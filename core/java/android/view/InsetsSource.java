@@ -16,6 +16,8 @@
 
 package android.view;
 
+import static android.view.InsetsState.ITYPE_IME;
+
 import android.annotation.Nullable;
 import android.graphics.Insets;
 import android.graphics.Rect;
@@ -51,6 +53,9 @@ public class InsetsSource implements Parcelable {
         mType = other.mType;
         mFrame = new Rect(other.mFrame);
         mVisible = other.mVisible;
+        mVisibleFrame = other.mVisibleFrame != null
+                ? new Rect(other.mVisibleFrame)
+                : null;
     }
 
     public void setFrame(Rect frame) {
@@ -109,6 +114,12 @@ public class InsetsSource implements Parcelable {
             return Insets.NONE;
         }
 
+        // TODO: Currently, non-floating IME always intersects at bottom due to issues with cutout.
+        // However, we should let the policy decide from the server.
+        if (getType() == ITYPE_IME) {
+            return Insets.of(0, 0, 0, mTmpFrame.height());
+        }
+
         // Intersecting at top/bottom
         if (mTmpFrame.width() == relativeFrame.width()) {
             if (mTmpFrame.top == relativeFrame.top) {
@@ -157,6 +168,7 @@ public class InsetsSource implements Parcelable {
     public int hashCode() {
         int result = mType;
         result = 31 * result + mFrame.hashCode();
+        result = 31 * result + (mVisibleFrame != null ? mVisibleFrame.hashCode() : 0);
         result = 31 * result + (mVisible ? 1 : 0);
         return result;
     }
@@ -179,6 +191,15 @@ public class InsetsSource implements Parcelable {
         dest.writeParcelable(mFrame, 0 /* flags*/);
         dest.writeParcelable(mVisibleFrame, 0 /* flags */);
         dest.writeBoolean(mVisible);
+    }
+
+    @Override
+    public String toString() {
+        return "InsetsSource: {"
+                + "mType=" + InsetsState.typeToString(mType)
+                + ", mFrame=" + mFrame.toShortString()
+                + ", mVisible" + mVisible
+                + "}";
     }
 
     public static final @android.annotation.NonNull Creator<InsetsSource> CREATOR = new Creator<InsetsSource>() {

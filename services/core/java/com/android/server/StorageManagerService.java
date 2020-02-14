@@ -24,6 +24,7 @@ import static android.Manifest.permission.WRITE_MEDIA_STORAGE;
 import static android.app.ActivityManager.PROCESS_STATE_NONEXISTENT;
 import static android.app.AppOpsManager.MODE_ALLOWED;
 import static android.app.AppOpsManager.OP_LEGACY_STORAGE;
+import static android.app.AppOpsManager.OP_MANAGE_EXTERNAL_STORAGE;
 import static android.app.AppOpsManager.OP_READ_EXTERNAL_STORAGE;
 import static android.app.AppOpsManager.OP_REQUEST_INSTALL_PACKAGES;
 import static android.app.AppOpsManager.OP_WRITE_EXTERNAL_STORAGE;
@@ -1702,15 +1703,8 @@ class StorageManagerService extends IStorageManager.Stub
         if (mIsFuseEnabled != settingsFuseFlag) {
             Slog.i(TAG, "Toggling persist.sys.fuse to " + settingsFuseFlag);
             SystemProperties.set(PROP_FUSE, Boolean.toString(settingsFuseFlag));
-
-            PowerManager powerManager = mContext.getSystemService(PowerManager.class);
-            if (powerManager.isRebootingUserspaceSupported()) {
-                // Perform userspace reboot to kick policy into place
-                powerManager.reboot(PowerManager.REBOOT_USERSPACE);
-            } else {
-                // Perform hard reboot to kick policy into place
-                powerManager.reboot("fuse_prop");
-            }
+            // Perform hard reboot to kick policy into place
+            mContext.getSystemService(PowerManager.class).reboot("fuse_prop");
         }
     }
 
@@ -3963,8 +3957,12 @@ class StorageManagerService extends IStorageManager.Stub
             final boolean hasMtp = mIPackageManager.checkUidPermission(ACCESS_MTP, uid) ==
                     PERMISSION_GRANTED;
             if (mIsFuseEnabled && hasMtp) {
-                // The process hosting the MTP server should be able to write in Android/
-                return Zygote.MOUNT_EXTERNAL_ANDROID_WRITABLE;
+                ApplicationInfo ai = mIPackageManager.getApplicationInfo(packageName,
+                        0, UserHandle.getUserId(uid));
+                if (ai.isSignedWithPlatformKey()) {
+                    // Platform processes hosting the MTP server should be able to write in Android/
+                    return Zygote.MOUNT_EXTERNAL_ANDROID_WRITABLE;
+                }
             }
 
             // Determine if caller is holding runtime permission
@@ -4342,8 +4340,37 @@ class StorageManagerService extends IStorageManager.Stub
             return true;
         }
 
-        public void onAppOpsChanged(int code, int uid,
-                @Nullable String packageName, int mode) {
+        private void killAppForOpChange(int code, int uid, String packageName) {
+            final IActivityManager am = ActivityManager.getService();
+            try {
+                am.killApplication(packageName,
+                        UserHandle.getAppId(uid),
+                        UserHandle.USER_ALL, AppOpsManager.opToName(code) + " changed.");
+            } catch (RemoteException e) {
+            }
+        }
+
+        public void onAppOpsChanged(int code, int uid, @Nullable String packageName, int mode) {
+            if (mIsFuseEnabled) {
+                // When using FUSE, we may need to kill the app if the op changes
+                switch(code) {
+                    case OP_REQUEST_INSTALL_PACKAGES:
+                        // Always kill regardless of op change, to remount apps /storage
+                        killAppForOpChange(code, uid, packageName);
+                        return;
+                    case OP_MANAGE_EXTERNAL_STORAGE:
+                        if (mode != MODE_ALLOWED) {
+                            // Only kill if op is denied, to lose external_storage gid
+                            // Killing when op is granted to pickup the gid automatically, results
+                            // in a bad UX, especially since the gid only gives access to unreliable
+                            // volumes, USB OTGs that are rarely mounted. The app will get the
+                            // external_storage gid on next organic restart.
+                            killAppForOpChange(code, uid, packageName);
+                            return;
+                        }
+                }
+            }
+
             if (mode == MODE_ALLOWED && (code == OP_READ_EXTERNAL_STORAGE
                     || code == OP_WRITE_EXTERNAL_STORAGE
                     || code == OP_REQUEST_INSTALL_PACKAGES)) {

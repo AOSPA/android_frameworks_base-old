@@ -22,6 +22,7 @@ import static android.Manifest.permission.READ_WIFI_CREDENTIAL;
 
 import android.annotation.CallbackExecutor;
 import android.annotation.IntDef;
+import android.annotation.IntRange;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
@@ -1426,10 +1427,12 @@ public class WifiManager {
      * {@link #removeNetworkSuggestions(List)} for new API to add Wi-Fi networks for consideration
      * when auto-connecting to wifi.
      * <b>Compatibility Note:</b> For applications targeting
-     * {@link android.os.Build.VERSION_CODES#Q} or above, this API will return an empty list,
-     * except for:
+     * {@link android.os.Build.VERSION_CODES#Q} or above, this API will always fail and return an
+     * empty list.
+     * <p>
+     * Deprecation Exemptions:
      * <ul>
-     * <li>Device Owner (DO) & Profile Owner (PO) apps will have access to the full list.
+     * <li>Device Owner (DO), Profile Owner (PO) and system apps will have access to the full list.
      * <li>Callers with Carrier privilege will receive a restricted list only containing
      * configurations which they created.
      * </ul>
@@ -1620,7 +1623,13 @@ public class WifiManager {
      * {@link #removeNetworkSuggestions(List)} for new API to add Wi-Fi networks for consideration
      * when auto-connecting to wifi.
      * <b>Compatibility Note:</b> For applications targeting
-     * {@link android.os.Build.VERSION_CODES#Q} or above, this API will always return {@code -1}.
+     * {@link android.os.Build.VERSION_CODES#Q} or above, this API will always fail and return
+     * {@code -1}.
+     * <p>
+     * Deprecation Exemptions:
+     * <ul>
+     * <li>Device Owner (DO), Profile Owner (PO) and system apps.
+     * </ul>
      */
     @Deprecated
     public int addNetwork(WifiConfiguration config) {
@@ -1655,7 +1664,13 @@ public class WifiManager {
      * {@link #removeNetworkSuggestions(List)} for new API to add Wi-Fi networks for consideration
      * when auto-connecting to wifi.
      * <b>Compatibility Note:</b> For applications targeting
-     * {@link android.os.Build.VERSION_CODES#Q} or above, this API will always return {@code -1}.
+     * {@link android.os.Build.VERSION_CODES#Q} or above, this API will always fail and return
+     * {@code -1}.
+     * <p>
+     * Deprecation Exemptions:
+     * <ul>
+     * <li>Device Owner (DO), Profile Owner (PO) and system apps.
+     * </ul>
      */
     @Deprecated
     public int updateNetwork(WifiConfiguration config) {
@@ -1949,18 +1964,6 @@ public class WifiManager {
     }
 
     /**
-     * Same as {@link #registerNetworkRequestMatchCallback(Executor, NetworkRequestMatchCallback)},
-     * except that the callback will be executed on the application's main thread.
-     * @param callback Callback for network match events to register.
-     * @hide
-     */
-    @SystemApi
-    @RequiresPermission(android.Manifest.permission.NETWORK_SETTINGS)
-    public void registerNetworkRequestMatchCallback(@NonNull NetworkRequestMatchCallback callback) {
-        registerNetworkRequestMatchCallback(mContext.getMainExecutor(), callback);
-    }
-
-    /**
      * Registers a callback for NetworkRequest matches. See {@link NetworkRequestMatchCallback}.
      * Caller can unregister a previously registered callback using
      * {@link #unregisterNetworkRequestMatchCallback(NetworkRequestMatchCallback)}
@@ -2129,8 +2132,13 @@ public class WifiManager {
      * See {@link #addNetworkSuggestions(List)}, {@link #removeNetworkSuggestions(List)} for new
      * API to add Wi-Fi networks for consideration when auto-connecting to wifi.
      * <b>Compatibility Note:</b> For applications targeting
-     * {@link android.os.Build.VERSION_CODES#R} or above, except for system of DO/PO apps, this API
-     * will throw {@link IllegalArgumentException}
+     * {@link android.os.Build.VERSION_CODES#R} or above, this API will always fail and throw
+     * {@link IllegalArgumentException}.
+     * <p>
+     * Deprecation Exemptions:
+     * <ul>
+     * <li>Device Owner (DO), Profile Owner (PO) and system apps.
+     * </ul>
      */
     public void addOrUpdatePasspointConfiguration(PasspointConfiguration config) {
         try {
@@ -2256,7 +2264,13 @@ public class WifiManager {
      * {@link #removeNetworkSuggestions(List)} for new API to add Wi-Fi networks for consideration
      * when auto-connecting to wifi.
      * <b>Compatibility Note:</b> For applications targeting
-     * {@link android.os.Build.VERSION_CODES#Q} or above, this API will always return false.
+     * {@link android.os.Build.VERSION_CODES#Q} or above, this API will always fail and return
+     * {@code false}.
+     * <p>
+     * Deprecation Exemptions:
+     * <ul>
+     * <li>Device Owner (DO), Profile Owner (PO) and system apps.
+     * </ul>
      */
     @Deprecated
     public boolean removeNetwork(int netId) {
@@ -2300,7 +2314,12 @@ public class WifiManager {
      * {@link #removeNetworkSuggestions(List)} for new API to add Wi-Fi networks for consideration
      * when auto-connecting to wifi.
      * <b>Compatibility Note:</b> For applications targeting
-     * {@link android.os.Build.VERSION_CODES#Q} or above, this API will always return false.
+     * {@link android.os.Build.VERSION_CODES#Q} or above, this API will always fail and return
+     * {@code false}.
+     * Deprecation Exemptions:
+     * <ul>
+     * <li>Device Owner (DO), Profile Owner (PO) and system apps.
+     * </ul>
      */
     @Deprecated
     public boolean enableNetwork(int netId, boolean attemptConnect) {
@@ -2330,7 +2349,13 @@ public class WifiManager {
      * {@link #removeNetworkSuggestions(List)} for new API to add Wi-Fi networks for consideration
      * when auto-connecting to wifi.
      * <b>Compatibility Note:</b> For applications targeting
-     * {@link android.os.Build.VERSION_CODES#Q} or above, this API will always return false.
+     * {@link android.os.Build.VERSION_CODES#Q} or above, this API will always fail and return
+     * {@code false}.
+     * <p>
+     * Deprecation Exemptions:
+     * <ul>
+     * <li>Device Owner (DO), Profile Owner (PO) and system apps.
+     * </ul>
      */
     @Deprecated
     public boolean disableNetwork(int netId) {
@@ -2353,7 +2378,13 @@ public class WifiManager {
      * {@link #removeNetworkSuggestions(List)} for new API to add Wi-Fi networks for consideration
      * when auto-connecting to wifi.
      * <b>Compatibility Note:</b> For applications targeting
-     * {@link android.os.Build.VERSION_CODES#Q} or above, this API will always return false.
+     * {@link android.os.Build.VERSION_CODES#Q} or above, this API will always fail and return
+     * {@code false}.
+     * <p>
+     * Deprecation Exemptions:
+     * <ul>
+     * <li>Device Owner (DO), Profile Owner (PO) and system apps.
+     * </ul>
      */
     @Deprecated
     public boolean disconnect() {
@@ -2377,7 +2408,13 @@ public class WifiManager {
      * {@link #removeNetworkSuggestions(List)} for new API to add Wi-Fi networks for consideration
      * when auto-connecting to wifi.
      * <b>Compatibility Note:</b> For applications targeting
-     * {@link android.os.Build.VERSION_CODES#Q} or above, this API will always return false.
+     * {@link android.os.Build.VERSION_CODES#Q} or above, this API will always fail and return
+     * {@code false}.
+     * <p>
+     * Deprecation Exemptions:
+     * <ul>
+     * <li>Device Owner (DO), Profile Owner (PO) and system apps.
+     * </ul>
      */
     @Deprecated
     public boolean reconnect() {
@@ -2510,7 +2547,7 @@ public class WifiManager {
         return (getSupportedFeatures() & feature) == feature;
     }
 
-   /**
+    /**
      * @return true if this adapter supports Passpoint
      * @hide
      */
@@ -2842,6 +2879,34 @@ public class WifiManager {
     }
 
     /**
+     * Return the filtered ScanResults which may be authenticated by the suggested network
+     * configurations.
+     * @param networkSuggestions The list of {@link WifiNetworkSuggestion}
+     * @param scanResults The scan results to be filtered, this is optional, if it is null or
+     * empty, wifi system would use the recent scan results in the system.
+     * @return The map of {@link WifiNetworkSuggestion} and the list of {@link ScanResult} which
+     * may be authenticated by the corresponding network configuration.
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(allOf = {ACCESS_FINE_LOCATION, ACCESS_WIFI_STATE})
+    @NonNull
+    public Map<WifiNetworkSuggestion, List<ScanResult>> getMatchingScanResults(
+            @NonNull List<WifiNetworkSuggestion> networkSuggestions,
+            @Nullable List<ScanResult> scanResults) {
+        if (networkSuggestions == null) {
+            throw new IllegalArgumentException("networkSuggestions must not be null.");
+        }
+        try {
+            return mService.getMatchingScanResults(
+                    networkSuggestions, scanResults,
+                    mContext.getOpPackageName(), mContext.getFeatureId());
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
      * Check if scanning is always available.
      *
      * If this return {@code true}, apps can issue {@link #startScan} and fetch scan results
@@ -2894,29 +2959,6 @@ public class WifiManager {
     }
 
     /**
-     * Check if the device is dual mode capable i.e. supports concurrent STA + Soft AP.
-     *
-     * If the device is dual mode capable, it may require conversion of the user's Soft AP band
-     * selection {@link SoftApConfiguration#mBand} from {@link SoftApConfiguration#BAND_5GHZ} to
-     * include also {@link SoftApConfiguration#BAND_2GHZ}, since if the device is connected to a
-     * 5GHz DFS channel as a STA, it may be unable to honor a request to start Soft AP on the same
-     * DFS channel.
-     *
-     * @return {@code true} if dual mode STA + AP is supported by this device, {@code false}
-     * otherwise.
-     * @hide
-     */
-    @SystemApi
-    @RequiresPermission(android.Manifest.permission.NETWORK_SETTINGS)
-    public boolean isDualModeSupported() {
-        try {
-            return mService.needs5GHzToAnyApBandConversion();
-        } catch (RemoteException e) {
-            throw e.rethrowFromSystemServer();
-        }
-    }
-
-    /**
      * Return the DHCP-assigned addresses from the last successful DHCP request,
      * if any.
      * @return the DHCP information
@@ -2943,9 +2985,14 @@ public class WifiManager {
      * @deprecated Starting with Build.VERSION_CODES#Q, applications are not allowed to
      * enable/disable Wi-Fi.
      * <b>Compatibility Note:</b> For applications targeting
-     * {@link android.os.Build.VERSION_CODES#Q} or above, this API will always return {@code false}
-     * and will have no effect. If apps are targeting an older SDK (
-     * {@link android.os.Build.VERSION_CODES#P} or below), they can continue to use this API.
+     * {@link android.os.Build.VERSION_CODES#Q} or above, this API will always fail and return
+     * {@code false}. If apps are targeting an older SDK ({@link android.os.Build.VERSION_CODES#P}
+     * or below), they can continue to use this API.
+     * <p>
+     * Deprecation Exemptions:
+     * <ul>
+     * <li>Device Owner (DO), Profile Owner (PO) and system apps.
+     * </ul>
      */
     @Deprecated
     public boolean setWifiEnabled(boolean enabled) {
@@ -3034,6 +3081,7 @@ public class WifiManager {
      * [0, {@link #getMaxSignalLevel()}], where 0 is the lowest (worst signal) RSSI
      * rating and {@link #getMaxSignalLevel()} is the highest (best signal) RSSI rating.
      */
+    @IntRange(from = 0)
     public int calculateSignalLevel(int rssi) {
         try {
             return mService.calculateSignalLevel(rssi);
@@ -3046,6 +3094,7 @@ public class WifiManager {
      * Get the system default maximum signal level.
      * This is the maximum RSSI level returned by {@link #calculateSignalLevel(int)}.
      */
+    @IntRange(from = 0)
     public int getMaxSignalLevel() {
         return calculateSignalLevel(Integer.MAX_VALUE);
     }
@@ -3879,18 +3928,6 @@ public class WifiManager {
     }
 
     /**
-     * Same as {@link #registerSoftApCallback(Executor, SoftApCallback)},
-     * except that the callback will be executed on the application's main thread.
-     * @param callback Callback for soft AP events
-     * @hide
-     */
-    @SystemApi
-    @RequiresPermission(android.Manifest.permission.NETWORK_SETTINGS)
-    public void registerSoftApCallback(@NonNull SoftApCallback callback) {
-        registerSoftApCallback(mContext.getMainExecutor(), callback);
-    }
-
-    /**
      * Registers a callback for Soft AP. See {@link SoftApCallback}. Caller will receive the current
      * soft AP state and number of connected devices immediately after a successful call to this API
      * via callback. Note that receiving an immediate WIFI_AP_STATE_FAILED value for soft AP state
@@ -4462,6 +4499,23 @@ public class WifiManager {
     }
 
     /**
+     * Allows the OEM to enable/disable auto-join globally.
+     *
+     * @param choice true to allow autojoin, false to disallow autojoin
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.NETWORK_SETTINGS)
+    public void allowAutojoinGlobal(boolean choice) {
+        try {
+            mService.allowAutojoinGlobal(choice);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+
+    /**
      * Sets the user choice for allowing auto-join to a network.
      * The updated choice will be made available through the updated config supplied by the
      * CONFIGURED_NETWORKS_CHANGED broadcast.
@@ -4510,6 +4564,25 @@ public class WifiManager {
     public void setMacRandomizationSettingPasspointEnabled(@NonNull String fqdn, boolean enable) {
         try {
             mService.setMacRandomizationSettingPasspointEnabled(fqdn, enable);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Sets the user's choice of metered override for a Passpoint profile.
+     *
+     * @param fqdn the FQDN (fully qualified domain name) of the passpoint profile.
+     * @param meteredOverride One of three values: {@link WifiConfiguration#METERED_OVERRIDE_NONE},
+     *                        {@link WifiConfiguration#METERED_OVERRIDE_METERED},
+     *                        {@link WifiConfiguration#METERED_OVERRIDE_NOT_METERED}
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.NETWORK_SETTINGS)
+    public void setMeteredOverridePasspoint(@NonNull String fqdn, int meteredOverride) {
+        try {
+            mService.setMeteredOverridePasspoint(fqdn, meteredOverride);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -5002,12 +5075,18 @@ public class WifiManager {
     /**
      * Set Wi-Fi verbose logging level from developer settings.
      *
-     * @param verbose the verbose logging level to set. 0 will disable verbose logging, a positive
-     *                integer will enable verbose logging.
+     * @param enable true to enable verbose logging, false to disable.
      *
      * @hide
      */
     @SystemApi
+    @RequiresPermission(android.Manifest.permission.NETWORK_SETTINGS)
+    public void setVerboseLoggingEnabled(boolean enable) {
+        enableVerboseLogging(enable ? 1 : 0);
+    }
+
+    /** @hide */
+    @UnsupportedAppUsage
     @RequiresPermission(android.Manifest.permission.NETWORK_SETTINGS)
     public void enableVerboseLogging (int verbose) {
         try {
@@ -5019,15 +5098,23 @@ public class WifiManager {
     }
 
     /**
-     * Get the persisted WiFi verbose logging level, set by {@link #enableVerboseLogging(int)}.
+     * Get the persisted Wi-Fi verbose logging level, set by
+     * {@link #setVerboseLoggingEnabled(boolean)}.
      * No permissions are required to call this method.
      *
-     * @return 0 to indicate that verbose logging is disabled, a positive integer to indicate that
-     * verbose logging is enabled.
+     * @return true to indicate that verbose logging is enabled, false to indicate that verbose
+     * logging is disabled.
      *
      * @hide
      */
     @SystemApi
+    public boolean isVerboseLoggingEnabled() {
+        return getVerboseLoggingLevel() > 0;
+    }
+
+    /** @hide */
+    // TODO(b/145484145): remove once SUW stops calling this via reflection
+    @UnsupportedAppUsage
     public int getVerboseLoggingLevel() {
         try {
             return mService.getVerboseLoggingLevel();
@@ -5058,7 +5145,10 @@ public class WifiManager {
      */
     @Nullable
     @SystemApi
-    @RequiresPermission(android.Manifest.permission.ACCESS_WIFI_STATE)
+    @RequiresPermission(anyOf = {
+            android.Manifest.permission.NETWORK_SETTINGS,
+            android.Manifest.permission.NETWORK_SETUP_WIZARD
+    })
     public Network getCurrentNetwork() {
         try {
             return mService.getCurrentNetwork();
@@ -5085,18 +5175,6 @@ public class WifiManager {
      */
     public boolean getEnableAutoJoinWhenAssociated() {
         return false;
-    }
-
-    /**
-     * Enable/disable WifiConnectivityManager
-     * @hide
-     */
-    public void enableWifiConnectivityManager(boolean enabled) {
-        try {
-            mService.enableWifiConnectivityManager(enabled);
-        } catch (RemoteException e) {
-            throw e.rethrowFromSystemServer();
-        }
     }
 
     /**
@@ -5172,10 +5250,8 @@ public class WifiManager {
      * and ipconfig.txt file.
      * @param supplicantData bytes representing wpa_supplicant.conf
      * @param ipConfigData bytes representing ipconfig.txt
-     * @deprecated this is no longer supported.
      * @hide
      */
-    @Deprecated
     @SystemApi
     @RequiresPermission(android.Manifest.permission.NETWORK_SETTINGS)
     public void restoreSupplicantBackupData(
@@ -5306,18 +5382,6 @@ public class WifiManager {
     }
 
     /**
-     * Same as {@link #registerTrafficStateCallback(Executor, TrafficStateCallback)},
-     * except that the callback will be executed on the application's main thread.
-     * @param callback Callback for traffic state events
-     * @hide
-     */
-    @SystemApi
-    @RequiresPermission(android.Manifest.permission.NETWORK_SETTINGS)
-    public void registerTrafficStateCallback(@NonNull TrafficStateCallback callback) {
-        registerTrafficStateCallback(mContext.getMainExecutor(), callback);
-    }
-
-    /**
      * Registers a callback for monitoring traffic state. See {@link TrafficStateCallback}. These
      * callbacks will be invoked periodically by platform to inform clients about the current
      * traffic state. Caller can unregister a previously registered callback using
@@ -5375,7 +5439,7 @@ public class WifiManager {
      * level from wifi service.
      */
     private void updateVerboseLoggingEnabledFromService() {
-        mVerboseLoggingEnabled = getVerboseLoggingLevel() > 0;
+        mVerboseLoggingEnabled = isVerboseLoggingEnabled();
     }
 
     /**

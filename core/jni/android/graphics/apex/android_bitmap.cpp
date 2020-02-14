@@ -184,7 +184,7 @@ SkAlphaType getAlphaType(const AndroidBitmapInfo* info) {
 
 class CompressWriter : public SkWStream {
 public:
-    CompressWriter(void* userContext, AndroidBitmap_compress_write_fn fn)
+    CompressWriter(void* userContext, AndroidBitmap_CompressWriteFunc fn)
           : mUserContext(userContext), mFn(fn), mBytesWritten(0) {}
 
     bool write(const void* buffer, size_t size) override {
@@ -199,7 +199,7 @@ public:
 
 private:
     void* mUserContext;
-    AndroidBitmap_compress_write_fn mFn;
+    AndroidBitmap_CompressWriteFunc mFn;
     size_t mBytesWritten;
 };
 
@@ -207,7 +207,7 @@ private:
 
 int ABitmap_compress(const AndroidBitmapInfo* info, ADataSpace dataSpace, const void* pixels,
                      AndroidBitmapCompressFormat inFormat, int32_t quality, void* userContext,
-                     AndroidBitmap_compress_write_fn fn) {
+                     AndroidBitmap_CompressWriteFunc fn) {
     Bitmap::JavaCompressFormat format;
     switch (inFormat) {
         case ANDROID_BITMAP_COMPRESS_FORMAT_JPEG:
@@ -290,14 +290,8 @@ int ABitmap_compress(const AndroidBitmapInfo* info, ADataSpace dataSpace, const 
     }
 
     CompressWriter stream(userContext, fn);
-    switch (Bitmap::compress(bitmap, format, quality, &stream)) {
-        case Bitmap::CompressResult::Success:
-            return ANDROID_BITMAP_RESULT_SUCCESS;
-        case Bitmap::CompressResult::AllocationFailed:
-            return ANDROID_BITMAP_RESULT_ALLOCATION_FAILED;
-        case Bitmap::CompressResult::Error:
-            return ANDROID_BITMAP_RESULT_JNI_EXCEPTION;
-    }
+    return Bitmap::compress(bitmap, format, quality, &stream) ? ANDROID_BITMAP_RESULT_SUCCESS
+                                                              : ANDROID_BITMAP_RESULT_JNI_EXCEPTION;
 }
 
 AHardwareBuffer* ABitmap_getHardwareBuffer(ABitmap* bitmapHandle) {

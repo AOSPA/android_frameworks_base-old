@@ -95,15 +95,17 @@ public abstract class ApexManager {
      * Returns an instance of either {@link ApexManagerImpl} or {@link ApexManagerFlattenedApex}
      * depending on whether this device supports APEX, i.e. {@link ApexProperties#updatable()}
      * evaluates to {@code true}.
+     * @hide
      */
-    static ApexManager getInstance() {
+    public static ApexManager getInstance() {
         return sApexManagerSingleton.get();
     }
 
     /**
      * Minimal information about APEX mount points and the original APEX package they refer to.
+     * @hide
      */
-    static class ActiveApexInfo {
+    public static class ActiveApexInfo {
         @Nullable public final String apexModuleName;
         public final File apexDirectory;
         public final File preInstalledApexPath;
@@ -130,8 +132,10 @@ public abstract class ApexManager {
 
     /**
      * Returns {@link ActiveApexInfo} records relative to all active APEX packages.
+     *
+     * @hide
      */
-    abstract List<ActiveApexInfo> getActiveApexInfos();
+    public abstract List<ActiveApexInfo> getActiveApexInfos();
 
     abstract void systemReady(Context context);
 
@@ -272,6 +276,29 @@ public abstract class ApexManager {
     public abstract String getApexModuleNameForPackageName(String apexPackageName);
 
     /**
+     * Copies the CE apex data directory for the given {@code userId} to a backup location, for use
+     * in case of rollback.
+     *
+     * @return long inode for the snapshot directory if the snapshot was successful, or -1 if not
+     */
+    public abstract long snapshotCeData(int userId, int rollbackId, String apexPackageName);
+
+    /**
+     * Restores the snapshot of the CE apex data directory for the given {@code userId}.
+     *
+     * @return boolean true if the restore was successful
+     */
+    public abstract boolean restoreCeData(int userId, int rollbackId, String apexPackageName);
+
+    /**
+     * Deletes snapshots of the device encrypted apex data directories for the given
+     * {@code rollbackId}.
+     *
+     * @return boolean true if the delete was successful
+     */
+    public abstract boolean destroyDeSnapshots(int rollbackId);
+
+    /**
      * Dumps various state information to the provided {@link PrintWriter} object.
      *
      * @param pw the {@link PrintWriter} object to send information to.
@@ -347,7 +374,7 @@ public abstract class ApexManager {
         }
 
         @Override
-        List<ActiveApexInfo> getActiveApexInfos() {
+        public List<ActiveApexInfo> getActiveApexInfos() {
             synchronized (mLock) {
                 if (mActiveApexInfosCache == null) {
                     try {
@@ -662,6 +689,56 @@ public abstract class ApexManager {
             }
         }
 
+        @Override
+        public long snapshotCeData(int userId, int rollbackId, String apexPackageName) {
+            populatePackageNameToApexModuleNameIfNeeded();
+            String apexModuleName;
+            synchronized (mLock) {
+                apexModuleName = mPackageNameToApexModuleName.get(apexPackageName);
+            }
+            if (apexModuleName == null) {
+                Slog.e(TAG, "Invalid apex package name: " + apexPackageName);
+                return -1;
+            }
+            try {
+                return mApexService.snapshotCeData(userId, rollbackId, apexModuleName);
+            } catch (Exception e) {
+                Slog.e(TAG, e.getMessage(), e);
+                return -1;
+            }
+        }
+
+        @Override
+        public boolean restoreCeData(int userId, int rollbackId, String apexPackageName) {
+            populatePackageNameToApexModuleNameIfNeeded();
+            String apexModuleName;
+            synchronized (mLock) {
+                apexModuleName = mPackageNameToApexModuleName.get(apexPackageName);
+            }
+            if (apexModuleName == null) {
+                Slog.e(TAG, "Invalid apex package name: " + apexPackageName);
+                return false;
+            }
+            try {
+                mApexService.restoreCeData(userId, rollbackId, apexModuleName);
+                return true;
+            } catch (Exception e) {
+                Slog.e(TAG, e.getMessage(), e);
+                return false;
+            }
+        }
+
+        @Override
+        public boolean destroyDeSnapshots(int rollbackId) {
+            try {
+                mApexService.destroyDeSnapshots(rollbackId);
+                return true;
+            } catch (Exception e) {
+                Slog.e(TAG, e.getMessage(), e);
+                return false;
+            }
+        }
+
         /**
          * Dump information about the packages contained in a particular cache
          * @param packagesCache the cache to print information about.
@@ -744,7 +821,7 @@ public abstract class ApexManager {
      */
     private static final class ApexManagerFlattenedApex extends ApexManager {
         @Override
-        List<ActiveApexInfo> getActiveApexInfos() {
+        public List<ActiveApexInfo> getActiveApexInfos() {
             // There is no apexd running in case of flattened apex
             // We look up the /apex directory and identify the active APEX modules from there.
             // As "preinstalled" path, we just report /system since in the case of flattened APEX
@@ -862,6 +939,21 @@ public abstract class ApexManager {
         @Nullable
         public String getApexModuleNameForPackageName(String apexPackageName) {
             return null;
+        }
+
+        @Override
+        public long snapshotCeData(int userId, int rollbackId, String apexPackageName) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public boolean restoreCeData(int userId, int rollbackId, String apexPackageName) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public boolean destroyDeSnapshots(int rollbackId) {
+            throw new UnsupportedOperationException();
         }
 
         @Override

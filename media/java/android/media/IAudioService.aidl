@@ -269,6 +269,10 @@ interface IAudioService {
 
     int removeUidDeviceAffinity(in IAudioPolicyCallback pcb, in int uid);
 
+    int setUserIdDeviceAffinity(in IAudioPolicyCallback pcb, in int userId, in int[] deviceTypes,
+             in String[] deviceAddresses);
+    int removeUserIdDeviceAffinity(in IAudioPolicyCallback pcb, in int userId);
+
     boolean hasHapticChannels(in Uri uri);
 
     boolean isCallScreeningModeSupported();
@@ -280,6 +284,10 @@ interface IAudioService {
     AudioDeviceAddress getPreferredDeviceForStrategy(in int strategy);
 
     List<AudioDeviceAddress> getDevicesForAttributes(in AudioAttributes attributes);
+
+    int setAllowedCapturePolicy(in int capturePolicy);
+
+    int getAllowedCapturePolicy();
 
     // WARNING: read warning at top of file, new methods that need to be used by native
     // code via IAudioManager.h need to be added to the top section.

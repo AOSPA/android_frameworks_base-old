@@ -152,7 +152,8 @@ public final class SurfaceControl implements Parcelable {
             int L, int T, int R, int B);
     private static native void nativeSetDisplaySize(long transactionObj, IBinder displayToken,
             int width, int height);
-    private static native SurfaceControl.PhysicalDisplayInfo[] nativeGetDisplayConfigs(
+    private static native SurfaceControl.DisplayInfo nativeGetDisplayInfo(IBinder displayToken);
+    private static native SurfaceControl.DisplayConfig[] nativeGetDisplayConfigs(
             IBinder displayToken);
     private static native DisplayedContentSamplingAttributes
             nativeGetDisplayedContentSamplingAttributes(IBinder displayToken);
@@ -210,6 +211,9 @@ public final class SurfaceControl implements Parcelable {
             float shadowRadius);
     private static native void nativeSetGlobalShadowSettings(@Size(4) float[] ambientColor,
             @Size(4) float[] spotColor, float lightPosY, float lightPosZ, float lightRadius);
+
+    private static native void nativeSetFrameRate(
+            long transactionObj, long nativeObject, float frameRate);
 
     private final CloseGuard mCloseGuard = CloseGuard.get();
     private String mName;
@@ -1278,140 +1282,45 @@ public final class SurfaceControl implements Parcelable {
                 Integer.toHexString(System.identityHashCode(this));
     }
 
-    /*
-     * set display parameters.
-     * needs to be inside open/closeTransaction block
-     */
-
     /**
-     * Describes the properties of a physical display known to surface flinger.
+     * Immutable information about physical display.
+     *
      * @hide
      */
-    public static final class PhysicalDisplayInfo {
-        /**
-         * @hide
-         */
-        @UnsupportedAppUsage
-        public int width;
-
-        /**
-         * @hide
-         */
-        @UnsupportedAppUsage
-        public int height;
-
-        /**
-         * @hide
-         */
-        @UnsupportedAppUsage
-        public float refreshRate;
-
-        /**
-         * @hide
-         */
-        @UnsupportedAppUsage
+    public static final class DisplayInfo {
         public float density;
-
-        /**
-         * @hide
-         */
-        @UnsupportedAppUsage
-        public float xDpi;
-
-        /**
-         * @hide
-         */
-        @UnsupportedAppUsage
-        public float yDpi;
-
-        /**
-         * @hide
-         */
-        @UnsupportedAppUsage
         public boolean secure;
 
-        /**
-         * @hide
-         */
-        @UnsupportedAppUsage
-        public long appVsyncOffsetNanos;
-
-        /**
-         * @hide
-         */
-        @UnsupportedAppUsage
-        public long presentationDeadlineNanos;
-
-        /**
-         * @hide
-         */
-        @UnsupportedAppUsage
-        public PhysicalDisplayInfo() {
-        }
-
-        /**
-         * @hide
-         */
-        public PhysicalDisplayInfo(PhysicalDisplayInfo other) {
-            copyFrom(other);
-        }
-
-        /**
-         * @hide
-         */
-        @Override
-        public boolean equals(Object o) {
-            return o instanceof PhysicalDisplayInfo && equals((PhysicalDisplayInfo)o);
-        }
-
-        /**
-         * @hide
-         */
-        public boolean equals(PhysicalDisplayInfo other) {
-            return other != null
-                    && width == other.width
-                    && height == other.height
-                    && refreshRate == other.refreshRate
-                    && density == other.density
-                    && xDpi == other.xDpi
-                    && yDpi == other.yDpi
-                    && secure == other.secure
-                    && appVsyncOffsetNanos == other.appVsyncOffsetNanos
-                    && presentationDeadlineNanos == other.presentationDeadlineNanos;
-        }
-
-        /**
-         * @hide
-         */
-        @Override
-        public int hashCode() {
-            return 0; // don't care
-        }
-
-        /**
-         * @hide
-         */
-        public void copyFrom(PhysicalDisplayInfo other) {
-            width = other.width;
-            height = other.height;
-            refreshRate = other.refreshRate;
-            density = other.density;
-            xDpi = other.xDpi;
-            yDpi = other.yDpi;
-            secure = other.secure;
-            appVsyncOffsetNanos = other.appVsyncOffsetNanos;
-            presentationDeadlineNanos = other.presentationDeadlineNanos;
-        }
-
-        /**
-         * @hide
-         */
         @Override
         public String toString() {
-            return "PhysicalDisplayInfo{" + width + " x " + height + ", " + refreshRate + " fps, "
-                    + "density " + density + ", " + xDpi + " x " + yDpi + " dpi, secure " + secure
-                    + ", appVsyncOffset " + appVsyncOffsetNanos
-                    + ", bufferDeadline " + presentationDeadlineNanos + "}";
+            return "DisplayInfo{density=" + density + ", secure=" + secure + "}";
+        }
+    }
+
+    /**
+     * Configuration supported by physical display.
+     *
+     * @hide
+     */
+    public static final class DisplayConfig {
+        public int width;
+        public int height;
+        public float xDpi;
+        public float yDpi;
+
+        public float refreshRate;
+        public long appVsyncOffsetNanos;
+        public long presentationDeadlineNanos;
+
+        @Override
+        public String toString() {
+            return "DisplayConfig{width=" + width
+                    + ", height=" + height
+                    + ", xDpi=" + xDpi
+                    + ", yDpi=" + yDpi
+                    + ", refreshRate=" + refreshRate
+                    + ", appVsyncOffsetNanos=" + appVsyncOffsetNanos
+                    + ", presentationDeadlineNanos=" + presentationDeadlineNanos + "}";
         }
     }
 
@@ -1428,8 +1337,17 @@ public final class SurfaceControl implements Parcelable {
     /**
      * @hide
      */
-    @UnsupportedAppUsage
-    public static SurfaceControl.PhysicalDisplayInfo[] getDisplayConfigs(IBinder displayToken) {
+    public static SurfaceControl.DisplayInfo getDisplayInfo(IBinder displayToken) {
+        if (displayToken == null) {
+            throw new IllegalArgumentException("displayToken must not be null");
+        }
+        return nativeGetDisplayInfo(displayToken);
+    }
+
+    /**
+     * @hide
+     */
+    public static SurfaceControl.DisplayConfig[] getDisplayConfigs(IBinder displayToken) {
         if (displayToken == null) {
             throw new IllegalArgumentException("displayToken must not be null");
         }
@@ -1825,7 +1743,7 @@ public final class SurfaceControl implements Parcelable {
     }
 
     /**
-     * TODO(116025192): Remove this stopgap once framework is display-agnostic.
+     * TODO(b/116025192): Remove this stopgap once framework is display-agnostic.
      *
      * @hide
      */
@@ -2551,6 +2469,7 @@ public final class SurfaceControl implements Parcelable {
         /**
          * @hide
          */
+        @Deprecated
         @UnsupportedAppUsage
         public Transaction deferTransactionUntilSurface(SurfaceControl sc, Surface barrierSurface,
                 long frameNumber) {
@@ -2786,6 +2705,33 @@ public final class SurfaceControl implements Parcelable {
         public Transaction setShadowRadius(SurfaceControl sc, float shadowRadius) {
             checkPreconditions(sc);
             nativeSetShadowRadius(mNativeObject, sc.mNativeObject, shadowRadius);
+            return this;
+        }
+
+        /**
+         * Sets the intended frame rate for the surface {@link SurfaceControl}.
+         *
+         * On devices that are capable of running the display at different refresh rates, the system
+         * may choose a display refresh rate to better match this surface's frame rate. Usage of
+         * this API won't directly affect the application's frame production pipeline. However,
+         * because the system may change the display refresh rate, calls to this function may result
+         * in changes to Choreographer callback timings, and changes to the time interval at which
+         * the system releases buffers back to the application.
+         *
+         * @param sc The SurfaceControl to specify the frame rate of.
+         * @param frameRate The intended frame rate for this surface, in frames per second. 0 is a
+         *                  special value that indicates the app will accept the system's choice for
+         *                  the display frame rate, which is the default behavior if this function
+         *                  isn't called. The frameRate param does *not* need to be a valid refresh
+         *                  rate for this device's display - e.g., it's fine to pass 30fps to a
+         *                  device that can only run the display at 60fps.
+         * @return This transaction object.
+         */
+        @NonNull
+        public Transaction setFrameRate(
+                @NonNull SurfaceControl sc, @FloatRange(from = 0.0) float frameRate) {
+            checkPreconditions(sc);
+            nativeSetFrameRate(mNativeObject, sc.mNativeObject, frameRate);
             return this;
         }
 

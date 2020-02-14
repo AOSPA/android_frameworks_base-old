@@ -16,6 +16,20 @@
 
 package com.android.server.accessibility.gestures;
 
+import static android.accessibilityservice.AccessibilityService.GESTURE_2_FINGER_DOUBLE_TAP;
+import static android.accessibilityservice.AccessibilityService.GESTURE_2_FINGER_SINGLE_TAP;
+import static android.accessibilityservice.AccessibilityService.GESTURE_2_FINGER_SWIPE_DOWN;
+import static android.accessibilityservice.AccessibilityService.GESTURE_2_FINGER_SWIPE_LEFT;
+import static android.accessibilityservice.AccessibilityService.GESTURE_2_FINGER_SWIPE_RIGHT;
+import static android.accessibilityservice.AccessibilityService.GESTURE_2_FINGER_SWIPE_UP;
+import static android.accessibilityservice.AccessibilityService.GESTURE_2_FINGER_TRIPLE_TAP;
+import static android.accessibilityservice.AccessibilityService.GESTURE_3_FINGER_DOUBLE_TAP;
+import static android.accessibilityservice.AccessibilityService.GESTURE_3_FINGER_SINGLE_TAP;
+import static android.accessibilityservice.AccessibilityService.GESTURE_3_FINGER_SWIPE_DOWN;
+import static android.accessibilityservice.AccessibilityService.GESTURE_3_FINGER_SWIPE_LEFT;
+import static android.accessibilityservice.AccessibilityService.GESTURE_3_FINGER_SWIPE_RIGHT;
+import static android.accessibilityservice.AccessibilityService.GESTURE_3_FINGER_SWIPE_UP;
+import static android.accessibilityservice.AccessibilityService.GESTURE_3_FINGER_TRIPLE_TAP;
 import static android.accessibilityservice.AccessibilityService.GESTURE_DOUBLE_TAP;
 import static android.accessibilityservice.AccessibilityService.GESTURE_DOUBLE_TAP_AND_HOLD;
 import static android.accessibilityservice.AccessibilityService.GESTURE_SWIPE_DOWN;
@@ -65,6 +79,13 @@ class GestureManifold implements GestureMatcher.StateChangeListener {
     private final Handler mHandler;
     // Listener to be notified of gesture start and end.
     private Listener mListener;
+    // Whether double tap and double tap and hold will be dispatched to the service or handled in
+    // the framework.
+    private boolean mServiceHandlesDoubleTap = false;
+    // Whether multi-finger gestures are enabled.
+    boolean mMultiFingerGesturesEnabled;
+    // A list of all the multi-finger gestures, for easy adding and removal.
+    private final List<GestureMatcher> mMultiFingerGestures = new ArrayList<>();
     // Shared state information.
     private TouchState mState;
 
@@ -97,6 +118,39 @@ class GestureManifold implements GestureMatcher.StateChangeListener {
         mGestures.add(new Swipe(context, UP, DOWN, GESTURE_SWIPE_UP_AND_DOWN, this));
         mGestures.add(new Swipe(context, UP, LEFT, GESTURE_SWIPE_UP_AND_LEFT, this));
         mGestures.add(new Swipe(context, UP, RIGHT, GESTURE_SWIPE_UP_AND_RIGHT, this));
+        // Set up multi-finger gestures to be enabled later.
+        // Two-finger taps.
+        mMultiFingerGestures.add(
+                new MultiFingerMultiTap(mContext, 2, 1, GESTURE_2_FINGER_SINGLE_TAP, this));
+        mMultiFingerGestures.add(
+                new MultiFingerMultiTap(mContext, 2, 2, GESTURE_2_FINGER_DOUBLE_TAP, this));
+        mMultiFingerGestures.add(
+                new MultiFingerMultiTap(mContext, 2, 3, GESTURE_2_FINGER_TRIPLE_TAP, this));
+        // Three-finger taps.
+        mMultiFingerGestures.add(
+                new MultiFingerMultiTap(mContext, 3, 1, GESTURE_3_FINGER_SINGLE_TAP, this));
+        mMultiFingerGestures.add(
+                new MultiFingerMultiTap(mContext, 3, 2, GESTURE_3_FINGER_DOUBLE_TAP, this));
+        mMultiFingerGestures.add(
+                new MultiFingerMultiTap(mContext, 3, 3, GESTURE_3_FINGER_TRIPLE_TAP, this));
+        // Two-finger swipes.
+        mMultiFingerGestures.add(
+                new MultiFingerSwipe(context, 2, DOWN, GESTURE_2_FINGER_SWIPE_DOWN, this));
+        mMultiFingerGestures.add(
+                new MultiFingerSwipe(context, 2, LEFT, GESTURE_2_FINGER_SWIPE_LEFT, this));
+        mMultiFingerGestures.add(
+                new MultiFingerSwipe(context, 2, RIGHT, GESTURE_2_FINGER_SWIPE_RIGHT, this));
+        mMultiFingerGestures.add(
+                new MultiFingerSwipe(context, 2, UP, GESTURE_2_FINGER_SWIPE_UP, this));
+        // Three-finger swipes.
+        mMultiFingerGestures.add(
+                new MultiFingerSwipe(context, 3, DOWN, GESTURE_3_FINGER_SWIPE_DOWN, this));
+        mMultiFingerGestures.add(
+                new MultiFingerSwipe(context, 3, LEFT, GESTURE_3_FINGER_SWIPE_LEFT, this));
+        mMultiFingerGestures.add(
+                new MultiFingerSwipe(context, 3, RIGHT, GESTURE_3_FINGER_SWIPE_RIGHT, this));
+        mMultiFingerGestures.add(
+                new MultiFingerSwipe(context, 3, UP, GESTURE_3_FINGER_SWIPE_UP, this));
     }
 
     /**
@@ -154,18 +208,23 @@ class GestureManifold implements GestureMatcher.StateChangeListener {
      */
     public interface Listener {
         /**
-         * Called when the user has performed a double tap and then held down the second tap.
+         * When FLAG_SERVICE_HANDLES_DOUBLE_TAP is enabled, this method is not called; double-tap
+         * and hold is dispatched via onGestureCompleted. Otherwise, this method is called when the
+         * user has performed a double tap and then held down the second tap.
          */
         void onDoubleTapAndHold();
 
         /**
-         * Called when the user lifts their finger on the second tap of a double tap.
+         * When FLAG_SERVICE_HANDLES_DOUBLE_TAP is enabled, this method is not called; double-tap is
+         * dispatched via onGestureCompleted. Otherwise, this method is called when the user lifts
+         * their finger on the second tap of a double tap.
+         *
          * @return true if the event is consumed, else false
          */
         boolean onDoubleTap();
 
         /**
-         * Called when the system has decided the event stream is a gesture.
+         * Called when the system has decided the event stream is a potential gesture.
          *
          * @return true if the event is consumed, else false
          */
@@ -193,7 +252,13 @@ class GestureManifold implements GestureMatcher.StateChangeListener {
     public void onStateChanged(
             int gestureId, int state, MotionEvent event, MotionEvent rawEvent, int policyFlags) {
         if (state == GestureMatcher.STATE_GESTURE_STARTED && !mState.isGestureDetecting()) {
-            mListener.onGestureStarted();
+            if (gestureId == GESTURE_DOUBLE_TAP || gestureId == GESTURE_DOUBLE_TAP_AND_HOLD) {
+                if (mServiceHandlesDoubleTap) {
+                    mListener.onGestureStarted();
+                }
+            } else {
+                mListener.onGestureStarted();
+            }
         } else if (state == GestureMatcher.STATE_GESTURE_COMPLETED) {
             onGestureCompleted(gestureId);
         } else if (state == GestureMatcher.STATE_GESTURE_CANCELED && mState.isGestureDetecting()) {
@@ -217,11 +282,23 @@ class GestureManifold implements GestureMatcher.StateChangeListener {
         // Gestures that complete on a delay call clear() here.
         switch (gestureId) {
             case GESTURE_DOUBLE_TAP:
-                mListener.onDoubleTap();
+                if (mServiceHandlesDoubleTap) {
+                    AccessibilityGestureEvent gestureEvent =
+                            new AccessibilityGestureEvent(gestureId, event.getDisplayId());
+                    mListener.onGestureCompleted(gestureEvent);
+                } else {
+                    mListener.onDoubleTap();
+                }
                 clear();
                 break;
             case GESTURE_DOUBLE_TAP_AND_HOLD:
-                mListener.onDoubleTapAndHold();
+                if (mServiceHandlesDoubleTap) {
+                    AccessibilityGestureEvent gestureEvent =
+                            new AccessibilityGestureEvent(gestureId, event.getDisplayId());
+                    mListener.onGestureCompleted(gestureEvent);
+                } else {
+                    mListener.onDoubleTapAndHold();
+                }
                 clear();
                 break;
             default:
@@ -230,5 +307,28 @@ class GestureManifold implements GestureMatcher.StateChangeListener {
                 mListener.onGestureCompleted(gestureEvent);
                 break;
         }
+    }
+
+    public boolean isMultiFingerGesturesEnabled() {
+        return mMultiFingerGesturesEnabled;
+    }
+
+    public void setMultiFingerGesturesEnabled(boolean mode) {
+        if (mMultiFingerGesturesEnabled != mode) {
+            mMultiFingerGesturesEnabled = mode;
+            if (mode) {
+                mGestures.addAll(mMultiFingerGestures);
+            } else {
+                mGestures.removeAll(mMultiFingerGestures);
+            }
+        }
+    }
+
+    public void setServiceHandlesDoubleTap(boolean mode) {
+        mServiceHandlesDoubleTap = mode;
+    }
+
+    public boolean isServiceHandlesDoubleTapEnabled() {
+        return mServiceHandlesDoubleTap;
     }
 }

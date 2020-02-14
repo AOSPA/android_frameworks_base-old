@@ -328,7 +328,7 @@ public class DevicePolicyManager {
      * modified by the user and the only way of resetting the device is via factory reset.
      *
      * <p>From version {@link android.os.Build.VERSION_CODES#Q}, the admin app can choose
-     * whether to set up a fully managed device or a work profile. For the admin app to support
+     * whether to set up a fully managed device or a managed profile. For the admin app to support
      * this, it must have an activity with intent filter {@link #ACTION_GET_PROVISIONING_MODE} and
      * another one with intent filter {@link #ACTION_ADMIN_POLICY_COMPLIANCE}. For example:
      * <pre>
@@ -1781,12 +1781,13 @@ public class DevicePolicyManager {
     /**
      * Grants access to selection of KeyChain certificates on behalf of requesting apps.
      * Once granted the app will start receiving
-     * DelegatedAdminReceiver.onChoosePrivateKeyAlias. The caller (PO/DO) will
+     * {@link DelegatedAdminReceiver#onChoosePrivateKeyAlias}. The caller (PO/DO) will
      * no longer receive {@link DeviceAdminReceiver#onChoosePrivateKeyAlias}.
      * There can be at most one app that has this delegation.
      * If another app already had delegated certificate selection access,
      * it will lose the delegation when a new app is delegated.
-     *
+     * <p> The delegaetd app can also call {@link #grantKeyPairToApp} and
+     * {@link #revokeKeyPairFromApp} to directly grant KeyCain keys to other apps.
      * <p> Can be granted by Device Owner or Profile Owner.
      */
     public static final String DELEGATION_CERT_SELECTION = "delegation-cert-selection";
@@ -2389,6 +2390,36 @@ public class DevicePolicyManager {
      */
     public static final String ACTION_BIND_SECONDARY_LOCKSCREEN_SERVICE =
             "android.app.action.BIND_SECONDARY_LOCKSCREEN_SERVICE";
+
+    /**
+     * Return value for {@link #getPersonalAppsSuspendedReasons} when personal apps are not
+     * suspended.
+     */
+    public static final int PERSONAL_APPS_NOT_SUSPENDED = 0;
+
+    /**
+     * Flag for {@link #getPersonalAppsSuspendedReasons} return value. Set when personal
+     * apps are suspended by an admin explicitly via {@link #setPersonalAppsSuspended}.
+     */
+    public static final int PERSONAL_APPS_SUSPENDED_EXPLICITLY = 1 << 0;
+
+    /**
+     * Flag for {@link #getPersonalAppsSuspendedReasons} return value. Set when personal apps are
+     * suspended by framework because managed profile was off for longer than allowed by policy.
+     * @see #setManagedProfileMaximumTimeOff
+     */
+    public static final int PERSONAL_APPS_SUSPENDED_PROFILE_TIMEOUT = 1 << 1;
+
+    /**
+     * @hide
+     */
+    @IntDef(flag = true, prefix = { "PERSONAL_APPS_" }, value = {
+            PERSONAL_APPS_NOT_SUSPENDED,
+            PERSONAL_APPS_SUSPENDED_EXPLICITLY,
+            PERSONAL_APPS_SUSPENDED_PROFILE_TIMEOUT
+    })
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface PersonalAppSuspensionReason {}
 
     /**
      * Return true if the given administrator component is currently active (enabled) in the system.
@@ -4283,7 +4314,7 @@ public class DevicePolicyManager {
      * additionally call this method on the parent instance.
      * Calling this method on the parent {@link DevicePolicyManager} instance would wipe the
      * entire device, while calling it on the current profile instance would relinquish the device
-     * for personal use, removing the work profile and all policies set by the profile owner.
+     * for personal use, removing the managed profile and all policies set by the profile owner.
      *
      * @param flags Bit mask of additional options: currently supported flags are
      *            {@link #WIPE_EXTERNAL_STORAGE}, {@link #WIPE_RESET_PROTECTION_DATA},
@@ -4309,7 +4340,7 @@ public class DevicePolicyManager {
      * additionally call this method on the parent instance.
      * Calling this method on the parent {@link DevicePolicyManager} instance would wipe the
      * entire device, while calling it on the current profile instance would relinquish the device
-     * for personal use, removing the work profile and all policies set by the profile owner.
+     * for personal use, removing the managed profile and all policies set by the profile owner.
      *
      * @param flags Bit mask of additional options: currently supported flags are
      *            {@link #WIPE_EXTERNAL_STORAGE}, {@link #WIPE_RESET_PROTECTION_DATA} and
@@ -4575,6 +4606,18 @@ public class DevicePolicyManager {
     @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
     public static final String ACTION_START_ENCRYPTION
             = "android.app.action.START_ENCRYPTION";
+
+    /**
+     * Activity action: launch the DPC to check policy compliance. This intent is launched when
+     * the user taps on the notification about personal apps suspension. When handling this intent
+     * the DPC must check if personal apps should still be suspended and either unsuspend them or
+     * instruct the user on how to resolve the noncompliance causing the suspension.
+     *
+     * @see #setPersonalAppsSuspended
+     */
+    @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
+    public static final String ACTION_CHECK_POLICY_COMPLIANCE =
+            "android.app.action.CHECK_POLICY_COMPLIANCE";
 
     /**
      * Broadcast action: notify managed provisioning that new managed user is created.
@@ -6986,21 +7029,28 @@ public class DevicePolicyManager {
     }
 
     /**
-     * Called by a device owner to set the default SMS application.
+     * Must be called by a device owner or a profile owner of an organization-owned managed profile
+     * to set the default SMS application.
      * <p>
-     * The calling device admin must be a device owner. If it is not, a security exception will be
-     * thrown.
+     * This method can be called on the {@link DevicePolicyManager} instance, returned by
+     * {@link #getParentProfileInstance(ComponentName)}, where the caller must be the profile owner
+     * of an organization-owned managed profile and the package must be a pre-installed system
+     * package. If called on the parent instance, then the default SMS application is set on the
+     * personal profile.
      *
-     * @param admin Which {@link DeviceAdminReceiver} this request is associated with.
+     * @param admin       Which {@link DeviceAdminReceiver} this request is associated with.
      * @param packageName The name of the package to set as the default SMS application.
-     * @throws SecurityException if {@code admin} is not a device owner.
+     * @throws SecurityException        if {@code admin} is not a device or profile owner or if
+     *                                  called on the parent profile and the {@code admin} is not a
+     *                                  profile owner of an organization-owned managed profile.
+     * @throws IllegalArgumentException if called on the parent profile and the package
+     *                                  provided is not a pre-installed system package.
      */
     public void setDefaultSmsApplication(@NonNull ComponentName admin,
             @NonNull String packageName) {
-        throwIfParentInstance("setDefaultSmsApplication");
         if (mService != null) {
             try {
-                mService.setDefaultSmsApplication(admin, packageName);
+                mService.setDefaultSmsApplication(admin, packageName, mParentInstance);
             } catch (RemoteException e) {
                 throw e.rethrowFromSystemServer();
             }
@@ -8226,6 +8276,11 @@ public class DevicePolicyManager {
      * actual package file remain. This function can be called by a device owner, profile owner, or
      * by a delegate given the {@link #DELEGATION_PACKAGE_ACCESS} scope via
      * {@link #setDelegatedScopes}.
+     * <p>
+     * This method can be called on the {@link DevicePolicyManager} instance, returned by
+     * {@link #getParentProfileInstance(ComponentName)}, where the caller must be the profile owner
+     * of an organization-owned managed profile and the package must be a system package. If called
+     * on the parent instance, then the package is hidden or unhidden in the personal profile.
      *
      * @param admin Which {@link DeviceAdminReceiver} this request is associated with, or
      *            {@code null} if the caller is a package access delegate.
@@ -8233,17 +8288,20 @@ public class DevicePolicyManager {
      * @param hidden {@code true} if the package should be hidden, {@code false} if it should be
      *            unhidden.
      * @return boolean Whether the hidden setting of the package was successfully updated.
-     * @throws SecurityException if {@code admin} is not a device or profile owner.
+     * @throws SecurityException if {@code admin} is not a device or profile owner or if called on
+     *            the parent profile and the {@code admin} is not a profile owner of an
+     *            organization-owned managed profile.
+     * @throws IllegalArgumentException if called on the parent profile and the package provided
+     *            is not a system package.
      * @see #setDelegatedScopes
      * @see #DELEGATION_PACKAGE_ACCESS
      */
     public boolean setApplicationHidden(@NonNull ComponentName admin, String packageName,
             boolean hidden) {
-        throwIfParentInstance("setApplicationHidden");
         if (mService != null) {
             try {
                 return mService.setApplicationHidden(admin, mContext.getPackageName(), packageName,
-                        hidden);
+                        hidden, mParentInstance);
             } catch (RemoteException e) {
                 throw e.rethrowFromSystemServer();
             }
@@ -8255,20 +8313,30 @@ public class DevicePolicyManager {
      * Determine if a package is hidden. This function can be called by a device owner, profile
      * owner, or by a delegate given the {@link #DELEGATION_PACKAGE_ACCESS} scope via
      * {@link #setDelegatedScopes}.
+     * <p>
+     * This method can be called on the {@link DevicePolicyManager} instance, returned by
+     * {@link #getParentProfileInstance(ComponentName)}, where the caller must be the profile owner
+     * of an organization-owned managed profile and the package must be a system package. If called
+     * on the parent instance, this will determine whether the package is hidden or unhidden in the
+     * personal profile.
      *
      * @param admin Which {@link DeviceAdminReceiver} this request is associated with, or
      *            {@code null} if the caller is a package access delegate.
      * @param packageName The name of the package to retrieve the hidden status of.
      * @return boolean {@code true} if the package is hidden, {@code false} otherwise.
-     * @throws SecurityException if {@code admin} is not a device or profile owner.
+     * @throws SecurityException if {@code admin} is not a device or profile owner or if called on
+     *            the parent profile and the {@code admin} is not a profile owner of an
+     *            organization-owned managed profile.
+     * @throws IllegalArgumentException if called on the parent profile and the package provided
+     *            is not a system package.
      * @see #setDelegatedScopes
      * @see #DELEGATION_PACKAGE_ACCESS
      */
     public boolean isApplicationHidden(@NonNull ComponentName admin, String packageName) {
-        throwIfParentInstance("isApplicationHidden");
         if (mService != null) {
             try {
-                return mService.isApplicationHidden(admin, mContext.getPackageName(), packageName);
+                return mService.isApplicationHidden(admin, mContext.getPackageName(), packageName,
+                        mParentInstance);
             } catch (RemoteException e) {
                 throw e.rethrowFromSystemServer();
             }
@@ -8795,6 +8863,49 @@ public class DevicePolicyManager {
     }
 
     /**
+     * Called by device owners to request a location provider to change its allowed state. For a
+     * provider to be enabled requires both that the master location setting is enabled, and that
+     * the provider itself is allowed. Most location providers are always allowed. Some location
+     * providers may have user consents or terms and conditions that must be accepted, or some other
+     * type of blocker before they are allowed however. Every location provider is responsible for
+     * its own allowed state.
+     *
+     * <p>This method requests that a location provider change its allowed state. For providers that
+     * are always allowed and have no state to change, this will have no effect. If the provider
+     * does require some consent, terms and conditions, or other blocking state, using this API
+     * implies that the device owner is agreeing/disagreeing to any consents, terms and conditions,
+     * etc, and the provider should make a best effort to adjust it's allowed state accordingly.
+     *
+     * <p>Location providers are generally only responsible for the current user, and callers must
+     * assume that this method will only affect provider state for the current user. Callers are
+     * responsible for tracking current user changes and re-updating provider state as necessary.
+     *
+     * <p>While providers are expected to make a best effort to honor this request, it is not a
+     * given that all providers will support such a request. If a provider does change its state as
+     * a result of this request, that may happen asynchronously after some delay. Test location
+     * providers set through {@link android.location.LocationManager#addTestProvider} will respond
+     * to this request to aide in testing.
+     *
+     * @param admin          Which {@link DeviceAdminReceiver} this request is associated with
+     * @param provider       A location provider as listed by
+     *                       {@link android.location.LocationManager#getAllProviders()}
+     * @param providerAllowed Whether the location provider is being requested to enable or disable
+     *                       itself
+     * @throws SecurityException if {@code admin} is not a device owner.
+     */
+    public void requestSetLocationProviderAllowed(@NonNull ComponentName admin,
+            @NonNull String provider, boolean providerAllowed) {
+        throwIfParentInstance("requestSetLocationProviderAllowed");
+        if (mService != null) {
+            try {
+                mService.requestSetLocationProviderAllowed(admin, provider, providerAllowed);
+            } catch (RemoteException e) {
+                throw e.rethrowFromSystemServer();
+            }
+        }
+    }
+
+    /**
      * Called by profile or device owners to update {@link android.provider.Settings.Secure}
      * settings. Validation that the value of the setting is in the correct form for the setting
      * type should be performed by the caller.
@@ -9057,7 +9168,8 @@ public class DevicePolicyManager {
     }
 
     /**
-     * Called by device owners to set a local system update policy. When a new policy is set,
+     * Called by device owners or profile owners of an organization-owned managed profile to to set
+     * a local system update policy. When a new policy is set,
      * {@link #ACTION_SYSTEM_UPDATE_POLICY_CHANGED} is broadcasted.
      * <p>
      * If the supplied system update policy has freeze periods set but the freeze periods do not
@@ -9075,7 +9187,8 @@ public class DevicePolicyManager {
      *            components in the device owner package can set system update policies and the most
      *            recent policy takes effect.
      * @param policy the new policy, or {@code null} to clear the current policy.
-     * @throws SecurityException if {@code admin} is not a device owner.
+     * @throws SecurityException if {@code admin} is not a device owner or a profile owner of an
+     *      organization-owned managed profile.
      * @throws IllegalArgumentException if the policy type or maintenance window is not valid.
      * @throws SystemUpdatePolicy.ValidationFailedException if the policy's freeze period does not
      *             meet the requirement.
@@ -9333,6 +9446,16 @@ public class DevicePolicyManager {
      * application built with a {@code targetSdkVersion} &lt;
      * {@link android.os.Build.VERSION_CODES#M} the app-op matching the permission is set to
      * {@link android.app.AppOpsManager#MODE_IGNORED}, but the permission stays granted.
+     *
+     * NOTE: Starting from Android R, location-related permissions cannot be granted by the
+     * admin: Calling this method with {@link #PERMISSION_GRANT_STATE_GRANTED} for any of the
+     * following permissions will return false:
+     *
+     * <ul>
+     * <li>{@code ACCESS_FINE_LOCATION}</li>
+     * <li>{@code ACCESS_BACKGROUND_LOCATION}</li>
+     * <li>{@code ACCESS_COARSE_LOCATION}</li>
+     * </ul>
      *
      * @param admin Which profile or device owner this request is associated with.
      * @param packageName The application to grant or revoke a permission to.
@@ -11150,7 +11273,8 @@ public class DevicePolicyManager {
     }
 
     /**
-     * Called by device owner to install a system update from the given file. The device will be
+     * Called by device owner or profile owner of an organization-owned managed profile to install
+     * a system update from the given file. The device will be
      * rebooted in order to finish installing the update. Note that if the device is rebooted, this
      * doesn't necessarily mean that the update has been applied successfully. The caller should
      * additionally check the system version with {@link android.os.Build#FINGERPRINT} or {@link
@@ -11461,12 +11585,14 @@ public class DevicePolicyManager {
      * #setCrossProfilePackages(ComponentName, Set)}.</li>
      * <li>The default package names set by the OEM that are allowed to request user consent for
      * cross-profile communication without being explicitly enabled by the admin, via
-     * {@link com.android.internal.R.array#cross_profile_apps}</li>
+     * {@link com.android.internal.R.array#cross_profile_apps} and
+     * {@link com.android.internal.R.array#vendor_cross_profile_apps}.</li>
      * </ul>
      *
      * @return the combined set of whitelisted package names set via
-     * {@link #setCrossProfilePackages(ComponentName, Set)} and
-     * {@link com.android.internal.R.array#cross_profile_apps}
+     * {@link #setCrossProfilePackages(ComponentName, Set)},
+     * {@link com.android.internal.R.array#cross_profile_apps},
+     * and {@link com.android.internal.R.array#vendor_cross_profile_apps}.
      *
      * @hide
      */
@@ -11476,10 +11602,30 @@ public class DevicePolicyManager {
             permission.INTERACT_ACROSS_PROFILES
     })
     public @NonNull Set<String> getAllCrossProfilePackages() {
-        throwIfParentInstance("getDefaultCrossProfilePackages");
+        throwIfParentInstance("getAllCrossProfilePackages");
         if (mService != null) {
             try {
                 return new ArraySet<>(mService.getAllCrossProfilePackages());
+            } catch (RemoteException e) {
+                throw e.rethrowFromSystemServer();
+            }
+        }
+        return Collections.emptySet();
+    }
+
+    /**
+     * Returns the default package names set by the OEM that are allowed to request user consent for
+     * cross-profile communication without being explicitly enabled by the admin, via
+     * {@link com.android.internal.R.array#cross_profile_apps} and
+     * {@link com.android.internal.R.array#vendor_cross_profile_apps}.
+     *
+     * @hide
+     */
+    public @NonNull Set<String> getDefaultCrossProfilePackages() {
+        throwIfParentInstance("getDefaultCrossProfilePackages");
+        if (mService != null) {
+            try {
+                return new ArraySet<>(mService.getDefaultCrossProfilePackages());
             } catch (RemoteException e) {
                 throw e.rethrowFromSystemServer();
             }
@@ -11664,5 +11810,99 @@ public class DevicePolicyManager {
             }
         }
         return false;
+    }
+
+    /**
+     * Called by profile owner of an organization-owned managed profile to check whether
+     * personal apps are suspended.
+     *
+     * @return a bitmask of reasons for personal apps suspension or
+     *     {@link #PERSONAL_APPS_NOT_SUSPENDED} if apps are not suspended.
+     * @see #setPersonalAppsSuspended
+     */
+    public @PersonalAppSuspensionReason int getPersonalAppsSuspendedReasons(
+            @NonNull ComponentName admin) {
+        throwIfParentInstance("getPersonalAppsSuspendedReasons");
+        if (mService != null) {
+            try {
+                return mService.getPersonalAppsSuspendedReasons(admin);
+            } catch (RemoteException re) {
+                throw re.rethrowFromSystemServer();
+            }
+        }
+        return 0;
+    }
+
+    /**
+     * Called by a profile owner of an organization-owned managed profile to suspend personal
+     * apps on the device. When personal apps are suspended the device can only be used for calls.
+     *
+     * <p>When personal apps are suspended, an ongoing notification about that is shown to the user.
+     * When the user taps the notification, system invokes {@link #ACTION_CHECK_POLICY_COMPLIANCE}
+     * in the profile owner package. Profile owner implementation that uses personal apps suspension
+     * must handle this intent.
+     *
+     * @param admin Which {@link DeviceAdminReceiver} this request is associated with
+     * @param suspended Whether personal apps should be suspended.
+     * @throws IllegalStateException if the profile owner doesn't have an activity that handles
+     *        {@link #ACTION_CHECK_POLICY_COMPLIANCE}
+     */
+    public void setPersonalAppsSuspended(@NonNull ComponentName admin, boolean suspended) {
+        throwIfParentInstance("setPersonalAppsSuspended");
+        if (mService != null) {
+            try {
+                mService.setPersonalAppsSuspended(admin, suspended);
+            } catch (RemoteException re) {
+                throw re.rethrowFromSystemServer();
+            }
+        }
+    }
+
+    /**
+     * Called by a profile owner of an organization-owned managed profile to set maximum time
+     * the profile is allowed to be turned off. If the profile is turned off for longer, personal
+     * apps are suspended on the device.
+     *
+     * <p>When personal apps are suspended, an ongoing notification about that is shown to the user.
+     * When the user taps the notification, system invokes {@link #ACTION_CHECK_POLICY_COMPLIANCE}
+     * in the profile owner package. Profile owner implementation that uses personal apps suspension
+     * must handle this intent.
+     *
+     * @param admin Which {@link DeviceAdminReceiver} this request is associated with
+     * @param timeoutMs Maximum time the profile is allowed to be off in milliseconds or 0 if
+     *        not limited.
+     * @throws IllegalStateException if the profile owner doesn't have an activity that handles
+     *        {@link #ACTION_CHECK_POLICY_COMPLIANCE}
+     * @see #setPersonalAppsSuspended
+     */
+    public void setManagedProfileMaximumTimeOff(@NonNull ComponentName admin, long timeoutMs) {
+        throwIfParentInstance("setManagedProfileMaximumTimeOff");
+        if (mService != null) {
+            try {
+                mService.setManagedProfileMaximumTimeOff(admin, timeoutMs);
+            } catch (RemoteException re) {
+                throw re.rethrowFromSystemServer();
+            }
+        }
+    }
+
+     /**
+     * Called by a profile owner of an organization-owned managed profile to get maximum time
+     * the profile is allowed to be turned off.
+     *
+     * @param admin Which {@link DeviceAdminReceiver} this request is associated with
+     * @return Maximum time the profile is allowed to be off in milliseconds or 0 if not limited.
+     * @see #setPersonalAppsSuspended
+     */
+    public long getManagedProfileMaximumTimeOff(@NonNull ComponentName admin) {
+        throwIfParentInstance("getManagedProfileMaximumTimeOff");
+        if (mService != null) {
+            try {
+                return mService.getManagedProfileMaximumTimeOff(admin);
+            } catch (RemoteException re) {
+                throw re.rethrowFromSystemServer();
+            }
+        }
+        return 0;
     }
 }

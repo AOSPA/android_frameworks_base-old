@@ -68,4 +68,18 @@ abstract class BaseIDevicePolicyManager extends IDevicePolicyManager.Stub {
     public boolean isOrganizationOwnedDeviceWithManagedProfile() {
         return false;
     }
+
+    public int getPersonalAppsSuspendedReasons(ComponentName admin) {
+        return 0;
+    }
+
+    public void setPersonalAppsSuspended(ComponentName admin, boolean suspended) {
+    }
+
+    public void setManagedProfileMaximumTimeOff(ComponentName admin, long timeoutMs) {
+    }
+
+    public long getManagedProfileMaximumTimeOff(ComponentName admin) {
+        return 0;
+    }
 }

@@ -191,12 +191,20 @@ filegroup {
     path: "telephony/java",
 }
 
+genrule {
+    name: "statslog-telephony-common-java-gen",
+    tools: ["stats-log-api-gen"],
+    cmd: "$(location stats-log-api-gen) --java $(out) --module telephony_common"
+        + " --javaPackage com.android.internal.telephony --javaClass TelephonyCommonStatsLog",
+    out: ["com/android/internal/telephony/TelephonyCommonStatsLog.java"],
+}
+
 filegroup {
     name: "framework-telephony-common-sources",
     srcs: [
         "telephony/common/**/*.java",
+        ":statslog-telephony-common-java-gen",
     ],
-    path: "telephony/common",
 }
 
 filegroup {
@@ -265,7 +273,8 @@ filegroup {
 
         // etc.
         ":framework-javastream-protos",
-        ":framework-statslog-gen",
+        ":framework-statslog-gen", // StatsLogInternal.java
+        ":statslog-framework-java-gen", // FrameworkStatsLog.java
 
         // telephony annotations
         ":framework-telephony-annotations",
@@ -297,6 +306,8 @@ filegroup {
     ],
 }
 
+// AIDL files under these paths are mixture of public and private ones.
+// They shouldn't be exported across module boundaries.
 java_defaults {
     name: "framework-aidl-export-defaults",
     aidl: {
@@ -321,12 +332,6 @@ java_defaults {
             "wifi/aidl-export",
         ],
     },
-
-    required: [
-        // TODO: remove gps_debug and protolog.conf.json when the build system propagates "required" properly.
-        "gps_debug.conf",
-	"protolog.conf.json.gz",
-    ],
 }
 
 // Collection of classes that are generated from non-Java files that are not listed in
@@ -344,6 +349,7 @@ java_library {
         "android.hardware.cas-V1.2-java",
         "android.hardware.contexthub-V1.0-java",
         "android.hardware.gnss-V1.0-java",
+        "android.hardware.gnss-V2.1-java",
         "android.hardware.health-V1.0-java-constants",
         "android.hardware.radio-V1.0-java",
         "android.hardware.radio-V1.1-java",
@@ -415,6 +421,12 @@ java_defaults {
     plugins: [
         "view-inspector-annotation-processor",
         "staledataclass-annotation-processor",
+    ],
+
+    required: [
+        // TODO: remove gps_debug and protolog.conf.json when the build system propagates "required" properly.
+        "gps_debug.conf",
+        "protolog.conf.json.gz",
     ],
 }
 
@@ -530,7 +542,7 @@ java_library {
     srcs: [":framework-all-sources"],
     installable: false,
     static_libs: [
-        "exoplayer2-core",
+        "exoplayer2-extractor",
         "android.hardware.wifi-V1.0-java-constants",
     ],
     libs: ["icing-java-proto-lite"],
@@ -539,19 +551,26 @@ java_library {
 
 java_library {
     name: "framework-annotation-proc",
-    defaults: ["framework-aidl-export-defaults"],
-    srcs: [":framework-all-sources"],
+    srcs: [
+        ":framework-all-sources",
+        "core/java/**/*.logtags",
+    ],
+    sdk_version: "core_platform",
     libs: [
         "app-compat-annotations",
+        "ext",
+        "icing-java-proto-lite",
         "unsupportedappusage",
     ],
+
     installable: false,
     plugins: [
         "unsupportedappusage-annotation-processor",
         "compat-changeid-annotation-processor",
     ],
     static_libs: [
-        "exoplayer2-core",
+        "framework-internal-utils",
+        "exoplayer2-extractor",
         "android.hardware.wifi-V1.0-java-constants",
     ]
 }
@@ -572,7 +591,6 @@ java_library {
     host_supported: true,
     srcs: [
         "core/java/android/annotation/IntDef.java",
-        "core/java/android/annotation/UnsupportedAppUsage.java",
     ],
     static_libs: [
         "art.module.api.annotations",
@@ -600,6 +618,14 @@ genrule {
     tools: ["stats-log-api-gen"],
     cmd: "$(location stats-log-api-gen) --java $(out) --worksource",
     out: ["android/util/StatsLogInternal.java"],
+}
+
+genrule {
+    name: "statslog-framework-java-gen",
+    tools: ["stats-log-api-gen"],
+    cmd: "$(location stats-log-api-gen) --java $(out) --module framework" +
+         " --javaPackage com.android.internal.util --javaClass FrameworkStatsLog --worksource",
+    out: ["com/android/internal/util/FrameworkStatsLog.java"],
 }
 
 gensrcs {
@@ -645,7 +671,6 @@ filegroup {
         "core/java/android/annotation/SystemApi.java",
         "core/java/android/annotation/SystemService.java",
         "core/java/android/annotation/TestApi.java",
-        "core/java/android/annotation/UnsupportedAppUsage.java",
         "core/java/com/android/internal/annotations/GuardedBy.java",
         "core/java/com/android/internal/annotations/VisibleForTesting.java",
         "core/java/com/android/internal/annotations/Immutable.java",
@@ -713,7 +738,11 @@ filegroup {
     name: "framework-tethering-annotations",
     srcs: [
         "core/java/android/annotation/NonNull.java",
+        "core/java/android/annotation/Nullable.java",
+        "core/java/android/annotation/RequiresPermission.java",
         "core/java/android/annotation/SystemApi.java",
+        "core/java/android/annotation/TestApi.java",
+        "core/java/com/android/internal/annotations/GuardedBy.java",
     ],
 }
 // Build ext.jar
@@ -917,6 +946,8 @@ filegroup {
     srcs: [
         "core/java/android/os/incremental/IIncrementalManager.aidl",
         "core/java/android/os/incremental/IIncrementalManagerNative.aidl",
+        "core/java/android/os/incremental/IncrementalNewFileParams.aidl",
+        "core/java/android/os/incremental/IncrementalSignature.aidl",
     ],
     path: "core/java",
 }
@@ -1049,7 +1080,6 @@ java_library {
         "core/java/android/annotation/Nullable.java",
         "core/java/android/annotation/SystemApi.java",
         "core/java/android/annotation/TestApi.java",
-        "core/java/android/annotation/UnsupportedAppUsage.java",
         "core/java/android/os/HidlMemory.java",
         "core/java/android/os/HwBinder.java",
         "core/java/android/os/HwBlob.java",
@@ -1262,7 +1292,11 @@ metalava_framework_docs_args = "--manifest $(location core/res/AndroidManifest.x
     "--hide MissingPermission --hide BroadcastBehavior " +
     "--hide HiddenSuperclass --hide DeprecationMismatch --hide UnavailableSymbol " +
     "--hide SdkConstant --hide HiddenTypeParameter --hide Todo --hide Typo " +
-    "--force-convert-to-warning-nullability-annotations +*:-android.*:+android.icu.*:-dalvik.*"
+    "--force-convert-to-warning-nullability-annotations +*:-android.*:+android.icu.*:-dalvik.* " +
+    "--api-lint-ignore-prefix android.icu. " +
+    "--api-lint-ignore-prefix java. " +
+    "--api-lint-ignore-prefix junit. " +
+    "--api-lint-ignore-prefix org. "
 
 build = [
     "StubLibraries.bp",

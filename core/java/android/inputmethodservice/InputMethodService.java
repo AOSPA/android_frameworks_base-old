@@ -16,12 +16,11 @@
 
 package android.inputmethodservice;
 
-import static android.view.Display.DEFAULT_DISPLAY;
 import static android.view.ViewGroup.LayoutParams.MATCH_PARENT;
 import static android.view.ViewGroup.LayoutParams.WRAP_CONTENT;
 import static android.view.ViewRootImpl.NEW_INSETS_MODE_NONE;
+import static android.view.WindowInsets.Type.navigationBars;
 import static android.view.WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS;
-import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_ONLY_DRAW_BOTTOM_BAR_BACKGROUND;
 
 import static com.android.internal.util.function.pooled.PooledLambda.obtainMessage;
 
@@ -39,6 +38,7 @@ import android.app.Dialog;
 import android.compat.annotation.UnsupportedAppUsage;
 import android.content.ComponentName;
 import android.content.Context;
+import android.content.pm.PackageManager;
 import android.content.res.Configuration;
 import android.content.res.Resources;
 import android.content.res.TypedArray;
@@ -52,7 +52,6 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
-import android.os.Process;
 import android.os.RemoteException;
 import android.os.ResultReceiver;
 import android.os.SystemClock;
@@ -64,6 +63,7 @@ import android.text.method.MovementMethod;
 import android.util.Log;
 import android.util.PrintWriterPrinter;
 import android.util.Printer;
+import android.util.Size;
 import android.view.Gravity;
 import android.view.KeyCharacterMap;
 import android.view.KeyEvent;
@@ -452,6 +452,9 @@ public class InputMethodService extends AbstractInputMethodService {
     @Nullable
     private InlineSuggestionsRequestInfo mInlineSuggestionsRequestInfo = null;
 
+    private boolean mAutomotiveHideNavBarForKeyboard;
+    private boolean mIsAutomotive;
+
     /**
      * An opaque {@link Binder} token of window requesting {@link InputMethodImpl#showSoftInput}
      * The original app window token is passed from client app window.
@@ -560,12 +563,10 @@ public class InputMethodService extends AbstractInputMethodService {
         @Override
         public void updateInputMethodDisplay(int displayId) {
             // Update display for adding IME window to the right display.
-            if (displayId != DEFAULT_DISPLAY) {
-                // TODO(b/111364446) Need to address context lifecycle issue if need to re-create
-                // for update resources & configuration correctly when show soft input
-                // in non-default display.
-                updateDisplay(displayId);
-            }
+            // TODO(b/111364446) Need to address context lifecycle issue if need to re-create
+            // for update resources & configuration correctly when show soft input
+            // in non-default display.
+            updateDisplay(displayId);
         }
 
         /**
@@ -1233,6 +1234,11 @@ public class InputMethodService extends AbstractInputMethodService {
         super.onCreate();
         mImm = (InputMethodManager)getSystemService(INPUT_METHOD_SERVICE);
         mSettingsObserver = SettingsObserver.createAndRegister(this);
+
+        mIsAutomotive = isAutomotive();
+        mAutomotiveHideNavBarForKeyboard = getApplicationContext().getResources().getBoolean(
+                com.android.internal.R.bool.config_automotiveHideNavBarForKeyboard);
+
         // TODO(b/111364446) Need to address context lifecycle issue if need to re-create
         // for update resources & configuration correctly when show soft input
         // in non-default display.
@@ -1240,16 +1246,20 @@ public class InputMethodService extends AbstractInputMethodService {
                 Context.LAYOUT_INFLATER_SERVICE);
         mWindow = new SoftInputWindow(this, "InputMethod", mTheme, null, null, mDispatcherState,
                 WindowManager.LayoutParams.TYPE_INPUT_METHOD, Gravity.BOTTOM, false);
-        mWindow.getWindow().setFitWindowInsetsTypes(WindowInsets.Type.systemBars());
-        mWindow.getWindow().addPrivateFlags(PRIVATE_FLAG_ONLY_DRAW_BOTTOM_BAR_BACKGROUND);
+        mWindow.getWindow().getAttributes().setFitInsetsTypes(WindowInsets.Type.statusBars());
+
+        // IME layout should always be inset by navigation bar, no matter its current visibility,
+        // unless automotive requests it, since automotive may hide the navigation bar.
         mWindow.getWindow().getDecorView().setOnApplyWindowInsetsListener(
                 (v, insets) -> v.onApplyWindowInsets(
-                        new WindowInsets.Builder(insets).setSystemWindowInsets(
-                                android.graphics.Insets.of(
-                                        insets.getSystemWindowInsetLeft(),
-                                        insets.getSystemWindowInsetTop(),
-                                        insets.getSystemWindowInsetRight(),
-                                        insets.getStableInsetBottom())).build()));
+                        new WindowInsets.Builder(insets).setInsets(
+                                navigationBars(),
+                                mIsAutomotive && mAutomotiveHideNavBarForKeyboard
+                                        ? android.graphics.Insets.NONE
+                                        : insets.getInsetsIgnoringVisibility(navigationBars())
+                                )
+                                .build()));
+
         // For ColorView in DecorView to work, FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS needs to be set
         // by default (but IME developers can opt this out later if they want a new behavior).
         mWindow.getWindow().setFlags(
@@ -1466,8 +1476,9 @@ public class InputMethodService extends AbstractInputMethodService {
      * screen orientation changes.
      */
     public int getMaxWidth() {
-        WindowManager wm = (WindowManager) getSystemService(Context.WINDOW_SERVICE);
-        return wm.getDefaultDisplay().getWidth();
+        final WindowManager windowManager = getSystemService(WindowManager.class);
+        final Size windowSize = windowManager.getCurrentWindowMetrics().getSize();
+        return windowSize.getWidth();
     }
     
     /**
@@ -3284,6 +3295,11 @@ public class InputMethodService extends AbstractInputMethodService {
                 | (isInputViewShown()
                         ? (mCanPreRender ? (mWindowVisible ? IME_VISIBLE : IME_INVISIBLE)
                         : IME_VISIBLE) : 0);
+    }
+
+    private boolean isAutomotive() {
+        return getApplicationContext().getPackageManager().hasSystemFeature(
+                PackageManager.FEATURE_AUTOMOTIVE);
     }
 
     /**

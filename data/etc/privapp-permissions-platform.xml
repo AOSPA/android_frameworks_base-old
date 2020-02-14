@@ -59,6 +59,7 @@ applications that come with the platform
     <privapp-permissions package="com.android.externalstorage">
         <permission name="android.permission.MOUNT_UNMOUNT_FILESYSTEMS"/>
         <permission name="android.permission.WRITE_MEDIA_STORAGE"/>
+        <permission name="android.permission.MANAGE_EXTERNAL_STORAGE"/>
     </privapp-permissions>
 
     <privapp-permissions package="com.android.location.fused">
@@ -98,6 +99,7 @@ applications that come with the platform
         <permission name="android.permission.MANAGE_USERS"/>
         <permission name="android.permission.INTERACT_ACROSS_USERS"/>
         <permission name="android.permission.WRITE_MEDIA_STORAGE"/>
+        <permission name="android.permission.MANAGE_EXTERNAL_STORAGE"/>
     </privapp-permissions>
 
     <privapp-permissions package="com.android.musicfx">
@@ -200,6 +202,8 @@ applications that come with the platform
         <permission name="android.permission.CLEAR_APP_CACHE"/>
         <permission name="android.permission.CONNECTIVITY_INTERNAL"/>
         <permission name="android.permission.START_ACTIVITIES_FROM_BACKGROUND"/>
+        <permission name="android.permission.WRITE_MEDIA_STORAGE"/>
+        <permission name="android.permission.MANAGE_EXTERNAL_STORAGE"/>
         <permission name="android.permission.UPDATE_APP_OPS_STATS"/>
         <permission name="android.permission.UPDATE_DEVICE_STATS"/>
     </privapp-permissions>
@@ -209,6 +213,7 @@ applications that come with the platform
         <permission name="android.permission.MANAGE_USERS"/>
         <permission name="android.permission.USE_RESERVED_DISK"/>
         <permission name="android.permission.WRITE_MEDIA_STORAGE"/>
+        <permission name="android.permission.MANAGE_EXTERNAL_STORAGE"/>
         <permission name="android.permission.WATCH_APPOPS"/>
         <permission name="android.permission.UPDATE_APP_OPS_STATS"/>
         <permission name="android.permission.UPDATE_DEVICE_STATS"/>
@@ -265,6 +270,7 @@ applications that come with the platform
 
     <privapp-permissions package="com.android.sharedstoragebackup">
         <permission name="android.permission.WRITE_MEDIA_STORAGE"/>
+        <permission name="android.permission.MANAGE_EXTERNAL_STORAGE"/>
     </privapp-permissions>
 
     <privapp-permissions package="com.android.shell">
@@ -300,6 +306,7 @@ applications that come with the platform
         <permission name="android.permission.LOCAL_MAC_ADDRESS"/>
         <permission name="android.permission.MANAGE_ACCESSIBILITY"/>
         <permission name="android.permission.MANAGE_DEVICE_ADMINS"/>
+        <permission name="android.permission.MANAGE_ROLLBACKS"/>
         <permission name="android.permission.MANAGE_USB"/>
         <permission name="android.permission.MODIFY_APPWIDGET_BIND_PERMISSIONS"/>
         <permission name="android.permission.MODIFY_PHONE_STATE"/>
@@ -340,6 +347,7 @@ applications that come with the platform
         <permission name="android.permission.UPDATE_APP_OPS_STATS"/>
         <permission name="android.permission.USE_RESERVED_DISK"/>
         <permission name="android.permission.WRITE_MEDIA_STORAGE"/>
+        <permission name="android.permission.MANAGE_EXTERNAL_STORAGE"/>
         <permission name="android.permission.WRITE_SECURE_SETTINGS"/>
         <permission name="android.permission.STATUS_BAR_SERVICE"/>
         <permission name="android.permission.REQUEST_INCIDENT_REPORT_APPROVAL"/>
@@ -357,6 +365,14 @@ applications that come with the platform
         <permission name="android.permission.CONTROL_INCALL_EXPERIENCE"/>
         <!-- Permission required for Tethering CTS tests. -->
         <permission name="android.permission.TETHER_PRIVILEGED"/>
+        <!-- Permissions required to test ambient display. -->
+        <permission name="android.permission.READ_DREAM_STATE" />
+        <permission name="android.permission.WRITE_DREAM_STATE" />
+        <!-- Permission required to test lights control APIs. -->
+        <permission name="android.permission.CONTROL_DEVICE_LIGHTS" />
+        <!-- Permission required for ShortcutManagerUsageTest CTS test. -->
+        <permission name="android.permission.ACCESS_SHORTCUTS"/>
+        <permission name="android.permission.REBOOT"/>
     </privapp-permissions>
 
     <privapp-permissions package="com.android.statementservice">

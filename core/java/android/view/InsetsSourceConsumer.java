@@ -17,11 +17,14 @@
 package android.view;
 
 import static android.view.InsetsController.ANIMATION_TYPE_NONE;
+import static android.view.InsetsState.toPublicType;
 
 import android.annotation.IntDef;
 import android.annotation.Nullable;
+import android.util.MutableShort;
 import android.view.InsetsState.InternalInsetsType;
 import android.view.SurfaceControl.Transaction;
+import android.view.WindowInsets.Type.InsetsType;
 
 import com.android.internal.annotations.VisibleForTesting;
 
@@ -36,7 +39,7 @@ import java.util.function.Supplier;
 public class InsetsSourceConsumer {
 
     @Retention(RetentionPolicy.SOURCE)
-    @IntDef(value = {ShowResult.SHOW_IMMEDIATELY, ShowResult.SHOW_DELAYED, ShowResult.SHOW_FAILED})
+    @IntDef(value = {ShowResult.SHOW_IMMEDIATELY, ShowResult.IME_SHOW_DELAYED, ShowResult.IME_SHOW_FAILED})
     @interface ShowResult {
         /**
          * Window type is ready to be shown, will be shown immidiately.
@@ -46,12 +49,12 @@ public class InsetsSourceConsumer {
          * Result will be delayed. Window needs to be prepared or request is not from controller.
          * Request will be delegated to controller and may or may not be shown.
          */
-        int SHOW_DELAYED = 1;
+        int IME_SHOW_DELAYED = 1;
         /**
          * Window will not be shown because one of the conditions couldn't be met.
          * (e.g. in IME's case, when no editor is focused.)
          */
-        int SHOW_FAILED = 2;
+        int IME_SHOW_FAILED = 2;
     }
 
     protected final InsetsController mController;
@@ -71,18 +74,48 @@ public class InsetsSourceConsumer {
         mRequestedVisible = InsetsState.getDefaultVisibility(type);
     }
 
-    public void setControl(@Nullable InsetsSourceControl control) {
+    /**
+     * Updates the control delivered from the server.
+
+     * @param showTypes An integer array with a single entry that determines which types a show
+     *                  animation should be run after setting the control.
+     * @param hideTypes An integer array with a single entry that determines which types a hide
+     *                  animation should be run after setting the control.
+     */
+    public void setControl(@Nullable InsetsSourceControl control,
+            @InsetsType int[] showTypes, @InsetsType int[] hideTypes) {
         if (mSourceControl == control) {
             return;
         }
         mSourceControl = control;
-        applyHiddenToControl();
+
+        // We are loosing control
+        if (mSourceControl == null) {
+            mController.notifyControlRevoked(this);
+
+            // Restore server visibility.
+            mState.getSource(getType()).setVisible(
+                    mController.getLastDispatchedState().getSource(getType()).isVisible());
+            applyLocalVisibilityOverride();
+            return;
+        }
+
+        // We are gaining control, and need to run an animation since previous state didn't match
+        if (mRequestedVisible != mState.getSource(mType).isVisible()) {
+            if (mRequestedVisible) {
+                showTypes[0] |= toPublicType(getType());
+            } else {
+                hideTypes[0] |= toPublicType(getType());
+            }
+            return;
+        }
+
+        // We are gaining control, but don't need to run an animation. However make sure that the
+        // leash visibility is still up to date.
         if (applyLocalVisibilityOverride()) {
             mController.notifyVisibilityChanged();
         }
-        if (mSourceControl == null) {
-            mController.notifyControlRevoked(this);
-        }
+        applyHiddenToControl();
     }
 
     @VisibleForTesting
@@ -95,7 +128,7 @@ public class InsetsSourceConsumer {
     }
 
     @VisibleForTesting
-    public void show() {
+    public void show(boolean fromIme) {
         setRequestedVisible(true);
     }
 
@@ -155,7 +188,8 @@ public class InsetsSourceConsumer {
      *                       {@link android.inputmethodservice.InputMethodService}).
      * @return @see {@link ShowResult}.
      */
-    @ShowResult int requestShow(boolean fromController) {
+    @VisibleForTesting
+    public @ShowResult int requestShow(boolean fromController) {
         return ShowResult.SHOW_IMMEDIATELY;
     }
 
@@ -171,17 +205,14 @@ public class InsetsSourceConsumer {
      * the moment.
      */
     private void setRequestedVisible(boolean requestedVisible) {
-        if (mRequestedVisible == requestedVisible) {
-            return;
-        }
         mRequestedVisible = requestedVisible;
-        applyLocalVisibilityOverride();
-        mController.notifyVisibilityChanged();
+        if (applyLocalVisibilityOverride()) {
+            mController.notifyVisibilityChanged();
+        }
     }
 
     private void applyHiddenToControl() {
-        if (mSourceControl == null || mSourceControl.getLeash() == null
-                || mController.getAnimationType(mType) != ANIMATION_TYPE_NONE) {
+        if (mSourceControl == null || mSourceControl.getLeash() == null) {
             return;
         }
 

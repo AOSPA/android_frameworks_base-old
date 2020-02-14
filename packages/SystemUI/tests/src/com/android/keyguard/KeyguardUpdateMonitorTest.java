@@ -22,7 +22,6 @@ import static android.telephony.SubscriptionManager.NAME_SOURCE_DEFAULT;
 import static com.google.common.truth.Truth.assertThat;
 
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -438,14 +437,14 @@ public class KeyguardUpdateMonitorTest extends SysuiTestCase {
     }
 
     @Test
-    public void testIgnoresAuth_whenLockout() {
+    public void testTriesToAuthenticate_whenLockout() {
         mKeyguardUpdateMonitor.dispatchStartedWakingUp();
         mTestableLooper.processAllMessages();
         when(mStrongAuthTracker.getStrongAuthForUser(anyInt())).thenReturn(
                 KeyguardUpdateMonitor.StrongAuthTracker.STRONG_AUTH_REQUIRED_AFTER_LOCKOUT);
 
         mKeyguardUpdateMonitor.onKeyguardVisibilityChanged(true);
-        verify(mFaceManager, never()).authenticate(any(), any(), anyInt(), any(), any(), anyInt());
+        verify(mFaceManager).authenticate(any(), any(), anyInt(), any(), any(), anyInt());
     }
 
     @Test
@@ -483,7 +482,7 @@ public class KeyguardUpdateMonitorTest extends SysuiTestCase {
         List<SubscriptionInfo> list = new ArrayList<>();
         list.add(TEST_SUBSCRIPTION);
         list.add(TEST_SUBSCRIPTION_2);
-        when(mSubscriptionManager.getActiveSubscriptionInfoList(anyBoolean())).thenReturn(list);
+        when(mSubscriptionManager.getActiveAndHiddenSubscriptionInfoList()).thenReturn(list);
         mKeyguardUpdateMonitor.mPhoneStateListener.onActiveDataSubscriptionIdChanged(
                 TEST_SUBSCRIPTION_2.getSubscriptionId());
         mTestableLooper.processAllMessages();

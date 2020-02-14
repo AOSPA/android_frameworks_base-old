@@ -18,6 +18,7 @@ package android.net;
 
 import android.app.PendingIntent;
 import android.net.ConnectionInfo;
+import android.net.IConnectivityDiagnosticsCallback;
 import android.net.LinkProperties;
 import android.net.Network;
 import android.net.NetworkAgentConfig;
@@ -25,6 +26,7 @@ import android.net.NetworkCapabilities;
 import android.net.NetworkInfo;
 import android.net.NetworkQuotaInfo;
 import android.net.NetworkRequest;
+import android.net.NetworkScore;
 import android.net.NetworkState;
 import android.net.ISocketKeepaliveCallback;
 import android.net.ProxyInfo;
@@ -119,6 +121,14 @@ interface IConnectivityManager
 
     ParcelFileDescriptor establishVpn(in VpnConfig config);
 
+    boolean provisionVpnProfile(in VpnProfile profile, String packageName);
+
+    void deleteVpnProfile(String packageName);
+
+    void startVpnProfile(String packageName);
+
+    void stopVpnProfile(String packageName);
+
     VpnConfig getVpnConfig(int userId);
 
     @UnsupportedAppUsage
@@ -153,7 +163,7 @@ interface IConnectivityManager
     void declareNetworkRequestUnfulfillable(in NetworkRequest request);
 
     Network registerNetworkAgent(in Messenger messenger, in NetworkInfo ni, in LinkProperties lp,
-            in NetworkCapabilities nc, int score, in NetworkAgentConfig config,
+            in NetworkCapabilities nc, in NetworkScore score, in NetworkAgentConfig config,
             in int factorySerialNumber);
 
     NetworkRequest requestNetwork(in NetworkCapabilities networkCapabilities,
@@ -210,6 +220,10 @@ interface IConnectivityManager
     int getConnectionOwnerUid(in ConnectionInfo connectionInfo);
     boolean isCallerCurrentAlwaysOnVpnApp();
     boolean isCallerCurrentAlwaysOnVpnLockdownApp();
+
+    void registerConnectivityDiagnosticsCallback(in IConnectivityDiagnosticsCallback callback,
+            in NetworkRequest request);
+    void unregisterConnectivityDiagnosticsCallback(in IConnectivityDiagnosticsCallback callback);
 
     IBinder startOrGetTestNetworkService();
 }

@@ -20,6 +20,7 @@ import static com.android.internal.app.ChooserActivity.TARGET_TYPE_SHORTCUTS_FRO
 import static com.android.internal.app.ChooserActivity.TARGET_TYPE_SHORTCUTS_FROM_SHORTCUT_MANAGER;
 
 import android.app.ActivityManager;
+import android.app.prediction.AppPredictor;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
@@ -27,7 +28,9 @@ import android.content.pm.ActivityInfo;
 import android.content.pm.LabeledIntent;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
+import android.content.pm.ShortcutInfo;
 import android.os.AsyncTask;
+import android.os.UserHandle;
 import android.os.UserManager;
 import android.service.chooser.ChooserTarget;
 import android.util.Log;
@@ -90,6 +93,8 @@ public class ChooserListAdapter extends ResolverListAdapter {
 
     // Sorted list of DisplayResolveInfos for the alphabetical app section.
     private List<DisplayResolveInfo> mSortedList = new ArrayList<>();
+    private AppPredictor mAppPredictor;
+    private AppPredictor.Callback mAppPredictorCallback;
 
     public ChooserListAdapter(Context context, List<Intent> payloadIntents,
             Intent[] initialIntents, List<ResolveInfo> rList,
@@ -160,20 +165,24 @@ public class ChooserListAdapter extends ResolverListAdapter {
         }
     }
 
+    AppPredictor getAppPredictor() {
+        return mAppPredictor;
+    }
+
     @Override
     public void handlePackagesChanged() {
         if (DEBUG) {
             Log.d(TAG, "clearing queryTargets on package change");
         }
         createPlaceHolders();
-        mChooserListCommunicator.onHandlePackagesChanged();
+        mChooserListCommunicator.onHandlePackagesChanged(this);
 
     }
 
     @Override
     public void notifyDataSetChanged() {
         if (!mListViewDataChanged) {
-            mChooserListCommunicator.sendListViewUpdateMessage();
+            mChooserListCommunicator.sendListViewUpdateMessage(getUserHandle());
             mListViewDataChanged = true;
         }
     }
@@ -243,11 +252,6 @@ public class ChooserListAdapter extends ResolverListAdapter {
             mSortedList.addAll(mDisplayList);
         }
         Collections.sort(mSortedList, new ChooserActivity.AzInfoComparator(mContext));
-    }
-
-    @Override
-    public boolean shouldGetResolvedFilter() {
-        return true;
     }
 
     @Override
@@ -388,7 +392,8 @@ public class ChooserListAdapter extends ResolverListAdapter {
      * if score is too low.
      */
     public void addServiceResults(DisplayResolveInfo origTarget, List<ChooserTarget> targets,
-            @ChooserActivity.ShareTargetType int targetType) {
+            @ChooserActivity.ShareTargetType int targetType,
+            Map<ChooserTarget, ShortcutInfo> directShareToShortcutInfos) {
         if (DEBUG) {
             Log.d(TAG, "addServiceResults " + origTarget + ", " + targets.size()
                     + " targets");
@@ -417,8 +422,11 @@ public class ChooserListAdapter extends ResolverListAdapter {
                 // This incents ChooserTargetServices to define what's truly better.
                 targetScore = lastScore * 0.95f;
             }
-            boolean isInserted = insertServiceTarget(new SelectableTargetInfo(
-                    mContext, origTarget, target, targetScore, mSelectableTargetInfoComunicator));
+            UserHandle userHandle = getUserHandle();
+            Context contextAsUser = mContext.createContextAsUser(userHandle, 0 /* flags */);
+            boolean isInserted = insertServiceTarget(new SelectableTargetInfo(contextAsUser,
+                    origTarget, target, targetScore, mSelectableTargetInfoComunicator,
+                    (isShortcutResult ? directShareToShortcutInfos.get(target) : null)));
 
             if (isInserted && isShortcutResult) {
                 mNumShortcutResults++;
@@ -532,7 +540,7 @@ public class ChooserListAdapter extends ResolverListAdapter {
     @Override
     AsyncTask<List<ResolvedComponentInfo>,
                 Void,
-                List<ResolvedComponentInfo>> createSortingTask() {
+                List<ResolvedComponentInfo>> createSortingTask(boolean doPostProcessing) {
         return new AsyncTask<List<ResolvedComponentInfo>,
                 Void,
                 List<ResolvedComponentInfo>>() {
@@ -545,11 +553,28 @@ public class ChooserListAdapter extends ResolverListAdapter {
             }
             @Override
             protected void onPostExecute(List<ResolvedComponentInfo> sortedComponents) {
-                processSortedList(sortedComponents);
-                mChooserListCommunicator.updateProfileViewButton();
-                notifyDataSetChanged();
+                processSortedList(sortedComponents, doPostProcessing);
+                if (doPostProcessing) {
+                    mChooserListCommunicator.updateProfileViewButton();
+                    notifyDataSetChanged();
+                }
             }
         };
+    }
+
+    public void setAppPredictor(AppPredictor appPredictor) {
+        mAppPredictor = appPredictor;
+    }
+
+    public void setAppPredictorCallback(AppPredictor.Callback appPredictorCallback) {
+        mAppPredictorCallback = appPredictorCallback;
+    }
+
+    public void destroyAppPredictor() {
+        if (getAppPredictor() != null) {
+            getAppPredictor().unregisterPredictionUpdates(mAppPredictorCallback);
+            getAppPredictor().destroy();
+        }
     }
 
     /**
@@ -560,7 +585,7 @@ public class ChooserListAdapter extends ResolverListAdapter {
 
         int getMaxRankedTargets();
 
-        void sendListViewUpdateMessage();
+        void sendListViewUpdateMessage(UserHandle userHandle);
 
         boolean isSendAction(Intent targetIntent);
     }

@@ -190,7 +190,7 @@ public class ImmersiveModeConfirmation {
                         | WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED
                         | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
                 PixelFormat.TRANSLUCENT);
-        lp.setFitWindowInsetsTypes(lp.getFitWindowInsetsTypes() & ~Type.statusBars());
+        lp.setFitInsetsTypes(lp.getFitInsetsTypes() & ~Type.statusBars());
         lp.privateFlags |= WindowManager.LayoutParams.SYSTEM_FLAG_SHOW_FOR_ALL_USERS;
         lp.setTitle("ImmersiveModeConfirmation");
         lp.windowAnimations = com.android.internal.R.style.Animation_ImmersiveModeConfirmation;
@@ -275,7 +275,7 @@ public class ImmersiveModeConfirmation {
             super.onAttachedToWindow();
 
             DisplayMetrics metrics = new DisplayMetrics();
-            getWindowManager().getDefaultDisplay().getMetrics(metrics);
+            mContext.getDisplay().getMetrics(metrics);
             float density = metrics.density;
 
             getViewTreeObserver().addOnComputeInternalInsetsListener(mInsetsListener);

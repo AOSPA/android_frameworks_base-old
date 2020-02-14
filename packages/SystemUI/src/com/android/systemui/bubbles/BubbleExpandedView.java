@@ -20,10 +20,13 @@ import static android.content.Intent.FLAG_ACTIVITY_MULTIPLE_TASK;
 import static android.content.Intent.FLAG_ACTIVITY_NEW_DOCUMENT;
 import static android.view.Display.INVALID_DISPLAY;
 
+import static android.view.ViewRootImpl.NEW_INSETS_MODE_FULL;
+import static android.view.ViewRootImpl.sNewInsetsMode;
 import static com.android.systemui.bubbles.BubbleDebugConfig.DEBUG_BUBBLE_EXPANDED_VIEW;
 import static com.android.systemui.bubbles.BubbleDebugConfig.TAG_BUBBLES;
 import static com.android.systemui.bubbles.BubbleDebugConfig.TAG_WITH_CLASS_NAME;
 
+import android.annotation.Nullable;
 import android.app.ActivityOptions;
 import android.app.ActivityTaskManager;
 import android.app.ActivityView;
@@ -83,7 +86,7 @@ public class BubbleExpandedView extends LinearLayout implements View.OnClickList
     private ActivityViewStatus mActivityViewStatus = ActivityViewStatus.INITIALIZING;
     private int mTaskId = -1;
 
-    private PendingIntent mBubbleIntent;
+    private PendingIntent mPendingIntent;
 
     private boolean mKeyboardVisible;
     private boolean mNeedsNewHeight;
@@ -98,7 +101,9 @@ public class BubbleExpandedView extends LinearLayout implements View.OnClickList
     private int[] mTempLoc = new int[2];
     private int mExpandedViewTouchSlop;
 
-    private Bubble mBubble;
+    @Nullable private Bubble mBubble;
+
+    private boolean mIsOverflow;
 
     private BubbleController mBubbleController = Dependency.get(BubbleController.class);
     private WindowManager mWindowManager;
@@ -125,7 +130,7 @@ public class BubbleExpandedView extends LinearLayout implements View.OnClickList
                                     + "bubble=" + getBubbleKey());
                         }
                         try {
-                            if (mBubble.usingShortcutInfo()) {
+                            if (!mIsOverflow && mBubble.usingShortcutInfo()) {
                                 mActivityView.startShortcutActivity(mBubble.getShortcutInfo(),
                                         options, null /* sourceBounds */);
                             } else {
@@ -133,7 +138,7 @@ public class BubbleExpandedView extends LinearLayout implements View.OnClickList
                                 // Apply flags to make behaviour match documentLaunchMode=always.
                                 fillInIntent.addFlags(FLAG_ACTIVITY_NEW_DOCUMENT);
                                 fillInIntent.addFlags(FLAG_ACTIVITY_MULTIPLE_TASK);
-                                mActivityView.startActivity(mBubbleIntent, fillInIntent, options);
+                                mActivityView.startActivity(mPendingIntent, fillInIntent, options);
                             }
                         } catch (RuntimeException e) {
                             // If there's a runtime exception here then there's something
@@ -141,7 +146,7 @@ public class BubbleExpandedView extends LinearLayout implements View.OnClickList
                             // the bubble again so we'll just remove it.
                             Log.w(TAG, "Exception while displaying bubble: " + getBubbleKey()
                                     + ", " + e.getMessage() + "; removing bubble");
-                            mBubbleController.removeBubble(mBubble.getKey(),
+                            mBubbleController.removeBubble(getBubbleKey(),
                                     BubbleController.DISMISS_INVALID_INTENT);
                         }
                     });
@@ -241,6 +246,7 @@ public class BubbleExpandedView extends LinearLayout implements View.OnClickList
 
         mActivityView = new ActivityView(mContext, null /* attrs */, 0 /* defStyle */,
                 true /* singleTaskInstance */);
+
         // Set ActivityView's alpha value as zero, since there is no view content to be shown.
         setContentVisibility(false);
         addView(mActivityView);
@@ -334,12 +340,27 @@ public class BubbleExpandedView extends LinearLayout implements View.OnClickList
                             ? insets.getDisplayCutout().getSafeInsetBottom()
                             : 0);
             final int insetsBottom = Math.max(activityViewBottom - keyboardTop, 0);
-            mActivityView.setForwardedInsets(Insets.of(0, 0, 0, insetsBottom));
+
+            // TODO: Temporary hack to offset the view until we can properly inset Bubbles again.
+            if (sNewInsetsMode == NEW_INSETS_MODE_FULL) {
+                mStackView.animate().translationY(-insetsBottom);
+            } else {
+                mActivityView.setForwardedInsets(Insets.of(0, 0, 0, insetsBottom));
+            }
         }
     }
 
     void setStackView(BubbleStackView stackView) {
         mStackView = stackView;
+    }
+
+    public void setOverflow(boolean overflow) {
+        mIsOverflow = overflow;
+
+        Intent target = new Intent(mContext, BubbleOverflowActivity.class);
+        mPendingIntent = PendingIntent.getActivity(mContext, /* requestCode */ 0,
+                target, PendingIntent.FLAG_UPDATE_CURRENT);
+        mSettingsIcon.setVisibility(GONE);
     }
 
     /**
@@ -350,14 +371,14 @@ public class BubbleExpandedView extends LinearLayout implements View.OnClickList
             Log.d(TAG, "update: bubble=" + (bubble != null ? bubble.getKey() : "null"));
         }
         boolean isNew = mBubble == null;
-        if (isNew || bubble.getKey().equals(mBubble.getKey())) {
+        if (isNew || bubble != null && bubble.getKey().equals(mBubble.getKey())) {
             mBubble = bubble;
             mSettingsIcon.setContentDescription(getResources().getString(
                     R.string.bubbles_settings_button_description, bubble.getAppName()));
 
             if (isNew) {
-                mBubbleIntent = mBubble.getBubbleIntent();
-                if (mBubbleIntent != null || mBubble.getShortcutInfo() != null) {
+                mPendingIntent = mBubble.getBubbleIntent();
+                if (mPendingIntent != null || mBubble.getShortcutInfo() != null) {
                     setContentVisibility(false);
                     mActivityView.setVisibility(VISIBLE);
                 }
@@ -393,12 +414,16 @@ public class BubbleExpandedView extends LinearLayout implements View.OnClickList
         return true;
     }
 
+    // TODO(138116789) Fix overflow height.
     void updateHeight() {
         if (DEBUG_BUBBLE_EXPANDED_VIEW) {
             Log.d(TAG, "updateHeight: bubble=" + getBubbleKey());
         }
         if (usingActivityView()) {
-            float desiredHeight = Math.max(mBubble.getDesiredHeight(mContext), mMinHeight);
+            float desiredHeight = mMinHeight;
+            if (!mIsOverflow) {
+                desiredHeight = Math.max(mBubble.getDesiredHeight(mContext), mMinHeight);
+            }
             float height = Math.min(desiredHeight, getMaxExpandedHeight());
             height = Math.max(height, mMinHeight);
             LayoutParams lp = (LayoutParams) mActivityView.getLayoutParams();
@@ -543,7 +568,7 @@ public class BubbleExpandedView extends LinearLayout implements View.OnClickList
     }
 
     private boolean usingActivityView() {
-        return (mBubbleIntent != null || mBubble.getShortcutInfo() != null)
+        return (mPendingIntent != null || mBubble.getShortcutInfo() != null)
                 && mActivityView != null;
     }
 

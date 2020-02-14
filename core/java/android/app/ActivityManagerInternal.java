@@ -368,6 +368,22 @@ public abstract class ActivityManagerInternal {
      */
     public abstract void unregisterProcessObserver(IProcessObserver processObserver);
 
+    /**
+     * Checks if there is an unfinished instrumentation that targets the given uid.
+     *
+     * @param uid The uid to be checked for
+     *
+     * @return True, if there is an instrumentation whose target application uid matches the given
+     * uid, false otherwise
+     */
+    public abstract boolean isUidCurrentlyInstrumented(int uid);
+
+    /**
+     * Show a debug toast, asking user to file a bugreport.
+     */
+    // TODO: remove this toast after feature development is done
+    public abstract void showWhileInUseDebugToast(int uid, int op, int mode);
+
     // Starts a process as empty.
     public abstract int startActivityAsUserEmpty(Bundle options);
 }

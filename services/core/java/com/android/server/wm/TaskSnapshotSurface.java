@@ -36,7 +36,6 @@ import static android.view.WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS;
 import static android.view.WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH;
 import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_FORCE_DRAW_BAR_BACKGROUNDS;
 import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION_STARTING;
-
 import static com.android.internal.policy.DecorView.NAVIGATION_BAR_COLOR_VIEW_ATTRIBUTES;
 import static com.android.internal.policy.DecorView.STATUS_BAR_COLOR_VIEW_ATTRIBUTES;
 import static com.android.internal.policy.DecorView.getColorViewLeftInset;
@@ -116,7 +115,11 @@ class TaskSnapshotSurface implements StartingSurface {
     private static final String TAG = TAG_WITH_CLASS_NAME ? "SnapshotStartingWindow" : TAG_WM;
     private static final int MSG_REPORT_DRAW = 0;
     private static final String TITLE_FORMAT = "SnapshotStartingWindow for taskId=%s";
-    private static final Point sSurfaceSize = new Point(); //tmp var for unused relayout param
+
+    //tmp vars for unused relayout params
+    private static final Point sTmpSurfaceSize = new Point();
+    private static final SurfaceControl sTmpSurfaceControl = new SurfaceControl();
+
     private final Window mWindow;
     private final Surface mSurface;
     private SurfaceControl mSurfaceControl;
@@ -184,8 +187,9 @@ class TaskSnapshotSurface implements StartingSurface {
                 return null;
             }
             sysUiVis = topFullscreenOpaqueWindow.getSystemUiVisibility();
-            windowFlags = topFullscreenOpaqueWindow.getAttrs().flags;
-            windowPrivateFlags = topFullscreenOpaqueWindow.getAttrs().privateFlags;
+            WindowManager.LayoutParams attrs = topFullscreenOpaqueWindow.mAttrs;
+            windowFlags = attrs.flags;
+            windowPrivateFlags = attrs.privateFlags;
 
             layoutParams.packageName = mainWindow.getAttrs().packageName;
             layoutParams.windowAnimations = mainWindow.getAttrs().windowAnimations;
@@ -200,6 +204,14 @@ class TaskSnapshotSurface implements StartingSurface {
             layoutParams.width = LayoutParams.MATCH_PARENT;
             layoutParams.height = LayoutParams.MATCH_PARENT;
             layoutParams.systemUiVisibility = sysUiVis;
+            layoutParams.insetsFlags.behavior
+                    = topFullscreenOpaqueWindow.mAttrs.insetsFlags.behavior;
+            layoutParams.insetsFlags.appearance
+                    = topFullscreenOpaqueWindow.mAttrs.insetsFlags.appearance;
+            layoutParams.setFitInsetsTypes(attrs.getFitInsetsTypes());
+            layoutParams.setFitInsetsSides(attrs.getFitInsetsSides());
+            layoutParams.setFitInsetsIgnoringVisibility(attrs.isFitInsetsIgnoringVisibility());
+
             layoutParams.setTitle(String.format(TITLE_FORMAT, task.mTaskId));
 
             final TaskDescription td = task.getTaskDescription();
@@ -230,7 +242,7 @@ class TaskSnapshotSurface implements StartingSurface {
             session.relayout(window, window.mSeq, layoutParams, -1, -1, View.VISIBLE, 0, -1,
                     tmpFrame, tmpContentInsets, tmpRect, tmpStableInsets, tmpRect,
                     tmpCutout, tmpMergedConfiguration, surfaceControl, mTmpInsetsState,
-                    sSurfaceSize);
+                    sTmpSurfaceSize, sTmpSurfaceControl);
         } catch (RemoteException e) {
             // Local call.
         }

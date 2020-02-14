@@ -124,6 +124,12 @@ interface IImsUt {
             int serviceClass);
 
     /**
+     * Updates the configuration of the call barring for specified service class with password.
+     */
+    int updateCallBarringWithPassword(int cbType, int action, in String[] barrList,
+            int serviceClass, String password);
+
+    /**
      * Retrieves the configuration of the call forward for specified service class.
      * Returns an integer value to indicate the requestId of the UT request.
      * -1 is returned if the "condition" is invalid for the queryCallForward,

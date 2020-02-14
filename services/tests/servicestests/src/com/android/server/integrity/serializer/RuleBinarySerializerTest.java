@@ -42,12 +42,11 @@ import static com.google.common.truth.Truth.assertThat;
 import android.content.integrity.AppInstallMetadata;
 import android.content.integrity.AtomicFormula;
 import android.content.integrity.CompoundFormula;
-import android.content.integrity.Formula;
+import android.content.integrity.IntegrityFormula;
+import android.content.integrity.IntegrityUtils;
 import android.content.integrity.Rule;
 
 import androidx.annotation.NonNull;
-
-import com.android.server.integrity.IntegrityUtils;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -204,8 +203,8 @@ public class RuleBinarySerializerTest {
                         + getBits(DEFAULT_FORMAT_VERSION_BYTES.length, /* numOfBits= */ 32)
                         + SERIALIZED_END_INDEXING_KEY
                         + getBits(
-                        DEFAULT_FORMAT_VERSION_BYTES.length + getBytes(expectedBits).length,
-                        /* numOfBits= */ 32);
+                                DEFAULT_FORMAT_VERSION_BYTES.length + getBytes(expectedBits).length,
+                                /* numOfBits= */ 32);
         expectedIndexingOutputStream.write(
                 getBytes(
                         expectedIndexingBitsForIndexed
@@ -424,10 +423,10 @@ public class RuleBinarySerializerTest {
 
     @Test
     public void testBinaryString_serializeValidAtomicFormula_integerValue() throws Exception {
-        int versionCode = 1;
+        long versionCode = 1;
         Rule rule =
                 new Rule(
-                        new AtomicFormula.IntAtomicFormula(
+                        new AtomicFormula.LongAtomicFormula(
                                 AtomicFormula.VERSION_CODE, AtomicFormula.EQ, versionCode),
                         Rule.DENY);
         RuleSerializer binarySerializer = new RuleBinarySerializer();
@@ -436,7 +435,7 @@ public class RuleBinarySerializerTest {
                         + ATOMIC_FORMULA_START_BITS
                         + VERSION_CODE
                         + EQ
-                        + getBits(versionCode, /* numOfBits= */ 32)
+                        + getBits(versionCode, /* numOfBits= */ 64)
                         + DENY
                         + END_BIT;
         ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
@@ -481,7 +480,7 @@ public class RuleBinarySerializerTest {
 
     @Test
     public void testBinaryString_serializeInvalidFormulaType() throws Exception {
-        Formula invalidFormula = getInvalidFormula();
+        IntegrityFormula invalidFormula = getInvalidFormula();
         Rule rule = new Rule(invalidFormula, Rule.DENY);
         RuleSerializer binarySerializer = new RuleBinarySerializer();
 
@@ -858,16 +857,26 @@ public class RuleBinarySerializerTest {
                 + END_BIT;
     }
 
-    private static Formula getInvalidFormula() {
-        return new Formula() {
+    private static IntegrityFormula getInvalidFormula() {
+        return new AtomicFormula(0) {
             @Override
-            public boolean isSatisfied(AppInstallMetadata appInstallMetadata) {
+            public int getTag() {
+                return 0;
+            }
+
+            @Override
+            public boolean matches(AppInstallMetadata appInstallMetadata) {
                 return false;
             }
 
             @Override
-            public int getTag() {
-                return 0;
+            public boolean isAppCertificateFormula() {
+                return false;
+            }
+
+            @Override
+            public boolean isInstallerFormula() {
+                return false;
             }
 
             @Override

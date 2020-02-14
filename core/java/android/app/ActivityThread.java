@@ -111,6 +111,8 @@ import android.os.Process;
 import android.os.RemoteCallback;
 import android.os.RemoteException;
 import android.os.ServiceManager;
+import android.os.StatsFrameworkInitializer;
+import android.os.StatsServiceManager;
 import android.os.StrictMode;
 import android.os.SystemClock;
 import android.os.SystemProperties;
@@ -924,10 +926,6 @@ public final class ActivityThread extends ClientTransactionHandler {
 
     private class ApplicationThread extends IApplicationThread.Stub {
         private static final String DB_INFO_FORMAT = "  %8s %8s %14s %14s  %s";
-
-        public final void scheduleSleeping(IBinder token, boolean sleeping) {
-            sendMessage(H.SLEEPING, token, sleeping ? 1 : 0);
-        }
 
         public final void scheduleReceiver(Intent intent, ActivityInfo info,
                 CompatibilityInfo compatInfo, int resultCode, String data, Bundle extras,
@@ -1856,7 +1854,6 @@ public final class ActivityThread extends ClientTransactionHandler {
                     case SCHEDULE_CRASH: return "SCHEDULE_CRASH";
                     case DUMP_HEAP: return "DUMP_HEAP";
                     case DUMP_ACTIVITY: return "DUMP_ACTIVITY";
-                    case SLEEPING: return "SLEEPING";
                     case SET_CORE_SETTINGS: return "SET_CORE_SETTINGS";
                     case UPDATE_PACKAGE_COMPATIBILITY_INFO: return "UPDATE_PACKAGE_COMPATIBILITY_INFO";
                     case DUMP_PROVIDER: return "DUMP_PROVIDER";
@@ -1985,11 +1982,6 @@ public final class ActivityThread extends ClientTransactionHandler {
                     break;
                 case DUMP_PROVIDER:
                     handleDumpProvider((DumpComponentInfo)msg.obj);
-                    break;
-                case SLEEPING:
-                    Trace.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER, "sleeping");
-                    handleSleeping((IBinder)msg.obj, msg.arg1 != 0);
-                    Trace.traceEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER);
                     break;
                 case SET_CORE_SETTINGS:
                     Trace.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER, "setCoreSettings");
@@ -2207,7 +2199,7 @@ public final class ActivityThread extends ClientTransactionHandler {
     Resources getTopLevelResources(String resDir, String[] splitResDirs, String[] overlayDirs,
             String[] libDirs, int displayId, LoadedApk pkgInfo) {
         return mResourcesManager.getResources(null, resDir, splitResDirs, overlayDirs, libDirs,
-                displayId, null, pkgInfo.getCompatibilityInfo(), pkgInfo.getClassLoader());
+                displayId, null, pkgInfo.getCompatibilityInfo(), pkgInfo.getClassLoader(), null);
     }
 
     @UnsupportedAppUsage
@@ -4856,41 +4848,6 @@ public final class ActivityThread extends ClientTransactionHandler {
         }
     }
 
-    // TODO: This method should be changed to use {@link #performStopActivityInner} to perform to
-    // stop operation on the activity to reduce code duplication and the chance of fixing a bug in
-    // one place and missing the other.
-    private void handleSleeping(IBinder token, boolean sleeping) {
-        ActivityClientRecord r = mActivities.get(token);
-
-        if (r == null) {
-            Log.w(TAG, "handleSleeping: no activity for token " + token);
-            return;
-        }
-
-        if (sleeping) {
-            if (!r.stopped && !r.isPreHoneycomb()) {
-                callActivityOnStop(r, true /* saveState */, "sleeping");
-            }
-
-            // Make sure any pending writes are now committed.
-            if (!r.isPreHoneycomb()) {
-                QueuedWork.waitToFinish();
-            }
-
-            // Tell activity manager we slept.
-            try {
-                ActivityTaskManager.getService().activitySlept(r.token);
-            } catch (RemoteException ex) {
-                throw ex.rethrowFromSystemServer();
-            }
-        } else {
-            if (r.stopped && r.activity.mVisibleFromServer) {
-                r.activity.performRestart(true /* start */, "handleSleeping");
-                r.setState(ON_START);
-            }
-        }
-    }
-
     private void handleSetCoreSettings(Bundle coreSettings) {
         synchronized (mResourcesManager) {
             mCoreSettings = coreSettings;
@@ -7367,6 +7324,15 @@ public final class ActivityThread extends ClientTransactionHandler {
         }
     }
 
+    float getFloatCoreSetting(String key, float defaultValue) {
+        synchronized (mResourcesManager) {
+            if (mCoreSettings != null) {
+                return mCoreSettings.getFloat(key, defaultValue);
+            }
+            return defaultValue;
+        }
+    }
+
     private static class AndroidOs extends ForwardingOs {
         /**
          * Install selective syscall interception. For example, this is used to
@@ -7555,6 +7521,7 @@ public final class ActivityThread extends ClientTransactionHandler {
      */
     public static void initializeMainlineModules() {
         TelephonyFrameworkInitializer.setTelephonyServiceManager(new TelephonyServiceManager());
+        StatsFrameworkInitializer.setStatsServiceManager(new StatsServiceManager());
     }
 
     private void purgePendingResources() {

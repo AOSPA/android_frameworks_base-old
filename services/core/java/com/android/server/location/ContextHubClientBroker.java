@@ -16,6 +16,8 @@
 
 package com.android.server.location;
 
+import static android.content.pm.PackageManager.PERMISSION_GRANTED;
+
 import android.Manifest;
 import android.app.PendingIntent;
 import android.content.Context;
@@ -33,6 +35,7 @@ import android.os.Binder;
 import android.os.IBinder;
 import android.os.RemoteException;
 import android.util.Log;
+import android.util.proto.ProtoOutputStream;
 
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Supplier;
@@ -109,6 +112,11 @@ public class ContextHubClientBroker extends IContextHubClient.Stub
     private AtomicBoolean mIsPendingIntentCancelled = new AtomicBoolean(false);
 
     /*
+     * True if the application creating the client has the ACCESS_CONTEXT_HUB permission.
+     */
+    private final boolean mHasAccessContextHubPermission;
+
+    /*
      * Helper class to manage registered PendingIntent requests from the client.
      */
     private class PendingIntentRequest {
@@ -165,6 +173,9 @@ public class ContextHubClientBroker extends IContextHubClient.Stub
         mCallbackInterface = callback;
         mPendingIntentRequest = new PendingIntentRequest();
         mPackage = mContext.getPackageManager().getNameForUid(Binder.getCallingUid());
+
+        mHasAccessContextHubPermission = context.checkCallingPermission(
+            Manifest.permission.ACCESS_CONTEXT_HUB) == PERMISSION_GRANTED;
     }
 
     /* package */ ContextHubClientBroker(
@@ -178,6 +189,9 @@ public class ContextHubClientBroker extends IContextHubClient.Stub
         mHostEndPointId = hostEndPointId;
         mPendingIntentRequest = new PendingIntentRequest(pendingIntent, nanoAppId);
         mPackage = pendingIntent.getCreatorPackage();
+
+        mHasAccessContextHubPermission = context.checkCallingPermission(
+            Manifest.permission.ACCESS_CONTEXT_HUB) == PERMISSION_GRANTED;
     }
 
     /**
@@ -415,10 +429,12 @@ public class ContextHubClientBroker extends IContextHubClient.Stub
      */
     private void doSendPendingIntent(PendingIntent pendingIntent, Intent intent) {
         try {
+            String requiredPermission = mHasAccessContextHubPermission
+                    ? Manifest.permission.ACCESS_CONTEXT_HUB
+                    : Manifest.permission.LOCATION_HARDWARE;
             pendingIntent.send(
                     mContext, 0 /* code */, intent, null /* onFinished */, null /* Handler */,
-                    Manifest.permission.LOCATION_HARDWARE /* requiredPermission */,
-                    null /* options */);
+                    requiredPermission, null /* options */);
         } catch (PendingIntent.CanceledException e) {
             mIsPendingIntentCancelled.set(true);
             // The PendingIntent is no longer valid
@@ -447,6 +463,28 @@ public class ContextHubClientBroker extends IContextHubClient.Stub
             mClientManager.unregisterClient(mHostEndPointId);
             mRegistered = false;
         }
+    }
+
+    /**
+     * Dump debugging info as ClientBrokerProto
+     *
+     * If the output belongs to a sub message, the caller is responsible for wrapping this function
+     * between {@link ProtoOutputStream#start(long)} and {@link ProtoOutputStream#end(long)}.
+     *
+     * @param proto the ProtoOutputStream to write to
+     */
+    void dump(ProtoOutputStream proto) {
+        proto.write(ClientBrokerProto.ENDPOINT_ID, getHostEndPointId());
+        proto.write(ClientBrokerProto.ATTACHED_CONTEXT_HUB_ID, getAttachedContextHubId());
+        proto.write(ClientBrokerProto.PACKAGE, mPackage);
+        if (mPendingIntentRequest.isValid()) {
+            proto.write(ClientBrokerProto.PENDING_INTENT_REQUEST_VALID, true);
+            proto.write(ClientBrokerProto.NANO_APP_ID, mPendingIntentRequest.getNanoAppId());
+        }
+        proto.write(ClientBrokerProto.HAS_PENDING_INTENT, mPendingIntentRequest.hasPendingIntent());
+        proto.write(ClientBrokerProto.PENDING_INTENT_CANCELLED, isPendingIntentCancelled());
+        proto.write(ClientBrokerProto.REGISTERED, mRegistered);
+
     }
 
     @Override

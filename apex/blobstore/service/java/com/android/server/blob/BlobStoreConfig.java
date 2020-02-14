@@ -25,6 +25,13 @@ import java.io.File;
 class BlobStoreConfig {
     public static final String TAG = "BlobStore";
 
+    public static final int CURRENT_XML_VERSION = 1;
+
+    private static final String ROOT_DIR_NAME = "blobstore";
+    private static final String BLOBS_DIR_NAME = "blobs";
+    private static final String SESSIONS_INDEX_FILE_NAME = "sessions_index.xml";
+    private static final String BLOBS_INDEX_FILE_NAME = "blobs_index.xml";
+
     @Nullable
     public static File prepareBlobFile(long sessionId) {
         final File blobsDir = prepareBlobsDir();
@@ -58,7 +65,25 @@ class BlobStoreConfig {
 
     @NonNull
     private static File getBlobsDir(File blobsRootDir) {
-        return new File(blobsRootDir, "blobs");
+        return new File(blobsRootDir, BLOBS_DIR_NAME);
+    }
+
+    @Nullable
+    public static File prepareSessionIndexFile() {
+        final File blobStoreRootDir = prepareBlobStoreRootDir();
+        if (blobStoreRootDir == null) {
+            return null;
+        }
+        return new File(blobStoreRootDir, SESSIONS_INDEX_FILE_NAME);
+    }
+
+    @Nullable
+    public static File prepareBlobsIndexFile() {
+        final File blobsStoreRootDir = prepareBlobStoreRootDir();
+        if (blobsStoreRootDir == null) {
+            return null;
+        }
+        return new File(blobsStoreRootDir, BLOBS_INDEX_FILE_NAME);
     }
 
     @Nullable
@@ -73,6 +98,6 @@ class BlobStoreConfig {
 
     @NonNull
     public static File getBlobStoreRootDir() {
-        return new File(Environment.getDataSystemDirectory(), "blobstore");
+        return new File(Environment.getDataSystemDirectory(), ROOT_DIR_NAME);
     }
 }

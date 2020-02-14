@@ -16,14 +16,12 @@
 
 package android.content.integrity;
 
-import static android.content.integrity.TestUtils.assertExpectException;
+import static com.google.common.truth.Truth.assertThat;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
+import static org.testng.Assert.expectThrows;
 
 import android.content.integrity.AtomicFormula.BooleanAtomicFormula;
-import android.content.integrity.AtomicFormula.IntAtomicFormula;
+import android.content.integrity.AtomicFormula.LongAtomicFormula;
 import android.content.integrity.AtomicFormula.StringAtomicFormula;
 import android.os.Parcel;
 
@@ -36,19 +34,93 @@ public class AtomicFormulaTest {
 
     @Test
     public void testValidAtomicFormula_stringValue() {
+        String packageName = "com.test.app";
         StringAtomicFormula stringAtomicFormula =
                 new StringAtomicFormula(
-                        AtomicFormula.PACKAGE_NAME, "com.test.app", /* isHashedValue= */ false);
+                        AtomicFormula.PACKAGE_NAME, packageName, /* isHashedValue= */false);
 
-        assertEquals(AtomicFormula.PACKAGE_NAME, stringAtomicFormula.getKey());
+        assertThat(stringAtomicFormula.getKey()).isEqualTo(AtomicFormula.PACKAGE_NAME);
+        assertThat(stringAtomicFormula.getValue()).isEqualTo(packageName);
+        assertThat(stringAtomicFormula.getIsHashedValue()).isFalse();
     }
 
     @Test
-    public void testValidAtomicFormula_intValue() {
-        IntAtomicFormula intAtomicFormula =
-                new IntAtomicFormula(AtomicFormula.VERSION_CODE, AtomicFormula.LE, 1);
+    public void testValidAtomicFormula_stringValue_autoHash_packageNameLessThanLimit() {
+        String packageName = "com.test.app";
+        StringAtomicFormula stringAtomicFormula =
+                new StringAtomicFormula(AtomicFormula.PACKAGE_NAME, packageName);
 
-        assertEquals(AtomicFormula.VERSION_CODE, intAtomicFormula.getKey());
+        assertThat(stringAtomicFormula.getKey()).isEqualTo(AtomicFormula.PACKAGE_NAME);
+        assertThat(stringAtomicFormula.getValue()).isEqualTo(packageName);
+        assertThat(stringAtomicFormula.getIsHashedValue()).isFalse();
+    }
+
+    @Test
+    public void testValidAtomicFormula_stringValue_autoHash_longPackageName() {
+        String packageName = "com.test.app.test.app.test.app.test.app.test.app";
+        StringAtomicFormula stringAtomicFormula =
+                new StringAtomicFormula(AtomicFormula.PACKAGE_NAME, packageName);
+
+        assertThat(stringAtomicFormula.getKey()).isEqualTo(AtomicFormula.PACKAGE_NAME);
+        assertThat(stringAtomicFormula.getValue()).doesNotMatch(packageName);
+        assertThat(stringAtomicFormula.getIsHashedValue()).isTrue();
+    }
+
+    @Test
+    public void testValidAtomicFormula_stringValue_autoHash_installerNameLessThanLimit() {
+        String installerName = "com.test.app";
+        StringAtomicFormula stringAtomicFormula =
+                new StringAtomicFormula(AtomicFormula.INSTALLER_NAME, installerName);
+
+
+        assertThat(stringAtomicFormula.getKey()).isEqualTo(AtomicFormula.INSTALLER_NAME);
+        assertThat(stringAtomicFormula.getValue()).isEqualTo(installerName);
+        assertThat(stringAtomicFormula.getIsHashedValue()).isFalse();
+    }
+
+    @Test
+    public void testValidAtomicFormula_stringValue_autoHash_longInstallerName() {
+        String installerName = "com.test.app.test.app.test.app.test.app.test.app";
+        StringAtomicFormula stringAtomicFormula =
+                new StringAtomicFormula(AtomicFormula.INSTALLER_NAME, installerName);
+
+        assertThat(stringAtomicFormula.getKey()).isEqualTo(AtomicFormula.INSTALLER_NAME);
+        assertThat(stringAtomicFormula.getValue()).doesNotMatch(installerName);
+        assertThat(stringAtomicFormula.getIsHashedValue()).isTrue();
+    }
+
+    @Test
+    public void testValidAtomicFormula_stringValue_appCertificateAutoHashed() {
+        String appCert = "cert";
+        StringAtomicFormula stringAtomicFormula =
+                new StringAtomicFormula(AtomicFormula.APP_CERTIFICATE, appCert);
+
+        assertThat(stringAtomicFormula.getKey()).isEqualTo(AtomicFormula.APP_CERTIFICATE);
+        assertThat(stringAtomicFormula.getValue()).doesNotMatch(appCert);
+        assertThat(stringAtomicFormula.getIsHashedValue()).isTrue();
+    }
+
+    @Test
+    public void testValidAtomicFormula_stringValue_installerCertificateAutoHashed() {
+        String installerCert = "cert";
+        StringAtomicFormula stringAtomicFormula =
+                new StringAtomicFormula(AtomicFormula.INSTALLER_CERTIFICATE,
+                        installerCert);
+
+        assertThat(stringAtomicFormula.getKey()).isEqualTo(
+                AtomicFormula.INSTALLER_CERTIFICATE);
+        assertThat(stringAtomicFormula.getValue()).doesNotMatch(installerCert);
+        assertThat(stringAtomicFormula.getIsHashedValue()).isTrue();
+    }
+
+    @Test
+    public void testValidAtomicFormula_longValue() {
+        LongAtomicFormula longAtomicFormula =
+                new LongAtomicFormula(
+                        AtomicFormula.VERSION_CODE, AtomicFormula.GTE, 1);
+
+        assertThat(longAtomicFormula.getKey()).isEqualTo(AtomicFormula.VERSION_CODE);
+        assertThat(longAtomicFormula.getValue()).isEqualTo(1);
     }
 
     @Test
@@ -56,180 +128,44 @@ public class AtomicFormulaTest {
         BooleanAtomicFormula atomicFormula =
                 new BooleanAtomicFormula(AtomicFormula.PRE_INSTALLED, true);
 
-        assertEquals(AtomicFormula.PRE_INSTALLED, atomicFormula.getKey());
+        assertThat(atomicFormula.getKey()).isEqualTo(AtomicFormula.PRE_INSTALLED);
+        assertThat(atomicFormula.getValue()).isTrue();
     }
 
     @Test
     public void testInvalidAtomicFormula_stringValue() {
-        assertExpectException(
-                IllegalArgumentException.class,
-                /* expectedExceptionMessageRegex */
-                String.format("Key VERSION_CODE cannot be used with StringAtomicFormula"),
-                () ->
-                        new StringAtomicFormula(
-                                AtomicFormula.VERSION_CODE,
-                                "test-value",
-                                /* isHashedValue= */ false));
+        Exception e =
+                expectThrows(
+                        IllegalArgumentException.class,
+                        () ->
+                                new StringAtomicFormula(
+                                        AtomicFormula.VERSION_CODE,
+                                        "test-value",
+                                        /* isHashedValue= */ false));
+        assertThat(e.getMessage()).matches(
+                "Key VERSION_CODE cannot be used with StringAtomicFormula");
     }
 
     @Test
-    public void testInvalidAtomicFormula_intValue() {
-        assertExpectException(
-                IllegalArgumentException.class,
-                /* expectedExceptionMessageRegex */
-                String.format("Key PACKAGE_NAME cannot be used with IntAtomicFormula"),
-                () -> new IntAtomicFormula(AtomicFormula.PACKAGE_NAME, AtomicFormula.EQ, 1));
+    public void testInvalidAtomicFormula_longValue() {
+        Exception e =
+                expectThrows(
+                        IllegalArgumentException.class,
+                        () ->
+                                new LongAtomicFormula(
+                                        AtomicFormula.PACKAGE_NAME, AtomicFormula.EQ, 1));
+        assertThat(e.getMessage()).matches(
+                "Key PACKAGE_NAME cannot be used with LongAtomicFormula");
     }
 
     @Test
     public void testInvalidAtomicFormula_boolValue() {
-        assertExpectException(
-                IllegalArgumentException.class,
-                /* expectedExceptionMessageRegex */
-                String.format("Key PACKAGE_NAME cannot be used with BooleanAtomicFormula"),
-                () -> new BooleanAtomicFormula(AtomicFormula.PACKAGE_NAME, true));
-    }
-
-    @Test
-    public void testIsSatisfiable_string_true() {
-        StringAtomicFormula stringAtomicFormula =
-                new StringAtomicFormula(
-                        AtomicFormula.PACKAGE_NAME, "com.test.app", /* isHashedValue= */ false);
-        AppInstallMetadata appInstallMetadata =
-                getAppInstallMetadataBuilder().setPackageName("com.test.app").build();
-
-        assertTrue(stringAtomicFormula.isSatisfied(appInstallMetadata));
-    }
-
-    @Test
-    public void testIsSatisfiable_string_false() {
-        StringAtomicFormula stringAtomicFormula =
-                new StringAtomicFormula(
-                        AtomicFormula.PACKAGE_NAME, "com.test.app", /* isHashedValue= */ false);
-        AppInstallMetadata appInstallMetadata =
-                getAppInstallMetadataBuilder().setPackageName("com.foo.bar").build();
-
-        assertFalse(stringAtomicFormula.isSatisfied(appInstallMetadata));
-    }
-
-    @Test
-    public void testIsSatisfiable_int_eq_true() {
-        IntAtomicFormula intAtomicFormula =
-                new IntAtomicFormula(AtomicFormula.VERSION_CODE, AtomicFormula.EQ, 0);
-        AppInstallMetadata appInstallMetadata =
-                getAppInstallMetadataBuilder().setVersionCode(0).build();
-
-        assertTrue(intAtomicFormula.isSatisfied(appInstallMetadata));
-    }
-
-    @Test
-    public void testIsSatisfiable_int_eq_false() {
-        IntAtomicFormula intAtomicFormula =
-                new IntAtomicFormula(AtomicFormula.VERSION_CODE, AtomicFormula.EQ, 0);
-        AppInstallMetadata appInstallMetadata =
-                getAppInstallMetadataBuilder().setVersionCode(1).build();
-
-        assertFalse(intAtomicFormula.isSatisfied(appInstallMetadata));
-    }
-
-    @Test
-    public void testIsSatisfiable_int_gt_true() {
-        IntAtomicFormula intAtomicFormula =
-                new IntAtomicFormula(AtomicFormula.VERSION_CODE, AtomicFormula.GT, 0);
-        AppInstallMetadata appInstallMetadata =
-                getAppInstallMetadataBuilder().setVersionCode(1).build();
-
-        assertTrue(intAtomicFormula.isSatisfied(appInstallMetadata));
-    }
-
-    @Test
-    public void testIsSatisfiable_int_gt_false() {
-        IntAtomicFormula intAtomicFormula =
-                new IntAtomicFormula(AtomicFormula.VERSION_CODE, AtomicFormula.GT, 1);
-        AppInstallMetadata appInstallMetadata =
-                getAppInstallMetadataBuilder().setVersionCode(0).build();
-
-        assertFalse(intAtomicFormula.isSatisfied(appInstallMetadata));
-    }
-
-    @Test
-    public void testIsSatisfiable_int_ge_true() {
-        IntAtomicFormula intAtomicFormula =
-                new IntAtomicFormula(AtomicFormula.VERSION_CODE, AtomicFormula.GE, 0);
-        AppInstallMetadata appInstallMetadata =
-                getAppInstallMetadataBuilder().setVersionCode(1).build();
-
-        assertTrue(intAtomicFormula.isSatisfied(appInstallMetadata));
-    }
-
-    @Test
-    public void testIsSatisfiable_int_ge_false() {
-        IntAtomicFormula intAtomicFormula =
-                new IntAtomicFormula(AtomicFormula.VERSION_CODE, AtomicFormula.GE, 1);
-        AppInstallMetadata appInstallMetadata =
-                getAppInstallMetadataBuilder().setVersionCode(0).build();
-
-        assertFalse(intAtomicFormula.isSatisfied(appInstallMetadata));
-    }
-
-    @Test
-    public void testIsSatisfiable_int_lt_true() {
-        IntAtomicFormula intAtomicFormula =
-                new IntAtomicFormula(AtomicFormula.VERSION_CODE, AtomicFormula.LT, 1);
-        AppInstallMetadata appInstallMetadata =
-                getAppInstallMetadataBuilder().setVersionCode(0).build();
-
-        assertTrue(intAtomicFormula.isSatisfied(appInstallMetadata));
-    }
-
-    @Test
-    public void testIsSatisfiable_int_lt_false() {
-        IntAtomicFormula intAtomicFormula =
-                new IntAtomicFormula(AtomicFormula.VERSION_CODE, AtomicFormula.LT, 1);
-        AppInstallMetadata appInstallMetadata =
-                getAppInstallMetadataBuilder().setVersionCode(2).build();
-
-        assertFalse(intAtomicFormula.isSatisfied(appInstallMetadata));
-    }
-
-    @Test
-    public void testIsSatisfiable_int_le_true() {
-        IntAtomicFormula intAtomicFormula =
-                new IntAtomicFormula(AtomicFormula.VERSION_CODE, AtomicFormula.LE, 1);
-        AppInstallMetadata appInstallMetadata =
-                getAppInstallMetadataBuilder().setVersionCode(0).build();
-
-        assertTrue(intAtomicFormula.isSatisfied(appInstallMetadata));
-    }
-
-    @Test
-    public void testIsSatisfiable_int_le_false() {
-        IntAtomicFormula intAtomicFormula =
-                new IntAtomicFormula(AtomicFormula.VERSION_CODE, AtomicFormula.LE, 1);
-        AppInstallMetadata appInstallMetadata =
-                getAppInstallMetadataBuilder().setVersionCode(2).build();
-
-        assertFalse(intAtomicFormula.isSatisfied(appInstallMetadata));
-    }
-
-    @Test
-    public void testIsSatisfiable_bool_true() {
-        BooleanAtomicFormula boolFormula =
-                new BooleanAtomicFormula(AtomicFormula.PRE_INSTALLED, true);
-        AppInstallMetadata appInstallMetadata =
-                getAppInstallMetadataBuilder().setIsPreInstalled(true).build();
-
-        assertTrue(boolFormula.isSatisfied(appInstallMetadata));
-    }
-
-    @Test
-    public void testIsSatisfiable_bool_false() {
-        BooleanAtomicFormula boolFormula =
-                new BooleanAtomicFormula(AtomicFormula.PRE_INSTALLED, true);
-        AppInstallMetadata appInstallMetadata =
-                getAppInstallMetadataBuilder().setIsPreInstalled(false).build();
-
-        assertFalse(boolFormula.isSatisfied(appInstallMetadata));
+        Exception e =
+                expectThrows(
+                        IllegalArgumentException.class,
+                        () -> new BooleanAtomicFormula(AtomicFormula.PACKAGE_NAME, true));
+        assertThat(e.getMessage()).matches(
+                "Key PACKAGE_NAME cannot be used with BooleanAtomicFormula");
     }
 
     @Test
@@ -242,46 +178,252 @@ public class AtomicFormulaTest {
         p.setDataPosition(0);
         StringAtomicFormula newFormula = StringAtomicFormula.CREATOR.createFromParcel(p);
 
-        assertEquals(formula, newFormula);
+        assertThat(newFormula).isEqualTo(formula);
     }
 
     @Test
     public void testParcelUnparcel_int() {
-        IntAtomicFormula formula =
-                new IntAtomicFormula(AtomicFormula.VERSION_CODE, AtomicFormula.LT, 1);
+        LongAtomicFormula formula =
+                new LongAtomicFormula(
+                        AtomicFormula.VERSION_CODE, AtomicFormula.GT, 1);
         Parcel p = Parcel.obtain();
         formula.writeToParcel(p, 0);
         p.setDataPosition(0);
-        IntAtomicFormula newFormula = IntAtomicFormula.CREATOR.createFromParcel(p);
+        LongAtomicFormula newFormula =
+                LongAtomicFormula.CREATOR.createFromParcel(p);
 
-        assertEquals(formula, newFormula);
+        assertThat(newFormula).isEqualTo(formula);
     }
 
     @Test
     public void testParcelUnparcel_bool() {
-        BooleanAtomicFormula formula = new BooleanAtomicFormula(AtomicFormula.PRE_INSTALLED, true);
+        BooleanAtomicFormula formula = new BooleanAtomicFormula(
+                AtomicFormula.PRE_INSTALLED, true);
         Parcel p = Parcel.obtain();
         formula.writeToParcel(p, 0);
         p.setDataPosition(0);
         BooleanAtomicFormula newFormula = BooleanAtomicFormula.CREATOR.createFromParcel(p);
 
-        assertEquals(formula, newFormula);
+        assertThat(newFormula).isEqualTo(formula);
     }
 
     @Test
     public void testInvalidAtomicFormula_invalidKey() {
-        assertExpectException(
-                IllegalArgumentException.class,
-                /* expectedExceptionMessageRegex */ "Unknown key: -1",
-                () -> new IntAtomicFormula(/* key= */ -1, AtomicFormula.EQ, 0));
+        Exception e =
+                expectThrows(
+                        IllegalArgumentException.class,
+                        () -> new LongAtomicFormula(/* key= */ -1,
+                                AtomicFormula.EQ, /* value= */0));
+        assertThat(e.getMessage()).matches("Unknown key: -1");
     }
 
     @Test
     public void testInvalidAtomicFormula_invalidOperator() {
-        assertExpectException(
-                IllegalArgumentException.class,
-                /* expectedExceptionMessageRegex */ "Unknown operator: -1",
-                () -> new IntAtomicFormula(AtomicFormula.VERSION_CODE, /* operator= */ -1, 0));
+        Exception e =
+                expectThrows(
+                        IllegalArgumentException.class,
+                        () ->
+                                new LongAtomicFormula(
+                                        AtomicFormula.VERSION_CODE, /* operator= */ -1, /* value= */
+                                        0));
+        assertThat(e.getMessage()).matches("Unknown operator: -1");
+    }
+
+    @Test
+    public void testFormulaMatches_string_true() {
+        StringAtomicFormula stringAtomicFormula =
+                new StringAtomicFormula(
+                        AtomicFormula.PACKAGE_NAME, "com.test.app", /* isHashedValue= */
+                        false);
+        AppInstallMetadata appInstallMetadata =
+                getAppInstallMetadataBuilder().setPackageName("com.test.app").build();
+
+        assertThat(stringAtomicFormula.matches(appInstallMetadata)).isTrue();
+    }
+
+    @Test
+    public void testFormulaMatches_string_false() {
+        StringAtomicFormula stringAtomicFormula =
+                new StringAtomicFormula(
+                        AtomicFormula.PACKAGE_NAME, "com.test.app", /* isHashedValue= */
+                        false);
+        AppInstallMetadata appInstallMetadata =
+                getAppInstallMetadataBuilder().setPackageName("com.foo.bar").build();
+
+        assertThat(stringAtomicFormula.matches(appInstallMetadata)).isFalse();
+    }
+
+
+    @Test
+    public void testIsAppCertificateFormula_string_true() {
+        StringAtomicFormula stringAtomicFormula =
+                new StringAtomicFormula(
+                        AtomicFormula.APP_CERTIFICATE, "cert", /* isHashedValue= */false);
+
+        assertThat(stringAtomicFormula.isAppCertificateFormula()).isTrue();
+    }
+
+    @Test
+    public void testIsAppCertificateFormula_string_false() {
+        StringAtomicFormula stringAtomicFormula =
+                new StringAtomicFormula(
+                        AtomicFormula.PACKAGE_NAME, "com.test.app", /* isHashedValue= */
+                        false);
+
+        assertThat(stringAtomicFormula.isAppCertificateFormula()).isFalse();
+    }
+
+    @Test
+    public void testIsInstallerFormula_string_false() {
+        StringAtomicFormula stringAtomicFormula =
+                new StringAtomicFormula(
+                        AtomicFormula.APP_CERTIFICATE, "cert", /* isHashedValue= */false);
+
+        assertThat(stringAtomicFormula.isInstallerFormula()).isFalse();
+    }
+
+    @Test
+    public void testIsInstallerFormula_string_installerName_true() {
+        StringAtomicFormula stringAtomicFormula =
+                new StringAtomicFormula(
+                        AtomicFormula.INSTALLER_NAME,
+                        "com.test.installer",
+                        /* isHashedValue= */false);
+
+        assertThat(stringAtomicFormula.isInstallerFormula()).isTrue();
+    }
+
+    @Test
+    public void testIsInstallerFormula_string_installerCertificate_true() {
+        StringAtomicFormula stringAtomicFormula =
+                new StringAtomicFormula(
+                        AtomicFormula.INSTALLER_CERTIFICATE, "cert", /* isHashedValue= */false);
+
+        assertThat(stringAtomicFormula.isInstallerFormula()).isTrue();
+    }
+
+    @Test
+    public void testFormulaMatches_long_eq_true() {
+        LongAtomicFormula longAtomicFormula =
+                new LongAtomicFormula(
+                        AtomicFormula.VERSION_CODE, AtomicFormula.EQ, 0);
+        AppInstallMetadata appInstallMetadata =
+                getAppInstallMetadataBuilder().setVersionCode(0).build();
+
+        assertThat(longAtomicFormula.matches(appInstallMetadata)).isTrue();
+    }
+
+    @Test
+    public void testFormulaMatches_long_eq_false() {
+        LongAtomicFormula longAtomicFormula =
+                new LongAtomicFormula(
+                        AtomicFormula.VERSION_CODE, AtomicFormula.EQ, 0);
+        AppInstallMetadata appInstallMetadata =
+                getAppInstallMetadataBuilder().setVersionCode(1).build();
+
+        assertThat(longAtomicFormula.matches(appInstallMetadata)).isFalse();
+    }
+
+    @Test
+    public void testFormulaMatches_long_gt_true() {
+        LongAtomicFormula longAtomicFormula =
+                new LongAtomicFormula(AtomicFormula.VERSION_CODE, AtomicFormula.GT,
+                        0);
+        AppInstallMetadata appInstallMetadata =
+                getAppInstallMetadataBuilder().setVersionCode(1).build();
+
+        assertThat(longAtomicFormula.matches(appInstallMetadata)).isTrue();
+    }
+
+    @Test
+    public void testFormulaMatches_long_gt_false() {
+        LongAtomicFormula longAtomicFormula =
+                new LongAtomicFormula(AtomicFormula.VERSION_CODE, AtomicFormula.GT,
+                        1);
+        AppInstallMetadata appInstallMetadata =
+                getAppInstallMetadataBuilder().setVersionCode(0).build();
+
+        assertThat(longAtomicFormula.matches(appInstallMetadata)).isFalse();
+    }
+
+    @Test
+    public void testFormulaMatches_long_gte_true() {
+        LongAtomicFormula longAtomicFormula =
+                new LongAtomicFormula(
+                        AtomicFormula.VERSION_CODE, AtomicFormula.GTE, 1);
+
+        AppInstallMetadata appInstallMetadata1 =
+                getAppInstallMetadataBuilder().setVersionCode(1).build();
+        assertThat(longAtomicFormula.matches(appInstallMetadata1)).isTrue();
+
+        AppInstallMetadata appInstallMetadata2 =
+                getAppInstallMetadataBuilder().setVersionCode(2).build();
+        assertThat(longAtomicFormula.matches(appInstallMetadata2)).isTrue();
+    }
+
+    @Test
+    public void testFormulaMatches_long_gte_false() {
+        LongAtomicFormula longAtomicFormula =
+                new LongAtomicFormula(
+                        AtomicFormula.VERSION_CODE, AtomicFormula.GTE, 1);
+        AppInstallMetadata appInstallMetadata =
+                getAppInstallMetadataBuilder().setVersionCode(0).build();
+
+        assertThat(longAtomicFormula.matches(appInstallMetadata)).isFalse();
+    }
+
+    @Test
+    public void testIsAppCertificateFormula_long_false() {
+        LongAtomicFormula longAtomicFormula =
+                new AtomicFormula.LongAtomicFormula(
+                        AtomicFormula.VERSION_CODE, AtomicFormula.GTE, 1);
+
+        assertThat(longAtomicFormula.isAppCertificateFormula()).isFalse();
+    }
+
+    @Test
+    public void testIsInstallerFormula_long_false() {
+        LongAtomicFormula longAtomicFormula =
+                new LongAtomicFormula(
+                        AtomicFormula.VERSION_CODE, AtomicFormula.GTE, 1);
+
+        assertThat(longAtomicFormula.isInstallerFormula()).isFalse();
+    }
+
+    @Test
+    public void testFormulaMatches_bool_true() {
+        BooleanAtomicFormula boolFormula =
+                new BooleanAtomicFormula(AtomicFormula.PRE_INSTALLED, true);
+        AppInstallMetadata appInstallMetadata =
+                getAppInstallMetadataBuilder().setIsPreInstalled(true).build();
+
+        assertThat(boolFormula.matches(appInstallMetadata)).isTrue();
+    }
+
+    @Test
+    public void testFormulaMatches_bool_false() {
+        BooleanAtomicFormula boolFormula =
+                new BooleanAtomicFormula(AtomicFormula.PRE_INSTALLED, true);
+        AppInstallMetadata appInstallMetadata =
+                getAppInstallMetadataBuilder().setIsPreInstalled(false).build();
+
+        assertThat(boolFormula.matches(appInstallMetadata)).isFalse();
+    }
+
+    @Test
+    public void testIsAppCertificateFormula_bool_false() {
+        BooleanAtomicFormula boolFormula =
+                new BooleanAtomicFormula(AtomicFormula.PRE_INSTALLED, true);
+
+        assertThat(boolFormula.isAppCertificateFormula()).isFalse();
+    }
+
+    @Test
+    public void testIsInstallerFormula_bool_false() {
+        BooleanAtomicFormula boolFormula =
+                new BooleanAtomicFormula(AtomicFormula.PRE_INSTALLED, true);
+
+        assertThat(boolFormula.isInstallerFormula()).isFalse();
     }
 
     /** Returns a builder with all fields filled with some dummy data. */

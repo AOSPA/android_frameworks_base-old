@@ -41,6 +41,7 @@ import static android.os.Build.VERSION_CODES.O;
 import static android.os.Trace.TRACE_TAG_PACKAGE_MANAGER;
 import static android.view.WindowManager.LayoutParams.ROTATION_ANIMATION_UNSPECIFIED;
 
+import android.annotation.AnyThread;
 import android.annotation.IntDef;
 import android.annotation.IntRange;
 import android.annotation.NonNull;
@@ -953,6 +954,10 @@ public class PackageParser {
             throw new PackageParserException(INSTALL_PARSE_FAILED_NOT_APK,
                     "No packages found in split");
         }
+        // Apk directory is directly nested under the current directory
+        if (files.length == 1 && files[0].isDirectory()) {
+            return parseClusterPackageLite(files[0], flags);
+        }
 
         String packageName = null;
         int versionCode = 0;
@@ -1080,6 +1085,7 @@ public class PackageParser {
      *
      * @see #parsePackage(File, int, boolean)
      */
+    @AnyThread
     public ParsedPackage parseParsedPackage(File packageFile, int flags, boolean useCaches)
             throws PackageParserException {
         ParsedPackage parsed = useCaches ? getCachedResult(packageFile, flags) : null;
@@ -1325,12 +1331,9 @@ public class PackageParser {
                 }
             }
 
-            pkg.setCodePath(packageDir.getCanonicalPath());
+            pkg.setCodePath(lite.codePath);
             pkg.setUse32bitAbi(lite.use32bitAbi);
             return pkg;
-        } catch (IOException e) {
-            throw new PackageParserException(INSTALL_PARSE_FAILED_UNEXPECTED_EXCEPTION,
-                    "Failed to get path: " + lite.baseCodePath, e);
         } finally {
             IoUtils.closeQuietly(assetLoader);
         }
@@ -1582,7 +1585,8 @@ public class PackageParser {
             throws PackageParserException {
         final String apkPath = apkFile.getAbsolutePath();
 
-        int minSignatureScheme = SigningDetails.SignatureSchemeVersion.JAR;
+        int minSignatureScheme = ApkSignatureVerifier.getMinimumSignatureSchemeVersionForTargetSdk(
+                pkg.applicationInfo.targetSdkVersion);
         if (pkg.applicationInfo.isStaticSharedLibrary()) {
             // must use v2 signing scheme
             minSignatureScheme = SigningDetails.SignatureSchemeVersion.SIGNING_BLOCK_V2;
@@ -8519,7 +8523,8 @@ public class PackageParser {
                 Display.DEFAULT_DISPLAY,
                 null,
                 systemResources.getCompatibilityInfo(),
-                systemResources.getClassLoader());
+                systemResources.getClassLoader(),
+                null);
 
         sUseRoundIcon = overlayableRes.getBoolean(com.android.internal.R.bool.config_useRoundIcon);
     }

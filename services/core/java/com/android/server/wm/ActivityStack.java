@@ -60,10 +60,18 @@ import static android.view.WindowManager.TRANSIT_TASK_OPEN_BEHIND;
 import static android.view.WindowManager.TRANSIT_TASK_TO_BACK;
 import static android.view.WindowManager.TRANSIT_TASK_TO_FRONT;
 
-import static com.android.server.am.ActivityStackProto.DISPLAY_ID;
-import static com.android.server.am.ActivityStackProto.FULLSCREEN;
-import static com.android.server.am.ActivityStackProto.RESUMED_ACTIVITY;
-import static com.android.server.am.ActivityStackProto.STACK;
+import static com.android.server.wm.TaskProto.ACTIVITIES;
+import static com.android.server.wm.TaskProto.ACTIVITY_TYPE;
+import static com.android.server.wm.TaskProto.BOUNDS;
+import static com.android.server.wm.TaskProto.DISPLAYED_BOUNDS;
+import static com.android.server.wm.TaskProto.DISPLAY_ID;
+import static com.android.server.wm.TaskProto.LAST_NON_FULLSCREEN_BOUNDS;
+import static com.android.server.wm.TaskProto.MIN_HEIGHT;
+import static com.android.server.wm.TaskProto.MIN_WIDTH;
+import static com.android.server.wm.TaskProto.ORIG_ACTIVITY;
+import static com.android.server.wm.TaskProto.REAL_ACTIVITY;
+import static com.android.server.wm.TaskProto.RESIZE_MODE;
+import static com.android.server.wm.TaskProto.RESUMED_ACTIVITY;
 import static com.android.server.wm.ActivityStack.ActivityState.PAUSED;
 import static com.android.server.wm.ActivityStack.ActivityState.PAUSING;
 import static com.android.server.wm.ActivityStack.ActivityState.RESUMED;
@@ -107,15 +115,19 @@ import static com.android.server.wm.BoundsAnimationController.NO_PIP_MODE_CHANGE
 import static com.android.server.wm.BoundsAnimationController.SCHEDULE_PIP_MODE_CHANGED_ON_END;
 import static com.android.server.wm.BoundsAnimationController.SCHEDULE_PIP_MODE_CHANGED_ON_START;
 import static com.android.server.wm.DragResizeMode.DRAG_RESIZE_MODE_DOCKED_DIVIDER;
-import static com.android.server.wm.StackProto.ADJUSTED_BOUNDS;
-import static com.android.server.wm.StackProto.ADJUSTED_FOR_IME;
-import static com.android.server.wm.StackProto.ADJUST_DIVIDER_AMOUNT;
-import static com.android.server.wm.StackProto.ADJUST_IME_AMOUNT;
-import static com.android.server.wm.StackProto.ANIMATING_BOUNDS;
-import static com.android.server.wm.StackProto.DEFER_REMOVAL;
-import static com.android.server.wm.StackProto.FILLS_PARENT;
-import static com.android.server.wm.StackProto.MINIMIZE_AMOUNT;
-import static com.android.server.wm.StackProto.WINDOW_CONTAINER;
+import static com.android.server.wm.TaskProto.ADJUSTED_BOUNDS;
+import static com.android.server.wm.TaskProto.ADJUSTED_FOR_IME;
+import static com.android.server.wm.TaskProto.ADJUST_DIVIDER_AMOUNT;
+import static com.android.server.wm.TaskProto.ADJUST_IME_AMOUNT;
+import static com.android.server.wm.TaskProto.ANIMATING_BOUNDS;
+import static com.android.server.wm.TaskProto.DEFER_REMOVAL;
+import static com.android.server.wm.TaskProto.FILLS_PARENT;
+import static com.android.server.wm.TaskProto.MINIMIZE_AMOUNT;
+import static com.android.server.wm.TaskProto.ROOT_TASK_ID;
+import static com.android.server.wm.TaskProto.SURFACE_HEIGHT;
+import static com.android.server.wm.TaskProto.SURFACE_WIDTH;
+import static com.android.server.wm.TaskProto.TASKS;
+import static com.android.server.wm.TaskProto.WINDOW_CONTAINER;
 import static com.android.server.wm.WindowContainer.AnimationFlags.CHILDREN;
 import static com.android.server.wm.WindowContainer.AnimationFlags.TRANSITION;
 import static com.android.server.wm.WindowManagerDebugConfig.TAG_WM;
@@ -345,6 +357,9 @@ public class ActivityStack extends Task implements BoundsAnimationTarget {
     private ActivityRecord mTopDismissingKeyguardActivity;
 
     private static final int TRANSLUCENT_TIMEOUT_MSG = FIRST_ACTIVITY_STACK_MSG + 1;
+
+    // TODO(task-hierarchy): remove when tiles can be actual parents
+    TaskTile mTile = null;
 
     private final Handler mHandler;
 
@@ -647,11 +662,20 @@ public class ActivityStack extends Task implements BoundsAnimationTarget {
     }
 
     @Override
+    public void resolveOverrideConfiguration(Configuration newParentConfig) {
+        super.resolveOverrideConfiguration(newParentConfig);
+        if (mTile != null) {
+            // If this is a virtual child of a tile, simulate the parent-child relationship
+            mTile.updateResolvedConfig(getResolvedOverrideConfiguration());
+        }
+    }
+
+    @Override
     public void onConfigurationChanged(Configuration newParentConfig) {
         // Calling Task#onConfigurationChanged() for leaf task since the ops in this method are
         // particularly for ActivityStack, like preventing bounds changes when inheriting certain
         // windowing mode.
-        if (!isRootTask()) {
+        if (!isRootTask() || this instanceof TaskTile) {
             super.onConfigurationChanged(newParentConfig);
             return;
         }
@@ -668,6 +692,8 @@ public class ActivityStack extends Task implements BoundsAnimationTarget {
         getBounds(newBounds);
 
         super.onConfigurationChanged(newParentConfig);
+
+        updateTaskOrganizerState();
 
         // Only need to update surface size here since the super method will handle updating
         // surface position.
@@ -771,6 +797,22 @@ public class ActivityStack extends Task implements BoundsAnimationTarget {
         }
     }
 
+    void updateTaskOrganizerState() {
+        if (!isRootTask()) {
+            return;
+        }
+
+        final int windowingMode = getWindowingMode();
+        /*
+         * Different windowing modes may be managed by different task organizers. If
+         * getTaskOrganizer returns null, we still call setTaskOrganizer to
+         * make sure we clear it.
+         */
+        final ITaskOrganizer org =
+            mWmService.mAtmService.mTaskOrganizerController.getTaskOrganizer(windowingMode);
+        setTaskOrganizer(org);
+    }
+
     @Override
     public void setWindowingMode(int windowingMode) {
         // Calling Task#setWindowingMode() for leaf task since this is the a specialization of
@@ -783,15 +825,6 @@ public class ActivityStack extends Task implements BoundsAnimationTarget {
         setWindowingMode(windowingMode, false /* animate */, false /* showRecents */,
                 false /* enteringSplitScreenMode */, false /* deferEnsuringVisibility */,
                 false /* creating */);
-        windowingMode = getWindowingMode();
-        /*
-         * Different windowing modes may be managed by different task organizers. If
-         * getTaskOrganizer returns null, we still call transferToTaskOrganizer to
-         * make sure we clear it.
-         */
-        final ITaskOrganizer org =
-            mWmService.mAtmService.mTaskOrganizerController.getTaskOrganizer(windowingMode);
-        transferToTaskOrganizer(org);
     }
 
     /**
@@ -1272,6 +1305,8 @@ public class ActivityStack extends Task implements BoundsAnimationTarget {
     void awakeFromSleepingLocked() {
         // Ensure activities are no longer sleeping.
         forAllActivities((Consumer<ActivityRecord>) (r) -> r.setSleeping(false));
+        ensureActivitiesVisible(null /* starting */, 0 /* configChanges */,
+                false /* preserveWindows */);
         if (mPausingActivity != null) {
             Slog.d(TAG, "awakeFromSleepingLocked: previously pausing activity didn't pause");
             mPausingActivity.activityPaused(true);
@@ -1321,13 +1356,6 @@ public class ActivityStack extends Task implements BoundsAnimationTarget {
                 mStackSupervisor.scheduleIdle();
                 shouldSleep = false;
             }
-
-            if (containsActivityFromStack(mStackSupervisor.mGoingToSleepActivities)) {
-                // Still need to tell some activities to sleep; can't sleep yet.
-                if (DEBUG_PAUSE) Slog.v(TAG_PAUSE, "Sleep still need to sleep "
-                        + mStackSupervisor.mGoingToSleepActivities.size() + " activities");
-                shouldSleep = false;
-            }
         }
 
         if (shouldSleep) {
@@ -1338,16 +1366,18 @@ public class ActivityStack extends Task implements BoundsAnimationTarget {
     }
 
     void goToSleep() {
-        // Ensure visibility without updating configuration, as activities are about to sleep.
-        ensureActivitiesVisible(null /* starting */, 0 /* configChanges */, !PRESERVE_WINDOWS);
-
-        // Make sure any paused or stopped but visible activities are now sleeping.
-        // This ensures that the activity's onStop() is called.
+        // Make sure all visible activities are now sleeping. This will update the activity's
+        // visibility and onStop() will be called.
         forAllActivities((r) -> {
-            if (r.isState(STARTED, STOPPING, STOPPED, PAUSED, PAUSING)) {
+            if (r.isState(STARTED, RESUMED, PAUSING, PAUSED, STOPPING, STOPPED)) {
                 r.setSleeping(true);
             }
         });
+
+        // Ensure visibility after updating sleep states without updating configuration,
+        // as activities are about to be sent to sleep.
+        ensureActivitiesVisible(null /* starting */, 0 /* configChanges */,
+                !PRESERVE_WINDOWS);
     }
 
     private boolean containsActivityFromStack(List<ActivityRecord> rs) {
@@ -1602,24 +1632,6 @@ public class ActivityStack extends Task implements BoundsAnimationTarget {
     boolean isTopActivityVisible() {
         final ActivityRecord topActivity = getTopNonFinishingActivity();
         return topActivity != null && topActivity.mVisibleRequested;
-    }
-
-    private static void transferSingleTaskToOrganizer(Task tr, ITaskOrganizer organizer) {
-        tr.setTaskOrganizer(organizer);
-    }
-
-    /**
-     * Transfer control of the leashes and IWindowContainers to the given ITaskOrganizer.
-     * This will (or shortly there-after) invoke the taskAppeared callbacks.
-     * If the tasks had a previous TaskOrganizer, setTaskOrganizer will take care of
-     * emitting the taskVanished callbacks.
-     */
-    void transferToTaskOrganizer(ITaskOrganizer organizer) {
-        final PooledConsumer c = PooledLambda.obtainConsumer(
-                ActivityStack::transferSingleTaskToOrganizer,
-                PooledLambda.__(Task.class), organizer);
-        forAllTasks(c, true /* traverseTopToBottom */, this);
-        c.recycle();
     }
 
     /**
@@ -2058,8 +2070,17 @@ public class ActivityStack extends Task implements BoundsAnimationTarget {
             return false;
         }
 
-        // If we are sleeping, and there is no resumed activity, and the top
-        // activity is paused, well that is the state we want.
+        // If we are currently pausing an activity, then don't do anything until that is done.
+        final boolean allPausedComplete = mRootWindowContainer.allPausedActivitiesComplete();
+        if (!allPausedComplete) {
+            if (DEBUG_SWITCH || DEBUG_PAUSE || DEBUG_STATES) {
+                Slog.v(TAG_PAUSE, "resumeTopActivityLocked: Skip resume: some activity pausing.");
+            }
+            return false;
+        }
+
+        // If we are sleeping, and there is no resumed activity, and the top activity is paused,
+        // well that is the state we want.
         if (shouldSleepOrShutDownActivities()
                 && mLastPausedActivity == next
                 && mRootWindowContainer.allPausedActivitiesComplete()) {
@@ -2100,8 +2121,7 @@ public class ActivityStack extends Task implements BoundsAnimationTarget {
         // The activity may be waiting for stop, but that is no longer
         // appropriate for it.
         mStackSupervisor.mStoppingActivities.remove(next);
-        mStackSupervisor.mGoingToSleepActivities.remove(next);
-        next.sleeping = false;
+        next.setSleeping(false);
         next.launching = true;
 
         if (DEBUG_SWITCH) Slog.v(TAG_SWITCH, "Resuming " + next);
@@ -2398,7 +2418,7 @@ public class ActivityStack extends Task implements BoundsAnimationTarget {
                 EventLogTags.writeWmResumeActivity(next.mUserId, System.identityHashCode(next),
                         next.getTask().mTaskId, next.shortComponentName);
 
-                next.sleeping = false;
+                next.setSleeping(false);
                 mAtmService.getAppWarningsLocked().onResumeActivity(next);
                 next.app.setPendingUiCleanAndForceProcessStateUpTo(mAtmService.mTopProcessState);
                 next.clearOptionsLocked();
@@ -3999,7 +4019,6 @@ public class ActivityStack extends Task implements BoundsAnimationTarget {
                 ? ((WindowContainer) newParent).getDisplayContent() : null;
         final DisplayContent oldDisplay = oldParent != null
                 ? ((WindowContainer) oldParent).getDisplayContent() : null;
-
         super.onParentChanged(newParent, oldParent);
 
         if (display != null && inSplitScreenPrimaryWindowingMode()
@@ -4017,6 +4036,11 @@ public class ActivityStack extends Task implements BoundsAnimationTarget {
         // the prevous display.
         if (oldDisplay != null && oldDisplay.isRemoving()) {
             postReparent();
+        }
+        if (mTile != null && getSurfaceControl() != null) {
+            // by now, the TaskStack should already have been reparented, so we can reparent its
+            // surface here
+            reparentSurfaceControl(getPendingTransaction(), mTile.getSurfaceControl());
         }
     }
 
@@ -4036,6 +4060,10 @@ public class ActivityStack extends Task implements BoundsAnimationTarget {
      * Used to make room for shadows in the pinned windowing mode.
      */
     int getStackOutset() {
+        // If we are drawing shadows on the task then don't outset the stack.
+        if (mWmService.mRenderShadowsInCompositor) {
+            return 0;
+        }
         DisplayContent displayContent = getDisplayContent();
         if (inPinnedWindowingMode() && displayContent != null) {
             final DisplayMetrics displayMetrics = displayContent.getDisplayMetrics();
@@ -4051,7 +4079,16 @@ public class ActivityStack extends Task implements BoundsAnimationTarget {
 
     @Override
     void getRelativeDisplayedPosition(Point outPos) {
-        super.getRelativeDisplayedPosition(outPos);
+        // check for tile which is "virtually" a parent.
+        if (mTile != null) {
+            final Rect dispBounds = getDisplayedBounds();
+            outPos.set(dispBounds.left, dispBounds.top);
+            final Rect parentBounds = mTile.getBounds();
+            outPos.offset(-parentBounds.left, -parentBounds.top);
+        } else {
+            super.getRelativeDisplayedPosition(outPos);
+        }
+
         final int outset = getStackOutset();
         outPos.x -= outset;
         outPos.y -= outset;
@@ -4059,6 +4096,16 @@ public class ActivityStack extends Task implements BoundsAnimationTarget {
 
     private void updateSurfaceSize(SurfaceControl.Transaction transaction) {
         if (mSurfaceControl == null) {
+            return;
+        }
+        if (mTile != null) {
+            // Tile controls crop, so the app needs to be able to draw its background outside of
+            // the stack bounds for when the tile crop gets bigger than the stack.
+            if (mLastSurfaceSize.equals(0, 0)) {
+                return;
+            }
+            transaction.setWindowCrop(mSurfaceControl, null);
+            mLastSurfaceSize.set(0, 0);
             return;
         }
 
@@ -4084,8 +4131,13 @@ public class ActivityStack extends Task implements BoundsAnimationTarget {
 
     @Override
     void onDisplayChanged(DisplayContent dc) {
+        if (mTile != null && dc != mTile.getDisplay()) {
+            mTile.removeChild(this);
+        }
         super.onDisplayChanged(dc);
-        updateSurfaceBounds();
+        if (isRootTask()) {
+            updateSurfaceBounds();
+        }
     }
 
     /**
@@ -4904,32 +4956,44 @@ public class ActivityStack extends Task implements BoundsAnimationTarget {
         return shouldSleepActivities() || mAtmService.mShuttingDown;
     }
 
-    @Override
-    public void dumpDebug(ProtoOutputStream proto, long fieldId,
-            @WindowTraceLogLevel int logLevel) {
-        final long token = proto.start(fieldId);
-        dumpDebugInnerStackOnly(proto, STACK, logLevel);
-        proto.write(com.android.server.am.ActivityStackProto.ID, getRootTaskId());
-
-        forAllTasks((t) -> {
-            t.dumpDebugInner(proto, com.android.server.am.ActivityStackProto.TASKS, logLevel);
-        }, true /* traverseTopToBottom */, this);
-        if (mResumedActivity != null) {
-            mResumedActivity.writeIdentifierToProto(proto, RESUMED_ACTIVITY);
-        }
-        proto.write(DISPLAY_ID, getDisplayId());
-        if (!matchParentBounds()) {
-            final Rect bounds = getRequestedOverrideBounds();
-            bounds.dumpDebug(proto, com.android.server.am.ActivityStackProto.BOUNDS);
-        }
-
-        // TODO: Remove, no longer needed with windowingMode.
-        proto.write(FULLSCREEN, matchParentBounds());
-        proto.end(token);
+    TaskTile getTile() {
+        return mTile;
     }
 
-    // TODO(proto-merge): Remove once protos for ActivityStack and TaskStack are merged.
-    void dumpDebugInnerStackOnly(ProtoOutputStream proto, long fieldId,
+    /**
+     * Don't call this directly. instead use {@link TaskTile#addChild} or
+     * {@link TaskTile#removeChild}.
+     */
+    void setTile(TaskTile tile) {
+        TaskTile origTile = mTile;
+        mTile = tile;
+        final ConfigurationContainer parent = getParent();
+        if (parent != null) {
+            onConfigurationChanged(parent.getConfiguration());
+        }
+
+        // Reparent to tile surface or back to original parent
+        if (getSurfaceControl() == null) {
+            return;
+        }
+        if (mTile != null) {
+            reparentSurfaceControl(getPendingTransaction(), mTile.getSurfaceControl());
+        } else if (mTile == null && origTile != null) {
+            reparentSurfaceControl(getPendingTransaction(), getParentSurfaceControl());
+        }
+    }
+
+    @Override
+    void removeImmediately() {
+        // TODO(task-hierarchy): remove this override when tiles are in hierarchy
+        if (mTile != null) {
+            mTile.removeChild(this);
+        }
+        super.removeImmediately();
+    }
+
+    @Override
+    public void dumpDebug(ProtoOutputStream proto, long fieldId,
             @WindowTraceLogLevel int logLevel) {
         if (logLevel == WindowTraceLogLevel.CRITICAL && !isVisible()) {
             return;
@@ -4937,19 +5001,60 @@ public class ActivityStack extends Task implements BoundsAnimationTarget {
 
         final long token = proto.start(fieldId);
         super.dumpDebug(proto, WINDOW_CONTAINER, logLevel);
-        proto.write(StackProto.ID, getRootTaskId());
-        forAllTasks((t) -> {
-            t.dumpDebugInnerTaskOnly(proto, StackProto.TASKS, logLevel);
-        }, true /* traverseTopToBottom */, this);
+
+        proto.write(TaskProto.ID, mTaskId);
+        proto.write(DISPLAY_ID, getDisplayId());
+        proto.write(ROOT_TASK_ID, getRootTaskId());
+
+        for (int i = mChildren.size() - 1; i >= 0; --i) {
+            final WindowContainer child = mChildren.get(i);
+            if (child instanceof Task) {
+                child.dumpDebug(proto, TASKS, logLevel);
+            } else if (child instanceof ActivityRecord) {
+                child.dumpDebug(proto, ACTIVITIES, logLevel);
+            } else {
+                throw new IllegalStateException("Unknown child type: " + child);
+            }
+        }
+
+        if (mResumedActivity != null) {
+            mResumedActivity.writeIdentifierToProto(proto, RESUMED_ACTIVITY);
+        }
+        if (realActivity != null) {
+            proto.write(REAL_ACTIVITY, realActivity.flattenToShortString());
+        }
+        if (origActivity != null) {
+            proto.write(ORIG_ACTIVITY, origActivity.flattenToShortString());
+        }
+        proto.write(ACTIVITY_TYPE, getActivityType());
+        proto.write(RESIZE_MODE, mResizeMode);
+        proto.write(MIN_WIDTH, mMinWidth);
+        proto.write(MIN_HEIGHT, mMinHeight);
+
         proto.write(FILLS_PARENT, matchParentBounds());
-        getRawBounds().dumpDebug(proto, StackProto.BOUNDS);
+
+        if (!matchParentBounds()) {
+            final Rect bounds = getRequestedOverrideBounds();
+            bounds.dumpDebug(proto, BOUNDS);
+        }
+        getOverrideDisplayedBounds().dumpDebug(proto, DISPLAYED_BOUNDS);
+        mAdjustedBounds.dumpDebug(proto, ADJUSTED_BOUNDS);
+        if (mLastNonFullscreenBounds != null) {
+            mLastNonFullscreenBounds.dumpDebug(proto, LAST_NON_FULLSCREEN_BOUNDS);
+        }
+
         proto.write(DEFER_REMOVAL, mDeferRemoval);
         proto.write(MINIMIZE_AMOUNT, mMinimizeAmount);
         proto.write(ADJUSTED_FOR_IME, mAdjustedForIme);
         proto.write(ADJUST_IME_AMOUNT, mAdjustImeAmount);
         proto.write(ADJUST_DIVIDER_AMOUNT, mAdjustDividerAmount);
-        mAdjustedBounds.dumpDebug(proto, ADJUSTED_BOUNDS);
         proto.write(ANIMATING_BOUNDS, mBoundsAnimating);
+
+        if (mSurfaceControl != null) {
+            proto.write(SURFACE_WIDTH, mSurfaceControl.getWidth());
+            proto.write(SURFACE_HEIGHT, mSurfaceControl.getHeight());
+        }
+
         proto.end(token);
     }
 }

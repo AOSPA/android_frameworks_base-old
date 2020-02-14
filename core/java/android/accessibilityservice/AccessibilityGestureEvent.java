@@ -17,6 +17,20 @@
 package android.accessibilityservice;
 
 
+import static android.accessibilityservice.AccessibilityService.GESTURE_2_FINGER_DOUBLE_TAP;
+import static android.accessibilityservice.AccessibilityService.GESTURE_2_FINGER_SINGLE_TAP;
+import static android.accessibilityservice.AccessibilityService.GESTURE_2_FINGER_SWIPE_DOWN;
+import static android.accessibilityservice.AccessibilityService.GESTURE_2_FINGER_SWIPE_LEFT;
+import static android.accessibilityservice.AccessibilityService.GESTURE_2_FINGER_SWIPE_RIGHT;
+import static android.accessibilityservice.AccessibilityService.GESTURE_2_FINGER_SWIPE_UP;
+import static android.accessibilityservice.AccessibilityService.GESTURE_2_FINGER_TRIPLE_TAP;
+import static android.accessibilityservice.AccessibilityService.GESTURE_3_FINGER_DOUBLE_TAP;
+import static android.accessibilityservice.AccessibilityService.GESTURE_3_FINGER_SINGLE_TAP;
+import static android.accessibilityservice.AccessibilityService.GESTURE_3_FINGER_SWIPE_DOWN;
+import static android.accessibilityservice.AccessibilityService.GESTURE_3_FINGER_SWIPE_LEFT;
+import static android.accessibilityservice.AccessibilityService.GESTURE_3_FINGER_SWIPE_RIGHT;
+import static android.accessibilityservice.AccessibilityService.GESTURE_3_FINGER_SWIPE_UP;
+import static android.accessibilityservice.AccessibilityService.GESTURE_3_FINGER_TRIPLE_TAP;
 import static android.accessibilityservice.AccessibilityService.GESTURE_DOUBLE_TAP;
 import static android.accessibilityservice.AccessibilityService.GESTURE_DOUBLE_TAP_AND_HOLD;
 import static android.accessibilityservice.AccessibilityService.GESTURE_SWIPE_DOWN;
@@ -60,6 +74,12 @@ public final class AccessibilityGestureEvent implements Parcelable {
 
     /** @hide */
     @IntDef(prefix = { "GESTURE_" }, value = {
+            GESTURE_2_FINGER_SINGLE_TAP,
+            GESTURE_2_FINGER_DOUBLE_TAP,
+            GESTURE_2_FINGER_TRIPLE_TAP,
+            GESTURE_3_FINGER_SINGLE_TAP,
+            GESTURE_3_FINGER_DOUBLE_TAP,
+            GESTURE_3_FINGER_TRIPLE_TAP,
             GESTURE_DOUBLE_TAP,
             GESTURE_DOUBLE_TAP_AND_HOLD,
             GESTURE_SWIPE_UP,
@@ -77,7 +97,15 @@ public final class AccessibilityGestureEvent implements Parcelable {
             GESTURE_SWIPE_RIGHT,
             GESTURE_SWIPE_RIGHT_AND_UP,
             GESTURE_SWIPE_RIGHT_AND_LEFT,
-            GESTURE_SWIPE_RIGHT_AND_DOWN
+            GESTURE_SWIPE_RIGHT_AND_DOWN,
+            GESTURE_2_FINGER_SWIPE_DOWN,
+            GESTURE_2_FINGER_SWIPE_LEFT,
+            GESTURE_2_FINGER_SWIPE_RIGHT,
+            GESTURE_2_FINGER_SWIPE_UP,
+            GESTURE_3_FINGER_SWIPE_DOWN,
+            GESTURE_3_FINGER_SWIPE_LEFT,
+            GESTURE_3_FINGER_SWIPE_RIGHT,
+            GESTURE_3_FINGER_SWIPE_UP
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface GestureId {}
@@ -122,11 +150,49 @@ public final class AccessibilityGestureEvent implements Parcelable {
     @Override
     public String toString() {
         StringBuilder stringBuilder = new StringBuilder("AccessibilityGestureEvent[");
-        stringBuilder.append("gestureId: ").append(mGestureId);
+        stringBuilder.append("gestureId: ").append(eventTypeToString(mGestureId));
         stringBuilder.append(", ");
         stringBuilder.append("displayId: ").append(mDisplayId);
         stringBuilder.append(']');
         return stringBuilder.toString();
+    }
+
+    private static String eventTypeToString(int eventType) {
+        switch (eventType) {
+            case GESTURE_2_FINGER_SINGLE_TAP: return "GESTURE_2_FINGER_SINGLE_TAP";
+            case GESTURE_2_FINGER_DOUBLE_TAP: return "GESTURE_2_FINGER_DOUBLE_TAP";
+            case GESTURE_2_FINGER_TRIPLE_TAP: return "GESTURE_2_FINGER_TRIPLE_TAP";
+            case GESTURE_3_FINGER_SINGLE_TAP: return "GESTURE_3_FINGER_SINGLE_TAP";
+            case GESTURE_3_FINGER_DOUBLE_TAP: return "GESTURE_3_FINGER_DOUBLE_TAP";
+            case GESTURE_3_FINGER_TRIPLE_TAP: return "GESTURE_3_FINGER_TRIPLE_TAP";
+            case GESTURE_DOUBLE_TAP: return "GESTURE_DOUBLE_TAP";
+            case GESTURE_DOUBLE_TAP_AND_HOLD: return "GESTURE_DOUBLE_TAP_AND_HOLD";
+            case GESTURE_SWIPE_DOWN: return "GESTURE_SWIPE_DOWN";
+            case GESTURE_SWIPE_DOWN_AND_LEFT: return "GESTURE_SWIPE_DOWN_AND_LEFT";
+            case GESTURE_SWIPE_DOWN_AND_UP: return "GESTURE_SWIPE_DOWN_AND_UP";
+            case GESTURE_SWIPE_DOWN_AND_RIGHT: return "GESTURE_SWIPE_DOWN_AND_RIGHT";
+            case GESTURE_SWIPE_LEFT: return "GESTURE_SWIPE_LEFT";
+            case GESTURE_SWIPE_LEFT_AND_UP: return "GESTURE_SWIPE_LEFT_AND_UP";
+            case GESTURE_SWIPE_LEFT_AND_RIGHT: return "GESTURE_SWIPE_LEFT_AND_RIGHT";
+            case GESTURE_SWIPE_LEFT_AND_DOWN: return "GESTURE_SWIPE_LEFT_AND_DOWN";
+            case GESTURE_SWIPE_RIGHT: return "GESTURE_SWIPE_RIGHT";
+            case GESTURE_SWIPE_RIGHT_AND_UP: return "GESTURE_SWIPE_RIGHT_AND_UP";
+            case GESTURE_SWIPE_RIGHT_AND_LEFT: return "GESTURE_SWIPE_RIGHT_AND_LEFT";
+            case GESTURE_SWIPE_RIGHT_AND_DOWN: return "GESTURE_SWIPE_RIGHT_AND_DOWN";
+            case GESTURE_SWIPE_UP: return "GESTURE_SWIPE_UP";
+            case GESTURE_SWIPE_UP_AND_LEFT: return "GESTURE_SWIPE_UP_AND_LEFT";
+            case GESTURE_SWIPE_UP_AND_DOWN: return "GESTURE_SWIPE_UP_AND_DOWN";
+            case GESTURE_SWIPE_UP_AND_RIGHT: return "GESTURE_SWIPE_UP_AND_RIGHT";
+            case GESTURE_2_FINGER_SWIPE_DOWN: return "GESTURE_2_FINGER_SWIPE_DOWN";
+            case GESTURE_2_FINGER_SWIPE_LEFT: return "GESTURE_2_FINGER_SWIPE_LEFT";
+            case GESTURE_2_FINGER_SWIPE_RIGHT: return "GESTURE_2_FINGER_SWIPE_RIGHT";
+            case GESTURE_2_FINGER_SWIPE_UP: return "GESTURE_2_FINGER_SWIPE_UP";
+            case GESTURE_3_FINGER_SWIPE_DOWN: return "GESTURE_3_FINGER_SWIPE_DOWN";
+            case GESTURE_3_FINGER_SWIPE_LEFT: return "GESTURE_3_FINGER_SWIPE_LEFT";
+            case GESTURE_3_FINGER_SWIPE_RIGHT: return "GESTURE_3_FINGER_SWIPE_RIGHT";
+            case GESTURE_3_FINGER_SWIPE_UP: return "GESTURE_3_FINGER_SWIPE_UP";
+            default: return Integer.toHexString(eventType);
+        }
     }
 
     /**

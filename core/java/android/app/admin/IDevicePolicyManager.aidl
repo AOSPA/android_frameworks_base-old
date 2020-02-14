@@ -202,7 +202,7 @@ interface IDevicePolicyManager {
     void addPersistentPreferredActivity(in ComponentName admin, in IntentFilter filter, in ComponentName activity);
     void clearPackagePersistentPreferredActivities(in ComponentName admin, String packageName);
 
-    void setDefaultSmsApplication(in ComponentName admin, String packageName);
+    void setDefaultSmsApplication(in ComponentName admin, String packageName, boolean parent);
 
     void setApplicationRestrictions(in ComponentName who, in String callerPackage, in String packageName, in Bundle settings);
     Bundle getApplicationRestrictions(in ComponentName who, in String callerPackage, in String packageName);
@@ -233,8 +233,8 @@ interface IDevicePolicyManager {
     boolean isNotificationListenerServicePermitted(in String packageName, int userId);
 
     Intent createAdminSupportIntent(in String restriction);
-    boolean setApplicationHidden(in ComponentName admin, in String callerPackage, in String packageName, boolean hidden);
-    boolean isApplicationHidden(in ComponentName admin, in String callerPackage, in String packageName);
+    boolean setApplicationHidden(in ComponentName admin, in String callerPackage, in String packageName, boolean hidden, boolean parent);
+    boolean isApplicationHidden(in ComponentName admin, in String callerPackage, in String packageName, boolean parent);
 
     UserHandle createAndManageUser(in ComponentName who, in String name, in ComponentName profileOwner, in PersistableBundle adminExtras, in int flags);
     boolean removeUser(in ComponentName who, in UserHandle userHandle);
@@ -270,6 +270,7 @@ interface IDevicePolicyManager {
     boolean isLockdownAdminConfiguredNetworks(in ComponentName who);
 
     void setLocationEnabled(in ComponentName who, boolean locationEnabled);
+    void requestSetLocationProviderAllowed(in ComponentName who, in String provider, boolean providerAllowed);
 
     boolean setTime(in ComponentName who, long millis);
     boolean setTimeZone(in ComponentName who, String timeZone);
@@ -456,6 +457,7 @@ interface IDevicePolicyManager {
     List<String> getCrossProfilePackages(in ComponentName admin);
 
     List<String> getAllCrossProfilePackages();
+    List<String> getDefaultCrossProfilePackages();
 
     boolean isManagedKiosk();
     boolean isUnattendedManagedKiosk();
@@ -470,4 +472,10 @@ interface IDevicePolicyManager {
 
     void setCommonCriteriaModeEnabled(in ComponentName admin, boolean enabled);
     boolean isCommonCriteriaModeEnabled(in ComponentName admin);
+
+    int getPersonalAppsSuspendedReasons(in ComponentName admin);
+    void setPersonalAppsSuspended(in ComponentName admin, boolean suspended);
+
+    long getManagedProfileMaximumTimeOff(in ComponentName admin);
+    void setManagedProfileMaximumTimeOff(in ComponentName admin, long timeoutMs);
 }

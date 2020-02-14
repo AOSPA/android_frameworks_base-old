@@ -44,17 +44,18 @@ import android.service.notification.NotificationListenerService.Ranking;
 import android.service.notification.NotificationListenerService.RankingMap;
 import android.service.notification.StatusBarNotification;
 import android.util.ArrayMap;
-import android.util.Log;
 
 import com.android.internal.statusbar.IStatusBarService;
 import com.android.systemui.DumpController;
 import com.android.systemui.Dumpable;
+import com.android.systemui.statusbar.FeatureFlags;
 import com.android.systemui.statusbar.notification.collection.coalescer.CoalescedEvent;
 import com.android.systemui.statusbar.notification.collection.coalescer.GroupCoalescer;
 import com.android.systemui.statusbar.notification.collection.coalescer.GroupCoalescer.BatchableNotificationHandler;
 import com.android.systemui.statusbar.notification.collection.notifcollection.CollectionReadyForBuildListener;
 import com.android.systemui.statusbar.notification.collection.notifcollection.DismissedByUserStats;
 import com.android.systemui.statusbar.notification.collection.notifcollection.NotifCollectionListener;
+import com.android.systemui.statusbar.notification.collection.notifcollection.NotifCollectionLogger;
 import com.android.systemui.statusbar.notification.collection.notifcollection.NotifLifetimeExtender;
 import com.android.systemui.util.Assert;
 
@@ -91,13 +92,15 @@ import javax.inject.Singleton;
  * {@link #addNotificationLifetimeExtender(NotifLifetimeExtender)}).
  *
  * Interested parties can register listeners
- * ({@link #addCollectionListener(NotifCollectionListener)}) to be informed when notifications are
- * added, updated, or removed.
+ * ({@link #addCollectionListener(NotifCollectionListener)}) to be informed when notifications
+ * events occur.
  */
 @MainThread
 @Singleton
 public class NotifCollection implements Dumpable {
     private final IStatusBarService mStatusBarService;
+    private final FeatureFlags mFeatureFlags;
+    private final NotifCollectionLogger mLogger;
 
     private final Map<String, NotificationEntry> mNotificationSet = new ArrayMap<>();
     private final Collection<NotificationEntry> mReadOnlyNotificationSet =
@@ -111,10 +114,16 @@ public class NotifCollection implements Dumpable {
     private boolean mAmDispatchingToOtherCode;
 
     @Inject
-    public NotifCollection(IStatusBarService statusBarService, DumpController dumpController) {
+    public NotifCollection(
+            IStatusBarService statusBarService,
+            DumpController dumpController,
+            FeatureFlags featureFlags,
+            NotifCollectionLogger logger) {
         Assert.isMainThread();
         mStatusBarService = statusBarService;
+        mLogger = logger;
         dumpController.registerDumpable(TAG, this);
+        mFeatureFlags = featureFlags;
     }
 
     /** Initializes the NotifCollection and registers it to receive notification events. */
@@ -184,8 +193,8 @@ public class NotifCollection implements Dumpable {
     private void onNotificationGroupPosted(List<CoalescedEvent> batch) {
         Assert.isMainThread();
 
-        Log.d(TAG, "POSTED GROUP " + batch.get(0).getSbn().getGroupKey()
-                + " (" + batch.size() + " events)");
+        mLogger.logNotifGroupPosted(batch.get(0).getSbn().getGroupKey(), batch.size());
+
         for (CoalescedEvent event : batch) {
             postNotification(event.getSbn(), event.getRanking(), null);
         }
@@ -198,13 +207,14 @@ public class NotifCollection implements Dumpable {
             int reason) {
         Assert.isMainThread();
 
-        Log.d(TAG, "REMOVED " + sbn.getKey() + " reason=" + reason);
+        mLogger.logNotifRemoved(sbn.getKey(), reason);
         removeNotification(sbn.getKey(), rankingMap, reason, null);
     }
 
     private void onNotificationRankingUpdate(RankingMap rankingMap) {
         Assert.isMainThread();
         applyRanking(rankingMap);
+        dispatchNotificationRankingUpdate(rankingMap);
         rebuildList();
     }
 
@@ -216,10 +226,12 @@ public class NotifCollection implements Dumpable {
 
         if (entry == null) {
             // A new notification!
-            Log.d(TAG, "POSTED  " + sbn.getKey());
+            mLogger.logNotifPosted(sbn.getKey());
 
             entry = new NotificationEntry(sbn, ranking);
             mNotificationSet.put(sbn.getKey(), entry);
+            dispatchOnEntryInit(entry);
+
             if (rankingMap != null) {
                 applyRanking(rankingMap);
             }
@@ -228,7 +240,7 @@ public class NotifCollection implements Dumpable {
 
         } else {
             // Update to an existing entry
-            Log.d(TAG, "UPDATED " + sbn.getKey());
+            mLogger.logNotifUpdated(sbn.getKey());
 
             // Notification is updated so it is essentially re-added and thus alive again.  Don't
             // need to keep its lifetime extended.
@@ -287,6 +299,7 @@ public class NotifCollection implements Dumpable {
             }
 
             dispatchOnEntryRemoved(entry, reason, dismissedByUserStats != null /* removedByUser */);
+            dispatchOnEntryCleanUp(entry);
         }
 
         rebuildList();
@@ -295,15 +308,26 @@ public class NotifCollection implements Dumpable {
     private void applyRanking(@NonNull RankingMap rankingMap) {
         for (NotificationEntry entry : mNotificationSet.values()) {
             if (!isLifetimeExtended(entry)) {
-                Ranking ranking = requireRanking(rankingMap, entry.getKey());
-                entry.setRanking(ranking);
 
-                // TODO: (b/145659174) update the sbn's overrideGroupKey in
-                //  NotificationEntry.setRanking instead of here once we fully migrate to the
-                //  NewNotifPipeline
-                final String newOverrideGroupKey = ranking.getOverrideGroupKey();
-                if (!Objects.equals(entry.getSbn().getOverrideGroupKey(), newOverrideGroupKey)) {
-                    entry.getSbn().setOverrideGroupKey(newOverrideGroupKey);
+                // TODO: (b/148791039) We should crash if we are ever handed a ranking with
+                //  incomplete entries. Right now, there's a race condition in NotificationListener
+                //  that means this might occur when SystemUI is starting up.
+                Ranking ranking = new Ranking();
+                if (rankingMap.getRanking(entry.getKey(), ranking)) {
+                    entry.setRanking(ranking);
+
+                    // TODO: (b/145659174) update the sbn's overrideGroupKey in
+                    //  NotificationEntry.setRanking instead of here once we fully migrate to the
+                    //  NewNotifPipeline
+                    if (mFeatureFlags.isNewNotifPipelineRenderingEnabled()) {
+                        final String newOverrideGroupKey = ranking.getOverrideGroupKey();
+                        if (!Objects.equals(entry.getSbn().getOverrideGroupKey(),
+                                newOverrideGroupKey)) {
+                            entry.getSbn().setOverrideGroupKey(newOverrideGroupKey);
+                        }
+                    }
+                } else {
+                    mLogger.logRankingMissing(entry.getKey(), rankingMap);
                 }
             }
         }
@@ -365,6 +389,14 @@ public class NotifCollection implements Dumpable {
         return ranking;
     }
 
+    private void dispatchOnEntryInit(NotificationEntry entry) {
+        mAmDispatchingToOtherCode = true;
+        for (NotifCollectionListener listener : mNotifCollectionListeners) {
+            listener.onEntryInit(entry);
+        }
+        mAmDispatchingToOtherCode = false;
+    }
+
     private void dispatchOnEntryAdded(NotificationEntry entry) {
         mAmDispatchingToOtherCode = true;
         for (NotifCollectionListener listener : mNotifCollectionListeners) {
@@ -381,6 +413,14 @@ public class NotifCollection implements Dumpable {
         mAmDispatchingToOtherCode = false;
     }
 
+    private void dispatchNotificationRankingUpdate(RankingMap map) {
+        mAmDispatchingToOtherCode = true;
+        for (NotifCollectionListener listener : mNotifCollectionListeners) {
+            listener.onRankingUpdate(map);
+        }
+        mAmDispatchingToOtherCode = false;
+    }
+
     private void dispatchOnEntryRemoved(
             NotificationEntry entry,
             @CancellationReason int reason,
@@ -388,6 +428,14 @@ public class NotifCollection implements Dumpable {
         mAmDispatchingToOtherCode = true;
         for (NotifCollectionListener listener : mNotifCollectionListeners) {
             listener.onEntryRemoved(entry, reason, removedByUser);
+        }
+        mAmDispatchingToOtherCode = false;
+    }
+
+    private void dispatchOnEntryCleanUp(NotificationEntry entry) {
+        mAmDispatchingToOtherCode = true;
+        for (NotifCollectionListener listener : mNotifCollectionListeners) {
+            listener.onEntryCleanUp(entry);
         }
         mAmDispatchingToOtherCode = false;
     }

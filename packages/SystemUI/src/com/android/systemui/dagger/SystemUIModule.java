@@ -27,6 +27,7 @@ import com.android.systemui.BootCompleteCacheImpl;
 import com.android.systemui.DumpController;
 import com.android.systemui.assist.AssistModule;
 import com.android.systemui.dagger.qualifiers.Main;
+import com.android.systemui.log.dagger.LogModule;
 import com.android.systemui.model.SysUiState;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.recents.Recents;
@@ -37,6 +38,7 @@ import com.android.systemui.statusbar.StatusBarWindowBlurController;
 import com.android.systemui.statusbar.SysuiStatusBarStateController;
 import com.android.systemui.statusbar.notification.collection.inflation.NotificationRowBinder;
 import com.android.systemui.statusbar.notification.collection.inflation.NotificationRowBinderImpl;
+import com.android.systemui.statusbar.notification.dagger.NotificationsModule;
 import com.android.systemui.statusbar.notification.people.PeopleHubModule;
 import com.android.systemui.statusbar.notification.row.dagger.NotificationRowComponent;
 import com.android.systemui.statusbar.phone.KeyguardLiftController;
@@ -59,9 +61,13 @@ import dagger.Provides;
  * A dagger module for injecting components of System UI that are not overridden by the System UI
  * implementation.
  */
-@Module(includes = {AssistModule.class,
-                    ConcurrencyModule.class,
-                    PeopleHubModule.class},
+@Module(includes = {
+            AssistModule.class,
+            ConcurrencyModule.class,
+            LogModule.class,
+            NotificationsModule.class,
+            PeopleHubModule.class,
+        },
         subcomponents = {StatusBarComponent.class, NotificationRowComponent.class})
 public abstract class SystemUIModule {
 

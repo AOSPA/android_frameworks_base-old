@@ -21,6 +21,7 @@ import com.android.systemui.ScreenDecorations;
 import com.android.systemui.SizeCompatModeActivityController;
 import com.android.systemui.SliceBroadcastRelayHandler;
 import com.android.systemui.SystemUI;
+import com.android.systemui.accessibility.SystemActions;
 import com.android.systemui.accessibility.WindowMagnification;
 import com.android.systemui.biometrics.AuthController;
 import com.android.systemui.globalactions.GlobalActionsComponent;
@@ -36,6 +37,7 @@ import com.android.systemui.statusbar.phone.StatusBar;
 import com.android.systemui.statusbar.phone.StatusBarModule;
 import com.android.systemui.statusbar.tv.TvStatusBar;
 import com.android.systemui.theme.ThemeOverlayController;
+import com.android.systemui.toast.ToastUI;
 import com.android.systemui.util.leak.GarbageMonitor;
 import com.android.systemui.volume.VolumeUI;
 
@@ -140,11 +142,23 @@ public abstract class SystemUIBinder {
     @ClassKey(StatusBar.class)
     public abstract SystemUI bindsStatusBar(StatusBar sysui);
 
+   /** Inject into SystemActions. */
+    @Binds
+    @IntoMap
+    @ClassKey(SystemActions.class)
+    public abstract SystemUI bindSystemActions(SystemActions sysui);
+
     /** Inject into ThemeOverlayController. */
     @Binds
     @IntoMap
     @ClassKey(ThemeOverlayController.class)
     public abstract SystemUI bindThemeOverlayController(ThemeOverlayController sysui);
+
+    /** Inject into ToastUI. */
+    @Binds
+    @IntoMap
+    @ClassKey(ToastUI.class)
+    public abstract SystemUI bindToastUI(ToastUI service);
 
     /** Inject into TvStatusBar. */
     @Binds

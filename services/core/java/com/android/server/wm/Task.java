@@ -16,13 +16,13 @@
 
 package com.android.server.wm;
 
-import static android.app.ActivityTaskManager.INVALID_STACK_ID;
 import static android.app.ActivityTaskManager.INVALID_TASK_ID;
 import static android.app.ActivityTaskManager.RESIZE_MODE_FORCED;
 import static android.app.ActivityTaskManager.RESIZE_MODE_SYSTEM;
 import static android.app.ActivityTaskManager.RESIZE_MODE_SYSTEM_SCREEN_ROTATION;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_STANDARD;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_UNDEFINED;
+import static android.app.WindowConfiguration.PINNED_WINDOWING_MODE_ELEVATION_IN_DIP;
 import static android.app.WindowConfiguration.ROTATION_UNDEFINED;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FREEFORM;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN;
@@ -59,17 +59,8 @@ import static android.view.Display.DEFAULT_DISPLAY;
 import static android.view.Display.INVALID_DISPLAY;
 import static android.view.SurfaceControl.METADATA_TASK_ID;
 
-import static com.android.server.am.TaskRecordProto.ACTIVITIES;
-import static com.android.server.am.TaskRecordProto.ACTIVITY_TYPE;
-import static com.android.server.am.TaskRecordProto.FULLSCREEN;
-import static com.android.server.am.TaskRecordProto.LAST_NON_FULLSCREEN_BOUNDS;
-import static com.android.server.am.TaskRecordProto.MIN_HEIGHT;
-import static com.android.server.am.TaskRecordProto.MIN_WIDTH;
-import static com.android.server.am.TaskRecordProto.ORIG_ACTIVITY;
-import static com.android.server.am.TaskRecordProto.REAL_ACTIVITY;
-import static com.android.server.am.TaskRecordProto.RESIZE_MODE;
-import static com.android.server.am.TaskRecordProto.STACK_ID;
-import static com.android.server.am.TaskRecordProto.TASK;
+import static com.android.internal.policy.DecorView.DECOR_SHADOW_FOCUSED_HEIGHT_IN_DIP;
+import static com.android.internal.policy.DecorView.DECOR_SHADOW_UNFOCUSED_HEIGHT_IN_DIP;
 import static com.android.server.wm.ActivityRecord.STARTING_WINDOW_SHOWN;
 import static com.android.server.wm.ActivityStack.ActivityState.RESUMED;
 import static com.android.server.wm.ActivityStackSupervisor.ON_TOP;
@@ -88,7 +79,6 @@ import static com.android.server.wm.ActivityTaskManagerDebugConfig.TAG_WITH_CLAS
 import static com.android.server.wm.ActivityTaskManagerService.TAG_STACK;
 import static com.android.server.wm.DragResizeMode.DRAG_RESIZE_MODE_DOCKED_DIVIDER;
 import static com.android.server.wm.ProtoLogGroup.WM_DEBUG_ADD_REMOVE;
-import static com.android.server.wm.TaskProto.APP_WINDOW_TOKENS;
 import static com.android.server.wm.TaskProto.DISPLAYED_BOUNDS;
 import static com.android.server.wm.TaskProto.FILLS_PARENT;
 import static com.android.server.wm.TaskProto.SURFACE_HEIGHT;
@@ -99,6 +89,7 @@ import static com.android.server.wm.WindowContainer.AnimationFlags.TRANSITION;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_STACK;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_TASK_MOVEMENT;
 import static com.android.server.wm.WindowManagerDebugConfig.TAG_WM;
+import static com.android.server.wm.WindowManagerService.dipToPixel;
 import static com.android.server.wm.WindowStateAnimator.STACK_CLIP_BEFORE_ANIM;
 
 import static java.lang.Integer.MAX_VALUE;
@@ -210,6 +201,8 @@ class Task extends WindowContainer<WindowContainer> {
     static final int PERSIST_TASK_VERSION = 1;
 
     static final int INVALID_MIN_SIZE = -1;
+    private float mShadowRadius = 0;
+    private final Rect mLastSurfaceCrop = new Rect();
 
     /**
      * The modes to control how the stack is moved to the front when calling {@link Task#reparent}.
@@ -362,6 +355,7 @@ class Task extends WindowContainer<WindowContainer> {
      * Display rotation as of the last time {@link #setBounds(Rect)} was called or this task was
      * moved to a new display.
      */
+    @Surface.Rotation
     private int mRotation;
 
     // For comparison with DisplayContent bounds.
@@ -496,7 +490,7 @@ class Task extends WindowContainer<WindowContainer> {
     }
 
     class TaskToken extends RemoteToken {
-        TaskToken(ConfigurationContainer container) {
+        TaskToken(WindowContainer container) {
             super(container);
         }
 
@@ -1251,7 +1245,7 @@ class Task extends WindowContainer<WindowContainer> {
         if (affinityIntent != null) return affinityIntent;
         // Probably a task that contains other tasks, so return the intent for the top task?
         final Task topTask = getTopMostTask();
-        return topTask != null ? topTask.getBaseIntent() : null;
+        return (topTask != this && topTask != null) ? topTask.getBaseIntent() : null;
     }
 
     /** Returns the first non-finishing activity from the bottom. */
@@ -1869,6 +1863,7 @@ class Task extends WindowContainer<WindowContainer> {
         super.onConfigurationChanged(newParentConfig);
         if (wasInMultiWindowMode != inMultiWindowMode()) {
             mStackSupervisor.scheduleUpdateMultiWindowMode(this);
+            updateShadowsRadius(isFocused(), getPendingTransaction());
         }
 
         // If the configuration supports persistent bounds (eg. Freeform), keep track of the
@@ -2527,16 +2522,34 @@ class Task extends WindowContainer<WindowContainer> {
                 ? getStack().getDisplayContent() : null;
         if (displayContent != null) {
             rotation = displayContent.getDisplayInfo().rotation;
-        } else if (bounds == null) {
-            return super.setBounds(bounds);
         }
 
         final int boundsChange = super.setBounds(bounds);
-
         mRotation = rotation;
-
         updateSurfacePosition();
         return boundsChange;
+    }
+
+    private void updateSurfaceCrop() {
+        // Only update the crop if we are drawing shadows on the task.
+        if (mSurfaceControl == null || !mWmService.mRenderShadowsInCompositor) {
+            return;
+        }
+
+        if (inSplitScreenWindowingMode()) {
+            // inherit crop from parent
+            mTmpRect.setEmpty();
+        } else {
+            getBounds(mTmpRect);
+        }
+
+        mTmpRect.offsetTo(0, 0);
+        if (mLastSurfaceCrop.equals(mTmpRect)) {
+            return;
+        }
+
+        getPendingTransaction().setWindowCrop(mSurfaceControl, mTmpRect);
+        mLastSurfaceCrop.set(mTmpRect);
     }
 
     @Override
@@ -2724,6 +2737,7 @@ class Task extends WindowContainer<WindowContainer> {
             boolean[] foundTop = { false };
             final PooledConsumer c = PooledLambda.obtainConsumer(Task::getMaxVisibleBounds,
                     PooledLambda.__(ActivityRecord.class), out, foundTop);
+            forAllActivities(c);
             c.recycle();
             if (foundTop[0]) {
                 return;
@@ -3126,32 +3140,12 @@ class Task extends WindowContainer<WindowContainer> {
         } else {
             mTmpDimBoundsRect.offsetTo(0, 0);
         }
+
+        updateSurfaceCrop();
+
         if (mDimmer.updateDims(getPendingTransaction(), mTmpDimBoundsRect)) {
             scheduleAnimation();
         }
-    }
-
-    // TODO(proto-merge): Remove once protos for TaskRecord and Task are merged.
-    void dumpDebugInnerTaskOnly(ProtoOutputStream proto, long fieldId,
-            @WindowTraceLogLevel int logLevel) {
-        if (logLevel == WindowTraceLogLevel.CRITICAL && !isVisible()) {
-            return;
-        }
-
-        final long token = proto.start(fieldId);
-        super.dumpDebug(proto, WINDOW_CONTAINER, logLevel);
-        proto.write(TaskProto.ID, mTaskId);
-        forAllActivities((r) -> {
-            r.dumpDebug(proto, APP_WINDOW_TOKENS, logLevel);
-        });
-        proto.write(FILLS_PARENT, matchParentBounds());
-        getBounds().dumpDebug(proto, TaskProto.BOUNDS);
-        mOverrideDisplayedBounds.dumpDebug(proto, DISPLAYED_BOUNDS);
-        if (mSurfaceControl != null) {
-            proto.write(SURFACE_WIDTH, mSurfaceControl.getWidth());
-            proto.write(SURFACE_HEIGHT, mSurfaceControl.getHeight());
-        }
-        proto.end(token);
     }
 
     @Override
@@ -3185,7 +3179,10 @@ class Task extends WindowContainer<WindowContainer> {
         info.taskId = mTaskId;
         info.displayId = getDisplayId();
         info.isRunning = getTopNonFinishingActivity() != null;
-        info.baseIntent = new Intent(getBaseIntent());
+        final Intent baseIntent = getBaseIntent();
+        // Make a copy of base intent because this is like a snapshot info.
+        // Besides, {@link RecentTasks#getRecentTasksImpl} may modify it.
+        info.baseIntent = baseIntent == null ? new Intent() : new Intent(baseIntent);
         info.baseActivity = mReuseActivitiesReport.base != null
                 ? mReuseActivitiesReport.base.intent.getComponent()
                 : null;
@@ -3200,6 +3197,10 @@ class Task extends WindowContainer<WindowContainer> {
         info.supportsSplitScreenMultiWindow = supportsSplitScreenWindowingMode();
         info.resizeMode = mResizeMode;
         info.configuration.setTo(getConfiguration());
+        info.token = mRemoteToken;
+        // Get's the first non-undefined activity type among this and children. Can't use
+        // configuration.windowConfiguration because that would only be this level.
+        info.topActivityType = getActivityType();
     }
 
     /**
@@ -3346,7 +3347,7 @@ class Task extends WindowContainer<WindowContainer> {
         if (affinity != null) {
             sb.append(" A=");
             sb.append(affinity);
-        } else if (intent != null) {
+        } else if (intent != null && intent.getComponent() != null) {
             sb.append(" I=");
             sb.append(intent.getComponent().flattenToShortString());
         } else if (affinityIntent != null && affinityIntent.getComponent() != null) {
@@ -3357,43 +3358,6 @@ class Task extends WindowContainer<WindowContainer> {
         }
         stringName = sb.toString();
         return toString();
-    }
-
-    void dumpDebugInner(ProtoOutputStream proto, long fieldId,
-            @WindowTraceLogLevel int logLevel) {
-        if (logLevel == WindowTraceLogLevel.CRITICAL && !isVisible()) {
-            return;
-        }
-
-        final long token = proto.start(fieldId);
-        dumpDebugInnerTaskOnly(proto, TASK, logLevel);
-        proto.write(com.android.server.am.TaskRecordProto.ID, mTaskId);
-
-        forAllActivities((r) -> {
-            r.dumpDebug(proto, ACTIVITIES);
-        });
-        proto.write(STACK_ID, getRootTaskId());
-        if (mLastNonFullscreenBounds != null) {
-            mLastNonFullscreenBounds.dumpDebug(proto, LAST_NON_FULLSCREEN_BOUNDS);
-        }
-        if (realActivity != null) {
-            proto.write(REAL_ACTIVITY, realActivity.flattenToShortString());
-        }
-        if (origActivity != null) {
-            proto.write(ORIG_ACTIVITY, origActivity.flattenToShortString());
-        }
-        proto.write(ACTIVITY_TYPE, getActivityType());
-        proto.write(RESIZE_MODE, mResizeMode);
-        // TODO: Remove, no longer needed with windowingMode.
-        proto.write(FULLSCREEN, matchParentBounds());
-
-        if (!matchParentBounds()) {
-            final Rect bounds = getRequestedOverrideBounds();
-            bounds.dumpDebug(proto, com.android.server.am.TaskRecordProto.BOUNDS);
-        }
-        proto.write(MIN_WIDTH, mMinWidth);
-        proto.write(MIN_HEIGHT, mMinHeight);
-        proto.end(token);
     }
 
     /** @see #getNumRunningActivities(TaskActivitiesReport) */
@@ -3835,9 +3799,13 @@ class Task extends WindowContainer<WindowContainer> {
     }
 
     boolean isControlledByTaskOrganizer() {
-        // TODO(b/147849315): Clean-up relationship between task-org and task-hierarchy. Ideally
-        //  we only give control of the root task.
-        return getTopMostTask().mTaskOrganizer != null;
+        final Task rootTask = getRootTask();
+        return rootTask == this && rootTask.mTaskOrganizer != null
+                // TODO(task-hierarchy): Figure out how to control nested tasks.
+                // For now, if this is in a tile let WM drive.
+                && !(rootTask instanceof TaskTile)
+                && !(rootTask instanceof ActivityStack
+                        && ((ActivityStack) rootTask).getTile() != null);
     }
 
     @Override
@@ -3865,6 +3833,9 @@ class Task extends WindowContainer<WindowContainer> {
    }
 
     void setTaskOrganizer(ITaskOrganizer organizer) {
+        if (mTaskOrganizer == organizer) {
+            return;
+        }
         // Let the old organizer know it has lost control.
         if (mTaskOrganizer != null) {
             sendTaskVanished();
@@ -3890,8 +3861,6 @@ class Task extends WindowContainer<WindowContainer> {
     public void updateSurfacePosition() {
         // Avoid fighting with the TaskOrganizer over Surface position.
         if (isControlledByTaskOrganizer()) {
-            getPendingTransaction().setPosition(mSurfaceControl, 0, 0);
-            scheduleAnimation();
             return;
         } else {
             super.updateSurfacePosition();
@@ -3909,20 +3878,57 @@ class Task extends WindowContainer<WindowContainer> {
         super.getRelativeDisplayedPosition(outPos);
     }
 
-    @Override
-    public void setWindowingMode(int windowingMode) {
-        super.setWindowingMode(windowingMode);
-        windowingMode = getWindowingMode();
-
-        // TODO(b/147849315): Clean-up relationship between task-org and task-hierarchy. Ideally
-        //  we only give control of the root task.
-        // Different windowing modes may be managed by different task organizers. If
-        // getTaskOrganizer returns null, we still call transferToTaskOrganizer to make sure we
-        // clear it.
-        if (!isRootTask()) {
-            final ITaskOrganizer org =
-                    mAtmService.mTaskOrganizerController.getTaskOrganizer(windowingMode);
-            setTaskOrganizer(org);
+    /**
+     * @return true if the task is currently focused.
+     */
+    private boolean isFocused() {
+        if (mDisplayContent == null || mDisplayContent.mCurrentFocus == null) {
+            return false;
         }
+        return mDisplayContent.mCurrentFocus.getTask() == this;
+    }
+
+    /**
+     * @return the desired shadow radius in pixels for the current task.
+     */
+    private float getShadowRadius(boolean taskIsFocused) {
+        if (mDisplayContent == null) {
+            return 0;
+        }
+
+        if (inPinnedWindowingMode()) {
+            return dipToPixel(PINNED_WINDOWING_MODE_ELEVATION_IN_DIP,
+                    mDisplayContent.getDisplayMetrics());
+        }
+        if (inFreeformWindowingMode()) {
+            final int elevation = taskIsFocused
+                    ? DECOR_SHADOW_FOCUSED_HEIGHT_IN_DIP : DECOR_SHADOW_UNFOCUSED_HEIGHT_IN_DIP;
+            return dipToPixel(elevation, mDisplayContent.getDisplayMetrics());
+        }
+
+        // For all other windowing modes, do not draw a shadow.
+        return 0;
+    }
+
+    /**
+     * Update the length of the shadow if needed based on windowing mode and task focus state.
+     */
+    private void updateShadowsRadius(boolean taskIsFocused,
+            SurfaceControl.Transaction pendingTransaction) {
+        if (!mWmService.mRenderShadowsInCompositor) return;
+
+        final float newShadowRadius = getShadowRadius(taskIsFocused);
+        if (mShadowRadius != newShadowRadius) {
+            mShadowRadius = newShadowRadius;
+            pendingTransaction.setShadowRadius(getSurfaceControl(), mShadowRadius);
+        }
+    }
+
+    /**
+     * Called on the task of a window which gained or lost focus.
+     * @param hasFocus
+     */
+    void onWindowFocusChanged(boolean hasFocus) {
+        updateShadowsRadius(hasFocus, getPendingTransaction());
     }
 }

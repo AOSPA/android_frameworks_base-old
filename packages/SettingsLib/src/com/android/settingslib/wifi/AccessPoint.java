@@ -681,7 +681,7 @@ public class AccessPoint implements Comparable<AccessPoint> {
                 }
             }
         }
-        return oldMetering == mIsScoredNetworkMetered;
+        return oldMetering != mIsScoredNetworkMetered;
     }
 
     /**
@@ -1286,7 +1286,7 @@ public class AccessPoint implements Comparable<AccessPoint> {
         } else if (isActive()) {
             summary.append(getSummary(mContext, /* ssid */ null, getDetailedState(),
                     mInfo != null && mInfo.isEphemeral(),
-                    mInfo != null ? mInfo.getAppPackageName() : null));
+                    mInfo != null ? mInfo.getRequestingPackageName() : null));
         } else { // not active
             if (mConfig != null && mConfig.hasNoInternetAccess()) {
                 int messageID = mConfig.getNetworkSelectionStatus().isNetworkPermanentlyDisabled()
@@ -1315,8 +1315,8 @@ public class AccessPoint implements Comparable<AccessPoint> {
             } else { // In range, not disabled.
                 if (mConfig != null) { // Is saved network
                     // Last attempt to connect to this failed. Show reason why
-                    switch (mConfig.recentFailure.getAssociationStatus()) {
-                        case WifiConfiguration.RecentFailure.STATUS_AP_UNABLE_TO_HANDLE_NEW_STA:
+                    switch (mConfig.getRecentFailureReason()) {
+                        case WifiConfiguration.RECENT_FAILURE_AP_UNABLE_TO_HANDLE_NEW_STA:
                             summary.append(mContext.getString(
                                     R.string.wifi_ap_unable_to_handle_new_sta));
                             break;

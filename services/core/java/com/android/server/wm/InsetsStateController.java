@@ -60,6 +60,8 @@ class InsetsStateController {
             w.notifyInsetsChanged();
         }
     };
+    private final InsetsControlTarget mEmptyImeControlTarget = () -> {
+    };
 
     InsetsStateController(DisplayContent displayContent) {
         mDisplayContent = displayContent;
@@ -88,6 +90,20 @@ class InsetsStateController {
             state.removeSource(ITYPE_IME);
             state.removeSource(ITYPE_STATUS_BAR);
         }
+
+        // IME needs different frames for certain cases (e.g. navigation bar in gesture nav).
+        if (type == ITYPE_IME) {
+            for (int i = mProviders.size() - 1; i >= 0; i--) {
+                InsetsSourceProvider otherProvider = mProviders.valueAt(i);
+                if (otherProvider.overridesImeFrame()) {
+                    InsetsSource override =
+                            new InsetsSource(state.getSource(otherProvider.getSource().getType()));
+                    override.setFrame(otherProvider.getImeOverrideFrame());
+                    state.addSource(override);
+                }
+            }
+        }
+
         return state;
     }
 
@@ -163,12 +179,33 @@ class InsetsStateController {
         }
     }
 
+    /**
+     * Computes insets state of the insets provider window in the display frames.
+     *
+     * @param state The output state.
+     * @param win The owner window of insets provider.
+     * @param displayFrames The display frames to create insets source.
+     * @param windowFrames The specified frames to represent the owner window.
+     */
+    void computeSimulatedState(InsetsState state, WindowState win, DisplayFrames displayFrames,
+            WindowFrames windowFrames) {
+        for (int i = mProviders.size() - 1; i >= 0; i--) {
+            final InsetsSourceProvider provider = mProviders.valueAt(i);
+            if (provider.mWin == win) {
+                state.addSource(provider.createSimulatedSource(displayFrames, windowFrames));
+            }
+        }
+    }
+
     boolean isFakeTarget(@InternalInsetsType int type, InsetsControlTarget target) {
         return mTypeFakeControlTargetMap.get(type) == target;
     }
 
-    void onImeTargetChanged(@Nullable InsetsControlTarget imeTarget) {
-        onControlChanged(ITYPE_IME, imeTarget);
+    void onImeControlTargetChanged(@Nullable InsetsControlTarget imeTarget) {
+
+        // Make sure that we always have a control target for the IME, even if the IME target is
+        // null. Otherwise there is no leash that will hide it and IME becomes "randomly" visible.
+        onControlChanged(ITYPE_IME, imeTarget != null ? imeTarget : mEmptyImeControlTarget);
         notifyPendingInsetsControlChanged();
     }
 

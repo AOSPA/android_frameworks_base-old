@@ -20,6 +20,7 @@ import static android.view.WindowManagerPolicyConstants.APPLICATION_MEDIA_OVERLA
 import static android.view.WindowManagerPolicyConstants.APPLICATION_MEDIA_SUBLAYER;
 import static android.view.WindowManagerPolicyConstants.APPLICATION_PANEL_SUBLAYER;
 
+import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.TestApi;
 import android.compat.annotation.UnsupportedAppUsage;
@@ -43,6 +44,7 @@ import android.util.AttributeSet;
 import android.util.Log;
 import android.view.SurfaceControl.Transaction;
 import android.view.accessibility.AccessibilityNodeInfo;
+import android.view.SurfaceControlViewHost;
 
 import com.android.internal.view.SurfaceCallbackHelper;
 
@@ -204,6 +206,7 @@ public class SurfaceView extends View implements ViewRootImpl.SurfaceChangedCall
 
     // The token of embedded windowless view hierarchy.
     private IBinder mEmbeddedViewHierarchy;
+    SurfaceControlViewHost.SurfacePackage mSurfacePackage;
 
     public SurfaceView(Context context) {
         this(context, null);
@@ -411,7 +414,8 @@ public class SurfaceView extends View implements ViewRootImpl.SurfaceChangedCall
                             }
                             t.setAlpha(mSurfaceControl, alpha);
                             if (!useBLAST) {
-                                t.deferTransactionUntilSurface(mSurfaceControl, parent, frame);
+                                t.deferTransactionUntil(mSurfaceControl,
+                                        viewRoot.getRenderSurfaceControl(), frame);
                             }
                         }
                         // It's possible that mSurfaceControl is released in the UI thread before
@@ -877,6 +881,11 @@ public class SurfaceView extends View implements ViewRootImpl.SurfaceChangedCall
                     } else {
                         mTmpTransaction.hide(mSurfaceControl);
                     }
+
+                    if (mSurfacePackage != null) {
+                        reparentSurfacePackage(mTmpTransaction, mSurfacePackage);
+                    }
+
                     updateBackgroundVisibility(mTmpTransaction);
                     if (mUseAlpha) {
                         mTmpTransaction.setAlpha(mSurfaceControl, alpha);
@@ -1114,7 +1123,7 @@ public class SurfaceView extends View implements ViewRootImpl.SurfaceChangedCall
         if (frameNumber > 0 && !WindowManagerGlobal.USE_BLAST_ADAPTER) {
             final ViewRootImpl viewRoot = getViewRootImpl();
 
-            t.deferTransactionUntilSurface(surface, viewRoot.mSurface,
+            t.deferTransactionUntil(surface, viewRoot.getRenderSurfaceControl(),
                     frameNumber);
         }
 
@@ -1209,8 +1218,8 @@ public class SurfaceView extends View implements ViewRootImpl.SurfaceChangedCall
 
             if (frameNumber > 0 && viewRoot !=  null && !useBLAST) {
                 if (viewRoot.mSurface.isValid()) {
-                    mRtTransaction.deferTransactionUntilSurface(mSurfaceControl, viewRoot.mSurface,
-                            frameNumber);
+                    mRtTransaction.deferTransactionUntil(mSurfaceControl,
+                            viewRoot.getRenderSurfaceControl(), frameNumber);
                 }
             }
             t.hide(mSurfaceControl);
@@ -1471,11 +1480,12 @@ public class SurfaceView extends View implements ViewRootImpl.SurfaceChangedCall
     }
 
     /**
-     * @return The token used to identify the windows input channel.
-     * @hide
+     * A token used for constructing {@link SurfaceControlViewHost}. This token should
+     * be passed from the host process to the client process.
+     *
+     * @return The token
      */
-    @TestApi
-    public @Nullable IBinder getInputToken() {
+    public @Nullable IBinder getHostToken() {
         final ViewRootImpl viewRoot = getViewRootImpl();
         if (viewRoot == null) {
             return null;
@@ -1534,6 +1544,33 @@ public class SurfaceView extends View implements ViewRootImpl.SurfaceChangedCall
         final ViewRootImpl viewRoot = getViewRootImpl();
         if (viewRoot == null) return;
         viewRoot.setUseBLASTSyncTransaction();
+    }
+
+    /**
+     * Display the view-hierarchy embedded within a {@link SurfaceControlViewHost.SurfacePackage}
+     * within this SurfaceView. If this SurfaceView is above it's host Surface (see
+     * {@link #setZOrderOnTop} then the embedded Surface hierarchy will be able to receive
+     * input.
+     *
+     * @param p The SurfacePackage to embed.
+     */
+    public void setChildSurfacePackage(@NonNull SurfaceControlViewHost.SurfacePackage p) {
+        final SurfaceControl sc = p != null ? p.getSurfaceControl() : null;
+        final SurfaceControl lastSc = mSurfacePackage != null ?
+            mSurfacePackage.getSurfaceControl() : null;
+        if (mSurfaceControl != null && lastSc != null) {
+            mTmpTransaction.reparent(lastSc, null).apply();
+        } else if (mSurfaceControl != null) {
+            reparentSurfacePackage(mTmpTransaction, p);
+            mTmpTransaction.apply();
+        }
+        mSurfacePackage = p;
+    }
+
+    private void reparentSurfacePackage(SurfaceControl.Transaction t,
+            SurfaceControlViewHost.SurfacePackage p) {
+        // TODO: Link accessibility IDs here.
+        t.reparent(p.getSurfaceControl(), mSurfaceControl);
     }
 
     /**

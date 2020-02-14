@@ -115,8 +115,8 @@ public class PackageManagerShellCommandDataLoader extends DataLoaderService {
         }
 
         @Override
-        public boolean onPrepareImage(Collection<InstallationFile> addedFiles,
-                Collection<String> removedFiles) {
+        public boolean onPrepareImage(@NonNull Collection<InstallationFile> addedFiles,
+                @NonNull Collection<String> removedFiles) {
             final int commandId = extractShellCommandId(mParams.getArguments());
             if (commandId == INVALID_SHELL_COMMAND_ID) {
                 return false;
@@ -152,6 +152,7 @@ public class PackageManagerShellCommandDataLoader extends DataLoaderService {
                 }
                 return true;
             } catch (IOException e) {
+                Slog.e(TAG, "Exception while streaming files", e);
                 return false;
             }
         }

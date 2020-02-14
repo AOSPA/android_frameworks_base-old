@@ -94,7 +94,7 @@ public class InsetsStateTest {
             WindowInsets insets = mState.calculateInsets(new Rect(0, 0, 100, 300), false, false,
                     DisplayCutout.NO_CUTOUT, null, null, SOFT_INPUT_ADJUST_RESIZE, 0, null);
             assertEquals(100, insets.getStableInsetBottom());
-            assertEquals(Insets.of(0, 0, 0, 100), insets.getMaxInsets(Type.systemBars()));
+            assertEquals(Insets.of(0, 0, 0, 100), insets.getInsetsIgnoringVisibility(Type.systemBars()));
             assertEquals(Insets.of(0, 0, 0, 200), insets.getSystemWindowInsets());
             assertEquals(Insets.of(0, 0, 0, 200), insets.getInsets(Type.all()));
             assertEquals(Insets.of(0, 0, 0, 100), insets.getInsets(Type.navigationBars()));
@@ -213,6 +213,7 @@ public class InsetsStateTest {
     @Test
     public void testParcelUnparcel() {
         mState.getSource(ITYPE_IME).setFrame(new Rect(0, 0, 100, 100));
+        mState.getSource(ITYPE_IME).setVisibleFrame(new Rect(0, 0, 50, 10));
         mState.getSource(ITYPE_IME).setVisible(true);
         mState.getSource(ITYPE_STATUS_BAR).setFrame(new Rect(0, 0, 100, 100));
         Parcel p = Parcel.obtain();
@@ -220,6 +221,16 @@ public class InsetsStateTest {
         p.setDataPosition(0);
         mState2.readFromParcel(p);
         p.recycle();
+        assertEquals(mState, mState2);
+    }
+
+    @Test
+    public void testCopy() {
+        mState.getSource(ITYPE_IME).setFrame(new Rect(0, 0, 100, 100));
+        mState.getSource(ITYPE_IME).setVisibleFrame(new Rect(0, 0, 50, 10));
+        mState.getSource(ITYPE_IME).setVisible(true);
+        mState.getSource(ITYPE_STATUS_BAR).setFrame(new Rect(0, 0, 100, 100));
+        mState2.set(mState, true);
         assertEquals(mState, mState2);
     }
 

@@ -27,6 +27,7 @@ import static android.Manifest.permission.WRITE_EXTERNAL_STORAGE;
 import static android.content.Intent.ACTION_MAIN;
 import static android.content.Intent.CATEGORY_DEFAULT;
 import static android.content.Intent.CATEGORY_HOME;
+import static android.content.Intent.EXTRA_LONG_VERSION_CODE;
 import static android.content.Intent.EXTRA_PACKAGE_NAME;
 import static android.content.Intent.EXTRA_VERSION_CODE;
 import static android.content.pm.PackageManager.CERT_INPUT_RAW_X509;
@@ -60,6 +61,7 @@ import static android.content.pm.PackageManager.INSTALL_FAILED_UPDATE_INCOMPATIB
 import static android.content.pm.PackageManager.INSTALL_FAILED_VERSION_DOWNGRADE;
 import static android.content.pm.PackageManager.INSTALL_INTERNAL;
 import static android.content.pm.PackageManager.INSTALL_PARSE_FAILED_INCONSISTENT_CERTIFICATES;
+import static android.content.pm.PackageManager.INSTALL_PARSE_FAILED_NO_CERTIFICATES;
 import static android.content.pm.PackageManager.INSTALL_SUCCEEDED;
 import static android.content.pm.PackageManager.INTENT_FILTER_DOMAIN_VERIFICATION_STATUS_ALWAYS;
 import static android.content.pm.PackageManager.INTENT_FILTER_DOMAIN_VERIFICATION_STATUS_ALWAYS_ASK;
@@ -115,6 +117,7 @@ import static com.android.server.pm.PackageManagerServiceUtils.dumpCriticalInfo;
 import static com.android.server.pm.PackageManagerServiceUtils.getCompressedFiles;
 import static com.android.server.pm.PackageManagerServiceUtils.getLastModifiedTime;
 import static com.android.server.pm.PackageManagerServiceUtils.logCriticalInfo;
+import static com.android.server.pm.PackageManagerServiceUtils.makeDirRecursive;
 import static com.android.server.pm.PackageManagerServiceUtils.verifySignatures;
 
 import android.Manifest;
@@ -124,8 +127,8 @@ import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.UserIdInt;
 import android.app.ActivityManager;
-import android.app.ApplicationPackageManager;
 import android.app.AppOpsManager;
+import android.app.ApplicationPackageManager;
 import android.app.BroadcastOptions;
 import android.app.IActivityManager;
 import android.app.ResourcesManager;
@@ -185,6 +188,7 @@ import android.content.pm.PackageUserState;
 import android.content.pm.ParceledListSlice;
 import android.content.pm.PermissionGroupInfo;
 import android.content.pm.PermissionInfo;
+import android.content.pm.ProcessInfo;
 import android.content.pm.ProviderInfo;
 import android.content.pm.ResolveInfo;
 import android.content.pm.SELinuxUtil;
@@ -285,9 +289,9 @@ import android.util.Slog;
 import android.util.SparseArray;
 import android.util.SparseBooleanArray;
 import android.util.SparseIntArray;
-import android.util.StatsLog;
 import android.util.TimingsTraceLog;
 import android.util.Xml;
+import android.util.apk.ApkSignatureVerifier;
 import android.util.jar.StrictJarFile;
 import android.util.proto.ProtoOutputStream;
 import android.util.BoostFramework;
@@ -307,6 +311,7 @@ import com.android.internal.util.ArrayUtils;
 import com.android.internal.util.ConcurrentUtils;
 import com.android.internal.util.DumpUtils;
 import com.android.internal.util.FastXmlSerializer;
+import com.android.internal.util.FrameworkStatsLog;
 import com.android.internal.util.IndentingPrintWriter;
 import com.android.internal.util.Preconditions;
 import com.android.server.AttributeCache;
@@ -358,7 +363,6 @@ import java.io.File;
 import java.io.FileDescriptor;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
-import java.io.FilenameFilter;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.lang.annotation.Retention;
@@ -386,6 +390,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -646,6 +651,8 @@ public class PackageManagerService extends IPackageManager.Stub
      */
     private static final String[] INSTANT_APP_BROADCAST_PERMISSION =
             new String[] { android.Manifest.permission.ACCESS_INSTANT_APPS };
+
+    private static final String RANDOM_DIR_PREFIX = "~~";
 
     final ServiceThread mHandlerThread;
 
@@ -2160,7 +2167,8 @@ public class PackageManagerService extends IPackageManager.Stub
                                 getPackageExternalStorageType(volume, isExternal(res.pkg));
                         // If the package was installed externally, log it.
                         if (packageExternalStorageType != StorageEnums.UNKNOWN) {
-                            StatsLog.write(StatsLog.APP_INSTALL_ON_EXTERNAL_STORAGE_REPORTED,
+                            FrameworkStatsLog.write(
+                                    FrameworkStatsLog.APP_INSTALL_ON_EXTERNAL_STORAGE_REPORTED,
                                     packageExternalStorageType, res.pkg.getPackageName());
                         }
                     }
@@ -2724,7 +2732,7 @@ public class PackageManagerService extends IPackageManager.Stub
         t.traceBegin("get system config");
         SystemConfig systemConfig = SystemConfig.getInstance();
         mAvailableFeatures = systemConfig.getAvailableFeatures();
-        ApplicationPackageManager.invalidateSysFeatureCache();
+        ApplicationPackageManager.invalidateHasSystemFeatureCache();
         t.traceEnd();
 
         mProtectedPackages = new ProtectedPackages(mContext);
@@ -2868,23 +2876,34 @@ public class PackageManagerService extends IPackageManager.Stub
                 scanFlags = scanFlags | SCAN_FIRST_BOOT_OR_UPGRADE;
             }
 
+            final int systemParseFlags = mDefParseFlags | PackageParser.PARSE_IS_SYSTEM_DIR;
+            final int systemScanFlags = scanFlags | SCAN_AS_SYSTEM;
+
+            PackageParser packageParser = new PackageParser();
+            packageParser.setSeparateProcesses(mSeparateProcesses);
+            packageParser.setOnlyCoreApps(mOnlyCore);
+            packageParser.setDisplayMetrics(mMetrics);
+            packageParser.setCacheDir(mCacheDir);
+            packageParser.setCallback(mPackageParserCallback);
+
+            ExecutorService executorService = ParallelPackageParser.makeExecutorService();
             // Collect vendor/product/system_ext overlay packages. (Do this before scanning
             // any apps.)
             // For security and version matching reason, only consider overlay packages if they
             // reside in the right directory.
-            final int systemParseFlags = mDefParseFlags | PackageParser.PARSE_IS_SYSTEM_DIR;
-            final int systemScanFlags = scanFlags | SCAN_AS_SYSTEM;
             for (int i = mDirsToScanAsSystem.size() - 1; i >= 0; i--) {
                 final SystemPartition partition = mDirsToScanAsSystem.get(i);
                 if (partition.overlayFolder == null) {
                     continue;
                 }
                 scanDirTracedLI(partition.overlayFolder, systemParseFlags,
-                        systemScanFlags | partition.scanFlag, 0);
+                        systemScanFlags | partition.scanFlag, 0,
+                        packageParser, executorService);
             }
 
             scanDirTracedLI(frameworkDir, systemParseFlags,
-                    systemScanFlags | SCAN_NO_DEX | SCAN_AS_PRIVILEGED, 0);
+                    systemScanFlags | SCAN_NO_DEX | SCAN_AS_PRIVILEGED, 0,
+                    packageParser, executorService);
             if (!mPackages.containsKey("android")) {
                 throw new IllegalStateException(
                         "Failed to load frameworks package; check log for warnings");
@@ -2893,10 +2912,12 @@ public class PackageManagerService extends IPackageManager.Stub
                 final SystemPartition partition = mDirsToScanAsSystem.get(i);
                 if (partition.privAppFolder != null) {
                     scanDirTracedLI(partition.privAppFolder, systemParseFlags,
-                            systemScanFlags | SCAN_AS_PRIVILEGED | partition.scanFlag, 0);
+                            systemScanFlags | SCAN_AS_PRIVILEGED | partition.scanFlag, 0,
+                            packageParser, executorService);
                 }
                 scanDirTracedLI(partition.appFolder, systemParseFlags,
-                        systemScanFlags | partition.scanFlag, 0);
+                        systemScanFlags | partition.scanFlag, 0,
+                        packageParser, executorService);
             }
 
 
@@ -2979,9 +3000,6 @@ public class PackageManagerService extends IPackageManager.Stub
                 }
             }
 
-            //delete tmp files
-            deleteTempPackageFiles();
-
             final int cachedSystemApps = PackageParser.sCachedPackageReadCount.get();
 
             // Remove any shared userIDs that have no associated packages
@@ -3000,8 +3018,18 @@ public class PackageManagerService extends IPackageManager.Stub
             if (!mOnlyCore) {
                 EventLog.writeEvent(EventLogTags.BOOT_PROGRESS_PMS_DATA_SCAN_START,
                         SystemClock.uptimeMillis());
-                scanDirTracedLI(sAppInstallDir, 0, scanFlags | SCAN_REQUIRE_KNOWN, 0);
+                scanDirTracedLI(sAppInstallDir, 0, scanFlags | SCAN_REQUIRE_KNOWN, 0,
+                        packageParser, executorService);
 
+            }
+
+            List<Runnable> unfinishedTasks = executorService.shutdownNow();
+            if (!unfinishedTasks.isEmpty()) {
+                throw new IllegalStateException("Not all tasks finished before calling close: "
+                        + unfinishedTasks);
+            }
+
+            if (!mOnlyCore) {
                 // Remove disable package settings for updated system apps that were
                 // removed via an OTA. If the update is no longer present, remove the
                 // app completely. Otherwise, revoke their system privileges.
@@ -3160,6 +3188,7 @@ public class PackageManagerService extends IPackageManager.Stub
                 // Adjust seInfo to ensure apps which share a sharedUserId are placed in the same
                 // SELinux domain.
                 setting.fixSeInfoLocked();
+                setting.updateProcesses();
             }
 
             // Now that we know all the packages we are keeping,
@@ -3565,8 +3594,7 @@ public class PackageManagerService extends IPackageManager.Stub
                 getNextCodePath(Environment.getDataAppDirectory(null), packageName);
         int ret = PackageManager.INSTALL_SUCCEEDED;
         try {
-            Os.mkdir(dstCodePath.getAbsolutePath(), 0755);
-            Os.chmod(dstCodePath.getAbsolutePath(), 0755);
+            makeDirRecursive(dstCodePath, 0755);
             for (File srcFile : compressedFiles) {
                 final String srcFileName = srcFile.getName();
                 final String dstFileName = srcFileName.substring(
@@ -4583,7 +4611,10 @@ public class PackageManagerService extends IPackageManager.Stub
         flags = updateFlagsForPackage(flags, userId);
         mPermissionManager.enforceCrossUserPermission(callingUid, userId,
                 false /*requireFullPermission*/, false /*checkShell*/, "getPackageUid");
+        return getPackageUidInternal(packageName, flags, userId, callingUid);
+    }
 
+    private int getPackageUidInternal(String packageName, int flags, int userId, int callingUid) {
         // reader
         synchronized (mLock) {
             final AndroidPackage p = mPackages.get(packageName);
@@ -8603,16 +8634,18 @@ public class PackageManagerService extends IPackageManager.Stub
         return finalList;
     }
 
-    private void scanDirTracedLI(File scanDir, final int parseFlags, int scanFlags, long currentTime) {
+    private void scanDirTracedLI(File scanDir, final int parseFlags, int scanFlags,
+            long currentTime, PackageParser packageParser, ExecutorService executorService) {
         Trace.traceBegin(TRACE_TAG_PACKAGE_MANAGER, "scanDir [" + scanDir.getAbsolutePath() + "]");
         try {
-            scanDirLI(scanDir, parseFlags, scanFlags, currentTime);
+            scanDirLI(scanDir, parseFlags, scanFlags, currentTime, packageParser, executorService);
         } finally {
             Trace.traceEnd(TRACE_TAG_PACKAGE_MANAGER);
         }
     }
 
-    private void scanDirLI(File scanDir, int parseFlags, int scanFlags, long currentTime) {
+    private void scanDirLI(File scanDir, int parseFlags, int scanFlags, long currentTime,
+            PackageParser packageParser, ExecutorService executorService) {
         final File[] files = scanDir.listFiles();
         if (ArrayUtils.isEmpty(files)) {
             Log.d(TAG, "No files in app dir " + scanDir);
@@ -8623,58 +8656,58 @@ public class PackageManagerService extends IPackageManager.Stub
             Log.d(TAG, "Scanning app dir " + scanDir + " scanFlags=" + scanFlags
                     + " flags=0x" + Integer.toHexString(parseFlags));
         }
-        try (ParallelPackageParser parallelPackageParser = new ParallelPackageParser(
-                mSeparateProcesses, mOnlyCore, mMetrics, mCacheDir,
-                mPackageParserCallback)) {
-            // Submit files for parsing in parallel
-            int fileCount = 0;
-            for (File file : files) {
-                final boolean isPackage = (isApkFile(file) || file.isDirectory())
-                        && !PackageInstallerService.isStageName(file.getName());
-                if (!isPackage) {
-                    // Ignore entries which are not packages
-                    continue;
+
+        ParallelPackageParser parallelPackageParser =
+                new ParallelPackageParser(packageParser, executorService);
+
+        // Submit files for parsing in parallel
+        int fileCount = 0;
+        for (File file : files) {
+            final boolean isPackage = (isApkFile(file) || file.isDirectory())
+                    && !PackageInstallerService.isStageName(file.getName());
+            if (!isPackage) {
+                // Ignore entries which are not packages
+                continue;
+            }
+            parallelPackageParser.submit(file, parseFlags);
+            fileCount++;
+        }
+
+        // Process results one by one
+        for (; fileCount > 0; fileCount--) {
+            ParallelPackageParser.ParseResult parseResult = parallelPackageParser.take();
+            Throwable throwable = parseResult.throwable;
+            int errorCode = PackageManager.INSTALL_SUCCEEDED;
+
+            if (throwable == null) {
+                // TODO(toddke): move lower in the scan chain
+                // Static shared libraries have synthetic package names
+                if (parseResult.parsedPackage.isStaticSharedLibrary()) {
+                    renameStaticSharedLibraryPackage(parseResult.parsedPackage);
                 }
-                parallelPackageParser.submit(file, parseFlags);
-                fileCount++;
+                try {
+                    addForInitLI(parseResult.parsedPackage, parseFlags, scanFlags,
+                            currentTime, null);
+                } catch (PackageManagerException e) {
+                    errorCode = e.error;
+                    Slog.w(TAG, "Failed to scan " + parseResult.scanFile + ": " + e.getMessage());
+                }
+            } else if (throwable instanceof PackageParserException) {
+                PackageParserException e = (PackageParserException)
+                        throwable;
+                errorCode = e.error;
+                Slog.w(TAG, "Failed to parse " + parseResult.scanFile + ": " + e.getMessage());
+            } else {
+                throw new IllegalStateException("Unexpected exception occurred while parsing "
+                        + parseResult.scanFile, throwable);
             }
 
-            // Process results one by one
-            for (; fileCount > 0; fileCount--) {
-                ParallelPackageParser.ParseResult parseResult = parallelPackageParser.take();
-                Throwable throwable = parseResult.throwable;
-                int errorCode = PackageManager.INSTALL_SUCCEEDED;
-
-                if (throwable == null) {
-                    // TODO(toddke): move lower in the scan chain
-                    // Static shared libraries have synthetic package names
-                    if (parseResult.parsedPackage.isStaticSharedLibrary()) {
-                        renameStaticSharedLibraryPackage(parseResult.parsedPackage);
-                    }
-                    try {
-                        addForInitLI(parseResult.parsedPackage, parseFlags, scanFlags,
-                                currentTime, null);
-                    } catch (PackageManagerException e) {
-                        errorCode = e.error;
-                        Slog.w(TAG, "Failed to scan " + parseResult.scanFile + ": " + e.getMessage());
-                    }
-                } else if (throwable instanceof PackageParserException) {
-                    PackageParserException e = (PackageParserException)
-                            throwable;
-                    errorCode = e.error;
-                    Slog.w(TAG, "Failed to parse " + parseResult.scanFile + ": " + e.getMessage());
-                } else {
-                    throw new IllegalStateException("Unexpected exception occurred while parsing "
-                            + parseResult.scanFile, throwable);
-                }
-
-                // Delete invalid userdata apps
-                if ((scanFlags & SCAN_AS_SYSTEM) == 0 &&
-                        errorCode != PackageManager.INSTALL_SUCCEEDED) {
-                    logCriticalInfo(Log.WARN,
-                            "Deleting invalid package at " + parseResult.scanFile);
-                    removeCodePathLI(parseResult.scanFile);
-                }
+            // Delete invalid userdata apps
+            if ((scanFlags & SCAN_AS_SYSTEM) == 0
+                    && errorCode != PackageManager.INSTALL_SUCCEEDED) {
+                logCriticalInfo(Log.WARN,
+                        "Deleting invalid package at " + parseResult.scanFile);
+                removeCodePathLI(parseResult.scanFile);
             }
         }
     }
@@ -9848,8 +9881,12 @@ public class PackageManagerService extends IPackageManager.Stub
     @GuardedBy("mInstallLock")
     void removeCodePathLI(File codePath) {
         if (codePath.isDirectory()) {
+            File codePathParent = codePath.getParentFile();
             try {
                 mInstaller.rmPackageDir(codePath.getAbsolutePath());
+                if (codePathParent.getName().startsWith(RANDOM_DIR_PREFIX)) {
+                    mInstaller.rmPackageDir(codePathParent.getAbsolutePath());
+                }
             } catch (InstallerException e) {
                 Slog.w(TAG, "Failed to remove code path", e);
             }
@@ -11589,6 +11626,17 @@ public class PackageManagerService extends IPackageManager.Stub
                         }
                     }
                 }
+            }
+
+            // Ensure the package is signed with at least the minimum signature scheme version
+            // required for its target SDK.
+            int minSignatureSchemeVersion =
+                    ApkSignatureVerifier.getMinimumSignatureSchemeVersionForTargetSdk(
+                            pkg.getTargetSdkVersion());
+            if (pkg.getSigningDetails().signatureSchemeVersion < minSignatureSchemeVersion) {
+                throw new PackageManagerException(INSTALL_PARSE_FAILED_NO_CERTIFICATES,
+                        "No signature found in package of version " + minSignatureSchemeVersion
+                                + " or newer for package " + pkg.getPackageName());
             }
         }
     }
@@ -14404,6 +14452,7 @@ public class PackageManagerService extends IPackageManager.Stub
             integrityVerification.putExtra(EXTRA_VERIFICATION_ID, verificationId);
             integrityVerification.putExtra(EXTRA_PACKAGE_NAME, pkgLite.packageName);
             integrityVerification.putExtra(EXTRA_VERSION_CODE, pkgLite.versionCode);
+            integrityVerification.putExtra(EXTRA_LONG_VERSION_CODE, pkgLite.getLongVersionCode());
             populateInstallerExtras(integrityVerification);
 
             // send to integrity component only.
@@ -14941,7 +14990,9 @@ public class PackageManagerService extends IPackageManager.Stub
             final boolean onIncremental = mIncrementalManager != null
                     && isIncrementalPath(beforeCodeFile.getAbsolutePath());
             try {
+                makeDirRecursive(afterCodeFile.getParentFile(), 0775);
                 if (onIncremental) {
+                    // TODO(b/147371381): fix incremental installation
                     mIncrementalManager.rename(beforeCodeFile.getAbsolutePath(),
                             afterCodeFile.getAbsolutePath());
                 } else {
@@ -15153,16 +15204,29 @@ public class PackageManagerService extends IPackageManager.Stub
         }
     }
 
+    /**
+     * Given {@code targetDir}, returns {@code targetDir/~~[randomStrA]/[packageName]-[randomStrB].}
+     * Makes sure that {@code targetDir/~~[randomStrA]} directory doesn't exist.
+     * Notice that this method doesn't actually create any directory.
+     *
+     * @param targetDir Directory that is two-levels up from the result directory.
+     * @param packageName Name of the package whose code files are to be installed under the result
+     *                    directory.
+     * @return File object for the directory that should hold the code files of {@code packageName}.
+     */
     private File getNextCodePath(File targetDir, String packageName) {
-        File result;
         SecureRandom random = new SecureRandom();
         byte[] bytes = new byte[16];
+        File firstLevelDir;
         do {
             random.nextBytes(bytes);
-            String suffix = Base64.encodeToString(bytes, Base64.URL_SAFE | Base64.NO_WRAP);
-            result = new File(targetDir, packageName + "-" + suffix);
-        } while (result.exists());
-        return result;
+            String dirName = RANDOM_DIR_PREFIX
+                    + Base64.encodeToString(bytes, Base64.URL_SAFE | Base64.NO_WRAP);
+            firstLevelDir = new File(targetDir, dirName);
+        } while (firstLevelDir.exists());
+        random.nextBytes(bytes);
+        String suffix = Base64.encodeToString(bytes, Base64.URL_SAFE | Base64.NO_WRAP);
+        return new File(firstLevelDir, packageName + "-" + suffix);
     }
 
     static class PackageInstalledInfo {
@@ -17164,12 +17228,6 @@ public class PackageManagerService extends IPackageManager.Stub
         }
     }
 
-    private void deleteTempPackageFiles() {
-        // TODO: Is this used?
-        final FilenameFilter filter =
-                (dir, name) -> name.startsWith("vmdl") && name.endsWith(".tmp");
-    }
-
     @Override
     public void deletePackageAsUser(String packageName, int versionCode,
             IPackageDeleteObserver observer, int userId, int flags) {
@@ -17776,7 +17834,7 @@ public class PackageManagerService extends IPackageManager.Stub
     }
 
     /*
-     * This method deletes the package from internal data structures. If the DONT_DELETE_DATA
+     * This method deletes the package from internal data structures. If the DELETE_KEEP_DATA
      * flag is not set, the data directory is removed as well.
      * make sure this flag is set for partially installed apps. If not its meaningless to
      * delete a partially installed application.
@@ -19739,9 +19797,7 @@ public class PackageManagerService extends IPackageManager.Stub
         if (packageName == null) {
             return null;
         }
-        if (getPackageInfo(packageName, MATCH_SYSTEM_ONLY | MATCH_DIRECT_BOOT_AWARE
-                        | MATCH_DIRECT_BOOT_UNAWARE | MATCH_DISABLED_COMPONENTS,
-                UserHandle.getCallingUserId()) == null) {
+        if (getPackageInfo(packageName, MATCH_FACTORY_ONLY, UserHandle.USER_SYSTEM) == null) {
             return null;
         }
         return packageName;
@@ -20288,8 +20344,8 @@ public class PackageManagerService extends IPackageManager.Stub
 
         // Disable any carrier apps. We do this very early in boot to prevent the apps from being
         // disabled after already being started.
-        CarrierAppUtils.disableCarrierAppsUntilPrivileged(mContext.getOpPackageName(), this,
-                mPermissionManagerService, UserHandle.USER_SYSTEM, mContext);
+        CarrierAppUtils.disableCarrierAppsUntilPrivileged(
+                mContext.getOpPackageName(), UserHandle.USER_SYSTEM, mContext);
 
         disableSkuSpecificApps();
 
@@ -21514,7 +21570,7 @@ public class PackageManagerService extends IPackageManager.Stub
             final int absoluteCodePathCount = absoluteCodePaths.size();
             for (int i = 0; i < absoluteCodePathCount; i++) {
                 String absoluteCodePath = absoluteCodePaths.get(i);
-                if (absolutePath.startsWith(absoluteCodePath)) {
+                if (absoluteCodePath.startsWith(absolutePath)) {
                     pathValid = true;
                     break;
                 }
@@ -22215,13 +22271,15 @@ public class PackageManagerService extends IPackageManager.Stub
 
         if (!isPreviousLocationExternal && isExternal(pkg)) {
             // Move from internal to external storage.
-            StatsLog.write(StatsLog.APP_MOVED_STORAGE_REPORTED, packageExternalStorageType,
-                    StatsLog.APP_MOVED_STORAGE_REPORTED__MOVE_TYPE__TO_EXTERNAL,
+            FrameworkStatsLog.write(FrameworkStatsLog.APP_MOVED_STORAGE_REPORTED,
+                    packageExternalStorageType,
+                    FrameworkStatsLog.APP_MOVED_STORAGE_REPORTED__MOVE_TYPE__TO_EXTERNAL,
                     packageName);
         } else if (isPreviousLocationExternal && !isExternal(pkg)) {
             // Move from external to internal storage.
-            StatsLog.write(StatsLog.APP_MOVED_STORAGE_REPORTED, packageExternalStorageType,
-                    StatsLog.APP_MOVED_STORAGE_REPORTED__MOVE_TYPE__TO_INTERNAL,
+            FrameworkStatsLog.write(FrameworkStatsLog.APP_MOVED_STORAGE_REPORTED,
+                    packageExternalStorageType,
+                    FrameworkStatsLog.APP_MOVED_STORAGE_REPORTED__MOVE_TYPE__TO_INTERNAL,
                     packageName);
         }
     }
@@ -23178,6 +23236,12 @@ public class PackageManagerService extends IPackageManager.Stub
         }
 
         @Override
+        public int getPackageUidInternal(String packageName, int flags, int userId) {
+            return PackageManagerService.this
+                    .getPackageUidInternal(packageName, flags, userId, Process.SYSTEM_UID);
+        }
+
+        @Override
         public ApplicationInfo getApplicationInfo(
                 String packageName, int flags, int filterCallingUid, int userId) {
             return PackageManagerService.this
@@ -23569,6 +23633,20 @@ public class PackageManagerService extends IPackageManager.Stub
         }
 
         @Override
+        public ArrayMap<String, ProcessInfo> getProcessesForUid(int uid) {
+            synchronized (mLock) {
+                return getProcessesForUidLocked(uid);
+            }
+        }
+
+        @Override
+        public int[] getPermissionGids(String permissionName, int userId) {
+            synchronized (mLock) {
+                return getPermissionGidsLocked(permissionName, userId);
+            }
+        }
+
+        @Override
         public boolean isOnlyCoreApps() {
             return PackageManagerService.this.isOnlyCoreApps();
         }
@@ -23823,12 +23901,35 @@ public class PackageManagerService extends IPackageManager.Stub
         return res != null ? res : EmptyArray.STRING;
     }
 
+    @GuardedBy("mLock")
+    public ArrayMap<String, ProcessInfo> getProcessesForUidLocked(int uid) {
+        final int appId = UserHandle.getAppId(uid);
+        final SettingBase obj = mSettings.getSettingLPr(appId);
+        if (obj instanceof SharedUserSetting) {
+            final SharedUserSetting sus = (SharedUserSetting) obj;
+            return PackageInfoUtils.generateProcessInfo(sus.processes, 0);
+        } else if (obj instanceof PackageSetting) {
+            final PackageSetting ps = (PackageSetting) obj;
+            return PackageInfoUtils.generateProcessInfo(ps.pkg.getProcesses(), 0);
+        }
+        return null;
+    }
+
+    @GuardedBy("mLock")
+    public int[] getPermissionGidsLocked(String permissionName, int userId) {
+        BasePermission perm
+                = mPermissionManager.getPermissionSettings().getPermission(permissionName);
+        if (perm != null) {
+            return perm.computeGids(userId);
+        }
+        return null;
+    }
+
     @Override
     public int getRuntimePermissionsVersion(@UserIdInt int userId) {
         Preconditions.checkArgumentNonnegative(userId);
-        mContext.enforceCallingOrSelfPermission(
-                Manifest.permission.ADJUST_RUNTIME_PERMISSIONS_POLICY,
-                "setRuntimePermissionVersion");
+        enforceAdjustRuntimePermissionsPolicyOrUpgradeRuntimePermissions(
+                "getRuntimePermissionVersion");
         synchronized (mLock) {
             return mSettings.getDefaultRuntimePermissionsVersionLPr(userId);
         }
@@ -23838,11 +23939,24 @@ public class PackageManagerService extends IPackageManager.Stub
     public void setRuntimePermissionsVersion(int version, @UserIdInt int userId) {
         Preconditions.checkArgumentNonnegative(version);
         Preconditions.checkArgumentNonnegative(userId);
-        mContext.enforceCallingOrSelfPermission(
-                Manifest.permission.ADJUST_RUNTIME_PERMISSIONS_POLICY,
+        enforceAdjustRuntimePermissionsPolicyOrUpgradeRuntimePermissions(
                 "setRuntimePermissionVersion");
         synchronized (mLock) {
             mSettings.setDefaultRuntimePermissionsVersionLPr(version, userId);
+        }
+    }
+
+    private void enforceAdjustRuntimePermissionsPolicyOrUpgradeRuntimePermissions(
+            @NonNull String message) {
+        if (mContext.checkCallingOrSelfPermission(
+                Manifest.permission.ADJUST_RUNTIME_PERMISSIONS_POLICY)
+                != PackageManager.PERMISSION_GRANTED
+                && mContext.checkCallingOrSelfPermission(
+                Manifest.permission.UPGRADE_RUNTIME_PERMISSIONS)
+                != PackageManager.PERMISSION_GRANTED) {
+            throw new SecurityException(message + " requires "
+                    + Manifest.permission.ADJUST_RUNTIME_PERMISSIONS_POLICY + " or "
+                    + Manifest.permission.UPGRADE_RUNTIME_PERMISSIONS);
         }
     }
 

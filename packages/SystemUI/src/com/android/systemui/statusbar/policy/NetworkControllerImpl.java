@@ -41,9 +41,9 @@ import android.os.Looper;
 import android.os.PersistableBundle;
 import android.provider.Settings;
 import android.telephony.CarrierConfigManager;
+import android.telephony.CellSignalStrength;
 import android.telephony.PhoneStateListener;
 import android.telephony.ServiceState;
-import android.telephony.SignalStrength;
 import android.telephony.SubscriptionInfo;
 import android.telephony.SubscriptionManager;
 import android.telephony.SubscriptionManager.OnSubscriptionsChangedListener;
@@ -319,11 +319,11 @@ public class NetworkControllerImpl extends BroadcastReceiver
         filter.addAction(WifiManager.RSSI_CHANGED_ACTION);
         filter.addAction(WifiManager.WIFI_STATE_CHANGED_ACTION);
         filter.addAction(WifiManager.NETWORK_STATE_CHANGED_ACTION);
-        filter.addAction(TelephonyIntents.ACTION_SIM_STATE_CHANGED);
+        filter.addAction(Intent.ACTION_SIM_STATE_CHANGED);
         filter.addAction(TelephonyManager.ACTION_DEFAULT_DATA_SUBSCRIPTION_CHANGED);
         filter.addAction(TelephonyManager.ACTION_DEFAULT_VOICE_SUBSCRIPTION_CHANGED);
         filter.addAction(Intent.ACTION_SERVICE_STATE);
-        filter.addAction(TelephonyIntents.SPN_STRINGS_UPDATED_ACTION);
+        filter.addAction(TelephonyManager.ACTION_SERVICE_PROVIDERS_UPDATED);
         filter.addAction(ConnectivityManager.CONNECTIVITY_ACTION);
         filter.addAction(ConnectivityManager.INET_CONDITION_ACTION);
         filter.addAction(Intent.ACTION_AIRPLANE_MODE_CHANGED);
@@ -530,7 +530,7 @@ public class NetworkControllerImpl extends BroadcastReceiver
                 mConfig = Config.readConfig(mContext);
                 mReceiverHandler.post(this::handleConfigurationChanged);
                 break;
-            case TelephonyIntents.ACTION_SIM_STATE_CHANGED:
+            case Intent.ACTION_SIM_STATE_CHANGED:
                 // Avoid rebroadcast because SysUI is direct boot aware.
                 if (intent.getBooleanExtra(Intent.EXTRA_REBROADCAST_ON_UNLOCK, false)) {
                     break;
@@ -611,7 +611,7 @@ public class NetworkControllerImpl extends BroadcastReceiver
     @VisibleForTesting
     void doUpdateMobileControllers() {
         List<SubscriptionInfo> subscriptions = mSubscriptionManager
-                .getActiveSubscriptionInfoList(false);
+                .getActiveAndHiddenSubscriptionInfoList();
         if (subscriptions == null) {
             subscriptions = Collections.emptyList();
         }
@@ -1043,7 +1043,7 @@ public class NetworkControllerImpl extends BroadcastReceiver
                 if (level != null) {
                     controller.getState().level = level.equals("null") ? -1
                             : Math.min(Integer.parseInt(level),
-                                    SignalStrength.NUM_SIGNAL_STRENGTH_BINS);
+                                    CellSignalStrength.getNumSignalStrengthLevels());
                     controller.getState().connected = controller.getState().level >= 0;
                 }
                 if (args.containsKey("inflate")) {

@@ -369,7 +369,7 @@ public abstract class PackageManager {
      * Flag parameter to retrieve some information about all applications (even
      * uninstalled ones) which have data directories. This state could have
      * resulted if applications have been deleted with flag
-     * {@code DONT_DELETE_DATA} with a possibility of being replaced or
+     * {@code DELETE_KEEP_DATA} with a possibility of being replaced or
      * reinstalled in future.
      * <p>
      * Note: this flag may cause less information about currently installed
@@ -549,9 +549,10 @@ public abstract class PackageManager {
     public static final int MATCH_DEBUG_TRIAGED_MISSING = MATCH_DIRECT_BOOT_AUTO;
 
     /**
-     * Internal flag used to indicate that a package is a hidden system app.
+     * Internal {@link PackageInfo} flag used to indicate that a package is a hidden system app.
      * @hide
      */
+    @SystemApi
     public static final int MATCH_HIDDEN_UNTIL_INSTALLED_COMPONENTS =  0x20000000;
 
     /**
@@ -1959,6 +1960,15 @@ public abstract class PackageManager {
 
     /**
      * Feature for {@link #getSystemAvailableFeatures} and
+     * {@link #hasSystemFeature}: The device's main front and back cameras can stream
+     * concurrently as described in  {@link
+     * android.hardware.camera2.CameraManager#getConcurrentStreamingCameraIds()}
+     */
+    @SdkConstant(SdkConstantType.FEATURE)
+    public static final String FEATURE_CAMERA_CONCURRENT = "android.hardware.camera.concurrent";
+
+    /**
+     * Feature for {@link #getSystemAvailableFeatures} and
      * {@link #hasSystemFeature}: The device is capable of communicating with
      * consumer IR devices.
      */
@@ -2203,6 +2213,23 @@ public abstract class PackageManager {
 
     /**
      * Feature for {@link #getSystemAvailableFeatures} and
+     * {@link #hasSystemFeature(String, int)}: If this feature is supported, the feature version
+     * specifies a date such that the device is known to pass the Vulkan dEQP test suite associated
+     * with that date.  The date is encoded as follows:
+     * <ul>
+     * <li>Year in bits 31-16</li>
+     * <li>Month in bits 15-8</li>
+     * <li>Day in bits 7-0</li>
+     * </ul>
+     * <p>
+     * Example: 2019-03-01 is encoded as 0x07E30301, and would indicate that the device passes the
+     * Vulkan dEQP test suite version that was current on 2019-03-01.
+     */
+    @SdkConstant(SdkConstantType.FEATURE)
+    public static final String FEATURE_VULKAN_DEQP_LEVEL = "android.software.vulkan.deqp.level";
+
+    /**
+     * Feature for {@link #getSystemAvailableFeatures} and
      * {@link #hasSystemFeature}: The device includes broadcast radio tuner.
      * @hide
      */
@@ -2305,6 +2332,13 @@ public abstract class PackageManager {
     @SdkConstant(SdkConstantType.FEATURE)
     public static final String FEATURE_SENSOR_AMBIENT_TEMPERATURE =
             "android.hardware.sensor.ambient_temperature";
+
+    /**
+     * Feature for {@link #getSystemAvailableFeatures} and
+     * {@link #hasSystemFeature}: The device includes a hinge angle sensor.
+     */
+    @SdkConstant(SdkConstantType.FEATURE)
+    public static final String FEATURE_SENSOR_HINGE_ANGLE = "android.hardware.sensor.hinge_angle";
 
     /**
      * Feature for {@link #getSystemAvailableFeatures} and
@@ -3311,6 +3345,15 @@ public abstract class PackageManager {
     public static final int FLAG_PERMISSION_ONE_TIME = 1 << 16;
 
     /**
+     * Permission flags: Reserved for use by the permission controller.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final int FLAGS_PERMISSION_RESERVED_PERMISSIONCONTROLLER = 1 << 28 | 1 << 29
+            | 1 << 30 | 1 << 31;
+
+    /**
      * Permission flags: Bitwise or of all permission flags allowing an
      * exemption for a restricted permission.
      * @hide
@@ -3500,6 +3543,44 @@ public abstract class PackageManager {
     public static final long FILTER_APPLICATION_QUERY = 135549675L;
 
     /** {@hide} */
+    @IntDef(prefix = {"SYSTEM_APP_STATE_"}, value = {
+            SYSTEM_APP_STATE_HIDDEN_UNTIL_INSTALLED_HIDDEN,
+            SYSTEM_APP_STATE_HIDDEN_UNTIL_INSTALLED_VISIBLE,
+            SYSTEM_APP_STATE_INSTALLED,
+            SYSTEM_APP_STATE_UNINSTALLED
+    })
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface SystemAppState {}
+
+    /**
+     * Constant for noting system app state as hidden before installation
+     * @hide
+     */
+    @SystemApi
+    public static final int SYSTEM_APP_STATE_HIDDEN_UNTIL_INSTALLED_HIDDEN = 0;
+
+    /**
+     * Constant for noting system app state as visible before installation
+     * @hide
+     */
+    @SystemApi
+    public static final int SYSTEM_APP_STATE_HIDDEN_UNTIL_INSTALLED_VISIBLE = 1;
+
+    /**
+     * Constant for noting system app state as installed
+     * @hide
+     */
+    @SystemApi
+    public static final int SYSTEM_APP_STATE_INSTALLED = 2;
+
+    /**
+     * Constant for noting system app state as not installed
+     * @hide
+     */
+    @SystemApi
+    public static final int SYSTEM_APP_STATE_UNINSTALLED = 3;
+
+    /** {@hide} */
     public int getUserId() {
         return UserHandle.myUserId();
     }
@@ -3517,7 +3598,7 @@ public abstract class PackageManager {
      *         information is retrieved from the list of uninstalled
      *         applications (which includes installed applications as well as
      *         applications with data directory i.e. applications which had been
-     *         deleted with {@code DONT_DELETE_DATA} flag set).
+     *         deleted with {@code DELETE_KEEP_DATA} flag set).
      * @throws NameNotFoundException if a package with the given name cannot be
      *             found on the system.
      */
@@ -3543,7 +3624,7 @@ public abstract class PackageManager {
      *         information is retrieved from the list of uninstalled
      *         applications (which includes installed applications as well as
      *         applications with data directory i.e. applications which had been
-     *         deleted with {@code DONT_DELETE_DATA} flag set).
+     *         deleted with {@code DELETE_KEEP_DATA} flag set).
      * @throws NameNotFoundException if a package with the given name cannot be
      *             found on the system.
      */
@@ -3564,7 +3645,7 @@ public abstract class PackageManager {
      *         information is retrieved from the list of uninstalled
      *         applications (which includes installed applications as well as
      *         applications with data directory i.e. applications which had been
-     *         deleted with {@code DONT_DELETE_DATA} flag set).
+     *         deleted with {@code DELETE_KEEP_DATA} flag set).
      * @throws NameNotFoundException if a package with the given name cannot be
      *             found on the system.
      * @hide
@@ -3811,7 +3892,7 @@ public abstract class PackageManager {
      *         the application information is retrieved from the list of
      *         uninstalled applications (which includes installed applications
      *         as well as applications with data directory i.e. applications
-     *         which had been deleted with {@code DONT_DELETE_DATA} flag set).
+     *         which had been deleted with {@code DELETE_KEEP_DATA} flag set).
      * @throws NameNotFoundException if a package with the given name cannot be
      *             found on the system.
      */
@@ -3838,7 +3919,7 @@ public abstract class PackageManager {
      *         the application information is retrieved from the list of
      *         uninstalled applications (which includes installed applications
      *         as well as applications with data directory i.e. applications
-     *         which had been deleted with {@code DONT_DELETE_DATA} flag set).
+     *         which had been deleted with {@code DELETE_KEEP_DATA} flag set).
      * @throws NameNotFoundException if a package with the given name cannot be
      *             found on the system.
      * @hide
@@ -3961,7 +4042,7 @@ public abstract class PackageManager {
      *         information is retrieved from the list of uninstalled
      *         applications (which includes installed applications as well as
      *         applications with data directory i.e. applications which had been
-     *         deleted with {@code DONT_DELETE_DATA} flag set).
+     *         deleted with {@code DELETE_KEEP_DATA} flag set).
      */
     @NonNull
     public abstract List<PackageInfo> getInstalledPackages(@PackageInfoFlags int flags);
@@ -3979,7 +4060,7 @@ public abstract class PackageManager {
      *         information is retrieved from the list of uninstalled
      *         applications (which includes installed applications as well as
      *         applications with data directory i.e. applications which had been
-     *         deleted with {@code DONT_DELETE_DATA} flag set).
+     *         deleted with {@code DELETE_KEEP_DATA} flag set).
      */
     @NonNull
     public abstract List<PackageInfo> getPackagesHoldingPermissions(
@@ -3998,7 +4079,7 @@ public abstract class PackageManager {
      *         information is retrieved from the list of uninstalled
      *         applications (which includes installed applications as well as
      *         applications with data directory i.e. applications which had been
-     *         deleted with {@code DONT_DELETE_DATA} flag set).
+     *         deleted with {@code DELETE_KEEP_DATA} flag set).
      * @hide
      */
     @NonNull
@@ -4544,7 +4625,7 @@ public abstract class PackageManager {
     /**
      * Return a List of all application packages that are installed for the
      * current user. If flag GET_UNINSTALLED_PACKAGES has been set, a list of all
-     * applications including those deleted with {@code DONT_DELETE_DATA}
+     * applications including those deleted with {@code DELETE_KEEP_DATA}
      * (partially installed apps with data directory) will be returned.
      *
      * @param flags Additional option flags to modify the data returned.
@@ -4555,7 +4636,7 @@ public abstract class PackageManager {
      *         information is retrieved from the list of uninstalled
      *         applications (which includes installed applications as well as
      *         applications with data directory i.e. applications which had been
-     *         deleted with {@code DONT_DELETE_DATA} flag set).
+     *         deleted with {@code DELETE_KEEP_DATA} flag set).
      */
     @NonNull
     public abstract List<ApplicationInfo> getInstalledApplications(@ApplicationInfoFlags int flags);
@@ -4564,7 +4645,7 @@ public abstract class PackageManager {
      * Return a List of all application packages that are installed on the
      * device, for a specific user. If flag GET_UNINSTALLED_PACKAGES has been
      * set, a list of all applications including those deleted with
-     * {@code DONT_DELETE_DATA} (partially installed apps with data directory)
+     * {@code DELETE_KEEP_DATA} (partially installed apps with data directory)
      * will be returned.
      *
      * @param flags Additional option flags to modify the data returned.
@@ -4577,7 +4658,7 @@ public abstract class PackageManager {
      *         information is retrieved from the list of uninstalled
      *         applications (which includes installed applications as well as
      *         applications with data directory i.e. applications which had been
-     *         deleted with {@code DONT_DELETE_DATA} flag set).
+     *         deleted with {@code DELETE_KEEP_DATA} flag set).
      * @hide
      */
     @NonNull
@@ -6601,6 +6682,17 @@ public abstract class PackageManager {
     @UnsupportedAppUsage
     public abstract boolean getApplicationHiddenSettingAsUser(@NonNull String packageName,
             @NonNull UserHandle userHandle);
+
+    /**
+     * Sets system app state
+     * @param packageName Package name of the app.
+     * @param state State of the app.
+     * @hide
+     */
+    @SystemApi
+    public void setSystemAppState(@NonNull String packageName, @SystemAppState int state) {
+        throw new RuntimeException("Not implemented. Must override in a subclass");
+    }
 
     /**
      * Return whether the device has been booted into safe mode.

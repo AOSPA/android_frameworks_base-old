@@ -104,6 +104,9 @@ public class BubbleDataTest extends SysuiTestCase {
     @Captor
     private ArgumentCaptor<BubbleData.Update> mUpdateCaptor;
 
+    @Mock
+    private BubbleController.NotificationSuppressionChangedListener mSuppressionListener;
+
     @Before
     public void setUp() throws Exception {
         mNotificationTestHelper = new NotificationTestHelper(mContext, mDependency);
@@ -121,20 +124,20 @@ public class BubbleDataTest extends SysuiTestCase {
         modifyRanking(mEntryInterruptive)
                 .setVisuallyInterruptive(true)
                 .build();
-        mBubbleInterruptive = new Bubble(mEntryInterruptive);
+        mBubbleInterruptive = new Bubble(mEntryInterruptive, mSuppressionListener);
 
         ExpandableNotificationRow row = mNotificationTestHelper.createBubble();
         mEntryDismissed = createBubbleEntry(1, "dismissed", "package.d");
         mEntryDismissed.setRow(row);
-        mBubbleDismissed = new Bubble(mEntryDismissed);
+        mBubbleDismissed = new Bubble(mEntryDismissed, mSuppressionListener);
 
-        mBubbleA1 = new Bubble(mEntryA1);
-        mBubbleA2 = new Bubble(mEntryA2);
-        mBubbleA3 = new Bubble(mEntryA3);
-        mBubbleB1 = new Bubble(mEntryB1);
-        mBubbleB2 = new Bubble(mEntryB2);
-        mBubbleB3 = new Bubble(mEntryB3);
-        mBubbleC1 = new Bubble(mEntryC1);
+        mBubbleA1 = new Bubble(mEntryA1, mSuppressionListener);
+        mBubbleA2 = new Bubble(mEntryA2, mSuppressionListener);
+        mBubbleA3 = new Bubble(mEntryA3, mSuppressionListener);
+        mBubbleB1 = new Bubble(mEntryB1, mSuppressionListener);
+        mBubbleB2 = new Bubble(mEntryB2, mSuppressionListener);
+        mBubbleB3 = new Bubble(mEntryB3, mSuppressionListener);
+        mBubbleC1 = new Bubble(mEntryC1, mSuppressionListener);
 
         mBubbleData = new BubbleData(getContext());
 
@@ -237,9 +240,8 @@ public class BubbleDataTest extends SysuiTestCase {
                 true /* showInShade */);
         verifyUpdateReceived();
 
-        // Make it look like user swiped away row
-        mEntryDismissed.getRow().dismiss(false /* refocusOnDismiss */);
-        assertThat(mBubbleData.getBubbleWithKey(mBubbleDismissed.getKey()).showInShade()).isFalse();
+        // Suppress the notif / make it look dismissed
+        mBubbleDismissed.setSuppressNotification(true);
 
         mBubbleData.notificationEntryUpdated(mBubbleDismissed, false /* suppressFlyout */,
                 true /* showInShade */);
@@ -257,7 +259,7 @@ public class BubbleDataTest extends SysuiTestCase {
      * enforced by expiring the bubble which was least recently updated (lowest timestamp).
      */
     @Test
-    public void test_collapsed_addBubble_atMaxBubbles_expiresOldest() {
+    public void test_collapsed_addBubble_atMaxBubbles_overflowsOldest() {
         // Setup
         sendUpdatedEntryAtTime(mEntryA1, 1000);
         sendUpdatedEntryAtTime(mEntryA2, 2000);
@@ -269,7 +271,10 @@ public class BubbleDataTest extends SysuiTestCase {
         // Test
         sendUpdatedEntryAtTime(mEntryC1, 6000);
         verifyUpdateReceived();
+
+        // Verify
         assertBubbleRemoved(mBubbleA1, BubbleController.DISMISS_AGED);
+        assertThat(mBubbleData.getOverflowBubbles()).isEqualTo(ImmutableList.of(mBubbleA1));
     }
 
     /**

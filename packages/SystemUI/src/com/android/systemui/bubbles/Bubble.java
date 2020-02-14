@@ -31,6 +31,8 @@ import android.content.pm.LauncherApps;
 import android.content.pm.PackageManager;
 import android.content.pm.ShortcutInfo;
 import android.content.res.Resources;
+import android.graphics.Bitmap;
+import android.graphics.Path;
 import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
 import android.os.Bundle;
@@ -58,6 +60,14 @@ class Bubble {
     private long mLastUpdated;
     private long mLastAccessed;
 
+    private BubbleController.NotificationSuppressionChangedListener mSuppressionListener;
+
+    /** Whether the bubble should show a dot for the notification indicating updated content. */
+    private boolean mShowBubbleUpdateDot = true;
+
+    /** Whether flyout text should be suppressed, regardless of any other flags or state. */
+    private boolean mSuppressFlyout;
+
     // Items that are typically loaded later
     private String mAppName;
     private ShortcutInfo mShortcutInfo;
@@ -67,20 +77,6 @@ class Bubble {
     private boolean mInflated;
     private BubbleViewInfoTask mInflationTask;
     private boolean mInflateSynchronously;
-
-    /**
-     * Whether this notification should be shown in the shade when it is also displayed as a bubble.
-     *
-     * <p>When a notification is a bubble we don't show it in the shade once the bubble has been
-     * expanded</p>
-     */
-    private boolean mShowInShadeWhenBubble = true;
-
-    /** Whether the bubble should show a dot for the notification indicating updated content. */
-    private boolean mShowBubbleUpdateDot = true;
-
-    /** Whether flyout text should be suppressed, regardless of any other flags or state. */
-    private boolean mSuppressFlyout;
 
     /**
      * Presentational info about the flyout.
@@ -93,6 +89,9 @@ class Bubble {
     }
 
     private FlyoutMessage mFlyoutMessage;
+    private Bitmap mBadgedImage;
+    private int mDotColor;
+    private Path mDotPath;
 
     public static String groupId(NotificationEntry entry) {
         UserHandle user = entry.getSbn().getUser();
@@ -101,11 +100,13 @@ class Bubble {
 
     /** Used in tests when no UI is required. */
     @VisibleForTesting(visibility = PRIVATE)
-    Bubble(NotificationEntry e) {
+    Bubble(NotificationEntry e,
+            BubbleController.NotificationSuppressionChangedListener listener) {
         mEntry = e;
         mKey = e.getKey();
         mLastUpdated = e.getSbn().getPostTime();
         mGroupId = groupId(e);
+        mSuppressionListener = listener;
     }
 
     public String getKey() {
@@ -122,6 +123,18 @@ class Bubble {
 
     public String getPackageName() {
         return mEntry.getSbn().getPackageName();
+    }
+
+    public Bitmap getBadgedImage() {
+        return mBadgedImage;
+    }
+
+    public int getDotColor() {
+        return mDotColor;
+    }
+
+    public Path getDotPath() {
+        return mDotPath;
     }
 
     @Nullable
@@ -205,8 +218,12 @@ class Bubble {
         mAppName = info.appName;
         mFlyoutMessage = info.flyoutMessage;
 
+        mBadgedImage = info.badgedBubbleImage;
+        mDotColor = info.dotColor;
+        mDotPath = info.dotPath;
+
         mExpandedView.update(this);
-        mIconView.update(this, info.badgedBubbleImage, info.dotColor, info.dotPath);
+        mIconView.update(this);
     }
 
     /**
@@ -257,25 +274,42 @@ class Bubble {
      */
     void markAsAccessedAt(long lastAccessedMillis) {
         mLastAccessed = lastAccessedMillis;
-        setShowInShade(false);
+        setSuppressNotification(true);
         setShowDot(false /* show */, true /* animate */);
     }
 
     /**
-     * Whether this notification should be shown in the shade when it is also displayed as a
-     * bubble.
+     * Should be invoked whenever a Bubble is promoted from overflow.
      */
-    boolean showInShade() {
-        return !mEntry.isRowDismissed() && !shouldSuppressNotification()
-                && (!mEntry.isClearable() || mShowInShadeWhenBubble);
+    void markUpdatedAt(long lastAccessedMillis) {
+        mLastUpdated = lastAccessedMillis;
     }
 
     /**
-     * Sets whether this notification should be shown in the shade when it is also displayed as a
-     * bubble.
+     * Whether this notification should be shown in the shade.
      */
-    void setShowInShade(boolean showInShade) {
-        mShowInShadeWhenBubble = showInShade;
+    boolean showInShade() {
+        return !shouldSuppressNotification() || !mEntry.isClearable();
+    }
+
+    /**
+     * Sets whether this notification should be suppressed in the shade.
+     */
+    void setSuppressNotification(boolean suppressNotification) {
+        boolean prevShowInShade = showInShade();
+
+        Notification.BubbleMetadata data = mEntry.getBubbleMetadata();
+        int flags = data.getFlags();
+        if (suppressNotification) {
+            flags |= Notification.BubbleMetadata.FLAG_SUPPRESS_NOTIFICATION;
+        } else {
+            flags &= ~Notification.BubbleMetadata.FLAG_SUPPRESS_NOTIFICATION;
+        }
+        data.setFlags(flags);
+
+        if (showInShade() != prevShowInShade && mSuppressionListener != null) {
+            mSuppressionListener.onBubbleNotificationSuppressionChange(this);
+        }
     }
 
     /**

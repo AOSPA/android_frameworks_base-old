@@ -35,6 +35,7 @@ import android.app.IApplicationThread;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.pm.ApplicationInfo;
+import android.content.pm.ProcessInfo;
 import android.content.pm.ServiceInfo;
 import android.content.pm.VersionedPackage;
 import android.content.res.CompatibilityInfo;
@@ -55,7 +56,6 @@ import android.util.DebugUtils;
 import android.util.EventLog;
 import android.util.Slog;
 import android.util.SparseArray;
-import android.util.StatsLog;
 import android.util.TimeUtils;
 import android.util.proto.ProtoOutputStream;
 import android.util.BoostFramework;
@@ -66,6 +66,7 @@ import com.android.internal.app.procstats.ProcessStats;
 import com.android.internal.os.BatteryStatsImpl;
 import com.android.internal.os.ProcessCpuTracker;
 import com.android.internal.os.Zygote;
+import com.android.internal.util.FrameworkStatsLog;
 import com.android.server.Watchdog;
 import com.android.server.wm.WindowProcessController;
 import com.android.server.wm.WindowProcessListener;
@@ -86,6 +87,7 @@ class ProcessRecord implements WindowProcessListener {
 
     private final ActivityManagerService mService; // where we came from
     final ApplicationInfo info; // all about the first app in the process
+    final ProcessInfo processInfo; // if non-null, process-specific manifest info
     final boolean isolated;     // true if this is a special isolated process
     final boolean appZygote;    // true if this is forked from the app zygote
     final int uid;              // uid of process; may be different from 'info' if isolated
@@ -163,6 +165,8 @@ class ProcessRecord implements WindowProcessListener {
     long lastCompactTime;       // The last time that this process was compacted
     int reqCompactAction;       // The most recent compaction action requested for this app.
     int lastCompactAction;      // The most recent compaction action performed for this app.
+    boolean frozen;             // True when the process is frozen.
+    long freezeUnfreezeTime;    // Last time the app was (un)frozen, 0 for never
     private int mCurSchedGroup; // Currently desired scheduling class
     int setSchedGroup;          // Last set to background scheduling class
     int trimMemoryLevel;        // Last selected memory trimming level
@@ -317,6 +321,14 @@ class ProcessRecord implements WindowProcessListener {
     int startUid;
     // set of disabled compat changes for the process (all others are enabled)
     long[] mDisabledCompatChanges;
+
+    // The precede instance of the process, which would exist when the previous process is killed
+    // but not fully dead yet; in this case, the new instance of the process should be held until
+    // this precede instance is fully dead.
+    volatile ProcessRecord mPrecedence;
+    // The succeeding instance of the process, which is going to be started after this process
+    // is killed successfully.
+    volatile ProcessRecord mSuccessor;
 
     // Cached task info for OomAdjuster
     private static final int VALUE_INVALID = -1;
@@ -605,6 +617,13 @@ class ProcessRecord implements WindowProcessListener {
             int _uid) {
         mService = _service;
         info = _info;
+        if (_service.mPackageManagerInt != null) {
+            ArrayMap<String, ProcessInfo> processes =
+                    _service.mPackageManagerInt.getProcessesForUid(_uid);
+            processInfo = processes != null ? processes.get(_processName) : null;
+        } else {
+            processInfo = null;
+        }
         isolated = _info.uid != _uid;
         appZygote = (UserHandle.getAppId(_uid) >= Process.FIRST_APP_ZYGOTE_ISOLATED_UID
                 && UserHandle.getAppId(_uid) <= Process.LAST_APP_ZYGOTE_ISOLATED_UID);
@@ -616,7 +635,7 @@ class ProcessRecord implements WindowProcessListener {
         curAdj = setAdj = verifiedAdj = ProcessList.INVALID_ADJ;
         mPersistent = false;
         removed = false;
-        lastStateTime = lastPssTime = nextPssTime = SystemClock.uptimeMillis();
+        freezeUnfreezeTime = lastStateTime = lastPssTime = nextPssTime = SystemClock.uptimeMillis();
         mWindowProcessController = new WindowProcessController(
                 mService.mActivityTaskManager, info, processName, uid, userId, this, this);
         pkgList.put(_info.packageName, new ProcessStats.ProcessStateHolder(_info.longVersionCode));
@@ -649,7 +668,7 @@ class ProcessRecord implements WindowProcessListener {
                 origBase.setState(ProcessStats.STATE_NOTHING,
                         tracker.getMemFactorLocked(), SystemClock.uptimeMillis(), pkgList.mPkgList);
                 for (int ipkg = pkgList.size() - 1; ipkg >= 0; ipkg--) {
-                    StatsLog.write(StatsLog.PROCESS_STATE_CHANGED,
+                    FrameworkStatsLog.write(FrameworkStatsLog.PROCESS_STATE_CHANGED,
                             uid, processName, pkgList.keyAt(ipkg),
                             ActivityManager.processStateAmToProto(ProcessStats.STATE_NOTHING),
                             pkgList.valueAt(ipkg).appVersion);
@@ -696,7 +715,7 @@ class ProcessRecord implements WindowProcessListener {
                 origBase.setState(ProcessStats.STATE_NOTHING,
                         tracker.getMemFactorLocked(), SystemClock.uptimeMillis(), pkgList.mPkgList);
                 for (int ipkg = pkgList.size() - 1; ipkg >= 0; ipkg--) {
-                    StatsLog.write(StatsLog.PROCESS_STATE_CHANGED,
+                    FrameworkStatsLog.write(FrameworkStatsLog.PROCESS_STATE_CHANGED,
                             uid, processName, pkgList.keyAt(ipkg),
                             ActivityManager.processStateAmToProto(ProcessStats.STATE_NOTHING),
                             pkgList.valueAt(ipkg).appVersion);
@@ -993,7 +1012,7 @@ class ProcessRecord implements WindowProcessListener {
             setCurProcState(newState);
             setCurRawProcState(newState);
             for (int ipkg = pkgList.size() - 1; ipkg >= 0; ipkg--) {
-                StatsLog.write(StatsLog.PROCESS_STATE_CHANGED,
+                FrameworkStatsLog.write(FrameworkStatsLog.PROCESS_STATE_CHANGED,
                         uid, processName, pkgList.keyAt(ipkg),
                         ActivityManager.processStateAmToProto(mRepProcState),
                         pkgList.valueAt(ipkg).appVersion);
@@ -1011,7 +1030,7 @@ class ProcessRecord implements WindowProcessListener {
             baseProcessTracker.setState(ProcessStats.STATE_NOTHING,
                     tracker.getMemFactorLocked(), now, pkgList.mPkgList);
             for (int ipkg = pkgList.size() - 1; ipkg >= 0; ipkg--) {
-                StatsLog.write(StatsLog.PROCESS_STATE_CHANGED,
+                FrameworkStatsLog.write(FrameworkStatsLog.PROCESS_STATE_CHANGED,
                         uid, processName, pkgList.keyAt(ipkg),
                         ActivityManager.processStateAmToProto(ProcessStats.STATE_NOTHING),
                         pkgList.valueAt(ipkg).appVersion);
@@ -1097,7 +1116,7 @@ class ProcessRecord implements WindowProcessListener {
     void setReportedProcState(int repProcState) {
         mRepProcState = repProcState;
         for (int ipkg = pkgList.size() - 1; ipkg >= 0; ipkg--) {
-            StatsLog.write(StatsLog.PROCESS_STATE_CHANGED,
+            FrameworkStatsLog.write(FrameworkStatsLog.PROCESS_STATE_CHANGED,
                     uid, processName, pkgList.keyAt(ipkg),
                     ActivityManager.processStateAmToProto(mRepProcState),
                     pkgList.valueAt(ipkg).appVersion);
@@ -1626,16 +1645,16 @@ class ProcessRecord implements WindowProcessListener {
             Process.sendSignal(pid, Process.SIGNAL_QUIT);
         }
 
-        StatsLog.write(StatsLog.ANR_OCCURRED, uid, processName,
+        FrameworkStatsLog.write(FrameworkStatsLog.ANR_OCCURRED, uid, processName,
                 activityShortComponentName == null ? "unknown": activityShortComponentName,
                 annotation,
                 (this.info != null) ? (this.info.isInstantApp()
-                        ? StatsLog.ANROCCURRED__IS_INSTANT_APP__TRUE
-                        : StatsLog.ANROCCURRED__IS_INSTANT_APP__FALSE)
-                        : StatsLog.ANROCCURRED__IS_INSTANT_APP__UNAVAILABLE,
+                        ? FrameworkStatsLog.ANROCCURRED__IS_INSTANT_APP__TRUE
+                        : FrameworkStatsLog.ANROCCURRED__IS_INSTANT_APP__FALSE)
+                        : FrameworkStatsLog.ANROCCURRED__IS_INSTANT_APP__UNAVAILABLE,
                 isInterestingToUserLocked()
-                        ? StatsLog.ANROCCURRED__FOREGROUND_STATE__FOREGROUND
-                        : StatsLog.ANROCCURRED__FOREGROUND_STATE__BACKGROUND,
+                        ? FrameworkStatsLog.ANROCCURRED__FOREGROUND_STATE__FOREGROUND
+                        : FrameworkStatsLog.ANROCCURRED__FOREGROUND_STATE__BACKGROUND,
                 getProcessClassEnum(),
                 (this.info != null) ? this.info.packageName : "");
         final ProcessRecord parentPr = parentProcess != null

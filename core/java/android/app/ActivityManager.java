@@ -73,6 +73,7 @@ import android.util.DisplayMetrics;
 import android.util.Singleton;
 import android.util.Size;
 import android.view.IWindowContainer;
+import android.view.Surface;
 
 import com.android.internal.app.LocalePicker;
 import com.android.internal.app.procstats.ProcessStats;
@@ -600,6 +601,22 @@ public class ActivityManager {
     @TestApi
     public static final int PROCESS_CAPABILITY_ALL = PROCESS_CAPABILITY_FOREGROUND_LOCATION
             | PROCESS_CAPABILITY_FOREGROUND_CAMERA
+            | PROCESS_CAPABILITY_FOREGROUND_MICROPHONE;
+    /**
+     * All explicit capabilities. These are capabilities that need to be specified from manifest
+     * file.
+     * @hide
+     */
+    @TestApi
+    public static final int PROCESS_CAPABILITY_ALL_EXPLICIT =
+            PROCESS_CAPABILITY_FOREGROUND_LOCATION;
+
+    /**
+     * All implicit capabilities. There are capabilities that process automatically have.
+     * @hide
+     */
+    @TestApi
+    public static final int PROCESS_CAPABILITY_ALL_IMPLICIT = PROCESS_CAPABILITY_FOREGROUND_CAMERA
             | PROCESS_CAPABILITY_FOREGROUND_MICROPHONE;
 
     // NOTE: If PROCESS_STATEs are added, then new fields must be added
@@ -1928,7 +1945,12 @@ public class ActivityManager {
         // Top activity in task when snapshot was taken
         private final ComponentName mTopActivityComponent;
         private final GraphicBuffer mSnapshot;
+        /** Indicates whether task was in landscape or portrait */
+        @Configuration.Orientation
         private final int mOrientation;
+        /** See {@link android.view.Surface.Rotation} */
+        @Surface.Rotation
+        private int mRotation;
         private final Rect mContentInsets;
         // Whether this snapshot is a down-sampled version of the full resolution, used mainly for
         // low-ram devices
@@ -1945,7 +1967,7 @@ public class ActivityManager {
 
         public TaskSnapshot(long id,
                 @NonNull ComponentName topActivityComponent, GraphicBuffer snapshot,
-                @NonNull ColorSpace colorSpace, int orientation, Rect contentInsets,
+                @NonNull ColorSpace colorSpace, int orientation, int rotation, Rect contentInsets,
                 boolean reducedResolution, float scale, boolean isRealSnapshot, int windowingMode,
                 int systemUiVisibility, boolean isTranslucent) {
             mId = id;
@@ -1954,6 +1976,7 @@ public class ActivityManager {
             mColorSpace = colorSpace.getId() < 0
                     ? ColorSpace.get(ColorSpace.Named.SRGB) : colorSpace;
             mOrientation = orientation;
+            mRotation = rotation;
             mContentInsets = new Rect(contentInsets);
             mReducedResolution = reducedResolution;
             mScale = scale;
@@ -1972,6 +1995,7 @@ public class ActivityManager {
                     ? ColorSpace.get(ColorSpace.Named.values()[colorSpaceId])
                     : ColorSpace.get(ColorSpace.Named.SRGB);
             mOrientation = source.readInt();
+            mRotation = source.readInt();
             mContentInsets = source.readParcelable(null /* classLoader */);
             mReducedResolution = source.readBoolean();
             mScale = source.readFloat();
@@ -2016,6 +2040,13 @@ public class ActivityManager {
         @UnsupportedAppUsage
         public int getOrientation() {
             return mOrientation;
+        }
+
+        /**
+         * @return The screen rotation the screenshot was taken in.
+         */
+        public int getRotation() {
+            return mRotation;
         }
 
         /**
@@ -2087,6 +2118,7 @@ public class ActivityManager {
             dest.writeParcelable(mSnapshot, 0);
             dest.writeInt(mColorSpace.getId());
             dest.writeInt(mOrientation);
+            dest.writeInt(mRotation);
             dest.writeParcelable(mContentInsets, 0);
             dest.writeBoolean(mReducedResolution);
             dest.writeFloat(mScale);
@@ -2106,6 +2138,7 @@ public class ActivityManager {
                     + " mSnapshot=" + mSnapshot + " (" + width + "x" + height + ")"
                     + " mColorSpace=" + mColorSpace.toString()
                     + " mOrientation=" + mOrientation
+                    + " mRotation=" + mRotation
                     + " mContentInsets=" + mContentInsets.toShortString()
                     + " mReducedResolution=" + mReducedResolution + " mScale=" + mScale
                     + " mIsRealSnapshot=" + mIsRealSnapshot + " mWindowingMode=" + mWindowingMode
@@ -2129,6 +2162,7 @@ public class ActivityManager {
             private GraphicBuffer mSnapshot;
             private ColorSpace mColorSpace;
             private int mOrientation;
+            private int mRotation;
             private Rect mContentInsets;
             private boolean mReducedResolution;
             private float mScaleFraction;
@@ -2160,6 +2194,11 @@ public class ActivityManager {
 
             public Builder setOrientation(int orientation) {
                 mOrientation = orientation;
+                return this;
+            }
+
+            public Builder setRotation(int rotation) {
+                mRotation = rotation;
                 return this;
             }
 
@@ -2218,6 +2257,7 @@ public class ActivityManager {
                         mSnapshot,
                         mColorSpace,
                         mOrientation,
+                        mRotation,
                         mContentInsets,
                         mReducedResolution,
                         mScaleFraction,

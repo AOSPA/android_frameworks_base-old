@@ -40,6 +40,7 @@ import android.content.IntentFilter;
 import android.content.pm.UserInfo;
 import android.content.res.Resources;
 import android.database.ContentObserver;
+import android.graphics.Color;
 import android.graphics.drawable.Drawable;
 import android.media.AudioManager;
 import android.net.ConnectivityManager;
@@ -93,13 +94,13 @@ import com.android.systemui.MultiListLayout;
 import com.android.systemui.MultiListLayout.MultiListAdapter;
 import com.android.systemui.broadcast.BroadcastDispatcher;
 import com.android.systemui.colorextraction.SysuiColorExtractor;
+import com.android.systemui.controls.ui.ControlsUiController;
 import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.plugins.ActivityStarter;
 import com.android.systemui.plugins.GlobalActions.GlobalActionsManager;
 import com.android.systemui.plugins.GlobalActionsPanelPlugin;
-import com.android.systemui.statusbar.phone.NotificationShadeWindowController;
 import com.android.systemui.statusbar.BlurUtils;
-import com.android.systemui.statusbar.phone.ScrimController;
+import com.android.systemui.statusbar.phone.NotificationShadeWindowController;
 import com.android.systemui.statusbar.policy.ConfigurationController;
 import com.android.systemui.statusbar.policy.KeyguardStateController;
 import com.android.systemui.util.EmergencyDialerConstants;
@@ -183,6 +184,7 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
     private final IStatusBarService mStatusBarService;
     private final NotificationShadeWindowController mNotificationShadeWindowController;
     private GlobalActionsPanelPlugin mPanelPlugin;
+    private ControlsUiController mControlsUiController;
 
     /**
      * @param context everything needs a context :(
@@ -200,7 +202,8 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
             TelecomManager telecomManager, MetricsLogger metricsLogger,
             BlurUtils blurUtils, SysuiColorExtractor colorExtractor,
             IStatusBarService statusBarService,
-            NotificationShadeWindowController notificationShadeWindowController) {
+            NotificationShadeWindowController notificationShadeWindowController,
+            ControlsUiController controlsUiController) {
         mContext = new ContextThemeWrapper(context, com.android.systemui.R.style.qs_theme);
         mWindowManagerFuncs = windowManagerFuncs;
         mAudioManager = audioManager;
@@ -220,6 +223,7 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
         mSysuiColorExtractor = colorExtractor;
         mStatusBarService = statusBarService;
         mNotificationShadeWindowController = notificationShadeWindowController;
+        mControlsUiController = controlsUiController;
 
         // receive broadcasts
         IntentFilter filter = new IntentFilter();
@@ -457,7 +461,8 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
 
         ActionsDialog dialog = new ActionsDialog(mContext, mAdapter, panelViewController,
                 mBlurUtils, mSysuiColorExtractor, mStatusBarService,
-                mNotificationShadeWindowController, isControlsEnabled(mContext));
+                mNotificationShadeWindowController,
+                shouldShowControls() ? mControlsUiController : null);
         dialog.setCanceledOnTouchOutside(false); // Handled by the custom class.
         dialog.setKeyguardShowing(mKeyguardShowing);
 
@@ -531,7 +536,7 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
 
         @Override
         public boolean shouldBeSeparated() {
-            return !isControlsEnabled(mContext);
+            return !shouldShowControls();
         }
 
         @Override
@@ -1128,7 +1133,8 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
      * A single press action maintains no state, just responds to a press
      * and takes an action.
      */
-    private static abstract class SinglePressAction implements Action {
+
+    private abstract class SinglePressAction implements Action {
         private final int mIconResId;
         private final Drawable mIcon;
         private final int mMessageResId;
@@ -1167,7 +1173,7 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
         }
 
         protected int getActionLayoutId(Context context) {
-            if (isControlsEnabled(context)) {
+            if (shouldShowControls()) {
                 return com.android.systemui.R.layout.global_actions_grid_item_v2;
             }
             return com.android.systemui.R.layout.global_actions_grid_item;
@@ -1543,13 +1549,15 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
         private boolean mHadTopUi;
         private final NotificationShadeWindowController mNotificationShadeWindowController;
         private final BlurUtils mBlurUtils;
-        private final boolean mControlsEnabled;
+
+        private ControlsUiController mControlsUiController;
+        private ViewGroup mControlsView;
 
         ActionsDialog(Context context, MyAdapter adapter,
                 GlobalActionsPanelPlugin.PanelViewController plugin, BlurUtils blurUtils,
                 SysuiColorExtractor sysuiColorExtractor, IStatusBarService statusBarService,
                 NotificationShadeWindowController notificationShadeWindowController,
-                boolean controlsEnabled) {
+                ControlsUiController controlsUiController) {
             super(context, com.android.systemui.R.style.Theme_SystemUI_Dialog_GlobalActions);
             mContext = context;
             mAdapter = adapter;
@@ -1557,7 +1565,7 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
             mColorExtractor = sysuiColorExtractor;
             mStatusBarService = statusBarService;
             mNotificationShadeWindowController = notificationShadeWindowController;
-            mControlsEnabled = controlsEnabled;
+            mControlsUiController = controlsUiController;
 
             // Window initialization
             Window window = getWindow();
@@ -1577,7 +1585,7 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
                     | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH
                     | WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED);
             window.setType(WindowManager.LayoutParams.TYPE_VOLUME_OVERLAY);
-            window.setFitWindowInsetsTypes(0 /* types */);
+            window.getAttributes().setFitInsetsTypes(0 /* types */);
             setTitle(R.string.global_actions);
 
             mPanelController = plugin;
@@ -1631,14 +1639,13 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
                                 FrameLayout.LayoutParams.MATCH_PARENT,
                                 FrameLayout.LayoutParams.MATCH_PARENT);
                 panelContainer.addView(mPanelController.getPanelContent(), panelParams);
-                mBackgroundDrawable = mPanelController.getBackgroundDrawable();
-                mScrimAlpha = 1f;
             }
         }
 
         private void initializeLayout() {
             setContentView(getGlobalActionsLayoutId(mContext));
             fixNavBarClipping();
+            mControlsView = findViewById(com.android.systemui.R.id.global_actions_controls);
             mGlobalActionsLayout = findViewById(com.android.systemui.R.id.global_actions_view);
             mGlobalActionsLayout.setOutsideTouchListener(view -> dismiss());
             ((View) mGlobalActionsLayout.getParent()).setOnClickListener(view -> dismiss());
@@ -1659,7 +1666,7 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
             }
             if (mBackgroundDrawable == null) {
                 mBackgroundDrawable = new ScrimDrawable();
-                mScrimAlpha = ScrimController.GRADIENT_SCRIM_ALPHA;
+                mScrimAlpha = 0.8f;
             }
             getWindow().setBackgroundDrawable(mBackgroundDrawable);
         }
@@ -1674,7 +1681,7 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
         }
 
         private int getGlobalActionsLayoutId(Context context) {
-            if (mControlsEnabled) {
+            if (mControlsUiController != null) {
                 return com.android.systemui.R.layout.global_actions_grid_v2;
             }
 
@@ -1718,7 +1725,7 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
             if (!(mBackgroundDrawable instanceof ScrimDrawable)) {
                 return;
             }
-            ((ScrimDrawable) mBackgroundDrawable).setColor(colors.getMainColor(), animate);
+            ((ScrimDrawable) mBackgroundDrawable).setColor(Color.BLACK, animate);
             View decorView = getWindow().getDecorView();
             if (colors.supportsDarkText()) {
                 decorView.setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR |
@@ -1758,6 +1765,9 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
                                 mBlurUtils.radiusForRatio(animatedValue));
                     })
                     .start();
+            if (mControlsUiController != null) {
+                mControlsUiController.show(mControlsView);
+            }
         }
 
         @Override
@@ -1766,6 +1776,7 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
                 return;
             }
             mShowing = false;
+            if (mControlsUiController != null) mControlsUiController.hide();
             mGlobalActionsLayout.setTranslationX(0);
             mGlobalActionsLayout.setTranslationY(0);
             mGlobalActionsLayout.setAlpha(1);
@@ -1790,6 +1801,7 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
 
         void dismissImmediately() {
             mShowing = false;
+            if (mControlsUiController != null) mControlsUiController.hide();
             dismissPanel();
             resetOrientation();
             completeDismiss();
@@ -1886,8 +1898,10 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
         return true;
     }
 
-    private static boolean isControlsEnabled(Context context) {
-        return Settings.Secure.getInt(
-                context.getContentResolver(), "systemui.controls_available", 0) == 1;
+    private boolean shouldShowControls() {
+        return isCurrentUserOwner()
+                && !mKeyguardManager.isDeviceLocked()
+                && Settings.Secure.getInt(mContext.getContentResolver(),
+                        "systemui.controls_available", 0) == 1;
     }
 }

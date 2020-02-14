@@ -20,10 +20,12 @@ import static android.os.Trace.TRACE_TAG_PACKAGE_MANAGER;
 import static android.provider.DeviceConfig.NAMESPACE_PACKAGE_MANAGER_SERVICE;
 
 import android.Manifest;
+import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.PackageManager;
+import android.content.pm.PackageParser;
 import android.content.pm.parsing.AndroidPackage;
 import android.content.pm.parsing.ComponentParseUtils;
 import android.content.pm.parsing.ComponentParseUtils.ParsedActivity;
@@ -66,9 +68,8 @@ public class AppsFilter {
 
     // Logs all filtering instead of enforcing
     private static final boolean DEBUG_ALLOW_ALL = false;
-
-    @SuppressWarnings("ConstantExpression")
-    private static final boolean DEBUG_LOGGING = false | DEBUG_ALLOW_ALL;
+    private static final boolean DEBUG_LOGGING = false;
+    private static final boolean FEATURE_ENABLED_BY_DEFAULT = false;
 
     /**
      * This contains a list of app UIDs that are implicitly queryable because another app explicitly
@@ -108,6 +109,7 @@ public class AppsFilter {
     private final FeatureConfig mFeatureConfig;
 
     private final OverlayReferenceMapper mOverlayReferenceMapper;
+    private PackageParser.SigningDetails mSystemSigningDetails;
 
     AppsFilter(FeatureConfig featureConfig, String[] forceQueryableWhitelist,
             boolean systemAppsQueryable,
@@ -133,7 +135,7 @@ public class AppsFilter {
     private static class FeatureConfigImpl implements FeatureConfig {
         private static final String FILTERING_ENABLED_NAME = "package_query_filtering_enabled";
         private final PackageManagerService.Injector mInjector;
-        private volatile boolean mFeatureEnabled = false;
+        private volatile boolean mFeatureEnabled = FEATURE_ENABLED_BY_DEFAULT;
 
         private FeatureConfigImpl(PackageManagerService.Injector injector) {
             mInjector = injector;
@@ -142,14 +144,15 @@ public class AppsFilter {
         @Override
         public void onSystemReady() {
             mFeatureEnabled = DeviceConfig.getBoolean(
-                    NAMESPACE_PACKAGE_MANAGER_SERVICE, FILTERING_ENABLED_NAME, false);
+                    NAMESPACE_PACKAGE_MANAGER_SERVICE, FILTERING_ENABLED_NAME,
+                    FEATURE_ENABLED_BY_DEFAULT);
             DeviceConfig.addOnPropertiesChangedListener(
                     NAMESPACE_PACKAGE_MANAGER_SERVICE, FgThread.getExecutor(),
                     properties -> {
                         if (properties.getKeyset().contains(FILTERING_ENABLED_NAME)) {
                             synchronized (FeatureConfigImpl.this) {
                                 mFeatureEnabled = properties.getBoolean(FILTERING_ENABLED_NAME,
-                                        false);
+                                        FEATURE_ENABLED_BY_DEFAULT);
                             }
                         }
                     });
@@ -302,8 +305,9 @@ public class AppsFilter {
      *                   initiating uid.
      */
     public void grantImplicitAccess(int callingUid, int targetUid) {
-        if (mImplicitlyQueryable.add(targetUid, callingUid) && DEBUG_LOGGING) {
-            Slog.wtf(TAG, "implicit access granted: " + callingUid + " -> " + targetUid);
+        if (targetUid != callingUid
+                && mImplicitlyQueryable.add(targetUid, callingUid) && DEBUG_LOGGING) {
+            Slog.wtf(TAG, "implicit access granted: " + targetUid + " -> " + callingUid);
         }
     }
 
@@ -320,6 +324,17 @@ public class AppsFilter {
      */
     public void addPackage(PackageSetting newPkgSetting,
             ArrayMap<String, PackageSetting> existingSettings) {
+        if (Objects.equals("android", newPkgSetting.name)) {
+            // let's set aside the framework signatures
+            mSystemSigningDetails = newPkgSetting.signatures.mSigningDetails;
+            // and since we add overlays before we add the framework, let's revisit already added
+            // packages for signature matches
+            for (PackageSetting setting : existingSettings.values()) {
+                if (isSystemSigned(mSystemSigningDetails, setting)) {
+                    mForceQueryable.add(setting.appId);
+                }
+            }
+        }
         Trace.traceBegin(TRACE_TAG_PACKAGE_MANAGER, "filter.addPackage");
         try {
             final AndroidPackage newPkg = newPkgSetting.pkg;
@@ -335,7 +350,9 @@ public class AppsFilter {
                             || (newPkgSetting.isSystem() && (mSystemAppsQueryable
                             || ArrayUtils.contains(mForceQueryableByDevicePackageNames,
                             newPkg.getPackageName())));
-            if (newIsForceQueryable) {
+            if (newIsForceQueryable
+                    || (mSystemSigningDetails != null
+                            && isSystemSigned(mSystemSigningDetails, newPkgSetting))) {
                 mForceQueryable.add(newPkgSetting.appId);
             }
 
@@ -379,6 +396,12 @@ public class AppsFilter {
         } finally {
             Trace.traceEnd(TRACE_TAG_PACKAGE_MANAGER);
         }
+    }
+
+    private static boolean isSystemSigned(@NonNull PackageParser.SigningDetails sysSigningDetails,
+            PackageSetting pkgSetting) {
+        return pkgSetting.isSystem()
+            && pkgSetting.signatures.mSigningDetails.signaturesMatchExactly(sysSigningDetails);
     }
 
     /**
@@ -511,6 +534,10 @@ public class AppsFilter {
                 }
                 return true;
             }
+            if (targetPkg.isStaticSharedLibrary()) {
+                // not an app, this filtering takes place at a higher level
+                return false;
+            }
             final String targetName = targetPkg.getPackageName();
             Trace.beginSection("getAppId");
             final int callingAppId;
@@ -586,6 +613,7 @@ public class AppsFilter {
             } finally {
                 Trace.endSection();
             }
+
             if (callingPkgSetting != null) {
                 if (callingPkgInstruments(callingPkgSetting, targetPkgSetting, targetName)) {
                     return false;
@@ -599,27 +627,33 @@ public class AppsFilter {
                 }
             }
 
-            if (callingSharedPkgSettings != null) {
-                int size = callingSharedPkgSettings.size();
-                for (int index = 0; index < size; index++) {
-                    PackageSetting pkgSetting = callingSharedPkgSettings.valueAt(index);
-                    if (mOverlayReferenceMapper.isValidActor(targetName, pkgSetting.name)) {
+            try {
+                Trace.beginSection("mOverlayReferenceMapper");
+                if (callingSharedPkgSettings != null) {
+                    int size = callingSharedPkgSettings.size();
+                    for (int index = 0; index < size; index++) {
+                        PackageSetting pkgSetting = callingSharedPkgSettings.valueAt(index);
+                        if (mOverlayReferenceMapper.isValidActor(targetName, pkgSetting.name)) {
+                            if (DEBUG_LOGGING) {
+                                log(callingPkgSetting, targetPkgSetting,
+                                        "matches shared user of package that acts on target of "
+                                                + "overlay");
+                            }
+                            return false;
+                        }
+                    }
+                } else {
+                    if (mOverlayReferenceMapper.isValidActor(targetName, callingPkgSetting.name)) {
                         if (DEBUG_LOGGING) {
-                            log(callingPkgSetting, targetPkgSetting,
-                                    "matches shared user of package that acts on target of "
-                                            + "overlay");
+                            log(callingPkgSetting, targetPkgSetting, "acts on target of overlay");
                         }
                         return false;
                     }
                 }
-            } else {
-                if (mOverlayReferenceMapper.isValidActor(targetName, callingPkgSetting.name)) {
-                    if (DEBUG_LOGGING) {
-                        log(callingPkgSetting, targetPkgSetting, "acts on target of overlay");
-                    }
-                    return false;
-                }
+            } finally {
+                Trace.endSection();
             }
+
 
             return true;
         } finally {
@@ -657,7 +691,7 @@ public class AppsFilter {
             String description, Throwable throwable) {
         Slog.wtf(TAG,
                 "interaction: " + callingPkgSetting
-                        + " -> " + targetPkgSetting.name + " "
+                        + " -> " + targetPkgSetting + " "
                         + description, throwable);
     }
 

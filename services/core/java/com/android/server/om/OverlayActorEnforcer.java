@@ -43,6 +43,9 @@ import java.util.Map;
  */
 public class OverlayActorEnforcer {
 
+    // By default, the reason is not logged to prevent leaks of why it failed
+    private static final boolean DEBUG_REASON = false;
+
     private final VerifyCallback mVerifyCallback;
 
     /**
@@ -50,16 +53,16 @@ public class OverlayActorEnforcer {
      */
     static Pair<String, ActorState> getPackageNameForActor(String actorUriString,
             Map<String, Map<String, String>> namedActors) {
-        if (namedActors.isEmpty()) {
-            return Pair.create(null, ActorState.NO_NAMED_ACTORS);
-        }
-
         Uri actorUri = Uri.parse(actorUriString);
 
         String actorScheme = actorUri.getScheme();
         List<String> actorPathSegments = actorUri.getPathSegments();
         if (!"overlay".equals(actorScheme) || CollectionUtils.size(actorPathSegments) != 1) {
             return Pair.create(null, ActorState.INVALID_OVERLAYABLE_ACTOR_NAME);
+        }
+
+        if (namedActors.isEmpty()) {
+            return Pair.create(null, ActorState.NO_NAMED_ACTORS);
         }
 
         String actorNamespace = actorUri.getAuthority();
@@ -92,7 +95,7 @@ public class OverlayActorEnforcer {
         throw new SecurityException("UID" + callingUid + " is not allowed to call "
                 + methodName + " for "
                 + (TextUtils.isEmpty(targetOverlayableName) ? "" : (targetOverlayableName + " in "))
-                + overlayInfo.targetPackageName + " because " + actorState
+                + overlayInfo.targetPackageName + (DEBUG_REASON ? (" because " + actorState) : "")
         );
     }
 

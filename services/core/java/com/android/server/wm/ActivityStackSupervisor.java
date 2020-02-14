@@ -297,9 +297,6 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
      * settle down before doing so.  It contains ActivityRecord objects. */
     final ArrayList<ActivityRecord> mFinishingActivities = new ArrayList<>();
 
-    /** List of activities that are in the process of going to sleep. */
-    final ArrayList<ActivityRecord> mGoingToSleepActivities = new ArrayList<>();
-
     /** List of activities whose multi-window mode changed that we need to report to the
      * application */
     private final ArrayList<ActivityRecord> mMultiWindowModeChangedActivities = new ArrayList<>();
@@ -900,7 +897,7 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
                 }
                 mService.getPackageManagerInternalLocked().notifyPackageUse(
                         r.intent.getComponent().getPackageName(), NOTIFY_PACKAGE_USE_ACTIVITY);
-                r.sleeping = false;
+                r.setSleeping(false);
                 r.forceNewConfig = false;
                 mService.getAppWarningsLocked().onStartActivity(r);
                 r.compat = mService.compatibilityInfoForPackageLocked(r.info.applicationInfo);
@@ -1262,7 +1259,8 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
         final PackageInfo packageInfo;
         try {
             packageInfo = mService.mContext.getPackageManager()
-                    .getPackageInfo(callingPackage, PackageManager.GET_PERMISSIONS);
+                    .getPackageInfoAsUser(callingPackage, PackageManager.GET_PERMISSIONS,
+                            UserHandle.getUserId(callingUid));
         } catch (PackageManager.NameNotFoundException e) {
             Slog.i(TAG, "Cannot find package info for " + callingPackage);
             return ACTIVITY_RESTRICTION_NONE;
@@ -1746,6 +1744,7 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
              * invisible as well and added to the stopping list.  After which we process the
              * stopping list by handling the idle.
              */
+            stack.cancelAnimation();
             stack.mForceHidden = true;
             stack.ensureActivitiesVisible(null, 0, PRESERVE_WINDOWS);
             stack.mForceHidden = false;
@@ -2056,16 +2055,6 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
         }
     }
 
-    void activitySleptLocked(ActivityRecord r) {
-        mGoingToSleepActivities.remove(r);
-        final ActivityStack s = r.getRootTask();
-        if (s != null) {
-            s.checkReadyForSleep();
-        } else {
-            checkReadyForSleepLocked(true);
-        }
-    }
-
     void checkReadyForSleepLocked(boolean allowDelay) {
         if (!mService.isSleepingOrShuttingDownLocked()) {
             // Do not care.
@@ -2202,7 +2191,6 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
 
     void removeHistoryRecords(WindowProcessController app) {
         removeHistoryRecords(mStoppingActivities, app, "mStoppingActivities");
-        removeHistoryRecords(mGoingToSleepActivities, app, "mGoingToSleepActivities");
         removeHistoryRecords(mFinishingActivities, app, "mFinishingActivities");
     }
 
@@ -2539,7 +2527,10 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
         if (r != null) {
             r.finishRelaunching();
             if (r.getRootTask().shouldSleepOrShutDownActivities()) {
-                r.setSleeping(true, true);
+                // Activity is always relaunched to either resumed or paused state. If it was
+                // relaunched while hidden (by keyguard or smth else), it should be stopped.
+                r.getStack().ensureActivitiesVisible(null /* starting */, 0 /* configChanges */,
+                        false /* preserveWindows */);
             }
         }
     }

@@ -19,13 +19,10 @@
 #include "FieldValue.h"
 
 #include <android/frameworks/stats/1.0/types.h>
-#include <android/os/StatsLogEventWrapper.h>
 #include <android/util/ProtoOutputStream.h>
-#include <log/log_read.h>
 #include <private/android_logger.h>
 #include <stats_event_list.h>
 #include <stats_event.h>
-#include <utils/Errors.h>
 
 #include <string>
 #include <vector>
@@ -72,23 +69,12 @@ public:
     /**
      * Read a LogEvent from the socket
      */
-    explicit LogEvent(uint8_t* msg, uint32_t len, uint32_t uid);
+    explicit LogEvent(uint8_t* msg, uint32_t len, int32_t uid, int32_t pid);
 
     /**
      * Temp constructor to use for pulled atoms until we flip the socket schema.
      */
-    explicit LogEvent(uint8_t* msg, uint32_t len, uint32_t uid, bool useNewSchema);
-
-    /**
-     * Creates LogEvent from StatsLogEventWrapper.
-     */
-    static void createLogEvents(const StatsLogEventWrapper& statsLogEventWrapper,
-                                std::vector<std::shared_ptr<LogEvent>>& logEvents);
-
-    /**
-     * Construct one LogEvent from a StatsLogEventWrapper with the i-th work chain. -1 if no chain.
-     */
-    explicit LogEvent(const StatsLogEventWrapper& statsLogEventWrapper, int workChainIndex);
+    explicit LogEvent(uint8_t* msg, uint32_t len, int32_t uid, int32_t pid, bool useNewSchema);
 
     /**
      * Constructs a LogEvent with synthetic data for testing. Must call init() before reading.
@@ -135,9 +121,17 @@ public:
      */
     inline int GetTagId() const { return mTagId; }
 
-    inline uint32_t GetUid() const {
-        return mLogUid;
-    }
+    /**
+     * Get the uid of the logging client.
+     * Returns -1 if the uid is unknown/has not been set.
+     */
+    inline int32_t GetUid() const { return mLogUid; }
+
+    /**
+     * Get the pid of the logging client.
+     * Returns -1 if the pid is unknown/has not been set.
+     */
+    inline int32_t GetPid() const { return mLogPid; }
 
     /**
      * Get the nth value, starting at 1.
@@ -267,7 +261,15 @@ private:
             mValid = false;
             value = 0; // all primitive types can successfully cast 0
         } else {
-            value = *((T*)mBuf);
+            // When alignof(T) == 1, hopefully the compiler can optimize away
+            // this conditional as always true.
+            if ((reinterpret_cast<uintptr_t>(mBuf) % alignof(T)) == 0) {
+                // We're properly aligned, and can safely make this assignment.
+                value = *((T*)mBuf);
+            } else {
+                // We need to use memcpy.  It's slower, but safe.
+                memcpy(&value, mBuf, sizeof(T));
+            }
             mBuf += sizeof(T);
             mRemainingLen -= sizeof(T);
         }
@@ -309,9 +311,14 @@ private:
     // The elapsed timestamp set by statsd log writer.
     int64_t mElapsedTimestampNs;
 
+    // The atom tag of the event.
     int mTagId;
 
-    uint32_t mLogUid;
+    // The uid of the logging client (defaults to -1).
+    int32_t mLogUid = -1;
+
+    // The pid of the logging client (defaults to -1).
+    int32_t mLogPid = -1;
 };
 
 void writeExperimentIdsToProto(const std::vector<int64_t>& experimentIds, std::vector<uint8_t>* protoOut);

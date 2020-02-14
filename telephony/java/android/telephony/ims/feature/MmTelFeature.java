@@ -259,10 +259,7 @@ public class MmTelFeature extends ImsFeature {
             super(capabilities);
         }
 
-        /**
-         * @hide
-         */
-        @SystemApi @TestApi
+        /** @hide */
         @IntDef(flag = true,
                 value = {
                         CAPABILITY_TYPE_VOICE,
@@ -325,7 +322,6 @@ public class MmTelFeature extends ImsFeature {
         */
         @NonNull
         @Override
-        @SystemApi @TestApi
         public String toString() {
             StringBuilder builder = new StringBuilder("MmTel Capabilities - [");
             builder.append("Voice: ");
@@ -397,10 +393,7 @@ public class MmTelFeature extends ImsFeature {
     @SystemApi @TestApi
     public static final int PROCESS_CALL_CSFB = 1;
 
-    /**
-    * @hide
-    */
-    @SystemApi @TestApi
+    /** @hide */
     @IntDef(flag = true,
             value = {
                     PROCESS_CALL_IMS,
@@ -514,7 +507,7 @@ public class MmTelFeature extends ImsFeature {
      * @param callProfile The {@link ImsCallProfile} IMS call profile with details.
      *        This can be null if no call information is available for the rejected call.
      * @param reason The {@link ImsReasonInfo} call rejection reason.
-     * * @hide
+     * @hide
      */
     @SystemApi @TestApi
     public final void notifyRejectedCall(@NonNull ImsCallProfile callProfile,

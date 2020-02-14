@@ -194,8 +194,8 @@ public class CastTile extends QSTileImpl<BooleanState> {
             if (device.state == CastDevice.STATE_CONNECTED) {
                 state.value = true;
                 state.secondaryLabel = getDeviceName(device);
-                state.contentDescription = state.contentDescription + "," +
-                        mContext.getString(R.string.accessibility_cast_name, state.label);
+                state.contentDescription = state.contentDescription + ","
+                        + mContext.getString(R.string.accessibility_cast_name, state.label);
                 connecting = false;
                 break;
             } else if (device.state == CastDevice.STATE_CONNECTING) {
