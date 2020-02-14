@@ -47,6 +47,7 @@ import android.graphics.Path;
 import android.graphics.PixelFormat;
 import android.graphics.Rect;
 import android.graphics.Region;
+import android.graphics.drawable.VectorDrawable;
 import android.hardware.display.DisplayManager;
 import android.os.Handler;
 import android.os.HandlerThread;
@@ -137,6 +138,7 @@ public class ScreenDecorations extends SystemUI implements Tunable,
     private boolean mIsReceivingNavBarColor = false;
     private boolean mInGesturalMode;
     private boolean mCustomCutout;
+    private boolean mIsRoundedCornerMultipleRadius;
 
     /**
      * Converts a set of {@link Rect}s into a {@link Region}
@@ -331,6 +333,8 @@ public class ScreenDecorations extends SystemUI implements Tunable,
     private void startOnScreenDecorationsThread() {
         mRotation = RotationUtils.getExactRotation(mContext);
         mWindowManager = mContext.getSystemService(WindowManager.class);
+        mIsRoundedCornerMultipleRadius = mContext.getResources().getBoolean(
+                R.bool.config_roundedCornerMultipleRadius);
         updateRoundedCornerRadii();
         if (hasRoundedCorners() || shouldDrawCutout() || shouldHostHandles()) {
             setupDecorations();
@@ -544,17 +548,24 @@ public class ScreenDecorations extends SystemUI implements Tunable,
                 com.android.internal.R.dimen.rounded_corner_radius_top);
         final int newRoundedDefaultBottom = mContext.getResources().getDimensionPixelSize(
                 com.android.internal.R.dimen.rounded_corner_radius_bottom);
-
         final boolean roundedCornersChanged = mRoundedDefault != newRoundedDefault
                 || mRoundedDefaultBottom != newRoundedDefaultBottom
                 || mRoundedDefaultTop != newRoundedDefaultTop;
 
         if (roundedCornersChanged) {
-            mRoundedDefault = newRoundedDefault;
-            mRoundedDefaultTop = newRoundedDefaultTop;
-            mRoundedDefaultBottom = newRoundedDefaultBottom;
-            onTuningChanged(SIZE, null);
+            // If config_roundedCornerMultipleRadius set as true, ScreenDecorations respect the
+            // max(width, height) size of drawable/rounded.xml instead of rounded_corner_radius
+            if (mIsRoundedCornerMultipleRadius) {
+                final VectorDrawable d = (VectorDrawable) mContext.getDrawable(R.drawable.rounded);
+                mRoundedDefault = Math.max(d.getIntrinsicWidth(), d.getIntrinsicHeight());
+                mRoundedDefaultTop = mRoundedDefaultBottom = mRoundedDefault;
+            } else {
+                mRoundedDefault = newRoundedDefault;
+                mRoundedDefaultTop = newRoundedDefaultTop;
+                mRoundedDefaultBottom = newRoundedDefaultBottom;
+            }
         }
+        onTuningChanged(SIZE, null);
     }
 
     private void updateViews() {
@@ -653,7 +664,8 @@ public class ScreenDecorations extends SystemUI implements Tunable,
     }
 
     private boolean hasRoundedCorners() {
-        return mRoundedDefault > 0 || mRoundedDefaultBottom > 0 || mRoundedDefaultTop > 0;
+        return mRoundedDefault > 0 || mRoundedDefaultBottom > 0 || mRoundedDefaultTop > 0
+                || mIsRoundedCornerMultipleRadius;
     }
 
     private boolean shouldDrawCutout() {
