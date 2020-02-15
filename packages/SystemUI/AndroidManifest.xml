@@ -35,6 +35,7 @@
 
     <!-- Used to read storage for all users -->
     <uses-permission android:name="android.permission.WRITE_MEDIA_STORAGE" />
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
     <uses-permission android:name="android.permission.INJECT_EVENTS" />
@@ -645,6 +646,7 @@
                   android:label="Controls Providers"
                   android:theme="@style/Theme.SystemUI"
                   android:exported="true"
+                  android:showForAllUsers="true"
                   android:excludeFromRecents="true"
                   android:configChanges="screenSize|smallestScreenSize|screenLayout|orientation|keyboard|keyboardHidden"
                   android:visibleToInstantApps="true">
@@ -654,6 +656,7 @@
                   android:parentActivityName=".controls.management.ControlsProviderSelectorActivity"
                   android:theme="@style/Theme.SystemUI"
                   android:excludeFromRecents="true"
+                  android:showForAllUsers="true"
                   android:configChanges="screenSize|smallestScreenSize|screenLayout|orientation|keyboard|keyboardHidden"
                   android:visibleToInstantApps="true">
         </activity>

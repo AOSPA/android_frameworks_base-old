@@ -60,7 +60,7 @@ public class WifiUtils {
         if (config != null) {
             WifiConfiguration.NetworkSelectionStatus networkStatus =
                     config.getNetworkSelectionStatus();
-            for (int index = WifiConfiguration.NetworkSelectionStatus.NETWORK_SELECTION_ENABLE;
+            for (int index = WifiConfiguration.NetworkSelectionStatus.DISABLED_NONE;
                     index < WifiConfiguration.NetworkSelectionStatus
                             .NETWORK_SELECTION_DISABLED_MAX; index++) {
                 if (networkStatus.getDisableReasonCounter(index) != 0) {
@@ -103,10 +103,10 @@ public class WifiUtils {
             if (accessPoint.getSpeed() != AccessPoint.Speed.NONE) {
                 visibility.append(" speed=").append(accessPoint.getSpeedLabel());
             }
-            visibility.append(String.format(" tx=%.1f,", info.getTxSuccessRate()));
-            visibility.append(String.format("%.1f,", info.getTxRetriesRate()));
-            visibility.append(String.format("%.1f ", info.getTxBadRate()));
-            visibility.append(String.format("rx=%.1f", info.getRxSuccessRate()));
+            visibility.append(String.format(" tx=%.1f,", info.getSuccessfulTxPacketsPerSecond()));
+            visibility.append(String.format("%.1f,", info.getRetriedTxPacketsPerSecond()));
+            visibility.append(String.format("%.1f ", info.getLostTxPacketsPerSecond()));
+            visibility.append(String.format("rx=%.1f", info.getSuccessfulRxPacketsPerSecond()));
         }
 
         int maxRssi5 = INVALID_RSSI;

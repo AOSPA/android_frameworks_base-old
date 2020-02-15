@@ -85,13 +85,13 @@ import android.util.BoostFramework;
 import android.util.EventLog;
 import android.util.Log;
 import android.util.Slog;
-import android.util.StatsLog;
 import android.util.TimeUtils;
 import android.util.proto.ProtoOutputStream;
 
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.logging.MetricsLogger;
 import com.android.internal.os.BackgroundThread;
+import com.android.internal.util.FrameworkStatsLog;
 import com.android.internal.util.function.pooled.PooledLambda;
 import com.android.server.LocalServices;
 
@@ -773,8 +773,8 @@ class ActivityMetricsLogger {
         builder.setType(type);
         builder.addTaggedData(FIELD_CLASS_NAME, activity.info.name);
         mMetricsLogger.write(builder);
-        StatsLog.write(
-                StatsLog.APP_START_CANCELED,
+        FrameworkStatsLog.write(
+                FrameworkStatsLog.APP_START_CANCELED,
                 activity.info.applicationInfo.uid,
                 activity.packageName,
                 convertAppStartTransitionType(type),
@@ -851,8 +851,8 @@ class ActivityMetricsLogger {
         builder.addTaggedData(PACKAGE_OPTIMIZATION_COMPILATION_FILTER,
                 packageOptimizationInfo.getCompilationFilter());
         mMetricsLogger.write(builder);
-        StatsLog.write(
-                StatsLog.APP_START_OCCURRED,
+        FrameworkStatsLog.write(
+                FrameworkStatsLog.APP_START_OCCURRED,
                 info.applicationInfo.uid,
                 info.packageName,
                 convertAppStartTransitionType(info.type),
@@ -924,15 +924,15 @@ class ActivityMetricsLogger {
 
     private int convertAppStartTransitionType(int tronType) {
         if (tronType == TYPE_TRANSITION_COLD_LAUNCH) {
-            return StatsLog.APP_START_OCCURRED__TYPE__COLD;
+            return FrameworkStatsLog.APP_START_OCCURRED__TYPE__COLD;
         }
         if (tronType == TYPE_TRANSITION_WARM_LAUNCH) {
-            return StatsLog.APP_START_OCCURRED__TYPE__WARM;
+            return FrameworkStatsLog.APP_START_OCCURRED__TYPE__WARM;
         }
         if (tronType == TYPE_TRANSITION_HOT_LAUNCH) {
-            return StatsLog.APP_START_OCCURRED__TYPE__HOT;
+            return FrameworkStatsLog.APP_START_OCCURRED__TYPE__HOT;
         }
-        return StatsLog.APP_START_OCCURRED__TYPE__UNKNOWN;
+        return FrameworkStatsLog.APP_START_OCCURRED__TYPE__UNKNOWN;
     }
 
     /** @return the last known window drawn delay of the given activity. */
@@ -986,13 +986,13 @@ class ActivityMetricsLogger {
         builder.addTaggedData(APP_TRANSITION_PROCESS_RUNNING,
                 info.mProcessRunning ? 1 : 0);
         mMetricsLogger.write(builder);
-        StatsLog.write(
-                StatsLog.APP_START_FULLY_DRAWN,
+        FrameworkStatsLog.write(
+                FrameworkStatsLog.APP_START_FULLY_DRAWN,
                 info.mLastLaunchedActivity.info.applicationInfo.uid,
                 info.mLastLaunchedActivity.packageName,
                 restoredFromBundle
-                        ? StatsLog.APP_START_FULLY_DRAWN__TYPE__WITH_BUNDLE
-                        : StatsLog.APP_START_FULLY_DRAWN__TYPE__WITHOUT_BUNDLE,
+                        ? FrameworkStatsLog.APP_START_FULLY_DRAWN__TYPE__WITH_BUNDLE
+                        : FrameworkStatsLog.APP_START_FULLY_DRAWN__TYPE__WITHOUT_BUNDLE,
                 info.mLastLaunchedActivity.info.name,
                 info.mProcessRunning,
                 startupTimeMs);
@@ -1097,8 +1097,8 @@ class ActivityMetricsLogger {
             return;
         }
 
-        StatsLog.write(
-                StatsLog.APP_START_MEMORY_STATE_CAPTURED,
+        FrameworkStatsLog.write(
+                FrameworkStatsLog.APP_START_MEMORY_STATE_CAPTURED,
                 uid,
                 info.processName,
                 info.launchedActivityName,
@@ -1241,7 +1241,7 @@ class ActivityMetricsLogger {
         final ProtoOutputStream protoOutputStream =
                 new ProtoOutputStream(LAUNCH_OBSERVER_ACTIVITY_RECORD_PROTO_CHUNK_SIZE);
         // Write this data out as the top-most ActivityRecordProto (i.e. it is not a sub-object).
-        record.dumpDebug(protoOutputStream);
+        record.dumpDebug(protoOutputStream, WindowTraceLogLevel.ALL);
         final byte[] bytes = protoOutputStream.getBytes();
 
         Trace.traceEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER);

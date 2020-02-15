@@ -33,6 +33,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import static java.util.Objects.requireNonNull;
 
@@ -51,6 +52,7 @@ import com.android.internal.statusbar.IStatusBarService;
 import com.android.internal.statusbar.NotificationVisibility;
 import com.android.systemui.DumpController;
 import com.android.systemui.SysuiTestCase;
+import com.android.systemui.statusbar.FeatureFlags;
 import com.android.systemui.statusbar.RankingBuilder;
 import com.android.systemui.statusbar.notification.collection.NoManSimulator.NotifEvent;
 import com.android.systemui.statusbar.notification.collection.NotifCollection.CancellationReason;
@@ -60,6 +62,7 @@ import com.android.systemui.statusbar.notification.collection.coalescer.GroupCoa
 import com.android.systemui.statusbar.notification.collection.notifcollection.CollectionReadyForBuildListener;
 import com.android.systemui.statusbar.notification.collection.notifcollection.DismissedByUserStats;
 import com.android.systemui.statusbar.notification.collection.notifcollection.NotifCollectionListener;
+import com.android.systemui.statusbar.notification.collection.notifcollection.NotifCollectionLogger;
 import com.android.systemui.statusbar.notification.collection.notifcollection.NotifLifetimeExtender;
 import com.android.systemui.util.Assert;
 
@@ -83,9 +86,11 @@ import java.util.Map;
 public class NotifCollectionTest extends SysuiTestCase {
 
     @Mock private IStatusBarService mStatusBarService;
+    @Mock private NotifCollectionLogger mLogger;
     @Mock private GroupCoalescer mGroupCoalescer;
     @Spy private RecordingCollectionListener mCollectionListener;
     @Mock private CollectionReadyForBuildListener mBuildListener;
+    @Mock private FeatureFlags mFeatureFlags;
 
     @Spy private RecordingLifetimeExtender mExtender1 = new RecordingLifetimeExtender("Extender1");
     @Spy private RecordingLifetimeExtender mExtender2 = new RecordingLifetimeExtender("Extender2");
@@ -105,7 +110,14 @@ public class NotifCollectionTest extends SysuiTestCase {
         MockitoAnnotations.initMocks(this);
         Assert.sMainLooper = TestableLooper.get(this).getLooper();
 
-        mCollection = new NotifCollection(mStatusBarService, mock(DumpController.class));
+        when(mFeatureFlags.isNewNotifPipelineRenderingEnabled()).thenReturn(true);
+        when(mFeatureFlags.isNewNotifPipelineEnabled()).thenReturn(true);
+
+        mCollection = new NotifCollection(
+                mStatusBarService,
+                mock(DumpController.class),
+                mFeatureFlags,
+                mLogger);
         mCollection.attach(mGroupCoalescer);
         mCollection.addCollectionListener(mCollectionListener);
         mCollection.setBuildListener(mBuildListener);
@@ -127,9 +139,10 @@ public class NotifCollectionTest extends SysuiTestCase {
                         .setRank(4747));
 
         // THEN the listener is notified
-        verify(mCollectionListener).onEntryAdded(mEntryCaptor.capture());
-
+        verify(mCollectionListener).onEntryInit(mEntryCaptor.capture());
         NotificationEntry entry = mEntryCaptor.getValue();
+
+        verify(mCollectionListener).onEntryAdded(entry);
         assertEquals(notif1.key, entry.getKey());
         assertEquals(notif1.sbn, entry.getSbn());
         assertEquals(notif1.ranking, entry.getRanking());
@@ -224,6 +237,7 @@ public class NotifCollectionTest extends SysuiTestCase {
 
         // THEN the listener is notified
         verify(mCollectionListener).onEntryRemoved(entry, REASON_APP_CANCEL, false);
+        verify(mCollectionListener).onEntryCleanUp(entry);
         assertEquals(notif.sbn, entry.getSbn());
         assertEquals(notif.ranking, entry.getRanking());
     }
@@ -594,6 +608,10 @@ public class NotifCollectionTest extends SysuiTestCase {
         private final Map<String, NotificationEntry> mLastSeenEntries = new ArrayMap<>();
 
         @Override
+        public void onEntryInit(NotificationEntry entry) {
+        }
+
+        @Override
         public void onEntryAdded(NotificationEntry entry) {
             mLastSeenEntries.put(entry.getKey(), entry);
         }
@@ -604,6 +622,10 @@ public class NotifCollectionTest extends SysuiTestCase {
 
         @Override
         public void onEntryRemoved(NotificationEntry entry, int reason, boolean removedByUser) {
+        }
+
+        @Override
+        public void onEntryCleanUp(NotificationEntry entry) {
         }
 
         public NotificationEntry getEntry(String key) {

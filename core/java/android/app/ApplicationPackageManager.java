@@ -131,7 +131,7 @@ public class ApplicationPackageManager extends PackageManager {
     private static final int DEFAULT_EPHEMERAL_COOKIE_MAX_SIZE_BYTES = 16384; // 16KB
 
     // Default flags to use with PackageManager when no flags are given.
-    private final static int sDefaultFlags = PackageManager.GET_SHARED_LIBRARY_FILES;
+    private static final int sDefaultFlags = GET_SHARED_LIBRARY_FILES;
 
     // Name of the resource which provides background permission button string
     public static final String APP_PERMISSION_BUTTON_ALLOW_ALWAYS =
@@ -618,36 +618,22 @@ public class ApplicationPackageManager extends PackageManager {
         return hasSystemFeature(name, 0);
     }
 
-    private boolean hasSystemFeatureUncached(String name, int version) {
-        try {
-            return mPM.hasSystemFeature(name, version);
-        } catch (RemoteException e) {
-            throw e.rethrowFromSystemServer();
-        }
-    }
-
-    // Make this cache relatively large.  There are many system features and
-    // none are ever invalidated.  MPTS tests suggests that the cache should
-    // hold at least 150 entries.
-    private static final int SYS_FEATURE_CACHE_SIZE = 256;
-    private static final String CACHE_KEY_SYS_FEATURE_PROPERTY = "cache_key.has_system_feature";
-
-    private class SystemFeatureQuery {
+    private class HasSystemFeatureQuery {
         public final String name;
         public final int version;
-        public SystemFeatureQuery(String n, int v) {
+        public HasSystemFeatureQuery(String n, int v) {
             name = n;
             version = v;
         }
         @Override
         public String toString() {
-            return String.format("SystemFeatureQuery(name=\"%s\", version=%d)",
+            return String.format("HasSystemFeatureQuery(name=\"%s\", version=%d)",
                     name, version);
         }
         @Override
         public boolean equals(Object o) {
-            if (o instanceof SystemFeatureQuery) {
-                SystemFeatureQuery r = (SystemFeatureQuery) o;
+            if (o instanceof HasSystemFeatureQuery) {
+                HasSystemFeatureQuery r = (HasSystemFeatureQuery) o;
                 return Objects.equals(name, r.name) &&  version == r.version;
             } else {
                 return false;
@@ -655,33 +641,41 @@ public class ApplicationPackageManager extends PackageManager {
         }
         @Override
         public int hashCode() {
-            return Objects.hashCode(name) + version;
+            return Objects.hashCode(name) * 13 + version;
         }
     }
 
-    private final PropertyInvalidatedCache<SystemFeatureQuery, Boolean> mSysFeatureCache =
-            new PropertyInvalidatedCache<SystemFeatureQuery, Boolean>(
-                SYS_FEATURE_CACHE_SIZE,
-                CACHE_KEY_SYS_FEATURE_PROPERTY) {
+    // Make this cache relatively large.  There are many system features and
+    // none are ever invalidated.  MPTS tests suggests that the cache should
+    // hold at least 150 entries.
+    private final static PropertyInvalidatedCache<HasSystemFeatureQuery, Boolean>
+            mHasSystemFeatureCache =
+            new PropertyInvalidatedCache<HasSystemFeatureQuery, Boolean>(
+                256, "cache_key.has_system_feature") {
                 @Override
-                protected Boolean recompute(SystemFeatureQuery query) {
-                    return hasSystemFeatureUncached(query.name, query.version);
+                protected Boolean recompute(HasSystemFeatureQuery query) {
+                    try {
+                        return ActivityThread.currentActivityThread().getPackageManager().
+                            hasSystemFeature(query.name, query.version);
+                    } catch (RemoteException e) {
+                        throw e.rethrowFromSystemServer();
+                    }
                 }
             };
 
     @Override
     public boolean hasSystemFeature(String name, int version) {
-        return mSysFeatureCache.query(new SystemFeatureQuery(name, version)).booleanValue();
+        return mHasSystemFeatureCache.query(new HasSystemFeatureQuery(name, version));
     }
 
     /** @hide */
-    public void disableSysFeatureCache() {
-        mSysFeatureCache.disableLocal();
+    public void disableHasSystemFeatureCache() {
+        mHasSystemFeatureCache.disableLocal();
     }
 
     /** @hide */
-    public static void invalidateSysFeatureCache() {
-        PropertyInvalidatedCache.invalidateCache(CACHE_KEY_SYS_FEATURE_PROPERTY);
+    public static void invalidateHasSystemFeatureCache() {
+        mHasSystemFeatureCache.invalidateCache();
     }
 
     @Override
@@ -907,7 +901,7 @@ public class ApplicationPackageManager extends PackageManager {
 
     @Override
     public boolean hasSigningCertificate(
-            String packageName, byte[] certificate, @PackageManager.CertificateInputType int type) {
+            String packageName, byte[] certificate, @CertificateInputType int type) {
         try {
             return mPM.hasSigningCertificate(packageName, certificate, type);
         } catch (RemoteException e) {
@@ -917,7 +911,7 @@ public class ApplicationPackageManager extends PackageManager {
 
     @Override
     public boolean hasSigningCertificate(
-            int uid, byte[] certificate, @PackageManager.CertificateInputType int type) {
+            int uid, byte[] certificate, @CertificateInputType int type) {
         try {
             return mPM.hasUidSigningCertificate(uid, certificate, type);
         } catch (RemoteException e) {
@@ -1464,8 +1458,7 @@ public class ApplicationPackageManager extends PackageManager {
             return getActivityIcon(intent.getComponent());
         }
 
-        ResolveInfo info = resolveActivity(
-            intent, PackageManager.MATCH_DEFAULT_ONLY);
+        ResolveInfo info = resolveActivity(intent, MATCH_DEFAULT_ONLY);
         if (info != null) {
             return info.activityInfo.loadIcon(this);
         }
@@ -1500,7 +1493,7 @@ public class ApplicationPackageManager extends PackageManager {
         }
 
         ResolveInfo info = resolveActivity(
-                intent, PackageManager.MATCH_DEFAULT_ONLY);
+                intent, MATCH_DEFAULT_ONLY);
         if (info != null) {
             return info.activityInfo.loadBanner(this);
         }
@@ -1532,8 +1525,7 @@ public class ApplicationPackageManager extends PackageManager {
             return getActivityLogo(intent.getComponent());
         }
 
-        ResolveInfo info = resolveActivity(
-            intent, PackageManager.MATCH_DEFAULT_ONLY);
+        ResolveInfo info = resolveActivity(intent, MATCH_DEFAULT_ONLY);
         if (info != null) {
             return info.activityInfo.loadLogo(this);
         }
@@ -2017,7 +2009,7 @@ public class ApplicationPackageManager extends PackageManager {
 
     @Override
     public int installExistingPackage(String packageName) throws NameNotFoundException {
-        return installExistingPackage(packageName, PackageManager.INSTALL_REASON_UNKNOWN);
+        return installExistingPackage(packageName, INSTALL_REASON_UNKNOWN);
     }
 
     @Override
@@ -2029,7 +2021,7 @@ public class ApplicationPackageManager extends PackageManager {
     @Override
     public int installExistingPackageAsUser(String packageName, int userId)
             throws NameNotFoundException {
-        return installExistingPackageAsUser(packageName, PackageManager.INSTALL_REASON_UNKNOWN,
+        return installExistingPackageAsUser(packageName, INSTALL_REASON_UNKNOWN,
                 userId);
     }
 
@@ -2404,7 +2396,7 @@ public class ApplicationPackageManager extends PackageManager {
     public void deletePackageAsUser(String packageName, IPackageDeleteObserver observer,
             int flags, int userId) {
         try {
-            mPM.deletePackageAsUser(packageName, PackageManager.VERSION_CODE_HIGHEST,
+            mPM.deletePackageAsUser(packageName, VERSION_CODE_HIGHEST,
                     observer, userId, flags);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
@@ -2651,11 +2643,11 @@ public class ApplicationPackageManager extends PackageManager {
     public void setSyntheticAppDetailsActivityEnabled(String packageName, boolean enabled) {
         try {
             ComponentName componentName = new ComponentName(packageName,
-                    PackageManager.APP_DETAILS_ACTIVITY_CLASS_NAME);
+                    APP_DETAILS_ACTIVITY_CLASS_NAME);
             mPM.setComponentEnabledSetting(componentName, enabled
-                    ? PackageManager.COMPONENT_ENABLED_STATE_DEFAULT
-                    : PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
-                    PackageManager.DONT_KILL_APP, getUserId());
+                    ? COMPONENT_ENABLED_STATE_DEFAULT
+                    : COMPONENT_ENABLED_STATE_DISABLED,
+                    DONT_KILL_APP, getUserId());
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -2665,10 +2657,10 @@ public class ApplicationPackageManager extends PackageManager {
     public boolean getSyntheticAppDetailsActivityEnabled(String packageName) {
         try {
             ComponentName componentName = new ComponentName(packageName,
-                    PackageManager.APP_DETAILS_ACTIVITY_CLASS_NAME);
+                    APP_DETAILS_ACTIVITY_CLASS_NAME);
             int state = mPM.getComponentEnabledSetting(componentName, getUserId());
-            return state == PackageManager.COMPONENT_ENABLED_STATE_ENABLED
-                    || state == PackageManager.COMPONENT_ENABLED_STATE_DEFAULT;
+            return state == COMPONENT_ENABLED_STATE_ENABLED
+                    || state == COMPONENT_ENABLED_STATE_DEFAULT;
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -2737,6 +2729,30 @@ public class ApplicationPackageManager extends PackageManager {
     public boolean getApplicationHiddenSettingAsUser(String packageName, UserHandle user) {
         try {
             return mPM.getApplicationHiddenSettingAsUser(packageName, user.getIdentifier());
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /** @hide */
+    @Override
+    public void setSystemAppState(String packageName, @SystemAppState int state) {
+        try {
+            switch (state) {
+                case SYSTEM_APP_STATE_HIDDEN_UNTIL_INSTALLED_HIDDEN:
+                    mPM.setSystemAppHiddenUntilInstalled(packageName, true);
+                    break;
+                case SYSTEM_APP_STATE_HIDDEN_UNTIL_INSTALLED_VISIBLE:
+                    mPM.setSystemAppHiddenUntilInstalled(packageName, false);
+                    break;
+                case SYSTEM_APP_STATE_INSTALLED:
+                    mPM.setSystemAppInstallState(packageName, true, getUserId());
+                    break;
+                case SYSTEM_APP_STATE_UNINSTALLED:
+                    mPM.setSystemAppInstallState(packageName, false, getUserId());
+                    break;
+                default:
+            }
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }

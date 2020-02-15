@@ -18,7 +18,9 @@ package com.android.internal.app;
 import android.annotation.IntDef;
 import android.annotation.Nullable;
 import android.content.Context;
+import android.content.pm.ResolveInfo;
 import android.os.UserHandle;
+import android.os.UserManager;
 import android.view.View;
 import android.view.ViewGroup;
 
@@ -26,7 +28,10 @@ import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.widget.PagerAdapter;
 import com.android.internal.widget.ViewPager;
 
+import java.util.HashSet;
+import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * Skeletal {@link PagerAdapter} implementation of a work or personal profile page for
@@ -34,6 +39,7 @@ import java.util.Objects;
  */
 public abstract class AbstractMultiProfilePagerAdapter extends PagerAdapter {
 
+    private static final String TAG = "AbstractMultiProfilePagerAdapter";
     static final int PROFILE_PERSONAL = 0;
     static final int PROFILE_WORK = 1;
     @IntDef({PROFILE_PERSONAL, PROFILE_WORK})
@@ -41,10 +47,23 @@ public abstract class AbstractMultiProfilePagerAdapter extends PagerAdapter {
 
     private final Context mContext;
     private int mCurrentPage;
+    private OnProfileSelectedListener mOnProfileSelectedListener;
+    private Set<Integer> mLoadedPages;
+    private final UserHandle mPersonalProfileUserHandle;
+    private final UserHandle mWorkProfileUserHandle;
 
-    AbstractMultiProfilePagerAdapter(Context context, int currentPage) {
+    AbstractMultiProfilePagerAdapter(Context context, int currentPage,
+            UserHandle personalProfileUserHandle,
+            UserHandle workProfileUserHandle) {
         mContext = Objects.requireNonNull(context);
         mCurrentPage = currentPage;
+        mLoadedPages = new HashSet<>();
+        mPersonalProfileUserHandle = personalProfileUserHandle;
+        mWorkProfileUserHandle = workProfileUserHandle;
+    }
+
+    void setOnProfileSelectedListener(OnProfileSelectedListener listener) {
+        mOnProfileSelectedListener = listener;
     }
 
     Context getContext() {
@@ -57,15 +76,29 @@ public abstract class AbstractMultiProfilePagerAdapter extends PagerAdapter {
      * page and rebuilds the list.
      */
     void setupViewPager(ViewPager viewPager) {
-        viewPager.setCurrentItem(mCurrentPage);
         viewPager.setOnPageChangeListener(new ViewPager.SimpleOnPageChangeListener() {
             @Override
             public void onPageSelected(int position) {
                 mCurrentPage = position;
-                getActiveListAdapter().rebuildList();
+                if (!mLoadedPages.contains(position)) {
+                    rebuildActiveTab(true);
+                    mLoadedPages.add(position);
+                }
+                if (mOnProfileSelectedListener != null) {
+                    mOnProfileSelectedListener.onProfileSelected(position);
+                }
             }
         });
         viewPager.setAdapter(this);
+        viewPager.setCurrentItem(mCurrentPage);
+        mLoadedPages.add(mCurrentPage);
+    }
+
+    void clearInactiveProfileCache() {
+        if (mLoadedPages.size() == 1) {
+            return;
+        }
+        mLoadedPages.remove(1 - mCurrentPage);
     }
 
     @Override
@@ -90,7 +123,8 @@ public abstract class AbstractMultiProfilePagerAdapter extends PagerAdapter {
         return mCurrentPage;
     }
 
-    UserHandle getCurrentUserHandle() {
+    @VisibleForTesting
+    public UserHandle getCurrentUserHandle() {
         return getActiveListAdapter().mResolverListController.getUserHandle();
     }
 
@@ -135,29 +169,102 @@ public abstract class AbstractMultiProfilePagerAdapter extends PagerAdapter {
      * <p>This method is meant to be implemented with an implementation-specific return type
      * depending on the adapter type.
      */
-    abstract Object getAdapterForIndex(int pageIndex);
+    @VisibleForTesting
+    public abstract Object getAdapterForIndex(int pageIndex);
 
+    /**
+     * Returns the {@link ResolverListAdapter} instance of the profile that represents
+     * <code>userHandle</code>. If there is no such adapter for the specified
+     * <code>userHandle</code>, returns {@code null}.
+     * <p>For example, if there is a work profile on the device with user id 10, calling this method
+     * with <code>UserHandle.of(10)</code> returns the work profile {@link ResolverListAdapter}.
+     */
+    @Nullable
+    abstract ResolverListAdapter getListAdapterForUserHandle(UserHandle userHandle);
+
+    /**
+     * Returns the {@link ResolverListAdapter} instance of the profile that is currently visible
+     * to the user.
+     * <p>For example, if the user is viewing the work tab in the share sheet, this method returns
+     * the work profile {@link ResolverListAdapter}.
+     * @see #getInactiveListAdapter()
+     */
     @VisibleForTesting
     public abstract ResolverListAdapter getActiveListAdapter();
 
     /**
      * If this is a device with a work profile, returns the {@link ResolverListAdapter} instance
-     * of the profile that is not the active one. Otherwise returns {@code null}. For example,
-     * if the share sheet is launched in the work profile, this method returns the personal
-     * profile {@link ResolverListAdapter}.
+     * of the profile that is <b><i>not</i></b> currently visible to the user. Otherwise returns
+     * {@code null}.
+     * <p>For example, if the user is viewing the work tab in the share sheet, this method returns
+     * the personal profile {@link ResolverListAdapter}.
      * @see #getActiveListAdapter()
      */
     @VisibleForTesting
     public abstract @Nullable ResolverListAdapter getInactiveListAdapter();
 
+    public abstract ResolverListAdapter getPersonalListAdapter();
+
+    public abstract @Nullable ResolverListAdapter getWorkListAdapter();
+
     abstract Object getCurrentRootAdapter();
 
-    abstract ViewGroup getCurrentAdapterView();
+    abstract ViewGroup getActiveAdapterView();
+
+    abstract @Nullable ViewGroup getInactiveAdapterView();
+
+    boolean rebuildActiveTab(boolean post) {
+        return rebuildTab(getActiveListAdapter(), post);
+    }
+
+    boolean rebuildInactiveTab(boolean post) {
+        if (getItemCount() == 1) {
+            return false;
+        }
+        return rebuildTab(getInactiveListAdapter(), post);
+    }
+
+    private boolean rebuildTab(ResolverListAdapter activeListAdapter, boolean doPostProcessing) {
+        UserHandle listUserHandle = activeListAdapter.getUserHandle();
+        if (UserHandle.myUserId() != listUserHandle.getIdentifier() &&
+                !hasAppsInOtherProfile(activeListAdapter)) {
+            // TODO(arangelov): Show empty state UX here
+            return false;
+        } else {
+            return activeListAdapter.rebuildList(doPostProcessing);
+        }
+    }
+
+    private boolean hasAppsInOtherProfile(ResolverListAdapter adapter) {
+        if (mWorkProfileUserHandle == null) {
+            return false;
+        }
+        List<ResolverActivity.ResolvedComponentInfo> resolversForIntent =
+                adapter.getResolversForUser(UserHandle.of(UserHandle.myUserId()));
+        for (ResolverActivity.ResolvedComponentInfo info : resolversForIntent) {
+            ResolveInfo resolveInfo = info.getResolveInfoAt(0);
+            if (resolveInfo.targetUserId != UserHandle.USER_CURRENT) {
+                return true;
+            }
+        }
+        return false;
+    }
 
     protected class ProfileDescriptor {
         final ViewGroup rootView;
         ProfileDescriptor(ViewGroup rootView) {
             this.rootView = rootView;
         }
+    }
+
+    public interface OnProfileSelectedListener {
+        /**
+         * Callback for when the user changes the active tab from personal to work or vice versa.
+         * <p>This callback is only called when the intent resolver or share sheet shows
+         * the work and personal profiles.
+         * @param profileIndex {@link #PROFILE_PERSONAL} if the personal profile was selected or
+         * {@link #PROFILE_WORK} if the work profile was selected.
+         */
+        void onProfileSelected(int profileIndex);
     }
 }

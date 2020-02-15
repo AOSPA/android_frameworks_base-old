@@ -29,11 +29,13 @@ import android.os.Handler;
 import android.os.Looper;
 import android.os.Message;
 import android.provider.Settings.Global;
+import android.telephony.AccessNetworkConstants;
 import android.telephony.Annotation;
 import android.telephony.CdmaEriInformation;
 import android.telephony.CellSignalStrength;
 import android.telephony.CellSignalStrengthCdma;
 import android.telephony.CellSignalStrengthNr;
+import android.telephony.DataSpecificRegistrationInfo;
 import android.telephony.ims.ImsMmTelManager;
 import android.telephony.ims.ImsReasonInfo;
 import android.telephony.ims.feature.MmTelFeature;
@@ -51,9 +53,9 @@ import com.android.ims.ImsException;
 import com.android.ims.ImsManager;
 import com.android.ims.FeatureConnector;
 import com.android.internal.annotations.VisibleForTesting;
-import com.android.internal.telephony.TelephonyIntents;
 import com.android.internal.telephony.PhoneConstants;
 import com.android.internal.telephony.PhoneConstants.DataState;
+import com.android.internal.telephony.TelephonyIntents;
 import com.android.settingslib.Utils;
 import com.android.settingslib.graph.SignalDrawable;
 import com.android.settingslib.net.SignalStrengthUtil;
@@ -390,9 +392,9 @@ public class MobileSignalController extends SignalController<
 
     private int getNumLevels() {
         if (mInflateSignalStrengths) {
-            return SignalStrength.NUM_SIGNAL_STRENGTH_BINS + 1;
+            return CellSignalStrength.getNumSignalStrengthLevels() + 1;
         }
-        return SignalStrength.NUM_SIGNAL_STRENGTH_BINS;
+        return CellSignalStrength.getNumSignalStrengthLevels();
     }
 
     @Override
@@ -586,12 +588,12 @@ public class MobileSignalController extends SignalController<
 
     public void handleBroadcast(Intent intent) {
         String action = intent.getAction();
-        if (action.equals(TelephonyIntents.SPN_STRINGS_UPDATED_ACTION)) {
-            updateNetworkName(intent.getBooleanExtra(TelephonyIntents.EXTRA_SHOW_SPN, false),
-                    intent.getStringExtra(TelephonyIntents.EXTRA_SPN),
-                    intent.getStringExtra(TelephonyIntents.EXTRA_DATA_SPN),
-                    intent.getBooleanExtra(TelephonyIntents.EXTRA_SHOW_PLMN, false),
-                    intent.getStringExtra(TelephonyIntents.EXTRA_PLMN));
+        if (action.equals(TelephonyManager.ACTION_SERVICE_PROVIDERS_UPDATED)) {
+            updateNetworkName(intent.getBooleanExtra(TelephonyManager.EXTRA_SHOW_SPN, false),
+                    intent.getStringExtra(TelephonyManager.EXTRA_SPN),
+                    intent.getStringExtra(TelephonyManager.EXTRA_DATA_SPN),
+                    intent.getBooleanExtra(TelephonyManager.EXTRA_SHOW_PLMN, false),
+                    intent.getStringExtra(TelephonyManager.EXTRA_PLMN));
             notifyListenersIfNecessary();
         } else if (action.equals(TelephonyManager.ACTION_DEFAULT_DATA_SUBSCRIPTION_CHANGED)) {
             updateDataSim();
@@ -852,10 +854,19 @@ public class MobileSignalController extends SignalController<
         notifyListenersIfNecessary();
     }
 
+    private int getNrState(ServiceState serviceState) {
+        NetworkRegistrationInfo nri = serviceState.getNetworkRegistrationInfo(
+                NetworkRegistrationInfo.DOMAIN_PS, AccessNetworkConstants.TRANSPORT_TYPE_WWAN);
+        if (nri != null) {
+            return nri.getNrState();
+        }
+        return NetworkRegistrationInfo.NR_STATE_NONE;
+    }
+
     private MobileIconGroup getNr5GIconGroup() {
         if (mServiceState == null) return null;
 
-        int nrState = mServiceState.getNrState();
+        int nrState = getNrState(mServiceState);
         if (nrState == NetworkRegistrationInfo.NR_STATE_CONNECTED) {
             // Check if the NR 5G is using millimeter wave and the icon is config.
             if (mServiceState.getNrFrequencyRange() == ServiceState.FREQUENCY_RANGE_MMWAVE) {
@@ -1124,10 +1135,22 @@ public class MobileSignalController extends SignalController<
             if (mDataNetType == TelephonyManager.NETWORK_TYPE_LTE) {
                 if (isCarrierSpecificDataIcon()) {
                     mCAPlus = true;
-                } else if (mServiceState != null && mServiceState.isUsingCarrierAggregation()) {
+                } else if (mServiceState != null && isUsingCarrierAggregation(mServiceState)) {
                     mCA = true;
                 }
             }
+        }
+
+        private boolean isUsingCarrierAggregation(ServiceState serviceState) {
+            NetworkRegistrationInfo nri = serviceState.getNetworkRegistrationInfo(
+                    NetworkRegistrationInfo.DOMAIN_PS, AccessNetworkConstants.TRANSPORT_TYPE_WWAN);
+            if (nri != null) {
+                DataSpecificRegistrationInfo dsri = nri.getDataSpecificInfo();
+                if (dsri != null) {
+                    return dsri.isUsingCarrierAggregation();
+                }
+            }
+            return false;
         }
 
         @Override

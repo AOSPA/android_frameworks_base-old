@@ -18,7 +18,6 @@ package com.android.server.notification;
 
 import static android.app.role.RoleManager.ROLE_DIALER;
 import static android.app.role.RoleManager.ROLE_EMERGENCY;
-import static android.app.role.RoleManager.ROLE_SMS;
 import static android.content.pm.PackageManager.MATCH_ALL;
 
 import static junit.framework.Assert.assertFalse;
@@ -55,6 +54,8 @@ import android.util.ArraySet;
 import android.util.AtomicFile;
 import android.util.Pair;
 
+import com.android.internal.logging.InstanceIdSequence;
+import com.android.internal.logging.InstanceIdSequenceFake;
 import com.android.server.LocalServices;
 import com.android.server.UiServiceTestCase;
 import com.android.server.lights.LightsManager;
@@ -92,24 +93,23 @@ public class RoleObserverTest extends UiServiceTestCase {
     private Executor mExecutor;
     @Mock
     private RoleManager mRoleManager;
-
+    NotificationRecordLoggerFake mNotificationRecordLogger = new NotificationRecordLoggerFake();
+    private InstanceIdSequence mNotificationInstanceIdSequence = new InstanceIdSequenceFake(
+            1 << 30);
     private List<UserInfo> mUsers;
 
     private static class TestableNotificationManagerService extends NotificationManagerService {
-
-        TestableNotificationManagerService(Context context) {
-            super(context);
+        TestableNotificationManagerService(Context context,
+                NotificationRecordLogger logger,
+                InstanceIdSequence notificationInstanceIdSequence) {
+            super(context, logger, notificationInstanceIdSequence);
         }
 
         @Override
-        protected void handleSavePolicyFile() {
-            return;
-        }
+        protected void handleSavePolicyFile() { }
 
         @Override
-        protected void loadPolicyFile() {
-            return;
-        }
+        protected void loadPolicyFile() { }
     }
 
     @Before
@@ -125,7 +125,8 @@ public class RoleObserverTest extends UiServiceTestCase {
         mUsers.add(new UserInfo(10, "second", 0));
         when(mUm.getUsers()).thenReturn(mUsers);
 
-        mService = new TestableNotificationManagerService(mContext);
+        mService = new TestableNotificationManagerService(mContext, mNotificationRecordLogger,
+                mNotificationInstanceIdSequence);
         mRoleObserver = mService.new RoleObserver(mRoleManager, mPm, mExecutor);
 
         try {

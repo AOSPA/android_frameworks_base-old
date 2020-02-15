@@ -18,7 +18,6 @@ package android.app.appsearch;
 import android.annotation.CallbackExecutor;
 import android.annotation.NonNull;
 import android.annotation.SystemService;
-import android.app.appsearch.AppSearch.Document;
 import android.content.Context;
 import android.os.RemoteException;
 
@@ -26,6 +25,7 @@ import com.android.internal.infra.AndroidFuture;
 
 import com.google.android.icing.proto.SchemaProto;
 import com.google.android.icing.proto.SearchResultProto;
+import com.google.android.icing.proto.SearchSpecProto;
 import com.google.android.icing.proto.StatusProto;
 import com.google.android.icing.protobuf.InvalidProtocolBufferException;
 
@@ -149,25 +149,26 @@ public class AppSearchManager {
     }
 
     /**
-     * Index {@link android.app.appsearch.AppSearch.Document Documents} into AppSearch.
+     * Index {@link AppSearchDocument Documents} into AppSearch.
      *
      * <p>You should not call this method directly; instead, use the
      * {@code AppSearch#putDocuments()} API provided by JetPack.
      *
-     * <p>Each {@link AppSearch.Document Document's} {@code schemaType} field must be set to the
+     * <p>Each {@link AppSearchDocument Document's} {@code schemaType} field must be set to the
      * name of a schema type previously registered via the {@link #setSchema} method.
      *
-     * @param documents {@link Document Documents} that need to be indexed.
+     * @param documents {@link AppSearchDocument Documents} that need to be indexed.
      * @return An {@link AppSearchBatchResult} mapping the document URIs to {@link Void} if they
      *     were successfully indexed, or a {@link Throwable} describing the failure if they could
      *     not be indexed.
      * @hide
      */
-    public AppSearchBatchResult<String, Void> putDocuments(@NonNull List<Document> documents) {
+    public AppSearchBatchResult<String, Void> putDocuments(
+            @NonNull List<AppSearchDocument> documents) {
         // TODO(b/146386470): Transmit these documents as a RemoteStream instead of sending them in
         // one big list.
         List<byte[]> documentsBytes = new ArrayList<>(documents.size());
-        for (Document document : documents) {
+        for (AppSearchDocument document : documents) {
             documentsBytes.add(document.getProto().toByteArray());
         }
         AndroidFuture<AppSearchBatchResult> future = new AndroidFuture<>();
@@ -186,28 +187,28 @@ public class AppSearchManager {
      *<p>Currently we support following features in the raw query format:
      * <ul>
      *     <li>AND
-     *     AND joins (e.g. “match documents that have both the terms ‘dog’ and
+     *     <p>AND joins (e.g. “match documents that have both the terms ‘dog’ and
      *     ‘cat’”).
      *     Example: hello world matches documents that have both ‘hello’ and ‘world’
      *     <li>OR
-     *     OR joins (e.g. “match documents that have either the term ‘dog’ or
+     *     <p>OR joins (e.g. “match documents that have either the term ‘dog’ or
      *     ‘cat’”).
      *     Example: dog OR puppy
      *     <li>Exclusion
-     *     Exclude a term (e.g. “match documents that do
+     *     <p>Exclude a term (e.g. “match documents that do
      *     not have the term ‘dog’”).
      *     Example: -dog excludes the term ‘dog’
      *     <li>Grouping terms
-     *     Allow for conceptual grouping of subqueries to enable hierarchical structures (e.g.
+     *     <p>Allow for conceptual grouping of subqueries to enable hierarchical structures (e.g.
      *     “match documents that have either ‘dog’ or ‘puppy’, and either ‘cat’ or ‘kitten’”).
      *     Example: (dog puppy) (cat kitten) two one group containing two terms.
      *     <li>Property restricts
-     *      which properties of a document to specifically match terms in (e.g.
+     *     <p> Specifies which properties of a document to specifically match terms in (e.g.
      *     “match documents where the ‘subject’ property contains ‘important’”).
      *     Example: subject:important matches documents with the term ‘important’ in the
      *     ‘subject’ property
      *     <li>Schema type restricts
-     *     This is similar to property restricts, but allows for restricts on top-level document
+     *     <p>This is similar to property restricts, but allows for restricts on top-level document
      *     fields, such as schema_type. Clients should be able to limit their query to documents of
      *     a certain schema_type (e.g. “match documents that are of the ‘Email’ schema_type”).
      *     Example: { schema_type_filters: “Email”, “Video”,query: “dog” } will match documents
@@ -263,7 +264,11 @@ public class AppSearchManager {
         }, executor);
 
         try {
-            mService.query(queryExpression, searchSpec.getProto().toByteArray(), future);
+            SearchSpecProto searchSpecProto = searchSpec.getSearchSpecProto();
+            searchSpecProto = searchSpecProto.toBuilder().setQuery(queryExpression).build();
+            mService.query(searchSpecProto.toByteArray(),
+                    searchSpec.getResultSpecProto().toByteArray(),
+                    searchSpec.getScoringSpecProto().toByteArray(), future);
         } catch (RemoteException e) {
             future.completeExceptionally(e);
         }

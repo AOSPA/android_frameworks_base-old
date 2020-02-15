@@ -16,8 +16,6 @@
 
 package android.view;
 
-import static android.view.InsetsController.LAYOUT_INSETS_DURING_ANIMATION_HIDDEN;
-import static android.view.InsetsController.LAYOUT_INSETS_DURING_ANIMATION_SHOWN;
 import static android.view.InsetsState.ISIDE_BOTTOM;
 import static android.view.InsetsState.ISIDE_FLOATING;
 import static android.view.InsetsState.ISIDE_LEFT;
@@ -40,6 +38,7 @@ import android.view.WindowInsets.Type.InsetsType;
 import android.view.WindowInsetsAnimationCallback.AnimationBounds;
 import android.view.WindowInsetsAnimationCallback.InsetsAnimation;
 import android.view.WindowManager.LayoutParams;
+import android.view.animation.Interpolator;
 
 import com.android.internal.annotations.VisibleForTesting;
 
@@ -84,8 +83,8 @@ public class InsetsAnimationControlImpl implements WindowInsetsAnimationControll
     public InsetsAnimationControlImpl(SparseArray<InsetsSourceControl> controls, Rect frame,
             InsetsState state, WindowInsetsAnimationControlListener listener,
             @InsetsType int types,
-            InsetsAnimationControlCallbacks controller, long durationMs, boolean fade,
-            @LayoutInsetsDuringAnimation int layoutInsetsDuringAnimation) {
+            InsetsAnimationControlCallbacks controller, long durationMs, Interpolator interpolator,
+            boolean fade, @LayoutInsetsDuringAnimation int layoutInsetsDuringAnimation) {
         mControls = controls;
         mListener = listener;
         mTypes = types;
@@ -101,8 +100,8 @@ public class InsetsAnimationControlImpl implements WindowInsetsAnimationControll
         mFrame = new Rect(frame);
         buildTypeSourcesMap(mTypeSideMap, mSideSourceMap, mControls);
 
-        mAnimation = new WindowInsetsAnimationCallback.InsetsAnimation(mTypes,
-                InsetsController.INTERPOLATOR, durationMs);
+        mAnimation = new WindowInsetsAnimationCallback.InsetsAnimation(mTypes, interpolator,
+                durationMs);
         mAnimation.setAlpha(getCurrentAlpha());
         mController.startAnimation(this, listener, types, mAnimation,
                 new AnimationBounds(mHiddenInsets, mShownInsets), layoutInsetsDuringAnimation);
@@ -187,16 +186,10 @@ public class InsetsAnimationControlImpl implements WindowInsetsAnimationControll
 
     @Override
     public void finish(boolean shown) {
-        if (mCancelled) {
+        if (mCancelled || mFinished) {
             return;
         }
-        InsetsState state = new InsetsState(mController.getState());
-        for (int i = mControls.size() - 1; i >= 0; i--) {
-            InsetsSourceControl control = mControls.valueAt(i);
-            state.getSource(control.getType()).setVisible(shown);
-        }
-        Insets insets = getInsetsFromState(state, mFrame, null /* typeSideMap */);
-        setInsetsAndAlpha(insets, 1f /* alpha */, shown ? 1f : 0f /* fraction */);
+        setInsetsAndAlpha(shown ? mShownInsets : mHiddenInsets, 1f /* alpha */, 1f /* fraction */);
         mFinished = true;
         mShownOnFinish = shown;
     }
@@ -213,6 +206,10 @@ public class InsetsAnimationControlImpl implements WindowInsetsAnimationControll
         }
         mCancelled = true;
         mListener.onCancelled();
+    }
+
+    public boolean isCancelled() {
+        return mCancelled;
     }
 
     InsetsAnimation getAnimation() {
@@ -277,8 +274,8 @@ public class InsetsAnimationControlImpl implements WindowInsetsAnimationControll
             if (leash != null) {
                 // TODO: use a better interpolation for fade.
                 alpha = mFade ? ((float) maxInset / inset * 0.3f + 0.7f) : alpha;
-                surfaceParams.add(new SurfaceParams(leash, alpha, mTmpMatrix,
-                        null /* windowCrop */, 0 /* layer */, 0f /* cornerRadius*/,
+                surfaceParams.add(new SurfaceParams(leash, side == ISIDE_FLOATING ? 1 : alpha,
+                        mTmpMatrix, null /* windowCrop */, 0 /* layer */, 0f /* cornerRadius*/,
                         side == ISIDE_FLOATING ? state.getSource(source.getType()).isVisible()
                                 : inset != 0 /* visible */));
             }

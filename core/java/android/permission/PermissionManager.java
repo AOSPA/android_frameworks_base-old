@@ -93,7 +93,10 @@ public final class PermissionManager {
      */
     @TestApi
     @SystemApi
-    @RequiresPermission(Manifest.permission.ADJUST_RUNTIME_PERMISSIONS_POLICY)
+    @RequiresPermission(anyOf = {
+            Manifest.permission.ADJUST_RUNTIME_PERMISSIONS_POLICY,
+            Manifest.permission.UPGRADE_RUNTIME_PERMISSIONS
+    })
     public @IntRange(from = 0) int getRuntimePermissionsVersion() {
         try {
             return mPackageManager.getRuntimePermissionsVersion(mContext.getUserId());
@@ -111,7 +114,10 @@ public final class PermissionManager {
      */
     @TestApi
     @SystemApi
-    @RequiresPermission(Manifest.permission.ADJUST_RUNTIME_PERMISSIONS_POLICY)
+    @RequiresPermission(anyOf = {
+            Manifest.permission.ADJUST_RUNTIME_PERMISSIONS_POLICY,
+            Manifest.permission.UPGRADE_RUNTIME_PERMISSIONS
+    })
     public void setRuntimePermissionsVersion(@IntRange(from = 0) int version) {
         try {
             mPackageManager.setRuntimePermissionsVersion(version, mContext.getUserId());
@@ -260,6 +266,28 @@ public final class PermissionManager {
         try {
             mPermissionManager.revokeDefaultPermissionsFromDisabledTelephonyDataServices(
                     packageNames, user.getIdentifier());
+            executor.execute(() -> callback.accept(true));
+        } catch (RemoteException e) {
+            e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Grant default permissions to currently enabled carrier apps
+     * @param packageNames Package names of the apps to be granted permissions
+     * @param user The user handle
+     * @param executor The executor for the callback
+     * @param callback The callback provided by caller to be notified when grant completes
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(Manifest.permission.GRANT_RUNTIME_PERMISSIONS_TO_TELEPHONY_DEFAULTS)
+    public void grantDefaultPermissionsToEnabledCarrierApps(@NonNull String[] packageNames,
+            @NonNull UserHandle user, @NonNull @CallbackExecutor Executor executor,
+            @NonNull Consumer<Boolean> callback) {
+        try {
+            mPermissionManager.grantDefaultPermissionsToEnabledCarrierApps(packageNames,
+                    user.getIdentifier());
             executor.execute(() -> callback.accept(true));
         } catch (RemoteException e) {
             e.rethrowFromSystemServer();

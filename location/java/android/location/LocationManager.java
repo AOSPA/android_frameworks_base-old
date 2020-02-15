@@ -74,7 +74,7 @@ import java.util.function.Consumer;
  * still return location results, but the exact location will be obfuscated to a coarse level of
  * accuracy.
  */
-@SuppressWarnings({"deprecation", "DeprecatedIsStillUsed"})
+@SuppressWarnings({"deprecation"})
 @SystemService(Context.LOCATION_SERVICE)
 @RequiresFeature(PackageManager.FEATURE_LOCATION)
 public class LocationManager {
@@ -2413,21 +2413,6 @@ public class LocationManager {
             } catch (RemoteException e) {
                 throw e.rethrowFromSystemServer();
             }
-        }
-    }
-
-    /**
-     * Used by NetInitiatedActivity to report user response
-     * for network initiated GPS fix requests.
-     *
-     * @hide
-     */
-    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
-    public boolean sendNiResponse(int notifId, int userResponse) {
-        try {
-            return mService.sendNiResponse(notifId, userResponse);
-        } catch (RemoteException e) {
-            throw e.rethrowFromSystemServer();
         }
     }
 

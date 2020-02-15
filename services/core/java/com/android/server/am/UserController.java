@@ -130,6 +130,10 @@ class UserController implements Handler.Callback {
     // giving up on them and unfreezing the screen.
     static final int USER_SWITCH_TIMEOUT_MS = 3 * 1000;
 
+    // Amount of time we wait for observers to handle a user switch before we log a warning.
+    // Must be smaller than USER_SWITCH_TIMEOUT_MS.
+    private static final int USER_SWITCH_WARNING_TIMEOUT_MS = 500;
+
     // ActivityManager thread message constants
     static final int REPORT_USER_SWITCH_MSG = 10;
     static final int CONTINUE_USER_SWITCH_MSG = 20;
@@ -1615,9 +1619,13 @@ class UserController implements Handler.Callback {
                             synchronized (mLock) {
                                 long delay = SystemClock.elapsedRealtime() - dispatchStartedTime;
                                 if (delay > USER_SWITCH_TIMEOUT_MS) {
-                                    Slog.e(TAG, "User switch timeout: observer "  + name
+                                    Slog.e(TAG, "User switch timeout: observer " + name
                                             + " sent result after " + delay + " ms");
+                                } else if (delay > USER_SWITCH_WARNING_TIMEOUT_MS) {
+                                    Slog.w(TAG, "User switch slowed down by observer " + name
+                                            + ": result sent after " + delay + " ms");
                                 }
+
                                 curWaitingUserSwitchCallbacks.remove(name);
                                 // Continue switching if all callbacks have been notified and
                                 // user switching session is still valid
@@ -1689,6 +1697,9 @@ class UserController implements Handler.Callback {
                     intent.addFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY
                             | Intent.FLAG_RECEIVER_FOREGROUND);
                     intent.putExtra(Intent.EXTRA_USER_HANDLE, profileUserId);
+                    // Also, add the UserHandle for mainline modules which can't use the @hide
+                    // EXTRA_USER_HANDLE.
+                    intent.putExtra(Intent.EXTRA_USER, UserHandle.of(profileUserId));
                     mInjector.broadcastIntent(intent,
                             null, null, 0, null, null, null, AppOpsManager.OP_NONE,
                             null, false, false, MY_PID, SYSTEM_UID, callingUid, callingPid,
@@ -1705,6 +1716,9 @@ class UserController implements Handler.Callback {
                     intent.addFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY
                             | Intent.FLAG_RECEIVER_FOREGROUND);
                     intent.putExtra(Intent.EXTRA_USER_HANDLE, profileUserId);
+                    // Also, add the UserHandle for mainline modules which can't use the @hide
+                    // EXTRA_USER_HANDLE.
+                    intent.putExtra(Intent.EXTRA_USER, UserHandle.of(profileUserId));
                     mInjector.broadcastIntent(intent,
                             null, null, 0, null, null, null, AppOpsManager.OP_NONE,
                             null, false, false, MY_PID, SYSTEM_UID, callingUid, callingPid,
@@ -1714,6 +1728,9 @@ class UserController implements Handler.Callback {
                 intent.addFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY
                         | Intent.FLAG_RECEIVER_FOREGROUND);
                 intent.putExtra(Intent.EXTRA_USER_HANDLE, newUserId);
+                // Also, add the UserHandle for mainline modules which can't use the @hide
+                // EXTRA_USER_HANDLE.
+                intent.putExtra(Intent.EXTRA_USER, UserHandle.of(newUserId));
                 mInjector.broadcastIntent(intent,
                         null, null, 0, null, null,
                         new String[] {android.Manifest.permission.MANAGE_USERS},

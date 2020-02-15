@@ -46,6 +46,7 @@
 #include <signal.h>
 #include <dirent.h>
 #include <assert.h>
+#include <bionic/malloc.h>
 
 #include <string>
 #include <vector>
@@ -144,6 +145,7 @@ extern int register_android_os_Parcel(JNIEnv* env);
 extern int register_android_os_SELinux(JNIEnv* env);
 extern int register_android_os_VintfObject(JNIEnv *env);
 extern int register_android_os_VintfRuntimeInfo(JNIEnv *env);
+extern int register_android_os_storage_StorageManager(JNIEnv* env);
 extern int register_android_os_SystemProperties(JNIEnv *env);
 extern int register_android_os_SystemClock(JNIEnv* env);
 extern int register_android_os_Trace(JNIEnv* env);
@@ -239,6 +241,14 @@ static void com_android_internal_os_RuntimeInit_nativeSetExitWithoutCleanup(JNIE
     gCurRuntime->setExitWithoutCleanup(exitWithoutCleanup);
 }
 
+static void com_android_internal_os_RuntimeInit_nativeDisableHeapPointerTagging(
+        JNIEnv* env, jobject clazz) {
+    HeapTaggingLevel tag_level = M_HEAP_TAGGING_LEVEL_NONE;
+    if (!android_mallopt(M_SET_HEAP_TAGGING_LEVEL, &tag_level, sizeof(tag_level))) {
+        ALOGE("ERROR: could not disable heap pointer tagging\n");
+    }
+}
+
 /*
  * JNI registration.
  */
@@ -246,10 +256,12 @@ static void com_android_internal_os_RuntimeInit_nativeSetExitWithoutCleanup(JNIE
 int register_com_android_internal_os_RuntimeInit(JNIEnv* env)
 {
     const JNINativeMethod methods[] = {
-        { "nativeFinishInit", "()V",
-            (void*) com_android_internal_os_RuntimeInit_nativeFinishInit },
-        { "nativeSetExitWithoutCleanup", "(Z)V",
-            (void*) com_android_internal_os_RuntimeInit_nativeSetExitWithoutCleanup },
+            {"nativeFinishInit", "()V",
+             (void*)com_android_internal_os_RuntimeInit_nativeFinishInit},
+            {"nativeSetExitWithoutCleanup", "(Z)V",
+             (void*)com_android_internal_os_RuntimeInit_nativeSetExitWithoutCleanup},
+            {"nativeDisableHeapPointerTagging", "()V",
+             (void*)com_android_internal_os_RuntimeInit_nativeDisableHeapPointerTagging},
     };
     return jniRegisterNativeMethods(env, "com/android/internal/os/RuntimeInit",
         methods, NELEM(methods));
@@ -613,6 +625,8 @@ int AndroidRuntime::startVm(JavaVM** pJavaVM, JNIEnv** pEnv, bool zygote, bool p
     char jitprithreadweightOptBuf[sizeof("-Xjitprithreadweight:")-1 + PROPERTY_VALUE_MAX];
     char jittransitionweightOptBuf[sizeof("-Xjittransitionweight:")-1 + PROPERTY_VALUE_MAX];
     char hotstartupsamplesOptsBuf[sizeof("-Xps-hot-startup-method-samples:")-1 + PROPERTY_VALUE_MAX];
+    char saveResolvedClassesDelayMsOptsBuf[
+            sizeof("-Xps-save-resolved-classes-delay-ms:")-1 + PROPERTY_VALUE_MAX];
     char madviseRandomOptsBuf[sizeof("-XX:MadviseRandomAccess:")-1 + PROPERTY_VALUE_MAX];
     char gctypeOptsBuf[sizeof("-Xgc:")-1 + PROPERTY_VALUE_MAX];
     char backgroundgcOptsBuf[sizeof("-XX:BackgroundGC=")-1 + PROPERTY_VALUE_MAX];
@@ -807,6 +821,9 @@ int AndroidRuntime::startVm(JavaVM** pJavaVM, JNIEnv** pEnv, bool zygote, bool p
      */
     parseRuntimeOption("dalvik.vm.hot-startup-method-samples", hotstartupsamplesOptsBuf,
             "-Xps-hot-startup-method-samples:");
+
+    parseRuntimeOption("dalvik.vm.ps-resolved-classes-delay-ms", saveResolvedClassesDelayMsOptsBuf,
+            "-Xps-save-resolved-classes-delay-ms:");
 
     property_get("ro.config.low_ram", propBuf, "");
     if (strcmp(propBuf, "true") == 0) {
@@ -1455,6 +1472,7 @@ static const RegJNIRec gRegJNI[] = {
     REG_JNI(register_android_os_HwParcel),
     REG_JNI(register_android_os_HwRemoteBinder),
     REG_JNI(register_android_os_NativeHandle),
+    REG_JNI(register_android_os_storage_StorageManager),
     REG_JNI(register_android_os_VintfObject),
     REG_JNI(register_android_os_VintfRuntimeInfo),
     REG_JNI(register_android_service_DataLoaderService),

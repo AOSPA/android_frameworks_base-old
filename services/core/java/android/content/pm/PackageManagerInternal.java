@@ -33,6 +33,7 @@ import android.content.pm.parsing.AndroidPackage;
 import android.content.pm.parsing.ComponentParseUtils;
 import android.os.Bundle;
 import android.os.PersistableBundle;
+import android.util.ArrayMap;
 import android.util.ArraySet;
 import android.util.SparseArray;
 
@@ -169,7 +170,7 @@ public abstract class PackageManagerInternal {
      * Return a List of all application packages that are installed on the
      * device, for a specific user. If flag GET_UNINSTALLED_PACKAGES has been
      * set, a list of all applications including those deleted with
-     * {@code DONT_DELETE_DATA} (partially installed apps with data directory)
+     * {@code DELETE_KEEP_DATA} (partially installed apps with data directory)
      * will be returned.
      *
      * @param flags Additional option flags to modify the data returned.
@@ -183,7 +184,7 @@ public abstract class PackageManagerInternal {
      *         information is retrieved from the list of uninstalled
      *         applications (which includes installed applications as well as
      *         applications with data directory i.e. applications which had been
-     *         deleted with {@code DONT_DELETE_DATA} flag set).
+     *         deleted with {@code DELETE_KEEP_DATA} flag set).
      */
     public abstract List<ApplicationInfo> getInstalledApplications(
             @ApplicationInfoFlags int flags, @UserIdInt int userId, int callingUid);
@@ -251,11 +252,23 @@ public abstract class PackageManagerInternal {
             String packageName, int userId);
 
     /**
+     * Do a straight uid lookup for the given package/application in the given user. This enforces
+     * app visibility rules and permissions. Call {@link #getPackageUidInternal} for the internal
+     * implementation.
+     * @deprecated Use {@link PackageManager#getPackageUid(String, int)}
+     * @return The app's uid, or < 0 if the package was not found in that user
+     */
+    @Deprecated
+    public abstract int getPackageUid(String packageName,
+            @PackageInfoFlags int flags, int userId);
+
+    /**
      * Do a straight uid lookup for the given package/application in the given user.
      * @see PackageManager#getPackageUidAsUser(String, int, int)
      * @return The app's uid, or < 0 if the package was not found in that user
+     * TODO(b/148235092): rename this to getPackageUid
      */
-    public abstract int getPackageUid(String packageName,
+    public abstract int getPackageUidInternal(String packageName,
             @PackageInfoFlags int flags, int userId);
 
     /**
@@ -687,6 +700,27 @@ public abstract class PackageManagerInternal {
     @NonNull
     public abstract String[] getSharedUserPackagesForPackage(@NonNull String packageName,
             int userId);
+
+    /**
+     * Return the processes that have been declared for a uid.
+     *
+     * @param uid The uid to query.
+     *
+     * @return Returns null if there are no declared processes for the uid; otherwise,
+     * returns the set of processes it declared.
+     */
+    public abstract ArrayMap<String, ProcessInfo> getProcessesForUid(int uid);
+
+    /**
+     * Return the gids associated with a particular permission.
+     *
+     * @param permissionName The name of the permission to query.
+     * @param userId The user id the gids will be associated with.
+     *
+     * @return Returns null if there are no gids associated with the permission, otherwise an
+     * array if the gid ints.
+     */
+    public abstract int[] getPermissionGids(String permissionName, int userId);
 
     /**
      * Return if device is currently in a "core" boot environment, typically

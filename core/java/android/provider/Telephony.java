@@ -37,7 +37,6 @@ import android.database.sqlite.SqliteWrapper;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
-import android.os.Parcel;
 import android.telephony.CarrierConfigManager;
 import android.telephony.Rlog;
 import android.telephony.ServiceState;
@@ -1330,17 +1329,6 @@ public final class Telephony {
             @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
             public static final String ACTION_EXTERNAL_PROVIDER_CHANGE =
                           "android.provider.action.EXTERNAL_PROVIDER_CHANGE";
-
-            /**
-             * Same as {@link #ACTION_DEFAULT_SMS_PACKAGE_CHANGED} but it's implicit (e.g. sent to
-             * all apps) and requires
-             * {@link android.Manifest.permission#MONITOR_DEFAULT_SMS_PACKAGE} to receive.
-             *
-             * @hide
-             */
-            @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
-            public static final String ACTION_DEFAULT_SMS_PACKAGE_CHANGED_INTERNAL =
-                    "android.provider.action.DEFAULT_SMS_PACKAGE_CHANGED_INTERNAL";
 
             /**
              * Broadcast action: When SMS-MMS db is being created. If file-based encryption is
@@ -3797,6 +3785,7 @@ public final class Telephony {
          * @deprecated this column is no longer supported, use {@link #NETWORK_TYPE_BITMASK} instead
          */
         @Deprecated
+        @SystemApi
         public static final String BEARER_BITMASK = "bearer_bitmask";
 
         /**
@@ -3846,6 +3835,7 @@ public final class Telephony {
          * <p>Type: INTEGER</p>
          *@hide
          */
+        @SystemApi
         public static final String PROFILE_ID = "profile_id";
 
         /**
@@ -4046,6 +4036,7 @@ public final class Telephony {
          *
          * @hide
          */
+        @SystemApi
         public static final String SKIP_464XLAT = "skip_464xlat";
 
         /**
@@ -4054,6 +4045,7 @@ public final class Telephony {
          *
          * @hide
          */
+        @SystemApi
         public static final int SKIP_464XLAT_DEFAULT = -1;
 
         /**
@@ -4062,6 +4054,7 @@ public final class Telephony {
          *
          * @hide
          */
+        @SystemApi
         public static final int SKIP_464XLAT_DISABLE = 0;
 
         /**
@@ -4070,6 +4063,7 @@ public final class Telephony {
          *
          * @hide
          */
+        @SystemApi
         public static final int SKIP_464XLAT_ENABLE = 1;
 
 
@@ -4083,15 +4077,6 @@ public final class Telephony {
         })
         @Retention(RetentionPolicy.SOURCE)
         public @interface EditStatus {}
-
-        /** @hide */
-        @IntDef({
-                SKIP_464XLAT_DEFAULT,
-                SKIP_464XLAT_DISABLE,
-                SKIP_464XLAT_ENABLE,
-        })
-        @Retention(RetentionPolicy.SOURCE)
-        public @interface Skip464XlatStatus {}
 
         /**
          * Compat framework change ID for the APN db read permission change.
@@ -4343,6 +4328,15 @@ public final class Telephony {
         public static final String LANGUAGE_CODE = "language";
 
         /**
+         * Dats coding scheme of the message.
+         * <p>
+         * The data coding scheme (dcs) value defined in 3GPP TS 23.038 section 4
+         * </p>
+         * <P>Type: INTEGER</P>
+         */
+        public static final String DATA_CODING_SCHEME = "dcs";
+
+        /**
          * Message body.
          * <P>Type: TEXT</P>
          */
@@ -4430,16 +4424,30 @@ public final class Telephony {
         public static final String DEFAULT_SORT_ORDER = DELIVERY_TIME + " DESC";
 
         /**
-         * The timestamp in millisecond of when the device received the message.
+         * The timestamp in millisecond, reported by {@link System#currentTimeMillis()}, when the
+         * device received the message.
          * <P>Type: BIGINT</P>
          */
         public static final String RECEIVED_TIME = "received_time";
 
         /**
+         * The timestamp in millisecond, reported by {@link System#currentTimeMillis()}, when
+         * location was checked last time. Note this is only applicable to geo-targeting message.
+         * For non geo-targeting message. the field will be set to -1.
+         * <P>Type: BIGINT</P>
+         */
+        public static final String LOCATION_CHECK_TIME = "location_check_time";
+        /**
          * Indicates that whether the message has been broadcasted to the application.
          * <P>Type: BOOLEAN</P>
          */
         public static final String MESSAGE_BROADCASTED = "message_broadcasted";
+
+        /**
+         * Indicates that whether the message has been displayed to the user.
+         * <P>Type: BOOLEAN</P>
+         */
+        public static final String MESSAGE_DISPLAYED = "message_displayed";
 
         /**
          * The Warning Area Coordinates Elements. This element is used for geo-fencing purpose.
@@ -4610,32 +4618,6 @@ public final class Telephony {
         }
 
         /**
-         * Used to insert a ServiceState into the ServiceStateProvider as a ContentValues instance.
-         *
-         * @param state the ServiceState to convert into ContentValues
-         * @return the convertedContentValues instance
-         * @hide
-         */
-        public static ContentValues getContentValuesForServiceState(ServiceState state) {
-            ContentValues values = new ContentValues();
-            final Parcel p = Parcel.obtain();
-            state.writeToParcel(p, 0);
-            // Turn the parcel to byte array. Safe to do this because the content values were never
-            // written into a persistent storage. ServiceStateProvider keeps values in the memory.
-            values.put(SERVICE_STATE, p.marshall());
-            return values;
-        }
-
-        /**
-         * The current service state.
-         *
-         * This is the entire {@link ServiceState} object in byte array.
-         *
-         * @hide
-         */
-        public static final String SERVICE_STATE = "service_state";
-
-        /**
          * An integer value indicating the current voice service state.
          * <p>
          * Valid values: {@link ServiceState#STATE_IN_SERVICE},
@@ -4645,53 +4627,6 @@ public final class Telephony {
          * This is the same as {@link ServiceState#getState()}.
          */
         public static final String VOICE_REG_STATE = "voice_reg_state";
-
-        /**
-         * An integer value indicating the current data service state.
-         * <p>
-         * Valid values: {@link ServiceState#STATE_IN_SERVICE},
-         * {@link ServiceState#STATE_OUT_OF_SERVICE}, {@link ServiceState#STATE_EMERGENCY_ONLY},
-         * {@link ServiceState#STATE_POWER_OFF}.
-         * <p>
-         * This is the same as {@link ServiceState#getDataRegState()}.
-         * @hide
-         */
-        public static final String DATA_REG_STATE = "data_reg_state";
-
-        /**
-         * An integer value indicating the current voice roaming type.
-         * <p>
-         * This is the same as {@link ServiceState#getVoiceRoamingType()}.
-         * @hide
-         */
-        public static final String VOICE_ROAMING_TYPE = "voice_roaming_type";
-
-        /**
-         * An integer value indicating the current data roaming type.
-         * <p>
-         * This is the same as {@link ServiceState#getDataRoamingType()}.
-         * @hide
-         */
-        public static final String DATA_ROAMING_TYPE = "data_roaming_type";
-
-        /**
-         * The current registered voice network operator name in long alphanumeric format.
-         * <p>
-         * This is the same as {@link ServiceState#getOperatorAlphaLong()}.
-         * @hide
-         */
-        public static final String VOICE_OPERATOR_ALPHA_LONG = "voice_operator_alpha_long";
-
-        /**
-         * The current registered operator name in short alphanumeric format.
-         * <p>
-         * In GSM/UMTS, short format can be up to 8 characters long. The current registered voice
-         * network operator name in long alphanumeric format.
-         * <p>
-         * This is the same as {@link ServiceState#getOperatorAlphaShort()}.
-         * @hide
-         */
-        public static final String VOICE_OPERATOR_ALPHA_SHORT = "voice_operator_alpha_short";
 
         /**
          * The current registered operator numeric id.
@@ -4704,125 +4639,11 @@ public final class Telephony {
         public static final String VOICE_OPERATOR_NUMERIC = "voice_operator_numeric";
 
         /**
-         * The current registered data network operator name in long alphanumeric format.
-         * <p>
-         * This is the same as {@link ServiceState#getOperatorAlphaLong()}.
-         * @hide
-         */
-        public static final String DATA_OPERATOR_ALPHA_LONG = "data_operator_alpha_long";
-
-        /**
-         * The current registered data network operator name in short alphanumeric format.
-         * <p>
-         * This is the same as {@link ServiceState#getOperatorAlphaShort()}.
-         * @hide
-         */
-        public static final String DATA_OPERATOR_ALPHA_SHORT = "data_operator_alpha_short";
-
-        /**
-         * The current registered data network operator numeric id.
-         * <p>
-         * This is the same as {@link ServiceState#getOperatorNumeric()}.
-         * @hide
-         */
-        public static final String DATA_OPERATOR_NUMERIC = "data_operator_numeric";
-
-        /**
          * The current network selection mode.
          * <p>
          * This is the same as {@link ServiceState#getIsManualSelection()}.
          */
         public static final String IS_MANUAL_NETWORK_SELECTION = "is_manual_network_selection";
-
-        /**
-         * This is the same as {@link ServiceState#getRilVoiceRadioTechnology()}.
-         * @hide
-         */
-        public static final String RIL_VOICE_RADIO_TECHNOLOGY = "ril_voice_radio_technology";
-
-        /**
-         * This is the same as {@link ServiceState#getRilDataRadioTechnology()}.
-         * @hide
-         */
-        public static final String RIL_DATA_RADIO_TECHNOLOGY = "ril_data_radio_technology";
-
-        /**
-         * This is the same as {@link ServiceState#getCssIndicator()}.
-         * @hide
-         */
-        public static final String CSS_INDICATOR = "css_indicator";
-
-        /**
-         * This is the same as {@link ServiceState#getCdmaNetworkId()}.
-         * @hide
-         */
-        public static final String NETWORK_ID = "network_id";
-
-        /**
-         * This is the same as {@link ServiceState#getCdmaSystemId()}.
-         * @hide
-         */
-        public static final String SYSTEM_ID = "system_id";
-
-        /**
-         * This is the same as {@link ServiceState#getCdmaRoamingIndicator()}.
-         * @hide
-         */
-        public static final String CDMA_ROAMING_INDICATOR = "cdma_roaming_indicator";
-
-        /**
-         * This is the same as {@link ServiceState#getCdmaDefaultRoamingIndicator()}.
-         * @hide
-         */
-        public static final String CDMA_DEFAULT_ROAMING_INDICATOR =
-                "cdma_default_roaming_indicator";
-
-        /**
-         * This is the same as {@link ServiceState#getCdmaEriIconIndex()}.
-         * @hide
-         */
-        public static final String CDMA_ERI_ICON_INDEX = "cdma_eri_icon_index";
-
-        /**
-         * This is the same as {@link ServiceState#getCdmaEriIconMode()}.
-         * @hide
-         */
-        public static final String CDMA_ERI_ICON_MODE = "cdma_eri_icon_mode";
-
-        /**
-         * This is the same as {@link ServiceState#isEmergencyOnly()}.
-         * @hide
-         */
-        public static final String IS_EMERGENCY_ONLY = "is_emergency_only";
-
-        /**
-         * This is the same as {@link ServiceState#getDataRoamingFromRegistration()}.
-         * @hide
-         */
-        public static final String IS_DATA_ROAMING_FROM_REGISTRATION =
-                "is_data_roaming_from_registration";
-
-        /**
-         * This is the same as {@link ServiceState#isUsingCarrierAggregation()}.
-         * @hide
-         */
-        public static final String IS_USING_CARRIER_AGGREGATION = "is_using_carrier_aggregation";
-
-        /**
-         * The current registered raw data network operator name in long alphanumeric format.
-         * <p>
-         * This is the same as {@link ServiceState#getOperatorAlphaLongRaw()}.
-         * @hide
-         */
-        public static final String OPERATOR_ALPHA_LONG_RAW = "operator_alpha_long_raw";
-
-        /**
-         * The current registered raw data network operator name in short alphanumeric format.
-         * <p>
-         * This is the same as {@link ServiceState#getOperatorAlphaShortRaw()}.
-         * @hide
-         */
-        public static final String OPERATOR_ALPHA_SHORT_RAW = "operator_alpha_short_raw";
     }
 
     /**
@@ -5348,6 +5169,12 @@ public final class Telephony {
 
         /** TelephonyProvider column name for enable Wifi calling in roaming */
         public static final String WFC_IMS_ROAMING_ENABLED = "wfc_ims_roaming_enabled";
+
+        /**
+         * Determines if the user has enabled IMS RCS User Capability Exchange (UCE) for this
+         * subscription.
+         */
+        public static final String IMS_RCS_UCE_ENABLED = "ims_rcs_uce_enabled";
 
         /**
          * TelephonyProvider column name for whether a subscription is opportunistic, that is,

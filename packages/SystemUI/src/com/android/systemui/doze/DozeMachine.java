@@ -102,6 +102,10 @@ public class DozeMachine {
             }
         }
 
+        boolean isAlwaysOn() {
+            return this == DOZE_AOD || this == DOZE_AOD_DOCKED;
+        }
+
         int screenState(DozeParameters parameters) {
             switch (this) {
                 case UNINITIALIZED:
@@ -169,7 +173,7 @@ public class DozeMachine {
     @MainThread
     public void requestState(State requestedState) {
         Preconditions.checkArgument(requestedState != State.DOZE_REQUEST_PULSE);
-        requestState(requestedState, DozeEvent.PULSE_REASON_NONE);
+        requestState(requestedState, DozeLog.PULSE_REASON_NONE);
     }
 
     @MainThread
@@ -271,7 +275,7 @@ public class DozeMachine {
         if (newState == State.DOZE_REQUEST_PULSE) {
             mPulseReason = pulseReason;
         } else if (oldState == State.DOZE_PULSE_DONE) {
-            mPulseReason = DozeEvent.PULSE_REASON_NONE;
+            mPulseReason = DozeLog.PULSE_REASON_NONE;
         }
     }
 
@@ -324,6 +328,11 @@ public class DozeMachine {
         if (mState == State.FINISH) {
             return State.FINISH;
         }
+        if (mConfig.dozeSuppressed(UserHandle.USER_CURRENT) && requestedState.isAlwaysOn()) {
+            Log.i(TAG, "Doze is suppressed. Suppressing state: " + requestedState);
+            mDozeLog.traceDozeSuppressed(requestedState);
+            return State.DOZE;
+        }
         if ((mState == State.DOZE_AOD_PAUSED || mState == State.DOZE_AOD_PAUSING
                 || mState == State.DOZE_AOD || mState == State.DOZE)
                 && requestedState == State.DOZE_PULSE_DONE) {
@@ -368,7 +377,7 @@ public class DozeMachine {
                     nextState = State.DOZE;
                 }
 
-                transitionTo(nextState, DozeEvent.PULSE_REASON_NONE);
+                transitionTo(nextState, DozeLog.PULSE_REASON_NONE);
                 break;
             default:
                 break;

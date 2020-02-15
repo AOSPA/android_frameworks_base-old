@@ -324,15 +324,18 @@ public class TelecomManager {
             "android.telecom.extra.IS_USER_INTENT_EMERGENCY_CALL";
 
     /**
+     * A mandatory extra containing a {@link Uri} to be passed in when calling
+     * {@link #addNewUnknownCall(PhoneAccountHandle, Bundle)}. The {@link Uri} value indicates
+     * the remote handle of the new call.
      * @hide
      */
+    @SystemApi
     public static final String EXTRA_UNKNOWN_CALL_HANDLE =
             "android.telecom.extra.UNKNOWN_CALL_HANDLE";
 
     /**
      * Optional extra for incoming and outgoing calls containing a long which specifies the time the
      * call was created. This value is in milliseconds since boot.
-     * @hide
      */
     public static final String EXTRA_CALL_CREATED_TIME_MILLIS =
             "android.telecom.extra.CALL_CREATED_TIME_MILLIS";
@@ -377,10 +380,18 @@ public class TelecomManager {
             "android.telecom.extra.CONNECTION_SERVICE";
 
     /**
-     * Optional extra for communicating the call technology used by a
-     * {@link com.android.internal.telephony.Connection} to Telecom
+     * Optional extra for communicating the call technology used by a {@link ConnectionService}
+     * to Telecom. Valid values are:
+     * <ul>
+     *     <li>{@link TelephonyManager#PHONE_TYPE_CDMA}</li>
+     *     <li>{@link TelephonyManager#PHONE_TYPE_GSM}</li>
+     *     <li>{@link TelephonyManager#PHONE_TYPE_IMS}</li>
+     *     <li>{@link TelephonyManager#PHONE_TYPE_THIRD_PARTY}</li>
+     *     <li>{@link TelephonyManager#PHONE_TYPE_SIP}</li>
+     * </ul>
      * @hide
      */
+    @SystemApi
     public static final String EXTRA_CALL_TECHNOLOGY_TYPE =
             "android.telecom.extra.CALL_TECHNOLOGY_TYPE";
 
@@ -730,21 +741,24 @@ public class TelecomManager {
      * @see #EXTRA_CURRENT_TTY_MODE
      * @hide
      */
+    @SystemApi
     public static final String ACTION_CURRENT_TTY_MODE_CHANGED =
             "android.telecom.action.CURRENT_TTY_MODE_CHANGED";
 
     /**
      * The lookup key for an int that indicates the current TTY mode.
      * Valid modes are:
-     * - {@link #TTY_MODE_OFF}
-     * - {@link #TTY_MODE_FULL}
-     * - {@link #TTY_MODE_HCO}
-     * - {@link #TTY_MODE_VCO}
-     *
+     * <ul>
+     *     <li>{@link #TTY_MODE_OFF}</li>
+     *     <li>{@link #TTY_MODE_FULL}</li>
+     *     <li>{@link #TTY_MODE_HCO}</li>
+     *     <li>{@link #TTY_MODE_VCO}</li>
+     * </ul>
      * @hide
      */
+    @SystemApi
     public static final String EXTRA_CURRENT_TTY_MODE =
-            "android.telecom.intent.extra.CURRENT_TTY_MODE";
+            "android.telecom.extra.CURRENT_TTY_MODE";
 
     /**
      * Broadcast intent action indicating that the TTY preferred operating mode has changed. An
@@ -753,6 +767,7 @@ public class TelecomManager {
      * @see #EXTRA_TTY_PREFERRED_MODE
      * @hide
      */
+    @SystemApi
     public static final String ACTION_TTY_PREFERRED_MODE_CHANGED =
             "android.telecom.action.TTY_PREFERRED_MODE_CHANGED";
 
@@ -763,8 +778,9 @@ public class TelecomManager {
      *
      * @hide
      */
+    @SystemApi
     public static final String EXTRA_TTY_PREFERRED_MODE =
-            "android.telecom.intent.extra.TTY_PREFERRED";
+            "android.telecom.extra.TTY_PREFERRED_MODE";
 
     /**
      * Broadcast intent action for letting custom component know to show the missed call
@@ -833,14 +849,39 @@ public class TelecomManager {
     /**
      * Optional extra for {@link #placeCall(Uri, Bundle)} containing an integer that specifies
      * the source where user initiated this call. This data is used in metrics.
-     * Valid source are:
-     * {@link ParcelableCallAnalytics#CALL_SOURCE_UNSPECIFIED},
-     * {@link ParcelableCallAnalytics#CALL_SOURCE_EMERGENCY_DIALPAD},
-     * {@link ParcelableCallAnalytics#CALL_SOURCE_EMERGENCY_SHORTCUT}.
+     * Valid sources are:
+     * {@link TelecomManager#CALL_SOURCE_UNSPECIFIED},
+     * {@link TelecomManager#CALL_SOURCE_EMERGENCY_DIALPAD},
+     * {@link TelecomManager#CALL_SOURCE_EMERGENCY_SHORTCUT}.
      *
      * @hide
      */
+    @SystemApi
     public static final String EXTRA_CALL_SOURCE = "android.telecom.extra.CALL_SOURCE";
+
+    /**
+     * Indicating the call is initiated via emergency dialer's shortcut button.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final int CALL_SOURCE_EMERGENCY_SHORTCUT = 2;
+
+    /**
+     * Indicating the call is initiated via emergency dialer's dialpad.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final int CALL_SOURCE_EMERGENCY_DIALPAD = 1;
+
+    /**
+     * Indicating the call source is not specified.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final int CALL_SOURCE_UNSPECIFIED = 0;
 
     /**
      * The following 4 constants define how properties such as phone numbers and names are
@@ -1828,6 +1869,45 @@ public class TelecomManager {
     }
 
     /**
+     * Registers a new incoming conference. A {@link ConnectionService} should invoke this method
+     * when it has an incoming conference. For managed {@link ConnectionService}s, the specified
+     * {@link PhoneAccountHandle} must have been registered with {@link #registerPhoneAccount} and
+     * the user must have enabled the corresponding {@link PhoneAccount}.  This can be checked using
+     * {@link #getPhoneAccount}. Self-managed {@link ConnectionService}s must have
+     * {@link android.Manifest.permission#MANAGE_OWN_CALLS} to add a new incoming call.
+     * <p>
+     * The incoming conference you are adding is assumed to have a video state of
+     * {@link VideoProfile#STATE_AUDIO_ONLY}, unless the extra value
+     * {@link #EXTRA_INCOMING_VIDEO_STATE} is specified.
+     * <p>
+     * Once invoked, this method will cause the system to bind to the {@link ConnectionService}
+     * associated with the {@link PhoneAccountHandle} and request additional information about the
+     * call (See {@link ConnectionService#onCreateIncomingConference}) before starting the incoming
+     * call UI.
+     * <p>
+     * For a managed {@link ConnectionService}, a {@link SecurityException} will be thrown if either
+     * the {@link PhoneAccountHandle} does not correspond to a registered {@link PhoneAccount} or
+     * the associated {@link PhoneAccount} is not currently enabled by the user.
+     *
+     * @param phoneAccount A {@link PhoneAccountHandle} registered with
+     *            {@link #registerPhoneAccount}.
+     * @param extras A bundle that will be passed through to
+     *            {@link ConnectionService#onCreateIncomingConference}.
+     */
+
+    public void addNewIncomingConference(@NonNull PhoneAccountHandle phoneAccount,
+            @NonNull Bundle extras) {
+        try {
+            if (isServiceConnected()) {
+                getTelecomService().addNewIncomingConference(
+                        phoneAccount, extras == null ? new Bundle() : extras);
+            }
+        } catch (RemoteException e) {
+            Log.e(TAG, "RemoteException adding a new incoming conference: " + phoneAccount, e);
+        }
+    }
+
+    /**
      * Registers a new unknown call with Telecom. This can only be called by the system Telephony
      * service. This is invoked when Telephony detects a new unknown connection that was neither
      * a new incoming call, nor an user-initiated outgoing call.
@@ -2026,6 +2106,42 @@ public class TelecomManager {
             try {
                 service.placeCall(address, extras == null ? new Bundle() : extras,
                         mContext.getOpPackageName(), mContext.getFeatureId());
+            } catch (RemoteException e) {
+                Log.e(TAG, "Error calling ITelecomService#placeCall", e);
+            }
+        }
+    }
+
+
+    /**
+     * Place a new conference call with the provided participants using the system telecom service
+     * This method doesn't support placing of emergency calls.
+     *
+     * An adhoc conference call is established by providing a list of addresses to
+     * {@code TelecomManager#startConference(List<Uri>, int videoState)} where the
+     * {@link ConnectionService} is responsible for connecting all indicated participants
+     * to a conference simultaneously.
+     * This is in contrast to conferences formed by merging calls together (e.g. using
+     * {@link android.telecom.Call#mergeConference()}).
+     *
+     * The following keys are supported in the supplied extras.
+     * <ul>
+     *   <li>{@link #EXTRA_PHONE_ACCOUNT_HANDLE}</li>
+     *   <li>{@link #EXTRA_START_CALL_WITH_SPEAKERPHONE}</li>
+     *   <li>{@link #EXTRA_START_CALL_WITH_VIDEO_STATE}</li>
+     * </ul>
+     *
+     * @param participants List of participants to start conference with
+     * @param extras Bundle of extras to use with the call
+     */
+    @RequiresPermission(android.Manifest.permission.CALL_PHONE)
+    public void startConference(@NonNull List<Uri> participants,
+            @NonNull Bundle extras) {
+        ITelecomService service = getTelecomService();
+        if (service != null) {
+            try {
+                service.startConference(participants, extras,
+                        mContext.getOpPackageName());
             } catch (RemoteException e) {
                 Log.e(TAG, "Error calling ITelecomService#placeCall", e);
             }

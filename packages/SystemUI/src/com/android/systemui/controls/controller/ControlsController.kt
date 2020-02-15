@@ -20,8 +20,9 @@ import android.content.ComponentName
 import android.service.controls.Control
 import android.service.controls.actions.ControlAction
 import com.android.systemui.controls.ControlStatus
+import com.android.systemui.controls.UserAwareController
 
-interface ControlsController {
+interface ControlsController : UserAwareController {
     val available: Boolean
 
     fun getFavoriteControls(): List<ControlInfo>
@@ -30,7 +31,7 @@ interface ControlsController {
     fun changeFavoriteStatus(controlInfo: ControlInfo, state: Boolean)
     fun unsubscribe()
     fun action(controlInfo: ControlInfo, action: ControlAction)
-    fun refreshStatus(componentName: ComponentName, controls: List<Control>)
+    fun refreshStatus(componentName: ComponentName, control: Control)
     fun onActionResponse(
         componentName: ComponentName,
         controlId: String,

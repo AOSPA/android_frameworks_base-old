@@ -20,6 +20,7 @@ import android.Manifest.permission;
 import android.annotation.Nullable;
 import android.app.AppOpsManager;
 import android.app.role.RoleManager;
+import android.compat.annotation.UnsupportedAppUsage;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
@@ -34,21 +35,15 @@ import android.content.pm.ServiceInfo;
 import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.Binder;
-import android.os.Debug;
 import android.os.Process;
 import android.os.UserHandle;
 import android.provider.Telephony;
 import android.provider.Telephony.Sms.Intents;
 import android.telephony.PackageChangeReceiver;
-import android.util.Log;
 import android.telephony.TelephonyManager;
 import android.util.Log;
 
 import com.android.internal.annotations.VisibleForTesting;
-import com.android.internal.logging.MetricsLogger;
-import com.android.internal.logging.nano.MetricsProto.MetricsEvent;
-
-import dalvik.annotation.compat.UnsupportedAppUsage;
 
 import java.util.Collection;
 import java.util.HashMap;
@@ -199,13 +194,13 @@ public final class SmsApplication {
         final int callingUid = Binder.getCallingUid();
         if (DEBUG_MULTIUSER) {
             Log.i(LOG_TAG, "getIncomingUserHandle caller=" + callingUid + ", myuid="
-                    + android.os.Process.myUid() + "\n\t" + Debug.getCallers(4));
+                    + android.os.Process.myUid());
         }
         if (UserHandle.getAppId(callingUid)
                 < android.os.Process.FIRST_APPLICATION_UID) {
             return contextUserId;
         } else {
-            return UserHandle.getUserId(callingUid);
+            return UserHandle.getUserHandleForUid(callingUid).getIdentifier();
         }
     }
 
@@ -671,9 +666,21 @@ public final class SmsApplication {
     }
 
     /**
+     * Broadcast action:
+     * Same as {@link Intent#ACTION_DEFAULT_SMS_PACKAGE_CHANGED} but it's implicit (e.g. sent to
+     * all apps) and requires
+     * {@link #PERMISSION_MONITOR_DEFAULT_SMS_PACKAGE} to receive.
+     */
+    public static final String ACTION_DEFAULT_SMS_PACKAGE_CHANGED_INTERNAL =
+            "android.provider.action.DEFAULT_SMS_PACKAGE_CHANGED_INTERNAL";
+
+    public static final String PERMISSION_MONITOR_DEFAULT_SMS_PACKAGE =
+            "android.permission.MONITOR_DEFAULT_SMS_PACKAGE";
+
+    /**
      * Sends broadcasts on sms app change:
      * {@link Intent#ACTION_DEFAULT_SMS_PACKAGE_CHANGED}
-     * {@link Intents.ACTION_DEFAULT_SMS_PACKAGE_CHANGED_INTERNAL}
+     * {@link #ACTION_DEFAULT_SMS_PACKAGE_CHANGED_INTERNAL}
      */
     public static void broadcastSmsAppChange(Context context,
             UserHandle userHandle, @Nullable String oldPackage, @Nullable String newPackage) {
@@ -723,16 +730,11 @@ public final class SmsApplication {
         }
 
         // Send an implicit broadcast for the system server.
-        // (or anyone with MONITOR_DEFAULT_SMS_PACKAGE, really.)
+        // (or anyone with PERMISSION_MONITOR_DEFAULT_SMS_PACKAGE, really.)
         final Intent intent =
-                new Intent(Intents.ACTION_DEFAULT_SMS_PACKAGE_CHANGED_INTERNAL);
+                new Intent(ACTION_DEFAULT_SMS_PACKAGE_CHANGED_INTERNAL);
         context.sendBroadcastAsUser(intent, userHandle,
-                permission.MONITOR_DEFAULT_SMS_PACKAGE);
-
-        if (applicationData != null) {
-            MetricsLogger.action(context, MetricsEvent.ACTION_DEFAULT_SMS_APP_CHANGED,
-                    applicationData.mPackageName);
-        }
+                PERMISSION_MONITOR_DEFAULT_SMS_PACKAGE);
     }
 
     /**
@@ -811,10 +813,10 @@ public final class SmsApplication {
                 // This should never happen in prod -- unit tests will put the receiver into a
                 // unusual state where the pending result is null, which produces a NPE when calling
                 // getSendingUserId. Just pretend like it's the system user for testing.
-                userId = UserHandle.USER_SYSTEM;
+                userId = UserHandle.SYSTEM.getIdentifier();
             }
             Context userContext = mContext;
-            if (userId != UserHandle.USER_SYSTEM) {
+            if (userId != UserHandle.SYSTEM.getIdentifier()) {
                 try {
                     userContext = mContext.createPackageContextAsUser(mContext.getPackageName(), 0,
                         UserHandle.of(userId));

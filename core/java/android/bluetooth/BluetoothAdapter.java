@@ -1229,6 +1229,7 @@ public final class BluetoothAdapter {
                 SystemProperties.set("persist.bluetooth.factoryreset", "true");
                 return mManagerService.factoryReset();
             }
+            Log.e(TAG, "factoryReset(): IBluetooth Service is null");
         } catch (RemoteException e) {
             Log.e(TAG, "", e);
         } finally {
@@ -1245,7 +1246,7 @@ public final class BluetoothAdapter {
      */
     @UnsupportedAppUsage
     @RequiresPermission(Manifest.permission.BLUETOOTH)
-    public @NonNull ParcelUuid[] getUuids() {
+    public @Nullable ParcelUuid[] getUuids() {
         if (getState() != STATE_ON) {
             return null;
         }
@@ -1772,6 +1773,45 @@ public final class BluetoothAdapter {
     }
 
     /**
+     * Removes the active device for the grouping of @ActiveDeviceUse specified
+     *
+     * @param profiles represents the purpose for which we are setting this as the active device.
+     *                 Possible values are:
+     *                 {@link BluetoothAdapter#ACTIVE_DEVICE_AUDIO},
+     *                 {@link BluetoothAdapter#ACTIVE_DEVICE_PHONE_CALL},
+     *                 {@link BluetoothAdapter#ACTIVE_DEVICE_ALL}
+     * @return false on immediate error, true otherwise
+     * @throws IllegalArgumentException if device is null or profiles is not one of
+     * {@link ActiveDeviceUse}
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(Manifest.permission.BLUETOOTH_PRIVILEGED)
+    public boolean removeActiveDevice(@ActiveDeviceUse int profiles) {
+        if (profiles != ACTIVE_DEVICE_AUDIO && profiles != ACTIVE_DEVICE_PHONE_CALL
+                && profiles != ACTIVE_DEVICE_ALL) {
+            Log.e(TAG, "Invalid profiles param value in removeActiveDevice");
+            throw new IllegalArgumentException("Profiles must be one of "
+                    + "BluetoothAdapter.ACTIVE_DEVICE_AUDIO, "
+                    + "BluetoothAdapter.ACTIVE_DEVICE_PHONE_CALL, or "
+                    + "BluetoothAdapter.ACTIVE_DEVICE_ALL");
+        }
+        try {
+            mServiceLock.readLock().lock();
+            if (mService != null) {
+                return mService.removeActiveDevice(profiles);
+            }
+        } catch (RemoteException e) {
+            Log.e(TAG, "", e);
+        } finally {
+            mServiceLock.readLock().unlock();
+        }
+
+        return false;
+    }
+
+    /**
+     * Sets device as the active devices for the profiles passed into the function
      *
      * @param device is the remote bluetooth device
      * @param profiles represents the purpose for which we are setting this as the active device.
@@ -1780,18 +1820,26 @@ public final class BluetoothAdapter {
      *                 {@link BluetoothAdapter#ACTIVE_DEVICE_PHONE_CALL},
      *                 {@link BluetoothAdapter#ACTIVE_DEVICE_ALL}
      * @return false on immediate error, true otherwise
+     * @throws IllegalArgumentException if device is null or profiles is not one of
+     * {@link ActiveDeviceUse}
      * @hide
      */
     @SystemApi
-    @RequiresPermission(Manifest.permission.BLUETOOTH_ADMIN)
-    public boolean setActiveDevice(@Nullable BluetoothDevice device,
+    @RequiresPermission(Manifest.permission.BLUETOOTH_PRIVILEGED)
+    public boolean setActiveDevice(@NonNull BluetoothDevice device,
             @ActiveDeviceUse int profiles) {
+        if (device == null) {
+            Log.e(TAG, "setActiveDevice: Null device passed as parameter");
+            throw new IllegalArgumentException("device cannot be null");
+        }
         if (profiles != ACTIVE_DEVICE_AUDIO && profiles != ACTIVE_DEVICE_PHONE_CALL
                 && profiles != ACTIVE_DEVICE_ALL) {
             Log.e(TAG, "Invalid profiles param value in setActiveDevice");
-            return false;
+            throw new IllegalArgumentException("Profiles must be one of "
+                    + "BluetoothAdapter.ACTIVE_DEVICE_AUDIO, "
+                    + "BluetoothAdapter.ACTIVE_DEVICE_PHONE_CALL, or "
+                    + "BluetoothAdapter.ACTIVE_DEVICE_ALL");
         }
-
         try {
             mServiceLock.readLock().lock();
             if (mService != null) {
@@ -2165,6 +2213,33 @@ public final class BluetoothAdapter {
                 result.send(0, null);
             }
         }
+    }
+
+    /**
+     * Fetches a list of the most recently connected bluetooth devices ordered by how recently they
+     * were connected with most recently first and least recently last
+     *
+     * @return {@link List} of bonded {@link BluetoothDevice} ordered by how recently they were
+     * connected
+     *
+     * @hide
+     */
+    @RequiresPermission(Manifest.permission.BLUETOOTH_ADMIN)
+    public @NonNull List<BluetoothDevice> getMostRecentlyConnectedDevices() {
+        if (getState() != STATE_ON) {
+            return new ArrayList<>();
+        }
+        try {
+            mServiceLock.readLock().lock();
+            if (mService != null) {
+                return mService.getMostRecentlyConnectedDevices();
+            }
+        } catch (RemoteException e) {
+            Log.e(TAG, "", e);
+        } finally {
+            mServiceLock.readLock().unlock();
+        }
+        return new ArrayList<>();
     }
 
     /**
@@ -3272,18 +3347,6 @@ public final class BluetoothAdapter {
     }
 
     /**
-     * TODO: Remove this hidden method once all the SL4A and other tests are updated to use the new
-     * API name, listenUsingL2capChannel.
-     * @hide
-     */
-    @RequiresPermission(Manifest.permission.BLUETOOTH)
-    public BluetoothServerSocket listenUsingL2capCoc(int transport)
-            throws IOException {
-        Log.e(TAG, "listenUsingL2capCoc: PLEASE USE THE OFFICIAL API, listenUsingL2capChannel");
-        return listenUsingL2capChannel();
-    }
-
-    /**
      * Create an insecure L2CAP Connection-oriented Channel (CoC) {@link BluetoothServerSocket} and
      * assign a dynamic PSM value. This socket can be used to listen for incoming connections. The
      * supported Bluetooth transport is LE only.
@@ -3327,19 +3390,6 @@ public final class BluetoothAdapter {
         socket.setChannel(assignedPsm);
 
         return socket;
-    }
-
-    /**
-     * TODO: Remove this hidden method once all the SL4A and other tests are updated to use the new
-     * API name, listenUsingInsecureL2capChannel.
-     * @hide
-     */
-    @RequiresPermission(Manifest.permission.BLUETOOTH)
-    public BluetoothServerSocket listenUsingInsecureL2capCoc(int transport)
-            throws IOException {
-        Log.e(TAG, "listenUsingInsecureL2capCoc: PLEASE USE THE OFFICIAL API, "
-                    + "listenUsingInsecureL2capChannel");
-        return listenUsingInsecureL2capChannel();
     }
 
     /**

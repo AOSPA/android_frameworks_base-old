@@ -19,6 +19,11 @@ package com.android.server.integrity.model;
 import android.annotation.Nullable;
 import android.content.integrity.Rule;
 
+import com.android.internal.util.FrameworkStatsLog;
+
+import java.util.Collections;
+import java.util.List;
+
 /**
  * A class encapsulating the result from the evaluation engine after evaluating rules against app
  * install metadata.
@@ -34,19 +39,19 @@ public final class IntegrityCheckResult {
     }
 
     private final Effect mEffect;
-    @Nullable private final Rule mRule;
+    private final List<Rule> mRuleList;
 
-    private IntegrityCheckResult(Effect effect, @Nullable Rule rule) {
+    private IntegrityCheckResult(Effect effect, @Nullable List<Rule> ruleList) {
         this.mEffect = effect;
-        this.mRule = rule;
+        this.mRuleList = ruleList;
     }
 
     public Effect getEffect() {
         return mEffect;
     }
 
-    public Rule getRule() {
-        return mRule;
+    public List<Rule> getMatchedRules() {
+        return mRuleList;
     }
 
     /**
@@ -55,7 +60,7 @@ public final class IntegrityCheckResult {
      * @return An evaluation outcome with ALLOW effect and no rule.
      */
     public static IntegrityCheckResult allow() {
-        return new IntegrityCheckResult(Effect.ALLOW, null);
+        return new IntegrityCheckResult(Effect.ALLOW, Collections.emptyList());
     }
 
     /**
@@ -63,17 +68,43 @@ public final class IntegrityCheckResult {
      *
      * @return An evaluation outcome with ALLOW effect and rule causing that effect.
      */
-    public static IntegrityCheckResult allow(Rule rule) {
-        return new IntegrityCheckResult(Effect.ALLOW, rule);
+    public static IntegrityCheckResult allow(List<Rule> ruleList) {
+        return new IntegrityCheckResult(Effect.ALLOW, ruleList);
     }
 
     /**
      * Create a DENY evaluation outcome.
      *
-     * @param rule Rule causing the DENY effect.
+     * @param ruleList All valid rules that cause the DENY effect.
      * @return An evaluation outcome with DENY effect and rule causing that effect.
      */
-    public static IntegrityCheckResult deny(Rule rule) {
-        return new IntegrityCheckResult(Effect.DENY, rule);
+    public static IntegrityCheckResult deny(List<Rule> ruleList) {
+        return new IntegrityCheckResult(Effect.DENY, ruleList);
     }
+
+    /**
+     * Returns the in value of the integrity check result for logging purposes.
+     */
+    public int getLoggingResponse() {
+        if (getEffect() == Effect.DENY) {
+            return FrameworkStatsLog.INTEGRITY_CHECK_RESULT_REPORTED__RESPONSE__REJECTED;
+        } else if (getEffect() == Effect.ALLOW && getMatchedRules().isEmpty()) {
+            return FrameworkStatsLog.INTEGRITY_CHECK_RESULT_REPORTED__RESPONSE__ALLOWED;
+        } else if (getEffect() == Effect.ALLOW && !getMatchedRules().isEmpty()) {
+            return FrameworkStatsLog.INTEGRITY_CHECK_RESULT_REPORTED__RESPONSE__FORCE_ALLOWED;
+        } else {
+            throw new IllegalStateException("IntegrityCheckResult is not valid.");
+        }
+    }
+
+    /** Returns true when the {@code mEffect} is caused by an app certificate mismatch. */
+    public boolean isCausedByAppCertRule() {
+        return mRuleList.stream().anyMatch(rule -> rule.getFormula().isAppCertificateFormula());
+    }
+
+    /** Returns true when the {@code mEffect} is caused by an installer rule. */
+    public boolean isCausedByInstallerRule() {
+        return mRuleList.stream().anyMatch(rule -> rule.getFormula().isInstallerFormula());
+    }
+
 }

@@ -31,6 +31,7 @@ import android.provider.settings.backup.SecureSettings;
 import android.provider.settings.backup.SystemSettings;
 
 import androidx.test.filters.SmallTest;
+import androidx.test.filters.Suppress;
 import androidx.test.runner.AndroidJUnit4;
 
 import org.junit.Test;
@@ -224,6 +225,7 @@ public class SettingsBackupTest {
                     Settings.Global.DEVELOPMENT_FORCE_RESIZABLE_ACTIVITIES,
                     Settings.Global.DEVELOPMENT_FORCE_RTL,
                     Settings.Global.DEVELOPMENT_ENABLE_SIZECOMPAT_FREEFORM,
+                    Settings.Global.DEVELOPMENT_RENDER_SHADOWS_IN_COMPOSITOR,
                     Settings.Global.DEVICE_DEMO_MODE,
                     Settings.Global.DEVICE_IDLE_CONSTANTS,
                     Settings.Global.BATTERY_SAVER_ADAPTIVE_CONSTANTS,
@@ -277,6 +279,7 @@ public class SettingsBackupTest {
                     Settings.Global.FORCED_APP_STANDBY_FOR_SMALL_BATTERY_ENABLED,
                     Settings.Global.WIFI_ON_WHEN_PROXY_DISCONNECTED,
                     Settings.Global.FSTRIM_MANDATORY_INTERVAL,
+                    Settings.Global.FOREGROUND_SERVICE_STARTS_LOGGING_ENABLED,
                     Settings.Global.GLOBAL_HTTP_PROXY_EXCLUSION_LIST,
                     Settings.Global.GLOBAL_HTTP_PROXY_HOST,
                     Settings.Global.GLOBAL_HTTP_PROXY_PAC,
@@ -540,7 +543,6 @@ public class SettingsBackupTest {
                     Settings.Global.WIFI_ON,
                     Settings.Global.WIFI_P2P_DEVICE_NAME,
                     Settings.Global.WIFI_P2P_PENDING_FACTORY_RESET,
-                    Settings.Global.WIFI_SAVED_STATE,
                     Settings.Global.WIFI_SCAN_ALWAYS_AVAILABLE,
                     Settings.Global.WIFI_SCAN_INTERVAL_WHEN_P2P_CONNECTED_MS,
                     Settings.Global.WIFI_SCAN_THROTTLE_ENABLED,
@@ -574,7 +576,8 @@ public class SettingsBackupTest {
                     Settings.Global.ENABLED_SUBSCRIPTION_FOR_SLOT,
                     Settings.Global.MODEM_STACK_ENABLED_FOR_SLOT,
                     Settings.Global.POWER_BUTTON_LONG_PRESS,
-                    Settings.Global.POWER_BUTTON_VERY_LONG_PRESS);
+                    Settings.Global.POWER_BUTTON_VERY_LONG_PRESS,
+                    Settings.Global.INTEGRITY_CHECK_INCLUDES_RULE_PROVIDER);
 
     private static final Set<String> BACKUP_BLACKLISTED_SECURE_SETTINGS =
              newHashSet(
@@ -725,6 +728,7 @@ public class SettingsBackupTest {
                  Settings.Secure.DOZE_WAKE_DISPLAY_GESTURE,
                  Settings.Secure.FACE_UNLOCK_RE_ENROLL,
                  Settings.Secure.TAP_GESTURE,
+                 Settings.Secure.NEARBY_SHARING_COMPONENT, // not user configurable
                  Settings.Secure.WINDOW_MAGNIFICATION,
                  Settings.Secure.ACCESSIBILITY_SHORTCUT_TARGET_MAGNIFICATION_CONTROLLER,
                  Settings.Secure.SUPPRESS_DOZE);
@@ -746,6 +750,7 @@ public class SettingsBackupTest {
     }
 
     @Test
+    @Suppress //("b/148236308")
     public void secureSettingsBackedUpOrBlacklisted() {
         HashSet<String> keys = new HashSet<String>();
         Collections.addAll(keys, SecureSettings.SETTINGS_TO_BACKUP);

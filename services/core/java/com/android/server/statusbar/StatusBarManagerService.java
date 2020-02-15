@@ -21,6 +21,7 @@ import static android.view.Display.DEFAULT_DISPLAY;
 
 import android.annotation.Nullable;
 import android.app.ActivityThread;
+import android.app.ITransientNotificationCallback;
 import android.app.Notification;
 import android.app.StatusBarManager;
 import android.content.ComponentName;
@@ -79,7 +80,6 @@ public class StatusBarManagerService extends IStatusBarService.Stub implements D
 
     private final Context mContext;
 
-    private final WindowManagerService mWindowManager;
     private Handler mHandler = new Handler();
     private NotificationDelegate mNotificationDelegate;
     private volatile IStatusBar mBar;
@@ -93,6 +93,7 @@ public class StatusBarManagerService extends IStatusBarService.Stub implements D
     private final Object mLock = new Object();
     private final DeathRecipient mDeathRecipient = new DeathRecipient();
     private int mCurrentUserId;
+    private boolean mTracingEnabled;
 
     private SparseArray<UiState> mDisplayUiState = new SparseArray<>();
 
@@ -176,11 +177,10 @@ public class StatusBarManagerService extends IStatusBarService.Stub implements D
     }
 
     /**
-     * Construct the service, add the status bar view to the window manager
+     * Construct the service
      */
-    public StatusBarManagerService(Context context, WindowManagerService windowManager) {
+    public StatusBarManagerService(Context context) {
         mContext = context;
-        mWindowManager = windowManager;
 
         LocalServices.addService(StatusBarManagerInternal.class, mInternalService);
         LocalServices.addService(GlobalActionsProvider.class, mGlobalActionsProvider);
@@ -501,6 +501,26 @@ public class StatusBarManagerService extends IStatusBarService.Stub implements D
                 } catch (RemoteException ex) { }
             }
         }
+
+        @Override
+        public void showToast(String packageName, IBinder token, CharSequence text,
+                IBinder windowToken, int duration,
+                @Nullable ITransientNotificationCallback callback) {
+            if (mBar != null) {
+                try {
+                    mBar.showToast(packageName, token, text, windowToken, duration, callback);
+                } catch (RemoteException ex) { }
+            }
+        }
+
+        @Override
+        public void hideToast(String packageName, IBinder token) {
+            if (mBar != null) {
+                try {
+                    mBar.hideToast(packageName, token);
+                } catch (RemoteException ex) { }
+            }
+        }
     };
 
     private final GlobalActionsProvider mGlobalActionsProvider = new GlobalActionsProvider() {
@@ -698,6 +718,31 @@ public class StatusBarManagerService extends IStatusBarService.Stub implements D
             } catch (RemoteException ex) {
             }
         }
+    }
+
+    @Override
+    public void startTracing() {
+        if (mBar != null) {
+            try {
+                mBar.startTracing();
+                mTracingEnabled = true;
+            } catch (RemoteException ex) {}
+        }
+    }
+
+    @Override
+    public void stopTracing() {
+        if (mBar != null) {
+            try {
+                mTracingEnabled = false;
+                mBar.stopTracing();
+            } catch (RemoteException ex) {}
+        }
+    }
+
+    @Override
+    public boolean isTracing() {
+        return mTracingEnabled;
     }
 
     // TODO(b/117478341): make it aware of multi-display if needed.
@@ -1338,6 +1383,17 @@ public class StatusBarManagerService extends IStatusBarService.Stub implements D
         long identity = Binder.clearCallingIdentity();
         try {
             mNotificationDelegate.onNotificationBubbleChanged(key, isBubble);
+        } finally {
+            Binder.restoreCallingIdentity(identity);
+        }
+    }
+
+    @Override
+    public void onBubbleNotificationSuppressionChanged(String key, boolean isNotifSuppressed) {
+        enforceStatusBarService();
+        long identity = Binder.clearCallingIdentity();
+        try {
+            mNotificationDelegate.onBubbleNotificationSuppressionChanged(key, isNotifSuppressed);
         } finally {
             Binder.restoreCallingIdentity(identity);
         }

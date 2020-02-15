@@ -36,6 +36,7 @@ import android.net.wifi.ISuggestionConnectionStatusListener;
 import android.net.wifi.ITrafficStateCallback;
 import android.net.wifi.ITxPacketCountListener;
 import android.net.wifi.IWifiConnectedNetworkScorer;
+import android.net.wifi.ScanResult;
 import android.net.wifi.SoftApConfiguration;
 import android.net.wifi.WifiConfiguration;
 import android.net.wifi.WifiInfo;
@@ -61,9 +62,9 @@ interface IWifiManager
 
     ParceledListSlice getPrivilegedConfiguredNetworks(String packageName, String featureId);
 
-    Map getAllMatchingFqdnsForScanResults(in List<android.net.wifi.ScanResult> scanResult);
+    Map getAllMatchingFqdnsForScanResults(in List<ScanResult> scanResult);
 
-    Map getMatchingOsuProviders(in List<android.net.wifi.ScanResult> scanResult);
+    Map getMatchingOsuProviders(in List<ScanResult> scanResult);
 
     Map getMatchingPasspointConfigsForOsuProviders(in List<OsuProvider> osuProviders);
 
@@ -89,15 +90,19 @@ interface IWifiManager
 
     boolean disableNetwork(int netId, String packageName);
 
+    void allowAutojoinGlobal(boolean choice);
+
     void allowAutojoin(int netId, boolean choice);
 
     void allowAutojoinPasspoint(String fqdn, boolean enableAutoJoin);
 
     void setMacRandomizationSettingPasspointEnabled(String fqdn, boolean enable);
 
+    void setMeteredOverridePasspoint(String fqdn, int meteredOverride);
+
     boolean startScan(String packageName, String featureId);
 
-    List<android.net.wifi.ScanResult> getScanResults(String callingPackage, String callingFeatureId);
+    List<ScanResult> getScanResults(String callingPackage, String callingFeatureId);
 
     boolean disconnect(String packageName);
 
@@ -118,8 +123,6 @@ interface IWifiManager
     boolean is6GHzBandSupported();
 
     boolean isWifiStandardSupported(int standard);
-
-    boolean needs5GHzToAnyApBandConversion();
 
     DhcpInfo getDhcpInfo();
 
@@ -179,8 +182,6 @@ interface IWifiManager
     void enableVerboseLogging(int verbose);
 
     int getVerboseLoggingLevel();
-
-    void enableWifiConnectivityManager(boolean enabled);
 
     void disableEphemeralNetwork(String SSID, String packageName);
 
@@ -284,11 +285,16 @@ interface IWifiManager
 
     int calculateSignalLevel(int rssi);
 
-    List<WifiConfiguration> getWifiConfigForMatchedNetworkSuggestionsSharedWithUser(in List<android.net.wifi.ScanResult> scanResults);
+    List<WifiConfiguration> getWifiConfigForMatchedNetworkSuggestionsSharedWithUser(in List<ScanResult> scanResults);
 
     boolean setWifiConnectedNetworkScorer(in IBinder binder, in IWifiConnectedNetworkScorer scorer);
 
     void clearWifiConnectedNetworkScorer();
+
+    /**
+     * Return the Map of {@link WifiNetworkSuggestion} and the list of <ScanResult>
+     */
+    Map getMatchingScanResults(in List<WifiNetworkSuggestion> networkSuggestions, in List<ScanResult> scanResults, String callingPackage, String callingFeatureId);
 
     int getSoftApWifiGeneration();
 }

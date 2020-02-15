@@ -16,7 +16,9 @@
 
 package com.android.internal.app;
 
+import android.annotation.Nullable;
 import android.content.Context;
+import android.os.UserHandle;
 import android.view.LayoutInflater;
 import android.view.ViewGroup;
 
@@ -36,8 +38,10 @@ public class ChooserMultiProfilePagerAdapter extends AbstractMultiProfilePagerAd
     private final ChooserProfileDescriptor[] mItems;
 
     ChooserMultiProfilePagerAdapter(Context context,
-            ChooserActivity.ChooserGridAdapter adapter) {
-        super(context, /* currentPage */ 0);
+            ChooserActivity.ChooserGridAdapter adapter,
+            UserHandle personalProfileUserHandle,
+            UserHandle workProfileUserHandle) {
+        super(context, /* currentPage */ 0, personalProfileUserHandle, workProfileUserHandle);
         mItems = new ChooserProfileDescriptor[] {
                 createProfileDescriptor(adapter)
         };
@@ -46,8 +50,11 @@ public class ChooserMultiProfilePagerAdapter extends AbstractMultiProfilePagerAd
     ChooserMultiProfilePagerAdapter(Context context,
             ChooserActivity.ChooserGridAdapter personalAdapter,
             ChooserActivity.ChooserGridAdapter workAdapter,
-            @Profile int defaultProfile) {
-        super(context, /* currentPage */ defaultProfile);
+            @Profile int defaultProfile,
+            UserHandle personalProfileUserHandle,
+            UserHandle workProfileUserHandle) {
+        super(context, /* currentPage */ defaultProfile, personalProfileUserHandle,
+                workProfileUserHandle);
         mItems = new ChooserProfileDescriptor[] {
                 createProfileDescriptor(personalAdapter),
                 createProfileDescriptor(workAdapter)
@@ -77,8 +84,21 @@ public class ChooserMultiProfilePagerAdapter extends AbstractMultiProfilePagerAd
     }
 
     @Override
-    ChooserActivity.ChooserGridAdapter getAdapterForIndex(int pageIndex) {
+    @VisibleForTesting
+    public ChooserActivity.ChooserGridAdapter getAdapterForIndex(int pageIndex) {
         return mItems[pageIndex].chooserGridAdapter;
+    }
+
+    @Override
+    @Nullable
+    ChooserListAdapter getListAdapterForUserHandle(UserHandle userHandle) {
+        if (getActiveListAdapter().getUserHandle() == userHandle) {
+            return getActiveListAdapter();
+        } else if (getInactiveListAdapter() != null
+                && getInactiveListAdapter().getUserHandle() == userHandle) {
+            return getInactiveListAdapter();
+        }
+        return null;
     }
 
     @Override
@@ -116,13 +136,33 @@ public class ChooserMultiProfilePagerAdapter extends AbstractMultiProfilePagerAd
     }
 
     @Override
+    public ResolverListAdapter getPersonalListAdapter() {
+        return getAdapterForIndex(PROFILE_PERSONAL).getListAdapter();
+    }
+
+    @Override
+    @Nullable
+    public ResolverListAdapter getWorkListAdapter() {
+        return getAdapterForIndex(PROFILE_WORK).getListAdapter();
+    }
+
+    @Override
     ChooserActivity.ChooserGridAdapter getCurrentRootAdapter() {
         return getAdapterForIndex(getCurrentPage());
     }
 
     @Override
-    RecyclerView getCurrentAdapterView() {
+    RecyclerView getActiveAdapterView() {
         return getListViewForIndex(getCurrentPage());
+    }
+
+    @Override
+    @Nullable
+    RecyclerView getInactiveAdapterView() {
+        if (getCount() == 1) {
+            return null;
+        }
+        return getListViewForIndex(1 - getCurrentPage());
     }
 
     class ChooserProfileDescriptor extends ProfileDescriptor {

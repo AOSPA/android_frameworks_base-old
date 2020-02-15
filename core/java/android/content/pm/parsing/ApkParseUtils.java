@@ -205,11 +205,8 @@ public class ApkParseUtils {
                 }
             }
 
-            return parsingPackage.setCodePath(packageDir.getCanonicalPath())
+            return parsingPackage.setCodePath(lite.codePath)
                     .setUse32BitAbi(lite.use32bitAbi);
-        } catch (IOException e) {
-            throw new PackageParserException(INSTALL_PARSE_FAILED_UNEXPECTED_EXCEPTION,
-                    "Failed to get path: " + lite.baseCodePath, e);
         } finally {
             IoUtils.closeQuietly(assetLoader);
         }
@@ -2426,6 +2423,21 @@ public class ApkParseUtils {
                     XmlUtils.skipCurrentTag(parser);
 
                     break;
+                case "processes":
+                    ArrayMap<String, ComponentParseUtils.ParsedProcess> processes =
+                            ComponentParseUtils.parseProcesses(separateProcesses,
+                                    parsingPackage,
+                                    res, parser, flags,
+                                    outError);
+                    if (processes == null) {
+                        return parseInput.error(
+                                PackageManager.INSTALL_PARSE_FAILED_MANIFEST_MALFORMED,
+                                outError[0]
+                        );
+                    }
+
+                    parsingPackage.setProcesses(processes);
+                    break;
                 case "uses-package":
                     // Dependencies for app installers; we don't currently try to
                     // enforce this.
@@ -3161,7 +3173,8 @@ public class ApkParseUtils {
                     pkg.getBaseCodePath(),
                     skipVerify,
                     pkg.isStaticSharedLibrary(),
-                    pkg.getSigningDetails()
+                    pkg.getSigningDetails(),
+                    pkg.getTargetSdkVersion()
             ));
 
             String[] splitCodePaths = pkg.getSplitCodePaths();
@@ -3171,7 +3184,8 @@ public class ApkParseUtils {
                             splitCodePaths[i],
                             skipVerify,
                             pkg.isStaticSharedLibrary(),
-                            pkg.getSigningDetails()
+                            pkg.getSigningDetails(),
+                            pkg.getTargetSdkVersion()
                     ));
                 }
             }
@@ -3184,9 +3198,11 @@ public class ApkParseUtils {
             String baseCodePath,
             boolean skipVerify,
             boolean isStaticSharedLibrary,
-            @NonNull SigningDetails existingSigningDetails
+            @NonNull SigningDetails existingSigningDetails,
+            int targetSdk
     ) throws PackageParserException {
-        int minSignatureScheme = SigningDetails.SignatureSchemeVersion.JAR;
+        int minSignatureScheme = ApkSignatureVerifier.getMinimumSignatureSchemeVersionForTargetSdk(
+                targetSdk);
         if (isStaticSharedLibrary) {
             // must use v2 signing scheme
             minSignatureScheme = SigningDetails.SignatureSchemeVersion.SIGNING_BLOCK_V2;

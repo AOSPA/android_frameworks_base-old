@@ -17,6 +17,8 @@
 package android.app;
 
 import static android.annotation.Dimension.DP;
+import static android.graphics.drawable.Icon.TYPE_URI;
+import static android.graphics.drawable.Icon.TYPE_URI_ADAPTIVE_BITMAP;
 
 import static com.android.internal.util.ContrastColorUtil.satisfiesTextContrast;
 
@@ -1003,6 +1005,31 @@ public class Notification implements Parcelable
      * @see Builder#setRemoteInputHistory(CharSequence[])
      */
     public static final String EXTRA_REMOTE_INPUT_HISTORY = "android.remoteInputHistory";
+
+
+    /**
+     * {@link #extras} key: this is a remote input history which can include media messages
+     * in addition to text, as supplied to
+     * {@link Builder#setRemoteInputHistory(RemoteInputHistoryItem[])} or
+     * {@link Builder#setRemoteInputHistory(CharSequence[])}.
+     *
+     * SystemUI can populate this through
+     * {@link Builder#setRemoteInputHistory(RemoteInputHistoryItem[])} with the most recent inputs
+     * that have been sent through a {@link RemoteInput} of this Notification. These items can
+     * represent either media content (specified by a URI and a MIME type) or a text message
+     * (described by a CharSequence).
+     *
+     * To maintain compatibility, this can also be set by apps with
+     * {@link Builder#setRemoteInputHistory(CharSequence[])}, which will create a
+     * {@link RemoteInputHistoryItem} for each of the provided text-only messages.
+     *
+     * The extra with this key is of type {@link RemoteInputHistoryItem[]} and contains the most
+     * recent entry at the 0 index, the second most recent at the 1 index, etc.
+     *
+     * @see Builder#setRemoteInputHistory(RemoteInputHistoryItem[])
+     * @hide
+     */
+    public static final String EXTRA_REMOTE_INPUT_HISTORY_ITEMS = "android.remoteInputHistoryItems";
 
     /**
      * {@link #extras} key: boolean as supplied to
@@ -2460,6 +2487,20 @@ public class Notification implements Parcelable
             if (extras.containsKey(EXTRA_BACKGROUND_IMAGE_URI)) {
                 visitor.accept(Uri.parse(extras.getString(EXTRA_BACKGROUND_IMAGE_URI)));
             }
+
+            ArrayList<Person> people = extras.getParcelableArrayList(EXTRA_PEOPLE_LIST);
+            if (people != null && !people.isEmpty()) {
+                for (Person p : people) {
+                    if (p.getIconUri() != null) {
+                        visitor.accept(p.getIconUri());
+                    }
+                }
+            }
+
+            final Person person = extras.getParcelable(EXTRA_MESSAGING_PERSON);
+            if (person != null && person.getIconUri() != null) {
+                visitor.accept(person.getIconUri());
+            }
         }
 
         if (MessagingStyle.class.equals(getNotificationStyle()) && extras != null) {
@@ -2468,6 +2509,11 @@ public class Notification implements Parcelable
                 for (MessagingStyle.Message message : MessagingStyle.Message
                         .getMessagesFromBundleArray(messages)) {
                     visitor.accept(message.getDataUri());
+
+                    Person senderPerson = message.getSenderPerson();
+                    if (senderPerson != null && senderPerson.getIconUri() != null) {
+                        visitor.accept(senderPerson.getIconUri());
+                    }
                 }
             }
 
@@ -2476,7 +2522,20 @@ public class Notification implements Parcelable
                 for (MessagingStyle.Message message : MessagingStyle.Message
                         .getMessagesFromBundleArray(historic)) {
                     visitor.accept(message.getDataUri());
+
+                    Person senderPerson = message.getSenderPerson();
+                    if (senderPerson != null && senderPerson.getIconUri() != null) {
+                        visitor.accept(senderPerson.getIconUri());
+                    }
                 }
+            }
+        }
+
+        if (mBubbleMetadata != null && mBubbleMetadata.getBubbleIcon() != null) {
+            final Icon icon = mBubbleMetadata.getBubbleIcon();
+            final int iconType = icon.getType();
+            if (iconType == TYPE_URI_ADAPTIVE_BITMAP || iconType == TYPE_URI) {
+                visitor.accept(icon.getUri());
             }
         }
     }
@@ -3534,8 +3593,16 @@ public class Notification implements Parcelable
          * This field will be ignored by Launchers that don't support badging, don't show
          * notification content, or don't show {@link android.content.pm.ShortcutManager shortcuts}.
          *
+         * If this notification has {@link BubbleMetadata} attached that was created with
+         * {@link BubbleMetadata.Builder#createShortcutBubble(String)} a check will be performed
+         * to ensure the shortcutId supplied to bubble metadata matches the shortcutId set here,
+         * if one was set. If the shortcutId's were specified but do not match, an exception
+         * is thrown.
+         *
          * @param shortcutId the {@link ShortcutInfo#getId() id} of the shortcut this notification
          *                   supersedes
+         *
+         * @see BubbleMetadata.Builder#createShortcutBubble(String)
          */
         @NonNull
         public Builder setShortcutId(String shortcutId) {
@@ -3833,12 +3900,37 @@ public class Notification implements Parcelable
             if (text == null) {
                 mN.extras.putCharSequenceArray(EXTRA_REMOTE_INPUT_HISTORY, null);
             } else {
-                final int N = Math.min(MAX_REPLY_HISTORY, text.length);
-                CharSequence[] safe = new CharSequence[N];
-                for (int i = 0; i < N; i++) {
+                final int itemCount = Math.min(MAX_REPLY_HISTORY, text.length);
+                CharSequence[] safe = new CharSequence[itemCount];
+                RemoteInputHistoryItem[] items = new RemoteInputHistoryItem[itemCount];
+                for (int i = 0; i < itemCount; i++) {
                     safe[i] = safeCharSequence(text[i]);
+                    items[i] = new RemoteInputHistoryItem(text[i]);
                 }
                 mN.extras.putCharSequenceArray(EXTRA_REMOTE_INPUT_HISTORY, safe);
+
+                // Also add these messages as structured history items.
+                mN.extras.putParcelableArray(EXTRA_REMOTE_INPUT_HISTORY_ITEMS, items);
+            }
+            return this;
+        }
+
+        /**
+         * Set the remote input history, with support for embedding URIs and mime types for
+         * images and other media.
+         * @hide
+         */
+        @NonNull
+        public Builder setRemoteInputHistory(RemoteInputHistoryItem[] items) {
+            if (items == null) {
+                mN.extras.putParcelableArray(EXTRA_REMOTE_INPUT_HISTORY_ITEMS, null);
+            } else {
+                final int itemCount = Math.min(MAX_REPLY_HISTORY, items.length);
+                RemoteInputHistoryItem[] history = new RemoteInputHistoryItem[itemCount];
+                for (int i = 0; i < itemCount; i++) {
+                    history[i] = items[i];
+                }
+                mN.extras.putParcelableArray(EXTRA_REMOTE_INPUT_HISTORY_ITEMS, history);
             }
             return this;
         }
@@ -5246,16 +5338,17 @@ public class Notification implements Parcelable
                 big.setViewVisibility(R.id.actions_container, View.GONE);
             }
 
-            CharSequence[] replyText = mN.extras.getCharSequenceArray(EXTRA_REMOTE_INPUT_HISTORY);
-            if (validRemoteInput && replyText != null
-                    && replyText.length > 0 && !TextUtils.isEmpty(replyText[0])
+            RemoteInputHistoryItem[] replyText = (RemoteInputHistoryItem[])
+                    mN.extras.getParcelableArray(EXTRA_REMOTE_INPUT_HISTORY_ITEMS);
+            if (validRemoteInput && replyText != null && replyText.length > 0
+                    && !TextUtils.isEmpty(replyText[0].getText())
                     && p.maxRemoteInputHistory > 0) {
                 boolean showSpinner = mN.extras.getBoolean(EXTRA_SHOW_REMOTE_INPUT_SPINNER);
                 big.setViewVisibility(R.id.notification_material_reply_container, View.VISIBLE);
                 big.setViewVisibility(R.id.notification_material_reply_text_1_container,
                         View.VISIBLE);
                 big.setTextViewText(R.id.notification_material_reply_text_1,
-                        processTextSpans(replyText[0]));
+                        processTextSpans(replyText[0].getText()));
                 setTextViewColorSecondary(big, R.id.notification_material_reply_text_1, p);
                 big.setViewVisibility(R.id.notification_material_reply_progress,
                         showSpinner ? View.VISIBLE : View.GONE);
@@ -5264,19 +5357,19 @@ public class Notification implements Parcelable
                         ColorStateList.valueOf(
                                 isColorized(p) ? getPrimaryTextColor(p) : resolveContrastColor(p)));
 
-                if (replyText.length > 1 && !TextUtils.isEmpty(replyText[1])
+                if (replyText.length > 1 && !TextUtils.isEmpty(replyText[1].getText())
                         && p.maxRemoteInputHistory > 1) {
                     big.setViewVisibility(R.id.notification_material_reply_text_2, View.VISIBLE);
                     big.setTextViewText(R.id.notification_material_reply_text_2,
-                            processTextSpans(replyText[1]));
+                            processTextSpans(replyText[1].getText()));
                     setTextViewColorSecondary(big, R.id.notification_material_reply_text_2, p);
 
-                    if (replyText.length > 2 && !TextUtils.isEmpty(replyText[2])
+                    if (replyText.length > 2 && !TextUtils.isEmpty(replyText[2].getText())
                             && p.maxRemoteInputHistory > 2) {
                         big.setViewVisibility(
                                 R.id.notification_material_reply_text_3, View.VISIBLE);
                         big.setTextViewText(R.id.notification_material_reply_text_3,
-                                processTextSpans(replyText[2]));
+                                processTextSpans(replyText[2].getText()));
                         setTextViewColorSecondary(big, R.id.notification_material_reply_text_3, p);
                     }
                 }
@@ -5865,9 +5958,29 @@ public class Notification implements Parcelable
         /**
          * Combine all of the options that have been set and return a new {@link Notification}
          * object.
+         *
+         * If this notification has {@link BubbleMetadata} attached that was created with
+         * {@link BubbleMetadata.Builder#createShortcutBubble(String)} a check will be performed
+         * to ensure the shortcutId supplied to bubble metadata matches the shortcutId set on the
+         * notification builder, if one was set. If the shortcutId's were specified but do not
+         * match, an exception is thrown here.
+         *
+         * @see BubbleMetadata.Builder#createShortcutBubble(String)
+         * @see #setShortcutId(String)
          */
         @NonNull
         public Notification build() {
+            // Check shortcut id matches
+            if (mN.mShortcutId != null
+                    && mN.mBubbleMetadata != null
+                    && mN.mBubbleMetadata.getShortcutId() != null
+                    && !mN.mShortcutId.equals(mN.mBubbleMetadata.getShortcutId())) {
+                throw new IllegalArgumentException(
+                        "Notification and BubbleMetadata shortcut id's don't match,"
+                                + " notification: " + mN.mShortcutId
+                                + " vs bubble: " + mN.mBubbleMetadata.getShortcutId());
+            }
+
             // first, add any extras from the calling code
             if (mUserExtras != null) {
                 mN.extras = getAllExtras();
@@ -7517,7 +7630,7 @@ public class Notification implements Parcelable
             @Nullable
             private final Person mSender;
             /** True if this message was generated from the extra
-             *  {@link Notification#EXTRA_REMOTE_INPUT_HISTORY}
+             *  {@link Notification#EXTRA_REMOTE_INPUT_HISTORY_ITEMS}
              */
             private final boolean mRemoteInputHistory;
 
@@ -7569,7 +7682,7 @@ public class Notification implements Parcelable
              * Should be <code>null</code> for messages by the current user, in which case
              * the platform will insert the user set in {@code MessagingStyle(Person)}.
              * @param remoteInputHistory True if the messages was generated from the extra
-             * {@link Notification#EXTRA_REMOTE_INPUT_HISTORY}.
+             * {@link Notification#EXTRA_REMOTE_INPUT_HISTORY_ITEMS}.
              * <p>
              * The person provided should contain an Icon, set with
              * {@link Person.Builder#setIcon(Icon)} and also have a name provided
@@ -7676,7 +7789,7 @@ public class Notification implements Parcelable
 
             /**
              * @return True if the message was generated from
-             * {@link Notification#EXTRA_REMOTE_INPUT_HISTORY}.
+             * {@link Notification#EXTRA_REMOTE_INPUT_HISTORY_ITEMS}.
              * @hide
              */
             public boolean isRemoteInputHistory() {
@@ -7906,8 +8019,8 @@ public class Notification implements Parcelable
             if (mBuilder.mActions.size() > 0) {
                 maxRows--;
             }
-            CharSequence[] remoteInputHistory = mBuilder.mN.extras.getCharSequenceArray(
-                    EXTRA_REMOTE_INPUT_HISTORY);
+            RemoteInputHistoryItem[] remoteInputHistory = (RemoteInputHistoryItem[])
+                    mBuilder.mN.extras.getParcelableArray(EXTRA_REMOTE_INPUT_HISTORY_ITEMS);
             if (remoteInputHistory != null
                     && remoteInputHistory.length > NUMBER_OF_HISTORY_ALLOWED_UNTIL_REDUCTION) {
                 // Let's remove some messages to make room for the remote input history.
@@ -8583,17 +8696,23 @@ public class Notification implements Parcelable
         public static final int FLAG_AUTO_EXPAND_BUBBLE = 0x00000001;
 
         /**
-         * If set and the app posting the bubble is in the foreground, the bubble will
-         * be posted <b>without</b> the associated notification in the notification shade.
+         * Indicates whether the notification associated with the bubble is being visually
+         * suppressed from the notification shade. When <code>true</code> the notification is
+         * hidden, when <code>false</code> the notification shows as normal.
          *
-         * <p>This flag has no effect if the app posting the bubble is not in the foreground.
-         * The app is considered foreground if it is visible and on the screen, note that
-         * a foreground service does not qualify.
-         * </p>
+         * <p>Apps sending bubbles may set this flag so that the bubble is posted <b>without</b>
+         * the associated notification in the notification shade.</p>
          *
-         * <p>Generally this flag should only be set if the user has performed an action to request
-         * or create a bubble, or if the user has seen the content in the notification and the
-         * notification is no longer relevant.</p>
+         * <p>Apps sending bubbles can only apply this flag when the app is in the foreground,
+         * otherwise the flag is not respected. The app is considered foreground if it is visible
+         * and on the screen, note that a foreground service does not qualify.</p>
+         *
+         * <p>Generally this flag should only be set by the app if the user has performed an
+         * action to request or create a bubble, or if the user has seen the content in the
+         * notification and the notification is no longer relevant. </p>
+         *
+         * <p>The system will also update this flag with <code>true</code> to hide the notification
+         * from the user once the bubble has been expanded. </p>
          *
          * @hide
          */
@@ -8711,6 +8830,24 @@ public class Notification implements Parcelable
         }
 
         /**
+         * Indicates whether the notification associated with the bubble is being visually
+         * suppressed from the notification shade. When <code>true</code> the notification is
+         * hidden, when <code>false</code> the notification shows as normal.
+         *
+         * <p>Apps sending bubbles may set this flag so that the bubble is posted <b>without</b>
+         * the associated notification in the notification shade.</p>
+         *
+         * <p>Apps sending bubbles can only apply this flag when the app is in the foreground,
+         * otherwise the flag is not respected. The app is considered foreground if it is visible
+         * and on the screen, note that a foreground service does not qualify.</p>
+         *
+         * <p>Generally the app should only set this flag if the user has performed an
+         * action to request or create a bubble, or if the user has seen the content in the
+         * notification and the notification is no longer relevant. </p>
+         *
+         * <p>The system will update this flag with <code>true</code> to hide the notification
+         * from the user once the bubble has been expanded.</p>
+         *
          * @return whether this bubble should suppress the notification when it is posted.
          *
          * @see BubbleMetadata.Builder#setSuppressNotification(boolean)
@@ -8848,6 +8985,12 @@ public class Notification implements Parcelable
                 }
                 if (icon == null) {
                     throw new IllegalArgumentException("Bubbles require non-null icon");
+                }
+                if (icon.getType() != TYPE_URI_ADAPTIVE_BITMAP
+                        && icon.getType() != TYPE_URI) {
+                    Log.w(TAG, "Bubbles work best with icons of TYPE_URI or "
+                            + "TYPE_URI_ADAPTIVE_BITMAP. "
+                            + "In the future, using an icon of this type will be required.");
                 }
                 mShortcutId = null;
                 mPendingIntent = intent;

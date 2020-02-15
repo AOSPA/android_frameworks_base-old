@@ -45,7 +45,10 @@ import android.database.ContentObserver;
 import android.os.Binder;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
 import android.os.IBinder;
+import android.os.Looper;
+import android.os.ParcelFileDescriptor;
 import android.os.RemoteException;
 import android.os.ResultReceiver;
 import android.os.ShellCallback;
@@ -55,8 +58,11 @@ import android.provider.DeviceConfig;
 import android.provider.DeviceConfig.Properties;
 import android.provider.Settings;
 import android.service.contentcapture.ActivityEvent.ActivityEventType;
+import android.service.contentcapture.IDataShareCallback;
+import android.service.contentcapture.IDataShareReadAdapter;
 import android.util.ArraySet;
 import android.util.LocalLog;
+import android.util.Pair;
 import android.util.Slog;
 import android.util.SparseArray;
 import android.util.SparseBooleanArray;
@@ -64,7 +70,9 @@ import android.view.contentcapture.ContentCaptureCondition;
 import android.view.contentcapture.ContentCaptureHelper;
 import android.view.contentcapture.ContentCaptureManager;
 import android.view.contentcapture.DataRemovalRequest;
+import android.view.contentcapture.DataShareRequest;
 import android.view.contentcapture.IContentCaptureManager;
+import android.view.contentcapture.IDataShareWriteAdapter;
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.infra.AbstractRemoteService;
@@ -77,9 +85,17 @@ import com.android.server.infra.AbstractMasterSystemService;
 import com.android.server.infra.FrameworkResourcesServiceNameResolver;
 
 import java.io.FileDescriptor;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.io.PrintWriter;
+import java.lang.ref.WeakReference;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
+import java.util.concurrent.Executor;
+import java.util.concurrent.Executors;
 
 /**
  * A service used to observe the contents of the screen.
@@ -91,9 +107,13 @@ import java.util.List;
 public final class ContentCaptureManagerService extends
         AbstractMasterSystemService<ContentCaptureManagerService, ContentCapturePerUserService> {
 
+    private static final String TAG = ContentCaptureManagerService.class.getSimpleName();
     static final String RECEIVER_BUNDLE_EXTRA_SESSIONS = "sessions";
 
     private static final int MAX_TEMP_SERVICE_DURATION_MS = 1_000 * 60 * 2; // 2 minutes
+    private static final int MAX_DATA_SHARE_FILE_DESCRIPTORS_TTL_MS =  1_000 * 60 * 5; // 5 minutes
+    private static final int MAX_CONCURRENT_FILE_SHARING_REQUESTS = 10;
+    private static final int DATA_SHARE_BYTE_BUFFER_LENGTH = 1_024;
 
     private final LocalService mLocalService = new LocalService();
 
@@ -126,6 +146,12 @@ public final class ContentCaptureManagerService extends
     @GuardedBy("mLock") int mDevCfgLogHistorySize;
     @GuardedBy("mLock") int mDevCfgIdleUnbindTimeoutMs;
 
+    private final Executor mDataShareExecutor = Executors.newCachedThreadPool();
+    private final Handler mHandler = new Handler(Looper.getMainLooper());
+
+    @GuardedBy("mLock")
+    private final Set<String> mPackagesWithShareRequests = new HashSet<>();
+
     final GlobalContentCaptureOptions mGlobalContentCaptureOptions =
             new GlobalContentCaptureOptions();
 
@@ -140,11 +166,11 @@ public final class ContentCaptureManagerService extends
         setDeviceConfigProperties();
 
         if (mDevCfgLogHistorySize > 0) {
-            if (debug) Slog.d(mTag, "log history size: " + mDevCfgLogHistorySize);
+            if (debug) Slog.d(TAG, "log history size: " + mDevCfgLogHistorySize);
             mRequestsHistory = new LocalLog(mDevCfgLogHistorySize);
         } else {
             if (debug) {
-                Slog.d(mTag, "disabled log history because size is " + mDevCfgLogHistorySize);
+                Slog.d(TAG, "disabled log history because size is " + mDevCfgLogHistorySize);
             }
             mRequestsHistory = null;
         }
@@ -155,7 +181,7 @@ public final class ContentCaptureManagerService extends
             final boolean disabled = !isEnabledBySettings(userId);
             // Sets which services are disabled by settings
             if (disabled) {
-                Slog.i(mTag, "user " + userId + " disabled by settings");
+                Slog.i(TAG, "user " + userId + " disabled by settings");
                 if (mDisabledBySettings == null) {
                     mDisabledBySettings = new SparseBooleanArray(1);
                 }
@@ -218,7 +244,7 @@ public final class ContentCaptureManagerService extends
 
     @Override // from AbstractMasterSystemService
     protected void enforceCallingPermissionForManagement() {
-        getContext().enforceCallingPermission(MANAGE_CONTENT_CAPTURE, mTag);
+        getContext().enforceCallingPermission(MANAGE_CONTENT_CAPTURE, TAG);
     }
 
     @Override // from AbstractMasterSystemService
@@ -242,7 +268,7 @@ public final class ContentCaptureManagerService extends
                         isEnabledBySettings(userId));
                 return;
             default:
-                Slog.w(mTag, "Unexpected property (" + property + "); updating cache instead");
+                Slog.w(TAG, "Unexpected property (" + property + "); updating cache instead");
         }
     }
 
@@ -279,7 +305,7 @@ public final class ContentCaptureManagerService extends
                     setFineTuneParamsFromDeviceConfig();
                     return;
                 default:
-                    Slog.i(mTag, "Ignoring change on " + key);
+                    Slog.i(TAG, "Ignoring change on " + key);
             }
         }
     }
@@ -306,7 +332,7 @@ public final class ContentCaptureManagerService extends
                     ContentCaptureManager.DEVICE_CONFIG_PROPERTY_IDLE_UNBIND_TIMEOUT,
                     (int) AbstractRemoteService.PERMANENT_BOUND_TIMEOUT_MS);
             if (verbose) {
-                Slog.v(mTag, "setFineTuneParamsFromDeviceConfig(): "
+                Slog.v(TAG, "setFineTuneParamsFromDeviceConfig(): "
                         + "bufferSize=" + mDevCfgMaxBufferSize
                         + ", idleFlush=" + mDevCfgIdleFlushingFrequencyMs
                         + ", textFluxh=" + mDevCfgTextChangeFlushingFrequencyMs
@@ -325,7 +351,7 @@ public final class ContentCaptureManagerService extends
         verbose = ContentCaptureHelper.sVerbose;
         debug = ContentCaptureHelper.sDebug;
         if (verbose) {
-            Slog.v(mTag, "setLoggingLevelFromDeviceConfig(): level=" + mDevCfgLoggingLevel
+            Slog.v(TAG, "setLoggingLevelFromDeviceConfig(): level=" + mDevCfgLoggingLevel
                     + ", debug=" + debug + ", verbose=" + verbose);
         }
     }
@@ -340,7 +366,7 @@ public final class ContentCaptureManagerService extends
 
     private void setDisabledByDeviceConfig(@Nullable String explicitlyEnabled) {
         if (verbose) {
-            Slog.v(mTag, "setDisabledByDeviceConfig(): explicitlyEnabled=" + explicitlyEnabled);
+            Slog.v(TAG, "setDisabledByDeviceConfig(): explicitlyEnabled=" + explicitlyEnabled);
         }
         final List<UserInfo> users = getSupportedUsers();
 
@@ -355,17 +381,17 @@ public final class ContentCaptureManagerService extends
         synchronized (mLock) {
             if (mDisabledByDeviceConfig == newDisabledValue) {
                 if (verbose) {
-                    Slog.v(mTag, "setDisabledByDeviceConfig(): already " + newDisabledValue);
+                    Slog.v(TAG, "setDisabledByDeviceConfig(): already " + newDisabledValue);
                 }
                 return;
             }
             mDisabledByDeviceConfig = newDisabledValue;
 
-            Slog.i(mTag, "setDisabledByDeviceConfig(): set to " + mDisabledByDeviceConfig);
+            Slog.i(TAG, "setDisabledByDeviceConfig(): set to " + mDisabledByDeviceConfig);
             for (int i = 0; i < users.size(); i++) {
                 final int userId = users.get(i).id;
                 boolean disabled = mDisabledByDeviceConfig || isDisabledBySettingsLocked(userId);
-                Slog.i(mTag, "setDisabledByDeviceConfig(): updating service for user "
+                Slog.i(TAG, "setDisabledByDeviceConfig(): updating service for user "
                         + userId + " to " + (disabled ? "'disabled'" : "'enabled'"));
                 updateCachedServiceLocked(userId, disabled);
             }
@@ -381,16 +407,16 @@ public final class ContentCaptureManagerService extends
             final boolean alreadyEnabled = !mDisabledBySettings.get(userId);
             if (!(enabled ^ alreadyEnabled)) {
                 if (debug) {
-                    Slog.d(mTag, "setContentCaptureFeatureEnabledForUser(): already " + enabled);
+                    Slog.d(TAG, "setContentCaptureFeatureEnabledForUser(): already " + enabled);
                 }
                 return;
             }
             if (enabled) {
-                Slog.i(mTag, "setContentCaptureFeatureEnabled(): enabling service for user "
+                Slog.i(TAG, "setContentCaptureFeatureEnabled(): enabling service for user "
                         + userId);
                 mDisabledBySettings.delete(userId);
             } else {
-                Slog.i(mTag, "setContentCaptureFeatureEnabled(): disabling service for user "
+                Slog.i(TAG, "setContentCaptureFeatureEnabled(): disabling service for user "
                         + userId);
                 mDisabledBySettings.put(userId, true);
             }
@@ -401,7 +427,7 @@ public final class ContentCaptureManagerService extends
 
     // Called by Shell command.
     void destroySessions(@UserIdInt int userId, @NonNull IResultReceiver receiver) {
-        Slog.i(mTag, "destroySessions() for userId " + userId);
+        Slog.i(TAG, "destroySessions() for userId " + userId);
         enforceCallingPermissionForManagement();
 
         synchronized (mLock) {
@@ -424,7 +450,7 @@ public final class ContentCaptureManagerService extends
 
     // Called by Shell command.
     void listSessions(int userId, IResultReceiver receiver) {
-        Slog.i(mTag, "listSessions() for userId " + userId);
+        Slog.i(TAG, "listSessions() for userId " + userId);
         enforceCallingPermissionForManagement();
 
         final Bundle resultData = new Bundle();
@@ -471,14 +497,14 @@ public final class ContentCaptureManagerService extends
         final int callingUid = Binder.getCallingUid();
         final String serviceName = mServiceNameResolver.getServiceName(userId);
         if (serviceName == null) {
-            Slog.e(mTag, methodName + ": called by UID " + callingUid
+            Slog.e(TAG, methodName + ": called by UID " + callingUid
                     + ", but there's no service set for user " + userId);
             return false;
         }
 
         final ComponentName serviceComponent = ComponentName.unflattenFromString(serviceName);
         if (serviceComponent == null) {
-            Slog.w(mTag, methodName + ": invalid service name: " + serviceName);
+            Slog.w(TAG, methodName + ": invalid service name: " + serviceName);
             return false;
         }
 
@@ -489,11 +515,11 @@ public final class ContentCaptureManagerService extends
         try {
             serviceUid = pm.getPackageUidAsUser(servicePackageName, UserHandle.getCallingUserId());
         } catch (NameNotFoundException e) {
-            Slog.w(mTag, methodName + ": could not verify UID for " + serviceName);
+            Slog.w(TAG, methodName + ": could not verify UID for " + serviceName);
             return false;
         }
         if (callingUid != serviceUid) {
-            Slog.e(mTag, methodName + ": called by UID " + callingUid + ", but service UID is "
+            Slog.e(TAG, methodName + ": called by UID " + callingUid + ", but service UID is "
                     + serviceUid);
             return false;
         }
@@ -516,7 +542,7 @@ public final class ContentCaptureManagerService extends
             try {
                 result.send(RESULT_CODE_SECURITY_EXCEPTION, bundleFor(e.getMessage()));
             } catch (RemoteException e2) {
-                Slog.w(mTag, "Unable to send security exception (" + e + "): ", e2);
+                Slog.w(TAG, "Unable to send security exception (" + e + "): ", e2);
             }
         }
         return true;
@@ -601,7 +627,7 @@ public final class ContentCaptureManagerService extends
             try {
                 result.send(RESULT_CODE_OK, bundleFor(connectedServiceComponentName));
             } catch (RemoteException e) {
-                Slog.w(mTag, "Unable to send service component name: " + e);
+                Slog.w(TAG, "Unable to send service component name: " + e);
             }
         }
 
@@ -614,6 +640,35 @@ public final class ContentCaptureManagerService extends
             synchronized (mLock) {
                 final ContentCapturePerUserService service = getServiceForUserLocked(userId);
                 service.removeDataLocked(request);
+            }
+        }
+
+        @Override
+        public void shareData(@NonNull DataShareRequest request,
+                @NonNull IDataShareWriteAdapter clientAdapter) {
+            Preconditions.checkNotNull(request);
+            Preconditions.checkNotNull(clientAdapter);
+
+            assertCalledByPackageOwner(request.getPackageName());
+
+            final int userId = UserHandle.getCallingUserId();
+            synchronized (mLock) {
+                final ContentCapturePerUserService service = getServiceForUserLocked(userId);
+
+                if (mPackagesWithShareRequests.size() >= MAX_CONCURRENT_FILE_SHARING_REQUESTS
+                        || mPackagesWithShareRequests.contains(request.getPackageName())) {
+                    try {
+                        clientAdapter.error(
+                                ContentCaptureManager.DATA_SHARE_ERROR_CONCURRENT_REQUEST);
+                    } catch (RemoteException e) {
+                        Slog.e(TAG, "Failed to send error message to client");
+                    }
+                    return;
+                }
+
+                service.onDataSharedLocked(request,
+                        new DataShareCallbackDelegate(request, clientAdapter,
+                                ContentCaptureManagerService.this));
             }
         }
 
@@ -632,7 +687,7 @@ public final class ContentCaptureManagerService extends
             try {
                 result.send(enabled ? RESULT_CODE_TRUE : RESULT_CODE_FALSE, /* resultData= */null);
             } catch (RemoteException e) {
-                Slog.w(mTag, "Unable to send isContentCaptureFeatureEnabled(): " + e);
+                Slog.w(TAG, "Unable to send isContentCaptureFeatureEnabled(): " + e);
             }
         }
 
@@ -652,7 +707,7 @@ public final class ContentCaptureManagerService extends
             try {
                 result.send(RESULT_CODE_OK, bundleFor(componentName));
             } catch (RemoteException e) {
-                Slog.w(mTag, "Unable to send getServiceSettingsIntent(): " + e);
+                Slog.w(TAG, "Unable to send getServiceSettingsIntent(): " + e);
             }
         }
 
@@ -673,13 +728,13 @@ public final class ContentCaptureManagerService extends
             try {
                 result.send(RESULT_CODE_OK, bundleFor(conditions));
             } catch (RemoteException e) {
-                Slog.w(mTag, "Unable to send getServiceComponentName(): " + e);
+                Slog.w(TAG, "Unable to send getServiceComponentName(): " + e);
             }
         }
 
         @Override
         public void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
-            if (!DumpUtils.checkDumpPermission(getContext(), mTag, pw)) return;
+            if (!DumpUtils.checkDumpPermission(getContext(), TAG, pw)) return;
 
             boolean showHistory = true;
             if (args != null) {
@@ -692,7 +747,7 @@ public final class ContentCaptureManagerService extends
                             pw.println("Usage: dumpsys content_capture [--no-history]");
                             return;
                         default:
-                            Slog.w(mTag, "Ignoring invalid dump arg: " + arg);
+                            Slog.w(TAG, "Ignoring invalid dump arg: " + arg);
                     }
                 }
             }
@@ -789,7 +844,7 @@ public final class ContentCaptureManagerService extends
                     final ComponentName componentName =
                             ComponentName.unflattenFromString(serviceName);
                     if (componentName == null) {
-                        Slog.w(mTag, "setServiceInfo(): invalid name: " + serviceName);
+                        Slog.w(TAG, "setServiceInfo(): invalid name: " + serviceName);
                         mServicePackages.remove(userId);
                     } else {
                         mServicePackages.put(userId, componentName.getPackageName());
@@ -815,7 +870,7 @@ public final class ContentCaptureManagerService extends
                             && packageName.equals(mServicePackages.get(userId))) {
                         // No components whitelisted either, but let it go because it's the
                         // service's own package
-                        if (verbose) Slog.v(mTag, "getOptionsForPackage() lite for " + packageName);
+                        if (verbose) Slog.v(TAG, "getOptionsForPackage() lite for " + packageName);
                         return new ContentCaptureOptions(mDevCfgLoggingLevel);
                     }
                 }
@@ -824,7 +879,7 @@ public final class ContentCaptureManagerService extends
             // Restrict what temporary services can whitelist
             if (Build.IS_USER && mServiceNameResolver.isTemporary(userId)) {
                 if (!packageName.equals(mServicePackages.get(userId))) {
-                    Slog.w(mTag, "Ignoring package " + packageName + " while using temporary "
+                    Slog.w(TAG, "Ignoring package " + packageName + " while using temporary "
                             + "service " + mServicePackages.get(userId));
                     return null;
                 }
@@ -833,7 +888,7 @@ public final class ContentCaptureManagerService extends
             if (!packageWhitelisted && whitelistedComponents == null) {
                 // No can do!
                 if (verbose) {
-                    Slog.v(mTag, "getOptionsForPackage(" + packageName + "): not whitelisted");
+                    Slog.v(TAG, "getOptionsForPackage(" + packageName + "): not whitelisted");
                 }
                 return null;
             }
@@ -842,7 +897,7 @@ public final class ContentCaptureManagerService extends
                     mDevCfgMaxBufferSize, mDevCfgIdleFlushingFrequencyMs,
                     mDevCfgTextChangeFlushingFrequencyMs, mDevCfgLogHistorySize,
                     whitelistedComponents);
-            if (verbose) Slog.v(mTag, "getOptionsForPackage(" + packageName + "): " + options);
+            if (verbose) Slog.v(TAG, "getOptionsForPackage(" + packageName + "): " + options);
             return options;
         }
 
@@ -857,6 +912,226 @@ public final class ContentCaptureManagerService extends
                 if (mTemporaryServices.size() > 0) {
                     pw.print(prefix); pw.print("Temp services: "); pw.println(mTemporaryServices);
                 }
+            }
+        }
+    }
+
+    private static class DataShareCallbackDelegate extends IDataShareCallback.Stub {
+
+        @NonNull private final DataShareRequest mDataShareRequest;
+        @NonNull private final WeakReference<IDataShareWriteAdapter> mClientAdapterReference;
+        @NonNull private final WeakReference<ContentCaptureManagerService> mParentServiceReference;
+
+        DataShareCallbackDelegate(@NonNull DataShareRequest dataShareRequest,
+                @NonNull IDataShareWriteAdapter clientAdapter,
+                ContentCaptureManagerService parentService) {
+            mDataShareRequest = dataShareRequest;
+            mClientAdapterReference = new WeakReference<>(clientAdapter);
+            mParentServiceReference = new WeakReference<>(parentService);
+        }
+
+        @Override
+        public void accept(IDataShareReadAdapter serviceAdapter) throws RemoteException {
+            Slog.i(TAG, "Data share request accepted by Content Capture service");
+
+            final ContentCaptureManagerService parentService = mParentServiceReference.get();
+            final IDataShareWriteAdapter clientAdapter = mClientAdapterReference.get();
+            if (parentService == null || clientAdapter == null) {
+                Slog.w(TAG, "Can't fulfill accept() request, because remote objects have been "
+                        + "GC'ed");
+                return;
+            }
+
+            final WeakReference<IDataShareReadAdapter> serviceAdapterReference =
+                    new WeakReference<>(serviceAdapter);
+
+            Pair<ParcelFileDescriptor, ParcelFileDescriptor> clientPipe = createPipe();
+            if (clientPipe == null) {
+                clientAdapter.error(ContentCaptureManager.DATA_SHARE_ERROR_UNKNOWN);
+                serviceAdapter.error(ContentCaptureManager.DATA_SHARE_ERROR_UNKNOWN);
+                return;
+            }
+
+            ParcelFileDescriptor sourceIn = clientPipe.second;
+            ParcelFileDescriptor sinkIn = clientPipe.first;
+
+            Pair<ParcelFileDescriptor, ParcelFileDescriptor> servicePipe = createPipe();
+            if (servicePipe == null) {
+                bestEffortCloseFileDescriptors(sourceIn, sinkIn);
+
+                clientAdapter.error(ContentCaptureManager.DATA_SHARE_ERROR_UNKNOWN);
+                serviceAdapter.error(ContentCaptureManager.DATA_SHARE_ERROR_UNKNOWN);
+                return;
+            }
+
+            ParcelFileDescriptor sourceOut = servicePipe.second;
+            ParcelFileDescriptor sinkOut = servicePipe.first;
+
+            parentService.mPackagesWithShareRequests.add(mDataShareRequest.getPackageName());
+
+            clientAdapter.write(sourceIn);
+            serviceAdapter.start(sinkOut);
+
+            // File descriptor received by the client app will be a copy of the current one. Close
+            // the one that belongs to the system server, so there's only 1 open left for the
+            // current pipe.
+            bestEffortCloseFileDescriptor(sourceIn);
+
+            parentService.mDataShareExecutor.execute(() -> {
+                try (InputStream fis =
+                             new ParcelFileDescriptor.AutoCloseInputStream(sinkIn);
+                     OutputStream fos =
+                             new ParcelFileDescriptor.AutoCloseOutputStream(sourceOut)) {
+
+                    byte[] byteBuffer = new byte[DATA_SHARE_BYTE_BUFFER_LENGTH];
+                    while (true) {
+                        int readBytes = fis.read(byteBuffer);
+
+                        if (readBytes == -1) {
+                            break;
+                        }
+
+                        fos.write(byteBuffer, 0 /* offset */, readBytes);
+                    }
+                } catch (IOException e) {
+                    Slog.e(TAG, "Failed to pipe client and service streams", e);
+
+                    sendErrorSignal(mClientAdapterReference, serviceAdapterReference,
+                            ContentCaptureManager.DATA_SHARE_ERROR_UNKNOWN);
+                }
+            });
+
+            parentService.mHandler.postDelayed(() ->
+                    enforceDataSharingTtl(
+                            sourceIn,
+                            sinkIn,
+                            sourceOut,
+                            sinkOut,
+                            serviceAdapterReference),
+                    MAX_DATA_SHARE_FILE_DESCRIPTORS_TTL_MS);
+        }
+
+        @Override
+        public void reject() throws RemoteException {
+            Slog.i(TAG, "Data share request rejected by Content Capture service");
+
+            IDataShareWriteAdapter clientAdapter = mClientAdapterReference.get();
+            if (clientAdapter == null) {
+                Slog.w(TAG, "Can't fulfill reject() request, because remote objects have been "
+                        + "GC'ed");
+                return;
+            }
+
+            clientAdapter.rejected();
+        }
+
+        private void enforceDataSharingTtl(ParcelFileDescriptor sourceIn,
+                ParcelFileDescriptor sinkIn,
+                ParcelFileDescriptor sourceOut,
+                ParcelFileDescriptor sinkOut,
+                WeakReference<IDataShareReadAdapter> serviceAdapterReference) {
+
+            final ContentCaptureManagerService parentService = mParentServiceReference.get();
+            if (parentService == null) {
+                Slog.w(TAG, "Can't enforce data sharing TTL, because remote objects have been "
+                        + "GC'ed");
+                return;
+            }
+
+            synchronized (parentService.mLock) {
+                parentService.mPackagesWithShareRequests
+                        .remove(mDataShareRequest.getPackageName());
+
+                // Interaction finished successfully <=> all data has been written to Content
+                // Capture Service. If it hasn't been read successfully, service would be able
+                // to signal by closing the input stream while not have finished reading.
+                boolean finishedSuccessfully = !sinkIn.getFileDescriptor().valid()
+                        && !sourceOut.getFileDescriptor().valid();
+
+                if (finishedSuccessfully) {
+                    Slog.i(TAG, "Content capture data sharing session terminated "
+                            + "successfully for package '"
+                            + mDataShareRequest.getPackageName()
+                            + "'");
+                } else {
+                    Slog.i(TAG, "Reached the timeout of Content Capture data sharing session "
+                            + "for package '"
+                            + mDataShareRequest.getPackageName()
+                            + "', terminating the pipe.");
+                }
+
+                // Ensure all the descriptors are closed after the session.
+                bestEffortCloseFileDescriptors(sourceIn, sinkIn, sourceOut, sinkOut);
+
+                if (!finishedSuccessfully) {
+                    sendErrorSignal(mClientAdapterReference, serviceAdapterReference,
+                            ContentCaptureManager.DATA_SHARE_ERROR_TIMEOUT_INTERRUPTED);
+                }
+            }
+        }
+
+        private Pair<ParcelFileDescriptor, ParcelFileDescriptor> createPipe() {
+            ParcelFileDescriptor[] fileDescriptors;
+            try {
+                fileDescriptors = ParcelFileDescriptor.createPipe();
+            } catch (IOException e) {
+                Slog.e(TAG, "Failed to create a content capture data-sharing pipe", e);
+                return null;
+            }
+
+            if (fileDescriptors.length != 2) {
+                Slog.e(TAG, "Failed to create a content capture data-sharing pipe, "
+                        + "unexpected number of file descriptors");
+                return null;
+            }
+
+            if (!fileDescriptors[0].getFileDescriptor().valid()
+                    || !fileDescriptors[1].getFileDescriptor().valid()) {
+                Slog.e(TAG, "Failed to create a content capture data-sharing pipe, didn't "
+                        + "receive a pair of valid file descriptors.");
+                return null;
+            }
+
+            return Pair.create(fileDescriptors[0], fileDescriptors[1]);
+        }
+
+        private void bestEffortCloseFileDescriptor(ParcelFileDescriptor fd) {
+            try {
+                fd.close();
+            } catch (IOException e) {
+                Slog.e(TAG, "Failed to close a file descriptor", e);
+            }
+        }
+
+        private void bestEffortCloseFileDescriptors(ParcelFileDescriptor... fds) {
+            for (ParcelFileDescriptor fd : fds) {
+                bestEffortCloseFileDescriptor(fd);
+            }
+        }
+
+        private static void sendErrorSignal(
+                WeakReference<IDataShareWriteAdapter> clientAdapterReference,
+                WeakReference<IDataShareReadAdapter> serviceAdapterReference,
+                int errorCode) {
+
+            final IDataShareWriteAdapter clientAdapter = clientAdapterReference.get();
+            final IDataShareReadAdapter serviceAdapter = serviceAdapterReference.get();
+
+            if (clientAdapter == null || serviceAdapter == null) {
+                Slog.w(TAG, "Can't propagate error() to read/write data share adapters, because "
+                        + "remote objects have been GC'ed");
+                return;
+            }
+
+            try {
+                clientAdapter.error(errorCode);
+            } catch (RemoteException e) {
+                Slog.e(TAG, "Failed to call error() the client operation", e);
+            }
+            try {
+                serviceAdapter.error(errorCode);
+            } catch (RemoteException e) {
+                Slog.e(TAG, "Failed to call error() the service operation", e);
             }
         }
     }

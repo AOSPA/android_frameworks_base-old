@@ -24,6 +24,7 @@ import static android.app.AppOpsManager.FILTER_BY_OP_NAMES;
 import static android.app.AppOpsManager.FILTER_BY_PACKAGE_NAME;
 import static android.app.AppOpsManager.FILTER_BY_UID;
 import static android.app.AppOpsManager.HistoricalOpsRequestFilter;
+import static android.app.AppOpsManager.MODE_ALLOWED;
 import static android.app.AppOpsManager.NoteOpEvent;
 import static android.app.AppOpsManager.OP_CAMERA;
 import static android.app.AppOpsManager.OP_COARSE_LOCATION;
@@ -50,12 +51,14 @@ import static android.app.AppOpsManager.resolveFirstUnrestrictedUidState;
 import static android.content.Intent.ACTION_PACKAGE_REMOVED;
 import static android.content.Intent.EXTRA_REPLACING;
 import static android.content.pm.PermissionInfo.PROTECTION_DANGEROUS;
+import static android.os.Process.STATSD_UID;
 
 import android.Manifest;
 import android.annotation.IntRange;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.app.ActivityManager;
+import android.app.ActivityManagerInternal;
 import android.app.ActivityThread;
 import android.app.AppGlobals;
 import android.app.AppOpsManager;
@@ -85,7 +88,6 @@ import android.hardware.camera2.CameraDevice.CAMERA_AUDIO_RESTRICTION;
 import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.Binder;
-import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
@@ -210,6 +212,9 @@ public class AppOpsService extends IAppOpsService.Stub {
     private static final int MAX_UNFORWARED_OPS = 10;
     private static final int MAX_UNUSED_POOLED_OBJECTS = 3;
 
+    //TODO: remove this when development is done.
+    private static final int TEMP_PROCESS_CAPABILITY_FOREGROUND_LOCATION = 1 << 31;
+
     Context mContext;
     final AtomicFile mFile;
     final Handler mHandler;
@@ -287,6 +292,8 @@ public class AppOpsService extends IAppOpsService.Stub {
 
     @GuardedBy("this")
     private SparseArray<List<Integer>> mSwitchOpToOps;
+
+    private ActivityManagerInternal mActivityManagerInternal;
 
     /**
      * An unsynchronized pool of {@link OpEventProxyInfo} objects.
@@ -423,7 +430,7 @@ public class AppOpsService extends IAppOpsService.Stub {
     final Constants mConstants;
 
     @VisibleForTesting
-    static final class UidState {
+    final class UidState {
         public final int uid;
 
         public int state = UID_STATE_CACHED;
@@ -431,6 +438,8 @@ public class AppOpsService extends IAppOpsService.Stub {
         public long pendingStateCommitTime;
         public int capability;
         public int pendingCapability;
+        public boolean appWidgetVisible;
+        public boolean pendingAppWidgetVisible;
 
         public ArrayMap<String, Ops> pkgOps;
         public SparseIntArray opModes;
@@ -438,6 +447,8 @@ public class AppOpsService extends IAppOpsService.Stub {
         // true indicates there is an interested observer, false there isn't but it has such an op
         public SparseBooleanArray foregroundOps;
         public boolean hasForegroundWatchers;
+
+        public long lastTimeShowDebugToast;
 
         public UidState(int uid) {
             this.uid = uid;
@@ -457,7 +468,9 @@ public class AppOpsService extends IAppOpsService.Stub {
 
         int evalMode(int op, int mode) {
             if (mode == AppOpsManager.MODE_FOREGROUND) {
-                if (state <= UID_STATE_TOP) {
+                if (appWidgetVisible) {
+                    return MODE_ALLOWED;
+                } else if (state <= UID_STATE_TOP) {
                     // process is in foreground.
                     return AppOpsManager.MODE_ALLOWED;
                 } else if (state <= AppOpsManager.resolveFirstUnrestrictedUidState(op)) {
@@ -467,20 +480,62 @@ public class AppOpsService extends IAppOpsService.Stub {
                         case AppOpsManager.OP_COARSE_LOCATION:
                         case AppOpsManager.OP_MONITOR_LOCATION:
                         case AppOpsManager.OP_MONITOR_HIGH_POWER_LOCATION:
-                            return ((capability & PROCESS_CAPABILITY_FOREGROUND_LOCATION) != 0)
-                                ? AppOpsManager.MODE_ALLOWED : AppOpsManager.MODE_IGNORED;
+                            if ((capability & PROCESS_CAPABILITY_FOREGROUND_LOCATION) != 0) {
+                                return AppOpsManager.MODE_ALLOWED;
+                            } else if ((capability
+                                    & TEMP_PROCESS_CAPABILITY_FOREGROUND_LOCATION) != 0) {
+                                // The FGS has the location capability, but due to FGS BG start
+                                // restriction it lost the capability, use temp location capability
+                                // to mark this case.
+                                // TODO change to MODE_IGNORED when enforcing the feature.
+                                maybeShowWhileInUseDebugToast(op, mode);
+                                return AppOpsManager.MODE_ALLOWED;
+                            } else {
+                                return AppOpsManager.MODE_IGNORED;
+                            }
                         case OP_CAMERA:
-                            return ((capability & PROCESS_CAPABILITY_FOREGROUND_CAMERA) != 0)
-                                    ? AppOpsManager.MODE_ALLOWED : AppOpsManager.MODE_IGNORED;
+                            if ((capability & PROCESS_CAPABILITY_FOREGROUND_CAMERA) != 0) {
+                                return AppOpsManager.MODE_ALLOWED;
+                            } else {
+                                //TODO change to MODE_IGNORED when enforcing the feature.
+                                maybeShowWhileInUseDebugToast(op, mode);
+                                return AppOpsManager.MODE_ALLOWED;
+                            }
                         case OP_RECORD_AUDIO:
-                            return ((capability & PROCESS_CAPABILITY_FOREGROUND_MICROPHONE) != 0)
-                                    ? AppOpsManager.MODE_ALLOWED : AppOpsManager.MODE_IGNORED;
+                            if ((capability & PROCESS_CAPABILITY_FOREGROUND_MICROPHONE) != 0) {
+                                return AppOpsManager.MODE_ALLOWED;
+                            } else {
+                                //TODO change to MODE_IGNORED when enforcing the feature.
+                                maybeShowWhileInUseDebugToast(op, mode);
+                                return AppOpsManager.MODE_ALLOWED;
+                            }
                         default:
                             return AppOpsManager.MODE_ALLOWED;
                     }
                 } else {
                     // process is not in foreground.
                     return AppOpsManager.MODE_IGNORED;
+                }
+            } else if (mode == AppOpsManager.MODE_ALLOWED) {
+                switch (op) {
+                    case OP_CAMERA:
+                        if ((capability & PROCESS_CAPABILITY_FOREGROUND_CAMERA) != 0) {
+                            return AppOpsManager.MODE_ALLOWED;
+                        } else {
+                            //TODO change to MODE_IGNORED when enforcing the feature.
+                            maybeShowWhileInUseDebugToast(op, mode);
+                            return AppOpsManager.MODE_ALLOWED;
+                        }
+                    case OP_RECORD_AUDIO:
+                        if ((capability & PROCESS_CAPABILITY_FOREGROUND_MICROPHONE) != 0) {
+                            return AppOpsManager.MODE_ALLOWED;
+                        } else {
+                            //TODO change to MODE_IGNORED when enforcing the feature.
+                            maybeShowWhileInUseDebugToast(op, mode);
+                            return AppOpsManager.MODE_ALLOWED;
+                        }
+                    default:
+                        return MODE_ALLOWED;
                 }
             }
             return mode;
@@ -529,6 +584,23 @@ public class AppOpsService extends IAppOpsService.Stub {
                 }
             }
             foregroundOps = which;
+        }
+
+        // TODO: remove this toast after feature development is done
+        // If the procstate is foreground service and while-in-use permission is denied, show a
+        // toast message to ask user to file a bugreport so we know how many apps are impacted by
+        // the new background started foreground service while-in-use permission restriction.
+        void maybeShowWhileInUseDebugToast(int op, int mode) {
+            if (state != UID_STATE_FOREGROUND_SERVICE) {
+                return;
+            }
+            final long now = System.currentTimeMillis();
+            if (lastTimeShowDebugToast == 0 ||  now - lastTimeShowDebugToast > 3600000) {
+                lastTimeShowDebugToast = now;
+                mHandler.sendMessage(PooledLambda.obtainMessage(
+                        ActivityManagerInternal::showWhileInUseDebugToast,
+                        mActivityManagerInternal, uid, op, mode));
+            }
         }
     }
 
@@ -1476,6 +1548,7 @@ public class AppOpsService extends IAppOpsService.Stub {
                         }
                     });
         }
+        mActivityManagerInternal = LocalServices.getService(ActivityManagerInternal.class);
     }
 
     public void packageRemoved(int uid, String packageName) {
@@ -1760,6 +1833,15 @@ public class AppOpsService extends IAppOpsService.Stub {
                 beginTimeMillis, endTimeMillis, flags);
         Objects.requireNonNull(callback, "callback cannot be null");
 
+        ActivityManagerInternal ami = LocalServices.getService(ActivityManagerInternal.class);
+        boolean isCallerInstrumented = ami.isUidCurrentlyInstrumented(Binder.getCallingUid());
+        boolean isCallerStatsCollector = Binder.getCallingUid() == STATSD_UID;
+
+        if (!isCallerStatsCollector && !isCallerInstrumented) {
+            mHandler.post(() -> callback.sendResult(new Bundle()));
+            return;
+        }
+
         mContext.enforcePermission(android.Manifest.permission.GET_APP_OPS_STATS,
                 Binder.getCallingPid(), Binder.getCallingUid(), "getHistoricalOps");
 
@@ -1979,12 +2061,6 @@ public class AppOpsService extends IAppOpsService.Stub {
     }
 
     private void updatePermissionRevokedCompat(int uid, int switchCode, int mode) {
-        PackageManagerInternal packageManagerInternal = LocalServices.getService(
-                PackageManagerInternal.class);
-        if (packageManagerInternal.getUidTargetSdkVersion(uid) >= Build.VERSION_CODES.M) {
-            return;
-        }
-
         PackageManager packageManager = mContext.getPackageManager();
         String[] packageNames = packageManager.getPackagesForUid(uid);
         if (ArrayUtils.isEmpty(packageNames)) {
@@ -2993,7 +3069,6 @@ public class AppOpsService extends IAppOpsService.Stub {
             }
             if (DEBUG) Slog.d(TAG, "startOperation: allowing code " + code + " uid " + uid
                     + " package " + resolvedPackageName);
-
             try {
                 featureOp.started(clientId, uidState.state);
             } catch (RemoteException e) {
@@ -3216,7 +3291,9 @@ public class AppOpsService extends IAppOpsService.Stub {
                 final long firstUnrestrictedUidState = resolveFirstUnrestrictedUidState(code);
                 final boolean resolvedLastFg = uidState.state <= firstUnrestrictedUidState;
                 final boolean resolvedNowFg = uidState.pendingState <= firstUnrestrictedUidState;
-                if (resolvedLastFg == resolvedNowFg) {
+                if (resolvedLastFg == resolvedNowFg
+                        && uidState.capability == uidState.pendingCapability
+                        && uidState.appWidgetVisible == uidState.pendingAppWidgetVisible) {
                     continue;
                 }
                 final ArraySet<ModeCallback> callbacks = mOpModeWatchers.get(code);
@@ -3250,7 +3327,23 @@ public class AppOpsService extends IAppOpsService.Stub {
         }
         uidState.state = uidState.pendingState;
         uidState.capability = uidState.pendingCapability;
+        uidState.appWidgetVisible = uidState.pendingAppWidgetVisible;
         uidState.pendingStateCommitTime = 0;
+    }
+
+    private void updateAppWidgetVisibility(SparseArray<String> uidPackageNames, boolean visible) {
+        synchronized (this) {
+            for (int i = uidPackageNames.size() - 1; i >= 0; i--) {
+                final int uid = uidPackageNames.keyAt(i);
+                final UidState uidState = getUidStateLocked(uid, true);
+                if (uidState != null && (uidState.pendingAppWidgetVisible != visible)) {
+                    uidState.pendingAppWidgetVisible = visible;
+                    if (uidState.pendingAppWidgetVisible != uidState.appWidgetVisible) {
+                        commitUidPendingStateLocked(uidState);
+                    }
+                }
+            }
+        }
     }
 
     /**
@@ -4225,7 +4318,7 @@ public class AppOpsService extends IAppOpsService.Stub {
                     } else if (shell.targetsUid && shell.packageName != null) {
                         try {
                             final int uid = shell.mInternal.mContext.getPackageManager()
-                                    .getPackageUid(shell.packageName, shell.userId);
+                                    .getPackageUidAsUser(shell.packageName, shell.userId);
                             shell.mInterface.setUidMode(shell.op, uid, mode);
                         } catch (PackageManager.NameNotFoundException e) {
                             return -1;
@@ -4475,8 +4568,6 @@ public class AppOpsService extends IAppOpsService.Stub {
         pw.println("    Limit output to data associated with the given feature id.");
         pw.println("  --watchers");
         pw.println("    Only output the watcher sections.");
-        pw.println("  --history");
-        pw.println("    Output the historical data.");
     }
 
     private void dumpStatesLocked(@NonNull PrintWriter pw, @Nullable String filterFeatureId,
@@ -4609,6 +4700,7 @@ public class AppOpsService extends IAppOpsService.Stub {
         int dumpUid = Process.INVALID_UID;
         int dumpMode = -1;
         boolean dumpWatchers = false;
+        // TODO ntmyren: Remove the dumpHistory and dumpFilter
         boolean dumpHistory = false;
         @HistoricalOpsRequestFilter int dumpFilter = 0;
 
@@ -4671,8 +4763,6 @@ public class AppOpsService extends IAppOpsService.Stub {
                     }
                 } else if ("--watchers".equals(arg)) {
                     dumpWatchers = true;
-                } else if ("--history".equals(arg)) {
-                    dumpHistory = true;
                 } else if (arg.length() > 0 && arg.charAt(0) == '-'){
                     pw.println("Unknown option: " + arg);
                     return;
@@ -5490,6 +5580,12 @@ public class AppOpsService extends IAppOpsService.Stub {
             synchronized (AppOpsService.this) {
                 mProfileOwners = owners;
             }
+        }
+
+        @Override
+        public void updateAppWidgetVisibility(SparseArray<String> uidPackageNames,
+                boolean visible) {
+            AppOpsService.this.updateAppWidgetVisibility(uidPackageNames, visible);
         }
     }
 }

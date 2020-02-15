@@ -72,8 +72,6 @@ import android.text.TextUtils;
 import android.util.DisplayMetrics;
 import android.util.EventLog;
 import android.util.Slog;
-import android.util.StatsLog;
-import android.view.WindowManager;
 import android.view.contentcapture.ContentCaptureManager;
 
 import com.android.internal.R;
@@ -81,6 +79,7 @@ import com.android.internal.notification.SystemNotificationChannels;
 import com.android.internal.os.BinderInternal;
 import com.android.internal.util.ConcurrentUtils;
 import com.android.internal.util.EmergencyAffordanceManager;
+import com.android.internal.util.FrameworkStatsLog;
 import com.android.internal.widget.ILockSettings;
 import com.android.server.am.ActivityManagerService;
 import com.android.server.appbinding.AppBindingService;
@@ -347,6 +346,7 @@ public final class SystemServer {
 
     private static final String START_SENSOR_SERVICE = "StartSensorService";
     private static final String START_HIDL_SERVICES = "StartHidlServices";
+    private static final String START_BLOB_STORE_SERVICE = "startBlobStoreManagerService";
 
     private static final String SYSPROP_START_COUNT = "sys.system_server.start_count";
     private static final String SYSPROP_START_ELAPSED = "sys.system_server.start_elapsed";
@@ -354,6 +354,7 @@ public final class SystemServer {
 
     private Future<?> mSensorServiceStart;
     private Future<?> mZygotePreload;
+    private Future<?> mBlobStoreServiceStart;
 
     /**
      * Start the sensor service. This is a blocking call and can take time.
@@ -369,6 +370,12 @@ public final class SystemServer {
      * Mark this process' heap as profileable. Only for debug builds.
      */
     private static native void initZygoteChildHeapProfiling();
+
+
+    /**
+     * Spawn a thread that monitors for fd leaks.
+     */
+    private static native void spawnFdLeakCheckThread();
 
     /**
      * The main entry point from zygote.
@@ -450,8 +457,9 @@ public final class SystemServer {
             final long uptimeMillis = SystemClock.elapsedRealtime();
             EventLog.writeEvent(EventLogTags.BOOT_PROGRESS_SYSTEM_RUN, uptimeMillis);
             if (!mRuntimeRestart) {
-                StatsLog.write(StatsLog.BOOT_TIME_EVENT_ELAPSED_TIME_REPORTED,
-                        StatsLog.BOOT_TIME_EVENT_ELAPSED_TIME__EVENT__SYSTEM_SERVER_INIT_START,
+                FrameworkStatsLog.write(FrameworkStatsLog.BOOT_TIME_EVENT_ELAPSED_TIME_REPORTED,
+                        FrameworkStatsLog
+                                .BOOT_TIME_EVENT_ELAPSED_TIME__EVENT__SYSTEM_SERVER_INIT_START,
                         uptimeMillis);
             }
 
@@ -502,6 +510,11 @@ public final class SystemServer {
             // Debug builds - allow heap profiling.
             if (Build.IS_DEBUGGABLE) {
                 initZygoteChildHeapProfiling();
+            }
+
+            // Debug builds - spawn a thread to monitor for fd leaks.
+            if (Build.IS_DEBUGGABLE) {
+                spawnFdLeakCheckThread();
             }
 
             // Check whether we failed to shut down last time we tried.
@@ -562,8 +575,8 @@ public final class SystemServer {
 
         if (!mRuntimeRestart && !isFirstBootOrUpgrade()) {
             final long uptimeMillis = SystemClock.elapsedRealtime();
-            StatsLog.write(StatsLog.BOOT_TIME_EVENT_ELAPSED_TIME_REPORTED,
-                    StatsLog.BOOT_TIME_EVENT_ELAPSED_TIME__EVENT__SYSTEM_SERVER_READY,
+            FrameworkStatsLog.write(FrameworkStatsLog.BOOT_TIME_EVENT_ELAPSED_TIME_REPORTED,
+                    FrameworkStatsLog.BOOT_TIME_EVENT_ELAPSED_TIME__EVENT__SYSTEM_SERVER_READY,
                     uptimeMillis);
             final long maxUptimeMillis = 60 * 1000;
             if (uptimeMillis > maxUptimeMillis) {
@@ -799,8 +812,9 @@ public final class SystemServer {
 
         // Start the package manager.
         if (!mRuntimeRestart) {
-            StatsLog.write(StatsLog.BOOT_TIME_EVENT_ELAPSED_TIME_REPORTED,
-                    StatsLog.BOOT_TIME_EVENT_ELAPSED_TIME__EVENT__PACKAGE_MANAGER_INIT_START,
+            FrameworkStatsLog.write(FrameworkStatsLog.BOOT_TIME_EVENT_ELAPSED_TIME_REPORTED,
+                    FrameworkStatsLog
+                            .BOOT_TIME_EVENT_ELAPSED_TIME__EVENT__PACKAGE_MANAGER_INIT_START,
                     SystemClock.elapsedRealtime());
         }
 
@@ -817,8 +831,9 @@ public final class SystemServer {
         mPackageManager = mSystemContext.getPackageManager();
         t.traceEnd();
         if (!mRuntimeRestart && !isFirstBootOrUpgrade()) {
-            StatsLog.write(StatsLog.BOOT_TIME_EVENT_ELAPSED_TIME_REPORTED,
-                    StatsLog.BOOT_TIME_EVENT_ELAPSED_TIME__EVENT__PACKAGE_MANAGER_INIT_READY,
+            FrameworkStatsLog.write(FrameworkStatsLog.BOOT_TIME_EVENT_ELAPSED_TIME_REPORTED,
+                    FrameworkStatsLog
+                            .BOOT_TIME_EVENT_ELAPSED_TIME__EVENT__PACKAGE_MANAGER_INIT_READY,
                     SystemClock.elapsedRealtime());
         }
         // Manages A/B OTA dexopting. This is a bootstrap service as we need it to rename
@@ -1336,7 +1351,7 @@ public final class SystemServer {
             if (!isWatch) {
                 t.traceBegin("StartStatusBarManagerService");
                 try {
-                    statusBar = new StatusBarManagerService(context, wm);
+                    statusBar = new StatusBarManagerService(context);
                     ServiceManager.addService(Context.STATUS_BAR_SERVICE, statusBar);
                 } catch (Throwable e) {
                     reportWtf("starting StatusBarManagerService", e);
@@ -1761,9 +1776,11 @@ public final class SystemServer {
             mSystemServiceManager.startService(SensorNotificationService.class);
             t.traceEnd();
 
-            t.traceBegin("StartContextHubSystemService");
-            mSystemServiceManager.startService(ContextHubSystemService.class);
-            t.traceEnd();
+            if (mPackageManager.hasSystemFeature(PackageManager.FEATURE_CONTEXTHUB)) {
+                t.traceBegin("StartContextHubSystemService");
+                mSystemServiceManager.startService(ContextHubSystemService.class);
+                t.traceEnd();
+            }
 
             t.traceBegin("StartDiskStatsService");
             try {
@@ -1819,6 +1836,13 @@ public final class SystemServer {
                 mSystemServiceManager.startService(EmergencyAffordanceService.class);
                 t.traceEnd();
             }
+
+            mBlobStoreServiceStart = SystemServerInitThreadPool.submit(() -> {
+                final TimingsTraceAndSlog traceLog = TimingsTraceAndSlog.newAsyncLog();
+                traceLog.traceBegin(START_BLOB_STORE_SERVICE);
+                mSystemServiceManager.startService(BLOB_STORE_MANAGER_SERVICE_CLASS);
+                traceLog.traceEnd();
+            }, START_BLOB_STORE_SERVICE);
 
             // Dreams (interactive idle-time views, a/k/a screen savers, and doze mode)
             t.traceBegin("StartDreamManager");
@@ -2064,10 +2088,6 @@ public final class SystemServer {
         mSystemServiceManager.startService(ClipboardService.class);
         t.traceEnd();
 
-        t.traceBegin("StartBlobStoreManagerService");
-        mSystemServiceManager.startService(BLOB_STORE_MANAGER_SERVICE_CLASS);
-        t.traceEnd();
-
         t.traceBegin("AppServiceManager");
         mSystemServiceManager.startService(AppBindingService.Lifecycle.class);
         t.traceEnd();
@@ -2137,8 +2157,7 @@ public final class SystemServer {
         // propagate to it.
         final Configuration config = wm.computeNewConfiguration(DEFAULT_DISPLAY);
         DisplayMetrics metrics = new DisplayMetrics();
-        WindowManager w = (WindowManager) context.getSystemService(Context.WINDOW_SERVICE);
-        w.getDefaultDisplay().getMetrics(metrics);
+        context.getDisplay().getMetrics(metrics);
         context.getResources().updateConfiguration(config, metrics);
 
         // The system context's theme may be configuration-dependent.
@@ -2204,6 +2223,9 @@ public final class SystemServer {
         t.traceBegin("AppSearchManagerService");
         mSystemServiceManager.startService(APP_SEARCH_MANAGER_SERVICE_CLASS);
         t.traceEnd();
+
+        ConcurrentUtils.waitForFutureNoInterrupt(mBlobStoreServiceStart,
+                START_BLOB_STORE_SERVICE);
 
         // These are needed to propagate to the runnable below.
         final NetworkManagementService networkManagementF = networkManagement;

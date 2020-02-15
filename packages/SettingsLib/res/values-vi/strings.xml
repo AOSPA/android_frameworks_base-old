@@ -42,7 +42,8 @@
     <string name="connected_via_app" msgid="3532267661404276584">"Đã kết nối qua <xliff:g id="NAME">%1$s</xliff:g>"</string>
     <string name="available_via_passpoint" msgid="1716000261192603682">"Có sẵn qua %1$s"</string>
     <string name="tap_to_sign_up" msgid="5356397741063740395">"Nhấn để đăng ký"</string>
-    <string name="wifi_connected_no_internet" msgid="2381729074310543563">"Đã kết nối, không có Internet"</string>
+    <!-- no translation found for wifi_connected_no_internet (5087420713443350646) -->
+    <skip />
     <string name="private_dns_broken" msgid="1984159464346556931">"Không thể truy cập máy chủ DNS riêng tư"</string>
     <string name="wifi_limited_connection" msgid="1184778285475204682">"Kết nối giới hạn"</string>
     <string name="wifi_status_no_internet" msgid="3799933875988829048">"Không có Internet"</string>
@@ -201,7 +202,7 @@
     <string name="development_settings_summary" msgid="8718917813868735095">"Đặt tùy chọn cho phát triển ứng dụng"</string>
     <string name="development_settings_not_available" msgid="355070198089140951">"Tùy chọn dành cho nhà phát triển không khả dụng cho người dùng này"</string>
     <string name="vpn_settings_not_available" msgid="2894137119965668920">"Cài đặt VPN không khả dụng cho người dùng này"</string>
-    <string name="tethering_settings_not_available" msgid="266821736434699780">"Cài đặt chia sẻ kết nối không khả dụng cho người dùng này"</string>
+    <string name="tethering_settings_not_available" msgid="266821736434699780">"Cài đặt cách chia sẻ kết nối không khả dụng cho người dùng này"</string>
     <string name="apn_settings_not_available" msgid="1147111671403342300">"Cài đặt tên điểm truy cập không khả dụng cho người dùng này"</string>
     <string name="enable_adb" msgid="8072776357237289039">"Gỡ lỗi qua USB"</string>
     <string name="enable_adb_summary" msgid="3711526030096574316">"Bật chế độ gỡ lỗi khi kết nối USB"</string>

@@ -1551,22 +1551,21 @@ public class AudioManager {
      *     {@link AudioAttributes#ALLOW_CAPTURE_BY_ALL},
      *     {@link AudioAttributes#ALLOW_CAPTURE_BY_SYSTEM},
      *     {@link AudioAttributes#ALLOW_CAPTURE_BY_NONE}.
-     * @throws IllegalArgumentException if the argument is not a valid value.
+     * @throws RuntimeException if the argument is not a valid value.
      */
     public void setAllowedCapturePolicy(@AudioAttributes.CapturePolicy int capturePolicy) {
-        int flags = AudioAttributes.capturePolicyToFlags(capturePolicy, 0x0);
-        // TODO: got trough AudioService and save a cache to restore in case of AP crash
         // TODO: also pass the package in case multiple packages have the same UID
-        int result = AudioSystem.setAllowedCapturePolicy(Process.myUid(), flags);
-        if (result != AudioSystem.AUDIO_STATUS_OK) {
-            Log.e(TAG, "Could not setAllowedCapturePolicy: " + result);
-            return;
+        final IAudioService service = getService();
+        try {
+            int result = service.setAllowedCapturePolicy(capturePolicy);
+            if (result != AudioSystem.AUDIO_STATUS_OK) {
+                Log.e(TAG, "Could not setAllowedCapturePolicy: " + result);
+                return;
+            }
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
         }
-        mCapturePolicy = capturePolicy;
     }
-
-    @AudioAttributes.CapturePolicy
-    private int mCapturePolicy = AudioAttributes.ALLOW_CAPTURE_BY_ALL;
 
     /**
      * Return the capture policy.
@@ -1575,7 +1574,13 @@ public class AudioManager {
      */
     @AudioAttributes.CapturePolicy
     public int getAllowedCapturePolicy() {
-        return mCapturePolicy;
+        int result = AudioAttributes.ALLOW_CAPTURE_BY_ALL;
+        try {
+            result = getService().getAllowedCapturePolicy();
+        } catch (RemoteException e) {
+            Log.e(TAG, "Failed to query allowed capture policy: " + e);
+        }
+        return result;
     }
 
     //====================================================================
@@ -4614,6 +4619,70 @@ public class AudioManager {
             // null or unknown key
             return null;
         }
+    }
+
+    /**
+     * @hide
+     * Sets an additional audio output device delay in milliseconds.
+     *
+     * The additional output delay is a request to the output device to
+     * delay audio presentation (generally with respect to video presentation for better
+     * synchronization).
+     * It may not be supported by all output devices,
+     * and typically increases the audio latency by the amount of additional
+     * audio delay requested.
+     *
+     * If additional audio delay is supported by an audio output device,
+     * it is expected to be supported for all output streams (and configurations)
+     * opened on that device.
+     *
+     * @param device an instance of {@link AudioDeviceInfo} returned from {@link getDevices()}.
+     * @param delayMs delay in milliseconds desired.  This should be in range of {@code 0}
+     *     to the value returned by {@link #getMaxAdditionalOutputDeviceDelay()}.
+     * @return true if successful, false if the device does not support output device delay
+     *     or the delay is not in range of {@link #getMaxAdditionalOutputDeviceDelay()}.
+     */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING)
+    public boolean setAdditionalOutputDeviceDelay(
+            @NonNull AudioDeviceInfo device, @IntRange(from = 0) int delayMs) {
+        Objects.requireNonNull(device);
+        // Implement the setter in r-dev or r-tv-dev as needed.
+        return false;
+    }
+
+    /**
+     * @hide
+     * Returns the current additional audio output device delay in milliseconds.
+     *
+     * @param device an instance of {@link AudioDeviceInfo} returned from {@link getDevices()}.
+     * @return the additional output device delay. This is a non-negative number.
+     *     {@code 0} is returned if unsupported.
+     */
+    @SystemApi
+    @IntRange(from = 0)
+    public int getAdditionalOutputDeviceDelay(@NonNull AudioDeviceInfo device) {
+        Objects.requireNonNull(device);
+        // Implement the getter in r-dev or r-tv-dev as needed.
+        return 0;
+    }
+
+    /**
+     * @hide
+     * Returns the maximum additional audio output device delay in milliseconds.
+     *
+     * @param device an instance of {@link AudioDeviceInfo} returned from {@link getDevices()}.
+     * @return the maximum output device delay in milliseconds that can be set.
+     *     This is a non-negative number
+     *     representing the additional audio delay supported for the device.
+     *     {@code 0} is returned if unsupported.
+     */
+    @SystemApi
+    @IntRange(from = 0)
+    public int getMaxAdditionalOutputDeviceDelay(@NonNull AudioDeviceInfo device) {
+        Objects.requireNonNull(device);
+        // Implement the getter in r-dev or r-tv-dev as needed.
+        return 0;
     }
 
     /**

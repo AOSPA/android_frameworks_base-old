@@ -92,7 +92,6 @@ import android.util.Log;
 import android.util.SparseBooleanArray;
 
 import com.android.internal.annotations.VisibleForTesting;
-import com.android.internal.telephony.TelephonyIntents;
 import com.android.internal.widget.LockPatternUtils;
 import com.android.settingslib.WirelessUtils;
 import com.android.systemui.DejankUtils;
@@ -372,7 +371,8 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
         checkIsHandlerThread();
         if (DEBUG_SIM_STATES) {
             Log.v(TAG, "onSubscriptionInfoChanged()");
-            List<SubscriptionInfo> sil = mSubscriptionManager.getActiveSubscriptionInfoList(false);
+            List<SubscriptionInfo> sil = mSubscriptionManager
+                    .getActiveAndHiddenSubscriptionInfoList();
             if (sil != null) {
                 for (SubscriptionInfo subInfo : sil) {
                     Log.v(TAG, "SubInfo:" + subInfo);
@@ -426,10 +426,10 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
     public List<SubscriptionInfo> getSubscriptionInfo(boolean forceReload) {
         List<SubscriptionInfo> sil = mSubscriptionInfo;
         if (sil == null || forceReload) {
-            sil = mSubscriptionManager.getActiveSubscriptionInfoList(false);
+            sil = mSubscriptionManager.getActiveAndHiddenSubscriptionInfoList();
         }
         if (sil == null) {
-            // getActiveSubscriptionInfoList was null callers expect an empty list.
+            // getActiveAndHiddenSubscriptionInfoList was null callers expect an empty list.
             mSubscriptionInfo = new ArrayList<SubscriptionInfo>();
         } else {
             mSubscriptionInfo = sil;
@@ -1083,7 +1083,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
                         MSG_BATTERY_UPDATE, new BatteryStatus(status, level, plugged, health,
                                 maxChargingMicroWatt));
                 mHandler.sendMessage(msg);
-            } else if (TelephonyIntents.ACTION_SIM_STATE_CHANGED.equals(action)) {
+            } else if (Intent.ACTION_SIM_STATE_CHANGED.equals(action)) {
                 SimData args = SimData.fromIntent(intent);
                 // ACTION_SIM_STATE_CHANGED is rebroadcast after unlocking the device to
                 // keep compatibility with apps that aren't direct boot aware.
@@ -1122,7 +1122,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
                 }
                 mHandler.sendMessage(
                         mHandler.obtainMessage(MSG_SERVICE_STATE_CHANGE, subId, 0, serviceState));
-            } else if (TelephonyIntents.ACTION_DEFAULT_DATA_SUBSCRIPTION_CHANGED.equals(action)) {
+            } else if (TelephonyManager.ACTION_DEFAULT_DATA_SUBSCRIPTION_CHANGED.equals(action)) {
                 mHandler.sendEmptyMessage(MSG_SIM_SUBSCRIPTION_INFO_CHANGED);
             } else if (DevicePolicyManager.ACTION_DEVICE_POLICY_MANAGER_STATE_CHANGED.equals(
                     action)) {
@@ -1273,7 +1273,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
 
         static SimData fromIntent(Intent intent) {
             int state;
-            if (!TelephonyIntents.ACTION_SIM_STATE_CHANGED.equals(intent.getAction())) {
+            if (!Intent.ACTION_SIM_STATE_CHANGED.equals(intent.getAction())) {
                 throw new IllegalArgumentException("only handles intent ACTION_SIM_STATE_CHANGED");
             }
             String stateExtra = intent.getStringExtra(Intent.EXTRA_SIM_STATE);
@@ -1673,7 +1673,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
         filter.addAction(Intent.ACTION_BATTERY_CHANGED);
         filter.addAction(Intent.ACTION_TIMEZONE_CHANGED);
         filter.addAction(Intent.ACTION_AIRPLANE_MODE_CHANGED);
-        filter.addAction(TelephonyIntents.ACTION_SIM_STATE_CHANGED);
+        filter.addAction(Intent.ACTION_SIM_STATE_CHANGED);
         filter.addAction(Intent.ACTION_SERVICE_STATE);
         filter.addAction(TelephonyManager.ACTION_DEFAULT_DATA_SUBSCRIPTION_CHANGED);
         filter.addAction(TelephonyManager.ACTION_PHONE_STATE_CHANGED);
@@ -1883,9 +1883,8 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
         final boolean awakeKeyguard = mKeyguardIsVisible && mDeviceInteractive && !mGoingToSleep;
         final int user = getCurrentUser();
         final int strongAuth = mStrongAuthTracker.getStrongAuthForUser(user);
-        final boolean isLockOutOrLockDown =
-                containsFlag(strongAuth, STRONG_AUTH_REQUIRED_AFTER_LOCKOUT)
-                        || containsFlag(strongAuth, STRONG_AUTH_REQUIRED_AFTER_DPM_LOCK_NOW)
+        final boolean isLockDown =
+                containsFlag(strongAuth, STRONG_AUTH_REQUIRED_AFTER_DPM_LOCK_NOW)
                         || containsFlag(strongAuth, STRONG_AUTH_REQUIRED_AFTER_USER_LOCKDOWN);
         final boolean isEncryptedOrTimedOut =
                 containsFlag(strongAuth, STRONG_AUTH_REQUIRED_AFTER_BOOT)
@@ -1899,9 +1898,9 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
         boolean becauseCannotSkipBouncer = !getUserCanSkipBouncer(user) || canBypass;
 
         // Scan even when encrypted or timeout to show a preemptive bouncer when bypassing.
-        // Lockout/lockdown modes shouldn't scan, since they are more explicit.
+        // Lock-down mode shouldn't scan, since it is more explicit.
         boolean strongAuthAllowsScanning = (!isEncryptedOrTimedOut || canBypass && !mBouncer)
-                && !isLockOutOrLockDown;
+                && !isLockDown;
 
         // Only listen if this KeyguardUpdateMonitor belongs to the primary user. There is an
         // instance of KeyguardUpdateMonitor for each user but KeyguardUpdateMonitor is user-aware.

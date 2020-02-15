@@ -2386,11 +2386,7 @@ public final class ContactsContract {
          * This id is provided by its own data source, and can be used to backup metadata
          * to the server.
          * This should be unique within each set of account_name/account_type/data_set
-         *
-         * @deprecated This column is no longer supported as of Android version
-         * {@link android.os.Build.VERSION_CODES#R}.
          */
-        @Deprecated
         public static final String BACKUP_ID = "backup_id";
 
         /**
@@ -2455,8 +2451,8 @@ public final class ContactsContract {
          * needs to be synchronized by the server.
          * <P>Type: INTEGER (boolean)</P>
          *
-         * @deprecated This column is no longer supported as of Android version
-         * {@link android.os.Build.VERSION_CODES#R}.
+         * @deprecated This column never actually worked since added. It will not supported as
+         * of Android version {@link android.os.Build.VERSION_CODES#R}.
          */
         @Deprecated
         public static final String METADATA_DIRTY = "metadata_dirty";
@@ -4202,8 +4198,8 @@ public final class ContactsContract {
          * Hash id on the data fields, used for backup and restore.
          *
          * @hide
-         * @deprecated This column is no longer supported as of Android version
-         * {@link android.os.Build.VERSION_CODES#R}.
+         * @deprecated This column was never public since added. It will not be supported
+         * as of Android version {@link android.os.Build.VERSION_CODES#R}.
          */
         @Deprecated
         public static final String HASH_ID = "hash_id";
@@ -9513,8 +9509,8 @@ public final class ContactsContract {
 
     /**
      * @hide
-     * @deprecated These columns are no longer supported as of Android version
-     * {@link android.os.Build.VERSION_CODES#R}.
+     * @deprecated These columns were never public since added. They will not be supported
+     * as of Android version {@link android.os.Build.VERSION_CODES#R}.
      */
     @Deprecated
     @SystemApi
@@ -9623,8 +9619,8 @@ public final class ContactsContract {
      * from server before it is merged into other CP2 tables.
      *
      * @hide
-     * @deprecated These columns are no longer supported as of Android version
-     * {@link android.os.Build.VERSION_CODES#R}.
+     * @deprecated These columns were never public since added. They will not be supported
+     * as of Android version {@link android.os.Build.VERSION_CODES#R}.
      */
     @Deprecated
     @SystemApi

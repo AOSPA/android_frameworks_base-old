@@ -33,6 +33,7 @@ import android.net.ITetheringConnector;
 import android.net.ITetheringEventCallback;
 import android.net.NetworkCapabilities;
 import android.net.NetworkRequest;
+import android.net.TetheringRequestParcel;
 import android.net.dhcp.DhcpServerCallbacks;
 import android.net.dhcp.DhcpServingParamsParcel;
 import android.net.ip.IpServer;
@@ -76,8 +77,8 @@ public class TetheringService extends Service {
         mLog.mark("onCreate");
         mDeps = getTetheringDependencies();
         mContext = mDeps.getContext();
-        mTethering = makeTethering(mDeps);
         mUserManager = (UserManager) mContext.getSystemService(Context.USER_SERVICE);
+        mTethering = makeTethering(mDeps);
     }
 
     /**
@@ -143,11 +144,11 @@ public class TetheringService extends Service {
         }
 
         @Override
-        public void startTethering(int type, ResultReceiver receiver, boolean showProvisioningUi,
-                String callerPkg) {
-            if (checkAndNotifyCommonError(callerPkg, receiver)) return;
+        public void startTethering(TetheringRequestParcel request, String callerPkg,
+                IIntResultListener listener) {
+            if (checkAndNotifyCommonError(callerPkg, listener)) return;
 
-            mTethering.startTethering(type, receiver, showProvisioningUi);
+            mTethering.startTethering(request, listener);
         }
 
         @Override

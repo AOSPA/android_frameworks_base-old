@@ -3012,12 +3012,18 @@
       <public name="sdkVersion" />
       <!-- @hide @SystemApi -->
       <public name="minExtensionVersion" />
+      <public name="autofillInlineSuggestionChip" />
+      <public name="autofillInlineSuggestionTitle" />
+      <public name="autofillInlineSuggestionSubtitle" />
+      <!-- @hide @SystemApi -->
+      <public name="isAutofillInlineSuggestionTheme" />
     </public-group>
 
     <public-group type="drawable" first-id="0x010800b5">
     </public-group>
 
     <public-group type="style" first-id="0x010302e5">
+      <public name="Theme.AutofillInlineSuggestion" />
     </public-group>
 
     <public-group type="id" first-id="0x0102004a">
@@ -3037,6 +3043,8 @@
       <public name="config_defaultCallScreening" />
       <!-- @hide @SystemApi @TestApi -->
       <public name="config_systemGallery" />
+      <!-- @hide @SystemApi -->
+      <public name="low_memory" />
     </public-group>
 
     <public-group type="bool" first-id="0x01110005">
@@ -3059,6 +3067,18 @@
       <public name="accessibilitySystemActionLockScreen" />
       <public name="accessibilitySystemActionTakeScreenshot" />
     </public-group>
+
+    <public-group type="array" first-id="0x01070006">
+      <!-- @hide @SystemApi -->
+      <public name="simColors" />
+      <!-- @hide @SystemApi -->
+      <public name="config_restrictedPreinstalledCarrierApps" />
+      <!-- @hide @SystemApi -->
+      <public name="config_sms_enabled_single_shift_tables" />
+      <!-- @hide @SystemApi -->
+      <public name="config_sms_enabled_locking_shift_tables" />
+    </public-group>
+
   <!-- ===============================================================
        DO NOT ADD UN-GROUPED ITEMS HERE
 

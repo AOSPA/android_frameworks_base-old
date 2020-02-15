@@ -139,10 +139,69 @@ public class DozeMachineTest extends SysuiTestCase {
     }
 
     @Test
+    public void testInitialize_dozeSuppressed_alwaysOnDisabled_goesToDoze() {
+        when(mConfigMock.dozeSuppressed(anyInt())).thenReturn(true);
+        when(mConfigMock.alwaysOnEnabled(anyInt())).thenReturn(false);
+
+        mMachine.requestState(INITIALIZED);
+
+        verify(mPartMock).transitionTo(INITIALIZED, DOZE);
+        assertEquals(DOZE, mMachine.getState());
+    }
+
+    @Test
+    public void testInitialize_dozeSuppressed_alwaysOnEnabled_goesToDoze() {
+        when(mConfigMock.dozeSuppressed(anyInt())).thenReturn(true);
+        when(mConfigMock.alwaysOnEnabled(anyInt())).thenReturn(true);
+
+        mMachine.requestState(INITIALIZED);
+
+        verify(mPartMock).transitionTo(INITIALIZED, DOZE);
+        assertEquals(DOZE, mMachine.getState());
+    }
+
+    @Test
+    public void testInitialize_dozeSuppressed_afterDocked_goesToDoze() {
+        when(mConfigMock.dozeSuppressed(anyInt())).thenReturn(true);
+        when(mDockManager.isDocked()).thenReturn(true);
+
+        mMachine.requestState(INITIALIZED);
+
+        verify(mPartMock).transitionTo(INITIALIZED, DOZE);
+        assertEquals(DOZE, mMachine.getState());
+    }
+
+    @Test
+    public void testInitialize_dozeSuppressed_alwaysOnDisabled_afterDockPaused_goesToDoze() {
+        when(mConfigMock.dozeSuppressed(anyInt())).thenReturn(true);
+        when(mConfigMock.alwaysOnEnabled(anyInt())).thenReturn(false);
+        when(mDockManager.isDocked()).thenReturn(true);
+        when(mDockManager.isHidden()).thenReturn(true);
+
+        mMachine.requestState(INITIALIZED);
+
+        verify(mPartMock).transitionTo(INITIALIZED, DOZE);
+        assertEquals(DOZE, mMachine.getState());
+    }
+
+    @Test
+    public void testInitialize_dozeSuppressed_alwaysOnEnabled_afterDockPaused_goesToDoze() {
+        when(mConfigMock.dozeSuppressed(anyInt())).thenReturn(true);
+        when(mConfigMock.alwaysOnEnabled(anyInt())).thenReturn(true);
+        when(mDockManager.isDocked()).thenReturn(true);
+        when(mDockManager.isHidden()).thenReturn(true);
+
+        mMachine.requestState(INITIALIZED);
+
+        verify(mPartMock).transitionTo(INITIALIZED, DOZE);
+        assertEquals(DOZE, mMachine.getState());
+    }
+
+    @Test
     public void testPulseDone_goesToDoze() {
         when(mConfigMock.alwaysOnEnabled(anyInt())).thenReturn(false);
         mMachine.requestState(INITIALIZED);
-        mMachine.requestPulse(DozeEvent.PULSE_REASON_NOTIFICATION);
+        mMachine.requestPulse(DozeLog.PULSE_REASON_NOTIFICATION);
         mMachine.requestState(DOZE_PULSING);
 
         mMachine.requestState(DOZE_PULSE_DONE);
@@ -155,7 +214,7 @@ public class DozeMachineTest extends SysuiTestCase {
     public void testPulseDone_goesToAoD() {
         when(mConfigMock.alwaysOnEnabled(anyInt())).thenReturn(true);
         mMachine.requestState(INITIALIZED);
-        mMachine.requestPulse(DozeEvent.PULSE_REASON_NOTIFICATION);
+        mMachine.requestPulse(DozeLog.PULSE_REASON_NOTIFICATION);
         mMachine.requestState(DOZE_PULSING);
 
         mMachine.requestState(DOZE_PULSE_DONE);
@@ -165,10 +224,24 @@ public class DozeMachineTest extends SysuiTestCase {
     }
 
     @Test
+    public void testPulseDone_dozeSuppressed_goesToSuppressed() {
+        when(mConfigMock.dozeSuppressed(anyInt())).thenReturn(true);
+        when(mConfigMock.alwaysOnEnabled(anyInt())).thenReturn(true);
+        mMachine.requestState(INITIALIZED);
+        mMachine.requestPulse(DozeLog.PULSE_REASON_NOTIFICATION);
+        mMachine.requestState(DOZE_PULSING);
+
+        mMachine.requestState(DOZE_PULSE_DONE);
+
+        verify(mPartMock).transitionTo(DOZE_PULSE_DONE, DOZE);
+        assertEquals(DOZE, mMachine.getState());
+    }
+
+    @Test
     public void testPulseDone_afterDocked_goesToDockedAoD() {
         when(mDockManager.isDocked()).thenReturn(true);
         mMachine.requestState(INITIALIZED);
-        mMachine.requestPulse(DozeEvent.PULSE_REASON_NOTIFICATION);
+        mMachine.requestPulse(DozeLog.PULSE_REASON_NOTIFICATION);
         mMachine.requestState(DOZE_PULSING);
 
         mMachine.requestState(DOZE_PULSE_DONE);
@@ -178,12 +251,42 @@ public class DozeMachineTest extends SysuiTestCase {
     }
 
     @Test
+    public void testPulseDone_dozeSuppressed_afterDocked_goesToDoze() {
+        when(mConfigMock.dozeSuppressed(anyInt())).thenReturn(true);
+        when(mDockManager.isDocked()).thenReturn(true);
+        mMachine.requestState(INITIALIZED);
+        mMachine.requestPulse(DozeLog.PULSE_REASON_NOTIFICATION);
+        mMachine.requestState(DOZE_PULSING);
+
+        mMachine.requestState(DOZE_PULSE_DONE);
+
+        verify(mPartMock).transitionTo(DOZE_PULSE_DONE, DOZE);
+        assertEquals(DOZE, mMachine.getState());
+    }
+
+    @Test
     public void testPulseDone_afterDockPaused_goesToDoze() {
         when(mConfigMock.alwaysOnEnabled(anyInt())).thenReturn(true);
         when(mDockManager.isDocked()).thenReturn(true);
         when(mDockManager.isHidden()).thenReturn(true);
         mMachine.requestState(INITIALIZED);
-        mMachine.requestPulse(DozeEvent.PULSE_REASON_NOTIFICATION);
+        mMachine.requestPulse(DozeLog.PULSE_REASON_NOTIFICATION);
+        mMachine.requestState(DOZE_PULSING);
+
+        mMachine.requestState(DOZE_PULSE_DONE);
+
+        verify(mPartMock).transitionTo(DOZE_PULSE_DONE, DOZE);
+        assertEquals(DOZE, mMachine.getState());
+    }
+
+    @Test
+    public void testPulseDone_dozeSuppressed_afterDockPaused_goesToDoze() {
+        when(mConfigMock.dozeSuppressed(anyInt())).thenReturn(true);
+        when(mConfigMock.alwaysOnEnabled(anyInt())).thenReturn(true);
+        when(mDockManager.isDocked()).thenReturn(true);
+        when(mDockManager.isHidden()).thenReturn(true);
+        mMachine.requestState(INITIALIZED);
+        mMachine.requestPulse(DozeLog.PULSE_REASON_NOTIFICATION);
         mMachine.requestState(DOZE_PULSING);
 
         mMachine.requestState(DOZE_PULSE_DONE);
@@ -227,7 +330,7 @@ public class DozeMachineTest extends SysuiTestCase {
     public void testWakeLock_heldInPulseStates() {
         mMachine.requestState(INITIALIZED);
 
-        mMachine.requestPulse(DozeEvent.PULSE_REASON_NOTIFICATION);
+        mMachine.requestPulse(DozeLog.PULSE_REASON_NOTIFICATION);
         assertTrue(mWakeLockFake.isHeld());
 
         mMachine.requestState(DOZE_PULSING);
@@ -250,7 +353,7 @@ public class DozeMachineTest extends SysuiTestCase {
         mMachine.requestState(INITIALIZED);
 
         mMachine.requestState(DOZE);
-        mMachine.requestPulse(DozeEvent.PULSE_REASON_NOTIFICATION);
+        mMachine.requestPulse(DozeLog.PULSE_REASON_NOTIFICATION);
         mMachine.requestState(DOZE_PULSING);
         mMachine.requestState(DOZE_PULSE_DONE);
 
@@ -262,9 +365,9 @@ public class DozeMachineTest extends SysuiTestCase {
         mMachine.requestState(INITIALIZED);
 
         mMachine.requestState(DOZE);
-        mMachine.requestPulse(DozeEvent.PULSE_REASON_NOTIFICATION);
+        mMachine.requestPulse(DozeLog.PULSE_REASON_NOTIFICATION);
         mMachine.requestState(DOZE_PULSING);
-        mMachine.requestPulse(DozeEvent.PULSE_REASON_NOTIFICATION);
+        mMachine.requestPulse(DozeLog.PULSE_REASON_NOTIFICATION);
         mMachine.requestState(DOZE_PULSE_DONE);
     }
 
@@ -273,7 +376,7 @@ public class DozeMachineTest extends SysuiTestCase {
         mMachine.requestState(INITIALIZED);
 
         mMachine.requestState(DOZE);
-        mMachine.requestPulse(DozeEvent.PULSE_REASON_NOTIFICATION);
+        mMachine.requestPulse(DozeLog.PULSE_REASON_NOTIFICATION);
         mMachine.requestState(DOZE_PULSE_DONE);
     }
 
@@ -286,7 +389,7 @@ public class DozeMachineTest extends SysuiTestCase {
             return null;
         }).when(mPartMock).transitionTo(any(), eq(DOZE_REQUEST_PULSE));
 
-        mMachine.requestPulse(DozeEvent.PULSE_REASON_NOTIFICATION);
+        mMachine.requestPulse(DozeLog.PULSE_REASON_NOTIFICATION);
 
         assertEquals(DOZE_PULSING, mMachine.getState());
     }
@@ -295,9 +398,9 @@ public class DozeMachineTest extends SysuiTestCase {
     public void testPulseReason_getMatchesRequest() {
         mMachine.requestState(INITIALIZED);
         mMachine.requestState(DOZE);
-        mMachine.requestPulse(DozeEvent.REASON_SENSOR_DOUBLE_TAP);
+        mMachine.requestPulse(DozeLog.REASON_SENSOR_DOUBLE_TAP);
 
-        assertEquals(DozeEvent.REASON_SENSOR_DOUBLE_TAP, mMachine.getPulseReason());
+        assertEquals(DozeLog.REASON_SENSOR_DOUBLE_TAP, mMachine.getPulseReason());
     }
 
     @Test
@@ -309,7 +412,7 @@ public class DozeMachineTest extends SysuiTestCase {
             if (newState == DOZE_REQUEST_PULSE
                     || newState == DOZE_PULSING
                     || newState == DOZE_PULSE_DONE) {
-                assertEquals(DozeEvent.PULSE_REASON_NOTIFICATION, mMachine.getPulseReason());
+                assertEquals(DozeLog.PULSE_REASON_NOTIFICATION, mMachine.getPulseReason());
             } else {
                 assertTrue("unexpected state " + newState,
                         newState == DOZE || newState == DOZE_AOD);
@@ -317,7 +420,7 @@ public class DozeMachineTest extends SysuiTestCase {
             return null;
         }).when(mPartMock).transitionTo(any(), any());
 
-        mMachine.requestPulse(DozeEvent.PULSE_REASON_NOTIFICATION);
+        mMachine.requestPulse(DozeLog.PULSE_REASON_NOTIFICATION);
         mMachine.requestState(DOZE_PULSING);
         mMachine.requestState(DOZE_PULSE_DONE);
     }

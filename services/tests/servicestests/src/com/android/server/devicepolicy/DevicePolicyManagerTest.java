@@ -1986,7 +1986,11 @@ public class DevicePolicyManagerTest extends DpmTestBase {
                     UserManager.DISALLOW_SAFE_BOOT,
                     UserManager.DISALLOW_SHARE_LOCATION,
                     UserManager.DISALLOW_SMS,
-                    UserManager.DISALLOW_USB_FILE_TRANSFER
+                    UserManager.DISALLOW_USB_FILE_TRANSFER,
+                    UserManager.DISALLOW_AIRPLANE_MODE,
+                    UserManager.DISALLOW_MOUNT_PHYSICAL_MEDIA,
+                    UserManager.DISALLOW_OUTGOING_CALLS,
+                    UserManager.DISALLOW_UNMUTE_MICROPHONE
             );
 
     public void testSetUserRestriction_asPoOfOrgOwnedDevice() throws Exception {
@@ -2181,6 +2185,59 @@ public class DevicePolicyManagerTest extends DpmTestBase {
     private void assertAccountsAreEqual(List<String> expectedAccounts,
             List<String> actualAccounts) {
         assertThat(actualAccounts).containsExactlyElementsIn(expectedAccounts);
+    }
+
+    public void testSetApplicationHiddenWithDO() throws Exception {
+        mContext.binder.callingUid = DpmMockContext.CALLER_SYSTEM_USER_UID;
+        setupDeviceOwner();
+        mContext.packageName = admin1.getPackageName();
+        setUpPackageManagerForAdmin(admin1, mContext.binder.callingUid);
+
+        String packageName = "com.google.android.test";
+
+        dpm.setApplicationHidden(admin1, packageName, true);
+        verify(getServices().ipackageManager).setApplicationHiddenSettingAsUser(packageName,
+                true, UserHandle.USER_SYSTEM);
+
+        dpm.setApplicationHidden(admin1, packageName, false);
+        verify(getServices().ipackageManager).setApplicationHiddenSettingAsUser(packageName,
+                false, UserHandle.USER_SYSTEM);
+
+        verify(getServices().ipackageManager, never()).getPackageInfo(packageName,
+                PackageManager.MATCH_SYSTEM_ONLY, UserHandle.USER_SYSTEM);
+        verify(getServices().ipackageManager, never()).getPackageInfo(packageName,
+                PackageManager.MATCH_UNINSTALLED_PACKAGES | PackageManager.MATCH_SYSTEM_ONLY,
+                UserHandle.USER_SYSTEM);
+    }
+
+    public void testSetApplicationHiddenWithPOOfOrganizationOwnedDevice() throws Exception {
+        final int MANAGED_PROFILE_USER_ID = DpmMockContext.CALLER_USER_HANDLE;
+        final int MANAGED_PROFILE_ADMIN_UID =
+                UserHandle.getUid(MANAGED_PROFILE_USER_ID, DpmMockContext.SYSTEM_UID);
+        mContext.binder.callingUid = MANAGED_PROFILE_ADMIN_UID;
+
+        addManagedProfile(admin1, MANAGED_PROFILE_ADMIN_UID, admin1);
+        configureProfileOwnerOfOrgOwnedDevice(admin1, DpmMockContext.CALLER_USER_HANDLE);
+        mContext.packageName = admin1.getPackageName();
+        setUpPackageManagerForAdmin(admin1, mContext.binder.callingUid);
+
+        String packageName = "com.google.android.test";
+
+        ApplicationInfo applicationInfo = new ApplicationInfo();
+        applicationInfo.flags = ApplicationInfo.FLAG_SYSTEM;
+        when(getServices().userManager.getProfileParent(MANAGED_PROFILE_USER_ID))
+                .thenReturn(new UserInfo(UserHandle.USER_SYSTEM, "user system", 0));
+        when(getServices().ipackageManager.getApplicationInfo(packageName,
+                PackageManager.MATCH_UNINSTALLED_PACKAGES, UserHandle.USER_SYSTEM)).thenReturn(
+                applicationInfo);
+
+        parentDpm.setApplicationHidden(admin1, packageName, true);
+        verify(getServices().ipackageManager).setApplicationHiddenSettingAsUser(packageName,
+                true, UserHandle.USER_SYSTEM);
+
+        parentDpm.setApplicationHidden(admin1, packageName, false);
+        verify(getServices().ipackageManager).setApplicationHiddenSettingAsUser(packageName,
+                false, UserHandle.USER_SYSTEM);
     }
 
     public void testGetMacAddress() throws Exception {
@@ -5760,6 +5817,7 @@ public class DevicePolicyManagerTest extends DpmTestBase {
         mContext.packageName = admin1.getPackageName();
 
         setCrossProfileAppsList();
+        setVendorCrossProfileAppsList();
 
         assertTrue(dpm.getAllCrossProfilePackages().isEmpty());
     }
@@ -5770,6 +5828,7 @@ public class DevicePolicyManagerTest extends DpmTestBase {
         mContext.packageName = admin1.getPackageName();
 
         setCrossProfileAppsList();
+        setVendorCrossProfileAppsList();
         initializeDpms();
 
         assertTrue(dpm.getAllCrossProfilePackages().isEmpty());
@@ -5782,9 +5841,11 @@ public class DevicePolicyManagerTest extends DpmTestBase {
 
         dpm.setCrossProfilePackages(admin1, packages);
         setCrossProfileAppsList("TEST_DEFAULT_PACKAGE", "TEST_COMMON_PACKAGE");
+        setVendorCrossProfileAppsList("TEST_VENDOR_DEFAULT_PACKAGE");
 
         assertEquals(Sets.newSet(
-                        "TEST_PACKAGE", "TEST_DEFAULT_PACKAGE", "TEST_COMMON_PACKAGE"),
+                        "TEST_PACKAGE", "TEST_DEFAULT_PACKAGE", "TEST_COMMON_PACKAGE",
+                        "TEST_VENDOR_DEFAULT_PACKAGE"),
                 dpm.getAllCrossProfilePackages());
 
     }
@@ -5797,11 +5858,29 @@ public class DevicePolicyManagerTest extends DpmTestBase {
 
         dpm.setCrossProfilePackages(admin1, packages);
         setCrossProfileAppsList("TEST_DEFAULT_PACKAGE", "TEST_COMMON_PACKAGE");
+        setVendorCrossProfileAppsList("TEST_VENDOR_DEFAULT_PACKAGE");
         initializeDpms();
 
         assertEquals(Sets.newSet(
-                "TEST_PACKAGE", "TEST_DEFAULT_PACKAGE", "TEST_COMMON_PACKAGE"),
+                "TEST_PACKAGE", "TEST_DEFAULT_PACKAGE", "TEST_COMMON_PACKAGE",
+                "TEST_VENDOR_DEFAULT_PACKAGE"),
                 dpm.getAllCrossProfilePackages());
+    }
+
+    public void testGetDefaultCrossProfilePackages_noPackagesSet_returnsEmpty() {
+        setCrossProfileAppsList();
+        setVendorCrossProfileAppsList();
+
+        assertThat(dpm.getDefaultCrossProfilePackages()).isEmpty();
+    }
+
+    public void testGetDefaultCrossProfilePackages_packagesSet_returnsCombinedSet() {
+        setCrossProfileAppsList("TEST_DEFAULT_PACKAGE", "TEST_COMMON_PACKAGE");
+        setVendorCrossProfileAppsList("TEST_VENDOR_DEFAULT_PACKAGE");
+
+        assertThat(dpm.getDefaultCrossProfilePackages()).isEqualTo(Sets.newSet(
+                "TEST_DEFAULT_PACKAGE", "TEST_COMMON_PACKAGE", "TEST_VENDOR_DEFAULT_PACKAGE"
+        ));
     }
 
     public void testSetCommonCriteriaMode_asDeviceOwner() throws Exception {
@@ -5832,6 +5911,12 @@ public class DevicePolicyManagerTest extends DpmTestBase {
     private void setCrossProfileAppsList(String... packages) {
         when(mContext.getResources()
                 .getStringArray(eq(R.array.cross_profile_apps)))
+                .thenReturn(packages);
+    }
+
+    private void setVendorCrossProfileAppsList(String... packages) {
+        when(mContext.getResources()
+                .getStringArray(eq(R.array.vendor_cross_profile_apps)))
                 .thenReturn(packages);
     }
 

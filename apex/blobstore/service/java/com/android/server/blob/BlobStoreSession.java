@@ -16,7 +16,13 @@
 package com.android.server.blob;
 
 import static android.app.blob.BlobStoreManager.COMMIT_RESULT_ERROR;
+import static android.app.blob.XmlTags.ATTR_ID;
+import static android.app.blob.XmlTags.ATTR_PACKAGE;
+import static android.app.blob.XmlTags.ATTR_UID;
+import static android.app.blob.XmlTags.TAG_ACCESS_MODE;
+import static android.app.blob.XmlTags.TAG_BLOB_HANDLE;
 import static android.system.OsConstants.O_CREAT;
+import static android.system.OsConstants.O_RDONLY;
 import static android.system.OsConstants.O_RDWR;
 import static android.system.OsConstants.SEEK_SET;
 
@@ -41,8 +47,16 @@ import android.util.ExceptionUtils;
 import android.util.Slog;
 
 import com.android.internal.annotations.GuardedBy;
+import com.android.internal.annotations.VisibleForTesting;
+import com.android.internal.util.IndentingPrintWriter;
 import com.android.internal.util.Preconditions;
+import com.android.internal.util.XmlUtils;
+import com.android.server.blob.BlobStoreManagerService.DumpArgs;
 import com.android.server.blob.BlobStoreManagerService.SessionStateChangeListener;
+
+import org.xmlpull.v1.XmlPullParser;
+import org.xmlpull.v1.XmlPullParserException;
+import org.xmlpull.v1.XmlSerializer;
 
 import java.io.File;
 import java.io.FileDescriptor;
@@ -50,9 +64,11 @@ import java.io.IOException;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Objects;
 
 /** TODO: add doc */
-public class BlobStoreSession extends IBlobStoreSession.Stub {
+@VisibleForTesting
+class BlobStoreSession extends IBlobStoreSession.Stub {
 
     static final int STATE_OPENED = 1;
     static final int STATE_CLOSED = 0;
@@ -66,10 +82,10 @@ public class BlobStoreSession extends IBlobStoreSession.Stub {
     private final Context mContext;
     private final SessionStateChangeListener mListener;
 
-    public final BlobHandle blobHandle;
-    public final long sessionId;
-    public final int ownerUid;
-    public final String ownerPackageName;
+    private final BlobHandle mBlobHandle;
+    private final long mSessionId;
+    private final int mOwnerUid;
+    private final String mOwnerPackageName;
 
     // Do not access this directly, instead use getSessionFile().
     private File mSessionFile;
@@ -89,15 +105,31 @@ public class BlobStoreSession extends IBlobStoreSession.Stub {
     BlobStoreSession(Context context, long sessionId, BlobHandle blobHandle,
             int ownerUid, String ownerPackageName, SessionStateChangeListener listener) {
         this.mContext = context;
-        this.blobHandle = blobHandle;
-        this.sessionId = sessionId;
-        this.ownerUid = ownerUid;
-        this.ownerPackageName = ownerPackageName;
+        this.mBlobHandle = blobHandle;
+        this.mSessionId = sessionId;
+        this.mOwnerUid = ownerUid;
+        this.mOwnerPackageName = ownerPackageName;
         this.mListener = listener;
     }
 
+    public BlobHandle getBlobHandle() {
+        return mBlobHandle;
+    }
+
+    public long getSessionId() {
+        return mSessionId;
+    }
+
+    public int getOwnerUid() {
+        return mOwnerUid;
+    }
+
+    public String getOwnerPackageName() {
+        return mOwnerPackageName;
+    }
+
     boolean hasAccess(int callingUid, String callingPackageName) {
-        return ownerUid == callingUid && ownerPackageName.equals(callingPackageName);
+        return mOwnerUid == callingUid && mOwnerPackageName.equals(callingPackageName);
     }
 
     void open() {
@@ -143,6 +175,8 @@ public class BlobStoreSession extends IBlobStoreSession.Stub {
     @NonNull
     public ParcelFileDescriptor openWrite(@BytesLong long offsetBytes,
             @BytesLong long lengthBytes) {
+        Preconditions.checkArgumentNonnegative(offsetBytes, "offsetBytes must not be negative");
+
         assertCallerIsOwner();
         synchronized (mSessionLock) {
             if (mState != STATE_OPENED) {
@@ -187,16 +221,50 @@ public class BlobStoreSession extends IBlobStoreSession.Stub {
     }
 
     @Override
+    @NonNull
+    public ParcelFileDescriptor openRead() {
+        assertCallerIsOwner();
+        synchronized (mSessionLock) {
+            if (mState != STATE_OPENED) {
+                throw new IllegalStateException("Not allowed to read in state: "
+                        + stateToString(mState));
+            }
+
+            try {
+                return openReadLocked();
+            } catch (IOException e) {
+                throw ExceptionUtils.wrap(e);
+            }
+        }
+    }
+
+    @GuardedBy("mSessionLock")
+    @NonNull
+    private ParcelFileDescriptor openReadLocked() throws IOException {
+        FileDescriptor fd = null;
+        try {
+            final File sessionFile = getSessionFile();
+            if (sessionFile == null) {
+                throw new IllegalStateException("Couldn't get the file for this session");
+            }
+            fd = Os.open(sessionFile.getPath(), O_RDONLY, 0);
+        } catch (ErrnoException e) {
+            e.rethrowAsIOException();
+        }
+        return createRevocableFdLocked(fd);
+    }
+
+    @Override
     @BytesLong
     public long getSize() {
-        return 0;
+        return getSessionFile().length();
     }
 
     @Override
     public void allowPackageAccess(@NonNull String packageName,
             @NonNull byte[] certificate) {
         assertCallerIsOwner();
-        Preconditions.checkNotNull(packageName, "packageName must not be null");
+        Objects.requireNonNull(packageName, "packageName must not be null");
         synchronized (mSessionLock) {
             if (mState != STATE_OPENED) {
                 throw new IllegalStateException("Not allowed to change access type in state: "
@@ -234,7 +302,9 @@ public class BlobStoreSession extends IBlobStoreSession.Stub {
     public boolean isPackageAccessAllowed(@NonNull String packageName,
             @NonNull byte[] certificate) {
         assertCallerIsOwner();
-        Preconditions.checkNotNull(packageName, "packageName must not be null");
+        Objects.requireNonNull(packageName, "packageName must not be null");
+        Preconditions.checkByteArrayNotEmpty(certificate, "certificate");
+
         synchronized (mSessionLock) {
             if (mState != STATE_OPENED) {
                 throw new IllegalStateException("Not allowed to get access type in state: "
@@ -311,12 +381,12 @@ public class BlobStoreSession extends IBlobStoreSession.Stub {
     void verifyBlobData() {
         byte[] actualDigest = null;
         try {
-            actualDigest = FileUtils.digest(getSessionFile(), blobHandle.algorithm);
+            actualDigest = FileUtils.digest(getSessionFile(), mBlobHandle.algorithm);
         } catch (IOException | NoSuchAlgorithmException e) {
             Slog.e(TAG, "Error computing the digest", e);
         }
         synchronized (mSessionLock) {
-            if (actualDigest != null && Arrays.equals(actualDigest, blobHandle.digest)) {
+            if (actualDigest != null && Arrays.equals(actualDigest, mBlobHandle.digest)) {
                 mState = STATE_VERIFIED_VALID;
                 // Commit callback will be sent once the data is persisted.
             } else {
@@ -331,8 +401,8 @@ public class BlobStoreSession extends IBlobStoreSession.Stub {
     private void revokeAllFdsLocked() {
         for (int i = mRevocableFds.size() - 1; i >= 0; --i) {
             mRevocableFds.get(i).revoke();
-            mRevocableFds.remove(i);
         }
+        mRevocableFds.clear();
     }
 
     @GuardedBy("mSessionLock")
@@ -355,7 +425,7 @@ public class BlobStoreSession extends IBlobStoreSession.Stub {
     @Nullable
     File getSessionFile() {
         if (mSessionFile == null) {
-            mSessionFile = BlobStoreConfig.prepareBlobFile(sessionId);
+            mSessionFile = BlobStoreConfig.prepareBlobFile(mSessionId);
         }
         return mSessionFile;
     }
@@ -379,8 +449,78 @@ public class BlobStoreSession extends IBlobStoreSession.Stub {
 
     private void assertCallerIsOwner() {
         final int callingUid = Binder.getCallingUid();
-        if (callingUid != ownerUid) {
-            throw new SecurityException(ownerUid + " is not the session owner");
+        if (callingUid != mOwnerUid) {
+            throw new SecurityException(mOwnerUid + " is not the session owner");
         }
+    }
+
+    void dump(IndentingPrintWriter fout, DumpArgs dumpArgs) {
+        synchronized (mSessionLock) {
+            fout.println("state: " + stateToString(mState));
+            fout.println("ownerUid: " + mOwnerUid);
+            fout.println("ownerPkg: " + mOwnerPackageName);
+
+            fout.println("blobHandle:");
+            fout.increaseIndent();
+            mBlobHandle.dump(fout, dumpArgs.shouldDumpFull());
+            fout.decreaseIndent();
+
+            fout.println("accessMode:");
+            fout.increaseIndent();
+            mBlobAccessMode.dump(fout);
+            fout.decreaseIndent();
+
+            fout.println("Open fds: #" + mRevocableFds.size());
+        }
+    }
+
+    void writeToXml(@NonNull XmlSerializer out) throws IOException {
+        synchronized (mSessionLock) {
+            XmlUtils.writeLongAttribute(out, ATTR_ID, mSessionId);
+            XmlUtils.writeStringAttribute(out, ATTR_PACKAGE, mOwnerPackageName);
+            XmlUtils.writeIntAttribute(out, ATTR_UID, mOwnerUid);
+
+            out.startTag(null, TAG_BLOB_HANDLE);
+            mBlobHandle.writeToXml(out);
+            out.endTag(null, TAG_BLOB_HANDLE);
+
+            out.startTag(null, TAG_ACCESS_MODE);
+            mBlobAccessMode.writeToXml(out);
+            out.endTag(null, TAG_ACCESS_MODE);
+        }
+    }
+
+    @Nullable
+    static BlobStoreSession createFromXml(@NonNull XmlPullParser in,
+            @NonNull Context context, @NonNull SessionStateChangeListener stateChangeListener)
+            throws IOException, XmlPullParserException {
+        final int sessionId = XmlUtils.readIntAttribute(in, ATTR_ID);
+        final String ownerPackageName = XmlUtils.readStringAttribute(in, ATTR_PACKAGE);
+        final int ownerUid = XmlUtils.readIntAttribute(in, ATTR_UID);
+
+        final int depth = in.getDepth();
+        BlobHandle blobHandle = null;
+        BlobAccessMode blobAccessMode = null;
+        while (XmlUtils.nextElementWithin(in, depth)) {
+            if (TAG_BLOB_HANDLE.equals(in.getName())) {
+                blobHandle = BlobHandle.createFromXml(in);
+            } else if (TAG_ACCESS_MODE.equals(in.getName())) {
+                blobAccessMode = BlobAccessMode.createFromXml(in);
+            }
+        }
+
+        if (blobHandle == null) {
+            Slog.wtf(TAG, "blobHandle should be available");
+            return null;
+        }
+        if (blobAccessMode == null) {
+            Slog.wtf(TAG, "blobAccessMode should be available");
+            return null;
+        }
+
+        final BlobStoreSession blobStoreSession = new BlobStoreSession(context, sessionId,
+                blobHandle, ownerUid, ownerPackageName, stateChangeListener);
+        blobStoreSession.mBlobAccessMode.allow(blobAccessMode);
+        return blobStoreSession;
     }
 }

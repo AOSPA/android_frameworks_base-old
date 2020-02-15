@@ -21,6 +21,7 @@ import static android.app.usage.UsageEvents.Event.CONFIGURATION_CHANGE;
 import static android.app.usage.UsageEvents.Event.DEVICE_EVENT_PACKAGE_NAME;
 import static android.app.usage.UsageEvents.Event.DEVICE_SHUTDOWN;
 import static android.app.usage.UsageEvents.Event.FLUSH_TO_DISK;
+import static android.app.usage.UsageEvents.Event.LOCUS_ID_SET;
 import static android.app.usage.UsageEvents.Event.NOTIFICATION_INTERRUPTION;
 import static android.app.usage.UsageEvents.Event.SHORTCUT_INVOCATION;
 import static android.app.usage.UsageEvents.Event.USER_STOPPED;
@@ -30,6 +31,8 @@ import static android.app.usage.UsageStatsManager.USAGE_SOURCE_TASK_ROOT_ACTIVIT
 
 import android.Manifest;
 import android.annotation.NonNull;
+import android.annotation.Nullable;
+import android.annotation.UserIdInt;
 import android.app.ActivityManager;
 import android.app.AppOpsManager;
 import android.app.IUidObserver;
@@ -52,10 +55,12 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.LocusId;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.PackageManagerInternal;
 import android.content.pm.ParceledListSlice;
+import android.content.pm.ShortcutServiceInternal;
 import android.content.pm.UserInfo;
 import android.content.res.Configuration;
 import android.os.Binder;
@@ -152,6 +157,8 @@ public class UsageStatsService extends SystemService implements
     PackageManagerInternal mPackageManagerInternal;
     // Do not use directly. Call getDpmInternal() instead
     DevicePolicyManagerInternal mDpmInternal;
+    // Do not use directly. Call getShortcutServiceInternal() instead
+    ShortcutServiceInternal mShortcutServiceInternal;
 
     private final SparseArray<UserUsageStatsService> mUserState = new SparseArray<>();
     private final SparseBooleanArray mUserUnlockedStates = new SparseBooleanArray();
@@ -263,6 +270,8 @@ public class UsageStatsService extends SystemService implements
         if (phase == PHASE_SYSTEM_SERVICES_READY) {
             // initialize mDpmInternal
             getDpmInternal();
+            // initialize mShortcutServiceInternal
+            getShortcutServiceInternal();
 
             if (ENABLE_KERNEL_UPDATES && KERNEL_COUNTER_FILE.exists()) {
                 try {
@@ -369,7 +378,7 @@ public class UsageStatsService extends SystemService implements
     /**
      * Fetches a map (package_name:install_time) of installed packages for the given user. This
      * map contains all installed packages, including those packages which have been uninstalled
-     * with the DONT_DELETE_DATA flag.
+     * with the DELETE_KEEP_DATA flag.
      * This is a helper method which should only be called when the given user's usage stats service
      * is initialized; it performs a heavy query to package manager so do not call it otherwise.
      * <br/>
@@ -394,6 +403,13 @@ public class UsageStatsService extends SystemService implements
             mDpmInternal = LocalServices.getService(DevicePolicyManagerInternal.class);
         }
         return mDpmInternal;
+    }
+
+    private ShortcutServiceInternal getShortcutServiceInternal() {
+        if (mShortcutServiceInternal == null) {
+            mShortcutServiceInternal = LocalServices.getService(ShortcutServiceInternal.class);
+        }
+        return mShortcutServiceInternal;
     }
 
     private void readUsageSourceSetting() {
@@ -463,6 +479,16 @@ public class UsageStatsService extends SystemService implements
 
     private boolean shouldObfuscateInstantAppsForCaller(int callingUid, int userId) {
         return !mPackageManagerInternal.canAccessInstantApps(callingUid, userId);
+    }
+
+    private boolean shouldHideShortcutInvocationEvents(int userId, String callingPackage,
+            int callingPid, int callingUid) {
+        final ShortcutServiceInternal shortcutServiceInternal = getShortcutServiceInternal();
+        if (shortcutServiceInternal != null) {
+            return !shortcutServiceInternal.hasShortcutHostPermission(userId, callingPackage,
+                    callingPid, callingUid);
+        }
+        return true; // hide by default if we can't verify visibility
     }
 
     private static void deleteRecursively(File f) {
@@ -1004,7 +1030,7 @@ public class UsageStatsService extends SystemService implements
      * Called by the Binder stub.
      */
     UsageEvents queryEvents(int userId, long beginTime, long endTime,
-            boolean shouldObfuscateInstantApps) {
+            boolean shouldObfuscateInstantApps, boolean shouldHideShortcutInvocationEvents) {
         synchronized (mLock) {
             if (!mUserUnlockedStates.get(userId)) {
                 Slog.w(TAG, "Failed to query events for locked user " + userId);
@@ -1015,7 +1041,8 @@ public class UsageStatsService extends SystemService implements
             if (service == null) {
                 return null; // user was stopped or removed
             }
-            return service.queryEvents(beginTime, endTime, shouldObfuscateInstantApps);
+            return service.queryEvents(beginTime, endTime, shouldObfuscateInstantApps,
+                    shouldHideShortcutInvocationEvents);
         }
     }
 
@@ -1414,14 +1441,18 @@ public class UsageStatsService extends SystemService implements
                 return null;
             }
 
-            final boolean obfuscateInstantApps = shouldObfuscateInstantAppsForCaller(
-                    Binder.getCallingUid(), UserHandle.getCallingUserId());
-
             final int userId = UserHandle.getCallingUserId();
+            final int callingUid = Binder.getCallingUid();
+            final int callingPid = Binder.getCallingPid();
+            final boolean obfuscateInstantApps = shouldObfuscateInstantAppsForCaller(
+                    callingUid, userId);
+
             final long token = Binder.clearCallingIdentity();
             try {
+                final boolean hideShortcutInvocationEvents = shouldHideShortcutInvocationEvents(
+                        userId, callingPackage, callingPid, callingUid);
                 return UsageStatsService.this.queryEvents(userId, beginTime, endTime,
-                        obfuscateInstantApps);
+                        obfuscateInstantApps, hideShortcutInvocationEvents);
             } finally {
                 Binder.restoreCallingIdentity(token);
             }
@@ -1452,19 +1483,24 @@ public class UsageStatsService extends SystemService implements
                 return null;
             }
 
-            if (userId != UserHandle.getCallingUserId()) {
+            final int callingUserId = UserHandle.getCallingUserId();
+            if (userId != callingUserId) {
                 getContext().enforceCallingPermission(
                         Manifest.permission.INTERACT_ACROSS_USERS_FULL,
                         "No permission to query usage stats for this user");
             }
 
+            final int callingUid = Binder.getCallingUid();
+            final int callingPid = Binder.getCallingPid();
             final boolean obfuscateInstantApps = shouldObfuscateInstantAppsForCaller(
-                    Binder.getCallingUid(), UserHandle.getCallingUserId());
+                    callingUid, callingUserId);
 
             final long token = Binder.clearCallingIdentity();
             try {
+                final boolean hideShortcutInvocationEvents = shouldHideShortcutInvocationEvents(
+                        userId, callingPackage, callingPid, callingUid);
                 return UsageStatsService.this.queryEvents(userId, beginTime, endTime,
-                        obfuscateInstantApps);
+                        obfuscateInstantApps, hideShortcutInvocationEvents);
             } finally {
                 Binder.restoreCallingIdentity(token);
             }
@@ -1987,6 +2023,17 @@ public class UsageStatsService extends SystemService implements
         }
 
         @Override
+        public void reportLocusUpdate(@NonNull ComponentName activity, @UserIdInt int userId,
+                @Nullable LocusId locusId, @NonNull  IBinder appToken) {
+            Event event = new Event(LOCUS_ID_SET, SystemClock.elapsedRealtime());
+            event.mLocusId = locusId.getId();
+            event.mPackage = activity.getPackageName();
+            event.mClass = activity.getClassName();
+            event.mInstanceId = appToken.hashCode();
+            reportEventOrAddToQueue(userId, event);
+        }
+
+        @Override
         public void reportContentProviderUsage(String name, String packageName, int userId) {
             mAppStandby.postReportContentProviderUsage(name, packageName, userId);
         }
@@ -2070,9 +2117,9 @@ public class UsageStatsService extends SystemService implements
 
         @Override
         public UsageEvents queryEventsForUser(int userId, long beginTime, long endTime,
-                boolean shouldObfuscateInstantApps) {
+                boolean obfuscateInstantApps, boolean hideShortcutInvocationEvents) {
             return UsageStatsService.this.queryEvents(
-                    userId, beginTime, endTime, shouldObfuscateInstantApps);
+                    userId, beginTime, endTime, obfuscateInstantApps, hideShortcutInvocationEvents);
         }
 
         @Override

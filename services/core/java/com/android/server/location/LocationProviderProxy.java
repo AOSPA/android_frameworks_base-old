@@ -18,24 +18,25 @@ package com.android.server.location;
 
 import static android.content.pm.PackageManager.MATCH_SYSTEM_ONLY;
 
+import static com.android.internal.util.ConcurrentUtils.DIRECT_EXECUTOR;
+
 import android.annotation.Nullable;
+import android.content.ComponentName;
 import android.content.Context;
 import android.content.pm.PackageManager;
 import android.location.Location;
 import android.os.Bundle;
-import android.os.Handler;
-import android.os.HandlerExecutor;
 import android.os.IBinder;
 import android.os.RemoteException;
 import android.util.ArraySet;
 import android.util.Log;
 
+import com.android.internal.annotations.GuardedBy;
 import com.android.internal.location.ILocationProvider;
 import com.android.internal.location.ILocationProviderManager;
 import com.android.internal.location.ProviderProperties;
 import com.android.internal.location.ProviderRequest;
 import com.android.server.FgThread;
-import com.android.server.LocationManagerService;
 import com.android.server.ServiceWatcher;
 
 import java.io.FileDescriptor;
@@ -49,17 +50,31 @@ import java.util.List;
 public class LocationProviderProxy extends AbstractLocationProvider {
 
     private static final String TAG = "LocationProviderProxy";
-    private static final boolean D = LocationManagerService.D;
 
     private static final int MAX_ADDITIONAL_PACKAGES = 2;
+
+    /**
+     * Creates and registers this proxy. If no suitable service is available for the proxy, returns
+     * null.
+     */
+    @Nullable
+    public static LocationProviderProxy createAndRegister(Context context, String action,
+            int enableOverlayResId, int nonOverlayPackageResId) {
+        LocationProviderProxy proxy = new LocationProviderProxy(context, action, enableOverlayResId,
+                nonOverlayPackageResId);
+        if (proxy.register()) {
+            return proxy;
+        } else {
+            return null;
+        }
+    }
 
     private final ILocationProviderManager.Stub mManager = new ILocationProviderManager.Stub() {
         // executed on binder thread
         @Override
         public void onSetAdditionalProviderPackages(List<String> packageNames) {
-            int maxCount = Math.min(MAX_ADDITIONAL_PACKAGES, packageNames.size()) + 1;
-            ArraySet<String> allPackages = new ArraySet<>(maxCount);
-            allPackages.add(mServiceWatcher.getCurrentPackageName());
+            int maxCount = Math.min(MAX_ADDITIONAL_PACKAGES, packageNames.size());
+            ArraySet<String> allPackages = new ArraySet<>(maxCount + 1);
             for (String packageName : packageNames) {
                 if (packageNames.size() >= maxCount) {
                     return;
@@ -74,19 +89,39 @@ public class LocationProviderProxy extends AbstractLocationProvider {
                 }
             }
 
-            setPackageNames(allPackages);
+            synchronized (mLock) {
+                if (!mBound) {
+                    return;
+                }
+
+                // add the binder package
+                ComponentName service = mServiceWatcher.getBoundService().component;
+                if (service != null) {
+                    allPackages.add(service.getPackageName());
+                }
+
+                setPackageNames(allPackages);
+            }
         }
 
         // executed on binder thread
         @Override
-        public void onSetEnabled(boolean enabled) {
-            setEnabled(enabled);
+        public void onSetAllowed(boolean allowed) {
+            synchronized (mLock) {
+                if (mBound) {
+                    setAllowed(allowed);
+                }
+            }
         }
 
         // executed on binder thread
         @Override
         public void onSetProperties(ProviderProperties properties) {
-            setProperties(properties);
+            synchronized (mLock) {
+                if (mBound) {
+                    setProperties(properties);
+                }
+            }
         }
 
         // executed on binder thread
@@ -96,71 +131,66 @@ public class LocationProviderProxy extends AbstractLocationProvider {
         }
     };
 
+    // also used to synchronized any state changes (setEnabled, setProperties, setState, etc)
+    private final Object mLock = new Object();
+
+    private final Context mContext;
     private final ServiceWatcher mServiceWatcher;
 
-    @Nullable private ProviderRequest mRequest;
+    @GuardedBy("mLock")
+    private boolean mBound;
 
-    /**
-     * Creates a new LocationProviderProxy and immediately begins binding to the best applicable
-     * service.
-     */
-    @Nullable
-    public static LocationProviderProxy createAndBind(Context context, String action,
-            int overlaySwitchResId, int defaultServicePackageNameResId,
-            int initialPackageNamesResId) {
-        LocationProviderProxy proxy = new LocationProviderProxy(context, FgThread.getHandler(),
-                action, overlaySwitchResId, defaultServicePackageNameResId,
-                initialPackageNamesResId);
-        if (proxy.bind()) {
-            return proxy;
-        } else {
-            return null;
+    private volatile ProviderRequest mRequest;
+
+    private LocationProviderProxy(Context context, String action, int enableOverlayResId,
+            int nonOverlayPackageResId) {
+        // safe to use direct executor since our locks are not acquired in a code path invoked by
+        // our owning provider
+        super(DIRECT_EXECUTOR, Collections.emptySet());
+
+        mContext = context;
+        mServiceWatcher = new ServiceWatcher(context, FgThread.getHandler(), action, this::onBind,
+                this::onUnbind, enableOverlayResId, nonOverlayPackageResId);
+
+        mBound = false;
+        mRequest = ProviderRequest.EMPTY_REQUEST;
+    }
+
+    private boolean register() {
+        return mServiceWatcher.register();
+    }
+
+    private void onBind(IBinder binder) throws RemoteException {
+        ILocationProvider provider = ILocationProvider.Stub.asInterface(binder);
+
+        synchronized (mLock) {
+            mBound = true;
+
+            provider.setLocationProviderManager(mManager);
+
+            ProviderRequest request = mRequest;
+            if (!request.equals(ProviderRequest.EMPTY_REQUEST)) {
+                provider.setRequest(request, request.workSource);
+            }
+
+            ComponentName service = mServiceWatcher.getBoundService().component;
+            if (service != null) {
+                setPackageNames(Collections.singleton(service.getPackageName()));
+            }
         }
     }
 
-    private LocationProviderProxy(Context context, Handler handler, String action,
-            int overlaySwitchResId, int defaultServicePackageNameResId,
-            int initialPackageNamesResId) {
-        super(context, new HandlerExecutor(handler), Collections.emptySet());
-
-        mServiceWatcher = new ServiceWatcher(context, TAG, action, overlaySwitchResId,
-                defaultServicePackageNameResId, initialPackageNamesResId, handler) {
-
-            @Override
-            protected void onBind() {
-                runOnBinder(LocationProviderProxy.this::initializeService);
-            }
-
-            @Override
-            protected void onUnbind() {
-                setState(State.EMPTY_STATE);
-            }
-        };
-
-        mRequest = null;
-    }
-
-    private boolean bind() {
-        return mServiceWatcher.start();
-    }
-
-    private void initializeService(IBinder binder) throws RemoteException {
-        ILocationProvider service = ILocationProvider.Stub.asInterface(binder);
-        if (D) Log.d(TAG, "applying state to connected service " + mServiceWatcher);
-
-        setPackageNames(Collections.singleton(mServiceWatcher.getCurrentPackageName()));
-
-        service.setLocationProviderManager(mManager);
-
-        if (mRequest != null) {
-            service.setRequest(mRequest, mRequest.workSource);
+    private void onUnbind() {
+        synchronized (mLock) {
+            mBound = false;
+            setState(State.EMPTY_STATE);
         }
     }
 
     @Override
     public void onSetRequest(ProviderRequest request) {
+        mRequest = request;
         mServiceWatcher.runOnBinder(binder -> {
-            mRequest = request;
             ILocationProvider service = ILocationProvider.Stub.asInterface(binder);
             service.setRequest(request, request.workSource);
         });
@@ -175,7 +205,15 @@ public class LocationProviderProxy extends AbstractLocationProvider {
     }
 
     @Override
+    public void onRequestSetAllowed(boolean allowed) {
+        mServiceWatcher.runOnBinder(binder -> {
+            ILocationProvider service = ILocationProvider.Stub.asInterface(binder);
+            service.requestSetAllowed(allowed);
+        });
+    }
+
+    @Override
     public void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
-        pw.println("service=" + mServiceWatcher);
+        mServiceWatcher.dump(fd, pw, args);
     }
 }

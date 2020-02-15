@@ -22,20 +22,17 @@ import static android.content.integrity.Rule.FORCE_ALLOW;
 import android.annotation.NonNull;
 import android.content.integrity.AppInstallMetadata;
 import android.content.integrity.Rule;
-import android.util.Slog;
 
 import com.android.server.integrity.model.IntegrityCheckResult;
 
-import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * A helper class for evaluating rules against app install metadata to find if there are matching
  * rules.
  */
 final class RuleEvaluator {
-
-    private static final String TAG = "RuleEvaluator";
 
     /**
      * Match the list of rules against an app install metadata.
@@ -51,30 +48,34 @@ final class RuleEvaluator {
     @NonNull
     static IntegrityCheckResult evaluateRules(
             List<Rule> rules, AppInstallMetadata appInstallMetadata) {
-        List<Rule> matchedRules = new ArrayList<>();
-        for (Rule rule : rules) {
-            if (rule.getFormula().isSatisfied(appInstallMetadata)) {
-                matchedRules.add(rule);
-            }
+
+        // Identify the rules that match the {@code appInstallMetadata}.
+        List<Rule> matchedRules =
+                rules.stream()
+                        .filter(rule -> rule.getFormula().matches(appInstallMetadata))
+                        .collect(Collectors.toList());
+
+        // Identify the matched power allow rules and terminate early if we have any.
+        List<Rule> matchedPowerAllowRules =
+                matchedRules.stream()
+                        .filter(rule -> rule.getEffect() == FORCE_ALLOW)
+                        .collect(Collectors.toList());
+
+        if (!matchedPowerAllowRules.isEmpty()) {
+            return IntegrityCheckResult.allow(matchedPowerAllowRules);
         }
 
-        boolean denied = false;
-        Rule denyRule = null;
-        for (Rule rule : matchedRules) {
-            switch (rule.getEffect()) {
-                case DENY:
-                    if (!denied) {
-                        denied = true;
-                        denyRule = rule;
-                    }
-                    break;
-                case FORCE_ALLOW:
-                    return IntegrityCheckResult.allow(rule);
-                default:
-                    Slog.e(TAG, "Matched an unknown effect rule: " + rule);
-                    return IntegrityCheckResult.allow();
-            }
+        // Identify the matched deny rules.
+        List<Rule> matchedDenyRules =
+                matchedRules.stream()
+                        .filter(rule -> rule.getEffect() == DENY)
+                        .collect(Collectors.toList());
+
+        if (!matchedDenyRules.isEmpty()) {
+            return IntegrityCheckResult.deny(matchedDenyRules);
         }
-        return denied ? IntegrityCheckResult.deny(denyRule) : IntegrityCheckResult.allow();
+
+        // When no rules are denied, return default allow result.
+        return IntegrityCheckResult.allow();
     }
 }

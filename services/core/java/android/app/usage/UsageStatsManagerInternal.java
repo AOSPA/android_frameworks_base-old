@@ -16,10 +16,14 @@
 
 package android.app.usage;
 
+import android.annotation.NonNull;
+import android.annotation.Nullable;
 import android.annotation.UserIdInt;
 import android.app.usage.UsageStatsManager.StandbyBuckets;
 import android.content.ComponentName;
+import android.content.LocusId;
 import android.content.res.Configuration;
+import android.os.IBinder;
 import android.os.UserHandle;
 import android.os.UserManager;
 
@@ -111,6 +115,20 @@ public abstract class UsageStatsManagerInternal {
     public abstract void reportContentProviderUsage(String name, String pkgName,
             @UserIdInt int userId);
 
+
+    /**
+     * Reports locusId update for a given activity.
+     *
+     * @param activity The component name of the app.
+     * @param userId The user id of who uses the app.
+     * @param locusId The locusId a unique, stable id that identifies this activity.
+     * @param appToken ActivityRecord's appToken.
+     * {@link UsageEvents}
+     * @hide
+     */
+    public abstract void reportLocusUpdate(@NonNull ComponentName activity, @UserIdInt int userId,
+            @Nullable LocusId locusId, @NonNull IBinder appToken);
+
     /**
      * Prepares the UsageStatsService for shutdown.
      */
@@ -197,9 +215,14 @@ public abstract class UsageStatsManagerInternal {
 
     /**
      * Returns the events for the user in the given time period.
+     *
+     * @param obfuscateInstantApps whether instant app package names need to be obfuscated in the
+     *     result.
+     * @param hideShortcutInvocationEvents whether the {@link UsageEvents.Event#SHORTCUT_INVOCATION}
+     *     events need to be excluded from the result.
      */
     public abstract UsageEvents queryEventsForUser(@UserIdInt int userId, long beginTime,
-            long endTime, boolean shouldObfuscateInstantApps);
+            long endTime, boolean obfuscateInstantApps, boolean hideShortcutInvocationEvents);
 
     /**
      * Used to persist the last time a job was run for this app, in order to make decisions later

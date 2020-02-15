@@ -317,6 +317,14 @@ public class ServiceState implements Parcelable {
      */
     public static final int UNKNOWN_ID = -1;
 
+    /**
+     * A parcelable extra used with {@link Intent#ACTION_SERVICE_STATE} representing the service
+     * state.
+     * @hide
+     */
+    private static final String EXTRA_SERVICE_STATE = "android.intent.extra.SERVICE_STATE";
+
+
     private String mOperatorAlphaLong;
     private String mOperatorAlphaShort;
     private String mOperatorNumeric;
@@ -1292,7 +1300,7 @@ public class ServiceState implements Parcelable {
      */
     @UnsupportedAppUsage
     private void setFromNotifierBundle(Bundle m) {
-        ServiceState ssFromBundle = m.getParcelable(Intent.EXTRA_SERVICE_STATE);
+        ServiceState ssFromBundle = m.getParcelable(EXTRA_SERVICE_STATE);
         if (ssFromBundle != null) {
             copyFrom(ssFromBundle);
         }
@@ -1310,7 +1318,7 @@ public class ServiceState implements Parcelable {
      */
     @SystemApi
     public void fillInNotifierBundle(@NonNull Bundle m) {
-        m.putParcelable(Intent.EXTRA_SERVICE_STATE, this);
+        m.putParcelable(EXTRA_SERVICE_STATE, this);
         // serviceState already consists of below entries.
         // for backward compatibility, we continue fill in below entries.
         m.putInt("voiceRegState", mVoiceRegState);
@@ -1924,6 +1932,8 @@ public class ServiceState implements Parcelable {
 
     /**
      * Get the network registration state for the transport type and network domain.
+     * If multiple domains are in the input bitmask, only the first one from
+     * networkRegistrationInfo.getDomain() will be returned.
      *
      * @param domain The network {@link NetworkRegistrationInfo.Domain domain}
      * @param transportType The transport type
@@ -2071,11 +2081,18 @@ public class ServiceState implements Parcelable {
     public boolean isIwlanPreferred() {
         return mIsIwlanPreferred;
     }
-     /**
-     * @return {@code true}Returns True whenever the modem is searching for service.
-     * To check both CS and PS domain
-     */
 
+    /**
+     * This indicates whether the device is searching for service.
+     *
+     * This API reports the modem searching status for
+     * {@link AccessNetworkConstants#TRANSPORT_TYPE_WWAN} (cellular) service in either
+     * {@link NetworkRegistrationInfo#DOMAIN_CS} or {@link NetworkRegistrationInfo#DOMAIN_PS}.
+     * This API will not report searching status for
+     * {@link AccessNetworkConstants#TRANSPORT_TYPE_WLAN}.
+     *
+     * @return {@code true} whenever the modem is searching for service.
+     */
     public boolean isSearching() {
         NetworkRegistrationInfo psRegState = getNetworkRegistrationInfo(
                 NetworkRegistrationInfo.DOMAIN_PS, AccessNetworkConstants.TRANSPORT_TYPE_WWAN);

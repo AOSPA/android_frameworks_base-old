@@ -977,6 +977,12 @@ public class ContextWrapper extends Context {
     }
 
     @Override
+    @NonNull
+    public Context createWindowContext(int type, @Nullable Bundle options) {
+        return mBase.createWindowContext(type, options);
+    }
+
+    @Override
     public @NonNull Context createFeatureContext(@Nullable String featureId) {
         return mBase.createFeatureContext(featureId);
     }
@@ -992,11 +998,8 @@ public class ContextWrapper extends Context {
         return mBase.getDisplayAdjustments(displayId);
     }
 
-    /** @hide */
-    @UnsupportedAppUsage
-    @TestApi
     @Override
-    public Display getDisplay() {
+    public @Nullable Display getDisplay() {
         return mBase.getDisplay();
     }
 

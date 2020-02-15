@@ -49,10 +49,10 @@ import java.util.stream.Collectors;
 /**
  * Media Router 2 allows applications to control the routing of media channels
  * and streams from the current device to remote speakers and devices.
- *
  */
 // TODO: Add method names at the beginning of log messages. (e.g. updateControllerOnHandler)
 //       Not only MediaRouter2, but also to service / manager / provider.
+// TODO: ensure thread-safe and document it
 public class MediaRouter2 {
     private static final String TAG = "MR2";
     private static final boolean DEBUG = Log.isLoggable(TAG, Log.DEBUG);
@@ -159,7 +159,8 @@ public class MediaRouter2 {
     /**
      * Registers a callback to discover routes and to receive events when they change.
      * <p>
-     * If you register the same callback twice or more, it will be ignored.
+     * If the specified callback is already registered, its registration will be updated for the
+     * given {@link Executor executor} and {@link RouteDiscoveryPreference discovery preference}.
      * </p>
      */
     public void registerRouteCallback(@NonNull @CallbackExecutor Executor executor,
@@ -170,10 +171,11 @@ public class MediaRouter2 {
         Objects.requireNonNull(preference, "preference must not be null");
 
         RouteCallbackRecord record = new RouteCallbackRecord(executor, routeCallback, preference);
-        if (!mRouteCallbackRecords.addIfAbsent(record)) {
-            Log.w(TAG, "Ignoring the same callback");
-            return;
-        }
+
+        mRouteCallbackRecords.remove(record);
+        // It can fail to add the callback record if another registration with the same callback
+        // is happening but it's okay because either this or the other registration should be done.
+        mRouteCallbackRecords.addIfAbsent(record);
 
         synchronized (sRouterLock) {
             if (mClient == null) {
@@ -228,7 +230,11 @@ public class MediaRouter2 {
     /**
      * Gets the unmodifiable list of {@link MediaRoute2Info routes} currently
      * known to the media router.
+     * <p>
+     * {@link MediaRoute2Info#isSystemRoute() System routes} such as phone speaker,
+     * Bluetooth devices are always included in the list.
      * Please note that the list can be changed before callbacks are invoked.
+     * </p>
      *
      * @return the list of routes that contains at least one of the route features in discovery
      * preferences registered by the application
@@ -241,7 +247,8 @@ public class MediaRouter2 {
 
                 List<MediaRoute2Info> filteredRoutes = new ArrayList<>();
                 for (MediaRoute2Info route : mRoutes.values()) {
-                    if (route.hasAnyFeatures(mDiscoveryPreference.getPreferredFeatures())) {
+                    if (route.isSystemRoute()
+                            || route.hasAnyFeatures(mDiscoveryPreference.getPreferredFeatures())) {
                         filteredRoutes.add(route);
                     }
                 }
@@ -305,12 +312,18 @@ public class MediaRouter2 {
      * with the given route.
      *
      * @param route the route you want to create a controller with.
+     * @throws IllegalArgumentException if the given route is
+     * {@link MediaRoute2Info#isSystemRoute() system route}
      *
      * @see RoutingControllerCallback#onControllerCreated
      * @see RoutingControllerCallback#onControllerCreationFailed
      */
     public void requestCreateController(@NonNull MediaRoute2Info route) {
         Objects.requireNonNull(route, "route must not be null");
+        if (route.isSystemRoute()) {
+            throw new IllegalArgumentException("Can't create a route controller with "
+                    + "a system route. Use getSystemController().");
+        }
         // TODO: Check the given route exists
 
         final int requestId;

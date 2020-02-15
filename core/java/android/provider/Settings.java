@@ -63,6 +63,7 @@ import android.os.IBinder;
 import android.os.LocaleList;
 import android.os.PowerManager.AutoPowerSaveModeTriggers;
 import android.os.Process;
+import android.os.RemoteCallback;
 import android.os.RemoteException;
 import android.os.ResultReceiver;
 import android.os.ServiceManager;
@@ -2161,6 +2162,11 @@ public final class Settings {
     public static final String CALL_METHOD_PREFIX_KEY = "_prefix";
 
     /**
+     * @hide - RemoteCallback monitor callback argument extra to the fast-path call()-based requests
+     */
+    public static final String CALL_METHOD_MONITOR_CALLBACK_KEY = "_monitor_callback_key";
+
+    /**
      * @hide - String argument extra to the fast-path call()-based requests
      */
     public static final String CALL_METHOD_FLAGS_KEY = "_flags";
@@ -2217,6 +2223,26 @@ public final class Settings {
 
     /** @hide - Private call() method to reset to defaults the 'configuration' table */
     public static final String CALL_METHOD_LIST_CONFIG = "LIST_config";
+
+    /** @hide - Private call() method to register monitor callback for 'configuration' table */
+    public static final String CALL_METHOD_REGISTER_MONITOR_CALLBACK_CONFIG =
+            "REGISTER_MONITOR_CALLBACK_config";
+
+    /** @hide - String argument extra to the config monitor callback */
+    public static final String EXTRA_MONITOR_CALLBACK_TYPE = "monitor_callback_type";
+
+    /** @hide - String argument extra to the config monitor callback */
+    public static final String EXTRA_ACCESS_CALLBACK = "access_callback";
+
+    /** @hide - String argument extra to the config monitor callback */
+    public static final String EXTRA_NAMESPACE_UPDATED_CALLBACK =
+            "namespace_updated_callback";
+
+    /** @hide - String argument extra to the config monitor callback */
+    public static final String EXTRA_NAMESPACE = "namespace";
+
+    /** @hide - String argument extra to the config monitor callback */
+    public static final String EXTRA_CALLING_PACKAGE = "calling_package";
 
     /**
      * Activity Extra: Limit available options in launched activity based on the given authority.
@@ -2391,6 +2417,10 @@ public final class Settings {
     public static class NameValueTable implements BaseColumns {
         public static final String NAME = "name";
         public static final String VALUE = "value";
+        // A flag indicating whether the current value of a setting should be preserved during
+        // restore.
+        /** @hide */
+        public static final String IS_PRESERVED_IN_RESTORE = "is_preserved_in_restore";
 
         protected static boolean putString(ContentResolver resolver, Uri uri,
                 String name, String value) {
@@ -2695,6 +2725,7 @@ public final class Settings {
                                                 }
                                             }
                                         });
+                                        currentGeneration = generation;
                                     }
                                 }
                                 if (mGenerationTracker != null && currentGeneration ==
@@ -2775,14 +2806,7 @@ public final class Settings {
                         }
                         mValues.clear();
                     } else {
-                        boolean prefixCached = false;
-                        int size = mValues.size();
-                        for (int i = 0; i < size; ++i) {
-                            if (mValues.keyAt(i).startsWith(prefix)) {
-                                prefixCached = true;
-                                break;
-                            }
-                        }
+                        boolean prefixCached = mValues.containsKey(prefix);
                         if (prefixCached) {
                             if (!names.isEmpty()) {
                                 for (String name : names) {
@@ -2791,9 +2815,11 @@ public final class Settings {
                                     }
                                 }
                             } else {
-                                for (int i = 0; i < size; ++i) {
+                                for (int i = 0; i < mValues.size(); ++i) {
                                     String key = mValues.keyAt(i);
-                                    if (key.startsWith(prefix)) {
+                                    // Explicitly exclude the prefix as it is only there to
+                                    // signal that the prefix has been cached.
+                                    if (key.startsWith(prefix) && !key.equals(prefix)) {
                                         keyValues.put(key, mValues.get(key));
                                     }
                                 }
@@ -2881,12 +2907,15 @@ public final class Settings {
                                     }
                                 }
                             });
+                            currentGeneration = generation;
                         }
                     }
                     if (mGenerationTracker != null && currentGeneration
                             == mGenerationTracker.getCurrentGeneration()) {
                         // cache the complete list of flags for the namespace
                         mValues.putAll(flagsToValues);
+                        // Adding the prefix as a signal that the prefix is cached.
+                        mValues.put(prefix, null);
                     }
                 }
                 return keyValues;
@@ -5193,7 +5222,6 @@ public final class Settings {
             MOVED_TO_GLOBAL.add(Settings.Global.WIFI_NUM_OPEN_NETWORKS_KEPT);
             MOVED_TO_GLOBAL.add(Settings.Global.WIFI_ON);
             MOVED_TO_GLOBAL.add(Settings.Global.WIFI_P2P_DEVICE_NAME);
-            MOVED_TO_GLOBAL.add(Settings.Global.WIFI_SAVED_STATE);
             MOVED_TO_GLOBAL.add(Settings.Global.WIFI_SUPPLICANT_SCAN_INTERVAL_MS);
             MOVED_TO_GLOBAL.add(Settings.Global.WIFI_COVERAGE_EXTEND_FEATURE_ENABLED);
             MOVED_TO_GLOBAL.add(Settings.Global.WIFI_VERBOSE_LOGGING_ENABLED);
@@ -8388,6 +8416,7 @@ public final class Settings {
          *
          * @hide
          */
+        @SystemApi
         public static final String CARRIER_APPS_HANDLED = "carrier_apps_handled";
 
         /**
@@ -8696,6 +8725,14 @@ public final class Settings {
          */
         public static final String BACK_GESTURE_INSET_SCALE_RIGHT =
                 "back_gesture_inset_scale_right";
+
+        /**
+         * Current provider of proximity-based sharing services.
+         * Default value in @string/config_defaultNearbySharingComponent.
+         * No VALIDATOR as this setting will not be backed up.
+         * @hide
+         */
+        public static final String NEARBY_SHARING_COMPONENT = "nearby_sharing_component";
 
         /**
          * Controls whether aware is enabled.
@@ -9347,6 +9384,16 @@ public final class Settings {
         public static final String DEVELOPMENT_ENABLE_SIZECOMPAT_FREEFORM =
                 "enable_sizecompat_freeform";
 
+        /**
+         * If true, shadows drawn around the window will be rendered by the system compositor. If
+         * false, shadows will be drawn by the client by setting an elevation on the root view and
+         * the contents will be inset by the surface insets.
+         * (0 = false, 1 = true)
+         * @hide
+         */
+        public static final String DEVELOPMENT_RENDER_SHADOWS_IN_COMPOSITOR =
+                "render_shadows_in_compositor";
+
        /**
         * Whether user has enabled development settings.
         */
@@ -9723,6 +9770,15 @@ public final class Settings {
         * @hide
         */
        public static final String PACKAGE_VERIFIER_INCLUDE_ADB = "verifier_verify_adb_installs";
+
+        /**
+         * Run integrity checks for integrity rule providers.
+         * 0 = bypass integrity verification on installs from rule providers (default)
+         * 1 = perform integrity verification on installs from rule providers
+         * @hide
+         */
+        public static final String INTEGRITY_CHECK_INCLUDES_RULE_PROVIDER =
+                "verify_integrity_for_rule_provider";
 
        /**
         * Time since last fstrim (milliseconds) after which we force one to happen
@@ -10290,16 +10346,6 @@ public final class Settings {
          * @hide
          */
         public static final String BLE_SCAN_BACKGROUND_MODE = "ble_scan_background_mode";
-
-       /**
-        * Used to save the Wifi_ON state prior to tethering.
-        * This state will be checked to restore Wifi after
-        * the user turns off tethering.
-        *
-        * @hide
-        */
-       @UnsupportedAppUsage
-       public static final String WIFI_SAVED_STATE = "wifi_saved_state";
 
        /**
         * The interval in milliseconds to scan as used by the wifi supplicant
@@ -11076,6 +11122,15 @@ public final class Settings {
          */
         public static final String ACTIVITY_STARTS_LOGGING_ENABLED
                 = "activity_starts_logging_enabled";
+
+        /**
+         * Feature flag to enable or disable the foreground service starts logging feature.
+         * Type: int (0 for false, 1 for true)
+         * Default: 1
+         * @hide
+         */
+        public static final String FOREGROUND_SERVICE_STARTS_LOGGING_ENABLED =
+                "foreground_service_starts_logging_enabled";
 
         /**
          * @hide
@@ -14023,7 +14078,7 @@ public final class Settings {
          * means Common Criteria mode is enabled.
          * @hide
          */
-        @SystemApi(client = SystemApi.Client.MODULE_APPS)
+        @SystemApi
         public static final String COMMON_CRITERIA_MODE = "common_criteria_mode";
     }
 
@@ -14072,7 +14127,7 @@ public final class Settings {
          * @hide
          */
         @RequiresPermission(Manifest.permission.READ_DEVICE_CONFIG)
-        static Map<String, String> getStrings(@NonNull ContentResolver resolver,
+        public static Map<String, String> getStrings(@NonNull ContentResolver resolver,
                 @NonNull String namespace, @NonNull List<String> names) {
             List<String> compositeNames = new ArrayList<>(names.size());
             for (String name : names) {
@@ -14131,8 +14186,9 @@ public final class Settings {
          * @hide
          */
         @RequiresPermission(Manifest.permission.WRITE_DEVICE_CONFIG)
-        static boolean setStrings(@NonNull ContentResolver resolver, @NonNull String namespace,
-                @NonNull Map<String, String> keyValues) throws DeviceConfig.BadConfigException {
+        public static boolean setStrings(@NonNull ContentResolver resolver,
+                @NonNull String namespace, @NonNull Map<String, String> keyValues)
+                throws DeviceConfig.BadConfigException {
             HashMap<String, String> compositeKeyValueMap = new HashMap<>(keyValues.keySet().size());
             for (Map.Entry<String, String> entry : keyValues.entrySet()) {
                 compositeKeyValueMap.put(
@@ -14176,6 +14232,43 @@ public final class Settings {
             } catch (RemoteException e) {
                 Log.w(TAG, "Can't reset to defaults for " + DeviceConfig.CONTENT_URI, e);
             }
+        }
+
+        /**
+         * Register callback for monitoring Config table.
+         *
+         * @param resolver Handle to the content resolver.
+         * @param callback callback to register
+         *
+         * @hide
+         */
+        @SystemApi
+        @RequiresPermission(Manifest.permission.MONITOR_DEVICE_CONFIG_ACCESS)
+        public static void registerMonitorCallback(@NonNull ContentResolver resolver,
+                @NonNull RemoteCallback callback) {
+            registerMonitorCallbackAsUser(resolver, resolver.getUserId(), callback);
+        }
+
+        private static void registerMonitorCallbackAsUser(
+                @NonNull ContentResolver resolver, @UserIdInt int userHandle,
+                @NonNull RemoteCallback callback) {
+            try {
+                Bundle arg = new Bundle();
+                arg.putInt(CALL_METHOD_USER_KEY, userHandle);
+                arg.putParcelable(CALL_METHOD_MONITOR_CALLBACK_KEY, callback);
+                IContentProvider cp = sProviderHolder.getProvider(resolver);
+                cp.call(resolver.getPackageName(), resolver.getFeatureId(),
+                        sProviderHolder.mUri.getAuthority(),
+                        CALL_METHOD_REGISTER_MONITOR_CALLBACK_CONFIG, null, arg);
+            } catch (RemoteException e) {
+                Log.w(TAG, "Can't register config monitor callback", e);
+            }
+        }
+
+        /** @hide */
+        public static void clearProviderForTest() {
+            sProviderHolder.clearProviderForTest();
+            sNameValueCache.clearGenerationTrackerForTest();
         }
 
         private static String createCompositeName(@NonNull String namespace, @NonNull String name) {

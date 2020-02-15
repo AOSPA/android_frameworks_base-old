@@ -27,9 +27,6 @@
 #include <unistd.h>
 
 #include <cutils/sockets.h>
-#include <private/android_filesystem_config.h>
-#include <private/android_logger.h>
-#include <unordered_map>
 
 #include "StatsSocketListener.h"
 #include "guardrail/StatsdStats.h"
@@ -126,9 +123,10 @@ bool StatsSocketListener::onDataAvailable(SocketClient* cli) {
     uint8_t* msg = ptr + sizeof(uint32_t);
     uint32_t len = n - sizeof(uint32_t);
     uint32_t uid = cred->uid;
+    uint32_t pid = cred->pid;
 
     int64_t oldestTimestamp;
-    if (!mQueue->push(std::make_unique<LogEvent>(msg, len, uid), &oldestTimestamp)) {
+    if (!mQueue->push(std::make_unique<LogEvent>(msg, len, uid, pid), &oldestTimestamp)) {
         StatsdStats::getInstance().noteEventQueueOverflow(oldestTimestamp);
     }
 

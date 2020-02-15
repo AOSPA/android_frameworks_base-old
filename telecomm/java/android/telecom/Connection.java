@@ -511,8 +511,17 @@ public abstract class Connection extends Conferenceable {
     @TestApi
     public static final int PROPERTY_REMOTELY_HOSTED = 1 << 11;
 
+    /**
+     * Set by the framework to indicate that it is an adhoc conference call.
+     * <p>
+     * This is used for Outgoing and incoming conference calls.
+     *
+     */
+    public static final int PROPERTY_IS_ADHOC_CONFERENCE = 1 << 12;
+
+
     //**********************************************************************************************
-    // Next PROPERTY value: 1<<12
+    // Next PROPERTY value: 1<<13
     //**********************************************************************************************
 
     /**
@@ -1032,6 +1041,10 @@ public abstract class Connection extends Conferenceable {
 
         if ((properties & PROPERTY_REMOTELY_HOSTED) == PROPERTY_REMOTELY_HOSTED) {
             builder.append(isLong ? " PROPERTY_REMOTELY_HOSTED" : " remote_hst");
+        }
+
+        if ((properties & PROPERTY_IS_ADHOC_CONFERENCE) == PROPERTY_IS_ADHOC_CONFERENCE) {
+            builder.append(isLong ? " PROPERTY_IS_ADHOC_CONFERENCE" : " adhoc_conf");
         }
 
         builder.append("]");
@@ -3038,6 +3051,17 @@ public abstract class Connection extends Conferenceable {
      * </ul>
      */
     public void onReject() {}
+
+    /**
+     * Notifies this Connection, which is in {@link #STATE_RINGING}, of a request to reject.
+     * <p>
+     * For managed {@link ConnectionService}s, this will be called when the user rejects a call via
+     * the default dialer's {@link InCallService} using {@link Call#reject(int)}.
+     * @param rejectReason the reason the user provided for rejecting the call.
+     */
+    public void onReject(@android.telecom.Call.RejectReason int rejectReason) {
+        // to be implemented by ConnectionService.
+    }
 
     /**
      * Notifies this Connection, which is in {@link #STATE_RINGING}, of

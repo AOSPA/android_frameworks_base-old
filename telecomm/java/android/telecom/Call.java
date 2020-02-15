@@ -265,6 +265,29 @@ public final class Call {
     public static final String EVENT_HANDOVER_FAILED =
             "android.telecom.event.HANDOVER_FAILED";
 
+
+    /**
+     * Reject reason used with {@link #reject(int)} to indicate that the user is rejecting this
+     * call because they have declined to answer it.  This typically means that they are unable
+     * to answer the call at this time and would prefer it be sent to voicemail.
+     */
+    public static final int REJECT_REASON_DECLINED = 1;
+
+    /**
+     * Reject reason used with {@link #reject(int)} to indicate that the user is rejecting this
+     * call because it is an unwanted call.  This allows the user to indicate that they are
+     * rejecting a call because it is likely a nuisance call.
+     */
+    public static final int REJECT_REASON_UNWANTED = 2;
+
+    /**
+     * @hide
+     */
+    @IntDef(prefix = { "REJECT_REASON_" },
+            value = {REJECT_REASON_DECLINED, REJECT_REASON_UNWANTED})
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface RejectReason {};
+
     public static class Details {
         /** @hide */
         @Retention(RetentionPolicy.SOURCE)
@@ -560,8 +583,14 @@ public final class Call {
          */
         public static final int PROPERTY_VOIP_AUDIO_MODE = 0x00001000;
 
+        /**
+         * Indicates that the call is an adhoc conference call. This property can be set for both
+         * incoming and outgoing calls.
+         */
+        public static final int PROPERTY_IS_ADHOC_CONFERENCE = 0x00002000;
+
         //******************************************************************************************
-        // Next PROPERTY value: 0x00002000
+        // Next PROPERTY value: 0x00004000
         //******************************************************************************************
 
         private final String mTelecomCallId;
@@ -744,6 +773,9 @@ public final class Call {
             }
             if (hasProperty(properties, PROPERTY_VOIP_AUDIO_MODE)) {
                 builder.append(" PROPERTY_VOIP_AUDIO_MODE");
+            }
+            if (hasProperty(properties, PROPERTY_IS_ADHOC_CONFERENCE)) {
+                builder.append(" PROPERTY_IS_ADHOC_CONFERENCE");
             }
             builder.append("]");
             return builder.toString();
@@ -1527,6 +1559,16 @@ public final class Call {
      */
     public void reject(boolean rejectWithMessage, String textMessage) {
         mInCallAdapter.rejectCall(mTelecomCallId, rejectWithMessage, textMessage);
+    }
+
+    /**
+     * Instructs the {@link ConnectionService} providing this {@link #STATE_RINGING} call that the
+     * user has chosen to reject the call and has indicated a reason why the call is being rejected.
+     *
+     * @param rejectReason the reason the call is being rejected.
+     */
+    public void reject(@RejectReason int rejectReason) {
+        mInCallAdapter.rejectCall(mTelecomCallId, rejectReason);
     }
 
     /**

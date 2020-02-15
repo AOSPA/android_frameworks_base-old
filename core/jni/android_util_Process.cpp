@@ -342,6 +342,22 @@ void android_os_Process_setProcessGroup(JNIEnv* env, jobject clazz, int pid, jin
     closedir(d);
 }
 
+void android_os_Process_setProcessFrozen(
+        JNIEnv *env, jobject clazz, jint pid, jint uid, jboolean freeze)
+{
+    bool success = true;
+
+    if (freeze) {
+        success = SetProcessProfiles(uid, pid, {"Frozen"});
+    } else {
+        success = SetProcessProfiles(uid, pid, {"Unfrozen"});
+    }
+
+    if (!success) {
+        signalExceptionForGroupError(env, EINVAL, pid);
+    }
+}
+
 void android_os_Process_setCgroupProcsProcessGroup(JNIEnv* env, jobject clazz, int uid, int pid, jint grp)
 {
     int fd;
@@ -1422,6 +1438,7 @@ static const JNINativeMethod methods[] = {
         {"setGid", "(I)I", (void*)android_os_Process_setGid},
         {"sendSignal", "(II)V", (void*)android_os_Process_sendSignal},
         {"sendSignalQuiet", "(II)V", (void*)android_os_Process_sendSignalQuiet},
+        {"setProcessFrozen", "(IIZ)V", (void*)android_os_Process_setProcessFrozen},
         {"getFreeMemory", "()J", (void*)android_os_Process_getFreeMemory},
         {"getTotalMemory", "()J", (void*)android_os_Process_getTotalMemory},
         {"readProcLines", "(Ljava/lang/String;[Ljava/lang/String;[J)V",

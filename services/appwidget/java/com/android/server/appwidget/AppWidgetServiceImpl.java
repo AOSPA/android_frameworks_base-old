@@ -24,9 +24,11 @@ import static com.android.server.pm.PackageManagerService.PLATFORM_PACKAGE_NAME;
 
 import android.annotation.UserIdInt;
 import android.app.ActivityManager;
+import android.app.ActivityManagerInternal;
 import android.app.AlarmManager;
 import android.app.AppGlobals;
 import android.app.AppOpsManager;
+import android.app.AppOpsManagerInternal;
 import android.app.IApplicationThread;
 import android.app.IServiceConnection;
 import android.app.KeyguardManager;
@@ -96,7 +98,6 @@ import android.util.Xml;
 import android.util.proto.ProtoOutputStream;
 import android.view.Display;
 import android.view.View;
-import android.view.WindowManager;
 import android.widget.RemoteViews;
 
 import com.android.internal.R;
@@ -232,6 +233,8 @@ class AppWidgetServiceImpl extends IAppWidgetService.Stub implements WidgetBacku
     private KeyguardManager mKeyguardManager;
     private DevicePolicyManagerInternal mDevicePolicyManagerInternal;
     private PackageManagerInternal mPackageManagerInternal;
+    private ActivityManagerInternal mActivityManagerInternal;
+    private AppOpsManagerInternal mAppOpsManagerInternal;
 
     private SecurityPolicy mSecurityPolicy;
 
@@ -272,9 +275,13 @@ class AppWidgetServiceImpl extends IAppWidgetService.Stub implements WidgetBacku
         LocalServices.addService(AppWidgetManagerInternal.class, new AppWidgetManagerLocal());
     }
 
+    void systemServicesReady() {
+        mActivityManagerInternal = LocalServices.getService(ActivityManagerInternal.class);
+        mAppOpsManagerInternal = LocalServices.getService(AppOpsManagerInternal.class);
+    }
+
     private void computeMaximumWidgetBitmapMemory() {
-        WindowManager wm = (WindowManager) mContext.getSystemService(Context.WINDOW_SERVICE);
-        Display display = wm.getDefaultDisplay();
+        Display display = mContext.getDisplay();
         Point size = new Point();
         display.getRealSize(size);
         // Cap memory usage at 1.5 times the size of the display
@@ -634,8 +641,11 @@ class AppWidgetServiceImpl extends IAppWidgetService.Stub implements WidgetBacku
                     final SuspendDialogInfo dialogInfo =
                             mPackageManagerInternal.getSuspendedDialogInfo(providerPackage,
                                     suspendingPackage, providerUserId);
+                    // TODO(b/148035643): Send the original widget intent or ACTION_MAIN as an
+                    // IntentSender to SuspendedAppActivity.
                     onClickIntent = SuspendedAppActivity.createSuspendedAppInterceptIntent(
-                            providerPackage, suspendingPackage, dialogInfo, null, providerUserId);
+                            providerPackage, suspendingPackage, dialogInfo, null, null,
+                            providerUserId);
                 }
             } else if (provider.maskedByQuietProfile) {
                 showBadge = true;
@@ -867,6 +877,8 @@ class AppWidgetServiceImpl extends IAppWidgetService.Stub implements WidgetBacku
                     outUpdates.add(updatesMap.valueAt(j));
                 }
             }
+            updateAppOpsLocked(host, true);
+
             // Reset the update counter once all the updates have been calculated
             host.lastWidgetUpdateSequenceNo = updateSequenceNo;
             return new ParceledListSlice<>(outUpdates);
@@ -895,6 +907,7 @@ class AppWidgetServiceImpl extends IAppWidgetService.Stub implements WidgetBacku
             if (host != null) {
                 host.callbacks = null;
                 pruneHostLocked(host);
+                updateAppOpsLocked(host, false);
             }
         }
     }
@@ -1952,7 +1965,6 @@ class AppWidgetServiceImpl extends IAppWidgetService.Stub implements WidgetBacku
             scheduleNotifyUpdateAppWidgetLocked(widget, widget.getEffectiveViewsLocked());
         }
     }
-
     private void scheduleNotifyAppWidgetViewDataChanged(Widget widget, int viewId) {
         if (viewId == ID_VIEWS_UPDATE || viewId == ID_PROVIDER_CHANGED) {
             // A view id should never collide with these constants but a developer can call this
@@ -3618,6 +3630,26 @@ class AppWidgetServiceImpl extends IAppWidgetService.Stub implements WidgetBacku
         return false;
     }
 
+    private void updateAppOpsLocked(Host host, boolean visible) {
+        // The launcher must be at TOP.
+        final int procState = mActivityManagerInternal.getUidProcessState(host.id.uid);
+        if (procState > ActivityManager.PROCESS_STATE_TOP) {
+            return;
+        }
+
+        final List<ResolveInfo> allHomeCandidates = new ArrayList<>();
+        // Default launcher from package manager.
+        final ComponentName defaultLauncher = mPackageManagerInternal
+                .getHomeActivitiesAsUser(allHomeCandidates, UserHandle.getUserId(host.id.uid));
+        // The launcher must be default launcher.
+        if (defaultLauncher == null
+                || !defaultLauncher.getPackageName().equals(host.id.packageName)) {
+            return;
+        }
+
+        mAppOpsManagerInternal.updateAppWidgetVisibility(host.getWidgetUids(), visible);
+    }
+
     private final class CallbackHandler extends Handler {
         public static final int MSG_NOTIFY_UPDATE_APP_WIDGET = 1;
         public static final int MSG_NOTIFY_PROVIDER_CHANGED = 2;
@@ -4097,6 +4129,16 @@ class AppWidgetServiceImpl extends IAppWidgetService.Stub implements WidgetBacku
             }
             outUpdates.put(lastWidgetUpdateSequenceNo,
                     PendingHostUpdate.appWidgetRemoved(appWidgetId));
+        }
+
+        public SparseArray<String> getWidgetUids() {
+            final SparseArray<String> uids = new SparseArray<>();
+            for (int i = widgets.size() - 1; i >= 0; i--) {
+                final Widget widget = widgets.get(i);
+                final ProviderId providerId = widget.provider.id;
+                uids.put(providerId.uid, providerId.componentName.getPackageName());
+            }
+            return uids;
         }
 
         @Override
@@ -4853,6 +4895,5 @@ class AppWidgetServiceImpl extends IAppWidgetService.Stub implements WidgetBacku
         public void unlockUser(int userId) {
             handleUserUnlocked(userId);
         }
-
     }
 }

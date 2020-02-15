@@ -156,7 +156,8 @@ public class PackageInstallerSessionTest {
         if (isMultiPackage) {
             params.isMultiPackage = true;
         }
-        InstallSource installSource = InstallSource.create("testInstaller", null, "testInstaller");
+        InstallSource installSource = InstallSource.create("testInstallInitiator",
+                "testInstallOriginator", "testInstaller");
         return new PackageInstallerSession(
                 /* callback */ null,
                 /* context */null,
@@ -297,6 +298,8 @@ public class PackageInstallerSessionTest {
         assertEquals(expected.userId, actual.userId);
         assertSessionParamsEquivalent(expected.params, actual.params);
         assertEquals(expected.getInstallerUid(), actual.getInstallerUid());
+        assertEquals(expected.getInstallerPackageName(), actual.getInstallerPackageName());
+        assertInstallSourcesEquivalent(expected.getInstallSource(), actual.getInstallSource());
         assertEquals(expected.stageDir.getAbsolutePath(), actual.stageDir.getAbsolutePath());
         assertEquals(expected.stageCid, actual.stageCid);
         assertEquals(expected.isPrepared(), actual.isPrepared());
@@ -309,10 +312,17 @@ public class PackageInstallerSessionTest {
                 actual.getStagedSessionErrorMessage());
         assertEquals(expected.isPrepared(), actual.isPrepared());
         assertEquals(expected.isCommitted(), actual.isCommitted());
+        assertEquals(expected.createdMillis, actual.createdMillis);
         assertEquals(expected.isSealed(), actual.isSealed());
         assertEquals(expected.isMultiPackage(), actual.isMultiPackage());
         assertEquals(expected.hasParentSessionId(), actual.hasParentSessionId());
         assertEquals(expected.getParentSessionId(), actual.getParentSessionId());
         assertArrayEquals(expected.getChildSessionIds(), actual.getChildSessionIds());
+    }
+
+    private void assertInstallSourcesEquivalent(InstallSource expected, InstallSource actual) {
+        assertEquals(expected.installerPackageName, actual.installerPackageName);
+        assertEquals(expected.initiatingPackageName, actual.initiatingPackageName);
+        assertEquals(expected.originatingPackageName, actual.originatingPackageName);
     }
 }

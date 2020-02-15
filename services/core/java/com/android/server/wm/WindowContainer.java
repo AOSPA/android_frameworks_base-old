@@ -31,6 +31,7 @@ import static com.android.server.policy.WindowManagerPolicy.FINISH_LAYOUT_REDO_W
 import static com.android.server.wm.ProtoLogGroup.WM_DEBUG_APP_TRANSITIONS;
 import static com.android.server.wm.ProtoLogGroup.WM_DEBUG_APP_TRANSITIONS_ANIM;
 import static com.android.server.wm.ProtoLogGroup.WM_DEBUG_ORIENTATION;
+import static com.android.server.wm.SurfaceAnimator.ANIMATION_TYPE_APP_TRANSITION;
 import static com.android.server.wm.WindowContainer.AnimationFlags.CHILDREN;
 import static com.android.server.wm.WindowContainer.AnimationFlags.PARENTS;
 import static com.android.server.wm.WindowContainer.AnimationFlags.TRANSITION;
@@ -61,6 +62,7 @@ import android.util.Pools;
 import android.util.Slog;
 import android.util.proto.ProtoOutputStream;
 import android.view.DisplayInfo;
+import android.view.IWindowContainer;
 import android.view.MagnificationSpec;
 import android.view.RemoteAnimationTarget;
 import android.view.SurfaceControl;
@@ -73,8 +75,11 @@ import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.util.ToBooleanFunction;
 import com.android.server.protolog.common.ProtoLog;
 import com.android.server.wm.SurfaceAnimator.Animatable;
+import com.android.server.wm.SurfaceAnimator.AnimationType;
+import com.android.server.wm.SurfaceAnimator.OnAnimationFinishedCallback;
 
 import java.io.PrintWriter;
+import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedList;
@@ -248,6 +253,12 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
     private MagnificationSpec mLastMagnificationSpec;
 
     private boolean mIsFocusable = true;
+
+    /**
+     * Used as a unique, cross-process identifier for this Container. It also serves a minimal
+     * interface to other processes.
+     */
+    RemoteToken mRemoteToken = null;
 
     WindowContainer(WindowManagerService wms) {
         mWmService = wms;
@@ -758,7 +769,7 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
      * {@see AnimationFlags#PARENTS}
      * {@see AnimationFlags#CHILDREN}
      */
-    final boolean isAnimating(int flags) {
+    boolean isAnimating(int flags) {
         if (mSurfaceAnimator.isAnimating()) {
             return true;
         }
@@ -860,13 +871,16 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         return false;
     }
 
-    @Override
+    /**
+     * Returns {@code true} if this container is focusable. Generally, if a parent is not focusable,
+     * this will not be focusable either.
+     */
     boolean isFocusable() {
-        return super.isFocusable() && mIsFocusable;
+        final WindowContainer parent = getParent();
+        return (parent == null || parent.isFocusable()) && mIsFocusable;
     }
 
     /** Set whether this container or its children can be focusable */
-    @Override
     boolean setFocusable(boolean focusable) {
         if (mIsFocusable == focusable) {
             return false;
@@ -1068,8 +1082,9 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
             if (wc.fillsParent() || orientation != SCREEN_ORIENTATION_UNSPECIFIED) {
                 // Use the orientation if the container fills its parent or requested an explicit
                 // orientation that isn't SCREEN_ORIENTATION_UNSPECIFIED.
-                ProtoLog.v(WM_DEBUG_ORIENTATION, "%s is requesting orientation %d (%s)", toString(),
-                        orientation, ActivityInfo.screenOrientationToString(orientation));
+                ProtoLog.v(WM_DEBUG_ORIENTATION, "%s is requesting orientation %d (%s)",
+                        wc.toString(), orientation,
+                        ActivityInfo.screenOrientationToString(orientation));
                 return orientation;
             }
         }
@@ -1839,19 +1854,24 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
      * @param anim The animation to run.
      * @param hidden Whether our container is currently hidden. TODO This should use isVisible at
      *               some point but the meaning is too weird to work for all containers.
+     * @param type The type of animation defined as {@link AnimationType}.
      * @param animationFinishedCallback The callback being triggered when the animation finishes.
      */
     void startAnimation(Transaction t, AnimationAdapter anim, boolean hidden,
-            @Nullable Runnable animationFinishedCallback) {
-        if (DEBUG_ANIM) Slog.v(TAG, "Starting animation on " + this + ": " + anim);
+            @AnimationType int type,
+            @Nullable OnAnimationFinishedCallback animationFinishedCallback) {
+        if (DEBUG_ANIM) {
+            Slog.v(TAG, "Starting animation on " + this + ": type=" + type + ", anim=" + anim);
+        }
 
         // TODO: This should use isVisible() but because isVisible has a really weird meaning at
         // the moment this doesn't work for all animatable window containers.
-        mSurfaceAnimator.startAnimation(t, anim, hidden, animationFinishedCallback);
+        mSurfaceAnimator.startAnimation(t, anim, hidden, type, animationFinishedCallback);
     }
 
-    void startAnimation(Transaction t, AnimationAdapter anim, boolean hidden) {
-        startAnimation(t, anim, hidden, null /* animationFinishedCallback */);
+    void startAnimation(Transaction t, AnimationAdapter anim, boolean hidden,
+            @AnimationType int type) {
+        startAnimation(t, anim, hidden, type, null /* animationFinishedCallback */);
     }
 
     void transferAnimation(WindowContainer from) {
@@ -1904,7 +1924,8 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
      * @see #getAnimationAdapter
      */
     boolean applyAnimation(WindowManager.LayoutParams lp, int transit, boolean enter,
-            boolean isVoiceInteraction, @Nullable Runnable animationFinishedCallback) {
+            boolean isVoiceInteraction,
+            @Nullable OnAnimationFinishedCallback animationFinishedCallback) {
         if (mWmService.mDisableTransitionAnimation) {
             ProtoLog.v(WM_DEBUG_APP_TRANSITIONS_ANIM,
                     "applyAnimation: transition animation is disabled or skipped. "
@@ -1925,7 +1946,7 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
                 AnimationAdapter thumbnailAdapter = adapters.second;
                 if (adapter != null) {
                     startAnimation(getPendingTransaction(), adapter, !isVisible(),
-                            animationFinishedCallback);
+                            ANIMATION_TYPE_APP_TRANSITION, animationFinishedCallback);
                     if (adapter.getShowWallpaper()) {
                         getDisplayContent().pendingLayoutChanges |= FINISH_LAYOUT_REDO_WALLPAPER;
                     }
@@ -2116,7 +2137,7 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
     /**
      * Called when an animation has finished running.
      */
-    protected void onAnimationFinished() {
+    protected void onAnimationFinished(@AnimationType int type, AnimationAdapter anim) {
         mWmService.onAnimationFinished();
     }
 
@@ -2258,5 +2279,41 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
     /** Cheap way of doing cast and instanceof. */
     ActivityRecord asActivityRecord() {
         return null;
+    }
+
+    RemoteToken getRemoteToken() {
+        return mRemoteToken;
+    }
+
+    static class RemoteToken extends IWindowContainer.Stub {
+        final WeakReference<WindowContainer> mWeakRef;
+
+        RemoteToken(WindowContainer container) {
+            mWeakRef = new WeakReference<>(container);
+        }
+
+        WindowContainer getContainer() {
+            return mWeakRef.get();
+        }
+
+        static RemoteToken fromBinder(IBinder binder) {
+            return (RemoteToken) binder;
+        }
+
+        @Override
+        public SurfaceControl getLeash() {
+            throw new RuntimeException("Not implemented");
+        }
+
+        @Override
+        public String toString() {
+            StringBuilder sb = new StringBuilder(128);
+            sb.append("RemoteToken{");
+            sb.append(Integer.toHexString(System.identityHashCode(this)));
+            sb.append(' ');
+            sb.append(mWeakRef.get());
+            sb.append('}');
+            return sb.toString();
+        }
     }
 }

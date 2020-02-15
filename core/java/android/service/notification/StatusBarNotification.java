@@ -17,7 +17,8 @@
 package android.service.notification;
 
 import static android.app.NotificationChannel.PLACEHOLDER_CONVERSATION_ID;
-import static android.util.FeatureFlagUtils.*;
+import static android.util.FeatureFlagUtils.NOTIF_CONVO_BYPASS_SHORTCUT_REQ;
+import static android.util.FeatureFlagUtils.isEnabled;
 
 import android.annotation.NonNull;
 import android.app.Notification;
@@ -33,8 +34,8 @@ import android.os.Parcel;
 import android.os.Parcelable;
 import android.os.UserHandle;
 import android.text.TextUtils;
-import android.util.FeatureFlagUtils;
 
+import com.android.internal.logging.InstanceId;
 import com.android.internal.logging.nano.MetricsProto;
 import com.android.internal.logging.nano.MetricsProto.MetricsEvent;
 
@@ -68,6 +69,8 @@ public class StatusBarNotification implements Parcelable {
     private final UserHandle user;
     @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
     private final long postTime;
+    // A small per-notification ID, used for statsd logging.
+    private InstanceId mInstanceId;  // Not final, see setInstanceId()
 
     private Context mContext; // used for inflation & icon expansion
 
@@ -131,8 +134,9 @@ public class StatusBarNotification implements Parcelable {
         this.postTime = in.readLong();
         if (in.readInt() != 0) {
             this.overrideGroupKey = in.readString();
-        } else {
-            this.overrideGroupKey = null;
+        }
+        if (in.readInt() != 0) {
+            this.mInstanceId = InstanceId.CREATOR.createFromParcel(in);
         }
         this.key = key();
         this.groupKey = groupKey();
@@ -196,11 +200,16 @@ public class StatusBarNotification implements Parcelable {
         out.writeInt(this.initialPid);
         this.notification.writeToParcel(out, flags);
         user.writeToParcel(out, flags);
-
         out.writeLong(this.postTime);
         if (this.overrideGroupKey != null) {
             out.writeInt(1);
             out.writeString(this.overrideGroupKey);
+        } else {
+            out.writeInt(0);
+        }
+        if (this.mInstanceId != null) {
+            out.writeInt(1);
+            mInstanceId.writeToParcel(out, flags);
         } else {
             out.writeInt(0);
         }
@@ -390,6 +399,20 @@ public class StatusBarNotification implements Parcelable {
     /**
      * @hide
      */
+    public InstanceId getInstanceId() {
+        return mInstanceId;
+    }
+
+    /**
+     * @hide
+     */
+    public void setInstanceId(InstanceId instanceId) {
+        mInstanceId = instanceId;
+    }
+
+    /**
+     * @hide
+     */
     @UnsupportedAppUsage
     public Context getPackageContext(Context context) {
         if (mContext == null) {
@@ -454,11 +477,23 @@ public class StatusBarNotification implements Parcelable {
         return conversationId;
     }
 
-    private String getGroupLogTag() {
+    /**
+     *  Returns a probably-unique string based on the notification's group name,
+     *  with no more than MAX_LOG_TAG_LENGTH characters.
+     * @return String based on group name of notification.
+     * @hide
+     */
+    public String getGroupLogTag() {
         return shortenTag(getGroup());
     }
 
-    private String getChannelIdLogTag() {
+    /**
+     *  Returns a probably-unique string based on the notification's channel ID,
+     *  with no more than MAX_LOG_TAG_LENGTH characters.
+     * @return String based on channel ID of notification.
+     * @hide
+     */
+    public String getChannelIdLogTag() {
         if (notification.getChannelId() == null) {
             return null;
         }

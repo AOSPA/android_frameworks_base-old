@@ -16,7 +16,9 @@
 
 package com.android.internal.app;
 
+import android.annotation.Nullable;
 import android.content.Context;
+import android.os.UserHandle;
 import android.view.LayoutInflater;
 import android.view.ViewGroup;
 import android.widget.ListView;
@@ -34,8 +36,10 @@ public class ResolverMultiProfilePagerAdapter extends AbstractMultiProfilePagerA
     private final ResolverProfileDescriptor[] mItems;
 
     ResolverMultiProfilePagerAdapter(Context context,
-            ResolverListAdapter adapter) {
-        super(context, /* currentPage */ 0);
+            ResolverListAdapter adapter,
+            UserHandle personalProfileUserHandle,
+            UserHandle workProfileUserHandle) {
+        super(context, /* currentPage */ 0, personalProfileUserHandle, workProfileUserHandle);
         mItems = new ResolverProfileDescriptor[] {
                 createProfileDescriptor(adapter)
         };
@@ -44,8 +48,11 @@ public class ResolverMultiProfilePagerAdapter extends AbstractMultiProfilePagerA
     ResolverMultiProfilePagerAdapter(Context context,
             ResolverListAdapter personalAdapter,
             ResolverListAdapter workAdapter,
-            @Profile int defaultProfile) {
-        super(context, /* currentPage */ defaultProfile);
+            @Profile int defaultProfile,
+            UserHandle personalProfileUserHandle,
+            UserHandle workProfileUserHandle) {
+        super(context, /* currentPage */ defaultProfile, personalProfileUserHandle,
+                workProfileUserHandle);
         mItems = new ResolverProfileDescriptor[] {
                 createProfileDescriptor(personalAdapter),
                 createProfileDescriptor(workAdapter)
@@ -81,8 +88,21 @@ public class ResolverMultiProfilePagerAdapter extends AbstractMultiProfilePagerA
     }
 
     @Override
-    ResolverListAdapter getAdapterForIndex(int pageIndex) {
+    @VisibleForTesting
+    public ResolverListAdapter getAdapterForIndex(int pageIndex) {
         return mItems[pageIndex].resolverListAdapter;
+    }
+
+    @Override
+    @Nullable
+    ResolverListAdapter getListAdapterForUserHandle(UserHandle userHandle) {
+        if (getActiveListAdapter().getUserHandle() == userHandle) {
+            return getActiveListAdapter();
+        } else if (getInactiveListAdapter() != null
+                && getInactiveListAdapter().getUserHandle() == userHandle) {
+            return getInactiveListAdapter();
+        }
+        return null;
     }
 
     @Override
@@ -101,13 +121,33 @@ public class ResolverMultiProfilePagerAdapter extends AbstractMultiProfilePagerA
     }
 
     @Override
+    public ResolverListAdapter getPersonalListAdapter() {
+        return getAdapterForIndex(PROFILE_PERSONAL);
+    }
+
+    @Override
+    @Nullable
+    public ResolverListAdapter getWorkListAdapter() {
+        return getAdapterForIndex(PROFILE_WORK);
+    }
+
+    @Override
     ResolverListAdapter getCurrentRootAdapter() {
         return getActiveListAdapter();
     }
 
     @Override
-    ListView getCurrentAdapterView() {
+    ListView getActiveAdapterView() {
         return getListViewForIndex(getCurrentPage());
+    }
+
+    @Override
+    @Nullable
+    ViewGroup getInactiveAdapterView() {
+        if (getCount() == 1) {
+            return null;
+        }
+        return getListViewForIndex(1 - getCurrentPage());
     }
 
     class ResolverProfileDescriptor extends ProfileDescriptor {

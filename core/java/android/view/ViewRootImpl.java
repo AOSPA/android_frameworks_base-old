@@ -122,6 +122,7 @@ import android.view.SurfaceControl.Transaction;
 import android.view.View.AttachInfo;
 import android.view.View.FocusDirection;
 import android.view.View.MeasureSpec;
+import android.view.Window.OnContentApplyWindowInsetsListener;
 import android.view.WindowInsets.Type;
 import android.view.WindowInsets.Type.InsetsType;
 import android.view.WindowManager.LayoutParams.SoftInputModeFlags;
@@ -215,7 +216,7 @@ public final class ViewRootImpl implements ViewParent,
      * If set to 1, this will switch to a mode where we only use the new approach for IME, but not
      * for the status/navigation bar.
      */
-    private static final String USE_NEW_INSETS_PROPERTY = "persist.wm.new_insets";
+    private static final String USE_NEW_INSETS_PROPERTY = "persist.debug.new_insets";
 
     /**
      * @see #USE_NEW_INSETS_PROPERTY
@@ -506,7 +507,7 @@ public final class ViewRootImpl implements ViewParent,
     @UnsupportedAppUsage
     public final Surface mSurface = new Surface();
     private final SurfaceControl mSurfaceControl = new SurfaceControl();
-    private SurfaceControl mBlastSurfaceControl;
+    private SurfaceControl mBlastSurfaceControl = new SurfaceControl();
 
     private BLASTBufferQueue mBlastBufferQueue;
 
@@ -635,6 +636,7 @@ public final class ViewRootImpl implements ViewParent,
             InputEventConsistencyVerifier.isInstrumentationEnabled() ?
                     new InputEventConsistencyVerifier(this, 0) : null;
 
+    private final InsetsController mInsetsController;
     private final ImeFocusController mImeFocusController;
 
     /**
@@ -645,7 +647,6 @@ public final class ViewRootImpl implements ViewParent,
         return mImeFocusController;
     }
 
-    private final InsetsController mInsetsController = new InsetsController(this);
 
     private final GestureExclusionTracker mGestureExclusionTracker = new GestureExclusionTracker();
 
@@ -706,6 +707,7 @@ public final class ViewRootImpl implements ViewParent,
         mFallbackEventHandler = new PhoneFallbackEventHandler(context);
         mChoreographer = Choreographer.getInstance();
         mDisplayManager = (DisplayManager)context.getSystemService(Context.DISPLAY_SERVICE);
+        mInsetsController = new InsetsController(this);
 
         String processorOverrideName = context.getResources().getString(
                                     R.string.config_inputEventCompatProcessorOverrideClassName);
@@ -755,6 +757,11 @@ public final class ViewRootImpl implements ViewParent,
     /** Add activity config callback to be notified about override config changes. */
     public void setActivityConfigCallback(ActivityConfigCallback callback) {
         mActivityConfigCallback = callback;
+    }
+
+    public void setOnContentApplyWindowInsetsListener(OnContentApplyWindowInsetsListener listener) {
+        mAttachInfo.mContentOnApplyWindowInsetsListener = listener;
+        requestFitSystemWindows();
     }
 
     public void addWindowCallbacks(WindowCallbacks callback) {
@@ -1444,6 +1451,7 @@ public final class ViewRootImpl implements ViewParent,
         // Get new instance of display based on current display adjustments. It may be updated later
         // if moving between the displays also involved a configuration change.
         updateInternalDisplay(displayId, mView.getResources());
+        mImeFocusController.onMovedToDisplay();
         mAttachInfo.mDisplayState = mDisplay.getState();
         // Internal state updated, now notify the view hierarchy.
         mView.dispatchMovedToDisplay(mDisplay, config);
@@ -1686,22 +1694,18 @@ public final class ViewRootImpl implements ViewParent,
             setBoundsLayerCrop();
             mTransaction.show(mBoundsLayer).apply();
         }
-        return mBoundsLayer;
+       return mBoundsLayer;
     }
 
     Surface getOrCreateBLASTSurface(int width, int height) {
         if (mSurfaceControl == null || !mSurfaceControl.isValid()) {
             return null;
         }
-        if (mBlastSurfaceControl == null) {
-            mBlastSurfaceControl = new SurfaceControl.Builder(mSurfaceSession)
-            .setParent(mSurfaceControl)
-            .setName("BLAST")
-            .setBLASTLayer()
-            .build();
+        if ((mBlastSurfaceControl != null)
+                && (mBlastBufferQueue == null)
+                && mBlastSurfaceControl.isValid()) {
             mBlastBufferQueue = new BLASTBufferQueue(
                 mBlastSurfaceControl, width, height);
-
         }
         mBlastBufferQueue.update(mBlastSurfaceControl, width, height);
 
@@ -1728,8 +1732,8 @@ public final class ViewRootImpl implements ViewParent,
     private void updateBoundsLayer() {
         if (mBoundsLayer != null) {
             setBoundsLayerCrop();
-            mTransaction.deferTransactionUntilSurface(mBoundsLayer,
-                    mSurface, mSurface.getNextFrameNumber())
+            mTransaction.deferTransactionUntil(mBoundsLayer,
+                    getRenderSurfaceControl(), mSurface.getNextFrameNumber())
                     .apply();
         }
     }
@@ -1980,9 +1984,9 @@ public final class ViewRootImpl implements ViewParent,
             return;
         }
 
-        int types = inOutParams.getFitWindowInsetsTypes();
-        int sides = inOutParams.getFitWindowInsetsSides();
-        boolean ignoreVis = inOutParams.getFitIgnoreVisibility();
+        int types = inOutParams.getFitInsetsTypes();
+        int sides = inOutParams.getFitInsetsSides();
+        boolean ignoreVis = inOutParams.isFitInsetsIgnoringVisibility();
 
         if (((sysUiVis & SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN) != 0
                 || (flags & FLAG_LAYOUT_IN_SCREEN) != 0)
@@ -1999,9 +2003,9 @@ public final class ViewRootImpl implements ViewParent,
                 && adjust == SOFT_INPUT_ADJUST_RESIZE) {
             types |= Type.ime();
         }
-        inOutParams.setFitWindowInsetsTypes(types);
-        inOutParams.setFitWindowInsetsSides(sides);
-        inOutParams.setFitIgnoreVisibility(ignoreVis);
+        inOutParams.setFitInsetsTypes(types);
+        inOutParams.setFitInsetsSides(sides);
+        inOutParams.setFitInsetsIgnoringVisibility(ignoreVis);
 
         // The fitting of insets are not really controlled by the clients, so we remove the flag.
         inOutParams.privateFlags &= ~PRIVATE_FLAG_FIT_INSETS_CONTROLLED;
@@ -3348,7 +3352,6 @@ public final class ViewRootImpl implements ViewParent,
 
     private void performLayout(WindowManager.LayoutParams lp, int desiredWindowWidth,
             int desiredWindowHeight) {
-        mLayoutRequested = false;
         mScrollMayChange = true;
         mInLayout = true;
 
@@ -3678,30 +3681,27 @@ public final class ViewRootImpl implements ViewParent,
         Trace.traceBegin(Trace.TRACE_TAG_VIEW, "draw");
 
         boolean usingAsyncReport = false;
+        boolean reportNextDraw = mReportNextDraw; // Capture the original value
         if (mAttachInfo.mThreadedRenderer != null && mAttachInfo.mThreadedRenderer.isEnabled()) {
             ArrayList<Runnable> commitCallbacks = mAttachInfo.mTreeObserver
                     .captureFrameCommitCallbacks();
-            if (mReportNextDraw) {
-                usingAsyncReport = true;
+            final boolean needFrameCompleteCallback = mNextDrawUseBLASTSyncTransaction ||
+                (commitCallbacks != null && commitCallbacks.size() > 0) ||
+                mReportNextDraw;
+            usingAsyncReport = mReportNextDraw;
+            if (needFrameCompleteCallback) {
                 final Handler handler = mAttachInfo.mHandler;
                 mAttachInfo.mThreadedRenderer.setFrameCompleteCallback((long frameNr) ->
                         handler.postAtFrontOfQueue(() -> {
                             finishBLASTSync();
-                            // TODO: Use the frame number
-                            pendingDrawFinished();
+                            if (reportNextDraw) {
+                                // TODO: Use the frame number
+                                pendingDrawFinished();
+                            }
                             if (commitCallbacks != null) {
                                 for (int i = 0; i < commitCallbacks.size(); i++) {
                                     commitCallbacks.get(i).run();
                                 }
-                            }
-                        }));
-            } else if (commitCallbacks != null && commitCallbacks.size() > 0) {
-                final Handler handler = mAttachInfo.mHandler;
-                mAttachInfo.mThreadedRenderer.setFrameCompleteCallback((long frameNr) ->
-                        handler.postAtFrontOfQueue(() -> {
-                            finishBLASTSync();
-                            for (int i = 0; i < commitCallbacks.size(); i++) {
-                                commitCallbacks.get(i).run();
                             }
                         }));
             }
@@ -4890,8 +4890,14 @@ public final class ViewRootImpl implements ViewParent,
                     break;
                 case MSG_INSETS_CONTROL_CHANGED: {
                     SomeArgs args = (SomeArgs) msg.obj;
-                    mInsetsController.onControlsChanged((InsetsSourceControl[]) args.arg2);
+
+                    // Deliver state change before control change, such that:
+                    // a) When gaining control, controller can compare with server state to evaluate
+                    // whether it needs to run animation.
+                    // b) When loosing control, controller can restore server state by taking last
+                    // dispatched state as truth.
                     mInsetsController.onStateChanged((InsetsState) args.arg1);
+                    mInsetsController.onControlsChanged((InsetsSourceControl[]) args.arg2);
                     break;
                 }
                 case MSG_SHOW_INSETS: {
@@ -7345,7 +7351,8 @@ public final class ViewRootImpl implements ViewParent,
                 insetsPending ? WindowManagerGlobal.RELAYOUT_INSETS_PENDING : 0, frameNumber,
                 mTmpFrame, mPendingContentInsets, mPendingVisibleInsets,
                 mPendingStableInsets, mPendingBackDropFrame, mPendingDisplayCutout,
-                mPendingMergedConfiguration, mSurfaceControl, mTempInsets, mSurfaceSize);
+                mPendingMergedConfiguration, mSurfaceControl, mTempInsets, mSurfaceSize,
+                mBlastSurfaceControl);
         if (mSurfaceControl.isValid()) {
             if (!WindowManagerGlobal.USE_BLAST_ADAPTER) {
                 mSurface.copyFrom(mSurfaceControl);
@@ -9539,5 +9546,13 @@ public final class ViewRootImpl implements ViewParent,
 
     SurfaceControl.Transaction getBLASTSyncTransaction() {
         return mRtBLASTSyncTransaction;
+    }
+
+    SurfaceControl getRenderSurfaceControl() {
+        if (WindowManagerGlobal.USE_BLAST_ADAPTER) {
+            return mBlastSurfaceControl;
+        } else {
+            return mSurfaceControl;
+        }
     }
 }

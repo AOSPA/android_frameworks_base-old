@@ -91,6 +91,7 @@
     <uses-permission android:name="android.permission.TEST_MANAGE_ROLLBACKS" />
     <uses-permission android:name="android.permission.ACCESS_SURFACE_FLINGER" />
     <uses-permission android:name="android.permission.READ_FRAME_BUFFER" />
+    <uses-permission android:name="android.permission.REBOOT" />
     <uses-permission android:name="android.permission.DEVICE_POWER" />
     <uses-permission android:name="android.permission.POWER_SAVER" />
     <uses-permission android:name="android.permission.INSTALL_LOCATION_PROVIDER" />
@@ -110,6 +111,7 @@
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.WRITE_MEDIA_STORAGE" />
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.INTERACT_ACROSS_USERS" />
     <uses-permission android:name="android.permission.INTERACT_ACROSS_USERS_FULL" />
     <uses-permission android:name="android.permission.CREATE_USERS" />
@@ -218,6 +220,9 @@
     <!-- Permission required for CTS test - CrossProfileAppsHostSideTest -->
     <uses-permission android:name="android.permission.INTERACT_ACROSS_PROFILES"/>
 
+    <!-- permissions required for CTS test - PhoneStateListenerTest -->
+    <uses-permission android:name="android.permission.LISTEN_ALWAYS_REPORTED_SIGNAL_STRENGTH" />
+
     <!-- Permission required for CTS test - UiModeManagerTest -->
     <uses-permission android:name="android.permission.ENTER_CAR_MODE_PRIORITIZED"/>
 
@@ -238,6 +243,19 @@
 
     <!-- Allows setting brightness from the shell -->
     <uses-permission android:name="android.permission.CONTROL_DISPLAY_BRIGHTNESS"/>
+
+    <!-- Permission required for CTS test - ShortcutManagerUsageTest -->
+    <uses-permission android:name="android.permission.ACCESS_SHORTCUTS"/>
+
+    <!-- Permissions required to test ambient display. -->
+    <uses-permission android:name="android.permission.READ_DREAM_STATE"/>
+    <uses-permission android:name="android.permission.WRITE_DREAM_STATE"/>
+
+    <!-- Permission required for CTS test - CtsLightsManagerTest -->
+    <uses-permission android:name="android.permission.CONTROL_DEVICE_LIGHTS" />
+
+    <!-- Permission needed to test mainline permission module rollback -->
+    <uses-permission android:name="android.permission.UPGRADE_RUNTIME_PERMISSIONS" />
 
     <application android:label="@string/app_label"
                 android:theme="@android:style/Theme.DeviceDefault.DayNight"

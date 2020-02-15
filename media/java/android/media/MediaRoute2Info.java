@@ -21,6 +21,7 @@ import static android.media.MediaRouter2Utils.toUniqueId;
 import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.annotation.TestApi;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Parcel;
@@ -78,6 +79,11 @@ public final class MediaRoute2Info implements Parcelable {
      * @see #getConnectionState
      */
     public static final int CONNECTION_STATE_CONNECTED = 2;
+
+    /** @hide */
+    @IntDef({PLAYBACK_VOLUME_FIXED, PLAYBACK_VOLUME_VARIABLE})
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface PlaybackVolume {}
 
     /**
      * Playback information indicating the playback volume is fixed, i&#46;e&#46; it cannot be
@@ -192,6 +198,7 @@ public final class MediaRoute2Info implements Parcelable {
     final List<String> mFeatures;
     @DeviceType
     final int mDeviceType;
+    final boolean mIsSystem;
     final Uri mIconUri;
     final CharSequence mDescription;
     @ConnectionState
@@ -208,6 +215,7 @@ public final class MediaRoute2Info implements Parcelable {
         mName = builder.mName;
         mFeatures = builder.mFeatures;
         mDeviceType = builder.mDeviceType;
+        mIsSystem = builder.mIsSystem;
         mIconUri = builder.mIconUri;
         mDescription = builder.mDescription;
         mConnectionState = builder.mConnectionState;
@@ -224,6 +232,7 @@ public final class MediaRoute2Info implements Parcelable {
         mName = TextUtils.CHAR_SEQUENCE_CREATOR.createFromParcel(in);
         mFeatures = in.createStringArrayList();
         mDeviceType = in.readInt();
+        mIsSystem = in.readBoolean();
         mIconUri = in.readParcelable(null);
         mDescription = TextUtils.CHAR_SEQUENCE_CREATOR.createFromParcel(in);
         mConnectionState = in.readInt();
@@ -282,6 +291,17 @@ public final class MediaRoute2Info implements Parcelable {
     }
 
     /**
+     * Returns whether the route is a system route or not.
+     * <p>
+     * System routes are media routes directly controlled by the system
+     * such as phone speaker, wired headset, and Bluetooth devices.
+     * </p>
+     */
+    public boolean isSystemRoute() {
+        return mIsSystem;
+    }
+
+    /**
      * Gets the URI of the icon representing this route.
      * <p>
      * This icon will be used in picker UIs if available.
@@ -326,6 +346,7 @@ public final class MediaRoute2Info implements Parcelable {
      *
      * @return {@link #PLAYBACK_VOLUME_FIXED} or {@link #PLAYBACK_VOLUME_VARIABLE}
      */
+    @PlaybackVolume
     public int getVolumeHandling() {
         return mVolumeHandling;
     }
@@ -354,6 +375,7 @@ public final class MediaRoute2Info implements Parcelable {
      * @hide
      */
     @NonNull
+    @TestApi
     public String getOriginalId() {
         return mId;
     }
@@ -375,6 +397,7 @@ public final class MediaRoute2Info implements Parcelable {
      *
      * @param features the list of route features to consider
      * @return true if the route has at least one feature in the list
+     * @hide
      */
     public boolean hasAnyFeatures(@NonNull Collection<String> features) {
         Objects.requireNonNull(features, "features must not be null");
@@ -416,6 +439,7 @@ public final class MediaRoute2Info implements Parcelable {
                 && Objects.equals(mName, other.mName)
                 && Objects.equals(mFeatures, other.mFeatures)
                 && (mDeviceType == other.mDeviceType)
+                && (mIsSystem == other.mIsSystem)
                 && Objects.equals(mIconUri, other.mIconUri)
                 && Objects.equals(mDescription, other.mDescription)
                 && (mConnectionState == other.mConnectionState)
@@ -429,7 +453,7 @@ public final class MediaRoute2Info implements Parcelable {
     @Override
     public int hashCode() {
         // Note: mExtras is not included.
-        return Objects.hash(mId, mName, mFeatures, mDeviceType, mIconUri, mDescription,
+        return Objects.hash(mId, mName, mFeatures, mDeviceType, mIsSystem, mIconUri, mDescription,
                 mConnectionState, mClientPackageName, mVolumeHandling, mVolumeMax, mVolume,
                 mProviderId);
     }
@@ -466,6 +490,7 @@ public final class MediaRoute2Info implements Parcelable {
         TextUtils.writeToParcel(mName, dest, flags);
         dest.writeStringList(mFeatures);
         dest.writeInt(mDeviceType);
+        dest.writeBoolean(mIsSystem);
         dest.writeParcelable(mIconUri, flags);
         TextUtils.writeToParcel(mDescription, dest, flags);
         dest.writeInt(mConnectionState);
@@ -487,6 +512,7 @@ public final class MediaRoute2Info implements Parcelable {
 
         @DeviceType
         int mDeviceType = DEVICE_TYPE_UNKNOWN;
+        boolean mIsSystem;
         Uri mIconUri;
         CharSequence mDescription;
         @ConnectionState
@@ -533,6 +559,7 @@ public final class MediaRoute2Info implements Parcelable {
             mName = routeInfo.mName;
             mFeatures = new ArrayList<>(routeInfo.mFeatures);
             mDeviceType = routeInfo.mDeviceType;
+            mIsSystem = routeInfo.mIsSystem;
             mIconUri = routeInfo.mIconUri;
             mDescription = routeInfo.mDescription;
             mConnectionState = routeInfo.mConnectionState;
@@ -548,6 +575,12 @@ public final class MediaRoute2Info implements Parcelable {
 
         /**
          * Adds a feature for the route.
+         * @param feature a feature that the route has. May be one of predefined features
+         *                such as {@link #FEATURE_LIVE_AUDIO}, {@link #FEATURE_LIVE_VIDEO} or
+         *                {@link #FEATURE_REMOTE_PLAYBACK} or a custom feature defined by
+         *                a provider.
+         *
+         * @see #addFeatures(Collection)
          */
         @NonNull
         public Builder addFeature(@NonNull String feature) {
@@ -560,6 +593,12 @@ public final class MediaRoute2Info implements Parcelable {
 
         /**
          * Adds features for the route. A route must support at least one route type.
+         * @param features features that the route has. May include predefined features
+         *                such as {@link #FEATURE_LIVE_AUDIO}, {@link #FEATURE_LIVE_VIDEO} or
+         *                {@link #FEATURE_REMOTE_PLAYBACK} or custom features defined by
+         *                a provider.
+         *
+         * @see #addFeature(String)
          */
         @NonNull
         public Builder addFeatures(@NonNull Collection<String> features) {
@@ -585,6 +624,16 @@ public final class MediaRoute2Info implements Parcelable {
         @NonNull
         public Builder setDeviceType(@DeviceType int deviceType) {
             mDeviceType = deviceType;
+            return this;
+        }
+
+        /**
+         * Sets whether the route is a system route or not.
+         * @hide
+         */
+        @NonNull
+        public Builder setSystemRoute(boolean isSystem) {
+            mIsSystem = isSystem;
             return this;
         }
 
@@ -643,7 +692,7 @@ public final class MediaRoute2Info implements Parcelable {
          * Sets the route's volume handling.
          */
         @NonNull
-        public Builder setVolumeHandling(int volumeHandling) {
+        public Builder setVolumeHandling(@PlaybackVolume int volumeHandling) {
             mVolumeHandling = volumeHandling;
             return this;
         }

@@ -41,6 +41,7 @@ import android.platform.test.annotations.Presubmit;
 import android.util.SparseArray;
 import android.view.SurfaceControl.Transaction;
 import android.view.SyncRtSurfaceTransactionApplier.SurfaceParams;
+import android.view.animation.LinearInterpolator;
 import android.view.test.InsetsModeSession;
 
 import androidx.test.runner.AndroidJUnit4;
@@ -108,20 +109,21 @@ public class InsetsAnimationControlImplTest {
         InsetsSourceConsumer topConsumer = new InsetsSourceConsumer(ITYPE_STATUS_BAR, mInsetsState,
                 () -> mMockTransaction, mMockController);
         topConsumer.setControl(
-                new InsetsSourceControl(ITYPE_STATUS_BAR, mTopLeash, new Point(0, 0)));
+                new InsetsSourceControl(ITYPE_STATUS_BAR, mTopLeash, new Point(0, 0)),
+                new int[1], new int[1]);
 
         InsetsSourceConsumer navConsumer = new InsetsSourceConsumer(ITYPE_NAVIGATION_BAR,
                 mInsetsState, () -> mMockTransaction, mMockController);
-        navConsumer.hide();
         navConsumer.setControl(new InsetsSourceControl(ITYPE_NAVIGATION_BAR, mNavLeash,
-                new Point(400, 0)));
+                new Point(400, 0)), new int[1], new int[1]);
+        navConsumer.hide();
 
         SparseArray<InsetsSourceControl> controls = new SparseArray<>();
         controls.put(ITYPE_STATUS_BAR, topConsumer.getControl());
         controls.put(ITYPE_NAVIGATION_BAR, navConsumer.getControl());
         mController = new InsetsAnimationControlImpl(controls,
                 new Rect(0, 0, 500, 500), mInsetsState, mMockListener, systemBars(),
-                mMockController, 10 /* durationMs */,
+                mMockController, 10 /* durationMs */, new LinearInterpolator(),
                 false /* fade */, LAYOUT_INSETS_DURING_ANIMATION_SHOWN);
     }
 
@@ -175,8 +177,6 @@ public class InsetsAnimationControlImplTest {
         when(mMockController.getState()).thenReturn(mInsetsState);
         mController.finish(true /* shown */);
         mController.applyChangeInsets(mInsetsState);
-        assertTrue(mInsetsState.getSource(ITYPE_STATUS_BAR).isVisible());
-        assertTrue(mInsetsState.getSource(ITYPE_NAVIGATION_BAR).isVisible());
         assertEquals(Insets.of(0, 100, 100, 0), mController.getCurrentInsets());
         verify(mMockController).notifyFinished(eq(mController), eq(true /* shown */));
     }

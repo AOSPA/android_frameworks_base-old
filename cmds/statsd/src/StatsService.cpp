@@ -27,13 +27,10 @@
 #include "subscriber/SubscriberReporter.h"
 
 #include <android-base/file.h>
-#include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 #include <binder/IPCThreadState.h>
-#include <binder/IServiceManager.h>
 #include <binder/PermissionController.h>
 #include <cutils/multiuser.h>
-#include <dirent.h>
 #include <frameworks/base/cmds/statsd/src/statsd_config.pb.h>
 #include <frameworks/base/cmds/statsd/src/uid_data.pb.h>
 #include <private/android_filesystem_config.h>
@@ -42,17 +39,13 @@
 #include <stdlib.h>
 #include <sys/system_properties.h>
 #include <unistd.h>
-#include <utils/Looper.h>
 #include <utils/String16.h>
-#include <chrono>
 
 using namespace android;
 
 using android::base::StringPrintf;
 using android::util::FIELD_COUNT_REPEATED;
-using android::util::FIELD_TYPE_INT64;
 using android::util::FIELD_TYPE_MESSAGE;
-using android::util::ProtoReader;
 
 namespace android {
 namespace os {
@@ -77,6 +70,25 @@ static binder::Status exception(uint32_t code, const std::string& msg) {
     return binder::Status::fromExceptionCode(code, String8(msg.c_str()));
 }
 
+
+static bool checkPermission(const char* permission) {
+    sp<IStatsCompanionService> scs = getStatsCompanionService();
+    if (scs == nullptr) {
+        return false;
+    }
+
+    bool success;
+    pid_t pid = IPCThreadState::self()->getCallingPid();
+    uid_t uid = IPCThreadState::self()->getCallingUid();
+
+    binder::Status status = scs->checkPermission(String16(permission), pid, uid, &success);
+    if (!status.isOk()) {
+        return false;
+    }
+    return success;
+}
+
+
 binder::Status checkUid(uid_t expectedUid) {
     uid_t uid = IPCThreadState::self()->getCallingUid();
     if (uid == expectedUid || uid == AID_ROOT) {
@@ -97,11 +109,11 @@ binder::Status checkDumpAndUsageStats(const String16& packageName) {
     }
 
     // Caller must be granted these permissions
-    if (!checkCallingPermission(String16(kPermissionDump))) {
+    if (!checkPermission(kPermissionDump)) {
         return exception(binder::Status::EX_SECURITY,
                 StringPrintf("UID %d / PID %d lacks permission %s", uid, pid, kPermissionDump));
     }
-    if (!checkCallingPermission(String16(kPermissionUsage))) {
+    if (!checkPermission(kPermissionUsage)) {
         return exception(binder::Status::EX_SECURITY,
                 StringPrintf("UID %d / PID %d lacks permission %s", uid, pid, kPermissionUsage));
     }
@@ -285,7 +297,7 @@ status_t StatsService::onTransact(uint32_t code, const Parcel& data, Parcel* rep
  * TODO: Come up with a more robust method of enacting <serviceutils/PriorityDumper.h>.
  */
 status_t StatsService::dump(int fd, const Vector<String16>& args) {
-    if (!checkCallingPermission(String16(kPermissionDump))) {
+    if (!checkPermission(kPermissionDump)) {
         return PERMISSION_DENIED;
     }
     int lastArg = args.size() - 1;
@@ -914,7 +926,7 @@ status_t StatsService::cmd_clear_puller_cache(int out) {
     IPCThreadState* ipc = IPCThreadState::self();
     VLOG("StatsService::cmd_clear_puller_cache with Pid %i, Uid %i",
             ipc->getCallingPid(), ipc->getCallingUid());
-    if (checkCallingPermission(String16(kPermissionDump))) {
+    if (checkPermission(kPermissionDump)) {
         int cleared = mPullerManager->ForceClearPullerCache();
         dprintf(out, "Puller removed %d cached data!\n", cleared);
         return NO_ERROR;
@@ -927,7 +939,7 @@ status_t StatsService::cmd_print_logs(int out, const Vector<String8>& args) {
     IPCThreadState* ipc = IPCThreadState::self();
     VLOG("StatsService::cmd_print_logs with Pid %i, Uid %i", ipc->getCallingPid(),
          ipc->getCallingUid());
-    if (checkCallingPermission(String16(kPermissionDump))) {
+    if (checkPermission(kPermissionDump)) {
         bool enabled = true;
         if (args.size() >= 2) {
             enabled = atoi(args[1].c_str()) != 0;
@@ -1314,12 +1326,12 @@ Status StatsService::sendBinaryPushStateChangedAtom(const android::String16& tra
     // Root, system, and shell always have access
     if (uid != AID_ROOT && uid != AID_SYSTEM && uid != AID_SHELL) {
         // Caller must be granted these permissions
-        if (!checkCallingPermission(String16(kPermissionDump))) {
+        if (!checkPermission(kPermissionDump)) {
             return exception(binder::Status::EX_SECURITY,
                              StringPrintf("UID %d / PID %d lacks permission %s", uid, pid,
                                           kPermissionDump));
         }
-        if (!checkCallingPermission(String16(kPermissionUsage))) {
+        if (!checkPermission(kPermissionUsage)) {
             return exception(binder::Status::EX_SECURITY,
                              StringPrintf("UID %d / PID %d lacks permission %s", uid, pid,
                                           kPermissionUsage));
@@ -1410,12 +1422,12 @@ Status StatsService::sendWatchdogRollbackOccurredAtom(const int32_t rollbackType
     // Root, system, and shell always have access
     if (uid != AID_ROOT && uid != AID_SYSTEM && uid != AID_SHELL) {
         // Caller must be granted these permissions
-        if (!checkCallingPermission(String16(kPermissionDump))) {
+        if (!checkPermission(kPermissionDump)) {
             return exception(binder::Status::EX_SECURITY,
                              StringPrintf("UID %d / PID %d lacks permission %s", uid, pid,
                                           kPermissionDump));
         }
-        if (!checkCallingPermission(String16(kPermissionUsage))) {
+        if (!checkPermission(kPermissionUsage)) {
             return exception(binder::Status::EX_SECURITY,
                              StringPrintf("UID %d / PID %d lacks permission %s", uid, pid,
                                           kPermissionUsage));

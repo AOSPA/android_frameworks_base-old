@@ -19,10 +19,13 @@ package android.view;
 import static android.view.InsetsController.ANIMATION_TYPE_HIDE;
 import static android.view.InsetsController.ANIMATION_TYPE_NONE;
 import static android.view.InsetsController.ANIMATION_TYPE_SHOW;
+import static android.view.InsetsSourceConsumer.ShowResult.IME_SHOW_DELAYED;
+import static android.view.InsetsSourceConsumer.ShowResult.SHOW_IMMEDIATELY;
 import static android.view.InsetsState.ITYPE_IME;
 import static android.view.InsetsState.ITYPE_NAVIGATION_BAR;
 import static android.view.InsetsState.ITYPE_STATUS_BAR;
 import static android.view.ViewRootImpl.NEW_INSETS_MODE_FULL;
+import static android.view.WindowInsets.Type.ime;
 import static android.view.WindowInsets.Type.statusBars;
 import static android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE;
 
@@ -32,6 +35,8 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.notNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -41,11 +46,16 @@ import android.graphics.Insets;
 import android.graphics.Point;
 import android.graphics.Rect;
 import android.platform.test.annotations.Presubmit;
+import android.view.SurfaceControl.Transaction;
 import android.view.WindowInsets.Type;
 import android.view.WindowManager.BadTokenException;
 import android.view.WindowManager.LayoutParams;
+import android.view.animation.LinearInterpolator;
 import android.view.test.InsetsModeSession;
 import android.widget.TextView;
+
+import com.android.server.testutils.OffsettableClock;
+import com.android.server.testutils.TestHandler;
 
 import androidx.test.InstrumentationRegistry;
 import androidx.test.runner.AndroidJUnit4;
@@ -58,6 +68,7 @@ import org.junit.runner.RunWith;
 import org.mockito.ArgumentCaptor;
 
 import java.util.concurrent.CountDownLatch;
+import java.util.function.Supplier;
 
 /**
  * Tests for {@link InsetsController}.
@@ -76,6 +87,8 @@ public class InsetsControllerTest {
     private SurfaceSession mSession = new SurfaceSession();
     private SurfaceControl mLeash;
     private ViewRootImpl mViewRoot;
+    private TestHandler mTestHandler;
+    private OffsettableClock mTestClock;
     private static InsetsModeSession sInsetsModeSession;
 
     @BeforeClass
@@ -102,7 +115,37 @@ public class InsetsControllerTest {
             } catch (BadTokenException e) {
                 // activity isn't running, we will ignore BadTokenException.
             }
-            mController = new InsetsController(mViewRoot);
+            mTestClock = new OffsettableClock();
+            mTestHandler = new TestHandler(null, mTestClock);
+            mController = new InsetsController(mViewRoot, (controller, type) -> {
+                if (type == ITYPE_IME) {
+                    return new InsetsSourceConsumer(type, controller.getState(),
+                            Transaction::new, controller) {
+
+                        private boolean mImeRequestedShow;
+
+                        @Override
+                        public void show(boolean fromIme) {
+                            super.show(fromIme);
+                            if (fromIme) {
+                                mImeRequestedShow = true;
+                            }
+                        }
+
+                        @Override
+                        public int requestShow(boolean fromController) {
+                            if (fromController || mImeRequestedShow) {
+                                return SHOW_IMMEDIATELY;
+                            } else {
+                                return IME_SHOW_DELAYED;
+                            }
+                        }
+                    };
+                } else {
+                    return new InsetsSourceConsumer(type, controller.getState(), Transaction::new,
+                            controller);
+                }
+            }, mTestHandler);
             final Rect rect = new Rect(5, 5, 5, 5);
             mController.getState().getSource(ITYPE_STATUS_BAR).setFrame(new Rect(0, 0, 100, 10));
             mController.getState().getSource(ITYPE_NAVIGATION_BAR).setFrame(
@@ -148,7 +191,7 @@ public class InsetsControllerTest {
             WindowInsetsAnimationControlListener mockListener =
                     mock(WindowInsetsAnimationControlListener.class);
             mController.controlWindowInsetsAnimation(statusBars(), 10 /* durationMs */,
-                    mockListener);
+                    new LinearInterpolator(), mockListener);
 
             // Ready gets deferred until next predraw
             mViewRoot.getView().getViewTreeObserver().dispatchOnPreDraw();
@@ -164,7 +207,8 @@ public class InsetsControllerTest {
         mController.getState().setDisplayFrame(new Rect(0, 0, 200, 200));
         WindowInsetsAnimationControlListener controlListener =
                 mock(WindowInsetsAnimationControlListener.class);
-        mController.controlWindowInsetsAnimation(0, 0 /* durationMs */, controlListener);
+        mController.controlWindowInsetsAnimation(0, 0 /* durationMs */, new LinearInterpolator(),
+                controlListener);
         verify(controlListener).onCancelled();
         verify(controlListener, never()).onReady(any(), anyInt());
     }
@@ -366,6 +410,84 @@ public class InsetsControllerTest {
     }
 
     @Test
+    public void testRestoreStartsAnimation() {
+        InsetsSourceControl control =
+                new InsetsSourceControl(ITYPE_STATUS_BAR, mLeash, new Point());
+        mController.onControlsChanged(new InsetsSourceControl[]{control});
+
+        InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> {
+            mController.hide(Type.statusBars());
+            mController.cancelExistingAnimation();
+            assertFalse(mController.getSourceConsumer(ITYPE_STATUS_BAR).isRequestedVisible());
+            assertFalse(mController.getState().getSource(ITYPE_STATUS_BAR).isVisible());
+
+            // Loosing control
+            InsetsState state = new InsetsState(mController.getState());
+            state.setSourceVisible(ITYPE_STATUS_BAR, true);
+            mController.onStateChanged(state);
+            mController.onControlsChanged(new InsetsSourceControl[0]);
+            assertFalse(mController.getSourceConsumer(ITYPE_STATUS_BAR).isRequestedVisible());
+            assertTrue(mController.getState().getSource(ITYPE_STATUS_BAR).isVisible());
+
+            // Gaining control
+            mController.onControlsChanged(new InsetsSourceControl[]{control});
+            assertEquals(ANIMATION_TYPE_HIDE, mController.getAnimationType(ITYPE_STATUS_BAR));
+            mController.cancelExistingAnimation();
+            assertFalse(mController.getSourceConsumer(ITYPE_STATUS_BAR).isRequestedVisible());
+            assertFalse(mController.getState().getSource(ITYPE_STATUS_BAR).isVisible());
+        });
+        InstrumentationRegistry.getInstrumentation().waitForIdleSync();
+    }
+
+    @Test
+    public void testStartImeAnimationAfterGettingControl() {
+        InsetsSourceControl control =
+                new InsetsSourceControl(ITYPE_IME, mLeash, new Point());
+
+        InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> {
+
+            mController.show(ime());
+            assertFalse(mController.getState().getSource(ITYPE_IME).isVisible());
+
+            // Pretend IME is calling
+            mController.show(ime(), true /* fromIme */);
+
+            // Gaining control shortly after
+            mController.onControlsChanged(new InsetsSourceControl[]{control});
+
+            assertEquals(ANIMATION_TYPE_SHOW, mController.getAnimationType(ITYPE_IME));
+            mController.cancelExistingAnimation();
+            assertTrue(mController.getSourceConsumer(ITYPE_IME).isRequestedVisible());
+            assertTrue(mController.getState().getSource(ITYPE_IME).isVisible());
+        });
+        InstrumentationRegistry.getInstrumentation().waitForIdleSync();
+    }
+
+    @Test
+    public void testStartImeAnimationAfterGettingControl_imeLater() {
+        InsetsSourceControl control =
+                new InsetsSourceControl(ITYPE_IME, mLeash, new Point());
+
+        InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> {
+
+            mController.show(ime());
+            assertFalse(mController.getState().getSource(ITYPE_IME).isVisible());
+
+            // Gaining control shortly after
+            mController.onControlsChanged(new InsetsSourceControl[]{control});
+
+            // Pretend IME is calling
+            mController.show(ime(), true /* fromIme */);
+
+            assertEquals(ANIMATION_TYPE_SHOW, mController.getAnimationType(ITYPE_IME));
+            mController.cancelExistingAnimation();
+            assertTrue(mController.getSourceConsumer(ITYPE_IME).isRequestedVisible());
+            assertTrue(mController.getState().getSource(ITYPE_IME).isVisible());
+        });
+        InstrumentationRegistry.getInstrumentation().waitForIdleSync();
+    }
+
+    @Test
     public void testAnimationEndState_controller() throws Exception {
         InsetsSourceControl control =
                 new InsetsSourceControl(ITYPE_STATUS_BAR, mLeash, new Point());
@@ -375,7 +497,7 @@ public class InsetsControllerTest {
             WindowInsetsAnimationControlListener mockListener =
                     mock(WindowInsetsAnimationControlListener.class);
             mController.controlWindowInsetsAnimation(statusBars(), 0 /* durationMs */,
-                    mockListener);
+                    new LinearInterpolator(), mockListener);
 
             ArgumentCaptor<WindowInsetsAnimationController> controllerCaptor =
                     ArgumentCaptor.forClass(WindowInsetsAnimationController.class);
@@ -391,6 +513,71 @@ public class InsetsControllerTest {
             assertFalse(mController.getSourceConsumer(ITYPE_STATUS_BAR).isRequestedVisible());
         });
         InstrumentationRegistry.getInstrumentation().waitForIdleSync();
+    }
+
+    @Test
+    public void testControlImeNotReady() {
+        prepareControls();
+        InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> {
+            WindowInsetsAnimationControlListener listener =
+                    mock(WindowInsetsAnimationControlListener.class);
+            mController.controlWindowInsetsAnimation(ime(), 0, new LinearInterpolator(), listener);
+
+            // Ready gets deferred until next predraw
+            mViewRoot.getView().getViewTreeObserver().dispatchOnPreDraw();
+
+            verify(listener, never()).onReady(any(), anyInt());
+
+            // Pretend that IME is calling.
+            mController.show(ime(), true);
+
+            // Ready gets deferred until next predraw
+            mViewRoot.getView().getViewTreeObserver().dispatchOnPreDraw();
+
+            verify(listener).onReady(notNull(), eq(ime()));
+
+        });
+    }
+
+    @Test
+    public void testControlImeNotReady_controlRevoked() {
+        prepareControls();
+        InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> {
+            WindowInsetsAnimationControlListener listener =
+                    mock(WindowInsetsAnimationControlListener.class);
+            mController.controlWindowInsetsAnimation(ime(), 0, new LinearInterpolator(), listener);
+
+            // Ready gets deferred until next predraw
+            mViewRoot.getView().getViewTreeObserver().dispatchOnPreDraw();
+
+            verify(listener, never()).onReady(any(), anyInt());
+
+            // Pretend that we are losing control
+            mController.onControlsChanged(new InsetsSourceControl[0]);
+
+            verify(listener).onCancelled();
+        });
+    }
+
+    @Test
+    public void testControlImeNotReady_timeout() {
+        prepareControls();
+        InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> {
+            WindowInsetsAnimationControlListener listener =
+                    mock(WindowInsetsAnimationControlListener.class);
+            mController.controlWindowInsetsAnimation(ime(), 0, new LinearInterpolator(), listener);
+
+            // Ready gets deferred until next predraw
+            mViewRoot.getView().getViewTreeObserver().dispatchOnPreDraw();
+
+            verify(listener, never()).onReady(any(), anyInt());
+
+            // Pretend that timeout is happening
+            mTestClock.fastForward(2500);
+            mTestHandler.timeAdvance();
+
+            verify(listener).onCancelled();
+        });
     }
 
     private void waitUntilNextFrame() throws Exception {

@@ -3394,6 +3394,7 @@ public abstract class Context {
             CONNECTIVITY_SERVICE,
             //@hide: IP_MEMORY_STORE_SERVICE,
             IPSEC_SERVICE,
+            VPN_MANAGEMENT_SERVICE,
             TEST_NETWORK_SERVICE,
             //@hide: UPDATE_LOCK_SERVICE,
             //@hide: NETWORKMANAGEMENT_SERVICE,
@@ -3480,6 +3481,7 @@ public abstract class Context {
             //@hide: TIME_DETECTOR_SERVICE,
             //@hide: TIME_ZONE_DETECTOR_SERVICE,
             PERMISSION_SERVICE,
+            LIGHTS_SERVICE,
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface ServiceName {}
@@ -3983,6 +3985,24 @@ public abstract class Context {
     public static final String IPSEC_SERVICE = "ipsec";
 
     /**
+     * Use with {@link #getSystemService(String)} to retrieve a {@link android.net.VpnManager} to
+     * manage profiles for the platform built-in VPN.
+     *
+     * @see #getSystemService(String)
+     */
+    public static final String VPN_MANAGEMENT_SERVICE = "vpn_management";
+
+    /**
+     * Use with {@link #getSystemService(String)} to retrieve a {@link
+     * android.net.ConnectivityDiagnosticsManager} for performing network connectivity diagnostics
+     * as well as receiving network connectivity information from the system.
+     *
+     * @see #getSystemService(String)
+     * @see android.net.ConnectivityDiagnosticsManager
+     */
+    public static final String CONNECTIVITY_DIAGNOSTICS_SERVICE = "connectivity_diagnostics";
+
+    /**
      * Use with {@link #getSystemService(String)} to retrieve a {@link
      * android.net.TestNetworkManager} for building TUNs and limited-use Networks
      *
@@ -4119,16 +4139,16 @@ public abstract class Context {
     public static final String LOWPAN_SERVICE = "lowpan";
 
     /**
-     * Use with {@link #getSystemService(String)} to retrieve a {@link
-     * android.net.EthernetManager} for handling management of
-     * Ethernet access.
+     * Use with {@link #getSystemService(String)} to retrieve a {@link android.net.EthernetManager}
+     * for handling management of Ethernet access.
      *
      * @see #getSystemService(String)
      * @see android.net.EthernetManager
      *
      * @hide
      */
-    @UnsupportedAppUsage
+    @SystemApi
+    @TestApi
     public static final String ETHERNET_SERVICE = "ethernet";
 
     /**
@@ -5012,10 +5032,7 @@ public abstract class Context {
     /**
      * Use with {@link #getSystemService(String)} to retrieve an
      * {@link android.telephony.ims.ImsManager}.
-     * @hide
      */
-    @SystemApi
-    @TestApi
     public static final String TELEPHONY_IMS_SERVICE = "telephony_ims";
 
     /**
@@ -5047,11 +5064,7 @@ public abstract class Context {
      *
      * @see #getSystemService(String)
      * @see android.app.blob.BlobStoreManager
-     *
-     * TODO: make this public once BlobStoreManager is ready.
-     * @hide
      */
-    @TestApi
     public static final String BLOB_STORE_SERVICE = "blob_store";
 
     /**
@@ -5086,6 +5099,7 @@ public abstract class Context {
      * @hide
      */
     @SystemApi
+    @TestApi
     public static final String APP_INTEGRITY_SERVICE = "app_integrity";
 
     /**
@@ -5109,6 +5123,15 @@ public abstract class Context {
      * @see android.security.FileIntegrityManager
      */
     public static final String FILE_INTEGRITY_SERVICE = "file_integrity";
+
+    /**
+     * Use with {@link #getSystemService(String)} to retrieve a
+     * {@link android.hardware.lights.LightsManager} for controlling device lights.
+     *
+     * @see #getSystemService(String)
+     * @hide
+     */
+    public static final String LIGHTS_SERVICE = "lights";
 
     /**
      * Determine whether the given permission is allowed for a particular
@@ -5706,18 +5729,75 @@ public abstract class Context {
      * shared, however common state (ClassLoader, other Resources for the
      * same configuration) may be so the Context itself can be fairly lightweight.
      *
-     * The returned display Context provides a {@link WindowManager}
-     * (see {@link #getSystemService(String)}) that is configured to show windows
-     * on the given display.  The WindowManager's {@link WindowManager#getDefaultDisplay}
-     * method can be used to retrieve the Display from the returned Context.
+     * To obtain an instance of a {@link WindowManager} (see {@link #getSystemService(String)}) that
+     * is configured to show windows on the given display call
+     * {@link #createWindowContext(int, Bundle)} on the returned display Context or use an
+     * {@link android.app.Activity}.
      *
-     * @param display A {@link Display} object specifying the display
-     * for whose metrics the Context's resources should be tailored and upon which
-     * new windows should be shown.
+     * @param display A {@link Display} object specifying the display for whose metrics the
+     * Context's resources should be tailored.
      *
      * @return A {@link Context} for the display.
      */
     public abstract Context createDisplayContext(@NonNull Display display);
+
+    /**
+     * Creates a Context for a non-activity window.
+     *
+     * <p>
+     * A window context is a context that can be used to add non-activity windows, such as
+     * {@link android.view.WindowManager.LayoutParams#TYPE_APPLICATION_OVERLAY}. A window context
+     * must be created from a context that has an associated {@link Display}, such as
+     * {@link android.app.Activity Activity} or a context created with
+     * {@link #createDisplayContext(Display)}.
+     *
+     * <p>
+     * The window context is created with the appropriate {@link Configuration} for the area of the
+     * display that the windows created with it can occupy; it must be used when
+     * {@link android.view.LayoutInflater inflating} views, such that they can be inflated with
+     * proper {@link Resources}.
+     *
+     * Below is a sample code to <b>add an application overlay window on the primary display:<b/>
+     * <pre class="prettyprint">
+     * ...
+     * final DisplayManager dm = anyContext.getSystemService(DisplayManager.class);
+     * final Display primaryDisplay = dm.getDisplay(DEFAULT_DISPLAY);
+     * final Context windowContext = anyContext.createDisplayContext(primaryDisplay)
+     *         .createWindowContext(TYPE_APPLICATION_OVERLAY, null);
+     * final View overlayView = Inflater.from(windowContext).inflate(someLayoutXml, null);
+     *
+     * // WindowManager.LayoutParams initialization
+     * ...
+     * mParams.type = TYPE_APPLICATION_OVERLAY;
+     * ...
+     *
+     * mWindowContext.getSystemService(WindowManager.class).addView(overlayView, mParams);
+     * </pre>
+     *
+     * <p>
+     * This context's configuration and resources are adjusted to a display area where the windows
+     * with provided type will be added. <b>Note that all windows associated with the same context
+     * will have an affinity and can only be moved together between different displays or areas on a
+     * display.</b> If there is a need to add different window types, or non-associated windows,
+     * separate Contexts should be used.
+     * </p>
+     *
+     * @param type Window type in {@link WindowManager.LayoutParams}
+     * @param options Bundle used to pass window-related options.
+     * @return A {@link Context} that can be used to create windows.
+     * @throws UnsupportedOperationException if this is called on a non-UI context, such as
+     *         {@link android.app.Application Application} or {@link android.app.Service Service}.
+     *
+     * @see #getSystemService(String)
+     * @see #getSystemService(Class)
+     * @see #WINDOW_SERVICE
+     * @see #LAYOUT_INFLATER_SERVICE
+     * @see #WALLPAPER_SERVICE
+     * @throws IllegalArgumentException if token is invalid
+     */
+    public @NonNull Context createWindowContext(int type, @Nullable Bundle options)  {
+        throw new RuntimeException("Not implemented. Must override in a subclass.");
+    }
 
     /**
      * Return a new Context object for the current Context but for a different feature in the app.
@@ -5803,17 +5883,22 @@ public abstract class Context {
     public abstract DisplayAdjustments getDisplayAdjustments(int displayId);
 
     /**
+     * Get the display this context is associated with. Applications should use this method with
+     * {@link android.app.Activity} or a context associated with a {@link Display} via
+     * {@link #createDisplayContext(Display)} to get a display object associated with a Context, or
+     * {@link android.hardware.display.DisplayManager#getDisplay} to get a display object by id.
      * @return Returns the {@link Display} object this context is associated with.
-     * @hide
      */
-    @UnsupportedAppUsage
-    @TestApi
-    public abstract Display getDisplay();
+    @Nullable
+    public Display getDisplay() {
+        throw new RuntimeException("Not implemented. Must override in a subclass.");
+    }
 
     /**
-     * Gets the display ID.
+     * Gets the ID of the display this context is associated with.
      *
      * @return display ID associated with this {@link Context}.
+     * @see #getDisplay()
      * @hide
      */
     @TestApi

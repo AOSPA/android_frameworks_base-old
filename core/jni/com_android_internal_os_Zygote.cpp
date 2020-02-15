@@ -829,6 +829,7 @@ static void MountEmulatedStorage(uid_t uid, jint mount_mode,
   if (isFuse) {
     if (mount_mode == MOUNT_EXTERNAL_PASS_THROUGH) {
       const std::string pass_through_source = StringPrintf("/mnt/pass_through/%d", user_id);
+      PrepareDir(pass_through_source, 0710, AID_ROOT, AID_MEDIA_RW, fail_fn);
       BindMount(pass_through_source, "/storage", fail_fn);
     } else if (mount_mode == MOUNT_EXTERNAL_INSTALLER) {
       const std::string installer_source = StringPrintf("/mnt/installer/%d", user_id);
@@ -1092,6 +1093,13 @@ static pid_t ForkCommon(JNIEnv* env, bool is_system_server,
   }
 
   android_fdsan_error_level fdsan_error_level = android_fdsan_get_error_level();
+
+  // Purge unused native memory in an attempt to reduce the amount of false
+  // sharing with the child process.  By reducing the size of the libc_malloc
+  // region shared with the child process we reduce the number of pages that
+  // transition to the private-dirty state when malloc adjusts the meta-data
+  // on each of the pages it is managing after the fork.
+  mallopt(M_PURGE, 0);
 
   pid_t pid = fork();
 

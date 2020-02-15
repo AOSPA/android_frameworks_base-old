@@ -69,6 +69,7 @@ import static com.android.server.am.ActivityManagerService.ANR_TRACE_DIR;
 import static com.android.server.am.ActivityManagerService.MY_PID;
 import static com.android.server.am.ActivityManagerService.STOCK_PM_FLAGS;
 import static com.android.server.am.ActivityManagerService.dumpStackTraces;
+import static com.android.server.am.ActivityManagerServiceDumpActivitiesProto.ROOT_WINDOW_CONTAINER;
 import static com.android.server.am.ActivityManagerServiceDumpProcessesProto.CONFIG_WILL_CHANGE;
 import static com.android.server.am.ActivityManagerServiceDumpProcessesProto.CONTROLLER;
 import static com.android.server.am.ActivityManagerServiceDumpProcessesProto.CURRENT_TRACKER;
@@ -144,6 +145,7 @@ import android.app.IApplicationThread;
 import android.app.IAssistDataReceiver;
 import android.app.INotificationManager;
 import android.app.IRequestFinishCallback;
+import android.app.ITaskOrganizerController;
 import android.app.ITaskStackListener;
 import android.app.Notification;
 import android.app.NotificationManager;
@@ -222,14 +224,11 @@ import android.util.ArraySet;
 import android.util.Log;
 import android.util.Slog;
 import android.util.SparseArray;
-import android.util.StatsLog;
 import android.util.TimeUtils;
 import android.util.proto.ProtoOutputStream;
 import android.view.IRecentsAnimationRunner;
-import android.view.ITaskOrganizer;
 import android.view.RemoteAnimationAdapter;
 import android.view.RemoteAnimationDefinition;
-import android.view.WindowContainerTransaction;
 import android.view.WindowManager;
 
 import com.android.internal.R;
@@ -248,6 +247,7 @@ import com.android.internal.policy.IKeyguardDismissCallback;
 import com.android.internal.policy.KeyguardDismissCallback;
 import com.android.internal.util.ArrayUtils;
 import com.android.internal.util.FastPrintWriter;
+import com.android.internal.util.FrameworkStatsLog;
 import com.android.internal.util.function.pooled.PooledConsumer;
 import com.android.internal.util.function.pooled.PooledFunction;
 import com.android.internal.util.function.pooled.PooledLambda;
@@ -258,7 +258,6 @@ import com.android.server.SystemServiceManager;
 import com.android.server.UiThread;
 import com.android.server.Watchdog;
 import com.android.server.am.ActivityManagerService;
-import com.android.server.am.ActivityManagerServiceDumpActivitiesProto;
 import com.android.server.am.ActivityManagerServiceDumpProcessesProto;
 import com.android.server.am.AppTimeTracker;
 import com.android.server.am.BaseErrorDialog;
@@ -292,7 +291,6 @@ import java.util.Arrays;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -343,10 +341,6 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
     public static final int RELAUNCH_REASON_WINDOWING_MODE_RESIZE = 1;
     /** This activity is being relaunched due to a free-resize operation. */
     public static final int RELAUNCH_REASON_FREE_RESIZE = 2;
-
-    /** Flag indicating that an applied transaction may have effected lifecycle */
-    private static final int TRANSACT_EFFECTS_CLIENT_CONFIG = 1;
-    private static final int TRANSACT_EFFECTS_LIFECYCLE = 1 << 1;
 
     Context mContext;
 
@@ -669,8 +663,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
     /**
      * Stores the registration and state of TaskOrganizers in use.
      */
-    TaskOrganizerController mTaskOrganizerController =
-        new TaskOrganizerController(this, mGlobalLock);
+    TaskOrganizerController mTaskOrganizerController = new TaskOrganizerController(this);
 
     private int mDeviceOwnerUid = Process.INVALID_UID;
 
@@ -1043,6 +1036,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
     public final int startActivities(IApplicationThread caller, String callingPackage,
             Intent[] intents, String[] resolvedTypes, IBinder resultTo, Bundle bOptions,
             int userId) {
+        assertPackageMatchesCallingUid(callingPackage);
         final String reason = "startActivities";
         enforceNotIsolatedCaller(reason);
         userId = handleIncomingUser(Binder.getCallingPid(), Binder.getCallingUid(), userId, reason);
@@ -1062,10 +1056,11 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
                 true /*validateIncomingUser*/);
     }
 
-    int startActivityAsUser(IApplicationThread caller, String callingPackage,
+    private int startActivityAsUser(IApplicationThread caller, String callingPackage,
             Intent intent, String resolvedType, IBinder resultTo, String resultWho, int requestCode,
             int startFlags, ProfilerInfo profilerInfo, Bundle bOptions, int userId,
             boolean validateIncomingUser) {
+        assertPackageMatchesCallingUid(callingPackage);
         enforceNotIsolatedCaller("startActivityAsUser");
 
         userId = getActivityStartController().checkTargetUser(userId, validateIncomingUser,
@@ -1238,6 +1233,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
     public final WaitResult startActivityAndWait(IApplicationThread caller, String callingPackage,
             Intent intent, String resolvedType, IBinder resultTo, String resultWho, int requestCode,
             int startFlags, ProfilerInfo profilerInfo, Bundle bOptions, int userId) {
+        assertPackageMatchesCallingUid(callingPackage);
         final WaitResult res = new WaitResult();
         enforceNotIsolatedCaller("startActivityAndWait");
         userId = handleIncomingUser(Binder.getCallingPid(), Binder.getCallingUid(),
@@ -1263,6 +1259,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
     public final int startActivityWithConfig(IApplicationThread caller, String callingPackage,
             Intent intent, String resolvedType, IBinder resultTo, String resultWho, int requestCode,
             int startFlags, Configuration config, Bundle bOptions, int userId) {
+        assertPackageMatchesCallingUid(callingPackage);
         enforceNotIsolatedCaller("startActivityWithConfig");
         userId = handleIncomingUser(Binder.getCallingPid(), Binder.getCallingUid(), userId,
                 "startActivityWithConfig");
@@ -1279,15 +1276,6 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
                 .setActivityOptions(bOptions)
                 .setUserId(userId)
                 .execute();
-    }
-
-    @Override
-    public final void registerTaskOrganizer(ITaskOrganizer organizer, int windowingMode) {
-        enforceCallerIsRecentsOrHasPermission(
-                MANAGE_ACTIVITY_STACKS, "registerTaskOrganizer()");
-        synchronized (mGlobalLock) {
-            mTaskOrganizerController.registerTaskOrganizer(organizer, windowingMode);
-        }
     }
 
     @Override
@@ -1447,6 +1435,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
             Intent intent, String resolvedType, IVoiceInteractionSession session,
             IVoiceInteractor interactor, int startFlags, ProfilerInfo profilerInfo,
             Bundle bOptions, int userId) {
+        assertPackageMatchesCallingUid(callingPackage);
         mAmInternal.enforceCallingPermission(BIND_VOICE_INTERACTION, "startVoiceActivity()");
         if (session == null || interactor == null) {
             throw new NullPointerException("null session or interactor");
@@ -1470,6 +1459,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
     @Override
     public int startAssistantActivity(String callingPackage, int callingPid, int callingUid,
             Intent intent, String resolvedType, Bundle bOptions, int userId) {
+        assertPackageMatchesCallingUid(callingPackage);
         mAmInternal.enforceCallingPermission(BIND_VOICE_INTERACTION, "startAssistantActivity()");
         userId = handleIncomingUser(callingPid, callingUid, userId, "startAssistantActivity");
 
@@ -1822,21 +1812,6 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         synchronized (mGlobalLock) {
             mStackSupervisor.activityRelaunchedLocked(token);
         }
-        Binder.restoreCallingIdentity(origId);
-    }
-
-    public final void activitySlept(IBinder token) {
-        if (DEBUG_ALL) Slog.v(TAG, "Activity slept: token=" + token);
-
-        final long origId = Binder.clearCallingIdentity();
-
-        synchronized (mGlobalLock) {
-            final ActivityRecord r = ActivityRecord.isInStackLocked(token);
-            if (r != null) {
-                mStackSupervisor.activitySleptLocked(r);
-            }
-        }
-
         Binder.restoreCallingIdentity(origId);
     }
 
@@ -2391,15 +2366,9 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
     void moveTaskToFrontLocked(@Nullable IApplicationThread appThread,
             @Nullable String callingPackage, int taskId, int flags, SafeActivityOptions options,
             boolean fromRecents) {
-
         final int callingPid = Binder.getCallingPid();
         final int callingUid = Binder.getCallingUid();
-        if (!isSameApp(callingUid, callingPackage)) {
-            String msg = "Permission Denial: moveTaskToFrontLocked() from pid="
-                    + Binder.getCallingPid() + " as package " + callingPackage;
-            Slog.w(TAG, msg);
-            throw new SecurityException(msg);
-        }
+        assertPackageMatchesCallingUid(callingPackage);
         if (!checkAppSwitchAllowedLocked(callingPid, callingUid, -1, -1, "Task to front")) {
             SafeActivityOptions.abort(options);
             return;
@@ -2451,7 +2420,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
     /**
      * Return true if callingUid is system, or packageName belongs to that callingUid.
      */
-    boolean isSameApp(int callingUid, @Nullable String packageName) {
+    private boolean isSameApp(int callingUid, @Nullable String packageName) {
         try {
             if (callingUid != 0 && callingUid != SYSTEM_UID) {
                 if (packageName == null) {
@@ -2466,6 +2435,21 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
             // Should not happen
         }
         return true;
+    }
+
+    /**
+     * Checks that the provided package name matches the current calling UID, throws a security
+     * exception if it doesn't.
+     */
+    void assertPackageMatchesCallingUid(@Nullable String packageName) {
+        final int callingUid = Binder.getCallingUid();
+        if (isSameApp(callingUid, packageName)) {
+            return;
+        }
+        final String msg = "Permission Denial: package=" + packageName
+                + " does not belong to uid=" + callingUid;
+        Slog.w(TAG, msg);
+        throw new SecurityException(msg);
     }
 
     boolean checkAppSwitchAllowedLocked(int sourcePid, int sourceUid,
@@ -3033,6 +3017,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
     @Override
     public List<IBinder> getAppTasks(String callingPackage) {
         int callingUid = Binder.getCallingUid();
+        assertPackageMatchesCallingUid(callingPackage);
         long ident = Binder.clearCallingIdentity();
         try {
             synchronized (mGlobalLock) {
@@ -3297,119 +3282,6 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
                 // After reparenting (which only resizes the task to the stack bounds), resize the
                 // task to the actual bounds provided
                 task.resize(bounds, resizeMode, preserveWindow, !DEFER_RESUME);
-            }
-        } finally {
-            Binder.restoreCallingIdentity(ident);
-        }
-    }
-
-    private int sanitizeAndApplyChange(ConfigurationContainer container,
-            WindowContainerTransaction.Change change) {
-        if (!(container instanceof Task || container instanceof ActivityStack)) {
-            throw new RuntimeException("Invalid token in task transaction");
-        }
-        // The "client"-facing API should prevent bad changes; however, just in case, sanitize
-        // masks here.
-        int configMask = change.getConfigSetMask();
-        int windowMask = change.getWindowSetMask();
-        configMask &= ActivityInfo.CONFIG_WINDOW_CONFIGURATION
-                | ActivityInfo.CONFIG_SMALLEST_SCREEN_SIZE;
-        windowMask &= WindowConfiguration.WINDOW_CONFIG_BOUNDS;
-        int effects = 0;
-        if (configMask != 0) {
-            Configuration c = new Configuration(container.getRequestedOverrideConfiguration());
-            c.setTo(change.getConfiguration(), configMask, windowMask);
-            container.onRequestedOverrideConfigurationChanged(c);
-            // TODO(b/145675353): remove the following once we could apply new bounds to the
-            // pinned stack together with its children.
-            resizePinnedStackIfNeeded(container, configMask, windowMask, c);
-            effects |= TRANSACT_EFFECTS_CLIENT_CONFIG;
-        }
-        if ((change.getChangeMask() & WindowContainerTransaction.Change.CHANGE_FOCUSABLE) != 0) {
-            if (container.setFocusable(change.getFocusable())) {
-                effects |= TRANSACT_EFFECTS_LIFECYCLE;
-            }
-        }
-        return effects;
-    }
-
-    private void resizePinnedStackIfNeeded(ConfigurationContainer container, int configMask,
-            int windowMask, Configuration config) {
-        if ((container instanceof ActivityStack)
-                && ((configMask & ActivityInfo.CONFIG_WINDOW_CONFIGURATION) != 0)
-                && ((windowMask & WindowConfiguration.WINDOW_CONFIG_BOUNDS) != 0)) {
-            final ActivityStack stack = (ActivityStack) container;
-            if (stack.inPinnedWindowingMode()) {
-                stack.resize(config.windowConfiguration.getBounds(),
-                        null /* tempTaskBounds */, null /* tempTaskInsetBounds */,
-                        PRESERVE_WINDOWS, true /* deferResume */);
-            }
-        }
-    }
-
-    private int applyWindowContainerChange(ConfigurationContainer cc,
-            WindowContainerTransaction.Change c) {
-        int effects = sanitizeAndApplyChange(cc, c);
-
-        Rect enterPipBounds = c.getEnterPipBounds();
-        if (enterPipBounds != null) {
-            Task tr = (Task) cc;
-            mStackSupervisor.updatePictureInPictureMode(tr,
-                    enterPipBounds, true);
-        }
-        return effects;
-    }
-
-    @Override
-    public void applyContainerTransaction(WindowContainerTransaction t) {
-        mAmInternal.enforceCallingPermission(MANAGE_ACTIVITY_STACKS, "applyContainerTransaction()");
-        if (t == null) {
-            return;
-        }
-        long ident = Binder.clearCallingIdentity();
-        try {
-            synchronized (mGlobalLock) {
-                int effects = 0;
-                deferWindowLayout();
-                try {
-                    ArraySet<WindowContainer> haveConfigChanges = new ArraySet<>();
-                    Iterator<Map.Entry<IBinder, WindowContainerTransaction.Change>> entries =
-                            t.getChanges().entrySet().iterator();
-                    while (entries.hasNext()) {
-                        final Map.Entry<IBinder, WindowContainerTransaction.Change> entry =
-                                entries.next();
-                        final ConfigurationContainer cc =
-                                ConfigurationContainer.RemoteToken.fromBinder(
-                                        entry.getKey()).getContainer();
-                        int containerEffect = applyWindowContainerChange(cc, entry.getValue());
-                        effects |= containerEffect;
-                        // Lifecycle changes will trigger ensureConfig for everything.
-                        if ((effects & TRANSACT_EFFECTS_LIFECYCLE) == 0
-                                && (containerEffect & TRANSACT_EFFECTS_CLIENT_CONFIG) != 0) {
-                            if (cc instanceof WindowContainer) {
-                                haveConfigChanges.add((WindowContainer) cc);
-                            }
-                        }
-                    }
-                    if ((effects & TRANSACT_EFFECTS_LIFECYCLE) != 0) {
-                        // Already calls ensureActivityConfig
-                        mRootWindowContainer.ensureActivitiesVisible(null, 0, PRESERVE_WINDOWS);
-                    } else if ((effects & TRANSACT_EFFECTS_CLIENT_CONFIG) != 0) {
-                        final PooledConsumer f = PooledLambda.obtainConsumer(
-                                ActivityRecord::ensureActivityConfiguration,
-                                PooledLambda.__(ActivityRecord.class), 0,
-                                false /* preserveWindow */);
-                        try {
-                            for (int i = haveConfigChanges.size() - 1; i >= 0; --i) {
-                                haveConfigChanges.valueAt(i).forAllActivities(f);
-                            }
-                        } finally {
-                            f.recycle();
-                        }
-                    }
-                } finally {
-                    continueWindowLayout();
-                }
             }
         } finally {
             Binder.restoreCallingIdentity(ident);
@@ -4444,6 +4316,13 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         }
     }
 
+    @Override
+    public ITaskOrganizerController getTaskOrganizerController() {
+        mAmInternal.enforceCallingPermission(MANAGE_ACTIVITY_STACKS,
+                "getTaskOrganizerController()");
+        return mTaskOrganizerController;
+    }
+
     /**
      * Check that we have the features required for VR-related API calls, and throw an exception if
      * not.
@@ -5382,7 +5261,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         if (DEBUG_SWITCH || DEBUG_CONFIGURATION) Slog.i(TAG_CONFIGURATION,
                 "Updating global configuration to: " + values);
         writeConfigurationChanged(changes);
-        StatsLog.write(StatsLog.RESOURCE_CONFIGURATION_CHANGED,
+        FrameworkStatsLog.write(FrameworkStatsLog.RESOURCE_CONFIGURATION_CHANGED,
                 values.colorMode,
                 values.densityDpi,
                 values.fontScale,
@@ -5701,8 +5580,8 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
             // will wake up stacks or put them to sleep as appropriate.
             if (wasSleeping) {
                 mSleeping = false;
-                StatsLog.write(StatsLog.ACTIVITY_MANAGER_SLEEP_STATE_CHANGED,
-                        StatsLog.ACTIVITY_MANAGER_SLEEP_STATE_CHANGED__STATE__AWAKE);
+                FrameworkStatsLog.write(FrameworkStatsLog.ACTIVITY_MANAGER_SLEEP_STATE_CHANGED,
+                        FrameworkStatsLog.ACTIVITY_MANAGER_SLEEP_STATE_CHANGED__STATE__AWAKE);
                 startTimeTrackingFocusedActivityLocked();
                 mTopProcessState = ActivityManager.PROCESS_STATE_TOP;
                 Slog.d(TAG, "Top Process State changed to PROCESS_STATE_TOP");
@@ -5714,8 +5593,8 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
             }
         } else if (!mSleeping && shouldSleep) {
             mSleeping = true;
-            StatsLog.write(StatsLog.ACTIVITY_MANAGER_SLEEP_STATE_CHANGED,
-                    StatsLog.ACTIVITY_MANAGER_SLEEP_STATE_CHANGED__STATE__ASLEEP);
+            FrameworkStatsLog.write(FrameworkStatsLog.ACTIVITY_MANAGER_SLEEP_STATE_CHANGED,
+                    FrameworkStatsLog.ACTIVITY_MANAGER_SLEEP_STATE_CHANGED__STATE__ASLEEP);
             if (mCurAppTimeTracker != null) {
                 mCurAppTimeTracker.stop();
             }
@@ -6332,6 +6211,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
                 SafeActivityOptions options, int userId, boolean validateIncomingUser,
                 PendingIntentRecord originatingPendingIntent,
                 boolean allowBackgroundActivityStart) {
+            assertPackageMatchesCallingUid(callingPackage);
             synchronized (mGlobalLock) {
                 return getActivityStartController().startActivitiesInPackage(uid, realCallingPid,
                         realCallingUid, callingPackage, intents, resolvedTypes, resultTo, options,
@@ -6347,6 +6227,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
                 int userId, Task inTask, String reason, boolean validateIncomingUser,
                 PendingIntentRecord originatingPendingIntent,
                 boolean allowBackgroundActivityStart) {
+            assertPackageMatchesCallingUid(callingPackage);
             synchronized (mGlobalLock) {
                 return getActivityStartController().startActivityInPackage(uid, realCallingPid,
                         realCallingUid, callingPackage, intent, resolvedType, resultTo, resultWho,
@@ -7082,10 +6963,8 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         public void writeActivitiesToProto(ProtoOutputStream proto) {
             synchronized (mGlobalLock) {
                 // The output proto of "activity --proto activities"
-                // is ActivityManagerServiceDumpActivitiesProto
-                mRootWindowContainer.dumpDebug(proto,
-                        ActivityManagerServiceDumpActivitiesProto.ACTIVITY_STACK_SUPERVISOR,
-                        WindowTraceLogLevel.ALL);
+                mRootWindowContainer.dumpDebug(
+                        proto, ROOT_WINDOW_CONTAINER, WindowTraceLogLevel.ALL);
             }
         }
 

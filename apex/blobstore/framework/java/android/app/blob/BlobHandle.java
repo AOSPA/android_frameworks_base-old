@@ -15,13 +15,26 @@
  */
 package android.app.blob;
 
+import static android.app.blob.XmlTags.ATTR_ALGO;
+import static android.app.blob.XmlTags.ATTR_DIGEST;
+import static android.app.blob.XmlTags.ATTR_EXPIRY_TIME;
+import static android.app.blob.XmlTags.ATTR_LABEL;
+import static android.app.blob.XmlTags.ATTR_TAG;
+
 import android.annotation.CurrentTimeMillisLong;
 import android.annotation.NonNull;
 import android.os.Parcel;
 import android.os.Parcelable;
+import android.util.Base64;
 
+import com.android.internal.util.IndentingPrintWriter;
 import com.android.internal.util.Preconditions;
+import com.android.internal.util.XmlUtils;
 
+import org.xmlpull.v1.XmlPullParser;
+import org.xmlpull.v1.XmlSerializer;
+
+import java.io.IOException;
 import java.util.Arrays;
 import java.util.Objects;
 
@@ -32,6 +45,10 @@ import java.util.Objects;
 public final class BlobHandle implements Parcelable {
     private static final String ALGO_SHA_256 = "SHA-256";
 
+    private static final String[] SUPPORTED_ALGOS = {
+            ALGO_SHA_256
+    };
+
     private static final int LIMIT_BLOB_TAG_LENGTH = 128; // characters
 
     /**
@@ -41,17 +58,20 @@ public final class BlobHandle implements Parcelable {
      * @hide
      */
     @NonNull public final String algorithm;
+
     /**
      * Hash of the blob this handle is representing using {@link #algorithm}.
      *
      * @hide
      */
     @NonNull public final byte[] digest;
+
     /**
      * Label of the blob that can be surfaced to the user.
      * @hide
      */
     @NonNull public final CharSequence label;
+
     /**
      * Time in milliseconds after which the blob should be invalidated and not
      * allowed to be accessed by any other app, in {@link System#currentTimeMillis()} timebase.
@@ -59,6 +79,7 @@ public final class BlobHandle implements Parcelable {
      * @hide
      */
     @CurrentTimeMillisLong public final long expiryTimeMillis;
+
     /**
      * An opaque {@link String} associated with the blob.
      *
@@ -87,14 +108,9 @@ public final class BlobHandle implements Parcelable {
     public static @NonNull BlobHandle create(@NonNull String algorithm, @NonNull byte[] digest,
             @NonNull CharSequence label, @CurrentTimeMillisLong long expiryTimeMillis,
             @NonNull String tag) {
-        Preconditions.checkNotNull(algorithm, "algorithm must not be null");
-        Preconditions.checkNotNull(digest, "digest must not be null");
-        Preconditions.checkNotNull(label, "label must not be null");
-        Preconditions.checkArgumentNonnegative(expiryTimeMillis,
-                "expiryTimeMillis must not be negative");
-        Preconditions.checkNotNull(tag, "tag must not be null");
-        Preconditions.checkArgument(tag.length() <= LIMIT_BLOB_TAG_LENGTH, "tag too long");
-        return new BlobHandle(algorithm, digest, label, expiryTimeMillis, tag);
+        final BlobHandle handle = new BlobHandle(algorithm, digest, label, expiryTimeMillis, tag);
+        handle.assertIsValid();
+        return handle;
     }
 
     /**
@@ -197,6 +213,50 @@ public final class BlobHandle implements Parcelable {
         return Objects.hash(algorithm, Arrays.hashCode(digest), label, expiryTimeMillis, tag);
     }
 
+    /** @hide */
+    public void dump(IndentingPrintWriter fout, boolean dumpFull) {
+        if (dumpFull) {
+            fout.println("algo: " + algorithm);
+            fout.println("digest: " + (dumpFull ? encodeDigest() : safeDigest()));
+            fout.println("label: " + label);
+            fout.println("expiryMs: " + expiryTimeMillis);
+            fout.println("tag: " + tag);
+        } else {
+            fout.println(toString());
+        }
+    }
+
+    /** @hide */
+    public void assertIsValid() {
+        Preconditions.checkArgumentIsSupported(SUPPORTED_ALGOS, algorithm);
+        Preconditions.checkByteArrayNotEmpty(digest, "digest");
+        Preconditions.checkStringNotEmpty(label, "label must not be null");
+        Preconditions.checkArgumentNonnegative(expiryTimeMillis,
+                "expiryTimeMillis must not be negative");
+        Preconditions.checkStringNotEmpty(tag, "tag must not be null");
+        Preconditions.checkArgument(tag.length() <= LIMIT_BLOB_TAG_LENGTH, "tag too long");
+    }
+
+    @Override
+    public String toString() {
+        return "BlobHandle {"
+                + "algo:" + algorithm + ","
+                + "digest:" + safeDigest() + ","
+                + "label:" + label + ","
+                + "expiryMs:" + expiryTimeMillis + ","
+                + "tag:" + tag
+                + "}";
+    }
+
+    private String safeDigest() {
+        final String digestStr = encodeDigest();
+        return digestStr.substring(0, 2) + ".." + digestStr.substring(digestStr.length() - 2);
+    }
+
+    private String encodeDigest() {
+        return Base64.encodeToString(digest, Base64.NO_WRAP);
+    }
+
     public static final @NonNull Creator<BlobHandle> CREATOR = new Creator<BlobHandle>() {
         @Override
         public @NonNull BlobHandle createFromParcel(@NonNull Parcel source) {
@@ -208,4 +268,25 @@ public final class BlobHandle implements Parcelable {
             return new BlobHandle[size];
         }
     };
+
+    /** @hide */
+    public void writeToXml(@NonNull XmlSerializer out) throws IOException {
+        XmlUtils.writeStringAttribute(out, ATTR_ALGO, algorithm);
+        XmlUtils.writeByteArrayAttribute(out, ATTR_DIGEST, digest);
+        XmlUtils.writeStringAttribute(out, ATTR_LABEL, label);
+        XmlUtils.writeLongAttribute(out, ATTR_EXPIRY_TIME, expiryTimeMillis);
+        XmlUtils.writeStringAttribute(out, ATTR_TAG, tag);
+    }
+
+    /** @hide */
+    @NonNull
+    public static BlobHandle createFromXml(@NonNull XmlPullParser in) throws IOException {
+        final String algo = XmlUtils.readStringAttribute(in, ATTR_ALGO);
+        final byte[] digest = XmlUtils.readByteArrayAttribute(in, ATTR_DIGEST);
+        final CharSequence label = XmlUtils.readStringAttribute(in, ATTR_LABEL);
+        final long expiryTimeMs = XmlUtils.readLongAttribute(in, ATTR_EXPIRY_TIME);
+        final String tag = XmlUtils.readStringAttribute(in, ATTR_TAG);
+
+        return BlobHandle.create(algo, digest, label, expiryTimeMs, tag);
+    }
 }

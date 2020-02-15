@@ -53,6 +53,7 @@ import android.content.pm.ParceledListSlice;
 import android.content.pm.ProviderInfo;
 import android.content.pm.UserInfo;
 import android.content.res.Configuration;
+import android.content.LocusId;
 import android.graphics.Bitmap;
 import android.graphics.GraphicBuffer;
 import android.graphics.Point;
@@ -286,7 +287,7 @@ interface IActivityManager {
     void killApplicationProcess(in String processName, int uid);
     // Special low-level communication with activity manager.
     boolean handleApplicationWtf(in IBinder app, in String tag, boolean system,
-            in ApplicationErrorReport.ParcelableCrashInfo crashInfo);
+            in ApplicationErrorReport.ParcelableCrashInfo crashInfo, int immediateCallerPid);
     @UnsupportedAppUsage
     void killBackgroundProcesses(in String packageName, int userId);
     boolean isUserAMonkey();
@@ -302,8 +303,13 @@ interface IActivityManager {
     boolean isTopActivityImmersive();
     void crashApplication(int uid, int initialPid, in String packageName, int userId,
             in String message, boolean force);
-    @UnsupportedAppUsage
+    /** @deprecated -- use getProviderMimeTypeAsync */
+    @UnsupportedAppUsage(maxTargetSdk = 29, publicAlternatives =
+            "Use {@link android.content.ContentResolver#getType} public API instead.")
     String getProviderMimeType(in Uri uri, int userId);
+
+    oneway void getProviderMimeTypeAsync(in Uri uri, int userId, in RemoteCallback resultCallback);
+
     // Cause the specified process to dump the specified heap.
     boolean dumpHeap(in String process, int userId, boolean managed, boolean mallocInfo,
             boolean runGc, in String path, in ParcelFileDescriptor fd,
@@ -637,4 +643,13 @@ interface IActivityManager {
      * and the given process is imperceptible.
      */
     void killProcessesWhenImperceptible(in int[] pids, String reason);
+
+    /**
+     * Set locus context for a given activity.
+     * @param activity
+     * @param locusId a unique, stable id that identifies this activity instance from others.
+     * @param appToken ActivityRecord's appToken.
+     */
+    void setActivityLocusContext(in ComponentName activity, in LocusId locusId,
+            in IBinder appToken);
 }

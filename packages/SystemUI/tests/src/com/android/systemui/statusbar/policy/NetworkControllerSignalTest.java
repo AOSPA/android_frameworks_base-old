@@ -36,7 +36,6 @@ import android.test.suitebuilder.annotation.SmallTest;
 import android.testing.AndroidTestingRunner;
 import android.testing.TestableLooper.RunWithLooper;
 
-import com.android.internal.telephony.TelephonyIntents;
 import com.android.settingslib.graph.SignalDrawable;
 import com.android.settingslib.net.DataUsageController;
 import com.android.systemui.R;
@@ -137,7 +136,7 @@ public class NetworkControllerSignalTest extends NetworkControllerBaseTest {
     @Test
     public void testSignalStrength() {
         for (int testStrength = 0;
-                testStrength < SignalStrength.NUM_SIGNAL_STRENGTH_BINS; testStrength++) {
+                testStrength < CellSignalStrength.getNumSignalStrengthLevels(); testStrength++) {
             setupDefaultSignal();
             setLevel(testStrength);
 
@@ -154,7 +153,7 @@ public class NetworkControllerSignalTest extends NetworkControllerBaseTest {
     @Test
     public void testCdmaSignalStrength() {
         for (int testStrength = 0;
-                testStrength < SignalStrength.NUM_SIGNAL_STRENGTH_BINS; testStrength++) {
+                testStrength < CellSignalStrength.getNumSignalStrengthLevels(); testStrength++) {
             setupDefaultSignal();
             setCdma();
             setLevel(testStrength);
@@ -168,7 +167,7 @@ public class NetworkControllerSignalTest extends NetworkControllerBaseTest {
     @Test
     public void testSignalRoaming() {
         for (int testStrength = 0;
-                testStrength < SignalStrength.NUM_SIGNAL_STRENGTH_BINS; testStrength++) {
+                testStrength < CellSignalStrength.getNumSignalStrengthLevels(); testStrength++) {
             setupDefaultSignal();
             setGsmRoaming(true);
             setLevel(testStrength);
@@ -411,13 +410,13 @@ public class NetworkControllerSignalTest extends NetworkControllerBaseTest {
             boolean showPlmn, String plmn) {
 
         Intent intent = new Intent();
-        intent.setAction(TelephonyIntents.SPN_STRINGS_UPDATED_ACTION);
+        intent.setAction(TelephonyManager.ACTION_SERVICE_PROVIDERS_UPDATED);
 
-        intent.putExtra(TelephonyIntents.EXTRA_SHOW_SPN, showSpn);
-        intent.putExtra(TelephonyIntents.EXTRA_SPN, spn);
+        intent.putExtra(TelephonyManager.EXTRA_SHOW_SPN, showSpn);
+        intent.putExtra(TelephonyManager.EXTRA_SPN, spn);
 
-        intent.putExtra(TelephonyIntents.EXTRA_SHOW_PLMN, showPlmn);
-        intent.putExtra(TelephonyIntents.EXTRA_PLMN, plmn);
+        intent.putExtra(TelephonyManager.EXTRA_SHOW_PLMN, showPlmn);
+        intent.putExtra(TelephonyManager.EXTRA_PLMN, plmn);
         SubscriptionManager.putSubscriptionIdExtra(intent, mSubId);
 
         return intent;
@@ -495,7 +494,7 @@ public class NetworkControllerSignalTest extends NetworkControllerBaseTest {
 
       // Carrier network change is true, show special indicator
       verifyLastMobileDataIndicators(true /* visible */,
-              SignalDrawable.getCarrierChangeState(SignalStrength.NUM_SIGNAL_STRENGTH_BINS),
+              SignalDrawable.getCarrierChangeState(CellSignalStrength.getNumSignalStrengthLevels()),
               0 /* typeIcon */);
 
       // Revert back
@@ -526,7 +525,7 @@ public class NetworkControllerSignalTest extends NetworkControllerBaseTest {
 
       // Carrier network change is true, show special indicator, no roaming.
       verifyLastMobileDataIndicators(true /* visible */,
-              SignalDrawable.getCarrierChangeState(SignalStrength.NUM_SIGNAL_STRENGTH_BINS),
+              SignalDrawable.getCarrierChangeState(CellSignalStrength.getNumSignalStrengthLevels()),
               0 /* typeIcon */,
               false /* roaming */);
 
@@ -558,7 +557,7 @@ public class NetworkControllerSignalTest extends NetworkControllerBaseTest {
 
       // Carrier network change is true, show special indicator, no roaming.
       verifyLastMobileDataIndicators(true /* visible */,
-              SignalDrawable.getCarrierChangeState(SignalStrength.NUM_SIGNAL_STRENGTH_BINS),
+              SignalDrawable.getCarrierChangeState(CellSignalStrength.getNumSignalStrengthLevels()),
               0 /* typeIcon */,
               false /* roaming */);
 
@@ -566,7 +565,7 @@ public class NetworkControllerSignalTest extends NetworkControllerBaseTest {
 
       // Roaming should not show.
       verifyLastMobileDataIndicators(true /* visible */,
-              SignalDrawable.getCarrierChangeState(SignalStrength.NUM_SIGNAL_STRENGTH_BINS),
+              SignalDrawable.getCarrierChangeState(CellSignalStrength.getNumSignalStrengthLevels()),
               0 /* typeIcon */,
               false /* roaming */);
 

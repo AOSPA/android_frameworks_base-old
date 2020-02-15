@@ -18,10 +18,23 @@ package android.net;
 
 import android.annotation.IntDef;
 import android.annotation.NonNull;
+import android.annotation.Nullable;
+import android.annotation.StringDef;
+import android.content.Context;
+import android.os.Binder;
+import android.os.Parcel;
+import android.os.Parcelable;
 import android.os.PersistableBundle;
+import android.os.RemoteException;
+
+import com.android.internal.annotations.VisibleForTesting;
+import com.android.internal.util.Preconditions;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
+import java.util.Map;
+import java.util.Objects;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
 
 /**
@@ -47,38 +60,174 @@ import java.util.concurrent.Executor;
  * </ul>
  */
 public class ConnectivityDiagnosticsManager {
-    public static final int DETECTION_METHOD_DNS_EVENTS = 1;
-    public static final int DETECTION_METHOD_TCP_METRICS = 2;
+    /** @hide */
+    @VisibleForTesting
+    public static final Map<ConnectivityDiagnosticsCallback, ConnectivityDiagnosticsBinder>
+            sCallbacks = new ConcurrentHashMap<>();
+
+    private final Context mContext;
+    private final IConnectivityManager mService;
 
     /** @hide */
-    @Retention(RetentionPolicy.SOURCE)
-    @IntDef(
-            prefix = {"DETECTION_METHOD_"},
-            value = {DETECTION_METHOD_DNS_EVENTS, DETECTION_METHOD_TCP_METRICS})
-    public @interface DetectionMethod {}
+    public ConnectivityDiagnosticsManager(Context context, IConnectivityManager service) {
+        mContext = Preconditions.checkNotNull(context, "missing context");
+        mService = Preconditions.checkNotNull(service, "missing IConnectivityManager");
+    }
 
     /** @hide */
-    public ConnectivityDiagnosticsManager() {}
+    @VisibleForTesting
+    public static boolean persistableBundleEquals(
+            @Nullable PersistableBundle a, @Nullable PersistableBundle b) {
+        if (a == b) return true;
+        if (a == null || b == null) return false;
+        if (!Objects.equals(a.keySet(), b.keySet())) return false;
+        for (String key : a.keySet()) {
+            if (!Objects.equals(a.get(key), b.get(key))) return false;
+        }
+        return true;
+    }
 
     /** Class that includes connectivity information for a specific Network at a specific time. */
-    public static class ConnectivityReport {
+    public static final class ConnectivityReport implements Parcelable {
+        /**
+         * The overall status of the network is that it is invalid; it neither provides
+         * connectivity nor has been exempted from validation.
+         */
+        public static final int NETWORK_VALIDATION_RESULT_INVALID = 0;
+
+        /**
+         * The overall status of the network is that it is valid, this may be because it provides
+         * full Internet access (all probes succeeded), or because other properties of the network
+         * caused probes not to be run.
+         */
+        // TODO: link to INetworkMonitor.NETWORK_VALIDATION_RESULT_VALID
+        public static final int NETWORK_VALIDATION_RESULT_VALID = 1;
+
+        /**
+         * The overall status of the network is that it provides partial connectivity; some
+         * probed services succeeded but others failed.
+         */
+        // TODO: link to INetworkMonitor.NETWORK_VALIDATION_RESULT_PARTIAL;
+        public static final int NETWORK_VALIDATION_RESULT_PARTIALLY_VALID = 2;
+
+        /**
+         * Due to the properties of the network, validation was not performed.
+         */
+        public static final int NETWORK_VALIDATION_RESULT_SKIPPED = 3;
+
+        /** @hide */
+        @IntDef(
+                prefix = {"NETWORK_VALIDATION_RESULT_"},
+                value = {
+                        NETWORK_VALIDATION_RESULT_INVALID,
+                        NETWORK_VALIDATION_RESULT_VALID,
+                        NETWORK_VALIDATION_RESULT_PARTIALLY_VALID,
+                        NETWORK_VALIDATION_RESULT_SKIPPED
+                })
+        @Retention(RetentionPolicy.SOURCE)
+        public @interface NetworkValidationResult {}
+
+        /**
+         * The overall validation result for the Network being reported on.
+         *
+         * <p>The possible values for this key are:
+         * {@link #NETWORK_VALIDATION_RESULT_INVALID},
+         * {@link #NETWORK_VALIDATION_RESULT_VALID},
+         * {@link #NETWORK_VALIDATION_RESULT_PARTIALLY_VALID},
+         * {@link #NETWORK_VALIDATION_RESULT_SKIPPED}.
+         *
+         * @see android.net.NetworkCapabilities#CAPABILITY_VALIDATED
+         */
+        @NetworkValidationResult
+        public static final String KEY_NETWORK_VALIDATION_RESULT = "networkValidationResult";
+
+        /** DNS probe. */
+        // TODO: link to INetworkMonitor.NETWORK_VALIDATION_PROBE_DNS
+        public static final int NETWORK_PROBE_DNS = 0x04;
+
+        /** HTTP probe. */
+        // TODO: link to INetworkMonitor.NETWORK_VALIDATION_PROBE_HTTP
+        public static final int NETWORK_PROBE_HTTP = 0x08;
+
+        /** HTTPS probe. */
+        // TODO: link to INetworkMonitor.NETWORK_VALIDATION_PROBE_HTTPS;
+        public static final int NETWORK_PROBE_HTTPS = 0x10;
+
+        /** Captive portal fallback probe. */
+        // TODO: link to INetworkMonitor.NETWORK_VALIDATION_FALLBACK
+        public static final int NETWORK_PROBE_FALLBACK = 0x20;
+
+        /** Private DNS (DNS over TLS) probd. */
+        // TODO: link to INetworkMonitor.NETWORK_VALIDATION_PROBE_PRIVDNS
+        public static final int NETWORK_PROBE_PRIVATE_DNS = 0x40;
+
+        /** @hide */
+        @IntDef(
+                prefix = {"NETWORK_PROBE_"},
+                value = {
+                        NETWORK_PROBE_DNS,
+                        NETWORK_PROBE_HTTP,
+                        NETWORK_PROBE_HTTPS,
+                        NETWORK_PROBE_FALLBACK,
+                        NETWORK_PROBE_PRIVATE_DNS
+                })
+        @Retention(RetentionPolicy.SOURCE)
+        public @interface NetworkProbe {}
+
+        /**
+         * A bitmask of network validation probes that succeeded.
+         *
+         * <p>The possible bits values reported by this key are:
+         * {@link #NETWORK_PROBE_DNS},
+         * {@link #NETWORK_PROBE_HTTP},
+         * {@link #NETWORK_PROBE_HTTPS},
+         * {@link #NETWORK_PROBE_FALLBACK},
+         * {@link #NETWORK_PROBE_PRIVATE_DNS}.
+         */
+        @NetworkProbe
+        public static final String KEY_NETWORK_PROBES_SUCCEEDED_BITMASK =
+                "networkProbesSucceeded";
+
+        /**
+         * A bitmask of network validation probes that were attempted.
+         *
+         * <p>These probes may have failed or may be incomplete at the time of this report.
+         *
+         * <p>The possible bits values reported by this key are:
+         * {@link #NETWORK_PROBE_DNS},
+         * {@link #NETWORK_PROBE_HTTP},
+         * {@link #NETWORK_PROBE_HTTPS},
+         * {@link #NETWORK_PROBE_FALLBACK},
+         * {@link #NETWORK_PROBE_PRIVATE_DNS}.
+         */
+        @NetworkProbe
+        public static final String KEY_NETWORK_PROBES_ATTEMPTED_BITMASK =
+                "networkProbesAttemped";
+
+        /** @hide */
+        @StringDef(prefix = {"KEY_"}, value = {
+                KEY_NETWORK_VALIDATION_RESULT, KEY_NETWORK_PROBES_SUCCEEDED_BITMASK,
+                KEY_NETWORK_PROBES_ATTEMPTED_BITMASK})
+        @Retention(RetentionPolicy.SOURCE)
+        public @interface ConnectivityReportBundleKeys {}
+
         /** The Network for which this ConnectivityReport applied */
-        @NonNull public final Network network;
+        @NonNull private final Network mNetwork;
 
         /**
          * The timestamp for the report. The timestamp is taken from {@link
          * System#currentTimeMillis}.
          */
-        public final long reportTimestamp;
+        private final long mReportTimestamp;
 
         /** LinkProperties available on the Network at the reported timestamp */
-        @NonNull public final LinkProperties linkProperties;
+        @NonNull private final LinkProperties mLinkProperties;
 
         /** NetworkCapabilities available on the Network at the reported timestamp */
-        @NonNull public final NetworkCapabilities networkCapabilities;
+        @NonNull private final NetworkCapabilities mNetworkCapabilities;
 
         /** PersistableBundle that may contain additional info about the report */
-        @NonNull public final PersistableBundle additionalInfo;
+        @NonNull private final PersistableBundle mAdditionalInfo;
 
         /**
          * Constructor for ConnectivityReport.
@@ -101,30 +250,191 @@ public class ConnectivityDiagnosticsManager {
                 @NonNull LinkProperties linkProperties,
                 @NonNull NetworkCapabilities networkCapabilities,
                 @NonNull PersistableBundle additionalInfo) {
-            this.network = network;
-            this.reportTimestamp = reportTimestamp;
-            this.linkProperties = linkProperties;
-            this.networkCapabilities = networkCapabilities;
-            this.additionalInfo = additionalInfo;
+            mNetwork = network;
+            mReportTimestamp = reportTimestamp;
+            mLinkProperties = linkProperties;
+            mNetworkCapabilities = networkCapabilities;
+            mAdditionalInfo = additionalInfo;
         }
+
+        /**
+         * Returns the Network for this ConnectivityReport.
+         *
+         * @return The Network for which this ConnectivityReport applied
+         */
+        @NonNull
+        public Network getNetwork() {
+            return mNetwork;
+        }
+
+        /**
+         * Returns the epoch timestamp (milliseconds) for when this report was taken.
+         *
+         * @return The timestamp for the report. Taken from {@link System#currentTimeMillis}.
+         */
+        public long getReportTimestamp() {
+            return mReportTimestamp;
+        }
+
+        /**
+         * Returns the LinkProperties available when this report was taken.
+         *
+         * @return LinkProperties available on the Network at the reported timestamp
+         */
+        @NonNull
+        public LinkProperties getLinkProperties() {
+            return new LinkProperties(mLinkProperties);
+        }
+
+        /**
+         * Returns the NetworkCapabilities when this report was taken.
+         *
+         * @return NetworkCapabilities available on the Network at the reported timestamp
+         */
+        @NonNull
+        public NetworkCapabilities getNetworkCapabilities() {
+            return new NetworkCapabilities(mNetworkCapabilities);
+        }
+
+        /**
+         * Returns a PersistableBundle with additional info for this report.
+         *
+         * @return PersistableBundle that may contain additional info about the report
+         */
+        @NonNull
+        public PersistableBundle getAdditionalInfo() {
+            return new PersistableBundle(mAdditionalInfo);
+        }
+
+        @Override
+        public boolean equals(@Nullable Object o) {
+            if (this == o) return true;
+            if (!(o instanceof ConnectivityReport)) return false;
+            final ConnectivityReport that = (ConnectivityReport) o;
+
+            // PersistableBundle is optimized to avoid unparcelling data unless fields are
+            // referenced. Because of this, use {@link ConnectivityDiagnosticsManager#equals} over
+            // {@link PersistableBundle#kindofEquals}.
+            return mReportTimestamp == that.mReportTimestamp
+                    && mNetwork.equals(that.mNetwork)
+                    && mLinkProperties.equals(that.mLinkProperties)
+                    && mNetworkCapabilities.equals(that.mNetworkCapabilities)
+                    && persistableBundleEquals(mAdditionalInfo, that.mAdditionalInfo);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(
+                    mNetwork,
+                    mReportTimestamp,
+                    mLinkProperties,
+                    mNetworkCapabilities,
+                    mAdditionalInfo);
+        }
+
+        /** {@inheritDoc} */
+        @Override
+        public int describeContents() {
+            return 0;
+        }
+
+        /** {@inheritDoc} */
+        @Override
+        public void writeToParcel(@NonNull Parcel dest, int flags) {
+            dest.writeParcelable(mNetwork, flags);
+            dest.writeLong(mReportTimestamp);
+            dest.writeParcelable(mLinkProperties, flags);
+            dest.writeParcelable(mNetworkCapabilities, flags);
+            dest.writeParcelable(mAdditionalInfo, flags);
+        }
+
+        /** Implement the Parcelable interface */
+        public static final @NonNull Creator<ConnectivityReport> CREATOR =
+                new Creator<ConnectivityReport>() {
+                    public ConnectivityReport createFromParcel(Parcel in) {
+                        return new ConnectivityReport(
+                                in.readParcelable(null),
+                                in.readLong(),
+                                in.readParcelable(null),
+                                in.readParcelable(null),
+                                in.readParcelable(null));
+                    }
+
+                    public ConnectivityReport[] newArray(int size) {
+                        return new ConnectivityReport[size];
+                    }
+                };
     }
 
     /** Class that includes information for a suspected data stall on a specific Network */
-    public static class DataStallReport {
+    public static final class DataStallReport implements Parcelable {
+        public static final int DETECTION_METHOD_DNS_EVENTS = 1;
+        public static final int DETECTION_METHOD_TCP_METRICS = 2;
+
+        /** @hide */
+        @Retention(RetentionPolicy.SOURCE)
+        @IntDef(
+                prefix = {"DETECTION_METHOD_"},
+                value = {DETECTION_METHOD_DNS_EVENTS, DETECTION_METHOD_TCP_METRICS})
+        public @interface DetectionMethod {}
+
+        /**
+         * This key represents the period in milliseconds over which other included TCP metrics
+         * were measured.
+         *
+         * <p>This key will be included if the data stall detection method is
+         * {@link #DETECTION_METHOD_TCP_METRICS}.
+         *
+         * <p>This value is an int.
+         */
+        public static final String KEY_TCP_METRICS_COLLECTION_PERIOD_MILLIS =
+                "tcpMetricsCollectionPeriodMillis";
+
+        /**
+         * This key represents the fail rate of TCP packets when the suspected data stall was
+         * detected.
+         *
+         * <p>This key will be included if the data stall detection method is
+         * {@link #DETECTION_METHOD_TCP_METRICS}.
+         *
+         * <p>This value is an int percentage between 0 and 100.
+         */
+        public static final String KEY_TCP_PACKET_FAIL_RATE = "tcpPacketFailRate";
+
+        /**
+         * This key represents the consecutive number of DNS timeouts that have occurred.
+         *
+         * <p>The consecutive count will be reset any time a DNS response is received.
+         *
+         * <p>This key will be included if the data stall detection method is
+         * {@link #DETECTION_METHOD_DNS_EVENTS}.
+         *
+         * <p>This value is an int.
+         */
+        public static final String KEY_DNS_CONSECUTIVE_TIMEOUTS = "dnsConsecutiveTimeouts";
+
+        /** @hide */
+        @Retention(RetentionPolicy.SOURCE)
+        @StringDef(prefix = {"KEY_"}, value = {
+                KEY_TCP_PACKET_FAIL_RATE,
+                KEY_DNS_CONSECUTIVE_TIMEOUTS
+        })
+        public @interface DataStallReportBundleKeys {}
+
         /** The Network for which this DataStallReport applied */
-        @NonNull public final Network network;
+        @NonNull private final Network mNetwork;
 
         /**
          * The timestamp for the report. The timestamp is taken from {@link
          * System#currentTimeMillis}.
          */
-        public final long reportTimestamp;
+        private long mReportTimestamp;
 
         /** The detection method used to identify the suspected data stall */
-        @DetectionMethod public final int detectionMethod;
+        @DetectionMethod private final int mDetectionMethod;
 
         /** PersistableBundle that may contain additional information on the suspected data stall */
-        @NonNull public final PersistableBundle stallDetails;
+        @NonNull private final PersistableBundle mStallDetails;
 
         /**
          * Constructor for DataStallReport.
@@ -143,10 +453,150 @@ public class ConnectivityDiagnosticsManager {
                 long reportTimestamp,
                 @DetectionMethod int detectionMethod,
                 @NonNull PersistableBundle stallDetails) {
-            this.network = network;
-            this.reportTimestamp = reportTimestamp;
-            this.detectionMethod = detectionMethod;
-            this.stallDetails = stallDetails;
+            mNetwork = network;
+            mReportTimestamp = reportTimestamp;
+            mDetectionMethod = detectionMethod;
+            mStallDetails = stallDetails;
+        }
+
+        /**
+         * Returns the Network for this DataStallReport.
+         *
+         * @return The Network for which this DataStallReport applied
+         */
+        @NonNull
+        public Network getNetwork() {
+            return mNetwork;
+        }
+
+        /**
+         * Returns the epoch timestamp (milliseconds) for when this report was taken.
+         *
+         * @return The timestamp for the report. Taken from {@link System#currentTimeMillis}.
+         */
+        public long getReportTimestamp() {
+            return mReportTimestamp;
+        }
+
+        /**
+         * Returns the detection method used to identify this suspected data stall.
+         *
+         * @return The detection method used to identify the suspected data stall
+         */
+        public int getDetectionMethod() {
+            return mDetectionMethod;
+        }
+
+        /**
+         * Returns a PersistableBundle with additional info for this report.
+         *
+         * <p>Gets a bundle with details about the suspected data stall including information
+         * specific to the monitoring method that detected the data stall.
+         *
+         * @return PersistableBundle that may contain additional information on the suspected data
+         *     stall
+         */
+        @NonNull
+        public PersistableBundle getStallDetails() {
+            return new PersistableBundle(mStallDetails);
+        }
+
+        @Override
+        public boolean equals(@Nullable Object o) {
+            if (this == o) return true;
+            if (!(o instanceof DataStallReport)) return false;
+            final DataStallReport that = (DataStallReport) o;
+
+            // PersistableBundle is optimized to avoid unparcelling data unless fields are
+            // referenced. Because of this, use {@link ConnectivityDiagnosticsManager#equals} over
+            // {@link PersistableBundle#kindofEquals}.
+            return mReportTimestamp == that.mReportTimestamp
+                    && mDetectionMethod == that.mDetectionMethod
+                    && mNetwork.equals(that.mNetwork)
+                    && persistableBundleEquals(mStallDetails, that.mStallDetails);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(mNetwork, mReportTimestamp, mDetectionMethod, mStallDetails);
+        }
+
+        /** {@inheritDoc} */
+        @Override
+        public int describeContents() {
+            return 0;
+        }
+
+        /** {@inheritDoc} */
+        @Override
+        public void writeToParcel(@NonNull Parcel dest, int flags) {
+            dest.writeParcelable(mNetwork, flags);
+            dest.writeLong(mReportTimestamp);
+            dest.writeInt(mDetectionMethod);
+            dest.writeParcelable(mStallDetails, flags);
+        }
+
+        /** Implement the Parcelable interface */
+        public static final @NonNull Creator<DataStallReport> CREATOR =
+                new Creator<DataStallReport>() {
+                    public DataStallReport createFromParcel(Parcel in) {
+                        return new DataStallReport(
+                                in.readParcelable(null),
+                                in.readLong(),
+                                in.readInt(),
+                                in.readParcelable(null));
+                    }
+
+                    public DataStallReport[] newArray(int size) {
+                        return new DataStallReport[size];
+                    }
+                };
+    }
+
+    /** @hide */
+    @VisibleForTesting
+    public static class ConnectivityDiagnosticsBinder
+            extends IConnectivityDiagnosticsCallback.Stub {
+        @NonNull private final ConnectivityDiagnosticsCallback mCb;
+        @NonNull private final Executor mExecutor;
+
+        /** @hide */
+        @VisibleForTesting
+        public ConnectivityDiagnosticsBinder(
+                @NonNull ConnectivityDiagnosticsCallback cb, @NonNull Executor executor) {
+            this.mCb = cb;
+            this.mExecutor = executor;
+        }
+
+        /** @hide */
+        @VisibleForTesting
+        public void onConnectivityReport(@NonNull ConnectivityReport report) {
+            Binder.withCleanCallingIdentity(() -> {
+                mExecutor.execute(() -> {
+                    mCb.onConnectivityReport(report);
+                });
+            });
+        }
+
+        /** @hide */
+        @VisibleForTesting
+        public void onDataStallSuspected(@NonNull DataStallReport report) {
+            Binder.withCleanCallingIdentity(() -> {
+                mExecutor.execute(() -> {
+                    mCb.onDataStallSuspected(report);
+                });
+            });
+        }
+
+        /** @hide */
+        @VisibleForTesting
+        public void onNetworkConnectivityReported(
+                @NonNull Network network, boolean hasConnectivity) {
+            Binder.withCleanCallingIdentity(() -> {
+                mExecutor.execute(() -> {
+                    mCb.onNetworkConnectivityReported(network, hasConnectivity);
+                });
+            });
         }
     }
 
@@ -189,8 +639,9 @@ public class ConnectivityDiagnosticsManager {
     /**
      * Registers a ConnectivityDiagnosticsCallback with the System.
      *
-     * <p>Only apps that offer network connectivity to the user are allowed to register callbacks.
-     * This includes:
+     * <p>Only apps that offer network connectivity to the user should be registering callbacks.
+     * These are the only apps whose callbacks will be invoked by the system. Apps considered to
+     * meet these conditions include:
      *
      * <ul>
      *   <li>Carrier apps with active subscriptions
@@ -198,15 +649,14 @@ public class ConnectivityDiagnosticsManager {
      *   <li>WiFi Suggesters
      * </ul>
      *
-     * <p>Callbacks will be limited to receiving notifications for networks over which apps provide
-     * connectivity.
+     * <p>Callbacks registered by apps not meeting the above criteria will not be invoked.
      *
      * <p>If a registering app loses its relevant permissions, any callbacks it registered will
      * silently stop receiving callbacks.
      *
-     * <p>Each register() call <b>MUST</b> use a unique ConnectivityDiagnosticsCallback instance. If
-     * a single instance is registered with multiple NetworkRequests, an IllegalArgumentException
-     * will be thrown.
+     * <p>Each register() call <b>MUST</b> use a ConnectivityDiagnosticsCallback instance that is
+     * not currently registered. If a ConnectivityDiagnosticsCallback instance is registered with
+     * multiple NetworkRequests, an IllegalArgumentException will be thrown.
      *
      * @param request The NetworkRequest that will be used to match with Networks for which
      *     callbacks will be fired
@@ -215,15 +665,21 @@ public class ConnectivityDiagnosticsManager {
      *     System
      * @throws IllegalArgumentException if the same callback instance is registered with multiple
      *     NetworkRequests
-     * @throws SecurityException if the caller does not have appropriate permissions to register a
-     *     callback
      */
     public void registerConnectivityDiagnosticsCallback(
             @NonNull NetworkRequest request,
             @NonNull Executor e,
             @NonNull ConnectivityDiagnosticsCallback callback) {
-        // TODO(b/143187964): implement ConnectivityDiagnostics functionality
-        throw new UnsupportedOperationException("registerCallback() not supported yet");
+        final ConnectivityDiagnosticsBinder binder = new ConnectivityDiagnosticsBinder(callback, e);
+        if (sCallbacks.putIfAbsent(callback, binder) != null) {
+            throw new IllegalArgumentException("Callback is currently registered");
+        }
+
+        try {
+            mService.registerConnectivityDiagnosticsCallback(binder, request);
+        } catch (RemoteException exception) {
+            exception.rethrowFromSystemServer();
+        }
     }
 
     /**
@@ -236,7 +692,15 @@ public class ConnectivityDiagnosticsManager {
      */
     public void unregisterConnectivityDiagnosticsCallback(
             @NonNull ConnectivityDiagnosticsCallback callback) {
-        // TODO(b/143187964): implement ConnectivityDiagnostics functionality
-        throw new UnsupportedOperationException("registerCallback() not supported yet");
+        // unconditionally removing from sCallbacks prevents race conditions here, since remove() is
+        // atomic.
+        final ConnectivityDiagnosticsBinder binder = sCallbacks.remove(callback);
+        if (binder == null) return;
+
+        try {
+            mService.unregisterConnectivityDiagnosticsCallback(binder);
+        } catch (RemoteException exception) {
+            exception.rethrowFromSystemServer();
+        }
     }
 }
