@@ -280,7 +280,7 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
         MapProfile MapProfile = mProfileManager.getMapProfile();
         if (MapProfile != null && isConnectedProfile(MapProfile))
         {
-            MapProfile.disconnect(mDevice);
+            MapProfile.setEnabled(mDevice, false);
         }
     }
 
