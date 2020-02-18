@@ -28,11 +28,16 @@ import android.graphics.Paint;
 import android.graphics.PixelFormat;
 import android.graphics.PorterDuff;
 import android.graphics.Point;
+<<<<<<< HEAD
 import android.hardware.biometrics.BiometricConstants;
 import android.hardware.biometrics.BiometricSourceType;
 import android.hardware.display.DisplayManager;
+=======
+import android.graphics.PorterDuff;
+>>>>>>> 59dd1586fe2d... FODCircleView: Always enable hbm
 import android.os.Handler;
 import android.os.Looper;
+import android.os.Message;
 import android.os.RemoteException;
 import android.os.UserHandle;
 import android.provider.Settings;
@@ -57,6 +62,7 @@ import java.util.NoSuchElementException;
 import java.util.Timer;
 import java.util.TimerTask;
 
+<<<<<<< HEAD
 public class FODCircleView extends ImageView {
 
     private final int[][] BRIGHTNESS_ALPHA_ARRAY = {
@@ -81,6 +87,11 @@ public class FODCircleView extends ImageView {
     };
 
     private static final int FADE_ANIM_DURATION = 250;
+=======
+public class FODCircleView extends ImageView implements Handler.Callback {
+    private final int MSG_HBM_OFF = 1001;
+    private final int MSG_HBM_ON = 1002;
+>>>>>>> 59dd1586fe2d... FODCircleView: Always enable hbm
 
     private final int mPositionX;
     private final int mPositionY;
@@ -98,6 +109,7 @@ public class FODCircleView extends ImageView {
 
     private IFingerprintInscreen mFingerprintInscreenDaemon;
 
+    private int mCurDim;
     private int mDreamingOffsetX;
     private int mDreamingOffsetY;
 
@@ -105,7 +117,14 @@ public class FODCircleView extends ImageView {
     private int mColor;
     private int mColorBackground;
 
+<<<<<<< HEAD
     private boolean mFading;
+=======
+    private int mHbmOffDelay;
+    private int mHbmOnDelay;
+    private boolean mSupportsAlwaysOnHbm;
+
+>>>>>>> 59dd1586fe2d... FODCircleView: Always enable hbm
     private boolean mIsBouncer;
     private boolean mIsDreaming;
     private boolean mIsCircleShowing;
@@ -245,11 +264,19 @@ public class FODCircleView extends ImageView {
             throw new RuntimeException("Unable to get IFingerprintInscreen");
         }
 
+        vendor.lineage.biometrics.fingerprint.inscreen.V1_1.IFingerprintInscreen daemon_v1_1 =
+                getFingerprintInScreenDaemonV1_1(daemon);
+
         try {
             mShouldBoostBrightness = daemon.shouldBoostBrightness();
             mPositionX = daemon.getPositionX();
             mPositionY = daemon.getPositionY();
             mSize = daemon.getSize();
+            if (daemon_v1_1 != null) {
+                mSupportsAlwaysOnHbm = daemon_v1_1.supportsAlwaysOnHBM();
+                mHbmOnDelay = daemon_v1_1.getHbmOnDelay();
+                mHbmOffDelay = daemon_v1_1.getHbmOffDelay();
+            }
         } catch (RemoteException e) {
             throw new RuntimeException("Failed to retrieve FOD circle position or size");
         }
@@ -275,8 +302,12 @@ public class FODCircleView extends ImageView {
 
         mDreamingMaxOffset = (int) (mSize * 0.1f);
 
+<<<<<<< HEAD
         mHandler = new Handler(Looper.getMainLooper());
         mFODAnimation = new FODAnimation(context, mPositionX, mPositionY);
+=======
+        mHandler = new Handler(Looper.getMainLooper(), this);
+>>>>>>> 59dd1586fe2d... FODCircleView: Always enable hbm
 
         mParams.height = mSize;
         mParams.width = mSize;
@@ -313,8 +344,22 @@ public class FODCircleView extends ImageView {
         mUpdateMonitor = KeyguardUpdateMonitor.getInstance(context);
         mUpdateMonitor.registerCallback(mMonitorCallback);
 
+<<<<<<< HEAD
         mCanUnlockWithFp = canUnlockWithFp();
         setAlpha(getFodAlpha());
+=======
+        getViewTreeObserver().addOnGlobalLayoutListener(() -> {
+            float drawingDimAmount = mParams.dimAmount;
+            if (!mSupportsAlwaysOnHbm) {
+                if (mCurrentDimAmount == 0.0f && drawingDimAmount > 0.0f) {
+                    dispatchPress();
+                    mCurrentDimAmount = drawingDimAmount;
+                } else if (mCurrentDimAmount > 0.0f && drawingDimAmount == 0.0f) {
+                    mCurrentDimAmount = drawingDimAmount;
+                }
+            }
+        });
+>>>>>>> 59dd1586fe2d... FODCircleView: Always enable hbm
     }
 
     @Override
@@ -404,6 +449,17 @@ public class FODCircleView extends ImageView {
         return mFingerprintInscreenDaemon;
     }
 
+    public vendor.lineage.biometrics.fingerprint.inscreen.V1_1.IFingerprintInscreen
+            getFingerprintInScreenDaemonV1_1() {
+        return getFingerprintInScreenDaemonV1_1(getFingerprintInScreenDaemon());
+    }
+
+    public vendor.lineage.biometrics.fingerprint.inscreen.V1_1.IFingerprintInscreen
+            getFingerprintInScreenDaemonV1_1(IFingerprintInscreen daemon) {
+        return vendor.lineage.biometrics.fingerprint.inscreen.V1_1.IFingerprintInscreen.castFrom(
+                   daemon);
+    }
+
     public void dispatchPress() {
         IFingerprintInscreen daemon = getFingerprintInScreenDaemon();
         try {
@@ -440,13 +496,45 @@ public class FODCircleView extends ImageView {
         }
     }
 
+    public void switchHbm(boolean enable) {
+        if (mShouldBoostBrightness) {
+            if (enable) {
+                mParams.screenBrightness = 1.0f;
+            } else {
+                mParams.screenBrightness = 0.0f;
+            }
+            mWindowManager.updateViewLayout(this, mParams);
+        }
+
+        vendor.lineage.biometrics.fingerprint.inscreen.V1_1.IFingerprintInscreen daemon_v1_1 =
+                getFingerprintInScreenDaemonV1_1();
+
+        try {
+            if (daemon_v1_1 != null) {
+                daemon_v1_1.switchHbm(enable);
+            }
+        } catch (RemoteException e) {
+            // do nothing
+        }
+    }
+
     public void showCircle() {
         mIsCircleShowing = true;
 
         setKeepScreenOn(true);
 
+<<<<<<< HEAD
         setDim(true);
         dispatchPress();
+=======
+        if (!mSupportsAlwaysOnHbm) {
+            setDim(true);
+        } else {
+            dispatchPress();
+            setColorFilter(Color.argb(0, 0, 0, 0), PorterDuff.Mode.SRC_ATOP);
+        }
+        updateAlpha();
+>>>>>>> 59dd1586fe2d... FODCircleView: Always enable hbm
 
         setImageDrawable(null);
         updateIconDim();
@@ -461,7 +549,19 @@ public class FODCircleView extends ImageView {
         invalidate();
 
         dispatchRelease();
+<<<<<<< HEAD
         setDim(false);
+=======
+
+        if (!mSupportsAlwaysOnHbm) {
+            setDim(false);
+        } else {
+            setColorFilter(Color.argb(mCurDim, 0, 0, 0),
+                    PorterDuff.Mode.SRC_ATOP);
+            invalidate();
+        }
+        updateAlpha();
+>>>>>>> 59dd1586fe2d... FODCircleView: Always enable hbm
 
         setKeepScreenOn(false);
     }
@@ -483,6 +583,15 @@ public class FODCircleView extends ImageView {
         mIsShowing = true;
 
         updatePosition();
+<<<<<<< HEAD
+=======
+
+        dispatchShow();
+        if (mSupportsAlwaysOnHbm) {
+            setDim(true);
+            mHandler.sendEmptyMessageDelayed(MSG_HBM_ON, mHbmOnDelay);
+        }
+>>>>>>> 59dd1586fe2d... FODCircleView: Always enable hbm
         setVisibility(View.VISIBLE);
 
         if (!mCanUnlockWithFp && !mIsDreaming) {
@@ -505,6 +614,19 @@ public class FODCircleView extends ImageView {
     }
 
     public void hide() {
+<<<<<<< HEAD
+=======
+        mIsShowing = false;
+
+        if (mSupportsAlwaysOnHbm) {
+            mHandler.sendEmptyMessageDelayed(MSG_HBM_OFF, mHbmOffDelay);
+            if (mHandler.hasMessages(MSG_HBM_ON)) {
+                mHandler.removeMessages(MSG_HBM_ON);
+            }
+            setDim(false);
+        }
+        setVisibility(View.GONE);
+>>>>>>> 59dd1586fe2d... FODCircleView: Always enable hbm
         hideCircle();
         dispatchHide();
 
@@ -588,6 +710,7 @@ public class FODCircleView extends ImageView {
                 // do nothing
             }
 
+<<<<<<< HEAD
             if (mShouldBoostBrightness) {
                 mPressedParams.screenBrightness = 1.0f;
             }
@@ -604,6 +727,15 @@ public class FODCircleView extends ImageView {
             if (mPressedView.getParent() != null) {
                 mWindowManager.removeView(mPressedView);
             }
+=======
+            mParams.dimAmount = dimAmount / 255.0f;
+            if (mSupportsAlwaysOnHbm) {
+                mCurDim = dimAmount;
+                setColorFilter(Color.argb(dimAmount, 0, 0, 0), PorterDuff.Mode.SRC_ATOP);
+            }
+        } else {
+            mParams.dimAmount = 0.0f;
+>>>>>>> 59dd1586fe2d... FODCircleView: Always enable hbm
         }
     }
 
@@ -644,6 +776,7 @@ public class FODCircleView extends ImageView {
         }
     };
 
+<<<<<<< HEAD
     private class SettingsObserver extends ContentObserver {
 
         private ContentResolver mCr;
@@ -668,5 +801,19 @@ public class FODCircleView extends ImageView {
                     100);
             updateIconDim();
         }
+=======
+    @Override
+    public boolean handleMessage(Message msg) {
+        switch (msg.what) {
+            case MSG_HBM_OFF: {
+                switchHbm(false);
+            } break;
+            case MSG_HBM_ON: {
+                switchHbm(true);
+            } break;
+
+        }
+        return true;
+>>>>>>> 59dd1586fe2d... FODCircleView: Always enable hbm
     }
 }

@@ -65,6 +65,7 @@ android_library {
         "dagger2-2.19",
         "jsr330",
         "vendor.pa.biometrics.fingerprint.inscreen-V1.0-java",
+        "vendor.pa.biometrics.fingerprint.inscreen-V1.1-java",
     ],
     manifest: "AndroidManifest.xml",
 
@@ -124,7 +125,7 @@ android_library {
         "testables",
         "truth-prebuilt",
         "dagger2-2.19",
-        "jsr330"
+        "jsr330",
     ],
     libs: [
         "android.test.runner",
