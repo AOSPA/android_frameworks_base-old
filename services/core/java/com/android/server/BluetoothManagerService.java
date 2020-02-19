@@ -809,7 +809,6 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
                 if (!mEnableExternal || (st == BluetoothAdapter.STATE_BLE_ON)) {
                     if (DBG) Slog.d(TAG, "Move to BT state OFF");
                     sendBrEdrDownCallback();
-                    mEnableExternal = false;
                 }
             } catch (RemoteException e) {
                 Slog.e(TAG, "", e);
@@ -858,7 +857,6 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
 
                 mBluetooth.onBrEdrDown();
                 mEnable = false;
-                mEnableExternal = false;
             } else if (isBluetoothPersistedStateOnBluetooth() ||
                  mEnableExternal) {
                 // This triggers transition to STATE_ON
