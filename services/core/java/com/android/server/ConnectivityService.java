@@ -108,8 +108,8 @@ import android.net.NetworkWatchlistManager;
 import android.net.PrivateDnsConfigParcel;
 import android.net.ProxyInfo;
 import android.net.RouteInfo;
-import android.net.StringNetworkSpecifier;
 import android.net.SocketKeepalive;
+import android.net.TelephonyNetworkSpecifier;
 import android.net.TetheringManager;
 import android.net.UidRange;
 import android.net.Uri;
@@ -7699,18 +7699,10 @@ public class ConnectivityService extends IConnectivityManager.Stub
     }
 
     private int getIntSpecifier(NetworkSpecifier networkSpecifierObj) {
-        String specifierStr = null;
-        int specifier = -1;
+        int specifier = SubscriptionManager.INVALID_SUBSCRIPTION_ID;
         if (networkSpecifierObj != null
-                && networkSpecifierObj instanceof StringNetworkSpecifier) {
-            specifierStr = ((StringNetworkSpecifier) networkSpecifierObj).specifier;
-        }
-        if (specifierStr != null &&  specifierStr.isEmpty() == false) {
-            try {
-                specifier = Integer.parseInt(specifierStr);
-            } catch (NumberFormatException e) {
-                specifier = -1;
-            }
+                && networkSpecifierObj instanceof TelephonyNetworkSpecifier) {
+            specifier = ((TelephonyNetworkSpecifier) networkSpecifierObj).getSubscriptionId();
         }
         return specifier;
     }
