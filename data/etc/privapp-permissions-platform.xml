@@ -70,6 +70,7 @@ applications that come with the platform
     <privapp-permissions package="com.android.managedprovisioning">
         <permission name="android.permission.CHANGE_COMPONENT_ENABLED_STATE"/>
         <permission name="android.permission.CHANGE_CONFIGURATION"/>
+        <permission name="android.permission.CONFIGURE_INTERACT_ACROSS_PROFILES"/>
         <permission name="android.permission.CRYPT_KEEPER"/>
         <permission name="android.permission.DELETE_PACKAGES"/>
         <permission name="android.permission.INSTALL_PACKAGES"/>
@@ -132,6 +133,7 @@ applications that come with the platform
         <permission name="android.permission.APPROVE_INCIDENT_REPORTS"/>
         <permission name="android.permission.READ_PRIVILEGED_PHONE_STATE" />
         <permission name="android.permission.SUBSTITUTE_NOTIFICATION_APP_NAME" />
+        <permission name="android.permission.PACKAGE_USAGE_STATS" />
     </privapp-permissions>
 
     <privapp-permissions package="com.android.phone">
@@ -168,7 +170,7 @@ applications that come with the platform
         <permission name="android.permission.START_ACTIVITIES_FROM_BACKGROUND"/>
         <permission name="android.permission.STATUS_BAR"/>
         <permission name="android.permission.STOP_APP_SWITCHES"/>
-        <permission name="android.permission.SUGGEST_PHONE_TIME_AND_ZONE"/>
+        <permission name="android.permission.SUGGEST_TELEPHONY_TIME_AND_ZONE"/>
         <permission name="android.permission.UPDATE_APP_OPS_STATS"/>
         <permission name="android.permission.UPDATE_DEVICE_STATS"/>
         <permission name="android.permission.UPDATE_LOCK"/>
@@ -365,6 +367,10 @@ applications that come with the platform
         <permission name="android.permission.CONTROL_INCALL_EXPERIENCE"/>
         <!-- Permission required for Tethering CTS tests. -->
         <permission name="android.permission.TETHER_PRIVILEGED"/>
+        <!-- Permissions required for ganting and logging -->
+        <permission name="android.permission.LOG_COMPAT_CHANGE" />
+        <permission name="android.permission.READ_COMPAT_CHANGE_CONFIG" />
+        <permission name="android.permission.OVERRIDE_COMPAT_CHANGE_CONFIG" />
         <!-- Permissions required to test ambient display. -->
         <permission name="android.permission.READ_DREAM_STATE" />
         <permission name="android.permission.WRITE_DREAM_STATE" />
@@ -373,6 +379,10 @@ applications that come with the platform
         <!-- Permission required for ShortcutManagerUsageTest CTS test. -->
         <permission name="android.permission.ACCESS_SHORTCUTS"/>
         <permission name="android.permission.REBOOT"/>
+        <!-- Permission required for access VIBRATOR_STATE. -->
+        <permission name="android.permission.ACCESS_VIBRATOR_STATE"/>
+        <!-- Permission required for UsageStatsTest CTS test. -->
+        <permission name="android.permission.MANAGE_NOTIFICATIONS"/>
     </privapp-permissions>
 
     <privapp-permissions package="com.android.statementservice">
@@ -400,5 +410,6 @@ applications that come with the platform
     </privapp-permissions>
     <privapp-permissions package="com.android.settings">
         <permission name="android.permission.INSTALL_DYNAMIC_SYSTEM"/>
+        <permission name="android.permission.BIND_CELL_BROADCAST_SERVICE"/>
     </privapp-permissions>
 </permissions>

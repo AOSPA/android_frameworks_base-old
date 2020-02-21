@@ -135,6 +135,7 @@ import android.view.accessibility.AccessibilityNodeInfo;
 import android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction;
 import android.view.accessibility.AccessibilityNodeProvider;
 import android.view.accessibility.AccessibilityWindowInfo;
+import android.view.accessibility.IAccessibilityEmbeddedConnection;
 import android.view.accessibility.IAccessibilityInteractionConnection;
 import android.view.accessibility.IAccessibilityInteractionConnectionCallback;
 import android.view.animation.AccelerateDecelerateInterpolator;
@@ -315,6 +316,8 @@ public final class ViewRootImpl implements ViewParent,
      */
     private boolean mForceNextConfigUpdate;
 
+    private final boolean mUseBLASTAdapter;
+
     /**
      * Signals that compatibility booleans have been initialized according to
      * target SDK versions.
@@ -352,6 +355,8 @@ public final class ViewRootImpl implements ViewParent,
     public final WindowManager.LayoutParams mWindowAttributes = new WindowManager.LayoutParams();
 
     final W mWindow;
+
+    final IBinder mLeashToken;
 
     final int mTargetSdkVersion;
 
@@ -650,6 +655,8 @@ public final class ViewRootImpl implements ViewParent,
 
     private final GestureExclusionTracker mGestureExclusionTracker = new GestureExclusionTracker();
 
+    private IAccessibilityEmbeddedConnection mEmbeddedConnection;
+
     static final class SystemUiVisibilityInfo {
         int seq;
         int globalVisibility;
@@ -685,6 +692,7 @@ public final class ViewRootImpl implements ViewParent,
         mVisRect = new Rect();
         mWinFrame = new Rect();
         mWindow = new W(this);
+        mLeashToken = new Binder();
         mTargetSdkVersion = context.getApplicationInfo().targetSdkVersion;
         mViewVisibility = View.GONE;
         mTransparentRegion = new Region();
@@ -736,6 +744,7 @@ public final class ViewRootImpl implements ViewParent,
 
         loadSystemProperties();
         mImeFocusController = new ImeFocusController(this);
+        mUseBLASTAdapter = WindowManagerGlobal.useBLAST();
     }
 
     public static void addFirstDrawHandler(Runnable callback) {
@@ -863,7 +872,7 @@ public final class ViewRootImpl implements ViewParent,
                 if (mWindowAttributes.packageName == null) {
                     mWindowAttributes.packageName = mBasePackageName;
                 }
-                if (WindowManagerGlobal.USE_BLAST_ADAPTER) {
+                if (mUseBLASTAdapter) {
                     mWindowAttributes.privateFlags |=
                         WindowManager.LayoutParams.PRIVATE_FLAG_USE_BLAST;
                 }
@@ -1343,7 +1352,7 @@ public final class ViewRootImpl implements ViewParent,
             }
             mWindowAttributes.privateFlags |= compatibleWindowFlag;
 
-            if (WindowManagerGlobal.USE_BLAST_ADAPTER) {
+            if (mUseBLASTAdapter) {
                 mWindowAttributes.privateFlags |=
                     WindowManager.LayoutParams.PRIVATE_FLAG_USE_BLAST;
             }
@@ -1746,12 +1755,9 @@ public final class ViewRootImpl implements ViewParent,
         mSurface.release();
         mSurfaceControl.release();
 
-        if (mBlastBufferQueue != null) {
-            mTransaction.remove(mBlastSurfaceControl).apply();
-            mBlastSurfaceControl = null;
-            // We should probably add an explicit dispose.
-            mBlastBufferQueue = null;
-        }
+        mBlastSurfaceControl.release();
+        // We should probably add an explicit dispose.
+        mBlastBufferQueue = null;
     }
 
     /**
@@ -3147,8 +3153,7 @@ public final class ViewRootImpl implements ViewParent,
             }
 
             mAttachInfo.mHasWindowFocus = hasWindowFocus;
-            mAttachInfo.mHasImeFocus = mImeFocusController.updateImeFocusable(
-                    mWindowAttributes, true /* force */);
+            mImeFocusController.updateImeFocusable(mWindowAttributes, true /* force */);
             mImeFocusController.onPreWindowFocus(hasWindowFocus, mWindowAttributes);
 
             if (mView != null) {
@@ -7354,7 +7359,7 @@ public final class ViewRootImpl implements ViewParent,
                 mPendingMergedConfiguration, mSurfaceControl, mTempInsets, mSurfaceSize,
                 mBlastSurfaceControl);
         if (mSurfaceControl.isValid()) {
-            if (!WindowManagerGlobal.USE_BLAST_ADAPTER) {
+            if (!mUseBLASTAdapter) {
                 mSurface.copyFrom(mSurfaceControl);
             } else {
                 mSurface.transferFrom(getOrCreateBLASTSurface(mSurfaceSize.x,
@@ -9166,6 +9171,10 @@ public final class ViewRootImpl implements ViewParent,
                         focusedView.sendAccessibilityEvent(AccessibilityEvent.TYPE_VIEW_FOCUSED);
                     }
                 }
+                if (mAttachInfo.mLeashedParentToken != null) {
+                    mAccessibilityManager.associateEmbeddedHierarchy(
+                            mAttachInfo.mLeashedParentToken, mLeashToken);
+                }
             } else {
                 ensureNoConnection();
                 mHandler.obtainMessage(MSG_CLEAR_ACCESSIBILITY_FOCUS_HOST).sendToTarget();
@@ -9178,6 +9187,7 @@ public final class ViewRootImpl implements ViewParent,
             if (!registered) {
                 mAttachInfo.mAccessibilityWindowId =
                         mAccessibilityManager.addAccessibilityInteractionConnection(mWindow,
+                                mLeashToken,
                                 mContext.getPackageName(),
                                 new AccessibilityInteractionConnection(ViewRootImpl.this));
             }
@@ -9362,6 +9372,17 @@ public final class ViewRootImpl implements ViewParent,
                         .notifyOutsideTouchClientThread();
             }
         }
+    }
+
+    /**
+     * Gets an accessibility embedded connection interface for this ViewRootImpl.
+     * @hide
+     */
+    public IAccessibilityEmbeddedConnection getEmbeddedConnection() {
+        if (mEmbeddedConnection == null) {
+            mEmbeddedConnection = new AccessibilityEmbeddedConnection(ViewRootImpl.this);
+        }
+        return mEmbeddedConnection;
     }
 
     private class SendWindowContentChangedAccessibilityEvent implements Runnable {
@@ -9549,7 +9570,7 @@ public final class ViewRootImpl implements ViewParent,
     }
 
     SurfaceControl getRenderSurfaceControl() {
-        if (WindowManagerGlobal.USE_BLAST_ADAPTER) {
+        if (mUseBLASTAdapter) {
             return mBlastSurfaceControl;
         } else {
             return mSurfaceControl;

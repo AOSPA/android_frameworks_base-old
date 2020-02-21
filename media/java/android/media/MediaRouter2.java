@@ -182,11 +182,16 @@ public class MediaRouter2 {
                 Client2 client = new Client2();
                 try {
                     mMediaRouterService.registerClient2(client, mPackageName);
-                    updateDiscoveryRequestLocked();
-                    mMediaRouterService.setDiscoveryRequest2(client, mDiscoveryPreference);
                     mClient = client;
                 } catch (RemoteException ex) {
-                    Log.e(TAG, "Unable to register media router.", ex);
+                    Log.e(TAG, "registerRouteCallback: Unable to register client.", ex);
+                }
+            }
+            if (mClient != null && updateDiscoveryPreferenceIfNeededLocked()) {
+                try {
+                    mMediaRouterService.setDiscoveryRequest2(mClient, mDiscoveryPreference);
+                } catch (RemoteException ex) {
+                    Log.e(TAG, "registerRouteCallback: Unable to set discovery request.");
                 }
             }
         }
@@ -209,22 +214,37 @@ public class MediaRouter2 {
         }
 
         synchronized (sRouterLock) {
-            if (mRouteCallbackRecords.size() == 0 && mClient != null) {
-                try {
-                    mMediaRouterService.unregisterClient2(mClient);
-                } catch (RemoteException ex) {
-                    Log.e(TAG, "Unable to unregister media router.", ex);
+            if (mClient != null) {
+                if (updateDiscoveryPreferenceIfNeededLocked()) {
+                    try {
+                        mMediaRouterService.setDiscoveryRequest2(mClient, mDiscoveryPreference);
+                    } catch (RemoteException ex) {
+                        Log.e(TAG, "unregisterRouteCallback: Unable to set discovery request.");
+                    }
                 }
-                //TODO: Clean up mRoutes. (onHandler?)
+                if (mRouteCallbackRecords.size() == 0) {
+                    try {
+                        mMediaRouterService.unregisterClient2(mClient);
+                    } catch (RemoteException ex) {
+                        Log.e(TAG, "Unable to unregister media router.", ex);
+                    }
+                }
+                mShouldUpdateRoutes = true;
                 mClient = null;
             }
         }
     }
 
-    private void updateDiscoveryRequestLocked() {
-        mDiscoveryPreference = new RouteDiscoveryPreference.Builder(
+    private boolean updateDiscoveryPreferenceIfNeededLocked() {
+        RouteDiscoveryPreference newDiscoveryPreference = new RouteDiscoveryPreference.Builder(
                 mRouteCallbackRecords.stream().map(record -> record.mPreference).collect(
                         Collectors.toList())).build();
+        if (Objects.equals(mDiscoveryPreference, newDiscoveryPreference)) {
+            return false;
+        }
+        mDiscoveryPreference = newDiscoveryPreference;
+        mShouldUpdateRoutes = true;
+        return true;
     }
 
     /**
@@ -426,7 +446,7 @@ public class MediaRouter2 {
      * @param volume The new volume value between 0 and {@link MediaRoute2Info#getVolumeMax}.
      * @hide
      */
-    public void requestSetVolume(@NonNull MediaRoute2Info route, int volume) {
+    public void setRouteVolume(@NonNull MediaRoute2Info route, int volume) {
         Objects.requireNonNull(route, "route must not be null");
 
         Client2 client;
@@ -435,32 +455,7 @@ public class MediaRouter2 {
         }
         if (client != null) {
             try {
-                mMediaRouterService.requestSetVolume2(client, route, volume);
-            } catch (RemoteException ex) {
-                Log.e(TAG, "Unable to send control request.", ex);
-            }
-        }
-    }
-
-    /**
-     * Requests an incremental volume update  for the route asynchronously.
-     * <p>
-     * It may have no effect if the route is currently not selected.
-     * </p>
-     *
-     * @param delta The delta to add to the current volume.
-     * @hide
-     */
-    public void requestUpdateVolume(@NonNull MediaRoute2Info route, int delta) {
-        Objects.requireNonNull(route, "route must not be null");
-
-        Client2 client;
-        synchronized (sRouterLock) {
-            client = mClient;
-        }
-        if (client != null) {
-            try {
-                mMediaRouterService.requestUpdateVolume2(client, route, delta);
+                mMediaRouterService.setRouteVolume2(client, route, volume);
             } catch (RemoteException ex) {
                 Log.e(TAG, "Unable to send control request.", ex);
             }
@@ -476,7 +471,8 @@ public class MediaRouter2 {
         synchronized (sRouterLock) {
             for (MediaRoute2Info route : routes) {
                 mRoutes.put(route.getId(), route);
-                if (route.hasAnyFeatures(mDiscoveryPreference.getPreferredFeatures())) {
+                if (route.isSystemRoute()
+                        || route.hasAnyFeatures(mDiscoveryPreference.getPreferredFeatures())) {
                     addedRoutes.add(route);
                 }
             }
@@ -492,7 +488,8 @@ public class MediaRouter2 {
         synchronized (sRouterLock) {
             for (MediaRoute2Info route : routes) {
                 mRoutes.remove(route.getId());
-                if (route.hasAnyFeatures(mDiscoveryPreference.getPreferredFeatures())) {
+                if (route.isSystemRoute()
+                        || route.hasAnyFeatures(mDiscoveryPreference.getPreferredFeatures())) {
                     removedRoutes.add(route);
                 }
             }
@@ -508,7 +505,8 @@ public class MediaRouter2 {
         synchronized (sRouterLock) {
             for (MediaRoute2Info route : routes) {
                 mRoutes.put(route.getId(), route);
-                if (route.hasAnyFeatures(mDiscoveryPreference.getPreferredFeatures())) {
+                if (route.isSystemRoute()
+                        || route.hasAnyFeatures(mDiscoveryPreference.getPreferredFeatures())) {
                     changedRoutes.add(route);
                 }
             }
@@ -648,8 +646,8 @@ public class MediaRouter2 {
     private List<MediaRoute2Info> filterRoutes(List<MediaRoute2Info> routes,
             RouteDiscoveryPreference discoveryRequest) {
         return routes.stream()
-                .filter(
-                        route -> route.hasAnyFeatures(discoveryRequest.getPreferredFeatures()))
+                .filter(route -> route.isSystemRoute()
+                        || route.hasAnyFeatures(discoveryRequest.getPreferredFeatures()))
                 .collect(Collectors.toList());
     }
 
@@ -887,6 +885,43 @@ public class MediaRouter2 {
         }
 
         /**
+         * Gets information about how volume is handled on the session.
+         *
+         * @return {@link MediaRoute2Info#PLAYBACK_VOLUME_FIXED} or
+         * {@link MediaRoute2Info#PLAYBACK_VOLUME_VARIABLE}
+         */
+        @MediaRoute2Info.PlaybackVolume
+        public int getVolumeHandling() {
+            synchronized (mControllerLock) {
+                return mSessionInfo.getVolumeHandling();
+            }
+        }
+
+        /**
+         * Gets the maximum volume of the session.
+         */
+        public int getVolumeMax() {
+            synchronized (mControllerLock) {
+                return mSessionInfo.getVolumeMax();
+            }
+        }
+
+        /**
+         * Gets the current volume of the session.
+         * <p>
+         * When it's available, it represents the volume of routing session, which is a group
+         * of selected routes. To get the volume of a route,
+         * use {@link MediaRoute2Info#getVolume()}.
+         * </p>
+         * @see MediaRoute2Info#getVolume()
+         */
+        public int getVolume() {
+            synchronized (mControllerLock) {
+                return mSessionInfo.getVolume();
+            }
+        }
+
+        /**
          * Returns true if this controller is released, false otherwise.
          * If it is released, then all other getters from this instance may return invalid values.
          * Also, any operations to this instance will be ignored once released.
@@ -1037,6 +1072,42 @@ public class MediaRouter2 {
                     mMediaRouterService.transferToRoute(client, getId(), route);
                 } catch (RemoteException ex) {
                     Log.e(TAG, "Unable to transfer to route for session.", ex);
+                }
+            }
+        }
+
+        /**
+         * Requests a volume change for the remote session asynchronously.
+         *
+         * @param volume The new volume value between 0 and {@link RoutingController#getVolumeMax}
+         *               (inclusive).
+         * @see #getVolume()
+         */
+        public void setVolume(int volume) {
+            if (getVolumeHandling() == MediaRoute2Info.PLAYBACK_VOLUME_FIXED) {
+                Log.w(TAG, "setVolume: the routing session has fixed volume. Ignoring.");
+                return;
+            }
+            if (volume < 0 || volume > getVolumeMax()) {
+                Log.w(TAG, "setVolume: the target volume is out of range. Ignoring");
+                return;
+            }
+
+            synchronized (mControllerLock) {
+                if (mIsReleased) {
+                    Log.w(TAG, "setVolume is called on released controller. Ignoring.");
+                    return;
+                }
+            }
+            Client2 client;
+            synchronized (sRouterLock) {
+                client = mClient;
+            }
+            if (client != null) {
+                try {
+                    mMediaRouterService.setSessionVolume2(client, getId(), volume);
+                } catch (RemoteException ex) {
+                    Log.e(TAG, "setVolume: Failed to deliver request.", ex);
                 }
             }
         }

@@ -27,6 +27,8 @@ import android.annotation.SystemApi;
 import android.annotation.SystemService;
 import android.annotation.TestApi;
 import android.app.usage.UsageStatsManager;
+import android.compat.annotation.ChangeId;
+import android.compat.annotation.EnabledAfter;
 import android.compat.annotation.UnsupportedAppUsage;
 import android.content.ContentResolver;
 import android.content.Context;
@@ -88,13 +90,30 @@ import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 /**
- * API for interacting with "application operation" tracking.
+ * AppOps are mappings of [package/uid, op-name] -> [mode]. The list of existing appops is defined
+ * by the system and cannot be amended by apps. Only system apps can change appop-modes.
  *
- * <p>This API is not generally intended for third party application developers; most
- * features are only available to system applications.
+ * <p>Beside a mode the system tracks when an op was {@link #noteOp noted}. The tracked data can
+ * only be read by system components.
+ *
+ * <p>Installed apps can usually only listen to changes and events on their own ops. E.g.
+ * {@link AppOpsCollector} allows to get a callback each time an app called {@link #noteOp} or
+ * {@link #startOp} for an op belonging to the app.
  */
 @SystemService(Context.APP_OPS_SERVICE)
 public class AppOpsManager {
+    /**
+     * This is a subtle behavior change to {@link #startWatchingMode}.
+     *
+     * Before this change the system called back for the switched op. After the change the system
+     * will call back for the actually requested op or all switched ops if no op is specified.
+     *
+     * @hide
+     */
+    @ChangeId
+    @EnabledAfter(targetSdkVersion = Build.VERSION_CODES.Q)
+    public static final long CALL_BACK_ON_CHANGED_LISTENER_WITH_SWITCHED_OP_CHANGE = 148180766L;
+
     /**
      * <p>App ops allows callers to:</p>
      *
@@ -141,6 +160,38 @@ public class AppOpsManager {
     private static @Nullable AppOpsCollector sNotedAppOpsCollector;
 
     static IBinder sClientId;
+
+    /**
+     * How many seconds we want for a drop in uid state from top to settle before applying it.
+     *
+     * <>Set a parameter to {@link android.provider.Settings.Global#APP_OPS_CONSTANTS}
+     *
+     * @hide
+     */
+    @TestApi
+    public static final String KEY_TOP_STATE_SETTLE_TIME = "top_state_settle_time";
+
+    /**
+     * How many second we want for a drop in uid state from foreground to settle before applying it.
+     *
+     * <>Set a parameter to {@link android.provider.Settings.Global#APP_OPS_CONSTANTS}
+     *
+     * @hide
+     */
+    @TestApi
+    public static final String KEY_FG_SERVICE_STATE_SETTLE_TIME =
+            "fg_service_state_settle_time";
+
+    /**
+     * How many seconds we want for a drop in uid state from background to settle before applying
+     * it.
+     *
+     * <>Set a parameter to {@link android.provider.Settings.Global#APP_OPS_CONSTANTS}
+     *
+     * @hide
+     */
+    @TestApi
+    public static final String KEY_BG_STATE_SETTLE_TIME = "bg_state_settle_time";
 
     /** @hide */
     @Retention(RetentionPolicy.SOURCE)
@@ -873,10 +924,12 @@ public class AppOpsManager {
      * @hide
      */
     public static final int OP_ACTIVATE_PLATFORM_VPN = 94;
+    /** @hide */
+    public static final int OP_LOADER_USAGE_STATS = 95;
 
     /** @hide */
     @UnsupportedAppUsage
-    public static final int _NUM_OP = 95;
+    public static final int _NUM_OP = 96;
 
     /** Access to coarse location information. */
     public static final String OPSTR_COARSE_LOCATION = "android:coarse_location";
@@ -1173,6 +1226,9 @@ public class AppOpsManager {
     public static final String OPSTR_INTERACT_ACROSS_PROFILES = "android:interact_across_profiles";
     /** @hide Start Platform VPN without user intervention */
     public static final String OPSTR_ACTIVATE_PLATFORM_VPN = "android:activate_platform_vpn";
+    /** @hide */
+    @SystemApi
+    public static final String OPSTR_LOADER_USAGE_STATS = "android:loader_usage_stats";
 
 
     /** {@link #sAppOpsToNote} not initialized yet for this op */
@@ -1251,7 +1307,8 @@ public class AppOpsManager {
             OP_MANAGE_IPSEC_TUNNELS,
             OP_INSTANT_APP_START_FOREGROUND,
             OP_MANAGE_EXTERNAL_STORAGE,
-            OP_INTERACT_ACROSS_PROFILES
+            OP_INTERACT_ACROSS_PROFILES,
+            OP_LOADER_USAGE_STATS,
     };
 
     /**
@@ -1358,6 +1415,7 @@ public class AppOpsManager {
             OP_MANAGE_EXTERNAL_STORAGE,         // MANAGE_EXTERNAL_STORAGE
             OP_INTERACT_ACROSS_PROFILES,        //INTERACT_ACROSS_PROFILES
             OP_ACTIVATE_PLATFORM_VPN,           // ACTIVATE_PLATFORM_VPN
+            OP_LOADER_USAGE_STATS,              // LOADER_USAGE_STATS
     };
 
     /**
@@ -1459,6 +1517,7 @@ public class AppOpsManager {
             OPSTR_MANAGE_EXTERNAL_STORAGE,
             OPSTR_INTERACT_ACROSS_PROFILES,
             OPSTR_ACTIVATE_PLATFORM_VPN,
+            OPSTR_LOADER_USAGE_STATS,
     };
 
     /**
@@ -1561,6 +1620,7 @@ public class AppOpsManager {
             "MANAGE_EXTERNAL_STORAGE",
             "INTERACT_ACROSS_PROFILES",
             "ACTIVATE_PLATFORM_VPN",
+            "LOADER_USAGE_STATS",
     };
 
     /**
@@ -1664,6 +1724,7 @@ public class AppOpsManager {
             Manifest.permission.MANAGE_EXTERNAL_STORAGE,
             android.Manifest.permission.INTERACT_ACROSS_PROFILES,
             null, // no permission for OP_ACTIVATE_PLATFORM_VPN
+            android.Manifest.permission.LOADER_USAGE_STATS,
     };
 
     /**
@@ -1767,6 +1828,7 @@ public class AppOpsManager {
             null, // MANAGE_EXTERNAL_STORAGE
             null, // INTERACT_ACROSS_PROFILES
             null, // ACTIVATE_PLATFORM_VPN
+            null, // LOADER_USAGE_STATS
     };
 
     /**
@@ -1869,6 +1931,7 @@ public class AppOpsManager {
             false, // MANAGE_EXTERNAL_STORAGE
             false, // INTERACT_ACROSS_PROFILES
             false, // ACTIVATE_PLATFORM_VPN
+            false, // LOADER_USAGE_STATS
     };
 
     /**
@@ -1970,6 +2033,7 @@ public class AppOpsManager {
             AppOpsManager.MODE_DEFAULT, // MANAGE_EXTERNAL_STORAGE
             AppOpsManager.MODE_DEFAULT, // INTERACT_ACROSS_PROFILES
             AppOpsManager.MODE_IGNORED, // ACTIVATE_PLATFORM_VPN
+            AppOpsManager.MODE_DEFAULT, // LOADER_USAGE_STATS
     };
 
     /**
@@ -2075,6 +2139,7 @@ public class AppOpsManager {
             false, // MANAGE_EXTERNAL_STORAGE
             false, // INTERACT_ACROSS_PROFILES
             false, // ACTIVATE_PLATFORM_VPN
+            false, // LOADER_USAGE_STATS
     };
 
     /**
@@ -2803,7 +2868,7 @@ public class AppOpsManager {
          * @param flags The op flags
          *
          * @return the last access time (in milliseconds since epoch start (January 1, 1970
-         * 00:00:00.000 GMT - Gregorian)) or {@code -1}
+         * 00:00:00.000 GMT - Gregorian)) or {@code -1} if there was no access
          *
          * @see #getLastAccessForegroundTime(int)
          * @see #getLastAccessBackgroundTime(int)
@@ -2820,7 +2885,7 @@ public class AppOpsManager {
          * @param flags The op flags
          *
          * @return the last access time (in milliseconds since epoch start (January 1, 1970
-         * 00:00:00.000 GMT - Gregorian)) or {@code -1}
+         * 00:00:00.000 GMT - Gregorian)) or {@code -1} if there was no foreground access
          *
          * @see #getLastAccessTime(int)
          * @see #getLastAccessBackgroundTime(int)
@@ -2838,7 +2903,7 @@ public class AppOpsManager {
          * @param flags The op flags
          *
          * @return the last access time (in milliseconds since epoch start (January 1, 1970
-         * 00:00:00.000 GMT - Gregorian)) or {@code -1}
+         * 00:00:00.000 GMT - Gregorian)) or {@code -1} if there was no background access
          *
          * @see #getLastAccessTime(int)
          * @see #getLastAccessForegroundTime(int)
@@ -2855,7 +2920,7 @@ public class AppOpsManager {
          *
          * @param flags The op flags
          *
-         * @return the last access event of {@code null}
+         * @return the last access event of {@code null} if there was no access
          */
         private @Nullable NoteOpEvent getLastAccessEvent(@UidState int fromUidState,
                 @UidState int toUidState, @OpFlags int flags) {
@@ -2870,7 +2935,7 @@ public class AppOpsManager {
          * @param flags The op flags
          *
          * @return the last access time (in milliseconds since epoch start (January 1, 1970
-         * 00:00:00.000 GMT - Gregorian)) or {@code -1}
+         * 00:00:00.000 GMT - Gregorian)) or {@code -1} if there was no access
          *
          * @see #getLastAccessTime(int)
          * @see #getLastAccessForegroundTime(int)
@@ -2893,7 +2958,7 @@ public class AppOpsManager {
          * @param flags The op flags
          *
          * @return the last rejection time (in milliseconds since epoch start (January 1, 1970
-         * 00:00:00.000 GMT - Gregorian)) or {@code -1}
+         * 00:00:00.000 GMT - Gregorian)) or {@code -1} if there was no rejection
          *
          * @see #getLastRejectForegroundTime(int)
          * @see #getLastRejectBackgroundTime(int)
@@ -2910,7 +2975,7 @@ public class AppOpsManager {
          * @param flags The op flags
          *
          * @return the last rejection time (in milliseconds since epoch start (January 1, 1970
-         * 00:00:00.000 GMT - Gregorian)) or {@code -1}
+         * 00:00:00.000 GMT - Gregorian)) or {@code -1} if there was no foreground rejection
          *
          * @see #getLastRejectTime(int)
          * @see #getLastRejectBackgroundTime(int)
@@ -2928,7 +2993,7 @@ public class AppOpsManager {
          * @param flags The op flags
          *
          * @return the last rejection time (in milliseconds since epoch start (January 1, 1970
-         * 00:00:00.000 GMT - Gregorian)) or {@code -1}
+         * 00:00:00.000 GMT - Gregorian)) or {@code -1} if there was no background rejection
          *
          * @see #getLastRejectTime(int)
          * @see #getLastRejectForegroundTime(int)
@@ -2945,8 +3010,7 @@ public class AppOpsManager {
          *
          * @param flags The op flags
          *
-         * @return the last rejection time (in milliseconds since epoch start (January 1, 1970
-         * 00:00:00.000 GMT - Gregorian)) or {@code -1}
+         * @return the last rejection event of {@code null} if there was no rejection
          *
          * @see #getLastRejectTime(int)
          * @see #getLastRejectForegroundTime(int)
@@ -2965,7 +3029,8 @@ public class AppOpsManager {
          * @param toUidState The highest UID state for which to query (inclusive)
          * @param flags The op flags
          *
-         * @return the last access time (in milliseconds since epoch) or {@code -1}
+         * @return the last access time (in milliseconds since epoch) or {@code -1} if there was no
+         * rejection
          *
          * @see #getLastRejectTime(int)
          * @see #getLastRejectForegroundTime(int)
@@ -2988,7 +3053,7 @@ public class AppOpsManager {
          *
          * @param flags The op flags
          *
-         * @return the duration in milliseconds or {@code -1}
+         * @return the duration in milliseconds or {@code -1} if there was no rejection
          *
          * @see #getLastForegroundDuration(int)
          * @see #getLastBackgroundDuration(int)
@@ -3004,7 +3069,7 @@ public class AppOpsManager {
          *
          * @param flags The op flags
          *
-         * @return the duration in milliseconds or {@code -1}
+         * @return the duration in milliseconds or {@code -1} if there was no foreground rejection
          *
          * @see #getLastDuration(int)
          * @see #getLastBackgroundDuration(int)
@@ -3021,7 +3086,7 @@ public class AppOpsManager {
          *
          * @param flags The op flags
          *
-         * @return the duration in milliseconds or {@code -1}
+         * @return the duration in milliseconds or {@code -1} if there was no background rejection
          *
          * @see #getLastDuration(int)
          * @see #getLastForegroundDuration(int)
@@ -3040,7 +3105,7 @@ public class AppOpsManager {
          * @param toUidState The highest UID state for which to query (inclusive)
          * @param flags The op flags
          *
-         * @return the duration in milliseconds or {@code -1}
+         * @return the duration in milliseconds or {@code -1} if there was no rejection
          *
          * @see #getLastDuration(int)
          * @see #getLastForegroundDuration(int)
@@ -3064,7 +3129,7 @@ public class AppOpsManager {
          *
          * @param flags The op flags
          *
-         * @return The proxy name or {@code null}
+         * @return The proxy info or {@code null} if there was no proxy access
          *
          * @see #getLastForegroundProxyInfo(int)
          * @see #getLastBackgroundProxyInfo(int)
@@ -3081,7 +3146,7 @@ public class AppOpsManager {
          *
          * @param flags The op flags
          *
-         * @return The proxy name or {@code null}
+         * @return The proxy info or {@code null} if there was no proxy access
          *
          * @see #getLastProxyInfo(int)
          * @see #getLastBackgroundProxyInfo(int)
@@ -3099,7 +3164,7 @@ public class AppOpsManager {
          *
          * @param flags The op flags
          *
-         * @return The proxy name or {@code null}
+         * @return The proxy info or {@code null} if there was no proxy background access
          *
          * @see #getLastProxyInfo(int)
          * @see #getLastForegroundProxyInfo(int)
@@ -3119,7 +3184,7 @@ public class AppOpsManager {
          * @param toUidState The highest UID state for which to query (inclusive)
          * @param flags The op flags
          *
-         * @return The proxy name or {@code null}
+         * @return The proxy info or {@code null} if there was no proxy foreground access
          *
          * @see #getLastProxyInfo(int)
          * @see #getLastForegroundProxyInfo(int)
@@ -3375,7 +3440,7 @@ public class AppOpsManager {
          * @param flags The op flags
          *
          * @return the last access time (in milliseconds since epoch start (January 1, 1970
-         * 00:00:00.000 GMT - Gregorian)) or {@code -1}
+         * 00:00:00.000 GMT - Gregorian)) or {@code -1} if there was no access
          *
          * @see #getLastAccessForegroundTime(int)
          * @see #getLastAccessBackgroundTime(int)
@@ -3392,7 +3457,7 @@ public class AppOpsManager {
          * @param flags The op flags
          *
          * @return the last access time (in milliseconds since epoch start (January 1, 1970
-         * 00:00:00.000 GMT - Gregorian)) or {@code -1}
+         * 00:00:00.000 GMT - Gregorian)) or {@code -1} if there was no foreground access
          *
          * @see #getLastAccessTime(int)
          * @see #getLastAccessBackgroundTime(int)
@@ -3410,7 +3475,7 @@ public class AppOpsManager {
          * @param flags The op flags
          *
          * @return the last access time (in milliseconds since epoch start (January 1, 1970
-         * 00:00:00.000 GMT - Gregorian)) or {@code -1}
+         * 00:00:00.000 GMT - Gregorian)) or {@code -1} if there was no background access
          *
          * @see #getLastAccessTime(int)
          * @see #getLastAccessForegroundTime(int)
@@ -3427,7 +3492,7 @@ public class AppOpsManager {
          *
          * @param flags The op flags
          *
-         * @return the last access event of {@code null}
+         * @return the last access event of {@code null} if there was no access
          */
         private @Nullable NoteOpEvent getLastAccessEvent(@UidState int fromUidState,
                 @UidState int toUidState, @OpFlags int flags) {
@@ -3453,7 +3518,7 @@ public class AppOpsManager {
          * @param flags The op flags
          *
          * @return the last access time (in milliseconds since epoch start (January 1, 1970
-         * 00:00:00.000 GMT - Gregorian)) or {@code -1}
+         * 00:00:00.000 GMT - Gregorian)) or {@code -1} if there was no access
          *
          * @see #getLastAccessTime(int)
          * @see #getLastAccessForegroundTime(int)
@@ -3489,7 +3554,7 @@ public class AppOpsManager {
          * @param flags The op flags
          *
          * @return the last rejection time (in milliseconds since epoch start (January 1, 1970
-         * 00:00:00.000 GMT - Gregorian)) or {@code -1}
+         * 00:00:00.000 GMT - Gregorian)) or {@code -1} if there was no rejection
          *
          * @see #getLastRejectForegroundTime(int)
          * @see #getLastRejectBackgroundTime(int)
@@ -3506,7 +3571,7 @@ public class AppOpsManager {
          * @param flags The op flags
          *
          * @return the last rejection time (in milliseconds since epoch start (January 1, 1970
-         * 00:00:00.000 GMT - Gregorian)) or {@code -1}
+         * 00:00:00.000 GMT - Gregorian)) or {@code -1} if there was no foreground rejection
          *
          * @see #getLastRejectTime(int)
          * @see #getLastRejectBackgroundTime(int)
@@ -3524,7 +3589,7 @@ public class AppOpsManager {
          * @param flags The op flags
          *
          * @return the last rejection time (in milliseconds since epoch start (January 1, 1970
-         * 00:00:00.000 GMT - Gregorian)) or {@code -1}
+         * 00:00:00.000 GMT - Gregorian)) or {@code -1} if there was no background rejection
          *
          * @see #getLastRejectTime(int)
          * @see #getLastRejectForegroundTime(int)
@@ -3541,7 +3606,7 @@ public class AppOpsManager {
          *
          * @param flags The op flags
          *
-         * @return the last reject event of {@code null}
+         * @return the last reject event of {@code null} if there was no rejection
          */
         private @Nullable NoteOpEvent getLastRejectEvent(@UidState int fromUidState,
                 @UidState int toUidState, @OpFlags int flags) {
@@ -3567,7 +3632,7 @@ public class AppOpsManager {
          * @param flags The op flags
          *
          * @return the last rejection time (in milliseconds since epoch start (January 1, 1970
-         * 00:00:00.000 GMT - Gregorian)) or {@code -1}
+         * 00:00:00.000 GMT - Gregorian)) or {@code -1} if there was no rejection
          *
          * @see #getLastRejectTime(int)
          * @see #getLastRejectForegroundTime(int)
@@ -3611,7 +3676,7 @@ public class AppOpsManager {
          *
          * @param flags The op flags
          *
-         * @return the duration in milliseconds or {@code -1}
+         * @return the duration in milliseconds or {@code -1} if there was no access
          *
          * @see #getLastForegroundDuration(int)
          * @see #getLastBackgroundDuration(int)
@@ -3627,7 +3692,7 @@ public class AppOpsManager {
          *
          * @param flags The op flags
          *
-         * @return the duration in milliseconds or {@code -1}
+         * @return the duration in milliseconds or {@code -1} if there was no foreground access
          *
          * @see #getLastDuration(int)
          * @see #getLastBackgroundDuration(int)
@@ -3644,7 +3709,7 @@ public class AppOpsManager {
          *
          * @param flags The op flags
          *
-         * @return the duration in milliseconds or {@code -1}
+         * @return the duration in milliseconds or {@code -1} if there was no background access
          *
          * @see #getLastDuration(int)
          * @see #getLastForegroundDuration(int)
@@ -3663,7 +3728,7 @@ public class AppOpsManager {
          * @param toUidState The highest UID state for which to query (inclusive)
          * @param flags The op flags
          *
-         * @return the duration in milliseconds or {@code -1}
+         * @return the duration in milliseconds or {@code -1} if there was no access
          *
          * @see #getLastDuration(int)
          * @see #getLastForegroundDuration(int)
@@ -3738,7 +3803,7 @@ public class AppOpsManager {
          *
          * @param flags The op flags
          *
-         * @return The proxy name or {@code null}
+         * @return The proxy info or {@code null} if there was no proxy access
          *
          * @see #getLastForegroundProxyInfo(int)
          * @see #getLastBackgroundProxyInfo(int)
@@ -3755,7 +3820,7 @@ public class AppOpsManager {
          *
          * @param flags The op flags
          *
-         * @return The proxy name or {@code null}
+         * @return The proxy info or {@code null} if there was no foreground proxy access
          *
          * @see #getLastProxyInfo(int)
          * @see #getLastBackgroundProxyInfo(int)
@@ -3773,7 +3838,7 @@ public class AppOpsManager {
          *
          * @param flags The op flags
          *
-         * @return The proxy name or {@code null}
+         * @return The proxy info or {@code null} if there was no background proxy access
          *
          * @see #getLastProxyInfo(int)
          * @see #getLastForegroundProxyInfo(int)
@@ -3793,7 +3858,7 @@ public class AppOpsManager {
          * @param toUidState The highest UID state for which to query (inclusive)
          * @param flags The op flags
          *
-         * @return The proxy name or {@code null}
+         * @return The proxy info or {@code null} if there was no proxy access
          *
          * @see #getLastProxyInfo(int)
          * @see #getLastForegroundProxyInfo(int)
@@ -3865,7 +3930,10 @@ public class AppOpsManager {
         }
 
         /**
-         * The features that have been used when checking the op
+         * The features that have been used when checking the op keyed by id of the feature.
+         *
+         * @see Context#createFeatureContext(String)
+         * @see #noteOp(String, int, String, String, String)
          */
         @DataClass.Generated.Member
         public @NonNull Map<String,OpFeatureEntry> getFeatures() {
@@ -6774,6 +6842,9 @@ public class AppOpsManager {
      * succeeds, the last execution time of the operation for this app will be updated to
      * the current time.
      *
+     * <p>If this is a check that is not preceding the protected operation, use
+     * {@link #unsafeCheckOp} instead.
+     *
      * @param op The operation to note.  One of the OPSTR_* constants.
      * @param uid The user id of the application attempting to perform the operation.
      * @param packageName The name of the application attempting to perform the operation.
@@ -6797,6 +6868,9 @@ public class AppOpsManager {
      * that these two match, and if not, return {@link #MODE_IGNORED}.  If this call
      * succeeds, the last execution time of the operation for this app will be updated to
      * the current time.
+     *
+     * <p>If this is a check that is not preceding the protected operation, use
+     * {@link #unsafeCheckOp} instead.
      *
      * @param op The operation to note.  One of the OP_* constants.
      * @param uid The user id of the application attempting to perform the operation.
@@ -7757,9 +7831,38 @@ public class AppOpsManager {
 
     /**
      * Callback an app can choose to {@link #setNotedAppOpsCollector register} to monitor it's noted
-     * appops.
+     * appops. I.e. each time any app calls {@link #noteOp} or {@link #startOp} one of the callback
+     * methods of this object is called.
      *
      * <p><b>Only appops related to dangerous permissions are collected.</b>
+     *
+     * <pre>
+     * setNotedAppOpsCollector(new AppOpsCollector() {
+     *     ArraySet<Pair<String, String>> opsNotedForThisProcess = new ArraySet<>();
+     *
+     *     private synchronized void addAccess(String op, String accessLocation) {
+     *         // Ops are often noted when permission protected APIs were called.
+     *         // In this case permissionToOp() allows to resolve the permission<->op
+     *         opsNotedForThisProcess.add(new Pair(accessType, accessLocation));
+     *     }
+     *
+     *     public void onNoted(SyncNotedAppOp op) {
+     *         // Accesses is currently happening, hence stack trace describes location of access
+     *         addAccess(op.getOp(), Arrays.toString(Thread.currentThread().getStackTrace()));
+     *     }
+     *
+     *     public void onSelfNoted(SyncNotedAppOp op) {
+     *         onNoted(op);
+     *     }
+     *
+     *     public void onAsyncNoted(AsyncNotedAppOp asyncOp) {
+     *         // Stack trace is not useful for async ops as accessed happened on different thread
+     *         addAccess(asyncOp.getOp(), asyncOp.getMessage());
+     *     }
+     * });
+     * </pre>
+     *
+     * @see #setNotedAppOpsCollector
      */
     public abstract static class AppOpsCollector {
         /** Callback registered with the system. This will receive the async notes ops */

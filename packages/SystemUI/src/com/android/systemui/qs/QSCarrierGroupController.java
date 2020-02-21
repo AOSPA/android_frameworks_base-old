@@ -29,6 +29,7 @@ import android.util.Log;
 import android.view.View;
 import android.widget.TextView;
 
+import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
 import com.android.keyguard.CarrierTextController;
@@ -37,6 +38,7 @@ import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.plugins.ActivityStarter;
 import com.android.systemui.statusbar.policy.NetworkController;
 
+import java.util.Objects;
 import java.util.function.Consumer;
 
 import javax.inject.Inject;
@@ -67,8 +69,10 @@ public class QSCarrierGroupController {
                 @Override
                 public void setMobileDataIndicators(NetworkController.IconState statusIcon,
                         NetworkController.IconState qsIcon, int statusType, int qsType,
-                        boolean activityIn, boolean activityOut, int volteIcon, String typeContentDescription,
-                        String description, boolean isWide, int subId, boolean roaming) {
+                        boolean activityIn, boolean activityOut, int volteIcon,
+                        CharSequence typeContentDescription,
+                        CharSequence typeContentDescriptionHtml, CharSequence description,
+                        boolean isWide, int subId, boolean roaming) {
                     int slotIndex = getSlotIndex(subId);
                     if (slotIndex >= SIM_SLOTS) {
                         Log.w(TAG, "setMobileDataIndicators - slot: " + slotIndex);
@@ -81,7 +85,7 @@ public class QSCarrierGroupController {
                     mInfos[slotIndex].visible = statusIcon.visible;
                     mInfos[slotIndex].mobileSignalIconId = statusIcon.icon;
                     mInfos[slotIndex].contentDescription = statusIcon.contentDescription;
-                    mInfos[slotIndex].typeContentDescription = typeContentDescription;
+                    mInfos[slotIndex].typeContentDescription = typeContentDescription.toString();
                     mInfos[slotIndex].roaming = roaming;
                     mMainHandler.obtainMessage(H.MSG_UPDATE_STATE).sendToTarget();
                 }
@@ -297,6 +301,27 @@ public class QSCarrierGroupController {
         String contentDescription;
         String typeContentDescription;
         boolean roaming;
+
+        @Override
+        public boolean equals(@Nullable Object obj) {
+            if (this == obj) return true;
+            if (!(obj instanceof CellSignalState)) return false;
+            CellSignalState other = (CellSignalState) obj;
+            return this.visible == other.visible
+                    && this.mobileSignalIconId == other.mobileSignalIconId
+                    && Objects.equals(this.contentDescription, other.contentDescription)
+                    && Objects.equals(this.typeContentDescription, other.typeContentDescription)
+                    && this.roaming == other.roaming;
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(visible,
+                    mobileSignalIconId,
+                    contentDescription,
+                    typeContentDescription,
+                    roaming);
+        }
     }
 
     public static class Builder {

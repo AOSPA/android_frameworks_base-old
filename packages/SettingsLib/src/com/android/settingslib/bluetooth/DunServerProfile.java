@@ -111,16 +111,17 @@ public final class DunServerProfile implements LocalBluetoothProfile {
         return mService.getConnectionState(device);
     }
 
-    public boolean isPreferred(BluetoothDevice device) {
+    public boolean isEnabled(BluetoothDevice device) {
         return true;
     }
 
-    public int getPreferred(BluetoothDevice device) {
+    public int getConnectionPolicy(BluetoothDevice device) {
         return -1;
     }
 
-    public void setPreferred(BluetoothDevice device, boolean preferred) {
-        // ignore: isPreferred is always true for DUN
+    public boolean setEnabled(BluetoothDevice device, boolean enabled) {
+        // ignore: isEnabled is always true for DUN
+        return true;
     }
 
     public String toString() {

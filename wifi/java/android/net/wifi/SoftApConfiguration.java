@@ -538,6 +538,9 @@ public final class SoftApConfiguration implements Parcelable {
             case BAND_5GHZ:
                 wifiConfig.apBand  = WifiConfiguration.AP_BAND_5GHZ;
                 break;
+            case BAND_2GHZ | BAND_5GHZ:
+                wifiConfig.apBand  = WifiConfiguration.AP_BAND_ANY;
+                break;
             case BAND_ANY:
                 wifiConfig.apBand  = WifiConfiguration.AP_BAND_ANY;
                 break;

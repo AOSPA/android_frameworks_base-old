@@ -23,6 +23,7 @@ import android.content.Intent;
 import android.net.wifi.WifiManager;
 import android.os.UserManager;
 import android.service.quicksettings.Tile;
+import android.util.Log;
 import android.widget.Switch;
 
 import com.android.internal.logging.nano.MetricsProto.MetricsEvent;
@@ -75,6 +76,7 @@ public class HotspotTile extends QSTileImpl<BooleanState> {
 
     @Override
     public void handleSetListening(boolean listening) {
+        super.handleSetListening(listening);
         if (mListening == listening) return;
         mListening = listening;
         if (listening) {
@@ -163,6 +165,7 @@ public class HotspotTile extends QSTileImpl<BooleanState> {
 
         state.secondaryLabel = getSecondaryLabel(
                 isTileActive, isTransient, isDataSaverEnabled, numConnectedDevices);
+        state.stateDescription = state.secondaryLabel;
     }
 
     @Nullable
@@ -215,6 +218,14 @@ public class HotspotTile extends QSTileImpl<BooleanState> {
             mCallbackInfo.isHotspotEnabled = enabled;
             mCallbackInfo.numConnectedDevices = numDevices;
             refreshState(mCallbackInfo);
+        }
+
+        @Override
+        public void onHotspotAvailabilityChanged(boolean available) {
+            if (!available) {
+                Log.d(TAG, "Tile removed. Hotspot no longer available");
+                mHost.removeTile(getTileSpec());
+            }
         }
     }
 

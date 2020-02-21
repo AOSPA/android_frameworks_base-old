@@ -481,6 +481,8 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     int mVeryLongPressTimeout;
     boolean mAllowStartActivityForLongPressOnPowerDuringSetup;
     MetricsLogger mLogger;
+    boolean mWakeOnDpadKeyPress;
+    boolean mWakeOnAssistKeyPress;
 
     private boolean mHandleVolumeKeysInWM;
 
@@ -1738,6 +1740,13 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         mAccessibilityShortcutController =
                 new AccessibilityShortcutController(mContext, new Handler(), mCurrentUserId);
         mLogger = new MetricsLogger();
+
+        Resources res = mContext.getResources();
+        mWakeOnDpadKeyPress =
+                res.getBoolean(com.android.internal.R.bool.config_wakeOnDpadKeyPress);
+        mWakeOnAssistKeyPress =
+                res.getBoolean(com.android.internal.R.bool.config_wakeOnAssistKeyPress);
+
         // Init display burn-in protection
         boolean burnInProtectionEnabled = context.getResources().getBoolean(
                 com.android.internal.R.bool.config_enableBurnInProtection);
@@ -2729,21 +2738,23 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                             Settings.System.SCREEN_BRIGHTNESS_MODE_MANUAL,
                             UserHandle.USER_CURRENT_OR_SELF);
                 }
-
-                int min = mPowerManager.getMinimumScreenBrightnessSetting();
-                int max = mPowerManager.getMaximumScreenBrightnessSetting();
-                int step = (max - min + BRIGHTNESS_STEPS - 1) / BRIGHTNESS_STEPS * direction;
-                int brightness = Settings.System.getIntForUser(mContext.getContentResolver(),
-                        Settings.System.SCREEN_BRIGHTNESS,
-                        mPowerManager.getDefaultScreenBrightnessSetting(),
+                float minFloat = mPowerManager.getBrightnessConstraint(
+                        PowerManager.BRIGHTNESS_CONSTRAINT_TYPE_MINIMUM);
+                float maxFloat = mPowerManager.getBrightnessConstraint(
+                        PowerManager.BRIGHTNESS_CONSTRAINT_TYPE_MAXIMUM);
+                float stepFloat = (maxFloat - minFloat) / BRIGHTNESS_STEPS * direction;
+                float brightnessFloat = Settings.System.getFloatForUser(
+                        mContext.getContentResolver(), Settings.System.SCREEN_BRIGHTNESS_FLOAT,
+                        mPowerManager.getBrightnessConstraint(
+                                PowerManager.BRIGHTNESS_CONSTRAINT_TYPE_DEFAULT),
                         UserHandle.USER_CURRENT_OR_SELF);
-                brightness += step;
+                brightnessFloat += stepFloat;
                 // Make sure we don't go beyond the limits.
-                brightness = Math.min(max, brightness);
-                brightness = Math.max(min, brightness);
+                brightnessFloat = Math.min(maxFloat, brightnessFloat);
+                brightnessFloat = Math.max(minFloat, brightnessFloat);
 
-                Settings.System.putIntForUser(mContext.getContentResolver(),
-                        Settings.System.SCREEN_BRIGHTNESS, brightness,
+                Settings.System.putFloatForUser(mContext.getContentResolver(),
+                        Settings.System.SCREEN_BRIGHTNESS_FLOAT, brightnessFloat,
                         UserHandle.USER_CURRENT_OR_SELF);
                 startActivityAsUser(new Intent(Intent.ACTION_SHOW_BRIGHTNESS_DIALOG),
                         UserHandle.CURRENT_OR_SELF);
@@ -4082,13 +4093,11 @@ public class PhoneWindowManager implements WindowManagerPolicy {
      */
     private boolean isWakeKeyWhenScreenOff(int keyCode) {
         switch (keyCode) {
-            // ignore volume keys unless docked
             case KeyEvent.KEYCODE_VOLUME_UP:
             case KeyEvent.KEYCODE_VOLUME_DOWN:
             case KeyEvent.KEYCODE_VOLUME_MUTE:
                 return mDefaultDisplayPolicy.getDockMode() != Intent.EXTRA_DOCK_STATE_UNDOCKED;
 
-            // ignore media keys
             case KeyEvent.KEYCODE_MUTE:
             case KeyEvent.KEYCODE_HEADSETHOOK:
             case KeyEvent.KEYCODE_MEDIA_PLAY:
@@ -4102,7 +4111,18 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             case KeyEvent.KEYCODE_MEDIA_FAST_FORWARD:
             case KeyEvent.KEYCODE_MEDIA_AUDIO_TRACK:
                 return false;
+
+            case KeyEvent.KEYCODE_DPAD_UP:
+            case KeyEvent.KEYCODE_DPAD_DOWN:
+            case KeyEvent.KEYCODE_DPAD_LEFT:
+            case KeyEvent.KEYCODE_DPAD_RIGHT:
+            case KeyEvent.KEYCODE_DPAD_CENTER:
+                return mWakeOnDpadKeyPress;
+
+            case KeyEvent.KEYCODE_ASSIST:
+                return mWakeOnAssistKeyPress;
         }
+
         return true;
     }
 
@@ -5187,7 +5207,8 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                     final Intent dock = createHomeDockIntent();
                     if (dock != null) {
                         int result = ActivityTaskManager.getService()
-                                .startActivityAsUser(null, mContext.getBasePackageName(), dock,
+                                .startActivityAsUser(null, mContext.getBasePackageName(),
+                                        mContext.getFeatureId(), dock,
                                         dock.resolveTypeIfNeeded(mContext.getContentResolver()),
                                         null, null, 0,
                                         ActivityManager.START_FLAG_ONLY_IF_NEEDED,
@@ -5198,7 +5219,8 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                     }
                 }
                 int result = ActivityTaskManager.getService()
-                        .startActivityAsUser(null, mContext.getBasePackageName(), mHomeIntent,
+                        .startActivityAsUser(null, mContext.getBasePackageName(),
+                                mContext.getFeatureId(), mHomeIntent,
                                 mHomeIntent.resolveTypeIfNeeded(mContext.getContentResolver()),
                                 null, null, 0,
                                 ActivityManager.START_FLAG_ONLY_IF_NEEDED,

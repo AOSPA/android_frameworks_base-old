@@ -580,9 +580,15 @@ std::unique_ptr<LogEvent> CreateUidProcessStateChangedEvent(
 }
 
 sp<StatsLogProcessor> CreateStatsLogProcessor(const int64_t timeBaseNs, const int64_t currentTimeNs,
-                                              const StatsdConfig& config, const ConfigKey& key) {
+                                              const StatsdConfig& config, const ConfigKey& key,
+                                              const sp<IPullAtomCallback>& puller,
+                                              const int32_t atomTag) {
     sp<UidMap> uidMap = new UidMap();
     sp<StatsPullerManager> pullerManager = new StatsPullerManager();
+    if (puller != nullptr) {
+        pullerManager->RegisterPullAtomCallback(/*uid=*/0, atomTag, NS_PER_SEC, NS_PER_SEC * 10, {},
+                                                puller);
+    }
     sp<AlarmMonitor> anomalyAlarmMonitor =
         new AlarmMonitor(1,  [](const sp<IStatsCompanionService>&, int64_t){},
                 [](const sp<IStatsCompanionService>&){});
@@ -940,6 +946,34 @@ void backfillStartEndTimestamp(ConfigMetricsReportList *config_report_list) {
     for (int i = 0; i < config_report_list->reports_size(); ++i) {
         backfillStartEndTimestamp(config_report_list->mutable_reports(i));
     }
+}
+
+binder::Status FakeSubsystemSleepCallback::onPullAtom(
+        int atomTag, const sp<IPullAtomResultReceiver>& resultReceiver) {
+    // Convert stats_events into StatsEventParcels.
+    std::vector<android::util::StatsEventParcel> parcels;
+    for (int i = 1; i < 3; i++) {
+        AStatsEvent* event = AStatsEvent_obtain();
+        AStatsEvent_setAtomId(event, atomTag);
+        std::string subsystemName = "subsystem_name_";
+        subsystemName = subsystemName + std::to_string(i);
+        AStatsEvent_writeString(event, subsystemName.c_str());
+        AStatsEvent_writeString(event, "subsystem_subname foo");
+        AStatsEvent_writeInt64(event, /*count= */ i);
+        AStatsEvent_writeInt64(event, /*time_millis= */ i * 100);
+        AStatsEvent_build(event);
+        size_t size;
+        uint8_t* buffer = AStatsEvent_getBuffer(event, &size);
+
+        android::util::StatsEventParcel p;
+        // vector.assign() creates a copy, but this is inevitable unless
+        // stats_event.h/c uses a vector as opposed to a buffer.
+        p.buffer.assign(buffer, buffer + size);
+        parcels.push_back(std::move(p));
+        AStatsEvent_write(event);
+    }
+    resultReceiver->pullFinished(atomTag, /*success=*/true, parcels);
+    return binder::Status::ok();
 }
 
 }  // namespace statsd

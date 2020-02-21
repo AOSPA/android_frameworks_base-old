@@ -19,34 +19,21 @@ java_library {
         ":updatable-media-srcs",
     ],
 
-    aidl: {
-        export_include_dirs: [
-            "java",
-        ],
-
-        // It would be great if we don't need to add include_dirs for public
-        // parcelable classes. Find a better way.
-        include_dirs: [
-            // To refer:
-            // android.os.Bundle
-            // android.os.ResultReceiver
-            "frameworks/base/core/java",
-        ],
-    },
-
     permitted_packages: [
         "android.media",
     ],
 
+    optimize: {
+        enabled: true,
+        shrink: true,
+        proguard_flags_files: ["updatable-media-proguard.flags"],
+    },
+
     installable: true,
 
-    // TODO: build against stable API surface. Use core_platform for now to avoid
-    // link-check failure with exoplayer building against "current".
-    sdk_version: "core_platform",
+    sdk_version: "module_current",
     libs: [
-        // The order matters. android_system_* library should come later.
         "framework_media_annotation",
-        "android_system_stubs_current",
     ],
 
     static_libs: [
@@ -99,13 +86,10 @@ filegroup {
     path: "java"
 }
 
-droidstubs {
-    name: "updatable-media-stubs",
-    srcs: [
-        ":updatable-media-srcs",
-        ":framework-media-annotation-srcs",
-    ],
-    defaults: [ "framework-module-stubs-defaults-systemapi" ],
+stubs_defaults {
+    name: "framework-media-stubs-srcs-defaults",
+    srcs: [ ":updatable-media-srcs" ],
+    libs: [ "framework_media_annotation" ],
     aidl: {
         // TODO(b/135922046) remove this
         include_dirs: ["frameworks/base/core/java"],
@@ -113,9 +97,53 @@ droidstubs {
     sdk_version: "system_current",
 }
 
+droidstubs {
+    name: "framework-media-stubs-srcs-publicapi",
+    defaults: [
+        "framework-media-stubs-srcs-defaults",
+        "framework-module-stubs-defaults-publicapi",
+    ],
+}
+
+droidstubs {
+    name: "framework-media-stubs-srcs-systemapi",
+    defaults: [
+        "framework-media-stubs-srcs-defaults",
+        "framework-module-stubs-defaults-systemapi",
+    ],
+}
+
+droidstubs {
+    name: "framework-media-api-module_libs_api",
+    defaults: [
+        "framework-media-stubs-srcs-defaults",
+        "framework-module-api-defaults-module_libs_api",
+    ],
+}
+
+droidstubs {
+    name: "framework-media-stubs-srcs-module_libs_api",
+    defaults: [
+        "framework-media-stubs-srcs-defaults",
+        "framework-module-stubs-defaults-module_libs_api",
+    ],
+}
+
 java_library {
-    name: "updatable_media_stubs",
-    srcs: [":updatable-media-stubs"],
+    name: "framework-media-stubs-publicapi",
+    srcs: [":framework-media-stubs-srcs-publicapi"],
+    sdk_version: "current",
+}
+
+java_library {
+    name: "framework-media-stubs-systemapi",
+    srcs: [":framework-media-stubs-srcs-systemapi"],
+    sdk_version: "system_current",
+}
+
+java_library {
+    name: "framework-media-stubs-module_libs_api",
+    srcs: [":framework-media-stubs-srcs-module_libs_api"],
     sdk_version: "system_current",
 }
 

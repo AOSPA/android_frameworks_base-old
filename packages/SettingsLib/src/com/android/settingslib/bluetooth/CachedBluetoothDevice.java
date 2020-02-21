@@ -42,7 +42,6 @@ import com.android.settingslib.Utils;
 
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 
@@ -73,10 +72,10 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
     short mRssi;
     // mProfiles and mRemovedProfiles does not do swap() between main and sub device. It is
     // because current sub device is only for HearingAid and its profile is the same.
-    private final List<LocalBluetoothProfile> mProfiles = new ArrayList<>();
+    private final Collection<LocalBluetoothProfile> mProfiles = new CopyOnWriteArrayList<>();
 
     // List of profiles that were previously in mProfiles, but have been removed
-    private final List<LocalBluetoothProfile> mRemovedProfiles = new ArrayList<>();
+    private final Collection<LocalBluetoothProfile> mRemovedProfiles = new CopyOnWriteArrayList<>();
 
     // Device supports PANU but not NAP: remove PanProfile after device disconnects from NAP
     private boolean mLocalNapRoleConnected;
@@ -217,7 +216,7 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
 
             if (newProfileState == BluetoothProfile.STATE_CONNECTED) {
                 if (profile instanceof MapProfile) {
-                    profile.setPreferred(mDevice, true);
+                    profile.setEnabled(mDevice, true);
                 }
                 if (!mProfiles.contains(profile)) {
                     mRemovedProfiles.remove(profile);
@@ -230,7 +229,7 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
                 }
             } else if (profile instanceof MapProfile
                     && newProfileState == BluetoothProfile.STATE_DISCONNECTED) {
-                profile.setPreferred(mDevice, false);
+                profile.setEnabled(mDevice, false);
             } else if (mLocalNapRoleConnected && profile instanceof PanProfile
                     && ((PanProfile) profile).isLocalRoleNap(mDevice)
                     && newProfileState == BluetoothProfile.STATE_DISCONNECTED) {
@@ -276,17 +275,17 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
         PbapServerProfile PbapProfile = mProfileManager.getPbapProfile();
         if (PbapProfile != null && isConnectedProfile(PbapProfile))
         {
-            PbapProfile.disconnect(mDevice);
+            PbapProfile.setEnabled(mDevice, false);
         }
         MapProfile MapProfile = mProfileManager.getMapProfile();
         if (MapProfile != null && isConnectedProfile(MapProfile))
         {
-            MapProfile.disconnect(mDevice);
+            MapProfile.setEnabled(mDevice, false);
         }
     }
 
     public void disconnect(LocalBluetoothProfile profile) {
-        if (profile.disconnect(mDevice)) {
+        if (profile.setEnabled(mDevice, false)) {
             if (BluetoothUtils.D) {
                 Log.d(TAG, "Command sent successfully:DISCONNECT " + describe(profile));
             }
@@ -373,7 +372,7 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
         if (!ensurePaired()) {
             return;
         }
-        if (profile.connect(mDevice)) {
+        if (profile.setEnabled(mDevice, true)) {
             if (BluetoothUtils.D) {
                 Log.d(TAG, "Command sent successfully:CONNECT " + describe(profile));
             }
@@ -771,7 +770,7 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
     }
 
     public List<LocalBluetoothProfile> getProfiles() {
-        return Collections.unmodifiableList(mProfiles);
+        return new ArrayList<>(mProfiles);
     }
 
     public List<LocalBluetoothProfile> getConnectableProfiles() {
@@ -788,7 +787,7 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
     }
 
     public List<LocalBluetoothProfile> getRemovedProfiles() {
-        return mRemovedProfiles;
+        return new ArrayList<>(mRemovedProfiles);
     }
 
     public void registerCallback(Callback callback) {

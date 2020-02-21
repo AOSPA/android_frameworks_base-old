@@ -14,9 +14,7 @@
 
 package com.android.systemui.plugins.qs;
 
-import static java.lang.annotation.RetentionPolicy.SOURCE;
-
-import android.annotation.IntDef;
+import android.annotation.NonNull;
 import android.content.Context;
 import android.graphics.drawable.Drawable;
 import android.metrics.LogMaker;
@@ -28,7 +26,6 @@ import com.android.systemui.plugins.qs.QSTile.Callback;
 import com.android.systemui.plugins.qs.QSTile.Icon;
 import com.android.systemui.plugins.qs.QSTile.State;
 
-import java.lang.annotation.Retention;
 import java.util.Objects;
 import java.util.function.Supplier;
 
@@ -84,17 +81,6 @@ public interface QSTile {
         return logMaker;
     }
 
-    @Retention(SOURCE)
-    @IntDef({COLOR_TILE_ACCENT, COLOR_TILE_RED, COLOR_TILE_BLUE, COLOR_TILE_YELLOW,
-            COLOR_TILE_GREEN})
-    @interface ColorTile {}
-    int COLOR_TILE_ACCENT = 0;
-    int COLOR_TILE_RED = 1;
-    int COLOR_TILE_BLUE = 2;
-    int COLOR_TILE_YELLOW = 3;
-    int COLOR_TILE_GREEN = 4;
-    default void setColor(@ColorTile int color) {}
-
     @ProvidesInterface(version = Callback.VERSION)
     public interface Callback {
         public static final int VERSION = 1;
@@ -122,6 +108,12 @@ public interface QSTile {
         public int getPadding() {
             return 0;
         }
+
+        @Override
+        @NonNull
+        public String toString() {
+            return "Icon";
+        }
     }
 
     @ProvidesInterface(version = State.VERSION)
@@ -133,6 +125,7 @@ public interface QSTile {
         public CharSequence label;
         public CharSequence secondaryLabel;
         public CharSequence contentDescription;
+        public CharSequence stateDescription;
         public CharSequence dualLabelContentDescription;
         public boolean disabledByPolicy;
         public boolean dualTarget = false;
@@ -141,7 +134,6 @@ public interface QSTile {
         public SlashState slash;
         public boolean handlesLongClick = true;
         public boolean showRippleEffect = true;
-        public int colorActive = -1;
 
         public boolean copyTo(State other) {
             if (other == null) throw new IllegalArgumentException();
@@ -151,6 +143,7 @@ public interface QSTile {
                     || !Objects.equals(other.label, label)
                     || !Objects.equals(other.secondaryLabel, secondaryLabel)
                     || !Objects.equals(other.contentDescription, contentDescription)
+                    || !Objects.equals(other.stateDescription, stateDescription)
                     || !Objects.equals(other.dualLabelContentDescription,
                             dualLabelContentDescription)
                     || !Objects.equals(other.expandedAccessibilityClassName,
@@ -161,13 +154,13 @@ public interface QSTile {
                     || !Objects.equals(other.dualTarget, dualTarget)
                     || !Objects.equals(other.slash, slash)
                     || !Objects.equals(other.handlesLongClick, handlesLongClick)
-                    || !Objects.equals(other.showRippleEffect, showRippleEffect)
-                    || !Objects.equals(other.colorActive, colorActive);
+                    || !Objects.equals(other.showRippleEffect, showRippleEffect);
             other.icon = icon;
             other.iconSupplier = iconSupplier;
             other.label = label;
             other.secondaryLabel = secondaryLabel;
             other.contentDescription = contentDescription;
+            other.stateDescription = stateDescription;
             other.dualLabelContentDescription = dualLabelContentDescription;
             other.expandedAccessibilityClassName = expandedAccessibilityClassName;
             other.disabledByPolicy = disabledByPolicy;
@@ -177,7 +170,6 @@ public interface QSTile {
             other.slash = slash != null ? slash.copy() : null;
             other.handlesLongClick = handlesLongClick;
             other.showRippleEffect = showRippleEffect;
-            other.colorActive = colorActive;
             return changed;
         }
 
@@ -195,6 +187,7 @@ public interface QSTile {
             sb.append(",label=").append(label);
             sb.append(",secondaryLabel=").append(secondaryLabel);
             sb.append(",contentDescription=").append(contentDescription);
+            sb.append(",stateDescription=").append(stateDescription);
             sb.append(",dualLabelContentDescription=").append(dualLabelContentDescription);
             sb.append(",expandedAccessibilityClassName=").append(expandedAccessibilityClassName);
             sb.append(",disabledByPolicy=").append(disabledByPolicy);

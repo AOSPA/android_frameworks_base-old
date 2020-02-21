@@ -50,15 +50,20 @@ public class MediaSession2Record implements MediaSessionRecordImpl {
     private final MediaSessionService mService;
     @GuardedBy("mLock")
     private boolean mIsConnected;
+    @GuardedBy("mLock")
+    private int mPolicies;
+    @GuardedBy("mLock")
+    private boolean mIsClosed;
 
     public MediaSession2Record(Session2Token sessionToken, MediaSessionService service,
-            Looper handlerLooper) {
+            Looper handlerLooper, int policies) {
         mSessionToken = sessionToken;
         mService = service;
         mHandlerExecutor = new HandlerExecutor(new Handler(handlerLooper));
         mController = new MediaController2.Builder(service.getContext(), sessionToken)
                 .setControllerCallback(mHandlerExecutor, new Controller2Callback())
                 .build();
+        mPolicies = policies;
     }
 
     @Override
@@ -116,9 +121,17 @@ public class MediaSession2Record implements MediaSessionRecordImpl {
     @Override
     public void close() {
         synchronized (mLock) {
+            mIsClosed = true;
             // Call close regardless of the mIsAvailable. This may be called when it's not yet
             // connected.
             mController.close();
+        }
+    }
+
+    @Override
+    public boolean isClosed() {
+        synchronized (mLock) {
+            return mIsClosed;
         }
     }
 
@@ -127,6 +140,21 @@ public class MediaSession2Record implements MediaSessionRecordImpl {
             KeyEvent ke, int sequenceId, ResultReceiver cb) {
         // TODO(jaewan): Implement.
         return false;
+    }
+
+
+    @Override
+    public int getSessionPolicies() {
+        synchronized (mLock) {
+            return mPolicies;
+        }
+    }
+
+    @Override
+    public void setSessionPolicies(int policies) {
+        synchronized (mLock) {
+            mPolicies = policies;
+        }
     }
 
     @Override

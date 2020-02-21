@@ -321,6 +321,7 @@ class ActivityStarter {
         int callingPid = DEFAULT_CALLING_PID;
         int callingUid = DEFAULT_CALLING_UID;
         String callingPackage;
+        @Nullable String callingFeatureId;
         int realCallingPid = DEFAULT_REAL_CALLING_PID;
         int realCallingUid = DEFAULT_REAL_CALLING_UID;
         int startFlags;
@@ -370,6 +371,7 @@ class ActivityStarter {
             callingPid = DEFAULT_CALLING_PID;
             callingUid = DEFAULT_CALLING_UID;
             callingPackage = null;
+            callingFeatureId = null;
             realCallingPid = DEFAULT_REAL_CALLING_PID;
             realCallingUid = DEFAULT_REAL_CALLING_UID;
             startFlags = 0;
@@ -408,6 +410,7 @@ class ActivityStarter {
             callingPid = request.callingPid;
             callingUid = request.callingUid;
             callingPackage = request.callingPackage;
+            callingFeatureId = request.callingFeatureId;
             realCallingPid = request.realCallingPid;
             realCallingUid = request.realCallingUid;
             startFlags = request.startFlags;
@@ -697,9 +700,10 @@ class ActivityStarter {
         }
 
         final IIntentSender target = mService.getIntentSenderLocked(
-                ActivityManager.INTENT_SENDER_ACTIVITY, "android" /* packageName */, appCallingUid,
-                mRequest.userId, null /* token */, null /* resultWho*/, 0 /* requestCode*/,
-                new Intent[] { mRequest.intent }, new String[] { mRequest.resolvedType },
+                ActivityManager.INTENT_SENDER_ACTIVITY, "android" /* packageName */,
+                null /* featureId */, appCallingUid, mRequest.userId, null /* token */,
+                null /* resultWho*/, 0 /* requestCode*/, new Intent[]{mRequest.intent},
+                new String[]{mRequest.resolvedType},
                 PendingIntent.FLAG_CANCEL_CURRENT | PendingIntent.FLAG_ONE_SHOT,
                 null /* bOptions */);
 
@@ -811,6 +815,7 @@ class ActivityStarter {
         int callingPid = request.callingPid;
         int callingUid = request.callingUid;
         String callingPackage = request.callingPackage;
+        String callingFeatureId = request.callingFeatureId;
         final int realCallingPid = request.realCallingPid;
         final int realCallingUid = request.realCallingUid;
         final int startFlags = request.startFlags;
@@ -886,6 +891,7 @@ class ActivityStarter {
                 // we want the final activity to consider it to have been launched by the
                 // previous app activity.
                 callingPackage = sourceRecord.launchedFromPackage;
+                callingFeatureId = sourceRecord.launchedFromFeatureId;
             }
         }
 
@@ -953,8 +959,8 @@ class ActivityStarter {
         }
 
         boolean abort = !mSupervisor.checkStartAnyActivityPermission(intent, aInfo, resultWho,
-                requestCode, callingPid, callingUid, callingPackage, request.ignoreTargetSecurity,
-                inTask != null, callerApp, resultRecord, resultStack);
+                requestCode, callingPid, callingUid, callingPackage, callingFeatureId,
+                request.ignoreTargetSecurity, inTask != null, callerApp, resultRecord, resultStack);
         abort |= !mService.mIntentFirewall.checkStartActivity(intent, callingUid,
                 callingPid, resolvedType, aInfo.applicationInfo);
         abort |= !mService.getPermissionPolicyInternal().checkStartActivity(intent, callingUid,
@@ -994,7 +1000,8 @@ class ActivityStarter {
             }
         }
 
-        mInterceptor.setStates(userId, realCallingPid, realCallingUid, startFlags, callingPackage);
+        mInterceptor.setStates(userId, realCallingPid, realCallingUid, startFlags, callingPackage,
+                callingFeatureId);
         if (mInterceptor.intercept(intent, rInfo, aInfo, resolvedType, inTask, callingPid,
                 callingUid, checkedOptions)) {
             // activity start was intercepted, e.g. because the target user is currently in quiet
@@ -1027,7 +1034,7 @@ class ActivityStarter {
             if (mService.getPackageManagerInternalLocked().isPermissionsReviewRequired(
                     aInfo.packageName, userId)) {
                 final IIntentSender target = mService.getIntentSenderLocked(
-                        ActivityManager.INTENT_SENDER_ACTIVITY, callingPackage,
+                        ActivityManager.INTENT_SENDER_ACTIVITY, callingPackage, callingFeatureId,
                         callingUid, userId, null, null, 0, new Intent[]{intent},
                         new String[]{resolvedType}, PendingIntent.FLAG_CANCEL_CURRENT
                                 | PendingIntent.FLAG_ONE_SHOT, null);
@@ -1085,7 +1092,7 @@ class ActivityStarter {
         // app [on install success].
         if (rInfo != null && rInfo.auxiliaryInfo != null) {
             intent = createLaunchIntent(rInfo.auxiliaryInfo, request.ephemeralIntent,
-                    callingPackage, verificationBundle, resolvedType, userId);
+                    callingPackage, callingFeatureId, verificationBundle, resolvedType, userId);
             resolvedType = null;
             callingUid = realCallingUid;
             callingPid = realCallingPid;
@@ -1094,9 +1101,10 @@ class ActivityStarter {
         }
 
         final ActivityRecord r = new ActivityRecord(mService, callerApp, callingPid, callingUid,
-                callingPackage, intent, resolvedType, aInfo, mService.getGlobalConfiguration(),
-                resultRecord, resultWho, requestCode, request.componentSpecified,
-                voiceSession != null, mSupervisor, checkedOptions, sourceRecord);
+                callingPackage, callingFeatureId, intent, resolvedType, aInfo,
+                mService.getGlobalConfiguration(), resultRecord, resultWho, requestCode,
+                request.componentSpecified, voiceSession != null, mSupervisor, checkedOptions,
+                sourceRecord);
         mLastStartActivityRecord = r;
 
         if (r.appTimeTracker == null && sourceRecord != null) {
@@ -1306,21 +1314,22 @@ class ActivityStarter {
      * Creates a launch intent for the given auxiliary resolution data.
      */
     private @NonNull Intent createLaunchIntent(@Nullable AuxiliaryResolveInfo auxiliaryResponse,
-            Intent originalIntent, String callingPackage, Bundle verificationBundle,
-            String resolvedType, int userId) {
+            Intent originalIntent, String callingPackage, @Nullable String callingFeatureId,
+            Bundle verificationBundle, String resolvedType, int userId) {
         if (auxiliaryResponse != null && auxiliaryResponse.needsPhaseTwo) {
             // request phase two resolution
             PackageManagerInternal packageManager = mService.getPackageManagerInternalLocked();
             boolean isRequesterInstantApp = packageManager.isInstantApp(callingPackage, userId);
             packageManager.requestInstantAppResolutionPhaseTwo(
                     auxiliaryResponse, originalIntent, resolvedType, callingPackage,
-                    isRequesterInstantApp, verificationBundle, userId);
+                    callingFeatureId, isRequesterInstantApp, verificationBundle, userId);
         }
         return InstantAppResolver.buildEphemeralInstallerIntent(
                 originalIntent,
                 InstantAppResolver.sanitizeIntent(originalIntent),
                 auxiliaryResponse == null ? null : auxiliaryResponse.failureIntent,
                 callingPackage,
+                callingFeatureId,
                 verificationBundle,
                 resolvedType,
                 userId,
@@ -2509,7 +2518,6 @@ class ActivityStarter {
         return this;
     }
 
-    @VisibleForTesting
     Intent getIntent() {
         return mRequest.intent;
     }
@@ -2589,6 +2597,11 @@ class ActivityStarter {
 
     ActivityStarter setCallingPackage(String callingPackage) {
         mRequest.callingPackage = callingPackage;
+        return this;
+    }
+
+    ActivityStarter setCallingFeatureId(String callingFeatureId) {
+        mRequest.callingFeatureId = callingFeatureId;
         return this;
     }
 

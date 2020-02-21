@@ -997,8 +997,9 @@ public final class Settings {
      * <p>
      * In some cases, a matching Activity may not exist, so ensure you safeguard against this.
      * <p>
-     * Input: Optionally, in versions of Android prior to 11, the Intent's data URI can specify the
-     * application package name to directly invoke the management GUI specific to the package name.
+     * Input: Optionally, in versions of Android prior to {@link android.os.Build.VERSION_CODES#R},
+     * the Intent's data URI can specify the application package name to directly invoke the
+     * management GUI specific to the package name.
      * For example "package:com.my.app".
      * <p>
      * Output: Nothing.
@@ -1011,9 +1012,10 @@ public final class Settings {
      * Activity Action: Show screen for controlling if the app specified in the data URI of the
      * intent can draw on top of other apps.
      * <p>
-     * Unlike {@link #ACTION_MANAGE_OVERLAY_PERMISSION}, which in Android 11 can't be used to show
-     * a GUI for a specific package, permission {@code android.permission.INTERNAL_SYSTEM_WINDOW} is
-     * needed to start an activity with this intent.
+     * Unlike {@link #ACTION_MANAGE_OVERLAY_PERMISSION}, which in Android {@link
+     * android.os.Build.VERSION_CODES#R} can't be used to show a GUI for a specific package,
+     * permission {@code android.permission.INTERNAL_SYSTEM_WINDOW} is needed to start an activity
+     * with this intent.
      * <p>
      * In some cases, a matching Activity may not exist, so ensure you
      * safeguard against this.
@@ -1771,6 +1773,15 @@ public final class Settings {
             = "android.settings.NOTIFICATION_SETTINGS";
 
     /**
+     * Activity Action: Show notification history screen.
+     *
+     * @hide
+     */
+    @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
+    public static final String ACTION_NOTIFICATION_HISTORY
+            = "android.settings.NOTIFICATION_HISTORY";
+
+    /**
      * Activity Action: Show app listing settings, filtered by those that send notifications.
      *
      * @hide
@@ -1828,6 +1839,17 @@ public final class Settings {
      * This must be passed as an extra field to the {@link #ACTION_CHANNEL_NOTIFICATION_SETTINGS}.
      */
     public static final String EXTRA_CHANNEL_ID = "android.provider.extra.CHANNEL_ID";
+
+    /**
+     * Activity Extra: The {@link NotificationChannel#getConversationId()} of the notification
+     * conversation settings to display.
+     * <p>
+     * This is an optional extra field to the {@link #ACTION_CHANNEL_NOTIFICATION_SETTINGS}. If
+     * included the system will first look up notification settings by channel and conversation id,
+     * and will fall back to channel id if a specialized channel for this conversation doesn't
+     * exist, similar to {@link NotificationManager#getNotificationChannel(String, String)}.
+     */
+    public static final String EXTRA_CONVERSATION_ID = "android.provider.extra.CONVERSATION_ID";
 
     /**
      * Activity Action: Show notification redaction settings.
@@ -2986,6 +3008,7 @@ public final class Settings {
         private static final HashSet<String> MOVED_TO_SECURE;
         static {
             MOVED_TO_SECURE = new HashSet<>(30);
+            MOVED_TO_SECURE.add(Secure.ADAPTIVE_SLEEP);
             MOVED_TO_SECURE.add(Secure.ANDROID_ID);
             MOVED_TO_SECURE.add(Secure.HTTP_PROXY);
             MOVED_TO_SECURE.add(Secure.LOCATION_PROVIDERS_ALLOWED);
@@ -3906,6 +3929,19 @@ public final class Settings {
         public static final String SCREEN_BRIGHTNESS_FOR_VR = "screen_brightness_for_vr";
 
         /**
+         * The screen backlight brightness between 0.0f and 1.0f.
+         * @hide
+         */
+        public static final String SCREEN_BRIGHTNESS_FOR_VR_FLOAT =
+                "screen_brightness_for_vr_float";
+
+        /**
+         * The screen backlight brightness between 0.0f and 1.0f.
+         * @hide
+         */
+        public static final String SCREEN_BRIGHTNESS_FLOAT = "screen_brightness_float";
+
+        /**
          * Control whether to enable automatic brightness mode.
          */
         public static final String SCREEN_BRIGHTNESS_MODE = "screen_brightness_mode";
@@ -3930,6 +3966,7 @@ public final class Settings {
 
         /**
          * Control whether to enable adaptive sleep mode.
+         * @deprecated Use {@link android.provider.Settings.Secure#ADAPTIVE_SLEEP} instead.
          * @hide
          */
         public static final String ADAPTIVE_SLEEP = "adaptive_sleep";
@@ -4718,9 +4755,10 @@ public final class Settings {
             PUBLIC_SETTINGS.add(DIM_SCREEN);
             PUBLIC_SETTINGS.add(SCREEN_OFF_TIMEOUT);
             PUBLIC_SETTINGS.add(SCREEN_BRIGHTNESS);
+            PUBLIC_SETTINGS.add(SCREEN_BRIGHTNESS_FLOAT);
             PUBLIC_SETTINGS.add(SCREEN_BRIGHTNESS_FOR_VR);
+            PUBLIC_SETTINGS.add(SCREEN_BRIGHTNESS_FOR_VR_FLOAT);
             PUBLIC_SETTINGS.add(SCREEN_BRIGHTNESS_MODE);
-            PUBLIC_SETTINGS.add(ADAPTIVE_SLEEP);
             PUBLIC_SETTINGS.add(MODE_RINGER_STREAMS_AFFECTED);
             PUBLIC_SETTINGS.add(MUTE_STREAMS_AFFECTED);
             PUBLIC_SETTINGS.add(VIBRATE_ON);
@@ -5776,6 +5814,12 @@ public final class Settings {
         }
 
         /**
+         * Control whether to enable adaptive sleep mode.
+         * @hide
+         */
+        public static final String ADAPTIVE_SLEEP = "adaptive_sleep";
+
+        /**
          * @deprecated Use {@link android.provider.Settings.Global#DEVELOPMENT_SETTINGS_ENABLED}
          * instead
          */
@@ -6235,16 +6279,19 @@ public final class Settings {
          * @hide
          */
         public static final String LOCATION_CHANGER = "location_changer";
+
         /**
          * The location changer is unknown or unable to detect.
          * @hide
          */
         public static final int LOCATION_CHANGER_UNKNOWN = 0;
+
         /**
          * Location settings in system settings.
          * @hide
          */
         public static final int LOCATION_CHANGER_SYSTEM_SETTINGS = 1;
+
         /**
          * The location icon in drop down notification drawer.
          * @hide
@@ -6298,6 +6345,14 @@ public final class Settings {
          */
         @SystemApi
         public static final int LOCATION_MODE_ON = LOCATION_MODE_HIGH_ACCURACY;
+
+        /**
+         * The accuracy in meters used for coarsening location for clients with only the coarse
+         * location permission.
+         *
+         * @hide
+         */
+        public static final String LOCATION_COARSE_ACCURACY_M = "locationCoarseAccuracy";
 
         /**
          * A flag containing settings used for biometric weak
@@ -10210,7 +10265,9 @@ public final class Settings {
          *
          * Type: int (0 for false, 1 for true)
          * @hide
+         * @deprecated Use {@link WifiManager#isAutoWakeupEnabled()} instead.
          */
+        @Deprecated
         @SystemApi
         public static final String WIFI_WAKEUP_ENABLED = "wifi_wakeup_enabled";
 
@@ -10246,7 +10303,6 @@ public final class Settings {
          * enabled state.
          * @hide
          */
-        @SystemApi
         public static final String NETWORK_RECOMMENDATIONS_ENABLED =
                 "network_recommendations_enabled";
 

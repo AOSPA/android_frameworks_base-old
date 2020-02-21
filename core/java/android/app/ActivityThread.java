@@ -3773,7 +3773,15 @@ public final class ActivityThread extends ClientTransactionHandler {
             return;
         }
 
-        r.activity.onPictureInPictureRequested();
+        final boolean receivedByApp = r.activity.onPictureInPictureRequested();
+        if (!receivedByApp) {
+            // Previous recommendation was for apps to enter picture-in-picture in
+            // onUserLeavingHint() for cases such as the app being put into the background. For
+            // backwards compatibility with apps that are not using the newer
+            // onPictureInPictureRequested() callback, we schedule the life cycle events needed to
+            // trigger onUserLeavingHint(), then we return the activity to its previous state.
+            schedulePauseWithUserLeaveHintAndReturnToCurrentState(r);
+        }
     }
 
     /**
@@ -3781,18 +3789,7 @@ public final class ActivityThread extends ClientTransactionHandler {
      * return to its previous state. This allows activities that rely on onUserLeaveHint instead of
      * onPictureInPictureRequested to enter picture-in-picture.
      */
-    public void schedulePauseAndReturnToCurrentState(IBinder token) {
-        final ActivityClientRecord r = mActivities.get(token);
-        if (r == null) {
-            Log.w(TAG, "Activity to request pause with user leaving hint to no longer exists");
-            return;
-        }
-
-        if (r.mIsUserLeaving) {
-            // The activity is about to perform user leaving, so there's no need to cycle ourselves.
-            return;
-        }
-
+    private void schedulePauseWithUserLeaveHintAndReturnToCurrentState(ActivityClientRecord r) {
         final int prevState = r.getLifecycleState();
         if (prevState != ON_RESUME && prevState != ON_PAUSE) {
             return;
@@ -4545,7 +4542,6 @@ public final class ActivityThread extends ClientTransactionHandler {
         if (r != null) {
             if (userLeaving) {
                 performUserLeavingActivity(r);
-                r.mIsUserLeaving = false;
             }
 
             r.activity.mConfigChangeFlags |= configChanges;
@@ -4560,7 +4556,6 @@ public final class ActivityThread extends ClientTransactionHandler {
     }
 
     final void performUserLeavingActivity(ActivityClientRecord r) {
-        r.mIsUserLeaving = true;
         mInstrumentation.callActivityOnPictureInPictureRequested(r.activity);
         mInstrumentation.callActivityOnUserLeaving(r.activity);
     }

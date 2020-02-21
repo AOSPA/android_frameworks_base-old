@@ -63,17 +63,20 @@ import com.android.systemui.statusbar.RemoteInputController;
 import com.android.systemui.statusbar.StatusBarState;
 import com.android.systemui.statusbar.SysuiStatusBarStateController;
 import com.android.systemui.statusbar.notification.DynamicPrivacyController;
+import com.android.systemui.statusbar.notification.ForegroundServiceDismissalFeatureController;
 import com.android.systemui.statusbar.notification.NotificationEntryManager;
+import com.android.systemui.statusbar.notification.NotificationEntryManagerLogger;
 import com.android.systemui.statusbar.notification.NotificationFilter;
 import com.android.systemui.statusbar.notification.NotificationSectionsFeatureManager;
 import com.android.systemui.statusbar.notification.TestableNotificationEntryManager;
 import com.android.systemui.statusbar.notification.VisualStabilityManager;
+import com.android.systemui.statusbar.notification.collection.NotifCollection;
+import com.android.systemui.statusbar.notification.collection.NotifPipeline;
 import com.android.systemui.statusbar.notification.collection.NotificationEntry;
 import com.android.systemui.statusbar.notification.collection.NotificationEntryBuilder;
 import com.android.systemui.statusbar.notification.collection.NotificationRankingManager;
 import com.android.systemui.statusbar.notification.collection.inflation.NotificationRowBinder;
 import com.android.systemui.statusbar.notification.collection.provider.HighPriorityProvider;
-import com.android.systemui.statusbar.notification.logging.NotifLog;
 import com.android.systemui.statusbar.notification.people.PeopleNotificationIdentifier;
 import com.android.systemui.statusbar.notification.row.ExpandableNotificationRow;
 import com.android.systemui.statusbar.notification.row.FooterView;
@@ -132,6 +135,7 @@ public class NotificationStackScrollLayoutTest extends SysuiTestCase {
     @Mock private NotificationSectionsManager mNotificationSectionsManager;
     @Mock private NotificationSection mNotificationSection;
     @Mock private NotificationLockscreenUserManager mLockscreenUserManager;
+    @Mock private FeatureFlags mFeatureFlags;
     private UserChangedListener mUserChangedListener;
     private TestableNotificationEntryManager mEntryManager;
     private int mOriginalInterruptionModelSetting;
@@ -162,14 +166,14 @@ public class NotificationStackScrollLayoutTest extends SysuiTestCase {
         ArgumentCaptor<UserChangedListener> userChangedCaptor = ArgumentCaptor
                 .forClass(UserChangedListener.class);
         mEntryManager = new TestableNotificationEntryManager(
-                mock(NotifLog.class),
+                mock(NotificationEntryManagerLogger.class),
                 mock(NotificationGroupManager.class),
                 new NotificationRankingManager(
                         () -> mock(NotificationMediaManager.class),
                         mGroupManager,
                         mHeadsUpManager,
                         mock(NotificationFilter.class),
-                        mock(NotifLog.class),
+                        mock(NotificationEntryManagerLogger.class),
                         mock(NotificationSectionsFeatureManager.class),
                         mock(PeopleNotificationIdentifier.class),
                         mock(HighPriorityProvider.class)
@@ -178,10 +182,11 @@ public class NotificationStackScrollLayoutTest extends SysuiTestCase {
                 mock(FeatureFlags.class),
                 () -> mock(NotificationRowBinder.class),
                 () -> mRemoteInputManager,
-                mock(LeakDetector.class));
-        mDependency.injectTestDependency(NotificationEntryManager.class, mEntryManager);
+                mock(LeakDetector.class),
+                mock(ForegroundServiceDismissalFeatureController.class)
+        );
         mEntryManager.setUpForTest(mock(NotificationPresenter.class), null, mHeadsUpManager);
-
+        when(mFeatureFlags.isNewNotifPipelineRenderingEnabled()).thenReturn(false);
 
         NotificationShelf notificationShelf = mock(NotificationShelf.class);
         when(mNotificationSectionsManager.createSectionsForBuckets()).thenReturn(
@@ -203,7 +208,14 @@ public class NotificationStackScrollLayoutTest extends SysuiTestCase {
                 mLockscreenUserManager,
                 mock(NotificationGutsManager.class),
                 mZenModeController,
-                mNotificationSectionsManager);
+                mNotificationSectionsManager,
+                mock(ForegroundServiceSectionController.class),
+                mock(ForegroundServiceDismissalFeatureController.class),
+                mFeatureFlags,
+                mock(NotifPipeline.class),
+                mEntryManager,
+                mock(NotifCollection.class)
+        );
         verify(mLockscreenUserManager).addUserChangedListener(userChangedCaptor.capture());
         mUserChangedListener = userChangedCaptor.getValue();
         mStackScroller = spy(mStackScrollerInternal);
@@ -394,8 +406,11 @@ public class NotificationStackScrollLayoutTest extends SysuiTestCase {
 
         mStackScroller.onUpdateRowStates();
 
+        // Expecting the footer to be the last child
+        int expected = mStackScroller.getChildCount() - 1;
+
         // move footer to end
-        verify(mStackScroller).changeViewPosition(any(FooterView.class), eq(-1 /* end */));
+        verify(mStackScroller).changeViewPosition(any(FooterView.class), eq(expected));
     }
 
     @Test

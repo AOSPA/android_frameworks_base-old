@@ -88,6 +88,7 @@ import android.os.SystemClock;
 import android.os.SystemProperties;
 import android.os.UserHandle;
 import android.os.UserManager;
+import android.os.incremental.V4Signature;
 import android.os.storage.StorageManager;
 import android.permission.IPermissionManager;
 import android.system.ErrnoException;
@@ -181,6 +182,8 @@ class PackageManagerShellCommand extends ShellCommand {
                     return runInstall();
                 case "install-streaming":
                     return runStreamingInstall();
+                case "install-incremental":
+                    return runIncrementalInstall();
                 case "install-abandon":
                 case "install-destroy":
                     return runInstallAbandon();
@@ -1163,7 +1166,16 @@ class PackageManagerShellCommand extends ShellCommand {
         final InstallParams params = makeInstallParams();
         if (params.sessionParams.dataLoaderParams == null) {
             params.sessionParams.setDataLoaderParams(
-                    PackageManagerShellCommandDataLoader.getDataLoaderParams(this));
+                    PackageManagerShellCommandDataLoader.getStreamingDataLoaderParams(this));
+        }
+        return doRunInstall(params);
+    }
+
+    private int runIncrementalInstall() throws RemoteException {
+        final InstallParams params = makeInstallParams();
+        if (params.sessionParams.dataLoaderParams == null) {
+            params.sessionParams.setDataLoaderParams(
+                    PackageManagerShellCommandDataLoader.getIncrementalDataLoaderParams(this));
         }
         return doRunInstall(params);
     }
@@ -2730,6 +2742,9 @@ class PackageManagerShellCommand extends ShellCommand {
                 case "--staged":
                     sessionParams.setStaged();
                     break;
+                case "--force-queryable":
+                    sessionParams.setForceQueryable();
+                    break;
                 case "--enable-rollback":
                     if (params.installerPackageName == null) {
                         // com.android.shell has the TEST_MANAGE_ROLLBACKS
@@ -2753,6 +2768,9 @@ class PackageManagerShellCommand extends ShellCommand {
                     break;
                 case "--no-wait":
                     params.mWaitForStagedSessionReady = false;
+                    break;
+                case "--skip-verification":
+                    sessionParams.installFlags |= PackageManager.INSTALL_DISABLE_VERIFICATION;
                     break;
                 default:
                     throw new IllegalArgumentException("Unknown option " + opt);
@@ -2995,17 +3013,27 @@ class PackageManagerShellCommand extends ShellCommand {
                         return 1;
                     }
 
-                    session.addFile(LOCATION_DATA_APP, name, sizeBytes, STDIN_PATH_BYTES, null);
+                    // Incremental requires unique metadatas, let's add a name to the dash.
+                    session.addFile(LOCATION_DATA_APP, name, sizeBytes,
+                            ("-" + name).getBytes(StandardCharsets.UTF_8), null);
                     continue;
                 }
 
                 // 3. Local file.
                 final String inPath = arg;
 
-                String name = new File(inPath).getName();
-                byte[] metadata = inPath.getBytes(StandardCharsets.UTF_8);
+                final File file = new File(inPath);
+                final String name = file.getName();
+                final long size = file.length();
+                final byte[] metadata = inPath.getBytes(StandardCharsets.UTF_8);
 
-                session.addFile(LOCATION_DATA_APP, name, -1, metadata, null);
+                // Try to load a v4 signature for the APK.
+                final V4Signature v4signature = V4Signature.readFrom(
+                        new File(inPath + V4Signature.EXT));
+                final byte[] v4signatureBytes =
+                        (v4signature != null) ? v4signature.toByteArray() : null;
+
+                session.addFile(LOCATION_DATA_APP, name, size, metadata, v4signatureBytes);
             }
             return 0;
         } finally {

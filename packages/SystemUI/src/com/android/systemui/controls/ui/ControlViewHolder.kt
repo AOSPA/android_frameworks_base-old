@@ -17,7 +17,6 @@
 package com.android.systemui.controls.ui
 
 import android.content.Context
-import android.content.Intent
 import android.graphics.drawable.ClipDrawable
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.Icon
@@ -34,14 +33,15 @@ import android.widget.ImageView
 import android.widget.TextView
 
 import com.android.systemui.controls.controller.ControlsController
+import com.android.systemui.util.concurrency.DelayableExecutor
 import com.android.systemui.R
 
-public const val MIN_LEVEL = 0
-public const val MAX_LEVEL = 10000
+private const val UPDATE_DELAY_IN_MILLIS = 3000L
 
 class ControlViewHolder(
     val layout: ViewGroup,
-    val controlsController: ControlsController
+    val controlsController: ControlsController,
+    val uiExecutor: DelayableExecutor
 ) {
     val icon: ImageView = layout.requireViewById(R.id.icon)
     val status: TextView = layout.requireViewById(R.id.status)
@@ -52,6 +52,7 @@ class ControlViewHolder(
     val clipLayer: ClipDrawable
     val gd: GradientDrawable
     lateinit var cws: ControlWithState
+    var cancelUpdate: Runnable? = null
 
     init {
         val ld = layout.getBackground() as LayerDrawable
@@ -63,6 +64,8 @@ class ControlViewHolder(
     fun bindData(cws: ControlWithState) {
         this.cws = cws
 
+        cancelUpdate?.run()
+
         val (status, template) = cws.control?.let {
             title.setText(it.getTitle())
             subtitle.setText(it.getSubtitle())
@@ -73,17 +76,39 @@ class ControlViewHolder(
             Pair(Control.STATUS_UNKNOWN, ControlTemplate.NO_TEMPLATE)
         }
 
-        cws.control?.let { c ->
+        cws.control?.let {
             layout.setOnLongClickListener(View.OnLongClickListener() {
-                val closeDialog = Intent(Intent.ACTION_CLOSE_SYSTEM_DIALOGS)
-                context.sendBroadcast(closeDialog)
-
-                c.getAppIntent().send()
+                ControlActionCoordinator.longPress(this@ControlViewHolder)
                 true
             })
         }
 
         findBehavior(status, template).apply(this, cws)
+    }
+
+    fun actionResponse(@ControlAction.ResponseResult response: Int) {
+        val text = when (response) {
+            ControlAction.RESPONSE_OK -> "Success"
+            ControlAction.RESPONSE_FAIL -> "Error"
+            else -> ""
+        }
+
+        if (!text.isEmpty()) {
+            setTransientStatus(text)
+        }
+    }
+
+    fun setTransientStatus(tempStatus: String) {
+        val previousText = status.getText()
+        val previousTextExtra = statusExtra.getText()
+
+        cancelUpdate = uiExecutor.executeDelayed({
+                status.setText(previousText)
+                statusExtra.setText(previousTextExtra)
+            }, UPDATE_DELAY_IN_MILLIS)
+
+        status.setText(tempStatus)
+        statusExtra.setText("")
     }
 
     fun action(action: ControlAction) {

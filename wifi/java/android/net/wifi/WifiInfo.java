@@ -291,13 +291,16 @@ public class WifiInfo implements Parcelable {
      */
     private boolean mMeteredHint;
 
+    /**
+     * Passpoint unique key
+     */
+    private String mPasspointUniqueId;
 
     private int mWifiGeneration;
 
     private boolean mVhtMax8SpatialStreamsSupport;
 
     private boolean mTwtSupport;
-
 
     /** @hide */
     @UnsupportedAppUsage
@@ -331,6 +334,7 @@ public class WifiInfo implements Parcelable {
         setRequestingPackageName(null);
         setFQDN(null);
         setProviderFriendlyName(null);
+        setPasspointUniqueId(null);
         setWifiGeneration(-1);
         setTwtSupport(false);
         setVhtMax8SpatialStreamsSupport(false);
@@ -385,6 +389,7 @@ public class WifiInfo implements Parcelable {
             mWifiStandard = source.mWifiStandard;
             mMaxSupportedTxLinkSpeed = source.mMaxSupportedTxLinkSpeed;
             mMaxSupportedRxLinkSpeed = source.mMaxSupportedRxLinkSpeed;
+            mPasspointUniqueId = source.mPasspointUniqueId;
         }
     }
 
@@ -464,9 +469,8 @@ public class WifiInfo implements Parcelable {
      * <p>
      * If the SSID can be decoded as UTF-8, it will be returned surrounded by double
      * quotation marks. Otherwise, it is returned as a string of hex digits.
-     * The SSID may be
-     * <lt>&lt;unknown ssid&gt;, if there is no network currently connected or if the caller has
-     * insufficient permissions to access the SSID.<lt>
+     * The SSID may be {@link WifiManager#UNKNOWN_SSID}, if there is no network currently connected
+     * or if the caller has insufficient permissions to access the SSID.
      * </p>
      * <p>
      * Prior to {@link android.os.Build.VERSION_CODES#JELLY_BEAN_MR1}, this method
@@ -1032,6 +1036,7 @@ public class WifiInfo implements Parcelable {
         dest.writeInt(mWifiStandard);
         dest.writeInt(mMaxSupportedTxLinkSpeed);
         dest.writeInt(mMaxSupportedRxLinkSpeed);
+        dest.writeString(mPasspointUniqueId);
     }
 
     /** Implement the Parcelable interface {@hide} */
@@ -1079,6 +1084,7 @@ public class WifiInfo implements Parcelable {
                 info.mWifiStandard = in.readInt();
                 info.mMaxSupportedTxLinkSpeed = in.readInt();
                 info.mMaxSupportedRxLinkSpeed = in.readInt();
+                info.mPasspointUniqueId = in.readString();
                 return info;
             }
 
@@ -1086,4 +1092,24 @@ public class WifiInfo implements Parcelable {
                 return new WifiInfo[size];
             }
         };
+
+    /**
+     * Set the Passpoint unique identifier for the current connection
+     *
+     * @param passpointUniqueId Unique identifier
+     * @hide
+     */
+    public void setPasspointUniqueId(@Nullable String passpointUniqueId) {
+        mPasspointUniqueId = passpointUniqueId;
+    }
+
+    /**
+     * Get the Passpoint unique identifier for the current connection
+     *
+     * @return Passpoint unique identifier
+     * @hide
+     */
+    public @Nullable String getPasspointUniqueId() {
+        return mPasspointUniqueId;
+    }
 }
