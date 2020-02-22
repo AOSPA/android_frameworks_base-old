@@ -30,6 +30,8 @@ import java.lang.annotation.RetentionPolicy;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.Collections;
+import java.util.List;
 import java.util.Objects;
 
 /**
@@ -53,14 +55,12 @@ public abstract class AtomicFormula extends IntegrityFormula {
                     PRE_INSTALLED,
             })
     @Retention(RetentionPolicy.SOURCE)
-    public @interface Key {
-    }
+    public @interface Key {}
 
     /** @hide */
     @IntDef(value = {EQ, GT, GTE})
     @Retention(RetentionPolicy.SOURCE)
-    public @interface Operator {
-    }
+    public @interface Operator {}
 
     /**
      * Package name of the app.
@@ -332,9 +332,12 @@ public abstract class AtomicFormula extends IntegrityFormula {
          * Constructs a new {@link StringAtomicFormula} together with handling the necessary
          * hashing for the given key.
          *
-         * <p> The value will be hashed with SHA256 and the hex digest will be computed; for
-         * all cases except when the key is PACKAGE_NAME or INSTALLER_NAME and the value
-         * is less than 33 characters.
+         * <p> The value will be automatically hashed with SHA256 and the hex digest will be
+         * computed when the key is PACKAGE_NAME or INSTALLER_NAME and the value is more than 32
+         * characters.
+         *
+         * <p> The APP_CERTIFICATES and INSTALLER_CERTIFICATES are always delivered in hashed
+         * form. So the isHashedValue is set to true by default.
          *
          * @throws IllegalArgumentException if {@code key} cannot be used with string value.
          */
@@ -348,7 +351,11 @@ public abstract class AtomicFormula extends IntegrityFormula {
                     String.format(
                             "Key %s cannot be used with StringAtomicFormula", keyToString(key)));
             mValue = hashValue(key, value);
-            mIsHashedValue = !mValue.equals(value);
+            mIsHashedValue =
+                    key == APP_CERTIFICATE
+                            || key == INSTALLER_CERTIFICATE
+                            ? true
+                            : !mValue.equals(value);
         }
 
         StringAtomicFormula(Parcel in) {
@@ -381,7 +388,7 @@ public abstract class AtomicFormula extends IntegrityFormula {
             if (mValue == null || mIsHashedValue == null) {
                 return false;
             }
-            return getStringMetadataValue(appInstallMetadata, getKey()).equals(mValue);
+            return getMetadataValue(appInstallMetadata, getKey()).contains(mValue);
         }
 
         @Override
@@ -442,17 +449,17 @@ public abstract class AtomicFormula extends IntegrityFormula {
             return mIsHashedValue;
         }
 
-        private static String getStringMetadataValue(
+        private static List<String> getMetadataValue(
                 AppInstallMetadata appInstallMetadata, int key) {
             switch (key) {
                 case AtomicFormula.PACKAGE_NAME:
-                    return appInstallMetadata.getPackageName();
+                    return Collections.singletonList(appInstallMetadata.getPackageName());
                 case AtomicFormula.APP_CERTIFICATE:
-                    return appInstallMetadata.getAppCertificate();
+                    return appInstallMetadata.getAppCertificates();
                 case AtomicFormula.INSTALLER_CERTIFICATE:
-                    return appInstallMetadata.getInstallerCertificate();
+                    return appInstallMetadata.getInstallerCertificates();
                 case AtomicFormula.INSTALLER_NAME:
-                    return appInstallMetadata.getInstallerName();
+                    return Collections.singletonList(appInstallMetadata.getInstallerName());
                 default:
                     throw new IllegalStateException(
                             "Unexpected key in StringAtomicFormula: " + key);

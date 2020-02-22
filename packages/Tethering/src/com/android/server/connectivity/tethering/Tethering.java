@@ -274,13 +274,6 @@ public class Tethering {
 
         mStateReceiver = new StateReceiver();
 
-        mNetdCallback = new NetdCallback();
-        try {
-            mNetd.registerUnsolicitedEventListener(mNetdCallback);
-        } catch (RemoteException e) {
-            mLog.e("Unable to register netd UnsolicitedEventListener");
-        }
-
         final UserManager userManager = (UserManager) mContext.getSystemService(
                 Context.USER_SERVICE);
         mTetheringRestriction = new UserRestrictionActionListener(userManager, this);
@@ -289,6 +282,14 @@ public class Tethering {
 
         // Load tethering configuration.
         updateConfiguration();
+        // NetdCallback should be registered after updateConfiguration() to ensure
+        // TetheringConfiguration is created.
+        mNetdCallback = new NetdCallback();
+        try {
+            mNetd.registerUnsolicitedEventListener(mNetdCallback);
+        } catch (RemoteException e) {
+            mLog.e("Unable to register netd UnsolicitedEventListener");
+        }
 
         startStateMachineUpdaters(mHandler);
         startTrackDefaultNetwork();
@@ -1952,13 +1953,25 @@ public class Tethering {
             parcel.tetheringSupported = mDeps.isTetheringSupported();
             parcel.upstreamNetwork = mTetherUpstream;
             parcel.config = mConfig.toStableParcelable();
-            parcel.states = mTetherStatesParcel;
+            parcel.states =
+                    mTetherStatesParcel != null ? mTetherStatesParcel : emptyTetherStatesParcel();
             try {
                 callback.onCallbackStarted(parcel);
             } catch (RemoteException e) {
                 // Not really very much to do here.
             }
         });
+    }
+
+    private TetherStatesParcel emptyTetherStatesParcel() {
+        final TetherStatesParcel parcel = new TetherStatesParcel();
+        parcel.availableList = new String[0];
+        parcel.tetheredList = new String[0];
+        parcel.localOnlyList = new String[0];
+        parcel.erroredIfaceList = new String[0];
+        parcel.lastErrorList = new int[0];
+
+        return parcel;
     }
 
     /** Unregister tethering event callback */

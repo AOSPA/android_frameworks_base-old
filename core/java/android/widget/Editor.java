@@ -454,15 +454,17 @@ public class Editor {
             aspectRatio = 5.5f;
         }
 
-        final Paint.FontMetrics fontMetrics = mTextView.getPaint().getFontMetrics();
-        final float sourceHeight = fontMetrics.descent - fontMetrics.ascent;
+        final Layout layout = mTextView.getLayout();
+        final int line = layout.getLineForOffset(mTextView.getSelectionStart());
+        final int sourceHeight =
+            layout.getLineBottomWithoutSpacing(line) - layout.getLineTop(line);
         // Slightly increase the height to avoid tooLargeTextForMagnifier() returns true.
         int height = (int)(sourceHeight * zoom) + 2;
         int width = (int)(aspectRatio * height);
 
         params.setFishEyeStyle()
                 .setSize(width, height)
-                .setSourceSize(width, Math.round(sourceHeight))
+                .setSourceSize(width, sourceHeight)
                 .setElevation(0)
                 .setInitialZoom(zoom)
                 .setClippingEnabled(false);
@@ -5041,7 +5043,7 @@ public class Editor {
 
             // Vertically snap to middle of current line.
             showPosInView.y = ((mTextView.getLayout().getLineTop(lineNumber)
-                    + mTextView.getLayout().getLineBottom(lineNumber)) / 2.0f
+                    + mTextView.getLayout().getLineBottomWithoutSpacing(lineNumber)) / 2.0f
                     + mTextView.getTotalPaddingTop() - mTextView.getScrollY()) * mTextViewScaleY;
             return true;
         }
@@ -5109,8 +5111,10 @@ public class Editor {
                     int lineRight = (int) layout.getLineRight(line);
                     lineRight += mTextView.getTotalPaddingLeft() - mTextView.getScrollX();
                     mMagnifierAnimator.mMagnifier.setSourceHorizontalBounds(lineLeft, lineRight);
+                    mMagnifierAnimator.mMagnifier.show(showPosInView.x, showPosInView.y);
+                } else {
+                  mMagnifierAnimator.show(showPosInView.x, showPosInView.y);
                 }
-                mMagnifierAnimator.show(showPosInView.x, showPosInView.y);
                 updateHandlesVisibility();
             } else {
                 dismissMagnifier();
@@ -5246,9 +5250,6 @@ public class Editor {
         private boolean mIsInActionMode;
         // The timestamp for the last up event, which is used for double tap detection.
         private long mLastUpTime;
-        // The text height of the font of the text view, which is used to calculate the Y coordinate
-        // of the touch through events.
-        private float mTextHeight;
 
         // The delta height applied to the insertion handle view.
         private final int mDeltaHeight;
@@ -5401,8 +5402,6 @@ public class Editor {
                     if (ev.getEventTime() - mLastUpTime < ViewConfiguration.getDoubleTapTimeout()) {
                         stopTextActionMode();  // Avoid crash when double tap and drag backwards.
                     }
-                    final Paint.FontMetrics fontMetrics = mTextView.getPaint().getFontMetrics();
-                    mTextHeight = fontMetrics.descent - fontMetrics.ascent;
                     mTouchState.setIsOnHandle(true);
                     break;
                 case MotionEvent.ACTION_UP:
@@ -5441,6 +5440,10 @@ public class Editor {
         }
 
         private MotionEvent transformEventForTouchThrough(MotionEvent ev) {
+            final Layout layout = mTextView.getLayout();
+            final int line = layout.getLineForOffset(getCurrentCursorOffset());
+            final int textHeight =
+                    layout.getLineBottomWithoutSpacing(line) - layout.getLineTop(line);
             // Transforms the touch events to screen coordinates.
             // And also shift up to make the hit point is on the text.
             // Note:
@@ -5448,7 +5451,7 @@ public class Editor {
             //  - The revised Y should be at the top of the text.
             Matrix m = new Matrix();
             m.setTranslate(ev.getRawX() - ev.getX() + (getMeasuredWidth() >> 1) - mTouchDownX,
-                    ev.getRawY() - ev.getY() - mTouchDownY - mTextHeight);
+                    ev.getRawY() - ev.getY() - (textHeight >> 1) - mTouchDownY);
             ev.transform(m);
             // Transforms the touch events to text view coordinates.
             mTextView.toLocalMotionEvent(ev);

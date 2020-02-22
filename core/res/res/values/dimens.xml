@@ -33,9 +33,11 @@
     <dimen name="toast_y_offset">24dp</dimen>
     <!-- Height of the status bar -->
     <dimen name="status_bar_height">@dimen/status_bar_height_portrait</dimen>
-    <!-- Height of the status bar in portrait -->
+    <!-- Height of the status bar in portrait. The height should be
+         Max((status bar content height + waterfall top size), top cutout size) -->
     <dimen name="status_bar_height_portrait">24dp</dimen>
-    <!-- Height of the status bar in landscape -->
+    <!-- Height of the status bar in landscape. The height should be
+         Max((status bar content height + waterfall top size), top cutout size) -->
     <dimen name="status_bar_height_landscape">@dimen/status_bar_height_portrait</dimen>
     <!-- Height of area above QQS where battery/time go -->
     <dimen name="quick_qs_offset_height">48dp</dimen>
@@ -773,6 +775,8 @@
     <dimen name="resolver_small_margin">18dp</dimen>
     <dimen name="resolver_edge_margin">24dp</dimen>
     <dimen name="resolver_elevation">1dp</dimen>
+    <dimen name="resolver_empty_state_height">212dp</dimen>
+    <dimen name="resolver_empty_state_height_with_tabs">268dp</dimen>
 
     <dimen name="chooser_action_button_icon_size">18dp</dimen>
 

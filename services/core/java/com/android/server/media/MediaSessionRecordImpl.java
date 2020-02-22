@@ -20,6 +20,8 @@ import android.media.AudioManager;
 import android.os.ResultReceiver;
 import android.view.KeyEvent;
 
+import com.android.server.media.SessionPolicyProvider.SessionPolicy;
+
 import java.io.PrintWriter;
 
 /**
@@ -128,6 +130,18 @@ public interface MediaSessionRecordImpl extends AutoCloseable {
             KeyEvent ke, int sequenceId, ResultReceiver cb);
 
     /**
+     * Get session policies from custom policy provider set when MediaSessionRecord is instantiated.
+     * If custom policy does not exist, will return null.
+     */
+    @SessionPolicy
+    int getSessionPolicies();
+
+    /**
+     * Overwrite session policies that have been set when MediaSessionRecord is instantiated.
+     */
+    void setSessionPolicies(@SessionPolicy int policies);
+
+    /**
      * Dumps internal state
      *
      * @param pw print writer
@@ -140,4 +154,9 @@ public interface MediaSessionRecordImpl extends AutoCloseable {
      */
     @Override
     void close();
+
+    /**
+     * Returns whether {@link #close()} is called before.
+     */
+    boolean isClosed();
 }

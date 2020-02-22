@@ -217,15 +217,31 @@
         your organization</string>
 
     <!-- Notification title displayed for screen recording [CHAR LIMIT=50]-->
-    <string name="screenrecord_name">Screen Recording</string>
+    <string name="screenrecord_name">Screen Recorder</string>
     <!-- Description of the screen recording notification channel [CHAR LIMIT=NONE]-->
     <string name="screenrecord_channel_description">Ongoing notification for a screen record session</string>
-    <!-- Label for the button to begin screen recording [CHAR LIMIT=NONE]-->
-    <string name="screenrecord_start_label">Start Recording</string>
-    <!-- Label for the checkbox to enable microphone input during screen recording [CHAR LIMIT=NONE]-->
-    <string name="screenrecord_mic_label">Record voiceover</string>
+    <!-- Title for the screen prompting the user to begin recording their screen [CHAR LIMIT=NONE]-->
+    <string name="screenrecord_start_label">Start Recording?</string>
+    <!-- Message reminding the user that sensitive information may be captured during a screen recording [CHAR_LIMIT=NONE]-->
+    <string name="screenrecord_description">While recording, Android System can capture any sensitive information that\u2019s visible on your screen or played on your device. This includes passwords, payment info, photos, messages, and audio.</string>
+    <!-- Label for a switch to enable recording audio [CHAR LIMIT=NONE]-->
+    <string name="screenrecord_audio_label">Record audio</string>
+    <!-- Label for the option to record audio from the device [CHAR LIMIT=NONE]-->
+    <string name="screenrecord_device_audio_label">Device audio</string>
+    <!-- Description of what audio may be captured from the device [CHAR LIMIT=NONE]-->
+    <string name="screenrecord_device_audio_description">Sound from your device, like music, calls, and ringtones</string>
+    <!-- Label for the option to enable microphone input during screen recording [CHAR LIMIT=NONE]-->
+    <string name="screenrecord_mic_label">Microphone</string>
+    <!-- Label for an option to record audio from both device and microphone [CHAR LIMIT=NONE]-->
+    <string name="screenrecord_device_audio_and_mic_label">Device audio and microphone</string>
+    <!-- Button to start a screen recording [CHAR LIMIT=50]-->
+    <string name="screenrecord_start">Start</string>
+    <!-- Notification text displayed when we are recording the screen [CHAR LIMIT=100]-->
+    <string name="screenrecord_ongoing_screen_only">Recording screen</string>
+    <!-- Notification text displayed when we are recording both the screen and audio [CHAR LIMIT=100]-->
+    <string name="screenrecord_ongoing_screen_and_audio">Recording screen and audio</string>
     <!-- Label for the checkbox to enable showing location of touches during screen recording [CHAR LIMIT=NONE]-->
-    <string name="screenrecord_taps_label">Show taps</string>
+    <string name="screenrecord_taps_label">Show touches on screen</string>
     <!-- Label for notification that the user can tap to stop and save the screen recording [CHAR LIMIT=NONE] -->
     <string name="screenrecord_stop_text">Tap to stop</string>
     <!-- Label for notification action to stop and save the screen recording [CHAR LIMIT=35] -->
@@ -250,6 +266,8 @@
     <string name="screenrecord_delete_error">Error deleting screen recording</string>
     <!-- A toast message shown when the screen recording cannot be started due to insufficient permissions [CHAR LIMIT=NONE] -->
     <string name="screenrecord_permission_error">Failed to get permissions</string>
+    <!-- A toast message shown when the screen recording cannot be started due to a generic error [CHAR LIMIT=NONE] -->
+    <string name="screenrecord_start_error">Error starting screen recording</string>
 
     <!-- Title for the USB function chooser in UsbPreferenceActivity. [CHAR LIMIT=30] -->
     <string name="usb_preference_title">USB file transfer options</string>
@@ -468,6 +486,9 @@
 
     <!-- Content description of the data connection type 5Ge. [CHAR LIMIT=NONE] -->
     <string name="data_connection_5ge" translatable="false">5Ge</string>
+
+    <!-- Content description of the data connection type 5Ge with HTML styling. DO NOT TRANSLATE [CHAR LIMIT=NONE] -->
+    <string name="data_connection_5ge_html" translate="false"> &lt;i>5G &lt;small>E&lt;/small>&lt;/i> </string>
 
     <!-- Content description of the data connection type 5G. [CHAR LIMIT=NONE] -->
     <string name="data_connection_5g" translatable="false">5G</string>
@@ -1177,6 +1198,9 @@
     <!-- The text for the manage notifications link. [CHAR LIMIT=40] -->
     <string name="manage_notifications_text">Manage</string>
 
+    <!-- The text for the notification history link. [CHAR LIMIT=40] -->
+    <string name="manage_notifications_history_text">History</string>
+
     <!-- Section title for notifications that do not vibrate or make noise. [CHAR LIMIT=40] -->
     <string name="notification_section_header_gentle">Silent notifications</string>
 
@@ -1756,6 +1780,12 @@
     <!-- [CHAR LIMIT=150] Notification Importance title: bubble level summary -->
     <string name="notification_channel_summary_bubble">Keeps your attention with a floating shortcut to this content.</string>
 
+    <!-- [CHAR LIMIT=NONE] Empty overflow title -->
+    <string name="bubble_overflow_empty_title">No recent bubbles</string>
+
+    <!-- [CHAR LIMIT=NONE] Empty overflow subtitle -->
+    <string name="bubble_overflow_empty_subtitle">Recently dismissed bubbles will appear here for easy retrieval.</string>
+
     <!-- Notification: Control panel: Label that displays when the app's notifications cannot be blocked. -->
     <string name="notification_unblockable_desc">These notifications can\'t be modified.</string>
 
@@ -1811,23 +1841,23 @@
     <!-- Notification: Conversation: control panel, label for button that demotes notification from conversation to normal notification -->
     <string name="demote">Mark this notification as not a conversation</string>
 
-    <!-- [CHAR LIMIT=100] Mark this conversation as a favorite -->
-    <string name="notification_conversation_favorite">Favorite</string>
+    <!-- [CHAR LIMIT=100] This conversation is marked as important -->
+    <string name="notification_conversation_favorite">Important conversation</string>
 
-    <!-- [CHAR LIMIT=100] Unmark this conversation as a favorite -->
-    <string name="notification_conversation_unfavorite">Unfavorite</string>
+    <!-- [CHAR LIMIT=100] This conversation is not marked as important -->
+    <string name="notification_conversation_unfavorite">Not an important conversation</string>
 
-    <!-- [CHAR LIMIT=100] Mute this conversation -->
-    <string name="notification_conversation_mute">Mute</string>
+    <!-- [CHAR LIMIT=100] This conversation is silenced (will not make sound or vibrate)-->
+    <string name="notification_conversation_mute">Silenced</string>
 
-    <!-- [CHAR LIMIT=100] Umute this conversation -->
-    <string name="notification_conversation_unmute">Unmute</string>
+    <!-- [CHAR LIMIT=100] This conversation is alerting (may make sound and/or vibrate)-->
+    <string name="notification_conversation_unmute">Alerting</string>
 
     <!-- [CHAR LIMIT=100] Show notification as bubble -->
-    <string name="notification_conversation_bubble">Show as bubble</string>
+    <string name="notification_conversation_bubble">Show bubble</string>
 
     <!-- [CHAR LIMIT=100] Turn off bubbles for notification -->
-    <string name="notification_conversation_unbubble">Turn off bubbles</string>
+    <string name="notification_conversation_unbubble">Remove bubbles</string>
 
     <!-- [CHAR LIMIT=100] Add this conversation to home screen -->
     <string name="notification_conversation_home_screen">Add to home screen</string>
@@ -1842,7 +1872,10 @@
     <string name="notification_menu_snooze_description">notification snooze options</string>
 
     <!-- Notification: Menu row: Label for the snooze action shown in local context menu. [CHAR LIMIT=NONE] -->
-    <string name="notification_menu_snooze_action">Snooze</string>
+    <string name="notification_menu_snooze_action">Remind me</string>
+
+    <!-- Notification: Menu row: Label for the snooze action shown in local context menu. [CHAR LIMIT=NONE] -->
+    <string name="notification_menu_settings_action">Settings</string>
 
     <!-- Notification: Snooze panel: Snooze undo button label. [CHAR LIMIT=50]-->
     <string name="snooze_undo">UNDO</string>
@@ -2010,6 +2043,9 @@
 
     <!-- Label for feature switch [CHAR LIMIT=30] -->
     <string name="switch_bar_off">Off</string>
+
+    <!-- The tile in quick settings is unavailable. [CHAR LIMIT=32] -->
+    <string name="tile_unavailable">Unavailable</string>
 
     <!-- SysUI Tuner: Button that leads to the navigation bar customization screen [CHAR LIMIT=60] -->
     <string name="nav_bar">Navigation bar</string>
@@ -2547,6 +2583,28 @@
     <!-- Title for Magnification Controls Window [CHAR LIMIT=NONE] -->
     <string name="magnification_controls_title">Magnification Window Controls</string>
 
-    <!-- Quick Controls strings [CHAR LIMIT=30] -->
+    <!-- Quick Controls strings -->
+    <!-- Quick Controls view header [CHAR LIMIT=30] -->
     <string name="quick_controls_title">Quick Controls</string>
+
+    <!-- Controls management providers screen title [CHAR LIMIT=30]-->
+    <string name="controls_providers_title">Add Controls</string>
+    <!-- Controls management providers screen subtitle [CHAR LIMIT=NONE] -->
+    <string name="controls_providers_subtitle">Choose an app from which to add controls</string>
+    <!-- Number of favorites for controls management screen [CHAR LIMIT=NONE]-->
+    <plurals name="controls_number_of_favorites">
+        <item quantity="one"><xliff:g id="number" example="1">%s</xliff:g> current favorite.</item>
+        <item quantity="other"><xliff:g id="number" example="3">%s</xliff:g> current favorites.</item>
+    </plurals>
+
+    <!-- Controls management controls screen default title [CHAR LIMIT=30] -->
+    <string name="controls_favorite_default_title">Controls</string>
+    <!-- Controls management controls screen subtitle [CHAR LIMIT=NONE] -->
+    <string name="controls_favorite_subtitle">Choose controls for quick access</string>
+    <!-- Controls management controls screen favorites header [CHAR LIMIT=50] -->
+    <string name="controls_favorite_header_favorites">Favorites</string>
+    <!-- Controls management controls screen all header [CHAR LIMIT=50] -->
+    <string name="controls_favorite_header_all">All</string>
+    <!-- Controls management controls screen error on load message [CHAR LIMIT=50] -->
+    <string name="controls_favorite_load_error">The list of all controls could not be loaded.</string>
 </resources>

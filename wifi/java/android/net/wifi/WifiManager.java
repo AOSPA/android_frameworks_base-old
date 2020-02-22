@@ -28,6 +28,7 @@ import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
 import android.annotation.SdkConstant;
 import android.annotation.SdkConstant.SdkConstantType;
+import android.annotation.SuppressLint;
 import android.annotation.SystemApi;
 import android.annotation.SystemService;
 import android.app.ActivityManager;
@@ -38,6 +39,7 @@ import android.net.ConnectivityManager;
 import android.net.DhcpInfo;
 import android.net.MacAddress;
 import android.net.Network;
+import android.net.NetworkScore;
 import android.net.NetworkStack;
 import android.net.wifi.hotspot2.IProvisioningCallback;
 import android.net.wifi.hotspot2.OsuProvider;
@@ -256,12 +258,12 @@ public class WifiManager {
      * - {@link #EXTRA_SCAN_AVAILABLE}
      */
     @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
-    public static final String ACTION_WIFI_SCAN_AVAILABLE =
-            "android.net.wifi.action.WIFI_SCAN_AVAILABLE";
+    public static final String ACTION_WIFI_SCAN_AVAILABILITY_CHANGED =
+            "android.net.wifi.action.WIFI_SCAN_AVAILABILITY_CHANGED";
 
     /**
      * A boolean extra indicating whether scanning is currently available.
-     * Sent in the broadcast {@link #ACTION_WIFI_SCAN_AVAILABLE}.
+     * Sent in the broadcast {@link #ACTION_WIFI_SCAN_AVAILABILITY_CHANGED}.
      * Its value is true if scanning is currently available, false otherwise.
      */
     public static final String EXTRA_SCAN_AVAILABLE = "android.net.wifi.extra.SCAN_AVAILABLE";
@@ -1492,8 +1494,7 @@ public class WifiManager {
         List<Pair<WifiConfiguration, Map<Integer, List<ScanResult>>>> configs = new ArrayList<>();
         try {
             Map<String, Map<Integer, List<ScanResult>>> results =
-                    mService.getAllMatchingFqdnsForScanResults(
-                            scanResults);
+                    mService.getAllMatchingPasspointProfilesForScanResults(scanResults);
             if (results.isEmpty()) {
                 return configs;
             }
@@ -1501,8 +1502,8 @@ public class WifiManager {
                     mService.getWifiConfigsForPasspointProfiles(
                             new ArrayList<>(results.keySet()));
             for (WifiConfiguration configuration : wifiConfigurations) {
-                Map<Integer, List<ScanResult>> scanResultsPerNetworkType = results.get(
-                        configuration.FQDN);
+                Map<Integer, List<ScanResult>> scanResultsPerNetworkType =
+                        results.get(configuration.getKey());
                 if (scanResultsPerNetworkType != null) {
                     configs.add(Pair.create(configuration, scanResultsPerNetworkType));
                 }
@@ -1778,11 +1779,13 @@ public class WifiManager {
          * @param wifiConfiguration WifiConfiguration object corresponding to the network
          *                          user selected.
          */
+        @SuppressLint("CallbackMethodName")
         default void select(@NonNull WifiConfiguration wifiConfiguration) {}
 
         /**
          * User rejected the app's request.
          */
+        @SuppressLint("CallbackMethodName")
         default void reject() {}
     }
 
@@ -2118,9 +2121,11 @@ public class WifiManager {
      * for connecting to Passpoint networks that are operated by the Passpoint
      * service provider specified in the configuration.
      *
-     * Each configuration is uniquely identified by its FQDN (Fully Qualified Domain
-     * Name).  In the case when there is an existing configuration with the same
-     * FQDN, the new configuration will replace the existing configuration.
+     * Each configuration is uniquely identified by a unique key which depends on the contents of
+     * the configuration. This allows the caller to install multiple profiles with the same FQDN
+     * (Fully qualified domain name). Therefore, in order to update an existing profile, it is
+     * first required to remove it using {@link WifiManager#removePasspointConfiguration(String)}.
+     * Otherwise, a new profile will be added with both configuration.
      *
      * @param config The Passpoint configuration to be added
      * @throws IllegalArgumentException if configuration is invalid or Passpoint is not enabled on
@@ -2781,8 +2786,8 @@ public class WifiManager {
     public void getWifiActivityEnergyInfoAsync(
             @NonNull @CallbackExecutor Executor executor,
             @NonNull OnWifiActivityEnergyInfoListener listener) {
-        if (executor == null) throw new IllegalArgumentException("executor cannot be null");
-        if (listener == null) throw new IllegalArgumentException("listener cannot be null");
+        Objects.requireNonNull(executor, "executor cannot be null");
+        Objects.requireNonNull(listener, "listener cannot be null");
         try {
             mService.getWifiActivityEnergyInfoAsync(
                     new OnWifiActivityEnergyInfoProxy(executor, listener));
@@ -3138,7 +3143,7 @@ public class WifiManager {
     }
 
     /**
-     * Start Soft AP (hotspot) mode with the specified configuration.
+     * Start Soft AP (hotspot) mode for tethering purposes with the specified configuration.
      * Note that starting Soft AP mode may disable station mode operation if the device does not
      * support concurrency.
      * @param wifiConfig SSID, security and channel details as part of WifiConfiguration, or null to
@@ -3434,7 +3439,7 @@ public class WifiManager {
     }
 
     /**
-     * Gets the Wi-Fi enabled state.
+     * Gets the tethered Wi-Fi hotspot enabled state.
      * @return One of {@link #WIFI_AP_STATE_DISABLED},
      *         {@link #WIFI_AP_STATE_DISABLING}, {@link #WIFI_AP_STATE_ENABLED},
      *         {@link #WIFI_AP_STATE_ENABLING}, {@link #WIFI_AP_STATE_FAILED}
@@ -3453,8 +3458,8 @@ public class WifiManager {
     }
 
     /**
-     * Return whether Wi-Fi AP is enabled or disabled.
-     * @return {@code true} if Wi-Fi AP is enabled
+     * Return whether tethered Wi-Fi AP is enabled or disabled.
+     * @return {@code true} if tethered  Wi-Fi AP is enabled
      * @see #getWifiApState()
      *
      * @hide
@@ -3466,7 +3471,7 @@ public class WifiManager {
     }
 
     /**
-     * Gets the Wi-Fi AP Configuration.
+     * Gets the tethered Wi-Fi AP Configuration.
      * @return AP details in WifiConfiguration
      *
      * Note that AP detail may contain configuration which is cannot be represented
@@ -3488,7 +3493,7 @@ public class WifiManager {
     }
 
     /**
-     * Gets the Wi-Fi AP Configuration.
+     * Gets the Wi-Fi tethered AP Configuration.
      * @return AP details in {@link SoftApConfiguration}
      *
      * @hide
@@ -3505,7 +3510,7 @@ public class WifiManager {
     }
 
     /**
-     * Sets the Wi-Fi AP Configuration.
+     * Sets the tethered Wi-Fi AP Configuration.
      * @return {@code true} if the operation succeeded, {@code false} otherwise
      *
      * @deprecated This API is deprecated. Use {@link #setSoftApConfiguration(SoftApConfiguration)}
@@ -3524,9 +3529,9 @@ public class WifiManager {
     }
 
     /**
-     * Sets the Wi-Fi AP Configuration.
+     * Sets the tethered Wi-Fi AP Configuration.
      *
-     * If the API is called while the soft AP is enabled, the configuration will apply to
+     * If the API is called while the tethered soft AP is enabled, the configuration will apply to
      * the current soft AP if the new configuration only includes
      * {@link SoftApConfiguration.Builder#setMaxNumberOfClients(int)}
      * or {@link SoftApConfiguration.Builder#setShutdownTimeoutMillis(int)}
@@ -4499,16 +4504,16 @@ public class WifiManager {
     }
 
     /**
-     * Allows the OEM to enable/disable auto-join globally.
+     * Enable/disable auto-join globally.
      *
-     * @param choice true to allow autojoin, false to disallow autojoin
+     * @param allowAutojoin true to allow auto-join, false to disallow auto-join
      * @hide
      */
     @SystemApi
     @RequiresPermission(android.Manifest.permission.NETWORK_SETTINGS)
-    public void allowAutojoinGlobal(boolean choice) {
+    public void allowAutojoinGlobal(boolean allowAutojoin) {
         try {
-            mService.allowAutojoinGlobal(choice);
+            mService.allowAutojoinGlobal(allowAutojoin);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -4520,15 +4525,15 @@ public class WifiManager {
      * The updated choice will be made available through the updated config supplied by the
      * CONFIGURED_NETWORKS_CHANGED broadcast.
      *
-     * @param netId the id of the network to allow/disallow autojoin for.
-     * @param choice true to allow autojoin, false to disallow autojoin
+     * @param netId the id of the network to allow/disallow auto-join for.
+     * @param allowAutojoin true to allow auto-join, false to disallow auto-join
      * @hide
      */
     @SystemApi
     @RequiresPermission(android.Manifest.permission.NETWORK_SETTINGS)
-    public void allowAutojoin(int netId, boolean choice) {
+    public void allowAutojoin(int netId, boolean allowAutojoin) {
         try {
-            mService.allowAutojoin(netId, choice);
+            mService.allowAutojoin(netId, allowAutojoin);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -4538,14 +4543,14 @@ public class WifiManager {
      * Configure auto-join settings for a Passpoint profile.
      *
      * @param fqdn the FQDN (fully qualified domain name) of the passpoint profile.
-     * @param enableAutoJoin true to enable autojoin, false to disable autojoin.
+     * @param allowAutojoin true to enable auto-join, false to disable auto-join.
      * @hide
      */
     @SystemApi
     @RequiresPermission(android.Manifest.permission.NETWORK_SETTINGS)
-    public void allowAutojoinPasspoint(@NonNull String fqdn, boolean enableAutoJoin) {
+    public void allowAutojoinPasspoint(@NonNull String fqdn, boolean allowAutojoin) {
         try {
-            mService.allowAutojoinPasspoint(fqdn, enableAutoJoin);
+            mService.allowAutojoinPasspoint(fqdn, allowAutojoin);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -6325,10 +6330,11 @@ public class WifiManager {
          *
          * @param sessionId The ID to indicate current Wi-Fi network connection obtained from
          *                  {@link WifiConnectedNetworkScorer#start(int)}.
-         * @param isUsable The bit to indicate whether current Wi-Fi network is usable or not.
-         *                 Populated by connected network scorer in applications.
+         * @param score The {@link android.net.NetworkScore} object representing the
+         *              characteristics of current Wi-Fi network. Populated by connected network
+         *              scorer in applications.
          */
-        void onStatusChange(int sessionId, boolean isUsable);
+        void onScoreChange(int sessionId, @NonNull NetworkScore score);
 
         /**
          * Called by applications to trigger an update of {@link WifiUsabilityStatsEntry}.
@@ -6354,9 +6360,9 @@ public class WifiManager {
         }
 
         @Override
-        public void onStatusChange(int sessionId, boolean isUsable) {
+        public void onScoreChange(int sessionId, @NonNull NetworkScore score) {
             try {
-                mScoreChangeCallback.onStatusChange(sessionId, isUsable);
+                mScoreChangeCallback.onScoreChange(sessionId, score);
             } catch (RemoteException e) {
                 throw e.rethrowFromSystemServer();
             }
@@ -6489,6 +6495,96 @@ public class WifiManager {
         }
         try {
             mService.clearWifiConnectedNetworkScorer();
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Enable/disable wifi scan throttling from 3rd party apps.
+     *
+     * <p>
+     * The throttling limits for apps are described in
+     * <a href="Wi-Fi Scan Throttling">
+     * https://developer.android.com/guide/topics/connectivity/wifi-scan#wifi-scan-throttling</a>
+     * </p>
+     *
+     * @param enable true to allow scan throttling, false to disallow scan throttling.
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.NETWORK_SETTINGS)
+    public void setScanThrottleEnabled(boolean enable) {
+        try {
+            mService.setScanThrottleEnabled(enable);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Get the persisted Wi-Fi scan throttle state. Defaults to true, unless changed by the user via
+     * Developer options.
+     *
+     * <p>
+     * The throttling limits for apps are described in
+     * <a href="Wi-Fi Scan Throttling">
+     * https://developer.android.com/guide/topics/connectivity/wifi-scan#wifi-scan-throttling</a>
+     * </p>
+     *
+     * @return true to indicate that scan throttling is enabled, false to indicate that scan
+     * throttling is disabled.
+     */
+    @RequiresPermission(ACCESS_WIFI_STATE)
+    public boolean isScanThrottleEnabled() {
+        try {
+            return mService.isScanThrottleEnabled();
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Enable/disable wifi auto wakeup feature.
+     *
+     * <p>
+     * The feature is described in
+     * <a href="Wi-Fi Turn on automatically">
+     * https://source.android.com/devices/tech/connect/wifi-infrastructure
+     * #turn_on_wi-fi_automatically
+     * </a>
+     *
+     * @param enable true to enable, false to disable.
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.NETWORK_SETTINGS)
+    public void setAutoWakeupEnabled(boolean enable) {
+        try {
+            mService.setAutoWakeupEnabled(enable);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Get the persisted Wi-Fi auto wakeup feature state. Defaults to false, unless changed by the
+     * user via Settings.
+     *
+     * <p>
+     * The feature is described in
+     * <a href="Wi-Fi Turn on automatically">
+     * https://source.android.com/devices/tech/connect/wifi-infrastructure
+     * #turn_on_wi-fi_automatically
+     * </a>
+     *
+     * @return true to indicate that wakeup feature is enabled, false to indicate that wakeup
+     * feature is disabled.
+     */
+    @RequiresPermission(ACCESS_WIFI_STATE)
+    public boolean isAutoWakeupEnabled() {
+        try {
+            return mService.isAutoWakeupEnabled();
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }

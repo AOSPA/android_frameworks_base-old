@@ -22,6 +22,7 @@ import static android.app.Notification.CATEGORY_EVENT;
 import static android.app.Notification.CATEGORY_MESSAGE;
 import static android.app.Notification.CATEGORY_REMINDER;
 import static android.app.Notification.FLAG_BUBBLE;
+import static android.app.Notification.FLAG_FOREGROUND_SERVICE;
 import static android.app.NotificationManager.Policy.SUPPRESSED_EFFECT_AMBIENT;
 import static android.app.NotificationManager.Policy.SUPPRESSED_EFFECT_BADGE;
 import static android.app.NotificationManager.Policy.SUPPRESSED_EFFECT_FULL_SCREEN_INTENT;
@@ -29,9 +30,11 @@ import static android.app.NotificationManager.Policy.SUPPRESSED_EFFECT_NOTIFICAT
 import static android.app.NotificationManager.Policy.SUPPRESSED_EFFECT_PEEK;
 import static android.app.NotificationManager.Policy.SUPPRESSED_EFFECT_STATUS_BAR;
 
+import static com.android.systemui.statusbar.notification.collection.NotifCollection.REASON_NOT_CANCELED;
 import static com.android.systemui.statusbar.notification.stack.NotificationSectionsManager.BUCKET_ALERTING;
 
-import android.annotation.NonNull;
+import static java.util.Objects.requireNonNull;
+
 import android.app.Notification;
 import android.app.Notification.MessagingStyle.Message;
 import android.app.NotificationChannel;
@@ -50,6 +53,7 @@ import android.util.ArraySet;
 import android.view.View;
 import android.widget.ImageView;
 
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.android.internal.annotations.VisibleForTesting;
@@ -59,10 +63,13 @@ import com.android.internal.util.ContrastColorUtil;
 import com.android.systemui.statusbar.InflationTask;
 import com.android.systemui.statusbar.StatusBarIconView;
 import com.android.systemui.statusbar.notification.InflationException;
+import com.android.systemui.statusbar.notification.collection.NotifCollection.CancellationReason;
 import com.android.systemui.statusbar.notification.collection.listbuilder.pluggable.NotifFilter;
 import com.android.systemui.statusbar.notification.collection.listbuilder.pluggable.NotifPromoter;
+import com.android.systemui.statusbar.notification.collection.notifcollection.NotifDismissInterceptor;
 import com.android.systemui.statusbar.notification.collection.notifcollection.NotifLifetimeExtender;
 import com.android.systemui.statusbar.notification.row.ExpandableNotificationRow;
+import com.android.systemui.statusbar.notification.row.ExpandableNotificationRowController;
 import com.android.systemui.statusbar.notification.row.NotificationGuts;
 import com.android.systemui.statusbar.notification.row.NotificationRowContentBinder.InflationFlag;
 import com.android.systemui.statusbar.notification.stack.NotificationSectionsManager;
@@ -99,15 +106,24 @@ public final class NotificationEntry extends ListEntry {
     /** List of lifetime extenders that are extending the lifetime of this notification. */
     final List<NotifLifetimeExtender> mLifetimeExtenders = new ArrayList<>();
 
+    /** List of dismiss interceptors that are intercepting the dismissal of this notification. */
+    final List<NotifDismissInterceptor> mDismissInterceptors = new ArrayList<>();
+
     /** If this notification was filtered out, then the filter that did the filtering. */
     @Nullable NotifFilter mExcludingFilter;
 
     /** If this was a group child that was promoted to the top level, then who did the promoting. */
     @Nullable NotifPromoter mNotifPromoter;
 
-    /** If this notification had an issue with inflating. Only used with the NewNotifPipeline **/
-    private boolean mHasInflationError;
+    /**
+     * If this notification was cancelled by system server, then the reason that was supplied.
+     * Uncancelled notifications always have REASON_NOT_CANCELED. Note that lifetime-extended
+     * notifications will have this set even though they are still in the active notification set.
+     */
+    @CancellationReason int mCancellationReason = REASON_NOT_CANCELED;
 
+    /** @see #getDismissState() */
+    @NonNull private DismissState mDismissState = DismissState.NOT_DISMISSED;
 
     /*
     * Old members
@@ -135,6 +151,7 @@ public final class NotificationEntry extends ListEntry {
 
     private NotificationEntry parent; // our parent (if we're in a group)
     private ExpandableNotificationRow row; // the outer expanded view
+    private ExpandableNotificationRowController mRowController;
 
     private int mCachedContrastColor = COLOR_INVALID;
     private int mCachedContrastColorIsFor = COLOR_INVALID;
@@ -164,18 +181,29 @@ public final class NotificationEntry extends ListEntry {
     private Runnable mOnSensitiveChangedListener;
     private boolean mAutoHeadsUp;
     private boolean mPulseSupressed;
+    private boolean mAllowFgsDismissal;
     private int mBucket = BUCKET_ALERTING;
 
     public NotificationEntry(
             @NonNull StatusBarNotification sbn,
             @NonNull Ranking ranking) {
-        super(Objects.requireNonNull(Objects.requireNonNull(sbn).getKey()));
+        this(sbn, ranking, false);
+    }
 
-        Objects.requireNonNull(ranking);
+    public NotificationEntry(
+            @NonNull StatusBarNotification sbn,
+            @NonNull Ranking ranking,
+            boolean allowFgsDismissal
+    ) {
+        super(requireNonNull(Objects.requireNonNull(sbn).getKey()));
+
+        requireNonNull(ranking);
 
         mKey = sbn.getKey();
         setSbn(sbn);
         setRanking(ranking);
+
+        mAllowFgsDismissal = allowFgsDismissal;
     }
 
     @Override
@@ -201,8 +229,8 @@ public final class NotificationEntry extends ListEntry {
      * TODO: Make this package-private
      */
     public void setSbn(@NonNull StatusBarNotification sbn) {
-        Objects.requireNonNull(sbn);
-        Objects.requireNonNull(sbn.getKey());
+        requireNonNull(sbn);
+        requireNonNull(sbn.getKey());
 
         if (!sbn.getKey().equals(mKey)) {
             throw new IllegalArgumentException("New key " + sbn.getKey()
@@ -227,8 +255,8 @@ public final class NotificationEntry extends ListEntry {
      * TODO: Make this package-private
      */
     public void setRanking(@NonNull Ranking ranking) {
-        Objects.requireNonNull(ranking);
-        Objects.requireNonNull(ranking.getKey());
+        requireNonNull(ranking);
+        requireNonNull(ranking.getKey());
 
         if (!ranking.getKey().equals(mKey)) {
             throw new IllegalArgumentException("New key " + ranking.getKey()
@@ -236,6 +264,22 @@ public final class NotificationEntry extends ListEntry {
         }
 
         mRanking = ranking;
+    }
+
+    /*
+     * Bookkeeping getters and setters
+     */
+
+    /**
+     * Set if the user has dismissed this notif but we haven't yet heard back from system server to
+     * confirm the dismissal.
+     */
+    @NonNull public DismissState getDismissState() {
+        return mDismissState;
+    }
+
+    void setDismissState(@NonNull DismissState dismissState) {
+        mDismissState = requireNonNull(dismissState);
     }
 
     /*
@@ -274,7 +318,6 @@ public final class NotificationEntry extends ListEntry {
     public boolean canBubble() {
         return mRanking.canBubble();
     }
-
 
     public @NonNull List<Notification.Action> getSmartActions() {
         return mRanking.getSmartActions();
@@ -361,6 +404,14 @@ public final class NotificationEntry extends ListEntry {
     //TODO: This will go away when we have a way to bind an entry to a row
     public void setRow(ExpandableNotificationRow row) {
         this.row = row;
+    }
+
+    public ExpandableNotificationRowController getRowController() {
+        return mRowController;
+    }
+
+    public void setRowController(ExpandableNotificationRowController controller) {
+        mRowController = controller;
     }
 
     @Nullable
@@ -543,12 +594,8 @@ public final class NotificationEntry extends ListEntry {
 
     public void setInflationTask(InflationTask abortableTask) {
         // abort any existing inflation
-        InflationTask existing = mRunningTask;
         abortTask();
         mRunningTask = abortableTask;
-        if (existing != null && mRunningTask != null) {
-            mRunningTask.supersedeTask(existing);
-        }
     }
 
     public void onInflationTaskFinished() {
@@ -576,18 +623,6 @@ public final class NotificationEntry extends ListEntry {
     public void onRemoteInputInserted() {
         lastRemoteInputSent = NOT_LAUNCHED_YET;
         remoteInputTextWhenReset = null;
-    }
-
-    void setHasInflationError(boolean hasError) {
-        mHasInflationError = hasError;
-    }
-
-    /**
-     * Whether this notification had an error when attempting to inflate. This is only used in
-     * the NewNotifPipeline
-     */
-    public boolean hasInflationError() {
-        return mHasInflationError;
     }
 
     public void setHasSentReply() {
@@ -799,8 +834,11 @@ public final class NotificationEntry extends ListEntry {
      *         notification can be dismissed in case notifications are sensitive on the lockscreen.
      * @see #canViewBeDismissed()
      */
+    // TOOD: This logic doesn't belong on NotificationEntry. It should be moved to the
+    // ForegroundsServiceDismissalFeatureController or some other controller that can be added
+    // as a dependency to any class that needs to answer this question.
     public boolean isClearable() {
-        if (!mSbn.isClearable()) {
+        if (!isDismissable()) {
             return false;
         }
 
@@ -808,12 +846,37 @@ public final class NotificationEntry extends ListEntry {
         if (children != null && children.size() > 0) {
             for (int i = 0; i < children.size(); i++) {
                 NotificationEntry child =  children.get(i);
-                if (!child.isClearable()) {
+                if (!child.isDismissable()) {
                     return false;
                 }
             }
         }
         return true;
+    }
+
+    /**
+     * Notifications might have any combination of flags:
+     * - FLAG_ONGOING_EVENT
+     * - FLAG_NO_CLEAR
+     * - FLAG_FOREGROUND_SERVICE
+     *
+     * We want to allow dismissal of notifications that represent foreground services, which may
+     * have all 3 flags set. If we only find NO_CLEAR though, we don't want to allow dismissal
+     */
+    private boolean isDismissable() {
+        boolean ongoing = ((mSbn.getNotification().flags & Notification.FLAG_ONGOING_EVENT) != 0);
+        boolean noclear = ((mSbn.getNotification().flags & Notification.FLAG_NO_CLEAR) != 0);
+        boolean fgs = ((mSbn.getNotification().flags & FLAG_FOREGROUND_SERVICE) != 0);
+
+        if (mAllowFgsDismissal) {
+            if (noclear && !ongoing && !fgs) {
+                return false;
+            }
+            return true;
+        } else {
+            return mSbn.isClearable();
+        }
+
     }
 
     public boolean canViewBeDismissed() {
@@ -972,6 +1035,16 @@ public final class NotificationEntry extends ListEntry {
             this.originalText = originalText;
             this.index = index;
         }
+    }
+
+    /** @see #getDismissState() */
+    public enum DismissState {
+        /** User has not dismissed this notif or its parent */
+        NOT_DISMISSED,
+        /** User has dismissed this notif specifically */
+        DISMISSED,
+        /** User has dismissed this notif's parent (which implicitly dismisses this one as well) */
+        PARENT_DISMISSED,
     }
 
     private static final long LAUNCH_COOLDOWN = 2000;

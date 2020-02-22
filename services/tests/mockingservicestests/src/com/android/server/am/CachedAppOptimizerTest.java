@@ -122,6 +122,8 @@ public final class CachedAppOptimizerTest {
                 CachedAppOptimizer.DEFAULT_COMPACT_THROTTLE_4);
         assertThat(mCachedAppOptimizerUnderTest.mCompactStatsdSampleRate).isEqualTo(
                 CachedAppOptimizer.DEFAULT_STATSD_SAMPLE_RATE);
+        assertThat(mCachedAppOptimizerUnderTest.mFreezerStatsdSampleRate).isEqualTo(
+                CachedAppOptimizer.DEFAULT_STATSD_SAMPLE_RATE);
         assertThat(mCachedAppOptimizerUnderTest.mFullAnonRssThrottleKb).isEqualTo(
                 CachedAppOptimizer.DEFAULT_COMPACT_FULL_RSS_THROTTLE_KB);
         assertThat(mCachedAppOptimizerUnderTest.mCompactThrottleBFGS).isEqualTo(
@@ -132,6 +134,8 @@ public final class CachedAppOptimizerTest {
                 CachedAppOptimizer.DEFAULT_COMPACT_FULL_RSS_THROTTLE_KB);
         assertThat(mCachedAppOptimizerUnderTest.mFullDeltaRssThrottleKb).isEqualTo(
                 CachedAppOptimizer.DEFAULT_COMPACT_FULL_DELTA_RSS_THROTTLE_KB);
+        assertThat(mCachedAppOptimizerUnderTest.useFreezer()).isEqualTo(
+                CachedAppOptimizer.DEFAULT_USE_FREEZER);
 
         Set<Integer> expected = new HashSet<>();
         for (String s : TextUtils.split(
@@ -177,6 +181,9 @@ public final class CachedAppOptimizerTest {
                 CachedAppOptimizer.KEY_COMPACT_STATSD_SAMPLE_RATE,
                 Float.toString(CachedAppOptimizer.DEFAULT_STATSD_SAMPLE_RATE + 0.1f), false);
         DeviceConfig.setProperty(DeviceConfig.NAMESPACE_ACTIVITY_MANAGER,
+                CachedAppOptimizer.KEY_FREEZER_STATSD_SAMPLE_RATE,
+                Float.toString(CachedAppOptimizer.DEFAULT_STATSD_SAMPLE_RATE + 0.1f), false);
+        DeviceConfig.setProperty(DeviceConfig.NAMESPACE_ACTIVITY_MANAGER,
                 CachedAppOptimizer.KEY_COMPACT_FULL_RSS_THROTTLE_KB,
                 Long.toString(CachedAppOptimizer.DEFAULT_COMPACT_FULL_RSS_THROTTLE_KB + 1), false);
         DeviceConfig.setProperty(DeviceConfig.NAMESPACE_ACTIVITY_MANAGER,
@@ -185,6 +192,11 @@ public final class CachedAppOptimizerTest {
                         CachedAppOptimizer.DEFAULT_COMPACT_FULL_DELTA_RSS_THROTTLE_KB + 1), false);
         DeviceConfig.setProperty(DeviceConfig.NAMESPACE_ACTIVITY_MANAGER,
                 CachedAppOptimizer.KEY_COMPACT_PROC_STATE_THROTTLE, "1,2,3", false);
+        assertThat(mCachedAppOptimizerUnderTest.useFreezer()).isEqualTo(
+                CachedAppOptimizer.DEFAULT_USE_FREEZER);
+        DeviceConfig.setProperty(DeviceConfig.NAMESPACE_ACTIVITY_MANAGER,
+                CachedAppOptimizer.KEY_USE_FREEZER, CachedAppOptimizer.DEFAULT_USE_FREEZER
+                ?  "false" : "true" , false);
 
         // Then calling init will read and set that flag.
         mCachedAppOptimizerUnderTest.init();
@@ -211,6 +223,8 @@ public final class CachedAppOptimizerTest {
                 CachedAppOptimizer.DEFAULT_COMPACT_THROTTLE_6 + 1);
         assertThat(mCachedAppOptimizerUnderTest.mCompactStatsdSampleRate).isEqualTo(
                 CachedAppOptimizer.DEFAULT_STATSD_SAMPLE_RATE + 0.1f);
+        assertThat(mCachedAppOptimizerUnderTest.mFreezerStatsdSampleRate).isEqualTo(
+                CachedAppOptimizer.DEFAULT_STATSD_SAMPLE_RATE + 0.1f);
         assertThat(mCachedAppOptimizerUnderTest.mCompactThrottleBFGS).isEqualTo(
                 CachedAppOptimizer.DEFAULT_COMPACT_THROTTLE_5 + 1);
         assertThat(mCachedAppOptimizerUnderTest.mCompactThrottlePersistent).isEqualTo(
@@ -218,6 +232,14 @@ public final class CachedAppOptimizerTest {
         assertThat(mCachedAppOptimizerUnderTest.mFullAnonRssThrottleKb).isEqualTo(
                 CachedAppOptimizer.DEFAULT_COMPACT_FULL_RSS_THROTTLE_KB + 1);
         assertThat(mCachedAppOptimizerUnderTest.mProcStateThrottle).containsExactly(1, 2, 3);
+
+        if (mCachedAppOptimizerUnderTest.isFreezerSupported()) {
+            if (CachedAppOptimizer.DEFAULT_USE_FREEZER) {
+                assertThat(mCachedAppOptimizerUnderTest.useFreezer()).isFalse();
+            } else {
+                assertThat(mCachedAppOptimizerUnderTest.useFreezer()).isTrue();
+            }
+        }
     }
 
     @Test
@@ -244,6 +266,46 @@ public final class CachedAppOptimizerTest {
     }
 
     @Test
+    public void useFreeze_doesNotListenToDeviceConfigChanges() throws InterruptedException {
+        if (!mCachedAppOptimizerUnderTest.isFreezerSupported()) {
+            return;
+        }
+
+        assertThat(mCachedAppOptimizerUnderTest.useFreezer()).isEqualTo(
+                CachedAppOptimizer.DEFAULT_USE_FREEZER);
+
+        // The freezer DeviceConfig property is read at boot only
+        DeviceConfig.setProperty(DeviceConfig.NAMESPACE_ACTIVITY_MANAGER,
+                CachedAppOptimizer.KEY_USE_FREEZER, "true", false);
+        mCachedAppOptimizerUnderTest.init();
+        mCountDown = new CountDownLatch(1);
+
+        // No notifications should get to the cached app optimizer.
+        assertThat(mCountDown.await(5, TimeUnit.SECONDS)).isFalse();
+
+        // The flag value has to be set correctly.
+        assertThat(mCachedAppOptimizerUnderTest.useFreezer()).isTrue();
+        // The cached app optimizer thread must be running.
+        assertThat(mCachedAppOptimizerUnderTest.mCachedAppOptimizerThread.isAlive()).isTrue();
+
+        // Set the flag the other way without rebooting. It shall not change.
+        mCountDown = new CountDownLatch(1);
+        DeviceConfig.setProperty(DeviceConfig.NAMESPACE_ACTIVITY_MANAGER,
+                CachedAppOptimizer.KEY_USE_FREEZER, "false", false);
+        assertThat(mCountDown.await(5, TimeUnit.SECONDS)).isTrue();
+        assertThat(mCachedAppOptimizerUnderTest.useFreezer()).isTrue();
+
+
+        // Now, set the flag to false and restart the cached app optimizer
+        DeviceConfig.setProperty(DeviceConfig.NAMESPACE_ACTIVITY_MANAGER,
+                CachedAppOptimizer.KEY_USE_FREEZER, "false", false);
+        mCachedAppOptimizerUnderTest.init();
+
+        // The flag value has to be set correctly.
+        assertThat(mCachedAppOptimizerUnderTest.useFreezer()).isFalse();
+    }
+
+    @Test
     public void useCompaction_listensToDeviceConfigChangesBadValues() throws InterruptedException {
         assertThat(mCachedAppOptimizerUnderTest.useCompaction()).isEqualTo(
                 CachedAppOptimizer.DEFAULT_USE_COMPACTION);
@@ -258,6 +320,22 @@ public final class CachedAppOptimizerTest {
         // Then we set the default.
         assertThat(mCachedAppOptimizerUnderTest.useCompaction()).isEqualTo(
                 CachedAppOptimizer.DEFAULT_USE_COMPACTION);
+    }
+
+    @Test
+    public void useFreeze_listensToDeviceConfigChangesBadValues() throws InterruptedException {
+        assertThat(mCachedAppOptimizerUnderTest.useFreezer()).isEqualTo(
+                CachedAppOptimizer.DEFAULT_USE_FREEZER);
+
+        // When we push an invalid flag value...
+        DeviceConfig.setProperty(DeviceConfig.NAMESPACE_ACTIVITY_MANAGER,
+                CachedAppOptimizer.KEY_USE_FREEZER, "foobar", false);
+
+        mCachedAppOptimizerUnderTest.init();
+
+        // Then we set the default.
+        assertThat(mCachedAppOptimizerUnderTest.useFreezer()).isEqualTo(
+                CachedAppOptimizer.DEFAULT_USE_FREEZER);
     }
 
     @Test
@@ -482,6 +560,17 @@ public final class CachedAppOptimizerTest {
         // Then that override is reflected in the compactor.
         assertThat(mCachedAppOptimizerUnderTest.mCompactStatsdSampleRate).isEqualTo(
                 CachedAppOptimizer.DEFAULT_STATSD_SAMPLE_RATE + 0.1f);
+
+        // When we override mFreezerStatsdSampleRate with a reasonable value ...
+        mCountDown = new CountDownLatch(1);
+        DeviceConfig.setProperty(DeviceConfig.NAMESPACE_ACTIVITY_MANAGER,
+                CachedAppOptimizer.KEY_FREEZER_STATSD_SAMPLE_RATE,
+                Float.toString(CachedAppOptimizer.DEFAULT_STATSD_SAMPLE_RATE + 0.1f), false);
+        assertThat(mCountDown.await(5, TimeUnit.SECONDS)).isTrue();
+
+        // Then that override is reflected in the compactor.
+        assertThat(mCachedAppOptimizerUnderTest.mFreezerStatsdSampleRate).isEqualTo(
+                CachedAppOptimizer.DEFAULT_STATSD_SAMPLE_RATE + 0.1f);
     }
 
     @Test
@@ -497,6 +586,16 @@ public final class CachedAppOptimizerTest {
 
         // Then that override is reflected in the compactor.
         assertThat(mCachedAppOptimizerUnderTest.mCompactStatsdSampleRate).isEqualTo(
+                CachedAppOptimizer.DEFAULT_STATSD_SAMPLE_RATE);
+
+        // When we override mFreezerStatsdSampleRate with an unreasonable value ...
+        mCountDown = new CountDownLatch(1);
+        DeviceConfig.setProperty(DeviceConfig.NAMESPACE_ACTIVITY_MANAGER,
+                CachedAppOptimizer.KEY_FREEZER_STATSD_SAMPLE_RATE, "foo", false);
+        assertThat(mCountDown.await(5, TimeUnit.SECONDS)).isTrue();
+
+        // Then that override is reflected in the freezer.
+        assertThat(mCachedAppOptimizerUnderTest.mFreezerStatsdSampleRate).isEqualTo(
                 CachedAppOptimizer.DEFAULT_STATSD_SAMPLE_RATE);
     }
 
@@ -523,6 +622,25 @@ public final class CachedAppOptimizerTest {
 
         // Then the values is capped in the range.
         assertThat(mCachedAppOptimizerUnderTest.mCompactStatsdSampleRate).isEqualTo(1.0f);
+
+        // When we override mFreezerStatsdSampleRate with an value outside of [0..1]...
+        mCountDown = new CountDownLatch(1);
+        DeviceConfig.setProperty(DeviceConfig.NAMESPACE_ACTIVITY_MANAGER,
+                CachedAppOptimizer.KEY_FREEZER_STATSD_SAMPLE_RATE,
+                Float.toString(-1.0f), false);
+        assertThat(mCountDown.await(5, TimeUnit.SECONDS)).isTrue();
+
+        // Then the values is capped in the range.
+        assertThat(mCachedAppOptimizerUnderTest.mFreezerStatsdSampleRate).isEqualTo(0.0f);
+
+        mCountDown = new CountDownLatch(1);
+        DeviceConfig.setProperty(DeviceConfig.NAMESPACE_ACTIVITY_MANAGER,
+                CachedAppOptimizer.KEY_FREEZER_STATSD_SAMPLE_RATE,
+                Float.toString(1.01f), false);
+        assertThat(mCountDown.await(5, TimeUnit.SECONDS)).isTrue();
+
+        // Then the values is capped in the range.
+        assertThat(mCachedAppOptimizerUnderTest.mFreezerStatsdSampleRate).isEqualTo(1.0f);
     }
 
     @Test

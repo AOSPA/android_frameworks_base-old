@@ -28,6 +28,7 @@ import com.android.systemui.statusbar.notification.NotificationEntryManager
 import com.android.systemui.statusbar.notification.NotificationListController
 import com.android.systemui.statusbar.notification.collection.inflation.NotificationRowBinderImpl
 import com.android.systemui.statusbar.notification.collection.init.NotifPipelineInitializer
+import com.android.systemui.statusbar.notification.row.NotifBindPipelineInitializer
 import com.android.systemui.statusbar.notification.stack.NotificationListContainer
 import com.android.systemui.statusbar.phone.NotificationGroupAlertTransferHelper
 import com.android.systemui.statusbar.phone.NotificationGroupManager
@@ -55,6 +56,7 @@ class NotificationsControllerImpl @Inject constructor(
     private val notificationListener: NotificationListener,
     private val entryManager: NotificationEntryManager,
     private val newNotifPipeline: Lazy<NotifPipelineInitializer>,
+    private val notifBindPipelineInitializer: NotifBindPipelineInitializer,
     private val deviceProvisionedController: DeviceProvisionedController,
     private val notificationRowBinder: NotificationRowBinderImpl,
     private val remoteInputUriController: RemoteInputUriController,
@@ -88,8 +90,8 @@ class NotificationsControllerImpl @Inject constructor(
         notificationRowBinder.setUpWithPresenter(
                 presenter,
                 listContainer,
-                headsUpManager,
                 bindRowCallback)
+        notifBindPipelineInitializer.initialize()
 
         if (featureFlags.isNewNotifPipelineEnabled) {
             newNotifPipeline.get().initialize(notificationListener, notificationRowBinder)

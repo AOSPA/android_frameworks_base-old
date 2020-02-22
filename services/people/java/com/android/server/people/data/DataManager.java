@@ -21,11 +21,11 @@ import android.annotation.Nullable;
 import android.annotation.UserIdInt;
 import android.annotation.WorkerThread;
 import android.app.Notification;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
 import android.app.Person;
 import android.app.prediction.AppTarget;
 import android.app.prediction.AppTargetEvent;
-import android.app.usage.UsageEvents;
-import android.app.usage.UsageStatsManagerInternal;
 import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.Context;
@@ -45,7 +45,9 @@ import android.os.Process;
 import android.os.RemoteException;
 import android.os.UserHandle;
 import android.os.UserManager;
+import android.provider.CallLog;
 import android.provider.ContactsContract.Contacts;
+import android.provider.Telephony.MmsSms;
 import android.service.notification.NotificationListenerService;
 import android.service.notification.StatusBarNotification;
 import android.telecom.TelecomManager;
@@ -65,7 +67,9 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.function.BiConsumer;
 import java.util.function.Consumer;
+import java.util.function.Function;
 
 /**
  * A class manages the lifecycle of the conversations and associated data, and exposes the methods
@@ -76,12 +80,13 @@ public class DataManager {
     private static final String PLATFORM_PACKAGE_NAME = "android";
     private static final int MY_UID = Process.myUid();
     private static final int MY_PID = Process.myPid();
-    private static final long USAGE_STATS_QUERY_MAX_EVENT_AGE_MS = DateUtils.DAY_IN_MILLIS;
+    private static final long QUERY_EVENTS_MAX_AGE_MS = DateUtils.DAY_IN_MILLIS;
     private static final long USAGE_STATS_QUERY_INTERVAL_SEC = 120L;
 
     private final Context mContext;
     private final Injector mInjector;
     private final ScheduledExecutorService mUsageStatsQueryExecutor;
+    private final ScheduledExecutorService mDiskReadWriterExecutor;
 
     private final SparseArray<UserData> mUserDataArray = new SparseArray<>();
     private final SparseArray<BroadcastReceiver> mBroadcastReceivers = new SparseArray<>();
@@ -89,16 +94,15 @@ public class DataManager {
     private final SparseArray<ScheduledFuture<?>> mUsageStatsQueryFutures = new SparseArray<>();
     private final SparseArray<NotificationListenerService> mNotificationListeners =
             new SparseArray<>();
+    private final ContentObserver mCallLogContentObserver;
+    private final ContentObserver mMmsSmsContentObserver;
 
     private ShortcutServiceInternal mShortcutServiceInternal;
-    private UsageStatsManagerInternal mUsageStatsManagerInternal;
     private ShortcutManager mShortcutManager;
     private UserManager mUserManager;
 
     public DataManager(Context context) {
-        mContext = context;
-        mInjector = new Injector();
-        mUsageStatsQueryExecutor = mInjector.createScheduledExecutor();
+        this(context, new Injector());
     }
 
     @VisibleForTesting
@@ -106,23 +110,32 @@ public class DataManager {
         mContext = context;
         mInjector = injector;
         mUsageStatsQueryExecutor = mInjector.createScheduledExecutor();
+        mCallLogContentObserver = new CallLogContentObserver(
+                BackgroundThread.getHandler());
+        mMmsSmsContentObserver = new MmsSmsContentObserver(
+                BackgroundThread.getHandler());
+        mDiskReadWriterExecutor = mInjector.createScheduledExecutor();
     }
 
     /** Initialization. Called when the system services are up running. */
     public void initialize() {
         mShortcutServiceInternal = LocalServices.getService(ShortcutServiceInternal.class);
-        mUsageStatsManagerInternal = LocalServices.getService(UsageStatsManagerInternal.class);
         mShortcutManager = mContext.getSystemService(ShortcutManager.class);
         mUserManager = mContext.getSystemService(UserManager.class);
 
         mShortcutServiceInternal.addListener(new ShortcutServiceListener());
+
+        IntentFilter shutdownIntentFilter = new IntentFilter(Intent.ACTION_SHUTDOWN);
+        BroadcastReceiver shutdownBroadcastReceiver = new ShutdownBroadcastReceiver();
+        mContext.registerReceiver(shutdownBroadcastReceiver, shutdownIntentFilter);
     }
 
     /** This method is called when a user is unlocked. */
     public void onUserUnlocked(int userId) {
         UserData userData = mUserDataArray.get(userId);
         if (userData == null) {
-            userData = new UserData(userId);
+            userData = new UserData(userId, mDiskReadWriterExecutor,
+                    mInjector.createContactsQueryHelper(mContext));
             mUserDataArray.put(userId, userData);
         }
         userData.setUserUnlocked();
@@ -153,10 +166,22 @@ public class DataManager {
         mNotificationListeners.put(userId, notificationListener);
         try {
             notificationListener.registerAsSystemService(mContext,
-                    new ComponentName(PLATFORM_PACKAGE_NAME, getClass().getSimpleName()),
-                    UserHandle.myUserId());
+                    new ComponentName(PLATFORM_PACKAGE_NAME, getClass().getCanonicalName()),
+                    userId);
         } catch (RemoteException e) {
             // Should never occur for local calls.
+        }
+
+        if (userId == UserHandle.USER_SYSTEM) {
+            // The call log and MMS/SMS messages are shared across user profiles. So only need to
+            // register the content observers once for the primary user.
+            // TODO: Register observers after the conversations and events being loaded from disk.
+            mContext.getContentResolver().registerContentObserver(
+                    CallLog.CONTENT_URI, /* notifyForDescendants= */ true,
+                    mCallLogContentObserver, UserHandle.USER_SYSTEM);
+            mContext.getContentResolver().registerContentObserver(
+                    MmsSms.CONTENT_URI, /* notifyForDescendants= */ false,
+                    mMmsSmsContentObserver, UserHandle.USER_SYSTEM);
         }
     }
 
@@ -181,6 +206,10 @@ public class DataManager {
             } catch (RemoteException e) {
                 // Should never occur for local calls.
             }
+        }
+        if (userId == UserHandle.USER_SYSTEM) {
+            mContext.getContentResolver().unregisterContentObserver(mCallLogContentObserver);
+            mContext.getContentResolver().unregisterContentObserver(mMmsSmsContentObserver);
         }
     }
 
@@ -270,8 +299,18 @@ public class DataManager {
                 | ShortcutQuery.FLAG_MATCH_PINNED | ShortcutQuery.FLAG_MATCH_PINNED_BY_ANY_LAUNCHER;
         return mShortcutServiceInternal.getShortcuts(
                 mInjector.getCallingUserId(), /*callingPackage=*/ PLATFORM_PACKAGE_NAME,
-                /*changedSince=*/ 0, packageName, shortcutIds, /*componentName=*/ null, queryFlags,
-                userId, MY_PID, MY_UID);
+                /*changedSince=*/ 0, packageName, shortcutIds, /*locusIds=*/ null,
+                /*componentName=*/ null, queryFlags, userId, MY_PID, MY_UID);
+    }
+
+    private void forAllUnlockedUsers(Consumer<UserData> consumer) {
+        for (int i = 0; i < mUserDataArray.size(); i++) {
+            int userId = mUserDataArray.keyAt(i);
+            UserData userData = mUserDataArray.get(userId);
+            if (userData.isUnlocked()) {
+                consumer.accept(userData);
+            }
+        }
     }
 
     @Nullable
@@ -283,7 +322,8 @@ public class DataManager {
     private void updateDefaultDialer(@NonNull UserData userData) {
         TelecomManager telecomManager = mContext.getSystemService(TelecomManager.class);
         String defaultDialer = telecomManager != null
-                ? telecomManager.getDefaultDialerPackage(userData.getUserId()) : null;
+                ? telecomManager.getDefaultDialerPackage(
+                        new UserHandle(userData.getUserId())) : null;
         userData.setDefaultDialer(defaultDialer);
     }
 
@@ -353,43 +393,28 @@ public class DataManager {
     }
 
     @VisibleForTesting
-    @WorkerThread
-    void queryUsageStatsService(@UserIdInt int userId, long currentTime, long lastQueryTime) {
-        UsageEvents usageEvents = mUsageStatsManagerInternal.queryEventsForUser(
-                userId, lastQueryTime, currentTime, false, false);
-        if (usageEvents == null) {
-            return;
-        }
-        while (usageEvents.hasNextEvent()) {
-            UsageEvents.Event e = new UsageEvents.Event();
-            usageEvents.getNextEvent(e);
-
-            String packageName = e.getPackageName();
-            PackageData packageData = getPackage(packageName, userId);
-            if (packageData == null) {
-                continue;
-            }
-            if (e.getEventType() == UsageEvents.Event.SHORTCUT_INVOCATION) {
-                String shortcutId = e.getShortcutId();
-                if (packageData.getConversationStore().getConversation(shortcutId) != null) {
-                    EventHistoryImpl eventHistory =
-                            packageData.getEventStore().getOrCreateShortcutEventHistory(
-                                    shortcutId);
-                    eventHistory.addEvent(
-                            new Event(e.getTimeStamp(), Event.TYPE_SHORTCUT_INVOCATION));
-                }
-            }
-        }
-    }
-
-    @VisibleForTesting
     ContentObserver getContactsContentObserverForTesting(@UserIdInt int userId) {
         return mContactsContentObservers.get(userId);
     }
 
     @VisibleForTesting
+    ContentObserver getCallLogContentObserverForTesting() {
+        return mCallLogContentObserver;
+    }
+
+    @VisibleForTesting
+    ContentObserver getMmsSmsContentObserverForTesting() {
+        return mMmsSmsContentObserver;
+    }
+
+    @VisibleForTesting
     NotificationListenerService getNotificationListenerServiceForTesting(@UserIdInt int userId) {
         return mNotificationListeners.get(userId);
+    }
+
+    @VisibleForTesting
+    UserData getUserDataForTesting(@UserIdInt int userId) {
+        return mUserDataArray.get(userId);
     }
 
     /** Observer that observes the changes in the Contacts database. */
@@ -442,6 +467,88 @@ public class DataManager {
         }
     }
 
+    /** Observer that observes the changes in the call log database. */
+    private class CallLogContentObserver extends ContentObserver implements
+            BiConsumer<String, Event> {
+
+        private final CallLogQueryHelper mCallLogQueryHelper;
+        private long mLastCallTimestamp;
+
+        private CallLogContentObserver(Handler handler) {
+            super(handler);
+            mCallLogQueryHelper = mInjector.createCallLogQueryHelper(mContext, this);
+            mLastCallTimestamp = System.currentTimeMillis() - QUERY_EVENTS_MAX_AGE_MS;
+        }
+
+        @Override
+        public void onChange(boolean selfChange) {
+            if (mCallLogQueryHelper.querySince(mLastCallTimestamp)) {
+                mLastCallTimestamp = mCallLogQueryHelper.getLastCallTimestamp();
+            }
+        }
+
+        @Override
+        public void accept(String phoneNumber, Event event) {
+            forAllUnlockedUsers(userData -> {
+                PackageData defaultDialer = userData.getDefaultDialer();
+                if (defaultDialer == null) {
+                    return;
+                }
+                ConversationStore conversationStore = defaultDialer.getConversationStore();
+                if (conversationStore.getConversationByPhoneNumber(phoneNumber) == null) {
+                    return;
+                }
+                EventStore eventStore = defaultDialer.getEventStore();
+                eventStore.getOrCreateCallEventHistory(phoneNumber).addEvent(event);
+            });
+        }
+    }
+
+    /** Observer that observes the changes in the MMS & SMS database. */
+    private class MmsSmsContentObserver extends ContentObserver implements
+            BiConsumer<String, Event> {
+
+        private final MmsQueryHelper mMmsQueryHelper;
+        private long mLastMmsTimestamp;
+
+        private final SmsQueryHelper mSmsQueryHelper;
+        private long mLastSmsTimestamp;
+
+        private MmsSmsContentObserver(Handler handler) {
+            super(handler);
+            mMmsQueryHelper = mInjector.createMmsQueryHelper(mContext, this);
+            mSmsQueryHelper = mInjector.createSmsQueryHelper(mContext, this);
+            mLastSmsTimestamp = mLastMmsTimestamp =
+                    System.currentTimeMillis() - QUERY_EVENTS_MAX_AGE_MS;
+        }
+
+        @Override
+        public void onChange(boolean selfChange) {
+            if (mMmsQueryHelper.querySince(mLastMmsTimestamp)) {
+                mLastMmsTimestamp = mMmsQueryHelper.getLastMessageTimestamp();
+            }
+            if (mSmsQueryHelper.querySince(mLastSmsTimestamp)) {
+                mLastSmsTimestamp = mSmsQueryHelper.getLastMessageTimestamp();
+            }
+        }
+
+        @Override
+        public void accept(String phoneNumber, Event event) {
+            forAllUnlockedUsers(userData -> {
+                PackageData defaultSmsApp = userData.getDefaultSmsApp();
+                if (defaultSmsApp == null) {
+                    return;
+                }
+                ConversationStore conversationStore = defaultSmsApp.getConversationStore();
+                if (conversationStore.getConversationByPhoneNumber(phoneNumber) == null) {
+                    return;
+                }
+                EventStore eventStore = defaultSmsApp.getEventStore();
+                eventStore.getOrCreateSmsEventHistory(phoneNumber).addEvent(event);
+            });
+        }
+    }
+
     /** Listener for the shortcut data changes. */
     private class ShortcutServiceListener implements
             ShortcutServiceInternal.ShortcutChangeListener {
@@ -474,6 +581,44 @@ public class DataManager {
             long currentTime = System.currentTimeMillis();
             eventHistory.addEvent(new Event(currentTime, Event.TYPE_NOTIFICATION_OPENED));
         }
+
+        @Override
+        public void onNotificationChannelModified(String pkg, UserHandle user,
+                NotificationChannel channel, int modificationType) {
+            PackageData packageData = getPackage(pkg, user.getIdentifier());
+            String shortcutId = channel.getConversationId();
+            if (packageData == null || shortcutId == null) {
+                return;
+            }
+            ConversationStore conversationStore = packageData.getConversationStore();
+            ConversationInfo conversationInfo = conversationStore.getConversation(shortcutId);
+            if (conversationInfo == null) {
+                return;
+            }
+            ConversationInfo.Builder builder = new ConversationInfo.Builder(conversationInfo);
+            switch (modificationType) {
+                case NOTIFICATION_CHANNEL_OR_GROUP_ADDED:
+                case NOTIFICATION_CHANNEL_OR_GROUP_UPDATED:
+                    builder.setNotificationChannelId(channel.getId());
+                    builder.setImportant(channel.isImportantConversation());
+                    builder.setDemoted(channel.isDemoted());
+                    builder.setNotificationSilenced(
+                            channel.getImportance() <= NotificationManager.IMPORTANCE_LOW);
+                    builder.setBubbled(channel.canBubble());
+                    break;
+                case NOTIFICATION_CHANNEL_OR_GROUP_DELETED:
+                    // If the notification channel is deleted, revert all the notification settings
+                    // to the default value.
+                    builder.setNotificationChannelId(null);
+                    builder.setImportant(false);
+                    builder.setDemoted(false);
+                    builder.setNotificationSilenced(false);
+                    builder.setBubbled(false);
+                    break;
+            }
+            conversationStore.addOrUpdate(builder.build());
+            // TODO: Cache the shortcut when a conversation's notification setting is changed.
+        }
     }
 
     /**
@@ -482,19 +627,20 @@ public class DataManager {
      */
     private class UsageStatsQueryRunnable implements Runnable {
 
-        private final int mUserId;
-        private long mLastQueryTime;
+        private final UsageStatsQueryHelper mUsageStatsQueryHelper;
+        private long mLastEventTimestamp;
 
         private UsageStatsQueryRunnable(int userId) {
-            mUserId = userId;
-            mLastQueryTime = System.currentTimeMillis() - USAGE_STATS_QUERY_MAX_EVENT_AGE_MS;
+            mUsageStatsQueryHelper = mInjector.createUsageStatsQueryHelper(userId,
+                    (packageName) -> getPackage(packageName, userId));
+            mLastEventTimestamp = System.currentTimeMillis() - QUERY_EVENTS_MAX_AGE_MS;
         }
 
         @Override
         public void run() {
-            long currentTime = System.currentTimeMillis();
-            queryUsageStatsService(mUserId, currentTime, mLastQueryTime);
-            mLastQueryTime = currentTime;
+            if (mUsageStatsQueryHelper.querySince(mLastEventTimestamp)) {
+                mLastEventTimestamp = mUsageStatsQueryHelper.getLastEventTimestamp();
+            }
         }
     }
 
@@ -524,6 +670,14 @@ public class DataManager {
         }
     }
 
+    private class ShutdownBroadcastReceiver extends BroadcastReceiver {
+
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            forAllPackages(PackageData::saveToDisk);
+        }
+    }
+
     @VisibleForTesting
     static class Injector {
 
@@ -533,6 +687,26 @@ public class DataManager {
 
         ContactsQueryHelper createContactsQueryHelper(Context context) {
             return new ContactsQueryHelper(context);
+        }
+
+        CallLogQueryHelper createCallLogQueryHelper(Context context,
+                BiConsumer<String, Event> eventConsumer) {
+            return new CallLogQueryHelper(context, eventConsumer);
+        }
+
+        MmsQueryHelper createMmsQueryHelper(Context context,
+                BiConsumer<String, Event> eventConsumer) {
+            return new MmsQueryHelper(context, eventConsumer);
+        }
+
+        SmsQueryHelper createSmsQueryHelper(Context context,
+                BiConsumer<String, Event> eventConsumer) {
+            return new SmsQueryHelper(context, eventConsumer);
+        }
+
+        UsageStatsQueryHelper createUsageStatsQueryHelper(@UserIdInt int userId,
+                Function<String, PackageData> packageDataGetter) {
+            return new UsageStatsQueryHelper(userId, packageDataGetter);
         }
 
         int getCallingUserId() {

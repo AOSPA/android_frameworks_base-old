@@ -391,6 +391,7 @@ bool ManifestFixer::BuildRules(xml::XmlActionExecutor* executor,
   manifest_action["uses-split"].Action(RequiredNameIsJavaPackage);
   manifest_action["queries"]["package"].Action(RequiredNameIsJavaPackage);
   manifest_action["queries"]["intent"] = intent_filter_action;
+  manifest_action["queries"]["provider"].Action(RequiredAndroidAttribute("authorities"));
   // TODO: more complicated component name tag
 
   manifest_action["key-sets"]["key-set"]["public-key"];
@@ -427,6 +428,12 @@ bool ManifestFixer::BuildRules(xml::XmlActionExecutor* executor,
   }
 
   application_action["meta-data"] = meta_data_action;
+
+  application_action["processes"];
+  application_action["processes"]["deny-permission"];
+  application_action["processes"]["allow-permission"];
+  application_action["processes"]["process"]["deny-permission"];
+  application_action["processes"]["process"]["allow-permission"];
 
   application_action["activity"] = component_action;
   application_action["activity"]["layout"];

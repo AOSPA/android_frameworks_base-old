@@ -38,6 +38,8 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
 import android.content.Context;
 import android.os.PersistableBundle;
 
+import androidx.test.InstrumentationRegistry;
+
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -58,21 +60,26 @@ public class ConnectivityDiagnosticsManagerTest {
 
     private static final Executor INLINE_EXECUTOR = x -> x.run();
 
-    @Mock private Context mContext;
     @Mock private IConnectivityManager mService;
     @Mock private ConnectivityDiagnosticsCallback mCb;
 
+    private Context mContext;
     private ConnectivityDiagnosticsBinder mBinder;
     private ConnectivityDiagnosticsManager mManager;
 
+    private String mPackageName;
+
     @Before
     public void setUp() {
-        mContext = mock(Context.class);
+        mContext = InstrumentationRegistry.getContext();
+
         mService = mock(IConnectivityManager.class);
         mCb = mock(ConnectivityDiagnosticsCallback.class);
 
         mBinder = new ConnectivityDiagnosticsBinder(mCb, INLINE_EXECUTOR);
         mManager = new ConnectivityDiagnosticsManager(mContext, mService);
+
+        mPackageName = mContext.getOpPackageName();
     }
 
     @After
@@ -139,17 +146,14 @@ public class ConnectivityDiagnosticsManagerTest {
 
     @Test
     public void testConnectivityReportEquals() {
-        assertEquals(createSampleConnectivityReport(), createSampleConnectivityReport());
-        assertEquals(createDefaultConnectivityReport(), createDefaultConnectivityReport());
+        final ConnectivityReport defaultReport = createDefaultConnectivityReport();
+        final ConnectivityReport sampleReport = createSampleConnectivityReport();
+        assertEquals(sampleReport, createSampleConnectivityReport());
+        assertEquals(defaultReport, createDefaultConnectivityReport());
 
-        final LinkProperties linkProperties = new LinkProperties();
-        linkProperties.setInterfaceName(INTERFACE_NAME);
-
-        final NetworkCapabilities networkCapabilities = new NetworkCapabilities();
-        networkCapabilities.addCapability(NetworkCapabilities.NET_CAPABILITY_IMS);
-
-        final PersistableBundle bundle = new PersistableBundle();
-        bundle.putString(BUNDLE_KEY, BUNDLE_VALUE);
+        final LinkProperties linkProperties = sampleReport.getLinkProperties();
+        final NetworkCapabilities networkCapabilities = sampleReport.getNetworkCapabilities();
+        final PersistableBundle bundle = sampleReport.getAdditionalInfo();
 
         assertNotEquals(
                 createDefaultConnectivityReport(),
@@ -199,39 +203,104 @@ public class ConnectivityDiagnosticsManagerTest {
     }
 
     private DataStallReport createSampleDataStallReport() {
+        final LinkProperties linkProperties = new LinkProperties();
+        linkProperties.setInterfaceName(INTERFACE_NAME);
+
         final PersistableBundle bundle = new PersistableBundle();
         bundle.putString(BUNDLE_KEY, BUNDLE_VALUE);
-        return new DataStallReport(new Network(NET_ID), TIMESTAMP, DETECTION_METHOD, bundle);
+
+        final NetworkCapabilities networkCapabilities = new NetworkCapabilities();
+        networkCapabilities.addCapability(NetworkCapabilities.NET_CAPABILITY_IMS);
+
+        return new DataStallReport(
+                new Network(NET_ID),
+                TIMESTAMP,
+                DETECTION_METHOD,
+                linkProperties,
+                networkCapabilities,
+                bundle);
     }
 
     private DataStallReport createDefaultDataStallReport() {
-        return new DataStallReport(new Network(0), 0L, 0, PersistableBundle.EMPTY);
+        return new DataStallReport(
+                new Network(0),
+                0L,
+                0,
+                new LinkProperties(),
+                new NetworkCapabilities(),
+                PersistableBundle.EMPTY);
     }
 
     @Test
     public void testDataStallReportEquals() {
-        assertEquals(createSampleDataStallReport(), createSampleDataStallReport());
-        assertEquals(createDefaultDataStallReport(), createDefaultDataStallReport());
+        final DataStallReport defaultReport = createDefaultDataStallReport();
+        final DataStallReport sampleReport = createSampleDataStallReport();
+        assertEquals(sampleReport, createSampleDataStallReport());
+        assertEquals(defaultReport, createDefaultDataStallReport());
 
-        final PersistableBundle bundle = new PersistableBundle();
-        bundle.putString(BUNDLE_KEY, BUNDLE_VALUE);
+        final LinkProperties linkProperties = sampleReport.getLinkProperties();
+        final NetworkCapabilities networkCapabilities = sampleReport.getNetworkCapabilities();
+        final PersistableBundle bundle = sampleReport.getStallDetails();
 
         assertNotEquals(
-                createDefaultDataStallReport(),
-                new DataStallReport(new Network(NET_ID), 0L, 0, PersistableBundle.EMPTY));
+                defaultReport,
+                new DataStallReport(
+                        new Network(NET_ID),
+                        0L,
+                        0,
+                        new LinkProperties(),
+                        new NetworkCapabilities(),
+                        PersistableBundle.EMPTY));
         assertNotEquals(
-                createDefaultDataStallReport(),
-                new DataStallReport(new Network(0), TIMESTAMP, 0, PersistableBundle.EMPTY));
+                defaultReport,
+                new DataStallReport(
+                        new Network(0),
+                        TIMESTAMP,
+                        0,
+                        new LinkProperties(),
+                        new NetworkCapabilities(),
+                        PersistableBundle.EMPTY));
         assertNotEquals(
-                createDefaultDataStallReport(),
-                new DataStallReport(new Network(0), 0L, DETECTION_METHOD, PersistableBundle.EMPTY));
+                defaultReport,
+                new DataStallReport(
+                        new Network(0),
+                        0L,
+                        DETECTION_METHOD,
+                        new LinkProperties(),
+                        new NetworkCapabilities(),
+                        PersistableBundle.EMPTY));
         assertNotEquals(
-                createDefaultDataStallReport(), new DataStallReport(new Network(0), 0L, 0, bundle));
+                defaultReport,
+                new DataStallReport(
+                        new Network(0),
+                        0L,
+                        0,
+                        linkProperties,
+                        new NetworkCapabilities(),
+                        PersistableBundle.EMPTY));
+        assertNotEquals(
+                defaultReport,
+                new DataStallReport(
+                        new Network(0),
+                        0L,
+                        0,
+                        new LinkProperties(),
+                        networkCapabilities,
+                        PersistableBundle.EMPTY));
+        assertNotEquals(
+                defaultReport,
+                new DataStallReport(
+                        new Network(0),
+                        0L,
+                        0,
+                        new LinkProperties(),
+                        new NetworkCapabilities(),
+                        bundle));
     }
 
     @Test
     public void testDataStallReportParcelUnparcel() {
-        assertParcelSane(createSampleDataStallReport(), 4);
+        assertParcelSane(createSampleDataStallReport(), 6);
     }
 
     @Test
@@ -271,7 +340,7 @@ public class ConnectivityDiagnosticsManagerTest {
         mManager.registerConnectivityDiagnosticsCallback(request, INLINE_EXECUTOR, mCb);
 
         verify(mService).registerConnectivityDiagnosticsCallback(
-                any(ConnectivityDiagnosticsBinder.class), eq(request));
+                any(ConnectivityDiagnosticsBinder.class), eq(request), eq(mPackageName));
         assertTrue(ConnectivityDiagnosticsManager.sCallbacks.containsKey(mCb));
     }
 
@@ -302,7 +371,7 @@ public class ConnectivityDiagnosticsManagerTest {
         // verify that re-registering is successful
         mManager.registerConnectivityDiagnosticsCallback(request, INLINE_EXECUTOR, mCb);
         verify(mService, times(2)).registerConnectivityDiagnosticsCallback(
-                any(ConnectivityDiagnosticsBinder.class), eq(request));
+                any(ConnectivityDiagnosticsBinder.class), eq(request), eq(mPackageName));
         assertTrue(ConnectivityDiagnosticsManager.sCallbacks.containsKey(mCb));
     }
 

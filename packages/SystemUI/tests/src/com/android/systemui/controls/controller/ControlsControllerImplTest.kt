@@ -32,12 +32,14 @@ import androidx.test.filters.SmallTest
 import com.android.systemui.DumpController
 import com.android.systemui.SysuiTestCase
 import com.android.systemui.broadcast.BroadcastDispatcher
-import com.android.systemui.controls.management.ControlsListingController
 import com.android.systemui.controls.ControlStatus
+import com.android.systemui.controls.management.ControlsListingController
 import com.android.systemui.controls.ui.ControlsUiController
 import com.android.systemui.util.concurrency.FakeExecutor
 import com.android.systemui.util.time.FakeSystemClock
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -54,6 +56,7 @@ import org.mockito.Mockito.reset
 import org.mockito.Mockito.verify
 import org.mockito.MockitoAnnotations
 import java.util.Optional
+import java.util.function.Consumer
 
 @SmallTest
 @RunWith(AndroidTestingRunner::class)
@@ -77,12 +80,13 @@ class ControlsControllerImplTest : SysuiTestCase() {
     @Captor
     private lateinit var controlInfoListCaptor: ArgumentCaptor<List<ControlInfo>>
     @Captor
-    private lateinit var controlLoadCallbackCaptor: ArgumentCaptor<(List<Control>) -> Unit>
+    private lateinit var controlLoadCallbackCaptor:
+            ArgumentCaptor<ControlsBindingController.LoadCallback>
     @Captor
     private lateinit var broadcastReceiverCaptor: ArgumentCaptor<BroadcastReceiver>
 
     private lateinit var delayableExecutor: FakeExecutor
-    private lateinit var controller: ControlsController
+    private lateinit var controller: ControlsControllerImpl
 
     companion object {
         fun <T> capture(argumentCaptor: ArgumentCaptor<T>): T = argumentCaptor.capture()
@@ -224,13 +228,13 @@ class ControlsControllerImplTest : SysuiTestCase() {
         val newControlInfo = TEST_CONTROL_INFO.copy(controlTitle = TEST_CONTROL_TITLE_2)
         val control = builderFromInfo(newControlInfo).build()
 
-        controller.loadForComponent(TEST_COMPONENT) {}
+        controller.loadForComponent(TEST_COMPONENT, Consumer {})
 
         reset(persistenceWrapper)
         verify(bindingController).bindAndLoad(eq(TEST_COMPONENT),
                 capture(controlLoadCallbackCaptor))
 
-        controlLoadCallbackCaptor.value.invoke(listOf(control))
+        controlLoadCallbackCaptor.value.accept(listOf(control))
 
         verify(persistenceWrapper).storeFavorites(listOf(newControlInfo))
     }
@@ -292,17 +296,22 @@ class ControlsControllerImplTest : SysuiTestCase() {
         var loaded = false
         val control = builderFromInfo(TEST_CONTROL_INFO).build()
 
-        controller.loadForComponent(TEST_COMPONENT) {
+        controller.loadForComponent(TEST_COMPONENT, Consumer { data ->
+            val controls = data.allControls
+            val favorites = data.favoritesIds
             loaded = true
-            assertEquals(1, it.size)
-            val controlStatus = it[0]
+            assertEquals(1, controls.size)
+            val controlStatus = controls[0]
             assertEquals(ControlStatus(control, false), controlStatus)
-        }
+
+            assertTrue(favorites.isEmpty())
+            assertFalse(data.errorOnLoad)
+        })
 
         verify(bindingController).bindAndLoad(eq(TEST_COMPONENT),
                 capture(controlLoadCallbackCaptor))
 
-        controlLoadCallbackCaptor.value.invoke(listOf(control))
+        controlLoadCallbackCaptor.value.accept(listOf(control))
 
         assertTrue(loaded)
     }
@@ -314,20 +323,26 @@ class ControlsControllerImplTest : SysuiTestCase() {
         val control2 = builderFromInfo(TEST_CONTROL_INFO_2).build()
         controller.changeFavoriteStatus(TEST_CONTROL_INFO, true)
 
-        controller.loadForComponent(TEST_COMPONENT) {
+        controller.loadForComponent(TEST_COMPONENT, Consumer { data ->
+            val controls = data.allControls
+            val favorites = data.favoritesIds
             loaded = true
-            assertEquals(2, it.size)
-            val controlStatus = it.first { it.control.controlId == TEST_CONTROL_ID }
+            assertEquals(2, controls.size)
+            val controlStatus = controls.first { it.control.controlId == TEST_CONTROL_ID }
             assertEquals(ControlStatus(control, true), controlStatus)
 
-            val controlStatus2 = it.first { it.control.controlId == TEST_CONTROL_ID_2 }
+            val controlStatus2 = controls.first { it.control.controlId == TEST_CONTROL_ID_2 }
             assertEquals(ControlStatus(control2, false), controlStatus2)
-        }
+
+            assertEquals(1, favorites.size)
+            assertEquals(TEST_CONTROL_ID, favorites[0])
+            assertFalse(data.errorOnLoad)
+        })
 
         verify(bindingController).bindAndLoad(eq(TEST_COMPONENT),
                 capture(controlLoadCallbackCaptor))
 
-        controlLoadCallbackCaptor.value.invoke(listOf(control, control2))
+        controlLoadCallbackCaptor.value.accept(listOf(control, control2))
 
         assertTrue(loaded)
     }
@@ -337,19 +352,53 @@ class ControlsControllerImplTest : SysuiTestCase() {
         var loaded = false
         controller.changeFavoriteStatus(TEST_CONTROL_INFO, true)
 
-        controller.loadForComponent(TEST_COMPONENT) {
+        controller.loadForComponent(TEST_COMPONENT, Consumer { data ->
+            val controls = data.allControls
+            val favorites = data.favoritesIds
             loaded = true
-            assertEquals(1, it.size)
-            val controlStatus = it[0]
+            assertEquals(1, controls.size)
+            val controlStatus = controls[0]
             assertEquals(TEST_CONTROL_ID, controlStatus.control.controlId)
             assertTrue(controlStatus.favorite)
             assertTrue(controlStatus.removed)
-        }
+
+            assertEquals(1, favorites.size)
+            assertEquals(TEST_CONTROL_ID, favorites[0])
+            assertFalse(data.errorOnLoad)
+        })
 
         verify(bindingController).bindAndLoad(eq(TEST_COMPONENT),
                 capture(controlLoadCallbackCaptor))
 
-        controlLoadCallbackCaptor.value.invoke(emptyList())
+        controlLoadCallbackCaptor.value.accept(emptyList())
+
+        assertTrue(loaded)
+    }
+
+    @Test
+    fun testErrorOnLoad_notRemoved() {
+        var loaded = false
+        controller.changeFavoriteStatus(TEST_CONTROL_INFO, true)
+
+        controller.loadForComponent(TEST_COMPONENT, Consumer { data ->
+            val controls = data.allControls
+            val favorites = data.favoritesIds
+            loaded = true
+            assertEquals(1, controls.size)
+            val controlStatus = controls[0]
+            assertEquals(TEST_CONTROL_ID, controlStatus.control.controlId)
+            assertTrue(controlStatus.favorite)
+            assertFalse(controlStatus.removed)
+
+            assertEquals(1, favorites.size)
+            assertEquals(TEST_CONTROL_ID, favorites[0])
+            assertTrue(data.errorOnLoad)
+        })
+
+        verify(bindingController).bindAndLoad(eq(TEST_COMPONENT),
+                capture(controlLoadCallbackCaptor))
+
+        controlLoadCallbackCaptor.value.error("")
 
         assertTrue(loaded)
     }
@@ -360,12 +409,12 @@ class ControlsControllerImplTest : SysuiTestCase() {
         val newControlInfo = TEST_CONTROL_INFO.copy(controlTitle = TEST_CONTROL_TITLE_2)
         val control = builderFromInfo(newControlInfo).build()
 
-        controller.loadForComponent(TEST_COMPONENT) {}
+        controller.loadForComponent(TEST_COMPONENT, Consumer {})
 
         verify(bindingController).bindAndLoad(eq(TEST_COMPONENT),
                 capture(controlLoadCallbackCaptor))
 
-        controlLoadCallbackCaptor.value.invoke(listOf(control))
+        controlLoadCallbackCaptor.value.accept(listOf(control))
 
         val favorites = controller.getFavoriteControls()
         assertEquals(1, favorites.size)
@@ -416,5 +465,147 @@ class ControlsControllerImplTest : SysuiTestCase() {
         verify(listingController).changeUser(UserHandle.of(otherUser))
         assertTrue(controller.getFavoriteControls().isEmpty())
         assertEquals(otherUser, controller.currentUserId)
+        assertTrue(controller.available)
+    }
+
+    @Test
+    fun testDisableFeature_notAvailable() {
+        Settings.Secure.putIntForUser(mContext.contentResolver,
+                ControlsControllerImpl.CONTROLS_AVAILABLE, 0, user)
+        controller.settingObserver.onChange(false, ControlsControllerImpl.URI, 0)
+        assertFalse(controller.available)
+    }
+
+    @Test
+    fun testDisableFeature_clearFavorites() {
+        controller.changeFavoriteStatus(TEST_CONTROL_INFO, true)
+        assertFalse(controller.getFavoriteControls().isEmpty())
+
+        Settings.Secure.putIntForUser(mContext.contentResolver,
+                ControlsControllerImpl.CONTROLS_AVAILABLE, 0, user)
+        controller.settingObserver.onChange(false, ControlsControllerImpl.URI, user)
+        assertTrue(controller.getFavoriteControls().isEmpty())
+    }
+
+    @Test
+    fun testDisableFeature_noChangeForNotCurrentUser() {
+        controller.changeFavoriteStatus(TEST_CONTROL_INFO, true)
+        Settings.Secure.putIntForUser(mContext.contentResolver,
+                ControlsControllerImpl.CONTROLS_AVAILABLE, 0, otherUser)
+        controller.settingObserver.onChange(false, ControlsControllerImpl.URI, otherUser)
+
+        assertTrue(controller.available)
+        assertFalse(controller.getFavoriteControls().isEmpty())
+    }
+
+    @Test
+    fun testCorrectUserSettingOnUserChange() {
+        Settings.Secure.putIntForUser(mContext.contentResolver,
+                ControlsControllerImpl.CONTROLS_AVAILABLE, 0, otherUser)
+
+        val intent = Intent(Intent.ACTION_USER_SWITCHED).apply {
+            putExtra(Intent.EXTRA_USER_HANDLE, otherUser)
+        }
+        val pendingResult = mock(BroadcastReceiver.PendingResult::class.java)
+        `when`(pendingResult.sendingUserId).thenReturn(otherUser)
+        broadcastReceiverCaptor.value.pendingResult = pendingResult
+
+        broadcastReceiverCaptor.value.onReceive(mContext, intent)
+
+        assertFalse(controller.available)
+    }
+
+    @Test
+    fun testCountFavoritesForComponent_singleComponent() {
+        controller.changeFavoriteStatus(TEST_CONTROL_INFO, true)
+
+        assertEquals(1, controller.countFavoritesForComponent(TEST_COMPONENT))
+        assertEquals(0, controller.countFavoritesForComponent(TEST_COMPONENT_2))
+    }
+
+    @Test
+    fun testCountFavoritesForComponent_multipleComponents() {
+        controller.changeFavoriteStatus(TEST_CONTROL_INFO, true)
+        controller.changeFavoriteStatus(TEST_CONTROL_INFO_2, true)
+
+        assertEquals(1, controller.countFavoritesForComponent(TEST_COMPONENT))
+        assertEquals(1, controller.countFavoritesForComponent(TEST_COMPONENT_2))
+    }
+
+    @Test
+    fun testGetFavoritesForComponent() {
+        controller.changeFavoriteStatus(TEST_CONTROL_INFO, true)
+        assertEquals(listOf(TEST_CONTROL_INFO), controller.getFavoritesForComponent(TEST_COMPONENT))
+    }
+
+    @Test
+    fun testGetFavoritesForComponent_otherComponent() {
+        controller.changeFavoriteStatus(TEST_CONTROL_INFO_2, true)
+        assertTrue(controller.getFavoritesForComponent(TEST_COMPONENT).isEmpty())
+    }
+
+    @Test
+    fun testGetFavoritesForComponent_multipleInOrder() {
+        val controlInfo = ControlInfo(TEST_COMPONENT, "id", "title", 0)
+
+        controller.changeFavoriteStatus(TEST_CONTROL_INFO, true)
+        controller.changeFavoriteStatus(controlInfo, true)
+
+        assertEquals(listOf(TEST_CONTROL_INFO, controlInfo),
+            controller.getFavoritesForComponent(TEST_COMPONENT))
+
+        controller.clearFavorites()
+
+        controller.changeFavoriteStatus(controlInfo, true)
+        controller.changeFavoriteStatus(TEST_CONTROL_INFO, true)
+
+        assertEquals(listOf(controlInfo, TEST_CONTROL_INFO),
+            controller.getFavoritesForComponent(TEST_COMPONENT))
+    }
+
+    @Test
+    fun testReplaceFavoritesForComponent_noFavorites() {
+        controller.replaceFavoritesForComponent(TEST_COMPONENT, listOf(TEST_CONTROL_INFO))
+
+        assertEquals(1, controller.countFavoritesForComponent(TEST_COMPONENT))
+        assertEquals(listOf(TEST_CONTROL_INFO), controller.getFavoritesForComponent(TEST_COMPONENT))
+    }
+
+    @Test
+    fun testReplaceFavoritesForComponent_differentComponentsAreFilteredOut() {
+        controller.replaceFavoritesForComponent(TEST_COMPONENT,
+            listOf(TEST_CONTROL_INFO, TEST_CONTROL_INFO_2))
+
+        assertEquals(1, controller.countFavoritesForComponent(TEST_COMPONENT))
+        assertEquals(listOf(TEST_CONTROL_INFO), controller.getFavoritesForComponent(TEST_COMPONENT))
+    }
+
+    @Test
+    fun testReplaceFavoritesForComponent_oldFavoritesRemoved() {
+        val controlInfo = ControlInfo(TEST_COMPONENT, "id", "title", 0)
+        assertNotEquals(TEST_CONTROL_INFO, controlInfo)
+
+        controller.changeFavoriteStatus(controlInfo, true)
+        controller.replaceFavoritesForComponent(TEST_COMPONENT, listOf(TEST_CONTROL_INFO))
+
+        assertEquals(1, controller.countFavoritesForComponent(TEST_COMPONENT))
+        assertEquals(listOf(TEST_CONTROL_INFO), controller.getFavoritesForComponent(TEST_COMPONENT))
+    }
+
+    @Test
+    fun testReplaceFavoritesForComponent_favoritesInOrder() {
+        val controlInfo = ControlInfo(TEST_COMPONENT, "id", "title", 0)
+
+        val listOrder1 = listOf(TEST_CONTROL_INFO, controlInfo)
+        controller.replaceFavoritesForComponent(TEST_COMPONENT, listOrder1)
+
+        assertEquals(2, controller.countFavoritesForComponent(TEST_COMPONENT))
+        assertEquals(listOrder1, controller.getFavoritesForComponent(TEST_COMPONENT))
+
+        val listOrder2 = listOf(controlInfo, TEST_CONTROL_INFO)
+        controller.replaceFavoritesForComponent(TEST_COMPONENT, listOrder2)
+
+        assertEquals(2, controller.countFavoritesForComponent(TEST_COMPONENT))
+        assertEquals(listOrder2, controller.getFavoritesForComponent(TEST_COMPONENT))
     }
 }

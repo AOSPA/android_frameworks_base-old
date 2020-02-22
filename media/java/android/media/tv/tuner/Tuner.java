@@ -74,6 +74,8 @@ public class Tuner implements AutoCloseable  {
     private List<Integer> mFrontendIds;
     private Frontend mFrontend;
     private EventHandler mHandler;
+    @Nullable
+    private FrontendInfo mFrontendInfo;
 
     private List<Integer> mLnbIds;
     private Lnb mLnb;
@@ -97,6 +99,7 @@ public class Tuner implements AutoCloseable  {
     public Tuner(@NonNull Context context, @NonNull String tvInputSessionId,
             @TvInputService.PriorityHintUseCaseType int useCase,
             @Nullable OnResourceLostListener listener) {
+        nativeSetup();
         mContext = context;
     }
 
@@ -185,7 +188,7 @@ public class Tuner implements AutoCloseable  {
     /**
      * Listener for resource lost.
      *
-     * <p>Resource is reclaimed and tuner instance is forced to close.
+     * <p>Insufficient resources are reclaimed by higher priority clients.
      */
     public interface OnResourceLostListener {
         /**
@@ -241,7 +244,7 @@ public class Tuner implements AutoCloseable  {
      *
      * <p>
      * Tuner events are started when {@link #tune(FrontendSettings)} is called and end when {@link
-     * #stopTune()} is called.
+     * #cancelTuning()} is called.
      *
      * @param eventListener receives tune events.
      * @throws SecurityException if the caller does not have appropriate permissions.
@@ -292,6 +295,7 @@ public class Tuner implements AutoCloseable  {
     @Result
     public int tune(@NonNull FrontendSettings settings) {
         TunerUtils.checkTunerPermission(mContext);
+        mFrontendInfo = null;
         return nativeTune(settings.getType(), settings);
     }
 
@@ -305,7 +309,7 @@ public class Tuner implements AutoCloseable  {
      */
     @RequiresPermission(android.Manifest.permission.ACCESS_TV_TUNER)
     @Result
-    public int stopTune() {
+    public int cancelTuning() {
         TunerUtils.checkTunerPermission(mContext);
         return nativeStopTune();
     }
@@ -318,8 +322,8 @@ public class Tuner implements AutoCloseable  {
      * @param settings A {@link FrontendSettings} to configure the frontend.
      * @param scanType The scan type.
      * @throws SecurityException     if the caller does not have appropriate permissions.
-     * @throws IllegalStateException if {@code scan} is called again before {@link #stopScan()} is
-     *                               called.
+     * @throws IllegalStateException if {@code scan} is called again before
+     *                               {@link #cancelScanning()} is called.
      */
     @RequiresPermission(android.Manifest.permission.ACCESS_TV_TUNER)
     @Result
@@ -333,6 +337,7 @@ public class Tuner implements AutoCloseable  {
         }
         mScanCallback = scanCallback;
         mScanCallbackExecutor = executor;
+        mFrontendInfo = null;
         return nativeScan(settings.getType(), settings, scanType);
     }
 
@@ -349,7 +354,7 @@ public class Tuner implements AutoCloseable  {
      */
     @RequiresPermission(android.Manifest.permission.ACCESS_TV_TUNER)
     @Result
-    public int stopScan() {
+    public int cancelScanning() {
         TunerUtils.checkTunerPermission(mContext);
         int retVal = nativeStopScan();
         mScanCallback = null;
@@ -468,7 +473,10 @@ public class Tuner implements AutoCloseable  {
         if (mFrontend == null) {
             throw new IllegalStateException("frontend is not initialized");
         }
-        return nativeGetFrontendInfo(mFrontend.mId);
+        if (mFrontendInfo == null) {
+            mFrontendInfo = nativeGetFrontendInfo(mFrontend.mId);
+        }
+        return mFrontendInfo;
     }
 
     /**

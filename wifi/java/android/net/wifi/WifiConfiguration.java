@@ -602,14 +602,12 @@ public class WifiConfiguration implements Parcelable {
      * 2GHz band.
      * @hide
      */
-    @SystemApi
     public static final int AP_BAND_2GHZ = 0;
 
     /**
      * 5GHz band.
      * @hide
      */
-    @SystemApi
     public static final int AP_BAND_5GHZ = 1;
 
     /**
@@ -629,7 +627,6 @@ public class WifiConfiguration implements Parcelable {
      * operating country code and current radio conditions.
      * @hide
      */
-    @SystemApi
     public static final int AP_BAND_ANY = -1;
 
     /**
@@ -639,7 +636,7 @@ public class WifiConfiguration implements Parcelable {
      *
      * @hide
      */
-    @SystemApi
+    @UnsupportedAppUsage
     @ApBand
     public int apBand = AP_BAND_2GHZ;
 
@@ -1007,7 +1004,7 @@ public class WifiConfiguration implements Parcelable {
      * Indicate whether the network is trusted or not. Networks are considered trusted
      * if the user explicitly allowed this network connection.
      * This bit can be used by suggestion network, see
-     * {@link WifiNetworkSuggestion.Builder#setUnTrusted(boolean)}
+     * {@link WifiNetworkSuggestion.Builder#setUntrusted(boolean)}
      * @hide
      */
     public boolean trusted;
@@ -1380,8 +1377,32 @@ public class WifiConfiguration implements Parcelable {
         public static final int DISABLED_BY_WRONG_PASSWORD = 8;
         /** This network is disabled because service is not subscribed. */
         public static final int DISABLED_AUTHENTICATION_NO_SUBSCRIPTION = 9;
-        /** All other disable reasons should be strictly less than this value. */
+        /**
+         * All other disable reasons should be strictly less than this value.
+         * @hide
+         */
         public static final int NETWORK_SELECTION_DISABLED_MAX = 10;
+
+        /**
+         * Get an integer that is equal to the maximum integer value of all the
+         * DISABLED_* reasons
+         * e.g. {@link #DISABLED_NONE}, {@link #DISABLED_ASSOCIATION_REJECTION}, etc.
+         *
+         * All DISABLED_* constants will be contiguous in the range
+         * 0, 1, 2, 3, ..., getMaxNetworkSelectionDisableReasons()
+         *
+         * <br />
+         * For example, this can be used to iterate through all the network selection
+         * disable reasons like so:
+         * <pre>{@code
+         * for (int reason = 0; reason <= getMaxNetworkSelectionDisableReasons(); reason++) {
+         *     ...
+         * }
+         * }</pre>
+         */
+        public static int getMaxNetworkSelectionDisableReason() {
+            return NETWORK_SELECTION_DISABLED_MAX - 1;
+        }
 
         /**
          * Contains info about disable reasons.
@@ -1785,7 +1806,10 @@ public class WifiConfiguration implements Parcelable {
             return mStatus;
         }
 
-        /** True if the current network is enabled to join network selection, false otherwise. */
+        /**
+         * True if the current network is enabled to join network selection, false otherwise.
+         * @hide
+         */
         public boolean isNetworkEnabled() {
             return mStatus == NETWORK_SELECTION_ENABLED;
         }
@@ -1798,7 +1822,10 @@ public class WifiConfiguration implements Parcelable {
             return mStatus == NETWORK_SELECTION_TEMPORARY_DISABLED;
         }
 
-        /** True if the current network is permanently disabled, false otherwise. */
+        /**
+         * True if the current network is permanently disabled, false otherwise.
+         * @hide
+         */
         public boolean isNetworkPermanentlyDisabled() {
             return mStatus == NETWORK_SELECTION_PERMANENTLY_DISABLED;
         }
@@ -2166,7 +2193,8 @@ public class WifiConfiguration implements Parcelable {
         return !TextUtils.isEmpty(FQDN)
                 && !TextUtils.isEmpty(providerFriendlyName)
                 && enterpriseConfig != null
-                && enterpriseConfig.getEapMethod() != WifiEnterpriseConfig.Eap.NONE;
+                && enterpriseConfig.getEapMethod() != WifiEnterpriseConfig.Eap.NONE
+                && !TextUtils.isEmpty(mPasspointUniqueId);
     }
 
     /**
@@ -2193,7 +2221,8 @@ public class WifiConfiguration implements Parcelable {
     public boolean isEnterprise() {
         return (allowedKeyManagement.get(KeyMgmt.WPA_EAP)
                 || allowedKeyManagement.get(KeyMgmt.IEEE8021X)
-                || allowedKeyManagement.get(KeyMgmt.SUITE_B_192))
+                || allowedKeyManagement.get(KeyMgmt.SUITE_B_192)
+                || allowedKeyManagement.get(KeyMgmt.WAPI_CERT))
                 && enterpriseConfig != null
                 && enterpriseConfig.getEapMethod() != WifiEnterpriseConfig.Eap.NONE;
     }
@@ -2483,6 +2512,9 @@ public class WifiConfiguration implements Parcelable {
             if (allowedKeyManagement.get(KeyMgmt.SUITE_B_192)) {
                 keyMgmt += KeyMgmt.strings[KeyMgmt.SUITE_B_192];
             }
+            if (allowedKeyManagement.get(KeyMgmt.WAPI_CERT)) {
+                keyMgmt += KeyMgmt.strings[KeyMgmt.WAPI_CERT];
+            }
 
             if (TextUtils.isEmpty(keyMgmt)) {
                 throw new IllegalStateException("Not an EAP network");
@@ -2564,12 +2596,17 @@ public class WifiConfiguration implements Parcelable {
      */
     @NonNull
     public String getKey() {
-        String key = providerFriendlyName == null
-                ? getSsidAndSecurityTypeString()
-                : FQDN + KeyMgmt.strings[KeyMgmt.WPA_EAP];
+        // Passpoint ephemeral networks have their unique identifier set. Return it as is to be
+        // able to match internally.
+        if (mPasspointUniqueId != null) {
+            return mPasspointUniqueId;
+        }
+
+        String key = getSsidAndSecurityTypeString();
         if (!shared) {
             key += "-" + UserHandle.getUserHandleForUid(creatorUid).getIdentifier();
         }
+
         return key;
     }
 
@@ -2832,6 +2869,7 @@ public class WifiConfiguration implements Parcelable {
             requirePMF = source.requirePMF;
             updateIdentifier = source.updateIdentifier;
             carrierId = source.carrierId;
+            mPasspointUniqueId = source.mPasspointUniqueId;
         }
     }
 
@@ -2909,6 +2947,7 @@ public class WifiConfiguration implements Parcelable {
         dest.writeInt(osu ? 1 : 0);
         dest.writeLong(randomizedMacExpirationTimeMs);
         dest.writeInt(carrierId);
+        dest.writeString(mPasspointUniqueId);
     }
 
     /** Implement the Parcelable interface {@hide} */
@@ -2988,6 +3027,7 @@ public class WifiConfiguration implements Parcelable {
                 config.osu = in.readInt() != 0;
                 config.randomizedMacExpirationTimeMs = in.readLong();
                 config.carrierId = in.readInt();
+                config.mPasspointUniqueId = in.readString();
                 return config;
             }
 
@@ -2995,4 +3035,28 @@ public class WifiConfiguration implements Parcelable {
                 return new WifiConfiguration[size];
             }
         };
+
+    /**
+     * Passpoint Unique identifier
+     * @hide
+     */
+    private String mPasspointUniqueId = null;
+
+    /**
+     * Set the Passpoint unique identifier
+     * @param uniqueId Passpoint unique identifier to be set
+     * @hide
+     */
+    public void setPasspointUniqueId(String uniqueId) {
+        mPasspointUniqueId = uniqueId;
+    }
+
+    /**
+     * Set the Passpoint unique identifier
+     * @hide
+     */
+    public String getPasspointUniqueId() {
+        return mPasspointUniqueId;
+    }
+
 }

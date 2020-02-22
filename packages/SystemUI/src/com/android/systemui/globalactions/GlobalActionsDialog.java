@@ -101,6 +101,7 @@ import com.android.systemui.plugins.GlobalActions.GlobalActionsManager;
 import com.android.systemui.plugins.GlobalActionsPanelPlugin;
 import com.android.systemui.statusbar.BlurUtils;
 import com.android.systemui.statusbar.phone.NotificationShadeWindowController;
+import com.android.systemui.statusbar.phone.ScrimController;
 import com.android.systemui.statusbar.policy.ConfigurationController;
 import com.android.systemui.statusbar.policy.KeyguardStateController;
 import com.android.systemui.util.EmergencyDialerConstants;
@@ -1045,7 +1046,9 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
             Action action = getItem(position);
             View view = action.create(mContext, convertView, parent, LayoutInflater.from(mContext));
             view.setOnClickListener(v -> onClickItem(position));
-            view.setOnLongClickListener(v -> onLongClickItem(position));
+            if (action instanceof LongPressAction) {
+                view.setOnLongClickListener(v -> onLongClickItem(position));
+            }
             return view;
         }
 
@@ -1666,7 +1669,7 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
             }
             if (mBackgroundDrawable == null) {
                 mBackgroundDrawable = new ScrimDrawable();
-                mScrimAlpha = 0.8f;
+                mScrimAlpha = ScrimController.BUSY_SCRIM_ALPHA;
             }
             getWindow().setBackgroundDrawable(mBackgroundDrawable);
         }
@@ -1725,7 +1728,8 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
             if (!(mBackgroundDrawable instanceof ScrimDrawable)) {
                 return;
             }
-            ((ScrimDrawable) mBackgroundDrawable).setColor(Color.BLACK, animate);
+            ((ScrimDrawable) mBackgroundDrawable).setColor(colors.supportsDarkText() ? Color.WHITE
+                    : Color.BLACK, animate);
             View decorView = getWindow().getDecorView();
             if (colors.supportsDarkText()) {
                 decorView.setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR |
@@ -1899,9 +1903,7 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
     }
 
     private boolean shouldShowControls() {
-        return isCurrentUserOwner()
-                && !mKeyguardManager.isDeviceLocked()
-                && Settings.Secure.getInt(mContext.getContentResolver(),
-                        "systemui.controls_available", 0) == 1;
+        return !mKeyguardManager.isDeviceLocked()
+                && mControlsUiController.getAvailable();
     }
 }

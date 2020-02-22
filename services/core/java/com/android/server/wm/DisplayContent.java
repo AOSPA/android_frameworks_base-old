@@ -197,6 +197,7 @@ import android.util.ArraySet;
 import android.util.BoostFramework;
 import android.util.DisplayMetrics;
 import android.util.IntArray;
+import android.util.RotationUtils;
 import android.util.Slog;
 import android.util.SparseArray;
 import android.util.SparseBooleanArray;
@@ -312,8 +313,7 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
 
     private final DisplayArea.Root mRootDisplayArea = new DisplayArea.Root(mWmService);
 
-    private final DisplayAreaPolicy mDisplayAreaPolicy = new DisplayAreaPolicy.Default(
-            mWmService, this, mRootDisplayArea, mImeWindowsContainers, mTaskContainers);
+    private final DisplayAreaPolicy mDisplayAreaPolicy;
 
     private WindowState mTmpWindow;
     private WindowState mTmpWindow2;
@@ -1035,6 +1035,8 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
         super.addChild(mWindowContainers, null);
         super.addChild(mOverlayContainers, null);
 
+        mDisplayAreaPolicy = mWmService.mDisplayAreaPolicyProvider.instantiate(
+                mWmService, this, mRootDisplayArea, mImeWindowsContainers, mTaskContainers);
         mWindowContainers.addChildren();
 
         // Sets the display content for the children.
@@ -1612,17 +1614,18 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
         if (cutout == null || cutout == DisplayCutout.NO_CUTOUT) {
             return WmDisplayCutout.NO_CUTOUT;
         }
+        final Insets waterfallInsets =
+                RotationUtils.rotateInsets(cutout.getWaterfallInsets(), rotation);
         if (rotation == ROTATION_0) {
             return WmDisplayCutout.computeSafeInsets(
                     cutout, mInitialDisplayWidth, mInitialDisplayHeight);
         }
         final boolean rotated = (rotation == ROTATION_90 || rotation == ROTATION_270);
         final Rect[] newBounds = mRotationUtil.getRotatedBounds(
-                WmDisplayCutout.computeSafeInsets(
-                        cutout, mInitialDisplayWidth, mInitialDisplayHeight)
-                        .getDisplayCutout().getBoundingRectsAll(),
+                cutout.getBoundingRectsAll(),
                 rotation, mInitialDisplayWidth, mInitialDisplayHeight);
-        return WmDisplayCutout.computeSafeInsets(DisplayCutout.fromBounds(newBounds),
+        return WmDisplayCutout.computeSafeInsets(
+                DisplayCutout.fromBoundsAndWaterfall(newBounds, waterfallInsets),
                 rotated ? mInitialDisplayHeight : mInitialDisplayWidth,
                 rotated ? mInitialDisplayWidth : mInitialDisplayHeight);
     }
@@ -5666,7 +5669,8 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
         return activityType == ACTIVITY_TYPE_STANDARD
                 && (windowingMode == WINDOWING_MODE_FULLSCREEN
                 || windowingMode == WINDOWING_MODE_FREEFORM
-                || windowingMode == WINDOWING_MODE_SPLIT_SCREEN_SECONDARY);
+                || windowingMode == WINDOWING_MODE_SPLIT_SCREEN_SECONDARY
+                || windowingMode == WINDOWING_MODE_MULTI_WINDOW);
     }
 
     /**

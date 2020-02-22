@@ -15,6 +15,7 @@
  */
 package android.media;
 
+import android.annotation.CheckResult;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.net.Uri;
@@ -32,6 +33,7 @@ import com.google.android.exoplayer2.extractor.PositionHolder;
 import com.google.android.exoplayer2.extractor.SeekMap.SeekPoints;
 import com.google.android.exoplayer2.extractor.TrackOutput;
 import com.google.android.exoplayer2.extractor.amr.AmrExtractor;
+import com.google.android.exoplayer2.extractor.flac.FlacExtractor;
 import com.google.android.exoplayer2.extractor.flv.FlvExtractor;
 import com.google.android.exoplayer2.extractor.mkv.MatroskaExtractor;
 import com.google.android.exoplayer2.extractor.mp3.Mp3Extractor;
@@ -48,6 +50,7 @@ import com.google.android.exoplayer2.upstream.DataSource;
 import com.google.android.exoplayer2.upstream.DataSpec;
 import com.google.android.exoplayer2.upstream.TransferListener;
 import com.google.android.exoplayer2.util.ParsableByteArray;
+import com.google.android.exoplayer2.video.ColorInfo;
 
 import java.io.EOFException;
 import java.io.IOException;
@@ -382,6 +385,7 @@ public final class MediaParser {
          * parse the input.
          */
         @NonNull
+        @CheckResult
         private static UnrecognizedInputFormatException createForExtractors(
                 @NonNull String... extractorNames) {
             StringBuilder builder = new StringBuilder();
@@ -536,7 +540,7 @@ public final class MediaParser {
                 }
             }
             if (mExtractor == null) {
-                UnrecognizedInputFormatException.createForExtractors(mExtractorNamesPool);
+                throw UnrecognizedInputFormatException.createForExtractors(mExtractorNamesPool);
             }
             return true;
         }
@@ -807,70 +811,91 @@ public final class MediaParser {
     // Private static methods.
 
     private static MediaFormat toMediaFormat(Format format) {
-
-        // TODO: Add if (value != Format.NO_VALUE);
-
         MediaFormat result = new MediaFormat();
-        result.setInteger(MediaFormat.KEY_BIT_RATE, format.bitrate);
-        result.setInteger(MediaFormat.KEY_CHANNEL_COUNT, format.channelCount);
-        if (format.colorInfo != null) {
-            result.setInteger(MediaFormat.KEY_COLOR_TRANSFER, format.colorInfo.colorTransfer);
-            result.setInteger(MediaFormat.KEY_COLOR_RANGE, format.colorInfo.colorRange);
-            result.setInteger(MediaFormat.KEY_COLOR_STANDARD, format.colorInfo.colorSpace);
+        setOptionalMediaFormatInt(result, MediaFormat.KEY_BIT_RATE, format.bitrate);
+        setOptionalMediaFormatInt(result, MediaFormat.KEY_CHANNEL_COUNT, format.channelCount);
+
+        ColorInfo colorInfo = format.colorInfo;
+        if (colorInfo != null) {
+            setOptionalMediaFormatInt(
+                    result, MediaFormat.KEY_COLOR_TRANSFER, colorInfo.colorTransfer);
+            setOptionalMediaFormatInt(result, MediaFormat.KEY_COLOR_RANGE, colorInfo.colorRange);
+            setOptionalMediaFormatInt(result, MediaFormat.KEY_COLOR_STANDARD, colorInfo.colorSpace);
+
             if (format.colorInfo.hdrStaticInfo != null) {
                 result.setByteBuffer(
                         MediaFormat.KEY_HDR_STATIC_INFO,
                         ByteBuffer.wrap(format.colorInfo.hdrStaticInfo));
             }
         }
-        result.setString(MediaFormat.KEY_MIME, format.sampleMimeType);
-        result.setFloat(MediaFormat.KEY_FRAME_RATE, format.frameRate);
-        result.setInteger(MediaFormat.KEY_WIDTH, format.width);
-        result.setInteger(MediaFormat.KEY_HEIGHT, format.height);
+
+        setOptionalMediaFormatString(result, MediaFormat.KEY_MIME, format.sampleMimeType);
+        setOptionalMediaFormatString(result, MediaFormat.KEY_CODECS_STRING, format.codecs);
+        if (format.frameRate != Format.NO_VALUE) {
+            result.setFloat(MediaFormat.KEY_FRAME_RATE, format.frameRate);
+        }
+        setOptionalMediaFormatInt(result, MediaFormat.KEY_WIDTH, format.width);
+        setOptionalMediaFormatInt(result, MediaFormat.KEY_HEIGHT, format.height);
+
         List<byte[]> initData = format.initializationData;
         if (initData != null) {
             for (int i = 0; i < initData.size(); i++) {
                 result.setByteBuffer("csd-" + i, ByteBuffer.wrap(initData.get(i)));
             }
         }
-        result.setString(MediaFormat.KEY_LANGUAGE, format.language);
-        result.setInteger(MediaFormat.KEY_MAX_INPUT_SIZE, format.maxInputSize);
-        result.setInteger(MediaFormat.KEY_PCM_ENCODING, format.pcmEncoding);
-        result.setInteger(MediaFormat.KEY_ROTATION, format.rotationDegrees);
-        result.setInteger(MediaFormat.KEY_SAMPLE_RATE, format.sampleRate);
+        setOptionalMediaFormatString(result, MediaFormat.KEY_LANGUAGE, format.language);
+        setOptionalMediaFormatInt(result, MediaFormat.KEY_MAX_INPUT_SIZE, format.maxInputSize);
+        setOptionalMediaFormatInt(result, MediaFormat.KEY_PCM_ENCODING, format.pcmEncoding);
+        setOptionalMediaFormatInt(result, MediaFormat.KEY_ROTATION, format.rotationDegrees);
+        setOptionalMediaFormatInt(result, MediaFormat.KEY_SAMPLE_RATE, format.sampleRate);
 
         int selectionFlags = format.selectionFlags;
-        // We avoid setting selection flags in the MediaFormat, unless explicitly signaled by the
-        // extractor.
-        if ((selectionFlags & C.SELECTION_FLAG_AUTOSELECT) != 0) {
-            result.setInteger(MediaFormat.KEY_IS_AUTOSELECT, 1);
-        }
-        if ((selectionFlags & C.SELECTION_FLAG_DEFAULT) != 0) {
-            result.setInteger(MediaFormat.KEY_IS_DEFAULT, 1);
-        }
-        if ((selectionFlags & C.SELECTION_FLAG_FORCED) != 0) {
-            result.setInteger(MediaFormat.KEY_IS_FORCED_SUBTITLE, 1);
+        result.setInteger(
+                MediaFormat.KEY_IS_AUTOSELECT, selectionFlags & C.SELECTION_FLAG_AUTOSELECT);
+        result.setInteger(MediaFormat.KEY_IS_DEFAULT, selectionFlags & C.SELECTION_FLAG_DEFAULT);
+        result.setInteger(
+                MediaFormat.KEY_IS_FORCED_SUBTITLE, selectionFlags & C.SELECTION_FLAG_FORCED);
+
+        setOptionalMediaFormatInt(result, MediaFormat.KEY_ENCODER_DELAY, format.encoderDelay);
+        setOptionalMediaFormatInt(result, MediaFormat.KEY_ENCODER_PADDING, format.encoderPadding);
+
+        if (format.pixelWidthHeightRatio != Format.NO_VALUE && format.pixelWidthHeightRatio != 0) {
+            int parWidth = 1;
+            int parHeight = 1;
+            if (format.pixelWidthHeightRatio < 1.0f) {
+                parHeight = 1 << 30;
+                parWidth = (int) (format.pixelWidthHeightRatio * parHeight);
+            } else if (format.pixelWidthHeightRatio > 1.0f) {
+                parWidth = 1 << 30;
+                parHeight = (int) (parWidth / format.pixelWidthHeightRatio);
+            }
+            result.setInteger(MediaFormat.KEY_PIXEL_ASPECT_RATIO_WIDTH, parWidth);
+            result.setInteger(MediaFormat.KEY_PIXEL_ASPECT_RATIO_HEIGHT, parHeight);
+            result.setFloat("pixel-width-height-ratio-float", format.pixelWidthHeightRatio);
         }
 
         // LACK OF SUPPORT FOR:
         //    format.accessibilityChannel;
-        //    format.codecs;
         //    format.containerMimeType;
-        //    format.drmInitData;
-        //    format.encoderDelay;
-        //    format.encoderPadding;
         //    format.id;
         //    format.metadata;
-        //    format.pixelWidthHeightRatio;
         //    format.roleFlags;
         //    format.stereoMode;
         //    format.subsampleOffsetUs;
         return result;
     }
 
-    private static int toFrameworkFlags(int flags) {
-        // TODO: Implement.
-        return 0;
+    private static void setOptionalMediaFormatInt(MediaFormat mediaFormat, String key, int value) {
+        if (value != Format.NO_VALUE) {
+            mediaFormat.setInteger(key, value);
+        }
+    }
+
+    private static void setOptionalMediaFormatString(
+            MediaFormat mediaFormat, String key, @Nullable String value) {
+        if (value != null) {
+            mediaFormat.setString(key, value);
+        }
     }
 
     private static DrmInitData toFrameworkDrmInitData(
@@ -912,6 +937,7 @@ public final class MediaParser {
         extractorFactoriesByName.put("exo.Ac4Extractor", Ac4Extractor::new);
         extractorFactoriesByName.put("exo.AdtsExtractor", AdtsExtractor::new);
         extractorFactoriesByName.put("exo.AmrExtractor", AmrExtractor::new);
+        extractorFactoriesByName.put("exo.FlacExtractor", FlacExtractor::new);
         extractorFactoriesByName.put("exo.FlvExtractor", FlvExtractor::new);
         extractorFactoriesByName.put("exo.FragmentedMp4Extractor", FragmentedMp4Extractor::new);
         extractorFactoriesByName.put("exo.MatroskaExtractor", MatroskaExtractor::new);

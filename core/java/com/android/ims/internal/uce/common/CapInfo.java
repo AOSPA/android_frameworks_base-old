@@ -78,9 +78,9 @@ public class CapInfo implements Parcelable {
     private boolean mChatbotSupported = false;
     /** Chatbot role support. */
     private boolean mChatbotRoleSupported = false;
-     /** Standalone Chatbot communication support. */
+    /** Standalone Chatbot communication support. */
     private boolean mSmChatbotSupported = false;
-     /** MMtel based call composer support. */
+    /** MMtel based call composer support. */
     private boolean mMmtelCallComposerSupported = false;
     /** List of supported extensions. */
     private String[] mExts = new String[10];
@@ -505,7 +505,6 @@ public class CapInfo implements Parcelable {
     /**
      * Checks whether standalone chatbot communication is supported.
      */
-    @UnsupportedAppUsage
     public boolean isSmChatbotSupported() {
         return mSmChatbotSupported;
     }
@@ -513,7 +512,6 @@ public class CapInfo implements Parcelable {
     /**
      * Sets standalone chatbot communication as supported or not supported.
      */
-    @UnsupportedAppUsage
     public void setSmChatbotSupported(boolean smChatbotSupported) {
         this.mSmChatbotSupported = smChatbotSupported;
     }
@@ -521,7 +519,6 @@ public class CapInfo implements Parcelable {
     /**
      * Checks whether Mmtel based call composer is supported.
      */
-    @UnsupportedAppUsage
     public boolean isMmtelCallComposerSupported() {
         return mMmtelCallComposerSupported;
     }
@@ -529,7 +526,6 @@ public class CapInfo implements Parcelable {
     /**
      * Sets Mmtel based call composer as supported or not supported.
      */
-    @UnsupportedAppUsage
     public void setMmtelCallComposerSupported(boolean mmtelCallComposerSupported) {
         this.mMmtelCallComposerSupported = mmtelCallComposerSupported;
     }

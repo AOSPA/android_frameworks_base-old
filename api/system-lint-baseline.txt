@@ -70,10 +70,6 @@ GenericException: android.service.autofill.augmented.FillWindow#finalize():
     
 
 
-HeavyBitSet: android.net.wifi.wificond.NativeScanResult#getCapabilities():
-    
-
-
 IntentBuilderName: android.content.Context#registerReceiverForAllUsers(android.content.BroadcastReceiver, android.content.IntentFilter, String, android.os.Handler):
     Methods creating an Intent should be named `create<Foo>Intent()`, was `registerReceiverForAllUsers`
 
@@ -212,8 +208,6 @@ MutableBareField: android.net.IpConfiguration#staticIpConfiguration:
     
 MutableBareField: android.net.wifi.WifiConfiguration#allowAutojoin:
     
-MutableBareField: android.net.wifi.WifiConfiguration#apBand:
-    
 MutableBareField: android.net.wifi.WifiConfiguration#carrierId:
     
 MutableBareField: android.net.wifi.WifiConfiguration#fromWifiNetworkSpecifier:
@@ -234,21 +228,21 @@ MutableBareField: android.net.wifi.WifiConfiguration#shared:
     
 MutableBareField: android.net.wifi.WifiScanner.ScanSettings#type:
     
-MutableBareField: android.net.wifi.wificond.WifiCondManager.WifiGenerationCapabilities#htSupport2g:
+MutableBareField: android.net.wifi.wificond.WifiNl80211Manager.WifiGenerationCapabilities#htSupport2g:
     Bare field htSupport2g must be marked final, or moved behind accessors if mutable
-MutableBareField: android.net.wifi.wificond.WifiCondManager.WifiGenerationCapabilities#htSupport5g:
+MutableBareField: android.net.wifi.wificond.WifiNl80211Manager.WifiGenerationCapabilities#htSupport5g:
     Bare field htSupport5g must be marked final, or moved behind accessors if mutable
-MutableBareField: android.net.wifi.wificond.WifiCondManager.WifiGenerationCapabilities#sapHeSupport2g:
+MutableBareField: android.net.wifi.wificond.WifiNl80211Manager.WifiGenerationCapabilities#sapHeSupport2g:
     Bare field sapHeSupport2g must be marked final, or moved behind accessors if mutable
-MutableBareField: android.net.wifi.wificond.WifiCondManager.WifiGenerationCapabilities#sapHeSupport5g:
+MutableBareField: android.net.wifi.wificond.WifiNl80211Manager.WifiGenerationCapabilities#sapHeSupport5g:
     Bare field sapHeSupport5g must be marked final, or moved behind accessors if mutable
-MutableBareField: android.net.wifi.wificond.WifiCondManager.WifiGenerationCapabilities#staHeSupport2g:
+MutableBareField: android.net.wifi.wificond.WifiNl80211Manager.WifiGenerationCapabilities#staHeSupport2g:
     Bare field staHeSupport2g must be marked final, or moved behind accessors if mutable
-MutableBareField: android.net.wifi.wificond.WifiCondManager.WifiGenerationCapabilities#staHeSupport5g:
+MutableBareField: android.net.wifi.wificond.WifiNl80211Manager.WifiGenerationCapabilities#staHeSupport5g:
     Bare field staHeSupport5g must be marked final, or moved behind accessors if mutable
-MutableBareField: android.net.wifi.wificond.WifiCondManager.WifiGenerationCapabilities#vhtSupport2g:
+MutableBareField: android.net.wifi.wificond.WifiNl80211Manager.WifiGenerationCapabilities#vhtSupport2g:
     Bare field vhtSupport2g must be marked final, or moved behind accessors if mutable
-MutableBareField: android.net.wifi.wificond.WifiCondManager.WifiGenerationCapabilities#vhtSupport5g:
+MutableBareField: android.net.wifi.wificond.WifiNl80211Manager.WifiGenerationCapabilities#vhtSupport5g:
     Bare field vhtSupport5g must be marked final, or moved behind accessors if mutable
 
 
@@ -270,7 +264,7 @@ OnNameExpected: android.content.ContentProvider#checkUriPermission(android.net.U
     If implemented by developer, should follow the on<Something> style; otherwise consider marking final
 
 
-PairedRegistration: android.net.wifi.wificond.WifiCondManager#registerApCallback(String, java.util.concurrent.Executor, android.net.wifi.wificond.WifiCondManager.SoftApCallback):
+PairedRegistration: android.net.wifi.wificond.WifiNl80211Manager#registerApCallback(String, java.util.concurrent.Executor, android.net.wifi.wificond.WifiNl80211Manager.SoftApCallback):
     
 
 

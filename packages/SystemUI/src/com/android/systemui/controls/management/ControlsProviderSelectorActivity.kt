@@ -20,9 +20,13 @@ import android.content.ComponentName
 import android.content.Intent
 import android.os.Bundle
 import android.view.LayoutInflater
+import android.view.ViewStub
+import android.widget.TextView
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.android.systemui.R
 import com.android.systemui.broadcast.BroadcastDispatcher
+import com.android.systemui.controls.controller.ControlsController
 import com.android.systemui.dagger.qualifiers.Background
 import com.android.systemui.dagger.qualifiers.Main
 import com.android.systemui.settings.CurrentUserTracker
@@ -37,6 +41,7 @@ class ControlsProviderSelectorActivity @Inject constructor(
     @Main private val executor: Executor,
     @Background private val backExecutor: Executor,
     private val listingController: ControlsListingController,
+    private val controlsController: ControlsController,
     broadcastDispatcher: BroadcastDispatcher
 ) : LifecycleActivity() {
 
@@ -58,13 +63,29 @@ class ControlsProviderSelectorActivity @Inject constructor(
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        setContentView(R.layout.controls_management)
+        requireViewById<ViewStub>(R.id.stub).apply {
+            layoutResource = R.layout.controls_management_apps
+            inflate()
+        }
 
-        recyclerView = RecyclerView(applicationContext)
-        recyclerView.adapter = AppAdapter(executor, lifecycle, listingController,
-                LayoutInflater.from(this), ::launchFavoritingActivity)
+        recyclerView = requireViewById(R.id.list)
+        recyclerView.adapter = AppAdapter(
+                backExecutor,
+                executor,
+                lifecycle,
+                listingController,
+                LayoutInflater.from(this),
+                ::launchFavoritingActivity,
+                FavoritesRenderer(resources, controlsController::countFavoritesForComponent),
+                resources)
         recyclerView.layoutManager = LinearLayoutManager(applicationContext)
 
-        setContentView(recyclerView)
+        requireViewById<TextView>(R.id.title).text =
+                resources.getText(R.string.controls_providers_title)
+        requireViewById<TextView>(R.id.subtitle).text =
+                resources.getText(R.string.controls_providers_subtitle)
+
         currentUserTracker.startTracking()
     }
 
@@ -79,11 +100,16 @@ class ControlsProviderSelectorActivity @Inject constructor(
                         .apply {
                     putExtra(ControlsFavoritingActivity.EXTRA_APP,
                             listingController.getAppLabel(it))
-                    putExtra(ControlsFavoritingActivity.EXTRA_COMPONENT, it)
-                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                    putExtra(Intent.EXTRA_COMPONENT_NAME, it)
+                    flags = Intent.FLAG_ACTIVITY_SINGLE_TOP
                 }
                 startActivity(intent)
             }
         }
+    }
+
+    override fun onDestroy() {
+        currentUserTracker.stopTracking()
+        super.onDestroy()
     }
 }
