@@ -75,4 +75,7 @@
 
     <!-- App lock -->
     <dimen name="applock_icon_dimension">54dp</dimen>
+
+    <!-- Size of the FOD animation -->
+    <dimen name="fod_animation_size">310dp</dimen>
 </resources>
