@@ -93,6 +93,7 @@ public class FODCircleView extends ImageView {
     private final ImageView mPressedView;
 
     private LockPatternUtils mLockPatternUtils;
+    private FODAnimation mFODAnimation;
 
     private Timer mBurnInProtectionTimer;
 
@@ -165,6 +166,9 @@ public class FODCircleView extends ImageView {
             } else {
                 setAlpha(getFODAlpha());
             }
+            if (mFODAnimation != null) {
+                mFODAnimation.setAnimationKeyguard(showing);
+            }
         }
 
         @Override
@@ -224,6 +228,15 @@ public class FODCircleView extends ImageView {
         public void onStrongAuthStateChanged(int userId) {
             setAlpha(getFODAlpha());
         }
+
+        @Override
+        public void onBiometricHelp(int msgId, String helpString,
+                BiometricSourceType biometricSourceType) {
+            if (msgId == -1) { // Auth error
+                hideCircle();
+                mHandler.post(() -> mFODAnimation.hideFODanimation());
+            }
+        }
     };
 
     public FODCircleView(Context context) {
@@ -260,6 +273,7 @@ public class FODCircleView extends ImageView {
         mDreamingMaxOffset = (int) (mSize * 0.1f);
 
         mHandler = new Handler(Looper.getMainLooper());
+        mFODAnimation = new FODAnimation(context, mPositionX, mPositionY);
 
         mParams.height = mSize;
         mParams.width = mSize;
@@ -324,14 +338,17 @@ public class FODCircleView extends ImageView {
 
         if (event.getAction() == MotionEvent.ACTION_DOWN && newIsInside) {
             showCircle();
+            mFODAnimation.showFODanimation();
             return true;
         } else if (event.getAction() == MotionEvent.ACTION_UP) {
             hideCircle();
+            mFODAnimation.hideFODanimation();
             return true;
         } else if (event.getAction() == MotionEvent.ACTION_MOVE) {
             return true;
         }
 
+        mFODAnimation.hideFODanimation();
         return false;
     }
 
