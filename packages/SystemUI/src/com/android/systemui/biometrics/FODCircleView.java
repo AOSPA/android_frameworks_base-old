@@ -84,6 +84,7 @@ public class FODCircleView extends ImageView {
     private final ImageView mPressedView;
 
     private LockPatternUtils mLockPatternUtils;
+    private FODAnimation mFODAnimation;
 
     private Timer mBurnInProtectionTimer;
 
@@ -149,6 +150,9 @@ public class FODCircleView extends ImageView {
             } else {
                 updateAlpha();
             }
+            if (mFODAnimation != null) {
+                mFODAnimation.setAnimationKeyguard(showing);
+            }
         }
 
         @Override
@@ -183,6 +187,44 @@ public class FODCircleView extends ImageView {
                 show();
             }
         }
+<<<<<<< HEAD   (ccbe5f [android-11.0.0_r27] Ignore GrantCredentials call with unexp)
+=======
+
+        @Override
+        public void onBiometricError(int msgId, String helpString,
+                BiometricSourceType biometricSourceType) {
+            if (biometricSourceType == BiometricSourceType.FINGERPRINT
+                    && (msgId == BiometricConstants.BIOMETRIC_ERROR_LOCKOUT
+                    || msgId == BiometricConstants.BIOMETRIC_ERROR_LOCKOUT_PERMANENT)) {
+                mHandler.removeCallbacksAndMessages(null);
+                mFpDisabled = true;
+                show();
+            }
+        }
+
+        @Override
+        public void onBiometricAuthenticated(int userId,
+                BiometricSourceType biometricSourceType) {
+            if (biometricSourceType == BiometricSourceType.FINGERPRINT) {
+                hide();
+            }
+        }
+
+        @Override
+        public void onStrongAuthStateChanged(int userId) {
+            mCanUnlockWithFp = canUnlockWithFp();
+            setAlpha(getFodAlpha());
+        }
+
+        @Override
+        public void onBiometricHelp(int msgId, String helpString,
+                BiometricSourceType biometricSourceType) {
+            if (msgId == -1) { // Auth error
+                hideCircle();
+                mHandler.post(() -> mFODAnimation.hideFODanimation());
+            }
+        }
+>>>>>>> CHANGE (23ffd4 FODCircleView: Introduce fingerprint animation)
     };
 
     public FODCircleView(Context context) {
@@ -219,6 +261,7 @@ public class FODCircleView extends ImageView {
         mDreamingMaxOffset = (int) (mSize * 0.1f);
 
         mHandler = new Handler(Looper.getMainLooper());
+        mFODAnimation = new FODAnimation(context, mPositionX, mPositionY);
 
         mParams.height = mSize;
         mParams.width = mSize;
@@ -275,14 +318,17 @@ public class FODCircleView extends ImageView {
 
         if (event.getAction() == MotionEvent.ACTION_DOWN && newIsInside) {
             showCircle();
+            mFODAnimation.showFODanimation();
             return true;
         } else if (event.getAction() == MotionEvent.ACTION_UP) {
             hideCircle();
+            mFODAnimation.hideFODanimation();
             return true;
         } else if (event.getAction() == MotionEvent.ACTION_MOVE) {
             return true;
         }
 
+        mFODAnimation.hideFODanimation();
         return false;
     }
 
