@@ -359,8 +359,12 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
 
     @Before
     public void setUp() throws Exception {
+        // Shell permisssions will override permissions of our app, so add all necessary permissions
+        // fo this test here:
         InstrumentationRegistry.getInstrumentation().getUiAutomation().adoptShellPermissionIdentity(
-                "android.permission.WRITE_DEVICE_CONFIG", "android.permission.READ_DEVICE_CONFIG");
+                "android.permission.WRITE_DEVICE_CONFIG",
+                "android.permission.READ_DEVICE_CONFIG",
+                "android.permission.READ_CONTACTS");
 
         MockitoAnnotations.initMocks(this);
 
@@ -1281,6 +1285,27 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
                 mBinderService.getActiveNotifications(PKG);
         assertEquals(0, notifs.length);
         assertEquals(0, mService.getNotificationRecordCount());
+    }
+
+    @Test
+    public void testPostCancelPostNotifiesListeners() throws Exception {
+        // WHEN a notification is posted
+        final StatusBarNotification sbn = generateNotificationRecord(null).getSbn();
+        mBinderService.enqueueNotificationWithTag(PKG, PKG, "tag", sbn.getId(),
+                sbn.getNotification(), sbn.getUserId());
+        // THEN it is canceled
+        mBinderService.cancelNotificationWithTag(PKG, PKG, "tag", sbn.getId(), sbn.getUserId());
+        // THEN it is posted again (before the cancel has a chance to finish)
+        mBinderService.enqueueNotificationWithTag(PKG, PKG, "tag", sbn.getId(),
+                sbn.getNotification(), sbn.getUserId());
+        // THEN the later enqueue isn't swallowed by the cancel. I.e., ordering is respected
+        waitForIdle();
+
+        // The final enqueue made it to the listener instead of being canceled
+        StatusBarNotification[] notifs =
+                mBinderService.getActiveNotifications(PKG);
+        assertEquals(1, notifs.length);
+        assertEquals(1, mService.getNotificationRecordCount());
     }
 
     @Test
@@ -2622,6 +2647,33 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
     }
 
     @Test
+    public void testSystemNotificationListenerCanUnsnooze() throws Exception {
+        final NotificationRecord nr = generateNotificationRecord(
+                mTestNotificationChannel, 2, "group", false);
+
+        mBinderService.enqueueNotificationWithTag(PKG, PKG,
+                "testSystemNotificationListenerCanUnsnooze",
+                nr.getSbn().getId(), nr.getSbn().getNotification(),
+                nr.getSbn().getUserId());
+        waitForIdle();
+        NotificationManagerService.SnoozeNotificationRunnable snoozeNotificationRunnable =
+                mService.new SnoozeNotificationRunnable(
+                        nr.getKey(), 100, null);
+        snoozeNotificationRunnable.run();
+
+        ManagedServices.ManagedServiceInfo listener = mListeners.new ManagedServiceInfo(
+                null, new ComponentName(PKG, "test_class"), mUid, true, null, 0);
+        listener.isSystem = true;
+        when(mListeners.checkServiceTokenLocked(any())).thenReturn(listener);
+
+        mBinderService.unsnoozeNotificationFromSystemListener(null, nr.getKey());
+        waitForIdle();
+        StatusBarNotification[] notifs = mBinderService.getActiveNotifications(PKG);
+        assertEquals(1, notifs.length);
+        assertNotNull(notifs[0].getKey());//mService.getNotificationRecord(nr.getSbn().getKey()));
+    }
+
+    @Test
     public void testSetListenerAccessForUser() throws Exception {
         UserHandle user = UserHandle.of(10);
         ComponentName c = ComponentName.unflattenFromString("package/Component");
@@ -2854,21 +2906,21 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
     }
 
     @Test
-    public void testSetListenerAccess_doesNothingOnLowRam() throws Exception {
+    public void testSetListenerAccess_onLowRam() throws Exception {
         when(mActivityManager.isLowRamDevice()).thenReturn(true);
         ComponentName c = ComponentName.unflattenFromString("package/Component");
         mBinderService.setNotificationListenerAccessGranted(c, true);
 
-        verify(mListeners, never()).setPackageOrComponentEnabled(
+        verify(mListeners).setPackageOrComponentEnabled(
                 anyString(), anyInt(), anyBoolean(), anyBoolean());
-        verify(mConditionProviders, never()).setPackageOrComponentEnabled(
+        verify(mConditionProviders).setPackageOrComponentEnabled(
                 anyString(), anyInt(), anyBoolean(), anyBoolean());
-        verify(mAssistants, never()).setPackageOrComponentEnabled(
-                any(), anyInt(), anyBoolean(), anyBoolean());
+        verify(mAssistants).migrateToXml();
+        verify(mAssistants).resetDefaultAssistantsIfNecessary();
     }
 
     @Test
-    public void testSetAssistantAccess_doesNothingOnLowRam() throws Exception {
+    public void testSetAssistantAccess_onLowRam() throws Exception {
         when(mActivityManager.isLowRamDevice()).thenReturn(true);
         ComponentName c = ComponentName.unflattenFromString("package/Component");
         List<UserInfo> uis = new ArrayList<>();
@@ -2879,26 +2931,28 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
 
         mBinderService.setNotificationAssistantAccessGranted(c, true);
 
-        verify(mListeners, never()).setPackageOrComponentEnabled(
+        verify(mListeners).migrateToXml();
+        verify(mListeners).notifyNotificationChannelChanged(anyString(), any(), any(),
+                anyInt());
+        verify(mConditionProviders).setPackageOrComponentEnabled(
                 anyString(), anyInt(), anyBoolean(), anyBoolean());
-        verify(mConditionProviders, never()).setPackageOrComponentEnabled(
-                anyString(), anyInt(), anyBoolean(), anyBoolean());
-        verify(mAssistants, never()).setPackageOrComponentEnabled(
-                any(), anyInt(), anyBoolean(), anyBoolean());
+        verify(mAssistants).migrateToXml();
+        verify(mAssistants).resetDefaultAssistantsIfNecessary();
     }
 
     @Test
-    public void testSetDndAccess_doesNothingOnLowRam() throws Exception {
+    public void testSetDndAccess_onLowRam() throws Exception {
         when(mActivityManager.isLowRamDevice()).thenReturn(true);
         ComponentName c = ComponentName.unflattenFromString("package/Component");
         mBinderService.setNotificationPolicyAccessGranted(c.getPackageName(), true);
 
-        verify(mListeners, never()).setPackageOrComponentEnabled(
+        verify(mListeners).migrateToXml();
+        verify(mListeners).notifyNotificationChannelChanged(anyString(), any(), any(),
+                anyInt());
+        verify(mConditionProviders).setPackageOrComponentEnabled(
                 anyString(), anyInt(), anyBoolean(), anyBoolean());
-        verify(mConditionProviders, never()).setPackageOrComponentEnabled(
-                anyString(), anyInt(), anyBoolean(), anyBoolean());
-        verify(mAssistants, never()).setPackageOrComponentEnabled(
-                any(), anyInt(), anyBoolean(), anyBoolean());
+        verify(mAssistants).migrateToXml();
+        verify(mAssistants).resetDefaultAssistantsIfNecessary();
     }
 
     @Test
@@ -4240,68 +4294,13 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
     }
 
     @Test
-    public void testCanUseManagedServicesLowRamNoWatchNullPkg() {
-        when(mPackageManagerClient.hasSystemFeature(FEATURE_WATCH)).thenReturn(false);
-        when(mActivityManager.isLowRamDevice()).thenReturn(true);
-        when(mResources.getStringArray(R.array.config_allowedManagedServicesOnLowRamDevices))
-                .thenReturn(new String[] {"a", "b", "c"});
-        when(mContext.getResources()).thenReturn(mResources);
-
-        assertEquals(false, mService.canUseManagedServices(null, 0, null));
+    public void testCanUseManagedServicesNullPkg() {
+        assertEquals(true, mService.canUseManagedServices(null, 0, null));
     }
 
-    @Test
-    public void testCanUseManagedServicesLowRamNoWatchValidPkg() {
-        when(mPackageManagerClient.hasSystemFeature(FEATURE_WATCH)).thenReturn(false);
-        when(mActivityManager.isLowRamDevice()).thenReturn(true);
-        when(mResources.getStringArray(R.array.config_allowedManagedServicesOnLowRamDevices))
-                .thenReturn(new String[] {"a", "b", "c"});
-        when(mContext.getResources()).thenReturn(mResources);
-
-        assertEquals(true, mService.canUseManagedServices("b", 0, null));
-    }
 
     @Test
-    public void testCanUseManagedServicesLowRamNoWatchNoValidPkg() {
-        when(mPackageManagerClient.hasSystemFeature(FEATURE_WATCH)).thenReturn(false);
-        when(mActivityManager.isLowRamDevice()).thenReturn(true);
-        when(mResources.getStringArray(R.array.config_allowedManagedServicesOnLowRamDevices))
-                .thenReturn(new String[] {"a", "b", "c"});
-        when(mContext.getResources()).thenReturn(mResources);
-
-        assertEquals(false, mService.canUseManagedServices("d", 0, null));
-    }
-
-    @Test
-    public void testCanUseManagedServicesLowRamWatchNoValidPkg() {
-        when(mPackageManagerClient.hasSystemFeature(FEATURE_WATCH)).thenReturn(true);
-        when(mActivityManager.isLowRamDevice()).thenReturn(true);
-        when(mResources.getStringArray(R.array.config_allowedManagedServicesOnLowRamDevices))
-                .thenReturn(new String[] {"a", "b", "c"});
-        when(mContext.getResources()).thenReturn(mResources);
-
-        assertEquals(true, mService.canUseManagedServices("d", 0, null));
-    }
-
-    @Test
-    public void testCanUseManagedServicesNoLowRamNoWatchValidPkg() {
-        when(mPackageManagerClient.hasSystemFeature(FEATURE_WATCH)).thenReturn(false);
-        when(mActivityManager.isLowRamDevice()).thenReturn(false);
-        when(mResources.getStringArray(R.array.config_allowedManagedServicesOnLowRamDevices))
-                .thenReturn(new String[] {"a", "b", "c"});
-        when(mContext.getResources()).thenReturn(mResources);
-
-        assertEquals(true, mService.canUseManagedServices("d", 0 , null));
-    }
-
-    @Test
-    public void testCanUseManagedServicesNoLowRamWatchValidPkg() {
-        when(mPackageManagerClient.hasSystemFeature(FEATURE_WATCH)).thenReturn(true);
-        when(mActivityManager.isLowRamDevice()).thenReturn(false);
-        when(mResources.getStringArray(R.array.config_allowedManagedServicesOnLowRamDevices))
-                .thenReturn(new String[] {"a", "b", "c"});
-        when(mContext.getResources()).thenReturn(mResources);
-
+    public void testCanUseManagedServicesNoValidPkg() {
         assertEquals(true, mService.canUseManagedServices("d", 0, null));
     }
 

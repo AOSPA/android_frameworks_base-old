@@ -19,6 +19,7 @@ package com.android.server.job.controllers;
 import static com.android.server.job.JobSchedulerService.ACTIVE_INDEX;
 import static com.android.server.job.JobSchedulerService.NEVER_INDEX;
 import static com.android.server.job.JobSchedulerService.RESTRICTED_INDEX;
+import static com.android.server.job.JobSchedulerService.WORKING_INDEX;
 import static com.android.server.job.JobSchedulerService.sElapsedRealtimeClock;
 
 import android.app.AppGlobals;
@@ -30,6 +31,7 @@ import android.net.Network;
 import android.net.Uri;
 import android.os.RemoteException;
 import android.os.UserHandle;
+import android.provider.MediaStore;
 import android.text.format.DateFormat;
 import android.util.ArraySet;
 import android.util.Pair;
@@ -37,6 +39,7 @@ import android.util.Slog;
 import android.util.TimeUtils;
 import android.util.proto.ProtoOutputStream;
 
+import com.android.internal.util.ArrayUtils;
 import com.android.internal.util.FrameworkStatsLog;
 import com.android.server.LocalServices;
 import com.android.server.job.GrantedUriPermissions;
@@ -93,6 +96,15 @@ public final class JobStatus {
                     | CONSTRAINT_CHARGING
                     | CONSTRAINT_CONNECTIVITY
                     | CONSTRAINT_IDLE;
+
+    /**
+     * Standard media URIs that contain the media files that might be important to the user.
+     * @see #mHasMediaBackupExemption
+     */
+    private static final Uri[] MEDIA_URIS_FOR_STANDBY_EXEMPTION = {
+            MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+            MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
+    };
 
     /**
      * The constraints that we want to log to statsd.
@@ -206,6 +218,18 @@ public final class JobStatus {
      * bucket.
      */
     private int mDynamicConstraints = 0;
+
+    /**
+     * Indicates whether the job is responsible for backing up media, so we can be lenient in
+     * applying standby throttling.
+     *
+     * Doesn't exempt jobs with a deadline constraint, as they can be started without any content or
+     * network changes, in which case this exemption does not make sense.
+     *
+     * TODO(b/149519887): Use a more explicit signal, maybe an API flag, that the scheduling package
+     * needs to provide at the time of scheduling a job.
+     */
+    private final boolean mHasMediaBackupExemption;
 
     // Set to true if doze constraint was satisfied due to app being whitelisted.
     public boolean dozeWhitelisted;
@@ -415,9 +439,11 @@ public final class JobStatus {
         this.mOriginalLatestRunTimeElapsedMillis = latestRunTimeElapsedMillis;
         this.numFailures = numFailures;
 
+        boolean requiresNetwork = false;
         int requiredConstraints = job.getConstraintFlags();
         if (job.getRequiredNetwork() != null) {
             requiredConstraints |= CONSTRAINT_CONNECTIVITY;
+            requiresNetwork = true;
         }
         if (earliestRunTimeElapsedMillis != NO_EARLIEST_RUNTIME) {
             requiredConstraints |= CONSTRAINT_TIMING_DELAY;
@@ -425,8 +451,16 @@ public final class JobStatus {
         if (latestRunTimeElapsedMillis != NO_LATEST_RUNTIME) {
             requiredConstraints |= CONSTRAINT_DEADLINE;
         }
+        boolean exemptedMediaUrisOnly = false;
         if (job.getTriggerContentUris() != null) {
             requiredConstraints |= CONSTRAINT_CONTENT_TRIGGER;
+            exemptedMediaUrisOnly = true;
+            for (JobInfo.TriggerContentUri uri : job.getTriggerContentUris()) {
+                if (!ArrayUtils.contains(MEDIA_URIS_FOR_STANDBY_EXEMPTION, uri.getUri())) {
+                    exemptedMediaUrisOnly = false;
+                    break;
+                }
+            }
         }
         this.requiredConstraints = requiredConstraints;
         mRequiredConstraintsOfInterest = requiredConstraints & CONSTRAINTS_OF_INTEREST;
@@ -450,6 +484,9 @@ public final class JobStatus {
             // our source UID into place.
             job.getRequiredNetwork().networkCapabilities.setSingleUid(this.sourceUid);
         }
+        final JobSchedulerInternal jsi = LocalServices.getService(JobSchedulerInternal.class);
+        mHasMediaBackupExemption = !job.hasLateConstraint() && exemptedMediaUrisOnly
+                && requiresNetwork && this.sourcePackageName.equals(jsi.getMediaBackupPackage());
     }
 
     /** Copy constructor: used specifically when cloning JobStatus objects for persistence,
@@ -545,7 +582,6 @@ public final class JobStatus {
 
         int standbyBucket = JobSchedulerService.standbyBucketForPackage(jobPackage,
                 sourceUserId, elapsedNow);
-        JobSchedulerInternal js = LocalServices.getService(JobSchedulerInternal.class);
         return new JobStatus(job, callingUid, sourcePkg, sourceUserId,
                 standbyBucket, tag, 0,
                 earliestRunTimeElapsedMillis, latestRunTimeElapsedMillis,
@@ -734,7 +770,14 @@ public final class JobStatus {
             // like other ACTIVE apps.
             return ACTIVE_INDEX;
         }
-        return getStandbyBucket();
+        final int actualBucket = getStandbyBucket();
+        if (actualBucket != RESTRICTED_INDEX && actualBucket != NEVER_INDEX
+                && mHasMediaBackupExemption) {
+            // Cap it at WORKING_INDEX as media back up jobs are important to the user, and the
+            // source package may not have been used directly in a while.
+            return Math.min(WORKING_INDEX, actualBucket);
+        }
+        return actualBucket;
     }
 
     /** Returns the real standby bucket of the job. */
@@ -1615,11 +1658,11 @@ public final class JobStatus {
                     pw.println();
                 }
             }
-            if (job.getExtras() != null && !job.getExtras().maybeIsEmpty()) {
+            if (job.getExtras() != null && !job.getExtras().isDefinitelyEmpty()) {
                 pw.print(prefix); pw.print("  Extras: ");
                 pw.println(job.getExtras().toShortString());
             }
-            if (job.getTransientExtras() != null && !job.getTransientExtras().maybeIsEmpty()) {
+            if (job.getTransientExtras() != null && !job.getTransientExtras().isDefinitelyEmpty()) {
                 pw.print(prefix); pw.print("  Transient extras: ");
                 pw.println(job.getTransientExtras().toShortString());
             }
@@ -1836,10 +1879,10 @@ public final class JobStatus {
                             job.getTriggerContentMaxDelay());
                 }
             }
-            if (job.getExtras() != null && !job.getExtras().maybeIsEmpty()) {
+            if (job.getExtras() != null && !job.getExtras().isDefinitelyEmpty()) {
                 job.getExtras().dumpDebug(proto, JobStatusDumpProto.JobInfo.EXTRAS);
             }
-            if (job.getTransientExtras() != null && !job.getTransientExtras().maybeIsEmpty()) {
+            if (job.getTransientExtras() != null && !job.getTransientExtras().isDefinitelyEmpty()) {
                 job.getTransientExtras().dumpDebug(proto, JobStatusDumpProto.JobInfo.TRANSIENT_EXTRAS);
             }
             if (job.getClipData() != null) {

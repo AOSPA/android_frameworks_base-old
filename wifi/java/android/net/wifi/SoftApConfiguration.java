@@ -17,6 +17,7 @@
 package android.net.wifi;
 
 import android.annotation.IntDef;
+import android.annotation.IntRange;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.SystemApi;
@@ -202,6 +203,11 @@ public final class SoftApConfiguration implements Parcelable {
     private final List<MacAddress> mAllowedClientList;
 
     /**
+     * Whether auto shutdown of soft AP is enabled or not.
+     */
+    private final boolean mAutoShutdownEnabled;
+
+    /**
      * Delay in milliseconds before shutting down soft AP when
      * there are no connected devices.
      */
@@ -255,9 +261,10 @@ public final class SoftApConfiguration implements Parcelable {
     /** Private constructor for Builder and Parcelable implementation. */
     private SoftApConfiguration(@Nullable String ssid, @Nullable MacAddress bssid,
             @Nullable String passphrase, boolean hiddenSsid, @BandType int band, int channel,
-            @SecurityType int securityType, int maxNumberOfClients, int shutdownTimeoutMillis,
-            boolean clientControlByUser, @NonNull List<MacAddress> blockedList,
-            @NonNull List<MacAddress> allowedList, @Nullable String oweTransIfaceName) {
+            @SecurityType int securityType, int maxNumberOfClients, boolean shutdownTimeoutEnabled,
+            int shutdownTimeoutMillis, boolean clientControlByUser,
+            @NonNull List<MacAddress> blockedList, @NonNull List<MacAddress> allowedList,
+            @Nullable String oweTransIfaceName) {
         mSsid = ssid;
         mBssid = bssid;
         mPassphrase = passphrase;
@@ -266,6 +273,7 @@ public final class SoftApConfiguration implements Parcelable {
         mChannel = channel;
         mSecurityType = securityType;
         mMaxNumberOfClients = maxNumberOfClients;
+        mAutoShutdownEnabled = shutdownTimeoutEnabled;
         mShutdownTimeoutMillis = shutdownTimeoutMillis;
         mClientControlByUser = clientControlByUser;
         mBlockedClientList = new ArrayList<>(blockedList);
@@ -290,6 +298,7 @@ public final class SoftApConfiguration implements Parcelable {
                 && mChannel == other.mChannel
                 && mSecurityType == other.mSecurityType
                 && mMaxNumberOfClients == other.mMaxNumberOfClients
+                && mAutoShutdownEnabled == other.mAutoShutdownEnabled
                 && mShutdownTimeoutMillis == other.mShutdownTimeoutMillis
                 && mClientControlByUser == other.mClientControlByUser
                 && Objects.equals(mBlockedClientList, other.mBlockedClientList)
@@ -300,8 +309,9 @@ public final class SoftApConfiguration implements Parcelable {
     @Override
     public int hashCode() {
         return Objects.hash(mSsid, mBssid, mPassphrase, mHiddenSsid,
-                mBand, mChannel, mSecurityType, mMaxNumberOfClients, mShutdownTimeoutMillis,
-                mClientControlByUser, mBlockedClientList, mAllowedClientList, mOweTransIfaceName);
+                mBand, mChannel, mSecurityType, mMaxNumberOfClients, mAutoShutdownEnabled,
+                mShutdownTimeoutMillis, mClientControlByUser, mBlockedClientList,
+                mAllowedClientList, mOweTransIfaceName);
     }
 
     @Override
@@ -316,6 +326,7 @@ public final class SoftApConfiguration implements Parcelable {
         sbuf.append(" \n Channel =").append(mChannel);
         sbuf.append(" \n SecurityType=").append(getSecurityType());
         sbuf.append(" \n MaxClient=").append(mMaxNumberOfClients);
+        sbuf.append(" \n AutoShutdownEnabled=").append(mAutoShutdownEnabled);
         sbuf.append(" \n ShutdownTimeoutMillis=").append(mShutdownTimeoutMillis);
         sbuf.append(" \n ClientControlByUser=").append(mClientControlByUser);
         sbuf.append(" \n BlockedClientList=").append(mBlockedClientList);
@@ -334,6 +345,7 @@ public final class SoftApConfiguration implements Parcelable {
         dest.writeInt(mChannel);
         dest.writeInt(mSecurityType);
         dest.writeInt(mMaxNumberOfClients);
+        dest.writeBoolean(mAutoShutdownEnabled);
         dest.writeInt(mShutdownTimeoutMillis);
         dest.writeBoolean(mClientControlByUser);
         dest.writeTypedList(mBlockedClientList);
@@ -354,7 +366,7 @@ public final class SoftApConfiguration implements Parcelable {
                     in.readString(),
                     in.readParcelable(MacAddress.class.getClassLoader()),
                     in.readString(), in.readBoolean(), in.readInt(), in.readInt(), in.readInt(),
-                    in.readInt(), in.readInt(), in.readBoolean(),
+                    in.readInt(), in.readBoolean(), in.readInt(), in.readBoolean(),
                     in.createTypedArrayList(MacAddress.CREATOR),
                     in.createTypedArrayList(MacAddress.CREATOR), in.readString());
         }
@@ -445,6 +457,18 @@ public final class SoftApConfiguration implements Parcelable {
     @SystemApi
     public int getMaxNumberOfClients() {
         return mMaxNumberOfClients;
+    }
+
+    /**
+     * Returns whether auto shutdown is enabled or not.
+     * The Soft AP will shutdown when there are no devices associated to it for
+     * the timeout duration. See {@link Builder#setAutoShutdownEnabled(boolean)}.
+     *
+     * @hide
+     */
+    @SystemApi
+    public boolean isAutoShutdownEnabled() {
+        return mAutoShutdownEnabled;
     }
 
     /**
@@ -581,6 +605,7 @@ public final class SoftApConfiguration implements Parcelable {
         private int mChannel;
         private int mMaxNumberOfClients;
         private int mSecurityType;
+        private boolean mAutoShutdownEnabled;
         private int mShutdownTimeoutMillis;
         private boolean mClientControlByUser;
         private List<MacAddress> mBlockedClientList;
@@ -599,6 +624,7 @@ public final class SoftApConfiguration implements Parcelable {
             mChannel = 0;
             mMaxNumberOfClients = 0;
             mSecurityType = SECURITY_TYPE_OPEN;
+            mAutoShutdownEnabled = true; // enabled by default.
             mShutdownTimeoutMillis = 0;
             mClientControlByUser = false;
             mBlockedClientList = new ArrayList<>();
@@ -620,6 +646,7 @@ public final class SoftApConfiguration implements Parcelable {
             mChannel = other.mChannel;
             mMaxNumberOfClients = other.mMaxNumberOfClients;
             mSecurityType = other.mSecurityType;
+            mAutoShutdownEnabled = other.mAutoShutdownEnabled;
             mShutdownTimeoutMillis = other.mShutdownTimeoutMillis;
             mClientControlByUser = other.mClientControlByUser;
             mBlockedClientList = new ArrayList<>(other.mBlockedClientList);
@@ -636,8 +663,8 @@ public final class SoftApConfiguration implements Parcelable {
         public SoftApConfiguration build() {
             return new SoftApConfiguration(mSsid, mBssid, mPassphrase,
                     mHiddenSsid, mBand, mChannel, mSecurityType, mMaxNumberOfClients,
-                    mShutdownTimeoutMillis, mClientControlByUser, mBlockedClientList,
-                    mAllowedClientList, mOweTransIfaceName);
+                    mAutoShutdownEnabled, mShutdownTimeoutMillis, mClientControlByUser,
+                    mBlockedClientList, mAllowedClientList, mOweTransIfaceName);
         }
 
         /**
@@ -822,11 +849,30 @@ public final class SoftApConfiguration implements Parcelable {
          * @return Builder for chaining.
          */
         @NonNull
-        public Builder setMaxNumberOfClients(int maxNumberOfClients) {
+        public Builder setMaxNumberOfClients(@IntRange(from = 0) int maxNumberOfClients) {
             if (maxNumberOfClients < 0) {
                 throw new IllegalArgumentException("maxNumberOfClients should be not negative");
             }
             mMaxNumberOfClients = maxNumberOfClients;
+            return this;
+        }
+
+        /**
+         * Specifies whether auto shutdown is enabled or not.
+         * The Soft AP will shut down when there are no devices connected to it for
+         * the timeout duration.
+         *
+         * <p>
+         * <li>If not set, defaults to true</li>
+         *
+         * @param enable true to enable, false to disable.
+         * @return Builder for chaining.
+         *
+         * @see #setShutdownTimeoutMillis(int)
+         */
+        @NonNull
+        public Builder setAutoShutdownEnabled(boolean enable) {
+            mAutoShutdownEnabled = enable;
             return this;
         }
 
@@ -840,14 +886,16 @@ public final class SoftApConfiguration implements Parcelable {
          *
          * <p>
          * <li>If not set, defaults to 0</li>
-         * <li>The shut down timout will apply when
-         * {@link Settings.Global.SOFT_AP_TIMEOUT_ENABLED} is true</li>
+         * <li>The shut down timeout will apply when {@link #setAutoShutdownEnabled(boolean)} is
+         * set to true</li>
          *
          * @param timeoutMillis milliseconds of the timeout delay.
          * @return Builder for chaining.
+         *
+         * @see #setAutoShutdownEnabled(boolean)
          */
         @NonNull
-        public Builder setShutdownTimeoutMillis(int timeoutMillis) {
+        public Builder setShutdownTimeoutMillis(@IntRange(from = 0) int timeoutMillis) {
             if (timeoutMillis < 0) {
                 throw new IllegalArgumentException("Invalid timeout value");
             }

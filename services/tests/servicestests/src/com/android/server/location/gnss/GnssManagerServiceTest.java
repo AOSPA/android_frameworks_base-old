@@ -16,6 +16,8 @@
 
 package com.android.server.location.gnss;
 
+import static android.location.LocationManager.GPS_PROVIDER;
+
 import static com.google.common.truth.Truth.assertThat;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -36,6 +38,7 @@ import android.app.AppOpsManager;
 import android.content.Context;
 import android.content.pm.PackageManager;
 import android.location.GnssAntennaInfo;
+import android.location.GnssAntennaInfo.SphericalCorrections;
 import android.location.GnssClock;
 import android.location.GnssMeasurementCorrections;
 import android.location.GnssMeasurementsEvent;
@@ -243,8 +246,8 @@ public class GnssManagerServiceTest {
     private static List<GnssAntennaInfo> createDummyGnssAntennaInfos() {
         double carrierFrequencyMHz = 13758.0;
 
-        GnssAntennaInfo.PhaseCenterOffsetCoordinates phaseCenterOffsetCoordinates = new
-                GnssAntennaInfo.PhaseCenterOffsetCoordinates(
+        GnssAntennaInfo.PhaseCenterOffset phaseCenterOffset = new
+                GnssAntennaInfo.PhaseCenterOffset(
                 4.3d,
                 1.4d,
                 2.10d,
@@ -254,22 +257,26 @@ public class GnssManagerServiceTest {
 
         double[][] phaseCenterVariationCorrectionsMillimeters = new double[10][10];
         double[][] phaseCenterVariationCorrectionsUncertaintyMillimeters = new double[10][10];
-        GnssAntennaInfo.PhaseCenterVariationCorrections
+        SphericalCorrections
                 phaseCenterVariationCorrections =
-                new GnssAntennaInfo.PhaseCenterVariationCorrections(
+                new SphericalCorrections(
                         phaseCenterVariationCorrectionsMillimeters,
                         phaseCenterVariationCorrectionsUncertaintyMillimeters);
 
         double[][] signalGainCorrectionsDbi = new double[10][10];
         double[][] signalGainCorrectionsUncertaintyDbi = new double[10][10];
-        GnssAntennaInfo.SignalGainCorrections signalGainCorrections = new
-                GnssAntennaInfo.SignalGainCorrections(
+        SphericalCorrections signalGainCorrections = new
+                SphericalCorrections(
                 signalGainCorrectionsDbi,
                 signalGainCorrectionsUncertaintyDbi);
 
         List<GnssAntennaInfo> gnssAntennaInfos = new ArrayList();
-        gnssAntennaInfos.add(new GnssAntennaInfo(carrierFrequencyMHz, phaseCenterOffsetCoordinates,
-                phaseCenterVariationCorrections, signalGainCorrections));
+        gnssAntennaInfos.add(new GnssAntennaInfo.Builder()
+                .setCarrierFrequencyMHz(carrierFrequencyMHz)
+                .setPhaseCenterOffset(phaseCenterOffset)
+                .setPhaseCenterVariationCorrections(phaseCenterVariationCorrections)
+                .setSignalGainCorrections(signalGainCorrections)
+                .build());
         return gnssAntennaInfos;
     }
 
@@ -293,6 +300,9 @@ public class GnssManagerServiceTest {
                     }
                     return AppOpsManager.MODE_ERRORED;
                 });
+
+        when(mLocationManagerInternal.isProviderEnabledForUser(eq(GPS_PROVIDER), anyInt()))
+                .thenReturn(true);
     }
 
     private void disableLocationPermissions() {
@@ -303,6 +313,9 @@ public class GnssManagerServiceTest {
 
         when(mAppOpsManager.checkOp(anyInt(), anyInt(),
                 anyString())).thenReturn(AppOpsManager.MODE_ERRORED);
+
+        when(mLocationManagerInternal.isProviderEnabledForUser(eq(GPS_PROVIDER), anyInt()))
+                .thenReturn(false);
     }
 
     private GnssStatusListenerHelper createGnssStatusListenerHelper(Context context,
@@ -377,14 +390,6 @@ public class GnssManagerServiceTest {
 
         assertThat(mGnssManagerService.getGnssHardwareModelName()).isEqualTo(
                 gnssHardwareModelName);
-    }
-
-    @Test
-    public void getGnssCapabilitiesWithoutPermissionsTest() {
-        disableLocationPermissions();
-
-        assertThrows(SecurityException.class,
-                () -> mGnssManagerService.getGnssCapabilities("com.android.server"));
     }
 
     @Test
@@ -527,6 +532,7 @@ public class GnssManagerServiceTest {
         assertThrows(SecurityException.class,
                 () -> mGnssManagerService.removeGnssBatchingCallback());
 
+        enableLocationPermissions();
         mGnssManagerService.onReportLocation(mockLocationList);
 
         verify(mockBatchedLocationCallback, times(1)).onLocationBatch(mockLocationList);

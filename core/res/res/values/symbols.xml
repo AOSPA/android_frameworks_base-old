@@ -473,6 +473,7 @@
   <java-symbol type="integer" name="config_num_physical_slots" />
   <java-symbol type="array" name="config_integrityRuleProviderPackages" />
   <java-symbol type="bool" name="config_useAssistantVolume" />
+  <java-symbol type="string" name="config_bandwidthEstimateSource" />
 
   <java-symbol type="color" name="tab_indicator_text_v4" />
 
@@ -2926,6 +2927,7 @@
   <java-symbol type="string" name="status_bar_microphone" />
   <java-symbol type="string" name="status_bar_camera" />
   <java-symbol type="string" name="status_bar_sensors_off" />
+  <java-symbol type="string" name="status_bar_screen_record" />
 
   <!-- Locale picker -->
   <java-symbol type="id" name="locale_search_menu" />
@@ -3184,8 +3186,6 @@
   <java-symbol type="array" name="config_nonBlockableNotificationPackages" />
   <java-symbol type="array" name="config_priorityOnlyDndExemptPackages" />
 
-  <java-symbol type="array" name="config_allowedManagedServicesOnLowRamDevices" />
-
   <!-- Screen-size-dependent modes for picker dialogs. -->
   <java-symbol type="integer" name="time_picker_mode" />
   <java-symbol type="integer" name="date_picker_mode" />
@@ -3278,7 +3278,6 @@
   <java-symbol type="layout" name="autofill_dataset_picker"/>
   <java-symbol type="layout" name="autofill_dataset_picker_fullscreen"/>
   <java-symbol type="layout" name="autofill_dataset_picker_header_footer"/>
-  <java-symbol type="layout" name="autofill_inline_suggestion" />
   <java-symbol type="id" name="autofill" />
   <java-symbol type="id" name="autofill_dataset_footer"/>
   <java-symbol type="id" name="autofill_dataset_header"/>
@@ -3286,10 +3285,6 @@
   <java-symbol type="id" name="autofill_dataset_list"/>
   <java-symbol type="id" name="autofill_dataset_picker"/>
   <java-symbol type="id" name="autofill_dataset_title" />
-  <java-symbol type="id" name="autofill_inline_suggestion_end_icon" />
-  <java-symbol type="id" name="autofill_inline_suggestion_start_icon" />
-  <java-symbol type="id" name="autofill_inline_suggestion_subtitle" />
-  <java-symbol type="id" name="autofill_inline_suggestion_title" />
   <java-symbol type="id" name="autofill_save_custom_subtitle" />
   <java-symbol type="id" name="autofill_save_icon" />
   <java-symbol type="id" name="autofill_save_no" />
@@ -3798,6 +3793,7 @@
   <java-symbol type="dimen" name="resolver_small_margin"/>
   <java-symbol type="dimen" name="resolver_edge_margin"/>
   <java-symbol type="dimen" name="resolver_elevation"/>
+  <java-symbol type="dimen" name="chooser_icon_size"/>
 
   <!-- For DropBox -->
   <java-symbol type="integer" name="config_dropboxLowPriorityBroadcastRateLimitPeriod" />
@@ -3873,9 +3869,6 @@
   <!-- For App Standby -->
   <java-symbol type="string" name="as_app_forced_to_restricted_bucket" />
 
-  <!-- Assistant handles -->
-  <java-symbol type="dimen" name="assist_handle_shadow_radius" />
-
   <!-- For Waterfall Display -->
   <java-symbol type="dimen" name="waterfall_display_left_edge_size" />
   <java-symbol type="dimen" name="waterfall_display_top_edge_size" />
@@ -3908,6 +3901,7 @@
   <java-symbol type="id" name="resolver_empty_state_title" />
   <java-symbol type="id" name="resolver_empty_state_subtitle" />
   <java-symbol type="id" name="resolver_empty_state_button" />
+  <java-symbol type="id" name="resolver_tab_divider" />
   <java-symbol type="string" name="resolver_cant_share_with_work_apps" />
   <java-symbol type="string" name="resolver_cant_share_with_personal_apps" />
   <java-symbol type="string" name="resolver_cant_share_cross_profile_explanation" />
@@ -3931,6 +3925,8 @@
 
   <!-- Whether to expand the lock screen user switcher by default -->
   <java-symbol type="bool" name="config_expandLockScreenUserSwitcher" />
+
+  <java-symbol type="string" name="loading" />
 
   <!-- For Pdn throttle feature -->
   <java-symbol type="bool" name="config_pdp_retry_for_29_33_55_enabled" />

@@ -218,7 +218,7 @@ MutableBareField: android.net.wifi.WifiConfiguration#macRandomizationSetting:
     
 MutableBareField: android.net.wifi.WifiConfiguration#meteredOverride:
     
-MutableBareField: android.net.wifi.WifiConfiguration#requirePMF:
+MutableBareField: android.net.wifi.WifiConfiguration#requirePmf:
     
 MutableBareField: android.net.wifi.WifiConfiguration#saePasswordId:
     
@@ -264,7 +264,7 @@ OnNameExpected: android.content.ContentProvider#checkUriPermission(android.net.U
     If implemented by developer, should follow the on<Something> style; otherwise consider marking final
 
 
-PairedRegistration: android.net.wifi.wificond.WifiNl80211Manager#registerApCallback(String, java.util.concurrent.Executor, android.net.wifi.wificond.WifiNl80211Manager.SoftApCallback):
+PairedRegistration: android.net.wifi.nl80211.WifiNl80211Manager#registerApCallback(String, java.util.concurrent.Executor, android.net.wifi.nl80211.WifiNl80211Manager.SoftApCallback):
     
 
 

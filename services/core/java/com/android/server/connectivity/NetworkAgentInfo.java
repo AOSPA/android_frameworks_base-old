@@ -18,12 +18,14 @@ package com.android.server.connectivity;
 
 import static android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET;
 import static android.net.NetworkCapabilities.NET_CAPABILITY_MMS;
+import static android.net.NetworkCapabilities.NET_CAPABILITY_NOT_METERED;
 import static android.net.NetworkCapabilities.NET_CAPABILITY_VALIDATED;
 import static android.net.NetworkCapabilities.transportNamesOf;
 
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.content.Context;
+import android.net.CaptivePortalData;
 import android.net.IDnsResolver;
 import android.net.INetd;
 import android.net.INetworkMonitor;
@@ -169,6 +171,10 @@ public class NetworkAgentInfo implements Comparable<NetworkAgentInfo> {
 
     // Set to true when partial connectivity was detected.
     public boolean partialConnectivity;
+
+    // Captive portal info of the network, if any.
+    // Obtained by ConnectivityService and merged into NetworkAgent-provided information.
+    public CaptivePortalData captivePortalData;
 
     // Networks are lingered when they become unneeded as a result of their NetworkRequests being
     // satisfied by a higher-scoring network. so as to allow communication to wrap up before the
@@ -473,24 +479,16 @@ public class NetworkAgentInfo implements Comparable<NetworkAgentInfo> {
         return networkCapabilities.hasTransport(NetworkCapabilities.TRANSPORT_VPN);
     }
 
-    private int getCurrentScore(boolean pretendValidated) {
-        // TODO: We may want to refactor this into a NetworkScore class that takes a base score from
-        // the NetworkAgent and signals from the NetworkAgent and uses those signals to modify the
-        // score.  The NetworkScore class would provide a nice place to centralize score constants
-        // so they are not scattered about the transports.
-
+    /** Gets the current score */
+    public int getCurrentScore() {
         // If this network is explicitly selected and the user has decided to use it even if it's
-        // unvalidated, give it the maximum score. Also give it the maximum score if it's explicitly
-        // selected and we're trying to see what its score could be. This ensures that we don't tear
-        // down an explicitly selected network before the user gets a chance to prefer it when
-        // a higher-scoring network (e.g., Ethernet) is available.
-        if (networkAgentConfig.explicitlySelected
-                && (networkAgentConfig.acceptUnvalidated || pretendValidated)) {
+        // unvalidated, give it the maximum score.
+        if (networkAgentConfig.explicitlySelected && networkAgentConfig.acceptUnvalidated) {
             return ConnectivityConstants.EXPLICITLY_SELECTED_NETWORK_SCORE;
         }
 
         int score = mNetworkScore.getLegacyScore();
-        if (!lastValidated && !pretendValidated && !ignoreWifiUnvalidationPenalty() && !isVPN()) {
+        if (!lastValidated && !ignoreWifiUnvalidationPenalty() && !isVPN()) {
             score -= ConnectivityConstants.UNVALIDATED_SCORE_PENALTY;
         }
         if (score < 0) score = 0;
@@ -504,18 +502,6 @@ public class NetworkAgentInfo implements Comparable<NetworkAgentInfo> {
                 networkCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET);
         boolean avoidBadWifi = mConnService.avoidBadWifi() || avoidUnvalidated;
         return isWifi && !avoidBadWifi && everValidated;
-    }
-
-    // Get the current score for this Network.  This may be modified from what the
-    // NetworkAgent sent, as it has modifiers applied to it.
-    public int getCurrentScore() {
-        return getCurrentScore(false);
-    }
-
-    // Get the current score for this Network as if it was validated.  This may be modified from
-    // what the NetworkAgent sent, as it has modifiers applied to it.
-    public int getCurrentScoreAsValidated() {
-        return getCurrentScore(true);
     }
 
     public void setNetworkScore(@NonNull NetworkScore ns) {
@@ -625,6 +611,41 @@ public class NetworkAgentInfo implements Comparable<NetworkAgentInfo> {
         mLingerTimerForRequest.clear();
         updateLingerTimer();  // Sets mLingerExpiryMs, cancels and nulls out mLingerMessage.
         mLingering = false;
+    }
+
+    /**
+     * Returns whether this NAI has any chance of ever beating this other agent.
+     *
+     * The chief use case of this is the decision to tear down this network. ConnectivityService
+     * tears down networks that don't satisfy any request, unless they have a chance to beat any
+     * existing satisfier.
+     *
+     * @param other the agent to beat
+     * @return whether this should be given more time to try and beat the other agent
+     * TODO : remove this and migrate to a ranker-based approach
+     */
+    public boolean canPossiblyBeat(@NonNull final NetworkAgentInfo other) {
+        // Any explicitly selected network should be held on.
+        if (networkAgentConfig.explicitlySelected) return true;
+        // An outscored exiting network should be torn down.
+        if (mNetworkScore.isExiting()) return false;
+        // If this network is validated it can be torn down as it can't hope to be better than
+        // it already is.
+        if (networkCapabilities.hasCapability(NET_CAPABILITY_VALIDATED)) return false;
+        // If neither network is validated, keep both until at least one does.
+        if (!other.networkCapabilities.hasCapability(NET_CAPABILITY_VALIDATED)) return true;
+        // If this network is not metered but the other is, it should be preferable if it validates.
+        if (networkCapabilities.hasCapability(NET_CAPABILITY_NOT_METERED)
+                && !other.networkCapabilities.hasCapability(NET_CAPABILITY_NOT_METERED)) {
+            return true;
+        }
+
+        // If the control comes here :
+        // • This network is neither exiting or explicitly selected
+        // • This network is not validated, but the other is
+        // • This network is metered, or both networks are unmetered
+        // Keep it if it's expected to be faster than the other., should it validate.
+        return mNetworkScore.probablyFasterThan(other.mNetworkScore);
     }
 
     public void dumpLingerTimers(PrintWriter pw) {

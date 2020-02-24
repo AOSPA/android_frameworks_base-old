@@ -3440,6 +3440,27 @@ public class NotificationManagerService extends SystemService {
         }
 
         @Override
+        public ParceledListSlice<ConversationChannelWrapper> getConversations(
+                boolean onlyImportant) {
+            enforceSystemOrSystemUI("getConversations");
+            ArrayList<ConversationChannelWrapper> conversations =
+                    mPreferencesHelper.getConversations(onlyImportant);
+            for (ConversationChannelWrapper conversation : conversations) {
+                LauncherApps.ShortcutQuery query = new LauncherApps.ShortcutQuery()
+                        .setPackage(conversation.getPkg())
+                        .setQueryFlags(FLAG_MATCH_DYNAMIC | FLAG_MATCH_PINNED)
+                        .setShortcutIds(Arrays.asList(
+                                conversation.getNotificationChannel().getConversationId()));
+                List<ShortcutInfo> shortcuts = mLauncherAppsService.getShortcuts(
+                        query, UserHandle.of(UserHandle.getUserId(conversation.getUid())));
+                if (shortcuts != null && !shortcuts.isEmpty()) {
+                    conversation.setShortcutInfo(shortcuts.get(0));
+                }
+            }
+            return new ParceledListSlice<>(conversations);
+        }
+
+        @Override
         public ParceledListSlice<NotificationChannelGroup> getNotificationChannelGroupsForPackage(
                 String pkg, int uid, boolean includeDeleted) {
             enforceSystemOrSystemUI("getNotificationChannelGroupsForPackage");
@@ -3971,6 +3992,29 @@ public class NotificationManagerService extends SystemService {
                 synchronized (mNotificationLock) {
                     final ManagedServiceInfo info =
                             mAssistants.checkServiceTokenLocked(token);
+                    unsnoozeNotificationInt(key, info);
+                }
+            } finally {
+                Binder.restoreCallingIdentity(identity);
+            }
+        }
+
+        /**
+         * Allows the notification assistant to un-snooze a single notification.
+         *
+         * @param token The binder for the listener, to check that the caller is allowed
+         */
+        @Override
+        public void unsnoozeNotificationFromSystemListener(INotificationListener token,
+                String key) {
+            long identity = Binder.clearCallingIdentity();
+            try {
+                synchronized (mNotificationLock) {
+                    final ManagedServiceInfo info =
+                            mListeners.checkServiceTokenLocked(token);
+                    if (!info.isSystem) {
+                        throw new SecurityException("Not allowed to unsnooze before deadline");
+                    }
                     unsnoozeNotificationInt(key, info);
                 }
             } finally {
@@ -5632,6 +5676,22 @@ public class NotificationManagerService extends SystemService {
         mHandler.post(new EnqueueNotificationRunnable(userId, r, isAppForeground));
     }
 
+    public void onConversationRemoved(String pkg, int uid, String conversationId) {
+        checkCallerIsSystem();
+        Preconditions.checkStringNotEmpty(pkg);
+        Preconditions.checkStringNotEmpty(conversationId);
+
+        mHistoryManager.deleteConversation(pkg, uid, conversationId);
+        List<String> deletedChannelIds =
+                mPreferencesHelper.deleteConversation(pkg, uid, conversationId);
+        for (String channelId : deletedChannelIds) {
+            cancelAllNotificationsInt(MY_UID, MY_PID, pkg, channelId, 0, 0, true,
+                    UserHandle.getUserId(uid), REASON_CHANNEL_BANNED,
+                    null);
+        }
+        handleSavePolicyFile();
+    }
+
     @VisibleForTesting
     protected void fixNotification(Notification notification, String pkg, String tag, int id,
             int userId) throws NameNotFoundException {
@@ -6220,6 +6280,7 @@ public class NotificationManagerService extends SystemService {
         private final int mRank;
         private final int mCount;
         private final ManagedServiceInfo mListener;
+        private final long mWhen;
 
         CancelNotificationRunnable(final int callingUid, final int callingPid,
                 final String pkg, final String tag, final int id,
@@ -6239,6 +6300,7 @@ public class NotificationManagerService extends SystemService {
             this.mRank = rank;
             this.mCount = count;
             this.mListener = listener;
+            this.mWhen = System.currentTimeMillis();
         }
 
         @Override
@@ -6250,13 +6312,28 @@ public class NotificationManagerService extends SystemService {
             }
 
             synchronized (mNotificationLock) {
-                // If the notification is currently enqueued, repost this runnable so it has a
-                // chance to notify listeners
-                if ((findNotificationByListLocked(mEnqueuedNotifications, mPkg, mTag, mId, mUserId))
-                        != null) {
+                // Check to see if there is a notification in the enqueued list that hasn't had a
+                // chance to post yet.
+                List<NotificationRecord> enqueued = findEnqueuedNotificationsForCriteria(
+                        mPkg, mTag, mId, mUserId);
+                boolean repost = false;
+                if (enqueued.size() > 0) {
+                    // Found something, let's see what it was
+                    repost = true;
+                    // If all enqueues happened before this cancel then wait for them to happen,
+                    // otherwise we should let this cancel through so the next enqueue happens
+                    for (NotificationRecord r : enqueued) {
+                        if (r.mUpdateTimeMs > mWhen) {
+                            // At least one enqueue was posted after the cancel, so we're invalid
+                            return;
+                        }
+                    }
+                }
+                if (repost) {
                     mHandler.post(this);
                     return;
                 }
+
                 // Look for the notification in the posted list, since we already checked enqueued.
                 NotificationRecord r =
                         findNotificationByListLocked(mNotificationList, mPkg, mTag, mId, mUserId);
@@ -6273,6 +6350,10 @@ public class NotificationManagerService extends SystemService {
                         return;
                     }
                     if ((r.getNotification().flags & mMustNotHaveFlags) != 0) {
+                        return;
+                    }
+                    if (r.getUpdateTimeMs() > mWhen) {
+                        // In this case, a post must have slipped by when this runnable reposted
                         return;
                     }
 
@@ -8197,6 +8278,29 @@ public class NotificationManagerService extends SystemService {
         return null;
     }
 
+    /**
+     * There may be multiple records that match your criteria. For instance if there have been
+     * multiple notifications posted which are enqueued for the same pkg, tag, id, userId. This
+     * method will find all of them in the given list
+     * @return
+     */
+    @GuardedBy("mNotificationLock")
+    private List<NotificationRecord> findEnqueuedNotificationsForCriteria(
+            String pkg, String tag, int id, int userId) {
+        final ArrayList<NotificationRecord> records = new ArrayList<>();
+        final int n = mEnqueuedNotifications.size();
+        for (int i = 0; i < n; i++) {
+            NotificationRecord r = mEnqueuedNotifications.get(i);
+            if (notificationMatchesUserId(r, userId)
+                    && r.getSbn().getId() == id
+                    && TextUtils.equals(r.getSbn().getTag(), tag)
+                    && r.getSbn().getPackageName().equals(pkg)) {
+                records.add(r);
+            }
+        }
+        return records;
+    }
+
     @GuardedBy("mNotificationLock")
     int indexOfNotificationLocked(String key) {
         final int N = mNotificationList.size();
@@ -8526,21 +8630,11 @@ public class NotificationManagerService extends SystemService {
 
     @VisibleForTesting
     boolean canUseManagedServices(String pkg, Integer userId, String requiredPermission) {
-        boolean canUseManagedServices = !mActivityManager.isLowRamDevice()
-                || mPackageManagerClient.hasSystemFeature(PackageManager.FEATURE_WATCH);
-
-        for (String whitelisted : getContext().getResources().getStringArray(
-                R.array.config_allowedManagedServicesOnLowRamDevices)) {
-            if (whitelisted.equals(pkg)) {
-                canUseManagedServices = true;
-                break;
-            }
-        }
-
+        boolean canUseManagedServices = true;
         if (requiredPermission != null) {
             try {
                 if (mPackageManager.checkPermission(requiredPermission, pkg, userId)
-                    != PackageManager.PERMISSION_GRANTED) {
+                        != PackageManager.PERMISSION_GRANTED) {
                     canUseManagedServices = false;
                 }
             } catch (RemoteException e) {
@@ -8829,7 +8923,9 @@ public class NotificationManagerService extends SystemService {
                 final StatusBarNotification sbn,
                 final boolean isVisible) {
             final String key = sbn.getKey();
-            Slog.d(TAG, "notifyAssistantVisibilityChangedLocked: " + key);
+            if (DBG) {
+                Slog.d(TAG, "notifyAssistantVisibilityChangedLocked: " + key);
+            }
             notifyAssistantLocked(
                     sbn,
                     false /* sameUserOnly */,

@@ -514,7 +514,7 @@ public class WifiConfiguration implements Parcelable {
                 allowedKeyManagement.set(WifiConfiguration.KeyMgmt.SAE);
                 allowedPairwiseCiphers.set(WifiConfiguration.PairwiseCipher.CCMP);
                 allowedGroupCiphers.set(WifiConfiguration.GroupCipher.CCMP);
-                requirePMF = true;
+                requirePmf = true;
                 break;
             case SECURITY_TYPE_EAP_SUITE_B:
                 allowedProtocols.set(WifiConfiguration.Protocol.RSN);
@@ -524,14 +524,14 @@ public class WifiConfiguration implements Parcelable {
                 allowedGroupManagementCiphers.set(WifiConfiguration.GroupMgmtCipher.BIP_GMAC_256);
                 // Note: allowedSuiteBCiphers bitset will be set by the service once the
                 // certificates are attached to this profile
-                requirePMF = true;
+                requirePmf = true;
                 break;
             case SECURITY_TYPE_OWE:
                 allowedProtocols.set(WifiConfiguration.Protocol.RSN);
                 allowedKeyManagement.set(WifiConfiguration.KeyMgmt.OWE);
                 allowedPairwiseCiphers.set(WifiConfiguration.PairwiseCipher.CCMP);
                 allowedGroupCiphers.set(WifiConfiguration.GroupCipher.CCMP);
-                requirePMF = true;
+                requirePmf = true;
                 break;
             case SECURITY_TYPE_WAPI_PSK:
                 allowedKeyManagement.set(WifiConfiguration.KeyMgmt.WAPI_PSK);
@@ -708,7 +708,7 @@ public class WifiConfiguration implements Parcelable {
      * @hide
      */
     @SystemApi
-    public boolean requirePMF;
+    public boolean requirePmf;
 
     /**
      * @hide
@@ -2248,9 +2248,10 @@ public class WifiConfiguration implements Parcelable {
         sbuf.append("ID: ").append(this.networkId).append(" SSID: ").append(this.SSID).
                 append(" PROVIDER-NAME: ").append(this.providerFriendlyName).
                 append(" BSSID: ").append(this.BSSID).append(" FQDN: ").append(this.FQDN)
+                .append(" HOME-PROVIDER-NETWORK: ").append(this.isHomeProviderNetwork)
                 .append(" PRIO: ").append(this.priority)
                 .append(" HIDDEN: ").append(this.hiddenSSID)
-                .append(" PMF: ").append(this.requirePMF)
+                .append(" PMF: ").append(this.requirePmf)
                 .append("CarrierId: ").append(this.carrierId)
                 .append('\n');
 
@@ -2866,7 +2867,7 @@ public class WifiConfiguration implements Parcelable {
 
             macRandomizationSetting = source.macRandomizationSetting;
             randomizedMacExpirationTimeMs = source.randomizedMacExpirationTimeMs;
-            requirePMF = source.requirePMF;
+            requirePmf = source.requirePmf;
             updateIdentifier = source.updateIdentifier;
             carrierId = source.carrierId;
             mPasspointUniqueId = source.mPasspointUniqueId;
@@ -2899,7 +2900,7 @@ public class WifiConfiguration implements Parcelable {
         dest.writeInt(wepTxKeyIndex);
         dest.writeInt(priority);
         dest.writeInt(hiddenSSID ? 1 : 0);
-        dest.writeInt(requirePMF ? 1 : 0);
+        dest.writeInt(requirePmf ? 1 : 0);
         dest.writeString(updateIdentifier);
 
         writeBitSet(dest, allowedKeyManagement);
@@ -2980,7 +2981,7 @@ public class WifiConfiguration implements Parcelable {
                 config.wepTxKeyIndex = in.readInt();
                 config.priority = in.readInt();
                 config.hiddenSSID = in.readInt() != 0;
-                config.requirePMF = in.readInt() != 0;
+                config.requirePmf = in.readInt() != 0;
                 config.updateIdentifier = in.readString();
 
                 config.allowedKeyManagement   = readBitSet(in);

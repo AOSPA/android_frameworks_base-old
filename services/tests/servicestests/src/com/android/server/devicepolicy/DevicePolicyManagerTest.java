@@ -26,6 +26,7 @@ import static android.app.admin.DevicePolicyManager.PASSWORD_COMPLEXITY_MEDIUM;
 import static android.app.admin.DevicePolicyManager.PASSWORD_COMPLEXITY_NONE;
 import static android.app.admin.DevicePolicyManager.WIPE_EUICC;
 import static android.app.admin.PasswordMetrics.computeForPassword;
+import static android.content.pm.ApplicationInfo.PRIVATE_FLAG_DIRECT_BOOT_AWARE;
 
 import static com.android.internal.widget.LockPatternUtils.CREDENTIAL_TYPE_NONE;
 import static com.android.internal.widget.LockPatternUtils.EscrowTokenStateChangeCallback;
@@ -96,7 +97,6 @@ import android.test.MoreAsserts;
 import android.util.ArraySet;
 import android.util.Pair;
 
-import androidx.test.filters.FlakyTest;
 import androidx.test.filters.SmallTest;
 
 import com.android.internal.R;
@@ -2087,7 +2087,7 @@ public class DevicePolicyManagerTest extends DpmTestBase {
 
         FactoryResetProtectionPolicy policy = new FactoryResetProtectionPolicy.Builder()
                 .setFactoryResetProtectionAccounts(new ArrayList<>())
-                .setFactoryResetProtectionDisabled(true)
+                .setFactoryResetProtectionEnabled(false)
                 .build();
         dpm.setFactoryResetProtectionPolicy(admin1, policy);
 
@@ -2098,14 +2098,15 @@ public class DevicePolicyManagerTest extends DpmTestBase {
         verify(mContext.spiedContext).sendBroadcastAsUser(
                 MockUtils.checkIntentAction(
                         DevicePolicyManager.ACTION_RESET_PROTECTION_POLICY_CHANGED),
-                MockUtils.checkUserHandle(DpmMockContext.CALLER_USER_HANDLE));
+                MockUtils.checkUserHandle(DpmMockContext.CALLER_USER_HANDLE),
+                eq(android.Manifest.permission.MANAGE_FACTORY_RESET_PROTECTION));
     }
 
     public void testSetFactoryResetProtectionPolicyFailWithPO() throws Exception {
         setupProfileOwner();
 
         FactoryResetProtectionPolicy policy = new FactoryResetProtectionPolicy.Builder()
-                .setFactoryResetProtectionDisabled(true)
+                .setFactoryResetProtectionEnabled(false)
                 .build();
 
         assertExpectException(SecurityException.class, null,
@@ -2145,7 +2146,8 @@ public class DevicePolicyManagerTest extends DpmTestBase {
         verify(mContext.spiedContext).sendBroadcastAsUser(
                 MockUtils.checkIntentAction(
                         DevicePolicyManager.ACTION_RESET_PROTECTION_POLICY_CHANGED),
-                MockUtils.checkUserHandle(DpmMockContext.CALLER_USER_HANDLE));
+                MockUtils.checkUserHandle(DpmMockContext.CALLER_USER_HANDLE),
+                eq(android.Manifest.permission.MANAGE_FACTORY_RESET_PROTECTION));
     }
 
     public void testGetFactoryResetProtectionPolicyWithFrpManagementAgent()
@@ -2157,7 +2159,7 @@ public class DevicePolicyManagerTest extends DpmTestBase {
 
         FactoryResetProtectionPolicy policy = new FactoryResetProtectionPolicy.Builder()
                 .setFactoryResetProtectionAccounts(new ArrayList<>())
-                .setFactoryResetProtectionDisabled(true)
+                .setFactoryResetProtectionEnabled(false)
                 .build();
 
         dpm.setFactoryResetProtectionPolicy(admin1, policy);
@@ -2172,13 +2174,14 @@ public class DevicePolicyManagerTest extends DpmTestBase {
         verify(mContext.spiedContext).sendBroadcastAsUser(
                 MockUtils.checkIntentAction(
                         DevicePolicyManager.ACTION_RESET_PROTECTION_POLICY_CHANGED),
-                MockUtils.checkUserHandle(DpmMockContext.CALLER_USER_HANDLE));
+                MockUtils.checkUserHandle(DpmMockContext.CALLER_USER_HANDLE),
+                eq(android.Manifest.permission.MANAGE_FACTORY_RESET_PROTECTION));
     }
 
     private void assertPoliciesAreEqual(FactoryResetProtectionPolicy expectedPolicy,
             FactoryResetProtectionPolicy actualPolicy) {
-        assertThat(actualPolicy.isFactoryResetProtectionDisabled()).isEqualTo(
-                expectedPolicy.isFactoryResetProtectionDisabled());
+        assertThat(actualPolicy.isFactoryResetProtectionEnabled()).isEqualTo(
+                expectedPolicy.isFactoryResetProtectionEnabled());
         assertAccountsAreEqual(expectedPolicy.getFactoryResetProtectionAccounts(),
                 actualPolicy.getFactoryResetProtectionAccounts());
     }
@@ -6046,6 +6049,86 @@ public class DevicePolicyManagerTest extends DpmTestBase {
         assertTrue(dpm.isCommonCriteriaModeEnabled(admin1));
     }
 
+    public void testCanProfileOwnerResetPasswordWhenLocked_nonDirectBootAwarePo()
+            throws Exception {
+        setDeviceEncryptionPerUser();
+        setupProfileOwner();
+        setupPasswordResetToken();
+
+        mContext.binder.callingUid = DpmMockContext.SYSTEM_UID;
+        assertFalse("po is not direct boot aware",
+                dpm.canProfileOwnerResetPasswordWhenLocked(DpmMockContext.CALLER_USER_HANDLE));
+    }
+
+    public void testCanProfileOwnerResetPasswordWhenLocked_noActiveToken() throws Exception {
+        setDeviceEncryptionPerUser();
+        setupProfileOwner();
+        makeAdmin1DirectBootAware();
+
+        mContext.binder.callingUid = DpmMockContext.SYSTEM_UID;
+        assertFalse("po doesn't have an active password reset token",
+                dpm.canProfileOwnerResetPasswordWhenLocked(DpmMockContext.CALLER_USER_HANDLE));
+    }
+
+    public void testCanProfileOwnerResetPasswordWhenLocked_nonFbeDevice() throws Exception {
+        setupProfileOwner();
+        makeAdmin1DirectBootAware();
+        setupPasswordResetToken();
+
+        mContext.binder.callingUid = DpmMockContext.SYSTEM_UID;
+        assertFalse("device is not FBE",
+                dpm.canProfileOwnerResetPasswordWhenLocked(DpmMockContext.CALLER_USER_HANDLE));
+    }
+
+    public void testCanProfileOwnerResetPasswordWhenLocked() throws Exception {
+        setDeviceEncryptionPerUser();
+        setupProfileOwner();
+        makeAdmin1DirectBootAware();
+        setupPasswordResetToken();
+
+        mContext.binder.callingUid = DpmMockContext.SYSTEM_UID;
+        assertTrue("direct boot aware po with active password reset token",
+                dpm.canProfileOwnerResetPasswordWhenLocked(DpmMockContext.CALLER_USER_HANDLE));
+    }
+
+    private void setupPasswordResetToken() {
+        final byte[] token = new byte[32];
+        final long handle = 123456;
+
+        when(getServices().lockPatternUtils
+                .addEscrowToken(eq(token), eq(DpmMockContext.CALLER_USER_HANDLE),
+                        nullable(EscrowTokenStateChangeCallback.class)))
+                .thenReturn(handle);
+
+        dpm.setResetPasswordToken(admin1, token);
+
+        when(getServices().lockPatternUtils
+                .isEscrowTokenActive(eq(handle), eq(DpmMockContext.CALLER_USER_HANDLE)))
+                .thenReturn(true);
+
+        assertTrue("failed to activate token", dpm.isResetPasswordTokenActive(admin1));
+    }
+
+    private void makeAdmin1DirectBootAware()
+            throws PackageManager.NameNotFoundException, android.os.RemoteException {
+        Mockito.reset(getServices().ipackageManager);
+
+        final ApplicationInfo ai = DpmTestUtils.cloneParcelable(
+                mRealTestContext.getPackageManager().getApplicationInfo(
+                        admin1.getPackageName(),
+                        PackageManager.GET_DISABLED_UNTIL_USED_COMPONENTS));
+        ai.privateFlags = PRIVATE_FLAG_DIRECT_BOOT_AWARE;
+
+        doReturn(ai).when(getServices().ipackageManager).getApplicationInfo(
+                eq(admin1.getPackageName()),
+                anyInt(),
+                eq(DpmMockContext.CALLER_USER_HANDLE));
+    }
+
+    private void setDeviceEncryptionPerUser() {
+        when(getServices().storageManager.isFileBasedEncryptionEnabled()).thenReturn(true);
+    }
+
     private void setCrossProfileAppsList(String... packages) {
         when(mContext.getResources()
                 .getStringArray(eq(R.array.cross_profile_apps)))
@@ -6056,6 +6139,55 @@ public class DevicePolicyManagerTest extends DpmTestBase {
         when(mContext.getResources()
                 .getStringArray(eq(R.array.vendor_cross_profile_apps)))
                 .thenReturn(packages);
+    }
+
+    public void testSetAccountTypesWithManagementDisabledOnManagedProfile() throws Exception {
+        setupProfileOwner();
+
+        final String accountType = "com.example.account.type";
+        int originalUid = mContext.binder.callingUid;
+        dpm.setAccountManagementDisabled(admin1, accountType, true);
+        assertThat(dpm.getAccountTypesWithManagementDisabled()).asList().containsExactly(
+                accountType);
+        mContext.binder.callingUid = DpmMockContext.ANOTHER_UID;
+        assertThat(dpm.getAccountTypesWithManagementDisabled()).isEmpty();
+        mContext.binder.callingUid = DpmMockContext.SYSTEM_UID;
+        assertThat(dpm.getAccountTypesWithManagementDisabled()).isEmpty();
+
+        mContext.binder.callingUid = originalUid;
+        dpm.setAccountManagementDisabled(admin1, accountType, false);
+        assertThat(dpm.getAccountTypesWithManagementDisabled()).isEmpty();
+    }
+
+    public void testSetAccountTypesWithManagementDisabledOnOrgOwnedManagedProfile()
+            throws Exception {
+        final int managedProfileUserId = 15;
+        final int managedProfileAdminUid = UserHandle.getUid(managedProfileUserId, 19436);
+
+        addManagedProfile(admin1, managedProfileAdminUid, admin1);
+        mContext.binder.callingUid = managedProfileAdminUid;
+
+        configureProfileOwnerOfOrgOwnedDevice(admin1, managedProfileUserId);
+
+        int originalUid = mContext.binder.callingUid;
+        final String accountType = "com.example.account.type";
+        dpm.getParentProfileInstance(admin1).setAccountManagementDisabled(admin1, accountType,
+                true);
+        assertThat(dpm.getAccountTypesWithManagementDisabled()).isEmpty();
+        mContext.binder.callingUid = DpmMockContext.ANOTHER_UID;
+        assertThat(dpm.getAccountTypesWithManagementDisabled()).asList().containsExactly(
+                accountType);
+        mContext.binder.callingUid = DpmMockContext.SYSTEM_UID;
+        assertThat(dpm.getAccountTypesWithManagementDisabled()).asList().containsExactly(
+                accountType);
+
+        mContext.binder.callingUid = originalUid;
+        dpm.getParentProfileInstance(admin1).setAccountManagementDisabled(admin1, accountType,
+                false);
+        mContext.binder.callingUid = DpmMockContext.ANOTHER_UID;
+        assertThat(dpm.getAccountTypesWithManagementDisabled()).isEmpty();
+        mContext.binder.callingUid = DpmMockContext.SYSTEM_UID;
+        assertThat(dpm.getAccountTypesWithManagementDisabled()).isEmpty();
     }
 
     // admin1 is the outgoing DPC, adminAnotherPakcage is the incoming one.

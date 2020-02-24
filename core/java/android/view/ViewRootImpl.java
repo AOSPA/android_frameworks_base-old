@@ -18,6 +18,7 @@ package android.view;
 
 import static android.view.Display.DEFAULT_DISPLAY;
 import static android.view.Display.INVALID_DISPLAY;
+import static android.view.InputDevice.SOURCE_CLASS_NONE;
 import static android.view.InsetsState.ITYPE_NAVIGATION_BAR;
 import static android.view.InsetsState.ITYPE_STATUS_BAR;
 import static android.view.View.PFLAG_DRAW_ANIMATION;
@@ -116,6 +117,7 @@ import android.util.Slog;
 import android.util.SparseArray;
 import android.util.TimeUtils;
 import android.util.TypedValue;
+import android.view.InputDevice.InputSourceClass;
 import android.view.InsetsState.InternalInsetsType;
 import android.view.Surface.OutOfResourcesException;
 import android.view.SurfaceControl.Transaction;
@@ -223,13 +225,6 @@ public final class ViewRootImpl implements ViewParent,
      * @see #USE_NEW_INSETS_PROPERTY
      * @hide
      */
-    public static int sNewInsetsMode =
-            SystemProperties.getInt(USE_NEW_INSETS_PROPERTY, 0);
-
-    /**
-     * @see #USE_NEW_INSETS_PROPERTY
-     * @hide
-     */
     public static final int NEW_INSETS_MODE_NONE = 0;
 
     /**
@@ -243,6 +238,13 @@ public final class ViewRootImpl implements ViewParent,
      * @hide
      */
     public static final int NEW_INSETS_MODE_FULL = 2;
+
+    /**
+     * @see #USE_NEW_INSETS_PROPERTY
+     * @hide
+     */
+    public static int sNewInsetsMode =
+            SystemProperties.getInt(USE_NEW_INSETS_PROPERTY, NEW_INSETS_MODE_FULL);
 
     /**
      * Set this system property to true to force the view hierarchy to render
@@ -436,6 +438,8 @@ public final class ViewRootImpl implements ViewParent,
     @UnsupportedAppUsage
     final View.AttachInfo mAttachInfo;
     final SystemUiVisibilityInfo mCompatibleVisibilityInfo;
+    int mDispatchedSystemUiVisibility =
+            ViewRootImpl.sNewInsetsMode == NEW_INSETS_MODE_FULL ? 0 : -1;
     InputQueue.Callback mInputQueueCallback;
     InputQueue mInputQueue;
     @UnsupportedAppUsage
@@ -497,6 +501,10 @@ public final class ViewRootImpl implements ViewParent,
     int mPendingInputEventCount;
     boolean mProcessInputEventsScheduled;
     boolean mUnbufferedInputDispatch;
+    boolean mUnbufferedInputDispatchBySource;
+    @InputSourceClass
+    int mUnbufferedInputSource = SOURCE_CLASS_NONE;
+
     String mPendingInputEventQueueLengthCounterName = "pq";
 
     InputStage mFirstInputStage;
@@ -655,7 +663,7 @@ public final class ViewRootImpl implements ViewParent,
 
     private final GestureExclusionTracker mGestureExclusionTracker = new GestureExclusionTracker();
 
-    private IAccessibilityEmbeddedConnection mEmbeddedConnection;
+    private IAccessibilityEmbeddedConnection mAccessibilityEmbeddedConnection;
 
     static final class SystemUiVisibilityInfo {
         int seq;
@@ -664,7 +672,22 @@ public final class ViewRootImpl implements ViewParent,
         int localChanges;
     }
 
+    // If set, ViewRootImpl will call BLASTBufferQueue::setNextTransaction with
+    // mRtBLASTSyncTransaction, prior to invoking draw. This provides a way
+    // to redirect the buffers in to transactions.
     private boolean mNextDrawUseBLASTSyncTransaction;
+    // Set when calling setNextTransaction, we can't just reuse mNextDrawUseBLASTSyncTransaction
+    // because, imagine this scenario:
+    //     1. First draw is using BLAST, mNextDrawUseBLAST = true
+    //     2. We call perform draw and are waiting on the callback
+    //     3. After the first perform draw but before the first callback and the
+    //        second perform draw, a second draw sets mNextDrawUseBLAST = true (it already was)
+    //     4. At this point the callback fires and we set mNextDrawUseBLAST = false;
+    //     5. We get to performDraw and fail to sync as we intended because mNextDrawUseBLAST
+    //        is now false.
+    // This is why we use a two-step latch with the two booleans, one consumed from
+    // performDraw and one consumed from finishBLASTSync()
+    private boolean mNextReportConsumeBLAST;
     // Be very careful with the threading here. This is used from the render thread while
     // the UI thread is paused and then applied and cleared from the UI thread right after
     // draw returns.
@@ -1707,12 +1730,13 @@ public final class ViewRootImpl implements ViewParent,
     }
 
     Surface getOrCreateBLASTSurface(int width, int height) {
-        if (mSurfaceControl == null || !mSurfaceControl.isValid()) {
+        if (mSurfaceControl == null
+                || !mSurfaceControl.isValid()
+                || mBlastSurfaceControl == null
+                || !mBlastSurfaceControl.isValid()) {
             return null;
         }
-        if ((mBlastSurfaceControl != null)
-                && (mBlastBufferQueue == null)
-                && mBlastSurfaceControl.isValid()) {
+        if (mBlastBufferQueue == null) {
             mBlastBufferQueue = new BLASTBufferQueue(
                 mBlastSurfaceControl, width, height);
         }
@@ -1833,7 +1857,7 @@ public final class ViewRootImpl implements ViewParent,
             mTraversalBarrier = mHandler.getLooper().getQueue().postSyncBarrier();
             mChoreographer.postCallback(
                     Choreographer.CALLBACK_TRAVERSAL, mTraversalRunnable, null);
-            if (!mUnbufferedInputDispatch) {
+            if (!mUnbufferedInputDispatch && !mUnbufferedInputDispatchBySource) {
                 scheduleConsumeBatchedInput();
             }
             notifyRendererOfFramePending();
@@ -1947,8 +1971,30 @@ public final class ViewRootImpl implements ViewParent,
         } else {
             info.globalVisibility |= systemUiFlag;
         }
-        if (mAttachInfo.mGlobalSystemUiVisibility != info.globalVisibility) {
+        if (mDispatchedSystemUiVisibility != info.globalVisibility) {
             scheduleTraversals();
+        }
+    }
+
+    private void handleDispatchSystemUiVisibilityChanged(SystemUiVisibilityInfo args) {
+        if (mSeq != args.seq && sNewInsetsMode != NEW_INSETS_MODE_FULL) {
+            // The sequence has changed, so we need to update our value and make
+            // sure to do a traversal afterward so the window manager is given our
+            // most recent data.
+            mSeq = args.seq;
+            mAttachInfo.mForceReportNewAttributes = true;
+            scheduleTraversals();
+        }
+        if (mView == null) return;
+        if (args.localChanges != 0) {
+            mView.updateLocalSystemUiVisibility(args.localValue, args.localChanges);
+            args.localChanges = 0;
+        }
+
+        final int visibility = args.globalVisibility & View.SYSTEM_UI_CLEARABLE_FLAGS;
+        if (mDispatchedSystemUiVisibility != visibility) {
+            mDispatchedSystemUiVisibility = visibility;
+            mView.dispatchSystemUiVisibilityChanged(visibility);
         }
     }
 
@@ -2183,8 +2229,9 @@ public final class ViewRootImpl implements ViewParent,
         return insets;
     }
 
-    void dispatchApplyInsets(View host) {
+    public void dispatchApplyInsets(View host) {
         Trace.traceBegin(Trace.TRACE_TAG_VIEW, "dispatchApplyInsets");
+        mApplyInsetsRequested = false;
         WindowInsets insets = getWindowInsets(true /* forceConstruct */);
         final boolean dispatchCutout = (mWindowAttributes.layoutInDisplayCutoutMode
                 == LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS);
@@ -2421,7 +2468,6 @@ public final class ViewRootImpl implements ViewParent,
         }
 
         if (mApplyInsetsRequested) {
-            mApplyInsetsRequested = false;
             updateVisibleInsets();
             dispatchApplyInsets(host);
             if (mLayoutRequested) {
@@ -2598,7 +2644,6 @@ public final class ViewRootImpl implements ViewParent,
                 if (contentInsetsChanged || mLastSystemUiVisibility !=
                         mAttachInfo.mSystemUiVisibility || mApplyInsetsRequested) {
                     mLastSystemUiVisibility = mAttachInfo.mSystemUiVisibility;
-                    mApplyInsetsRequested = false;
                     dispatchApplyInsets(host);
                     // We applied insets so force contentInsetsChanged to ensure the
                     // hierarchy is measured below.
@@ -3696,9 +3741,9 @@ public final class ViewRootImpl implements ViewParent,
             usingAsyncReport = mReportNextDraw;
             if (needFrameCompleteCallback) {
                 final Handler handler = mAttachInfo.mHandler;
-                mAttachInfo.mThreadedRenderer.setFrameCompleteCallback((long frameNr) ->
+                mAttachInfo.mThreadedRenderer.setFrameCompleteCallback((long frameNr) -> {
+                        finishBLASTSync();
                         handler.postAtFrontOfQueue(() -> {
-                            finishBLASTSync();
                             if (reportNextDraw) {
                                 // TODO: Use the frame number
                                 pendingDrawFinished();
@@ -3708,12 +3753,23 @@ public final class ViewRootImpl implements ViewParent,
                                     commitCallbacks.get(i).run();
                                 }
                             }
-                        }));
+                        });});
             }
         }
 
         try {
             if (mNextDrawUseBLASTSyncTransaction) {
+                // TODO(b/149747443)
+                // We aren't prepared to handle overlapping use of mRtBLASTSyncTransaction
+                // so if we are BLAST syncing we make sure the previous draw has
+                // totally finished.
+                if (mAttachInfo.mThreadedRenderer != null) {
+                    mAttachInfo.mThreadedRenderer.fence();
+                }
+
+                mNextReportConsumeBLAST = true;
+                mNextDrawUseBLASTSyncTransaction = false;
+
                 mBlastBufferQueue.setNextTransaction(mRtBLASTSyncTransaction);
             }
             boolean canUseAsync = draw(fullRedrawNeeded);
@@ -7190,28 +7246,6 @@ public final class ViewRootImpl implements ViewParent,
         event.recycle();
     }
 
-    public void handleDispatchSystemUiVisibilityChanged(SystemUiVisibilityInfo args) {
-        if (mSeq != args.seq && sNewInsetsMode != NEW_INSETS_MODE_FULL) {
-            // The sequence has changed, so we need to update our value and make
-            // sure to do a traversal afterward so the window manager is given our
-            // most recent data.
-            mSeq = args.seq;
-            mAttachInfo.mForceReportNewAttributes = true;
-            scheduleTraversals();
-        }
-        if (mView == null) return;
-        if (args.localChanges != 0) {
-            mView.updateLocalSystemUiVisibility(args.localValue, args.localChanges);
-            args.localChanges = 0;
-        }
-
-        int visibility = args.globalVisibility&View.SYSTEM_UI_CLEARABLE_FLAGS;
-        if (visibility != mAttachInfo.mGlobalSystemUiVisibility) {
-            mAttachInfo.mGlobalSystemUiVisibility = visibility;
-            mView.dispatchSystemUiVisibilityChanged(visibility);
-        }
-    }
-
     /**
      * Notify that the window title changed
      */
@@ -7485,6 +7519,9 @@ public final class ViewRootImpl implements ViewParent,
                 writer.print(mTraversalScheduled);
         writer.print(innerPrefix); writer.print("mIsAmbientMode=");
                 writer.print(mIsAmbientMode);
+        writer.print(innerPrefix); writer.print("mUnbufferedInputSource=");
+        writer.print(Integer.toHexString(mUnbufferedInputSource));
+
         if (mTraversalScheduled) {
             writer.print(" (barrier="); writer.print(mTraversalBarrier); writer.println(")");
         } else {
@@ -8089,6 +8126,7 @@ public final class ViewRootImpl implements ViewParent,
         @Override
         public void onInputEvent(InputEvent event) {
             Trace.traceBegin(Trace.TRACE_TAG_VIEW, "processInputEventForCompatibility");
+            processUnbufferedRequest(event);
             List<InputEvent> processedEvents;
             try {
                 processedEvents =
@@ -8114,7 +8152,7 @@ public final class ViewRootImpl implements ViewParent,
 
         @Override
         public void onBatchedInputEventPending() {
-            if (mUnbufferedInputDispatch) {
+            if (mUnbufferedInputDispatch || mUnbufferedInputDispatchBySource) {
                 super.onBatchedInputEventPending();
             } else {
                 scheduleConsumeBatchedInput();
@@ -8130,6 +8168,17 @@ public final class ViewRootImpl implements ViewParent,
         public void dispose() {
             unscheduleConsumeBatchedInput();
             super.dispose();
+        }
+
+        private void processUnbufferedRequest(InputEvent event) {
+            if (!(event instanceof MotionEvent)) {
+                return;
+            }
+            mUnbufferedInputDispatchBySource =
+                    (event.getSource() & mUnbufferedInputSource) != SOURCE_CLASS_NONE;
+            if (mUnbufferedInputDispatchBySource && mConsumeBatchedInputScheduled) {
+                scheduleConsumeBatchedInputImmediately();
+            }
         }
     }
     WindowInputEventReceiver mInputEventReceiver;
@@ -8381,6 +8430,7 @@ public final class ViewRootImpl implements ViewParent,
         mHandler.sendMessage(msg);
     }
 
+    // TODO(118118435): Remove this after migration
     public void dispatchSystemUiVisibilityChanged(int seq, int globalVisibility,
             int localValue, int localChanges) {
         SystemUiVisibilityInfo args = new SystemUiVisibilityInfo();
@@ -9378,11 +9428,12 @@ public final class ViewRootImpl implements ViewParent,
      * Gets an accessibility embedded connection interface for this ViewRootImpl.
      * @hide
      */
-    public IAccessibilityEmbeddedConnection getEmbeddedConnection() {
-        if (mEmbeddedConnection == null) {
-            mEmbeddedConnection = new AccessibilityEmbeddedConnection(ViewRootImpl.this);
+    public IAccessibilityEmbeddedConnection getAccessibilityEmbeddedConnection() {
+        if (mAccessibilityEmbeddedConnection == null) {
+            mAccessibilityEmbeddedConnection = new AccessibilityEmbeddedConnection(
+                    ViewRootImpl.this);
         }
-        return mEmbeddedConnection;
+        return mAccessibilityEmbeddedConnection;
     }
 
     private class SendWindowContentChangedAccessibilityEvent implements Runnable {
@@ -9559,8 +9610,8 @@ public final class ViewRootImpl implements ViewParent,
     }
 
     private void finishBLASTSync() {
-        if (mNextDrawUseBLASTSyncTransaction) {
-            mNextDrawUseBLASTSyncTransaction = false;
+        if (mNextReportConsumeBLAST) {
+            mNextReportConsumeBLAST = false;
             mRtBLASTSyncTransaction.apply();
         }
     }
@@ -9569,11 +9620,19 @@ public final class ViewRootImpl implements ViewParent,
         return mRtBLASTSyncTransaction;
     }
 
-    SurfaceControl getRenderSurfaceControl() {
+    /**
+     * @hide
+     */
+    public SurfaceControl getRenderSurfaceControl() {
         if (mUseBLASTAdapter) {
             return mBlastSurfaceControl;
         } else {
             return mSurfaceControl;
         }
+    }
+
+    @Override
+    public void onDescendantUnbufferedRequested() {
+        mUnbufferedInputSource = mView.mUnbufferedInputSource;
     }
 }

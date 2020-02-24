@@ -42,6 +42,7 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.mockito.Mockito.mock
+import org.mockito.Mockito.`when` as whenever
 
 @SmallTest
 @RunWith(AndroidTestingRunner::class)
@@ -52,18 +53,20 @@ class NotificationRankingManagerTest : SysuiTestCase() {
     }
     private lateinit var personNotificationIdentifier: PeopleNotificationIdentifier
     private lateinit var rankingManager: TestableNotificationRankingManager
+    private lateinit var sectionsManager: NotificationSectionsFeatureManager
 
     @Before
     fun setup() {
         personNotificationIdentifier =
                 mock(PeopleNotificationIdentifier::class.java)
+        sectionsManager = mock(NotificationSectionsFeatureManager::class.java)
         rankingManager = TestableNotificationRankingManager(
                 lazyMedia,
                 mock(NotificationGroupManager::class.java),
                 mock(HeadsUpManager::class.java),
                 mock(NotificationFilter::class.java),
                 mock(NotificationEntryManagerLogger::class.java),
-                mock(NotificationSectionsFeatureManager::class.java),
+                sectionsManager,
                 personNotificationIdentifier,
                 HighPriorityProvider(personNotificationIdentifier)
         )
@@ -141,6 +144,50 @@ class NotificationRankingManagerTest : SysuiTestCase() {
 
         assertEquals(
                 listOf(a, b),
+                rankingManager.updateRanking(null, listOf(a, b), "test"))
+    }
+
+    @Test
+    fun testSort_importantPeople() {
+        whenever(sectionsManager.isFilteringEnabled()).thenReturn(true)
+        val aN = Notification.Builder(mContext, "test")
+                .setStyle(Notification.MessagingStyle(""))
+                .build()
+        val a = NotificationEntryBuilder()
+                .setImportance(IMPORTANCE_HIGH)
+                .setPkg("pkg")
+                .setOpPkg("pkg")
+                .setTag("tag")
+                .setNotification(aN)
+                .setChannel(NotificationChannel("test", "", IMPORTANCE_DEFAULT))
+                .setUser(mContext.getUser())
+                .setOverrideGroupKey("")
+                .build()
+        whenever(personNotificationIdentifier.isImportantPeopleNotification(a.sbn, a.ranking))
+                .thenReturn(false)
+        whenever(personNotificationIdentifier.isPeopleNotification(a.sbn, a.ranking))
+                .thenReturn(true)
+
+        val bN = Notification.Builder(mContext, "test")
+                .setStyle(Notification.MessagingStyle(""))
+                .build()
+        val b = NotificationEntryBuilder()
+                .setImportance(IMPORTANCE_HIGH)
+                .setPkg("pkg2")
+                .setOpPkg("pkg2")
+                .setTag("tag")
+                .setNotification(bN)
+                .setChannel(NotificationChannel("test", "", IMPORTANCE_DEFAULT))
+                .setUser(mContext.getUser())
+                .setOverrideGroupKey("")
+                .build()
+        whenever(personNotificationIdentifier.isImportantPeopleNotification(a.sbn, a.ranking))
+                .thenReturn(false)
+        whenever(personNotificationIdentifier.isPeopleNotification(a.sbn, a.ranking))
+                .thenReturn(true)
+
+        assertEquals(
+                listOf(b, a),
                 rankingManager.updateRanking(null, listOf(a, b), "test"))
     }
 

@@ -492,6 +492,10 @@ class TaskOrganizerController extends ITaskOrganizerController.Stub
         if (!(container instanceof Task)) {
             throw new IllegalArgumentException("Invalid container in hierarchy op");
         }
+        if (container.getDisplayContent() == null) {
+            Slog.w(TAG, "Container is no longer attached: " + container);
+            return 0;
+        }
         if (hop.isReparent()) {
             // special case for tiles since they are "virtual" parents
             if (container instanceof ActivityStack && ((ActivityStack) container).isRootTask()) {
@@ -543,8 +547,7 @@ class TaskOrganizerController extends ITaskOrganizerController.Stub
             final ActivityStack stack = (ActivityStack) container;
             if (stack.inPinnedWindowingMode()) {
                 stack.resize(config.windowConfiguration.getBounds(),
-                        null /* tempTaskBounds */, null /* tempTaskInsetBounds */,
-                        PRESERVE_WINDOWS, true /* deferResume */);
+                        null /* configBounds */, PRESERVE_WINDOWS, true /* deferResume */);
             }
         }
     }
@@ -552,6 +555,12 @@ class TaskOrganizerController extends ITaskOrganizerController.Stub
     private int applyWindowContainerChange(WindowContainer wc,
             WindowContainerTransaction.Change c) {
         int effects = sanitizeAndApplyChange(wc, c);
+
+        final SurfaceControl.Transaction t = c.getBoundsChangeTransaction();
+        if (t != null) {
+            Task tr = (Task) wc;
+            tr.setMainWindowSizeChangeTransaction(t);
+        }
 
         Rect enterPipBounds = c.getEnterPipBounds();
         if (enterPipBounds != null) {

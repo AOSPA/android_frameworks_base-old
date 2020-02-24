@@ -24,12 +24,14 @@ import static androidx.test.platform.app.InstrumentationRegistry.getInstrumentat
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -41,6 +43,7 @@ import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.Person;
+import android.app.job.JobScheduler;
 import android.app.prediction.AppTarget;
 import android.app.prediction.AppTargetEvent;
 import android.app.prediction.AppTargetId;
@@ -49,12 +52,13 @@ import android.content.ContentResolver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.pm.PackageManagerInternal;
 import android.content.pm.ShortcutInfo;
-import android.content.pm.ShortcutManager;
 import android.content.pm.ShortcutServiceInternal;
 import android.content.pm.UserInfo;
 import android.database.ContentObserver;
 import android.net.Uri;
+import android.os.CancellationSignal;
 import android.os.Looper;
 import android.os.UserHandle;
 import android.os.UserManager;
@@ -66,7 +70,9 @@ import android.telephony.TelephonyManager;
 import android.util.Range;
 
 import com.android.internal.app.ChooserActivity;
+import com.android.internal.content.PackageMonitor;
 import com.android.server.LocalServices;
+import com.android.server.pm.parsing.pkg.AndroidPackage;
 
 import org.junit.After;
 import org.junit.Before;
@@ -80,10 +86,12 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BiConsumer;
+import java.util.function.Consumer;
 
 @RunWith(JUnit4.class)
 public final class DataManagerTest {
@@ -92,6 +100,7 @@ public final class DataManagerTest {
     private static final int USER_ID_PRIMARY_MANAGED = 10;
     private static final int USER_ID_SECONDARY = 11;
     private static final String TEST_PKG_NAME = "pkg";
+    private static final String TEST_CLASS_NAME = "class";
     private static final String TEST_SHORTCUT_ID = "sc";
     private static final String CONTACT_URI = "content://com.android.contacts/contacts/lookup/123";
     private static final String PHONE_NUMBER = "+1234567890";
@@ -101,19 +110,20 @@ public final class DataManagerTest {
     @Mock private Context mContext;
     @Mock private ShortcutServiceInternal mShortcutServiceInternal;
     @Mock private UsageStatsManagerInternal mUsageStatsManagerInternal;
-    @Mock private ShortcutManager mShortcutManager;
+    @Mock private PackageManagerInternal mPackageManagerInternal;
     @Mock private UserManager mUserManager;
     @Mock private TelephonyManager mTelephonyManager;
     @Mock private TelecomManager mTelecomManager;
     @Mock private ContentResolver mContentResolver;
     @Mock private ScheduledExecutorService mExecutorService;
+    @Mock private JobScheduler mJobScheduler;
     @Mock private ScheduledFuture mScheduledFuture;
     @Mock private StatusBarNotification mStatusBarNotification;
     @Mock private Notification mNotification;
 
     private NotificationChannel mNotificationChannel;
     private DataManager mDataManager;
-    private int mCallingUserId;
+    private CancellationSignal mCancellationSignal;
     private TestInjector mInjector;
 
     @Before
@@ -124,14 +134,20 @@ public final class DataManagerTest {
 
         addLocalServiceMock(UsageStatsManagerInternal.class, mUsageStatsManagerInternal);
 
+        addLocalServiceMock(PackageManagerInternal.class, mPackageManagerInternal);
+        AndroidPackage androidPackage = mock(AndroidPackage.class);
+        when(androidPackage.getPackageName()).thenReturn(TEST_PKG_NAME);
+        doAnswer(ans -> {
+            Consumer<AndroidPackage> callback = (Consumer<AndroidPackage>) ans.getArguments()[0];
+            callback.accept(androidPackage);
+            return null;
+        }).when(mPackageManagerInternal).forEachInstalledPackage(any(Consumer.class), anyInt());
+
         when(mContext.getMainLooper()).thenReturn(Looper.getMainLooper());
+        when(mContext.getPackageName()).thenReturn("android");
 
         Context originalContext = getInstrumentation().getTargetContext();
         when(mContext.getApplicationInfo()).thenReturn(originalContext.getApplicationInfo());
-
-        when(mContext.getSystemService(Context.SHORTCUT_SERVICE)).thenReturn(mShortcutManager);
-        when(mContext.getSystemServiceName(ShortcutManager.class)).thenReturn(
-                Context.SHORTCUT_SERVICE);
 
         when(mContext.getSystemService(Context.USER_SERVICE)).thenReturn(mUserManager);
         when(mContext.getSystemServiceName(UserManager.class)).thenReturn(
@@ -144,6 +160,10 @@ public final class DataManagerTest {
                 Context.TELECOM_SERVICE);
         when(mTelecomManager.getDefaultDialerPackage(any(UserHandle.class)))
                 .thenReturn(TEST_PKG_NAME);
+
+        when(mContext.getSystemService(Context.JOB_SCHEDULER_SERVICE)).thenReturn(mJobScheduler);
+        when(mContext.getSystemServiceName(JobScheduler.class)).thenReturn(
+                Context.JOB_SCHEDULER_SERVICE);
 
         when(mExecutorService.scheduleAtFixedRate(any(Runnable.class), anyLong(), anyLong(), any(
                 TimeUnit.class))).thenReturn(mScheduledFuture);
@@ -160,13 +180,14 @@ public final class DataManagerTest {
         when(mStatusBarNotification.getNotification()).thenReturn(mNotification);
         when(mStatusBarNotification.getPackageName()).thenReturn(TEST_PKG_NAME);
         when(mStatusBarNotification.getUser()).thenReturn(UserHandle.of(USER_ID_PRIMARY));
+        when(mStatusBarNotification.getPostTime()).thenReturn(System.currentTimeMillis());
         when(mNotification.getShortcutId()).thenReturn(TEST_SHORTCUT_ID);
 
         mNotificationChannel = new NotificationChannel(
                 NOTIFICATION_CHANNEL_ID, "test channel", NotificationManager.IMPORTANCE_DEFAULT);
         mNotificationChannel.setConversationId("test", TEST_SHORTCUT_ID);
 
-        mCallingUserId = USER_ID_PRIMARY;
+        mCancellationSignal = new CancellationSignal();
 
         mInjector = new TestInjector();
         mDataManager = new DataManager(mContext, mInjector);
@@ -177,6 +198,7 @@ public final class DataManagerTest {
     public void tearDown() {
         LocalServices.removeServiceForTest(ShortcutServiceInternal.class);
         LocalServices.removeServiceForTest(UsageStatsManagerInternal.class);
+        LocalServices.removeServiceForTest(PackageManagerInternal.class);
     }
 
     @Test
@@ -185,18 +207,16 @@ public final class DataManagerTest {
         mDataManager.onUserUnlocked(USER_ID_PRIMARY_MANAGED);
         mDataManager.onUserUnlocked(USER_ID_SECONDARY);
 
-        mDataManager.onShortcutAddedOrUpdated(
+        mDataManager.addOrUpdateConversationInfo(
                 buildShortcutInfo("pkg_1", USER_ID_PRIMARY, "sc_1",
                         buildPerson(true, false)));
-        mDataManager.onShortcutAddedOrUpdated(
+        mDataManager.addOrUpdateConversationInfo(
                 buildShortcutInfo("pkg_2", USER_ID_PRIMARY_MANAGED, "sc_2",
                         buildPerson(false, true)));
-        mDataManager.onShortcutAddedOrUpdated(
+        mDataManager.addOrUpdateConversationInfo(
                 buildShortcutInfo("pkg_3", USER_ID_SECONDARY, "sc_3", buildPerson()));
 
-        List<ConversationInfo> conversations = new ArrayList<>();
-        mDataManager.forAllPackages(
-                packageData -> packageData.forAllConversations(conversations::add));
+        List<ConversationInfo> conversations = getConversationsInPrimary();
 
         // USER_ID_SECONDARY is not in the same profile group as USER_ID_PRIMARY.
         assertEquals(2, conversations.size());
@@ -217,23 +237,19 @@ public final class DataManagerTest {
     @Test
     public void testAccessConversationForUnlockedUsersOnly() {
         mDataManager.onUserUnlocked(USER_ID_PRIMARY);
-        mDataManager.onShortcutAddedOrUpdated(
+        mDataManager.addOrUpdateConversationInfo(
                 buildShortcutInfo("pkg_1", USER_ID_PRIMARY, "sc_1", buildPerson()));
-        mDataManager.onShortcutAddedOrUpdated(
+        mDataManager.addOrUpdateConversationInfo(
                 buildShortcutInfo("pkg_2", USER_ID_PRIMARY_MANAGED, "sc_2", buildPerson()));
 
-        List<ConversationInfo> conversations = new ArrayList<>();
-        mDataManager.forAllPackages(
-                packageData -> packageData.forAllConversations(conversations::add));
+        List<ConversationInfo> conversations = getConversationsInPrimary();
 
         // USER_ID_PRIMARY_MANAGED is not locked, so only USER_ID_PRIMARY's conversation is stored.
         assertEquals(1, conversations.size());
         assertEquals("sc_1", conversations.get(0).getShortcutId());
 
         mDataManager.onUserStopped(USER_ID_PRIMARY);
-        conversations.clear();
-        mDataManager.forAllPackages(
-                packageData -> packageData.forAllConversations(conversations::add));
+        conversations = getConversationsInPrimary();
         assertTrue(conversations.isEmpty());
     }
 
@@ -246,11 +262,12 @@ public final class DataManagerTest {
     }
 
     @Test
-    public void testReportAppTargetEvent() throws IntentFilter.MalformedMimeTypeException {
+    public void testReportAppTargetEvent_directSharing()
+            throws IntentFilter.MalformedMimeTypeException {
         mDataManager.onUserUnlocked(USER_ID_PRIMARY);
         ShortcutInfo shortcut = buildShortcutInfo(TEST_PKG_NAME, USER_ID_PRIMARY, TEST_SHORTCUT_ID,
                 buildPerson());
-        mDataManager.onShortcutAddedOrUpdated(shortcut);
+        mDataManager.addOrUpdateConversationInfo(shortcut);
 
         AppTarget appTarget = new AppTarget.Builder(new AppTargetId(TEST_SHORTCUT_ID), shortcut)
                 .build();
@@ -259,14 +276,58 @@ public final class DataManagerTest {
                         .setLaunchLocation(ChooserActivity.LAUNCH_LOCATON_DIRECT_SHARE)
                         .build();
         IntentFilter intentFilter = new IntentFilter(Intent.ACTION_SEND, "image/jpg");
-        mDataManager.reportAppTargetEvent(appTargetEvent, intentFilter);
+        mDataManager.reportShareTargetEvent(appTargetEvent, intentFilter);
 
-        List<Range<Long>> activeShareTimeSlots = new ArrayList<>();
-        mDataManager.forAllPackages(packageData ->
-                activeShareTimeSlots.addAll(
-                        packageData.getEventHistory(TEST_SHORTCUT_ID)
-                                .getEventIndex(Event.TYPE_SHARE_IMAGE)
-                                .getActiveTimeSlots()));
+        List<Range<Long>> activeShareTimeSlots = getActiveSlotsForTestShortcut(
+                Event.SHARE_EVENT_TYPES);
+        assertEquals(1, activeShareTimeSlots.size());
+    }
+
+    @Test
+    public void testReportAppTargetEvent_directSharing_createConversation()
+            throws IntentFilter.MalformedMimeTypeException {
+        mDataManager.onUserUnlocked(USER_ID_PRIMARY);
+        ShortcutInfo shortcut = buildShortcutInfo(TEST_PKG_NAME, USER_ID_PRIMARY, TEST_SHORTCUT_ID,
+                null);
+        AppTarget appTarget = new AppTarget.Builder(new AppTargetId(TEST_SHORTCUT_ID), shortcut)
+                .build();
+        AppTargetEvent appTargetEvent =
+                new AppTargetEvent.Builder(appTarget, AppTargetEvent.ACTION_LAUNCH)
+                        .setLaunchLocation(ChooserActivity.LAUNCH_LOCATON_DIRECT_SHARE)
+                        .build();
+        IntentFilter intentFilter = new IntentFilter(Intent.ACTION_SEND, "image/jpg");
+
+        mDataManager.reportShareTargetEvent(appTargetEvent, intentFilter);
+
+        List<Range<Long>> activeShareTimeSlots = getActiveSlotsForTestShortcut(
+                Event.SHARE_EVENT_TYPES);
+        assertEquals(1, activeShareTimeSlots.size());
+        ConversationInfo conversationInfo = mDataManager.getPackage(TEST_PKG_NAME, USER_ID_PRIMARY)
+                .getConversationStore()
+                .getConversation(TEST_SHORTCUT_ID);
+        assertNotNull(conversationInfo);
+        assertEquals(conversationInfo.getShortcutId(), TEST_SHORTCUT_ID);
+    }
+
+    @Test
+    public void testReportAppTargetEvent_appSharing()
+            throws IntentFilter.MalformedMimeTypeException {
+        mDataManager.onUserUnlocked(USER_ID_PRIMARY);
+        AppTarget appTarget = new AppTarget.Builder(
+                    new AppTargetId(TEST_SHORTCUT_ID),
+                    TEST_PKG_NAME,
+                    UserHandle.of(USER_ID_PRIMARY))
+                .setClassName(TEST_CLASS_NAME)
+                .build();
+        AppTargetEvent appTargetEvent =
+                new AppTargetEvent.Builder(appTarget, AppTargetEvent.ACTION_LAUNCH)
+                        .build();
+        IntentFilter intentFilter = new IntentFilter(Intent.ACTION_SEND, "image/jpg");
+
+        mDataManager.reportShareTargetEvent(appTargetEvent, intentFilter);
+
+        List<Range<Long>> activeShareTimeSlots = getActiveSlotsForTestShortcut(
+                Event.SHARE_EVENT_TYPES);
         assertEquals(1, activeShareTimeSlots.size());
     }
 
@@ -277,7 +338,7 @@ public final class DataManagerTest {
 
         ShortcutInfo shortcut = buildShortcutInfo(TEST_PKG_NAME, USER_ID_PRIMARY, TEST_SHORTCUT_ID,
                 buildPerson());
-        mDataManager.onShortcutAddedOrUpdated(shortcut);
+        mDataManager.addOrUpdateConversationInfo(shortcut);
 
         final String newPhoneNumber = "+1000000000";
         mInjector.mContactsQueryHelper.mIsStarred = true;
@@ -287,9 +348,7 @@ public final class DataManagerTest {
                 USER_ID_PRIMARY);
         contentObserver.onChange(false, ContactsContract.Contacts.CONTENT_URI, USER_ID_PRIMARY);
 
-        List<ConversationInfo> conversations = new ArrayList<>();
-        mDataManager.forAllPackages(
-                packageData -> packageData.forAllConversations(conversations::add));
+        List<ConversationInfo> conversations = getConversationsInPrimary();
         assertEquals(1, conversations.size());
 
         assertEquals(TEST_SHORTCUT_ID, conversations.get(0).getShortcutId());
@@ -298,12 +357,30 @@ public final class DataManagerTest {
     }
 
     @Test
+    public void testNotificationPosted() {
+        mDataManager.onUserUnlocked(USER_ID_PRIMARY);
+
+        ShortcutInfo shortcut = buildShortcutInfo(TEST_PKG_NAME, USER_ID_PRIMARY, TEST_SHORTCUT_ID,
+                buildPerson());
+        mDataManager.addOrUpdateConversationInfo(shortcut);
+
+        NotificationListenerService listenerService =
+                mDataManager.getNotificationListenerServiceForTesting(USER_ID_PRIMARY);
+
+        listenerService.onNotificationPosted(mStatusBarNotification);
+
+        List<Range<Long>> activeNotificationOpenTimeSlots = getActiveSlotsForTestShortcut(
+                Event.NOTIFICATION_EVENT_TYPES);
+        assertEquals(1, activeNotificationOpenTimeSlots.size());
+    }
+
+    @Test
     public void testNotificationOpened() {
         mDataManager.onUserUnlocked(USER_ID_PRIMARY);
 
         ShortcutInfo shortcut = buildShortcutInfo(TEST_PKG_NAME, USER_ID_PRIMARY, TEST_SHORTCUT_ID,
                 buildPerson());
-        mDataManager.onShortcutAddedOrUpdated(shortcut);
+        mDataManager.addOrUpdateConversationInfo(shortcut);
 
         NotificationListenerService listenerService =
                 mDataManager.getNotificationListenerServiceForTesting(USER_ID_PRIMARY);
@@ -311,12 +388,8 @@ public final class DataManagerTest {
         listenerService.onNotificationRemoved(mStatusBarNotification, null,
                 NotificationListenerService.REASON_CLICK);
 
-        List<Range<Long>> activeNotificationOpenTimeSlots = new ArrayList<>();
-        mDataManager.forAllPackages(packageData ->
-                activeNotificationOpenTimeSlots.addAll(
-                        packageData.getEventHistory(TEST_SHORTCUT_ID)
-                                .getEventIndex(Event.TYPE_NOTIFICATION_OPENED)
-                                .getActiveTimeSlots()));
+        List<Range<Long>> activeNotificationOpenTimeSlots = getActiveSlotsForTestShortcut(
+                Event.NOTIFICATION_EVENT_TYPES);
         assertEquals(1, activeNotificationOpenTimeSlots.size());
     }
 
@@ -327,7 +400,7 @@ public final class DataManagerTest {
 
         ShortcutInfo shortcut = buildShortcutInfo(TEST_PKG_NAME, USER_ID_PRIMARY, TEST_SHORTCUT_ID,
                 buildPerson());
-        mDataManager.onShortcutAddedOrUpdated(shortcut);
+        mDataManager.addOrUpdateConversationInfo(shortcut);
 
         NotificationListenerService listenerService =
                 mDataManager.getNotificationListenerServiceForTesting(USER_ID_PRIMARY);
@@ -352,7 +425,7 @@ public final class DataManagerTest {
 
         ShortcutInfo shortcut = buildShortcutInfo(TEST_PKG_NAME, USER_ID_PRIMARY, TEST_SHORTCUT_ID,
                 buildPerson());
-        mDataManager.onShortcutAddedOrUpdated(shortcut);
+        mDataManager.addOrUpdateConversationInfo(shortcut);
 
         NotificationListenerService listenerService =
                 mDataManager.getNotificationListenerServiceForTesting(USER_ID_PRIMARY);
@@ -366,6 +439,9 @@ public final class DataManagerTest {
         assertTrue(conversationInfo.isImportant());
         assertFalse(conversationInfo.isNotificationSilenced());
         assertFalse(conversationInfo.isDemoted());
+        verify(mShortcutServiceInternal).cacheShortcuts(
+                anyInt(), any(), eq(TEST_PKG_NAME),
+                eq(Collections.singletonList(TEST_SHORTCUT_ID)), eq(USER_ID_PRIMARY));
     }
 
     @Test
@@ -375,7 +451,7 @@ public final class DataManagerTest {
 
         ShortcutInfo shortcut = buildShortcutInfo(TEST_PKG_NAME, USER_ID_PRIMARY, TEST_SHORTCUT_ID,
                 buildPerson());
-        mDataManager.onShortcutAddedOrUpdated(shortcut);
+        mDataManager.addOrUpdateConversationInfo(shortcut);
 
         NotificationListenerService listenerService =
                 mDataManager.getNotificationListenerServiceForTesting(USER_ID_PRIMARY);
@@ -404,7 +480,7 @@ public final class DataManagerTest {
 
         ShortcutInfo shortcut = buildShortcutInfo(TEST_PKG_NAME, USER_ID_PRIMARY, TEST_SHORTCUT_ID,
                 buildPerson());
-        mDataManager.onShortcutAddedOrUpdated(shortcut);
+        mDataManager.addOrUpdateConversationInfo(shortcut);
 
         ContentObserver contentObserver = mDataManager.getCallLogContentObserverForTesting();
         contentObserver.onChange(false);
@@ -416,12 +492,7 @@ public final class DataManagerTest {
         mInjector.mCallLogQueryHelper.mEventConsumer.accept(PHONE_NUMBER,
                 new Event(currentTimestamp - MILLIS_PER_MINUTE * 5L, Event.TYPE_CALL_MISSED));
 
-        List<Range<Long>> activeTimeSlots = new ArrayList<>();
-        mDataManager.forAllPackages(packageData ->
-                activeTimeSlots.addAll(
-                        packageData.getEventHistory(TEST_SHORTCUT_ID)
-                                .getEventIndex(Event.CALL_EVENT_TYPES)
-                                .getActiveTimeSlots()));
+        List<Range<Long>> activeTimeSlots = getActiveSlotsForTestShortcut(Event.CALL_EVENT_TYPES);
         assertEquals(3, activeTimeSlots.size());
     }
 
@@ -432,7 +503,7 @@ public final class DataManagerTest {
 
         ShortcutInfo shortcut = buildShortcutInfo(TEST_PKG_NAME, USER_ID_PRIMARY, TEST_SHORTCUT_ID,
                 buildPerson());
-        mDataManager.onShortcutAddedOrUpdated(shortcut);
+        mDataManager.addOrUpdateConversationInfo(shortcut);
         mDataManager.getUserDataForTesting(USER_ID_PRIMARY).setDefaultSmsApp(TEST_PKG_NAME);
 
         ContentObserver contentObserver = mDataManager.getMmsSmsContentObserverForTesting();
@@ -445,18 +516,106 @@ public final class DataManagerTest {
         mInjector.mMmsQueryHelper.mEventConsumer.accept(PHONE_NUMBER, outgoingSmsEvent);
         mInjector.mSmsQueryHelper.mEventConsumer.accept(PHONE_NUMBER, incomingSmsEvent);
 
-        List<Range<Long>> activeTimeSlots = new ArrayList<>();
-        mDataManager.forAllPackages(packageData ->
-                activeTimeSlots.addAll(
-                        packageData.getEventHistory(TEST_SHORTCUT_ID)
-                                .getEventIndex(Event.SMS_EVENT_TYPES)
-                                .getActiveTimeSlots()));
+        List<Range<Long>> activeTimeSlots = getActiveSlotsForTestShortcut(Event.SMS_EVENT_TYPES);
         assertEquals(2, activeTimeSlots.size());
+    }
+
+    @Test
+    public void testDeleteUninstalledPackageDataOnPackageRemoved() {
+        mDataManager.onUserUnlocked(USER_ID_PRIMARY);
+
+        ShortcutInfo shortcut = buildShortcutInfo(TEST_PKG_NAME, USER_ID_PRIMARY, TEST_SHORTCUT_ID,
+                buildPerson());
+        mDataManager.addOrUpdateConversationInfo(shortcut);
+        assertNotNull(mDataManager.getPackage(TEST_PKG_NAME, USER_ID_PRIMARY));
+
+        PackageMonitor packageMonitor = mDataManager.getPackageMonitorForTesting(USER_ID_PRIMARY);
+        Intent intent = new Intent(Intent.ACTION_PACKAGE_REMOVED);
+        intent.putExtra(Intent.EXTRA_USER_HANDLE, USER_ID_PRIMARY);
+        intent.setData(Uri.parse("package:" + TEST_PKG_NAME));
+        packageMonitor.onReceive(mContext, intent);
+        assertNull(mDataManager.getPackage(TEST_PKG_NAME, USER_ID_PRIMARY));
+    }
+
+    @Test
+    public void testPruneUninstalledPackageData() {
+        mDataManager.onUserUnlocked(USER_ID_PRIMARY);
+
+        ShortcutInfo shortcut = buildShortcutInfo(TEST_PKG_NAME, USER_ID_PRIMARY, TEST_SHORTCUT_ID,
+                buildPerson());
+        mDataManager.addOrUpdateConversationInfo(shortcut);
+        assertNotNull(mDataManager.getPackage(TEST_PKG_NAME, USER_ID_PRIMARY));
+
+        doAnswer(ans -> null).when(mPackageManagerInternal)
+                .forEachInstalledPackage(any(Consumer.class), anyInt());
+        mDataManager.pruneDataForUser(USER_ID_PRIMARY, mCancellationSignal);
+        assertNull(mDataManager.getPackage(TEST_PKG_NAME, USER_ID_PRIMARY));
+    }
+
+    @Test
+    public void testPruneCallEventsFromNonDialer() {
+        mDataManager.onUserUnlocked(USER_ID_PRIMARY);
+
+        ShortcutInfo shortcut = buildShortcutInfo(TEST_PKG_NAME, USER_ID_PRIMARY, TEST_SHORTCUT_ID,
+                buildPerson());
+        mDataManager.addOrUpdateConversationInfo(shortcut);
+
+        long currentTimestamp = System.currentTimeMillis();
+        mInjector.mCallLogQueryHelper.mEventConsumer.accept(PHONE_NUMBER,
+                new Event(currentTimestamp - MILLIS_PER_MINUTE, Event.TYPE_CALL_OUTGOING));
+
+        List<Range<Long>> activeTimeSlots = getActiveSlotsForTestShortcut(Event.CALL_EVENT_TYPES);
+        assertEquals(1, activeTimeSlots.size());
+
+        mDataManager.getUserDataForTesting(USER_ID_PRIMARY).setDefaultDialer(null);
+        mDataManager.pruneDataForUser(USER_ID_PRIMARY, mCancellationSignal);
+        activeTimeSlots = getActiveSlotsForTestShortcut(Event.CALL_EVENT_TYPES);
+        assertTrue(activeTimeSlots.isEmpty());
+    }
+
+    @Test
+    public void testPruneSmsEventsFromNonDefaultSmsApp() {
+        mDataManager.onUserUnlocked(USER_ID_PRIMARY);
+
+        ShortcutInfo shortcut = buildShortcutInfo(TEST_PKG_NAME, USER_ID_PRIMARY, TEST_SHORTCUT_ID,
+                buildPerson());
+        mDataManager.addOrUpdateConversationInfo(shortcut);
+        mDataManager.getUserDataForTesting(USER_ID_PRIMARY).setDefaultSmsApp(TEST_PKG_NAME);
+
+        long currentTimestamp = System.currentTimeMillis();
+        mInjector.mMmsQueryHelper.mEventConsumer.accept(PHONE_NUMBER,
+                new Event(currentTimestamp - MILLIS_PER_MINUTE, Event.TYPE_SMS_OUTGOING));
+
+        List<Range<Long>> activeTimeSlots = getActiveSlotsForTestShortcut(Event.SMS_EVENT_TYPES);
+        assertEquals(1, activeTimeSlots.size());
+
+        mDataManager.getUserDataForTesting(USER_ID_PRIMARY).setDefaultSmsApp(null);
+        mDataManager.pruneDataForUser(USER_ID_PRIMARY, mCancellationSignal);
+        activeTimeSlots = getActiveSlotsForTestShortcut(Event.SMS_EVENT_TYPES);
+        assertTrue(activeTimeSlots.isEmpty());
     }
 
     private static <T> void addLocalServiceMock(Class<T> clazz, T mock) {
         LocalServices.removeServiceForTest(clazz);
         LocalServices.addService(clazz, mock);
+    }
+
+    private List<ConversationInfo> getConversationsInPrimary() {
+        List<ConversationInfo> conversations = new ArrayList<>();
+        mDataManager.forPackagesInProfile(USER_ID_PRIMARY,
+                packageData -> packageData.forAllConversations(conversations::add));
+        return conversations;
+    }
+
+    private List<Range<Long>> getActiveSlotsForTestShortcut(
+            Set<Integer> eventTypes) {
+        List<Range<Long>> activeSlots = new ArrayList<>();
+        mDataManager.forPackagesInProfile(USER_ID_PRIMARY, packageData ->
+                activeSlots.addAll(
+                        packageData.getEventHistory(TEST_SHORTCUT_ID)
+                                .getEventIndex(eventTypes)
+                                .getActiveTimeSlots()));
+        return activeSlots;
     }
 
     private ShortcutInfo buildShortcutInfo(String packageName, int userId, String id,
@@ -467,6 +626,7 @@ public final class DataManagerTest {
         when(mockContext.getUser()).thenReturn(UserHandle.of(userId));
         ShortcutInfo.Builder builder = new ShortcutInfo.Builder(mockContext, id)
                 .setShortLabel(id)
+                .setLongLived(true)
                 .setIntent(new Intent("TestIntent"));
         if (person != null) {
             builder.setPersons(new Person[] {person});
@@ -628,11 +788,6 @@ public final class DataManagerTest {
                 BiConsumer<String, Event> eventConsumer) {
             mSmsQueryHelper = new TestSmsQueryHelper(context, eventConsumer);
             return mSmsQueryHelper;
-        }
-
-        @Override
-        int getCallingUserId() {
-            return mCallingUserId;
         }
     }
 }

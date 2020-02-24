@@ -1601,7 +1601,7 @@ public class AudioManager {
     @SystemApi
     @RequiresPermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING)
     public boolean setPreferredDeviceForStrategy(@NonNull AudioProductStrategy strategy,
-            @NonNull AudioDevice device) {
+            @NonNull AudioDeviceAttributes device) {
         Objects.requireNonNull(strategy);
         Objects.requireNonNull(device);
         try {
@@ -1616,7 +1616,7 @@ public class AudioManager {
     /**
      * @hide
      * Removes the preferred audio device previously set with
-     * {@link #setPreferredDeviceForStrategy(AudioProductStrategy, AudioDevice)}.
+     * {@link #setPreferredDeviceForStrategy(AudioProductStrategy, AudioDeviceAttributes)}.
      * @param strategy the audio strategy whose routing will be affected
      * @return true if the operation was successful, false otherwise (invalid strategy, or no
      *     device set for example)
@@ -1637,14 +1637,14 @@ public class AudioManager {
     /**
      * @hide
      * Return the preferred device for an audio strategy, previously set with
-     * {@link #setPreferredDeviceForStrategy(AudioProductStrategy, AudioDevice)}
+     * {@link #setPreferredDeviceForStrategy(AudioProductStrategy, AudioDeviceAttributes)}
      * @param strategy the strategy to query
      * @return the preferred device for that strategy, or null if none was ever set or if the
      *    strategy is invalid
      */
     @SystemApi
     @RequiresPermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING)
-    public @Nullable AudioDevice getPreferredDeviceForStrategy(
+    public @Nullable AudioDeviceAttributes getPreferredDeviceForStrategy(
             @NonNull AudioProductStrategy strategy) {
         Objects.requireNonNull(strategy);
         try {
@@ -1658,7 +1658,13 @@ public class AudioManager {
      * @hide
      * Interface to be notified of changes in the preferred audio device set for a given audio
      * strategy.
-     * @see #setPreferredDeviceForStrategy(AudioProductStrategy, AudioDevice)
+     * <p>Note that this listener will only be invoked whenever
+     * {@link #setPreferredDeviceForStrategy(AudioProductStrategy, AudioDeviceAttributes)} or
+     * {@link #removePreferredDeviceForStrategy(AudioProductStrategy)} causes a change in
+     * preferred device. It will not be invoked directly after registration with
+     * {@link #addOnPreferredDeviceForStrategyChangedListener(Executor, OnPreferredDeviceForStrategyChangedListener)}
+     * to indicate which strategies had preferred devices at the time of registration.</p>
+     * @see #setPreferredDeviceForStrategy(AudioProductStrategy, AudioDeviceAttributes)
      * @see #removePreferredDeviceForStrategy(AudioProductStrategy)
      * @see #getPreferredDeviceForStrategy(AudioProductStrategy)
      */
@@ -1672,7 +1678,7 @@ public class AudioManager {
          *              preferred audio device
          */
         void onPreferredDeviceForStrategyChanged(@NonNull AudioProductStrategy strategy,
-                @Nullable AudioDevice device);
+                @Nullable AudioDeviceAttributes device);
     }
 
     /**
@@ -1772,7 +1778,8 @@ public class AudioManager {
             extends IStrategyPreferredDeviceDispatcher.Stub {
 
         @Override
-        public void dispatchPrefDeviceChanged(int strategyId, @Nullable AudioDevice device) {
+        public void dispatchPrefDeviceChanged(int strategyId,
+                                              @Nullable AudioDeviceAttributes device) {
             // make a shallow copy of listeners so callback is not executed under lock
             final ArrayList<PrefDevListenerInfo> prefDevListeners;
             synchronized (mPrefDevListenerLock) {
@@ -4571,7 +4578,7 @@ public class AudioManager {
      */
     @SystemApi
     @RequiresPermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING)
-    public @NonNull List<AudioDevice> getDevicesForAttributes(
+    public @NonNull List<AudioDeviceAttributes> getDevicesForAttributes(
             @NonNull AudioAttributes attributes) {
         Objects.requireNonNull(attributes);
         final IAudioService service = getService();

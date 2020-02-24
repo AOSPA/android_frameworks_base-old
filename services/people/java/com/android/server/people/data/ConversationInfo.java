@@ -137,6 +137,11 @@ public class ConversationInfo {
         return hasShortcutFlags(ShortcutInfo.FLAG_LONG_LIVED);
     }
 
+    /** Whether the shortcut for this conversation is cached in Shortcut Service. */
+    public boolean isShortcutCached() {
+        return hasShortcutFlags(ShortcutInfo.FLAG_CACHED);
+    }
+
     /** Whether this conversation is marked as important by the user. */
     public boolean isImportant() {
         return hasConversationFlags(FLAG_IMPORTANT);
@@ -213,6 +218,9 @@ public class ConversationInfo {
         if (isShortcutLongLived()) {
             sb.append("Liv");
         }
+        if (isShortcutCached()) {
+            sb.append("Cac");
+        }
         sb.append("]");
         sb.append(", conversationFlags=0x").append(Integer.toHexString(mConversationFlags));
         sb.append(" [");
@@ -266,6 +274,10 @@ public class ConversationInfo {
         }
         protoOutputStream.write(ConversationInfoProto.SHORTCUT_FLAGS, mShortcutFlags);
         protoOutputStream.write(ConversationInfoProto.CONVERSATION_FLAGS, mConversationFlags);
+        if (mContactPhoneNumber != null) {
+            protoOutputStream.write(ConversationInfoProto.CONTACT_PHONE_NUMBER,
+                    mContactPhoneNumber);
+        }
     }
 
     /** Reads from {@link ProtoInputStream} and constructs a {@link ConversationInfo}. */
@@ -306,6 +318,10 @@ public class ConversationInfo {
                 case (int) ConversationInfoProto.CONVERSATION_FLAGS:
                     builder.setConversationFlags(protoInputStream.readInt(
                             ConversationInfoProto.CONVERSATION_FLAGS));
+                    break;
+                case (int) ConversationInfoProto.CONTACT_PHONE_NUMBER:
+                    builder.setContactPhoneNumber(protoInputStream.readString(
+                            ConversationInfoProto.CONTACT_PHONE_NUMBER));
                     break;
                 default:
                     Slog.w(TAG, "Could not read undefined field: "

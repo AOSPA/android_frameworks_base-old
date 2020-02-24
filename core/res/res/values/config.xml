@@ -59,6 +59,7 @@
         <item><xliff:g id="id">@string/status_bar_airplane</xliff:g></item>
         <item><xliff:g id="id">@string/status_bar_battery</xliff:g></item>
         <item><xliff:g id="id">@string/status_bar_sensors_off</xliff:g></item>
+        <item><xliff:g id="id">@string/status_bar_screen_record</xliff:g></item>
     </string-array>
 
     <string translatable="false" name="status_bar_rotate">rotate</string>
@@ -94,6 +95,7 @@
     <string translatable="false" name="status_bar_camera">camera</string>
     <string translatable="false" name="status_bar_airplane">airplane</string>
     <string translatable="false" name="status_bar_sensors_off">sensors_off</string>
+    <string translatable="false" name="status_bar_screen_record">screen_record</string>
 
     <!-- Flag indicating whether the surface flinger has limited
          alpha compositing functionality in hardware.  If set, the window
@@ -272,7 +274,7 @@
     <!-- When true, Android uses the PAC implementation included in WebView to handle
          networks with PAC scripts.
          When false, Android's own implementation of libpac is used.-->
-    <bool name ="config_useWebViewPacProcessor">false</bool>
+    <bool name ="config_useWebViewPacProcessor">true</bool>
 
     <!-- XXXXX NOTE THE FOLLOWING RESOURCES USE THE WRONG NAMING CONVENTION.
          Please don't copy them, copy anything else. -->
@@ -2461,6 +2463,12 @@
          rmem_min,rmem_def,rmem_max,wmem_min,wmem_def,wmem_max -->
     <string name="config_ethernet_tcp_buffers" translatable="false">524288,1048576,3145728,524288,1048576,2097152</string>
 
+    <!-- What source to use to estimate link upstream and downstream bandwidth capacities.
+         Default is carrier_config, but it should be set to modem if the modem is returning
+         predictive (instead of instantaneous) bandwidth estimate.
+         Values are carrier_config and modem. -->
+    <string name="config_bandwidthEstimateSource">carrier_config</string>
+
     <!-- Whether WiFi display is supported by this device.
          There are many prerequisites for this feature to work correctly.
          Here are a few of them:
@@ -2833,13 +2841,13 @@
          "logout" =  Logout the current user
          -->
     <string-array translatable="false" name="config_globalActionsList">
+        <item>emergency</item>
         <item>power</item>
         <item>restart</item>
         <item>lockdown</item>
         <item>logout</item>
         <item>bugreport</item>
         <item>screenshot</item>
-        <item>emergency</item>
     </string-array>
 
     <!-- Number of milliseconds to hold a wake lock to ensure that drawing is fully
@@ -3536,10 +3544,9 @@
      mode -->
     <string-array translatable="false" name="config_priorityOnlyDndExemptPackages">
         <item>com.android.dialer</item>
+        <item>com.android.systemui</item>
+        <item>android</item>
     </string-array>
-
-    <!-- An array of packages which can listen for notifications on low ram devices. -->
-    <string-array translatable="false" name="config_allowedManagedServicesOnLowRamDevices" />
 
     <!-- The default value for transition animation scale found in developer settings.
          1.0 corresponds to 1x animator scale, 0 means that there will be no transition

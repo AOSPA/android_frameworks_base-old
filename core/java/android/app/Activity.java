@@ -126,6 +126,7 @@ import android.view.autofill.AutofillManager;
 import android.view.autofill.AutofillManager.AutofillClient;
 import android.view.autofill.AutofillPopupWindow;
 import android.view.autofill.IAutofillWindowPresenter;
+import android.view.contentcapture.ContentCaptureContext;
 import android.view.contentcapture.ContentCaptureManager;
 import android.view.contentcapture.ContentCaptureManager.ContentCaptureClient;
 import android.widget.AdapterView;
@@ -1056,7 +1057,10 @@ public class Activity extends ContextThemeWrapper
         } catch (RemoteException re) {
             re.rethrowFromSystemServer();
         }
-        // TODO(b/147750355): Pass locusId and bundle to the Content Capture.
+        // If locusId is not null pass it to the Content Capture.
+        if (locusId != null) {
+            setLocusContextToContentCapture(locusId, bundle);
+        }
     }
 
     /** Return the application that owns this activity. */
@@ -1207,6 +1211,19 @@ public class Activity extends ContextThemeWrapper
         } finally {
             Trace.traceEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER);
         }
+    }
+
+    private void setLocusContextToContentCapture(LocusId locusId, @Nullable Bundle bundle) {
+        final ContentCaptureManager cm = getContentCaptureManager();
+        if (cm == null) return;
+
+        ContentCaptureContext.Builder contentCaptureContextBuilder =
+                new ContentCaptureContext.Builder(locusId);
+        if (bundle != null) {
+            contentCaptureContextBuilder.setExtras(bundle);
+        }
+        cm.getMainContentCaptureSession().setContentCaptureContext(
+                contentCaptureContextBuilder.build());
     }
 
     @Override
@@ -1890,6 +1907,7 @@ public class Activity extends ContextThemeWrapper
             if (!mAutoFillIgnoreFirstResumePause) {
                 View focus = getCurrentFocus();
                 if (focus != null && focus.canNotifyAutofillEnterExitEvent()) {
+                    // TODO(b/148815880): Bring up keyboard if resumed from inline authentication.
                     // TODO: in Activity killed/recreated case, i.e. SessionLifecycleTest#
                     // testDatasetVisibleWhileAutofilledAppIsLifecycled: the View's initial
                     // window visibility after recreation is INVISIBLE in onResume() and next frame
@@ -8450,7 +8468,7 @@ public class Activity extends ContextThemeWrapper
     /** @hide */
     @Override
     public final void autofillClientAuthenticate(int authenticationId, IntentSender intent,
-            Intent fillInIntent) {
+            Intent fillInIntent, boolean authenticateInline) {
         try {
             startIntentSenderForResultInner(intent, AUTO_FILL_AUTH_WHO_PREFIX,
                     authenticationId, fillInIntent, 0, 0, null);

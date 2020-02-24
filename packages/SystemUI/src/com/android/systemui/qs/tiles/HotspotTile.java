@@ -17,11 +17,11 @@
 package com.android.systemui.qs.tiles;
 
 import android.annotation.Nullable;
-import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.net.wifi.WifiManager;
 import android.os.UserManager;
+import android.provider.Settings;
 import android.service.quicksettings.Tile;
 import android.util.Log;
 import android.widget.Switch;
@@ -38,9 +38,6 @@ import javax.inject.Inject;
 
 /** Quick settings tile: Hotspot **/
 public class HotspotTile extends QSTileImpl<BooleanState> {
-    private static final Intent TETHER_SETTINGS = new Intent().setComponent(new ComponentName(
-            "com.android.settings", "com.android.settings.TetherSettings"));
-
     private final Icon mEnabledStatic = ResourceIcon.get(R.drawable.ic_hotspot);
     private final Icon mWifi4EnabledStatic = ResourceIcon.get(R.drawable.ic_wifi_4_hotspot);
     private final Icon mWifi5EnabledStatic = ResourceIcon.get(R.drawable.ic_wifi_5_hotspot);
@@ -86,7 +83,7 @@ public class HotspotTile extends QSTileImpl<BooleanState> {
 
     @Override
     public Intent getLongClickIntent() {
-        return new Intent(TETHER_SETTINGS);
+        return new Intent(Settings.ACTION_TETHER_SETTINGS);
     }
 
     @Override

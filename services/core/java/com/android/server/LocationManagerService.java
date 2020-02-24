@@ -216,11 +216,6 @@ public class LocationManagerService extends ILocationManager.Stub {
     private String mComboNlpScreenMarker;
     private PowerManager mPowerManager;
 
-    // TODO: sharing a location fudger with mock providers can leak information as the mock provider
-    //   can be used to retrieve offset information. the fudger should likely be reset whenever mock
-    //   providers are added or removed
-    private LocationFudger mLocationFudger;
-
     private GeofenceManager mGeofenceManager;
     private GeocoderProxy mGeocodeProvider;
 
@@ -288,8 +283,6 @@ public class LocationManagerService extends ILocationManager.Stub {
             mPackageManager = mContext.getPackageManager();
             mAppOps = mContext.getSystemService(AppOpsManager.class);
             mPowerManager = mContext.getSystemService(PowerManager.class);
-
-            mLocationFudger = new LocationFudger(mSettingsHelper.getCoarseLocationAccuracyM());
             mGeofenceManager = new GeofenceManager(mContext, mSettingsHelper);
 
             PowerManagerInternal localPowerManager =
@@ -673,6 +666,8 @@ public class LocationManagerService extends ILocationManager.Stub {
 
         private final String mName;
 
+        private final LocationFudger mLocationFudger;
+
         // if the provider is enabled for a given user id - null or not present means unknown
         @GuardedBy("mLock")
         private final SparseArray<Boolean> mEnabled;
@@ -690,6 +685,7 @@ public class LocationManagerService extends ILocationManager.Stub {
 
         private LocationProviderManager(String name) {
             mName = name;
+            mLocationFudger = new LocationFudger(mSettingsHelper.getCoarseLocationAccuracyM());
             mEnabled = new SparseArray<>(2);
             mLastLocation = new SparseArray<>(2);
             mLastCoarseLocation = new SparseArray<>(2);
@@ -714,7 +710,9 @@ public class LocationManagerService extends ILocationManager.Stub {
             synchronized (mLock) {
                 mProvider.setMockProvider(provider);
 
-                // when removing a mock provider, also clear any mock last locations
+                // when removing a mock provider, also clear any mock last locations and reset the
+                // location fudger. the mock provider could have been used to infer the current
+                // location fudger offsets.
                 if (provider == null) {
                     for (int i = 0; i < mLastLocation.size(); i++) {
                         Location lastLocation = mLastLocation.valueAt(i);
@@ -729,6 +727,8 @@ public class LocationManagerService extends ILocationManager.Stub {
                             mLastCoarseLocation.setValueAt(i, null);
                         }
                     }
+
+                    mLocationFudger.resetOffsets();
                 }
             }
         }
@@ -870,10 +870,6 @@ public class LocationManagerService extends ILocationManager.Stub {
             if (oldState.allowed != newState.allowed) {
                 onEnabledChangedLocked(UserHandle.USER_ALL);
             }
-        }
-
-        public void requestSetAllowed(boolean allowed) {
-            mProvider.requestSetAllowed(allowed);
         }
 
         public void onUserStarted(int userId) {
@@ -1462,7 +1458,7 @@ public class LocationManagerService extends ILocationManager.Stub {
         }
 
         throw new SecurityException("uid " + Binder.getCallingUid() + " does not have "
-            + ACCESS_COARSE_LOCATION + " or " + ACCESS_FINE_LOCATION + ".");
+                + ACCESS_COARSE_LOCATION + " or " + ACCESS_FINE_LOCATION + ".");
     }
 
     private void enforceCallingOrSelfPackageName(String packageName) {
@@ -1840,8 +1836,8 @@ public class LocationManagerService extends ILocationManager.Stub {
 
             // Update statistics for historical location requests by package/provider
             mRequestStatistics.startRequesting(
-                    mReceiver.mCallerIdentity.mPackageName, provider, request.getInterval(),
-                    mIsForegroundUid);
+                    mReceiver.mCallerIdentity.mPackageName, mReceiver.mCallerIdentity.mFeatureId,
+                    provider, request.getInterval(), mIsForegroundUid);
         }
 
         /**
@@ -1850,7 +1846,8 @@ public class LocationManagerService extends ILocationManager.Stub {
         private void updateForeground(boolean isForeground) {
             mIsForegroundUid = isForeground;
             mRequestStatistics.updateForeground(
-                    mReceiver.mCallerIdentity.mPackageName, mProvider, isForeground);
+                    mReceiver.mCallerIdentity.mPackageName, mReceiver.mCallerIdentity.mFeatureId,
+                    mProvider, isForeground);
         }
 
         /**
@@ -1858,7 +1855,8 @@ public class LocationManagerService extends ILocationManager.Stub {
          */
         private void disposeLocked(boolean removeReceiver) {
             String packageName = mReceiver.mCallerIdentity.mPackageName;
-            mRequestStatistics.stopRequesting(packageName, mProvider);
+            mRequestStatistics.stopRequesting(packageName, mReceiver.mCallerIdentity.mFeatureId,
+                    mProvider);
 
             mLocationUsageLogger.logLocationApiUsage(
                     LocationStatsEnums.USAGE_ENDED,
@@ -1893,6 +1891,10 @@ public class LocationManagerService extends ILocationManager.Stub {
             StringBuilder b = new StringBuilder("UpdateRecord[");
             b.append(mProvider).append(" ");
             b.append(mReceiver.mCallerIdentity.mPackageName);
+            String featureId = mReceiver.mCallerIdentity.mFeatureId;
+            if (featureId != null) {
+                b.append(" ").append(featureId).append(" ");
+            }
             b.append("(").append(mReceiver.mCallerIdentity.mUid);
             if (mIsForegroundUid) {
                 b.append(" foreground");
@@ -2896,7 +2898,7 @@ public class LocationManagerService extends ILocationManager.Stub {
             for (Map.Entry<PackageProviderKey, PackageStatistics> entry
                     : sorted.entrySet()) {
                 PackageProviderKey key = entry.getKey();
-                ipw.println(key.providerName + ": " + key.packageName + ": " + entry.getValue());
+                ipw.println(key.mPackageName + ": " + key.mProviderName + ": " + entry.getValue());
             }
             ipw.decreaseIndent();
 
@@ -2933,18 +2935,6 @@ public class LocationManagerService extends ILocationManager.Stub {
     }
 
     private class LocalService extends LocationManagerInternal {
-
-        @Override
-        public void requestSetProviderAllowed(String provider, boolean allowed) {
-            Preconditions.checkArgument(provider != null, "invalid null provider");
-
-            synchronized (mLock) {
-                LocationProviderManager manager = getLocationProviderManager(provider);
-                if (manager != null) {
-                    manager.requestSetAllowed(allowed);
-                }
-            }
-        }
 
         @Override
         public boolean isProviderEnabledForUser(@NonNull String provider, int userId) {
