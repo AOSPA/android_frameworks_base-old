@@ -277,11 +277,6 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
         {
             PbapProfile.setEnabled(mDevice, false);
         }
-        MapProfile MapProfile = mProfileManager.getMapProfile();
-        if (MapProfile != null && isConnectedProfile(MapProfile))
-        {
-            MapProfile.setEnabled(mDevice, false);
-        }
     }
 
     public void disconnect(LocalBluetoothProfile profile) {
