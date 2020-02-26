@@ -541,7 +541,7 @@ final class LocalDisplayAdapter extends DisplayAdapter {
                     mInfo.displayCutout = DisplayCutout.fromResourcesRectApproximation(res,
                             mInfo.width, mInfo.height);
                 } else if (isBuiltIn) {
-                    mInfo.type = Display.TYPE_BUILT_IN;
+                    mInfo.type = Display.TYPE_INTERNAL;
                     mInfo.touch = DisplayDeviceInfo.TOUCH_INTERNAL;
                     mInfo.name = getContext().getResources().getString(
                             com.android.internal.R.string.display_manager_built_in_display_name);
