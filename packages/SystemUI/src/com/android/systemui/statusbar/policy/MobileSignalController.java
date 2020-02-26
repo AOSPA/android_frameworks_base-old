@@ -415,8 +415,8 @@ public class MobileSignalController extends SignalController<
         if ( (mCurrentState.voiceCapable || mCurrentState.videoCapable)
                 &&  mCurrentState.imsRegistered ) {
             resId = R.drawable.ic_volte;
-        }else if ( (mDataNetType == TelephonyManager.NETWORK_TYPE_LTE
-                        || mDataNetType == TelephonyManager.NETWORK_TYPE_LTE_CA)
+        }else if ( (mDisplayInfo.getNetworkType() == TelephonyManager.NETWORK_TYPE_LTE
+                        || mDisplayInfo.getNetworkType() == TelephonyManager.NETWORK_TYPE_LTE_CA)
                     && voiceNetTye  == TelephonyManager.NETWORK_TYPE_UNKNOWN) {
             resId = R.drawable.ic_volte_no_voice;
         }
@@ -519,8 +519,8 @@ public class MobileSignalController extends SignalController<
         int volteIcon = mConfig.showVolteIcon && isVolteSwitchOn() ? getVolteResId() : 0;
         if (DEBUG) {
             Log.d(mTag, "notifyListeners mConfig.alwaysShowNetworkTypeIcon="
-                    + mConfig.alwaysShowNetworkTypeIcon + "  mDataNetType:" + mDataNetType +
-                    "/" + TelephonyManager.getNetworkTypeName(mDataNetType)
+                    + mConfig.alwaysShowNetworkTypeIcon + "  getNetworkType:" + mDisplayInfo.getNetworkType() +
+                    "/" + TelephonyManager.getNetworkTypeName(mDisplayInfo.getNetworkType())
                     + " voiceNetType=" + getVoiceNetworkType() + "/"
                     + TelephonyManager.getNetworkTypeName(getVoiceNetworkType())
                     + " showDataIcon=" + showDataIcon
@@ -710,7 +710,7 @@ public class MobileSignalController extends SignalController<
             mCurrentState.iconGroup = mDefaultIcons;
         }
 
-        if ( mDataNetType == TelephonyManager.NETWORK_TYPE_NR ) {
+        if ( mDisplayInfo.getNetworkType() == TelephonyManager.NETWORK_TYPE_NR ) {
             if (mFiveGState.isNrIconTypeValid()) {
                 mCurrentState.iconGroup = mFiveGState.getIconGroup();
                 if (DEBUG) {
@@ -776,7 +776,7 @@ public class MobileSignalController extends SignalController<
                 int iconType = TelephonyManager.NETWORK_TYPE_UNKNOWN;
                 if (mCurrentState.connected) {
                     if (isDataNetworkTypeAvailable()) {
-                        iconType = mDataNetType;
+                        iconType = mDisplayInfo.getNetworkType();
                     } else {
                         iconType = getVoiceNetworkType();
                     }
@@ -812,7 +812,7 @@ public class MobileSignalController extends SignalController<
 
     private boolean isDataNetworkTypeAvailable() {
         boolean isAvailable = true;
-        if ( mDataNetType == TelephonyManager.NETWORK_TYPE_UNKNOWN ) {
+        if ( mDisplayInfo.getNetworkType() == TelephonyManager.NETWORK_TYPE_UNKNOWN ) {
             isAvailable = false;
         }else {
             int dataType = getDataNetworkType();
@@ -955,7 +955,7 @@ public class MobileSignalController extends SignalController<
                 mCellSignalStrengthNr = null;
             }
 
-            if ( mDataNetType == TelephonyManager.NETWORK_TYPE_NR
+            if ( mDisplayInfo.getNetworkType() == TelephonyManager.NETWORK_TYPE_NR
                     && !isCellSignalStrengthNrValid()
                     && mClient != null){
                 mClient.queryNrSignalStrength(mSubscriptionInfo.getSimSlotIndex());
