@@ -59,7 +59,7 @@ public final class CellIdentityNr extends CellIdentity {
         mTac = CellInfo.UNAVAILABLE;
         mNci = CellInfo.UNAVAILABLE;
         mBands = Collections.emptyList();
-        mAdditionalPlmns = Collections.emptyList();
+        mAdditionalPlmns = new ArraySet();
     }
 
     /**
