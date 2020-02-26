@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "d250c749_3681b921",
+        "filename": "packages/SystemUI/src/com/android/systemui/aospa/NotificationLightsView.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 76,
+      "author": {
+        "id": 1000178
+      },
+      "writtenOn": "2020-02-26T10:39:19Z",
+      "side": 1,
+      "message": "Why is this commented out? It controls the whole class",
+      "revId": "8b6caae797585800b23030b87af9248f01782e16",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    }
+  ]
+}
