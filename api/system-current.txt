@@ -8074,15 +8074,15 @@ package android.net.wifi.nl80211 {
   }
 
   public static class WifiNl80211Manager.WifiGenerationCapabilities {
-    ctor public WifiNl80211Manager.WifiGenerationCapabilities();
-    field public boolean htSupport2g;
-    field public boolean htSupport5g;
-    field public boolean sapHeSupport2g;
-    field public boolean sapHeSupport5g;
-    field public boolean staHeSupport2g;
-    field public boolean staHeSupport5g;
-    field public boolean vhtSupport2g;
-    field public boolean vhtSupport5g;
+    ctor public WifiNl80211Manager.WifiGenerationCapabilities(boolean, boolean, boolean, boolean, boolean, boolean, boolean, boolean);
+    field public final boolean htSupport2g;
+    field public final boolean htSupport5g;
+    field public final boolean sapHeSupport2g;
+    field public final boolean sapHeSupport5g;
+    field public final boolean staHeSupport2g;
+    field public final boolean staHeSupport5g;
+    field public final boolean vhtSupport2g;
+    field public final boolean vhtSupport5g;
   }
 
 }

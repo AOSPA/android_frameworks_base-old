@@ -1339,32 +1339,44 @@ public class WifiNl80211Manager {
 
         /** @hide */
         @SystemApi
-        public boolean htSupport2g = false;
+        public final boolean htSupport2g;
         /** @hide */
         @SystemApi
-        public boolean vhtSupport2g = false;
+        public final boolean vhtSupport2g;
         /** @hide */
         @SystemApi
-        public boolean staHeSupport2g = false;
+        public final boolean staHeSupport2g;
         /** @hide */
         @SystemApi
-        public boolean sapHeSupport2g = false;
+        public final boolean sapHeSupport2g;
         /** @hide */
         @SystemApi
-        public boolean htSupport5g = false;
+        public final boolean htSupport5g;
         /** @hide */
         @SystemApi
-        public boolean vhtSupport5g = false;
+        public final boolean vhtSupport5g;
         /** @hide */
         @SystemApi
-        public boolean staHeSupport5g = false;
+        public final boolean staHeSupport5g;
         /** @hide */
         @SystemApi
-        public boolean sapHeSupport5g = false;
+        public final boolean sapHeSupport5g;
 
         /** @hide */
         @SystemApi
-        public WifiGenerationCapabilities() {
+        public WifiGenerationCapabilities(
+                boolean htSupport2g, boolean vhtSupport2g,
+                boolean staHeSupport2g, boolean sapHeSupport2g,
+                boolean htSupport5g, boolean vhtSupport5g,
+                boolean staHeSupport5g, boolean sapHeSupport5g) {
+            this.htSupport2g = htSupport2g;
+            this.vhtSupport2g = vhtSupport2g;
+            this.staHeSupport2g = staHeSupport2g;
+            this.sapHeSupport2g = sapHeSupport2g;
+            this.htSupport5g = htSupport5g;
+            this.vhtSupport5g = vhtSupport5g;
+            this.staHeSupport5g = staHeSupport5g;
+            this.sapHeSupport5g = sapHeSupport5g;
         }
     }
 
@@ -1393,32 +1405,43 @@ public class WifiNl80211Manager {
             return null;
         }
 
-        WifiGenerationCapabilities wifiGenerationCapa = new WifiGenerationCapabilities();
+        boolean htSupport2g = false;
+        boolean vhtSupport2g = false;
+        boolean staHeSupport2g = false;
+        boolean sapHeSupport2g = false;
+        boolean htSupport5g = false;
+        boolean vhtSupport5g = false;
+        boolean staHeSupport5g = false;
+        boolean sapHeSupport5g = false;
 
         if ((wifiGenerationCapaMask & (1 << IWificond.QC_2G_HT_SUPPORT)) != 0) {
-            wifiGenerationCapa.htSupport2g = true;
+            htSupport2g = true;
         }
         if ((wifiGenerationCapaMask & (1 << IWificond.QC_2G_VHT_SUPPORT)) != 0) {
-            wifiGenerationCapa.vhtSupport2g = true;
+            vhtSupport2g = true;
         }
         if ((wifiGenerationCapaMask & (1 << IWificond.QC_2G_STA_HE_SUPPORT)) != 0) {
-            wifiGenerationCapa.staHeSupport2g = true;
+            staHeSupport2g = true;
         }
         if ((wifiGenerationCapaMask & (1 << IWificond.QC_2G_SAP_HE_SUPPORT)) != 0) {
-            wifiGenerationCapa.sapHeSupport2g = true;
+            sapHeSupport2g = true;
         }
         if ((wifiGenerationCapaMask & (1 << IWificond.QC_5G_HT_SUPPORT)) != 0) {
-            wifiGenerationCapa.htSupport5g = true;
+            htSupport5g = true;
         }
         if ((wifiGenerationCapaMask & (1 << IWificond.QC_5G_VHT_SUPPORT)) != 0) {
-            wifiGenerationCapa.vhtSupport5g = true;
+            vhtSupport5g = true;
         }
         if ((wifiGenerationCapaMask & (1 << IWificond.QC_5G_STA_HE_SUPPORT)) != 0) {
-            wifiGenerationCapa.staHeSupport5g = true;
+            staHeSupport5g = true;
         }
         if ((wifiGenerationCapaMask & (1 << IWificond.QC_5G_SAP_HE_SUPPORT)) != 0) {
-            wifiGenerationCapa.sapHeSupport5g = true;
+            sapHeSupport5g = true;
         }
+
+        WifiGenerationCapabilities wifiGenerationCapa = new WifiGenerationCapabilities(
+                htSupport2g, vhtSupport2g, staHeSupport2g, sapHeSupport2g,
+                htSupport5g, vhtSupport5g, staHeSupport5g, sapHeSupport5g);
 
         return wifiGenerationCapa;
     }
