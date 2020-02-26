@@ -703,6 +703,9 @@ public class MobileSignalController extends SignalController<
             }
         }
 
+        // TODO(b/150319502): Determine what to do with nr5GIconGroup
+        MobileIconGroup nr5GIconGroup = null;
+
         String iconKey = getIconKey();
         if (mNetworkToIconLookup.get(iconKey) != null) {
             mCurrentState.iconGroup = mNetworkToIconLookup.get(iconKey);
