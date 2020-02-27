@@ -870,7 +870,8 @@ public final class SurfaceControl implements Parcelable {
 
     private SurfaceControl(Parcel in) {
         readFromParcel(in);
-        mCloseGuard.open("release");
+        // TODO(b/150410543) Re-enable CloseGuard.
+        //mCloseGuard.open("release");
     }
 
     /**
