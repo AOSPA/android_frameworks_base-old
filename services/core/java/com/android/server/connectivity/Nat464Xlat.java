@@ -35,7 +35,6 @@ import android.util.Slog;
 
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.util.ArrayUtils;
-import com.android.server.NetPluginDelegate;
 import com.android.server.net.BaseNetworkObserver;
 
 import java.net.Inet4Address;
@@ -89,12 +88,6 @@ public class Nat464Xlat extends BaseNetworkObserver {
     private Inet6Address mIPv6Address;
     private State mState = State.IDLE;
 
-    /**
-    * Used to determine if Android XLAT is required or not
-    * which defaults to false
-    */
-    private static final String xlatRequired = "persist.vendor.net.doxlat";
-
     public Nat464Xlat(NetworkAgentInfo nai, INetd netd, IDnsResolver dnsResolver,
             INetworkManagementService nmService) {
         mDnsResolver = dnsResolver;
@@ -128,17 +121,13 @@ public class Nat464Xlat extends BaseNetworkObserver {
         final boolean skip464xlat = (nai.netAgentConfig() != null)
                 && nai.netAgentConfig().skip464xlat;
 
-        boolean androidXlatEnabled = true;
-        if(netType == ConnectivityManager.TYPE_MOBILE) {
-            final String xlatConfigValue = NetPluginDelegate.getConfig(xlatRequired, "true");
-            if(xlatConfigValue != null && xlatConfigValue.equals("false")){
-                Slog.i(TAG, "Android Xlat is disabled");
-                androidXlatEnabled = false;
-            }
+        boolean doXlat = SystemProperties.getBoolean("persist.vendor.net.doxlat", true);
+        if(!doXlat) {
+            Slog.i(TAG, "Android Xlat is disabled");
         }
 
-        return supported && connected && isIpv6OnlyNetwork &&
-                !skip464xlat && androidXlatEnabled;
+        return supported && connected && isIpv6OnlyNetwork && !skip464xlat
+            && ((netType == ConnectivityManager.TYPE_MOBILE) ? doXlat : true);
     }
 
     /**

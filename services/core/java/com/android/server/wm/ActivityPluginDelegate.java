@@ -117,7 +117,7 @@ public class ActivityPluginDelegate {
     private static synchronized boolean loadActivityExtJar() {
         final String realProvider = "com.qualcomm.qti."+
                                     "activityextension.ActivityNotifier";
-        final String realProviderPath = Environment.getRootDirectory().
+        final String realProviderPath = Environment.getSystemExtDirectory().
             getAbsolutePath() + "/framework/ActivityExt.jar";
 
         if (activityServiceClass != null && activityServiceObj != null) {
