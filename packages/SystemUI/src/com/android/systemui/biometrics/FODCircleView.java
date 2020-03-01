@@ -83,6 +83,7 @@ public class FODCircleView extends ImageView {
     private boolean mTouchedOutside;
     private boolean mCanUnlockWithFp;
     private boolean mFpDisabled;
+    private boolean mShouldRemoveIconOnAOD;
 
     private BoostFramework mPerfBoost;
     private boolean mIsPerfLockAcquired = false;
@@ -151,9 +152,16 @@ public class FODCircleView extends ImageView {
             if (dreaming) {
                 mBurnInProtectionTimer = new Timer();
                 mBurnInProtectionTimer.schedule(new BurnInProtectionTask(), 0, 60 * 1000);
+                if (mShouldRemoveIconOnAOD) {
+                    resetFODIcon(false);
+                }
             } else if (mBurnInProtectionTimer != null) {
                 mBurnInProtectionTimer.cancel();
                 updatePosition();
+            }
+
+            if (mShouldRemoveIconOnAOD && !dreaming) {
+                resetFODIcon(true);
             }
         }
 
@@ -218,6 +226,9 @@ public class FODCircleView extends ImageView {
                 // animate to new alpha value
                 show();
             }
+
+            mShouldRemoveIconOnAOD = Settings.System.getInt(mContext.getContentResolver(),
+                    Settings.System.SCREEN_OFF_FOD, 0) != 0;
         }
 
         @Override
@@ -422,13 +433,29 @@ public class FODCircleView extends ImageView {
     public void hideCircle() {
         mIsCircleShowing = false;
 
-        setImageResource(R.drawable.fod_icon_default);
+        setFODIcon();
         invalidate();
 
         dispatchRelease();
         setDim(false);
 
         setKeepScreenOn(false);
+    }
+
+    private void resetFODIcon(boolean show) {
+        if (show) {
+            setFODIcon();
+        } else {
+            this.setImageResource(0);
+        }
+    }
+
+    private void setFODIcon() {
+        if (mIsDreaming && mShouldRemoveIconOnAOD) {
+            return;
+        }
+
+        this.setImageResource(R.drawable.fod_icon_default);
     }
 
     public void show() {
