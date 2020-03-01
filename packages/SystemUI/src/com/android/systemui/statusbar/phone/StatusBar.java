@@ -179,6 +179,7 @@ import com.android.systemui.recents.ScreenPinningRequest;
 import com.android.systemui.shared.plugins.PluginManager;
 import com.android.systemui.shared.system.WindowManagerWrapper;
 import com.android.systemui.stackdivider.Divider;
+import com.android.systemui.statusbar.AODDimView;
 import com.android.systemui.statusbar.AutoHideUiElement;
 import com.android.systemui.statusbar.BackDropView;
 import com.android.systemui.statusbar.CommandQueue;
@@ -441,6 +442,8 @@ public class StatusBar extends SystemUI implements DemoMode,
 
     private final DisplayMetrics mDisplayMetrics;
 
+    private AODDimView mAODDimView;
+
     // XXX: gesture research
     private final GestureRecorder mGestureRec = DEBUG_GESTURES
         ? new GestureRecorder("/sdcard/statusbar_gestures.dat")
@@ -654,6 +657,10 @@ public class StatusBar extends SystemUI implements DemoMode,
                     mIsDreaming = dreaming;
                     if (dreaming) {
                         maybeEscalateHeadsUp();
+                    }
+                    if (mAODDimView != null) {
+                        if (dreaming) mAODDimView.setVisible(true, true);
+                        if (!dreaming) mAODDimView.setVisible(false);
                     }
                 }
 
@@ -923,6 +930,9 @@ public class StatusBar extends SystemUI implements DemoMode,
         // Set up the initial notification state. This needs to happen before CommandQueue.disable()
         setUpPresenter();
 
+        mCustomSettingsObserver.observe();
+        mCustomSettingsObserver.update();
+
         if (containsType(result.mTransientBarTypes, ITYPE_STATUS_BAR)) {
             showTransientUnchecked();
         }
@@ -979,7 +989,7 @@ public class StatusBar extends SystemUI implements DemoMode,
         mKeyguardUpdateMonitor.registerCallback(mUpdateCallback);
         mDozeServiceHost.initialize(this, mNotificationIconAreaController,
                 mStatusBarKeyguardViewManager, mNotificationShadeWindowViewController,
-                mNotificationPanelViewController, mAmbientIndicationContainer);
+                mNotificationPanelViewController, mAmbientIndicationContainer, mNotificationShadeWindowView);
 
         mConfigurationController.addCallback(this);
 
@@ -1060,6 +1070,7 @@ public class StatusBar extends SystemUI implements DemoMode,
                 R.id.notification_stack_scroller);
         NotificationListContainer notifListContainer = (NotificationListContainer) mStackScroller;
         mNotificationLogger.setUpWithContainer(notifListContainer);
+        mAODDimView = mNotificationShadeWindowView.findViewById(R.id.aod_screen_dim);
 
         // TODO: make this injectable. Currently that would create a circular dependency between
         // NotificationIconAreaController and StatusBar.
@@ -1995,6 +2006,36 @@ public class StatusBar extends SystemUI implements DemoMode,
     @VisibleForTesting
     void setUserSetupForTest(boolean userSetup) {
         mUserSetup = userSetup;
+    }
+
+    private CustomSettingsObserver mCustomSettingsObserver = new CustomSettingsObserver(mHandler);
+    private class CustomSettingsObserver extends ContentObserver {
+        CustomSettingsObserver(Handler handler) {
+            super(handler);
+        }
+        void observe() {
+            ContentResolver resolver = mContext.getContentResolver();
+            resolver.registerContentObserver(Settings.System.getUriFor(
+                    Settings.System.SCREEN_OFF_FOD),
+                    false, this, UserHandle.USER_ALL);
+        }
+
+        @Override
+        public void onChange(boolean selfChange, Uri uri) {
+            if (uri.equals(Settings.System.getUriFor(
+                    Settings.System.SCREEN_OFF_FOD))) {
+                updateAODDimView();
+            }
+        }
+
+        public void update() {
+            updateAODDimView();
+        }
+    }
+
+    private void updateAODDimView() {
+        mAODDimView.setEnabled(Settings.System.getIntForUser(mContext.getContentResolver(),
+            Settings.System.SCREEN_OFF_FOD, 0, UserHandle.USER_CURRENT) != 0);
     }
 
     /**

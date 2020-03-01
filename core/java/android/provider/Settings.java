@@ -5010,6 +5010,12 @@ public final class Settings {
        public static final String GESTURE_TWO_FINGER_SWIPE = "gesture_two_finger_swipe";
 
         /**
+         * Screen off FOD
+         * @hide
+         */
+        public static final String SCREEN_OFF_FOD = "screen_off_fod";
+
+        /**
          * Keys we no longer back up under the current schema, but want to continue to
          * process when restoring historical backup datasets.
          *
