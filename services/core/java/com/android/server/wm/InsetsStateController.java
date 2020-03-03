@@ -168,7 +168,6 @@ class InsetsStateController {
             mLastState.set(mState, true /* copySources */);
             notifyInsetsChanged();
         }
-        getImeSourceProvider().onPostInsetsDispatched();
     }
 
     void onInsetsModified(InsetsControlTarget windowState, InsetsState state) {
@@ -183,6 +182,7 @@ class InsetsStateController {
         }
         if (changed) {
             notifyInsetsChanged();
+            mDisplayContent.getDisplayPolicy().updateSystemUiVisibilityLw();
         }
     }
 

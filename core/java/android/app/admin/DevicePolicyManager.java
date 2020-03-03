@@ -33,6 +33,7 @@ import android.annotation.SuppressLint;
 import android.annotation.SystemApi;
 import android.annotation.SystemService;
 import android.annotation.TestApi;
+import android.annotation.UserHandleAware;
 import android.annotation.UserIdInt;
 import android.annotation.WorkerThread;
 import android.app.Activity;
@@ -1416,6 +1417,7 @@ public class DevicePolicyManager {
      * @see #setFactoryResetProtectionPolicy
      * @hide
      */
+    @RequiresPermission(android.Manifest.permission.MANAGE_FACTORY_RESET_PROTECTION)
     @SystemApi
     public static final String ACTION_RESET_PROTECTION_POLICY_CHANGED =
             "android.app.action.RESET_PROTECTION_POLICY_CHANGED";
@@ -4741,7 +4743,8 @@ public class DevicePolicyManager {
      * @hide
      */
     public static final int ORG_OWNED_PROFILE_KEYGUARD_FEATURES_PARENT_ONLY =
-            KEYGUARD_DISABLE_SECURE_CAMERA;
+            DevicePolicyManager.KEYGUARD_DISABLE_SECURE_CAMERA
+                    | DevicePolicyManager.KEYGUARD_DISABLE_SECURE_NOTIFICATIONS;
 
     /**
      * Keyguard features that when set on a normal or organization-owned managed profile, have
@@ -5738,6 +5741,25 @@ public class DevicePolicyManager {
     }
 
     /**
+     * Returns whether the admin has enabled always-on VPN lockdown for the current user.
+     *
+     * Only callable by the system.
+    * @hide
+    */
+    @UserHandleAware
+    public boolean isAlwaysOnVpnLockdownEnabled() {
+        throwIfParentInstance("isAlwaysOnVpnLockdownEnabled");
+        if (mService != null) {
+            try {
+                return mService.isAlwaysOnVpnLockdownEnabledForUser(myUserId());
+            } catch (RemoteException e) {
+                throw e.rethrowFromSystemServer();
+            }
+        }
+        return false;
+    }
+
+    /**
      * Called by device or profile owner to query the set of packages that are allowed to access
      * the network directly when always-on VPN is in lockdown mode but not connected. Returns
      * {@code null} when always-on VPN is not active or not in lockdown mode.
@@ -5776,6 +5798,26 @@ public class DevicePolicyManager {
         if (mService != null) {
             try {
                 return mService.getAlwaysOnVpnPackage(admin);
+            } catch (RemoteException e) {
+                throw e.rethrowFromSystemServer();
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Returns the VPN package name if the admin has enabled always-on VPN on the current user,
+     * or {@code null} if none is set.
+     *
+     * Only callable by the system.
+     * @hide
+     */
+    @UserHandleAware
+    public @Nullable String getAlwaysOnVpnPackage() {
+        throwIfParentInstance("getAlwaysOnVpnPackage");
+        if (mService != null) {
+            try {
+                return mService.getAlwaysOnVpnPackageForUser(myUserId());
             } catch (RemoteException e) {
                 throw e.rethrowFromSystemServer();
             }
@@ -6146,14 +6188,17 @@ public class DevicePolicyManager {
      * <ul>
      * <li>{@link #KEYGUARD_DISABLE_SECURE_CAMERA} which affects the parent user when called on the
      * parent profile.
+     * <li>{@link #KEYGUARD_DISABLE_SECURE_NOTIFICATIONS} which affects the parent user when called
+     * on the parent profile.
      * </ul>
      * {@link #KEYGUARD_DISABLE_TRUST_AGENTS}, {@link #KEYGUARD_DISABLE_FINGERPRINT},
-     * {@link #KEYGUARD_DISABLE_FACE}, {@link #KEYGUARD_DISABLE_IRIS} and
-     * {@link #KEYGUARD_DISABLE_SECURE_CAMERA} can also be set on the {@link DevicePolicyManager}
-     * instance returned by {@link #getParentProfileInstance(ComponentName)} in order to set
-     * restrictions on the parent profile. {@link #KEYGUARD_DISABLE_SECURE_CAMERA} can only be set
-     * on the parent profile instance if the calling device admin is the profile owner of an
-     * organization-owned managed profile.
+     * {@link #KEYGUARD_DISABLE_FACE}, {@link #KEYGUARD_DISABLE_IRIS},
+     * {@link #KEYGUARD_DISABLE_SECURE_CAMERA} and {@link #KEYGUARD_DISABLE_SECURE_NOTIFICATIONS}
+     * can also be set on the {@link DevicePolicyManager} instance returned by
+     * {@link #getParentProfileInstance(ComponentName)} in order to set restrictions on the parent
+     * profile. {@link #KEYGUARD_DISABLE_SECURE_CAMERA} can only be set on the parent profile
+     * instance if the calling device admin is the profile owner of an organization-owned
+     * managed profile.
      * <p>
      * Requests to disable other features on a managed profile will be ignored.
      * <p>
@@ -8497,6 +8542,11 @@ public class DevicePolicyManager {
      * From {@link android.os.Build.VERSION_CODES#N} the profile or device owner can still use
      * {@link android.accounts.AccountManager} APIs to add or remove accounts when account
      * management for a specific type is disabled.
+     * <p>
+     * This method may be called on the {@code DevicePolicyManager} instance returned from
+     * {@link #getParentProfileInstance(ComponentName)} by the profile owner on an
+     * organization-owned device, to restrict accounts that may not be managed on the primary
+     * profile.
      *
      * @param admin Which {@link DeviceAdminReceiver} this request is associated with.
      * @param accountType For which account management is disabled or enabled.
@@ -8506,10 +8556,10 @@ public class DevicePolicyManager {
      */
     public void setAccountManagementDisabled(@NonNull ComponentName admin, String accountType,
             boolean disabled) {
-        throwIfParentInstance("setAccountManagementDisabled");
         if (mService != null) {
             try {
-                mService.setAccountManagementDisabled(admin, accountType, disabled);
+                mService.setAccountManagementDisabled(admin, accountType, disabled,
+                        mParentInstance);
             } catch (RemoteException e) {
                 throw e.rethrowFromSystemServer();
             }
@@ -8517,28 +8567,43 @@ public class DevicePolicyManager {
     }
 
     /**
-     * Gets the array of accounts for which account management is disabled by the profile owner.
+     * Gets the array of accounts for which account management is disabled by the profile owner
+     * or device owner.
      *
      * <p> Account management can be disabled/enabled by calling
      * {@link #setAccountManagementDisabled}.
+     * <p>
+     * This method may be called on the {@code DevicePolicyManager} instance returned from
+     * {@link #getParentProfileInstance(ComponentName)}. Note that only a profile owner on
+     * an organization-deviced can affect account types on the parent profile instance.
      *
      * @return a list of account types for which account management has been disabled.
      *
      * @see #setAccountManagementDisabled
      */
     public @Nullable String[] getAccountTypesWithManagementDisabled() {
-        throwIfParentInstance("getAccountTypesWithManagementDisabled");
-        return getAccountTypesWithManagementDisabledAsUser(myUserId());
+        return getAccountTypesWithManagementDisabledAsUser(myUserId(), mParentInstance);
+    }
+
+    /**
+     * @see #getAccountTypesWithManagementDisabled()
+     * Note that calling this method on the parent profile instance will return the same
+     * value as calling it on the main {@code DevicePolicyManager} instance.
+     * @hide
+     */
+    public @Nullable String[] getAccountTypesWithManagementDisabledAsUser(int userId) {
+        return getAccountTypesWithManagementDisabledAsUser(userId, false);
     }
 
     /**
      * @see #getAccountTypesWithManagementDisabled()
      * @hide
      */
-    public @Nullable String[] getAccountTypesWithManagementDisabledAsUser(int userId) {
+    public @Nullable String[] getAccountTypesWithManagementDisabledAsUser(
+            int userId, boolean parentInstance) {
         if (mService != null) {
             try {
-                return mService.getAccountTypesWithManagementDisabledAsUser(userId);
+                return mService.getAccountTypesWithManagementDisabledAsUser(userId, parentInstance);
             } catch (RemoteException e) {
                 throw e.rethrowFromSystemServer();
             }
@@ -8917,49 +8982,6 @@ public class DevicePolicyManager {
         if (mService != null) {
             try {
                 mService.setLocationEnabled(admin, locationEnabled);
-            } catch (RemoteException e) {
-                throw e.rethrowFromSystemServer();
-            }
-        }
-    }
-
-    /**
-     * Called by device owners to request a location provider to change its allowed state. For a
-     * provider to be enabled requires both that the master location setting is enabled, and that
-     * the provider itself is allowed. Most location providers are always allowed. Some location
-     * providers may have user consents or terms and conditions that must be accepted, or some other
-     * type of blocker before they are allowed however. Every location provider is responsible for
-     * its own allowed state.
-     *
-     * <p>This method requests that a location provider change its allowed state. For providers that
-     * are always allowed and have no state to change, this will have no effect. If the provider
-     * does require some consent, terms and conditions, or other blocking state, using this API
-     * implies that the device owner is agreeing/disagreeing to any consents, terms and conditions,
-     * etc, and the provider should make a best effort to adjust it's allowed state accordingly.
-     *
-     * <p>Location providers are generally only responsible for the current user, and callers must
-     * assume that this method will only affect provider state for the current user. Callers are
-     * responsible for tracking current user changes and re-updating provider state as necessary.
-     *
-     * <p>While providers are expected to make a best effort to honor this request, it is not a
-     * given that all providers will support such a request. If a provider does change its state as
-     * a result of this request, that may happen asynchronously after some delay. Test location
-     * providers set through {@link android.location.LocationManager#addTestProvider} will respond
-     * to this request to aide in testing.
-     *
-     * @param admin          Which {@link DeviceAdminReceiver} this request is associated with
-     * @param provider       A location provider as listed by
-     *                       {@link android.location.LocationManager#getAllProviders()}
-     * @param providerAllowed Whether the location provider is being requested to enable or disable
-     *                       itself
-     * @throws SecurityException if {@code admin} is not a device owner.
-     */
-    public void requestSetLocationProviderAllowed(@NonNull ComponentName admin,
-            @NonNull String provider, boolean providerAllowed) {
-        throwIfParentInstance("requestSetLocationProviderAllowed");
-        if (mService != null) {
-            try {
-                mService.requestSetLocationProviderAllowed(admin, provider, providerAllowed);
             } catch (RemoteException e) {
                 throw e.rethrowFromSystemServer();
             }
@@ -9876,6 +9898,7 @@ public class DevicePolicyManager {
      * <li>{@link #setTrustAgentConfiguration}</li>
      * <li>{@link #getRequiredStrongAuthTimeout}</li>
      * <li>{@link #setRequiredStrongAuthTimeout}</li>
+     * <li>{@link #getAccountTypesWithManagementDisabled}</li>
      * </ul>
      * <p>
      * The following methods are supported for the parent instance but can only be called by the
@@ -9884,6 +9907,7 @@ public class DevicePolicyManager {
      * <li>{@link #getPasswordComplexity}</li>
      * <li>{@link #setCameraDisabled}</li>
      * <li>{@link #getCameraDisabled}</li>
+     * <li>{@link #setAccountManagementDisabled(ComponentName, String, boolean)}</li>
      * </ul>
      *
      * <p>The following methods can be called by the profile owner of a managed profile
@@ -11580,12 +11604,15 @@ public class DevicePolicyManager {
     }
 
     /**
-     * Sets the set of package names that are allowed to request user consent for cross-profile
-     * communication.
+     * Sets the set of admin-whitelisted package names that are allowed to request user consent for
+     * cross-profile communication.
      *
      * <p>Assumes that the caller is a profile owner and is the given {@code admin}.
      *
      * <p>Previous calls are overridden by each subsequent call to this method.
+     *
+     * <p>Note that other apps may be able to request user consent for cross-profile communication
+     * if they have been explicitly whitelisted by the OEM.
      *
      * <p>When previously-set cross-profile packages are missing from {@code packageNames}, the
      * app-op for {@code INTERACT_ACROSS_PROFILES} will be reset for those packages. This will not
@@ -11608,15 +11635,18 @@ public class DevicePolicyManager {
 
     /**
      * Returns the set of package names that the admin has previously set as allowed to request user
-     * consent for cross-profile communication, via {@link
-     * #setCrossProfilePackages(ComponentName, Set)}.
+     * consent for cross-profile communication, via {@link #setCrossProfilePackages(ComponentName,
+     * Set)}.
      *
      * <p>Assumes that the caller is a profile owner and is the given {@code admin}.
      *
+     * <p>Note that other apps not included in the returned set may be able to request user consent
+     * for cross-profile communication if they have been explicitly whitelisted by the OEM.
+     *
      * @param admin the {@link DeviceAdminReceiver} this request is associated with
      * @return the set of package names the admin has previously set as allowed to request user
-     * consent for cross-profile communication, via {@link
-     * #setCrossProfilePackages(ComponentName, Set)}
+     * consent for cross-profile communication, via {@link #setCrossProfilePackages(ComponentName,
+     * Set)}
      */
     public @NonNull Set<String> getCrossProfilePackages(@NonNull ComponentName admin) {
         throwIfParentInstance("getCrossProfilePackages");
@@ -11634,18 +11664,17 @@ public class DevicePolicyManager {
      * Returns the combined set of the following:
      * <ul>
      * <li>The package names that the admin has previously set as allowed to request user consent
-     * for cross-profile communication, via {@link
-     * #setCrossProfilePackages(ComponentName, Set)}.</li>
+     * for cross-profile communication, via {@link #setCrossProfilePackages(ComponentName,
+     * Set)}.</li>
      * <li>The default package names set by the OEM that are allowed to request user consent for
-     * cross-profile communication without being explicitly enabled by the admin, via
-     * {@link com.android.internal.R.array#cross_profile_apps} and
-     * {@link com.android.internal.R.array#vendor_cross_profile_apps}.</li>
+     * cross-profile communication without being explicitly enabled by the admin, via {@link
+     * com.android.internal.R.array#cross_profile_apps} and {@link com.android.internal.R.array
+     * #vendor_cross_profile_apps}.</li>
      * </ul>
      *
      * @return the combined set of whitelisted package names set via
-     * {@link #setCrossProfilePackages(ComponentName, Set)},
-     * {@link com.android.internal.R.array#cross_profile_apps},
-     * and {@link com.android.internal.R.array#vendor_cross_profile_apps}.
+     * {@link #setCrossProfilePackages(ComponentName, Set)}, {@link com.android.internal.R.array
+     * #cross_profile_apps}, and {@link com.android.internal.R.array#vendor_cross_profile_apps}.
      *
      * @hide
      */
@@ -11668,9 +11697,9 @@ public class DevicePolicyManager {
 
     /**
      * Returns the default package names set by the OEM that are allowed to request user consent for
-     * cross-profile communication without being explicitly enabled by the admin, via
-     * {@link com.android.internal.R.array#cross_profile_apps} and
-     * {@link com.android.internal.R.array#vendor_cross_profile_apps}.
+     * cross-profile communication without being explicitly enabled by the admin, via {@link
+     * com.android.internal.R.array#cross_profile_apps} and {@link com.android.internal.R.array
+     * #vendor_cross_profile_apps}.
      *
      * @hide
      */
@@ -11957,5 +11986,22 @@ public class DevicePolicyManager {
             }
         }
         return 0;
+    }
+
+    /**
+     * Returns {@code true} when {@code userId} has a profile owner that is capable of resetting
+     * password in RUNNING_LOCKED state. For that it should have at least one direct boot aware
+     * component and have an active password reset token. Can only be called by the system.
+     * @hide
+     */
+    public boolean canProfileOwnerResetPasswordWhenLocked(int userId) {
+        if (mService != null) {
+            try {
+                return mService.canProfileOwnerResetPasswordWhenLocked(userId);
+            } catch (RemoteException re) {
+                throw re.rethrowFromSystemServer();
+            }
+        }
+        return false;
     }
 }

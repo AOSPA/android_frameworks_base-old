@@ -22,6 +22,7 @@ import android.annotation.UserIdInt;
 import android.appwidget.AppWidgetProviderInfo;
 import android.content.ComponentName;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.IntentSender;
 import android.content.LocusId;
 import android.content.pm.LauncherApps.ShortcutQuery;
@@ -64,6 +65,9 @@ public abstract class ShortcutServiceInternal {
 
     public abstract void addListener(@NonNull ShortcutChangeListener listener);
 
+    public abstract void addShortcutChangeCallback(
+            @NonNull LauncherApps.ShortcutChangeCallback callback);
+
     public abstract int getShortcutIconResId(int launcherUserId, @NonNull String callingPackage,
             @NonNull String packageName, @NonNull String shortcutId, int userId);
 
@@ -92,4 +96,11 @@ public abstract class ShortcutServiceInternal {
     public abstract void uncacheShortcuts(int launcherUserId,
             @NonNull String callingPackage, @NonNull String packageName,
             @NonNull List<String> shortcutIds, int userId);
+
+    /**
+     * Retrieves all of the direct share targets that match the given IntentFilter for the specified
+     * user.
+     */
+    public abstract List<ShortcutManager.ShareShortcutInfo> getShareTargets(
+            @NonNull String callingPackage, @NonNull IntentFilter intentFilter, int userId);
 }

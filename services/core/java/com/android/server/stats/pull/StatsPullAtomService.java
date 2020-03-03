@@ -16,7 +16,8 @@
 
 package com.android.server.stats.pull;
 
-import static android.app.AppOpsManager.OP_FLAGS_ALL_TRUSTED;
+import static android.app.AppOpsManager.OP_FLAG_SELF;
+import static android.app.AppOpsManager.OP_FLAG_TRUSTED_PROXIED;
 import static android.content.pm.PackageInfo.REQUESTED_PERMISSION_GRANTED;
 import static android.content.pm.PermissionInfo.PROTECTION_DANGEROUS;
 import static android.os.Debug.getIonHeapsSizeKb;
@@ -40,6 +41,7 @@ import android.app.AppOpsManager.HistoricalPackageOps;
 import android.app.AppOpsManager.HistoricalUidOps;
 import android.app.INotificationManager;
 import android.app.ProcessMemoryState;
+import android.app.RuntimeAppOpAccessMessage;
 import android.app.StatsManager;
 import android.app.StatsManager.PullAtomMetadata;
 import android.bluetooth.BluetoothActivityEnergyInfo;
@@ -184,6 +186,7 @@ public class StatsPullAtomService extends SystemService {
 
     private static final int MAX_BATTERY_STATS_HELPER_FREQUENCY_MS = 1000;
     private static final int CPU_TIME_PER_THREAD_FREQ_MAX_NUM_FREQUENCIES = 8;
+    private static final int OP_FLAGS_PULLED = OP_FLAG_SELF | OP_FLAG_TRUSTED_PROXIED;
 
     private final Object mNetworkStatsLock = new Object();
     @GuardedBy("mNetworkStatsLock")
@@ -375,6 +378,8 @@ public class StatsPullAtomService extends SystemService {
                     return pullFaceSettings(atomTag, data);
                 case FrameworkStatsLog.APP_OPS:
                     return pullAppOps(atomTag, data);
+                case FrameworkStatsLog.RUNTIME_APP_OP_ACCESS:
+                    return pullRuntimeAppOpAccessMessage(atomTag, data);
                 case FrameworkStatsLog.NOTIFICATION_REMOTE_VIEWS:
                     return pullNotificationRemoteViews(atomTag, data);
                 case FrameworkStatsLog.DANGEROUS_PERMISSION_STATE_SAMPLED:
@@ -537,6 +542,7 @@ public class StatsPullAtomService extends SystemService {
         registerAppsOnExternalStorageInfo();
         registerFaceSettings();
         registerAppOps();
+        registerRuntimeAppOpAccessMessage();
         registerNotificationRemoteViews();
         registerDangerousPermissionState();
         registerDangerousPermissionStateSampled();
@@ -2832,14 +2838,25 @@ public class StatsPullAtomService extends SystemService {
 
     }
 
+    private void registerRuntimeAppOpAccessMessage() {
+        int tagId = FrameworkStatsLog.RUNTIME_APP_OP_ACCESS;
+        mStatsManager.registerPullAtomCallback(
+                tagId,
+                null, // use default PullAtomMetadata values
+                BackgroundThread.getExecutor(),
+                mStatsCallbackImpl
+        );
+
+    }
+
     int pullAppOps(int atomTag, List<StatsEvent> pulledData) {
         final long token = Binder.clearCallingIdentity();
         try {
             AppOpsManager appOps = mContext.getSystemService(AppOpsManager.class);
 
             CompletableFuture<HistoricalOps> ops = new CompletableFuture<>();
-            HistoricalOpsRequest histOpsRequest =
-                    new HistoricalOpsRequest.Builder(0, Long.MAX_VALUE).build();
+            HistoricalOpsRequest histOpsRequest = new HistoricalOpsRequest.Builder(0,
+                    Long.MAX_VALUE).setFlags(OP_FLAGS_PULLED).build();
             appOps.getHistoricalOps(histOpsRequest, mContext.getMainExecutor(), ops::complete);
 
             HistoricalOps histOps = ops.get(EXTERNAL_STATS_SYNC_TIMEOUT_MILLIS,
@@ -2851,19 +2868,19 @@ public class StatsPullAtomService extends SystemService {
                 for (int pkgIdx = 0; pkgIdx < uidOps.getPackageCount(); pkgIdx++) {
                     final HistoricalPackageOps packageOps = uidOps.getPackageOpsAt(pkgIdx);
                     for (int opIdx = 0; opIdx < packageOps.getOpCount(); opIdx++) {
-                        final AppOpsManager.HistoricalOp op  = packageOps.getOpAt(opIdx);
+                        final AppOpsManager.HistoricalOp op = packageOps.getOpAt(opIdx);
 
                         StatsEvent.Builder e = StatsEvent.newBuilder();
                         e.setAtomId(atomTag);
                         e.writeInt(uid);
                         e.writeString(packageOps.getPackageName());
                         e.writeInt(op.getOpCode());
-                        e.writeLong(op.getForegroundAccessCount(OP_FLAGS_ALL_TRUSTED));
-                        e.writeLong(op.getBackgroundAccessCount(OP_FLAGS_ALL_TRUSTED));
-                        e.writeLong(op.getForegroundRejectCount(OP_FLAGS_ALL_TRUSTED));
-                        e.writeLong(op.getBackgroundRejectCount(OP_FLAGS_ALL_TRUSTED));
-                        e.writeLong(op.getForegroundAccessDuration(OP_FLAGS_ALL_TRUSTED));
-                        e.writeLong(op.getBackgroundAccessDuration(OP_FLAGS_ALL_TRUSTED));
+                        e.writeLong(op.getForegroundAccessCount(OP_FLAGS_PULLED));
+                        e.writeLong(op.getBackgroundAccessCount(OP_FLAGS_PULLED));
+                        e.writeLong(op.getForegroundRejectCount(OP_FLAGS_PULLED));
+                        e.writeLong(op.getBackgroundRejectCount(OP_FLAGS_PULLED));
+                        e.writeLong(op.getForegroundAccessDuration(OP_FLAGS_PULLED));
+                        e.writeLong(op.getBackgroundAccessDuration(OP_FLAGS_PULLED));
 
                         String perm = AppOpsManager.opToPermission(op.getOpCode());
                         if (perm == null) {
@@ -2885,6 +2902,41 @@ public class StatsPullAtomService extends SystemService {
         } catch (Throwable t) {
             // TODO: catch exceptions at a more granular level
             Slog.e(TAG, "Could not read appops", t);
+            return StatsManager.PULL_SKIP;
+        } finally {
+            Binder.restoreCallingIdentity(token);
+        }
+        return StatsManager.PULL_SUCCESS;
+    }
+
+    int pullRuntimeAppOpAccessMessage(int atomTag, List<StatsEvent> pulledData) {
+        final long token = Binder.clearCallingIdentity();
+        try {
+            AppOpsManager appOps = mContext.getSystemService(AppOpsManager.class);
+
+            RuntimeAppOpAccessMessage message = appOps.collectRuntimeAppOpAccessMessage();
+            if (message == null) {
+                Slog.i(TAG, "No runtime appop access message collected");
+                return StatsManager.PULL_SUCCESS;
+            }
+
+            StatsEvent.Builder e = StatsEvent.newBuilder();
+            e.setAtomId(atomTag);
+            e.writeInt(message.getUid());
+            e.writeString(message.getPackageName());
+            e.writeString(message.getOp());
+            if (message.getFeatureId() == null) {
+                e.writeString("");
+            } else {
+                e.writeString(message.getFeatureId());
+            }
+            e.writeString(message.getMessage());
+            e.writeInt(message.getSamplingStrategy());
+
+            pulledData.add(e.build());
+        } catch (Throwable t) {
+            // TODO: catch exceptions at a more granular level
+            Slog.e(TAG, "Could not read runtime appop access message", t);
             return StatsManager.PULL_SKIP;
         } finally {
             Binder.restoreCallingIdentity(token);

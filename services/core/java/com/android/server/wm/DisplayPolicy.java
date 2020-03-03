@@ -26,7 +26,7 @@ import static android.app.WindowConfiguration.WINDOWING_MODE_SPLIT_SCREEN_SECOND
 import static android.app.WindowConfiguration.WINDOWING_MODE_UNDEFINED;
 import static android.content.res.Configuration.UI_MODE_TYPE_CAR;
 import static android.content.res.Configuration.UI_MODE_TYPE_MASK;
-import static android.view.Display.TYPE_BUILT_IN;
+import static android.view.Display.TYPE_INTERNAL;
 import static android.view.InsetsState.ITYPE_BOTTOM_GESTURES;
 import static android.view.InsetsState.ITYPE_BOTTOM_TAPPABLE_ELEMENT;
 import static android.view.InsetsState.ITYPE_LEFT_GESTURES;
@@ -134,7 +134,6 @@ import android.graphics.Rect;
 import android.graphics.Region;
 import android.hardware.input.InputManager;
 import android.hardware.power.V1_0.PowerHint;
-import android.os.Binder;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.Message;
@@ -319,6 +318,8 @@ public class DisplayPolicy {
     private int[] mNavigationBarFrameHeightForRotationDefault = new int[4];
 
     private boolean mIsFreeformWindowOverlappingWithNavBar;
+
+    private boolean mLastImmersiveMode;
 
     private final StatusBarController mStatusBarController;
 
@@ -1079,17 +1080,17 @@ public class DisplayPolicy {
      * @return If ok, WindowManagerImpl.ADD_OKAY.  If too many singletons,
      * WindowManagerImpl.ADD_MULTIPLE_SINGLETON
      */
-    int validateAddingWindowLw(WindowManager.LayoutParams attrs) {
+    int validateAddingWindowLw(WindowManager.LayoutParams attrs, int callingPid, int callingUid) {
         if ((attrs.privateFlags & PRIVATE_FLAG_IS_SCREEN_DECOR) != 0) {
-            mContext.enforceCallingOrSelfPermission(
-                    android.Manifest.permission.STATUS_BAR_SERVICE,
+            mContext.enforcePermission(
+                    android.Manifest.permission.STATUS_BAR_SERVICE, callingPid, callingUid,
                     "DisplayPolicy");
         }
 
         switch (attrs.type) {
             case TYPE_STATUS_BAR:
-                mContext.enforceCallingOrSelfPermission(
-                        android.Manifest.permission.STATUS_BAR_SERVICE,
+                mContext.enforcePermission(
+                        android.Manifest.permission.STATUS_BAR_SERVICE, callingPid, callingUid,
                         "DisplayPolicy");
                 if (mStatusBar != null) {
                     if (mStatusBar.isAlive()) {
@@ -1098,8 +1099,8 @@ public class DisplayPolicy {
                 }
                 break;
             case TYPE_NOTIFICATION_SHADE:
-                mContext.enforceCallingOrSelfPermission(
-                        android.Manifest.permission.STATUS_BAR_SERVICE,
+                mContext.enforcePermission(
+                        android.Manifest.permission.STATUS_BAR_SERVICE, callingPid, callingUid,
                         "DisplayPolicy");
                 if (mNotificationShade != null) {
                     if (mNotificationShade.isAlive()) {
@@ -1108,8 +1109,8 @@ public class DisplayPolicy {
                 }
                 break;
             case TYPE_NAVIGATION_BAR:
-                mContext.enforceCallingOrSelfPermission(
-                        android.Manifest.permission.STATUS_BAR_SERVICE,
+                mContext.enforcePermission(
+                        android.Manifest.permission.STATUS_BAR_SERVICE, callingPid, callingUid,
                         "DisplayPolicy");
                 if (mNavigationBar != null) {
                     if (mNavigationBar.isAlive()) {
@@ -1119,16 +1120,17 @@ public class DisplayPolicy {
                 break;
             case TYPE_NAVIGATION_BAR_PANEL:
                 // Check for permission if the caller is not the recents component.
-                if (!mService.mAtmInternal.isCallerRecents(Binder.getCallingUid())) {
-                    mContext.enforceCallingOrSelfPermission(
-                            android.Manifest.permission.STATUS_BAR_SERVICE, "DisplayPolicy");
+                if (!mService.mAtmInternal.isCallerRecents(callingUid)) {
+                    mContext.enforcePermission(
+                            android.Manifest.permission.STATUS_BAR_SERVICE, callingPid, callingUid,
+                            "DisplayPolicy");
                 }
                 break;
             case TYPE_STATUS_BAR_PANEL:
             case TYPE_STATUS_BAR_SUB_PANEL:
             case TYPE_VOICE_INTERACTION_STARTING:
-                mContext.enforceCallingOrSelfPermission(
-                        android.Manifest.permission.STATUS_BAR_SERVICE,
+                mContext.enforcePermission(
+                        android.Manifest.permission.STATUS_BAR_SERVICE, callingPid, callingUid,
                         "DisplayPolicy");
                 break;
         }
@@ -1327,6 +1329,11 @@ public class DisplayPolicy {
 
         if (transit == TRANSIT_PREVIEW_DONE) {
             if (win.hasAppShownWindows()) {
+                if (win.isActivityTypeHome()) {
+                    // Dismiss the starting window as soon as possible to avoid the crossfade out
+                    // with old content because home is easier to have different UI states.
+                    return ANIMATION_NONE;
+                }
                 if (DEBUG_ANIM) Slog.i(TAG, "**** STARTING EXIT");
                 return R.anim.app_starting_exit;
             }
@@ -1574,7 +1581,7 @@ public class DisplayPolicy {
         }
     }
 
-    private void simulateLayoutDecorWindow(WindowState win, DisplayFrames displayFrames, int uiMode,
+    private void simulateLayoutDecorWindow(WindowState win, DisplayFrames displayFrames,
             InsetsState insetsState, WindowFrames simulatedWindowFrames, Runnable layout) {
         win.setSimulatedWindowFrames(simulatedWindowFrames);
         try {
@@ -1598,7 +1605,7 @@ public class DisplayPolicy {
         final WindowFrames simulatedWindowFrames = new WindowFrames();
         if (mNavigationBar != null) {
             simulateLayoutDecorWindow(
-                    mNavigationBar, displayFrames, uiMode, insetsState, simulatedWindowFrames,
+                    mNavigationBar, displayFrames, insetsState, simulatedWindowFrames,
                     () -> layoutNavigationBar(displayFrames, uiMode, mLastNavVisible,
                             mLastNavTranslucent, mLastNavAllowedHidden,
                             mLastNotificationShadeForcesShowingNavigation,
@@ -1606,7 +1613,7 @@ public class DisplayPolicy {
         }
         if (mStatusBar != null) {
             simulateLayoutDecorWindow(
-                    mStatusBar, displayFrames, uiMode, insetsState, simulatedWindowFrames,
+                    mStatusBar, displayFrames, insetsState, simulatedWindowFrames,
                     () -> layoutStatusBar(displayFrames, mLastSystemUiFlags,
                             false /* isRealLayout */));
         }
@@ -1680,7 +1687,7 @@ public class DisplayPolicy {
         if (updateSysUiVisibility) {
             updateSystemUiVisibilityLw();
         }
-        layoutScreenDecorWindows(displayFrames, null /* transientFrames */);
+        layoutScreenDecorWindows(displayFrames, null /* simulatedFrames */);
         postAdjustDisplayFrames(displayFrames);
         mLastNavVisible = navVisible;
         mLastNavTranslucent = navTranslucent;
@@ -2083,6 +2090,7 @@ public class DisplayPolicy {
         final int requestedSysUiFl = PolicyControl.getSystemUiVisibility(null, attrs);
         final int sysUiFl = requestedSysUiFl | getImpliedSysUiFlagsForLayout(attrs);
 
+        displayFrames = win.getDisplayFrames(displayFrames);
         final WindowFrames windowFrames = win.getWindowFrames();
 
         sTmpLastParentFrame.set(windowFrames.mParentFrame);
@@ -3128,11 +3136,12 @@ public class DisplayPolicy {
 
     /**
      * Return corner radius in pixels that should be used on windows in order to cover the display.
-     * The radius is only valid for built-in displays since the one who configures window corner
-     * radius cannot know the corner radius of non-built-in display.
+     *
+     * The radius is only valid for internal displays, since the corner radius of external displays
+     * is not known at build time when window corners are configured.
      */
     float getWindowCornerRadius() {
-        return mDisplayContent.getDisplay().getType() == TYPE_BUILT_IN
+        return mDisplayContent.getDisplay().getType() == TYPE_INTERNAL
                 ? ScreenDecorationsUtils.getWindowCornerRadius(mContext.getResources()) : 0f;
     }
 
@@ -3319,8 +3328,8 @@ public class DisplayPolicy {
                     if (nb) mNavigationBarController.showTransient();
                     updateSystemUiVisibilityLw();
                 }
-                mImmersiveModeConfirmation.confirmCurrentPrompt();
             }
+            mImmersiveModeConfirmation.confirmCurrentPrompt();
         }
     }
 
@@ -3347,7 +3356,7 @@ public class DisplayPolicy {
         updateSystemUiVisibilityLw();
     }
 
-    private int updateSystemUiVisibilityLw() {
+    int updateSystemUiVisibilityLw() {
         // If there is no window focused, there will be nobody to handle the events
         // anyway, so just hang on in whatever state we're in until things settle down.
         WindowState winCandidate = mFocusedWindow != null ? mFocusedWindow
@@ -3703,9 +3712,11 @@ public class DisplayPolicy {
         vis = mStatusBarController.updateVisibilityLw(transientStatusBarAllowed, oldVis, vis);
 
         // update navigation bar
-        boolean oldImmersiveMode = isImmersiveMode(oldVis);
-        boolean newImmersiveMode = isImmersiveMode(vis);
+        boolean newInsetsMode = ViewRootImpl.sNewInsetsMode == NEW_INSETS_MODE_FULL;
+        boolean oldImmersiveMode = newInsetsMode ? mLastImmersiveMode : isImmersiveMode(oldVis);
+        boolean newImmersiveMode = newInsetsMode ? isImmersiveMode(win) : isImmersiveMode(vis);
         if (oldImmersiveMode != newImmersiveMode) {
+            mLastImmersiveMode = newImmersiveMode;
             final String pkg = win.getOwningPackage();
             mImmersiveModeConfirmation.immersiveModeChangedLw(pkg, newImmersiveMode,
                     mService.mPolicy.isUserSetupComplete(),
@@ -3810,12 +3821,23 @@ public class DisplayPolicy {
         }
     }
 
+    // TODO(b/118118435): Remove this after migration
     private boolean isImmersiveMode(int vis) {
         final int flags = View.SYSTEM_UI_FLAG_IMMERSIVE | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY;
         return mNavigationBar != null
                 && (vis & View.SYSTEM_UI_FLAG_HIDE_NAVIGATION) != 0
                 && (vis & flags) != 0
                 && canHideNavigationBar();
+    }
+
+    private boolean isImmersiveMode(WindowState win) {
+        final int behavior = win.mAttrs.insetsFlags.behavior;
+        return mNavigationBar != null
+                && canHideNavigationBar()
+                && (behavior == BEHAVIOR_SHOW_BARS_BY_SWIPE
+                        || behavior == BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE)
+                && getInsetsPolicy().isHidden(ITYPE_NAVIGATION_BAR)
+                && win != getNotificationShade();
     }
 
     /**

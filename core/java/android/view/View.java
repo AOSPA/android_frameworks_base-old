@@ -110,10 +110,10 @@ import android.view.AccessibilityIterators.ParagraphTextSegmentIterator;
 import android.view.AccessibilityIterators.TextSegmentIterator;
 import android.view.AccessibilityIterators.WordTextSegmentIterator;
 import android.view.ContextMenu.ContextMenuInfo;
+import android.view.InputDevice.InputSourceClass;
 import android.view.Window.OnContentApplyWindowInsetsListener;
 import android.view.WindowInsets.Type;
-import android.view.WindowInsetsAnimationCallback.AnimationBounds;
-import android.view.WindowInsetsAnimationCallback.InsetsAnimation;
+import android.view.WindowInsetsAnimation.Bounds;
 import android.view.WindowManager.LayoutParams;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityEventSource;
@@ -4672,7 +4672,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
 
         private ArrayList<OnUnhandledKeyEventListener> mUnhandledKeyListeners;
 
-        WindowInsetsAnimationCallback mWindowInsetsAnimationCallback;
+        WindowInsetsAnimation.Callback mWindowInsetsAnimationCallback;
 
         /**
          * This lives here since it's only valid for interactive views.
@@ -5204,6 +5204,14 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
 
     @StyleRes
     private int mExplicitStyle;
+
+    /**
+     * Specifies which input source classes should provide unbuffered input events to this view
+     *
+     * @see View#requestUnbufferedDispatch(int)
+     */
+    @InputSourceClass
+    int mUnbufferedInputSource = InputDevice.SOURCE_CLASS_NONE;
 
     /**
      * Simple constructor to use when creating a view from code.
@@ -8012,6 +8020,10 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
 
         if (mAttachInfo != null) {
             mAttachInfo.mKeyDispatchState.reset(this);
+        }
+
+        if (mParent != null) {
+            mParent.onDescendantUnbufferedRequested();
         }
 
         notifyEnterOrExitForAutoFillIfNeeded(gainFocus);
@@ -11200,43 +11212,45 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     }
 
     /**
-     * Sets a {@link WindowInsetsAnimationCallback} to be notified about animations of windows that
+     * Sets a {@link WindowInsetsAnimation.Callback} to be notified about animations of windows that
      * cause insets.
      * <p>
-     * When setting a listener, it's {@link WindowInsetsAnimationCallback#getDispatchMode() dispatch
-     * mode} will be retrieved and recorded until another listener will be set.
+     * The callback's {@link WindowInsetsAnimation.Callback#getDispatchMode()
+     * dispatch mode} will affect whether animation callbacks are dispatched to the children of
+     * this view.
      * </p>
-     * @param listener The listener to set.
+     * @param callback The callback to set.
      */
-    public void setWindowInsetsAnimationCallback(@Nullable WindowInsetsAnimationCallback listener) {
-        getListenerInfo().mWindowInsetsAnimationCallback = listener;
+    public void setWindowInsetsAnimationCallback(
+            @Nullable WindowInsetsAnimation.Callback callback) {
+        getListenerInfo().mWindowInsetsAnimationCallback = callback;
     }
 
     /**
-     * Dispatches {@link WindowInsetsAnimationCallback#onPrepare(InsetsAnimation)}
+     * Dispatches {@link WindowInsetsAnimation.Callback#onPrepare(WindowInsetsAnimation)}
      * when Window Insets animation is being prepared.
      * @param animation current animation
      *
-     * @see WindowInsetsAnimationCallback#onPrepare(InsetsAnimation)
+     * @see WindowInsetsAnimation.Callback#onPrepare(WindowInsetsAnimation)
      */
     public void dispatchWindowInsetsAnimationPrepare(
-            @NonNull InsetsAnimation animation) {
+            @NonNull WindowInsetsAnimation animation) {
         if (mListenerInfo != null && mListenerInfo.mWindowInsetsAnimationCallback != null) {
             mListenerInfo.mWindowInsetsAnimationCallback.onPrepare(animation);
         }
     }
 
     /**
-     * Dispatches {@link WindowInsetsAnimationCallback#onStart(InsetsAnimation, AnimationBounds)}
+     * Dispatches {@link WindowInsetsAnimation.Callback#onStart(WindowInsetsAnimation, Bounds)}
      * when Window Insets animation is started.
      * @param animation current animation
-     * @param bounds the upper and lower {@link AnimationBounds} that provides range of
-     *  {@link InsetsAnimation}.
-     * @return the upper and lower {@link AnimationBounds}.
+     * @param bounds the upper and lower {@link Bounds} that provides range of
+     *  {@link WindowInsetsAnimation}.
+     * @return the upper and lower {@link Bounds}.
      */
     @NonNull
-    public AnimationBounds dispatchWindowInsetsAnimationStart(
-            @NonNull InsetsAnimation animation, @NonNull AnimationBounds bounds) {
+    public Bounds dispatchWindowInsetsAnimationStart(
+            @NonNull WindowInsetsAnimation animation, @NonNull Bounds bounds) {
         if (mListenerInfo != null && mListenerInfo.mWindowInsetsAnimationCallback != null) {
             return mListenerInfo.mWindowInsetsAnimationCallback.onStart(animation, bounds);
         }
@@ -11244,28 +11258,31 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     }
 
     /**
-     * Dispatches {@link WindowInsetsAnimationCallback#onProgress(WindowInsets)}
+     * Dispatches {@link WindowInsetsAnimation.Callback#onProgress(WindowInsets, List)}
      * when Window Insets animation makes progress.
      * @param insets The current {@link WindowInsets}.
+     * @param runningAnimations The currently running {@link WindowInsetsAnimation}s.
      * @return current {@link WindowInsets}.
      */
     @NonNull
-    public WindowInsets dispatchWindowInsetsAnimationProgress(@NonNull WindowInsets insets) {
+    public WindowInsets dispatchWindowInsetsAnimationProgress(@NonNull WindowInsets insets,
+            @NonNull List<WindowInsetsAnimation> runningAnimations) {
         if (mListenerInfo != null && mListenerInfo.mWindowInsetsAnimationCallback != null) {
-            return mListenerInfo.mWindowInsetsAnimationCallback.onProgress(insets);
+            return mListenerInfo.mWindowInsetsAnimationCallback.onProgress(insets,
+                    runningAnimations);
         } else {
             return insets;
         }
     }
 
     /**
-     * Dispatches {@link WindowInsetsAnimationCallback#onFinish(InsetsAnimation)}
-     * when Window Insets animation finishes.
-     * @param animation The current ongoing {@link InsetsAnimation}.
+     * Dispatches {@link WindowInsetsAnimation.Callback#onEnd(WindowInsetsAnimation)}
+     * when Window Insets animation ends.
+     * @param animation The current ongoing {@link WindowInsetsAnimation}.
      */
-    public void dispatchWindowInsetsAnimationFinish(@NonNull InsetsAnimation animation) {
+    public void dispatchWindowInsetsAnimationEnd(@NonNull WindowInsetsAnimation animation) {
         if (mListenerInfo != null && mListenerInfo.mWindowInsetsAnimationCallback != null) {
-            mListenerInfo.mWindowInsetsAnimationCallback.onFinish(animation);
+            mListenerInfo.mWindowInsetsAnimationCallback.onEnd(animation);
         }
     }
 
@@ -13425,8 +13442,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * @see #getImportantForAccessibility()
      */
     public boolean isImportantForAccessibility() {
-        final int mode = (mPrivateFlags2 & PFLAG2_IMPORTANT_FOR_ACCESSIBILITY_MASK)
-                >> PFLAG2_IMPORTANT_FOR_ACCESSIBILITY_SHIFT;
+        final int mode = getImportantForAccessibility();
         if (mode == IMPORTANT_FOR_ACCESSIBILITY_NO
                 || mode == IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS) {
             return false;
@@ -15820,12 +15836,17 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * system not batch {@link MotionEvent}s but instead deliver them as soon as they're
      * available. This method should only be called for touch events.
      *
-     * <p class="note">This api is not intended for most applications. Buffered dispatch
+     * <p class="note">This API is not intended for most applications. Buffered dispatch
      * provides many of benefits, and just requesting unbuffered dispatch on most MotionEvent
      * streams will not improve your input latency. Side effects include: increased latency,
      * jittery scrolls and inability to take advantage of system resampling. Talk to your input
      * professional to see if {@link #requestUnbufferedDispatch(MotionEvent)} is right for
      * you.</p>
+     *
+     * To receive unbuffered events for arbitrary input device source classes, use
+     * {@link #requestUnbufferedDispatch(int)},
+     *
+     * @see View#requestUnbufferedDispatch(int)
      */
     public final void requestUnbufferedDispatch(MotionEvent event) {
         final int action = event.getAction();
@@ -15835,6 +15856,27 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
             return;
         }
         mAttachInfo.mUnbufferedDispatchRequested = true;
+    }
+
+    /**
+     * Request unbuffered dispatch of the given event source class to this view.
+     * This is similar to {@link View#requestUnbufferedDispatch(MotionEvent)}, but does not
+     * automatically terminate, and allows the specification of arbitrary input source classes.
+     *
+     * @param source The combined input source class to request unbuffered dispatch for. All
+     *               events coming from these source classes will not be buffered. Set to
+     *               {@link InputDevice#SOURCE_CLASS_NONE} in order to return to default behaviour.
+     *
+     * @see View#requestUnbufferedDispatch(MotionEvent)
+     */
+    public final void requestUnbufferedDispatch(@InputSourceClass int source) {
+        if (mUnbufferedInputSource == source) {
+            return;
+        }
+        mUnbufferedInputSource = source;
+        if (mParent != null) {
+            mParent.onDescendantUnbufferedRequested();
+        }
     }
 
     private boolean hasSize() {
@@ -28791,11 +28833,6 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         int mDisabledSystemUiVisibility;
 
         /**
-         * Last global system UI visibility reported by the window manager.
-         */
-        int mGlobalSystemUiVisibility = -1;
-
-        /**
          * True if a view in this hierarchy has an OnSystemUiVisibilityChangeListener
          * attached.
          */
@@ -28823,6 +28860,12 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
          * to another window.
          */
         final Point mLocationInParentDisplay = new Point();
+
+        /**
+         * The screen matrix of this view when it's on a {@link SurfaceControlViewHost} that is
+         * embedded within a SurfaceView.
+         */
+        Matrix mScreenMatrixInEmbeddedHierarchy;
 
         /**
          * Global to the view hierarchy used as a temporary for dealing with

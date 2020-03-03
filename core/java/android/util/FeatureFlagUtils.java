@@ -59,7 +59,7 @@ public class FeatureFlagUtils {
         DEFAULT_FLAGS = new HashMap<>();
         DEFAULT_FLAGS.put("settings_audio_switcher", "true");
         DEFAULT_FLAGS.put("settings_systemui_theme", "true");
-        DEFAULT_FLAGS.put(SETTINGS_FUSE_FLAG, "false");
+        DEFAULT_FLAGS.put(SETTINGS_FUSE_FLAG, "true");
         DEFAULT_FLAGS.put(DYNAMIC_SYSTEM, "false");
         DEFAULT_FLAGS.put(SEAMLESS_TRANSFER, "false");
         DEFAULT_FLAGS.put(HEARING_AID_SETTINGS, "false");
@@ -79,6 +79,7 @@ public class FeatureFlagUtils {
 
         DEFAULT_FLAGS.put("settings_tether_all_in_one", "false");
         DEFAULT_FLAGS.put(SETTINGS_SCHEDULES_FLAG, "false");
+        DEFAULT_FLAGS.put("settings_contextual_home2", "false");
     }
 
     /**

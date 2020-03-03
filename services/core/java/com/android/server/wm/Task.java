@@ -199,6 +199,7 @@ class Task extends WindowContainer<WindowContainer> {
     static final int INVALID_MIN_SIZE = -1;
     private float mShadowRadius = 0;
     private final Rect mLastSurfaceCrop = new Rect();
+    private static final boolean ENABLE_FREEFORM_COMPOSITOR_SHADOWS = false;
 
     /**
      * The modes to control how the stack is moved to the front when calling {@link Task#reparent}.
@@ -224,8 +225,8 @@ class Task extends WindowContainer<WindowContainer> {
 
     String affinity;        // The affinity name for this task, or null; may change identity.
     String rootAffinity;    // Initial base affinity, or null; does not change from initial root.
-    final IVoiceInteractionSession voiceSession;    // Voice interaction session driving task
-    final IVoiceInteractor voiceInteractor;         // Associated interactor to provide to app
+    IVoiceInteractionSession voiceSession;    // Voice interaction session driving task
+    IVoiceInteractor voiceInteractor;         // Associated interactor to provide to app
     Intent intent;          // The original intent that started the task. Note that this value can
                             // be null.
     Intent affinityIntent;  // Intent of affinity-moved activity that started this task.
@@ -421,6 +422,8 @@ class Task extends WindowContainer<WindowContainer> {
     /** When set, will force the task to report as invisible. */
     boolean mForceHidden = false;
 
+    SurfaceControl.Transaction mMainWindowSizeChangeTransaction;
+
     private final FindRootHelper mFindRootHelper = new FindRootHelper();
     private class FindRootHelper {
         private ActivityRecord mRoot;
@@ -568,6 +571,15 @@ class Task extends WindowContainer<WindowContainer> {
             mMinHeight = minHeight;
         }
         mAtmService.getTaskChangeNotificationController().notifyTaskCreated(_taskId, realActivity);
+    }
+
+    Task reuseAsLeafTask(IVoiceInteractionSession _voiceSession, IVoiceInteractor _voiceInteractor,
+            ActivityInfo info, ActivityRecord activity) {
+        voiceSession = _voiceSession;
+        voiceInteractor = _voiceInteractor;
+        setIntent(activity);
+        setMinDimensions(info);
+        return this;
     }
 
     private void cleanUpResourcesForDestroy(ConfigurationContainer oldParent) {
@@ -1003,7 +1015,7 @@ class Task extends WindowContainer<WindowContainer> {
     }
 
     /** Sets the original minimal width and height. */
-    private void setMinDimensions(ActivityInfo info) {
+    void setMinDimensions(ActivityInfo info) {
         if (info != null && info.windowLayout != null) {
             mMinWidth = info.windowLayout.minWidth;
             mMinHeight = info.windowLayout.minHeight;
@@ -2144,12 +2156,6 @@ class Task extends WindowContainer<WindowContainer> {
                     // For floating tasks, calculate the smallest width from the bounds of the task
                     inOutConfig.smallestScreenWidthDp = (int) (
                             Math.min(mTmpFullBounds.width(), mTmpFullBounds.height()) / density);
-                } else if (WindowConfiguration.isSplitScreenWindowingMode(windowingMode)) {
-                    // Iterating across all screen orientations, and return the minimum of the task
-                    // width taking into account that the bounds might change because the snap
-                    // algorithm snaps to a different value
-                    inOutConfig.smallestScreenWidthDp =
-                            getSmallestScreenWidthDpForDockedBounds(mTmpFullBounds);
                 }
                 // otherwise, it will just inherit
             }
@@ -2181,16 +2187,20 @@ class Task extends WindowContainer<WindowContainer> {
         return Configuration.reduceScreenLayout(sourceScreenLayout, longSize, shortSize);
     }
 
+    void resolveTileOverrideConfiguration(Configuration newParentConfig) {
+        super.resolveOverrideConfiguration(newParentConfig);
+    }
+
     @Override
     void resolveOverrideConfiguration(Configuration newParentConfig) {
-        if (isRootTask()) {
-            super.resolveOverrideConfiguration(newParentConfig);
+        if (!isLeafTask()) {
+            resolveTileOverrideConfiguration(newParentConfig);
             return;
         }
         mTmpBounds.set(getResolvedOverrideConfiguration().windowConfiguration.getBounds());
-        super.resolveOverrideConfiguration(newParentConfig);
+        resolveTileOverrideConfiguration(newParentConfig);
         int windowingMode =
-                getRequestedOverrideConfiguration().windowConfiguration.getWindowingMode();
+                getResolvedOverrideConfiguration().windowConfiguration.getWindowingMode();
         if (windowingMode == WINDOWING_MODE_UNDEFINED) {
             windowingMode = newParentConfig.windowConfiguration.getWindowingMode();
         }
@@ -2397,7 +2407,7 @@ class Task extends WindowContainer<WindowContainer> {
         final int[] currentCount = {0};
         final PooledConsumer c = PooledLambda.obtainConsumer((t, count) -> { count[0]++; },
                 PooledLambda.__(Task.class), currentCount);
-        forAllTasks(c, false /* traverseTopToBottom */, this);
+        forAllLeafTasks(c, false /* traverseTopToBottom */);
         c.recycle();
         return currentCount[0];
     }
@@ -2553,8 +2563,10 @@ class Task extends WindowContainer<WindowContainer> {
     }
 
     private void updateSurfaceCrop() {
+        // TODO(b/149585281) remove when root task has the correct bounds for freeform
         // Only update the crop if we are drawing shadows on the task.
-        if (mSurfaceControl == null || !mWmService.mRenderShadowsInCompositor) {
+        if (mSurfaceControl == null || !mWmService.mRenderShadowsInCompositor
+                || !isRootTask() || !ENABLE_FREEFORM_COMPOSITOR_SHADOWS) {
             return;
         }
 
@@ -2617,6 +2629,7 @@ class Task extends WindowContainer<WindowContainer> {
      */
     void setOverrideDisplayedBounds(Rect overrideDisplayedBounds) {
         if (overrideDisplayedBounds != null) {
+            adjustForMinimalTaskDimensions(overrideDisplayedBounds, mOverrideDisplayedBounds);
             mOverrideDisplayedBounds.set(overrideDisplayedBounds);
         } else {
             mOverrideDisplayedBounds.setEmpty();
@@ -2978,8 +2991,14 @@ class Task extends WindowContainer<WindowContainer> {
     }
 
     @Override
+    void onSurfaceShown(SurfaceControl.Transaction t) {
+        super.onSurfaceShown(t);
+        t.unsetColor(mSurfaceControl);
+    }
+
+    @Override
     SurfaceControl.Builder makeSurface() {
-        return super.makeSurface().setMetadata(METADATA_TASK_ID, mTaskId);
+        return super.makeSurface().setColorLayer().setMetadata(METADATA_TASK_ID, mTaskId);
     }
 
     boolean isTaskAnimating() {
@@ -3071,16 +3090,33 @@ class Task extends WindowContainer<WindowContainer> {
     }
 
     @Override
-    void forAllTasks(Consumer<Task> callback, boolean traverseTopToBottom, Task excludedTask) {
-        super.forAllTasks(callback, traverseTopToBottom, excludedTask);
-        if (excludedTask != this) {
-            callback.accept(this);
+    void forAllLeafTasks(Consumer<Task> callback, boolean traverseTopToBottom) {
+        final int count = mChildren.size();
+        boolean isLeafTask = true;
+        if (traverseTopToBottom) {
+            for (int i = count - 1; i >= 0; --i) {
+                final Task child = mChildren.get(i).asTask();
+                if (child != null) {
+                    isLeafTask = false;
+                    child.forAllLeafTasks(callback, traverseTopToBottom);
+                }
+            }
+        } else {
+            for (int i = 0; i < count; i++) {
+                final Task child = mChildren.get(i).asTask();
+                if (child != null) {
+                    isLeafTask = false;
+                    child.forAllLeafTasks(callback, traverseTopToBottom);
+                }
+            }
         }
+        if (isLeafTask) callback.accept(this);
     }
 
     @Override
     void forAllTasks(Consumer<Task> callback, boolean traverseTopToBottom) {
-        forAllTasks(callback, traverseTopToBottom, null /* excludedTask */);
+        super.forAllTasks(callback, traverseTopToBottom);
+        callback.accept(this);
     }
 
     @Override
@@ -3248,6 +3284,10 @@ class Task extends WindowContainer<WindowContainer> {
         return this;
     }
 
+    TaskTile asTile() {
+        return null;
+    }
+
     // TODO(task-merge): Figure-out how this should work with hierarchy tasks.
     boolean shouldBeVisible(ActivityRecord starting) {
         return true;
@@ -3258,7 +3298,7 @@ class Task extends WindowContainer<WindowContainer> {
         pw.print(" effectiveUid="); UserHandle.formatUid(pw, effectiveUid);
         pw.print(" mCallingUid="); UserHandle.formatUid(pw, mCallingUid);
         pw.print(" mUserSetupComplete="); pw.print(mUserSetupComplete);
-        pw.print(" mCallingPackage="); pw.println(mCallingPackage);
+        pw.print(" mCallingPackage="); pw.print(mCallingPackage);
         pw.print(" mCallingFeatureId="); pw.println(mCallingFeatureId);
         if (affinity != null || rootAffinity != null) {
             pw.print(prefix); pw.print("affinity="); pw.print(affinity);
@@ -3934,7 +3974,8 @@ class Task extends WindowContainer<WindowContainer> {
             return dipToPixel(PINNED_WINDOWING_MODE_ELEVATION_IN_DIP,
                     mDisplayContent.getDisplayMetrics());
         }
-        if (inFreeformWindowingMode()) {
+        // TODO(b/149585281) remove when root task has the correct bounds for freeform
+        if (ENABLE_FREEFORM_COMPOSITOR_SHADOWS && inFreeformWindowingMode()) {
             final int elevation = taskIsFocused
                     ? DECOR_SHADOW_FOCUSED_HEIGHT_IN_DIP : DECOR_SHADOW_UNFOCUSED_HEIGHT_IN_DIP;
             return dipToPixel(elevation, mDisplayContent.getDisplayMetrics());
@@ -3949,7 +3990,7 @@ class Task extends WindowContainer<WindowContainer> {
      */
     private void updateShadowsRadius(boolean taskIsFocused,
             SurfaceControl.Transaction pendingTransaction) {
-        if (!mWmService.mRenderShadowsInCompositor) return;
+        if (!mWmService.mRenderShadowsInCompositor || !isRootTask()) return;
 
         final float newShadowRadius = getShadowRadius(taskIsFocused);
         if (mShadowRadius != newShadowRadius) {
@@ -3970,5 +4011,18 @@ class Task extends WindowContainer<WindowContainer> {
         mPictureInPictureParams.copyOnlySet(p);
         mAtmService.mTaskOrganizerController.dispatchTaskInfoChanged(
                 this, true /* force */);
+    }
+
+    /**
+     * See {@link WindowContainerTransaction#setBoundsChangeTransaction}. In short this
+     * transaction will be consumed by the next BASE_APPLICATION window within our hierarchy
+     * to resize, and it will defer the transaction until that resize frame completes.
+     */
+    void setMainWindowSizeChangeTransaction(SurfaceControl.Transaction t) {
+        mMainWindowSizeChangeTransaction = t;
+    }
+
+    SurfaceControl.Transaction getMainWindowSizeChangeTransaction() {
+        return mMainWindowSizeChangeTransaction;
     }
 }

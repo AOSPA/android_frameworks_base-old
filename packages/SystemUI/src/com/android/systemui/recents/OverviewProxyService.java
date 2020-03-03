@@ -352,6 +352,8 @@ public class OverviewProxyService implements CallbackController<OverviewProxyLis
             try {
                 Intent intent = new Intent(AccessibilityManager.ACTION_CHOOSE_ACCESSIBILITY_BUTTON);
                 intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+                intent.putExtra(AccessibilityManager.EXTRA_SHORTCUT_TYPE,
+                        AccessibilityManager.ACCESSIBILITY_BUTTON);
                 mContext.startActivityAsUser(intent, UserHandle.CURRENT);
             } finally {
                 Binder.restoreCallingIdentity(token);
@@ -376,6 +378,14 @@ public class OverviewProxyService implements CallbackController<OverviewProxyLis
                 Insets visibleInsets, int taskId) {
             mScreenshotHelper.provideScreenshot(screenImage, locationInScreen, visibleInsets,
                     taskId, mHandler, null);
+        }
+
+        @Override
+        public void setSplitScreenMinimized(boolean minimized) {
+            Divider divider = mDividerOptional.get();
+            if (divider != null) {
+                divider.setMinimized(minimized);
+            }
         }
 
         private boolean verifyCaller(String reason) {
@@ -408,6 +418,9 @@ public class OverviewProxyService implements CallbackController<OverviewProxyLis
     private final ServiceConnection mOverviewServiceConnection = new ServiceConnection() {
         @Override
         public void onServiceConnected(ComponentName name, IBinder service) {
+            if (SysUiState.DEBUG) {
+                Log.d(TAG_OPS, "Overview proxy service connected");
+            }
             mConnectionBackoffAttempts = 0;
             mHandler.removeCallbacks(mDeferredConnectionCallback);
             try {
@@ -560,6 +573,10 @@ public class OverviewProxyService implements CallbackController<OverviewProxyLis
                 mNavBarController.getDefaultNavigationBarFragment();
         final NavigationBarView navBarView =
                 mNavBarController.getNavigationBarView(mContext.getDisplayId());
+        if (SysUiState.DEBUG) {
+            Log.d(TAG_OPS, "Updating sysui state flags: navBarFragment=" + navBarFragment
+                    + " navBarView=" + navBarView);
+        }
 
         if (navBarFragment != null) {
             navBarFragment.updateSystemUiStateFlags(-1);
@@ -574,6 +591,10 @@ public class OverviewProxyService implements CallbackController<OverviewProxyLis
     }
 
     private void notifySystemUiStateFlags(int flags) {
+        if (SysUiState.DEBUG) {
+            Log.d(TAG_OPS, "Notifying sysui state change to overview service: proxy="
+                    + mOverviewProxy + " flags=" + flags);
+        }
         try {
             if (mOverviewProxy != null) {
                 mOverviewProxy.onSystemUiStateChanged(flags);

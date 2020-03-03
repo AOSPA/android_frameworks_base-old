@@ -72,9 +72,7 @@ import com.android.internal.statusbar.NotificationVisibility;
 import com.android.systemui.DumpController;
 import com.android.systemui.Dumpable;
 import com.android.systemui.R;
-import com.android.systemui.bubbles.BubbleController.BubbleExpandListener;
-import com.android.systemui.bubbles.BubbleController.BubbleStateChangeListener;
-import com.android.systemui.bubbles.BubbleController.NotifCallback;
+import com.android.systemui.bubbles.dagger.BubbleModule;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.shared.system.ActivityManagerWrapper;
 import com.android.systemui.shared.system.PinnedStackListenerForwarder;
@@ -96,6 +94,7 @@ import com.android.systemui.statusbar.phone.ShadeController;
 import com.android.systemui.statusbar.phone.StatusBar;
 import com.android.systemui.statusbar.policy.ConfigurationController;
 import com.android.systemui.statusbar.policy.ZenModeController;
+import com.android.systemui.util.FloatingContentCoordinator;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
@@ -105,16 +104,12 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 
-import javax.inject.Inject;
-import javax.inject.Singleton;
-
 /**
  * Bubbles are a special type of content that can "float" on top of other apps or System UI.
  * Bubbles can be expanded to show more content.
  *
  * The controller manages addition, removal, and visible state of bubbles on screen.
  */
-@Singleton
 public class BubbleController implements ConfigurationController.ConfigurationListener, Dumpable {
 
     private static final String TAG = TAG_WITH_CLASS_NAME ? "BubbleController" : TAG_BUBBLES;
@@ -146,6 +141,7 @@ public class BubbleController implements ConfigurationController.ConfigurationLi
     @Nullable private BubbleStackView.SurfaceSynchronizer mSurfaceSynchronizer;
     private final NotificationGroupManager mNotificationGroupManager;
     private final ShadeController mShadeController;
+    private final FloatingContentCoordinator mFloatingContentCoordinator;
 
     private BubbleData mBubbleData;
     @Nullable private BubbleStackView mStackView;
@@ -277,7 +273,6 @@ public class BubbleController implements ConfigurationController.ConfigurationLi
         }
     }
 
-    @Inject
     public BubbleController(Context context,
             NotificationShadeWindowController notificationShadeWindowController,
             StatusBarStateController statusBarStateController,
@@ -291,13 +286,17 @@ public class BubbleController implements ConfigurationController.ConfigurationLi
             NotificationEntryManager entryManager,
             NotifPipeline notifPipeline,
             FeatureFlags featureFlags,
-            DumpController dumpController) {
+            DumpController dumpController,
+            FloatingContentCoordinator floatingContentCoordinator) {
         this(context, notificationShadeWindowController, statusBarStateController, shadeController,
                 data, null /* synchronizer */, configurationController, interruptionStateProvider,
                 zenModeController, notifUserManager, groupManager, entryManager,
-                notifPipeline, featureFlags, dumpController);
+                notifPipeline, featureFlags, dumpController, floatingContentCoordinator);
     }
 
+    /**
+     * Injected constructor. See {@link BubbleModule}.
+     */
     public BubbleController(Context context,
             NotificationShadeWindowController notificationShadeWindowController,
             StatusBarStateController statusBarStateController,
@@ -312,13 +311,15 @@ public class BubbleController implements ConfigurationController.ConfigurationLi
             NotificationEntryManager entryManager,
             NotifPipeline notifPipeline,
             FeatureFlags featureFlags,
-            DumpController dumpController) {
+            DumpController dumpController,
+            FloatingContentCoordinator floatingContentCoordinator) {
         dumpController.registerDumpable(TAG, this);
         mContext = context;
         mShadeController = shadeController;
         mNotificationInterruptionStateProvider = interruptionStateProvider;
         mNotifUserManager = notifUserManager;
         mZenModeController = zenModeController;
+        mFloatingContentCoordinator = floatingContentCoordinator;
         mZenModeController.addCallback(new ZenModeController.Callback() {
             @Override
             public void onZenChanged(int zen) {
@@ -588,7 +589,8 @@ public class BubbleController implements ConfigurationController.ConfigurationLi
      */
     private void ensureStackViewCreated() {
         if (mStackView == null) {
-            mStackView = new BubbleStackView(mContext, mBubbleData, mSurfaceSynchronizer);
+            mStackView = new BubbleStackView(
+                    mContext, mBubbleData, mSurfaceSynchronizer, mFloatingContentCoordinator);
             ViewGroup nsv = mNotificationShadeWindowController.getNotificationShadeView();
             int bubbleScrimIndex = nsv.indexOfChild(nsv.findViewById(R.id.scrim_for_bubble));
             int stackIndex = bubbleScrimIndex + 1;  // Show stack above bubble scrim.

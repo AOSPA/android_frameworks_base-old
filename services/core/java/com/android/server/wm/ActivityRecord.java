@@ -1169,8 +1169,12 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         // An activity is considered to be in multi-window mode if its task isn't fullscreen.
         final boolean inMultiWindowMode = inMultiWindowMode();
         if (inMultiWindowMode != mLastReportedMultiWindowMode) {
-            mLastReportedMultiWindowMode = inMultiWindowMode;
-            scheduleMultiWindowModeChanged(getConfiguration());
+            if (!inMultiWindowMode && mLastReportedPictureInPictureMode) {
+                updatePictureInPictureMode(null, false);
+            } else {
+                mLastReportedMultiWindowMode = inMultiWindowMode;
+                scheduleMultiWindowModeChanged(getConfiguration());
+            }
         }
     }
 
@@ -1732,10 +1736,9 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
                 // The snapshot of home is only used once because it won't be updated while screen
                 // is on (see {@link TaskSnapshotController#screenTurningOff}).
                 mWmService.mTaskSnapshotController.removeSnapshotCache(task.mTaskId);
-                // TODO(b/9684093): Use more general condition to specify the case.
-                if (mDisplayContent.mAppTransition
-                        .getAppTransition() != WindowManager.TRANSIT_KEYGUARD_GOING_AWAY) {
-                    // Only use snapshot of home as starting window when unlocking.
+                if ((mDisplayContent.mAppTransition.getTransitFlags()
+                        & WindowManager.TRANSIT_FLAG_KEYGUARD_GOING_AWAY_NO_ANIMATION) == 0) {
+                    // Only use snapshot of home as starting window when unlocking directly.
                     return false;
                 }
             }
@@ -2688,7 +2691,8 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         // DisplayContent#topRunningActivity().
         final ActivityRecord next = display.topRunningActivity();
         final boolean isLastStackOverEmptyHome =
-                next == null && stack.isFocusedStackOnDisplay() && display.getRootHomeTask() != null;
+                next == null && stack.isFocusedStackOnDisplay()
+                        && display.getOrCreateRootHomeTask() != null;
         if (isLastStackOverEmptyHome) {
             // Don't destroy activity immediately if this is the last activity on the display and
             // the display contains home stack. Although there is no next activity at the moment,
@@ -5217,11 +5221,17 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         }
         final TransitionInfoSnapshot info = mStackSupervisor
                 .getActivityMetricsLogger().notifyWindowsDrawn(this, timestampNs);
-        final int windowsDrawnDelayMs = info != null ? info.windowsDrawnDelayMs : INVALID_DELAY;
-        final @LaunchState int launchState = info != null ? info.getLaunchState() : -1;
-        mStackSupervisor.reportActivityLaunchedLocked(false /* timeout */, this,
-                windowsDrawnDelayMs, launchState);
-        mStackSupervisor.stopWaitingForActivityVisible(this, windowsDrawnDelayMs);
+        final boolean validInfo = info != null;
+        final int windowsDrawnDelayMs = validInfo ? info.windowsDrawnDelayMs : INVALID_DELAY;
+        final @LaunchState int launchState = validInfo ? info.getLaunchState() : -1;
+        // The activity may have been requested to be invisible (another activity has been launched)
+        // so there is no valid info. But if it is the current top activity (e.g. sleeping), the
+        // invalid state is still reported to make sure the waiting result is notified.
+        if (validInfo || this == mDisplayContent.topRunningActivity()) {
+            mStackSupervisor.reportActivityLaunchedLocked(false /* timeout */, this,
+                    windowsDrawnDelayMs, launchState);
+            mStackSupervisor.stopWaitingForActivityVisible(this, windowsDrawnDelayMs);
+        }
         finishLaunchTickingLocked();
         if (task != null) {
             task.hasBeenVisible = true;
@@ -6244,6 +6254,13 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         return mRemoteAnimationDefinition;
     }
 
+    @Override
+    void applyFixedRotationTransform(DisplayInfo info, DisplayFrames displayFrames,
+            Configuration config) {
+        super.applyFixedRotationTransform(info, displayFrames, config);
+        ensureActivityConfiguration(0 /* globalChanges */, false /* preserveWindow */);
+    }
+
     void setRequestedOrientation(int requestedOrientation) {
         setOrientation(requestedOrientation, mayFreezeScreenLocked());
         mAtmService.getTaskChangeNotificationController().notifyActivityRequestedOrientationChanged(
@@ -6482,11 +6499,20 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
 
     @Override
     void resolveOverrideConfiguration(Configuration newParentConfiguration) {
-        Configuration resolvedConfig = getResolvedOverrideConfiguration();
+        super.resolveOverrideConfiguration(newParentConfiguration);
+        final Configuration resolvedConfig = getResolvedOverrideConfiguration();
+        if (isFixedRotationTransforming()) {
+            // The resolved configuration is applied with rotated display configuration. If this
+            // activity matches its parent (the following resolving procedures are no-op), then it
+            // can use the resolved configuration directly. Otherwise (e.g. fixed aspect ratio),
+            // the rotated configuration is used as parent configuration to compute the actual
+            // resolved configuration. It is like putting the activity in a rotated container.
+            mTmpConfig.setTo(resolvedConfig);
+            newParentConfiguration = mTmpConfig;
+        }
         if (mCompatDisplayInsets != null) {
             resolveSizeCompatModeConfiguration(newParentConfiguration);
         } else {
-            super.resolveOverrideConfiguration(newParentConfiguration);
             // We ignore activities' requested orientation in multi-window modes. Task level may
             // take them into consideration when calculating bounds.
             if (getParent() != null && getParent().inMultiWindowMode()) {
@@ -6515,7 +6541,6 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
      * inheriting the parent bounds.
      */
     private void resolveSizeCompatModeConfiguration(Configuration newParentConfiguration) {
-        super.resolveOverrideConfiguration(newParentConfiguration);
         final Configuration resolvedConfig = getResolvedOverrideConfiguration();
         final Rect resolvedBounds = resolvedConfig.windowConfiguration.getBounds();
 
@@ -6689,28 +6714,26 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         mTmpPrevBounds.set(getBounds());
         super.onConfigurationChanged(newParentConfig);
 
-        final Rect overrideBounds = getResolvedOverrideBounds();
-        if (task != null && !overrideBounds.isEmpty()
-                // If the changes come from change-listener, the incoming parent configuration is
-                // still the old one. Make sure their orientations are the same to reduce computing
-                // the compatibility bounds for the intermediate state.
-                && (task.getConfiguration().orientation == newParentConfig.orientation)) {
-            final Rect taskBounds = task.getBounds();
-            // Since we only center the activity horizontally, if only the fixed height is smaller
-            // than its container, the override bounds don't need to take effect.
-            if ((overrideBounds.width() != taskBounds.width()
-                    || overrideBounds.height() > taskBounds.height())) {
-                calculateCompatBoundsTransformation(newParentConfig);
-                updateSurfacePosition();
-            } else if (mSizeCompatBounds != null) {
+        if (shouldUseSizeCompatMode()) {
+            final Rect overrideBounds = getResolvedOverrideBounds();
+            if (task != null && !overrideBounds.isEmpty()) {
+                final Rect taskBounds = task.getBounds();
+                // Since we only center the activity horizontally, if only the fixed height is
+                // smaller than its container, the override bounds don't need to take effect.
+                if ((overrideBounds.width() != taskBounds.width()
+                        || overrideBounds.height() > taskBounds.height())) {
+                    calculateCompatBoundsTransformation(newParentConfig);
+                    updateSurfacePosition();
+                } else if (mSizeCompatBounds != null) {
+                    mSizeCompatBounds = null;
+                    mSizeCompatScale = 1f;
+                    updateSurfacePosition();
+                }
+            } else if (overrideBounds.isEmpty()) {
                 mSizeCompatBounds = null;
                 mSizeCompatScale = 1f;
                 updateSurfacePosition();
             }
-        } else if (overrideBounds.isEmpty()) {
-            mSizeCompatBounds = null;
-            mSizeCompatScale = 1f;
-            updateSurfacePosition();
         }
 
         final int newWinMode = getWindowingMode();
@@ -7730,6 +7753,12 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
             return;
         }
         win.getAnimationFrames(outFrame, outInsets, outStableInsets, outSurfaceInsets);
+        if (isFixedRotationTransforming()) {
+            // This activity has been rotated but the display is still in old rotation. Because the
+            // animation applies in display space coordinates, the rotated animation frames need to
+            // be unrotated to avoid being cropped.
+            unrotateAnimationFrames(outFrame, outInsets, outStableInsets, outSurfaceInsets);
+        }
     }
 
     void setPictureInPictureParams(PictureInPictureParams p) {

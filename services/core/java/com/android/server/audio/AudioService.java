@@ -30,6 +30,7 @@ import android.Manifest;
 import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.annotation.UserIdInt;
 import android.app.ActivityManager;
 import android.app.ActivityManagerInternal;
 import android.app.AppGlobals;
@@ -64,7 +65,7 @@ import android.hardware.usb.UsbManager;
 import android.hidl.manager.V1_0.IServiceManager;
 import android.media.AudioAttributes;
 import android.media.AudioAttributes.AttributeSystemUsage;
-import android.media.AudioDevice;
+import android.media.AudioDeviceAttributes;
 import android.media.AudioDeviceInfo;
 import android.media.AudioFocusInfo;
 import android.media.AudioFocusRequest;
@@ -158,6 +159,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.Set;
@@ -1004,11 +1006,14 @@ public class AudioService extends IAudioService.Stub
         mDeviceBroker.onAudioServerDied();
 
         // Restore call state
-        if (AudioSystem.setPhoneState(mMode) ==  AudioSystem.AUDIO_STATUS_OK) {
-            mModeLogger.log(new AudioEventLogger.StringEvent(
-                "onAudioServerDied causes setPhoneState(" + AudioSystem.modeToString(mMode) + ")"));
+        synchronized (mDeviceBroker.mSetModeLock) {
+            if (AudioSystem.setPhoneState(mMode, getModeOwnerUid())
+                    ==  AudioSystem.AUDIO_STATUS_OK) {
+                mModeLogger.log(new AudioEventLogger.StringEvent(
+                        "onAudioServerDied causes setPhoneState(" + AudioSystem.modeToString(mMode)
+                        + ", uid=" + getModeOwnerUid() + ")"));
+            }
         }
-
         final int forSys;
         synchronized (mSettingsLock) {
             forSys = mCameraSoundForced ?
@@ -1075,6 +1080,15 @@ public class AudioService extends IAudioService.Stub
                             + AudioSystem.audioSystemErrorToString(status)
                             + " when connecting mixes for policy " + policy.toLogFriendlyString());
                     policy.release();
+                } else {
+                    final int deviceAffinitiesStatus = policy.setupDeviceAffinities();
+                    if (deviceAffinitiesStatus != AudioSystem.SUCCESS) {
+                        Log.e(TAG, "onAudioServerDied: error "
+                                + AudioSystem.audioSystemErrorToString(deviceAffinitiesStatus)
+                                + " when connecting device affinities for policy "
+                                + policy.toLogFriendlyString());
+                        policy.release();
+                    }
                 }
             }
         }
@@ -1723,7 +1737,7 @@ public class AudioService extends IAudioService.Stub
     // IPC methods
     ///////////////////////////////////////////////////////////////////////////
     /** @see AudioManager#setPreferredDeviceForStrategy(AudioProductStrategy, AudioDeviceInfo) */
-    public int setPreferredDeviceForStrategy(int strategy, AudioDevice device) {
+    public int setPreferredDeviceForStrategy(int strategy, AudioDeviceAttributes device) {
         if (device == null) {
             return AudioSystem.ERROR;
         }
@@ -1732,7 +1746,7 @@ public class AudioService extends IAudioService.Stub
                 "setPreferredDeviceForStrategy u/pid:%d/%d strat:%d dev:%s",
                 Binder.getCallingUid(), Binder.getCallingPid(), strategy, device.toString());
         sDeviceLogger.log(new AudioEventLogger.StringEvent(logString).printLog(TAG));
-        if (device.getRole() == AudioDevice.ROLE_INPUT) {
+        if (device.getRole() == AudioDeviceAttributes.ROLE_INPUT) {
             Log.e(TAG, "Unsupported input routing in " + logString);
             return AudioSystem.ERROR;
         }
@@ -1760,9 +1774,9 @@ public class AudioService extends IAudioService.Stub
     }
 
     /** @see AudioManager#getPreferredDeviceForStrategy(AudioProductStrategy) */
-    public AudioDevice getPreferredDeviceForStrategy(int strategy) {
+    public AudioDeviceAttributes getPreferredDeviceForStrategy(int strategy) {
         enforceModifyAudioRoutingPermission();
-        AudioDevice[] devices = new AudioDevice[1];
+        AudioDeviceAttributes[] devices = new AudioDeviceAttributes[1];
         final long identity = Binder.clearCallingIdentity();
         final int status = AudioSystem.getPreferredDeviceForStrategy(strategy, devices);
         Binder.restoreCallingIdentity(identity);
@@ -1796,7 +1810,7 @@ public class AudioService extends IAudioService.Stub
     }
 
     /** @see AudioManager#getDevicesForAttributes(AudioAttributes) */
-    public @NonNull ArrayList<AudioDevice> getDevicesForAttributes(
+    public @NonNull ArrayList<AudioDeviceAttributes> getDevicesForAttributes(
             @NonNull AudioAttributes attributes) {
         Objects.requireNonNull(attributes);
         enforceModifyAudioRoutingPermission();
@@ -3448,14 +3462,30 @@ public class AudioService extends IAudioService.Stub
         return modeOwnerPid;
     }
 
+    /**
+     * Return the uid of the current audio mode owner
+     * @return 0 if nobody owns the mode
+     */
+    /*package*/ int getModeOwnerUid() {
+        int modeOwnerUid = 0;
+        try {
+            modeOwnerUid = mSetModeDeathHandlers.get(0).getUid();
+        } catch (Exception e) {
+            // nothing to do, modeOwnerUid is not modified
+        }
+        return modeOwnerUid;
+    }
+
     private class SetModeDeathHandler implements IBinder.DeathRecipient {
-        private IBinder mCb; // To be notified of client's death
-        private int mPid;
+        private final IBinder mCb; // To be notified of client's death
+        private final int mPid;
+        private final int mUid;
         private int mMode = AudioSystem.MODE_NORMAL; // Current mode set by this client
 
-        SetModeDeathHandler(IBinder cb, int pid) {
+        SetModeDeathHandler(IBinder cb, int pid, int uid) {
             mCb = cb;
             mPid = pid;
+            mUid = uid;
         }
 
         public void binderDied() {
@@ -3468,7 +3498,7 @@ public class AudioService extends IAudioService.Stub
                 if (index < 0) {
                     Log.w(TAG, "unregistered setMode() client died");
                 } else {
-                    newModeOwnerPid = setModeInt(AudioSystem.MODE_NORMAL, mCb, mPid, TAG);
+                    newModeOwnerPid = setModeInt(AudioSystem.MODE_NORMAL, mCb, mPid, mUid, TAG);
                 }
             }
             // when entering RINGTONE, IN_CALL or IN_COMMUNICATION mode, clear all
@@ -3493,6 +3523,10 @@ public class AudioService extends IAudioService.Stub
 
         public IBinder getBinder() {
             return mCb;
+        }
+
+        public int getUid() {
+            return mUid;
         }
     }
 
@@ -3544,7 +3578,8 @@ public class AudioService extends IAudioService.Stub
                         + " without permission or being mode owner");
                 return;
             }
-            newModeOwnerPid = setModeInt(mode, cb, callingPid, callingPackage);
+            newModeOwnerPid = setModeInt(
+                mode, cb, callingPid, Binder.getCallingUid(), callingPackage);
         }
         // when entering RINGTONE, IN_CALL or IN_COMMUNICATION mode, clear all
         // SCO connections not started by the application changing the mode when pid changes
@@ -3556,9 +3591,11 @@ public class AudioService extends IAudioService.Stub
     // setModeInt() returns a valid PID if the audio mode was successfully set to
     // any mode other than NORMAL.
     @GuardedBy("mDeviceBroker.mSetModeLock")
-    private int setModeInt(int mode, IBinder cb, int pid, String caller) {
-        if (DEBUG_MODE) { Log.v(TAG, "setModeInt(mode=" + mode + ", pid=" + pid + ", caller="
-                + caller + ")"); }
+    private int setModeInt(int mode, IBinder cb, int pid, int uid, String caller) {
+        if (DEBUG_MODE) {
+            Log.v(TAG, "setModeInt(mode=" + mode + ", pid=" + pid
+                    + ", uid=" + uid + ", caller=" + caller + ")");
+        }
         int newModeOwnerPid = 0;
         if (cb == null) {
             Log.e(TAG, "setModeInt() called with null binder");
@@ -3595,7 +3632,7 @@ public class AudioService extends IAudioService.Stub
                 }
             } else {
                 if (hdlr == null) {
-                    hdlr = new SetModeDeathHandler(cb, pid);
+                    hdlr = new SetModeDeathHandler(cb, pid, uid);
                 }
                 // Register for client death notification
                 try {
@@ -3613,7 +3650,7 @@ public class AudioService extends IAudioService.Stub
 
             if (actualMode != mMode) {
                 final long identity = Binder.clearCallingIdentity();
-                status = AudioSystem.setPhoneState(actualMode);
+                status = AudioSystem.setPhoneState(actualMode, getModeOwnerUid());
                 Binder.restoreCallingIdentity(identity);
                 if (status == AudioSystem.AUDIO_STATUS_OK) {
                     if (DEBUG_MODE) { Log.v(TAG, " mode successfully set to " + actualMode); }
@@ -6696,7 +6733,7 @@ public class AudioService extends IAudioService.Stub
     static final int LOG_NB_EVENTS_DYN_POLICY = 10;
 
     final private AudioEventLogger mModeLogger = new AudioEventLogger(LOG_NB_EVENTS_PHONE_STATE,
-            "phone state (logged after successfull call to AudioSystem.setPhoneState(int))");
+            "phone state (logged after successful call to AudioSystem.setPhoneState(int, int))");
 
     // logs for wired + A2DP device connections:
     // - wired: logged before onSetWiredDeviceConnectionState() is executed
@@ -7934,22 +7971,16 @@ public class AudioService extends IAudioService.Stub
 
         int setUidDeviceAffinities(int uid, @NonNull int[] types, @NonNull String[] addresses) {
             final Integer Uid = new Integer(uid);
-            int res;
             if (mUidDeviceAffinities.remove(Uid) != null) {
-                final long identity = Binder.clearCallingIdentity();
-                res = AudioSystem.removeUidDeviceAffinities(uid);
-                Binder.restoreCallingIdentity(identity);
-                if (res != AudioSystem.SUCCESS) {
+                if (removeUidDeviceAffinitiesFromSystem(uid) != AudioSystem.SUCCESS) {
                     Log.e(TAG, "AudioSystem. removeUidDeviceAffinities(" + uid + ") failed, "
                             + " cannot call AudioSystem.setUidDeviceAffinities");
                     return AudioManager.ERROR;
                 }
             }
-            final long identity = Binder.clearCallingIdentity();
-            res = AudioSystem.setUidDeviceAffinities(uid, types, addresses);
-            Binder.restoreCallingIdentity(identity);
-            if (res == AudioSystem.SUCCESS) {
-                mUidDeviceAffinities.put(Uid, new AudioDeviceArray(types, addresses));
+            AudioDeviceArray deviceArray = new AudioDeviceArray(types, addresses);
+            if (setUidDeviceAffinitiesOnSystem(uid, deviceArray) == AudioSystem.SUCCESS) {
+                mUidDeviceAffinities.put(Uid, deviceArray);
                 return AudioManager.SUCCESS;
             }
             Log.e(TAG, "AudioSystem. setUidDeviceAffinities(" + uid + ") failed");
@@ -7958,10 +7989,7 @@ public class AudioService extends IAudioService.Stub
 
         int removeUidDeviceAffinities(int uid) {
             if (mUidDeviceAffinities.remove(new Integer(uid)) != null) {
-                final long identity = Binder.clearCallingIdentity();
-                final int res = AudioSystem.removeUidDeviceAffinities(uid);
-                Binder.restoreCallingIdentity(identity);
-                if (res == AudioSystem.SUCCESS) {
+                if (removeUidDeviceAffinitiesFromSystem(uid) == AudioSystem.SUCCESS) {
                     return AudioManager.SUCCESS;
                 }
             }
@@ -7969,26 +7997,41 @@ public class AudioService extends IAudioService.Stub
             return AudioManager.ERROR;
         }
 
+        @AudioSystem.AudioSystemError private int removeUidDeviceAffinitiesFromSystem(int uid) {
+            final long identity = Binder.clearCallingIdentity();
+            try {
+                return AudioSystem.removeUidDeviceAffinities(uid);
+            } finally {
+                Binder.restoreCallingIdentity(identity);
+            }
+        }
+
+        @AudioSystem.AudioSystemError private int setUidDeviceAffinitiesOnSystem(int uid,
+                AudioDeviceArray deviceArray) {
+            final long identity = Binder.clearCallingIdentity();
+            try {
+                return AudioSystem.setUidDeviceAffinities(uid, deviceArray.mDeviceTypes,
+                        deviceArray.mDeviceAddresses);
+            } finally {
+                Binder.restoreCallingIdentity(identity);
+            }
+        }
+
         int setUserIdDeviceAffinities(int userId,
                 @NonNull int[] types, @NonNull String[] addresses) {
             final Integer UserId = new Integer(userId);
-            int res;
             if (mUserIdDeviceAffinities.remove(UserId) != null) {
-                final long identity = Binder.clearCallingIdentity();
-                res = AudioSystem.removeUserIdDeviceAffinities(UserId);
-                Binder.restoreCallingIdentity(identity);
-                if (res != AudioSystem.SUCCESS) {
+                if (removeUserIdDeviceAffinitiesFromSystem(userId) != AudioSystem.SUCCESS) {
                     Log.e(TAG, "AudioSystem. removeUserIdDeviceAffinities("
                             + UserId + ") failed, "
                             + " cannot call AudioSystem.setUserIdDeviceAffinities");
                     return AudioManager.ERROR;
                 }
             }
-            final long identity = Binder.clearCallingIdentity();
-            res = AudioSystem.setUserIdDeviceAffinities(userId, types, addresses);
-            Binder.restoreCallingIdentity(identity);
-            if (res == AudioSystem.SUCCESS) {
-                mUserIdDeviceAffinities.put(UserId, new AudioDeviceArray(types, addresses));
+            AudioDeviceArray audioDeviceArray = new AudioDeviceArray(types, addresses);
+            if (setUserIdDeviceAffinitiesOnSystem(userId, audioDeviceArray)
+                    == AudioSystem.SUCCESS) {
+                mUserIdDeviceAffinities.put(UserId, audioDeviceArray);
                 return AudioManager.SUCCESS;
             }
             Log.e(TAG, "AudioSystem.setUserIdDeviceAffinities(" + userId + ") failed");
@@ -7997,10 +8040,7 @@ public class AudioService extends IAudioService.Stub
 
         int removeUserIdDeviceAffinities(int userId) {
             if (mUserIdDeviceAffinities.remove(new Integer(userId)) != null) {
-                final long identity = Binder.clearCallingIdentity();
-                final int res = AudioSystem.removeUserIdDeviceAffinities(userId);
-                Binder.restoreCallingIdentity(identity);
-                if (res == AudioSystem.SUCCESS) {
+                if (removeUserIdDeviceAffinitiesFromSystem(userId) == AudioSystem.SUCCESS) {
                     return AudioManager.SUCCESS;
                 }
             }
@@ -8008,9 +8048,76 @@ public class AudioService extends IAudioService.Stub
             return AudioManager.ERROR;
         }
 
+        @AudioSystem.AudioSystemError private int removeUserIdDeviceAffinitiesFromSystem(
+                @UserIdInt int userId) {
+            final long identity = Binder.clearCallingIdentity();
+            try {
+                return AudioSystem.removeUserIdDeviceAffinities(userId);
+            } finally {
+                Binder.restoreCallingIdentity(identity);
+            }
+        }
+
+        @AudioSystem.AudioSystemError private int setUserIdDeviceAffinitiesOnSystem(
+                @UserIdInt int userId, AudioDeviceArray deviceArray) {
+            final long identity = Binder.clearCallingIdentity();
+            try {
+                return AudioSystem.setUserIdDeviceAffinities(userId, deviceArray.mDeviceTypes,
+                        deviceArray.mDeviceAddresses);
+            } finally {
+                Binder.restoreCallingIdentity(identity);
+            }
+        }
+
+        @AudioSystem.AudioSystemError int setupDeviceAffinities() {
+            for (Map.Entry<Integer, AudioDeviceArray> uidEntry : mUidDeviceAffinities.entrySet()) {
+                int uidStatus = removeUidDeviceAffinitiesFromSystem(uidEntry.getKey());
+                if (uidStatus != AudioSystem.SUCCESS) {
+                    Log.e(TAG,
+                            "setupDeviceAffinities failed to remove device affinity for uid "
+                                    + uidEntry.getKey());
+                    return uidStatus;
+                }
+                uidStatus = setUidDeviceAffinitiesOnSystem(uidEntry.getKey(), uidEntry.getValue());
+                if (uidStatus != AudioSystem.SUCCESS) {
+                    Log.e(TAG,
+                            "setupDeviceAffinities failed to set device affinity for uid "
+                                    + uidEntry.getKey());
+                    return uidStatus;
+                }
+            }
+
+            for (Map.Entry<Integer, AudioDeviceArray> userIdEntry :
+                    mUserIdDeviceAffinities.entrySet()) {
+                int userIdStatus = removeUserIdDeviceAffinitiesFromSystem(userIdEntry.getKey());
+                if (userIdStatus != AudioSystem.SUCCESS) {
+                    Log.e(TAG,
+                            "setupDeviceAffinities failed to remove device affinity for userId "
+                                    + userIdEntry.getKey());
+                    return userIdStatus;
+                }
+                userIdStatus = setUserIdDeviceAffinitiesOnSystem(userIdEntry.getKey(),
+                                userIdEntry.getValue());
+                if (userIdStatus != AudioSystem.SUCCESS) {
+                    Log.e(TAG,
+                            "setupDeviceAffinities failed to set device affinity for userId "
+                                    + userIdEntry.getKey());
+                    return userIdStatus;
+                }
+            }
+            return AudioSystem.SUCCESS;
+        }
+
         /** @return human readable debug informations summarizing the state of the object. */
         public String toLogFriendlyString() {
             String textDump = super.toLogFriendlyString();
+            textDump += " Uid Device Affinities:\n";
+            String spacer = "     ";
+            textDump += logFriendlyAttributeDeviceArrayMap("Uid",
+                    mUidDeviceAffinities, spacer);
+            textDump += " UserId Device Affinities:\n";
+            textDump += logFriendlyAttributeDeviceArrayMap("UserId",
+                    mUserIdDeviceAffinities, spacer);
             textDump += " Proxy:\n";
             textDump += "   is focus policy= " + mIsFocusPolicy + "\n";
             if (mIsFocusPolicy) {
@@ -8020,6 +8127,24 @@ public class AudioService extends IAudioService.Stub
             }
             textDump += "   media projection= " + mProjection + "\n";
             return textDump;
+        }
+
+        private String logFriendlyAttributeDeviceArrayMap(String attribute,
+                Map<Integer, AudioDeviceArray> map, String spacer) {
+            final StringBuilder stringBuilder = new StringBuilder();
+            for (Map.Entry<Integer, AudioDeviceArray> mapEntry : map.entrySet()) {
+                stringBuilder.append(spacer).append(attribute).append(": ")
+                        .append(mapEntry.getKey()).append("\n");
+                AudioDeviceArray deviceArray = mapEntry.getValue();
+                String deviceSpacer = spacer + "   ";
+                for (int i = 0; i < deviceArray.mDeviceTypes.length; i++) {
+                    stringBuilder.append(deviceSpacer).append("Type: 0x")
+                            .append(Integer.toHexString(deviceArray.mDeviceTypes[i]))
+                            .append(" Address: ").append(deviceArray.mDeviceAddresses[i])
+                                    .append("\n");
+                }
+            }
+            return stringBuilder.toString();
         }
     };
 

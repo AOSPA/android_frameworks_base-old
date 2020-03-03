@@ -141,6 +141,12 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
     @ActivityInfo.ScreenOrientation
     protected int mOrientation = SCREEN_ORIENTATION_UNSPECIFIED;
 
+    /**
+     * The window container which decides its orientation since the last time
+     * {@link #getOrientation(int) was called.
+     */
+    protected WindowContainer mLastOrientationSource;
+
     private final Pools.SynchronizedPool<ForAllWindowsConsumerWrapper> mConsumerWrapperPool =
             new Pools.SynchronizedPool<>(3);
 
@@ -365,6 +371,7 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
             // build a surface.
             setSurfaceControl(makeSurface().build());
             getPendingTransaction().show(mSurfaceControl);
+            onSurfaceShown(getPendingTransaction());
             updateSurfacePosition();
         } else {
             // If we have a surface but a new parent, we just need to perform a reparent. Go through
@@ -381,6 +388,13 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         // Either way we need to ask the parent to assign us a Z-order.
         mParent.assignChildLayers();
         scheduleAnimation();
+    }
+
+    /**
+     * Called when the surface is shown for the first time.
+     */
+    void onSurfaceShown(Transaction t) {
+        // do nothing
     }
 
     // Temp. holders for a chain of containers we are currently processing.
@@ -601,7 +615,7 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
     void positionChildAt(int position, E child, boolean includingParents) {
 
         if (child.getParent() != this) {
-            throw new IllegalArgumentException("removeChild: container=" + child.getName()
+            throw new IllegalArgumentException("positionChildAt: container=" + child.getName()
                     + " is not a child of container=" + getName()
                     + " current parent=" + child.getParent());
         }
@@ -1053,6 +1067,7 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
      * @return The orientation as specified by this branch or the window hierarchy.
      */
     int getOrientation(int candidate) {
+        mLastOrientationSource = null;
         if (!fillsParent()) {
             // Ignore containers that don't completely fill their parents.
             return SCREEN_ORIENTATION_UNSET;
@@ -1064,6 +1079,7 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         // if none of the children have a better candidate for the orientation.
         if (mOrientation != SCREEN_ORIENTATION_UNSET
                 && mOrientation != SCREEN_ORIENTATION_UNSPECIFIED) {
+            mLastOrientationSource = this;
             return mOrientation;
         }
 
@@ -1079,6 +1095,7 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
                 // can find one. Else return SCREEN_ORIENTATION_BEHIND so the caller can choose to
                 // look behind this container.
                 candidate = orientation;
+                mLastOrientationSource = wc;
                 continue;
             }
 
@@ -1092,11 +1109,28 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
                 ProtoLog.v(WM_DEBUG_ORIENTATION, "%s is requesting orientation %d (%s)",
                         wc.toString(), orientation,
                         ActivityInfo.screenOrientationToString(orientation));
+                mLastOrientationSource = wc;
                 return orientation;
             }
         }
 
         return candidate;
+    }
+
+    /**
+     * @return The deepest source which decides the orientation of this window container since the
+     *         last time {@link #getOrientation(int) was called.
+     */
+    @Nullable
+    WindowContainer getLastOrientationSource() {
+        final WindowContainer source = mLastOrientationSource;
+        if (source != null && source != this) {
+            final WindowContainer nextSource = source.getLastOrientationSource();
+            if (nextSource != null) {
+                return nextSource;
+            }
+        }
+        return source;
     }
 
     /**
@@ -1425,15 +1459,15 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         }
     }
 
-    void forAllTasks(Consumer<Task> callback, boolean traverseTopToBottom, Task excludedTask) {
+    void forAllLeafTasks(Consumer<Task> callback, boolean traverseTopToBottom) {
         final int count = mChildren.size();
         if (traverseTopToBottom) {
             for (int i = count - 1; i >= 0; --i) {
-                mChildren.get(i).forAllTasks(callback, traverseTopToBottom, excludedTask);
+                mChildren.get(i).forAllLeafTasks(callback, traverseTopToBottom);
             }
         } else {
             for (int i = 0; i < count; i++) {
-                mChildren.get(i).forAllTasks(callback, traverseTopToBottom, excludedTask);
+                mChildren.get(i).forAllLeafTasks(callback, traverseTopToBottom);
             }
         }
     }
@@ -1908,7 +1942,7 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
 
     @Override
     public Builder makeAnimationLeash() {
-        return makeSurface();
+        return makeSurface().setContainerLayer();
     }
 
     @Override

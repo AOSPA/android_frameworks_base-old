@@ -392,6 +392,7 @@ message Atom {
         WifiFailureStatReported wifi_failure_stat_reported = 252 [(module) = "wifi"];
         WifiConnectionResultReported wifi_connection_result_reported = 253 [(module) = "wifi"];
         AppFreezeChanged app_freeze_changed = 254 [(module) = "framework"];
+        SnapshotMergeReported snapshot_merge_reported = 255;
         SdkExtensionStatus sdk_extension_status = 354;
     }
 
@@ -678,17 +679,32 @@ message CachedKillReported {
  *   frameworks/opt/net/wifi/service/java/com/android/server/wifi/WifiDataStall.java
  */
 message WifiHealthStatReported {
+    enum Band {
+        UNKNOWN = 0;
+        // All of 2.4GHz band
+        BAND_2G = 1;
+        // Frequencies in the range of [5150, 5250) GHz
+        BAND_5G_LOW = 2;
+        // Frequencies in the range of [5250, 5725) GHz
+        BAND_5G_MIDDLE = 3;
+        // Frequencies in the range of [5725, 5850) GHz
+        BAND_5G_HIGH = 4;
+        // Frequencies in the range of [5925, 6425) GHz
+        BAND_6G_LOW = 5;
+        // Frequencies in the range of [6425, 6875) GHz
+        BAND_6G_MIDDLE = 6;
+        // Frequencies in the range of [6875, 7125) GHz
+        BAND_6G_HIGH = 7;
+    }
     // duration this stat is obtained over in milliseconds
     optional int32 duration_millis = 1;
     // whether wifi is classified as sufficient for the user's data traffic, determined
     // by whether the calculated throughput exceeds the average demand within |duration_millis|
     optional bool is_sufficient = 2;
-    // whether the calculated throughput is exceeds the minimum required for typical usage
-    optional bool is_throughput_good = 3;
     // whether cellular data is available
-    optional bool is_cell_data_available = 4;
-    // the WLAN channel the connected network is on (ie. 2412)
-    optional int32 frequency = 5;
+    optional bool is_cell_data_available = 3;
+    // the Band bucket the connected network is on
+    optional Band band = 4;
 }
 
 /**
@@ -4403,6 +4419,52 @@ message BootTimeEventErrorCode {
     optional int32 error_code = 2;
 }
 
+/**
+ * Collects Virtual A/B statistics related to the use of dm-snapshot performed
+ * after an OTA.
+ *
+ * Logged from:
+ *  - system/core/fs_mgr/libsnapshot/snapshot.cpp
+ *  - system/core/fs_mgr/libsnapshot/snapshotctl.cpp
+ */
+message SnapshotMergeReported {
+    // Keep in sync with
+    // system/core/fs_mgr/libsnapshot/android/snapshot/snapshot.proto
+    enum UpdateState {
+        // No update or merge is in progress.
+        NONE = 0;
+        // An update is applying; snapshots may already exist.
+        INITIATED = 1;
+        // An update is pending, but has not been successfully booted yet.
+        UNVERIFIED = 2;
+        // The kernel is merging in the background.
+        MERGING = 3;
+        // Post-merge cleanup steps could not be completed due to a transient
+        // error, but the next reboot will finish any pending operations.
+        MERGE_NEEDS_REBOOT = 4;
+        // Merging is complete, and needs to be acknowledged.
+        MERGE_COMPLETED = 5;
+        // Merging failed due to an unrecoverable error.
+        MERGE_FAILED = 6;
+        // The update was implicitly cancelled, either by a rollback or a flash
+        // operation via fastboot. This state can only be returned by WaitForMerge.
+        CANCELLED = 7;
+    };
+
+    // Status of the update after the merge attempts.
+    optional UpdateState final_state = 1;
+
+    // Time to complete a merge operation in milliseconds.
+    // A negative value corresponds to the case in which the merge operation
+    // was interrupted and resumed (e.g. in case of a system reboot during the
+    // merge).
+    optional int64 duration_millis = 2;
+
+    // Number of reboots that occurred after issuing and before completing the
+    // merge of all the snapshot devices.
+    optional int32 intermediate_reboots = 3;
+}
+
 //////////////////////////////////////////////////////////////////////
 // Pulled atoms below this line //
 //////////////////////////////////////////////////////////////////////
@@ -8000,6 +8062,18 @@ message SurfaceflingerStatsGlobalInfo {
     // of this pull. If this number grows prohibitively large, then this can
     // cause jank due to resource contention.
     optional int32 event_connection_count = 6;
+    // Set of timings measured from when SurfaceFlinger began compositing a
+    // frame, until the frame was requested to be presented to the display. This
+    // measures SurfaceFlinger's total CPU walltime on the critical path per
+    // frame.
+    optional FrameTimingHistogram frame_duration = 7
+        [(android.os.statsd.log_mode) = MODE_BYTES];
+    // Set of timings measured from when SurfaceFlinger first began using the
+    // GPU to composite a frame, until the GPU has finished compositing that
+    // frame. This measures the total additional time SurfaceFlinger needed to
+    // perform due to falling back into GPU composition.
+    optional FrameTimingHistogram render_engine_timing = 8
+        [(android.os.statsd.log_mode) = MODE_BYTES];
 }
 
 /**
@@ -8204,14 +8278,6 @@ message DangerousPermissionStateSampled {
 }
 
 /**
- * HWUI renders pipeline type: GL (0) or Vulkan (1).
- */
-enum PipelineType {
-    GL = 0;
-    VULKAN = 1;
-}
-
-/**
  * HWUI stats for a given app.
  */
 message GraphicsStats {
@@ -8224,9 +8290,16 @@ message GraphicsStats {
     // The start & end timestamps in UTC as
     // milliseconds since January 1, 1970
     // Compatible with java.util.Date#setTime()
-    optional int64 stats_start = 3;
+    optional int64 start_millis = 3;
 
-    optional int64 stats_end = 4;
+    optional int64 end_millis = 4;
+
+    // HWUI renders pipeline type: GL (1) or Vulkan (2).
+    enum PipelineType {
+        UNKNOWN = 0;
+        GL = 1;
+        VULKAN = 2;
+    }
 
     // HWUI renders pipeline type: GL or Vulkan.
     optional PipelineType pipeline = 5;

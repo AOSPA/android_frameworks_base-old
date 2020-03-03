@@ -16,6 +16,7 @@
 
 package android.os.incremental;
 
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -30,7 +31,9 @@ import java.io.IOException;
  */
 public class V4Signature {
     public static final String EXT = ".idsig";
+    public static final int SUPPORTED_VERSION = 1;
 
+    public final int version;
     public final byte[] verityRootHash;
     public final byte[] v3Digest;
     public final byte[] pkcs7SignatureBlock;
@@ -43,6 +46,15 @@ public class V4Signature {
             return readFrom(stream);
         } catch (IOException e) {
             return null;
+        }
+    }
+
+    /**
+     * Construct a V4Signature from .idsig file.
+     */
+    public static V4Signature readFrom(byte[] bytes) throws IOException {
+        try (DataInputStream stream = new DataInputStream(new ByteArrayInputStream(bytes))) {
+            return readFrom(stream);
         }
     }
 
@@ -61,20 +73,27 @@ public class V4Signature {
         }
     }
 
+    boolean isVersionSupported() {
+        return this.version == SUPPORTED_VERSION;
+    }
+
     static V4Signature readFrom(DataInputStream stream) throws IOException {
+        final int version = stream.readInt();
         byte[] verityRootHash = readBytes(stream);
         byte[] v3Digest = readBytes(stream);
         byte[] pkcs7SignatureBlock = readBytes(stream);
-        return new V4Signature(verityRootHash, v3Digest, pkcs7SignatureBlock);
+        return new V4Signature(version, verityRootHash, v3Digest, pkcs7SignatureBlock);
     }
 
-    V4Signature(byte[] verityRootHash, byte[] v3Digest, byte[] pkcs7SignatureBlock) {
+    V4Signature(int version, byte[] verityRootHash, byte[] v3Digest, byte[] pkcs7SignatureBlock) {
+        this.version = version;
         this.verityRootHash = verityRootHash;
         this.v3Digest = v3Digest;
         this.pkcs7SignatureBlock = pkcs7SignatureBlock;
     }
 
     void writeTo(DataOutputStream stream) throws IOException {
+        stream.writeInt(this.version);
         writeBytes(stream, this.verityRootHash);
         writeBytes(stream, this.v3Digest);
         writeBytes(stream, this.pkcs7SignatureBlock);

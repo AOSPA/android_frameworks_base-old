@@ -37,8 +37,6 @@ class UserData {
 
     private final ScheduledExecutorService mScheduledExecutorService;
 
-    private final ContactsQueryHelper mHelper;
-
     private boolean mIsUnlocked;
 
     private Map<String, PackageData> mPackageDataMap = new ArrayMap<>();
@@ -49,12 +47,10 @@ class UserData {
     @Nullable
     private String mDefaultSmsApp;
 
-    UserData(@UserIdInt int userId, @NonNull ScheduledExecutorService scheduledExecutorService,
-            ContactsQueryHelper helper) {
+    UserData(@UserIdInt int userId, @NonNull ScheduledExecutorService scheduledExecutorService) {
         mUserId = userId;
         mPerUserPeopleDataDir = new File(Environment.getDataSystemCeDirectory(mUserId), "people");
         mScheduledExecutorService = scheduledExecutorService;
-        mHelper = helper;
     }
 
     @UserIdInt int getUserId() {
@@ -73,9 +69,8 @@ class UserData {
         // Ensures per user root directory for people data is present, and attempt to load
         // data from disk.
         mPerUserPeopleDataDir.mkdirs();
-        for (PackageData packageData : mPackageDataMap.values()) {
-            packageData.loadFromDisk();
-        }
+        mPackageDataMap.putAll(PackageData.packagesDataFromDisk(mUserId, this::isDefaultDialer,
+                this::isDefaultSmsApp, mScheduledExecutorService, mPerUserPeopleDataDir));
     }
 
     void setUserStopped() {
@@ -104,6 +99,14 @@ class UserData {
         return mPackageDataMap.get(packageName);
     }
 
+    /** Deletes the specified package data. */
+    void deletePackageData(@NonNull String packageName) {
+        PackageData packageData = mPackageDataMap.remove(packageName);
+        if (packageData != null) {
+            packageData.onDestroy();
+        }
+    }
+
     void setDefaultDialer(@Nullable String packageName) {
         mDefaultDialer = packageName;
     }
@@ -124,7 +127,7 @@ class UserData {
 
     private PackageData createPackageData(String packageName) {
         return new PackageData(packageName, mUserId, this::isDefaultDialer, this::isDefaultSmsApp,
-                mScheduledExecutorService, mPerUserPeopleDataDir, mHelper);
+                mScheduledExecutorService, mPerUserPeopleDataDir);
     }
 
     private boolean isDefaultDialer(String packageName) {

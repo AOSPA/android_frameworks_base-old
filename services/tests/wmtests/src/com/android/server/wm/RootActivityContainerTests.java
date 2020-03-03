@@ -313,8 +313,8 @@ public class RootActivityContainerTests extends ActivityTestsBase {
      */
     @Test
     public void testResizeDockedStackForSplitScreenPrimary() {
-        final Rect taskSize = new Rect(0, 0, 1000, 1000);
-        final Rect stackSize = new Rect(0, 0, 300, 300);
+        final Rect configSize = new Rect(0, 0, 1000, 1000);
+        final Rect displayedSize = new Rect(0, 0, 300, 300);
 
         // Create primary split-screen stack with a task.
         final ActivityStack primaryStack = new StackBuilder(mRootWindowContainer)
@@ -325,11 +325,13 @@ public class RootActivityContainerTests extends ActivityTestsBase {
         final Task task = primaryStack.getTopMostTask();
 
         // Resize dock stack.
-        mService.resizeDockedStack(stackSize, taskSize, null, null, null);
+        mService.resizeDockedStack(displayedSize, configSize, null, null, null);
 
         // Verify dock stack & its task bounds if is equal as resized result.
-        assertEquals(stackSize, primaryStack.getBounds());
-        assertEquals(taskSize, task.getBounds());
+        assertEquals(displayedSize, primaryStack.getDisplayedBounds());
+        assertEquals(displayedSize, primaryStack.getDisplayedBounds());
+        assertEquals(configSize, primaryStack.getBounds());
+        assertEquals(configSize, task.getBounds());
     }
 
     /**
@@ -858,6 +860,26 @@ public class RootActivityContainerTests extends ActivityTestsBase {
         assertNotNull(result);
         assertEquals("The display ID of the stack should same as secondary display ",
                 secondaryDisplay.mDisplayId, result.getDisplayId());
+    }
+
+    @Test
+    public void testSwitchUser_missingHomeRootTask() {
+        doReturn(mFullscreenStack).when(mRootWindowContainer).getTopDisplayFocusedStack();
+
+        DisplayContent defaultDisplay = mRootWindowContainer.getDefaultDisplay();
+        ActivityStack homeStack = defaultDisplay.getRootHomeTask();
+        if (homeStack != null) {
+            homeStack.removeImmediately();
+        }
+        assertNull(defaultDisplay.getRootHomeTask());
+
+        int currentUser = mRootWindowContainer.mCurrentUser;
+        int otherUser = currentUser + 1;
+
+        mRootWindowContainer.switchUser(otherUser, null);
+
+        assertNotNull(defaultDisplay.getRootHomeTask());
+        assertEquals(defaultDisplay.getTopStack(), defaultDisplay.getRootHomeTask());
     }
 
     /**

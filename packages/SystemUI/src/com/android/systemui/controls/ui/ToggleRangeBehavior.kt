@@ -51,20 +51,16 @@ class ToggleRangeBehavior : Behavior {
         private const val DEFAULT_FORMAT = "%.1f"
     }
 
-    override fun apply(cvh: ControlViewHolder, cws: ControlWithState) {
-        this.control = cws.control!!
+    override fun initialize(cvh: ControlViewHolder) {
         this.cvh = cvh
-
-        statusExtra = cvh.statusExtra
         status = cvh.status
-
-        status.setText(control.getStatusText())
-
         context = status.getContext()
+
+        cvh.setEnabled(false)
 
         val gestureListener = ToggleRangeGestureListener(cvh.layout)
         val gestureDetector = GestureDetector(context, gestureListener)
-        cvh.layout.setOnTouchListener({ v: View, e: MotionEvent ->
+        cvh.layout.setOnTouchListener { _: View, e: MotionEvent ->
             if (gestureDetector.onTouchEvent(e)) {
                 return@setOnTouchListener true
             }
@@ -76,7 +72,14 @@ class ToggleRangeBehavior : Behavior {
             }
 
             return@setOnTouchListener false
-        })
+        }
+    }
+
+    override fun bind(cws: ControlWithState) {
+        this.control = cws.control!!
+
+        statusExtra = cvh.statusExtra
+        status.setText(control.getStatusText())
 
         val ld = cvh.layout.getBackground() as LayerDrawable
         clipLayer = ld.findDrawableByLayerId(R.id.clip_layer)

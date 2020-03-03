@@ -49,6 +49,7 @@ import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
 import android.app.ServiceStartArgs;
+import android.app.admin.DevicePolicyEventLogger;
 import android.appwidget.AppWidgetManagerInternal;
 import android.content.ComponentName;
 import android.content.ComponentName.WithComponentName;
@@ -61,7 +62,6 @@ import android.content.pm.PackageManager;
 import android.content.pm.ParceledListSlice;
 import android.content.pm.ResolveInfo;
 import android.content.pm.ServiceInfo;
-import android.content.res.Resources;
 import android.net.Uri;
 import android.os.Binder;
 import android.os.Build;
@@ -79,6 +79,8 @@ import android.os.SystemProperties;
 import android.os.TransactionTooLargeException;
 import android.os.UserHandle;
 import android.provider.Settings;
+import android.stats.devicepolicy.DevicePolicyEnums;
+import android.text.TextUtils;
 import android.util.ArrayMap;
 import android.util.ArraySet;
 import android.util.BoostFramework;
@@ -89,7 +91,6 @@ import android.util.SparseArray;
 import android.util.TimeUtils;
 import android.util.proto.ProtoOutputStream;
 import android.webkit.WebViewZygote;
-import android.widget.Toast;
 
 import com.android.internal.R;
 import com.android.internal.app.procstats.ServiceState;
@@ -201,6 +202,9 @@ public final class ActiveServices {
     String mLastAnrDump;
 
     AppWidgetManagerInternal mAppWidgetManagerInternal;
+
+    // white listed packageName.
+    ArraySet<String> mWhiteListAllowWhileInUsePermissionInFgs = new ArraySet<>();
 
     final Runnable mLastAnrDumpClearer = new Runnable() {
         @Override public void run() {
@@ -407,6 +411,20 @@ public final class ActiveServices {
         AppStateTracker ast = LocalServices.getService(AppStateTracker.class);
         ast.addListener(new ForcedStandbyListener());
         mAppWidgetManagerInternal = LocalServices.getService(AppWidgetManagerInternal.class);
+        setWhiteListAllowWhileInUsePermissionInFgs();
+    }
+
+    private void setWhiteListAllowWhileInUsePermissionInFgs() {
+        final String attentionServicePackageName =
+                mAm.mContext.getPackageManager().getAttentionServicePackageName();
+        if (!TextUtils.isEmpty(attentionServicePackageName)) {
+            mWhiteListAllowWhileInUsePermissionInFgs.add(attentionServicePackageName);
+        }
+        final String systemCaptionsServicePackageName =
+                mAm.mContext.getPackageManager().getSystemCaptionsServicePackageName();
+        if (!TextUtils.isEmpty(systemCaptionsServicePackageName)) {
+            mWhiteListAllowWhileInUsePermissionInFgs.add(systemCaptionsServicePackageName);
+        }
     }
 
     private boolean getServicetrackerInstance() {
@@ -1954,6 +1972,8 @@ public final class ActiveServices {
                 requestServiceBindingLocked(s, b.intent, callerFg, false);
             }
 
+            maybeLogBindCrossProfileService(userId, callingPackage, callerApp.info.uid);
+
             getServiceMapLocked(s.userId).ensureNotStartingBackgroundLocked(s);
 
         } finally {
@@ -1961,6 +1981,21 @@ public final class ActiveServices {
         }
 
         return 1;
+    }
+
+    private void maybeLogBindCrossProfileService(
+            int userId, String callingPackage, int callingUid) {
+        if (UserHandle.isCore(callingUid)) {
+            return;
+        }
+        final int callingUserId = UserHandle.getCallingUserId();
+        if (callingUserId == userId
+                || !mAm.mUserController.isSameProfileGroup(callingUserId, userId)) {
+            return;
+        }
+        DevicePolicyEventLogger.createEvent(DevicePolicyEnums.BIND_CROSS_PROFILE_SERVICE)
+                .setStrings(callingPackage)
+                .write();
     }
 
     void publishServiceLocked(ServiceRecord r, Intent intent, IBinder service) {
@@ -4825,6 +4860,12 @@ public final class ActiveServices {
             return true;
         }
 
+        final boolean isWhiteListedPackage =
+                mWhiteListAllowWhileInUsePermissionInFgs.contains(callingPackage);
+        if (isWhiteListedPackage) {
+            return true;
+        }
+
         r.mInfoDenyWhileInUsePermissionInFgs =
                 "Background FGS start while-in-use permission restriction [callingPackage: "
                 + callingPackage
@@ -4835,20 +4876,35 @@ public final class ActiveServices {
     }
 
     // TODO: remove this toast after feature development is done
-    private void showWhileInUsePermissionInFgsBlockedToastLocked(String callingPackage) {
-        final Resources res = mAm.mContext.getResources();
-        final String toastMsg = res.getString(
-                        R.string.allow_while_in_use_permission_in_fgs, callingPackage);
-        mAm.mUiHandler.post(() -> {
-            Toast.makeText(mAm.mContext, toastMsg, Toast.LENGTH_LONG).show();
-        });
+    private void showWhileInUsePermissionInFgsBlockedNotificationLocked(String callingPackage,
+            String detailInfo) {
+        final Context context = mAm.mContext;
+        final String title = "Foreground Service While-in-use Permission Restricted";
+        final String content = "App affected:" + callingPackage + ", please file a bug report";
+        Notification.Builder n =
+                new Notification.Builder(context,
+                        SystemNotificationChannels.ALERTS)
+                        .setSmallIcon(R.drawable.stat_sys_vitals)
+                        .setWhen(0)
+                        .setColor(context.getColor(
+                                com.android.internal.R.color.system_notification_accent_color))
+                        .setTicker(title)
+                        .setContentTitle(title)
+                        .setContentText(content)
+                        .setStyle(new Notification.BigTextStyle().bigText(detailInfo));
+        final NotificationManager notificationManager =
+                (NotificationManager) context.getSystemService(context.NOTIFICATION_SERVICE);
+        notificationManager.notifyAsUser(null,
+                SystemMessageProto.SystemMessage.NOTE_FOREGROUND_SERVICE_WHILE_IN_USE_PERMISSION,
+                n.build(), UserHandle.ALL);
     }
 
     // TODO: remove this toast after feature development is done
     // show a toast message to ask user to file a bugreport so we know how many apps are impacted by
     // the new background started foreground service while-in-use permission restriction.
-    void showWhileInUseDebugToastLocked(int uid, int op, int mode) {
-        StringBuilder sb = new StringBuilder();
+    void showWhileInUseDebugNotificationLocked(int uid, int op, int mode) {
+        StringBuilder packageNameBuilder = new StringBuilder();
+        StringBuilder detailInfoBuilder = new StringBuilder();
         for (int i = mAm.mProcessList.mLruProcesses.size() - 1; i >= 0; i--) {
             ProcessRecord pr = mAm.mProcessList.mLruProcesses.get(i);
             if (pr.uid != uid) {
@@ -4861,17 +4917,22 @@ public final class ActiveServices {
                 }
                 if (!r.mAllowWhileInUsePermissionInFgs
                         && r.mInfoDenyWhileInUsePermissionInFgs != null) {
-                    Slog.wtf(TAG, r.mInfoDenyWhileInUsePermissionInFgs
-                            + " affected while-use-permission:" + AppOpsManager.opToPublicName(op));
-                    sb.append(r.mRecentCallingPackage + " ");
+                    final String msg = r.mInfoDenyWhileInUsePermissionInFgs
+                            + " affected while-in-use permission:"
+                            + AppOpsManager.opToPublicName(op);
+                    Slog.wtf(TAG, msg);
+                    packageNameBuilder.append(r.mRecentCallingPackage + " ");
+                    detailInfoBuilder.append(msg);
+                    detailInfoBuilder.append("\n");
                 }
             }
         }
 
-        final String callingPackageStr = sb.toString();
+        final String callingPackageStr = packageNameBuilder.toString();
         if (mAm.mConstants.mFlagForegroundServiceStartsLoggingEnabled
                 && !callingPackageStr.isEmpty()) {
-            showWhileInUsePermissionInFgsBlockedToastLocked(callingPackageStr);
+            showWhileInUsePermissionInFgsBlockedNotificationLocked(callingPackageStr,
+                    detailInfoBuilder.toString());
         }
     }
 }

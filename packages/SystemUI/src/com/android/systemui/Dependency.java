@@ -48,7 +48,6 @@ import com.android.systemui.keyguard.WakefulnessLifecycle;
 import com.android.systemui.model.SysUiState;
 import com.android.systemui.plugins.ActivityStarter;
 import com.android.systemui.plugins.DarkIconDispatcher;
-import com.android.systemui.plugins.FalsingManager;
 import com.android.systemui.plugins.PluginDependencyProvider;
 import com.android.systemui.plugins.VolumeDialogController;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
@@ -61,6 +60,7 @@ import com.android.systemui.shared.plugins.PluginManager;
 import com.android.systemui.shared.system.ActivityManagerWrapper;
 import com.android.systemui.shared.system.DevicePolicyManagerWrapper;
 import com.android.systemui.shared.system.PackageManagerWrapper;
+import com.android.systemui.stackdivider.Divider;
 import com.android.systemui.statusbar.CommandQueue;
 import com.android.systemui.statusbar.NavigationBarController;
 import com.android.systemui.statusbar.NotificationListener;
@@ -315,7 +315,6 @@ public class Dependency {
     @Inject Lazy<DockManager> mDockManager;
     @Inject Lazy<ChannelEditorDialogController> mChannelEditorDialogController;
     @Inject Lazy<INotificationManager> mINotificationManager;
-    @Inject Lazy<FalsingManager> mFalsingManager;
     @Inject Lazy<SysUiState> mSysUiStateFlagsContainer;
     @Inject Lazy<AlarmManager> mAlarmManager;
     @Inject Lazy<KeyguardSecurityModel> mKeyguardSecurityModel;
@@ -329,6 +328,7 @@ public class Dependency {
     @Inject Lazy<DisplayImeController> mDisplayImeController;
     @Inject Lazy<RecordingController> mRecordingController;
     @Inject Lazy<ProtoTracer> mProtoTracer;
+    @Inject Lazy<Divider> mDivider;
 
     @Inject
     public Dependency() {
@@ -509,7 +509,6 @@ public class Dependency {
         mProviders.put(DockManager.class, mDockManager::get);
         mProviders.put(ChannelEditorDialogController.class, mChannelEditorDialogController::get);
         mProviders.put(INotificationManager.class, mINotificationManager::get);
-        mProviders.put(FalsingManager.class, mFalsingManager::get);
         mProviders.put(SysUiState.class, mSysUiStateFlagsContainer::get);
         mProviders.put(AlarmManager.class, mAlarmManager::get);
         mProviders.put(KeyguardSecurityModel.class, mKeyguardSecurityModel::get);
@@ -530,6 +529,7 @@ public class Dependency {
         mProviders.put(AutoHideController.class, mAutoHideController::get);
 
         mProviders.put(RecordingController.class, mRecordingController::get);
+        mProviders.put(Divider.class, mDivider::get);
 
         sDependency = this;
     }
