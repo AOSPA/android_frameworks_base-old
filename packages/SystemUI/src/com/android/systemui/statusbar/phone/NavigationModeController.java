@@ -160,6 +160,11 @@ public class NavigationModeController implements Dumpable {
         overlayFilter.addDataSchemeSpecificPart("android", PatternMatcher.PATTERN_LITERAL);
         mContext.registerReceiverAsUser(mReceiver, UserHandle.ALL, overlayFilter, null, null);
 
+        mSettingsObserver = new CustomSettingsObserver(new Handler());
+        mContext.getContentResolver().registerContentObserver(Settings.System.getUriFor(
+                Settings.System.NAVIGATION_HANDLE_WIDTH),
+                false, mSettingsObserver, UserHandle.USER_ALL);
+
         IntentFilter preferredActivityFilter = new IntentFilter(ACTION_PREFERRED_ACTIVITY_CHANGED);
         mContext.registerReceiverAsUser(mReceiver, UserHandle.ALL, preferredActivityFilter, null,
                 null);
