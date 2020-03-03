@@ -36,12 +36,14 @@ import android.app.PendingIntent;
 import android.app.admin.DevicePolicyManager;
 import android.content.BroadcastReceiver;
 import android.content.ComponentName;
+import android.content.ContentObserver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.om.IOverlayManager;
 import android.content.pm.PackageManager;
 import android.content.res.ApkAssets;
+import android.os.Handler;
 import android.os.PatternMatcher;
 import android.os.RemoteException;
 import android.os.ServiceManager;
@@ -143,6 +145,21 @@ public class NavigationModeController implements Dumpable {
 
     private BroadcastReceiver mEnableGestureNavReceiver;
 
+    private final class CustomSettingsObserver extends ContentObserver {
+        public CustomSettingsObserver(Handler handler) {
+            super(handler);
+        }
+
+        @Override
+        public void onChange(boolean selfChange, Uri uri) {
+            for (int i = 0; i < mListeners.size(); i++) {
+                mListeners.get(i).onSettingsChanged();
+            }
+        }
+    }
+
+    private CustomSettingsObserver mSettingsObserver;
+
     @Inject
     public NavigationModeController(Context context,
             DeviceProvisionedController deviceProvisionedController,
@@ -159,6 +176,11 @@ public class NavigationModeController implements Dumpable {
         overlayFilter.addDataScheme("package");
         overlayFilter.addDataSchemeSpecificPart("android", PatternMatcher.PATTERN_LITERAL);
         mContext.registerReceiverAsUser(mReceiver, UserHandle.ALL, overlayFilter, null, null);
+
+        mSettingsObserver = new CustomSettingsObserver(new Handler());
+        mContext.getContentResolver().registerContentObserver(Settings.System.getUriFor(
+                Settings.System.NAVIGATION_HANDLE_WIDTH),
+                false, mSettingsObserver, UserHandle.USER_ALL);
 
         IntentFilter preferredActivityFilter = new IntentFilter(ACTION_PREFERRED_ACTIVITY_CHANGED);
         mContext.registerReceiverAsUser(mReceiver, UserHandle.ALL, preferredActivityFilter, null,
