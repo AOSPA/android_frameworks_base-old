@@ -3344,7 +3344,6 @@ public class ConnectivityService extends IConnectivityManager.Stub
         for (int i = 0; i < nai.numNetworkRequests(); i++) {
             NetworkRequest request = nai.requestAt(i);
             final NetworkRequestInfo nri = mNetworkRequests.get(request);
-            ensureRunningOnConnectivityServiceThread();
             final NetworkAgentInfo currentNetwork = nri.mSatisfier;
             if (currentNetwork != null && currentNetwork.network.netId == nai.network.netId) {
                 nri.mSatisfier = null;
@@ -3497,20 +3496,19 @@ public class ConnectivityService extends IConnectivityManager.Stub
 
             // If this Network is already the highest scoring Network for a request, or if
             // there is hope for it to become one if it validated, then it is needed.
-            ensureRunningOnConnectivityServiceThread();
             if (nri.request.isRequest() && nai.satisfies(nri.request) &&
                     satisfiesMobileMultiNetworkDataCheck(nai.networkCapabilities,
                        nri.request.networkCapabilities) &&
-                    (nai.isSatisfyingRequest(nri.request.requestId)
-                    // Note that canPossiblyBeat catches two important cases:
-                    // 1. Unvalidated slow networks will not be reaped when an unvalidated fast
-                    // network is currently satisfying the request. This is desirable for example
-                    // when cellular ends up validating but WiFi/Ethernet does not.
-                    // 2. Fast networks will not be reaped when a validated slow network is
-                    // currently satisfying the request. This is desirable for example when
-                    // Ethernet ends up validating and out scoring WiFi, or WiFi/Ethernet ends
-                    // up validating and out scoring cellular.
-                            || nai.canPossiblyBeat(nri.mSatisfier))) {
+                    (nai.isSatisfyingRequest(nri.request.requestId) ||
+                    // Note that this catches two important cases:
+                    // 1. Unvalidated cellular will not be reaped when unvalidated WiFi
+                    //    is currently satisfying the request.  This is desirable when
+                    //    cellular ends up validating but WiFi does not.
+                    // 2. Unvalidated WiFi will not be reaped when validated cellular
+                    //    is currently satisfying the request.  This is desirable when
+                    //    WiFi ends up validating and out scoring cellular.
+                    nri.mSatisfier.getCurrentScore()
+                            < nai.getCurrentScoreAsValidated())) {
                 return false;
             }
         }
@@ -3538,7 +3536,6 @@ public class ConnectivityService extends IConnectivityManager.Stub
         if (mNetworkRequests.get(nri.request) == null) {
             return;
         }
-        ensureRunningOnConnectivityServiceThread();
         if (nri.mSatisfier != null) {
             return;
         }
@@ -3576,7 +3573,6 @@ public class ConnectivityService extends IConnectivityManager.Stub
         mNetworkRequestInfoLogs.log("RELEASE " + nri);
         if (nri.request.isRequest()) {
             boolean wasKept = false;
-            ensureRunningOnConnectivityServiceThread();
             final NetworkAgentInfo nai = nri.mSatisfier;
             if (nai != null) {
                 boolean wasBackgroundNetwork = nai.isBackgroundNetwork();
@@ -3888,9 +3884,8 @@ public class ConnectivityService extends IConnectivityManager.Stub
         return avoidBadWifi();
     }
 
+
     private void rematchForAvoidBadWifiUpdate() {
-        ensureRunningOnConnectivityServiceThread();
-        mixInAllNetworkScores();
         rematchAllNetworksAndRequests();
         for (NetworkAgentInfo nai: mNetworkAgentInfos.values()) {
             if (nai.networkCapabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) {
@@ -5836,6 +5831,20 @@ public class ConnectivityService extends IConnectivityManager.Stub
         return nri.request.requestId == mDefaultRequest.requestId;
     }
 
+    // TODO : remove this method. It's a stopgap measure to help sheperding a number of dependent
+    // changes that would conflict throughout the automerger graph. Having this method temporarily
+    // helps with the process of going through with all these dependent changes across the entire
+    // tree.
+    /**
+     * Register a new agent. {@see #registerNetworkAgent} below.
+     */
+    public Network registerNetworkAgent(Messenger messenger, NetworkInfo networkInfo,
+            LinkProperties linkProperties, NetworkCapabilities networkCapabilities,
+            int currentScore, NetworkAgentConfig networkAgentConfig) {
+        return registerNetworkAgent(messenger, networkInfo, linkProperties, networkCapabilities,
+                currentScore, networkAgentConfig, NetworkProvider.ID_NONE);
+    }
+
     /**
      * Register a new agent with ConnectivityService to handle a network.
      *
@@ -5854,7 +5863,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
      */
     public Network registerNetworkAgent(Messenger messenger, NetworkInfo networkInfo,
             LinkProperties linkProperties, NetworkCapabilities networkCapabilities,
-            NetworkScore currentScore, NetworkAgentConfig networkAgentConfig, int providerId) {
+            int currentScore, NetworkAgentConfig networkAgentConfig, int providerId) {
         enforceNetworkFactoryPermission();
 
         LinkProperties lp = new LinkProperties(linkProperties);
@@ -5862,10 +5871,12 @@ public class ConnectivityService extends IConnectivityManager.Stub
         // TODO: Instead of passing mDefaultRequest, provide an API to determine whether a Network
         // satisfies mDefaultRequest.
         final NetworkCapabilities nc = new NetworkCapabilities(networkCapabilities);
+        final NetworkScore ns = new NetworkScore();
+        ns.putIntExtension(NetworkScore.LEGACY_SCORE, currentScore);
         final NetworkAgentInfo nai = new NetworkAgentInfo(messenger, new AsyncChannel(),
                 new Network(mNetIdManager.reserveNetId()), new NetworkInfo(networkInfo), lp, nc,
-                currentScore, mContext, mTrackerHandler, new NetworkAgentConfig(networkAgentConfig),
-                this, mNetd, mDnsResolver, mNMS, providerId);
+                ns, mContext, mTrackerHandler, new NetworkAgentConfig(networkAgentConfig), this,
+                mNetd, mDnsResolver, mNMS, providerId);
         // Make sure the network capabilities reflect what the agent info says.
         nai.getAndSetNetworkCapabilities(mixInCapabilities(nai, nc));
         final String extraInfo = networkInfo.getExtraInfo();
@@ -7123,45 +7134,9 @@ public class ConnectivityService extends IConnectivityManager.Stub
         }
     }
 
-    /**
-     * Re-mixin all network scores.
-     * This is called when some global setting like avoidBadWifi has changed.
-     * TODO : remove this when all usages have been removed.
-     */
-    private void mixInAllNetworkScores() {
-        ensureRunningOnConnectivityServiceThread();
-        for (final NetworkAgentInfo nai : mNetworkAgentInfos.values()) {
-            nai.setNetworkScore(mixInNetworkScore(nai, nai.getNetworkScore()));
-        }
-    }
-
-    /**
-     * Mix in the Connectivity-managed parts of the NetworkScore.
-     * @param nai The NAI this score applies to.
-     * @param sourceScore the score sent by the network agent, or the previous score of this NAI.
-     * @return A new score with the Connectivity-managed parts mixed in.
-     */
-    @NonNull
-    private NetworkScore mixInNetworkScore(@NonNull final NetworkAgentInfo nai,
-            @NonNull final NetworkScore sourceScore) {
-        final NetworkScore.Builder score = new NetworkScore.Builder(sourceScore);
-
-        // TODO : this should be done in Telephony. It should be handled per-network because
-        // it's a carrier-dependent config.
-        if (nai.networkCapabilities.hasTransport(TRANSPORT_CELLULAR)) {
-            if (mMultinetworkPolicyTracker.getAvoidBadWifi()) {
-                score.clearPolicy(NetworkScore.POLICY_IGNORE_ON_WIFI);
-            } else {
-                score.addPolicy(NetworkScore.POLICY_IGNORE_ON_WIFI);
-            }
-        }
-
-        return score.build();
-    }
-
     private void updateNetworkScore(NetworkAgentInfo nai, NetworkScore ns) {
         if (VDBG || DDBG) log("updateNetworkScore for " + nai.toShortString() + " to " + ns);
-        nai.setNetworkScore(mixInNetworkScore(nai, ns));
+        nai.setNetworkScore(ns);
         rematchAllNetworksAndRequests();
         sendUpdatedScoreToFactories(nai);
     }

@@ -251,9 +251,11 @@ public class WindowStateTests extends WindowTestsBase {
 
         // b/145812508: special legacy use-case for transparent/translucent windows.
         appWindow.mAttrs.format = PixelFormat.TRANSPARENT;
+        appWindow.mAttrs.alpha = 0;
         assertTrue(appWindow.canBeImeTarget());
 
         appWindow.mAttrs.format = PixelFormat.OPAQUE;
+        appWindow.mAttrs.alpha = 1;
         appWindow.mAttrs.flags &= ~FLAG_ALT_FOCUSABLE_IM;
         assertFalse(appWindow.canBeImeTarget());
         appWindow.mAttrs.flags &= ~FLAG_NOT_FOCUSABLE;
@@ -276,8 +278,7 @@ public class WindowStateTests extends WindowTestsBase {
         spyOn(appWindow);
         spyOn(controller);
         spyOn(stack);
-        doReturn(true).when(controller).isMinimizedDock();
-        doReturn(true).when(controller).isHomeStackResizable();
+        stack.setFocusable(false);
         doReturn(stack).when(appWindow).getRootTask();
 
         // Make sure canBeImeTarget is false due to shouldIgnoreInput is true;
@@ -619,9 +620,10 @@ public class WindowStateTests extends WindowTestsBase {
     }
 
     @Test
-    public void testCantReceiveTouchWhenShouldIgnoreInput() {
+    public void testCantReceiveTouchWhenNotFocusable() {
         final WindowState win0 = createWindow(null, TYPE_APPLICATION, "win0");
-        win0.mActivityRecord.getStack().setAdjustedForMinimizedDock(1 /* Any non 0 value works */);
+        win0.mActivityRecord.getStack().setWindowingMode(WINDOWING_MODE_SPLIT_SCREEN_PRIMARY);
+        win0.mActivityRecord.getStack().setFocusable(false);
         assertTrue(win0.cantReceiveTouchInput());
     }
 }

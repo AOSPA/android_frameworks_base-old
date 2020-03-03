@@ -21,6 +21,9 @@
 
 #include "jni.h"
 
+#include <C2Buffer.h>
+#include <binder/MemoryHeapBase.h>
+#include <media/MediaCodecBuffer.h>
 #include <media/MediaMetricsItem.h>
 #include <media/hardware/CryptoAPI.h>
 #include <media/stagefright/foundation/ABase.h>
@@ -58,6 +61,7 @@ struct JMediaCodec : public AHandler {
 
     void registerSelf();
     void release();
+    void releaseAsync();
 
     status_t enableOnFrameRenderedListener(jboolean enable);
 

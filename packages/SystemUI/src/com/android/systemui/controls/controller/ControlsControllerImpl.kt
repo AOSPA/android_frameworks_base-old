@@ -16,6 +16,7 @@
 
 package com.android.systemui.controls.controller
 
+import android.app.ActivityManager
 import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.ComponentName
@@ -34,13 +35,13 @@ import android.util.ArrayMap
 import android.util.Log
 import com.android.internal.annotations.GuardedBy
 import com.android.internal.annotations.VisibleForTesting
-import com.android.systemui.DumpController
 import com.android.systemui.Dumpable
 import com.android.systemui.broadcast.BroadcastDispatcher
 import com.android.systemui.controls.ControlStatus
 import com.android.systemui.controls.management.ControlsListingController
 import com.android.systemui.controls.ui.ControlsUiController
 import com.android.systemui.dagger.qualifiers.Background
+import com.android.systemui.dump.DumpManager
 import com.android.systemui.util.concurrency.DelayableExecutor
 import java.io.FileDescriptor
 import java.io.PrintWriter
@@ -59,7 +60,7 @@ class ControlsControllerImpl @Inject constructor (
     private val listingController: ControlsListingController,
     private val broadcastDispatcher: BroadcastDispatcher,
     optionalWrapper: Optional<ControlsFavoritePersistenceWrapper>,
-    dumpController: DumpController
+    dumpManager: DumpManager
 ) : Dumpable, ControlsController {
 
     companion object {
@@ -67,6 +68,7 @@ class ControlsControllerImpl @Inject constructor (
         internal const val CONTROLS_AVAILABLE = "systemui.controls_available"
         internal val URI = Settings.Secure.getUriFor(CONTROLS_AVAILABLE)
         private const val USER_CHANGE_RETRY_DELAY = 500L // ms
+        private const val DEFAULT_ENABLED = 1
     }
 
     // Map of map: ComponentName -> (String -> ControlInfo).
@@ -77,14 +79,15 @@ class ControlsControllerImpl @Inject constructor (
 
     private var userChanging: Boolean = true
 
-    private val contentResolver: ContentResolver
-        get() = context.contentResolver
-    override var available = Settings.Secure.getInt(contentResolver, CONTROLS_AVAILABLE, 0) != 0
-        private set
-
-    private var currentUser = context.user
+    private var currentUser = UserHandle.of(ActivityManager.getCurrentUser())
     override val currentUserId
         get() = currentUser.identifier
+
+    private val contentResolver: ContentResolver
+        get() = context.contentResolver
+    override var available = Settings.Secure.getIntForUser(
+            contentResolver, CONTROLS_AVAILABLE, DEFAULT_ENABLED, currentUserId) != 0
+        private set
 
     private val persistenceWrapper = optionalWrapper.orElseGet {
         ControlsFavoritePersistenceWrapper(
@@ -104,7 +107,7 @@ class ControlsControllerImpl @Inject constructor (
                 userContext.filesDir, ControlsFavoritePersistenceWrapper.FILE_NAME)
         persistenceWrapper.changeFile(fileName)
         available = Settings.Secure.getIntForUser(contentResolver, CONTROLS_AVAILABLE,
-                /* default */ 0, newUser.identifier) != 0
+                DEFAULT_ENABLED, newUser.identifier) != 0
         synchronized(currentFavorites) {
             currentFavorites.clear()
         }
@@ -140,7 +143,7 @@ class ControlsControllerImpl @Inject constructor (
                 return
             }
             available = Settings.Secure.getIntForUser(contentResolver, CONTROLS_AVAILABLE,
-                    /* default */ 0, currentUserId) != 0
+                    DEFAULT_ENABLED, currentUserId) != 0
             synchronized(currentFavorites) {
                 currentFavorites.clear()
             }
@@ -151,7 +154,7 @@ class ControlsControllerImpl @Inject constructor (
     }
 
     init {
-        dumpController.registerDumpable(this)
+        dumpManager.registerDumpable(javaClass.name, this)
         if (available) {
             loadFavorites()
         }

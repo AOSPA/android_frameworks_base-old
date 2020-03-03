@@ -749,7 +749,7 @@ public class MediaRouter2 {
     /**
      * Callback for receiving events about media route discovery.
      */
-    public static class RouteCallback {
+    public abstract static class RouteCallback {
         /**
          * Called when routes are added. Whenever you registers a callback, this will
          * be invoked with known routes.
@@ -777,7 +777,7 @@ public class MediaRouter2 {
     /**
      * Callback for receiving events on media transfer.
      */
-    public static class TransferCallback {
+    public abstract static class TransferCallback {
         /**
          * Called when a media is transferred between two different routing controllers.
          * This can happen by calling {@link #transferTo(MediaRoute2Info)} or
@@ -817,7 +817,7 @@ public class MediaRouter2 {
          * @return An optional bundle of app-specific arguments to send to the provider,
          *         or null if none. The contents of this bundle may affect the result of
          *         controller creation.
-         * @see MediaRoute2ProviderService#onCreateSession(String, String, long, Bundle)
+         * @see MediaRoute2ProviderService#onCreateSession(long, String, String, Bundle)
          */
         @Nullable
         Bundle onGetControllerHints(@NonNull MediaRoute2Info route);
@@ -826,7 +826,7 @@ public class MediaRouter2 {
     /**
      * Callback for receiving {@link RoutingController} updates.
      */
-    public static class ControllerCallback {
+    public abstract static class ControllerCallback {
         /**
          * Called when a controller is updated. (e.g., the selected routes of the
          * controller is changed or the volume of the controller is changed.)
@@ -976,8 +976,12 @@ public class MediaRouter2 {
         }
 
         /**
-         * Selects a route for the remote session. The given route must satisfy all of the
-         * following conditions:
+         * Selects a route for the remote session. After a route is selected, the media is expected
+         * to be played to the all the selected routes. This is different from {@link
+         * MediaRouter2#transferTo(MediaRoute2Info)} transferring to a route},
+         * where the media is expected to 'move' from one route to another.
+         * <p>
+         * The given route must satisfy all of the following conditions:
          * <ul>
          * <li>ID should not be included in {@link #getSelectedRoutes()}</li>
          * <li>ID should be included in {@link #getSelectableRoutes()}</li>
@@ -1024,8 +1028,10 @@ public class MediaRouter2 {
         }
 
         /**
-         * Deselects a route from the remote session. The given route must satisfy all of the
-         * following conditions:
+         * Deselects a route from the remote session. After a route is deselected, the media is
+         * expected to be stopped on the deselected routes.
+         * <p>
+         * The given route must satisfy all of the following conditions:
          * <ul>
          * <li>ID should be included in {@link #getSelectedRoutes()}</li>
          * <li>ID should be included in {@link #getDeselectableRoutes()}</li>
@@ -1065,7 +1071,7 @@ public class MediaRouter2 {
                 try {
                     mMediaRouterService.deselectRouteWithRouter2(stub, getId(), route);
                 } catch (RemoteException ex) {
-                    Log.e(TAG, "Unable to remove route from session.", ex);
+                    Log.e(TAG, "Unable to deselect route from session.", ex);
                 }
             }
         }

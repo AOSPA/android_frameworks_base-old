@@ -18,7 +18,10 @@ package com.android.systemui.statusbar.notification.row;
 
 import static com.android.systemui.statusbar.notification.ActivityLaunchAnimator.ExpandAnimationParameters;
 import static com.android.systemui.statusbar.notification.row.NotificationContentView.VISIBLE_TYPE_CONTRACTED;
+import static com.android.systemui.statusbar.notification.row.NotificationContentView.VISIBLE_TYPE_EXPANDED;
 import static com.android.systemui.statusbar.notification.row.NotificationContentView.VISIBLE_TYPE_HEADSUP;
+import static com.android.systemui.statusbar.notification.row.NotificationRowContentBinder.FLAG_CONTENT_VIEW_CONTRACTED;
+import static com.android.systemui.statusbar.notification.row.NotificationRowContentBinder.FLAG_CONTENT_VIEW_EXPANDED;
 import static com.android.systemui.statusbar.notification.row.NotificationRowContentBinder.FLAG_CONTENT_VIEW_HEADS_UP;
 import static com.android.systemui.statusbar.notification.row.NotificationRowContentBinder.FLAG_CONTENT_VIEW_PUBLIC;
 
@@ -28,6 +31,7 @@ import android.animation.ObjectAnimator;
 import android.animation.ValueAnimator.AnimatorUpdateListener;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.app.Notification;
 import android.app.NotificationChannel;
 import android.content.Context;
 import android.content.pm.PackageInfo;
@@ -148,6 +152,7 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
     private int mNotificationMinHeight;
     private int mNotificationMinHeightLarge;
     private int mNotificationMinHeightMedia;
+    private int mNotificationMinHeightMessaging;
     private int mNotificationMaxHeight;
     private int mIncreasedPaddingBetweenElements;
     private int mNotificationLaunchHeight;
@@ -465,6 +470,14 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
             }
         };
         switch (inflationFlag) {
+            case FLAG_CONTENT_VIEW_CONTRACTED:
+                getPrivateLayout().performWhenContentInactive(VISIBLE_TYPE_CONTRACTED,
+                        freeViewRunnable);
+                break;
+            case FLAG_CONTENT_VIEW_EXPANDED:
+                getPrivateLayout().performWhenContentInactive(VISIBLE_TYPE_EXPANDED,
+                        freeViewRunnable);
+                break;
             case FLAG_CONTENT_VIEW_HEADS_UP:
                 getPrivateLayout().performWhenContentInactive(VISIBLE_TYPE_HEADSUP,
                         freeViewRunnable);
@@ -630,10 +643,16 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
                 && expandedView.findViewById(com.android.internal.R.id.media_actions) != null;
         boolean showCompactMediaSeekbar = mMediaManager.getShowCompactMediaSeekbar();
 
+        Class<? extends Notification.Style> style =
+                mEntry.getSbn().getNotification().getNotificationStyle();
+        boolean isMessagingLayout = Notification.MessagingStyle.class.equals(style);
+
         if (customView && beforeP && !mIsSummaryWithChildren) {
             minHeight = beforeN ? mNotificationMinHeightBeforeN : mNotificationMinHeightBeforeP;
         } else if (isMediaLayout && showCompactMediaSeekbar) {
             minHeight = mNotificationMinHeightMedia;
+        } else if (isMessagingLayout) {
+            minHeight = mNotificationMinHeightMessaging;
         } else if (mUseIncreasedCollapsedHeight && layout == mPrivateLayout) {
             minHeight = mNotificationMinHeightLarge;
         } else {
@@ -799,7 +818,7 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
         // TODO: Move inflation logic out of this call
         if (mIsChildInGroup != isChildInGroup) {
             mIsChildInGroup = isChildInGroup;
-            if (mIsLowPriority) {
+            if (!isRemoved() && mIsLowPriority) {
                 RowContentBindParams params = mRowContentBindStage.getStageParams(mEntry);
                 params.setUseLowPriority(mIsLowPriority);
                 mRowContentBindStage.requestRebind(mEntry, null /* callback */);
@@ -1568,13 +1587,15 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
         // TODO: Move inflation logic out of this call and remove this method
         if (mNeedsRedaction != needsRedaction) {
             mNeedsRedaction = needsRedaction;
-            RowContentBindParams params = mRowContentBindStage.getStageParams(mEntry);
-            if (needsRedaction) {
-                params.requireContentViews(FLAG_CONTENT_VIEW_PUBLIC);
-            } else {
-                params.freeContentViews(FLAG_CONTENT_VIEW_PUBLIC);
+            if (!isRemoved()) {
+                RowContentBindParams params = mRowContentBindStage.getStageParams(mEntry);
+                if (needsRedaction) {
+                    params.requireContentViews(FLAG_CONTENT_VIEW_PUBLIC);
+                } else {
+                    params.freeContentViews(FLAG_CONTENT_VIEW_PUBLIC);
+                }
+                mRowContentBindStage.requestRebind(mEntry, null /* callback */);
             }
-            mRowContentBindStage.requestRebind(mEntry, null /* callback */);
         }
     }
 
@@ -1635,6 +1656,8 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
                 R.dimen.notification_min_height_increased);
         mNotificationMinHeightMedia = NotificationUtils.getFontScaledHeight(mContext,
                 R.dimen.notification_min_height_media);
+        mNotificationMinHeightMessaging = NotificationUtils.getFontScaledHeight(mContext,
+                R.dimen.notification_min_height_messaging);
         mNotificationMaxHeight = NotificationUtils.getFontScaledHeight(mContext,
                 R.dimen.notification_max_height);
         mMaxHeadsUpHeightBeforeN = NotificationUtils.getFontScaledHeight(mContext,

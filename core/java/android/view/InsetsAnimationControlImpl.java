@@ -16,6 +16,7 @@
 
 package android.view;
 
+import static android.view.InsetsController.AnimationType;
 import static android.view.InsetsState.ISIDE_BOTTOM;
 import static android.view.InsetsState.ISIDE_FLOATING;
 import static android.view.InsetsState.ISIDE_LEFT;
@@ -64,10 +65,10 @@ public class InsetsAnimationControlImpl implements WindowInsetsAnimationControll
     private final Insets mShownInsets;
     private final Matrix mTmpMatrix = new Matrix();
     private final InsetsState mInitialInsetsState;
+    private final @AnimationType int mAnimationType;
     private final @InsetsType int mTypes;
     private final InsetsAnimationControlCallbacks mController;
     private final WindowInsetsAnimation mAnimation;
-    private final Rect mFrame;
     private final boolean mFade;
     private Insets mCurrentInsets;
     private Insets mPendingInsets;
@@ -75,15 +76,16 @@ public class InsetsAnimationControlImpl implements WindowInsetsAnimationControll
     private boolean mFinished;
     private boolean mCancelled;
     private boolean mShownOnFinish;
-    private float mCurrentAlpha;
-    private float mPendingAlpha;
+    private float mCurrentAlpha = 1.0f;
+    private float mPendingAlpha = 1.0f;
 
     @VisibleForTesting
     public InsetsAnimationControlImpl(SparseArray<InsetsSourceControl> controls, Rect frame,
             InsetsState state, WindowInsetsAnimationControlListener listener,
             @InsetsType int types,
             InsetsAnimationControlCallbacks controller, long durationMs, Interpolator interpolator,
-            boolean fade, @LayoutInsetsDuringAnimation int layoutInsetsDuringAnimation) {
+            boolean fade, @LayoutInsetsDuringAnimation int layoutInsetsDuringAnimation,
+            @AnimationType int animationType) {
         mControls = controls;
         mListener = listener;
         mTypes = types;
@@ -96,12 +98,12 @@ public class InsetsAnimationControlImpl implements WindowInsetsAnimationControll
                 null /* typeSideMap */);
         mShownInsets = calculateInsets(mInitialInsetsState, frame, controls, true /* shown */,
                 mTypeSideMap);
-        mFrame = new Rect(frame);
         buildTypeSourcesMap(mTypeSideMap, mSideSourceMap, mControls);
 
         mAnimation = new WindowInsetsAnimation(mTypes, interpolator,
                 durationMs);
         mAnimation.setAlpha(getCurrentAlpha());
+        mAnimationType = animationType;
         mController.startAnimation(this, listener, types, mAnimation,
                 new Bounds(mHiddenInsets, mShownInsets), layoutInsetsDuringAnimation);
     }
@@ -135,6 +137,10 @@ public class InsetsAnimationControlImpl implements WindowInsetsAnimationControll
         return InsetsState.toInternalType(mTypes).contains(type);
     }
 
+    @AnimationType int getAnimationType() {
+        return mAnimationType;
+    }
+
     @Override
     public void setInsetsAndAlpha(Insets insets, float alpha, float fraction) {
         if (mFinished) {
@@ -147,7 +153,7 @@ public class InsetsAnimationControlImpl implements WindowInsetsAnimationControll
         }
         mPendingFraction = sanitize(fraction);
         mPendingInsets = sanitize(insets);
-        mPendingAlpha = 1 - sanitize(alpha);
+        mPendingAlpha = sanitize(alpha);
         mController.scheduleApplyChangeInsets();
     }
 
@@ -176,7 +182,8 @@ public class InsetsAnimationControlImpl implements WindowInsetsAnimationControll
         mController.applySurfaceParams(params.toArray(new SurfaceParams[params.size()]));
         mCurrentInsets = mPendingInsets;
         mAnimation.setFraction(mPendingFraction);
-        mCurrentAlpha = 1 - alphaOffset;
+        mCurrentAlpha = mPendingAlpha;
+        mAnimation.setAlpha(mPendingAlpha);
         if (mFinished) {
             mController.notifyFinished(this, mShownOnFinish);
         }
@@ -232,7 +239,8 @@ public class InsetsAnimationControlImpl implements WindowInsetsAnimationControll
 
     private Insets getInsetsFromState(InsetsState state, Rect frame,
             @Nullable @InternalInsetsSide SparseIntArray typeSideMap) {
-        return state.calculateInsets(frame, false /* isScreenRound */,
+        return state.calculateInsets(frame, null /* ignoringVisibilityState */,
+                false /* isScreenRound */,
                 false /* alwaysConsumeSystemBars */, null /* displayCutout */,
                 null /* legacyContentInsets */, null /* legacyStableInsets */,
                 LayoutParams.SOFT_INPUT_ADJUST_RESIZE /* legacySoftInputMode*/,
@@ -251,8 +259,8 @@ public class InsetsAnimationControlImpl implements WindowInsetsAnimationControll
         return alpha >= 1 ? 1 : (alpha <= 0 ? 0 : alpha);
     }
 
-    private void updateLeashesForSide(@InternalInsetsSide int side, int offset, int inset,
-            int maxInset, ArrayList<SurfaceParams> surfaceParams, InsetsState state, Float alpha) {
+    private void updateLeashesForSide(@InternalInsetsSide int side, int offset, int maxInset,
+            int inset, ArrayList<SurfaceParams> surfaceParams, InsetsState state, Float alpha) {
         ArraySet<InsetsSourceControl> items = mSideSourceMap.get(side);
         if (items == null) {
             return;
@@ -267,12 +275,13 @@ public class InsetsAnimationControlImpl implements WindowInsetsAnimationControll
             mTmpFrame.set(source.getFrame());
             addTranslationToMatrix(side, offset, mTmpMatrix, mTmpFrame);
 
+            state.getSource(source.getType()).setVisible(side == ISIDE_FLOATING || inset != 0);
             state.getSource(source.getType()).setFrame(mTmpFrame);
 
             // If the system is controlling the insets source, the leash can be null.
             if (leash != null) {
                 // TODO: use a better interpolation for fade.
-                alpha = mFade ? ((float) maxInset / inset * 0.3f + 0.7f) : alpha;
+                alpha = mFade ? ((float) inset / maxInset * 0.3f + 0.7f) : alpha;
                 surfaceParams.add(new SurfaceParams(leash, side == ISIDE_FLOATING ? 1 : alpha,
                         mTmpMatrix, null /* windowCrop */, 0 /* layer */, 0f /* cornerRadius*/,
                         side == ISIDE_FLOATING ? state.getSource(source.getType()).isVisible()

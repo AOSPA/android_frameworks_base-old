@@ -11468,7 +11468,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
                 outLocalInsets.setEmpty();
                 return in;
             }
-            Pair<Insets, WindowInsets> result = listener.onContentApplyWindowInsets(in);
+            Pair<Insets, WindowInsets> result = listener.onContentApplyWindowInsets(this, in);
             outLocalInsets.set(result.first.toRect());
             return result.second;
         } else {
@@ -29798,7 +29798,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
 
         // accessibility
         CharSequence contentDescription = getContentDescription();
-        stream.addProperty("accessibility:contentDescription",
+        stream.addUserProperty("accessibility:contentDescription",
                 contentDescription == null ? "" : contentDescription.toString());
         stream.addProperty("accessibility:labelFor", getLabelFor());
         stream.addProperty("accessibility:importantForAccessibility", getImportantForAccessibility());

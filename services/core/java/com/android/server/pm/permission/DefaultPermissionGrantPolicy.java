@@ -152,8 +152,8 @@ public final class DefaultPermissionGrantPolicy {
 
     private static final Set<String> FOREGROUND_LOCATION_PERMISSIONS = new ArraySet<>();
     static {
-        ALWAYS_LOCATION_PERMISSIONS.add(Manifest.permission.ACCESS_FINE_LOCATION);
-        ALWAYS_LOCATION_PERMISSIONS.add(Manifest.permission.ACCESS_COARSE_LOCATION);
+        FOREGROUND_LOCATION_PERMISSIONS.add(Manifest.permission.ACCESS_FINE_LOCATION);
+        FOREGROUND_LOCATION_PERMISSIONS.add(Manifest.permission.ACCESS_COARSE_LOCATION);
     }
 
     private static final Set<String> COARSE_BACKGROUND_LOCATION_PERMISSIONS = new ArraySet<>();
@@ -733,7 +733,7 @@ public final class DefaultPermissionGrantPolicy {
         if (!TextUtils.isEmpty(contentCapturePackageName)) {
             grantPermissionsToSystemPackage(contentCapturePackageName, userId,
                     PHONE_PERMISSIONS, SMS_PERMISSIONS, ALWAYS_LOCATION_PERMISSIONS,
-                    CONTACTS_PERMISSIONS);
+                    CONTACTS_PERMISSIONS, STORAGE_PERMISSIONS);
         }
 
         // Atthention Service

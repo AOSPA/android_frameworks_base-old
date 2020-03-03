@@ -25,6 +25,7 @@ import static android.net.NetworkPolicyManager.isProcStateAllowedWhileOnRestrict
 import static android.os.MessageQueue.OnFileDescriptorEventListener.EVENT_INPUT;
 import static android.os.Process.SYSTEM_UID;
 import static android.os.Process.THREAD_PRIORITY_BACKGROUND;
+import static android.os.Process.ZYGOTE_POLICY_FLAG_EMPTY;
 import static android.os.Process.getFreeMemory;
 import static android.os.Process.getTotalMemory;
 import static android.os.Process.killProcessQuiet;
@@ -80,13 +81,11 @@ import android.os.Bundle;
 import android.os.DropBoxManager;
 import android.os.Handler;
 import android.os.IBinder;
-import android.os.IVold;
 import android.os.Looper;
 import android.os.Message;
 import android.os.PowerManager;
 import android.os.Process;
 import android.os.RemoteException;
-import android.os.ServiceManager;
 import android.os.StrictMode;
 import android.os.SystemClock;
 import android.os.SystemProperties;
@@ -1645,7 +1644,7 @@ public final class ProcessList {
      */
     @GuardedBy("mService")
     boolean startProcessLocked(ProcessRecord app, HostingRecord hostingRecord,
-            boolean disableHiddenApiChecks, boolean disableTestApiChecks,
+            int zygotePolicyFlags, boolean disableHiddenApiChecks, boolean disableTestApiChecks,
             boolean mountExtStorageFull, String abiOverride) {
         if (app.pendingStart) {
             return true;
@@ -1738,8 +1737,7 @@ public final class ProcessList {
             }
             // Run the app in safe mode if its manifest requests so or the
             // system is booted in safe mode.
-            if ((app.info.flags & ApplicationInfo.FLAG_VM_SAFE_MODE) != 0 ||
-                    mService.mSafeMode == true) {
+            if ((app.info.flags & ApplicationInfo.FLAG_VM_SAFE_MODE) != 0 || mService.mSafeMode) {
                 runtimeFlags |= Zygote.DEBUG_ENABLE_SAFEMODE;
             }
             if ((app.info.privateFlags & ApplicationInfo.PRIVATE_FLAG_PROFILEABLE_BY_SHELL) != 0) {
@@ -1851,8 +1849,8 @@ public final class ProcessList {
             final String entryPoint = "android.app.ActivityThread";
 
             return startProcessLocked(hostingRecord, entryPoint, app, uid, gids,
-                    runtimeFlags, mountExternal, seInfo, requiredAbi, instructionSet, invokeWith,
-                    startTime);
+                    runtimeFlags, zygotePolicyFlags, mountExternal, seInfo, requiredAbi,
+                    instructionSet, invokeWith, startTime);
         } catch (RuntimeException e) {
             Slog.e(ActivityManagerService.TAG, "Failure starting process " + app.processName, e);
 
@@ -1869,9 +1867,8 @@ public final class ProcessList {
     }
 
     @GuardedBy("mService")
-    boolean startProcessLocked(HostingRecord hostingRecord,
-            String entryPoint,
-            ProcessRecord app, int uid, int[] gids, int runtimeFlags, int mountExternal,
+    boolean startProcessLocked(HostingRecord hostingRecord, String entryPoint, ProcessRecord app,
+            int uid, int[] gids, int runtimeFlags, int zygotePolicyFlags, int mountExternal,
             String seInfo, String requiredAbi, String instructionSet, String invokeWith,
             long startTime) {
         app.pendingStart = true;
@@ -1900,15 +1897,15 @@ public final class ProcessList {
             if (DEBUG_PROCESSES) Slog.i(TAG_PROCESSES,
                     "Posting procStart msg for " + app.toShortString());
             mService.mProcStartHandler.post(() -> handleProcessStart(
-                    app, entryPoint, gids, runtimeFlags, mountExternal, requiredAbi,
-                    instructionSet, invokeWith, startSeq));
+                    app, entryPoint, gids, runtimeFlags, zygotePolicyFlags, mountExternal,
+                    requiredAbi, instructionSet, invokeWith, startSeq));
             return true;
         } else {
             try {
                 final Process.ProcessStartResult startResult = startProcess(hostingRecord,
                         entryPoint, app,
-                        uid, gids, runtimeFlags, mountExternal, seInfo, requiredAbi, instructionSet,
-                        invokeWith, startTime);
+                        uid, gids, runtimeFlags, zygotePolicyFlags, mountExternal, seInfo,
+                        requiredAbi, instructionSet, invokeWith, startTime);
                 handleProcessStartedLocked(app, startResult.pid, startResult.usingWrapper,
                         startSeq, false);
             } catch (RuntimeException e) {
@@ -1928,8 +1925,8 @@ public final class ProcessList {
      * <p>Note: this function doesn't hold the global AM lock intentionally.</p>
      */
     private void handleProcessStart(final ProcessRecord app, final String entryPoint,
-            final int[] gids, final int runtimeFlags, final int mountExternal,
-            final String requiredAbi, final String instructionSet,
+            final int[] gids, final int runtimeFlags, int zygotePolicyFlags,
+            final int mountExternal, final String requiredAbi, final String instructionSet,
             final String invokeWith, final long startSeq) {
         // If there is a precede instance of the process, wait for its death with a timeout.
         // Use local reference since we are not using locks here
@@ -1964,8 +1961,10 @@ public final class ProcessList {
         }
         try {
             final Process.ProcessStartResult startResult = startProcess(app.hostingRecord,
-                    entryPoint, app, app.startUid, gids, runtimeFlags, mountExternal,
-                    app.seInfo, requiredAbi, instructionSet, invokeWith, app.startTime);
+                    entryPoint, app, app.startUid, gids, runtimeFlags, zygotePolicyFlags,
+                    mountExternal, app.seInfo, requiredAbi, instructionSet, invokeWith,
+                    app.startTime);
+
             synchronized (mService) {
                 handleProcessStartedLocked(app, startResult, startSeq);
             }
@@ -2118,9 +2117,9 @@ public final class ProcessList {
     }
 
     private Process.ProcessStartResult startProcess(HostingRecord hostingRecord, String entryPoint,
-            ProcessRecord app, int uid, int[] gids, int runtimeFlags, int mountExternal,
-            String seInfo, String requiredAbi, String instructionSet, String invokeWith,
-            long startTime) {
+            ProcessRecord app, int uid, int[] gids, int runtimeFlags, int zygotePolicyFlags,
+            int mountExternal, String seInfo, String requiredAbi, String instructionSet,
+            String invokeWith, long startTime) {
         try {
             Trace.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER, "Start proc: " +
                     app.processName);
@@ -2168,14 +2167,15 @@ public final class ProcessList {
                         app.processName, uid, uid, gids, runtimeFlags, mountExternal,
                         app.info.targetSdkVersion, seInfo, requiredAbi, instructionSet,
                         app.info.dataDir, null, app.info.packageName,
-                        /*useUsapPool=*/ false, isTopApp, app.mDisabledCompatChanges,
-                        pkgDataInfoMap, new String[]{PROC_START_SEQ_IDENT + app.startSeq});
+                        /*zygotePolicyFlags=*/ ZYGOTE_POLICY_FLAG_EMPTY, isTopApp,
+                        app.mDisabledCompatChanges, pkgDataInfoMap,
+                        new String[]{PROC_START_SEQ_IDENT + app.startSeq});
             } else {
                 startResult = Process.start(entryPoint,
                         app.processName, uid, uid, gids, runtimeFlags, mountExternal,
                         app.info.targetSdkVersion, seInfo, requiredAbi, instructionSet,
-                        app.info.dataDir, invokeWith, app.info.packageName, isTopApp,
-                        app.mDisabledCompatChanges, pkgDataInfoMap,
+                        app.info.dataDir, invokeWith, app.info.packageName, zygotePolicyFlags,
+                        isTopApp, app.mDisabledCompatChanges, pkgDataInfoMap,
                         new String[]{PROC_START_SEQ_IDENT + app.startSeq});
             }
             if (mPerfServiceStartHint != null) {
@@ -2193,14 +2193,14 @@ public final class ProcessList {
     }
 
     @GuardedBy("mService")
-    final void startProcessLocked(ProcessRecord app, HostingRecord hostingRecord) {
-        startProcessLocked(app, hostingRecord, null /* abiOverride */);
+    void startProcessLocked(ProcessRecord app, HostingRecord hostingRecord, int zygotePolicyFlags) {
+        startProcessLocked(app, hostingRecord, zygotePolicyFlags, null /* abiOverride */);
     }
 
     @GuardedBy("mService")
     final boolean startProcessLocked(ProcessRecord app, HostingRecord hostingRecord,
-            String abiOverride) {
-        return startProcessLocked(app, hostingRecord,
+            int zygotePolicyFlags, String abiOverride) {
+        return startProcessLocked(app, hostingRecord, zygotePolicyFlags,
                 false /* disableHiddenApiChecks */, false /* disableTestApiChecks */,
                 false /* mountExtStorageFull */, abiOverride);
     }
@@ -2208,8 +2208,9 @@ public final class ProcessList {
     @GuardedBy("mService")
     final ProcessRecord startProcessLocked(String processName, ApplicationInfo info,
             boolean knownToBeDead, int intentFlags, HostingRecord hostingRecord,
-            boolean allowWhileBooting, boolean isolated, int isolatedUid, boolean keepIfLarge,
-            String abiOverride, String entryPoint, String[] entryPointArgs, Runnable crashHandler) {
+            int zygotePolicyFlags, boolean allowWhileBooting, boolean isolated, int isolatedUid,
+            boolean keepIfLarge, String abiOverride, String entryPoint, String[] entryPointArgs,
+            Runnable crashHandler) {
         long startTime = SystemClock.uptimeMillis();
         ProcessRecord app;
         if (!isolated) {
@@ -2320,7 +2321,8 @@ public final class ProcessList {
         }
 
         checkSlow(startTime, "startProcess: stepping in to startProcess");
-        final boolean success = startProcessLocked(app, hostingRecord, abiOverride);
+        final boolean success =
+                startProcessLocked(app, hostingRecord, zygotePolicyFlags, abiOverride);
         checkSlow(startTime, "startProcess: done starting proc!");
         return success ? app : null;
     }
@@ -2343,6 +2345,19 @@ public final class ProcessList {
         if (app.startSeq > expectedStartSeq) {
             if (sb == null) sb = new StringBuilder();
             sb.append("seq=" + app.startSeq + ",expected=" + expectedStartSeq + ";");
+        }
+        try {
+            AppGlobals.getPackageManager().checkPackageStartable(app.info.packageName, app.userId);
+        } catch (RemoteException e) {
+            // unexpected; ignore
+        } catch (SecurityException e) {
+            if (mService.mConstants.FLAG_PROCESS_START_ASYNC) {
+                if (sb == null) sb = new StringBuilder();
+                sb.append("Package is frozen;");
+            } else {
+                // we're not being started async and so should throw to the caller.
+                throw e;
+            }
         }
         return sb == null ? null : sb.toString();
     }
@@ -2643,7 +2658,8 @@ public final class ProcessList {
             mService.handleAppDiedLocked(app, willRestart, allowRestart);
             if (willRestart) {
                 removeLruProcessLocked(app);
-                mService.addAppLocked(app.info, null, false, null /* ABI override */);
+                mService.addAppLocked(app.info, null, false, null /* ABI override */,
+                        ZYGOTE_POLICY_FLAG_EMPTY);
             }
         } else {
             mRemovedProcesses.add(app);

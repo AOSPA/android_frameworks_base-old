@@ -20,8 +20,6 @@
 #include <fstream>
 #include <memory>
 #include <ostream>
-#include <sstream>
-#include <string>
 #include <vector>
 
 #include "android-base/stringprintf.h"
@@ -30,7 +28,9 @@
 #include "idmap2/FileUtils.h"
 #include "idmap2/Idmap.h"
 #include "idmap2/Policies.h"
+#include "idmap2/PolicyUtils.h"
 #include "idmap2/SysTrace.h"
+#include "Commands.h"
 
 using android::ApkAssets;
 using android::base::StringPrintf;
@@ -38,13 +38,11 @@ using android::idmap2::BinaryStreamVisitor;
 using android::idmap2::CommandLineOptions;
 using android::idmap2::Error;
 using android::idmap2::Idmap;
-using android::idmap2::PoliciesToBitmask;
-using android::idmap2::PolicyBitmask;
-using android::idmap2::PolicyFlags;
 using android::idmap2::Result;
 using android::idmap2::Unit;
 using android::idmap2::utils::kIdmapCacheDir;
 using android::idmap2::utils::kIdmapFilePermissionMask;
+using android::idmap2::utils::PoliciesToBitmaskResult;
 using android::idmap2::utils::UidHasWriteAccessToPath;
 
 Result<Unit> CreateMultiple(const std::vector<std::string>& args) {
@@ -80,7 +78,7 @@ Result<Unit> CreateMultiple(const std::vector<std::string>& args) {
   }
 
   PolicyBitmask fulfilled_policies = 0;
-  auto conv_result = PoliciesToBitmask(policies);
+  auto conv_result = PoliciesToBitmaskResult(policies);
   if (conv_result) {
     fulfilled_policies |= *conv_result;
   } else {
@@ -88,7 +86,7 @@ Result<Unit> CreateMultiple(const std::vector<std::string>& args) {
   }
 
   if (fulfilled_policies == 0) {
-    fulfilled_policies |= PolicyFlags::POLICY_PUBLIC;
+    fulfilled_policies |= PolicyFlags::PUBLIC;
   }
 
   const std::unique_ptr<const ApkAssets> target_apk = ApkAssets::Load(target_apk_path);
@@ -105,32 +103,34 @@ Result<Unit> CreateMultiple(const std::vector<std::string>& args) {
       continue;
     }
 
-    const std::unique_ptr<const ApkAssets> overlay_apk = ApkAssets::Load(overlay_apk_path);
-    if (!overlay_apk) {
-      LOG(WARNING) << "failed to load apk " << overlay_apk_path.c_str();
-      continue;
-    }
+    if (!Verify(std::vector<std::string>({"--idmap-path", idmap_path}))) {
+      const std::unique_ptr<const ApkAssets> overlay_apk = ApkAssets::Load(overlay_apk_path);
+      if (!overlay_apk) {
+        LOG(WARNING) << "failed to load apk " << overlay_apk_path.c_str();
+        continue;
+      }
 
-    const auto idmap =
-        Idmap::FromApkAssets(*target_apk, *overlay_apk, fulfilled_policies, !ignore_overlayable);
-    if (!idmap) {
-      LOG(WARNING) << "failed to create idmap";
-      continue;
-    }
+      const auto idmap =
+          Idmap::FromApkAssets(*target_apk, *overlay_apk, fulfilled_policies, !ignore_overlayable);
+      if (!idmap) {
+        LOG(WARNING) << "failed to create idmap";
+        continue;
+      }
 
-    umask(kIdmapFilePermissionMask);
-    std::ofstream fout(idmap_path);
-    if (fout.fail()) {
-      LOG(WARNING) << "failed to open idmap path " << idmap_path.c_str();
-      continue;
-    }
+      umask(kIdmapFilePermissionMask);
+      std::ofstream fout(idmap_path);
+      if (fout.fail()) {
+        LOG(WARNING) << "failed to open idmap path " << idmap_path.c_str();
+        continue;
+      }
 
-    BinaryStreamVisitor visitor(fout);
-    (*idmap)->accept(&visitor);
-    fout.close();
-    if (fout.fail()) {
-      LOG(WARNING) << "failed to write to idmap path %s" << idmap_path.c_str();
-      continue;
+      BinaryStreamVisitor visitor(fout);
+      (*idmap)->accept(&visitor);
+      fout.close();
+      if (fout.fail()) {
+        LOG(WARNING) << "failed to write to idmap path %s" << idmap_path.c_str();
+        continue;
+      }
     }
 
     idmap_paths.emplace_back(idmap_path);

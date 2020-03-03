@@ -18,11 +18,13 @@ package android.media.tv.tuner;
 
 import android.annotation.BytesLong;
 import android.annotation.CallbackExecutor;
+import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
 import android.annotation.SystemApi;
 import android.content.Context;
+import android.hardware.tv.tuner.V1_0.Constants;
 import android.media.tv.TvInputService;
 import android.media.tv.tuner.TunerConstants.Result;
 import android.media.tv.tuner.dvr.DvrPlayback;
@@ -45,6 +47,8 @@ import android.os.Handler;
 import android.os.Looper;
 import android.os.Message;
 
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.Executor;
@@ -66,6 +70,22 @@ public class Tuner implements AutoCloseable  {
     private static final int MSG_ON_FILTER_EVENT = 2;
     private static final int MSG_ON_FILTER_STATUS = 3;
     private static final int MSG_ON_LNB_EVENT = 4;
+
+    /** @hide */
+    @IntDef(prefix = "DVR_TYPE_", value = {DVR_TYPE_RECORD, DVR_TYPE_PLAYBACK})
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface DvrType {}
+
+    /**
+     * DVR for recording.
+     * @hide
+     */
+    public static final int DVR_TYPE_RECORD = Constants.DvrType.RECORD;
+    /**
+     * DVR for playback of recorded programs.
+     * @hide
+     */
+    public static final int DVR_TYPE_PLAYBACK = Constants.DvrType.PLAYBACK;
 
     static {
         System.loadLibrary("media_tv_tuner");
@@ -196,8 +216,8 @@ public class Tuner implements AutoCloseable  {
     private native int nativeSetLnb(int lnbId);
     private native int nativeSetLna(boolean enable);
     private native FrontendStatus nativeGetFrontendStatus(int[] statusTypes);
-    private native int nativeGetAvSyncHwId(Filter filter);
-    private native long nativeGetAvSyncTime(int avSyncId);
+    private native Integer nativeGetAvSyncHwId(Filter filter);
+    private native Long nativeGetAvSyncTime(int avSyncId);
     private native int nativeConnectCiCam(int ciCamId);
     private native int nativeDisconnectCiCam();
     private native FrontendInfo nativeGetFrontendInfo(int id);
@@ -443,7 +463,8 @@ public class Tuner implements AutoCloseable  {
     @RequiresPermission(android.Manifest.permission.ACCESS_TV_TUNER)
     public int getAvSyncHwId(@NonNull Filter filter) {
         TunerUtils.checkTunerPermission(mContext);
-        return nativeGetAvSyncHwId(filter);
+        Integer id = nativeGetAvSyncHwId(filter);
+        return id == null ? TunerConstants.INVALID_AV_SYNC_ID : id;
     }
 
     /**
@@ -458,7 +479,8 @@ public class Tuner implements AutoCloseable  {
     @RequiresPermission(android.Manifest.permission.ACCESS_TV_TUNER)
     public long getAvSyncTime(int avSyncHwId) {
         TunerUtils.checkTunerPermission(mContext);
-        return nativeGetAvSyncTime(avSyncHwId);
+        Long time = nativeGetAvSyncTime(avSyncHwId);
+        return time == null ? TunerConstants.TIMESTAMP_UNAVAILABLE : time;
     }
 
     /**
@@ -652,7 +674,7 @@ public class Tuner implements AutoCloseable  {
         if (filter != null) {
             filter.setMainType(mainType);
             filter.setSubtype(subType);
-            filter.setCallback(cb);
+            filter.setCallback(cb, executor);
             if (mHandler == null) {
                 mHandler = createEventHandler();
             }

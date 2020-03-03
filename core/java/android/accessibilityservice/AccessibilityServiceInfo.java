@@ -16,6 +16,8 @@
 
 package android.accessibilityservice;
 
+import static android.accessibilityservice.util.AccessibilityUtils.getFilteredHtmlText;
+import static android.accessibilityservice.util.AccessibilityUtils.loadSafeAnimatedImage;
 import static android.content.pm.PackageManager.FEATURE_FINGERPRINT;
 
 import android.annotation.IntDef;
@@ -27,7 +29,6 @@ import android.compat.annotation.EnabledAfter;
 import android.compat.annotation.UnsupportedAppUsage;
 import android.content.ComponentName;
 import android.content.Context;
-import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.PackageManager.NameNotFoundException;
 import android.content.pm.ResolveInfo;
@@ -782,12 +783,10 @@ public class AccessibilityServiceInfo implements Parcelable {
     }
 
     /**
-     * The animated image resource id.
-     * <p>
-     *    <strong>Statically set from
-     *    {@link AccessibilityService#SERVICE_META_DATA meta-data}.</strong>
-     * </p>
+     * Gets the animated image resource id.
+     *
      * @return The animated image resource id.
+     *
      * @hide
      */
     public int getAnimatedImageRes() {
@@ -797,10 +796,14 @@ public class AccessibilityServiceInfo implements Parcelable {
     /**
      * The animated image drawable.
      * <p>
+     *    Image can not exceed the screen size.
      *    <strong>Statically set from
      *    {@link AccessibilityService#SERVICE_META_DATA meta-data}.</strong>
      * </p>
-     * @return The animated image drawable.
+     * @return The animated image drawable, or null if the resource is invalid or the image
+     * exceed the screen size.
+     *
+     * @hide
      */
     @Nullable
     public Drawable loadAnimatedImage(@NonNull Context context)  {
@@ -808,11 +811,8 @@ public class AccessibilityServiceInfo implements Parcelable {
             return null;
         }
 
-        final PackageManager packageManager = context.getPackageManager();
-        final String packageName = mComponentName.getPackageName();
-        final ApplicationInfo applicationInfo = mResolveInfo.serviceInfo.applicationInfo;
-
-        return packageManager.getDrawable(packageName, mAnimatedImageRes, applicationInfo);
+        return loadSafeAnimatedImage(context, mResolveInfo.serviceInfo.applicationInfo,
+                mAnimatedImageRes);
     }
 
     /**
@@ -924,16 +924,19 @@ public class AccessibilityServiceInfo implements Parcelable {
     }
 
     /**
-     * The localized html description of the accessibility service.
+     * The localized and restricted html description of the accessibility service.
      * <p>
+     *    Filters the <img> tag which do not meet the custom specification and the <a> tag.
      *    <strong>Statically set from
      *    {@link AccessibilityService#SERVICE_META_DATA meta-data}.</strong>
      * </p>
-     * @return The localized html description.
+     * @return The localized and restricted html description.
+     *
+     * @hide
      */
     @Nullable
     public String loadHtmlDescription(@NonNull PackageManager packageManager) {
-        if (mHtmlDescriptionRes == 0) {
+        if (mHtmlDescriptionRes == /* invalid */ 0) {
             return null;
         }
 
@@ -941,7 +944,7 @@ public class AccessibilityServiceInfo implements Parcelable {
         final CharSequence htmlDescription = packageManager.getText(serviceInfo.packageName,
                 mHtmlDescriptionRes, serviceInfo.applicationInfo);
         if (htmlDescription != null) {
-            return htmlDescription.toString().trim();
+            return getFilteredHtmlText(htmlDescription.toString().trim());
         }
         return null;
     }

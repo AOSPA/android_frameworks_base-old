@@ -61,14 +61,6 @@ public class RecentsAnimationControllerCompat {
         }
     }
 
-    public void setSplitScreenMinimized(boolean minimized) {
-        try {
-            mAnimationController.setSplitScreenMinimized(minimized);
-        } catch (RemoteException e) {
-            Log.e(TAG, "Failed to set minimize dock", e);
-        }
-    }
-
     public void hideCurrentInputMethod() {
         try {
             mAnimationController.hideCurrentInputMethod();
@@ -88,15 +80,6 @@ public class RecentsAnimationControllerCompat {
             mAnimationController.finish(toHome, sendUserLeaveHint);
         } catch (RemoteException e) {
             Log.e(TAG, "Failed to finish recents animation", e);
-        }
-    }
-
-    @Deprecated
-    public void setCancelWithDeferredScreenshot(boolean screenshot) {
-        try {
-            mAnimationController.setCancelWithDeferredScreenshot(screenshot);
-        } catch (RemoteException e) {
-            Log.e(TAG, "Failed to set cancel with deferred screenshot", e);
         }
     }
 

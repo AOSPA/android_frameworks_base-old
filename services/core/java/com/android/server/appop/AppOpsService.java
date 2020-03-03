@@ -31,7 +31,6 @@ import static android.app.AppOpsManager.KEY_TOP_STATE_SETTLE_TIME;
 import static android.app.AppOpsManager.MODE_ALLOWED;
 import static android.app.AppOpsManager.NoteOpEvent;
 import static android.app.AppOpsManager.OP_CAMERA;
-import static android.app.AppOpsManager.OP_COARSE_LOCATION;
 import static android.app.AppOpsManager.OP_FLAGS_ALL;
 import static android.app.AppOpsManager.OP_FLAG_SELF;
 import static android.app.AppOpsManager.OP_FLAG_TRUSTED_PROXIED;
@@ -1446,6 +1445,7 @@ public class AppOpsService extends IAppOpsService.Stub {
 
                 ArrayMap<String, String> dstFeatureIds = new ArrayMap<>();
                 ArraySet<String> featureIds = new ArraySet<>();
+                featureIds.add(null);
                 if (pkg.getFeatures() != null) {
                     int numFeatures = pkg.getFeatures().size();
                     for (int featureNum = 0; featureNum < numFeatures; featureNum++) {
@@ -2346,13 +2346,6 @@ public class AppOpsService extends IAppOpsService.Stub {
         } catch (SecurityException e) {
             Slog.e(TAG, "Cannot setMode", e);
             return;
-        }
-
-        // STOPSHIP: Remove this check once we are sure no one is doing it.
-        if (code == OP_COARSE_LOCATION && mode != AppOpsManager.opToDefaultMode(code)) {
-            Slog.wtf(TAG, "Trying to setMode() instead of setUidMode(), " + "code=" + code
-                    + ", uid=" + uid + ", packageName=" + packageName + ", mode=" + mode
-                    + ", callingUid=" + Binder.getCallingUid(), new RuntimeException());
         }
 
         synchronized (this) {
@@ -4068,9 +4061,11 @@ public class AppOpsService extends IAppOpsService.Stub {
     private void readOp(XmlPullParser parser, @NonNull UidState uidState,
         @NonNull String pkgName, boolean isPrivileged) throws NumberFormatException,
         XmlPullParserException, IOException {
-        Op op = new Op(uidState, pkgName,
-                Integer.parseInt(parser.getAttributeValue(null, "n")),
-                uidState.uid);
+        int opCode = Integer.parseInt(parser.getAttributeValue(null, "n"));
+        if (isIgnoredAppOp(opCode)) {
+            return;
+        }
+        Op op = new Op(uidState, pkgName, opCode, uidState.uid);
 
         final int mode = XmlUtils.readIntAttribute(parser, "m",
                 AppOpsManager.opToDefaultMode(op.op));
@@ -4102,6 +4097,16 @@ public class AppOpsService extends IAppOpsService.Stub {
             uidState.pkgOps.put(pkgName, ops);
         }
         ops.put(op.op, op);
+    }
+
+    //TODO(b/149995538): Remove once this has reached all affected devices
+    private static boolean isIgnoredAppOp(int op) {
+        switch (op) {
+            case AppOpsManager.OP_MANAGE_EXTERNAL_STORAGE:
+                return true;
+            default:
+                return false;
+        }
     }
 
     void writeState() {

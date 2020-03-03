@@ -304,7 +304,7 @@ public class RecentsAnimationControllerTest extends WindowTestsBase {
         doNothing().when(mWm.mTaskSnapshotController).notifyAppVisibilityChanged(any(),
                 anyBoolean());
         doReturn(mMockTaskSnapshot).when(mWm.mTaskSnapshotController).getSnapshot(anyInt(),
-                anyInt(), eq(false) /* restoreFromDisk */, eq(false) /* reducedResolution */);
+                anyInt(), eq(false) /* restoreFromDisk */, eq(false) /* isLowResolution */);
         mController.setDeferredCancel(true /* deferred */, true /* screenshot */);
         mController.cancelAnimationWithScreenshot(true /* screenshot */);
         verify(mMockRunner).onAnimationCanceled(mMockTaskSnapshot /* taskSnapshot */);
@@ -333,7 +333,7 @@ public class RecentsAnimationControllerTest extends WindowTestsBase {
         assertTrue(mController.isAnimatingTask(activity.getTask()));
 
         // Assume activity transition should animate when no
-        // IRecentsAnimationController#setCancelWithDeferredScreenshot called.
+        // IRecentsAnimationController#setDeferCancelUntilNextTransition called.
         assertFalse(mController.shouldDeferCancelWithScreenshot());
         assertTrue(activity.shouldAnimate(TRANSIT_ACTIVITY_CLOSE));
     }

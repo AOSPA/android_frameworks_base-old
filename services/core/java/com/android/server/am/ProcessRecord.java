@@ -67,12 +67,14 @@ import com.android.internal.os.BatteryStatsImpl;
 import com.android.internal.os.ProcessCpuTracker;
 import com.android.internal.os.Zygote;
 import com.android.internal.util.FrameworkStatsLog;
+import com.android.server.MemoryPressureUtil;
 import com.android.server.Watchdog;
 import com.android.server.wm.WindowProcessController;
 import com.android.server.wm.WindowProcessListener;
 
 import java.io.File;
 import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -167,6 +169,7 @@ class ProcessRecord implements WindowProcessListener {
     int lastCompactAction;      // The most recent compaction action performed for this app.
     boolean frozen;             // True when the process is frozen.
     long freezeUnfreezeTime;    // Last time the app was (un)frozen, 0 for never
+    boolean shouldNotFreeze;    // True if a process has a WPRI binding from an unfrozen process
     private int mCurSchedGroup; // Currently desired scheduling class
     int setSchedGroup;          // Last set to background scheduling class
     int trimMemoryLevel;        // Last selected memory trimming level
@@ -1614,6 +1617,8 @@ class ProcessRecord implements WindowProcessListener {
             info.append("Parent: ").append(parentShortComponentName).append("\n");
         }
 
+        StringBuilder report = new StringBuilder();
+        report.append(MemoryPressureUtil.currentPsiState());
         ProcessCpuTracker processCpuTracker = new ProcessCpuTracker(true);
         ArrayList<Integer> nativePids = null;
 
@@ -1639,19 +1644,20 @@ class ProcessRecord implements WindowProcessListener {
 
         // For background ANRs, don't pass the ProcessCpuTracker to
         // avoid spending 1/2 second collecting stats to rank lastPids.
+        StringWriter tracesFileException = new StringWriter();
         File tracesFile = ActivityManagerService.dumpStackTraces(firstPids,
                 (isSilentAnr()) ? null : processCpuTracker, (isSilentAnr()) ? null : lastPids,
-                nativePids);
+                nativePids, tracesFileException);
 
-        String cpuInfo = null;
         if (isMonitorCpuUsage()) {
             mService.updateCpuStatsNow();
             synchronized (mService.mProcessCpuTracker) {
-                cpuInfo = mService.mProcessCpuTracker.printCurrentState(anrTime);
+                report.append(mService.mProcessCpuTracker.printCurrentState(anrTime));
             }
             info.append(processCpuTracker.printCurrentLoad());
-            info.append(cpuInfo);
+            info.append(report);
         }
+        report.append(tracesFileException.getBuffer());
 
         info.append(processCpuTracker.printCurrentState(anrTime));
 
@@ -1676,7 +1682,8 @@ class ProcessRecord implements WindowProcessListener {
         final ProcessRecord parentPr = parentProcess != null
                 ? (ProcessRecord) parentProcess.mOwner : null;
         mService.addErrorToDropBox("anr", this, processName, activityShortComponentName,
-                parentShortComponentName, parentPr, annotation, cpuInfo, tracesFile, null);
+                parentShortComponentName, parentPr, annotation, report.toString(), tracesFile,
+                null);
 
         if (mWindowProcessController.appNotResponding(info.toString(), () -> kill("anr",
                 ApplicationExitInfo.REASON_ANR, true),

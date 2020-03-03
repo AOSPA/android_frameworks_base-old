@@ -97,7 +97,6 @@ import android.content.pm.PackageManagerInternal;
 import android.content.pm.ResolveInfo;
 import android.content.pm.UserInfo;
 import android.content.res.Configuration;
-import android.graphics.Rect;
 import android.os.Binder;
 import android.os.Bundle;
 import android.os.IBinder;
@@ -339,6 +338,7 @@ class ActivityStarter {
         int filterCallingUid;
         PendingIntentRecord originatingPendingIntent;
         boolean allowBackgroundActivityStart;
+        boolean isDream;
 
         /**
          * If set to {@code true}, allows this activity start to look into
@@ -390,6 +390,7 @@ class ActivityStarter {
             filterCallingUid = UserHandle.USER_NULL;
             originatingPendingIntent = null;
             allowBackgroundActivityStart = false;
+            isDream = false;
         }
 
         /**
@@ -430,6 +431,7 @@ class ActivityStarter {
             filterCallingUid = request.filterCallingUid;
             originatingPendingIntent = request.originatingPendingIntent;
             allowBackgroundActivityStart = request.allowBackgroundActivityStart;
+            isDream = request.isDream;
         }
 
         /**
@@ -974,7 +976,7 @@ class ActivityStarter {
                 restrictedBgActivity = shouldAbortBackgroundActivityStart(callingUid,
                         callingPid, callingPackage, realCallingUid, realCallingPid, callerApp,
                         request.originatingPendingIntent, request.allowBackgroundActivityStart,
-                        intent);
+                        request.isDream, intent);
             } finally {
                 Trace.traceEnd(Trace.TRACE_TAG_WINDOW_MANAGER);
             }
@@ -1184,11 +1186,16 @@ class ActivityStarter {
     boolean shouldAbortBackgroundActivityStart(int callingUid, int callingPid,
             final String callingPackage, int realCallingUid, int realCallingPid,
             WindowProcessController callerApp, PendingIntentRecord originatingPendingIntent,
-            boolean allowBackgroundActivityStart, Intent intent) {
+            boolean allowBackgroundActivityStart, boolean isDream, Intent intent) {
         // don't abort for the most important UIDs
         final int callingAppId = UserHandle.getAppId(callingUid);
         if (callingUid == Process.ROOT_UID || callingAppId == Process.SYSTEM_UID
                 || callingAppId == Process.NFC_UID) {
+            return false;
+        }
+
+        // don't abort if this is the dream activity
+        if (isDream) {
             return false;
         }
         // don't abort if the callingUid has a visible window or is a persistent system process
@@ -1568,9 +1575,8 @@ class ActivityStarter {
                 mIntent, mStartActivity.getUriPermissionsLocked(), mStartActivity.mUserId);
         mService.getPackageManagerInternalLocked().grantImplicitAccess(
                 mStartActivity.mUserId, mIntent,
-                mCallingUid,
-                UserHandle.getAppId(mStartActivity.info.applicationInfo.uid)
-        );
+                UserHandle.getAppId(mStartActivity.info.applicationInfo.uid), mCallingUid,
+                true /*direct*/);
         if (newTask) {
             EventLogTags.writeWmCreateTask(mStartActivity.mUserId,
                     mStartActivity.getTask().mTaskId);
@@ -2411,7 +2417,6 @@ class ActivityStarter {
                 mNewTaskIntent != null ? mNewTaskIntent : mIntent, mVoiceSession,
                 mVoiceInteractor, toTop, mStartActivity, mSourceRecord, mOptions);
         addOrReparentStartingActivity(task, "setTaskFromReuseOrCreateNewTask - mReuseTask");
-        updateBounds(mStartActivity.getTask(), mLaunchParams.mBounds);
 
         if (DEBUG_TASKS) {
             Slog.v(TAG_TASKS, "Starting new activity " + mStartActivity
@@ -2432,21 +2437,6 @@ class ActivityStarter {
         activity.deliverNewIntentLocked(mCallingUid, mStartActivity.intent,
                 mStartActivity.launchedFromPackage);
         mIntentDelivered = true;
-    }
-
-    @VisibleForTesting
-    void updateBounds(Task task, Rect bounds) {
-        if (bounds.isEmpty()) {
-            return;
-        }
-
-        final Task rootTask = task.getRootTask();
-        if (rootTask != null && rootTask.inPinnedWindowingMode()) {
-            mService.animateResizePinnedStack(rootTask.mTaskId, bounds, -1);
-        } else {
-            // TODO: I don't believe it is possible to reach this else condition anymore...
-            task.setBounds(bounds);
-        }
     }
 
     private void addOrReparentStartingActivity(Task parent, String reason) {
@@ -2699,6 +2689,11 @@ class ActivityStarter {
 
     ActivityStarter setAllowBackgroundActivityStart(boolean allowBackgroundActivityStart) {
         mRequest.allowBackgroundActivityStart = allowBackgroundActivityStart;
+        return this;
+    }
+
+    ActivityStarter setIsDream(boolean isDream) {
+        mRequest.isDream = isDream;
         return this;
     }
 

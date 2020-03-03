@@ -398,6 +398,7 @@ public final class SystemServer {
         mStartCount = SystemProperties.getInt(SYSPROP_START_COUNT, 0) + 1;
         mRuntimeStartElapsedTime = SystemClock.elapsedRealtime();
         mRuntimeStartUptime = SystemClock.uptimeMillis();
+        Process.setStartTimes(mRuntimeStartElapsedTime, mRuntimeStartUptime);
 
         // Remember if it's runtime restart(when sys.boot_completed is already set) or reboot
         // We don't use "mStartCount > 1" here because it'll be wrong on a FDE device.
@@ -1945,16 +1946,14 @@ public final class SystemServer {
                 t.traceEnd();
             }
 
-            if (hasFeatureFace || hasFeatureIris || hasFeatureFingerprint) {
-                // Start this service after all biometric services.
-                t.traceBegin("StartBiometricService");
-                mSystemServiceManager.startService(BiometricService.class);
-                t.traceEnd();
+            // Start this service after all biometric services.
+            t.traceBegin("StartBiometricService");
+            mSystemServiceManager.startService(BiometricService.class);
+            t.traceEnd();
 
-                t.traceBegin("StartAuthService");
-                mSystemServiceManager.startService(AuthService.class);
-                t.traceEnd();
-            }
+            t.traceBegin("StartAuthService");
+            mSystemServiceManager.startService(AuthService.class);
+            t.traceEnd();
 
 
             t.traceBegin("StartBackgroundDexOptService");

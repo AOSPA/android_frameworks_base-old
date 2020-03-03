@@ -111,6 +111,7 @@ public class SurfaceControlViewHost {
             @NonNull WindowlessWindowManager wwm) {
         mWm = wwm;
         mViewRoot = new ViewRootImpl(c, d, mWm);
+        mViewRoot.forceDisableBLAST();
         mAccessibilityEmbeddedConnection = mViewRoot.getAccessibilityEmbeddedConnection();
     }
 
@@ -135,6 +136,7 @@ public class SurfaceControlViewHost {
         mWm = new WindowlessWindowManager(context.getResources().getConfiguration(),
                 mSurfaceControl, hostToken);
         mViewRoot = new ViewRootImpl(context, display, mWm);
+        mViewRoot.forceDisableBLAST();
         mAccessibilityEmbeddedConnection = mViewRoot.getAccessibilityEmbeddedConnection();
     }
 
@@ -199,7 +201,7 @@ public class SurfaceControlViewHost {
         final WindowManager.LayoutParams lp =
                 new WindowManager.LayoutParams(width, height,
                         WindowManager.LayoutParams.TYPE_APPLICATION, 0, PixelFormat.TRANSPARENT);
-        relayout(width, height);
+        relayout(lp);
     }
 
     /**

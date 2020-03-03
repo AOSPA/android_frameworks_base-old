@@ -1709,7 +1709,7 @@ public final class InputMethodManager {
             }
 
             try {
-                return mService.hideSoftInput(mClient, flags, resultReceiver);
+                return mService.hideSoftInput(mClient, windowToken, flags, resultReceiver);
             } catch (RemoteException e) {
                 throw e.rethrowFromSystemServer();
             }
@@ -1858,6 +1858,7 @@ public final class InputMethodManager {
         // system can verify the consistency between the uid of this process and package name passed
         // from here. See comment of Context#getOpPackageName() for details.
         tba.packageName = view.getContext().getOpPackageName();
+        tba.autofillId = view.getAutofillId();
         tba.fieldId = view.getId();
         InputConnection ic = view.onCreateInputConnection(tba);
         if (DEBUG) Log.v(TAG, "Starting input: tba=" + tba + " ic=" + ic);
@@ -1986,7 +1987,8 @@ public final class InputMethodManager {
     @UnsupportedAppUsage
     void closeCurrentInput() {
         try {
-            mService.hideSoftInput(mClient, HIDE_NOT_ALWAYS, null);
+            mService.hideSoftInput(
+                    mClient, mCurRootView.getView().getWindowToken(), HIDE_NOT_ALWAYS, null);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -2049,6 +2051,21 @@ public final class InputMethodManager {
             try {
                 if (mCurMethod != null) {
                     mCurMethod.notifyImeHidden();
+                }
+            } catch (RemoteException re) {
+            }
+        }
+    }
+
+    /**
+     * Notify IME directly to remove surface as it is no longer visible.
+     * @hide
+     */
+    public void removeImeSurface() {
+        synchronized (mH) {
+            try {
+                if (mCurMethod != null) {
+                    mCurMethod.removeImeSurface();
                 }
             } catch (RemoteException re) {
             }
