@@ -3644,6 +3644,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                             false /* knownToBeDead */,
                             0 /* intentFlags */,
                            sNullHostingRecord /* hostingRecord */,
+                           ZYGOTE_POLICY_FLAG_EMPTY /* zygotePolicyFlags */,
                            false /* allowWhileBooting */,
                            false /* isolated */,
                            true /* keepIfLarge */);
