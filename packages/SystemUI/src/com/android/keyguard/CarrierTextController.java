@@ -690,7 +690,7 @@ public class CarrierTextController {
                                            SubscriptionInfo sub) {
         StringBuilder newCarrierName = new StringBuilder();
         int networkType = getNetworkType(sub.getSubscriptionId());
-        String networkClass = networkClassToString(TelephonyManager.getNetworkClass(networkType));
+        String networkClass = networkTypeToString(networkType);
 
         String fiveGNetworkClass = get5GNetworkClass(sub, networkType);
         if ( fiveGNetworkClass != null ) {
@@ -734,17 +734,17 @@ public class CarrierTextController {
         return networkType;
     }
 
-    private String networkClassToString (int networkClass) {
-        final int[] classIds = {
-            com.android.systemui.R.string.config_rat_unknown,
-            com.android.systemui.R.string.config_rat_2g,
-            com.android.systemui.R.string.config_rat_3g,
-            com.android.systemui.R.string.config_rat_4g };
-        String classString = null;
-        if (networkClass < classIds.length) {
-            classString = getContext().getResources().getString(classIds[networkClass]);
+    private String networkTypeToString(int networkType) {
+        int classId = com.android.systemui.R.string.config_rat_unknown;
+        long mask = TelephonyManager.getBitMaskForNetworkType(networkType);
+        if ((mask & TelephonyManager.NETWORK_CLASS_BITMASK_2G) != 0) {
+          classId = com.android.systemui.R.string.config_rat_2g;
+        } else if ((mask & TelephonyManager.NETWORK_CLASS_BITMASK_3G) != 0) {
+          classId = com.android.systemui.R.string.config_rat_3g;
+        } else if ((mask & TelephonyManager.NETWORK_CLASS_BITMASK_4G) != 0) {
+          classId = com.android.systemui.R.string.config_rat_4g;
         }
-        return (classString == null) ? "" : classString;
+        return getContext().getResources().getString(classId);
     }
 
     /**
