@@ -1,0 +1,72 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "e92dd9b9_9ed5eab2",
+        "filename": "packages/SystemUI/src/com/android/systemui/volume/VolumeDialogControllerImpl.java",
+        "patchSetId": 5
+      },
+      "lineNbr": 551,
+      "author": {
+        "id": 1000465
+      },
+      "writtenOn": "2020-03-05T18:26:24Z",
+      "side": 1,
+      "message": "KeyEvent.KEYCODE_MEDIA_PAUSE instead of 127?\nSame below",
+      "revId": "4c5c0168aa8fc4cab18ec3d592a71726afdaed4f",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "e48b088d_dd0009b7",
+        "filename": "packages/SystemUI/src/com/android/systemui/volume/VolumeDialogControllerImpl.java",
+        "patchSetId": 5
+      },
+      "lineNbr": 554,
+      "author": {
+        "id": 1000465
+      },
+      "writtenOn": "2020-03-05T18:26:24Z",
+      "side": 1,
+      "message": "Isn\u0027t it better to create the instance in the constructor?",
+      "revId": "4c5c0168aa8fc4cab18ec3d592a71726afdaed4f",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "a7a2d533_36944ad8",
+        "filename": "packages/SystemUI/src/com/android/systemui/volume/VolumeDialogControllerImpl.java",
+        "patchSetId": 5
+      },
+      "lineNbr": 557,
+      "author": {
+        "id": 1000465
+      },
+      "writtenOn": "2020-03-05T18:26:24Z",
+      "side": 1,
+      "message": "A class var would maybe make it more understandable",
+      "revId": "4c5c0168aa8fc4cab18ec3d592a71726afdaed4f",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "72be0be5_f2919424",
+        "filename": "packages/SystemUI/src/com/android/systemui/volume/VolumeDialogControllerImpl.java",
+        "patchSetId": 5
+      },
+      "lineNbr": 562,
+      "author": {
+        "id": 1000465
+      },
+      "writtenOn": "2020-03-05T18:26:24Z",
+      "side": 1,
+      "message": "KeyEvent.KEYCODE_MEDIA_PLAY instead of 127?\nsame below",
+      "revId": "4c5c0168aa8fc4cab18ec3d592a71726afdaed4f",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    }
+  ]
+}
