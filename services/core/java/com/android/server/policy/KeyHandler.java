@@ -621,7 +621,9 @@ public class KeyHandler {
                 if (DEBUG) {
                     Log.w(TAG, "handleKeyEvent(): KEY_WAKEUP detected.");
                 }
-                doHapticFeedback(true);
+                if (!mIsInPocket) {
+                    doHapticFeedback(true);
+                }
                 return false;
             } else {
                 if (DEBUG) {
