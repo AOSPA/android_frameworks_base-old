@@ -986,6 +986,7 @@ public class ActivityStack extends Task {
     void minimalResumeActivityLocked(ActivityRecord r) {
         if (DEBUG_STATES) Slog.v(TAG_STATES, "Moving to RESUMED: " + r + " (starting new instance)"
                 + " callers=" + Debug.getCallers(5));
+        r.callServiceTrackeronActivityStatechange(RESUMED, true);
         r.setState(RESUMED, "minimalResumeActivityLocked");
         r.completeResumeLocked();
     }
@@ -1128,6 +1129,7 @@ public class ActivityStack extends Task {
         if (DEBUG_STATES) Slog.v(TAG_STATES, "Moving to PAUSING: " + prev);
         else if (DEBUG_PAUSE) Slog.v(TAG_PAUSE, "Start pausing: " + prev);
 
+        prev.callServiceTrackeronActivityStatechange(PAUSING, true);
         if (mActivityTrigger != null) {
             mActivityTrigger.activityPauseTrigger(prev.intent, prev.info, prev.info.applicationInfo);
         }
@@ -1227,6 +1229,7 @@ public class ActivityStack extends Task {
         if (prev != null) {
             prev.setWillCloseOrEnterPip(false);
             final boolean wasStopping = prev.isState(STOPPING);
+            prev.callServiceTrackeronActivityStatechange(PAUSED, true);
             prev.setState(PAUSED, "completePausedLocked");
             if (prev.finishing) {
                 if (DEBUG_PAUSE) Slog.v(TAG_PAUSE, "Executing finish of activity: " + prev);
@@ -1243,6 +1246,7 @@ public class ActivityStack extends Task {
                     // We are also stopping, the stop request must have gone soon after the pause.
                     // We can't clobber it, because the stop confirmation will not be handled.
                     // We don't need to schedule another stop, we only need to let it happen.
+                    prev.callServiceTrackeronActivityStatechange(STOPPING, true);
                     prev.setState(STOPPING, "completePausedLocked");
                 } else if (!prev.mVisibleRequested || shouldSleepOrShutDownActivities()) {
                     // Clear out any deferred client hide we might currently have.
@@ -1693,6 +1697,7 @@ public class ActivityStack extends Task {
 
         if (DEBUG_SWITCH) Slog.v(TAG_SWITCH, "Resuming " + next);
 
+        next.callServiceTrackeronActivityStatechange(RESUMED, true);
         if (mActivityTrigger != null) {
             mActivityTrigger.activityResumeTrigger(next.intent, next.info, next.info.applicationInfo,
                     next.occludesParent());
@@ -1913,7 +1918,6 @@ public class ActivityStack extends Task {
 
             if (DEBUG_STATES) Slog.v(TAG_STATES, "Moving to RESUMED: " + next
                     + " (in existing)");
-
             next.setState(RESUMED, "resumeTopActivityInnerLocked");
 
             next.app.updateProcessInfo(false /* updateServiceConnectionActivities */,
@@ -2000,10 +2004,12 @@ public class ActivityStack extends Task {
                 // Whoops, need to restart this activity!
                 if (DEBUG_STATES) Slog.v(TAG_STATES, "Resume failed; resetting state to "
                         + lastState + ": " + next);
+                next.callServiceTrackeronActivityStatechange(lastState, true);
                 next.setState(lastState, "resumeTopActivityInnerLocked");
 
                 // lastResumedActivity being non-null implies there is a lastStack present.
                 if (lastResumedActivity != null) {
+                    lastResumedActivity.callServiceTrackeronActivityStatechange(RESUMED, true);
                     lastResumedActivity.setState(RESUMED, "resumeTopActivityInnerLocked");
                 }
 
@@ -3039,6 +3045,7 @@ public class ActivityStack extends Task {
                         + " other stack to this stack mResumedActivity=" + mResumedActivity
                         + " other mResumedActivity=" + topRunningActivity);
             }
+            topRunningActivity.callServiceTrackeronActivityStatechange(RESUMED, true);
             topRunningActivity.setState(RESUMED, "positionChildAt");
         }
 
@@ -3074,6 +3081,7 @@ public class ActivityStack extends Task {
         // so that we don't resume the same activity again in the new stack.
         // Apps may depend on onResume()/onPause() being called in pairs.
         if (setResume) {
+            r.callServiceTrackeronActivityStatechange(RESUMED, true);
             r.setState(RESUMED, "moveToFrontAndResumeStateIfNeeded");
         }
         // If the activity was previously pausing, then ensure we transfer that as well

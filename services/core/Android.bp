@@ -132,6 +132,7 @@ java_library_static {
         "overlayable_policy_aidl-java",
         "SurfaceFlingerProperties",
         "vendor.qti.hardware.servicetracker-V1.0-java",
+        "vendor.qti.hardware.servicetracker-V1.2-java",
     ],
 }
 
