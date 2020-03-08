@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "52d2127a_10ecee85",
+        "filename": "packages/SystemUI/res/layout/qs_detail.xml",
+        "patchSetId": 4
+      },
+      "lineNbr": 24,
+      "author": {
+        "id": 1000480
+      },
+      "writtenOn": "2020-03-08T10:18:28Z",
+      "side": 1,
+      "message": "derp",
+      "revId": "51b73b2e1f094d7d9610707e2b1db221a3ca40a2",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    }
+  ]
+}
