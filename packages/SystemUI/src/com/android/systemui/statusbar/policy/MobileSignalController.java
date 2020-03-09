@@ -71,6 +71,8 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.Executor;
 
+import org.codeaurora.internal.NrConfigType;
+import org.codeaurora.internal.NrIconType;
 
 public class MobileSignalController extends SignalController<
         MobileSignalController.MobileState, MobileSignalController.MobileIconGroup> {
@@ -715,9 +717,6 @@ public class MobileSignalController extends SignalController<
             }
         }
 
-        // TODO(b/150319502): Determine what to do with nr5GIconGroup
-        MobileIconGroup nr5GIconGroup = null;
-
         String iconKey = getIconKey();
         if (mNetworkToIconLookup.get(iconKey) != null) {
             mCurrentState.iconGroup = mNetworkToIconLookup.get(iconKey);
@@ -745,12 +744,16 @@ public class MobileSignalController extends SignalController<
                 }
             }
 
-        }else if ( nr5GIconGroup == null && isSideCarNsaValid() ) {
-            nr5GIconGroup = mFiveGState.getIconGroup();
-            mCurrentState.iconGroup = nr5GIconGroup;
-            if (DEBUG) {
-                Log.d(mTag,"get 5G NSA icon from side-car");
+        }
+        //Modem has centralized logic to display 5G icon based on carrier requirements
+        //For 5G icon display, only query NrIconType reported by modem
+        if ( isSideCarValid() ) {
+            mCurrentState.iconGroup = mFiveGState.getIconGroup();
+            if ( mFiveGState.getSignalLevel() > mCurrentState.level ) {
+                mCurrentState.level = mFiveGState.getSignalLevel();
             }
+        }else {
+            mCurrentState.iconGroup = getNetworkTypeIconGroup();
         }
 
         mCurrentState.dataConnected = mCurrentState.connected
@@ -785,8 +788,8 @@ public class MobileSignalController extends SignalController<
 
 
         if ( mConfig.alwaysShowNetworkTypeIcon ) {
-            if ( nr5GIconGroup != null ) {
-                mCurrentState.iconGroup = nr5GIconGroup;
+            if ( isSideCarValid() ) {
+                mCurrentState.iconGroup = mFiveGState.getIconGroup();
             }else {
                 int iconType = TelephonyManager.NETWORK_TYPE_UNKNOWN;
                 if (mCurrentState.connected) {
@@ -916,6 +919,15 @@ public class MobileSignalController extends SignalController<
         return registered;
     }
 
+    private boolean isSideCarValid() {
+        return isSideCarSaValid() || isSideCarNsaValid();
+    }
+
+    private boolean isSideCarSaValid() {
+        return mFiveGState.getNrConfigType() == NrConfigType.SA_CONFIGURATION
+                && mFiveGState.getNrIconType() != NrIconType.INVALID;
+    }
+
     private boolean isSideCarNsaValid() {
         return  mFiveGState.isNrIconTypeValid() && isDataRegisteredOnLte();
     }
@@ -926,6 +938,21 @@ public class MobileSignalController extends SignalController<
 
     private int getNrLevel() {
         return mCellSignalStrengthNr != null ? mCellSignalStrengthNr.getLevel() : 0;
+    }
+
+    private MobileIconGroup getNetworkTypeIconGroup() {
+        MobileIconGroup iconGroup = mDefaultIcons;
+        int overrideNetworkType = mTelephonyDisplayInfo.getOverrideNetworkType();
+        String iconKey = null;
+        if (overrideNetworkType == TelephonyDisplayInfo.OVERRIDE_NETWORK_TYPE_NONE
+                || overrideNetworkType == TelephonyDisplayInfo.OVERRIDE_NETWORK_TYPE_NR_NSA_MMWAVE
+                || overrideNetworkType == TelephonyDisplayInfo.OVERRIDE_NETWORK_TYPE_NR_NSA ){
+            iconKey = toIconKey(mTelephonyDisplayInfo.getNetworkType());
+        } else{
+            iconKey = toDisplayIconKey(overrideNetworkType);
+        }
+
+        return mNetworkToIconLookup.getOrDefault(iconKey, mDefaultIcons);
     }
 
     @Override
