@@ -423,6 +423,14 @@
          [CHAR LIMIT=NONE] -->
     <string name="location_changed_notification_text">Tap to see your location settings.</string>
 
+    <!-- Feature Id for Country Detector. [CHAR LIMIT=NONE]-->
+    <string name="country_detector">Country Detector</string>
+    <!-- Feature Id for Location service. [CHAR LIMIT=NONE]-->
+    <string name="location_service">Location Service</string>
+    <!-- Feature Id for Sensor Notification service. [CHAR LIMIT=NONE]-->
+    <string name="sensor_notification_service">Sensor Notification Service</string>
+    <!-- Feature Id for Twilight service. [CHAR LIMIT=NONE]-->
+    <string name="twilight_service">Twilight Service</string>
 
     <!-- Factory reset warning dialog strings--> <skip />
     <!-- Shows up in the dialog's title to warn about an impeding factory reset. [CHAR LIMIT=NONE] -->
@@ -577,6 +585,12 @@
 
     <!-- Format for build summary info [CHAR LIMIT=NONE] -->
     <string name="bugreport_status" translatable="false">%s (%s)</string>
+
+    <!-- Toast for taking screenshot with bugreport successfully. [CHAR_LIMIT=100] -->
+    <string name="bugreport_screenshot_success_toast">Screenshot taken with bug report</string>
+
+    <!-- Toast for failed to take screenshot with bugreport. [CHAR_LIMIT=100] -->
+    <string name="bugreport_screenshot_failure_toast">Failed to take screenshot with bug report</string>
 
     <!-- label for item that enables silent mode in phone options dialog -->
     <string name="global_action_toggle_silent_mode">Silent mode</string>
@@ -3529,6 +3543,12 @@
     <!-- Message of notification shown when ADB is actively connected to the phone. -->
     <string name="adb_active_notification_message">Tap to turn off USB debugging</string>
     <string name="adb_active_notification_message" product="tv">Select to disable USB debugging.</string>
+    <!-- Title of notification shown when ADB Wireless is actively connected to the phone. [CHAR LIMIT=NONE] -->
+    <string name="adbwifi_active_notification_title">Wireless debugging connected</string>
+    <!-- Message of notification shown when ADB Wireless is actively connected to the phone. [CHAR LIMIT=NONE] -->
+    <string name="adbwifi_active_notification_message">Tap to turn off wireless debugging</string>
+    <!-- Message of notification shown when ADB Wireless is actively connected to the TV. [CHAR LIMIT=NONE] -->
+    <string name="adbwifi_active_notification_message" product="tv">Select to disable wireless debugging.</string>
 
     <!-- Title of notification shown when Test Harness Mode is enabled. [CHAR LIMIT=NONE] -->
     <string name="test_harness_mode_notification_title">Test Harness Mode enabled</string>
@@ -4905,6 +4925,8 @@
 
     <string name="importance_from_user">You set the importance of these notifications.</string>
     <string name="importance_from_person">This is important because of the people involved.</string>
+
+    <string name="notification_history_title_placeholder">Custom app notification</string>
 
     <!-- Message to user that app trying to create user for an account that already exists. [CHAR LIMIT=none] -->
     <string name="user_creation_account_exists">Allow <xliff:g id="app" example="Gmail">%1$s</xliff:g> to create a new User with <xliff:g id="account" example="foobar@gmail.com">%2$s</xliff:g> (a User with this account already exists) ?</string>

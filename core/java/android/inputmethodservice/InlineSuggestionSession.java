@@ -27,6 +27,8 @@ import android.os.IBinder;
 import android.os.Looper;
 import android.os.RemoteException;
 import android.util.Log;
+import android.view.autofill.AutofillId;
+import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InlineSuggestionsRequest;
 import android.view.inputmethod.InlineSuggestionsResponse;
 
@@ -38,15 +40,33 @@ import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 /**
- * Maintains an active inline suggestion session.
+ * Maintains an active inline suggestion session with the autofill manager service.
  *
  * <p>
- * Each session corresponds to one inline suggestion request, but there may be multiple callbacks
- * with the inline suggestions response.
+ * Each session corresponds to one {@link InlineSuggestionsRequest} and one {@link
+ * IInlineSuggestionsResponseCallback}, but there may be multiple invocations of the response
+ * callback for the same field or different fields in the same component.
+ *
+ * <p>
+ * The data flow from IMS point of view is:
+ * Before calling {@link InputMethodService#onStartInputView(EditorInfo, boolean)}, call the {@link
+ * #notifyOnStartInputView(AutofillId)}
+ * ->
+ * [async] {@link IInlineSuggestionsRequestCallback#onInputMethodStartInputView(AutofillId)}
+ * --- process boundary ---
+ * ->
+ * {@link com.android.server.inputmethod.InputMethodManagerService
+ * .InlineSuggestionsRequestCallbackDecorator#onInputMethodStartInputView(AutofillId)}
+ * ->
+ * {@link com.android.server.autofill.InlineSuggestionSession
+ * .InlineSuggestionsRequestCallbackImpl#onInputMethodStartInputView(AutofillId)}
+ *
+ * <p>
+ * The data flow for {@link #notifyOnFinishInputView(AutofillId)} is similar.
  */
 class InlineSuggestionSession {
 
-    private static final String TAG = InlineSuggestionSession.class.getSimpleName();
+    private static final String TAG = "ImsInlineSuggestionSession";
 
     private final Handler mHandler = new Handler(Looper.getMainLooper(), null, true);
 
@@ -59,6 +79,8 @@ class InlineSuggestionSession {
     @NonNull
     private final Supplier<String> mClientPackageNameSupplier;
     @NonNull
+    private final Supplier<AutofillId> mClientAutofillIdSupplier;
+    @NonNull
     private final Supplier<InlineSuggestionsRequest> mRequestSupplier;
     @NonNull
     private final Supplier<IBinder> mHostInputTokenSupplier;
@@ -70,18 +92,39 @@ class InlineSuggestionSession {
     InlineSuggestionSession(@NonNull ComponentName componentName,
             @NonNull IInlineSuggestionsRequestCallback callback,
             @NonNull Supplier<String> clientPackageNameSupplier,
+            @NonNull Supplier<AutofillId> clientAutofillIdSupplier,
             @NonNull Supplier<InlineSuggestionsRequest> requestSupplier,
             @NonNull Supplier<IBinder> hostInputTokenSupplier,
-            @NonNull Consumer<InlineSuggestionsResponse> responseConsumer) {
+            @NonNull Consumer<InlineSuggestionsResponse> responseConsumer,
+            boolean inputViewStarted) {
         mComponentName = componentName;
         mCallback = callback;
         mResponseCallback = new InlineSuggestionsResponseCallbackImpl(this);
         mClientPackageNameSupplier = clientPackageNameSupplier;
+        mClientAutofillIdSupplier = clientAutofillIdSupplier;
         mRequestSupplier = requestSupplier;
         mHostInputTokenSupplier = hostInputTokenSupplier;
         mResponseConsumer = responseConsumer;
 
-        makeInlineSuggestionsRequest();
+        makeInlineSuggestionsRequest(inputViewStarted);
+    }
+
+    void notifyOnStartInputView(AutofillId imeFieldId) {
+        if (DEBUG) Log.d(TAG, "notifyOnStartInputView");
+        try {
+            mCallback.onInputMethodStartInputView(imeFieldId);
+        } catch (RemoteException e) {
+            Log.w(TAG, "onInputMethodStartInputView() remote exception:" + e);
+        }
+    }
+
+    void notifyOnFinishInputView(AutofillId imeFieldId) {
+        if (DEBUG) Log.d(TAG, "notifyOnFinishInputView");
+        try {
+            mCallback.onInputMethodFinishInputView(imeFieldId);
+        } catch (RemoteException e) {
+            Log.w(TAG, "onInputMethodFinishInputView() remote exception:" + e);
+        }
     }
 
     /**
@@ -97,7 +140,7 @@ class InlineSuggestionSession {
      * Autofill Session through
      * {@link IInlineSuggestionsRequestCallback#onInlineSuggestionsRequest}.
      */
-    private void makeInlineSuggestionsRequest() {
+    private void makeInlineSuggestionsRequest(boolean inputViewStarted) {
         try {
             final InlineSuggestionsRequest request = mRequestSupplier.get();
             if (request == null) {
@@ -107,27 +150,36 @@ class InlineSuggestionSession {
                 mCallback.onInlineSuggestionsUnsupported();
             } else {
                 request.setHostInputToken(mHostInputTokenSupplier.get());
-                mCallback.onInlineSuggestionsRequest(request, mResponseCallback);
+                mCallback.onInlineSuggestionsRequest(request, mResponseCallback,
+                        mClientAutofillIdSupplier.get(), inputViewStarted);
             }
         } catch (RemoteException e) {
             Log.w(TAG, "makeInlinedSuggestionsRequest() remote exception:" + e);
         }
     }
 
-    private void handleOnInlineSuggestionsResponse(@NonNull InlineSuggestionsResponse response) {
+    private void handleOnInlineSuggestionsResponse(@NonNull AutofillId fieldId,
+            @NonNull InlineSuggestionsResponse response) {
         if (mInvalidated) {
             if (DEBUG) {
                 Log.d(TAG, "handleOnInlineSuggestionsResponse() called on invalid session");
             }
             return;
         }
-        // TODO(b/149522488): checking the current focused input field to make sure we don't send
-        //  inline responses for previous input field
-        if (!mComponentName.getPackageName().equals(mClientPackageNameSupplier.get())) {
+
+        if (!mComponentName.getPackageName().equals(mClientPackageNameSupplier.get())
+                || !fieldId.equalsIgnoreSession(mClientAutofillIdSupplier.get())) {
             if (DEBUG) {
-                Log.d(TAG, "handleOnInlineSuggestionsResponse() called on the wrong package name");
+                Log.d(TAG,
+                        "handleOnInlineSuggestionsResponse() called on the wrong package/field "
+                                + "name: " + mComponentName.getPackageName() + " v.s. "
+                                + mClientPackageNameSupplier.get() + ", " + fieldId + " v.s. "
+                                + mClientAutofillIdSupplier.get());
             }
             return;
+        }
+        if (DEBUG) {
+            Log.d(TAG, "IME receives response: " + response.getInlineSuggestions().size());
         }
         mResponseConsumer.accept(response);
     }
@@ -145,13 +197,13 @@ class InlineSuggestionSession {
         }
 
         @Override
-        public void onInlineSuggestionsResponse(InlineSuggestionsResponse response)
-                throws RemoteException {
+        public void onInlineSuggestionsResponse(AutofillId fieldId,
+                InlineSuggestionsResponse response) {
             final InlineSuggestionSession session = mInlineSuggestionSession.get();
             if (session != null) {
                 session.mHandler.sendMessage(obtainMessage(
                         InlineSuggestionSession::handleOnInlineSuggestionsResponse, session,
-                        response));
+                        fieldId, response));
             }
         }
     }

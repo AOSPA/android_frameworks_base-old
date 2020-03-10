@@ -54,6 +54,7 @@ import java.io.FileWriter;
 import java.io.FileReader;
 import java.io.IOException;
 import java.io.BufferedReader;
+import java.io.StringWriter;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -591,7 +592,7 @@ public class Watchdog extends Thread {
                             ArrayList<Integer> pids = new ArrayList<Integer>();
                             pids.add(Process.myPid());
                             initialStack = ActivityManagerService.dumpStackTraces(pids,
-                                    null, null, getInterestingNativePids());
+                                    null, null, getInterestingNativePids(), null);
                             waitedHalf = true;
                         }
                         continue;
@@ -617,9 +618,13 @@ public class Watchdog extends Thread {
             if (mPhonePid > 0) pids.add(mPhonePid);
 
             long anrTime = SystemClock.uptimeMillis();
+            StringBuilder report = new StringBuilder();
+            report.append(MemoryPressureUtil.currentPsiState());
             ProcessCpuTracker processCpuTracker = new ProcessCpuTracker(false);
+            StringWriter tracesFileException = new StringWriter();
             final File finalStack = ActivityManagerService.dumpStackTraces(
-                    pids, processCpuTracker, new SparseArray<>(), getInterestingNativePids());
+                    pids, processCpuTracker, new SparseArray<>(), getInterestingNativePids(),
+                    tracesFileException);
 
             //Collect Binder State logs to get status of all the transactions
             if (Build.IS_DEBUGGABLE) {
@@ -631,7 +636,8 @@ public class Watchdog extends Thread {
             SystemClock.sleep(5000);
 
             processCpuTracker.update();
-            String cpuInfo = processCpuTracker.printCurrentState(anrTime);
+            report.append(processCpuTracker.printCurrentState(anrTime));
+            report.append(tracesFileException.getBuffer());
 
             File watchdogTraces;
             String newTracesPath = "traces_SystemServer_WDT"
@@ -692,7 +698,7 @@ public class Watchdog extends Thread {
                         if (mActivity != null) {
                             mActivity.addErrorToDropBox(
                                     "watchdog", null, "system_server", null, null, null,
-                                    subject, cpuInfo, finalStack, null);
+                                    subject, report.toString(), finalStack, null);
                         }
                         FrameworkStatsLog.write(FrameworkStatsLog.SYSTEM_SERVER_WATCHDOG_OCCURRED,
                                 subject);

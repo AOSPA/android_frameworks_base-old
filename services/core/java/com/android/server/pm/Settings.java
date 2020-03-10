@@ -33,6 +33,7 @@ import static com.android.server.pm.PackageManagerService.PLATFORM_PACKAGE_NAME;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.UserIdInt;
+import android.app.compat.ChangeIdStateCache;
 import android.content.ComponentName;
 import android.content.Intent;
 import android.content.IntentFilter;
@@ -439,6 +440,11 @@ public final class Settings {
         mBackupStoppedPackagesFilename = new File(mSystemDir, "packages-stopped-backup.xml");
     }
 
+    private static void invalidatePackageCache() {
+        PackageManager.invalidatePackageInfoCache();
+        ChangeIdStateCache.invalidate();
+    }
+
     PackageSetting getPackageLPr(String pkgName) {
         return mPackages.get(pkgName);
     }
@@ -517,6 +523,9 @@ public final class Settings {
                 p.secondaryCpuAbiString, p.cpuAbiOverrideString,
                 p.appId, p.versionCode, p.pkgFlags, p.pkgPrivateFlags,
                 p.usesStaticLibraries, p.usesStaticLibrariesVersions, p.mimeGroups);
+        if (ret != null) {
+            ret.getPkgState().setUpdatedSystemApp(false);
+        }
         mDisabledSysPackages.remove(name);
         return ret;
     }
@@ -1971,6 +1980,8 @@ public final class Settings {
     }
 
     void writePackageRestrictionsLPr(int userId) {
+        invalidatePackageCache();
+
         if (DEBUG_MU) {
             Log.i(TAG, "Writing package restrictions for user=" + userId);
         }
@@ -2377,6 +2388,12 @@ public final class Settings {
         //Debug.startMethodTracing("/data/system/packageprof", 8 * 1024 * 1024);
 
         final long startTime = SystemClock.uptimeMillis();
+
+        // Whenever package manager changes something on the system, it writes out whatever it
+        // changed in the form of a settings object change, and it does so under its internal
+        // lock --- so if we invalidate the package cache here, we end up invalidating at the
+        // right time.
+        invalidatePackageCache();
 
         // Keep the old settings around until we know the new ones have
         // been successfully written.
@@ -4820,6 +4837,8 @@ public final class Settings {
             pw.print(ps.getHidden(user.id));
             pw.print(" suspended=");
             pw.print(ps.getSuspended(user.id));
+            pw.print(" distractionFlags=");
+            pw.print(ps.getDistractionFlags(user.id));
             pw.print(" stopped=");
             pw.print(ps.getStopped(user.id));
             pw.print(" notLaunched=");

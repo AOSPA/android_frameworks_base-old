@@ -1078,15 +1078,6 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
             }
 
             final ActivityStack stack = getRootTask();
-            if (inPinnedWindowingMode() && stack != null
-                    && stack.lastAnimatingBoundsWasToFullscreen()) {
-                // PIP edge case: When going from pinned to fullscreen, we apply a
-                // tempInsetFrame for the full task - but we're still at the start of the animation.
-                // To prevent a jump if there's a letterbox, restrict to the parent frame.
-                mInsetFrame.intersectUnchecked(windowFrames.mParentFrame);
-                windowFrames.mContainingFrame.intersectUnchecked(windowFrames.mParentFrame);
-            }
-
             layoutDisplayFrame = new Rect(windowFrames.mDisplayFrame);
             windowFrames.mDisplayFrame.set(windowFrames.mContainingFrame);
             layoutXDiff = mInsetFrame.left - windowFrames.mContainingFrame.left;
@@ -1137,7 +1128,6 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
                 }
             }
         } else if (mAttrs.type == TYPE_DOCK_DIVIDER) {
-            dc.getDockedDividerController().positionDockedStackedDivider(windowFrames.mFrame);
             windowFrames.mContentFrame.set(windowFrames.mFrame);
             if (!windowFrames.mFrame.equals(windowFrames.mLastFrame)) {
                 mMovedByResize = true;
@@ -1343,16 +1333,6 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
             return;
         }
 
-        final Task task = getTask();
-        // In the case of stack bound animations, the window frames will update (unlike other
-        // animations which just modify various transformation properties). We don't want to
-        // notify the client of frame changes in this case. Not only is it a lot of churn, but
-        // the frame may not correspond to the surface size or the onscreen area at various
-        // phases in the animation, and the client will become sad and confused.
-        if (task != null && task.getStack().isAnimatingBounds()) {
-            return;
-        }
-
         boolean didFrameInsetsChange = setReportResizeHints();
         boolean configChanged = !isLastConfigReportedToClient();
         if (DEBUG_CONFIGURATION && configChanged) {
@@ -1468,6 +1448,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         }
     }
 
+    /** @return The display frames in use by this window. */
     DisplayFrames getDisplayFrames(DisplayFrames originalFrames) {
         final DisplayFrames diplayFrames = mToken.getFixedRotationTransformDisplayFrames();
         if (diplayFrames != null) {
@@ -1956,13 +1937,9 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         // animating... let's do something.
         final int left = mWindowFrames.mFrame.left;
         final int top = mWindowFrames.mFrame.top;
-        final Task task = getTask();
-        final boolean adjustedForMinimizedDockOrIme = task != null
-                && (task.getStack().isAdjustedForMinimizedDockedStack()
-                || task.getStack().isAdjustedForIme());
         if (mToken.okToAnimate()
                 && (mAttrs.privateFlags & PRIVATE_FLAG_NO_MOVE_ANIMATION) == 0
-                && !isDragResizing() && !adjustedForMinimizedDockOrIme
+                && !isDragResizing()
                 && getWindowConfiguration().hasMovementAnimations()
                 && !mWinAnimator.mLastHidden
                 && !mSeamlesslyRotated) {
@@ -2269,15 +2246,15 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         }
 
         final ActivityStack stack = getRootTask();
-        if (stack != null && stack.shouldIgnoreInput()) {
+        if (stack != null && !stack.isFocusable()) {
             // Ignore when the stack shouldn't receive input event.
             // (i.e. the minimized stack in split screen mode.)
             return false;
         }
 
-        if (PixelFormat.formatHasAlpha(mAttrs.format)) {
-            // Support legacy use cases where transparent windows can still be ime target with
-            // FLAG_NOT_FOCUSABLE and ALT_FOCUSABLE_IM set.
+        if (PixelFormat.formatHasAlpha(mAttrs.format) && mAttrs.alpha == 0) {
+            // Support legacy use cases where completely transparent windows can still be ime target
+            // with FLAG_NOT_FOCUSABLE and ALT_FOCUSABLE_IM set.
             // Certain apps listen for IME insets using transparent windows and ADJUST_NOTHING to
             // manually synchronize app content to IME animation b/144619551.
             // TODO(b/145812508): remove this once new focus management is complete b/141738570
@@ -2428,13 +2405,6 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         final DisplayContent dc = getDisplayContent();
         if (dc != null) {
             dc.setLayoutNeeded();
-        }
-    }
-
-    void applyAdjustForImeIfNeeded() {
-        final Task task = getTask();
-        if (task != null && task.getStack() != null && task.getStack().isAdjustedForIme()) {
-            task.getStack().applyAdjustForImeIfNeeded(task);
         }
     }
 
@@ -3526,8 +3496,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
      */
     void notifyInsetsChanged() {
         try {
-            mClient.insetsChanged(
-                    getDisplayContent().getInsetsPolicy().getInsetsForDispatch(this));
+            mClient.insetsChanged(getInsetsState());
         } catch (RemoteException e) {
             Slog.w(TAG, "Failed to deliver inset state change w=" + this, e);
         }
@@ -3537,9 +3506,8 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
     public void notifyInsetsControlChanged() {
         final InsetsStateController stateController =
                 getDisplayContent().getInsetsStateController();
-        final InsetsPolicy policy = getDisplayContent().getInsetsPolicy();
         try {
-            mClient.insetsControlChanged(policy.getInsetsForDispatch(this),
+            mClient.insetsControlChanged(getInsetsState(),
                     stateController.getControlsForDispatch(this));
         } catch (RemoteException e) {
             Slog.w(TAG, "Failed to deliver inset state change", e);
@@ -4325,10 +4293,6 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
                     }
                 }
             }
-        }
-
-        if (mAttrs.type == TYPE_INPUT_METHOD) {
-            getDisplayContent().mDividerControllerLocked.resetImeHideRequested();
         }
 
         return true;

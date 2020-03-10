@@ -126,7 +126,9 @@ public class WifiConfiguration implements Parcelable {
                 WPA_PSK_SHA256,
                 WPA_EAP_SHA256,
                 WAPI_PSK,
-                WAPI_CERT})
+                WAPI_CERT,
+                FILS_SHA256,
+                FILS_SHA384})
         public @interface KeyMgmtScheme {}
 
         /** WPA is not used; plaintext or static WEP could be used. */
@@ -1776,7 +1778,7 @@ public class WifiConfiguration implements Parcelable {
          * @return network disable reason string, or null if the reason is invalid.
          */
         @Nullable
-        public static String getNetworkDisableReasonString(
+        public static String getNetworkSelectionDisableReasonString(
                 @NetworkSelectionDisableReason int reason) {
             DisableReasonInfo info = DISABLE_REASON_INFOS.get(reason);
             if (info == null) {
@@ -1790,8 +1792,8 @@ public class WifiConfiguration implements Parcelable {
          * @return current network disable reason in String (for debug purpose)
          * @hide
          */
-        public String getNetworkDisableReasonString() {
-            return getNetworkDisableReasonString(mNetworkSelectionDisableReason);
+        public String getNetworkSelectionDisableReasonString() {
+            return getNetworkSelectionDisableReasonString(mNetworkSelectionDisableReason);
         }
 
         /**
@@ -2257,17 +2259,21 @@ public class WifiConfiguration implements Parcelable {
 
 
         sbuf.append(" NetworkSelectionStatus ")
-                .append(mNetworkSelectionStatus.getNetworkStatusString() + "\n");
+                .append(mNetworkSelectionStatus.getNetworkStatusString())
+                .append("\n");
         if (mNetworkSelectionStatus.getNetworkSelectionDisableReason() > 0) {
             sbuf.append(" mNetworkSelectionDisableReason ")
-                    .append(mNetworkSelectionStatus.getNetworkDisableReasonString() + "\n");
+                    .append(mNetworkSelectionStatus.getNetworkSelectionDisableReasonString())
+                    .append("\n");
 
             for (int index = NetworkSelectionStatus.DISABLED_NONE;
                     index < NetworkSelectionStatus.NETWORK_SELECTION_DISABLED_MAX; index++) {
                 if (mNetworkSelectionStatus.getDisableReasonCounter(index) != 0) {
-                    sbuf.append(NetworkSelectionStatus.getNetworkDisableReasonString(index)
-                            + " counter:" + mNetworkSelectionStatus.getDisableReasonCounter(index)
-                            + "\n");
+                    sbuf.append(
+                            NetworkSelectionStatus.getNetworkSelectionDisableReasonString(index))
+                            .append(" counter:")
+                            .append(mNetworkSelectionStatus.getDisableReasonCounter(index))
+                            .append("\n");
                 }
             }
         }
@@ -2520,16 +2526,23 @@ public class WifiConfiguration implements Parcelable {
             if (TextUtils.isEmpty(keyMgmt)) {
                 throw new IllegalStateException("Not an EAP network");
             }
+            String keyId = trimStringForKeyId(SSID) + "_" + keyMgmt + "_"
+                    + trimStringForKeyId(enterpriseConfig.getKeyId(current != null
+                    ? current.enterpriseConfig : null));
 
-            return trimStringForKeyId(SSID) + "_" + keyMgmt + "_" +
-                    trimStringForKeyId(enterpriseConfig.getKeyId(current != null ?
-                            current.enterpriseConfig : null));
+            if (!fromWifiNetworkSuggestion) {
+                return keyId;
+            }
+            return keyId + "_" + trimStringForKeyId(BSSID) + "_" + trimStringForKeyId(creatorName);
         } catch (NullPointerException e) {
             throw new IllegalStateException("Invalid config details");
         }
     }
 
     private String trimStringForKeyId(String string) {
+        if (string == null) {
+            return "";
+        }
         // Remove quotes and spaces
         return string.replace("\"", "").replace(" ", "");
     }
@@ -2634,6 +2647,8 @@ public class WifiConfiguration implements Parcelable {
             key = SSID + KeyMgmt.strings[KeyMgmt.WAPI_PSK];
         } else if (allowedKeyManagement.get(KeyMgmt.WAPI_CERT)) {
             key = SSID + KeyMgmt.strings[KeyMgmt.WAPI_CERT];
+        } else if (allowedKeyManagement.get(KeyMgmt.OSEN)) {
+            key = SSID + KeyMgmt.strings[KeyMgmt.OSEN];
         } else if (allowedKeyManagement.get(KeyMgmt.DPP)) {
             key = SSID + KeyMgmt.strings[KeyMgmt.DPP];
         } else {

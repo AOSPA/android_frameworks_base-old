@@ -169,12 +169,6 @@ public abstract class ActivityTaskManagerInternal {
     public abstract List<IBinder> getTopVisibleActivities();
 
     /**
-     * Callback for window manager to let activity manager know that docked stack changes its
-     * minimized state.
-     */
-    public abstract void notifyDockedStackMinimizedChanged(boolean minimized);
-
-    /**
      * Notify listeners that contents are drawn for the first time on a single task display.
      *
      * @param displayId An ID of the display on which contents are drawn.
@@ -551,7 +545,7 @@ public abstract class ActivityTaskManagerInternal {
      * Gets bitmap snapshot of the provided task id.
      */
     public abstract ActivityManager.TaskSnapshot getTaskSnapshotNoRestore(int taskId,
-            boolean reducedResolution);
+            boolean isLowResolution);
 
     /** Returns true if uid is considered foreground for activity start purposes. */
     public abstract boolean isUidForeground(int uid);

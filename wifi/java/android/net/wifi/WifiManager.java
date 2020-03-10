@@ -39,7 +39,6 @@ import android.net.ConnectivityManager;
 import android.net.DhcpInfo;
 import android.net.MacAddress;
 import android.net.Network;
-import android.net.NetworkScore;
 import android.net.NetworkStack;
 import android.net.wifi.hotspot2.IProvisioningCallback;
 import android.net.wifi.hotspot2.OsuProvider;
@@ -2038,9 +2037,11 @@ public class WifiManager {
      * NOTE:
      * <li> These networks are just a suggestion to the platform. The platform will ultimately
      * decide on which network the device connects to. </li>
-     * <li> When an app is uninstalled, all its suggested networks are discarded. If the device is
-     * currently connected to a suggested network which is being removed then the device will
-     * disconnect from that network.</li>
+     * <li> When an app is uninstalled or disabled, all its suggested networks are discarded.
+     * If the device is currently connected to a suggested network which is being removed then the
+     * device will disconnect from that network.</li>
+     * <li> If user reset network settings, all added suggestions will be discarded. Apps can use
+     * {@link #getNetworkSuggestions()} to check if their suggestions are in the device.</li>
      * <li> In-place modification of existing suggestions are allowed.
      * If the provided suggestions {@link WifiNetworkSuggestion#equals(Object)} any previously
      * provided suggestions by the app. Previous suggestions will be updated</li>
@@ -2540,6 +2541,12 @@ public class WifiManager {
     public static final long WIFI_FEATURE_OCE              = 0x1000000000L; // OCE Support
     /** @hide */
     public static final long WIFI_FEATURE_WAPI             = 0x2000000000L; // WAPI
+
+    /** @hide */
+    public static final long WIFI_FEATURE_FILS_SHA256     = 0x4000000000L; // FILS-SHA256
+
+    /** @hide */
+    public static final long WIFI_FEATURE_FILS_SHA384     = 0x8000000000L; // FILS-SHA384
 
     private long getSupportedFeatures() {
         try {
@@ -3954,11 +3961,19 @@ public class WifiManager {
     }
 
     /**
-     * Registers a callback for Soft AP. See {@link SoftApCallback}. Caller will receive the current
-     * soft AP state and number of connected devices immediately after a successful call to this API
-     * via callback. Note that receiving an immediate WIFI_AP_STATE_FAILED value for soft AP state
-     * indicates that the latest attempt to start soft AP has failed. Caller can unregister a
-     * previously registered callback using {@link #unregisterSoftApCallback}
+     * Registers a callback for Soft AP. See {@link SoftApCallback}. Caller will receive the
+     * following callbacks on registration:
+     * <ul>
+     * <li> {@link SoftApCallback#onStateChanged(int, int)}</li>
+     * <li> {@link SoftApCallback#onConnectedClientsChanged(List<WifiClient>)}</li>
+     * <li> {@link SoftApCallback#onInfoChanged(SoftApInfo)}</li>
+     * <li> {@link SoftApCallback#onCapabilityChanged(SoftApCapability)}</li>
+     * </ul>
+     * These will be dispatched on registration to provide the caller with the current state
+     * (and are not an indication of any current change). Note that receiving an immediate
+     * WIFI_AP_STATE_FAILED value for soft AP state indicates that the latest attempt to start
+     * soft AP has failed. Caller can unregister a previously registered callback using
+     * {@link #unregisterSoftApCallback}
      * <p>
      * Applications should have the
      * {@link android.Manifest.permission#NETWORK_SETTINGS NETWORK_SETTINGS} permission. Callers
@@ -4606,9 +4621,10 @@ public class WifiManager {
      */
     @SystemApi
     @RequiresPermission(android.Manifest.permission.NETWORK_SETTINGS)
-    public void setMeteredOverridePasspoint(@NonNull String fqdn, int meteredOverride) {
+    public void setPasspointMeteredOverride(@NonNull String fqdn,
+            @WifiConfiguration.MeteredOverride int meteredOverride) {
         try {
-            mService.setMeteredOverridePasspoint(fqdn, meteredOverride);
+            mService.setPasspointMeteredOverride(fqdn, meteredOverride);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -5260,7 +5276,7 @@ public class WifiManager {
     }
 
     /**
-     * Returns soft ap config from the backed up data.
+     * Returns soft ap config from the backed up data or null if data is invalid.
      * @param data byte stream in the same format produced by {@link #retrieveSoftApBackupData()}
      *
      * @hide
@@ -6357,11 +6373,10 @@ public class WifiManager {
          *
          * @param sessionId The ID to indicate current Wi-Fi network connection obtained from
          *                  {@link WifiConnectedNetworkScorer#start(int)}.
-         * @param score The {@link android.net.NetworkScore} object representing the
-         *              characteristics of current Wi-Fi network. Populated by connected network
-         *              scorer in applications.
+         * @param score The score representing link quality of current Wi-Fi network connection.
+         *              Populated by connected network scorer in applications..
          */
-        void onScoreChange(int sessionId, @NonNull NetworkScore score);
+        void onScoreChange(int sessionId, int score);
 
         /**
          * Called by applications to trigger an update of {@link WifiUsabilityStatsEntry}.
@@ -6387,7 +6402,7 @@ public class WifiManager {
         }
 
         @Override
-        public void onScoreChange(int sessionId, @NonNull NetworkScore score) {
+        public void onScoreChange(int sessionId, int score) {
             try {
                 mScoreChangeCallback.onScoreChange(sessionId, score);
             } catch (RemoteException e) {

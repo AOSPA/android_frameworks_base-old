@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include <android/graphics/jni_runtime.h>
 #include <nativehelper/JNIHelp.h>
 #include "jni.h"
 #include "utils/Log.h"
@@ -49,7 +50,6 @@ int register_android_server_PersistentDataBlockService(JNIEnv* env);
 int register_android_server_Watchdog(JNIEnv* env);
 int register_android_server_HardwarePropertiesManagerService(JNIEnv* env);
 int register_android_server_SyntheticPasswordManager(JNIEnv* env);
-int register_android_graphics_GraphicsStatsService(JNIEnv* env);
 int register_android_hardware_display_DisplayViewport(JNIEnv* env);
 int register_android_server_net_NetworkStatsFactory(JNIEnv* env);
 int register_android_server_net_NetworkStatsService(JNIEnv* env);
@@ -61,6 +61,7 @@ int register_com_android_server_soundtrigger_middleware_AudioSessionProviderImpl
 int register_android_server_incremental_IncrementalManagerService(JNIEnv* env);
 int register_android_server_com_android_server_pm_PackageManagerShellCommandDataLoader(JNIEnv* env);
 int register_android_server_stats_pull_StatsPullAtomService(JNIEnv* env);
+int register_android_server_AdbDebuggingManager(JNIEnv* env);
 int register_android_server_ActivityTriggerService(JNIEnv* env);
 };
 
@@ -116,6 +117,7 @@ extern "C" jint JNI_OnLoad(JavaVM* vm, void* /* reserved */)
     register_android_server_incremental_IncrementalManagerService(env);
     register_android_server_com_android_server_pm_PackageManagerShellCommandDataLoader(env);
     register_android_server_stats_pull_StatsPullAtomService(env);
+    register_android_server_AdbDebuggingManager(env);
     register_android_server_ActivityTriggerService(env);
     return JNI_VERSION_1_4;
 }

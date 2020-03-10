@@ -215,8 +215,7 @@ public class ActivityTaskManager {
     public boolean setTaskWindowingModeSplitScreenPrimary(int taskId, int createMode, boolean toTop,
             boolean animate, Rect initialBounds, boolean showRecents) throws SecurityException {
         try {
-            return getService().setTaskWindowingModeSplitScreenPrimary(taskId, createMode, toTop,
-                    animate, initialBounds, showRecents);
+            return getService().setTaskWindowingModeSplitScreenPrimary(taskId, toTop);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -356,25 +355,6 @@ public class ActivityTaskManager {
     public void moveTaskToStack(int taskId, int stackId, boolean toTop) {
         try {
             getService().moveTaskToStack(taskId, stackId, toTop);
-        } catch (RemoteException e) {
-            throw e.rethrowFromSystemServer();
-        }
-    }
-
-    /**
-     * Resize the input stack id to the given bounds with animate setting.
-     * @param stackId Id of the stack to resize.
-     * @param bounds Bounds to resize the stack to or {@code null} for fullscreen.
-     * @param animate Whether we should play an animation for resizing stack.
-     */
-    @RequiresPermission(android.Manifest.permission.MANAGE_ACTIVITY_STACKS)
-    public void resizePinnedStack(int stackId, Rect bounds, boolean animate) {
-        try {
-            if (animate) {
-                getService().animateResizePinnedStack(stackId, bounds, -1 /* animationDuration */);
-            } else {
-                getService().resizePinnedStack(bounds, null /* tempPinnedTaskBounds */);
-            }
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }

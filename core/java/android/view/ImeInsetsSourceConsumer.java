@@ -16,8 +16,9 @@
 
 package android.view;
 
+import static android.view.InsetsController.ANIMATION_TYPE_USER;
+import static android.view.InsetsController.AnimationType;
 import static android.view.InsetsState.ITYPE_IME;
-import static android.view.InsetsState.toPublicType;
 
 import android.annotation.Nullable;
 import android.inputmethodservice.InputMethodService;
@@ -99,6 +100,21 @@ public final class ImeInsetsSourceConsumer extends InsetsSourceConsumer {
         }
     }
 
+    @Override
+    void hide(boolean animationFinished, @AnimationType int animationType) {
+        super.hide();
+
+        if (!animationFinished) {
+            if (animationType == ANIMATION_TYPE_USER) {
+                // if controlWindowInsetsAnimation is hiding keyboard.
+                notifyHidden();
+            }
+        } else {
+            // remove IME surface as IME has finished hide animation.
+            removeSurface();
+        }
+    }
+
     /**
      * Request {@link InputMethodManager} to show the IME.
      * @return @see {@link android.view.InsetsSourceConsumer.ShowResult}.
@@ -110,7 +126,8 @@ public final class ImeInsetsSourceConsumer extends InsetsSourceConsumer {
 
         // If we had a request before to show from IME (tracked with mImeRequestedShow), reaching
         // this code here means that we now got control, so we can start the animation immediately.
-        if (fromIme || mImeRequestedShow) {
+        // If client window is trying to control IME and IME is already visible, it is immediate.
+        if (fromIme || mImeRequestedShow || mState.getSource(getType()).isVisible()) {
             mImeRequestedShow = false;
             return ShowResult.SHOW_IMMEDIATELY;
         }
@@ -125,6 +142,11 @@ public final class ImeInsetsSourceConsumer extends InsetsSourceConsumer {
     @Override
     void notifyHidden() {
         getImm().notifyImeHidden();
+    }
+
+    @Override
+    public void removeSurface() {
+        getImm().removeImeSurface();
     }
 
     @Override

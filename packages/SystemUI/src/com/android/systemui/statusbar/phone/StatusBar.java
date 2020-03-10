@@ -163,6 +163,7 @@ import com.android.systemui.recents.ScreenPinningRequest;
 import com.android.systemui.shared.plugins.PluginManager;
 import com.android.systemui.shared.system.WindowManagerWrapper;
 import com.android.systemui.stackdivider.Divider;
+import com.android.systemui.statusbar.AutoHideUiElement;
 import com.android.systemui.statusbar.BackDropView;
 import com.android.systemui.statusbar.CommandQueue;
 import com.android.systemui.statusbar.CrossFadeHelper;
@@ -676,6 +677,7 @@ public class StatusBar extends SystemUI implements DemoMode,
             KeyguardDismissUtil keyguardDismissUtil,
             ExtensionController extensionController,
             UserInfoControllerImpl userInfoControllerImpl,
+            PhoneStatusBarPolicy phoneStatusBarPolicy,
             DismissCallbackRegistry dismissCallbackRegistry,
             StatusBarTouchableRegionManager statusBarTouchableRegionManager) {
         super(context);
@@ -751,6 +753,7 @@ public class StatusBar extends SystemUI implements DemoMode,
         mKeyguardDismissUtil = keyguardDismissUtil;
         mExtensionController = extensionController;
         mUserInfoControllerImpl = userInfoControllerImpl;
+        mIconPolicy = phoneStatusBarPolicy;
         mDismissCallbackRegistry = dismissCallbackRegistry;
 
         mBubbleExpandListener =
@@ -875,8 +878,7 @@ public class StatusBar extends SystemUI implements DemoMode,
         // end old BaseStatusBar.start().
 
         // Lastly, call to the icon policy to install/update all the icons.
-        mIconPolicy = new PhoneStatusBarPolicy(mContext, mIconController, mCommandQueue,
-                mBroadcastDispatcher, mUiBgExecutor);
+        mIconPolicy.init();
         mSignalPolicy = new StatusBarSignalPolicy(mContext, mIconController);
 
         mKeyguardStateController.addCallback(this);
@@ -1073,7 +1075,27 @@ public class StatusBar extends SystemUI implements DemoMode,
             }
         });
 
-        mAutoHideController.setStatusBar(this);
+        mAutoHideController.addAutoHideUiElement(new AutoHideUiElement() {
+            @Override
+            public void synchronizeState() {
+                checkBarModes();
+            }
+
+            @Override
+            public boolean shouldHideOnTouch() {
+                return !mRemoteInputManager.getController().isRemoteInputActive();
+            }
+
+            @Override
+            public boolean isVisible() {
+                return isTransientShown();
+            }
+
+            @Override
+            public void hide() {
+                clearTransient();
+            }
+        });
 
         ScrimView scrimBehind = mNotificationShadeWindowView.findViewById(R.id.scrim_behind);
         ScrimView scrimInFront = mNotificationShadeWindowView.findViewById(R.id.scrim_in_front);
@@ -2227,7 +2249,7 @@ public class StatusBar extends SystemUI implements DemoMode,
         clearTransient();
     }
 
-    void clearTransient() {
+    private void clearTransient() {
         if (mTransientShown) {
             mTransientShown = false;
             handleTransientChanged();
@@ -2305,13 +2327,14 @@ public class StatusBar extends SystemUI implements DemoMode,
     }
 
     protected BarTransitions getStatusBarTransitions() {
-        return mStatusBarView.getBarTransitions();
+        return mNotificationShadeWindowViewController.getBarTransitions();
     }
 
     void checkBarModes() {
         if (mDemoMode) return;
-        if (mStatusBarView != null) checkBarMode(mStatusBarMode, mStatusBarWindowState,
-                getStatusBarTransitions());
+        if (mNotificationShadeWindowViewController != null) {
+            checkBarMode(mStatusBarMode, mStatusBarWindowState, getStatusBarTransitions());
+        }
         mNavigationBarController.checkNavBarModes(mDisplayId);
         mNoAnimationOnNextBarModeChange = false;
     }
@@ -2329,8 +2352,9 @@ public class StatusBar extends SystemUI implements DemoMode,
     }
 
     private void finishBarAnimations() {
-        if (mStatusBarView != null) {
-            mStatusBarView.getBarTransitions().finishAnimations();
+        if (mNotificationShadeWindowController != null
+                && mNotificationShadeWindowViewController.getBarTransitions() != null) {
+            mNotificationShadeWindowViewController.getBarTransitions().finishAnimations();
         }
         mNavigationBarController.finishBarAnimations(mDisplayId);
     }
@@ -2396,12 +2420,11 @@ public class StatusBar extends SystemUI implements DemoMode,
         pw.print("  mDozing="); pw.println(mDozing);
         pw.print("  mWallpaperSupported= "); pw.println(mWallpaperSupported);
 
-        if (mStatusBarView != null) {
-            dumpBarTransitions(pw, "mStatusBarView", mStatusBarView.getBarTransitions());
-        }
         pw.println("  StatusBarWindowView: ");
         if (mNotificationShadeWindowViewController != null) {
             mNotificationShadeWindowViewController.dump(fd, pw, args);
+            dumpBarTransitions(pw, "PhoneStatusBarTransitions",
+                    mNotificationShadeWindowViewController.getBarTransitions());
         }
 
         pw.println("  mMediaManager: ");
@@ -3004,8 +3027,10 @@ public class StatusBar extends SystemUI implements DemoMode,
                     -1;
             if (barMode != -1) {
                 boolean animate = true;
-                if (mStatusBarView != null) {
-                    mStatusBarView.getBarTransitions().transitionTo(barMode, animate);
+                if (mNotificationShadeWindowController != null
+                        && mNotificationShadeWindowViewController.getBarTransitions() != null) {
+                    mNotificationShadeWindowViewController.getBarTransitions().transitionTo(
+                            barMode, animate);
                 }
                 mNavigationBarController.transitionTo(mDisplayId, barMode, animate);
             }
@@ -4259,7 +4284,7 @@ public class StatusBar extends SystemUI implements DemoMode,
         return mGutsManager;
     }
 
-    boolean isTransientShown() {
+    private boolean isTransientShown() {
         return mTransientShown;
     }
 

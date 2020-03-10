@@ -4092,8 +4092,6 @@ public class Intent implements Parcelable, Cloneable {
      * @hide
      * @deprecated Use {@link #ACTION_SIM_CARD_STATE_CHANGED}
      */
-    @Deprecated
-    @SystemApi
     public static final String EXTRA_SIM_STATE = "ss";
 
     /**
@@ -4101,8 +4099,6 @@ public class Intent implements Parcelable, Cloneable {
      * @hide
      * @deprecated Use {@link #ACTION_SIM_CARD_STATE_CHANGED}
      */
-    @Deprecated
-    @SystemApi
     public static final String SIM_STATE_UNKNOWN = "UNKNOWN";
 
     /**
@@ -4110,8 +4106,6 @@ public class Intent implements Parcelable, Cloneable {
      * @hide
      * @deprecated Use {@link #ACTION_SIM_CARD_STATE_CHANGED}
      */
-    @Deprecated
-    @SystemApi
     public static final String SIM_STATE_NOT_READY = "NOT_READY";
 
     /**
@@ -4119,8 +4113,6 @@ public class Intent implements Parcelable, Cloneable {
      * @hide
      * @deprecated Use {@link #ACTION_SIM_CARD_STATE_CHANGED}
      */
-    @Deprecated
-    @SystemApi
     public static final String SIM_STATE_ABSENT = "ABSENT";
 
     /**
@@ -4128,8 +4120,6 @@ public class Intent implements Parcelable, Cloneable {
      * @hide
      * @deprecated Use {@link #ACTION_SIM_CARD_STATE_CHANGED}
      */
-    @Deprecated
-    @SystemApi
     public static final String SIM_STATE_PRESENT = "PRESENT";
 
     /**
@@ -4137,8 +4127,6 @@ public class Intent implements Parcelable, Cloneable {
      * @hide
      * @deprecated Use {@link #ACTION_SIM_CARD_STATE_CHANGED}
      */
-    @Deprecated
-    @SystemApi
     static public final String SIM_STATE_CARD_IO_ERROR = "CARD_IO_ERROR";
 
     /**
@@ -4147,8 +4135,6 @@ public class Intent implements Parcelable, Cloneable {
      * @hide
      * @deprecated Use {@link #ACTION_SIM_CARD_STATE_CHANGED}
      */
-    @Deprecated
-    @SystemApi
     static public final String SIM_STATE_CARD_RESTRICTED = "CARD_RESTRICTED";
 
     /**
@@ -4156,8 +4142,6 @@ public class Intent implements Parcelable, Cloneable {
      * @hide
      * @deprecated Use {@link #ACTION_SIM_CARD_STATE_CHANGED}
      */
-    @Deprecated
-    @SystemApi
     public static final String SIM_STATE_LOCKED = "LOCKED";
 
     /**
@@ -4165,8 +4149,6 @@ public class Intent implements Parcelable, Cloneable {
      * @hide
      * @deprecated Use {@link #ACTION_SIM_CARD_STATE_CHANGED}
      */
-    @Deprecated
-    @SystemApi
     public static final String SIM_STATE_READY = "READY";
 
     /**
@@ -4174,8 +4156,6 @@ public class Intent implements Parcelable, Cloneable {
      * @hide
      * @deprecated Use {@link #ACTION_SIM_CARD_STATE_CHANGED}
      */
-    @Deprecated
-    @SystemApi
     public static final String SIM_STATE_IMSI = "IMSI";
 
     /**
@@ -4183,8 +4163,6 @@ public class Intent implements Parcelable, Cloneable {
      * @hide
      * @deprecated Use {@link #ACTION_SIM_CARD_STATE_CHANGED}
      */
-    @Deprecated
-    @SystemApi
     public static final String SIM_STATE_LOADED = "LOADED";
 
     /**
@@ -4199,8 +4177,6 @@ public class Intent implements Parcelable, Cloneable {
      * @hide
      * @deprecated Use {@link #ACTION_SIM_APPLICATION_STATE_CHANGED}
      */
-    @Deprecated
-    @SystemApi
     public static final String EXTRA_SIM_LOCKED_REASON = "reason";
 
     /**
@@ -4208,8 +4184,6 @@ public class Intent implements Parcelable, Cloneable {
      * @hide
      * @deprecated Use {@link #ACTION_SIM_APPLICATION_STATE_CHANGED}
      */
-    @Deprecated
-    @SystemApi
     public static final String SIM_LOCKED_ON_PIN = "PIN";
 
     /**
@@ -4218,8 +4192,6 @@ public class Intent implements Parcelable, Cloneable {
      * @deprecated Use {@link #ACTION_SIM_APPLICATION_STATE_CHANGED}
      */
     /* PUK means ICC is locked on PUK1 */
-    @Deprecated
-    @SystemApi
     public static final String SIM_LOCKED_ON_PUK = "PUK";
 
     /**
@@ -4227,8 +4199,6 @@ public class Intent implements Parcelable, Cloneable {
      * @hide
      * @deprecated Use {@link #ACTION_SIM_APPLICATION_STATE_CHANGED}
      */
-    @Deprecated
-    @SystemApi
     public static final String SIM_LOCKED_NETWORK = "NETWORK";
 
     /**
@@ -4236,8 +4206,6 @@ public class Intent implements Parcelable, Cloneable {
      * @hide
      * @deprecated Use {@link #ACTION_SIM_APPLICATION_STATE_CHANGED}
      */
-    @Deprecated
-    @SystemApi
     public static final String SIM_ABSENT_ON_PERM_DISABLED = "PERM_DISABLED";
 
     /**
@@ -4248,8 +4216,6 @@ public class Intent implements Parcelable, Cloneable {
      * @deprecated Use {@link #ACTION_SIM_CARD_STATE_CHANGED} or
      * {@link #ACTION_SIM_APPLICATION_STATE_CHANGED}
      */
-    @Deprecated
-    @SystemApi
     public static final String EXTRA_REBROADCAST_ON_UNLOCK = "rebroadcastOnUnlock";
 
     /**

@@ -38,12 +38,14 @@ import androidx.test.filters.SmallTest;
 
 import com.android.internal.widget.LockPatternUtils;
 import com.android.keyguard.KeyguardUpdateMonitor;
-import com.android.systemui.DumpController;
 import com.android.systemui.SysuiTestCase;
 import com.android.systemui.broadcast.BroadcastDispatcher;
 import com.android.systemui.classifier.FalsingManagerFake;
+import com.android.systemui.dump.DumpManager;
 import com.android.systemui.statusbar.phone.NotificationShadeWindowController;
 import com.android.systemui.statusbar.phone.StatusBarKeyguardViewManager;
+import com.android.systemui.util.DeviceConfigProxy;
+import com.android.systemui.util.DeviceConfigProxyFake;
 import com.android.systemui.util.concurrency.FakeExecutor;
 import com.android.systemui.util.time.FakeSystemClock;
 
@@ -66,9 +68,10 @@ public class KeyguardViewMediatorTest extends SysuiTestCase {
     private @Mock NotificationShadeWindowController mNotificationShadeWindowController;
     private @Mock BroadcastDispatcher mBroadcastDispatcher;
     private @Mock DismissCallbackRegistry mDismissCallbackRegistry;
-    private @Mock DumpController mDumpController;
+    private @Mock DumpManager mDumpManager;
     private @Mock PowerManager mPowerManager;
     private @Mock TrustManager mTrustManager;
+    private DeviceConfigProxy mDeviceConfig = new DeviceConfigProxyFake();
     private FakeExecutor mUiBgExecutor = new FakeExecutor(new FakeSystemClock());
 
     private FalsingManagerFake mFalsingManager;
@@ -84,8 +87,8 @@ public class KeyguardViewMediatorTest extends SysuiTestCase {
         mViewMediator = new KeyguardViewMediator(
                 mContext, mFalsingManager, mLockPatternUtils, mBroadcastDispatcher,
                 mNotificationShadeWindowController, () -> mStatusBarKeyguardViewManager,
-                mDismissCallbackRegistry, mUpdateMonitor, mDumpController, mUiBgExecutor,
-                mPowerManager, mTrustManager);
+                mDismissCallbackRegistry, mUpdateMonitor, mDumpManager, mUiBgExecutor,
+                mPowerManager, mTrustManager, mDeviceConfig);
         mViewMediator.start();
     }
 
@@ -98,7 +101,7 @@ public class KeyguardViewMediatorTest extends SysuiTestCase {
 
     @Test
     public void testRegisterDumpable() {
-        verify(mDumpController).registerDumpable(eq(mViewMediator));
+        verify(mDumpManager).registerDumpable(KeyguardViewMediator.class.getName(), mViewMediator);
         verify(mNotificationShadeWindowController, never()).setKeyguardGoingAway(anyBoolean());
     }
 

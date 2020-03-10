@@ -19,6 +19,8 @@ package com.android.mediaroutertest;
 import static android.media.MediaRoute2Info.FEATURE_LIVE_AUDIO;
 import static android.media.MediaRoute2Info.PLAYBACK_VOLUME_FIXED;
 import static android.media.MediaRoute2Info.PLAYBACK_VOLUME_VARIABLE;
+import static android.media.MediaRoute2ProviderService.REASON_REJECTED;
+import static android.media.MediaRoute2ProviderService.REQUEST_ID_NONE;
 
 import static com.android.mediaroutertest.SampleMediaRoute2ProviderService.FEATURE_SAMPLE;
 import static com.android.mediaroutertest.SampleMediaRoute2ProviderService.FEATURE_SPECIAL;
@@ -32,6 +34,7 @@ import static com.android.mediaroutertest.SampleMediaRoute2ProviderService.ROUTE
 import static com.android.mediaroutertest.SampleMediaRoute2ProviderService.VOLUME_MAX;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
@@ -68,6 +71,7 @@ import java.util.function.Predicate;
 @SmallTest
 public class MediaRouter2ManagerTest {
     private static final String TAG = "MediaRouter2ManagerTest";
+    private static final int WAIT_TIME_MS = 2000;
     private static final int TIMEOUT_MS = 5000;
 
     private Context mContext;
@@ -110,11 +114,16 @@ public class MediaRouter2ManagerTest {
         releaseAllSessions();
         // unregister callbacks
         clearCallbacks();
+
+        SampleMediaRoute2ProviderService instance = SampleMediaRoute2ProviderService.getInstance();
+        if (instance != null) {
+            instance.setProxy(null);
+        }
     }
 
     @Test
     public void testOnRoutesRemovedAndAdded() throws Exception {
-        RouteCallback routeCallback = new RouteCallback();
+        RouteCallback routeCallback = new RouteCallback() {};
         mRouteCallbacks.add(routeCallback);
         mRouter2.registerRouteCallback(mExecutor, routeCallback,
                 new RouteDiscoveryPreference.Builder(FEATURES_ALL, true).build());
@@ -192,7 +201,7 @@ public class MediaRouter2ManagerTest {
 
         addManagerCallback(new MediaRouter2Manager.Callback());
         //TODO: remove this when it's not necessary.
-        addRouterCallback(new MediaRouter2.RouteCallback());
+        addRouterCallback(new MediaRouter2.RouteCallback() {});
         addTransferCallback(new MediaRouter2.TransferCallback() {
             @Override
             public void onTransferred(MediaRouter2.RoutingController oldController,
@@ -219,7 +228,7 @@ public class MediaRouter2ManagerTest {
         CountDownLatch latch = new CountDownLatch(1);
 
         Map<String, MediaRoute2Info> routes = waitAndGetRoutesWithManager(FEATURES_ALL);
-        addRouterCallback(new RouteCallback());
+        addRouterCallback(new RouteCallback() {});
         addManagerCallback(new MediaRouter2Manager.Callback() {
             @Override
             public void onSessionCreated(MediaRouter2Manager.RoutingController controller) {
@@ -239,10 +248,9 @@ public class MediaRouter2ManagerTest {
 
         assertEquals(2, sessions.size());
 
-        MediaRouter2Manager.RoutingController routingController =
-                mManager.getControllerForSession(sessions.get(1));
+        RoutingSessionInfo sessionInfo = sessions.get(1);
         awaitOnRouteChangedManager(
-                () -> routingController.release(),
+                () -> mManager.releaseSession(sessionInfo),
                 ROUTE_ID1,
                 route -> TextUtils.equals(route.getClientPackageName(), null));
         assertEquals(1, mManager.getRoutingSessions(mPackageName).size());
@@ -254,7 +262,7 @@ public class MediaRouter2ManagerTest {
     @Test
     public void testSelectAndTransferAndRelease() throws Exception {
         Map<String, MediaRoute2Info> routes = waitAndGetRoutesWithManager(FEATURES_ALL);
-        addRouterCallback(new RouteCallback());
+        addRouterCallback(new RouteCallback() {});
 
         CountDownLatch onSessionCreatedLatch = new CountDownLatch(1);
 
@@ -274,8 +282,7 @@ public class MediaRouter2ManagerTest {
         List<RoutingSessionInfo> sessions = mManager.getRoutingSessions(mPackageName);
 
         assertEquals(2, sessions.size());
-        MediaRouter2Manager.RoutingController routingController =
-                mManager.getControllerForSession(sessions.get(1));
+        RoutingSessionInfo sessionInfo = sessions.get(1);
 
         awaitOnRouteChangedManager(
                 () -> mManager.selectRoute(mPackageName, routes.get(ROUTE_ID5_TO_TRANSFER_TO)),
@@ -283,7 +290,7 @@ public class MediaRouter2ManagerTest {
                 route -> TextUtils.equals(route.getClientPackageName(), mPackageName));
 
         awaitOnRouteChangedManager(
-                () -> routingController.release(),
+                () -> mManager.releaseSession(sessionInfo),
                 ROUTE_ID5_TO_TRANSFER_TO,
                 route -> TextUtils.equals(route.getClientPackageName(), null));
     }
@@ -337,7 +344,7 @@ public class MediaRouter2ManagerTest {
     @Test
     public void testSetSessionVolume() throws Exception {
         Map<String, MediaRoute2Info> routes = waitAndGetRoutesWithManager(FEATURES_ALL);
-        addRouterCallback(new RouteCallback());
+        addRouterCallback(new RouteCallback() {});
 
         CountDownLatch onSessionCreatedLatch = new CountDownLatch(1);
         CountDownLatch volumeChangedLatch = new CountDownLatch(2);
@@ -397,6 +404,53 @@ public class MediaRouter2ManagerTest {
         }
     }
 
+    /**
+     * Tests that {@link android.media.MediaRoute2ProviderService#notifyRequestFailed(long, int)}
+     * should invoke the callback only when the right requestId is used.
+     */
+    @Test
+    public void testOnRequestFailedCalledForProperRequestId() throws Exception {
+        Map<String, MediaRoute2Info> routes = waitAndGetRoutesWithManager(FEATURES_ALL);
+        MediaRoute2Info volRoute = routes.get(ROUTE_ID_VARIABLE_VOLUME);
+
+        SampleMediaRoute2ProviderService instance = SampleMediaRoute2ProviderService.getInstance();
+        assertNotNull(instance);
+
+        final List<Long> requestIds = new ArrayList<>();
+        final CountDownLatch onSetRouteVolumeLatch = new CountDownLatch(1);
+        instance.setProxy(new SampleMediaRoute2ProviderService.Proxy() {
+            @Override
+            public void onSetRouteVolume(String routeId, int volume, long requestId) {
+                requestIds.add(requestId);
+                onSetRouteVolumeLatch.countDown();
+            }
+        });
+
+        addManagerCallback(new MediaRouter2Manager.Callback() {});
+        mManager.setRouteVolume(volRoute, 0);
+        assertTrue(onSetRouteVolumeLatch.await(TIMEOUT_MS, TimeUnit.MILLISECONDS));
+        assertFalse(requestIds.isEmpty());
+
+        final int failureReason = REASON_REJECTED;
+        final CountDownLatch onRequestFailedLatch = new CountDownLatch(1);
+        addManagerCallback(new MediaRouter2Manager.Callback() {
+            @Override
+            public void onRequestFailed(int reason) {
+                if (reason == failureReason) {
+                    onRequestFailedLatch.countDown();
+                }
+            }
+        });
+
+        final long invalidRequestId = REQUEST_ID_NONE;
+        instance.notifyRequestFailed(invalidRequestId, failureReason);
+        assertFalse(onRequestFailedLatch.await(WAIT_TIME_MS, TimeUnit.MILLISECONDS));
+
+        final long validRequestId = requestIds.get(0);
+        instance.notifyRequestFailed(validRequestId, failureReason);
+        assertTrue(onRequestFailedLatch.await(TIMEOUT_MS, TimeUnit.MILLISECONDS));
+    }
+
     @Test
     public void testVolumeHandling() throws Exception {
         Map<String, MediaRoute2Info> routes = waitAndGetRoutesWithManager(FEATURES_ALL);
@@ -415,7 +469,7 @@ public class MediaRouter2ManagerTest {
         CountDownLatch featuresLatch = new CountDownLatch(1);
 
         // A dummy callback is required to send route feature info.
-        RouteCallback routeCallback = new RouteCallback();
+        RouteCallback routeCallback = new RouteCallback() {};
         MediaRouter2Manager.Callback managerCallback = new MediaRouter2Manager.Callback() {
             @Override
             public void onRoutesAdded(List<MediaRoute2Info> routes) {
@@ -517,7 +571,7 @@ public class MediaRouter2ManagerTest {
         addManagerCallback(new MediaRouter2Manager.Callback());
 
         for (RoutingSessionInfo session : mManager.getActiveSessions()) {
-            mManager.getControllerForSession(session).release();
+            mManager.releaseSession(session);
         }
     }
 }

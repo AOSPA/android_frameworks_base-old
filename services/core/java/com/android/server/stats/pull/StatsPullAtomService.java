@@ -17,7 +17,7 @@
 package com.android.server.stats.pull;
 
 import static android.app.AppOpsManager.OP_FLAG_SELF;
-import static android.app.AppOpsManager.OP_FLAG_TRUSTED_PROXIED;
+import static android.app.AppOpsManager.OP_FLAG_TRUSTED_PROXY;
 import static android.content.pm.PackageInfo.REQUESTED_PERMISSION_GRANTED;
 import static android.content.pm.PermissionInfo.PROTECTION_DANGEROUS;
 import static android.os.Debug.getIonHeapsSizeKb;
@@ -82,6 +82,7 @@ import android.os.SynchronousResultReceiver;
 import android.os.SystemClock;
 import android.os.SystemProperties;
 import android.os.Temperature;
+import android.os.Trace;
 import android.os.UserHandle;
 import android.os.UserManager;
 import android.os.connectivity.WifiActivityEnergyInfo;
@@ -186,7 +187,8 @@ public class StatsPullAtomService extends SystemService {
 
     private static final int MAX_BATTERY_STATS_HELPER_FREQUENCY_MS = 1000;
     private static final int CPU_TIME_PER_THREAD_FREQ_MAX_NUM_FREQUENCIES = 8;
-    private static final int OP_FLAGS_PULLED = OP_FLAG_SELF | OP_FLAG_TRUSTED_PROXIED;
+    private static final int OP_FLAGS_PULLED = OP_FLAG_SELF | OP_FLAG_TRUSTED_PROXY;
+    private static final String COMMON_PERMISSION_PREFIX = "android.permission.";
 
     private final Object mNetworkStatsLock = new Object();
     @GuardedBy("mNetworkStatsLock")
@@ -271,127 +273,136 @@ public class StatsPullAtomService extends SystemService {
     private class StatsPullAtomCallbackImpl implements StatsManager.StatsPullAtomCallback {
         @Override
         public int onPullAtom(int atomTag, List<StatsEvent> data) {
-            switch(atomTag) {
-                case FrameworkStatsLog.WIFI_BYTES_TRANSFER:
-                    return pullWifiBytesTransfer(atomTag, data);
-                case FrameworkStatsLog.WIFI_BYTES_TRANSFER_BY_FG_BG:
-                    return pullWifiBytesTransferBackground(atomTag, data);
-                case FrameworkStatsLog.MOBILE_BYTES_TRANSFER:
-                    return pullMobileBytesTransfer(atomTag, data);
-                case FrameworkStatsLog.MOBILE_BYTES_TRANSFER_BY_FG_BG:
-                    return pullMobileBytesTransferBackground(atomTag, data);
-                case FrameworkStatsLog.BLUETOOTH_BYTES_TRANSFER:
-                    return pullBluetoothBytesTransfer(atomTag, data);
-                case FrameworkStatsLog.KERNEL_WAKELOCK:
-                    return pullKernelWakelock(atomTag, data);
-                case FrameworkStatsLog.CPU_TIME_PER_FREQ:
-                    return pullCpuTimePerFreq(atomTag, data);
-                case FrameworkStatsLog.CPU_TIME_PER_UID:
-                    return pullCpuTimePerUid(atomTag, data);
-                case FrameworkStatsLog.CPU_TIME_PER_UID_FREQ:
-                    return pullCpuTimeperUidFreq(atomTag, data);
-                case FrameworkStatsLog.CPU_ACTIVE_TIME:
-                    return pullCpuActiveTime(atomTag, data);
-                case FrameworkStatsLog.CPU_CLUSTER_TIME:
-                    return pullCpuClusterTime(atomTag, data);
-                case FrameworkStatsLog.WIFI_ACTIVITY_INFO:
-                    return pullWifiActivityInfo(atomTag, data);
-                case FrameworkStatsLog.MODEM_ACTIVITY_INFO:
-                    return pullModemActivityInfo(atomTag, data);
-                case FrameworkStatsLog.BLUETOOTH_ACTIVITY_INFO:
-                    return pullBluetoothActivityInfo(atomTag, data);
-                case FrameworkStatsLog.SYSTEM_ELAPSED_REALTIME:
-                    return pullSystemElapsedRealtime(atomTag, data);
-                case FrameworkStatsLog.SYSTEM_UPTIME:
-                    return pullSystemUptime(atomTag, data);
-                case FrameworkStatsLog.PROCESS_MEMORY_STATE:
-                    return pullProcessMemoryState(atomTag, data);
-                case FrameworkStatsLog.PROCESS_MEMORY_HIGH_WATER_MARK:
-                    return pullProcessMemoryHighWaterMark(atomTag, data);
-                case FrameworkStatsLog.PROCESS_MEMORY_SNAPSHOT:
-                    return pullProcessMemorySnapshot(atomTag, data);
-                case FrameworkStatsLog.SYSTEM_ION_HEAP_SIZE:
-                    return pullSystemIonHeapSize(atomTag, data);
-                case FrameworkStatsLog.ION_HEAP_SIZE:
-                    return pullIonHeapSize(atomTag, data);
-                case FrameworkStatsLog.PROCESS_SYSTEM_ION_HEAP_SIZE:
-                    return pullProcessSystemIonHeapSize(atomTag, data);
-                case FrameworkStatsLog.TEMPERATURE:
-                    return pullTemperature(atomTag, data);
-                case FrameworkStatsLog.COOLING_DEVICE:
-                    return pullCooldownDevice(atomTag, data);
-                case FrameworkStatsLog.BINDER_CALLS:
-                    return pullBinderCallsStats(atomTag, data);
-                case FrameworkStatsLog.BINDER_CALLS_EXCEPTIONS:
-                    return pullBinderCallsStatsExceptions(atomTag, data);
-                case FrameworkStatsLog.LOOPER_STATS:
-                    return pullLooperStats(atomTag, data);
-                case FrameworkStatsLog.DISK_STATS:
-                    return pullDiskStats(atomTag, data);
-                case FrameworkStatsLog.DIRECTORY_USAGE:
-                    return pullDirectoryUsage(atomTag, data);
-                case FrameworkStatsLog.APP_SIZE:
-                    return pullAppSize(atomTag, data);
-                case FrameworkStatsLog.CATEGORY_SIZE:
-                    return pullCategorySize(atomTag, data);
-                case FrameworkStatsLog.NUM_FINGERPRINTS_ENROLLED:
-                    return pullNumBiometricsEnrolled(
-                            BiometricsProtoEnums.MODALITY_FINGERPRINT, atomTag, data);
-                case FrameworkStatsLog.NUM_FACES_ENROLLED:
-                    return pullNumBiometricsEnrolled(
-                            BiometricsProtoEnums.MODALITY_FACE, atomTag, data);
-                case FrameworkStatsLog.PROC_STATS:
-                    return pullProcStats(ProcessStats.REPORT_ALL, atomTag, data);
-                case FrameworkStatsLog.PROC_STATS_PKG_PROC:
-                    return pullProcStats(ProcessStats.REPORT_PKG_PROC_STATS, atomTag, data);
-                case FrameworkStatsLog.DISK_IO:
-                    return pullDiskIO(atomTag, data);
-                case FrameworkStatsLog.POWER_PROFILE:
-                    return pullPowerProfile(atomTag, data);
-                case FrameworkStatsLog.PROCESS_CPU_TIME:
-                    return pullProcessCpuTime(atomTag, data);
-                case FrameworkStatsLog.CPU_TIME_PER_THREAD_FREQ:
-                    return pullCpuTimePerThreadFreq(atomTag, data);
-                case FrameworkStatsLog.DEVICE_CALCULATED_POWER_USE:
-                    return pullDeviceCalculatedPowerUse(atomTag, data);
-                case FrameworkStatsLog.DEVICE_CALCULATED_POWER_BLAME_UID:
-                    return pullDeviceCalculatedPowerBlameUid(atomTag, data);
-                case FrameworkStatsLog.DEVICE_CALCULATED_POWER_BLAME_OTHER:
-                    return pullDeviceCalculatedPowerBlameOther(atomTag, data);
-                case FrameworkStatsLog.DEBUG_ELAPSED_CLOCK:
-                    return pullDebugElapsedClock(atomTag, data);
-                case FrameworkStatsLog.DEBUG_FAILING_ELAPSED_CLOCK:
-                    return pullDebugFailingElapsedClock(atomTag, data);
-                case FrameworkStatsLog.BUILD_INFORMATION:
-                    return pullBuildInformation(atomTag, data);
-                case FrameworkStatsLog.ROLE_HOLDER:
-                    return pullRoleHolder(atomTag, data);
-                case FrameworkStatsLog.DANGEROUS_PERMISSION_STATE:
-                    return pullDangerousPermissionState(atomTag, data);
-                case FrameworkStatsLog.TIME_ZONE_DATA_INFO:
-                    return pullTimeZoneDataInfo(atomTag, data);
-                case FrameworkStatsLog.EXTERNAL_STORAGE_INFO:
-                    return pullExternalStorageInfo(atomTag, data);
-                case FrameworkStatsLog.APPS_ON_EXTERNAL_STORAGE_INFO:
-                    return pullAppsOnExternalStorageInfo(atomTag, data);
-                case FrameworkStatsLog.FACE_SETTINGS:
-                    return pullFaceSettings(atomTag, data);
-                case FrameworkStatsLog.APP_OPS:
-                    return pullAppOps(atomTag, data);
-                case FrameworkStatsLog.RUNTIME_APP_OP_ACCESS:
-                    return pullRuntimeAppOpAccessMessage(atomTag, data);
-                case FrameworkStatsLog.NOTIFICATION_REMOTE_VIEWS:
-                    return pullNotificationRemoteViews(atomTag, data);
-                case FrameworkStatsLog.DANGEROUS_PERMISSION_STATE_SAMPLED:
-                    return pullDangerousPermissionState(atomTag, data);
-                case FrameworkStatsLog.BATTERY_LEVEL:
-                case FrameworkStatsLog.REMAINING_BATTERY_CAPACITY:
-                case FrameworkStatsLog.FULL_BATTERY_CAPACITY:
-                case FrameworkStatsLog.BATTERY_VOLTAGE:
-                case FrameworkStatsLog.BATTERY_CYCLE_COUNT:
-                    return pullHealthHal(atomTag, data);
-                default:
-                    throw new UnsupportedOperationException("Unknown tagId=" + atomTag);
+            if (Trace.isTagEnabled(Trace.TRACE_TAG_SYSTEM_SERVER)) {
+                Trace.traceBegin(Trace.TRACE_TAG_SYSTEM_SERVER, "StatsPull-" + atomTag);
+            }
+            try {
+                switch (atomTag) {
+                    case FrameworkStatsLog.WIFI_BYTES_TRANSFER:
+                        return pullWifiBytesTransfer(atomTag, data);
+                    case FrameworkStatsLog.WIFI_BYTES_TRANSFER_BY_FG_BG:
+                        return pullWifiBytesTransferBackground(atomTag, data);
+                    case FrameworkStatsLog.MOBILE_BYTES_TRANSFER:
+                        return pullMobileBytesTransfer(atomTag, data);
+                    case FrameworkStatsLog.MOBILE_BYTES_TRANSFER_BY_FG_BG:
+                        return pullMobileBytesTransferBackground(atomTag, data);
+                    case FrameworkStatsLog.BLUETOOTH_BYTES_TRANSFER:
+                        return pullBluetoothBytesTransfer(atomTag, data);
+                    case FrameworkStatsLog.KERNEL_WAKELOCK:
+                        return pullKernelWakelock(atomTag, data);
+                    case FrameworkStatsLog.CPU_TIME_PER_FREQ:
+                        return pullCpuTimePerFreq(atomTag, data);
+                    case FrameworkStatsLog.CPU_TIME_PER_UID:
+                        return pullCpuTimePerUid(atomTag, data);
+                    case FrameworkStatsLog.CPU_TIME_PER_UID_FREQ:
+                        return pullCpuTimeperUidFreq(atomTag, data);
+                    case FrameworkStatsLog.CPU_ACTIVE_TIME:
+                        return pullCpuActiveTime(atomTag, data);
+                    case FrameworkStatsLog.CPU_CLUSTER_TIME:
+                        return pullCpuClusterTime(atomTag, data);
+                    case FrameworkStatsLog.WIFI_ACTIVITY_INFO:
+                        return pullWifiActivityInfo(atomTag, data);
+                    case FrameworkStatsLog.MODEM_ACTIVITY_INFO:
+                        return pullModemActivityInfo(atomTag, data);
+                    case FrameworkStatsLog.BLUETOOTH_ACTIVITY_INFO:
+                        return pullBluetoothActivityInfo(atomTag, data);
+                    case FrameworkStatsLog.SYSTEM_ELAPSED_REALTIME:
+                        return pullSystemElapsedRealtime(atomTag, data);
+                    case FrameworkStatsLog.SYSTEM_UPTIME:
+                        return pullSystemUptime(atomTag, data);
+                    case FrameworkStatsLog.PROCESS_MEMORY_STATE:
+                        return pullProcessMemoryState(atomTag, data);
+                    case FrameworkStatsLog.PROCESS_MEMORY_HIGH_WATER_MARK:
+                        return pullProcessMemoryHighWaterMark(atomTag, data);
+                    case FrameworkStatsLog.PROCESS_MEMORY_SNAPSHOT:
+                        return pullProcessMemorySnapshot(atomTag, data);
+                    case FrameworkStatsLog.SYSTEM_ION_HEAP_SIZE:
+                        return pullSystemIonHeapSize(atomTag, data);
+                    case FrameworkStatsLog.ION_HEAP_SIZE:
+                        return pullIonHeapSize(atomTag, data);
+                    case FrameworkStatsLog.PROCESS_SYSTEM_ION_HEAP_SIZE:
+                        return pullProcessSystemIonHeapSize(atomTag, data);
+                    case FrameworkStatsLog.TEMPERATURE:
+                        return pullTemperature(atomTag, data);
+                    case FrameworkStatsLog.COOLING_DEVICE:
+                        return pullCooldownDevice(atomTag, data);
+                    case FrameworkStatsLog.BINDER_CALLS:
+                        return pullBinderCallsStats(atomTag, data);
+                    case FrameworkStatsLog.BINDER_CALLS_EXCEPTIONS:
+                        return pullBinderCallsStatsExceptions(atomTag, data);
+                    case FrameworkStatsLog.LOOPER_STATS:
+                        return pullLooperStats(atomTag, data);
+                    case FrameworkStatsLog.DISK_STATS:
+                        return pullDiskStats(atomTag, data);
+                    case FrameworkStatsLog.DIRECTORY_USAGE:
+                        return pullDirectoryUsage(atomTag, data);
+                    case FrameworkStatsLog.APP_SIZE:
+                        return pullAppSize(atomTag, data);
+                    case FrameworkStatsLog.CATEGORY_SIZE:
+                        return pullCategorySize(atomTag, data);
+                    case FrameworkStatsLog.NUM_FINGERPRINTS_ENROLLED:
+                        return pullNumBiometricsEnrolled(
+                                BiometricsProtoEnums.MODALITY_FINGERPRINT, atomTag, data);
+                    case FrameworkStatsLog.NUM_FACES_ENROLLED:
+                        return pullNumBiometricsEnrolled(
+                                BiometricsProtoEnums.MODALITY_FACE, atomTag, data);
+                    case FrameworkStatsLog.PROC_STATS:
+                        return pullProcStats(ProcessStats.REPORT_ALL, atomTag, data);
+                    case FrameworkStatsLog.PROC_STATS_PKG_PROC:
+                        return pullProcStats(ProcessStats.REPORT_PKG_PROC_STATS, atomTag, data);
+                    case FrameworkStatsLog.DISK_IO:
+                        return pullDiskIO(atomTag, data);
+                    case FrameworkStatsLog.POWER_PROFILE:
+                        return pullPowerProfile(atomTag, data);
+                    case FrameworkStatsLog.PROCESS_CPU_TIME:
+                        return pullProcessCpuTime(atomTag, data);
+                    case FrameworkStatsLog.CPU_TIME_PER_THREAD_FREQ:
+                        return pullCpuTimePerThreadFreq(atomTag, data);
+                    case FrameworkStatsLog.DEVICE_CALCULATED_POWER_USE:
+                        return pullDeviceCalculatedPowerUse(atomTag, data);
+                    case FrameworkStatsLog.DEVICE_CALCULATED_POWER_BLAME_UID:
+                        return pullDeviceCalculatedPowerBlameUid(atomTag, data);
+                    case FrameworkStatsLog.DEVICE_CALCULATED_POWER_BLAME_OTHER:
+                        return pullDeviceCalculatedPowerBlameOther(atomTag, data);
+                    case FrameworkStatsLog.DEBUG_ELAPSED_CLOCK:
+                        return pullDebugElapsedClock(atomTag, data);
+                    case FrameworkStatsLog.DEBUG_FAILING_ELAPSED_CLOCK:
+                        return pullDebugFailingElapsedClock(atomTag, data);
+                    case FrameworkStatsLog.BUILD_INFORMATION:
+                        return pullBuildInformation(atomTag, data);
+                    case FrameworkStatsLog.ROLE_HOLDER:
+                        return pullRoleHolder(atomTag, data);
+                    case FrameworkStatsLog.DANGEROUS_PERMISSION_STATE:
+                        return pullDangerousPermissionState(atomTag, data);
+                    case FrameworkStatsLog.TIME_ZONE_DATA_INFO:
+                        return pullTimeZoneDataInfo(atomTag, data);
+                    case FrameworkStatsLog.EXTERNAL_STORAGE_INFO:
+                        return pullExternalStorageInfo(atomTag, data);
+                    case FrameworkStatsLog.APPS_ON_EXTERNAL_STORAGE_INFO:
+                        return pullAppsOnExternalStorageInfo(atomTag, data);
+                    case FrameworkStatsLog.FACE_SETTINGS:
+                        return pullFaceSettings(atomTag, data);
+                    case FrameworkStatsLog.APP_OPS:
+                        return pullAppOps(atomTag, data);
+                    case FrameworkStatsLog.RUNTIME_APP_OP_ACCESS:
+                        return pullRuntimeAppOpAccessMessage(atomTag, data);
+                    case FrameworkStatsLog.NOTIFICATION_REMOTE_VIEWS:
+                        return pullNotificationRemoteViews(atomTag, data);
+                    case FrameworkStatsLog.DANGEROUS_PERMISSION_STATE_SAMPLED:
+                        return pullDangerousPermissionState(atomTag, data);
+                    case FrameworkStatsLog.BATTERY_LEVEL:
+                    case FrameworkStatsLog.REMAINING_BATTERY_CAPACITY:
+                    case FrameworkStatsLog.FULL_BATTERY_CAPACITY:
+                    case FrameworkStatsLog.BATTERY_VOLTAGE:
+                    case FrameworkStatsLog.BATTERY_CYCLE_COUNT:
+                        return pullHealthHal(atomTag, data);
+                    case FrameworkStatsLog.APP_FEATURES_OPS:
+                        return pullAppFeaturesOps(atomTag, data);
+                    default:
+                        throw new UnsupportedOperationException("Unknown tagId=" + atomTag);
+                }
+            } finally {
+                Trace.traceEnd(Trace.TRACE_TAG_SYSTEM_SERVER);
             }
         }
     }
@@ -425,8 +436,7 @@ public class StatsPullAtomService extends SystemService {
         mStoragedUidIoStatsReader = new StoragedUidIoStatsReader();
 
         // Initialize PROC_STATS
-        // TODO (b/148402814): Change this directory to stats_pull.
-        mBaseDir = new File(SystemServiceManager.ensureSystemDir(), "stats_companion");
+        mBaseDir = new File(SystemServiceManager.ensureSystemDir(), "stats_pull");
 
         // Disables throttler on CPU time readers.
         mCpuUidUserSysTimeReader = new KernelCpuUidUserSysTimeReader(false);
@@ -542,6 +552,7 @@ public class StatsPullAtomService extends SystemService {
         registerAppsOnExternalStorageInfo();
         registerFaceSettings();
         registerAppOps();
+        registerAppFeaturesOps();
         registerRuntimeAppOpAccessMessage();
         registerNotificationRemoteViews();
         registerDangerousPermissionState();
@@ -1457,6 +1468,9 @@ public class StatsPullAtomService extends SystemService {
     }
 
     private void registerIonHeapSize() {
+        if (!new File("/sys/kernel/ion/total_heaps_kb").exists()) {
+            return;
+        }
         int tagId = FrameworkStatsLog.ION_HEAP_SIZE;
         mStatsManager.registerPullAtomCallback(
                 tagId,
@@ -1519,7 +1533,7 @@ public class StatsPullAtomService extends SystemService {
         }
         final long callingToken = Binder.clearCallingIdentity();
         try {
-            List<Temperature> temperatures = thermalService.getCurrentTemperatures();
+            Temperature temperatures[] = thermalService.getCurrentTemperatures();
             for (Temperature temp : temperatures) {
                 StatsEvent e = StatsEvent.newBuilder()
                         .setAtomId(atomTag)
@@ -1557,7 +1571,7 @@ public class StatsPullAtomService extends SystemService {
         }
         final long callingToken = Binder.clearCallingIdentity();
         try {
-            List<CoolingDevice> devices = thermalService.getCurrentCoolingDevices();
+            CoolingDevice devices[] = thermalService.getCurrentCoolingDevices();
             for (CoolingDevice device : devices) {
                 StatsEvent e = StatsEvent.newBuilder()
                         .setAtomId(atomTag)
@@ -2616,6 +2630,10 @@ public class StatsPullAtomService extends SystemService {
                             continue;
                         }
 
+                        if (permName.startsWith(COMMON_PERMISSION_PREFIX)) {
+                            permName = permName.substring(COMMON_PERMISSION_PREFIX.length());
+                        }
+
                         StatsEvent.Builder e = StatsEvent.newBuilder();
                         e.setAtomId(atomTag);
                         e.writeString(permName);
@@ -2835,7 +2853,6 @@ public class StatsPullAtomService extends SystemService {
                 BackgroundThread.getExecutor(),
                 mStatsCallbackImpl
         );
-
     }
 
     private void registerRuntimeAppOpAccessMessage() {
@@ -2846,7 +2863,6 @@ public class StatsPullAtomService extends SystemService {
                 BackgroundThread.getExecutor(),
                 mStatsCallbackImpl
         );
-
     }
 
     int pullAppOps(int atomTag, List<StatsEvent> pulledData) {
@@ -2896,6 +2912,84 @@ public class StatsPullAtomService extends SystemService {
                         }
 
                         pulledData.add(e.build());
+                    }
+                }
+            }
+        } catch (Throwable t) {
+            // TODO: catch exceptions at a more granular level
+            Slog.e(TAG, "Could not read appops", t);
+            return StatsManager.PULL_SKIP;
+        } finally {
+            Binder.restoreCallingIdentity(token);
+        }
+        return StatsManager.PULL_SUCCESS;
+    }
+
+    private void registerAppFeaturesOps() {
+        int tagId = FrameworkStatsLog.APP_FEATURES_OPS;
+        mStatsManager.registerPullAtomCallback(
+                tagId,
+                null, // use default PullAtomMetadata values
+                BackgroundThread.getExecutor(),
+                mStatsCallbackImpl
+        );
+    }
+
+    int pullAppFeaturesOps(int atomTag, List<StatsEvent> pulledData) {
+        final long token = Binder.clearCallingIdentity();
+        try {
+            AppOpsManager appOps = mContext.getSystemService(AppOpsManager.class);
+
+            CompletableFuture<HistoricalOps> ops = new CompletableFuture<>();
+            HistoricalOpsRequest histOpsRequest =
+                    new HistoricalOpsRequest.Builder(0, Long.MAX_VALUE).setFlags(
+                            OP_FLAGS_PULLED).build();
+            appOps.getHistoricalOps(histOpsRequest, mContext.getMainExecutor(), ops::complete);
+
+            HistoricalOps histOps = ops.get(EXTERNAL_STATS_SYNC_TIMEOUT_MILLIS,
+                    TimeUnit.MILLISECONDS);
+
+            for (int uidIdx = 0; uidIdx < histOps.getUidCount(); uidIdx++) {
+                final HistoricalUidOps uidOps = histOps.getUidOpsAt(uidIdx);
+                final int uid = uidOps.getUid();
+                for (int pkgIdx = 0; pkgIdx < uidOps.getPackageCount(); pkgIdx++) {
+                    final HistoricalPackageOps packageOps = uidOps.getPackageOpsAt(pkgIdx);
+                    for (int featureIdx = 0; featureIdx < packageOps.getFeatureCount();
+                            featureIdx++) {
+                        final AppOpsManager.HistoricalFeatureOps featureOps =
+                                packageOps.getFeatureOpsAt(featureIdx);
+                        for (int opIdx = 0; opIdx < featureOps.getOpCount(); opIdx++) {
+                            final AppOpsManager.HistoricalOp op = featureOps.getOpAt(opIdx);
+                            StatsEvent.Builder e = StatsEvent.newBuilder();
+                            e.setAtomId(atomTag);
+                            e.writeInt(uid);
+                            e.writeString(packageOps.getPackageName());
+                            e.writeString(featureOps.getFeatureId());
+                            e.writeString(op.getOpName());
+                            e.writeLong(op.getForegroundAccessCount(OP_FLAGS_PULLED));
+                            e.writeLong(op.getBackgroundAccessCount(OP_FLAGS_PULLED));
+                            e.writeLong(op.getForegroundRejectCount(OP_FLAGS_PULLED));
+                            e.writeLong(op.getBackgroundRejectCount(OP_FLAGS_PULLED));
+                            e.writeLong(op.getForegroundAccessDuration(OP_FLAGS_PULLED));
+                            e.writeLong(op.getBackgroundAccessDuration(OP_FLAGS_PULLED));
+
+                            String perm = AppOpsManager.opToPermission(op.getOpCode());
+                            if (perm == null) {
+                                e.writeBoolean(false);
+                            } else {
+                                PermissionInfo permInfo;
+                                try {
+                                    permInfo = mContext.getPackageManager().getPermissionInfo(perm,
+                                            0);
+                                    e.writeBoolean(
+                                            permInfo.getProtection() == PROTECTION_DANGEROUS);
+                                } catch (PackageManager.NameNotFoundException exception) {
+                                    e.writeBoolean(false);
+                                }
+                            }
+                            pulledData.add(e.build());
+                        }
+
                     }
                 }
             }

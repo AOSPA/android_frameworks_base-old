@@ -2543,12 +2543,13 @@ public abstract class Context {
      *
      * @see #sendOrderedBroadcast(Intent, String, BroadcastReceiver, Handler, int, String, Bundle)
      * @see android.app.BroadcastOptions
+     * @hide
      */
-    public void sendOrderedBroadcast(@RequiresPermission @NonNull Intent intent,
+    public void sendOrderedBroadcast(@RequiresPermission @NonNull Intent intent, int initialCode,
             @Nullable String receiverPermission, @Nullable String receiverAppOp,
-            @Nullable Bundle options, @Nullable BroadcastReceiver resultReceiver,
-            @Nullable Handler scheduler, int initialCode, @Nullable String initialData,
-            @Nullable Bundle initialExtras) {
+            @Nullable BroadcastReceiver resultReceiver, @Nullable Handler scheduler,
+            @Nullable String initialData, @Nullable Bundle initialExtras,
+            @Nullable Bundle options) {
         throw new RuntimeException("Not implemented. Must override in a subclass.");
     }
 
@@ -5155,6 +5156,17 @@ public abstract class Context {
      * @hide
      */
     public static final String LIGHTS_SERVICE = "lights";
+
+    /**
+     * Use with {@link #getSystemService(String)} to retrieve a
+     * {@link android.app.DreamManager} for controlling Dream states.
+     *
+     * @see #getSystemService(String)
+
+     * @hide
+     */
+    @TestApi
+    public static final String DREAM_SERVICE = "dream";
 
     /**
      * Determine whether the given permission is allowed for a particular

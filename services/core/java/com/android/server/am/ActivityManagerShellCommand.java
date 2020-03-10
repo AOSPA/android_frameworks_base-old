@@ -1763,6 +1763,12 @@ final class ActivityManagerShellCommand extends ShellCommand {
     }
 
     private boolean switchUserAndWaitForComplete(int userId) throws RemoteException {
+        UserInfo currentUser = mInterface.getCurrentUser();
+        if (currentUser != null && userId == currentUser.id) {
+            // Already switched to the correct user, exit early.
+            return true;
+        }
+
         // Register switch observer.
         final CountDownLatch switchLatch = new CountDownLatch(1);
         mInterface.registerUserSwitchObserver(
@@ -1777,13 +1783,18 @@ final class ActivityManagerShellCommand extends ShellCommand {
 
         // Switch.
         boolean switched = mInterface.switchUser(userId);
+        if (!switched) {
+            // Switching failed, don't wait for the user switch observer.
+            return false;
+        }
 
         // Wait.
         try {
-            switchLatch.await(USER_OPERATION_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+            switched = switchLatch.await(USER_OPERATION_TIMEOUT_MS, TimeUnit.MILLISECONDS);
         } catch (InterruptedException e) {
-            getErrPrintWriter().println("Thread interrupted unexpectedly.");
+            getErrPrintWriter().println("Error: Thread interrupted unexpectedly.");
         }
+
         return switched;
     }
 
@@ -1815,7 +1826,7 @@ final class ActivityManagerShellCommand extends ShellCommand {
         if (switched) {
             return 0;
         } else {
-            pw.printf("Failed to switch to user %d\n", userId);
+            pw.printf("Error: Failed to switch to user %d\n", userId);
             return 1;
         }
     }
@@ -2570,10 +2581,6 @@ final class ActivityManagerShellCommand extends ShellCommand {
         switch (op) {
             case "move-task":
                 return runStackMoveTask(pw);
-            case "resize-animated":
-                return runStackResizeAnimated(pw);
-            case "resize-docked-stack":
-                return runStackResizeDocked(pw);
             case "positiontask":
                 return runStackPositionTask(pw);
             case "list":
@@ -2645,34 +2652,6 @@ final class ActivityManagerShellCommand extends ShellCommand {
         }
 
         mTaskInterface.moveTaskToStack(taskId, stackId, toTop);
-        return 0;
-    }
-
-    int runStackResizeAnimated(PrintWriter pw) throws RemoteException {
-        String stackIdStr = getNextArgRequired();
-        int stackId = Integer.parseInt(stackIdStr);
-        final Rect bounds;
-        if ("null".equals(peekNextArg())) {
-            bounds = null;
-        } else {
-            bounds = getBounds();
-            if (bounds == null) {
-                getErrPrintWriter().println("Error: invalid input bounds");
-                return -1;
-            }
-        }
-        mTaskInterface.animateResizePinnedStack(stackId, bounds, -1);
-        return 0;
-    }
-
-    int runStackResizeDocked(PrintWriter pw) throws RemoteException {
-        final Rect bounds = getBounds();
-        final Rect taskBounds = getBounds();
-        if (bounds == null || taskBounds == null) {
-            getErrPrintWriter().println("Error: invalid input bounds");
-            return -1;
-        }
-        mTaskInterface.resizeDockedStack(bounds, taskBounds, null, null, null);
         return 0;
     }
 
@@ -3285,8 +3264,6 @@ final class ActivityManagerShellCommand extends ShellCommand {
             pw.println("       move-task <TASK_ID> <STACK_ID> [true|false]");
             pw.println("           Move <TASK_ID> from its current stack to the top (true) or");
             pw.println("           bottom (false) of <STACK_ID>.");
-            pw.println("       resize-animated <STACK_ID> <LEFT,TOP,RIGHT,BOTTOM>");
-            pw.println("           Same as resize, but allow animation.");
             pw.println("       resize-docked-stack <LEFT,TOP,RIGHT,BOTTOM> [<TASK_LEFT,TASK_TOP,TASK_RIGHT,TASK_BOTTOM>]");
             pw.println("           Change docked stack to <LEFT,TOP,RIGHT,BOTTOM>");
             pw.println("           and supplying temporary different task bounds indicated by");
