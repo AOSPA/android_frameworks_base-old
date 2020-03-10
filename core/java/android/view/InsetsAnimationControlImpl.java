@@ -166,18 +166,17 @@ public class InsetsAnimationControlImpl implements WindowInsetsAnimationControll
             return false;
         }
         final Insets offset = Insets.subtract(mShownInsets, mPendingInsets);
-        final Float alphaOffset = 1 - mPendingAlpha;
         ArrayList<SurfaceParams> params = new ArrayList<>();
         updateLeashesForSide(ISIDE_LEFT, offset.left, mShownInsets.left, mPendingInsets.left,
-                params, state, alphaOffset);
+                params, state, mPendingAlpha);
         updateLeashesForSide(ISIDE_TOP, offset.top, mShownInsets.top, mPendingInsets.top, params,
-                state, alphaOffset);
+                state, mPendingAlpha);
         updateLeashesForSide(ISIDE_RIGHT, offset.right, mShownInsets.right, mPendingInsets.right,
-                params, state, alphaOffset);
+                params, state, mPendingAlpha);
         updateLeashesForSide(ISIDE_BOTTOM, offset.bottom, mShownInsets.bottom,
-                mPendingInsets.bottom, params, state, alphaOffset);
+                mPendingInsets.bottom, params, state, mPendingAlpha);
         updateLeashesForSide(ISIDE_FLOATING, 0 /* offset */, 0 /* inset */, 0 /* maxInset */,
-                params, state, alphaOffset);
+                params, state, mPendingAlpha);
 
         mController.applySurfaceParams(params.toArray(new SurfaceParams[params.size()]));
         mCurrentInsets = mPendingInsets;
@@ -282,10 +281,14 @@ public class InsetsAnimationControlImpl implements WindowInsetsAnimationControll
             if (leash != null) {
                 // TODO: use a better interpolation for fade.
                 alpha = mFade ? ((float) inset / maxInset * 0.3f + 0.7f) : alpha;
-                surfaceParams.add(new SurfaceParams(leash, side == ISIDE_FLOATING ? 1 : alpha,
-                        mTmpMatrix, null /* windowCrop */, 0 /* layer */, 0f /* cornerRadius*/,
-                        side == ISIDE_FLOATING ? state.getSource(source.getType()).isVisible()
-                                : inset != 0 /* visible */));
+                SurfaceParams params = new SurfaceParams.Builder(leash)
+                        .withAlpha(side == ISIDE_FLOATING ? 1 : alpha)
+                        .withMatrix(mTmpMatrix)
+                        .withVisibility(side == ISIDE_FLOATING
+                                ? state.getSource(source.getType()).isVisible()
+                                : inset != 0 /* visible */)
+                        .build();
+                surfaceParams.add(params);
             }
         }
     }

@@ -39,6 +39,7 @@ import static com.android.dx.mockito.inline.extended.ExtendedMockito.when;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -253,6 +254,30 @@ public class TaskOrganizerTests extends WindowTestsBase {
     }
 
     @Test
+    public void testOverrideConfigSize() {
+        removeGlobalMinSizeRestriction();
+        final ActivityStack stack = new ActivityTestsBase.StackBuilder(mWm.mRoot)
+                .setWindowingMode(WINDOWING_MODE_FREEFORM).build();
+        final Task task = stack.getTopMostTask();
+        WindowContainerTransaction t = new WindowContainerTransaction();
+        t.setBounds(task.mRemoteToken, new Rect(10, 10, 100, 100));
+        mWm.mAtmService.mTaskOrganizerController.applyContainerTransaction(t, null);
+        final int origScreenWDp = task.getConfiguration().screenHeightDp;
+        final int origScreenHDp = task.getConfiguration().screenHeightDp;
+        t = new WindowContainerTransaction();
+        // verify that setting config overrides on parent restricts children.
+        t.setScreenSizeDp(stack.mRemoteToken, origScreenWDp, origScreenHDp);
+        t.setBounds(task.mRemoteToken, new Rect(10, 10, 150, 200));
+        mWm.mAtmService.mTaskOrganizerController.applyContainerTransaction(t, null);
+        assertEquals(origScreenHDp, task.getConfiguration().screenHeightDp);
+        t = new WindowContainerTransaction();
+        t.setScreenSizeDp(stack.mRemoteToken, Configuration.SCREEN_WIDTH_DP_UNDEFINED,
+                Configuration.SCREEN_HEIGHT_DP_UNDEFINED);
+        mWm.mAtmService.mTaskOrganizerController.applyContainerTransaction(t, null);
+        assertNotEquals(origScreenHDp, task.getConfiguration().screenHeightDp);
+    }
+
+    @Test
     public void testCreateDeleteRootTasks() {
         RunningTaskInfo info1 = mWm.mAtmService.mTaskOrganizerController.createRootTask(
                 Display.DEFAULT_DISPLAY,
@@ -293,8 +318,7 @@ public class TaskOrganizerTests extends WindowTestsBase {
 
         // Info should reflect new membership
         List<TaskTile> tiles = getTaskTiles(mDisplayContent);
-        info1 = new RunningTaskInfo();
-        tiles.get(0).fillTaskInfo(info1);
+        info1 = tiles.get(0).getTaskInfo();
         assertEquals(ACTIVITY_TYPE_STANDARD, info1.topActivityType);
 
         // Children inherit configuration
@@ -307,9 +331,8 @@ public class TaskOrganizerTests extends WindowTestsBase {
 
         tile1.removeChild(stack);
         assertEquals(mDisplayContent.getWindowingMode(), stack.getWindowingMode());
-        info1 = new RunningTaskInfo();
         tiles = getTaskTiles(mDisplayContent);
-        tiles.get(0).fillTaskInfo(info1);
+        info1 = tiles.get(0).getTaskInfo();
         assertEquals(ACTIVITY_TYPE_UNDEFINED, info1.topActivityType);
     }
 

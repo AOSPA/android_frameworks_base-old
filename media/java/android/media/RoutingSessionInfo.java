@@ -74,7 +74,6 @@ public final class RoutingSessionInfo implements Parcelable {
         mClientPackageName = builder.mClientPackageName;
         mProviderId = builder.mProviderId;
 
-        // TODO: Needs to check that the routes already have unique IDs.
         mSelectedRoutes = Collections.unmodifiableList(
                 convertToUniqueRouteIds(builder.mSelectedRoutes));
         mSelectableRoutes = Collections.unmodifiableList(
@@ -369,7 +368,6 @@ public final class RoutingSessionInfo implements Parcelable {
         Bundle mControlHints;
         boolean mIsSystemSession;
 
-        //TODO: Remove this.
         /**
          * Constructor for builder to create {@link RoutingSessionInfo}.
          * <p>
@@ -415,6 +413,14 @@ public final class RoutingSessionInfo implements Parcelable {
             mSelectableRoutes = new ArrayList<>(sessionInfo.mSelectableRoutes);
             mDeselectableRoutes = new ArrayList<>(sessionInfo.mDeselectableRoutes);
             mTransferableRoutes = new ArrayList<>(sessionInfo.mTransferableRoutes);
+
+            if (mProviderId != null) {
+                // They must have unique IDs.
+                mSelectedRoutes.replaceAll(MediaRouter2Utils::getOriginalId);
+                mSelectableRoutes.replaceAll(MediaRouter2Utils::getOriginalId);
+                mDeselectableRoutes.replaceAll(MediaRouter2Utils::getOriginalId);
+                mTransferableRoutes.replaceAll(MediaRouter2Utils::getOriginalId);
+            }
 
             mVolumeHandling = sessionInfo.mVolumeHandling;
             mVolumeMax = sessionInfo.mVolumeMax;

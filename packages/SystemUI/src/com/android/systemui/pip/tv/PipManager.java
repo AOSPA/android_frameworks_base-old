@@ -20,6 +20,8 @@ import static android.app.ActivityTaskManager.INVALID_STACK_ID;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_UNDEFINED;
 import static android.app.WindowConfiguration.WINDOWING_MODE_PINNED;
 
+import static com.android.systemui.pip.PipAnimationController.DURATION_DEFAULT_MS;
+
 import android.app.ActivityManager.RunningTaskInfo;
 import android.app.ActivityManager.StackInfo;
 import android.app.ActivityTaskManager;
@@ -50,7 +52,6 @@ import com.android.systemui.R;
 import com.android.systemui.UiOffloadThread;
 import com.android.systemui.broadcast.BroadcastDispatcher;
 import com.android.systemui.pip.BasePipManager;
-import com.android.systemui.pip.PipAnimationController;
 import com.android.systemui.pip.PipBoundsHandler;
 import com.android.systemui.pip.PipTaskOrganizer;
 import com.android.systemui.shared.system.ActivityManagerWrapper;
@@ -228,13 +229,15 @@ public class PipManager implements BasePipManager, PipTaskOrganizer.PipTransitio
     }
 
     @Inject
-    public PipManager(Context context, BroadcastDispatcher broadcastDispatcher) {
+    public PipManager(Context context, BroadcastDispatcher broadcastDispatcher,
+            PipBoundsHandler pipBoundsHandler) {
         if (mInitialized) {
             return;
         }
+
         mInitialized = true;
         mContext = context;
-        mPipBoundsHandler = new PipBoundsHandler(context);
+        mPipBoundsHandler = pipBoundsHandler;
         mPipTaskOrganizer = new PipTaskOrganizer(mContext, mPipBoundsHandler);
         mPipTaskOrganizer.registerPipTransitionCallback(this);
         mActivityTaskManager = ActivityTaskManager.getService();
@@ -433,8 +436,7 @@ public class PipManager implements BasePipManager, PipTaskOrganizer.PipTransitio
                 mCurrentPipBounds = mPipBounds;
                 break;
         }
-        mPipTaskOrganizer.resizePinnedStack(
-                mCurrentPipBounds, PipAnimationController.DURATION_DEFAULT_MS);
+        mPipTaskOrganizer.scheduleAnimateResizePip(mCurrentPipBounds, DURATION_DEFAULT_MS, null);
     }
 
     /**

@@ -109,7 +109,6 @@ extern int register_android_util_SeempLog(JNIEnv* env);
 extern int register_android_app_admin_SecurityLog(JNIEnv* env);
 extern int register_android_content_AssetManager(JNIEnv* env);
 extern int register_android_util_EventLog(JNIEnv* env);
-extern int register_android_util_StatsLogInternal(JNIEnv* env);
 extern int register_android_util_Log(JNIEnv* env);
 extern int register_android_util_MemoryIntArray(JNIEnv* env);
 extern int register_android_content_StringBlock(JNIEnv* env);
@@ -1438,7 +1437,6 @@ static const RegJNIRec gRegJNI[] = {
         REG_JNI(register_android_util_EventLog),
         REG_JNI(register_android_util_Log),
         REG_JNI(register_android_util_MemoryIntArray),
-        REG_JNI(register_android_util_StatsLogInternal),
         REG_JNI(register_android_app_admin_SecurityLog),
         REG_JNI(register_android_content_AssetManager),
         REG_JNI(register_android_content_StringBlock),

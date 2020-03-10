@@ -876,6 +876,11 @@ public class NotificationManagerService extends SystemService {
     final NotificationDelegate mNotificationDelegate = new NotificationDelegate() {
 
         @Override
+        public void prepareForPossibleShutdown() {
+            mHistoryManager.triggerWriteToDisk();
+        }
+
+        @Override
         public void onSetDisabled(int status) {
             synchronized (mNotificationLock) {
                 mDisableNotificationEffects =
@@ -2184,19 +2189,19 @@ public class NotificationManagerService extends SystemService {
 
     private void registerNotificationPreferencesPullers() {
         mPullAtomCallback = new StatsPullAtomCallbackImpl();
-        mStatsManager.registerPullAtomCallback(
+        mStatsManager.setPullAtomCallback(
                 PACKAGE_NOTIFICATION_PREFERENCES,
                 null, // use default PullAtomMetadata values
                 BackgroundThread.getExecutor(),
                 mPullAtomCallback
         );
-        mStatsManager.registerPullAtomCallback(
+        mStatsManager.setPullAtomCallback(
                 PACKAGE_NOTIFICATION_CHANNEL_PREFERENCES,
                 null, // use default PullAtomMetadata values
                 BackgroundThread.getExecutor(),
                 mPullAtomCallback
         );
-        mStatsManager.registerPullAtomCallback(
+        mStatsManager.setPullAtomCallback(
                 PACKAGE_NOTIFICATION_CHANNEL_GROUP_PREFERENCES,
                 null, // use default PullAtomMetadata values
                 BackgroundThread.getExecutor(),
@@ -2679,6 +2684,7 @@ public class NotificationManagerService extends SystemService {
                 mHistoryManager.addNotification(new HistoricalNotification.Builder()
                         .setPackage(r.getSbn().getPackageName())
                         .setUid(r.getSbn().getUid())
+                        .setUserId(r.getUserId())
                         .setChannelId(r.getChannel().getId())
                         .setChannelName(r.getChannel().getName().toString())
                         .setPostedTimeMs(System.currentTimeMillis())

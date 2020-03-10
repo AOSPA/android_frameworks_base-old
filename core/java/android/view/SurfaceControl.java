@@ -424,8 +424,7 @@ public final class SurfaceControl implements Parcelable {
             release();
         }
       	if (nativeObject != 0) {
-            // TODO(b/150410543) Re-enable CloseGuard.
-            // mCloseGuard.open("release");
+            mCloseGuard.open("release");
         }
         mNativeObject = nativeObject;
     }

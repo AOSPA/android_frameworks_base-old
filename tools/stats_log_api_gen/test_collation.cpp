@@ -98,7 +98,6 @@ TEST(CollationTest, CollateStats) {
     EXPECT_SET_CONTAINS_SIGNATURE(
         atoms.signatures_to_modules,
         JAVA_TYPE_ATTRIBUTION_CHAIN, // AttributionChain
-        JAVA_TYPE_DOUBLE,            // double
         JAVA_TYPE_FLOAT,             // float
         JAVA_TYPE_LONG,              // int64
         JAVA_TYPE_LONG,              // uint64
@@ -157,13 +156,13 @@ TEST(CollationTest, NonMessageTypeFails) {
 }
 
 /**
- * Test that atoms that have non-primitive types are rejected.
+ * Test that atoms that have non-primitive types or repeated fields are rejected.
  */
 TEST(CollationTest, FailOnBadTypes) {
     Atoms atoms;
     int errorCount = collate_atoms(BadTypesEvent::descriptor(), &atoms);
 
-    EXPECT_EQ(2, errorCount);
+    EXPECT_EQ(4, errorCount);
 }
 
 /**
@@ -249,23 +248,27 @@ TEST(CollationTest, PassOnLogFromModuleAtom) {
     Atoms atoms;
     int errorCount = collate_atoms(ModuleAtoms::descriptor(), &atoms);
     EXPECT_EQ(errorCount, 0);
-    EXPECT_EQ(atoms.decls.size(), 3ul);
+    EXPECT_EQ(atoms.decls.size(), 4ul);
 }
 
 TEST(CollationTest, RecognizeModuleAtom) {
     Atoms atoms;
     int errorCount = collate_atoms(ModuleAtoms::descriptor(), &atoms);
     EXPECT_EQ(errorCount, 0);
-    EXPECT_EQ(atoms.decls.size(), 3ul);
+    EXPECT_EQ(atoms.decls.size(), 4ul);
     for (const auto& atomDecl: atoms.decls) {
         if (atomDecl.code == 1) {
-            EXPECT_TRUE(atomDecl.hasModule);
-            EXPECT_EQ(atomDecl.moduleName, "module1");
+            EXPECT_EQ(1ul, atomDecl.moduleNames.size());
+            EXPECT_NE(atomDecl.moduleNames.end(), atomDecl.moduleNames.find("module1"));
         } else if (atomDecl.code == 2) {
-            EXPECT_TRUE(atomDecl.hasModule);
-            EXPECT_EQ(atomDecl.moduleName, "module2");
+            EXPECT_EQ(1ul, atomDecl.moduleNames.size());
+            EXPECT_NE(atomDecl.moduleNames.end(), atomDecl.moduleNames.find("module2"));
+        } else if (atomDecl.code == 3) {
+            EXPECT_EQ(2ul, atomDecl.moduleNames.size());
+            EXPECT_NE(atomDecl.moduleNames.end(), atomDecl.moduleNames.find("module1"));
+            EXPECT_NE(atomDecl.moduleNames.end(), atomDecl.moduleNames.find("module2"));
         } else {
-            EXPECT_FALSE(atomDecl.hasModule);
+            EXPECT_TRUE(atomDecl.moduleNames.empty());
         }
     }
 

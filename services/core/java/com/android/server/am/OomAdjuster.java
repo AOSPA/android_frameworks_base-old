@@ -33,6 +33,8 @@ import static android.app.ActivityManager.PROCESS_STATE_IMPORTANT_BACKGROUND;
 import static android.app.ActivityManager.PROCESS_STATE_IMPORTANT_FOREGROUND;
 import static android.app.ActivityManager.PROCESS_STATE_LAST_ACTIVITY;
 import static android.app.ActivityManager.PROCESS_STATE_NONEXISTENT;
+import static android.app.ActivityManager.PROCESS_STATE_PERSISTENT;
+import static android.app.ActivityManager.PROCESS_STATE_PERSISTENT_UI;
 import static android.app.ActivityManager.PROCESS_STATE_SERVICE;
 import static android.app.ActivityManager.PROCESS_STATE_TOP;
 import static android.app.ActivityManager.PROCESS_STATE_TRANSIENT_BACKGROUND;
@@ -886,7 +888,8 @@ public final class OomAdjuster {
                     // definition not re-use the same process again, and it is
                     // good to avoid having whatever code was running in them
                     // left sitting around after no longer needed.
-                    app.kill("isolated not needed", ApplicationExitInfo.REASON_OTHER, true);
+                    app.kill("isolated not needed", ApplicationExitInfo.REASON_OTHER,
+                            ApplicationExitInfo.SUBREASON_ISOLATED_NOT_NEEDED, true);
                 } else {
                     // Keeping this process, update its uid.
                     updateAppUidRecLocked(app);
@@ -1495,7 +1498,6 @@ public final class OomAdjuster {
         }
 
         int capabilityFromFGS = 0; // capability from foreground service.
-        boolean procStateFromFGSClient = false;
         for (int is = app.services.size() - 1;
                 is >= 0 && (adj > ProcessList.FOREGROUND_APP_ADJ
                         || schedGroup == ProcessList.SCHED_GROUP_BACKGROUND
@@ -1616,10 +1618,6 @@ public final class OomAdjuster {
                     if ((cr.flags & Context.BIND_WAIVE_PRIORITY) == 0) {
                         if (shouldSkipDueToCycle(app, client, procState, adj, cycleReEval)) {
                             continue;
-                        }
-
-                        if (clientProcState == PROCESS_STATE_FOREGROUND_SERVICE) {
-                            procStateFromFGSClient = true;
                         }
 
                         if (cr.hasFlag(Context.BIND_INCLUDE_CAPABILITIES)) {
@@ -1759,13 +1757,13 @@ public final class OomAdjuster {
                                 if (enabled) {
                                     if (cr.hasFlag(Context.BIND_INCLUDE_CAPABILITIES)) {
                                         // TOP process passes all capabilities to the service.
-                                        capability = PROCESS_CAPABILITY_ALL;
+                                        capability |= PROCESS_CAPABILITY_ALL;
                                     } else {
                                         // TOP process passes no capability to the service.
                                     }
                                 } else {
                                     // TOP process passes all capabilities to the service.
-                                    capability = PROCESS_CAPABILITY_ALL;
+                                    capability |= PROCESS_CAPABILITY_ALL;
                                 }
                             } else if (clientProcState
                                     <= PROCESS_STATE_FOREGROUND_SERVICE) {
@@ -2066,20 +2064,9 @@ public final class OomAdjuster {
         // apply capability from FGS.
         if (app.hasForegroundServices()) {
             capability |= capabilityFromFGS;
-        } else if (!ActivityManager.isProcStateBackground(procState)) {
-            // procState higher than PROCESS_STATE_BOUND_FOREGROUND_SERVICE implicitly has
-            // camera/microphone capability
-            if (procState == PROCESS_STATE_FOREGROUND_SERVICE && procStateFromFGSClient) {
-                // if the FGS state is passed down from client, do not grant implicit capabilities.
-            } else {
-                capability |= PROCESS_CAPABILITY_ALL_IMPLICIT;
-            }
         }
 
-        // TOP process has all capabilities.
-        if (procState <= PROCESS_STATE_TOP) {
-            capability = PROCESS_CAPABILITY_ALL;
-        }
+        capability |= getDefaultCapability(app, procState);
 
         // Do final modification to adj.  Everything we do between here and applying
         // the final setAdj must be done in this function, because we will also use
@@ -2097,6 +2084,30 @@ public final class OomAdjuster {
         // if curAdj or curProcState improved, then this process was promoted
         return app.curAdj < prevAppAdj || app.getCurProcState() < prevProcState
                 || app.curCapability != prevCapability ;
+    }
+
+    private int getDefaultCapability(ProcessRecord app, int procState) {
+        switch (procState) {
+            case PROCESS_STATE_PERSISTENT:
+            case PROCESS_STATE_PERSISTENT_UI:
+            case PROCESS_STATE_TOP:
+                return PROCESS_CAPABILITY_ALL;
+            case PROCESS_STATE_BOUND_TOP:
+                return PROCESS_CAPABILITY_ALL_IMPLICIT;
+            case PROCESS_STATE_FOREGROUND_SERVICE:
+                if (app.hasForegroundServices()) {
+                    // Capability from FGS are conditional depending on foreground service type in
+                    // manifest file and the mAllowWhileInUsePermissionInFgs flag.
+                    return PROCESS_CAPABILITY_NONE;
+                } else {
+                    // process has no FGS, the PROCESS_STATE_FOREGROUND_SERVICE is from client.
+                    return PROCESS_CAPABILITY_ALL_IMPLICIT;
+                }
+            case PROCESS_STATE_BOUND_FOREGROUND_SERVICE:
+                return PROCESS_CAPABILITY_ALL_IMPLICIT;
+            default:
+                return PROCESS_CAPABILITY_NONE;
+        }
     }
 
     /**
@@ -2213,7 +2224,8 @@ public final class OomAdjuster {
             }
             if (app.waitingToKill != null && app.curReceivers.isEmpty()
                     && app.setSchedGroup == ProcessList.SCHED_GROUP_BACKGROUND) {
-                app.kill(app.waitingToKill, ApplicationExitInfo.REASON_OTHER, true);
+                app.kill(app.waitingToKill, ApplicationExitInfo.REASON_USER_REQUESTED,
+                        ApplicationExitInfo.SUBREASON_UNKNOWN, true);
                 success = false;
             } else {
                 int processGroup;
@@ -2637,7 +2649,7 @@ public final class OomAdjuster {
         if (app.curAdj >= ProcessList.CACHED_APP_MIN_ADJ && !app.frozen) {
             mCachedAppOptimizer.freezeAppAsync(app);
         } else if (app.setAdj < ProcessList.CACHED_APP_MIN_ADJ && app.frozen) {
-            mCachedAppOptimizer.unfreezeAppAsync(app);
+            mCachedAppOptimizer.unfreezeAppLocked(app);
         }
     }
 }

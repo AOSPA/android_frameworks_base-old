@@ -365,8 +365,7 @@ public class ActivityStack extends Task {
             final PooledFunction f = PooledLambda.obtainFunction(
                     EnsureVisibleActivitiesConfigHelper::processActivity, this,
                     PooledLambda.__(ActivityRecord.class));
-            forAllActivities(f, start.getTask(), true /*includeBoundary*/,
-                    true /*traverseTopToBottom*/);
+            forAllActivities(f, start, true /*includeBoundary*/, true /*traverseTopToBottom*/);
             f.recycle();
 
             if (mUpdateConfig) {
@@ -1488,11 +1487,11 @@ public class ActivityStack extends Task {
 
         if (resumeNext) {
             final ActivityStack topStack = mRootWindowContainer.getTopDisplayFocusedStack();
-            if (!topStack.shouldSleepOrShutDownActivities()) {
+            if (topStack != null && !topStack.shouldSleepOrShutDownActivities()) {
                 mRootWindowContainer.resumeFocusedStacksTopActivities(topStack, prev, null);
             } else {
                 checkReadyForSleep();
-                ActivityRecord top = topStack.topRunningActivity();
+                final ActivityRecord top = topStack != null ? topStack.topRunningActivity() : null;
                 if (top == null || (prev != null && top != prev)) {
                     // If there are no more activities available to run, do resume anyway to start
                     // something. Also if the top activity on the stack is not the just paused
@@ -3338,7 +3337,7 @@ public class ActivityStack extends Task {
         if (DisplayContent.alwaysCreateStack(getWindowingMode(), getActivityType())) {
             // This stack will only contain one task, so just return itself since all stacks ara now
             // tasks and all tasks are now stacks.
-            task = reuseAsLeafTask(voiceSession, voiceInteractor, info, activity);
+            task = reuseAsLeafTask(voiceSession, voiceInteractor, intent, info, activity);
         } else {
             // Create child task since this stack can contain multiple tasks.
             final int taskId = activity != null
@@ -4003,15 +4002,8 @@ public class ActivityStack extends Task {
         proto.write(MIN_HEIGHT, mMinHeight);
 
         proto.write(FILLS_PARENT, matchParentBounds());
+        getRawBounds().dumpDebug(proto, BOUNDS);
 
-        if (!matchParentBounds()) {
-            final Rect bounds = getRequestedOverrideBounds();
-            bounds.dumpDebug(proto, BOUNDS);
-        } else if (getStack().getTile() != null) {
-            // use tile's bounds here for cts.
-            final Rect bounds = getStack().getTile().getRequestedOverrideBounds();
-            bounds.dumpDebug(proto, BOUNDS);
-        }
         getOverrideDisplayedBounds().dumpDebug(proto, DISPLAYED_BOUNDS);
         if (mLastNonFullscreenBounds != null) {
             mLastNonFullscreenBounds.dumpDebug(proto, LAST_NON_FULLSCREEN_BOUNDS);
