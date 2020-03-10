@@ -115,16 +115,8 @@ public class CellularTile extends QSTileImpl<SignalState> {
         return getCellularSettingIntent();
     }
 
-    @Override
-    protected void handleClick() {
+    private void handleClickInner() {
         if (getState().state == Tile.STATE_UNAVAILABLE) {
-            return;
-        }
-        if (mKeyguard.isSecure() && mKeyguard.isShowing()) {
-            Dependency.get(ActivityStarter.class).postQSRunnableDismissingKeyguard(() -> {
-                mHost.openPanels();
-                mDataController.setMobileDataEnabled(true);
-            });
             return;
         }
         if (mDataController.isMobileDataEnabled()) {
@@ -132,6 +124,18 @@ public class CellularTile extends QSTileImpl<SignalState> {
         } else {
             mDataController.setMobileDataEnabled(true);
         }
+    }
+
+    @Override
+    protected void handleClick() {
+        if (mKeyguard.isSecure() && mKeyguard.isShowing()) {
+            Dependency.get(ActivityStarter.class).postQSRunnableDismissingKeyguard(() -> {
+                mHost.openPanels();
+                handleClickInner();
+            });
+            return;
+        }
+        handleClickInner();
     }
 
     private void maybeShowDisableDialog() {
