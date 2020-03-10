@@ -19,6 +19,8 @@ package android.app.compat;
 import android.annotation.IntDef;
 import android.annotation.NonNull;
 
+import com.android.internal.annotations.Immutable;
+
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.util.Objects;
@@ -32,6 +34,7 @@ import java.util.Objects;
  *
  * @hide
  */
+@Immutable
 final class ChangeIdStateQuery {
 
     static final int QUERY_BY_PACKAGE_NAME = 0;

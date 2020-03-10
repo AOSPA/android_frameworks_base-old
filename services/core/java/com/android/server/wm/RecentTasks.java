@@ -1187,8 +1187,12 @@ class RecentTasks {
         mTasks.remove(task);
         notifyTaskRemoved(task, false /* wasTrimmed */, false /* killProcess */);
         if (task != null) {
-            final String taskPkgName =
-                  task.getBaseIntent().getComponent().getPackageName();
+            final Intent intent = task.getBaseIntent();
+            if (intent == null) return;
+            final ComponentName componentName = intent.getComponent();
+            if (componentName == null) return;
+
+            final String taskPkgName = componentName.getPackageName();
             if (mUxPerf != null) {
                 mUxPerf.perfUXEngine_events(BoostFramework.UXE_EVENT_KILL, 0, taskPkgName, 0);
             }

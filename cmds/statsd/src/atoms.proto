@@ -380,8 +380,8 @@ message Atom {
         BootTimeEventErrorCode boot_time_event_error_code_reported = 242 [(module) = "framework"];
         UserspaceRebootReported userspace_reboot_reported = 243 [(module) = "framework"];
         NotificationReported notification_reported = 244 [(module) = "framework"];
-        NotificationPanelReported notification_panel_reported = 245;
-        NotificationChannelModified notification_channel_modified = 246;
+        NotificationPanelReported notification_panel_reported = 245 [(module) = "sysui"];
+        NotificationChannelModified notification_channel_modified = 246 [(module) = "framework"];
         IntegrityCheckResultReported integrity_check_result_reported = 247 [(module) = "framework"];
         IntegrityRulesPushed integrity_rules_pushed = 248 [(module) = "framework"];
         CellBroadcastMessageReported cb_message_reported =
@@ -393,11 +393,15 @@ message Atom {
         WifiConnectionResultReported wifi_connection_result_reported = 253 [(module) = "wifi"];
         AppFreezeChanged app_freeze_changed = 254 [(module) = "framework"];
         SnapshotMergeReported snapshot_merge_reported = 255;
+        ForegroundServiceAppOpSessionEnded foreground_service_app_op_session_ended =
+            256  [(module) = "framework"];
+        DisplayJankReported display_jank_reported = 257;
+        AppStandbyBucketChanged app_standby_bucket_changed = 258 [(module) = "framework"];
         SdkExtensionStatus sdk_extension_status = 354;
     }
 
     // Pulled events will start at field 10000.
-    // Next: 10074
+    // Next: 10076
     oneof pulled {
         WifiBytesTransfer wifi_bytes_transfer = 10000 [(module) = "framework"];
         WifiBytesTransferByFgBg wifi_bytes_transfer_by_fg_bg = 10001 [(module) = "framework"];
@@ -478,6 +482,8 @@ message Atom {
                 10072 [(module) = "framework"];
         PackageNotificationChannelGroupPreferences package_notification_channel_group_preferences =
                 10073 [(module) = "framework"];
+        GnssStats gnss_stats = 10074 [(module) = "framework"];
+        AppFeaturesOps app_features_ops = 10075 [(module) = "framework"];
     }
 
     // DO NOT USE field numbers above 100,000 in AOSP.
@@ -976,6 +982,17 @@ message ScheduledJobStateChanged {
 
     // The job id (as assigned by the app).
     optional int32 job_id = 6;
+
+    // One flag for each of the API constraints defined by Jobscheduler. Does not include implcit
+    // constraints as they are always assumed to be set.
+    optional bool has_charging_constraint = 7;
+    optional bool has_battery_not_low_constraint = 8;
+    optional bool has_storage_not_low_constraint = 9;
+    optional bool has_timing_delay_constraint = 10;
+    optional bool has_deadline_constraint = 11;
+    optional bool has_idle_constraint = 12;
+    optional bool has_connectivity_constraint = 13;
+    optional bool has_content_trigger_constraint = 14;
 }
 
 /**
@@ -1211,18 +1228,8 @@ message WakeupAlarmOccurred {
     // Name of source package (for historical reasons, since BatteryStats tracked it).
     optional string package_name = 3;
 
-    // These enum values match the STANDBY_BUCKET_XXX constants defined in UsageStatsManager.java.
-    enum Bucket {
-        UNKNOWN = 0;
-        EXEMPTED = 5;
-        ACTIVE = 10;
-        WORKING_SET = 20;
-        FREQUENT = 30;
-        RARE = 40;
-        NEVER = 50;
-    }
     // The App Standby bucket of the app that scheduled the alarm at the time the alarm fired.
-    optional Bucket app_standby_bucket = 4;
+    optional AppStandbyBucketChanged.Bucket app_standby_bucket = 4;
 }
 
 /**
@@ -3283,12 +3290,12 @@ message OverlayStateChanged {
     ];
 }
 
-/*
+/**
  * Logs foreground service starts and stops.
  * Note that this is not when a service starts or stops, but when it is
  * considered foreground.
  * Logged from
- *     //frameworks/base/services/core/java/com/android/server/am/ActiveServices.java
+ *     frameworks/base/services/core/java/com/android/server/am/ActiveServices.java
  */
 message ForegroundServiceStateChanged {
     optional int32 uid = 1 [(is_uid) = true];
@@ -3300,6 +3307,49 @@ message ForegroundServiceStateChanged {
         EXIT = 2;
     }
     optional State state = 3;
+
+    // Whether the fgs is allowed while-in-use permissions, i.e. is considered 'in-use' to the user.
+    // (If the fgs was started while the app wasn't TOP it usually will be denied these permissions)
+    optional bool allow_while_in_use_permission = 4;
+}
+
+/**
+ * Logs the number of times a uid accesses a sensitive AppOp during a foreground service session.
+ * A foreground service session is any continuous period during which the uid holds at least one
+ * foreground service; the atom will be pushed when the uid no longer holds any foreground services.
+ * Accesses initiated while the uid is in the TOP state are ignored.
+ * Sessions with no attempted accesses are not logged.
+ * Logged from
+ *     frameworks/base/services/core/java/com/android/server/am/ActiveServices.java
+ */
+message ForegroundServiceAppOpSessionEnded {
+    optional int32 uid = 1 [(is_uid) = true];
+
+    // The operation's name.
+    // To the extent possible, preserve the mapping from AppOpsManager.OP_ constants.
+    // Only these named ops are actually logged.
+    enum AppOpName {
+        OP_NONE = -1; // Also represents UNKNOWN.
+        OP_COARSE_LOCATION = 0;
+        OP_FINE_LOCATION = 1;
+        OP_CAMERA = 26;
+        OP_RECORD_AUDIO = 27;
+    }
+    optional AppOpName app_op_name = 2 [default = OP_NONE];
+
+    // The uid's permission mode for accessing the AppOp during this fgs session.
+    enum Mode {
+        MODE_UNKNOWN = 0;
+        MODE_ALLOWED = 1; // Always allowed
+        MODE_IGNORED = 2; // Denied
+        MODE_FOREGROUND = 3; // Allow-while-in-use (or allowed-one-time)
+    }
+    optional Mode app_op_mode = 3;
+
+    // Number of times this AppOp was requested and allowed.
+    optional int32 count_ops_accepted = 4;
+    // Number of times this AppOp was requested but denied.
+    optional int32 count_ops_rejected = 5;
 }
 
 /**
@@ -3587,8 +3637,8 @@ message NotificationChannelModified {
     // The notifying app's uid and package.
     optional int32 uid = 2 [(is_uid) = true];
     optional string package_name = 3;
-    // App-assigned notification channel ID or channel-group ID
-    optional string channel_id = 4;
+    // Hash of app-assigned notification channel ID or channel-group ID
+    optional int32 channel_id_hash = 4;
     // Previous importance setting, if applicable
     optional android.stats.sysui.NotificationImportance old_importance = 5;
     // New importance setting
@@ -7547,6 +7597,51 @@ message AppOps {
 }
 
 /**
+ * Historical app ops data per package and features.
+ */
+message AppFeaturesOps {
+    // Uid of the package requesting the op
+    optional int32 uid = 1 [(is_uid) = true];
+
+    // Name of the package performing the op
+    optional string package_name = 2;
+
+    // feature id; provided by developer when accessing related API, limited at 50 chars by API.
+    // Features must be provided through manifest using <feature> tag available in R and above.
+    optional string feature_id = 3;
+
+    // operation id; maps to the OPSTR_* constants in AppOpsManager.java
+    optional string op = 4;
+
+    // The number of times the op was granted while the app was in the
+    // foreground (only for trusted requests)
+    optional int64 trusted_foreground_granted_count = 5;
+
+    // The number of times the op was granted while the app was in the
+    // background (only for trusted requests)
+    optional int64 trusted_background_granted_count = 6;
+
+    // The number of times the op was rejected while the app was in the
+    // foreground (only for trusted requests)
+    optional int64 trusted_foreground_rejected_count = 7;
+
+    // The number of times the op was rejected while the app was in the
+    // background (only for trusted requests)
+    optional int64 trusted_background_rejected_count = 8;
+
+    // For long-running operations, total duration of the operation
+    // while the app was in the foreground (only for trusted requests)
+    optional int64 trusted_foreground_duration_millis = 9;
+
+    // For long-running operations, total duration of the operation
+    // while the app was in the background (only for trusted requests)
+    optional int64 trusted_background_duration_millis = 10;
+
+    // Whether AppOps is guarded by Runtime permission
+    optional bool is_runtime_permission = 11;
+}
+
+/**
  * Location Manager API Usage information(e.g. API under usage,
  * API call's parameters).
  * Logged from:
@@ -8136,13 +8231,29 @@ message FrameTimingHistogram {
 }
 
 /**
+ * Janky event as reported by SurfaceFlinger.
+ * This event is intended to be consumed by a Perfetto subscriber for
+ * automated trace collection.
+ *
+ * Logged from:
+ *    frameworks/native/services/surfaceflinger/SurfaceFlinger.cpp
+ */
+message DisplayJankReported {
+    // Informational field for how long the janky event lasted in milliseconds
+    optional int64 event_duration_millis = 1;
+    // Number of frame deadlines missed, where SurfaceFlinger failed to update
+    // the display on time.
+    optional int32 present_deadlines_missed = 2;
+}
+
+/**
  * Information about camera facing and API level usage.
  * Logged from:
  *   frameworks/base/services/core/java/com/android/server/camera/CameraServiceProxy.java
  */
 message CameraActionEvent {
     // Camera session duration
-    optional int64 duration = 1;
+    optional int64 duration_millis = 1;
 
     // Camera API level used
     optional int32 api_level = 2;
@@ -8536,20 +8647,113 @@ message SdkExtensionStatus {
  *   frameworks/base/services/core/java/com/android/server/am/CachedAppOptimizer.java
  */
 message AppFreezeChanged {
-  // The type of event.
-  enum Action {
-    UNKNOWN = 0;
-    FREEZE_APP = 1;
-    UNFREEZE_APP = 2;
-  }
-  optional Action action = 1;
+    // The type of event.
+    enum Action {
+        UNKNOWN = 0;
+        FREEZE_APP = 1;
+        UNFREEZE_APP = 2;
+    }
+    optional Action action = 1;
 
-  // Pid of the process being frozen.
-  optional int32 pid = 2;
+    // Pid of the process being frozen.
+    optional int32 pid = 2;
 
-  // Name of the process being frozen.
-  optional string process_name = 3;
+    // Name of the process being frozen.
+    optional string process_name = 3;
 
-  // Time since last unfrozen.
-  optional int64 time_unfrozen_millis = 4;
+    // Time since last unfrozen.
+    optional int64 time_unfrozen_millis = 4;
+}
+
+/**
+ * Logs gnss stats from location service provider
+ *
+ * Pulled from:
+ *  frameworks/base/location/java/com/android/internal/location/gnssmetrics/GnssMetrics.java
+ */
+
+message GnssStats {
+    // Number of location reports since boot
+    optional int64 location_reports = 1;
+
+    // Total pulled reports of Location failures since boot
+    optional int64 location_failure_reports = 2;
+
+    // Number of time to first fix reports since boot
+    optional int64 time_to_first_fix_reports = 3;
+
+    // Total pulled reported time to first fix (in milli-seconds) since boot
+    optional int64 time_to_first_fix_milli_s = 4;
+
+    // Number of position accuracy reports since boot
+    optional int64 position_accuracy_reports = 5;
+
+    // Total pulled reported position accuracy (in meters) since boot
+    optional int64 position_accuracy_meters = 6;
+
+    // Number of top 4 average CN0 reports since boot
+    optional int64 top_four_average_cn0_reports = 7;
+
+    // Total pulled reported of top 4 average CN0 (dB-mHz) since boot
+    optional int64 top_four_average_cn0_db_mhz = 8;
+
+    // Number of l5 top 4 average CN0 reports since boot
+    optional int64 l5_top_four_average_cn0_reports = 9;
+
+    // Total pulled reported of l5 top 4 average CN0 (dB-mHz) since boot
+    optional int64 l5_top_four_average_cn0_db_mhz = 10;
+
+    // Total number of sv status messages reports since boot
+    optional int64 sv_status_reports = 11;
+
+    // Total number of sv status messages reports, where sv is used in fix since boot
+    optional int64 sv_status_reports_used_in_fix = 12;
+
+    // Total number of L5 sv status messages reports since boot
+    optional int64 l5_sv_status_reports = 13;
+
+    // Total number of L5 sv status messages reports, where sv is used in fix since boot
+    optional int64 l5_sv_status_reports_used_in_fix = 14;
+}
+
+/**
+ * Logs when an app is moved to a different standby bucket.
+ *
+ * Logged from:
+ *   frameworks/base/apex/jobscheduler/service/java/com/android/server/usage/AppIdleHistory.java
+ */
+message AppStandbyBucketChanged {
+    optional string package_name = 1;
+
+    // Should be 0, 10, 11, 12, etc. where 0 is the owner. See UserHandle for more documentation.
+    optional int32 user_id = 2;
+
+    // These enum values match the constants defined in UsageStatsManager.java.
+    enum Bucket {
+        BUCKET_UNKNOWN = 0;
+        BUCKET_EXEMPTED = 5;
+        BUCKET_ACTIVE = 10;
+        BUCKET_WORKING_SET = 20;
+        BUCKET_FREQUENT = 30;
+        BUCKET_RARE = 40;
+        BUCKET_RESTRICTED = 45;
+        BUCKET_NEVER = 50;
+    }
+    optional Bucket bucket = 3;
+
+    enum MainReason {
+        MAIN_UNKNOWN = 0;
+        MAIN_DEFAULT = 0x0100;
+        MAIN_TIMEOUT = 0x0200;
+        MAIN_USAGE = 0x0300;
+        MAIN_FORCED_BY_USER = 0x0400;
+        MAIN_PREDICTED = 0x0500;
+        MAIN_FORCED_BY_SYSTEM = 0x0600;
+    }
+    optional MainReason main_reason = 4;
+
+    // A more detailed reason for the standby bucket change. The sub reason name is dependent on
+    // the main reason. Values are one of the REASON_SUB_XXX constants defined in
+    // UsageStatsManager.java.
+    optional int32 sub_reason = 5;
 }

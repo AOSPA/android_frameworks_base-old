@@ -3058,6 +3058,13 @@ public class CarrierConfigManager {
             "ascii_7_bit_support_for_long_message_bool";
 
     /**
+     * Controls whether to show wifi calling icon in statusbar when wifi calling is available.
+     * @hide
+     */
+    public static final String KEY_SHOW_WIFI_CALLING_ICON_IN_STATUS_BAR_BOOL =
+            "show_wifi_calling_icon_in_status_bar_bool";
+
+    /**
      * Controls RSRP threshold at which OpportunisticNetworkService will decide whether
      * the opportunistic network is good enough for internet data.
      */
@@ -3483,7 +3490,7 @@ public class CarrierConfigManager {
      * @hide
      */
     public static final String KEY_DATA_SWITCH_VALIDATION_MIN_GAP_LONG =
-            "data_switch_validation_min_gap_LONG";
+            "data_switch_validation_min_gap_long";
 
     /**
     * A boolean property indicating whether this subscription should be managed as an opportunistic
@@ -3510,14 +3517,14 @@ public class CarrierConfigManager {
         /**
          * Delay in milliseconds to turn off wifi when IMS is registered over wifi.
          */
-        public static final String KEY_WIFI_OFF_DEFERRING_TIME_INT =
-                KEY_PREFIX + "wifi_off_deferring_time_int";
+        public static final String KEY_WIFI_OFF_DEFERRING_TIME_MILLIS_INT =
+                KEY_PREFIX + "wifi_off_deferring_time_millis_int";
 
         private Ims() {}
 
         private static PersistableBundle getDefaults() {
             PersistableBundle defaults = new PersistableBundle();
-            defaults.putInt(KEY_WIFI_OFF_DEFERRING_TIME_INT, 0);
+            defaults.putInt(KEY_WIFI_OFF_DEFERRING_TIME_MILLIS_INT, 4000);
             return defaults;
         }
     }
@@ -3574,6 +3581,30 @@ public class CarrierConfigManager {
      */
     public static final String KEY_SHOW_FORWARDED_NUMBER_BOOL =
             "show_forwarded_number_bool";
+
+    /**
+     * The list of originating address of missed incoming call SMS. If the SMS has originator
+     * matched, the SMS will be treated as special SMS for notifying missed incoming call to the
+     * user.
+     *
+     * @hide
+     */
+    public static final String KEY_MISSED_INCOMING_CALL_SMS_ORIGINATOR_STRING_ARRAY =
+            "missed_incoming_call_sms_originator_string_array";
+
+    /**
+     * The patterns of missed incoming call sms. This is the regular expression used for
+     * matching the missed incoming call's date, time, and caller id. The pattern should match
+     * fields for at least month, day, hour, and minute. Year is optional although it is encouraged.
+     *
+     * An usable pattern should look like this:
+     * ^(?<month>0[1-9]|1[012])\/(?<day>0[1-9]|1[0-9]|2[0-9]|3[0-1]) (?<hour>[0-1][0-9]|2[0-3]):
+     * (?<minute>[0-5][0-9])\s*(?<callerId>[0-9]+)\s*$
+     *
+     * @hide
+     */
+    public static final String KEY_MISSED_INCOMING_CALL_SMS_PATTERN_STRING_ARRAY =
+            "missed_incoming_call_sms_pattern_string_array";
 
      /**
      * Flag indicating whether carrier supports multianchor conference.
@@ -3755,7 +3786,7 @@ public class CarrierConfigManager {
         sDefaults.putInt(KEY_IMS_DTMF_TONE_DELAY_INT, 0);
         sDefaults.putInt(KEY_CDMA_DTMF_TONE_DELAY_INT, 100);
         sDefaults.putBoolean(KEY_CALL_FORWARDING_MAP_NON_NUMBER_TO_VOICEMAIL_BOOL, false);
-        sDefaults.putBoolean(KEY_IGNORE_RTT_MODE_SETTING_BOOL, false);
+        sDefaults.putBoolean(KEY_IGNORE_RTT_MODE_SETTING_BOOL, true);
         sDefaults.putInt(KEY_CDMA_3WAYCALL_FLASH_DELAY_INT , 0);
         sDefaults.putBoolean(KEY_SUPPORT_ADHOC_CONFERENCE_CALLS_BOOL, false);
         sDefaults.putBoolean(KEY_SUPPORT_ADD_CONFERENCE_PARTICIPANTS_BOOL, false);
@@ -4037,6 +4068,7 @@ public class CarrierConfigManager {
         sDefaults.putBoolean(KEY_UNMETERED_NR_NSA_MMWAVE_BOOL, false);
         sDefaults.putBoolean(KEY_UNMETERED_NR_NSA_SUB6_BOOL, false);
         sDefaults.putBoolean(KEY_ASCII_7_BIT_SUPPORT_FOR_LONG_MESSAGE_BOOL, false);
+        sDefaults.putBoolean(KEY_SHOW_WIFI_CALLING_ICON_IN_STATUS_BAR_BOOL, false);
         /* Default value is minimum RSRP level needed for SIGNAL_STRENGTH_GOOD */
         sDefaults.putInt(KEY_OPPORTUNISTIC_NETWORK_ENTRY_THRESHOLD_RSRP_INT, -108);
         /* Default value is minimum RSRP level needed for SIGNAL_STRENGTH_MODERATE */
@@ -4096,6 +4128,9 @@ public class CarrierConfigManager {
         sDefaults.putBoolean(ENABLE_EAP_METHOD_PREFIX_BOOL, false);
         sDefaults.putBoolean(KEY_SHOW_FORWARDED_NUMBER_BOOL, false);
         sDefaults.putLong(KEY_DATA_SWITCH_VALIDATION_MIN_GAP_LONG, TimeUnit.DAYS.toMillis(1));
+        sDefaults.putStringArray(KEY_MISSED_INCOMING_CALL_SMS_ORIGINATOR_STRING_ARRAY,
+                new String[0]);
+        sDefaults.putStringArray(KEY_MISSED_INCOMING_CALL_SMS_PATTERN_STRING_ARRAY, new String[0]);
         sDefaults.putBoolean(KEY_CARRIER_SUPPORTS_MULTIANCHOR_CONFERENCE, false);
     }
 
@@ -4109,7 +4144,8 @@ public class CarrierConfigManager {
         /** Prefix of all Wifi.KEY_* constants. */
         public static final String KEY_PREFIX = "wifi.";
         /**
-        * It contains the maximum client count definition that the carrier owns.
+        * It contains the maximum client count definition that the carrier sets.
+        * The default is 0, which means that the carrier hasn't set a requirement.
         */
         public static final String KEY_HOTSPOT_MAX_CLIENT_COUNT =
                 KEY_PREFIX + "hotspot_maximum_client_count";

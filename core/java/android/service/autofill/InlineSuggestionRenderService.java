@@ -31,7 +31,7 @@ import android.os.IBinder;
 import android.os.Looper;
 import android.os.RemoteException;
 import android.util.Log;
-import android.view.SurfaceControl;
+import android.view.Display;
 import android.view.SurfaceControlViewHost;
 import android.view.View;
 import android.view.WindowManager;
@@ -61,7 +61,8 @@ public abstract class InlineSuggestionRenderService extends Service {
     private final Handler mHandler = new Handler(Looper.getMainLooper(), null, true);
 
     private void handleRenderSuggestion(IInlineSuggestionUiCallback callback,
-            InlinePresentation presentation, int width, int height, IBinder hostInputToken) {
+            InlinePresentation presentation, int width, int height, IBinder hostInputToken,
+            int displayId) {
         if (hostInputToken == null) {
             try {
                 callback.onError();
@@ -70,26 +71,46 @@ public abstract class InlineSuggestionRenderService extends Service {
             }
             return;
         }
-        final SurfaceControlViewHost host = new SurfaceControlViewHost(this, this.getDisplay(),
-                hostInputToken);
-        final SurfaceControl surface = host.getSurfacePackage().getSurfaceControl();
 
-        final View suggestionView = onRenderSuggestion(presentation, width, height);
-
-        final InlineSuggestionRoot suggestionRoot = new InlineSuggestionRoot(this, callback);
-        suggestionRoot.addView(suggestionView);
-        suggestionRoot.setOnClickListener((v) -> {
-            try {
-                callback.onAutofill();
-            } catch (RemoteException e) {
-                Log.w(TAG, "RemoteException calling onAutofill()");
+        // When we create the UI it should be for the IME display
+        updateDisplay(displayId);
+        try {
+            final View suggestionView = onRenderSuggestion(presentation, width, height);
+            if (suggestionView == null) {
+                try {
+                    callback.onError();
+                } catch (RemoteException e) {
+                    Log.w(TAG, "Null suggestion view returned by renderer");
+                }
+                return;
             }
-        });
 
-        WindowManager.LayoutParams lp =
-                new WindowManager.LayoutParams(width, height,
-                        WindowManager.LayoutParams.TYPE_APPLICATION, 0, PixelFormat.TRANSPARENT);
-        host.addView(suggestionRoot, lp);
+            final InlineSuggestionRoot suggestionRoot = new InlineSuggestionRoot(this, callback);
+            suggestionRoot.addView(suggestionView);
+            WindowManager.LayoutParams lp =
+                    new WindowManager.LayoutParams(width, height,
+                            WindowManager.LayoutParams.TYPE_APPLICATION, 0,
+                            PixelFormat.TRANSPARENT);
+
+            final SurfaceControlViewHost host = new SurfaceControlViewHost(this, getDisplay(),
+                    hostInputToken);
+            host.addView(suggestionRoot, lp);
+            suggestionRoot.setOnClickListener((v) -> {
+                try {
+                    callback.onAutofill();
+                } catch (RemoteException e) {
+                    Log.w(TAG, "RemoteException calling onAutofill()");
+                }
+            });
+
+            sendResult(callback, host.getSurfacePackage());
+        } finally {
+            updateDisplay(Display.DEFAULT_DISPLAY);
+        }
+    }
+
+    private void sendResult(@NonNull IInlineSuggestionUiCallback callback,
+            @Nullable SurfaceControlViewHost.SurfacePackage surface) {
         try {
             callback.onContent(surface);
         } catch (RemoteException e) {
@@ -105,11 +126,11 @@ public abstract class InlineSuggestionRenderService extends Service {
                 @Override
                 public void renderSuggestion(@NonNull IInlineSuggestionUiCallback callback,
                         @NonNull InlinePresentation presentation, int width, int height,
-                        @Nullable IBinder hostInputToken) {
+                        @Nullable IBinder hostInputToken, int displayId) {
                     mHandler.sendMessage(obtainMessage(
                             InlineSuggestionRenderService::handleRenderSuggestion,
                             InlineSuggestionRenderService.this, callback, presentation,
-                            width, height, hostInputToken));
+                            width, height, hostInputToken, displayId));
                 }
             }.asBinder();
         }

@@ -383,6 +383,7 @@ final class CompatConfig {
             config.initConfigFromLib(Environment.buildPath(
                     apex.apexDirectory, "etc", "compatconfig"));
         }
+        config.invalidateCache();
         return config;
     }
 

@@ -29,16 +29,17 @@ import androidx.annotation.NonNull;
 
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.keyguard.KeyguardUpdateMonitor;
-import com.android.systemui.DumpController;
 import com.android.systemui.Dumpable;
 import com.android.systemui.classifier.brightline.BrightLineFalsingManager;
 import com.android.systemui.classifier.brightline.FalsingDataProvider;
 import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.dagger.qualifiers.UiBackground;
 import com.android.systemui.dock.DockManager;
+import com.android.systemui.dump.DumpManager;
 import com.android.systemui.plugins.FalsingManager;
 import com.android.systemui.plugins.FalsingPlugin;
 import com.android.systemui.plugins.PluginListener;
+import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.shared.plugins.PluginManager;
 import com.android.systemui.util.DeviceConfigProxy;
 import com.android.systemui.util.sensors.ProximitySensor;
@@ -69,19 +70,22 @@ public class FalsingManagerProxy implements FalsingManager, Dumpable {
     private final DockManager mDockManager;
     private final KeyguardUpdateMonitor mKeyguardUpdateMonitor;
     private Executor mUiBgExecutor;
+    private final StatusBarStateController mStatusBarStateController;
 
     @Inject
     FalsingManagerProxy(Context context, PluginManager pluginManager, @Main Executor executor,
             DisplayMetrics displayMetrics, ProximitySensor proximitySensor,
             DeviceConfigProxy deviceConfig, DockManager dockManager,
             KeyguardUpdateMonitor keyguardUpdateMonitor,
-            DumpController dumpController,
-            @UiBackground Executor uiBgExecutor) {
+            DumpManager dumpManager,
+            @UiBackground Executor uiBgExecutor,
+            StatusBarStateController statusBarStateController) {
         mDisplayMetrics = displayMetrics;
         mProximitySensor = proximitySensor;
         mDockManager = dockManager;
         mKeyguardUpdateMonitor = keyguardUpdateMonitor;
         mUiBgExecutor = uiBgExecutor;
+        mStatusBarStateController = statusBarStateController;
         mProximitySensor.setTag(PROXIMITY_SENSOR_TAG);
         mProximitySensor.setSensorDelay(SensorManager.SENSOR_DELAY_GAME);
         mDeviceConfig = deviceConfig;
@@ -110,7 +114,7 @@ public class FalsingManagerProxy implements FalsingManager, Dumpable {
 
         pluginManager.addPluginListener(mPluginListener, FalsingPlugin.class);
 
-        dumpController.registerDumpable("FalsingManager", this);
+        dumpManager.registerDumpable("FalsingManager", this);
     }
 
     private void onDeviceConfigPropertiesChanged(Context context, String namespace) {
@@ -143,7 +147,8 @@ public class FalsingManagerProxy implements FalsingManager, Dumpable {
                     mKeyguardUpdateMonitor,
                     mProximitySensor,
                     mDeviceConfig,
-                    mDockManager
+                    mDockManager,
+                    mStatusBarStateController
             );
         }
     }

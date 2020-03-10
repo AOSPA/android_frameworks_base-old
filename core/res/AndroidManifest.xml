@@ -550,6 +550,7 @@
     <protected-broadcast android:name="com.android.server.telecom.intent.action.CALLS_ADD_ENTRY" />
     <protected-broadcast android:name="com.android.settings.location.MODE_CHANGING" />
     <protected-broadcast android:name="com.android.settings.bluetooth.ACTION_DISMISS_PAIRING" />
+    <protected-broadcast android:name="com.android.settings.wifi.action.NETWORK_REQUEST" />
 
     <protected-broadcast android:name="NotificationManagerService.TIMEOUT" />
     <protected-broadcast android:name="ScheduleConditionProvider.EVALUATE" />
@@ -1855,6 +1856,9 @@
         android:protectionLevel="normal" />
 
     <!-- @SystemApi Allows an internal user to use privileged SecureElement APIs.
+         Applications holding this permission can access OMAPI reset system API
+         and bypass OMAPI AccessControlEnforcer.
+         <p>Not for use by third-party applications.
          @hide -->
     <permission android:name="android.permission.SECURE_ELEMENT_PRIVILEGED"
         android:protectionLevel="signature|privileged" />
@@ -5016,6 +5020,16 @@
     <!-- @hide @SystemApi Allows an application to access locusId events in the usage stats. -->
     <permission android:name="android.permission.ACCESS_LOCUS_ID_USAGE_STATS"
                 android:protectionLevel="signature|appPredictor" />
+
+    <!-- Feature Id for Country Detector. -->
+    <feature android:featureId="CountryDetector" android:label="@string/country_detector"/>
+    <!-- Feature Id for Location service. -->
+    <feature android:featureId="LocationService" android:label="@string/location_service"/>
+    <!-- Feature Id for Sensor Notification service. -->
+    <feature android:featureId="SensorNotificationService"
+             android:label="@string/sensor_notification_service"/>
+    <!-- Feature Id for Twilight service. -->
+    <feature android:featureId="TwilightService" android:label="@string/twilight_service"/>
 
     <application android:process="system"
                  android:persistent="true"
