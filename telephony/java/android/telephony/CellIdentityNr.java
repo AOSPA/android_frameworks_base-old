@@ -57,7 +57,7 @@ public final class CellIdentityNr extends CellIdentity {
         mPci = CellInfo.UNAVAILABLE;
         mTac = CellInfo.UNAVAILABLE;
         mNci = CellInfo.UNAVAILABLE;
-        mBands = Collections.emptyList();
+        mBands = new int[] {};
         mAdditionalPlmns = new ArraySet();
     }
 
