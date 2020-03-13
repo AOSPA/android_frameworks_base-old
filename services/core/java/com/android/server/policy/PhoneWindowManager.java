@@ -3932,7 +3932,11 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                     }
                 }
 
-                if ((result & ACTION_PASS_TO_USER) == 0) {
+                if (mUseTvRouting || mHandleVolumeKeysInWM || !mVolBtnMusicControls) {
+                    // Defer special key handlings to
+                    // {@link interceptKeyBeforeDispatching()}.
+                    result |= ACTION_PASS_TO_USER;
+                } else if ((result & ACTION_PASS_TO_USER) == 0) {
                     boolean mayChangeVolume = false;
 
                     if (isMusicActive()) {
@@ -3959,6 +3963,9 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                             // on key down events
                             mayChangeVolume = down;
                         }
+                    } else {
+                        result |= ACTION_PASS_TO_USER;
+                        break;
                     }
                     if (mayChangeVolume) {
                         // If we aren't passing to the user and no one else
@@ -4368,7 +4375,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         }
 
         boolean isDozing = isDozeMode();
-         if (isDozing && isVolumeKey(keyCode)) {
+        if (isDozing && isVolumeKey(keyCode)) {
             return false;
         }
 
