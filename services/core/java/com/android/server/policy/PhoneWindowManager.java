@@ -3785,6 +3785,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                         break;
                     }
                 }
+<<<<<<< HEAD   (ae6f48 [android-11.0.0_r15] RESTRICT AUTOMERGE Make task visible if)
                 if (mUseTvRouting || mHandleVolumeKeysInWM) {
                     // Defer special key handlings to
                     // {@link interceptKeyBeforeDispatching()}.
@@ -3795,6 +3796,56 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                     // figure out.
                     MediaSessionLegacyHelper.getHelper(mContext).sendVolumeKeyEvent(
                             event, AudioManager.USE_DEFAULT_STREAM_TYPE, true);
+=======
+
+                if (mUseTvRouting || mHandleVolumeKeysInWM || !mVolBtnMusicControls) {
+                    // Defer special key handlings to
+                    // {@link interceptKeyBeforeDispatching()}.
+                    result |= ACTION_PASS_TO_USER;
+                } else if ((result & ACTION_PASS_TO_USER) == 0) {
+                    boolean mayChangeVolume = false;
+
+                    if (isMusicActive()) {
+                        if (mVolBtnMusicControls && (keyCode != KeyEvent.KEYCODE_VOLUME_MUTE)) {
+                            // Detect long key presses.
+                            if (down) {
+                                mVolBtnLongPress = false;
+                                int newKeyCode = event.getKeyCode() == KeyEvent.KEYCODE_VOLUME_UP ?
+                                        KeyEvent.KEYCODE_MEDIA_NEXT : KeyEvent.KEYCODE_MEDIA_PREVIOUS;
+                                scheduleLongPressKeyEvent(event, newKeyCode);
+                                // Consume key down events of all presses.
+                                break;
+                            } else {
+                                mHandler.removeMessages(MSG_DISPATCH_VOLKEY_WITH_WAKE_LOCK);
+                                // Consume key up events of long presses only.
+                                if (mVolBtnLongPress) {
+                                    break;
+                                }
+                                // Change volume only on key up events of short presses.
+                                mayChangeVolume = true;
+                            }
+                        } else {
+                            // Long key press detection not applicable, change volume only
+                            // on key down events
+                            mayChangeVolume = down;
+                        }
+                    } else {
+                        result |= ACTION_PASS_TO_USER;
+                        break;
+                    }
+                    if (mayChangeVolume) {
+                        // If we aren't passing to the user and no one else
+                        // handled it send it to the session manager to figure
+                        // out.
+
+                        // Rewrite the event to use key-down as sendVolumeKeyEvent will
+                        // only change the volume on key down.
+                        KeyEvent newEvent = new KeyEvent(KeyEvent.ACTION_DOWN, keyCode);
+                        MediaSessionLegacyHelper.getHelper(mContext).sendVolumeKeyEvent(
+                                newEvent, AudioManager.USE_DEFAULT_STREAM_TYPE, true);
+                    }
+                    break;
+>>>>>>> CHANGE (51cde4 AudioService: Allow volume-key long press even when screen i)
                 }
                 break;
             }
@@ -4183,6 +4234,14 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             return false;
         }
 
+<<<<<<< HEAD   (ae6f48 [android-11.0.0_r15] RESTRICT AUTOMERGE Make task visible if)
+=======
+        boolean isDozing = isDozeMode();
+        if (isDozing && isVolumeKey(keyCode)) {
+            return false;
+        }
+
+>>>>>>> CHANGE (51cde4 AudioService: Allow volume-key long press even when screen i)
         // Send events to keyguard while the screen is on and it's showing.
         if (isKeyguardShowingAndNotOccluded() && !displayOff) {
             return true;

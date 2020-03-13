@@ -536,6 +536,8 @@ public class AudioService extends IAudioService.Stub
     private ForceControlStreamClient mForceControlStreamClient = null;
     // Used to play ringtones outside system_server
     private volatile IRingtonePlayer mRingtonePlayer;
+    // Used to detect volume key long-press when screen is off
+    private static boolean mScreenOn = true;
 
     // Devices for which the volume is fixed (volume is either max or muted)
     Set<Integer> mFixedVolumeDevices = new HashSet<>(Arrays.asList(
@@ -2001,6 +2003,9 @@ public class AudioService extends IAudioService.Stub
             flags &= ~AudioManager.FLAG_PLAY_SOUND;
             flags &= ~AudioManager.FLAG_VIBRATE;
             if (DEBUG_VOL) Log.d(TAG, "Volume controller suppressed adjustment");
+        } else if (!mScreenOn) {
+            // We don't need to show UI when screen is off
+            flags &= ~AudioManager.FLAG_SHOW_UI;
         }
 
         adjustStreamVolume(streamType, direction, flags, callingPackage, caller, uid,
@@ -6645,12 +6650,14 @@ public class AudioService extends IAudioService.Stub
                     RotationHelper.enable();
                 }
                 AudioSystem.setParameters("screen_state=on");
+                mScreenOn = true;
             } else if (action.equals(Intent.ACTION_SCREEN_OFF)) {
                 if (mMonitorRotation) {
                     //reduce wakeups (save current) by only listening when display is on
                     RotationHelper.disable();
                 }
                 AudioSystem.setParameters("screen_state=off");
+                mScreenOn = false;
             } else if (action.equals(Intent.ACTION_CONFIGURATION_CHANGED)) {
                 handleConfigurationChanged(context);
             } else if (action.equals(Intent.ACTION_USER_SWITCHED)) {
@@ -7706,13 +7713,18 @@ public class AudioService extends IAudioService.Stub
                 }
 
                 final long now = SystemClock.uptimeMillis();
+<<<<<<< HEAD   (ae6f48 [android-11.0.0_r15] RESTRICT AUTOMERGE Make task visible if)
                 if ((flags & AudioManager.FLAG_SHOW_UI) != 0 && !mVisible) {
                     // UI is not visible yet, adjustment is ignored
+=======
+                if ((flags & AudioManager.FLAG_SHOW_UI) != 0 && !mVisible && mScreenOn) {
+                    // ui will become visible
+>>>>>>> CHANGE (51cde4 AudioService: Allow volume-key long press even when screen i)
                     if (mNextLongPress < now) {
                         mNextLongPress = now + mLongPressTimeout;
                     }
                     suppress = true;
-                } else if (mNextLongPress > 0) {  // in a long-press
+                } else if (mNextLongPress > 0 && mScreenOn) {  // in a long-press
                     if (now > mNextLongPress) {
                         // long press triggered, no more suppression
                         mNextLongPress = 0;
