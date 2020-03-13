@@ -599,8 +599,8 @@ public class ScreenDecorations extends SystemUI implements Tunable,
                 mRoundedDefaultTop = newRoundedDefaultTop;
                 mRoundedDefaultBottom = newRoundedDefaultBottom;
             }
+            onTuningChanged(SIZE, null);
         }
-        onTuningChanged(SIZE, null);
     }
 
     private void updateViews() {
