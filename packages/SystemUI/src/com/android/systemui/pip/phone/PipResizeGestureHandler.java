@@ -41,6 +41,7 @@ import android.view.MotionEvent;
 import com.android.internal.policy.TaskResizingAlgorithm;
 import com.android.systemui.R;
 import com.android.systemui.pip.PipBoundsHandler;
+import com.android.systemui.pip.PipTaskOrganizer;
 import com.android.systemui.util.DeviceConfigProxy;
 
 import java.util.concurrent.Executor;
@@ -74,12 +75,13 @@ public class PipResizeGestureHandler {
 
     private InputMonitor mInputMonitor;
     private InputEventReceiver mInputEventReceiver;
+    private PipTaskOrganizer mPipTaskOrganizer;
 
     private int mCtrlType;
 
     public PipResizeGestureHandler(Context context, PipBoundsHandler pipBoundsHandler,
             PipTouchHandler pipTouchHandler, PipMotionHelper motionHelper,
-            DeviceConfigProxy deviceConfig) {
+            DeviceConfigProxy deviceConfig, PipTaskOrganizer pipTaskOrganizer) {
         final Resources res = context.getResources();
         context.getDisplay().getMetrics(mDisplayMetrics);
         mDisplayId = context.getDisplayId();
@@ -87,6 +89,7 @@ public class PipResizeGestureHandler {
         mPipBoundsHandler = pipBoundsHandler;
         mPipTouchHandler = pipTouchHandler;
         mMotionHelper = motionHelper;
+        mPipTaskOrganizer = pipTaskOrganizer;
 
         context.getDisplay().getRealSize(mMaxSize);
         mDelta = res.getDimensionPixelSize(R.dimen.pip_resize_edge_size);

@@ -81,7 +81,7 @@ import static android.view.WindowManager.LayoutParams.TYPE_PRIORITY_PHONE;
 import static android.view.WindowManager.LayoutParams.TYPE_PRIVATE_PRESENTATION;
 import static android.view.WindowManager.LayoutParams.TYPE_SEARCH_BAR;
 import static android.view.WindowManager.LayoutParams.TYPE_STATUS_BAR;
-import static android.view.WindowManager.LayoutParams.TYPE_STATUS_BAR_PANEL;
+import static android.view.WindowManager.LayoutParams.TYPE_STATUS_BAR_ADDITIONAL;
 import static android.view.WindowManager.LayoutParams.TYPE_STATUS_BAR_SUB_PANEL;
 import static android.view.WindowManager.LayoutParams.TYPE_SYSTEM_DIALOG;
 import static android.view.WindowManager.LayoutParams.TYPE_TOAST;
@@ -657,7 +657,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
     private boolean mIsDimming = false;
 
     private @Nullable InsetsSourceProvider mControllableInsetProvider;
-    private InsetsState mRequestedInsetsState;
+    private final InsetsState mRequestedInsetsState = new InsetsState();
 
     private static final float DEFAULT_DIM_AMOUNT_DEAD_WINDOW = 0.5f;
     private KeyInterceptionInfo mKeyInterceptionInfo;
@@ -816,9 +816,6 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         mSeq = seq;
         mPowerManagerWrapper = powerManagerWrapper;
         mForceSeamlesslyRotate = token.mRoundedCornerOverlay;
-        mRequestedInsetsState = new InsetsState(
-                getDisplayContent().getInsetsPolicy().getInsetsForDispatch(this),
-                true /* copySources */);
         if (DEBUG) {
             Slog.v(TAG, "Window " + this + " client=" + c.asBinder()
                             + " token=" + token + " (" + mAttrs.token + ")" + " params=" + a);
@@ -3209,7 +3206,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
             case TYPE_SEARCH_BAR:
             case TYPE_STATUS_BAR:
             case TYPE_NOTIFICATION_SHADE:
-            case TYPE_STATUS_BAR_PANEL:
+            case TYPE_STATUS_BAR_ADDITIONAL:
             case TYPE_STATUS_BAR_SUB_PANEL:
             case TYPE_SYSTEM_DIALOG:
             case TYPE_VOLUME_OVERLAY:

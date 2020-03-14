@@ -253,8 +253,7 @@ class TaskOrganizerController extends ITaskOrganizerController.Stub
                 final int nextId = display.getNextStackId();
                 TaskTile tile = new TaskTile(mService, nextId, windowingMode);
                 display.addTile(tile);
-                RunningTaskInfo out = new RunningTaskInfo();
-                tile.fillTaskInfo(out);
+                RunningTaskInfo out = tile.getTaskInfo();
                 mLastSentTaskInfos.put(tile, out);
                 return out;
             }
@@ -412,9 +411,7 @@ class TaskOrganizerController extends ITaskOrganizerController.Stub
                                 && !ArrayUtils.contains(activityTypes, as.getActivityType())) {
                             continue;
                         }
-                        final RunningTaskInfo info = new RunningTaskInfo();
-                        as.fillTaskInfo(info);
-                        out.add(info);
+                        out.add(as.getTaskInfo());
                     }
                 }
                 return out;
@@ -447,9 +444,7 @@ class TaskOrganizerController extends ITaskOrganizerController.Stub
                             && !ArrayUtils.contains(activityTypes, task.getActivityType())) {
                         continue;
                     }
-                    final RunningTaskInfo info = new RunningTaskInfo();
-                    task.fillTaskInfo(info);
-                    out.add(info);
+                    out.add(task.getTaskInfo());
                 }
                 return out;
             }
@@ -468,8 +463,9 @@ class TaskOrganizerController extends ITaskOrganizerController.Stub
         int configMask = change.getConfigSetMask();
         int windowMask = change.getWindowSetMask();
         configMask &= ActivityInfo.CONFIG_WINDOW_CONFIGURATION
-                | ActivityInfo.CONFIG_SMALLEST_SCREEN_SIZE;
-        windowMask &= WindowConfiguration.WINDOW_CONFIG_BOUNDS;
+                | ActivityInfo.CONFIG_SMALLEST_SCREEN_SIZE | ActivityInfo.CONFIG_SCREEN_SIZE;
+        windowMask &= (WindowConfiguration.WINDOW_CONFIG_BOUNDS
+                | WindowConfiguration.WINDOW_CONFIG_APP_BOUNDS);
         int effects = 0;
         if (configMask != 0) {
             Configuration c = new Configuration(container.getRequestedOverrideConfiguration());

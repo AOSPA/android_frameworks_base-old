@@ -83,6 +83,8 @@ import static android.os.Process.setProcessGroup;
 import static android.os.Process.setCgroupProcsProcessGroup;
 import static android.os.Process.setThreadPriority;
 import static android.os.Process.setThreadScheduler;
+import static android.permission.PermissionManager.KILL_APP_REASON_GIDS_CHANGED;
+import static android.permission.PermissionManager.KILL_APP_REASON_PERMISSIONS_REVOKED;
 import static android.provider.Settings.Global.ALWAYS_FINISH_ACTIVITIES;
 import static android.provider.Settings.Global.DEBUG_APP;
 import static android.provider.Settings.Global.NETWORK_ACCESS_TIMEOUT_MS;
@@ -4315,7 +4317,8 @@ public class ActivityManagerService extends IActivityManager.Stub
                 }
                 synchronized (this) {
                     mProcessList.killPackageProcessesLocked(packageName, appId, targetUserId,
-                            ProcessList.SERVICE_ADJ, "kill background");
+                            ProcessList.SERVICE_ADJ, ApplicationExitInfo.REASON_USER_REQUESTED,
+                            ApplicationExitInfo.SUBREASON_UNKNOWN, "kill background");
                 }
             }
         } finally {
@@ -4341,7 +4344,10 @@ public class ActivityManagerService extends IActivityManager.Stub
                 // because this method is also used to simulate low memory.
                 mAllowLowerMemLevel = true;
                 mProcessList.killPackageProcessesLocked(null /* packageName */, -1 /* appId */,
-                        UserHandle.USER_ALL, ProcessList.CACHED_APP_MIN_ADJ, "kill all background");
+                        UserHandle.USER_ALL, ProcessList.CACHED_APP_MIN_ADJ,
+                        ApplicationExitInfo.REASON_USER_REQUESTED,
+                        ApplicationExitInfo.SUBREASON_UNKNOWN,
+                        "kill all background");
 
                 doLowMemReportIfNeededLocked(null);
             }
@@ -4833,6 +4839,9 @@ public class ActivityManagerService extends IActivityManager.Stub
         boolean didSomething = mProcessList.killPackageProcessesLocked(packageName, appId, userId,
                 ProcessList.INVALID_ADJ, callerWillRestart, false /* allowRestart */, doit,
                 evenPersistent, true /* setRemoved */,
+                packageName == null ? ApplicationExitInfo.REASON_USER_STOPPED
+                        : ApplicationExitInfo.REASON_USER_REQUESTED,
+                ApplicationExitInfo.SUBREASON_UNKNOWN,
                 packageName == null ? ("stop user " + userId) : ("stop " + packageName));
 
         didSomething |=
@@ -4896,7 +4905,10 @@ public class ActivityManagerService extends IActivityManager.Stub
     @GuardedBy("this")
     private final void processContentProviderPublishTimedOutLocked(ProcessRecord app) {
         cleanupAppInLaunchingProvidersLocked(app, true);
-        mProcessList.removeProcessLocked(app, false, true, "timeout publishing content providers");
+        mProcessList.removeProcessLocked(app, false, true,
+                ApplicationExitInfo.REASON_INITIALIZATION_FAILURE,
+                ApplicationExitInfo.SUBREASON_UNKNOWN,
+                "timeout publishing content providers");
     }
 
     @GuardedBy("this")
@@ -5001,7 +5013,7 @@ public class ActivityManagerService extends IActivityManager.Stub
             if (pid > 0 && pid != MY_PID) {
                 killProcessQuiet(pid);
                 //TODO: killProcessGroup(app.info.uid, pid);
-                mProcessList.noteAppKill(app, ApplicationExitInfo.REASON_OTHER,
+                mProcessList.noteAppKill(app, ApplicationExitInfo.REASON_INITIALIZATION_FAILURE,
                         ApplicationExitInfo.SUBREASON_UNKNOWN, "attach failed");
             } else {
                 try {
@@ -9134,7 +9146,8 @@ public class ActivityManagerService extends IActivityManager.Stub
                 }
                 int adj = proc.setAdj;
                 if (adj >= worstType && !proc.killedByAm) {
-                    proc.kill(reason, ApplicationExitInfo.REASON_OTHER, true);
+                    proc.kill(reason, ApplicationExitInfo.REASON_OTHER,
+                            ApplicationExitInfo.SUBREASON_KILL_PID, true);
                     killed = true;
                 }
             }
@@ -9148,10 +9161,17 @@ public class ActivityManagerService extends IActivityManager.Stub
         synchronized (this) {
             final long identity = Binder.clearCallingIdentity();
             try {
+                boolean permissionChange = KILL_APP_REASON_PERMISSIONS_REVOKED.equals(reason)
+                        || KILL_APP_REASON_GIDS_CHANGED.equals(reason);
                 mProcessList.killPackageProcessesLocked(null /* packageName */, appId, userId,
                         ProcessList.PERSISTENT_PROC_ADJ, false /* callerWillRestart */,
                         true /* callerWillRestart */, true /* doit */, true /* evenPersistent */,
-                        false /* setRemoved */, reason != null ? reason : "kill uid");
+                        false /* setRemoved */,
+                        permissionChange ? ApplicationExitInfo.REASON_PERMISSION_CHANGE
+                        : ApplicationExitInfo.REASON_OTHER,
+                        permissionChange ? ApplicationExitInfo.SUBREASON_UNKNOWN
+                        : ApplicationExitInfo.SUBREASON_KILL_UID,
+                        reason != null ? reason : "kill uid");
             } finally {
                 Binder.restoreCallingIdentity(identity);
             }
@@ -9476,7 +9496,10 @@ public class ActivityManagerService extends IActivityManager.Stub
                 for (int i=procsToKill.size()-1; i>=0; i--) {
                     ProcessRecord proc = procsToKill.get(i);
                     Slog.i(TAG, "Removing system update proc: " + proc);
-                    mProcessList.removeProcessLocked(proc, true, false, "system update done");
+                    mProcessList.removeProcessLocked(proc, true, false,
+                            ApplicationExitInfo.REASON_OTHER,
+                            ApplicationExitInfo.SUBREASON_SYSTEM_UPDATE_DONE,
+                            "system update done");
                 }
             }
 
@@ -14480,7 +14503,8 @@ public class ActivityManagerService extends IActivityManager.Stub
                             + cpr.name.flattenToShortString()
                             + " in dying proc " + (proc != null ? proc.processName : "??")
                             + " (adj " + (proc != null ? proc.setAdj : "??") + ")",
-                            ApplicationExitInfo.REASON_OTHER,
+                            ApplicationExitInfo.REASON_DEPENDENCY_DIED,
+                            ApplicationExitInfo.SUBREASON_UNKNOWN,
                             true);
                 }
             } else if (capp.thread != null && conn.provider.provider != null) {
@@ -15972,7 +15996,10 @@ public class ActivityManagerService extends IActivityManager.Stub
                                                 -1);
                                         mProcessList.killPackageProcessesLocked(ssp,
                                                 UserHandle.getAppId(extraUid),
-                                                userId, ProcessList.INVALID_ADJ, "change " + ssp);
+                                                userId, ProcessList.INVALID_ADJ,
+                                                ApplicationExitInfo.REASON_USER_REQUESTED,
+                                                ApplicationExitInfo.SUBREASON_UNKNOWN,
+                                                "change " + ssp);
                                     }
                                     cleanupDisabledPackageComponentsLocked(ssp, userId,
                                             intent.getStringArrayExtra(
@@ -18709,7 +18736,10 @@ public class ActivityManagerService extends IActivityManager.Stub
 
                 final int N = procs.size();
                 for (int i = 0; i < N; i++) {
-                    mProcessList.removeProcessLocked(procs.get(i), false, true, "kill all fg");
+                    mProcessList.removeProcessLocked(procs.get(i), false, true,
+                            ApplicationExitInfo.REASON_OTHER,
+                            ApplicationExitInfo.SUBREASON_KILL_ALL_FG,
+                            "kill all fg");
                 }
             }
         }
@@ -18931,7 +18961,8 @@ public class ActivityManagerService extends IActivityManager.Stub
                     final ProcessRecord pr = (ProcessRecord) wpc.mOwner;
                     if (pr.setSchedGroup == ProcessList.SCHED_GROUP_BACKGROUND
                             && pr.curReceivers.isEmpty()) {
-                        pr.kill("remove task", ApplicationExitInfo.REASON_OTHER, true);
+                        pr.kill("remove task", ApplicationExitInfo.REASON_USER_REQUESTED,
+                                ApplicationExitInfo.SUBREASON_UNKNOWN, true);
                     } else {
                         // We delay killing processes that are not in the background or running a
                         // receiver.
@@ -18948,7 +18979,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                         true /* keepIfLarge */);
                 if (proc != null) {
                     mProcessList.removeProcessLocked(proc, false /* callerWillRestart */,
-                            true /* allowRestart */, reason);
+                            true /* allowRestart */,  ApplicationExitInfo.REASON_OTHER, reason);
                 }
             }
         }
@@ -19634,7 +19665,10 @@ public class ActivityManagerService extends IActivityManager.Stub
         try {
             synchronized(this) {
                 mProcessList.killPackageProcessesLocked(packageName, UserHandle.getAppId(pkgUid),
-                        userId, ProcessList.FOREGROUND_APP_ADJ, "dep: " + packageName);
+                        userId, ProcessList.FOREGROUND_APP_ADJ,
+                        ApplicationExitInfo.REASON_DEPENDENCY_DIED,
+                        ApplicationExitInfo.SUBREASON_UNKNOWN,
+                        "dep: " + packageName);
             }
         } finally {
             Binder.restoreCallingIdentity(callingId);

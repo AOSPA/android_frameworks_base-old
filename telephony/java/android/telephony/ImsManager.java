@@ -74,17 +74,17 @@ public class ImsManager {
             "android.telephony.ims.action.WFC_IMS_REGISTRATION_ERROR";
 
     /**
-     * An extra key corresponding to a String value which contains the carrier specific title to be
-     * displayed as part of the message shown to the user when there is an error registering for
-     * WiFi calling.
+     * An extra key corresponding to a {@link CharSequence} value which contains the carrier
+     * specific title to be displayed as part of the message shown to the user when there is an
+     * error registering for WiFi calling.
      */
     public static final String EXTRA_WFC_REGISTRATION_FAILURE_TITLE =
             "android.telephony.ims.extra.WFC_REGISTRATION_FAILURE_TITLE";
 
     /**
-     * An extra key corresponding to a String value which contains the carrier specific message to
-     * be displayed as part of the message shown to the user when there is an error registering for
-     * WiFi calling.
+     * An extra key corresponding to a {@link CharSequence} value which contains the carrier
+     * specific message to  be displayed as part of the message shown to the user when there is an
+     * error registering for WiFi calling.
      */
     public static final String EXTRA_WFC_REGISTRATION_FAILURE_MESSAGE =
             "android.telephony.ims.extra.WFC_REGISTRATION_FAILURE_MESSAGE";
@@ -103,10 +103,7 @@ public class ImsManager {
      * @param subscriptionId The ID of the subscription that this ImsRcsManager will use.
      * @throws IllegalArgumentException if the subscription is invalid.
      * @return a ImsRcsManager instance with the specific subscription ID.
-     * @hide
      */
-    @SystemApi
-    @TestApi
     @NonNull
     public ImsRcsManager getImsRcsManager(int subscriptionId) {
         if (!SubscriptionManager.isValidSubscriptionId(subscriptionId)) {
