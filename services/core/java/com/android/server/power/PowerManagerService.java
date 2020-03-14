@@ -527,7 +527,8 @@ public final class PowerManagerService extends SystemService
     // Gestures
     private boolean mGesturesEnabled;
 
-    private boolean mSupportsDoubleTapWakeConfig;
+    private boolean mSupportsDoubleTapConfig;
+    private boolean mSupportsSingleTapConfig;
     private boolean mSupportsDrawVConfig;
     private boolean mSupportsDrawInverseVConfig;
     private boolean mSupportsDrawOConfig;
@@ -543,7 +544,8 @@ public final class PowerManagerService extends SystemService
     private boolean mSupportsTwoFingerSwipeConfig;
 
     // True if double tap to wake is enabled
-    private boolean mDoubleTapWakeEnabled;
+    private boolean mDoubleTapEnabled;
+    private boolean mSingleTapEnabled;
     private boolean mDrawVEnabled;
     private boolean mDrawInverseVEnabled;
     private boolean mDrawOEnabled;
@@ -560,7 +562,7 @@ public final class PowerManagerService extends SystemService
 
     // Power features defined in hardware/libhardware/include/hardware/power.h.
     private static final int POWER_FEATURE_GESTURES = 1;
-    private static final int POWER_FEATURE_DOUBLE_TAP_TO_WAKE = 2;
+    private static final int POWER_FEATURE_DOUBLE_TAP = 2;
     private static final int POWER_FEATURE_DRAW_V = 3;
     private static final int POWER_FEATURE_DRAW_INVERSE_V = 4;
     private static final int POWER_FEATURE_DRAW_O = 5;
@@ -574,6 +576,7 @@ public final class PowerManagerService extends SystemService
     private static final int POWER_FEATURE_ONE_FINGER_SWIPE_LEFT = 13;
     private static final int POWER_FEATURE_TWO_FINGER_SWIPE = 14;
     private static final int POWER_FEATURE_DRAW_S = 15;
+    private static final int POWER_FEATURE_SINGLE_TAP = 16;
 
     // True if we are currently in VR Mode.
     private boolean mIsVrModeEnabled;
@@ -831,9 +834,9 @@ public final class PowerManagerService extends SystemService
             mNativeWrapper.nativeSetAutoSuspend(false);
             mNativeWrapper.nativeSetInteractive(true);
             mNativeWrapper.nativeSetFeature(POWER_FEATURE_GESTURES, 0);
-            mNativeWrapper.nativeSetFeature(POWER_FEATURE_DOUBLE_TAP_TO_WAKE, 0);
+            mNativeWrapper.nativeSetFeature(POWER_FEATURE_DOUBLE_TAP, 0);
             mNativeWrapper.nativeSetFeature(POWER_FEATURE_GESTURES, 0);
-            mNativeWrapper.nativeSetFeature(POWER_FEATURE_DOUBLE_TAP_TO_WAKE, 0);
+            mNativeWrapper.nativeSetFeature(POWER_FEATURE_DOUBLE_TAP, 0);
             mNativeWrapper.nativeSetFeature(POWER_FEATURE_DRAW_V, 0);
             mNativeWrapper.nativeSetFeature(POWER_FEATURE_DRAW_INVERSE_V, 0);
             mNativeWrapper.nativeSetFeature(POWER_FEATURE_DRAW_O, 0);
@@ -847,6 +850,7 @@ public final class PowerManagerService extends SystemService
             mNativeWrapper.nativeSetFeature(POWER_FEATURE_ONE_FINGER_SWIPE_DOWN, 0);
             mNativeWrapper.nativeSetFeature(POWER_FEATURE_ONE_FINGER_SWIPE_LEFT, 0);
             mNativeWrapper.nativeSetFeature(POWER_FEATURE_TWO_FINGER_SWIPE, 0);
+            mNativeWrapper.nativeSetFeature(POWER_FEATURE_SINGLE_TAP, 0);
         }
     }
 
@@ -973,6 +977,9 @@ public final class PowerManagerService extends SystemService
                 Settings.System.GESTURE_DOUBLE_TAP),
                 false, mSettingsObserver, UserHandle.USER_ALL);
         resolver.registerContentObserver(Settings.System.getUriFor(
+                Settings.System.GESTURE_SINGLE_TAP),
+                false, mSettingsObserver, UserHandle.USER_ALL);
+        resolver.registerContentObserver(Settings.System.getUriFor(
                 Settings.System.GESTURE_DRAW_V),
                 false, mSettingsObserver, UserHandle.USER_ALL);
         resolver.registerContentObserver(Settings.System.getUriFor(
@@ -1088,8 +1095,10 @@ public final class PowerManagerService extends SystemService
                 com.android.internal.R.integer.config_maximumScreenDimDuration);
         mMaximumScreenDimRatioConfig = resources.getFraction(
                 com.android.internal.R.fraction.config_maximumScreenDimRatio, 1, 1);
-        mSupportsDoubleTapWakeConfig = resources.getInteger(
+        mSupportsDoubleTapConfig = resources.getInteger(
                 com.android.internal.R.integer.config_doubleTapKeyCode) > 0;
+        mSupportsSingleTapConfig = resources.getInteger(
+                com.android.internal.R.integer.config_singleTapKeyCode) > 0;
         mSupportsDrawVConfig = resources.getInteger(
                 com.android.internal.R.integer.config_drawVKeyCode) > 0;
         mSupportsDrawInverseVConfig = resources.getInteger(
@@ -1153,15 +1162,27 @@ public final class PowerManagerService extends SystemService
         }
         mAlwaysOnEnabled = mAmbientDisplayConfiguration.alwaysOnEnabled(UserHandle.USER_CURRENT);
 
-        if (mSupportsDoubleTapWakeConfig) {
-            boolean doubleTapWakeEnabled = Settings.System.getIntForUser(resolver,
+        if (mSupportsDoubleTapConfig) {
+            boolean doubleTapEnabled = Settings.System.getIntForUser(resolver,
                     Settings.System.GESTURE_DOUBLE_TAP, mContext.getResources()
                     .getInteger(com.android.internal.R.integer.config_doubleTapDefault),
                     UserHandle.USER_CURRENT) > 0;
-            if (doubleTapWakeEnabled != mDoubleTapWakeEnabled) {
-                mDoubleTapWakeEnabled = doubleTapWakeEnabled;
-                mNativeWrapper.nativeSetFeature(POWER_FEATURE_DOUBLE_TAP_TO_WAKE,
-                        mDoubleTapWakeEnabled && mGesturesEnabled ? 1 : 0);
+            if (doubleTapEnabled != mDoubleTapEnabled) {
+                mDoubleTapEnabled = doubleTapEnabled;
+                mNativeWrapper.nativeSetFeature(POWER_FEATURE_DOUBLE_TAP,
+                        mDoubleTapEnabled && mGesturesEnabled ? 1 : 0);
+            }
+        }
+
+        if (mSupportsSingleTapConfig) {
+            boolean singleTapEnabled = Settings.System.getIntForUser(resolver,
+                    Settings.System.GESTURE_SINGLE_TAP, mContext.getResources()
+                    .getInteger(com.android.internal.R.integer.config_singleTapDefault),
+                    UserHandle.USER_CURRENT) > 0;
+            if (singleTapEnabled != mSingleTapEnabled) {
+                mSingleTapEnabled = singleTapEnabled;
+                mNativeWrapper.nativeSetFeature(POWER_FEATURE_SINGLE_TAP,
+                        mSingleTapEnabled && mGesturesEnabled ? 1 : 0);
             }
         }
 
@@ -3791,7 +3812,8 @@ public final class PowerManagerService extends SystemService
             pw.println("  mIsVrModeEnabled=" + mIsVrModeEnabled);
             pw.println("  mForegroundProfile=" + mForegroundProfile);
             pw.println("  mGesturesEnabled=" + mGesturesEnabled);
-            pw.println("  mDoubleTapWakeEnabled=" + mDoubleTapWakeEnabled);
+            pw.println("  mDoubleTapEnabled=" + mDoubleTapEnabled);
+            pw.println("  mSingleTapEnabled=" + mSingleTapEnabled);
             pw.println("  mDrawVEnabled=" + mDrawVEnabled);
             pw.println("  mDrawInverseVEnabled=" + mDrawInverseVEnabled);
             pw.println("  mDrawOEnabled=" + mDrawOEnabled);
@@ -4152,7 +4174,7 @@ public final class PowerManagerService extends SystemService
 
             proto.write(
                     PowerServiceSettingsAndConfigurationDumpProto.IS_DOUBLE_TAP_WAKE_ENABLED,
-                    mDoubleTapWakeEnabled);
+                    mDoubleTapEnabled);
             proto.write(
                     PowerServiceSettingsAndConfigurationDumpProto.IS_VR_MODE_ENABLED,
                     mIsVrModeEnabled);
