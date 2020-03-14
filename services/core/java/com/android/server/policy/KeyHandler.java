@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016, ParanoidAndroid Project
+ * Copyright (C) 2020, Paranoid Android
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -116,6 +116,7 @@ public class KeyHandler {
     private boolean mSystemReady = false;
 
     private int mDoubleTapKeyCode;
+    private int mSingleTapKeyCode;
     private int mDrawOKeyCode;
     private int mTwoFingerSwipeKeyCode;
     private int mDrawVKeyCode;
@@ -131,6 +132,7 @@ public class KeyHandler {
     private int mDrawSKeyCode;
 
     private int mDoubleTapGesture;
+    private int mSingleTapGesture;
     private int mDrawOGesture;
     private int mTwoFingerSwipeGesture;
     private int mDrawVGesture;
@@ -219,6 +221,7 @@ public class KeyHandler {
 
         // Gestures device key codes.
         mDoubleTapKeyCode = resources.getInteger(R.integer.config_doubleTapKeyCode);
+        mSingleTapKeyCode = resources.getInteger(R.integer.config_singleTapKeyCode);
         mDrawOKeyCode = resources.getInteger(R.integer.config_drawOKeyCode);
         mTwoFingerSwipeKeyCode = resources.getInteger(R.integer.config_twoFingerSwipeKeyCode);
         mDrawVKeyCode = resources.getInteger(R.integer.config_drawVKeyCode);
@@ -235,6 +238,7 @@ public class KeyHandler {
 
         mGestures.clear();
         mGestures.put(mDoubleTapKeyCode, mDoubleTapGesture);
+        mGestures.put(mSingleTapKeyCode, mSingleTapGesture);
         mGestures.put(mDrawOKeyCode, mDrawOGesture);
         mGestures.put(mTwoFingerSwipeKeyCode, mTwoFingerSwipeGesture);
         mGestures.put(mDrawVKeyCode, mDrawVGesture);
@@ -266,6 +270,14 @@ public class KeyHandler {
         if (doubleTapGesture != mDoubleTapGesture) {
             mDoubleTapGesture = doubleTapGesture;
             mGestures.put(mDoubleTapKeyCode, mDoubleTapGesture);
+        }
+
+        int singleTapGesture = Settings.System.getInt(mContext.getContentResolver(),
+                Settings.System.GESTURE_SINGLE_TAP, mContext.getResources()
+                        .getInteger(com.android.internal.R.integer.config_singleTapDefault));
+        if (singleTapGesture != mSingleTapGesture) {
+            mSingleTapGesture = singleTapGesture;
+            mGestures.put(mSingleTapKeyCode, mSingleTapGesture);
         }
 
         int drawOGesture = Settings.System.getInt(mContext.getContentResolver(),
@@ -453,6 +465,9 @@ public class KeyHandler {
                 false, mObserver, UserHandle.USER_ALL);
         resolver.registerContentObserver(Settings.System.getUriFor(
                 Settings.System.GESTURE_DOUBLE_TAP),
+                false, mObserver, UserHandle.USER_ALL);
+        resolver.registerContentObserver(Settings.System.getUriFor(
+                Settings.System.GESTURE_SINGLE_TAP),
                 false, mObserver, UserHandle.USER_ALL);
         resolver.registerContentObserver(Settings.System.getUriFor(
                 Settings.System.GESTURE_DRAW_V),

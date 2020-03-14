@@ -4528,6 +4528,12 @@ public final class Settings {
         public static final String GESTURE_DOUBLE_TAP = "gesture_double_tap";
 
         /**
+         * Controls whether single tap to wake is enabled.
+         * @hide
+         */
+        public static final String GESTURE_SINGLE_TAP = "gesture_single_tap";
+
+        /**
          * Controls whether draw V gesture is enabled.
          * @hide
          */
@@ -4872,6 +4878,7 @@ public final class Settings {
             PRIVATE_SETTINGS.add(DISPLAY_COLOR_MODE);
             PRIVATE_SETTINGS.add(GESTURES_ENABLED);
             PRIVATE_SETTINGS.add(GESTURE_DOUBLE_TAP);
+            PRIVATE_SETTINGS.add(GESTURE_SINGLE_TAP);
             PRIVATE_SETTINGS.add(GESTURE_DRAW_V);
             PRIVATE_SETTINGS.add(GESTURE_DRAW_INVERSE_V);
             PRIVATE_SETTINGS.add(GESTURE_DRAW_O);
