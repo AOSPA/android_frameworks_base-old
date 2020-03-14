@@ -1708,9 +1708,7 @@
   <java-symbol type="dimen" name="docked_stack_divider_insets" />
   <java-symbol type="dimen" name="docked_stack_minimize_thickness" />
   <java-symbol type="dimen" name="pip_minimized_visible_size" />
-  <java-symbol type="dimen" name="pip_fling_deceleration" />
   <java-symbol type="integer" name="config_dockedStackDividerSnapMode" />
-  <java-symbol type="integer" name="config_pictureInPictureSnapMode" />
   <java-symbol type="fraction" name="docked_stack_divider_fixed_ratio" />
   <java-symbol type="fraction" name="thumbnail_fullscreen_scale" />
   <java-symbol type="integer" name="thumbnail_width_tv" />
@@ -3257,6 +3255,10 @@
   <java-symbol type="string" name="config_defaultAccessibilityService" />
   <java-symbol type="string" name="accessibility_shortcut_spoken_feedback" />
 
+  <java-symbol type="string" name="accessibility_select_shortcut_menu_title" />
+  <java-symbol type="string" name="accessibility_edit_shortcut_menu_button_title" />
+  <java-symbol type="string" name="accessibility_edit_shortcut_menu_volume_title" />
+
   <!-- Accessibility Button -->
   <java-symbol type="layout" name="accessibility_button_chooser_item" />
   <java-symbol type="id" name="accessibility_button_target_icon" />
@@ -3901,7 +3903,9 @@
   <java-symbol type="color" name="resolver_tabs_active_color" />
   <java-symbol type="color" name="resolver_tabs_inactive_color" />
   <java-symbol type="string" name="resolver_personal_tab" />
+  <java-symbol type="string" name="resolver_personal_tab_accessibility" />
   <java-symbol type="string" name="resolver_work_tab" />
+  <java-symbol type="string" name="resolver_work_tab_accessibility" />
   <java-symbol type="id" name="stub" />
   <java-symbol type="id" name="resolver_empty_state" />
   <java-symbol type="id" name="resolver_empty_state_icon" />
@@ -3913,18 +3917,22 @@
   <java-symbol type="string" name="resolver_cant_share_with_work_apps" />
   <java-symbol type="string" name="resolver_cant_share_with_personal_apps" />
   <java-symbol type="string" name="resolver_cant_share_cross_profile_explanation" />
-  <java-symbol type="string" name="resolver_turn_on_work_apps" />
-  <java-symbol type="string" name="resolver_turn_on_work_apps_explanation" />
+  <java-symbol type="string" name="resolver_cant_access_work_apps" />
+  <java-symbol type="string" name="resolver_cant_access_work_apps_explanation" />
+  <java-symbol type="string" name="resolver_cant_access_personal_apps" />
+  <java-symbol type="string" name="resolver_cant_access_personal_apps_explanation" />
+  <java-symbol type="string" name="resolver_turn_on_work_apps_view" />
+  <java-symbol type="string" name="resolver_turn_on_work_apps_share" />
   <java-symbol type="string" name="resolver_no_apps_available" />
-  <java-symbol type="string" name="resolver_no_apps_available_explanation" />
-  <java-symbol type="string" name="resolver_no_apps_available_explanation" />
   <java-symbol type="string" name="resolver_switch_on_work" />
   <java-symbol type="drawable" name="ic_work_apps_off" />
   <java-symbol type="drawable" name="ic_sharing_disabled" />
   <java-symbol type="drawable" name="ic_no_apps" />
   <java-symbol type="dimen" name="resolver_empty_state_height" />
   <java-symbol type="dimen" name="resolver_empty_state_height_with_tabs" />
+  <java-symbol type="dimen" name="resolver_max_collapsed_height_with_tabs" />
   <java-symbol type="bool" name="sharesheet_show_content_preview" />
+  <java-symbol type="dimen" name="resolver_tab_divider_bottom_padding" />
 
   <!-- Toast message for background started foreground service while-in-use permission restriction feature -->
   <java-symbol type="string" name="allow_while_in_use_permission_in_fgs" />
@@ -3939,6 +3947,9 @@
   <java-symbol type="array" name="config_toastCrossUserPackages" />
 
   <java-symbol type="string" name="notification_history_title_placeholder" />
+
+  <java-symbol type="string" name="config_customMediaKeyDispatcher" />
+  <java-symbol type="string" name="config_customSessionPolicyProvider" />
 
   <!-- For Pdn throttle feature -->
   <java-symbol type="bool" name="config_pdp_retry_for_29_33_55_enabled" />

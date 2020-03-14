@@ -2691,6 +2691,27 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
         }
     }
 
+    /**
+     * If the device is in Device Owner mode, apply the restriction on adding
+     * a managed profile.
+     */
+    @GuardedBy("getLockObject()")
+    void applyManagedProfileRestrictionIfDeviceOwnerLocked() {
+        final int doUserId = mOwners.getDeviceOwnerUserId();
+        if (doUserId == UserHandle.USER_NULL) {
+            logIfVerbose("No DO found, skipping application of restriction.");
+            return;
+        }
+
+        final UserHandle doUserHandle = UserHandle.of(doUserId);
+        // Set the restriction if not set.
+        if (!mUserManager.hasUserRestriction(
+                UserManager.DISALLOW_ADD_MANAGED_PROFILE, doUserHandle)) {
+            mUserManager.setUserRestriction(UserManager.DISALLOW_ADD_MANAGED_PROFILE, true,
+                    doUserHandle);
+        }
+    }
+
     /** Apply default restrictions that haven't been applied to profile owners yet. */
     private void maybeSetDefaultProfileOwnerUserRestrictions() {
         synchronized (getLockObject()) {
@@ -3297,22 +3318,24 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
     }
 
 
-    public DeviceAdminInfo findAdmin(ComponentName adminName, int userHandle,
+    public DeviceAdminInfo findAdmin(final ComponentName adminName, final int userHandle,
             boolean throwForMissingPermission) {
         if (!mHasFeature) {
             return null;
         }
         enforceFullCrossUsersPermission(userHandle);
-        ActivityInfo ai = null;
-        try {
-            ai = mIPackageManager.getReceiverInfo(adminName,
-                    PackageManager.GET_META_DATA |
-                    PackageManager.MATCH_DISABLED_UNTIL_USED_COMPONENTS |
-                    PackageManager.MATCH_DIRECT_BOOT_AWARE |
-                    PackageManager.MATCH_DIRECT_BOOT_UNAWARE, userHandle);
-        } catch (RemoteException e) {
-            // shouldn't happen.
-        }
+        final ActivityInfo ai = mInjector.binderWithCleanCallingIdentity(() -> {
+            try {
+                return mIPackageManager.getReceiverInfo(adminName,
+                        PackageManager.GET_META_DATA
+                        | PackageManager.MATCH_DISABLED_UNTIL_USED_COMPONENTS
+                        | PackageManager.MATCH_DIRECT_BOOT_AWARE
+                        | PackageManager.MATCH_DIRECT_BOOT_UNAWARE, userHandle);
+            } catch (RemoteException e) {
+                // shouldn't happen.
+                return null;
+            }
+        });
         if (ai == null) {
             throw new IllegalArgumentException("Unknown admin: " + adminName);
         }
@@ -3899,6 +3922,7 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
                 maybeStartSecurityLogMonitorOnActivityManagerReady();
                 synchronized (getLockObject()) {
                     migrateToProfileOnOrganizationOwnedDeviceIfCompLocked();
+                    applyManagedProfileRestrictionIfDeviceOwnerLocked();
                 }
                 final int userId = getManagedUserId(UserHandle.USER_SYSTEM);
                 if (userId >= 0) {
@@ -8762,6 +8786,7 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
         mOwners.writeProfileOwner(userId);
         deleteTransferOwnershipBundleLocked(userId);
         toggleBackupServiceActive(userId, true);
+        applyManagedProfileRestrictionIfDeviceOwnerLocked();
     }
 
     @Override
@@ -10910,9 +10935,14 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
 
     private void enforcePackageIsSystemPackage(String packageName, int userId)
             throws RemoteException {
-        if (!isSystemApp(mIPackageManager, packageName, userId)) {
-            throw new IllegalArgumentException(
-                    "The provided package is not a system package");
+        boolean isSystem;
+        try {
+            isSystem = isSystemApp(mIPackageManager, packageName, userId);
+        } catch (IllegalArgumentException e) {
+            isSystem = false;
+        }
+        if (!isSystem) {
+            throw new IllegalArgumentException("The provided package is not a system package");
         }
     }
 

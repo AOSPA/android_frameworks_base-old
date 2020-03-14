@@ -24,6 +24,7 @@ import android.content.Intent
 import android.content.ServiceConnection
 import android.content.SharedPreferences
 import android.graphics.drawable.Drawable
+import android.graphics.drawable.LayerDrawable
 import android.os.IBinder
 import android.service.controls.Control
 import android.service.controls.TokenProvider
@@ -152,12 +153,19 @@ class ControlsUiControllerImpl @Inject constructor (
     private lateinit var lastItems: List<SelectionItem>
     private var popup: ListPopupWindow? = null
 
-    private val addControlsItem = SelectionItem(
-        context.resources.getString(R.string.controls_providers_title),
-        "",
-        context.getDrawable(R.drawable.ic_add),
-        EMPTY_COMPONENT
-    )
+    private val addControlsItem: SelectionItem
+
+    init {
+        val addDrawable = context.getDrawable(R.drawable.ic_add).apply {
+            setTint(context.resources.getColor(R.color.control_secondary_text, null))
+        }
+        addControlsItem = SelectionItem(
+            context.resources.getString(R.string.controls_providers_title),
+            "",
+            addDrawable,
+            EMPTY_COMPONENT
+        )
+    }
 
     override val available: Boolean
         get() = controlsController.get().available
@@ -293,8 +301,16 @@ class ControlsUiControllerImpl @Inject constructor (
          * for this dialog. Use a textView with the ListPopupWindow to achieve
          * a similar effect
          */
+        val item = adapter.findSelectionItem(selectedStructure) ?: adapter.getItem(0)
         parent.requireViewById<TextView>(R.id.app_or_structure_spinner).apply {
-            setText((adapter.findSelectionItem(selectedStructure) ?: adapter.getItem(0)).getTitle())
+            setText(item.getTitle())
+            // override the default color on the dropdown drawable
+            (getBackground() as LayerDrawable).getDrawable(1)
+                .setTint(context.resources.getColor(R.color.control_spinner_dropdown, null))
+        }
+        parent.requireViewById<ImageView>(R.id.app_icon).apply {
+            setContentDescription(item.getTitle())
+            setImageDrawable(item.icon)
         }
         val anchor = parent.requireViewById<ViewGroup>(R.id.controls_header)
         anchor.setOnClickListener(object : View.OnClickListener {
@@ -330,11 +346,6 @@ class ControlsUiControllerImpl @Inject constructor (
                 }
             }
         })
-
-        parent.requireViewById<ImageView>(R.id.app_icon).apply {
-            setContentDescription("My Home")
-            setImageDrawable(items[0].icon)
-        }
     }
 
     private fun loadPreference(structures: List<StructureInfo>): StructureInfo {
@@ -368,7 +379,8 @@ class ControlsUiControllerImpl @Inject constructor (
             if (newSelection != selectedStructure) {
                 selectedStructure = newSelection
                 updatePreferences(selectedStructure)
-                showControlsView(lastItems)
+                controlsListingController.get().removeCallback(listingCallback)
+                show(parent)
             }
         }
     }

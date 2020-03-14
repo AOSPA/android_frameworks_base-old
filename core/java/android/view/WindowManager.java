@@ -1026,7 +1026,11 @@ public interface WindowManager extends ViewManager {
         /**
          * Window type: panel that slides out from over the status bar
          * In multiuser systems shows on all users' windows.
+         *
+         * @deprecated This became API by accident and was never intended to be used for
+         * applications.
          */
+        @Deprecated
         public static final int TYPE_STATUS_BAR_PANEL   = FIRST_SYSTEM_WINDOW+14;
 
         /**
@@ -1219,6 +1223,14 @@ public interface WindowManager extends ViewManager {
          * @hide
          */
         public static final int TYPE_NOTIFICATION_SHADE = FIRST_SYSTEM_WINDOW + 40;
+
+        /**
+         * Window type: used to show the status bar in non conventional parts of the screen (i.e.
+         * the left or the bottom of the screen).
+         * In multiuser systems shows on all users' windows.
+         * @hide
+         */
+        public static final int TYPE_STATUS_BAR_ADDITIONAL = FIRST_SYSTEM_WINDOW + 41;
 
         /**
          * End of types of system windows.
@@ -1575,7 +1587,7 @@ public interface WindowManager extends ViewManager {
          *
          * {@sample development/samples/ApiDemos/res/layout/overscan_activity.xml complete}
          *
-         * @deprecated Overscan areas aren't set by any Android product anymore.
+         * @deprecated Overscan areas aren't set by any Android product anymore as of Android 11.
          */
         @Deprecated
         public static final int FLAG_LAYOUT_IN_OVERSCAN = 0x02000000;
@@ -2765,7 +2777,7 @@ public interface WindowManager extends ViewManager {
          * setting in the system settings menu. In that case, this field is ignored and the display
          * will remain in its current mode.
          *
-         * @see android.content.pm.ActivityInfo#preferMinimalPostProcessing
+         * @see android.content.pm.ActivityInfo#FLAG_PREFER_MINIMAL_POST_PROCESSING
          * @see android.view.Display#isMinimalPostProcessingSupported
          * @see android.view.Window#setPreferMinimalPostProcessing
          */

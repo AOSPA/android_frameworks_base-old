@@ -184,8 +184,8 @@
     <!-- Vertical translation of pulsing notification animations -->
     <dimen name="pulsing_notification_appear_translation">10dp</dimen>
 
-    <!-- The amount the content shifts upwards when transforming into the icon -->
-    <dimen name="notification_icon_transform_content_shift">32dp</dimen>
+    <!-- The amount the content shifts upwards when transforming into the shelf -->
+    <dimen name="shelf_transform_content_shift">32dp</dimen>
 
     <!-- The padding on the bottom of the notifications on the keyguard -->
     <dimen name="keyguard_indication_bottom_padding">12sp</dimen>
@@ -983,6 +983,9 @@
     <!-- The touchable/draggable edge size for PIP resize. -->
     <dimen name="pip_resize_edge_size">30dp</dimen>
 
+    <!-- The corner radius for PiP window. -->
+    <dimen name="pip_corner_radius">8dp</dimen>
+
     <dimen name="default_gear_space">18dp</dimen>
     <dimen name="cell_overlay_padding">18dp</dimen>
 
@@ -1183,6 +1186,9 @@
     <dimen name="bubble_dismiss_target_padding_x">40dp</dimen>
     <dimen name="bubble_dismiss_target_padding_y">20dp</dimen>
 
+    <dimen name="dismiss_circle_size">52dp</dimen>
+    <dimen name="dismiss_target_x_size">24dp</dimen>
+
     <!-- Bubbles user education views -->
     <dimen name="bubbles_manage_education_width">160dp</dimen>
     <!-- The inset from the top bound of the manage button to place the user education. -->
@@ -1216,11 +1222,18 @@
     <dimen name="magnifier_up_down_controls_height">40dp</dimen>
 
     <!-- Home Controls -->
+    <dimen name="controls_header_side_margin">32dp</dimen>
+    <dimen name="controls_header_app_icon_size">40dp</dimen>
+    <dimen name="controls_list_side_margin">16dp</dimen>
+    <dimen name="controls_top_margin">44dp</dimen>
+    <dimen name="control_header_text_size">22sp</dimen>
+    <dimen name="control_text_size">14sp</dimen>
     <dimen name="control_spacing">4dp</dimen>
     <dimen name="control_list_divider">1dp</dimen>
-    <dimen name="control_corner_radius">15dp</dimen>
-    <dimen name="control_height">100dp</dimen>
-    <dimen name="control_padding">15dp</dimen>
+    <dimen name="control_corner_radius">12dp</dimen>
+    <dimen name="control_height">106dp</dimen>
+    <dimen name="control_padding">12dp</dimen>
+    <dimen name="control_padding_adjustment">4dp</dimen>
     <dimen name="control_status_normal">12sp</dimen>
     <dimen name="control_status_expanded">18sp</dimen>
     <dimen name="control_base_item_margin">2dp</dimen>
@@ -1242,6 +1255,10 @@
     <dimen name="controls_app_divider_side_margin">32dp</dimen>
 
     <dimen name="controls_card_margin">2dp</dimen>
+    <item name="control_card_elevation" type="dimen" format="float">15</item>
+
+    <dimen name="controls_dialog_padding">8dp</dimen>
+    <dimen name="controls_dialog_control_width">200dp</dimen>
 
     <!-- Screen Record -->
     <dimen name="screenrecord_dialog_padding">18dp</dimen>

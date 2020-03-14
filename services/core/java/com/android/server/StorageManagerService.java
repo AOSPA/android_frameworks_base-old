@@ -336,6 +336,8 @@ class StorageManagerService extends IStorageManager.Stub
             Manifest.permission.WRITE_EXTERNAL_STORAGE
     };
 
+    @Nullable public static String sMediaStoreAuthorityProcessName;
+
     private final AtomicFile mSettingsFile;
 
     /**
@@ -1841,6 +1843,7 @@ class StorageManagerService extends IStorageManager.Stub
                 UserHandle.getUserId(UserHandle.USER_SYSTEM));
         if (provider != null) {
             mMediaStoreAuthorityAppId = UserHandle.getAppId(provider.applicationInfo.uid);
+            sMediaStoreAuthorityProcessName = provider.applicationInfo.processName;
         }
 
         provider = mPmInternal.resolveContentProvider(

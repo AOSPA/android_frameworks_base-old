@@ -23,6 +23,9 @@ import android.os.Handler;
 import android.os.PowerManager;
 import android.util.DisplayMetrics;
 
+import com.android.car.notification.CarNotificationListener;
+import com.android.car.notification.CarUxRestrictionManagerWrapper;
+import com.android.car.notification.NotificationDataManager;
 import com.android.internal.logging.MetricsLogger;
 import com.android.keyguard.KeyguardUpdateMonitor;
 import com.android.keyguard.ViewMediatorCallback;
@@ -30,8 +33,8 @@ import com.android.systemui.InitController;
 import com.android.systemui.assist.AssistManager;
 import com.android.systemui.broadcast.BroadcastDispatcher;
 import com.android.systemui.bubbles.BubbleController;
+import com.android.systemui.car.CarDeviceProvisionedController;
 import com.android.systemui.car.CarServiceProvider;
-import com.android.systemui.car.SystemUIPrimaryWindowController;
 import com.android.systemui.colorextraction.SysuiColorExtractor;
 import com.android.systemui.dagger.qualifiers.UiBackground;
 import com.android.systemui.keyguard.DismissCallbackRegistry;
@@ -48,6 +51,7 @@ import com.android.systemui.shared.plugins.PluginManager;
 import com.android.systemui.stackdivider.Divider;
 import com.android.systemui.statusbar.CommandQueue;
 import com.android.systemui.statusbar.FlingAnimationUtils;
+import com.android.systemui.statusbar.KeyguardIndicationController;
 import com.android.systemui.statusbar.NavigationBarController;
 import com.android.systemui.statusbar.NotificationLockscreenUserManager;
 import com.android.systemui.statusbar.NotificationMediaManager;
@@ -58,13 +62,12 @@ import com.android.systemui.statusbar.SuperStatusBarViewFactory;
 import com.android.systemui.statusbar.SysuiStatusBarStateController;
 import com.android.systemui.statusbar.VibratorHelper;
 import com.android.systemui.statusbar.dagger.StatusBarDependenciesModule;
-import com.android.systemui.statusbar.notification.BypassHeadsUpNotifier;
 import com.android.systemui.statusbar.notification.DynamicPrivacyController;
-import com.android.systemui.statusbar.notification.NotificationAlertingManager;
-import com.android.systemui.statusbar.notification.NotificationInterruptionStateProvider;
 import com.android.systemui.statusbar.notification.NotificationWakeUpCoordinator;
 import com.android.systemui.statusbar.notification.VisualStabilityManager;
 import com.android.systemui.statusbar.notification.init.NotificationsController;
+import com.android.systemui.statusbar.notification.interruption.BypassHeadsUpNotifier;
+import com.android.systemui.statusbar.notification.interruption.NotificationInterruptStateProvider;
 import com.android.systemui.statusbar.notification.logging.NotificationLogger;
 import com.android.systemui.statusbar.notification.row.NotificationGutsManager;
 import com.android.systemui.statusbar.notification.row.NotificationRowModule;
@@ -93,7 +96,6 @@ import com.android.systemui.statusbar.phone.dagger.StatusBarComponent;
 import com.android.systemui.statusbar.phone.dagger.StatusBarPhoneDependenciesModule;
 import com.android.systemui.statusbar.policy.BatteryController;
 import com.android.systemui.statusbar.policy.ConfigurationController;
-import com.android.systemui.statusbar.policy.DeviceProvisionedController;
 import com.android.systemui.statusbar.policy.ExtensionController;
 import com.android.systemui.statusbar.policy.KeyguardStateController;
 import com.android.systemui.statusbar.policy.NetworkController;
@@ -143,10 +145,9 @@ public class CarStatusBarModule {
             RemoteInputQuickSettingsDisabler remoteInputQuickSettingsDisabler,
             NotificationGutsManager notificationGutsManager,
             NotificationLogger notificationLogger,
-            NotificationInterruptionStateProvider notificationInterruptionStateProvider,
+            NotificationInterruptStateProvider notificationInterruptionStateProvider,
             NotificationViewHierarchyManager notificationViewHierarchyManager,
             KeyguardViewMediator keyguardViewMediator,
-            NotificationAlertingManager notificationAlertingManager,
             DisplayMetrics displayMetrics,
             MetricsLogger metricsLogger,
             @UiBackground Executor uiBgExecutor,
@@ -164,7 +165,7 @@ public class CarStatusBarModule {
             BubbleController bubbleController,
             NotificationGroupManager groupManager,
             VisualStabilityManager visualStabilityManager,
-            DeviceProvisionedController deviceProvisionedController,
+            CarDeviceProvisionedController carDeviceProvisionedController,
             NavigationBarController navigationBarController,
             Lazy<AssistManager> assistManagerLazy,
             ConfigurationController configurationController,
@@ -199,14 +200,16 @@ public class CarStatusBarModule {
             ExtensionController extensionController,
             UserInfoControllerImpl userInfoControllerImpl,
             PhoneStatusBarPolicy phoneStatusBarPolicy,
+            KeyguardIndicationController keyguardIndicationController,
             DismissCallbackRegistry dismissCallbackRegistry,
             StatusBarTouchableRegionManager statusBarTouchableRegionManager,
             CarServiceProvider carServiceProvider,
             Lazy<PowerManagerHelper> powerManagerHelperLazy,
-            FullscreenUserSwitcher fullscreenUserSwitcher,
-            SystemUIPrimaryWindowController systemUIPrimaryWindowController,
             CarNavigationBarController carNavigationBarController,
-            FlingAnimationUtils.Builder flingAnimationUtilsBuilder) {
+            FlingAnimationUtils.Builder flingAnimationUtilsBuilder,
+            NotificationDataManager notificationDataManager,
+            CarUxRestrictionManagerWrapper carUxRestrictionManagerWrapper,
+            CarNotificationListener carNotificationListener) {
         return new CarStatusBar(
                 context,
                 notificationsController,
@@ -229,7 +232,6 @@ public class CarStatusBarModule {
                 notificationInterruptionStateProvider,
                 notificationViewHierarchyManager,
                 keyguardViewMediator,
-                notificationAlertingManager,
                 displayMetrics,
                 metricsLogger,
                 uiBgExecutor,
@@ -247,7 +249,7 @@ public class CarStatusBarModule {
                 bubbleController,
                 groupManager,
                 visualStabilityManager,
-                deviceProvisionedController,
+                carDeviceProvisionedController,
                 navigationBarController,
                 assistManagerLazy,
                 configurationController,
@@ -281,13 +283,15 @@ public class CarStatusBarModule {
                 extensionController,
                 userInfoControllerImpl,
                 phoneStatusBarPolicy,
+                keyguardIndicationController,
                 dismissCallbackRegistry,
                 statusBarTouchableRegionManager,
                 carServiceProvider,
                 powerManagerHelperLazy,
-                fullscreenUserSwitcher,
-                systemUIPrimaryWindowController,
                 carNavigationBarController,
-                flingAnimationUtilsBuilder);
+                flingAnimationUtilsBuilder,
+                notificationDataManager,
+                carUxRestrictionManagerWrapper,
+                carNotificationListener);
     }
 }

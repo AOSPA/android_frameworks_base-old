@@ -94,6 +94,12 @@ public class InsetsSourceControl implements Parcelable {
         dest.writeParcelable(mSurfacePosition, 0 /* flags*/);
     }
 
+    public void release(InsetsController controller) {
+        if (mLeash != null) {
+            controller.releaseSurfaceControlFromRt(mLeash);
+        }
+    }
+
     public static final @android.annotation.NonNull Creator<InsetsSourceControl> CREATOR
             = new Creator<InsetsSourceControl>() {
         public InsetsSourceControl createFromParcel(Parcel in) {
