@@ -32,6 +32,7 @@
 
     <!-- Gestures Settings -->
     <java-symbol type="integer" name="config_doubleTapKeyCode" />
+    <java-symbol type="integer" name="config_singleTapKeyCode" />
     <java-symbol type="integer" name="config_drawVKeyCode" />
     <java-symbol type="integer" name="config_drawInverseVKeyCode" />
     <java-symbol type="integer" name="config_drawOKeyCode" />
@@ -47,6 +48,7 @@
     <java-symbol type="integer" name="config_twoFingerSwipeKeyCode" />
 
     <java-symbol type="integer" name="config_doubleTapDefault" />
+    <java-symbol type="integer" name="config_singleTapDefault" />
     <java-symbol type="integer" name="config_drawVDefault" />
     <java-symbol type="integer" name="config_drawInverseVDefault" />
     <java-symbol type="integer" name="config_drawODefault" />
