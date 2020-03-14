@@ -103,7 +103,7 @@ public class WifiInfo implements Parcelable {
     /**
      * Wi-Fi standard for the connection
      */
-    private @ScanResult.WifiStandard int mWifiStandard;
+    private @WifiAnnotations.WifiStandard int mWifiStandard;
 
     /**
      * The unit in which links speeds are expressed.
@@ -531,7 +531,7 @@ public class WifiInfo implements Parcelable {
      * Sets the Wi-Fi standard
      * @hide
      */
-    public void setWifiStandard(@ScanResult.WifiStandard int wifiStandard) {
+    public void setWifiStandard(@WifiAnnotations.WifiStandard int wifiStandard) {
         mWifiStandard = wifiStandard;
     }
 
@@ -539,7 +539,7 @@ public class WifiInfo implements Parcelable {
      * Get connection Wi-Fi standard
      * @return the connection Wi-Fi standard
      */
-    public @ScanResult.WifiStandard int getWifiStandard() {
+    public @WifiAnnotations.WifiStandard int getWifiStandard() {
         return mWifiStandard;
     }
 

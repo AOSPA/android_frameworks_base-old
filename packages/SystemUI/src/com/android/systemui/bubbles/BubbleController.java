@@ -1175,23 +1175,17 @@ public class BubbleController implements ConfigurationController.ConfigurationLi
      * status bar, otherwise returns {@link Display#INVALID_DISPLAY}.
      */
     public int getExpandedDisplayId(Context context) {
-        final Bubble bubble = getExpandedBubble(context);
-        return bubble != null ? bubble.getDisplayId() : INVALID_DISPLAY;
-    }
-
-    @Nullable
-    private Bubble getExpandedBubble(Context context) {
         if (mStackView == null) {
-            return null;
+            return INVALID_DISPLAY;
         }
         final boolean defaultDisplay = context.getDisplay() != null
                 && context.getDisplay().getDisplayId() == DEFAULT_DISPLAY;
-        final Bubble expandedBubble = mStackView.getExpandedBubble();
-        if (defaultDisplay && expandedBubble != null && isStackExpanded()
+        final BubbleViewProvider expandedViewProvider = mStackView.getExpandedBubble();
+        if (defaultDisplay && expandedViewProvider != null && isStackExpanded()
                 && !mNotificationShadeWindowController.getPanelExpanded()) {
-            return expandedBubble;
+            return expandedViewProvider.getDisplayId();
         }
-        return null;
+        return INVALID_DISPLAY;
     }
 
     @VisibleForTesting
@@ -1233,6 +1227,17 @@ public class BubbleController implements ConfigurationController.ConfigurationLi
         }
 
         @Override
+        public void onActivityRestartAttempt(RunningTaskInfo task, boolean homeTaskVisible,
+                boolean clearedTask) {
+            for (Bubble b : mBubbleData.getBubbles()) {
+                if (b.getDisplayId() == task.displayId) {
+                    expandStackAndSelectBubble(b.getKey());
+                    return;
+                }
+            }
+        }
+
+        @Override
         public void onActivityLaunchOnSecondaryDisplayRerouted() {
             if (mStackView != null) {
                 mBubbleData.setExpanded(false);
@@ -1256,7 +1261,7 @@ public class BubbleController implements ConfigurationController.ConfigurationLi
 
         @Override
         public void onSingleTaskDisplayEmpty(int displayId) {
-            final Bubble expandedBubble = mStackView != null
+            final BubbleViewProvider expandedBubble = mStackView != null
                     ? mStackView.getExpandedBubble()
                     : null;
             int expandedId = expandedBubble != null ? expandedBubble.getDisplayId() : -1;
@@ -1311,7 +1316,7 @@ public class BubbleController implements ConfigurationController.ConfigurationLi
     private class BubblesImeListener extends PinnedStackListenerForwarder.PinnedStackListener {
         @Override
         public void onImeVisibilityChanged(boolean imeVisible, int imeHeight) {
-            if (mStackView != null && mStackView.getBubbleCount() > 0) {
+            if (mStackView != null) {
                 mStackView.post(() -> mStackView.onImeVisibilityChanged(imeVisible, imeHeight));
             }
         }

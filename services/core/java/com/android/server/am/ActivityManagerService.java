@@ -4842,7 +4842,8 @@ public class ActivityManagerService extends IActivityManager.Stub
                 packageName == null ? ApplicationExitInfo.REASON_USER_STOPPED
                         : ApplicationExitInfo.REASON_USER_REQUESTED,
                 ApplicationExitInfo.SUBREASON_UNKNOWN,
-                packageName == null ? ("stop user " + userId) : ("stop " + packageName));
+                (packageName == null ? ("stop user " + userId) : ("stop " + packageName))
+                + " due to " + reason);
 
         didSomething |=
                 mAtmInternal.onForceStopPackage(packageName, doit, evenPersistent, userId);
@@ -17146,6 +17147,7 @@ public class ActivityManagerService extends IActivityManager.Stub
             proc.lastCachedPss = pss;
             proc.lastCachedSwapPss = swapPss;
         }
+        proc.mLastRss = rss;
 
         final SparseArray<Pair<Long, String>> watchUids
                 = mMemWatchProcesses.getMap().get(proc.processName);

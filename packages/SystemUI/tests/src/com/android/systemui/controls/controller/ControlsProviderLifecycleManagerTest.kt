@@ -1,7 +1,7 @@
 /*
  * Copyright (C) 2020 The Android Open Source Project
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
+ * Licensed under the Apache License, Version 2.0 (149the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
@@ -43,6 +43,7 @@ import org.mockito.ArgumentMatchers.eq
 import org.mockito.Captor
 import org.mockito.Mock
 import org.mockito.Mockito.`when`
+import org.mockito.Mockito.never
 import org.mockito.Mockito.verify
 import org.mockito.MockitoAnnotations
 
@@ -83,7 +84,6 @@ class ControlsProviderLifecycleManagerTest : SysuiTestCase() {
                 context,
                 executor,
                 actionCallbackService,
-                subscriberService,
                 UserHandle.of(0),
                 componentName
         )
@@ -144,9 +144,22 @@ class ControlsProviderLifecycleManagerTest : SysuiTestCase() {
     }
 
     @Test
+    fun testMaybeBindAndLoad_timeoutCancelled() {
+        manager.maybeBindAndLoad(subscriberService)
+        executor.runAllReady()
+
+        manager.cancelLoadTimeout()
+
+        executor.advanceClockToLast()
+        executor.runAllReady()
+
+        verify(subscriberService, never()).onError(any(), anyString())
+    }
+
+    @Test
     fun testMaybeBindAndSubscribe() {
         val list = listOf("TEST_ID")
-        manager.maybeBindAndSubscribe(list)
+        manager.maybeBindAndSubscribe(list, subscriberService)
         executor.runAllReady()
 
         assertTrue(mContext.isBound(componentName))

@@ -128,7 +128,7 @@ class TaskOrganizerController extends ITaskOrganizerController.Stub
 
         void removeTask(Task t) {
             try {
-                mOrganizer.taskVanished(t.getRemoteToken());
+                mOrganizer.taskVanished(t.getTaskInfo());
             } catch (Exception e) {
                 Slog.e(TAG, "Exception sending taskVanished callback" + e);
             }
@@ -553,18 +553,28 @@ class TaskOrganizerController extends ITaskOrganizerController.Stub
             WindowContainerTransaction.Change c) {
         int effects = sanitizeAndApplyChange(wc, c);
 
+        final Task tr = wc.asTask();
+
         final SurfaceControl.Transaction t = c.getBoundsChangeTransaction();
         if (t != null) {
-            Task tr = (Task) wc;
             tr.setMainWindowSizeChangeTransaction(t);
         }
 
         Rect enterPipBounds = c.getEnterPipBounds();
         if (enterPipBounds != null) {
-            Task tr = (Task) wc;
             mService.mStackSupervisor.updatePictureInPictureMode(tr,
                     enterPipBounds, true);
         }
+
+        final int windowingMode = c.getWindowingMode();
+        if (windowingMode > -1) {
+            tr.setWindowingMode(windowingMode);
+        }
+        final int childWindowingMode = c.getActivityWindowingMode();
+        if (childWindowingMode > -1) {
+            tr.setActivityWindowingMode(childWindowingMode);
+        }
+
         return effects;
     }
 

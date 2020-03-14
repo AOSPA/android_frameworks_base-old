@@ -54,6 +54,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
+import android.os.ParcelFileDescriptor;
 import android.os.PersistableBundle;
 import android.os.Process;
 import android.os.RemoteException;
@@ -2373,7 +2374,12 @@ public class TelephonyManager {
     public static final int PHONE_TYPE_CDMA = PhoneConstants.PHONE_TYPE_CDMA;
     /** Phone is via SIP. */
     public static final int PHONE_TYPE_SIP = PhoneConstants.PHONE_TYPE_SIP;
-    /** Phone is via IMS. */
+
+    /**
+     * Phone is via IMS.
+     *
+     * @hide
+     */
     public static final int PHONE_TYPE_IMS = PhoneConstants.PHONE_TYPE_IMS;
 
     /**
@@ -2381,7 +2387,6 @@ public class TelephonyManager {
      *
      * @hide
      */
-    @SystemApi
     public static final int PHONE_TYPE_THIRD_PARTY = PhoneConstants.PHONE_TYPE_THIRD_PARTY;
 
     /**
@@ -3762,29 +3767,6 @@ public class TelephonyManager {
      */
     public String getSimCountryIso() {
         return getSimCountryIsoForPhone(getPhoneId());
-    }
-
-    /**
-     * Returns the ISO-3166 country code equivalent for the SIM provider's country code
-     * of the default subscription
-     * <p>
-     * The ISO-3166 country code is provided in lowercase 2 character format.
-     * @return the lowercase 2 character ISO-3166 country code, or empty string is not available.
-     * <p>
-     * Note: This API is introduced to unblock mainlining work as the following APIs in
-     * Linkify.java invokes getSimCountryIso() without a context. TODO(Bug 144576376): remove
-     * this API once the following APIs are redesigned to access telephonymanager with a context.
-     *
-     * {@link Linkify#addLinks(@NonNull Spannable text, @LinkifyMask int mask)}
-     * {@link Linkify#addLinks(@NonNull Spannable text, @LinkifyMask int mask,
-               @Nullable Function<String, URLSpan> urlSpanFactory)}
-     *
-     * @hide
-     */
-    @SystemApi
-    @NonNull
-    public static String getDefaultSimCountryIso() {
-        return getSimCountryIso(SubscriptionManager.getDefaultSubscriptionId());
     }
 
     /**
@@ -5611,7 +5593,6 @@ public class TelephonyManager {
      * @hide
      */
     @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE)
-    @SystemApi
     @NonNull
     public CdmaEriInformation getCdmaEriInformation() {
         return new CdmaEriInformation(
@@ -8731,7 +8712,6 @@ public class TelephonyManager {
      *
      * @hide
      */
-    @SystemApi
     @Nullable
     @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE)
     public PinResult supplyPinReportPinResult(@NonNull String pin) {
@@ -8756,7 +8736,6 @@ public class TelephonyManager {
      *
      * @hide
      */
-    @SystemApi
     @Nullable
     @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE)
     public PinResult supplyPukReportPinResult(@NonNull String puk, @NonNull String pin) {
@@ -8948,7 +8927,10 @@ public class TelephonyManager {
     }
 
     /**
-     * Shut down all the live radios over all the slot index.
+     * Shut down all the live radios over all the slot indexes.
+     *
+     * <p>To know when the radio has completed powering off, use
+     * {@link PhoneStateListener#LISTEN_SERVICE_STATE LISTEN_SERVICE_STATE}.
      *
      * @hide
      */
@@ -8961,7 +8943,8 @@ public class TelephonyManager {
                 telephony.shutdownMobileRadios();
             }
         } catch (RemoteException e) {
-            Log.e(TAG, "Error calling ITelephony#shutdownMobileRadios", e);
+            Log.e(TAG, "Error calling ITelephony#shutdownAllRadios", e);
+            e.rethrowAsRuntimeException();
         }
     }
 
@@ -8980,7 +8963,8 @@ public class TelephonyManager {
                 return telephony.needMobileRadioShutdown();
             }
         } catch (RemoteException e) {
-            Log.e(TAG, "Error calling ITelephony#needMobileRadioShutdown", e);
+            Log.e(TAG, "Error calling ITelephony#isAnyRadioPoweredOn", e);
+            e.rethrowAsRuntimeException();
         }
         return false;
     }
@@ -11151,21 +11135,21 @@ public class TelephonyManager {
     }
 
     /**
-     * Checks whether cellular data connection is enabled in the device.
+     * Checks whether cellular data connection is allowed in the device.
      *
-     * Whether cellular data connection is enabled, meaning upon request whether will try to setup
-     * metered data connection considering all factors below:
-     * 1) User turned on data setting {@link #isDataEnabled}.
-     * 2) Carrier allows data to be on.
-     * 3) Network policy.
-     * And possibly others.
-     *
-     * @return {@code true} if the overall data connection is capable; {@code false} if not.
+     * <p>Whether cellular data connection is allowed considers all factors below:
+     * <UL>
+     *   <LI>User turned on data setting {@link #isDataEnabled}.</LI>
+     *   <LI>Carrier allows data to be on.</LI>
+     *   <LI>Network policy.</LI>
+     *   <LI>And possibly others.</LI>
+     * </UL>
+     * @return {@code true} if the overall data connection is allowed; {@code false} if not.
      * @hide
      */
     @SystemApi
     @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE)
-    public boolean isDataConnectionEnabled() {
+    public boolean isDataConnectionAllowed() {
         boolean retVal = false;
         try {
             int subId = getSubId(SubscriptionManager.getDefaultDataSubscriptionId());
@@ -11173,8 +11157,9 @@ public class TelephonyManager {
             if (telephony != null)
                 retVal = telephony.isDataEnabled(subId);
         } catch (RemoteException e) {
-            Log.e(TAG, "Error isDataConnectionEnabled", e);
+            Log.e(TAG, "Error isDataConnectionAllowed", e);
         } catch (NullPointerException e) {
+            return false;
         }
         return retVal;
     }
@@ -11654,11 +11639,9 @@ public class TelephonyManager {
     }
 
     /**
-     * Override the file path for testing OTA emergency number database in a file partition.
+     * Override the file path for OTA emergency number database in a file partition.
      *
-     * @param otaFilePath The test OTA emergency number database file path;
-     *                    if "RESET", recover the original database file partition.
-     *                    Format: <root file folder>@<file path>
+     * @param otaParcelFileDescriptor parcelable file descriptor for OTA emergency number database.
      *
      * <p> Requires permission:
      * {@link android.Manifest.permission#READ_ACTIVE_EMERGENCY_SESSION}
@@ -11668,16 +11651,42 @@ public class TelephonyManager {
     @RequiresPermission(android.Manifest.permission.READ_ACTIVE_EMERGENCY_SESSION)
     @SystemApi
     @TestApi
-    public void updateTestOtaEmergencyNumberDbFilePath(@NonNull String otaFilePath) {
+    public void updateOtaEmergencyNumberDbFilePath(
+            @NonNull ParcelFileDescriptor otaParcelFileDescriptor) {
         try {
             ITelephony telephony = getITelephony();
             if (telephony != null) {
-                telephony.updateTestOtaEmergencyNumberDbFilePath(otaFilePath);
+                telephony.updateOtaEmergencyNumberDbFilePath(otaParcelFileDescriptor);
             } else {
                 throw new IllegalStateException("telephony service is null.");
             }
         } catch (RemoteException ex) {
-            Log.e(TAG, "notifyOtaEmergencyNumberDatabaseInstalled RemoteException", ex);
+            Log.e(TAG, "updateOtaEmergencyNumberDbFilePath RemoteException", ex);
+            ex.rethrowAsRuntimeException();
+        }
+    }
+
+    /**
+     * Reset the file path to default for OTA emergency number database in a file partition.
+     *
+     * <p> Requires permission:
+     * {@link android.Manifest.permission#READ_ACTIVE_EMERGENCY_SESSION}
+     *
+     * @hide
+     */
+    @RequiresPermission(android.Manifest.permission.READ_ACTIVE_EMERGENCY_SESSION)
+    @SystemApi
+    @TestApi
+    public void resetOtaEmergencyNumberDbFilePath() {
+        try {
+            ITelephony telephony = getITelephony();
+            if (telephony != null) {
+                telephony.resetOtaEmergencyNumberDbFilePath();
+            } else {
+                throw new IllegalStateException("telephony service is null.");
+            }
+        } catch (RemoteException ex) {
+            Log.e(TAG, "resetOtaEmergencyNumberDbFilePath RemoteException", ex);
             ex.rethrowAsRuntimeException();
         }
     }
@@ -11879,7 +11888,7 @@ public class TelephonyManager {
     }
 
     /**
-     * A test API to return the emergency number db version.
+     * Returns the emergency number database version.
      *
      * <p>Requires Permission:
      *   {@link android.Manifest.permission#READ_PRIVILEGED_PHONE_STATE READ_PRIVILEGED_PHONE_STATE}
@@ -11888,6 +11897,7 @@ public class TelephonyManager {
      */
     @TestApi
     @SystemApi
+    @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE)
     public int getEmergencyNumberDbVersion() {
         try {
             ITelephony telephony = getITelephony();
@@ -12217,12 +12227,14 @@ public class TelephonyManager {
 
     /**
      * It indicates whether modem is enabled or not per slot.
-     * It's the corresponding status of {@link #enableModemForSlot}.
+     * It's the corresponding status of TelephonyManager.enableModemForSlot.
      *
+     * <p>Requires Permission:
+     * READ_PRIVILEGED_PHONE_STATE or
+     * {@link android.Manifest.permission#READ_PHONE_STATE READ_PHONE_STATE}
      * @param slotIndex which slot it's checking.
-     * @hide
      */
-    @SystemApi
+    @RequiresPermission(android.Manifest.permission.READ_PHONE_STATE)
     public boolean isModemEnabledForSlot(int slotIndex) {
         try {
             ITelephony telephony = getITelephony();

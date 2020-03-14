@@ -1588,6 +1588,7 @@ public class CarrierConfigManager {
     /**
      * The string is used to compare with operator name.
      * If it matches the pattern then show specific data icon.
+     * @hide
      */
     public static final String KEY_SHOW_CARRIER_DATA_ICON_PATTERN_STRING =
             "show_carrier_data_icon_pattern_string";
@@ -2407,17 +2408,16 @@ public class CarrierConfigManager {
      * <p> If a measure is not set, signal criteria reporting from modem will not be triggered and
      * not be used for calculating signal level. If multiple measures are set bit, the parameter
      * whose value is smallest is used to indicate the signal level.
+     * <UL>
+     *  <LI>RSRP = 1 << 0</LI>
+     *  <LI>RSRQ = 1 << 1</LI>
+     *  <LI>RSSNR = 1 << 2</LI>
+     * </UL>
+     * <p> The value of this key must be bitwise OR of {@link CellSignalStrengthLte#USE_RSRP},
+     * {@link CellSignalStrengthLte#USE_RSRQ}, {@link CellSignalStrengthLte#USE_RSSNR}.
      *
-     *  RSRP = 1 << 0,
-     *  RSRQ = 1 << 1,
-     *  RSSNR = 1 << 2,
-     *
-     *  The value of this key must be bitwise OR of {@link CellSignalStrengthLte#USE_RSRP},
-     *  {@link CellSignalStrengthLte#USE_RSRQ}, {@link CellSignalStrengthLte#USE_RSSNR}.
-     *
-     * For example, if both RSRP and RSRQ are used, the value of key is 3 (1 << 0 | 1 << 1).
-     * If the key is invalid or not configured, a default value (RSRP = 1 << 0)
-     * will apply.
+     * <p> For example, if both RSRP and RSRQ are used, the value of key is 3 (1 << 0 | 1 << 1).
+     * If the key is invalid or not configured, a default value (RSRP = 1 << 0) will apply.
      *
      * @hide
      */
@@ -2426,16 +2426,18 @@ public class CarrierConfigManager {
 
     /**
      * List of 4 customized 5G SS reference signal received power (SSRSRP) thresholds.
-     *
+     * <p>
      * Reference: 3GPP TS 38.215
-     *
+     * <p>
      * 4 threshold integers must be within the boundaries [-140 dB, -44 dB], and the levels are:
-     *     "NONE: [-140, threshold1]"
-     *     "POOR: (threshold1, threshold2]"
-     *     "MODERATE: (threshold2, threshold3]"
-     *     "GOOD:  (threshold3, threshold4]"
-     *     "EXCELLENT:  (threshold4, -44]"
-     *
+     * <UL>
+     *     <LI>"NONE: [-140, threshold1]"</LI>
+     *     <LI>"POOR: (threshold1, threshold2]"</LI>
+     *     <LI>"MODERATE: (threshold2, threshold3]"</LI>
+     *     <LI>"GOOD:  (threshold3, threshold4]"</LI>
+     *     <LI>"EXCELLENT:  (threshold4, -44]"</LI>
+     * </UL>
+     * <p>
      * This key is considered invalid if the format is violated. If the key is invalid or
      * not configured, a default value set will apply.
      */
@@ -2444,16 +2446,18 @@ public class CarrierConfigManager {
 
     /**
      * List of 4 customized 5G SS reference signal received quality (SSRSRQ) thresholds.
-     *
+     * <p>
      * Reference: 3GPP TS 38.215
-     *
+     * <p>
      * 4 threshold integers must be within the boundaries [-20 dB, -3 dB], and the levels are:
-     *     "NONE: [-20, threshold1]"
-     *     "POOR: (threshold1, threshold2]"
-     *     "MODERATE: (threshold2, threshold3]"
-     *     "GOOD:  (threshold3, threshold4]"
-     *     "EXCELLENT:  (threshold4, -3]"
-     *
+     * <UL>
+     *     <LI>"NONE: [-20, threshold1]"</LI>
+     *     <LI>"POOR: (threshold1, threshold2]"</LI>
+     *     <LI>"MODERATE: (threshold2, threshold3]"</LI>
+     *     <LI>"GOOD:  (threshold3, threshold4]"</LI>
+     *     <LI>"EXCELLENT:  (threshold4, -3]"</LI>
+     * </UL>
+     * <p>
      * This key is considered invalid if the format is violated. If the key is invalid or
      * not configured, a default value set will apply.
      */
@@ -2462,17 +2466,19 @@ public class CarrierConfigManager {
 
     /**
      * List of 4 customized 5G SS signal-to-noise and interference ratio (SSSINR) thresholds.
-     *
+     * <p>
      * Reference: 3GPP TS 38.215,
      *            3GPP TS 38.133 10.1.16.1
-     *
+     * <p>
      * 4 threshold integers must be within the boundaries [-23 dB, 40 dB], and the levels are:
-     *     "NONE: [-23, threshold1]"
-     *     "POOR: (threshold1, threshold2]"
-     *     "MODERATE: (threshold2, threshold3]"
-     *     "GOOD:  (threshold3, threshold4]"
-     *     "EXCELLENT:  (threshold4, 40]"
-     *
+     * <UL>
+     *     <LI>"NONE: [-23, threshold1]"</LI>
+     *     <LI>"POOR: (threshold1, threshold2]"</LI>
+     *     <LI>"MODERATE: (threshold2, threshold3]"</LI>
+     *     <LI>"GOOD:  (threshold3, threshold4]"</LI>
+     *     <LI>"EXCELLENT:  (threshold4, 40]"</LI>
+     * </UL>
+     * <p>
      * This key is considered invalid if the format is violated. If the key is invalid or
      * not configured, a default value set will apply.
      */
@@ -2487,19 +2493,19 @@ public class CarrierConfigManager {
      * <p> If a measure is not set, signal criteria reporting from modem will not be triggered and
      * not be used for calculating signal level. If multiple measures are set bit, the parameter
      * whose value is smallest is used to indicate the signal level.
-     *
-     *  SSRSRP = 1 << 0,
-     *  SSRSRQ = 1 << 1,
-     *  SSSINR = 1 << 2,
-     *
+     * <UL>
+     *  <LI>SSRSRP = 1 << 0</LI>
+     *  <LI>SSRSRQ = 1 << 1</LI>
+     *  <LI>SSSINR = 1 << 2</LI>
+     * </UL>
      *  The value of this key must be bitwise OR of {@link CellSignalStrengthNr#USE_SSRSRP},
      *  {@link CellSignalStrengthNr#USE_SSRSRQ}, {@link CellSignalStrengthNr#USE_SSSINR}.
      *
-     * For example, if both SSRSRP and SSSINR are used, the value of key is 5 (1 << 0 | 1 << 2).
+     * <p> For example, if both SSRSRP and SSSINR are used, the value of key is 5 (1 << 0 | 1 << 2).
      * If the key is invalid or not configured, a default value (SSRSRP = 1 << 0) will apply.
      *
-     *  Reference: 3GPP TS 38.215,
-     *             3GPP TS 38.133 10.1.16.1
+     * <p> Reference: 3GPP TS 38.215,
+     *                3GPP TS 38.133 10.1.16.1
      *
      * @hide
      */
@@ -3004,9 +3010,9 @@ public class CarrierConfigManager {
      * UE wants to display 5G_Plus icon for scenario#1, and 5G icon for scenario#2; otherwise not
      * define.
      * The configuration is: "connected_mmwave:5G_Plus,connected:5G"
+     * @hide
      */
-    public static final String KEY_5G_ICON_CONFIGURATION_STRING =
-            "5g_icon_configuration_string";
+    public static final String KEY_5G_ICON_CONFIGURATION_STRING = "5g_icon_configuration_string";
 
     /**
      * Timeout in seconds for displaying 5G icon, default value is 0 which means the timer is
@@ -3018,12 +3024,14 @@ public class CarrierConfigManager {
      *
      * If 5G is reacquired during this timer, the timer is canceled and restarted when 5G is next
      * lost. Allows us to momentarily lose 5G without blinking the icon.
+     * @hide
      */
     public static final String KEY_5G_ICON_DISPLAY_GRACE_PERIOD_SEC_INT =
             "5g_icon_display_grace_period_sec_int";
 
     /**
      * Controls time in milliseconds until DcTracker reevaluates 5G connection state.
+     * @hide
      */
     public static final String KEY_5G_WATCHDOG_TIME_MS_LONG = "5g_watchdog_time_long";
 
@@ -3553,6 +3561,15 @@ public class CarrierConfigManager {
             "support_wps_over_ims_bool";
 
     /**
+     * The two digital number pattern of MMI code which is defined by carrier.
+     * If the dial number matches this pattern, it will be dialed out normally not USSD.
+     *
+     * @hide
+     */
+    public static final String KEY_MMI_TWO_DIGIT_NUMBER_PATTERN_STRING_ARRAY =
+            "mmi_two_digit_number_pattern_string_array";
+
+    /**
      * Holds the list of carrier certificate hashes.
      * Note that each carrier has its own certificates.
      */
@@ -4060,7 +4077,8 @@ public class CarrierConfigManager {
         sDefaults.putBoolean(KEY_USE_CALLER_ID_USSD_BOOL, false);
         sDefaults.putInt(KEY_CALL_WAITING_SERVICE_CLASS_INT, 1 /* SERVICE_CLASS_VOICE */);
         sDefaults.putString(KEY_5G_ICON_CONFIGURATION_STRING,
-                "connected_mmwave:5G,connected:5G");
+                "connected_mmwave:5G,connected:5G,not_restricted_rrc_idle:5G,"
+                        + "not_restricted_rrc_con:5G");
         sDefaults.putInt(KEY_5G_ICON_DISPLAY_GRACE_PERIOD_SEC_INT, 0);
         /* Default value is 1 hour. */
         sDefaults.putLong(KEY_5G_WATCHDOG_TIME_MS_LONG, 3600000);
@@ -4121,6 +4139,7 @@ public class CarrierConfigManager {
                 new int[] {4 /* BUSY */});
         sDefaults.putBoolean(KEY_PREVENT_CLIR_ACTIVATION_AND_DEACTIVATION_CODE_BOOL, false);
         sDefaults.putLong(KEY_DATA_SWITCH_VALIDATION_TIMEOUT_LONG, 2000);
+        sDefaults.putStringArray(KEY_MMI_TWO_DIGIT_NUMBER_PATTERN_STRING_ARRAY, new String[0]);
         sDefaults.putInt(KEY_PARAMETERS_USED_FOR_LTE_SIGNAL_BAR_INT,
                 CellSignalStrengthLte.USE_RSRP);
         // Default wifi configurations.

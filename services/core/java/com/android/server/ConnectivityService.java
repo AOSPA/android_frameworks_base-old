@@ -104,7 +104,6 @@ import android.net.NetworkPolicyManager;
 import android.net.NetworkProvider;
 import android.net.NetworkQuotaInfo;
 import android.net.NetworkRequest;
-import android.net.NetworkScore;
 import android.net.NetworkSpecifier;
 import android.net.NetworkStack;
 import android.net.NetworkStackClient;
@@ -279,9 +278,6 @@ public class ConnectivityService extends IConnectivityManager.Stub
     // How long to wait before putting up a "This network doesn't have an Internet connection,
     // connect anyway?" dialog after the user selects a network that doesn't validate.
     private static final int PROMPT_UNVALIDATED_DELAY_MS = 8 * 1000;
-
-    // How long to dismiss network notification.
-    private static final int TIMEOUT_NOTIFICATION_DELAY_MS = 20 * 1000;
 
     // Default to 30s linger time-out. Modifiable only for testing.
     private static final String LINGER_DELAY_PROPERTY = "persist.netmon.linger";
@@ -531,18 +527,13 @@ public class ConnectivityService extends IConnectivityManager.Stub
     private static final int EVENT_PROVISIONING_NOTIFICATION = 43;
 
     /**
-     * This event can handle dismissing notification by given network id.
-     */
-    private static final int EVENT_TIMEOUT_NOTIFICATION = 44;
-
-    /**
      * Used to specify whether a network should be used even if connectivity is partial.
      * arg1 = whether to accept the network if its connectivity is partial (1 for true or 0 for
      * false)
      * arg2 = whether to remember this choice in the future (1 for true or 0 for false)
      * obj  = network
      */
-    private static final int EVENT_SET_ACCEPT_PARTIAL_CONNECTIVITY = 45;
+    private static final int EVENT_SET_ACCEPT_PARTIAL_CONNECTIVITY = 44;
 
     /**
      * Event for NetworkMonitor to inform ConnectivityService that the probe status has changed.
@@ -551,7 +542,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
      * arg1 = A bitmask to describe which probes are completed.
      * arg2 = A bitmask to describe which probes are successful.
      */
-    public static final int EVENT_PROBE_STATUS_CHANGED = 46;
+    public static final int EVENT_PROBE_STATUS_CHANGED = 45;
 
     /**
      * Event for NetworkMonitor to inform ConnectivityService that captive portal data has changed.
@@ -559,7 +550,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
      * arg2 = netId
      * obj = captive portal data
      */
-    private static final int EVENT_CAPPORT_DATA_CHANGED = 47;
+    private static final int EVENT_CAPPORT_DATA_CHANGED = 46;
 
     /**
      * Argument for {@link #EVENT_PROVISIONING_NOTIFICATION} to indicate that the notification
@@ -2773,8 +2764,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
                     break;
                 }
                 case NetworkAgent.EVENT_NETWORK_SCORE_CHANGED: {
-                    final NetworkScore ns = (NetworkScore) msg.obj;
-                    updateNetworkScore(nai, ns);
+                    updateNetworkScore(nai, msg.arg1);
                     break;
                 }
                 case NetworkAgent.EVENT_SET_EXPLICITLY_SELECTED: {
@@ -2921,13 +2911,6 @@ public class ConnectivityService extends IConnectivityManager.Stub
             final boolean valid = ((testResult & NETWORK_VALIDATION_RESULT_VALID) != 0);
             final boolean wasValidated = nai.lastValidated;
             final boolean wasDefault = isDefaultNetwork(nai);
-            // Only show a connected notification if the network is pending validation
-            // after the captive portal app was open, and it has now validated.
-            if (nai.captivePortalValidationPending && valid) {
-                // User is now logged in, network validated.
-                nai.captivePortalValidationPending = false;
-                showNetworkNotification(nai, NotificationType.LOGGED_IN);
-            }
 
             if (DBG) {
                 final String logMsg = !TextUtils.isEmpty(redirectUrl)
@@ -3811,12 +3794,6 @@ public class ConnectivityService extends IConnectivityManager.Stub
                 new CaptivePortal(new CaptivePortalImpl(network).asBinder()));
         appIntent.setFlags(Intent.FLAG_ACTIVITY_BROUGHT_TO_FRONT | Intent.FLAG_ACTIVITY_NEW_TASK);
 
-        // This runs on a random binder thread, but getNetworkAgentInfoForNetwork is thread-safe,
-        // and captivePortalValidationPending is volatile.
-        final NetworkAgentInfo nai = getNetworkAgentInfoForNetwork(network);
-        if (nai != null) {
-            nai.captivePortalValidationPending = true;
-        }
         Binder.withCleanCallingIdentity(() ->
                 mContext.startActivityAsUser(appIntent, UserHandle.CURRENT));
     }
@@ -3935,14 +3912,6 @@ public class ConnectivityService extends IConnectivityManager.Stub
         final String action;
         final boolean highPriority;
         switch (type) {
-            case LOGGED_IN:
-                action = Settings.ACTION_WIFI_SETTINGS;
-                mHandler.removeMessages(EVENT_TIMEOUT_NOTIFICATION);
-                mHandler.sendMessageDelayed(mHandler.obtainMessage(EVENT_TIMEOUT_NOTIFICATION,
-                        nai.network.netId, 0), TIMEOUT_NOTIFICATION_DELAY_MS);
-                // High priority because it is a direct result of the user logging in to a portal.
-                highPriority = true;
-                break;
             case NO_INTERNET:
                 action = ConnectivityManager.ACTION_PROMPT_UNVALIDATED;
                 // High priority because it is only displayed for explicitly selected networks.
@@ -3970,7 +3939,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
         }
 
         Intent intent = new Intent(action);
-        if (type != NotificationType.LOGGED_IN && type != NotificationType.PRIVATE_DNS_BROKEN) {
+        if (type != NotificationType.PRIVATE_DNS_BROKEN) {
             intent.setData(Uri.fromParts("netId", Integer.toString(nai.network.netId), null));
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             intent.setClassName("com.android.settings",
@@ -4186,9 +4155,6 @@ public class ConnectivityService extends IConnectivityManager.Stub
                     break;
                 case EVENT_DATA_SAVER_CHANGED:
                     handleRestrictBackgroundChanged(toBool(msg.arg1));
-                    break;
-                case EVENT_TIMEOUT_NOTIFICATION:
-                    mNotifier.clearNotification(msg.arg1, NotificationType.LOGGED_IN);
                     break;
                 case EVENT_UPDATE_TCP_BUFFER_FOR_5G:
                     handleUpdateTCPBuffersfor5G();
@@ -5871,12 +5837,10 @@ public class ConnectivityService extends IConnectivityManager.Stub
         // TODO: Instead of passing mDefaultRequest, provide an API to determine whether a Network
         // satisfies mDefaultRequest.
         final NetworkCapabilities nc = new NetworkCapabilities(networkCapabilities);
-        final NetworkScore ns = new NetworkScore();
-        ns.putIntExtension(NetworkScore.LEGACY_SCORE, currentScore);
         final NetworkAgentInfo nai = new NetworkAgentInfo(messenger, new AsyncChannel(),
                 new Network(mNetIdManager.reserveNetId()), new NetworkInfo(networkInfo), lp, nc,
-                ns, mContext, mTrackerHandler, new NetworkAgentConfig(networkAgentConfig), this,
-                mNetd, mDnsResolver, mNMS, providerId);
+                currentScore, mContext, mTrackerHandler, new NetworkAgentConfig(networkAgentConfig),
+                this, mNetd, mDnsResolver, mNMS, providerId);
         // Make sure the network capabilities reflect what the agent info says.
         nai.getAndSetNetworkCapabilities(mixInCapabilities(nai, nc));
         final String extraInfo = networkInfo.getExtraInfo();
@@ -7134,9 +7098,9 @@ public class ConnectivityService extends IConnectivityManager.Stub
         }
     }
 
-    private void updateNetworkScore(NetworkAgentInfo nai, NetworkScore ns) {
-        if (VDBG || DDBG) log("updateNetworkScore for " + nai.toShortString() + " to " + ns);
-        nai.setNetworkScore(ns);
+    private void updateNetworkScore(@NonNull final NetworkAgentInfo nai, final int score) {
+        if (VDBG || DDBG) log("updateNetworkScore for " + nai.toShortString() + " to " + score);
+        nai.setScore(score);
         rematchAllNetworksAndRequests();
         sendUpdatedScoreToFactories(nai);
     }
