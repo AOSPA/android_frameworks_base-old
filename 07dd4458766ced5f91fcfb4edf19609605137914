@@ -1,0 +1,38 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "0867dd21_83edca58",
+        "filename": "services/core/java/com/android/server/policy/KeyHandler.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 224,
+      "author": {
+        "id": 1000312
+      },
+      "writtenOn": "2020-03-15T07:53:01Z",
+      "side": 1,
+      "message": "Should be mSingleTapKeyCode",
+      "revId": "07dd4458766ced5f91fcfb4edf19609605137914",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "506169e7_85b1f2b3",
+        "filename": "services/core/java/com/android/server/policy/KeyHandler.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 241,
+      "author": {
+        "id": 1000312
+      },
+      "writtenOn": "2020-03-15T07:53:01Z",
+      "side": 1,
+      "message": "same here",
+      "revId": "07dd4458766ced5f91fcfb4edf19609605137914",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    }
+  ]
+}
