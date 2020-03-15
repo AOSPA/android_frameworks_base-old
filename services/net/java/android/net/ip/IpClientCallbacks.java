@@ -17,10 +17,7 @@
 package android.net.ip;
 
 import android.net.DhcpResults;
-import android.net.Layer2PacketParcelable;
 import android.net.LinkProperties;
-
-import java.util.List;
 
 /**
  * Callbacks for handling IpClient events.
@@ -119,9 +116,4 @@ public class IpClientCallbacks {
      * whenever 464xlat is being started or stopped.
      */
     public void setNeighborDiscoveryOffload(boolean enable) {}
-
-    /**
-     * Invoked on starting preconnection process.
-     */
-    public void onPreconnectionStart(List<Layer2PacketParcelable> packets) {}
 }

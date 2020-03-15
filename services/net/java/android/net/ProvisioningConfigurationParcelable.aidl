@@ -35,5 +35,4 @@ parcelable ProvisioningConfigurationParcelable {
     int ipv6AddrGenMode;
     Network network;
     String displayName;
-    boolean enablePreconnection;
 }

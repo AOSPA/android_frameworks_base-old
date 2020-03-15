@@ -15,7 +15,6 @@
  */
 package android.net.ip;
 
-import android.net.Layer2PacketParcelable;
 import android.net.LinkProperties;
 import android.net.ip.IIpClient;
 import android.net.DhcpResultsParcelable;
@@ -64,7 +63,4 @@ oneway interface IIpClientCallbacks {
     // Enabled/disable Neighbor Discover offload functionality. This is
     // called, for example, whenever 464xlat is being started or stopped.
     void setNeighborDiscoveryOffload(boolean enable);
-
-    // Invoked on starting preconnection process.
-    void onPreconnectionStart(in List<Layer2PacketParcelable> packets);
 }
