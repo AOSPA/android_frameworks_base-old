@@ -39,6 +39,7 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.PersistableBundle;
+import android.os.SystemProperties;
 import android.provider.Settings;
 import android.telephony.CarrierConfigManager;
 import android.telephony.CellSignalStrength;
@@ -1176,6 +1177,7 @@ public class NetworkControllerImpl extends BroadcastReceiver
         boolean hideNoInternetState = false;
         boolean showVolteIcon = false;
         boolean alwaysShowNetworkTypeIcon = false;
+        boolean enableRatIconEnhancement = false;
 
         static Config readConfig(Context context) {
             Config config = new Config();
@@ -1212,6 +1214,9 @@ public class NetworkControllerImpl extends BroadcastReceiver
                 config.hideLtePlus = b.getBoolean(
                         CarrierConfigManager.KEY_HIDE_LTE_PLUS_DATA_ICON_BOOL);
             }
+
+            config.enableRatIconEnhancement =
+                    SystemProperties.getBoolean("persist.sysui.rat_icon_enhancement", false);
             return config;
         }
     }
