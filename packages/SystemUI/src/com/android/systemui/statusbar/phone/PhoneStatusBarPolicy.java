@@ -471,6 +471,7 @@ public class PhoneStatusBarPolicy
             case BluetoothClass.Device.AUDIO_VIDEO_PORTABLE_AUDIO:
             case BluetoothClass.Device.AUDIO_VIDEO_LOUDSPEAKER:
             case BluetoothClass.Device.AUDIO_VIDEO_HEADPHONES:
+            case BluetoothClass.Device.AUDIO_VIDEO_HIFI_AUDIO:
                 show = true;
                 break;
             default:
