@@ -58,7 +58,6 @@ public class NotificationTemplateViewWrapper extends NotificationHeaderViewWrapp
     private TextView mText;
     protected View mActionsContainer;
     private ImageView mReplyAction;
-    private Rect mTmpRect = new Rect();
 
     private int mContentHeight;
     private int mMinHeightHint;
@@ -271,18 +270,6 @@ public class NotificationTemplateViewWrapper extends NotificationHeaderViewWrapp
         return super.disallowSingleClick(x, y);
     }
 
-    private boolean isOnView(View view, float x, float y) {
-        View searchView = (View) view.getParent();
-        while (searchView != null && !(searchView instanceof ExpandableNotificationRow)) {
-            searchView.getHitRect(mTmpRect);
-            x -= mTmpRect.left;
-            y -= mTmpRect.top;
-            searchView = (View) searchView.getParent();
-        }
-        view.getHitRect(mTmpRect);
-        return mTmpRect.contains((int) x,(int) y);
-    }
-
     @Override
     public void onContentUpdated(ExpandableNotificationRow row) {
         // Reinspect the notification. Before the super call, because the super call also updates
@@ -353,8 +340,12 @@ public class NotificationTemplateViewWrapper extends NotificationHeaderViewWrapp
     @Override
     public void setHeaderVisibleAmount(float headerVisibleAmount) {
         super.setHeaderVisibleAmount(headerVisibleAmount);
-        mNotificationHeader.setAlpha(headerVisibleAmount);
-        mHeaderTranslation = (1.0f - headerVisibleAmount) * mFullHeaderTranslation;
+        float headerTranslation = 0f;
+        if (mNotificationHeader != null) {
+            mNotificationHeader.setAlpha(headerVisibleAmount);
+            headerTranslation = (1.0f - headerVisibleAmount) * mFullHeaderTranslation;
+        }
+        mHeaderTranslation = headerTranslation;
         mView.setTranslationY(mHeaderTranslation);
     }
 

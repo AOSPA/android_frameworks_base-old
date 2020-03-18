@@ -2113,9 +2113,9 @@ public class ConnectivityService extends IConnectivityManager.Stub
     }
 
     private void enforceNetworkFactoryPermission() {
-        mContext.enforceCallingOrSelfPermission(
+        enforceAnyPermissionOf(
                 android.Manifest.permission.NETWORK_FACTORY,
-                "ConnectivityService");
+                NetworkStack.PERMISSION_MAINLINE_NETWORK_STACK);
     }
 
     private boolean checkSettingsPermission() {
@@ -7855,18 +7855,21 @@ public class ConnectivityService extends IConnectivityManager.Stub
     private void handleNetworkTestedWithExtras(
             @NonNull ConnectivityReportEvent reportEvent, @NonNull PersistableBundle extras) {
         final NetworkAgentInfo nai = reportEvent.mNai;
+        final NetworkCapabilities networkCapabilities =
+                new NetworkCapabilities(nai.networkCapabilities);
+        clearNetworkCapabilitiesUids(networkCapabilities);
         final ConnectivityReport report =
                 new ConnectivityReport(
                         reportEvent.mNai.network,
                         reportEvent.mTimestampMillis,
                         nai.linkProperties,
-                        nai.networkCapabilities,
+                        networkCapabilities,
                         extras);
         final List<IConnectivityDiagnosticsCallback> results =
                 getMatchingPermissionedCallbacks(nai);
         for (final IConnectivityDiagnosticsCallback cb : results) {
             try {
-                cb.onConnectivityReport(report);
+                cb.onConnectivityReportAvailable(report);
             } catch (RemoteException ex) {
                 loge("Error invoking onConnectivityReport", ex);
             }
@@ -7876,13 +7879,16 @@ public class ConnectivityService extends IConnectivityManager.Stub
     private void handleDataStallSuspected(
             @NonNull NetworkAgentInfo nai, long timestampMillis, int detectionMethod,
             @NonNull PersistableBundle extras) {
+        final NetworkCapabilities networkCapabilities =
+                new NetworkCapabilities(nai.networkCapabilities);
+        clearNetworkCapabilitiesUids(networkCapabilities);
         final DataStallReport report =
                 new DataStallReport(
                         nai.network,
                         timestampMillis,
                         detectionMethod,
                         nai.linkProperties,
-                        nai.networkCapabilities,
+                        networkCapabilities,
                         extras);
         final List<IConnectivityDiagnosticsCallback> results =
                 getMatchingPermissionedCallbacks(nai);
@@ -7906,6 +7912,12 @@ public class ConnectivityService extends IConnectivityManager.Stub
                 loge("Error invoking onNetworkConnectivityReported", ex);
             }
         }
+    }
+
+    private void clearNetworkCapabilitiesUids(@NonNull NetworkCapabilities nc) {
+        nc.setUids(null);
+        nc.setAdministratorUids(Collections.EMPTY_LIST);
+        nc.setOwnerUid(Process.INVALID_UID);
     }
 
     private List<IConnectivityDiagnosticsCallback> getMatchingPermissionedCallbacks(
@@ -7932,8 +7944,15 @@ public class ConnectivityService extends IConnectivityManager.Stub
             return true;
         }
 
-        if (!mLocationPermissionChecker.checkLocationPermission(
-                callbackPackageName, null /* featureId */, callbackUid, null /* message */)) {
+        // LocationPermissionChecker#checkLocationPermission can throw SecurityException if the uid
+        // and package name don't match. Throwing on the CS thread is not acceptable, so wrap the
+        // call in a try-catch.
+        try {
+            if (!mLocationPermissionChecker.checkLocationPermission(
+                    callbackPackageName, null /* featureId */, callbackUid, null /* message */)) {
+                return false;
+            }
+        } catch (SecurityException e) {
             return false;
         }
 

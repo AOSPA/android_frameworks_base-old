@@ -308,11 +308,11 @@ interface IDevicePolicyManager {
     void setAutoTimeRequired(in ComponentName who, boolean required);
     boolean getAutoTimeRequired();
 
-    void setAutoTime(in ComponentName who, boolean enabled);
-    boolean getAutoTime(in ComponentName who);
+    void setAutoTimeEnabled(in ComponentName who, boolean enabled);
+    boolean getAutoTimeEnabled(in ComponentName who);
 
-    void setAutoTimeZone(in ComponentName who, boolean enabled);
-    boolean getAutoTimeZone(in ComponentName who);
+    void setAutoTimeZoneEnabled(in ComponentName who, boolean enabled);
+    boolean getAutoTimeZoneEnabled(in ComponentName who);
 
     void setForceEphemeralUsers(in ComponentName who, boolean forceEpehemeralUsers);
     boolean getForceEphemeralUsers(in ComponentName who);
@@ -467,9 +467,9 @@ interface IDevicePolicyManager {
 
     boolean setKeyGrantForApp(in ComponentName admin, String callerPackage, String alias, String packageName, boolean hasGrant);
 
-    void setProtectedPackages(in ComponentName admin, in List<String> packages);
+    void setUserControlDisabledPackages(in ComponentName admin, in List<String> packages);
 
-    List<String> getProtectedPackages(in ComponentName admin);
+    List<String> getUserControlDisabledPackages(in ComponentName admin);
 
     void setCommonCriteriaModeEnabled(in ComponentName admin, boolean enabled);
     boolean isCommonCriteriaModeEnabled(in ComponentName admin);

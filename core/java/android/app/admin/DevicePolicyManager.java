@@ -5215,6 +5215,10 @@ public class DevicePolicyManager {
      * <p>Because this method might take several seconds to complete, it should only be called from
      * a worker thread. This method returns {@code null} when called from the main thread.
      *
+     * <p>This method is not thread-safe, calling it from multiple threads at the same time will
+     * result in undefined behavior. If the calling thread is interrupted while the invocation is
+     * in-flight, it will eventually terminate and return {@code null}.
+     *
      * <p>Note: If the provided {@code alias} is of an existing alias, all former grants that apps
      * have been given to access the key and certificates associated with this alias will be
      * revoked.
@@ -5732,6 +5736,10 @@ public class DevicePolicyManager {
         throwIfParentInstance("isAlwaysOnVpnLockdownEnabled");
         if (mService != null) {
             try {
+                // Starting from Android R, the caller can pass the permission check in
+                // DevicePolicyManagerService if it holds android.permission.MAINLINE_NETWORK_STACK.
+                // Note that the android.permission.MAINLINE_NETWORK_STACK is a signature permission
+                // which is used by the NetworkStack mainline module.
                 return mService.isAlwaysOnVpnLockdownEnabled(admin);
             } catch (RemoteException e) {
                 throw e.rethrowFromSystemServer();
@@ -6001,7 +6009,7 @@ public class DevicePolicyManager {
      * @param admin Which {@link DeviceAdminReceiver} this request is associated with.
      * @param required Whether auto time is set required or not.
      * @throws SecurityException if {@code admin} is not a device owner.
-     * @deprecated From {@link android.os.Build.VERSION_CODES#R}. Use {@link #setAutoTime}
+     * @deprecated From {@link android.os.Build.VERSION_CODES#R}. Use {@link #setAutoTimeEnabled}
      * to turn auto time on or off and use {@link UserManager#DISALLOW_CONFIG_DATE_TIME}
      * to prevent the user from changing this setting.
      */
@@ -6019,7 +6027,7 @@ public class DevicePolicyManager {
 
     /**
      * @return true if auto time is required.
-     * @deprecated From {@link android.os.Build.VERSION_CODES#R}. Use {@link #getAutoTime}
+     * @deprecated From {@link android.os.Build.VERSION_CODES#R}. Use {@link #getAutoTimeEnabled}
      */
     @Deprecated
     public boolean getAutoTimeRequired() {
@@ -6049,10 +6057,10 @@ public class DevicePolicyManager {
      * @throws SecurityException if caller is not a device owner, a profile owner for the
      * primary user, or a profile owner of an organization-owned managed profile.
      */
-    public void setAutoTime(@NonNull ComponentName admin, boolean enabled) {
+    public void setAutoTimeEnabled(@NonNull ComponentName admin, boolean enabled) {
         if (mService != null) {
             try {
-                mService.setAutoTime(admin, enabled);
+                mService.setAutoTimeEnabled(admin, enabled);
             } catch (RemoteException e) {
                 throw e.rethrowFromSystemServer();
             }
@@ -6064,10 +6072,10 @@ public class DevicePolicyManager {
      * @throws SecurityException if caller is not a device owner, a profile owner for the
      * primary user, or a profile owner of an organization-owned managed profile.
      */
-    public boolean getAutoTime(@NonNull ComponentName admin) {
+    public boolean getAutoTimeEnabled(@NonNull ComponentName admin) {
         if (mService != null) {
             try {
-                return mService.getAutoTime(admin);
+                return mService.getAutoTimeEnabled(admin);
             } catch (RemoteException e) {
                 throw e.rethrowFromSystemServer();
             }
@@ -6090,11 +6098,11 @@ public class DevicePolicyManager {
      * @throws SecurityException if caller is not a device owner, a profile owner for the
      * primary user, or a profile owner of an organization-owned managed profile.
      */
-    public void setAutoTimeZone(@NonNull ComponentName admin, boolean enabled) {
+    public void setAutoTimeZoneEnabled(@NonNull ComponentName admin, boolean enabled) {
         throwIfParentInstance("setAutoTimeZone");
         if (mService != null) {
             try {
-                mService.setAutoTimeZone(admin, enabled);
+                mService.setAutoTimeZoneEnabled(admin, enabled);
             } catch (RemoteException e) {
                 throw e.rethrowFromSystemServer();
             }
@@ -6106,11 +6114,11 @@ public class DevicePolicyManager {
      * @throws SecurityException if caller is not a device owner, a profile owner for the
      * primary user, or a profile owner of an organization-owned managed profile.
      */
-    public boolean getAutoTimeZone(@NonNull ComponentName admin) {
+    public boolean getAutoTimeZoneEnabled(@NonNull ComponentName admin) {
         throwIfParentInstance("getAutoTimeZone");
         if (mService != null) {
             try {
-                return mService.getAutoTimeZone(admin);
+                return mService.getAutoTimeZoneEnabled(admin);
             } catch (RemoteException e) {
                 throw e.rethrowFromSystemServer();
             }
@@ -8804,10 +8812,11 @@ public class DevicePolicyManager {
      * <p>
      * The following settings used to be supported, but can be controlled in other ways:
      * <ul>
-     * <li>{@link android.provider.Settings.Global#AUTO_TIME} : Use {@link #setAutoTime} and
+     * <li>{@link android.provider.Settings.Global#AUTO_TIME} : Use {@link #setAutoTimeEnabled} and
      * {@link UserManager#DISALLOW_CONFIG_DATE_TIME} instead.</li>
-     * <li>{@link android.provider.Settings.Global#AUTO_TIME_ZONE} : Use {@link #setAutoTimeZone}
-     * and {@link UserManager#DISALLOW_CONFIG_DATE_TIME} instead.</li>
+     * <li>{@link android.provider.Settings.Global#AUTO_TIME_ZONE} : Use
+     * {@link #setAutoTimeZoneEnabled} and {@link UserManager#DISALLOW_CONFIG_DATE_TIME}
+     * instead.</li>
      * <li>{@link android.provider.Settings.Global#DATA_ROAMING} : Use
      * {@link UserManager#DISALLOW_DATA_ROAMING} instead.</li>
      * </ul>
@@ -11847,18 +11856,19 @@ public class DevicePolicyManager {
     }
 
     /**
-     * Called by Device owner to set packages as protected. User will not be able to clear app
-     * data or force-stop protected packages.
+     * Called by Device owner to disable user control over apps. User will not be able to clear
+     * app data or force-stop packages.
      *
      * @param admin which {@link DeviceAdminReceiver} this request is associated with
-     * @param packages The package names to protect.
+     * @param packages The package names for the apps.
      * @throws SecurityException if {@code admin} is not a device owner.
      */
-    public void setProtectedPackages(@NonNull ComponentName admin, @NonNull List<String> packages) {
-        throwIfParentInstance("setProtectedPackages");
+    public void setUserControlDisabledPackages(@NonNull ComponentName admin,
+            @NonNull List<String> packages) {
+        throwIfParentInstance("setUserControlDisabledPackages");
         if (mService != null) {
             try {
-                mService.setProtectedPackages(admin, packages);
+                mService.setUserControlDisabledPackages(admin, packages);
             } catch (RemoteException re) {
                 throw re.rethrowFromSystemServer();
             }
@@ -11866,16 +11876,16 @@ public class DevicePolicyManager {
     }
 
     /**
-     * Returns the list of packages protected by the device owner.
+     * Returns the list of packages over which user control is disabled by the device owner.
      *
      * @param admin which {@link DeviceAdminReceiver} this request is associated with
      * @throws SecurityException if {@code admin} is not a device owner.
      */
-    public @NonNull List<String> getProtectedPackages(@NonNull ComponentName admin) {
-        throwIfParentInstance("getProtectedPackages");
+    public @NonNull List<String> getUserControlDisabledPackages(@NonNull ComponentName admin) {
+        throwIfParentInstance("getUserControlDisabledPackages");
         if (mService != null) {
             try {
-                return mService.getProtectedPackages(admin);
+                return mService.getUserControlDisabledPackages(admin);
             } catch (RemoteException re) {
                 throw re.rethrowFromSystemServer();
             }
@@ -11984,17 +11994,18 @@ public class DevicePolicyManager {
      * must handle this intent.
      *
      * @param admin Which {@link DeviceAdminReceiver} this request is associated with
-     * @param timeoutMs Maximum time the profile is allowed to be off in milliseconds or 0 if
-     *        not limited.
+     * @param timeoutMillis Maximum time the profile is allowed to be off in milliseconds or 0 if
+     *        not limited. The minimum non-zero value corresponds to 72 hours. If an admin sets a
+     *        smaller non-zero vaulue, 72 hours will be set instead.
      * @throws IllegalStateException if the profile owner doesn't have an activity that handles
      *        {@link #ACTION_CHECK_POLICY_COMPLIANCE}
      * @see #setPersonalAppsSuspended
      */
-    public void setManagedProfileMaximumTimeOff(@NonNull ComponentName admin, long timeoutMs) {
+    public void setManagedProfileMaximumTimeOff(@NonNull ComponentName admin, long timeoutMillis) {
         throwIfParentInstance("setManagedProfileMaximumTimeOff");
         if (mService != null) {
             try {
-                mService.setManagedProfileMaximumTimeOff(admin, timeoutMs);
+                mService.setManagedProfileMaximumTimeOff(admin, timeoutMillis);
             } catch (RemoteException re) {
                 throw re.rethrowFromSystemServer();
             }

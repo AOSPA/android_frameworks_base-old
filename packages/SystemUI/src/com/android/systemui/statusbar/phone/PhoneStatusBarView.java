@@ -18,6 +18,8 @@ package com.android.systemui.statusbar.phone;
 
 import static com.android.systemui.ScreenDecorations.DisplayCutoutView.boundsFromDirection;
 
+import static java.lang.Float.isNaN;
+
 import android.annotation.Nullable;
 import android.content.Context;
 import android.content.res.Configuration;
@@ -40,6 +42,7 @@ import com.android.systemui.R;
 import com.android.systemui.plugins.DarkIconDispatcher;
 import com.android.systemui.plugins.DarkIconDispatcher.DarkReceiver;
 import com.android.systemui.statusbar.CommandQueue;
+import com.android.systemui.util.leak.RotationUtils;
 
 import java.util.Objects;
 
@@ -47,7 +50,6 @@ public class PhoneStatusBarView extends PanelBar {
     private static final String TAG = "PhoneStatusBarView";
     private static final boolean DEBUG = StatusBar.DEBUG;
     private static final boolean DEBUG_GESTURES = false;
-    private static final int NO_VALUE = Integer.MIN_VALUE;
     private final CommandQueue mCommandQueue;
 
     StatusBar mBar;
@@ -64,13 +66,14 @@ public class PhoneStatusBarView extends PanelBar {
         }
     };
     private DarkReceiver mBattery;
-    private int mLastOrientation;
+    private int mRotationOrientation;
     @Nullable
     private View mCenterIconSpace;
     @Nullable
     private View mCutoutSpace;
     @Nullable
     private DisplayCutout mDisplayCutout;
+    private int mStatusBarHeight;
 
     /**
      * Draw this many pixels into the left/right side of the cutout to optimally use the space
@@ -107,7 +110,7 @@ public class PhoneStatusBarView extends PanelBar {
         super.onAttachedToWindow();
         // Always have Battery meters in the status bar observe the dark/light modes.
         Dependency.get(DarkIconDispatcher.class).addDarkReceiver(mBattery);
-        if (updateOrientationAndCutout(getResources().getConfiguration().orientation)) {
+        if (updateOrientationAndCutout()) {
             updateLayoutForCutout();
         }
     }
@@ -124,7 +127,7 @@ public class PhoneStatusBarView extends PanelBar {
         super.onConfigurationChanged(newConfig);
 
         // May trigger cutout space layout-ing
-        if (updateOrientationAndCutout(newConfig.orientation)) {
+        if (updateOrientationAndCutout()) {
             updateLayoutForCutout();
             requestLayout();
         }
@@ -132,7 +135,7 @@ public class PhoneStatusBarView extends PanelBar {
 
     @Override
     public WindowInsets onApplyWindowInsets(WindowInsets insets) {
-        if (updateOrientationAndCutout(mLastOrientation)) {
+        if (updateOrientationAndCutout()) {
             updateLayoutForCutout();
             requestLayout();
         }
@@ -140,17 +143,14 @@ public class PhoneStatusBarView extends PanelBar {
     }
 
     /**
-     *
-     * @param newOrientation may pass NO_VALUE for no change
      * @return boolean indicating if we need to update the cutout location / margins
      */
-    private boolean updateOrientationAndCutout(int newOrientation) {
+    private boolean updateOrientationAndCutout() {
         boolean changed = false;
-        if (newOrientation != NO_VALUE) {
-            if (mLastOrientation != newOrientation) {
-                changed = true;
-                mLastOrientation = newOrientation;
-            }
+        int newRotation = RotationUtils.getExactRotation(mContext);
+        if (newRotation != mRotationOrientation) {
+            changed = true;
+            mRotationOrientation = newRotation;
         }
 
         if (!Objects.equals(getRootWindowInsets().getDisplayCutout(), mDisplayCutout)) {
@@ -256,6 +256,9 @@ public class PhoneStatusBarView extends PanelBar {
 
     @Override
     public void panelScrimMinFractionChanged(float minFraction) {
+        if (isNaN(minFraction)) {
+            throw new IllegalArgumentException("minFraction cannot be NaN");
+        }
         if (mMinFraction != minFraction) {
             mMinFraction = minFraction;
             updateScrimFraction();
@@ -293,17 +296,16 @@ public class PhoneStatusBarView extends PanelBar {
         final int waterfallTopInset =
                 mDisplayCutout == null ? 0 : mDisplayCutout.getWaterfallInsets().top;
         ViewGroup.LayoutParams layoutParams = getLayoutParams();
-        layoutParams.height =
-                getResources().getDimensionPixelSize(R.dimen.status_bar_height) - waterfallTopInset;
+        mStatusBarHeight = getResources().getDimensionPixelSize(R.dimen.status_bar_height);
+        layoutParams.height = mStatusBarHeight - waterfallTopInset;
         setLayoutParams(layoutParams);
     }
 
     private void updateLayoutForCutout() {
         updateStatusBarHeight();
-        Pair<Integer, Integer> cornerCutoutMargins =
-                StatusBarWindowView.cornerCutoutMargins(mDisplayCutout, getDisplay());
-        updateCutoutLocation(cornerCutoutMargins);
-        updateSafeInsets(cornerCutoutMargins);
+        updateCutoutLocation(StatusBarWindowView.cornerCutoutMargins(mDisplayCutout, getDisplay()));
+        updateSafeInsets(StatusBarWindowView.statusBarCornerCutoutMargins(mDisplayCutout,
+                getDisplay(), mRotationOrientation, mStatusBarHeight));
     }
 
     private void updateCutoutLocation(Pair<Integer, Integer> cornerCutoutMargins) {

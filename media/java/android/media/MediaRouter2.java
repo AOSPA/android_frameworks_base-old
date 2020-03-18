@@ -58,7 +58,7 @@ import java.util.stream.Collectors;
 // TODO: Add method names at the beginning of log messages. (e.g. updateControllerOnHandler)
 //       Not only MediaRouter2, but also to service / manager / provider.
 // TODO: ensure thread-safe and document it
-public class MediaRouter2 {
+public final class MediaRouter2 {
     private static final String TAG = "MR2";
     private static final boolean DEBUG = Log.isLoggable(TAG, Log.DEBUG);
     private static final Object sRouterLock = new Object();
@@ -93,9 +93,9 @@ public class MediaRouter2 {
     MediaRouter2Stub mStub;
 
     @GuardedBy("sRouterLock")
-    private Map<String, RoutingController> mRoutingControllers = new ArrayMap<>();
+    private final Map<String, RoutingController> mRoutingControllers = new ArrayMap<>();
 
-    private AtomicInteger mControllerCreationRequestCnt = new AtomicInteger(1);
+    private final AtomicInteger mControllerCreationRequestCnt = new AtomicInteger(1);
 
     final Handler mHandler;
     @GuardedBy("sRouterLock")
@@ -419,8 +419,7 @@ public class MediaRouter2 {
 
         controller.release();
 
-        final int requestId;
-        requestId = mControllerCreationRequestCnt.getAndIncrement();
+        final int requestId = mControllerCreationRequestCnt.getAndIncrement();
 
         ControllerCreationRequest request =
                 new ControllerCreationRequest(requestId, controller, route);
@@ -610,10 +609,16 @@ public class MediaRouter2 {
         }
 
         if (sessionInfo != null) {
-            RoutingController newController = new RoutingController(sessionInfo);
-            synchronized (sRouterLock) {
-                mRoutingControllers.put(newController.getId(), newController);
+            RoutingController newController;
+            if (sessionInfo.isSystemSession()) {
+                newController = getSystemController();
+            } else {
+                newController = new RoutingController(sessionInfo);
+                synchronized (sRouterLock) {
+                    mRoutingControllers.put(newController.getId(), newController);
+                }
             }
+            //TODO: Determine oldController properly when transfer is launched by Output Switcher.
             notifyTransferred(matchingRequest != null ? matchingRequest.mController :
                     getSystemController(), newController);
         }

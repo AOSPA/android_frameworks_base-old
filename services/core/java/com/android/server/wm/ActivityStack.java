@@ -153,7 +153,6 @@ import android.util.Slog;
 import android.util.proto.ProtoOutputStream;
 import android.view.Display;
 import android.view.DisplayInfo;
-import android.view.ITaskOrganizer;
 import android.view.SurfaceControl;
 import com.android.internal.app.ActivityTrigger;
 
@@ -311,8 +310,6 @@ public class ActivityStack extends Task {
 
     // TODO(task-hierarchy): remove when tiles can be actual parents
     TaskTile mTile = null;
-
-    private int mLastTaskOrganizerWindowingMode = -1;
 
     private final Handler mHandler;
 
@@ -644,8 +641,6 @@ public class ActivityStack extends Task {
 
         super.onConfigurationChanged(newParentConfig);
 
-        updateTaskOrganizerState();
-
         // Only need to update surface size here since the super method will handle updating
         // surface position.
         updateSurfaceSize(getPendingTransaction());
@@ -699,30 +694,6 @@ public class ActivityStack extends Task {
             // placed properly when always on top state changes.
             display.positionStackAtTop(this, false /* includingParents */);
         }
-    }
-
-    void updateTaskOrganizerState() {
-        if (!isRootTask()) {
-            return;
-        }
-
-        final int windowingMode = getWindowingMode();
-        if (windowingMode == mLastTaskOrganizerWindowingMode) {
-            // If our windowing mode hasn't actually changed, then just stick
-            // with our old organizer. This lets us implement the semantic
-            // where SysUI can continue to manage it's old tasks
-            // while CTS temporarily takes over the registration.
-            return;
-        }
-        /*
-         * Different windowing modes may be managed by different task organizers. If
-         * getTaskOrganizer returns null, we still call setTaskOrganizer to
-         * make sure we clear it.
-         */
-        final ITaskOrganizer org =
-            mWmService.mAtmService.mTaskOrganizerController.getTaskOrganizer(windowingMode);
-        setTaskOrganizer(org);
-        mLastTaskOrganizerWindowingMode = windowingMode;
     }
 
     @Override
@@ -1557,7 +1528,7 @@ public class ActivityStack extends Task {
      */
     @StackVisibility
     int getVisibility(ActivityRecord starting) {
-        if (!isAttached() || mForceHidden) {
+        if (!isAttached() || isForceHidden()) {
             return STACK_VISIBILITY_INVISIBLE;
         }
 

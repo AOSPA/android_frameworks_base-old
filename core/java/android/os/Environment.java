@@ -23,6 +23,9 @@ import android.annotation.TestApi;
 import android.app.AppGlobals;
 import android.app.AppOpsManager;
 import android.app.admin.DevicePolicyManager;
+import android.compat.Compatibility;
+import android.compat.annotation.ChangeId;
+import android.compat.annotation.Disabled;
 import android.compat.annotation.UnsupportedAppUsage;
 import android.content.Context;
 import android.content.Intent;
@@ -87,6 +90,46 @@ public class Environment {
             "/system_ext");
     private static final File DIR_APEX_ROOT = getDirectory(ENV_APEX_ROOT,
             "/apex");
+
+    /**
+     * Scoped Storage is on by default. However, it is not strictly enforced and there are multiple
+     * ways to opt out of scoped storage:
+     * <ul>
+     * <li>Target Sdk < Q</li>
+     * <li>Target Sdk = Q and has `requestLegacyExternalStorage` set in AndroidManifest.xml</li>
+     * <li>Target Sdk > Q: Upgrading from an app that was opted out of scoped storage and has
+     * `preserveLegacyExternalStorage` set in AndroidManifest.xml</li>
+     * </ul>
+     * This flag is enabled for all apps by default as Scoped Storage is enabled by default.
+     * Developers can disable this flag to opt out of Scoped Storage and have legacy storage
+     * workflow.
+     *
+     * Note: {@code FORCE_ENABLE_SCOPED_STORAGE} should also be disabled for apps to opt out of
+     * scoped storage.
+     * Note: This flag is also used in {@code com.android.providers.media.LocalCallingIdentity}.
+     * Any modifications to this flag should be reflected there as well.
+     * See https://developer.android.com/training/data-storage#scoped-storage for more information.
+     */
+    @ChangeId
+    private static final long DEFAULT_SCOPED_STORAGE = 149924527L;
+
+    /**
+     * Setting this flag strictly enforces Scoped Storage regardless of:
+     * <ul>
+     * <li>The value of Target Sdk</li>
+     * <li>The value of `requestLegacyExternalStorage` in AndroidManifest.xml</li>
+     * <li>The value of `preserveLegacyExternalStorage` in AndroidManifest.xml</li>
+     * </ul>
+     *
+     * Note: {@code DEFAULT_SCOPED_STORAGE} should also be enabled for apps to be enforced into
+     * scoped storage.
+     * Note: This flag is also used in {@code com.android.providers.media.LocalCallingIdentity}.
+     * Any modifications to this flag should be reflected there as well.
+     * See https://developer.android.com/training/data-storage#scoped-storage for more information.
+     */
+    @ChangeId
+    @Disabled
+    private static final long FORCE_ENABLE_SCOPED_STORAGE = 132649864L;
 
     @UnsupportedAppUsage
     private static UserEnvironment sCurrentUser;
@@ -1191,12 +1234,13 @@ public class Environment {
     }
 
     /**
-     * Returns whether the primary shared/external storage media is a legacy
-     * view that includes files not owned by the app.
+     * Returns whether the shared/external storage media is a
+     * legacy view that includes files not owned by the app.
      * <p>
      * This value may be different from the value requested by
      * {@code requestLegacyExternalStorage} in the app's manifest, since an app
-     * may inherit its legacy state based on when it was first installed.
+     * may inherit its legacy state based on when it was first installed, target sdk and other
+     * factors.
      * <p>
      * Non-legacy apps can continue to discover and read media belonging to
      * other apps via {@link android.provider.MediaStore}.
@@ -1207,18 +1251,19 @@ public class Environment {
     }
 
     /**
-     * Returns whether the shared/external storage media at the given path is a
+     * Returns whether the shared/external storage media is a
      * legacy view that includes files not owned by the app.
      * <p>
      * This value may be different from the value requested by
      * {@code requestLegacyExternalStorage} in the app's manifest, since an app
-     * may inherit its legacy state based on when it was first installed.
+     * may inherit its legacy state based on when it was first installed, target sdk and other
+     * factors.
      * <p>
      * Non-legacy apps can continue to discover and read media belonging to
      * other apps via {@link android.provider.MediaStore}.
      *
      * @throws IllegalArgumentException if the path is not a valid storage
-     *             device.
+     * device.
      */
     public static boolean isExternalStorageLegacy(@NonNull File path) {
         final Context context = AppGlobals.getInitialApplication();
@@ -1232,24 +1277,23 @@ public class Environment {
             return false;
         }
 
-        if (packageManager.checkPermission(Manifest.permission.WRITE_MEDIA_STORAGE,
-                context.getPackageName()) == PackageManager.PERMISSION_GRANTED) {
+        // TODO(b/150672994): Compat flags do not override instant app and isolated process's
+        //  behavior.
+        boolean defaultScopedStorage = Compatibility.isChangeEnabled(DEFAULT_SCOPED_STORAGE);
+        boolean forceEnableScopedStorage = Compatibility.isChangeEnabled(
+                FORCE_ENABLE_SCOPED_STORAGE);
+        // if Scoped Storage is strictly enforced, the app does *not* have legacy storage access
+        // Note: does not require packagename/uid as this is directly called from an app process
+        if (isScopedStorageEnforced(defaultScopedStorage, forceEnableScopedStorage)) {
+            return false;
+        }
+        // if Scoped Storage is strictly disabled, the app has legacy storage access
+        // Note: does not require packagename/uid as this is directly called from an app process
+        if (isScopedStorageDisabled(defaultScopedStorage, forceEnableScopedStorage)) {
             return true;
         }
 
-        if (packageManager.checkPermission(Manifest.permission.INSTALL_PACKAGES,
-                context.getPackageName()) == PackageManager.PERMISSION_GRANTED) {
-            return true;
-        }
         final AppOpsManager appOps = context.getSystemService(AppOpsManager.class);
-        final String[] packagesForUid = packageManager.getPackagesForUid(uid);
-        for (String packageName : packagesForUid) {
-            if (appOps.checkOpNoThrow(AppOpsManager.OP_REQUEST_INSTALL_PACKAGES,
-                    uid, packageName) == AppOpsManager.MODE_ALLOWED) {
-                return true;
-            }
-        }
-
         return appOps.checkOpNoThrow(AppOpsManager.OP_LEGACY_STORAGE,
                 uid, context.getOpPackageName()) == AppOpsManager.MODE_ALLOWED;
     }
@@ -1296,6 +1340,16 @@ public class Environment {
             default:
                 throw new IllegalStateException("Unknown AppOpsManager mode " + opMode);
         }
+    }
+
+    private static boolean isScopedStorageEnforced(boolean defaultScopedStorage,
+            boolean forceEnableScopedStorage) {
+        return defaultScopedStorage && forceEnableScopedStorage;
+    }
+
+    private static boolean isScopedStorageDisabled(boolean defaultScopedStorage,
+            boolean forceEnableScopedStorage) {
+        return !defaultScopedStorage && !forceEnableScopedStorage;
     }
 
     static File getDirectory(String variableName, String defaultPath) {

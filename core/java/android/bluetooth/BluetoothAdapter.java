@@ -851,7 +851,7 @@ public final class BluetoothAdapter {
         synchronized (mLock) {
             if (sBluetoothLeScanner == null) {
                 sBluetoothLeScanner = new BluetoothLeScanner(mManagerService, getOpPackageName(),
-                        getFeatureId());
+                        getAttributionTag());
             }
         }
         return sBluetoothLeScanner;
@@ -1668,11 +1668,11 @@ public final class BluetoothAdapter {
         return ActivityThread.currentOpPackageName();
     }
 
-    private String getFeatureId() {
+    private String getAttributionTag() {
         // Workaround for legacy API for getting a BluetoothAdapter not
         // passing a context
         if (mContext != null) {
-            return mContext.getFeatureId();
+            return mContext.getAttributionTag();
         }
         return null;
     }
@@ -1715,7 +1715,7 @@ public final class BluetoothAdapter {
         try {
             mServiceLock.readLock().lock();
             if (mService != null) {
-                return mService.startDiscovery(getOpPackageName(), getFeatureId());
+                return mService.startDiscovery(getOpPackageName(), getAttributionTag());
             }
         } catch (RemoteException e) {
             Log.e(TAG, "", e);

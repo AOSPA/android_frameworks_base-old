@@ -172,26 +172,25 @@ static bool readChunk(int fd, std::vector<uint8_t>& data) {
 
 BlockHeader readHeader(std::span<uint8_t>& data);
 
-static inline int32_t readBEInt32(borrowed_fd fd) {
+static inline int32_t readLEInt32(borrowed_fd fd) {
     int32_t result;
     ReadFully(fd, &result, sizeof(result));
-    result = int32_t(be32toh(result));
+    result = int32_t(le32toh(result));
     return result;
 }
 
 static inline std::vector<char> readBytes(borrowed_fd fd) {
-    int32_t size = readBEInt32(fd);
+    int32_t size = readLEInt32(fd);
     std::vector<char> result(size);
     ReadFully(fd, result.data(), size);
     return result;
 }
 
 static inline int32_t skipIdSigHeaders(borrowed_fd fd) {
-    readBEInt32(fd);        // version
-    readBytes(fd);          // verityRootHash
-    readBytes(fd);          // v3Digest
-    readBytes(fd);          // pkcs7SignatureBlock
-    return readBEInt32(fd); // size of the verity tree
+    readLEInt32(fd);        // version
+    readBytes(fd);          // hashingInfo
+    readBytes(fd);          // signingInfo
+    return readLEInt32(fd); // size of the verity tree
 }
 
 static inline IncFsSize verityTreeSizeForFile(IncFsSize fileSize) {
@@ -365,13 +364,8 @@ private:
         }
     }
     void onDestroy() final {
-        ALOGE("Sending EXIT to server.");
-        sendRequest(mOutFd, EXIT);
         // Make sure the receiver thread stopped.
         CHECK(!mReceiverThread.joinable());
-
-        mInFd.reset();
-        mOutFd.reset();
     }
 
     // Installation.
@@ -569,13 +563,6 @@ private:
 
     // Streaming.
     bool initStreaming(unique_fd inout) {
-        mInFd.reset(dup(inout));
-        mOutFd.reset(dup(inout));
-        if (mInFd < 0 || mOutFd < 0) {
-            ALOGE("Failed to dup FDs.");
-            return false;
-        }
-
         mEventFd.reset(eventfd(0, EFD_CLOEXEC));
         if (mEventFd < 0) {
             ALOGE("Failed to create eventfd.");
@@ -584,7 +571,7 @@ private:
 
         // Awaiting adb handshake.
         char okay_buf[OKAY.size()];
-        if (!android::base::ReadFully(mInFd, okay_buf, OKAY.size())) {
+        if (!android::base::ReadFully(inout, okay_buf, OKAY.size())) {
             ALOGE("Failed to receive OKAY. Abort.");
             return false;
         }
@@ -594,13 +581,23 @@ private:
             return false;
         }
 
-        mReceiverThread = std::thread([this]() { receiver(); });
+        {
+            std::lock_guard lock{mOutFdLock};
+            mOutFd.reset(::dup(inout));
+            if (mOutFd < 0) {
+                ALOGE("Failed to create streaming fd.");
+            }
+        }
+
+        mReceiverThread =
+                std::thread([this, io = std::move(inout)]() mutable { receiver(std::move(io)); });
         ALOGI("Started streaming...");
         return true;
     }
 
     // IFS callbacks.
     void onPendingReads(dataloader::PendingReads pendingReads) final {
+        std::lock_guard lock{mOutFdLock};
         CHECK(mIfs);
         for (auto&& pendingRead : pendingReads) {
             const android::dataloader::FileId& fileId = pendingRead.id;
@@ -626,12 +623,12 @@ private:
         }
     }
 
-    void receiver() {
+    void receiver(unique_fd inout) {
         std::vector<uint8_t> data;
         std::vector<IncFsDataBlock> instructions;
         std::unordered_map<FileIdx, unique_fd> writeFds;
         while (!mStopReceiving) {
-            const int res = waitForDataOrSignal(mInFd, mEventFd);
+            const int res = waitForDataOrSignal(inout, mEventFd);
             if (res == 0) {
                 continue;
             }
@@ -641,10 +638,11 @@ private:
                 break;
             }
             if (res == mEventFd) {
-                ALOGE("Received stop signal. Exit.");
+                ALOGE("Received stop signal. Sending EXIT to server.");
+                sendRequest(inout, EXIT);
                 break;
             }
-            if (!readChunk(mInFd, data)) {
+            if (!readChunk(inout, data)) {
                 ALOGE("Failed to read a message. Abort.");
                 mStatusListener->reportStatus(DATA_LOADER_NO_CONNECTION);
                 break;
@@ -657,7 +655,7 @@ private:
                     ALOGI("Stop signal received. Sending exit command (remaining bytes: %d).",
                           int(remainingData.size()));
 
-                    sendRequest(mOutFd, EXIT);
+                    sendRequest(inout, EXIT);
                     mStopReceiving = true;
                     break;
                 }
@@ -700,6 +698,11 @@ private:
             writeInstructions(instructions);
         }
         writeInstructions(instructions);
+
+        {
+            std::lock_guard lock{mOutFdLock};
+            mOutFd.reset();
+        }
     }
 
     void writeInstructions(std::vector<IncFsDataBlock>& instructions) {
@@ -743,7 +746,7 @@ private:
     std::string mArgs;
     android::dataloader::FilesystemConnectorPtr mIfs = nullptr;
     android::dataloader::StatusListenerPtr mStatusListener = nullptr;
-    android::base::unique_fd mInFd;
+    std::mutex mOutFdLock;
     android::base::unique_fd mOutFd;
     android::base::unique_fd mEventFd;
     std::thread mReceiverThread;

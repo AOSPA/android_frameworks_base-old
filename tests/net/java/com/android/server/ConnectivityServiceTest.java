@@ -23,8 +23,6 @@ import static android.content.pm.PackageManager.GET_PERMISSIONS;
 import static android.content.pm.PackageManager.MATCH_ANY_USER;
 import static android.content.pm.PackageManager.PERMISSION_DENIED;
 import static android.content.pm.PackageManager.PERMISSION_GRANTED;
-import static android.net.ConnectivityDiagnosticsManager.ConnectivityReport;
-import static android.net.ConnectivityDiagnosticsManager.DataStallReport;
 import static android.net.ConnectivityManager.ACTION_CAPTIVE_PORTAL_SIGN_IN;
 import static android.net.ConnectivityManager.CONNECTIVITY_ACTION;
 import static android.net.ConnectivityManager.CONNECTIVITY_ACTION_SUPL;
@@ -100,6 +98,7 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.startsWith;
 import static org.mockito.Matchers.anyInt;
@@ -2426,7 +2425,7 @@ public class ConnectivityServiceTest {
         assertEquals(expectedRequestCount, testFactory.getMyRequestCount());
         assertTrue(testFactory.getMyStartRequested());
 
-        testFactory.unregister();
+        testFactory.terminate();
         if (networkCallback != null) mCm.unregisterNetworkCallback(networkCallback);
         handlerThread.quit();
     }
@@ -2449,6 +2448,38 @@ public class ConnectivityServiceTest {
         tryNetworkFactoryRequests(NET_CAPABILITY_TRUSTED);
         tryNetworkFactoryRequests(NET_CAPABILITY_NOT_VPN);
         // Skipping VALIDATED and CAPTIVE_PORTAL as they're disallowed.
+    }
+
+    @Test
+    public void testNetworkFactoryUnregister() throws Exception {
+        final NetworkCapabilities filter = new NetworkCapabilities();
+        filter.clearAll();
+
+        final HandlerThread handlerThread = new HandlerThread("testNetworkFactoryRequests");
+        handlerThread.start();
+
+        // Checks that calling setScoreFilter on a NetworkFactory immediately before closing it
+        // does not crash.
+        for (int i = 0; i < 100; i++) {
+            final MockNetworkFactory testFactory = new MockNetworkFactory(handlerThread.getLooper(),
+                    mServiceContext, "testFactory", filter);
+            // Register the factory and don't be surprised when the default request arrives.
+            testFactory.register();
+            testFactory.expectAddRequestsWithScores(0);
+            testFactory.waitForNetworkRequests(1);
+
+            testFactory.setScoreFilter(42);
+            testFactory.terminate();
+
+            if (i % 2 == 0) {
+                try {
+                    testFactory.register();
+                    fail("Re-registering terminated NetworkFactory should throw");
+                } catch (IllegalStateException expected) {
+                }
+            }
+        }
+        handlerThread.quit();
     }
 
     @Test
@@ -3483,7 +3514,7 @@ public class ConnectivityServiceTest {
         cellNetworkCallback.expectCallback(CallbackEntry.LOST, mCellNetworkAgent);
         assertLength(1, mCm.getAllNetworks());
 
-        testFactory.unregister();
+        testFactory.terminate();
         mCm.unregisterNetworkCallback(cellNetworkCallback);
         handlerThread.quit();
     }
@@ -3724,7 +3755,7 @@ public class ConnectivityServiceTest {
         mCm.requestNetwork(nr, networkCallback, timeoutMs);
 
         // pass timeout and validate that UNAVAILABLE is called
-        networkCallback.expectCallback(CallbackEntry.UNAVAILABLE, null);
+        networkCallback.expectCallback(CallbackEntry.UNAVAILABLE, (Network) null);
 
         // create a network satisfying request - validate that request not triggered
         mWiFiNetworkAgent = new TestNetworkAgentWrapper(TRANSPORT_WIFI);
@@ -3815,7 +3846,7 @@ public class ConnectivityServiceTest {
             // Simulate the factory releasing the request as unfulfillable and expect onUnavailable!
             testFactory.triggerUnfulfillable(requests.get(newRequestId));
 
-            networkCallback.expectCallback(CallbackEntry.UNAVAILABLE, null);
+            networkCallback.expectCallback(CallbackEntry.UNAVAILABLE, (Network) null);
             testFactory.waitForRequests();
 
             // unregister network callback - a no-op (since already freed by the
@@ -3823,7 +3854,7 @@ public class ConnectivityServiceTest {
             mCm.unregisterNetworkCallback(networkCallback);
         }
 
-        testFactory.unregister();
+        testFactory.terminate();
         handlerThread.quit();
     }
 
@@ -6758,6 +6789,26 @@ public class ConnectivityServiceTest {
     }
 
     @Test
+    public void testCheckConnectivityDiagnosticsPermissionsWrongUidPackageName() throws Exception {
+        final NetworkAgentInfo naiWithoutUid =
+                new NetworkAgentInfo(
+                        null, null, null, null, null, new NetworkCapabilities(), 0,
+                        mServiceContext, null, null, mService, null, null, null, 0);
+
+        mServiceContext.setPermission(android.Manifest.permission.NETWORK_STACK, PERMISSION_DENIED);
+
+        try {
+            assertFalse(
+                    "Mismatched uid/package name should not pass the location permission check",
+                    mService.checkConnectivityDiagnosticsPermissions(
+                            Process.myPid() + 1, Process.myUid() + 1, naiWithoutUid,
+                            mContext.getOpPackageName()));
+        } catch (SecurityException e) {
+            fail("checkConnectivityDiagnosticsPermissions shouldn't surface a SecurityException");
+        }
+    }
+
+    @Test
     public void testCheckConnectivityDiagnosticsPermissionsNoLocationPermission() throws Exception {
         final NetworkAgentInfo naiWithoutUid =
                 new NetworkAgentInfo(
@@ -6863,15 +6914,21 @@ public class ConnectivityServiceTest {
     }
 
     @Test
-    public void testConnectivityDiagnosticsCallbackOnConnectivityReport() throws Exception {
+    public void testConnectivityDiagnosticsCallbackOnConnectivityReportAvailable()
+            throws Exception {
         setUpConnectivityDiagnosticsCallback();
 
         // Block until all other events are done processing.
         HandlerUtilsKt.waitForIdle(mCsHandlerThread, TIMEOUT_MS);
 
         // Verify onConnectivityReport fired
-        verify(mConnectivityDiagnosticsCallback)
-                .onConnectivityReport(any(ConnectivityReport.class));
+        verify(mConnectivityDiagnosticsCallback).onConnectivityReportAvailable(
+                argThat(report -> {
+                    final NetworkCapabilities nc = report.getNetworkCapabilities();
+                    return nc.getUids() == null
+                            && nc.getAdministratorUids().isEmpty()
+                            && nc.getOwnerUid() == Process.INVALID_UID;
+                }));
     }
 
     @Test
@@ -6886,7 +6943,13 @@ public class ConnectivityServiceTest {
         HandlerUtilsKt.waitForIdle(mCsHandlerThread, TIMEOUT_MS);
 
         // Verify onDataStallSuspected fired
-        verify(mConnectivityDiagnosticsCallback).onDataStallSuspected(any(DataStallReport.class));
+        verify(mConnectivityDiagnosticsCallback).onDataStallSuspected(
+                argThat(report -> {
+                    final NetworkCapabilities nc = report.getNetworkCapabilities();
+                    return nc.getUids() == null
+                            && nc.getAdministratorUids().isEmpty()
+                            && nc.getOwnerUid() == Process.INVALID_UID;
+                }));
     }
 
     @Test

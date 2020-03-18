@@ -223,6 +223,11 @@ public class ChooserActivity extends ResolverActivity implements
             SystemUiDeviceConfigFlags.HASH_SALT_MAX_DAYS,
             DEFAULT_SALT_EXPIRATION_DAYS);
 
+    private boolean mAppendDirectShareEnabled = DeviceConfig.getBoolean(
+            DeviceConfig.NAMESPACE_SYSTEMUI,
+            SystemUiDeviceConfigFlags.APPEND_DIRECT_SHARE_ENABLED,
+            false);
+
     private Bundle mReplacementExtras;
     private IntentSender mChosenComponentSender;
     private IntentSender mRefinementIntentSender;
@@ -409,6 +414,11 @@ public class ChooserActivity extends ResolverActivity implements
         private static final int WATCHDOG_TIMEOUT_MAX_MILLIS = 10000;
         private static final int WATCHDOG_TIMEOUT_MIN_MILLIS = 3000;
 
+        private static final int DEFAULT_DIRECT_SHARE_TIMEOUT_MILLIS = 1500;
+        private int mDirectShareTimeout = DeviceConfig.getInt(DeviceConfig.NAMESPACE_SYSTEMUI,
+                SystemUiDeviceConfigFlags.SHARE_SHEET_DIRECT_SHARE_TIMEOUT,
+                DEFAULT_DIRECT_SHARE_TIMEOUT_MILLIS);
+
         private boolean mMinTimeoutPassed = false;
 
         private void removeAllMessages() {
@@ -427,15 +437,14 @@ public class ChooserActivity extends ResolverActivity implements
 
             if (DEBUG) {
                 Log.d(TAG, "queryTargets setting watchdog timer for "
-                        + WATCHDOG_TIMEOUT_MIN_MILLIS + "-"
+                        + mDirectShareTimeout + "-"
                         + WATCHDOG_TIMEOUT_MAX_MILLIS + "ms");
             }
 
             sendEmptyMessageDelayed(CHOOSER_TARGET_SERVICE_WATCHDOG_MIN_TIMEOUT,
                     WATCHDOG_TIMEOUT_MIN_MILLIS);
             sendEmptyMessageDelayed(CHOOSER_TARGET_SERVICE_WATCHDOG_MAX_TIMEOUT,
-                    WATCHDOG_TIMEOUT_MAX_MILLIS);
-
+                    mAppendDirectShareEnabled ? mDirectShareTimeout : WATCHDOG_TIMEOUT_MAX_MILLIS);
         }
 
         private void maybeStopServiceRequestTimer() {
@@ -463,6 +472,7 @@ public class ChooserActivity extends ResolverActivity implements
                     final ServiceResultInfo sri = (ServiceResultInfo) msg.obj;
                     if (!mServiceConnections.contains(sri.connection)) {
                         Log.w(TAG, "ChooserTargetServiceConnection " + sri.connection
+                                + sri.originalTarget.getResolveInfo().activityInfo.packageName
                                 + " returned after being removed from active connections."
                                 + " Have you considered returning results faster?");
                         break;
@@ -474,7 +484,7 @@ public class ChooserActivity extends ResolverActivity implements
                         if (adapterForUserHandle != null) {
                             adapterForUserHandle.addServiceResults(sri.originalTarget,
                                     sri.resultTargets, TARGET_TYPE_CHOOSER_TARGET,
-                                    /* directShareShortcutInfoCache */ null);
+                                    /* directShareShortcutInfoCache */ null, mServiceConnections);
                         }
                     }
                     unbindService(sri.connection);
@@ -489,6 +499,7 @@ public class ChooserActivity extends ResolverActivity implements
                     break;
 
                 case CHOOSER_TARGET_SERVICE_WATCHDOG_MAX_TIMEOUT:
+                    mMinTimeoutPassed = true;
                     unbindRemainingServices();
                     maybeStopServiceRequestTimer();
                     break;
@@ -513,7 +524,7 @@ public class ChooserActivity extends ResolverActivity implements
                         if (adapterForUserHandle != null) {
                             adapterForUserHandle.addServiceResults(
                                     resultInfo.originalTarget, resultInfo.resultTargets, msg.arg1,
-                                    mDirectShareShortcutInfoCache);
+                                    mDirectShareShortcutInfoCache, mServiceConnections);
                         }
                     }
                     break;
@@ -1481,7 +1492,7 @@ public class ChooserActivity extends ResolverActivity implements
                     /* origTarget */ null,
                     Lists.newArrayList(mCallerChooserTargets),
                     TARGET_TYPE_DEFAULT,
-                    /* directShareShortcutInfoCache */ null);
+                    /* directShareShortcutInfoCache */ null, mServiceConnections);
         }
     }
 
@@ -1525,10 +1536,12 @@ public class ChooserActivity extends ResolverActivity implements
                 labels.add(innerInfo.getResolveInfo().loadLabel(getPackageManager()));
             }
             f = new ResolverTargetActionsDialogFragment(mti.getDisplayLabel(), name,
-                    mti.getTargets(), labels);
+                    mti.getTargets(), labels,
+                    mChooserMultiProfilePagerAdapter.getCurrentUserHandle());
         } else {
             f = new ResolverTargetActionsDialogFragment(
-                    ti.getResolveInfo().loadLabel(getPackageManager()), name, pinned);
+                    ti.getResolveInfo().loadLabel(getPackageManager()), name, pinned,
+                    mChooserMultiProfilePagerAdapter.getCurrentUserHandle());
         }
 
         f.show(getFragmentManager(), TARGET_DETAILS_FRAGMENT_TAG);
@@ -2129,7 +2142,7 @@ public class ChooserActivity extends ResolverActivity implements
             return null;
         }
 
-        if (getPersonalProfileUserHandle() == userHandle) {
+        if (getPersonalProfileUserHandle().equals(userHandle)) {
             if (mPersonalAppPredictor != null) {
                 return mPersonalAppPredictor;
             }
@@ -2155,7 +2168,7 @@ public class ChooserActivity extends ResolverActivity implements
                         .getSystemService(AppPredictionManager.class);
         AppPredictor appPredictionSession = appPredictionManager.createAppPredictionSession(
                 appPredictionContext);
-        if (getPersonalProfileUserHandle() == userHandle) {
+        if (getPersonalProfileUserHandle().equals(userHandle)) {
             mPersonalAppPredictor = appPredictionSession;
         } else {
             mWorkAppPredictor = appPredictionSession;
@@ -2555,7 +2568,7 @@ public class ChooserActivity extends ResolverActivity implements
 
         ChooserListAdapter chooserListAdapter = (ChooserListAdapter) listAdapter;
         if (chooserListAdapter.getUserHandle()
-                == mChooserMultiProfilePagerAdapter.getCurrentUserHandle()) {
+                .equals(mChooserMultiProfilePagerAdapter.getCurrentUserHandle())) {
             mChooserMultiProfilePagerAdapter.getActiveAdapterView()
                     .setAdapter(mChooserMultiProfilePagerAdapter.getCurrentRootAdapter());
             mChooserMultiProfilePagerAdapter
@@ -3583,6 +3596,10 @@ public class ChooserActivity extends ResolverActivity implements
                     + (mOriginalTarget != null
                     ? mOriginalTarget.getResolveInfo().activityInfo.toString()
                     : "<connection destroyed>") + "}";
+        }
+
+        public ComponentName getComponentName() {
+            return mOriginalTarget.getResolveInfo().activityInfo.getComponentName();
         }
     }
 

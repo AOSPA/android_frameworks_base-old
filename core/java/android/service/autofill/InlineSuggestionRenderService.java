@@ -94,13 +94,28 @@ public abstract class InlineSuggestionRenderService extends Service {
 
             final SurfaceControlViewHost host = new SurfaceControlViewHost(this, getDisplay(),
                     hostInputToken);
-            host.addView(suggestionRoot, lp);
+            host.setView(suggestionRoot, lp);
             suggestionRoot.setOnClickListener((v) -> {
                 try {
-                    callback.onAutofill();
+                    if (suggestionView.hasOnClickListeners()) {
+                        suggestionView.callOnClick();
+                    }
+                    callback.onClick();
                 } catch (RemoteException e) {
-                    Log.w(TAG, "RemoteException calling onAutofill()");
+                    Log.w(TAG, "RemoteException calling onClick()");
                 }
+            });
+
+            suggestionRoot.setOnLongClickListener((v) -> {
+                try {
+                    if (suggestionView.hasOnLongClickListeners()) {
+                        suggestionView.performLongClick();
+                    }
+                    callback.onLongClick();
+                } catch (RemoteException e) {
+                    Log.w(TAG, "RemoteException calling onLongClick()");
+                }
+                return true;
             });
 
             sendResult(callback, host.getSurfacePackage());

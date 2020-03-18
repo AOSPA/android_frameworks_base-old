@@ -92,8 +92,10 @@ import com.android.systemui.dagger.qualifiers.UiBackground;
 import com.android.systemui.dump.DumpManager;
 import com.android.systemui.keyguard.dagger.KeyguardModule;
 import com.android.systemui.plugins.FalsingManager;
+import com.android.systemui.shared.system.QuickStepContract;
 import com.android.systemui.statusbar.phone.BiometricUnlockController;
 import com.android.systemui.statusbar.phone.KeyguardBypassController;
+import com.android.systemui.statusbar.phone.NavigationModeController;
 import com.android.systemui.statusbar.phone.NotificationPanelViewController;
 import com.android.systemui.statusbar.phone.NotificationShadeWindowController;
 import com.android.systemui.statusbar.phone.StatusBar;
@@ -375,6 +377,7 @@ public class KeyguardViewMediator extends SystemUI implements Dumpable {
 
     private boolean mLockLater;
     private boolean mShowHomeOverLockscreen;
+    private boolean mInGestureNavigationMode;
 
     private boolean mWakeAndUnlocking;
     private IKeyguardDrawnCallback mDrawnCallback;
@@ -721,7 +724,8 @@ public class KeyguardViewMediator extends SystemUI implements Dumpable {
             KeyguardUpdateMonitor keyguardUpdateMonitor, DumpManager dumpManager,
             @UiBackground Executor uiBgExecutor, PowerManager powerManager,
             TrustManager trustManager,
-            DeviceConfigProxy deviceConfig) {
+            DeviceConfigProxy deviceConfig,
+            NavigationModeController navigationModeController) {
         super(context);
         mFalsingManager = falsingManager;
         mLockPatternUtils = lockPatternUtils;
@@ -743,6 +747,10 @@ public class KeyguardViewMediator extends SystemUI implements Dumpable {
                 DeviceConfig.NAMESPACE_SYSTEMUI,
                 mHandler::post,
                 mOnPropertiesChangedListener);
+        mInGestureNavigationMode =
+                QuickStepContract.isGesturalMode(navigationModeController.addListener(mode -> {
+                    mInGestureNavigationMode = QuickStepContract.isGesturalMode(mode);
+                }));
     }
 
     public void userActivity() {
@@ -2015,7 +2023,7 @@ public class KeyguardViewMediator extends SystemUI implements Dumpable {
             // windows that appear on top, ever
             int flags = StatusBarManager.DISABLE_NONE;
             if (forceHideHomeRecentsButtons || isShowingAndNotOccluded()) {
-                if (!mShowHomeOverLockscreen) {
+                if (!mShowHomeOverLockscreen || !mInGestureNavigationMode) {
                     flags |= StatusBarManager.DISABLE_HOME;
                 }
                 flags |= StatusBarManager.DISABLE_RECENT;

@@ -44,6 +44,8 @@ import android.widget.LinearLayout;
 import com.android.internal.logging.MetricsLogger;
 import com.android.internal.logging.nano.MetricsProto.MetricsEvent;
 import com.android.settingslib.Utils;
+import com.android.settingslib.bluetooth.LocalBluetoothManager;
+import com.android.settingslib.media.InfoMediaManager;
 import com.android.settingslib.media.LocalMediaManager;
 import com.android.settingslib.media.MediaDevice;
 import com.android.systemui.Dependency;
@@ -51,6 +53,7 @@ import com.android.systemui.Dumpable;
 import com.android.systemui.R;
 import com.android.systemui.broadcast.BroadcastDispatcher;
 import com.android.systemui.dagger.qualifiers.Background;
+import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.dump.DumpManager;
 import com.android.systemui.plugins.qs.DetailAdapter;
 import com.android.systemui.plugins.qs.QSTile;
@@ -98,6 +101,8 @@ public class QSPanel extends LinearLayout implements Tunable, Callback, Brightne
     private final LinearLayout mMediaCarousel;
     private final ArrayList<QSMediaPlayer> mMediaPlayers = new ArrayList<>();
     private final NotificationMediaManager mNotificationMediaManager;
+    private final LocalBluetoothManager mLocalBluetoothManager;
+    private final Executor mForegroundExecutor;
     private final Executor mBackgroundExecutor;
     private LocalMediaManager mLocalMediaManager;
     private MediaDevice mDevice;
@@ -157,14 +162,18 @@ public class QSPanel extends LinearLayout implements Tunable, Callback, Brightne
             BroadcastDispatcher broadcastDispatcher,
             QSLogger qsLogger,
             NotificationMediaManager notificationMediaManager,
-            @Background Executor backgroundExecutor
+            @Main Executor foregroundExecutor,
+            @Background Executor backgroundExecutor,
+            @Nullable LocalBluetoothManager localBluetoothManager
     ) {
         super(context, attrs);
         mContext = context;
         mQSLogger = qsLogger;
         mDumpManager = dumpManager;
         mNotificationMediaManager = notificationMediaManager;
+        mForegroundExecutor = foregroundExecutor;
         mBackgroundExecutor = backgroundExecutor;
+        mLocalBluetoothManager = localBluetoothManager;
 
         setOrientation(VERTICAL);
 
@@ -265,7 +274,7 @@ public class QSPanel extends LinearLayout implements Tunable, Callback, Brightne
         if (player == null) {
             Log.d(TAG, "creating new player");
             player = new QSMediaPlayer(mContext, this, mNotificationMediaManager,
-                    mBackgroundExecutor);
+                    mForegroundExecutor, mBackgroundExecutor);
 
             if (player.isPlaying()) {
                 mMediaCarousel.addView(player.getView(), 0, lp); // add in front
@@ -286,7 +295,9 @@ public class QSPanel extends LinearLayout implements Tunable, Callback, Brightne
 
             // Set up listener for device changes
             // TODO: integrate with MediaTransferManager?
-            mLocalMediaManager = new LocalMediaManager(mContext, null, null);
+            InfoMediaManager imm =
+                    new InfoMediaManager(mContext, null, null, mLocalBluetoothManager);
+            mLocalMediaManager = new LocalMediaManager(mContext, mLocalBluetoothManager, imm, null);
             mLocalMediaManager.startScan();
             mDevice = mLocalMediaManager.getCurrentConnectedDevice();
             mLocalMediaManager.registerCallback(mDeviceCallback);

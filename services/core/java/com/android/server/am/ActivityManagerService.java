@@ -2203,9 +2203,17 @@ public class ActivityManagerService extends IActivityManager.Stub
 
         @Override
         protected void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
+            if (mActivityManagerService.mOomAdjuster.mCachedAppOptimizer.useFreezer()) {
+                Process.enableFreezer(false);
+            }
+
             if (!DumpUtils.checkDumpAndUsageStatsPermission(mActivityManagerService.mContext,
                     "meminfo", pw)) return;
             PriorityDump.dump(mPriorityDumper, fd, pw, args);
+
+            if (mActivityManagerService.mOomAdjuster.mCachedAppOptimizer.useFreezer()) {
+                Process.enableFreezer(true);
+            }
         }
     }
 
@@ -2217,9 +2225,17 @@ public class ActivityManagerService extends IActivityManager.Stub
 
         @Override
         protected void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
+            if (mActivityManagerService.mOomAdjuster.mCachedAppOptimizer.useFreezer()) {
+                Process.enableFreezer(false);
+            }
+
             if (!DumpUtils.checkDumpAndUsageStatsPermission(mActivityManagerService.mContext,
                     "gfxinfo", pw)) return;
             mActivityManagerService.dumpGraphicsHardwareUsage(fd, pw, args);
+
+            if (mActivityManagerService.mOomAdjuster.mCachedAppOptimizer.useFreezer()) {
+                Process.enableFreezer(true);
+            }
         }
     }
 
@@ -2231,9 +2247,17 @@ public class ActivityManagerService extends IActivityManager.Stub
 
         @Override
         protected void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
+            if (mActivityManagerService.mOomAdjuster.mCachedAppOptimizer.useFreezer()) {
+                Process.enableFreezer(false);
+            }
+
             if (!DumpUtils.checkDumpAndUsageStatsPermission(mActivityManagerService.mContext,
                     "dbinfo", pw)) return;
             mActivityManagerService.dumpDbInfo(fd, pw, args);
+
+            if (mActivityManagerService.mOomAdjuster.mCachedAppOptimizer.useFreezer()) {
+                Process.enableFreezer(true);
+            }
         }
     }
 
@@ -17620,8 +17644,11 @@ public class ActivityManagerService extends IActivityManager.Stub
 
     final void setProcessTrackerStateLocked(ProcessRecord proc, int memFactor, long now) {
         if (proc.thread != null && proc.baseProcessTracker != null) {
-            proc.baseProcessTracker.setState(
-                    proc.getReportedProcState(), memFactor, now, proc.pkgList.mPkgList);
+            final int procState = proc.getReportedProcState();
+            if (procState != PROCESS_STATE_NONEXISTENT) {
+                proc.baseProcessTracker.setState(
+                        procState, memFactor, now, proc.pkgList.mPkgList);
+            }
         }
     }
 
@@ -18798,6 +18825,11 @@ public class ActivityManagerService extends IActivityManager.Stub
         @Override
         public int getUidProcessState(int uid) {
             return getUidState(uid);
+        }
+
+        @Override
+        public Map<Integer, String> getProcessesWithPendingBindMounts(int userId) {
+            return mProcessList.getProcessesWithPendingBindMounts(userId);
         }
 
         @Override
