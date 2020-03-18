@@ -288,6 +288,7 @@ import java.lang.ref.WeakReference;
 import java.text.DateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -355,6 +356,8 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
     ActivityManagerInternal mAmInternal;
     UriGrantsManagerInternal mUgmInternal;
     private PackageManagerInternal mPmInternal;
+    /** The cached sys ui service component name from package manager. */
+    private ComponentName mSysUiServiceComponent;
     private PermissionPolicyInternal mPermissionPolicyInternal;
     @VisibleForTesting
     final ActivityTaskManagerInternal mInternal;
@@ -680,12 +683,15 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         }
 
         @Override
-        public void onChange(boolean selfChange, Uri uri, @UserIdInt int userId) {
-            if (mFontScaleUri.equals(uri)) {
-                updateFontScaleIfNeeded(userId);
-            } else if (mHideErrorDialogsUri.equals(uri)) {
-                synchronized (mGlobalLock) {
-                    updateShouldShowDialogsLocked(getGlobalConfiguration());
+        public void onChange(boolean selfChange, Collection<Uri> uris, int flags,
+                @UserIdInt int userId) {
+            for (Uri uri : uris) {
+                if (mFontScaleUri.equals(uri)) {
+                    updateFontScaleIfNeeded(userId);
+                } else if (mHideErrorDialogsUri.equals(uri)) {
+                    synchronized (mGlobalLock) {
+                        updateShouldShowDialogsLocked(getGlobalConfiguration());
+                    }
                 }
             }
         }
@@ -5863,6 +5869,14 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
             mPmInternal = LocalServices.getService(PackageManagerInternal.class);
         }
         return mPmInternal;
+    }
+
+    ComponentName getSysUiServiceComponentLocked() {
+        if (mSysUiServiceComponent == null) {
+            final PackageManagerInternal pm = getPackageManagerInternalLocked();
+            mSysUiServiceComponent = pm.getSystemUiServiceComponent();
+        }
+        return mSysUiServiceComponent;
     }
 
     PermissionPolicyInternal getPermissionPolicyInternal() {

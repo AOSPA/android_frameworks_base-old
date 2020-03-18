@@ -118,6 +118,7 @@ import static com.android.server.wm.ProtoLogGroup.WM_DEBUG_STARTING_WINDOW;
 import static com.android.server.wm.SurfaceAnimator.ANIMATION_TYPE_WINDOW_ANIMATION;
 import static com.android.server.wm.WindowContainer.AnimationFlags.PARENTS;
 import static com.android.server.wm.WindowContainer.AnimationFlags.TRANSITION;
+import static com.android.server.wm.WindowContainerChildProto.WINDOW;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_ANIM;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_CONFIGURATION;
@@ -137,6 +138,7 @@ import static com.android.server.wm.WindowManagerService.UPDATE_FOCUS_NORMAL;
 import static com.android.server.wm.WindowManagerService.UPDATE_FOCUS_REMOVING_FOCUS;
 import static com.android.server.wm.WindowManagerService.UPDATE_FOCUS_WILL_PLACE_SURFACES;
 import static com.android.server.wm.WindowManagerService.WINDOWS_FREEZING_SCREENS_TIMEOUT;
+import static com.android.server.wm.WindowManagerService.H.WINDOW_STATE_BLAST_SYNC_TIMEOUT;
 import static com.android.server.wm.WindowStateAnimator.COMMIT_DRAW_PENDING;
 import static com.android.server.wm.WindowStateAnimator.DRAW_PENDING;
 import static com.android.server.wm.WindowStateAnimator.HAS_DRAWN;
@@ -145,7 +147,6 @@ import static com.android.server.wm.WindowStateAnimator.READY_TO_SHOW;
 import static com.android.server.wm.WindowStateProto.ANIMATING_EXIT;
 import static com.android.server.wm.WindowStateProto.ANIMATOR;
 import static com.android.server.wm.WindowStateProto.ATTRIBUTES;
-import static com.android.server.wm.WindowStateProto.CHILD_WINDOWS;
 import static com.android.server.wm.WindowStateProto.DESTROYING;
 import static com.android.server.wm.WindowStateProto.DISPLAY_ID;
 import static com.android.server.wm.WindowStateProto.FINISHED_SEAMLESS_ROTATION_FRAME;
@@ -414,6 +415,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
     float mHScale=1, mVScale=1;
     float mLastHScale=1, mLastVScale=1;
     final Matrix mTmpMatrix = new Matrix();
+    final float[] mTmpMatrixArray = new float[9];
 
     private final WindowFrames mWindowFrames = new WindowFrames();
 
@@ -444,6 +446,14 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
     // wallpaper; if a wallpaper window: the currently applied offset.
     float mWallpaperX = -1;
     float mWallpaperY = -1;
+
+    // If a window showing a wallpaper: the requested zoom out for the
+    // wallpaper; if a wallpaper window: the currently applied zoom.
+    float mWallpaperZoomOut = -1;
+
+    // If a wallpaper window: whether the wallpaper should be scaled when zoomed, if set
+    // to false, mWallpaperZoom will be ignored here and just passed to the WallpaperService.
+    boolean mShouldScaleWallpaper;
 
     // If a window showing a wallpaper: what fraction of the offset
     // range corresponds to a full virtual screen.
@@ -668,6 +678,8 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
      * default. The variable is cached, so we do not send too many updates to SF.
      */
     int mFrameRateSelectionPriority = RefreshRatePolicy.LAYER_PRIORITY_UNSET;
+
+    static final int BLAST_TIMEOUT_DURATION = 5000; /* milliseconds */
 
     /**
      * @return The insets state as requested by the client, i.e. the dispatched insets state
@@ -3758,9 +3770,6 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         mSurfacePosition.dumpDebug(proto, SURFACE_POSITION);
         mWinAnimator.dumpDebug(proto, ANIMATOR);
         proto.write(ANIMATING_EXIT, mAnimatingExit);
-        for (int i = 0; i < mChildren.size(); i++) {
-            mChildren.get(i).dumpDebug(proto, CHILD_WINDOWS, logLevel);
-        }
         proto.write(REQUESTED_WIDTH, mRequestedWidth);
         proto.write(REQUESTED_HEIGHT, mRequestedHeight);
         proto.write(VIEW_VISIBILITY, mViewVisibility);
@@ -3776,6 +3785,11 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         proto.write(FINISHED_SEAMLESS_ROTATION_FRAME, mFinishSeamlessRotateFrameNumber);
         proto.write(FORCE_SEAMLESS_ROTATION, mForceSeamlesslyRotate);
         proto.end(token);
+    }
+
+    @Override
+    long getProtoFieldId() {
+        return WINDOW;
     }
 
     @Override
@@ -3917,6 +3931,9 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         if (mWallpaperXStep != -1 || mWallpaperYStep != -1) {
             pw.println(prefix + "mWallpaperXStep=" + mWallpaperXStep
                     + " mWallpaperYStep=" + mWallpaperYStep);
+        }
+        if (mWallpaperZoomOut != -1) {
+            pw.println(prefix + "mWallpaperZoomOut=" + mWallpaperZoomOut);
         }
         if (mWallpaperDisplayOffsetX != Integer.MIN_VALUE
                 || mWallpaperDisplayOffsetY != Integer.MIN_VALUE) {
@@ -5660,8 +5677,8 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         return mSession.mPid == pid && isNonToastOrStarting() && isVisibleNow();
     }
 
-    SurfaceControl getDeferTransactionBarrier() {
-        return mWinAnimator.getDeferTransactionBarrier();
+    SurfaceControl getClientViewRootSurface() {
+        return mWinAnimator.getClientViewRootSurface();
     }
 
     @Override
@@ -5671,6 +5688,11 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         mWaitingListener = waitingListener;
         mWaitingSyncId = waitingId;
         mUsingBLASTSyncTransaction = true;
+
+        mWmService.mH.removeMessages(WINDOW_STATE_BLAST_SYNC_TIMEOUT, this);
+        mWmService.mH.sendNewMessageDelayed(WINDOW_STATE_BLAST_SYNC_TIMEOUT, this,
+            BLAST_TIMEOUT_DURATION);
+
         return true;
     }
 
@@ -5678,6 +5700,8 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         if (!mUsingBLASTSyncTransaction) {
             return mWinAnimator.finishDrawingLocked(postDrawTransaction);
         }
+
+        mWmService.mH.removeMessages(WINDOW_STATE_BLAST_SYNC_TIMEOUT, this);
         if (postDrawTransaction == null) {
             postDrawTransaction = new SurfaceControl.Transaction();
         }

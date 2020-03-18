@@ -71,6 +71,7 @@ import android.view.DisplayAdjustments;
 import android.view.View;
 import android.view.ViewDebug;
 import android.view.WindowManager;
+import android.view.WindowManager.LayoutParams.WindowType;
 import android.view.autofill.AutofillManager.AutofillClient;
 import android.view.contentcapture.ContentCaptureManager.ContentCaptureClient;
 import android.view.textclassifier.TextClassificationManager;
@@ -5128,7 +5129,7 @@ public abstract class Context {
      * {@link android.os.incremental.IncrementalManager}.
      * @hide
      */
-    public static final String INCREMENTAL_SERVICE = "incremental_service";
+    public static final String INCREMENTAL_SERVICE = "incremental";
 
     /**
      * Use with {@link #getSystemService(String)} to retrieve an
@@ -5820,7 +5821,7 @@ public abstract class Context {
      * @see #WALLPAPER_SERVICE
      * @throws IllegalArgumentException if token is invalid
      */
-    public @NonNull Context createWindowContext(int type, @Nullable Bundle options)  {
+    public @NonNull Context createWindowContext(@WindowType int type, @Nullable Bundle options)  {
         throw new RuntimeException("Not implemented. Must override in a subclass.");
     }
 

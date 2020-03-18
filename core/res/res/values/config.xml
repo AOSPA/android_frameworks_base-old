@@ -2027,7 +2027,10 @@
          a keyboard is present. -->
     <bool name="config_showMenuShortcutsWhenKeyboardPresent">false</bool>
 
-    <!-- Do not translate. Defines the slots is Two Digit Number for dialing normally not USSD -->
+    <!-- Do not translate. Defines the slots is Two Digit Number for dialing normally not USSD.
+
+         Note: This config is deprecated, please use carrier config which is
+               CarrierConfigManager.KEY_MMI_TWO_DIGIT_NUMBER_PATTERN_STRING_ARRAY instead. -->
     <string-array name="config_twoDigitNumberPattern" translatable="false">
     </string-array>
 
@@ -4434,6 +4437,9 @@
 
     <!-- Package name of custom session policy provider class used by MediaSessionService. -->
     <string name="config_customSessionPolicyProvider"></string>
+
+    <!-- The max scale for the wallpaper when it's zoomed in -->
+    <item name="config_wallpaperMaxScale" format="float" type="dimen">1</item>
 
     <!-- pdp data retry for cause 29, 33 and 55-->
     <bool name="config_pdp_retry_for_29_33_55_enabled">false</bool>

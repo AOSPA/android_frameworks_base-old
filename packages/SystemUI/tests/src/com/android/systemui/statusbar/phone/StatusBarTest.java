@@ -119,8 +119,10 @@ import com.android.systemui.statusbar.notification.collection.NotificationEntry;
 import com.android.systemui.statusbar.notification.collection.NotificationEntryBuilder;
 import com.android.systemui.statusbar.notification.init.NotificationsController;
 import com.android.systemui.statusbar.notification.interruption.BypassHeadsUpNotifier;
+import com.android.systemui.statusbar.notification.interruption.NotificationAlertingManager;
 import com.android.systemui.statusbar.notification.interruption.NotificationInterruptStateProviderImpl;
 import com.android.systemui.statusbar.notification.logging.NotificationLogger;
+import com.android.systemui.statusbar.notification.logging.NotificationPanelLoggerFake;
 import com.android.systemui.statusbar.notification.row.NotificationGutsManager;
 import com.android.systemui.statusbar.notification.stack.NotificationStackScrollLayout;
 import com.android.systemui.statusbar.phone.dagger.StatusBarComponent;
@@ -190,6 +192,7 @@ public class StatusBarTest extends SysuiTestCase {
     @Mock private StatusBarNotificationPresenter mNotificationPresenter;
     @Mock private NotificationEntryListener mEntryListener;
     @Mock private NotificationFilter mNotificationFilter;
+    @Mock private NotificationAlertingManager mNotificationAlertingManager;
     @Mock private AmbientDisplayConfiguration mAmbientDisplayConfiguration;
     @Mock private NotificationLogger.ExpansionStateLogger mExpansionStateLogger;
     @Mock private KeyguardUpdateMonitor mKeyguardUpdateMonitor;
@@ -273,7 +276,7 @@ public class StatusBarTest extends SysuiTestCase {
         mMetricsLogger = new FakeMetricsLogger();
         NotificationLogger notificationLogger = new NotificationLogger(mNotificationListener,
                 mUiBgExecutor, mock(NotificationEntryManager.class), mStatusBarStateController,
-                mExpansionStateLogger);
+                mExpansionStateLogger, new NotificationPanelLoggerFake());
         notificationLogger.setVisibilityReporter(mock(Runnable.class));
 
         when(mCommandQueue.asBinder()).thenReturn(new Binder());
@@ -347,6 +350,7 @@ public class StatusBarTest extends SysuiTestCase {
                 mNotificationInterruptStateProvider,
                 mNotificationViewHierarchyManager,
                 mKeyguardViewMediator,
+                mNotificationAlertingManager,
                 new DisplayMetrics(),
                 mMetricsLogger,
                 mUiBgExecutor,

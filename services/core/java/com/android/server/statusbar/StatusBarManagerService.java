@@ -60,6 +60,7 @@ import com.android.internal.statusbar.StatusBarIcon;
 import com.android.internal.util.DumpUtils;
 import com.android.internal.view.AppearanceRegion;
 import com.android.server.LocalServices;
+import com.android.server.UiThread;
 import com.android.server.notification.NotificationDelegate;
 import com.android.server.policy.GlobalActionsProvider;
 import com.android.server.power.ShutdownThread;
