@@ -1291,7 +1291,7 @@ public class WindowManagerService extends IWindowManager.Stub
         mConstants.start(new HandlerExecutor(mH));
 
         LocalServices.addService(WindowManagerInternal.class, new LocalService());
-        mEmbeddedWindowController = new EmbeddedWindowController(mGlobalLock);
+        mEmbeddedWindowController = new EmbeddedWindowController(mAtmService);
 
         mDisplayAreaPolicyProvider = DisplayAreaPolicy.Provider.fromResources(
                 mContext.getResources());
@@ -1904,7 +1904,7 @@ public class WindowManagerService extends IWindowManager.Stub
         if (dc.mCurrentFocus == null) {
             dc.mWinRemovedSinceNullFocus.add(win);
         }
-        mEmbeddedWindowController.removeWindowsWithHost(win);
+        mEmbeddedWindowController.onWindowRemoved(win);
         mPendingRemove.remove(win);
         mResizingWindows.remove(win);
         updateNonSystemOverlayWindowsVisibilityIfNeeded(win, false /* surfaceShown */);
@@ -2451,10 +2451,6 @@ public class WindowManagerService extends IWindowManager.Stub
             // of a transaction to avoid artifacts.
             win.mAnimatingExit = true;
         } else {
-            final DisplayContent displayContent = win.getDisplayContent();
-            if (displayContent.mInputMethodWindow == win) {
-                displayContent.setInputMethodWindowLocked(null);
-            }
             boolean stopped = win.mActivityRecord != null ? win.mActivityRecord.mAppStopped : true;
             // We set mDestroying=true so ActivityRecord#notifyAppStopped in-to destroy surfaces
             // will later actually destroy the surface if we do not do so here. Normally we leave
@@ -2614,7 +2610,8 @@ public class WindowManagerService extends IWindowManager.Stub
                 if (type == TYPE_WALLPAPER) {
                     new WallpaperWindowToken(this, binder, true, dc, callerCanManageAppTokens);
                 } else {
-                    new WindowToken(this, binder, type, true, dc, callerCanManageAppTokens);
+                    new WindowToken(this, binder, type, true, dc, callerCanManageAppTokens,
+                            false /* roundedCornerOverlay */, fromClientToken);
                 }
             }
         } finally {
@@ -4681,6 +4678,7 @@ public class WindowManagerService extends IWindowManager.Stub
         public static final int RECOMPUTE_FOCUS = 61;
         public static final int ON_POINTER_DOWN_OUTSIDE_FOCUS = 62;
         public static final int LAYOUT_AND_ASSIGN_WINDOW_LAYERS_IF_NEEDED = 63;
+        public static final int WINDOW_STATE_BLAST_SYNC_TIMEOUT = 64;
 
         /**
          * Used to denote that an integer field in a message will not be used.
@@ -5058,6 +5056,13 @@ public class WindowManagerService extends IWindowManager.Stub
                     synchronized (mGlobalLock) {
                         final DisplayContent displayContent = (DisplayContent) msg.obj;
                         displayContent.layoutAndAssignWindowLayersIfNeeded();
+                    }
+                    break;
+                }
+                case WINDOW_STATE_BLAST_SYNC_TIMEOUT: {
+                    synchronized (mGlobalLock) {
+                      final WindowState ws = (WindowState) msg.obj;
+                      ws.finishDrawing(null);
                     }
                     break;
                 }
@@ -6155,7 +6160,7 @@ public class WindowManagerService extends IWindowManager.Stub
                 }
 
                 mRoot.forAllWindows((w) -> {
-                    if ((!visibleOnly || w.mWinAnimator.getShown())
+                    if ((!visibleOnly || w.isVisible())
                             && (!appsOnly || w.mActivityRecord != null)) {
                         windows.add(w);
                     }
@@ -8039,9 +8044,9 @@ public class WindowManagerService extends IWindowManager.Stub
     }
 
     @Override
-    public void getWindowInsets(WindowManager.LayoutParams attrs,
+    public boolean getWindowInsets(WindowManager.LayoutParams attrs,
             int displayId, Rect outContentInsets, Rect outStableInsets,
-            DisplayCutout.ParcelableWrapper displayCutout) {
+            DisplayCutout.ParcelableWrapper outDisplayCutout, InsetsState outInsetsState) {
         final long origId = Binder.clearCallingIdentity();
         try {
             synchronized (mGlobalLock) {
@@ -8051,8 +8056,13 @@ public class WindowManagerService extends IWindowManager.Stub
                             + "could not be found!");
                 }
                 final WindowToken windowToken = dc.getWindowToken(attrs.token);
-                dc.getDisplayPolicy().getLayoutHint(attrs, windowToken, mTmpRect /* outFrame */,
-                        outContentInsets, outStableInsets, displayCutout);
+                final InsetsStateController insetsStateController =
+                        dc.getInsetsStateController();
+                outInsetsState.set(insetsStateController.getInsetsForWindowMetrics(attrs));
+
+                return dc.getDisplayPolicy().getLayoutHint(attrs, windowToken,
+                        mTmpRect /* outFrame */, outContentInsets, outStableInsets,
+                        outDisplayCutout);
             }
         } finally {
             Binder.restoreCallingIdentity(origId);

@@ -47,6 +47,11 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 /**
+ * This API is not generally intended for third party application developers.
+ * Use the <a href="{@docRoot}jetpack/androidx.html">AndroidX</a>
+  <a href="{@docRoot}reference/androidx/mediarouter/media/package-summary.html">Media Router
+ * Library</a> for consistent behavior across all devices.
+ *
  * Media Router 2 allows applications to control the routing of media channels
  * and streams from the current device to remote speakers and devices.
  */
@@ -372,7 +377,9 @@ public class MediaRouter2 {
      * @see TransferCallback#onTransferred
      * @see TransferCallback#onTransferFailed
      */
-    public void transferTo(@Nullable MediaRoute2Info route) {
+    public void transferTo(@NonNull MediaRoute2Info route) {
+        Objects.requireNonNull(route, "route must not be null");
+
         List<RoutingController> controllers = getControllers();
         RoutingController controller = controllers.get(controllers.size() - 1);
 
@@ -380,19 +387,25 @@ public class MediaRouter2 {
     }
 
     /**
+     * Stops the current media routing. If the {@link #getSystemController() system controller}
+     * controls the media routing, this method is a no-op.
+     */
+    public void stop() {
+        List<RoutingController> controllers = getControllers();
+        RoutingController controller = controllers.get(controllers.size() - 1);
+
+        controller.release();
+    }
+
+    /**
      * Transfers the media of a routing controller to the given route.
      * @param controller a routing controller controlling media routing.
-     * @param route the route you want to transfer the media to. Pass {@code null} to stop
-     *              routing controlled by the given controller.
+     * @param route the route you want to transfer the media to.
      * @hide
      */
-    void transfer(@NonNull RoutingController controller, @Nullable MediaRoute2Info route) {
+    void transfer(@NonNull RoutingController controller, @NonNull MediaRoute2Info route) {
         Objects.requireNonNull(controller, "controller must not be null");
-
-        if (route == null) {
-            controller.release();
-            return;
-        }
+        Objects.requireNonNull(route, "route must not be null");
 
         // TODO: Check thread-safety
         if (!mRoutes.containsKey(route.getId())) {
@@ -429,11 +442,11 @@ public class MediaRouter2 {
         if (stub != null) {
             try {
                 mMediaRouterService.requestCreateSessionWithRouter2(
-                        stub, route, requestId, controllerHints);
+                        stub, requestId, route, controllerHints);
             } catch (RemoteException ex) {
                 Log.e(TAG, "transfer: Unable to request to create controller.", ex);
                 mHandler.sendMessage(obtainMessage(MediaRouter2::createControllerOnHandler,
-                        MediaRouter2.this, null, requestId));
+                        MediaRouter2.this, requestId, null));
             }
         }
     }
@@ -559,7 +572,7 @@ public class MediaRouter2 {
      * <p>
      * Pass {@code null} to sessionInfo for the failure case.
      */
-    void createControllerOnHandler(@Nullable RoutingSessionInfo sessionInfo, int requestId) {
+    void createControllerOnHandler(int requestId, @Nullable RoutingSessionInfo sessionInfo) {
         ControllerCreationRequest matchingRequest = null;
         for (ControllerCreationRequest request : mControllerCreationRequests) {
             if (request.mRequestId == requestId) {
@@ -676,7 +689,7 @@ public class MediaRouter2 {
 
         if (removed) {
             matchingController.release();
-            notifyControllerReleased(matchingController);
+            notifyStopped(matchingController);
         }
     }
 
@@ -733,16 +746,16 @@ public class MediaRouter2 {
         }
     }
 
-    private void notifyControllerUpdated(RoutingController controller) {
-        for (ControllerCallbackRecord record: mControllerCallbackRecords) {
-            record.mExecutor.execute(() -> record.mCallback.onControllerUpdated(controller));
+    private void notifyStopped(RoutingController controller) {
+        for (TransferCallbackRecord record: mTransferCallbackRecords) {
+            record.mExecutor.execute(
+                    () -> record.mTransferCallback.onStopped(controller));
         }
     }
 
-    private void notifyControllerReleased(RoutingController controller) {
-        for (TransferCallbackRecord record: mTransferCallbackRecords) {
-            record.mExecutor.execute(
-                    () -> record.mTransferCallback.onTransferred(controller, null));
+    private void notifyControllerUpdated(RoutingController controller) {
+        for (ControllerCallbackRecord record: mControllerCallbackRecords) {
+            record.mExecutor.execute(() -> record.mCallback.onControllerUpdated(controller));
         }
     }
 
@@ -783,20 +796,26 @@ public class MediaRouter2 {
          * This can happen by calling {@link #transferTo(MediaRoute2Info)} or
          * {@link RoutingController#release()}.
          *
-         * @param oldController the previous controller that controlled routing.
-         * @param newController the new controller to control routing or {@code null} if the
-         *                      previous controller is released.
+         * @param oldController the previous controller that controlled routing
+         * @param newController the new controller to control routing
          * @see #transferTo(MediaRoute2Info)
          */
         public void onTransferred(@NonNull RoutingController oldController,
-                @Nullable RoutingController newController) {}
+                @NonNull RoutingController newController) {}
 
         /**
          * Called when {@link #transferTo(MediaRoute2Info)} failed.
          *
-         * @param requestedRoute the route info which was used for the transfer.
+         * @param requestedRoute the route info which was used for the transfer
          */
         public void onTransferFailed(@NonNull MediaRoute2Info requestedRoute) {}
+
+        /**
+         * Called when a media routing stops. It can be stopped by a user or a provider.
+         *
+         * @param controller the controller that controlled the stopped media routing.
+         */
+        public void onStopped(@NonNull RoutingController controller) { }
     }
 
     /**
@@ -1181,7 +1200,7 @@ public class MediaRouter2 {
             }
 
             if (removed) {
-                mHandler.post(() -> notifyControllerReleased(RoutingController.this));
+                mHandler.post(() -> notifyStopped(RoutingController.this));
             }
 
             if (stub != null) {
@@ -1378,9 +1397,9 @@ public class MediaRouter2 {
         }
 
         @Override
-        public void notifySessionCreated(@Nullable RoutingSessionInfo sessionInfo, int requestId) {
+        public void notifySessionCreated(int requestId, @Nullable RoutingSessionInfo sessionInfo) {
             mHandler.sendMessage(obtainMessage(MediaRouter2::createControllerOnHandler,
-                    MediaRouter2.this, sessionInfo, requestId));
+                    MediaRouter2.this, requestId, sessionInfo));
         }
 
         @Override

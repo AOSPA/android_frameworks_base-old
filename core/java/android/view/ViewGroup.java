@@ -3714,7 +3714,7 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
         if (extraDataKey.equals(AccessibilityNodeInfo.EXTRA_DATA_RENDERING_INFO_KEY)) {
             final AccessibilityNodeInfo.ExtraRenderingInfo extraRenderingInfo =
                     AccessibilityNodeInfo.ExtraRenderingInfo.obtain();
-            extraRenderingInfo.setLayoutParams(getLayoutParams().width, getLayoutParams().height);
+            extraRenderingInfo.setLayoutSize(getLayoutParams().width, getLayoutParams().height);
             info.setExtraRenderingInfo(extraRenderingInfo);
         }
     }
@@ -7256,6 +7256,34 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
         mInsetsAnimationDispatchMode = callback != null
                 ? callback.getDispatchMode()
                 : DISPATCH_MODE_CONTINUE_ON_SUBTREE;
+    }
+
+    /**
+     * @hide
+     */
+    @Override
+    public boolean hasWindowInsetsAnimationCallback() {
+        if (super.hasWindowInsetsAnimationCallback()) {
+            return true;
+        }
+
+        // If we are root-level content view that fits insets, we imitate consuming behavior, so
+        // no child will retrieve window insets animation callback.
+        // See dispatchWindowInsetsAnimationPrepare.
+        boolean isOptionalFitSystemWindows = (mViewFlags & OPTIONAL_FITS_SYSTEM_WINDOWS) != 0
+                || isFrameworkOptionalFitsSystemWindows();
+        if (isOptionalFitSystemWindows && mAttachInfo != null
+                && mAttachInfo.mContentOnApplyWindowInsetsListener != null) {
+            return false;
+        }
+
+        final int count = getChildCount();
+        for (int i = 0; i < count; i++) {
+            if (getChildAt(i).hasWindowInsetsAnimationCallback()) {
+                return true;
+            }
+        }
+        return false;
     }
 
     @Override

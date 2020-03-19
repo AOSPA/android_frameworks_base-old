@@ -325,6 +325,8 @@ class ProcessRecord implements WindowProcessListener {
     // set of disabled compat changes for the process (all others are enabled)
     long[] mDisabledCompatChanges;
 
+    long mLastRss;               // Last computed memory rss.
+
     // The precede instance of the process, which would exist when the previous process is killed
     // but not fully dead yet; in this case, the new instance of the process should be held until
     // this precede instance is fully dead.
@@ -384,6 +386,9 @@ class ProcessRecord implements WindowProcessListener {
                     pw.println(processInfo.deniedPermissions.valueAt(i));
                 }
             }
+            if (processInfo.enableGwpAsan != null) {
+                pw.print(prefix); pw.println("  enableGwpAsan=" + processInfo.enableGwpAsan);
+            }
         }
         pw.print(prefix); pw.print("mRequiredAbi="); pw.print(mRequiredAbi);
                 pw.print(" instructionSet="); pw.println(instructionSet);
@@ -433,6 +438,7 @@ class ProcessRecord implements WindowProcessListener {
                 pw.print(" lastSwapPss="); DebugUtils.printSizeValue(pw, lastSwapPss*1024);
                 pw.print(" lastCachedPss="); DebugUtils.printSizeValue(pw, lastCachedPss*1024);
                 pw.print(" lastCachedSwapPss="); DebugUtils.printSizeValue(pw, lastCachedSwapPss*1024);
+        pw.print(" lastRss="); DebugUtils.printSizeValue(pw, mLastRss * 1024);
                 pw.println();
         pw.print(prefix); pw.print("procStateMemTracker: ");
         procStateMemTracker.dumpLine(pw);

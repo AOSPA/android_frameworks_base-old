@@ -136,6 +136,11 @@ static jmethodID gCreateSystemServerClassLoader;
 static bool gIsSecurityEnforced = true;
 
 /**
+ * True if the app process is running in its mount namespace.
+ */
+static bool gInAppMountNamespace = false;
+
+/**
  * The maximum number of characters (not including a null terminator) that a
  * process name may contain.
  */
@@ -353,10 +358,14 @@ static const std::array<const std::string, MOUNT_EXTERNAL_COUNT> ExternalStorage
 
 // Must match values in com.android.internal.os.Zygote.
 enum RuntimeFlags : uint32_t {
-  DEBUG_ENABLE_JDWP = 1,
-  PROFILE_FROM_SHELL = 1 << 15,
-  MEMORY_TAG_LEVEL_MASK = (1 << 19) | (1 << 20),
-  MEMORY_TAG_LEVEL_TBI = 1 << 19,
+    DEBUG_ENABLE_JDWP = 1,
+    PROFILE_FROM_SHELL = 1 << 15,
+    MEMORY_TAG_LEVEL_MASK = (1 << 19) | (1 << 20),
+    MEMORY_TAG_LEVEL_TBI = 1 << 19,
+    GWP_ASAN_LEVEL_MASK = (1 << 21) | (1 << 22),
+    GWP_ASAN_LEVEL_NEVER = 0 << 21,
+    GWP_ASAN_LEVEL_LOTTERY = 1 << 21,
+    GWP_ASAN_LEVEL_ALWAYS = 2 << 21,
 };
 
 enum UnsolicitedZygoteMessageTypes : uint32_t {
@@ -548,6 +557,17 @@ static void SetGids(JNIEnv* env, jintArray managed_gids, fail_fn_t fail_fn) {
   if (setgroups(gids.size(), reinterpret_cast<const gid_t*>(&gids[0])) == -1) {
     fail_fn(CREATE_ERROR("setgroups failed: %s, gids.size=%zu", strerror(errno), gids.size()));
   }
+}
+
+static void ensureInAppMountNamespace(fail_fn_t fail_fn) {
+  if (gInAppMountNamespace) {
+    // In app mount namespace already
+    return;
+  }
+  if (unshare(CLONE_NEWNS) == -1) {
+    fail_fn(CREATE_ERROR("Failed to unshare(): %s", strerror(errno)));
+  }
+  gInAppMountNamespace = true;
 }
 
 // Sets the resource limits via setrlimit(2) for the values in the
@@ -820,9 +840,7 @@ static void MountEmulatedStorage(uid_t uid, jint mount_mode,
   }
 
   // Create a second private mount namespace for our process
-  if (unshare(CLONE_NEWNS) == -1) {
-    fail_fn(CREATE_ERROR("Failed to unshare(): %s", strerror(errno)));
-  }
+  ensureInAppMountNamespace(fail_fn);
 
   // Handle force_mount_namespace with MOUNT_EXTERNAL_NONE.
   if (mount_mode == MOUNT_EXTERNAL_NONE) {
@@ -1328,6 +1346,7 @@ static void isolateAppData(JNIEnv* env, jobjectArray pkg_data_info_list,
   if ((size % 3) != 0) {
     fail_fn(CREATE_ERROR("Wrong pkg_inode_list size %d", size));
   }
+  ensureInAppMountNamespace(fail_fn);
 
   // Mount tmpfs on all possible data directories, so app no longer see the original apps data.
   char internalCePath[PATH_MAX];
@@ -1734,6 +1753,18 @@ static void SpecializeCommon(JNIEnv* env, uid_t uid, gid_t gid, jintArray gids,
       heap_tagging_level = M_HEAP_TAGGING_LEVEL_NONE;
   }
   android_mallopt(M_SET_HEAP_TAGGING_LEVEL, &heap_tagging_level, sizeof(heap_tagging_level));
+
+  bool forceEnableGwpAsan = false;
+  switch (runtime_flags & RuntimeFlags::GWP_ASAN_LEVEL_MASK) {
+      default:
+      case RuntimeFlags::GWP_ASAN_LEVEL_NEVER:
+          break;
+      case RuntimeFlags::GWP_ASAN_LEVEL_ALWAYS:
+          forceEnableGwpAsan = true;
+          [[fallthrough]];
+      case RuntimeFlags::GWP_ASAN_LEVEL_LOTTERY:
+          android_mallopt(M_INITIALIZE_GWP_ASAN, &forceEnableGwpAsan, sizeof(forceEnableGwpAsan));
+  }
 
   if (NeedsNoRandomizeWorkaround()) {
     // Work around ARM kernel ASLR lossage (http://b/5817320).

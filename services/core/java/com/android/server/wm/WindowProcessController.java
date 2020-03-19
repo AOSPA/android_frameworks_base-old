@@ -41,6 +41,7 @@ import static com.android.server.wm.ActivityTaskManagerService.KEY_DISPATCHING_T
 import static com.android.server.wm.ActivityTaskManagerService.RELAUNCH_REASON_NONE;
 
 import android.annotation.NonNull;
+import android.annotation.Nullable;
 import android.app.ActivityThread;
 import android.app.IApplicationThread;
 import android.app.ProfilerInfo;
@@ -52,6 +53,7 @@ import android.content.pm.ApplicationInfo;
 import android.content.res.Configuration;
 import android.os.Build;
 import android.os.Message;
+import android.os.Process;
 import android.os.RemoteException;
 import android.os.SystemClock;
 import android.util.ArraySet;
@@ -185,12 +187,22 @@ public class WindowProcessController extends ConfigurationContainer<Configuratio
     // Registered display id as a listener to override config change
     private int mDisplayId;
     private ActivityRecord mConfigActivityRecord;
+    /**
+     * Activities that hosts some UI drawn by the current process. The activities live
+     * in another process. This is used to check if the process is currently showing anything
+     * visible to the user.
+     */
+    @Nullable
+    private final ArrayList<ActivityRecord> mHostActivities = new ArrayList<>();
 
     /** Whether our process is currently running a {@link RecentsAnimation} */
     private boolean mRunningRecentsAnimation;
 
     /** Whether our process is currently running a {@link IRemoteAnimationRunner} */
     private boolean mRunningRemoteAnimation;
+
+    /** Whether this process is owned by the System UI package. */
+    final boolean mIsSysUiPackage;
 
     public WindowProcessController(@NonNull ActivityTaskManagerService atm, ApplicationInfo info,
             String name, int uid, int userId, Object owner, WindowProcessListener listener) {
@@ -202,6 +214,10 @@ public class WindowProcessController extends ConfigurationContainer<Configuratio
         mListener = listener;
         mAtm = atm;
         mDisplayId = INVALID_DISPLAY;
+
+        mIsSysUiPackage = info.packageName.equals(
+                mAtm.getSysUiServiceComponentLocked().getPackageName());
+
         onConfigurationChanged(atm.getGlobalConfiguration());
     }
 
@@ -672,6 +688,23 @@ public class WindowProcessController extends ConfigurationContainer<Configuratio
                     return true;
                 }
             }
+            if (isEmbedded()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * @return {@code true} if this process is rendering content on to a window shown by
+     * another process.
+     */
+    private boolean isEmbedded() {
+        for (int i = mHostActivities.size() - 1; i >= 0; --i) {
+            final ActivityRecord r = mHostActivities.get(i);
+            if (r.isInterestingToUserLocked()) {
+                return true;
+            }
         }
         return false;
     }
@@ -812,6 +845,19 @@ public class WindowProcessController extends ConfigurationContainer<Configuratio
                 }
             }
         }
+    }
+
+    /** Adds an activity that hosts UI drawn by the current process. */
+    void addHostActivity(ActivityRecord r) {
+        if (mHostActivities.contains(r)) {
+            return;
+        }
+        mHostActivities.add(r);
+    }
+
+    /** Removes an activity that hosts UI drawn by the current process. */
+    void removeHostActivity(ActivityRecord r) {
+        mHostActivities.remove(r);
     }
 
     public interface ComputeOomAdjCallback {
@@ -1039,6 +1085,12 @@ public class WindowProcessController extends ConfigurationContainer<Configuratio
      * always track the configuration of the non-finishing activity last added to the process.
      */
     private void updateActivityConfigurationListener() {
+        if (mIsSysUiPackage || mUid == Process.SYSTEM_UID) {
+            // This is a system owned process and should not use an activity config.
+            // TODO(b/151161907): Remove after support for display-independent (raw) SysUi configs.
+            return;
+        }
+
         for (int i = mActivities.size() - 1; i >= 0; i--) {
             final ActivityRecord activityRecord = mActivities.get(i);
             if (!activityRecord.finishing && !activityRecord.containsListener(this)) {

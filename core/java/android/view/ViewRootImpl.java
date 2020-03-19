@@ -1737,7 +1737,7 @@ public final class ViewRootImpl implements ViewParent,
             mBoundsLayer = new SurfaceControl.Builder(mSurfaceSession)
                     .setContainerLayer()
                     .setName("Bounds for - " + getTitle().toString())
-                    .setParent(mSurfaceControl)
+                    .setParent(getRenderSurfaceControl())
                     .build();
             setBoundsLayerCrop();
             mTransaction.show(mBoundsLayer).apply();
@@ -5701,9 +5701,9 @@ public final class ViewRootImpl implements ViewParent,
                 mTranslator.translateEventInScreenToAppWindow(event);
             }
 
-            // Enter touch mode if event is coming from a touch screen device.
+            // Enter touch mode on down or scroll from any type of a device.
             final int action = event.getAction();
-            if (event.isFromSource(InputDevice.SOURCE_TOUCHSCREEN)) {
+            if (action == MotionEvent.ACTION_DOWN || action == MotionEvent.ACTION_SCROLL) {
                 ensureTouchMode(true);
             }
 
@@ -9062,7 +9062,7 @@ public final class ViewRootImpl implements ViewParent,
 
         @Override
         public void dispatchWallpaperOffsets(float x, float y, float xStep, float yStep,
-                boolean sync) {
+                float zoom, boolean sync) {
             if (sync) {
                 try {
                     mWindowSession.wallpaperOffsetsComplete(asBinder());

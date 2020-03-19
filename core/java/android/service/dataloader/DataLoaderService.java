@@ -18,6 +18,7 @@ package android.service.dataloader;
 
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.annotation.RequiresPermission;
 import android.annotation.SystemApi;
 import android.app.Service;
 import android.content.Intent;
@@ -172,7 +173,7 @@ public abstract class DataLoaderService extends Service {
         @Override
         public void prepareImage(InstallationFileParcel[] addedFiles, String[] removedFiles) {
             if (!nativePrepareImage(mId, addedFiles, removedFiles)) {
-                Slog.w(TAG, "Failed to destroy loader: " + mId);
+                Slog.w(TAG, "Failed to prepare image for data loader: " + mId);
             }
         }
     }
@@ -206,6 +207,7 @@ public abstract class DataLoaderService extends Service {
          * @throws IOException if trouble opening the file for writing, such as lack of disk space
          *                     or unavailable media.
          */
+        @RequiresPermission(android.Manifest.permission.INSTALL_PACKAGES)
         public void writeData(@NonNull String name, long offsetBytes, long lengthBytes,
                 @NonNull ParcelFileDescriptor incomingFd) throws IOException {
             try {
