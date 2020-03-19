@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "12ebaff2_db79d688",
+        "filename": "packages/SystemUI/res/layout/volume_dialog.xml",
+        "patchSetId": 20
+      },
+      "lineNbr": 129,
+      "author": {
+        "id": 1000480
+      },
+      "writtenOn": "2020-03-19T21:21:14Z",
+      "side": 1,
+      "message": "What\u0027s that?",
+      "revId": "b4bb73e2b7f115b405b5ca9c898ee7266be2a2b4",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    }
+  ]
+}
