@@ -1,0 +1,458 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "fbd5d703_e9e235f1",
+        "filename": "packages/SystemUI/res/layout-land/volume_dialog.xml",
+        "patchSetId": 21
+      },
+      "lineNbr": 3,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2020-03-20T21:52:34Z",
+      "side": 1,
+      "message": "Same here",
+      "revId": "fa46b8368ea8493f6b2637ab0e0e8862fcabe18d",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "c489b253_f253200d",
+        "filename": "packages/SystemUI/res/layout/volume_dialog.xml",
+        "patchSetId": 21
+      },
+      "lineNbr": 3,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2020-03-20T21:52:34Z",
+      "side": 1,
+      "message": "Same here. I\u0027m not sure whether we should be doing this...",
+      "revId": "fa46b8368ea8493f6b2637ab0e0e8862fcabe18d",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "da4a7bbf_5235c999",
+        "filename": "packages/SystemUI/res/layout/volume_dialog.xml",
+        "patchSetId": 21
+      },
+      "lineNbr": 40,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2020-03-20T21:52:34Z",
+      "side": 1,
+      "message": "trailing whitespace",
+      "revId": "fa46b8368ea8493f6b2637ab0e0e8862fcabe18d",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "ee646063_653f4412",
+        "filename": "packages/SystemUI/res/layout/volume_dialog.xml",
+        "patchSetId": 21
+      },
+      "lineNbr": 76,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2020-03-20T21:52:34Z",
+      "side": 1,
+      "message": "What is the use of this layout? it looks like it was used as a container for the background, but since there is no longer a background applied to this, it looks like a useless parent to me. If it doesn\u0027t serve any purpose (in the Java code), can we get rid of it?",
+      "revId": "fa46b8368ea8493f6b2637ab0e0e8862fcabe18d",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "dd527139_58f53083",
+        "filename": "packages/SystemUI/res/layout/volume_dialog.xml",
+        "patchSetId": 21
+      },
+      "lineNbr": 110,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2020-03-20T21:52:34Z",
+      "side": 1,
+      "message": "trailing whitespace",
+      "revId": "fa46b8368ea8493f6b2637ab0e0e8862fcabe18d",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "df818940_00393506",
+        "filename": "packages/SystemUI/res/layout/volume_dialog.xml",
+        "patchSetId": 21
+      },
+      "lineNbr": 111,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2020-03-20T21:52:34Z",
+      "side": 1,
+      "message": "can we define an orientation here, rather than leaving it blank? (default orientation is horizontal, so you can just set that)\n\nAlso, what is the point of this parent? Can\u0027t we just move the id \u0026 fixed height to the scrollview? If you need a horizontal scrolling scrollview, use HorizontalScrollView class.",
+      "revId": "fa46b8368ea8493f6b2637ab0e0e8862fcabe18d",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "6edfdc08_0ba93ce1",
+        "filename": "packages/SystemUI/res/layout/volume_dialog.xml",
+        "patchSetId": 21
+      },
+      "lineNbr": 140,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2020-03-20T21:52:34Z",
+      "side": 1,
+      "message": "layout_gravity\u003d\"end\" does nothing here because it\u0027s a horizontal linearlayout, so the only gravities that work are top \u0026 bottom. Please remove it.",
+      "revId": "fa46b8368ea8493f6b2637ab0e0e8862fcabe18d",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "0b9902c7_440f0063",
+        "filename": "packages/SystemUI/res/layout/volume_dialog.xml",
+        "patchSetId": 21
+      },
+      "lineNbr": 143,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2020-03-20T21:52:34Z",
+      "side": 1,
+      "message": "can you move this up under layout_height definition?",
+      "revId": "fa46b8368ea8493f6b2637ab0e0e8862fcabe18d",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "0821c867_de553aa5",
+        "filename": "packages/SystemUI/res/layout/volume_dialog.xml",
+        "patchSetId": 21
+      },
+      "lineNbr": 156,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2020-03-20T21:52:34Z",
+      "side": 1,
+      "message": "these gravities don\u0027t do anything because the linearlayout is horizontal. please remove",
+      "revId": "fa46b8368ea8493f6b2637ab0e0e8862fcabe18d",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "766c7a73_e9ddb3b8",
+        "filename": "packages/SystemUI/res/layout/volume_dialog.xml",
+        "patchSetId": 21
+      },
+      "lineNbr": 171,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2020-03-20T21:52:34Z",
+      "side": 1,
+      "message": "can you get rid of the spaces between the gravity definitions?",
+      "revId": "fa46b8368ea8493f6b2637ab0e0e8862fcabe18d",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "7830f1d0_6d212ab5",
+        "filename": "packages/SystemUI/res/layout/volume_dialog.xml",
+        "patchSetId": 21
+      },
+      "lineNbr": 172,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2020-03-20T21:52:34Z",
+      "side": 1,
+      "message": "same here",
+      "revId": "fa46b8368ea8493f6b2637ab0e0e8862fcabe18d",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "339f2cd1_b0ccef3f",
+        "filename": "packages/SystemUI/res/layout/volume_dialog_row.xml",
+        "patchSetId": 21
+      },
+      "lineNbr": 3,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2020-03-20T21:52:34Z",
+      "side": 1,
+      "message": "and here",
+      "revId": "fa46b8368ea8493f6b2637ab0e0e8862fcabe18d",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "f8ea053a_4c265212",
+        "filename": "packages/SystemUI/res/layout/volume_dialog_row.xml",
+        "patchSetId": 21
+      },
+      "lineNbr": 59,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2020-03-20T21:52:34Z",
+      "side": 1,
+      "message": "isn\u0027t it LTR by default already? Or does this force the view to always be drawn in LTR mode, even if system is RTL?",
+      "revId": "fa46b8368ea8493f6b2637ab0e0e8862fcabe18d",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "094b65ae_c755056e",
+        "filename": "packages/SystemUI/res/layout/volume_dialog_row.xml",
+        "patchSetId": 21
+      },
+      "lineNbr": 69,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2020-03-20T21:52:34Z",
+      "side": 1,
+      "message": "can you get rid of the spaces here?",
+      "revId": "fa46b8368ea8493f6b2637ab0e0e8862fcabe18d",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "a9153ccc_ae0bf4d8",
+        "filename": "packages/SystemUI/res/layout/volume_dialog_row.xml",
+        "patchSetId": 21
+      },
+      "lineNbr": 70,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2020-03-20T21:52:34Z",
+      "side": 1,
+      "message": "and here",
+      "revId": "fa46b8368ea8493f6b2637ab0e0e8862fcabe18d",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "3ba6b3ba_fd481e6b",
+        "filename": "packages/SystemUI/res/layout/volume_dialog_row.xml",
+        "patchSetId": 21
+      },
+      "lineNbr": 75,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2020-03-20T21:52:34Z",
+      "side": 1,
+      "message": "can you move this up to under the layout_gravity definition?",
+      "revId": "fa46b8368ea8493f6b2637ab0e0e8862fcabe18d",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "ceb4e79b_26c9db33",
+        "filename": "packages/SystemUI/src/com/android/systemui/volume/VolumeDialogImpl.java",
+        "patchSetId": 21
+      },
+      "lineNbr": 3,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2020-03-20T21:52:34Z",
+      "side": 1,
+      "message": "I\u0027m not sure doing this is a good idea.. we don\u0027t own any of these files. @Jake your thoughts on this?",
+      "revId": "fa46b8368ea8493f6b2637ab0e0e8862fcabe18d",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "8ece03e0_98deb30c",
+        "filename": "packages/SystemUI/src/com/android/systemui/volume/VolumeDialogImpl.java",
+        "patchSetId": 21
+      },
+      "lineNbr": 197,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2020-03-20T21:52:34Z",
+      "side": 1,
+      "message": "can we make this final since we\u0027re initializing it in the constructor?",
+      "revId": "fa46b8368ea8493f6b2637ab0e0e8862fcabe18d",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "58a245e1_37e20e26",
+        "filename": "packages/SystemUI/src/com/android/systemui/volume/VolumeDialogImpl.java",
+        "patchSetId": 21
+      },
+      "lineNbr": 307,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2020-03-20T21:52:34Z",
+      "side": 1,
+      "message": "can you move this backwards by 4 spaces",
+      "range": {
+        "startLine": 305,
+        "startChar": 1,
+        "endLine": 307,
+        "endChar": 19
+      },
+      "revId": "fa46b8368ea8493f6b2637ab0e0e8862fcabe18d",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "67cbe795_7f1a406b",
+        "filename": "packages/SystemUI/src/com/android/systemui/volume/VolumeDialogImpl.java",
+        "patchSetId": 21
+      },
+      "lineNbr": 332,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2020-03-20T21:52:34Z",
+      "side": 1,
+      "message": "trailing whitespace",
+      "revId": "fa46b8368ea8493f6b2637ab0e0e8862fcabe18d",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "58171658_a5b9fd51",
+        "filename": "packages/SystemUI/src/com/android/systemui/volume/VolumeDialogImpl.java",
+        "patchSetId": 21
+      },
+      "lineNbr": 334,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2020-03-20T21:52:34Z",
+      "side": 1,
+      "message": "Can we make mLocalMediaManager variable final \u0026 move its creation to the constructor?",
+      "revId": "fa46b8368ea8493f6b2637ab0e0e8862fcabe18d",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "86d67a45_724fe4ea",
+        "filename": "packages/SystemUI/src/com/android/systemui/volume/VolumeDialogImpl.java",
+        "patchSetId": 21
+      },
+      "lineNbr": 371,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2020-03-20T21:52:34Z",
+      "side": 1,
+      "message": "if we\u0027re hiding this view on creation, why don\u0027t we set the visibility to gone in xml and get rid of this?",
+      "revId": "fa46b8368ea8493f6b2637ab0e0e8862fcabe18d",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "629d7560_be214184",
+        "filename": "packages/SystemUI/src/com/android/systemui/volume/VolumeDialogImpl.java",
+        "patchSetId": 21
+      },
+      "lineNbr": 372,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2020-03-20T21:52:34Z",
+      "side": 1,
+      "message": "this call is unnecessary since the view is visible by default once inflated",
+      "revId": "fa46b8368ea8493f6b2637ab0e0e8862fcabe18d",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "89dd97d7_5e0e306a",
+        "filename": "packages/SystemUI/src/com/android/systemui/volume/VolumeDialogImpl.java",
+        "patchSetId": 21
+      },
+      "lineNbr": 600,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2020-03-20T21:52:34Z",
+      "side": 1,
+      "message": "trailing whitespace",
+      "revId": "fa46b8368ea8493f6b2637ab0e0e8862fcabe18d",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "539ff80f_7fc004ee",
+        "filename": "packages/SystemUI/src/com/android/systemui/volume/VolumeDialogImpl.java",
+        "patchSetId": 21
+      },
+      "lineNbr": 859,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2020-03-20T21:52:34Z",
+      "side": 1,
+      "message": "double semicolon",
+      "range": {
+        "startLine": 859,
+        "startChar": 90,
+        "endLine": 859,
+        "endChar": 91
+      },
+      "revId": "fa46b8368ea8493f6b2637ab0e0e8862fcabe18d",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "9c345dde_12b6093c",
+        "filename": "packages/SystemUI/src/com/android/systemui/volume/VolumeDialogImpl.java",
+        "patchSetId": 21
+      },
+      "lineNbr": 1143,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2020-03-20T21:52:34Z",
+      "side": 1,
+      "message": "rather than doing this, you could also just do enable \u0026\u0026 !mHasAlertSlider",
+      "revId": "fa46b8368ea8493f6b2637ab0e0e8862fcabe18d",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    }
+  ]
+}
