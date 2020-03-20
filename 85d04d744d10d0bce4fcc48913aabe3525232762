@@ -1,0 +1,38 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "93a448f5_eb5eee60",
+        "filename": "packages/SystemUI/src/com/android/systemui/volume/VolumeDialogImpl.java",
+        "patchSetId": 4
+      },
+      "lineNbr": 380,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2020-03-20T21:30:09Z",
+      "side": 1,
+      "message": "What is the reason for inserting the rows in reversed order?",
+      "revId": "85d04d744d10d0bce4fcc48913aabe3525232762",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "a3c02410_1364c6d0",
+        "filename": "packages/SystemUI/src/com/android/systemui/volume/VolumeDialogImpl.java",
+        "patchSetId": 4
+      },
+      "lineNbr": 399,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2020-03-20T21:30:09Z",
+      "side": 1,
+      "message": "can we save the rows size before iterating? (int N \u003d mRows.size();)",
+      "revId": "85d04d744d10d0bce4fcc48913aabe3525232762",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    }
+  ]
+}
