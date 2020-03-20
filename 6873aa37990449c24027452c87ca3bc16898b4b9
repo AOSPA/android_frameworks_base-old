@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "6299c753_d8328d6b",
+        "filename": "packages/SystemUI/src/com/android/systemui/doze/DozeTriggers.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 522,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2020-03-20T21:28:11Z",
+      "side": 1,
+      "message": "Same as the comment I made inside the keyhandler change: can we make this String a constant? (preferably put it somewhere inside AmbientDisplayConfiguration class)",
+      "revId": "6873aa37990449c24027452c87ca3bc16898b4b9",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    }
+  ]
+}
