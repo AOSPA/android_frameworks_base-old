@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "53639e75_7106f449",
+        "filename": "services/core/java/com/android/server/policy/KeyHandler.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 547,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2020-03-20T21:26:08Z",
+      "side": 0,
+      "message": "Why are we not marking this specific action as handled?",
+      "revId": "6873aa37990449c24027452c87ca3bc16898b4b9",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    }
+  ]
+}

@@ -1,0 +1,72 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "9d917d4f_4a6fe1dc",
+        "filename": "services/core/java/com/android/server/policy/KeyHandler.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 565,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2020-03-20T21:26:08Z",
+      "side": 1,
+      "message": "Can we make this a constant rather than a loose String (same goes for the receiving end of this Intent)? I\u0027d suggest putting this somewhere inside the AmbientDisplayConfiguration class",
+      "revId": "7b3a07f3cf3b479c2a3b4afa488b41ca4e795f92",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "d3246ce9_8d31d2aa",
+        "filename": "services/core/java/com/android/server/policy/KeyHandler.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 576,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2020-03-20T21:26:08Z",
+      "side": 1,
+      "message": "Are you sure doing this is a good idea? This means that we will always vibrate, even if the action hasn\u0027t been handled. (this can happen if we get an action which isn\u0027t implemented in the keyhandler or for example if the action is allowed to fail like the music next/previous action when there is no song playing)",
+      "revId": "7b3a07f3cf3b479c2a3b4afa488b41ca4e795f92",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "423cdf78_e081dd8b",
+        "filename": "services/core/java/com/android/server/policy/KeyHandler.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 626,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2020-03-20T21:26:08Z",
+      "side": 1,
+      "message": "Can you put the code comment above the if statement instead of inside of it?",
+      "revId": "7b3a07f3cf3b479c2a3b4afa488b41ca4e795f92",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "5b5f31c0_c9e4b1a0",
+        "filename": "services/core/java/com/android/server/policy/KeyHandler.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 631,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2020-03-20T21:26:08Z",
+      "side": 1,
+      "message": "Wouldn\u0027t it be safer to check whether the handler has a GESTURE_REQUEST message before we send a new one? Especially since we delay it with 200ms, we can get another key event in this timeframe and that just means we\u0027re going to handle a new gesture without having finished handling the current one. I would suggest adding the check to the above scanCode check so we cancel (remove from queue) the current request and create a new one.\n\nAlso, why do we need a fixed delay of 200ms?",
+      "revId": "7b3a07f3cf3b479c2a3b4afa488b41ca4e795f92",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    }
+  ]
+}
