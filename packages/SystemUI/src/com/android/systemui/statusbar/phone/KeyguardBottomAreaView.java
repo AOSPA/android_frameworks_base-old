@@ -143,7 +143,6 @@ public class KeyguardBottomAreaView extends FrameLayout implements View.OnClickL
 
     private boolean mUserSetupComplete;
     private boolean mPrewarmBound;
-    private boolean mIsFingerprintRunning;
     private Messenger mPrewarmMessenger;
     private final ServiceConnection mPrewarmConnection = new ServiceConnection() {
 
@@ -395,7 +394,8 @@ public class KeyguardBottomAreaView extends FrameLayout implements View.OnClickL
                 R.dimen.default_burn_in_prevention_offset);
         MarginLayoutParams mlp = (MarginLayoutParams) mIndicationArea.getLayoutParams();
 
-        int bottomMargin = hasInDisplayFingerprint() ? mIndicationBottomMarginFod : mIndicationBottomMargin;
+        int bottomMargin = hasInDisplayFingerprint() && KeyguardUpdateMonitor.getInstance(mContext)
+                .isUnlockWithFingerprintPossible() ? mIndicationBottomMarginFod : mIndicationBottomMargin;
         boolean newLp = mlp.bottomMargin != bottomMargin;
         if (newLp) {
             mlp.bottomMargin = bottomMargin;
@@ -422,8 +422,7 @@ public class KeyguardBottomAreaView extends FrameLayout implements View.OnClickL
     }
 
     private boolean hasInDisplayFingerprint() {
-        return mContext.getPackageManager().hasSystemFeature(FOD)
-                && mIsFingerprintRunning;
+        return mContext.getPackageManager().hasSystemFeature(FOD);
     }
 
     public boolean isLeftVoiceAssist() {
@@ -737,7 +736,6 @@ public class KeyguardBottomAreaView extends FrameLayout implements View.OnClickL
                 public void onBiometricRunningStateChanged(boolean running,
                             BiometricSourceType biometricSourceType) {
                     if (biometricSourceType == BiometricSourceType.FINGERPRINT){
-                        mIsFingerprintRunning = running;
                         updateIndicationAreaPadding();
                     }
                 }
