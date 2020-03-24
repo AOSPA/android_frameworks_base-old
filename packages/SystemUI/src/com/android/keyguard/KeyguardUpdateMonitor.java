@@ -2093,6 +2093,11 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
         }
     }
 
+    public boolean isUnlockWithFingerprintPossible() {
+        final int userId = getCurrentUser();
+        return isUnlockWithFingerprintPossible(userId);
+    }
+
     public boolean isFingerprintAvailable() {
         final int userId = getCurrentUser();
         return mFpm != null && mFpm.isHardwareDetected()
