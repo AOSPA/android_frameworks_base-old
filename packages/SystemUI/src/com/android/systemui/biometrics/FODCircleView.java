@@ -28,6 +28,7 @@ import android.graphics.Paint;
 import android.graphics.PixelFormat;
 import android.graphics.PorterDuff;
 import android.graphics.Point;
+import android.hardware.biometrics.BiometricConstants;
 import android.hardware.biometrics.BiometricSourceType;
 import android.hardware.display.DisplayManager;
 import android.os.Handler;
@@ -105,6 +106,9 @@ public class FODCircleView extends ImageView {
     private boolean mIsBouncer;
     private boolean mIsDreaming;
     private boolean mIsCircleShowing;
+    private boolean mCanUnlockWithFp;
+    private boolean mIsShowing;
+    private boolean mFpDisabled;
 
     private Handler mHandler;
 
@@ -136,7 +140,7 @@ public class FODCircleView extends ImageView {
         @Override
         public void onKeyguardBouncerChanged(boolean isBouncer) {
             mIsBouncer = isBouncer;
-            if (mUpdateMonitor.isFingerprintDetectionRunning()) {
+            if (mUpdateMonitor.isFingerprintDetectionRunning() || mFpDisabled) {
                 if (isPinOrPattern(mUpdateMonitor.getCurrentUser()) || !isBouncer) {
                     show();
                 } else {
@@ -153,9 +157,10 @@ public class FODCircleView extends ImageView {
             super.onBiometricRunningStateChanged(running, biometricSourceType);
             if (biometricSourceType == BiometricSourceType.FINGERPRINT){
                 if (running) {
-                    show();
-                } else {
-                    hide();
+                    mHandler.postDelayed(() -> {
+                        mFpDisabled = false;
+                        show();
+                    }, mFpDisabled ? 50 : 0);
                 }
             }
         }
@@ -171,12 +176,46 @@ public class FODCircleView extends ImageView {
                 show();
             }
         }
+
+        @Override
+        public void onBiometricError(int msgId, String helpString,
+                BiometricSourceType biometricSourceType) {
+            if (biometricSourceType == BiometricSourceType.FINGERPRINT
+                    && (msgId == BiometricConstants.BIOMETRIC_ERROR_LOCKOUT
+                    || msgId == BiometricConstants.BIOMETRIC_ERROR_LOCKOUT_PERMANENT)) {
+                mHandler.removeCallbacksAndMessages(null);
+                mFpDisabled = true;
+                show();
+            }
+        }
+
+        @Override
+        public void onBiometricAuthenticated(int userId,
+                BiometricSourceType biometricSourceType) {
+            if (biometricSourceType == BiometricSourceType.FINGERPRINT) {
+                hide();
+            }
+        }
+
+        @Override
+        public void onStrongAuthStateChanged(int userId) {
+            mCanUnlockWithFp = canUnlockWithFp();
+            updateAlpha();
+        }
     };
+
+    private boolean canUnlockWithFp() {
+        boolean biometrics = mUpdateMonitor.isUnlockWithFingerprintPossible();
+        KeyguardUpdateMonitor.StrongAuthTracker strongAuthTracker =
+                mUpdateMonitor.getStrongAuthTracker();
+        return (biometrics && strongAuthTracker.isUnlockingWithBiometricAllowed()
+                || !biometrics) && !mFpDisabled;
+    }
 
     public FODCircleView(Context context) {
         super(context);
 
-        setScaleType(ScaleType.CENTER);
+        setScaleType(ImageView.ScaleType.CENTER_INSIDE);
 
         IFingerprintInscreen daemon = getFingerprintInScreenDaemon();
         if (daemon == null) {
@@ -250,6 +289,8 @@ public class FODCircleView extends ImageView {
         mUpdateMonitor = KeyguardUpdateMonitor.getInstance(context);
         mUpdateMonitor.registerCallback(mMonitorCallback);
 
+        mCanUnlockWithFp = canUnlockWithFp();
+        updateAlpha();
     }
 
     @Override
@@ -301,10 +342,11 @@ public class FODCircleView extends ImageView {
 
         boolean newIsInside = (x > 0 && x < mSize) && (y > 0 && y < mSize);
 
-        if (event.getAction() == MotionEvent.ACTION_DOWN && newIsInside) {
+        if (event.getAction() == MotionEvent.ACTION_DOWN && newIsInside && mIsShowing
+                && mCanUnlockWithFp) {
             showCircle();
             return true;
-        } else if (event.getAction() == MotionEvent.ACTION_UP) {
+        } else if (event.getAction() == MotionEvent.ACTION_UP  && mCanUnlockWithFp) {
             hideCircle();
             return true;
         } else if (event.getAction() == MotionEvent.ACTION_MOVE) {
@@ -403,10 +445,10 @@ public class FODCircleView extends ImageView {
             return;
         }
 
-        if (mIsBouncer) {
-            // Ignore show calls when Keyguard pin screen is being shown
-            return;
-        }
+        mCanUnlockWithFp = canUnlockWithFp();
+        updateAlpha();
+
+        mIsShowing = true;
 
         updatePosition();
 
@@ -415,13 +457,16 @@ public class FODCircleView extends ImageView {
     }
 
     public void hide() {
+        mIsShowing = false;
         setVisibility(View.GONE);
         hideCircle();
         dispatchHide();
     }
 
     private void updateAlpha() {
-        setAlpha(mIsDreaming ? 0.5f : 1.0f);
+        float alpha = (mIsDreaming ? 0.5f : 1f) *
+                (mCanUnlockWithFp ? 1f : 0.4f);
+        setAlpha(alpha);
     }
 
     private void updatePosition() {
