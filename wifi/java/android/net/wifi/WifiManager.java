@@ -3858,7 +3858,8 @@ public class WifiManager {
          * @param Macaddr Mac Address of connected Stations to soft AP
          * @param numClients number of connected clients
          */
-        public abstract void onStaConnected(@NonNull String Macaddr, int numClients);
+        default void onStaConnected(@NonNull String Macaddr, int numClients) {
+        }
 
         /**
          * Called when Stations disconnected to soft AP.
@@ -3866,7 +3867,8 @@ public class WifiManager {
          * @param Macaddr Mac Address of Disconnected Stations to soft AP
          * @param numClients number of connected clients
          */
-        public abstract void onStaDisconnected(@NonNull String Macaddr, int numClients);
+        default void onStaDisconnected(@NonNull String Macaddr, int numClients) {
+        }
     }
 
     /**
