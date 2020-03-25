@@ -199,6 +199,7 @@ class Task extends WindowContainer<WindowContainer> {
     private static final String ATTR_MIN_WIDTH = "min_width";
     private static final String ATTR_MIN_HEIGHT = "min_height";
     private static final String ATTR_PERSIST_TASK_VERSION = "persist_task_version";
+    private static final String ATTR_WINDOW_LAYOUT_AFFINITY = "window_layout_affinity";
 
     // Current version of the task record we persist. Used to check if we need to run any upgrade
     // code.
@@ -233,6 +234,8 @@ class Task extends WindowContainer<WindowContainer> {
 
     String affinity;        // The affinity name for this task, or null; may change identity.
     String rootAffinity;    // Initial base affinity, or null; does not change from initial root.
+    String mWindowLayoutAffinity; // Launch param affinity of this task or null. Used when saving
+                                // launch params of this task.
     IVoiceInteractionSession voiceSession;    // Voice interaction session driving task
     IVoiceInteractor voiceInteractor;         // Associated interactor to provide to app
     Intent intent;          // The original intent that started the task. Note that this value can
@@ -428,7 +431,10 @@ class Task extends WindowContainer<WindowContainer> {
     private boolean mForceShowForAllUsers;
 
     /** When set, will force the task to report as invisible. */
-    boolean mForceHidden = false;
+    static final int FLAG_FORCE_HIDDEN_FOR_PINNED_TASK = 1;
+    static final int FLAG_FORCE_HIDDEN_FOR_TASK_ORG = 1 << 1;
+    private int mForceHiddenFlags = 0;
+
 
     SurfaceControl.Transaction mMainWindowSizeChangeTransaction;
 
@@ -474,6 +480,7 @@ class Task extends WindowContainer<WindowContainer> {
      * taskAppeared callback, and emit a taskRemoved callback when the Task is vanished.
      */
     ITaskOrganizer mTaskOrganizer;
+    private int mLastTaskOrganizerWindowingMode = -1;
 
     /**
      * Last Picture-in-Picture params applicable to the task. Updated when the app
@@ -1000,6 +1007,8 @@ class Task extends WindowContainer<WindowContainer> {
                 origActivity = new ComponentName(info.packageName, info.name);
             }
         }
+        mWindowLayoutAffinity =
+                info.windowLayout == null ? null : info.windowLayout.windowLayoutAffinity;
 
         final int intentFlags = intent == null ? 0 : intent.getFlags();
         if ((intentFlags & Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED) != 0) {
@@ -1929,6 +1938,7 @@ class Task extends WindowContainer<WindowContainer> {
         // TODO: Should also take care of Pip mode changes here.
 
         saveLaunchingStateIfNeeded();
+        updateTaskOrganizerState(false /* forceUpdate */);
     }
 
     /**
@@ -2120,14 +2130,26 @@ class Task extends WindowContainer<WindowContainer> {
         intersectWithInsetsIfFits(outStableBounds, mTmpBounds, mTmpInsets);
     }
 
+    /**
+     * Forces the app bounds related configuration can be computed by
+     * {@link #computeConfigResourceOverrides(Configuration, Configuration, DisplayInfo,
+     * ActivityRecord.CompatDisplayInsets)}.
+     */
+    private static void invalidateAppBoundsConfig(@NonNull Configuration inOutConfig) {
+        final Rect appBounds = inOutConfig.windowConfiguration.getAppBounds();
+        if (appBounds != null) {
+            appBounds.setEmpty();
+        }
+        inOutConfig.screenWidthDp = Configuration.SCREEN_WIDTH_DP_UNDEFINED;
+        inOutConfig.screenHeightDp = Configuration.SCREEN_HEIGHT_DP_UNDEFINED;
+    }
+
     void computeConfigResourceOverrides(@NonNull Configuration inOutConfig,
             @NonNull Configuration parentConfig, @Nullable DisplayInfo overrideDisplayInfo) {
         if (overrideDisplayInfo != null) {
             // Make sure the screen related configs can be computed by the provided display info.
-            inOutConfig.windowConfiguration.setAppBounds(null);
             inOutConfig.screenLayout = Configuration.SCREENLAYOUT_UNDEFINED;
-            inOutConfig.screenWidthDp = Configuration.SCREEN_WIDTH_DP_UNDEFINED;
-            inOutConfig.screenHeightDp = Configuration.SCREEN_HEIGHT_DP_UNDEFINED;
+            invalidateAppBoundsConfig(inOutConfig);
         }
         computeConfigResourceOverrides(inOutConfig, parentConfig, overrideDisplayInfo,
                 null /* compatInsets */);
@@ -2142,6 +2164,10 @@ class Task extends WindowContainer<WindowContainer> {
     void computeConfigResourceOverrides(@NonNull Configuration inOutConfig,
             @NonNull Configuration parentConfig,
             @Nullable ActivityRecord.CompatDisplayInsets compatInsets) {
+        if (compatInsets != null) {
+            // Make sure the app bounds can be computed by the compat insets.
+            invalidateAppBoundsConfig(inOutConfig);
+        }
         computeConfigResourceOverrides(inOutConfig, parentConfig, null /* overrideDisplayInfo */,
                 compatInsets);
     }
@@ -3024,7 +3050,7 @@ class Task extends WindowContainer<WindowContainer> {
      */
     @VisibleForTesting
     boolean isTranslucent(ActivityRecord starting) {
-        if (!isAttached() || mForceHidden) {
+        if (!isAttached() || isForceHidden()) {
             return true;
         }
         final PooledPredicate p = PooledLambda.obtainPredicate(Task::isOpaqueActivity,
@@ -3363,6 +3389,9 @@ class Task extends WindowContainer<WindowContainer> {
         } else {
             info.pictureInPictureParams = mPictureInPictureParams;
         }
+        info.topActivityInfo = mReuseActivitiesReport.top != null
+                ? mReuseActivitiesReport.top.info
+                : null;
     }
 
     /**
@@ -3407,6 +3436,9 @@ class Task extends WindowContainer<WindowContainer> {
             } else {
                 pw.println();
             }
+        }
+        if (mWindowLayoutAffinity != null) {
+            pw.print(prefix); pw.print("windowLayoutAffinity="); pw.println(mWindowLayoutAffinity);
         }
         if (voiceSession != null || voiceInteractor != null) {
             pw.print(prefix); pw.print("VOICE: session=0x");
@@ -3589,6 +3621,9 @@ class Task extends WindowContainer<WindowContainer> {
         } else if (rootAffinity != null) {
             out.attribute(null, ATTR_ROOT_AFFINITY, rootAffinity != null ? rootAffinity : "@");
         }
+        if (mWindowLayoutAffinity != null) {
+            out.attribute(null, ATTR_WINDOW_LAYOUT_AFFINITY, mWindowLayoutAffinity);
+        }
         out.attribute(null, ATTR_ROOTHASRESET, String.valueOf(rootWasReset));
         out.attribute(null, ATTR_AUTOREMOVERECENTS, String.valueOf(autoRemoveRecents));
         out.attribute(null, ATTR_ASKEDCOMPATMODE, String.valueOf(askedCompatMode));
@@ -3746,6 +3781,7 @@ class Task extends WindowContainer<WindowContainer> {
             String affinity = null;
             String rootAffinity = null;
             boolean hasRootAffinity = false;
+            String windowLayoutAffinity = null;
             boolean rootHasReset = false;
             boolean autoRemoveRecents = false;
             boolean askedCompatMode = false;
@@ -3797,6 +3833,9 @@ class Task extends WindowContainer<WindowContainer> {
                     case ATTR_ROOT_AFFINITY:
                         rootAffinity = attrValue;
                         hasRootAffinity = true;
+                        break;
+                    case ATTR_WINDOW_LAYOUT_AFFINITY:
+                        windowLayoutAffinity = attrValue;
                         break;
                     case ATTR_ROOTHASRESET:
                         rootHasReset = Boolean.parseBoolean(attrValue);
@@ -3953,6 +3992,7 @@ class Task extends WindowContainer<WindowContainer> {
                     realActivitySuspended, userSetupComplete, minWidth, minHeight, null /*stack*/);
             task.mLastNonFullscreenBounds = lastNonFullscreenBounds;
             task.setBounds(lastNonFullscreenBounds);
+            task.mWindowLayoutAffinity = windowLayoutAffinity;
 
             for (int activityNdx = activities.size() - 1; activityNdx >= 0; --activityNdx) {
                 task.addChild(activities.get(activityNdx));
@@ -4008,16 +4048,57 @@ class Task extends WindowContainer<WindowContainer> {
             return;
         }
         // Let the old organizer know it has lost control.
-        if (mTaskOrganizer != null) {
-            sendTaskVanished();
-        }
+        sendTaskVanished();
         mTaskOrganizer = organizer;
         sendTaskAppeared();
+        onTaskOrganizerChanged();
     }
 
     // Called on Binder death.
     void taskOrganizerDied() {
         mTaskOrganizer = null;
+        mLastTaskOrganizerWindowingMode = -1;
+        onTaskOrganizerChanged();
+    }
+
+    /**
+     * Called when the task state changes (ie. from windowing mode change) an the task organizer
+     * state should also be updated.
+     *
+     * @param forceUpdate Updates the task organizer to the one currently specified in the task
+     *                    org controller for the task's windowing mode, ignoring the cached
+     *                    windowing mode checks.
+     */
+    void updateTaskOrganizerState(boolean forceUpdate) {
+        if (!isRootTask()) {
+            return;
+        }
+
+        final int windowingMode = getWindowingMode();
+        if (!forceUpdate && windowingMode == mLastTaskOrganizerWindowingMode) {
+            // If our windowing mode hasn't actually changed, then just stick
+            // with our old organizer. This lets us implement the semantic
+            // where SysUI can continue to manage it's old tasks
+            // while CTS temporarily takes over the registration.
+            return;
+        }
+        /*
+         * Different windowing modes may be managed by different task organizers. If
+         * getTaskOrganizer returns null, we still call setTaskOrganizer to
+         * make sure we clear it.
+         */
+        final ITaskOrganizer org =
+                mWmService.mAtmService.mTaskOrganizerController.getTaskOrganizer(windowingMode);
+        setTaskOrganizer(org);
+        mLastTaskOrganizerWindowingMode = windowingMode;
+    }
+
+    private void onTaskOrganizerChanged() {
+        if (mTaskOrganizer == null) {
+            // If this task is no longer controlled by a task organizer, then reset the force hidden
+            // state
+            setForceHidden(FLAG_FORCE_HIDDEN_FOR_TASK_ORG, false /* set */);
+        }
     }
 
     @Override
@@ -4128,6 +4209,31 @@ class Task extends WindowContainer<WindowContainer> {
             PooledLambda.__(ActivityRecord.class), windowingMode);
         forAllActivities(c);
         c.recycle();
+    }
+
+    /**
+     * Sets/unsets the forced-hidden state flag for this task depending on {@param set}.
+     * @return Whether the force hidden state changed
+     */
+    boolean setForceHidden(int flags, boolean set) {
+        int newFlags = mForceHiddenFlags;
+        if (set) {
+            newFlags |= flags;
+        } else {
+            newFlags &= ~flags;
+        }
+        if (mForceHiddenFlags == newFlags) {
+            return false;
+        }
+        mForceHiddenFlags = newFlags;
+        return true;
+    }
+
+    /**
+     * Returns whether this task is currently forced to be hidden for any reason.
+     */
+    protected boolean isForceHidden() {
+        return mForceHiddenFlags != 0;
     }
 
     @Override

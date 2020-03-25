@@ -17,6 +17,7 @@
 package android.media.tv.tuner.frontend;
 
 import android.annotation.IntDef;
+import android.annotation.IntRange;
 import android.annotation.NonNull;
 import android.annotation.RequiresPermission;
 import android.annotation.SystemApi;
@@ -144,17 +145,17 @@ public class DvbcFrontendSettings extends FrontendSettings {
 
 
     private final int mModulation;
-    private final long mFec;
+    private final long mInnerFec;
     private final int mSymbolRate;
     private final int mOuterFec;
     private final int mAnnex;
     private final int mSpectralInversion;
 
-    private DvbcFrontendSettings(int frequency, int modulation, long fec, int symbolRate,
+    private DvbcFrontendSettings(int frequency, int modulation, long innerFec, int symbolRate,
             int outerFec, int annex, int spectralInversion) {
         super(frequency);
         mModulation = modulation;
-        mFec = fec;
+        mInnerFec = innerFec;
         mSymbolRate = symbolRate;
         mOuterFec = outerFec;
         mAnnex = annex;
@@ -172,8 +173,8 @@ public class DvbcFrontendSettings extends FrontendSettings {
      * Gets Inner Forward Error Correction.
      */
     @InnerFec
-    public long getFec() {
-        return mFec;
+    public long getInnerFec() {
+        return mInnerFec;
     }
     /**
      * Gets Symbol Rate in symbols per second.
@@ -218,15 +219,26 @@ public class DvbcFrontendSettings extends FrontendSettings {
     /**
      * Builder for {@link DvbcFrontendSettings}.
      */
-    public static class Builder extends FrontendSettings.Builder<Builder> {
+    public static class Builder {
+        private int mFrequency;
         private int mModulation;
-        private long mFec;
+        private long mInnerFec;
         private int mSymbolRate;
         private int mOuterFec;
         private int mAnnex;
         private int mSpectralInversion;
 
         private Builder() {
+        }
+
+        /**
+         * Sets frequency in Hz.
+         */
+        @NonNull
+        @IntRange(from = 1)
+        public Builder setFrequency(int frequency) {
+            mFrequency = frequency;
+            return this;
         }
 
         /**
@@ -241,8 +253,8 @@ public class DvbcFrontendSettings extends FrontendSettings {
          * Sets Inner Forward Error Correction.
          */
         @NonNull
-        public Builder setFec(@InnerFec long fec) {
-            mFec = fec;
+        public Builder setInnerFec(@InnerFec long fec) {
+            mInnerFec = fec;
             return this;
         }
         /**
@@ -283,13 +295,8 @@ public class DvbcFrontendSettings extends FrontendSettings {
          */
         @NonNull
         public DvbcFrontendSettings build() {
-            return new DvbcFrontendSettings(mFrequency, mModulation, mFec, mSymbolRate, mOuterFec,
-                    mAnnex, mSpectralInversion);
-        }
-
-        @Override
-        Builder self() {
-            return this;
+            return new DvbcFrontendSettings(mFrequency, mModulation, mInnerFec, mSymbolRate,
+                mOuterFec, mAnnex, mSpectralInversion);
         }
     }
 

@@ -358,6 +358,22 @@ void android_os_Process_setProcessFrozen(
     }
 }
 
+void android_os_Process_enableFreezer(
+        JNIEnv *env, jobject clazz, jboolean enable)
+{
+    bool success = true;
+
+    if (enable) {
+        success = SetTaskProfiles(0, {"FreezerFrozen"}, true);
+    } else {
+        success = SetTaskProfiles(0, {"FreezerThawed"}, true);
+    }
+
+    if (!success) {
+        jniThrowException(env, "java/lang/RuntimeException", "Unknown error");
+    }
+}
+
 void android_os_Process_setCgroupProcsProcessGroup(JNIEnv* env, jobject clazz, int uid, int pid, jint grp)
 {
     int fd;
@@ -1439,6 +1455,7 @@ static const JNINativeMethod methods[] = {
         {"sendSignal", "(II)V", (void*)android_os_Process_sendSignal},
         {"sendSignalQuiet", "(II)V", (void*)android_os_Process_sendSignalQuiet},
         {"setProcessFrozen", "(IIZ)V", (void*)android_os_Process_setProcessFrozen},
+        {"enableFreezer", "(Z)V", (void*)android_os_Process_enableFreezer},
         {"getFreeMemory", "()J", (void*)android_os_Process_getFreeMemory},
         {"getTotalMemory", "()J", (void*)android_os_Process_getTotalMemory},
         {"readProcLines", "(Ljava/lang/String;[Ljava/lang/String;[J)V",

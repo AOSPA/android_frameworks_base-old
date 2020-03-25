@@ -58,7 +58,8 @@ import java.util.regex.Pattern;
  * messages and adapts the layout accordingly.
  */
 @RemoteViews.RemoteView
-public class MessagingLayout extends FrameLayout implements ImageMessageConsumer {
+public class MessagingLayout extends FrameLayout
+        implements ImageMessageConsumer, IMessagingLayout {
 
     private static final float COLOR_SHIFT_AMOUNT = 60;
     /**
@@ -143,9 +144,29 @@ public class MessagingLayout extends FrameLayout implements ImageMessageConsumer
         mNameReplacement = nameReplacement;
     }
 
+    /**
+     * Set this layout to show the collapsed representation.
+     *
+     * @param isCollapsed is it collapsed
+     */
     @RemotableViewMethod
-    public void setDisplayImagesAtEnd(boolean atEnd) {
-        mDisplayImagesAtEnd = atEnd;
+    public void setIsCollapsed(boolean isCollapsed) {
+        mDisplayImagesAtEnd = isCollapsed;
+    }
+
+    @RemotableViewMethod
+    public void setLargeIcon(Icon largeIcon) {
+        // Unused
+    }
+
+    /**
+     * Sets the conversation title of this conversation.
+     *
+     * @param conversationTitle the conversation title
+     */
+    @RemotableViewMethod
+    public void setConversationTitle(CharSequence conversationTitle) {
+        // Unused
     }
 
     @RemotableViewMethod
@@ -371,6 +392,15 @@ public class MessagingLayout extends FrameLayout implements ImageMessageConsumer
         mSenderTextColor = color;
     }
 
+
+    /**
+     * @param color the color of the notification background
+     */
+    @RemotableViewMethod
+    public void setNotificationBackgroundColor(int color) {
+        // Nothing to do with this
+    }
+
     @RemotableViewMethod
     public void setMessageTextColor(int color) {
         mMessageTextColor = color;
@@ -418,6 +448,7 @@ public class MessagingLayout extends FrameLayout implements ImageMessageConsumer
                 mAddedGroups.add(newGroup);
             }
             newGroup.setDisplayImagesAtEnd(mDisplayImagesAtEnd);
+            newGroup.setIsInConversation(false);
             newGroup.setLayoutColor(mLayoutColor);
             newGroup.setTextColors(mSenderTextColor, mMessageTextColor);
             Person sender = senders.get(groupIndex);

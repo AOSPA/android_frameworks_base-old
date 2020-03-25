@@ -186,7 +186,6 @@ import android.os.SystemService;
 import android.os.Trace;
 import android.os.UserHandle;
 import android.os.WorkSource;
-import android.provider.DeviceConfig;
 import android.provider.Settings;
 import android.service.vr.IVrManager;
 import android.service.vr.IVrStateCallbacks;
@@ -1011,9 +1010,7 @@ public class WindowManagerService extends IWindowManager.Stub
     void openSurfaceTransaction() {
         try {
             Trace.traceBegin(TRACE_TAG_WINDOW_MANAGER, "openSurfaceTransaction");
-            synchronized (mGlobalLock) {
-                SurfaceControl.openTransaction();
-            }
+            SurfaceControl.openTransaction();
         } finally {
             Trace.traceEnd(TRACE_TAG_WINDOW_MANAGER);
         }
@@ -1026,10 +1023,8 @@ public class WindowManagerService extends IWindowManager.Stub
     void closeSurfaceTransaction(String where) {
         try {
             Trace.traceBegin(TRACE_TAG_WINDOW_MANAGER, "closeSurfaceTransaction");
-            synchronized (mGlobalLock) {
-                SurfaceControl.closeTransaction();
-                mWindowTracing.logState(where);
-            }
+            SurfaceControl.closeTransaction();
+            mWindowTracing.logState(where);
         } finally {
             Trace.traceEnd(TRACE_TAG_WINDOW_MANAGER);
         }
@@ -1170,9 +1165,7 @@ public class WindowManagerService extends IWindowManager.Stub
         mAnimator = new WindowAnimator(this);
         mRoot = new RootWindowContainer(this);
 
-        mUseBLAST = DeviceConfig.getBoolean(
-                    DeviceConfig.NAMESPACE_WINDOW_MANAGER_NATIVE_BOOT,
-                    WM_USE_BLAST_ADAPTER_FLAG, false);
+        mUseBLAST = true;
 
         mWindowPlacerLocked = new WindowSurfacePlacer(this);
         mTaskSnapshotController = new TaskSnapshotController(this);

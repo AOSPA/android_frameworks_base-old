@@ -2565,7 +2565,7 @@ public class Vpn {
         public void exitIfOuterInterfaceIs(String interfaze) {
             if (interfaze.equals(mOuterInterface)) {
                 Log.i(TAG, "Legacy VPN is going down with " + interfaze);
-                exit();
+                exitVpnRunner();
             }
         }
 
@@ -2574,6 +2574,10 @@ public class Vpn {
         public void exitVpnRunner() {
             // We assume that everything is reset after stopping the daemons.
             interrupt();
+
+            // Always disconnect. This may be called again in cleanupVpnStateLocked() if
+            // exitVpnRunner() was called from exit(), but it will be a no-op.
+            agentDisconnect();
             try {
                 mContext.unregisterReceiver(mBroadcastReceiver);
             } catch (IllegalArgumentException e) {}
@@ -2807,7 +2811,7 @@ public class Vpn {
             } catch (Exception e) {
                 Log.i(TAG, "Aborting", e);
                 updateState(DetailedState.FAILED, e.getMessage());
-                exit();
+                exitVpnRunner();
             }
         }
 
