@@ -4091,7 +4091,7 @@ class StorageManagerService extends IStorageManager.Stub
                 return Zygote.MOUNT_EXTERNAL_NONE;
             }
 
-            if (mIsFuseEnabled && mMediaStoreAuthorityAppId == UserHandle.getAppId(uid)) {
+            if (mIsFuseEnabled && mStorageManagerInternal.isExternalStorageService(uid)) {
                 // Determine if caller requires pass_through mount; note that we do this for
                 // all processes that share a UID with MediaProvider; but this is fine, since
                 // those processes anyway share the same rights as MediaProvider.
@@ -4153,19 +4153,6 @@ class StorageManagerService extends IStorageManager.Stub
             // they hold the runtime permission
             boolean hasLegacy = mIAppOpsService.checkOperation(OP_LEGACY_STORAGE,
                     uid, packageName) == MODE_ALLOWED;
-
-            // Hack(b/147137425): we have to honor hasRequestedLegacyExternalStorage for a short
-            // while to enable 2 cases.
-            // 1) Apps that want to be in scoped storage in R, but want to opt out in Q devices,
-            // because they want to use raw file paths, would fail until fuse is enabled by default.
-            // 2) Test apps that target current sdk will fail. They would fail even after fuse is
-            // enabled, but we are fixing it with b/142395442. We are not planning to enable
-            // fuse by default until b/142395442 is fixed.
-            if (!hasLegacy && !mIsFuseEnabled) {
-                ApplicationInfo ai = mIPackageManager.getApplicationInfo(packageName,
-                        0, UserHandle.getUserId(uid));
-                hasLegacy = (ai != null && ai.hasRequestedLegacyExternalStorage());
-            }
 
             if (hasLegacy && hasWrite) {
                 return Zygote.MOUNT_EXTERNAL_WRITE;
@@ -4437,14 +4424,16 @@ class StorageManagerService extends IStorageManager.Stub
                             String.format("/storage/emulated/%d/Android/data/%s/",
                                     userId, pkg);
 
+                    int appUid =
+                            UserHandle.getUid(userId, mPmInternal.getPackage(pkg).getUid());
                     // Create package obb and data dir if it doesn't exist.
                     File file = new File(packageObbDir);
                     if (!file.exists()) {
-                        vold.setupAppDir(packageObbDir, mPmInternal.getPackage(pkg).getUid());
+                        vold.setupAppDir(packageObbDir, appUid);
                     }
                     file = new File(packageDataDir);
                     if (!file.exists()) {
-                        vold.setupAppDir(packageDataDir, mPmInternal.getPackage(pkg).getUid());
+                        vold.setupAppDir(packageDataDir, appUid);
                     }
                 }
             } catch (ServiceManager.ServiceNotFoundException | RemoteException e) {
@@ -4537,6 +4526,11 @@ class StorageManagerService extends IStorageManager.Stub
                     Log.e(TAG, "Failed to fixup app dir for " + packageName, e);
                 }
             }
+        }
+
+        @Override
+        public boolean isExternalStorageService(int uid) {
+            return mMediaStoreAuthorityAppId == UserHandle.getAppId(uid);
         }
 
         public boolean hasExternalStorage(int uid, String packageName) {

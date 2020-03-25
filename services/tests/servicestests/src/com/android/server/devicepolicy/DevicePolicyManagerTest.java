@@ -1405,8 +1405,8 @@ public class DevicePolicyManagerTest extends DpmTestBase {
         assertEquals(admin2, dpms.getDeviceOwnerComponent(/* callingUserOnly =*/ false));
 
         // Then check getDeviceOwnerAdminLocked().
-        assertEquals(admin2, dpms.getDeviceOwnerAdminLocked().info.getComponent());
-        assertEquals(DpmMockContext.CALLER_UID, dpms.getDeviceOwnerAdminLocked().getUid());
+        assertEquals(admin2, getDeviceOwner().info.getComponent());
+        assertEquals(DpmMockContext.CALLER_UID, getDeviceOwner().getUid());
     }
 
     /**
@@ -1759,7 +1759,7 @@ public class DevicePolicyManagerTest extends DpmTestBase {
         DpmTestUtils.assertRestrictions(
                 DpmTestUtils.newRestrictions(
                         UserManager.DISALLOW_ADD_USER, UserManager.DISALLOW_OUTGOING_CALLS),
-                dpms.getDeviceOwnerAdminLocked().ensureUserRestrictions()
+                getDeviceOwner().ensureUserRestrictions()
         );
         DpmTestUtils.assertRestrictions(
                 DpmTestUtils.newRestrictions(
@@ -1776,7 +1776,7 @@ public class DevicePolicyManagerTest extends DpmTestBase {
 
         DpmTestUtils.assertRestrictions(
                 DpmTestUtils.newRestrictions(UserManager.DISALLOW_OUTGOING_CALLS),
-                dpms.getDeviceOwnerAdminLocked().ensureUserRestrictions()
+                getDeviceOwner().ensureUserRestrictions()
         );
         DpmTestUtils.assertRestrictions(
                 DpmTestUtils.newRestrictions(UserManager.DISALLOW_OUTGOING_CALLS),
@@ -1832,6 +1832,18 @@ public class DevicePolicyManagerTest extends DpmTestBase {
                         UserManager.DISALLOW_ADD_USER, UserManager.DISALLOW_CAMERA),
                 eq(UserManagerInternal.OWNER_TYPE_DEVICE_OWNER));
         reset(getServices().userManagerInternal);
+    }
+
+    private DevicePolicyManagerService.ActiveAdmin getDeviceOwner() {
+        ComponentName component = dpms.mOwners.getDeviceOwnerComponent();
+        DevicePolicyManagerService.DevicePolicyData policy =
+                dpms.getUserData(dpms.mOwners.getDeviceOwnerUserId());
+        for (DevicePolicyManagerService.ActiveAdmin admin : policy.mAdminList) {
+            if (component.equals(admin.info.getComponent())) {
+                return admin;
+            }
+        }
+        return null;
     }
 
     public void testDaDisallowedPolicies_SecurityException() throws Exception {
@@ -2067,7 +2079,7 @@ public class DevicePolicyManagerTest extends DpmTestBase {
     private void assertNoDeviceOwnerRestrictions() {
         DpmTestUtils.assertRestrictions(
                 DpmTestUtils.newRestrictions(),
-                dpms.getDeviceOwnerAdminLocked().ensureUserRestrictions()
+                getDeviceOwner().ensureUserRestrictions()
         );
         DpmTestUtils.assertRestrictions(
                 DpmTestUtils.newRestrictions(),
@@ -5990,26 +6002,29 @@ public class DevicePolicyManagerTest extends DpmTestBase {
     public void testSetCommonCriteriaMode_asDeviceOwner() throws Exception {
         setDeviceOwner();
 
-        dpm.setCommonCriteriaModeEnabled(admin1, true);
-        verify(getServices().settings).settingsGlobalPutInt(
-                Settings.Global.COMMON_CRITERIA_MODE, 1);
+        assertFalse(dpm.isCommonCriteriaModeEnabled(admin1));
+        assertFalse(dpm.isCommonCriteriaModeEnabled(null));
 
-        when(getServices().settings.settingsGlobalGetInt(Settings.Global.COMMON_CRITERIA_MODE, 0))
-                .thenReturn(1);
+        dpm.setCommonCriteriaModeEnabled(admin1, true);
+
         assertTrue(dpm.isCommonCriteriaModeEnabled(admin1));
+        assertTrue(dpm.isCommonCriteriaModeEnabled(null));
     }
 
     public void testSetCommonCriteriaMode_asPoOfOrgOwnedDevice() throws Exception {
-        setupProfileOwner();
-        configureProfileOwnerOfOrgOwnedDevice(admin1, DpmMockContext.CALLER_USER_HANDLE);
+        final int managedProfileUserId = 15;
+        final int managedProfileAdminUid = UserHandle.getUid(managedProfileUserId, 19436);
+        addManagedProfile(admin1, managedProfileAdminUid, admin1);
+        configureProfileOwnerOfOrgOwnedDevice(admin1, managedProfileUserId);
+        mContext.binder.callingUid = managedProfileAdminUid;
+
+        assertFalse(dpm.isCommonCriteriaModeEnabled(admin1));
+        assertFalse(dpm.isCommonCriteriaModeEnabled(null));
 
         dpm.setCommonCriteriaModeEnabled(admin1, true);
-        verify(getServices().settings).settingsGlobalPutInt(
-                Settings.Global.COMMON_CRITERIA_MODE, 1);
 
-        when(getServices().settings.settingsGlobalGetInt(Settings.Global.COMMON_CRITERIA_MODE, 0))
-                .thenReturn(1);
         assertTrue(dpm.isCommonCriteriaModeEnabled(admin1));
+        assertTrue(dpm.isCommonCriteriaModeEnabled(null));
     }
 
     public void testCanProfileOwnerResetPasswordWhenLocked_nonDirectBootAwarePo()

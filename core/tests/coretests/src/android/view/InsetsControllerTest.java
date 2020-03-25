@@ -195,6 +195,9 @@ public class InsetsControllerTest {
         InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> {
             mController.onControlsChanged(createSingletonControl(ITYPE_STATUS_BAR));
 
+            ArgumentCaptor<WindowInsetsAnimationController> animationController =
+                    ArgumentCaptor.forClass(WindowInsetsAnimationController.class);
+
             WindowInsetsAnimationControlListener mockListener =
                     mock(WindowInsetsAnimationControlListener.class);
             mController.controlWindowInsetsAnimation(statusBars(), 10 /* durationMs */,
@@ -202,9 +205,10 @@ public class InsetsControllerTest {
 
             // Ready gets deferred until next predraw
             mViewRoot.getView().getViewTreeObserver().dispatchOnPreDraw();
-            verify(mockListener).onReady(any(), anyInt());
+            verify(mockListener).onReady(animationController.capture(), anyInt());
             mController.onControlsChanged(new InsetsSourceControl[0]);
-            verify(mockListener).onCancelled();
+            verify(mockListener).onCancelled(notNull());
+            assertTrue(animationController.getValue().isCancelled());
         });
     }
 
@@ -221,7 +225,7 @@ public class InsetsControllerTest {
                 new CancellationSignal(), controlListener);
         mController.addOnControllableInsetsChangedListener(
                 (controller, typeMask) -> assertEquals(0, typeMask));
-        verify(controlListener).onCancelled();
+        verify(controlListener).onCancelled(null);
         verify(controlListener, never()).onReady(any(), anyInt());
     }
 
@@ -533,7 +537,7 @@ public class InsetsControllerTest {
             verify(mockListener).onReady(any(), anyInt());
 
             cancellationSignal.cancel();
-            verify(mockListener).onCancelled();
+            verify(mockListener).onCancelled(notNull());
         });
         waitUntilNextFrame();
         InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> {
@@ -584,7 +588,7 @@ public class InsetsControllerTest {
             // Pretend that we are losing control
             mController.onControlsChanged(new InsetsSourceControl[0]);
 
-            verify(listener).onCancelled();
+            verify(listener).onCancelled(null);
         });
     }
 
@@ -606,7 +610,7 @@ public class InsetsControllerTest {
             mTestClock.fastForward(2500);
             mTestHandler.timeAdvance();
 
-            verify(listener).onCancelled();
+            verify(listener).onCancelled(null);
         });
     }
 
@@ -621,7 +625,7 @@ public class InsetsControllerTest {
                     cancellationSignal, listener);
             cancellationSignal.cancel();
 
-            verify(listener).onCancelled();
+            verify(listener).onCancelled(null);
 
             // Ready gets deferred until next predraw
             mViewRoot.getView().getViewTreeObserver().dispatchOnPreDraw();

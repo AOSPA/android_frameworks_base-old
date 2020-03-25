@@ -1066,8 +1066,9 @@ public abstract class CameraMetadata<TKey> {
      * <li>One Jpeg ImageReader, any resolution: the camera device is
      *    allowed to slow down JPEG output speed by 50% if there is any ongoing offline
      *    session.</li>
-     * <li>One ImageWriter surface of private format, any resolution if the device supports
-     *    PRIVATE_REPROCESSING capability</li>
+     * <li>If the device supports PRIVATE_REPROCESSING, one pair of ImageWriter/ImageReader
+     *    surfaces of private format, with the same resolution that is larger or equal to
+     *    the JPEG ImageReader resolution above.</li>
      * </ol>
      * </li>
      * <li>Alternatively, the active camera session above can be replaced by an legacy
@@ -2755,6 +2756,7 @@ public abstract class CameraMetadata<TKey> {
     /**
      * <p>No rotate and crop is applied. Processed outputs are in the sensor orientation.</p>
      * @see CaptureRequest#SCALER_ROTATE_AND_CROP
+     * @hide
      */
     public static final int SCALER_ROTATE_AND_CROP_NONE = 0;
 
@@ -2762,6 +2764,7 @@ public abstract class CameraMetadata<TKey> {
      * <p>Processed images are rotated by 90 degrees clockwise, and then cropped
      * to the original aspect ratio.</p>
      * @see CaptureRequest#SCALER_ROTATE_AND_CROP
+     * @hide
      */
     public static final int SCALER_ROTATE_AND_CROP_90 = 1;
 
@@ -2769,6 +2772,7 @@ public abstract class CameraMetadata<TKey> {
      * <p>Processed images are rotated by 180 degrees.  Since the aspect ratio does not
      * change, no cropping is performed.</p>
      * @see CaptureRequest#SCALER_ROTATE_AND_CROP
+     * @hide
      */
     public static final int SCALER_ROTATE_AND_CROP_180 = 2;
 
@@ -2776,6 +2780,7 @@ public abstract class CameraMetadata<TKey> {
      * <p>Processed images are rotated by 270 degrees clockwise, and then cropped
      * to the original aspect ratio.</p>
      * @see CaptureRequest#SCALER_ROTATE_AND_CROP
+     * @hide
      */
     public static final int SCALER_ROTATE_AND_CROP_270 = 3;
 
@@ -2795,6 +2800,7 @@ public abstract class CameraMetadata<TKey> {
      * coordinate system to make the operation transparent for applications.</p>
      * <p>No coordinate mapping will be done when the application selects a non-AUTO mode.</p>
      * @see CaptureRequest#SCALER_ROTATE_AND_CROP
+     * @hide
      */
     public static final int SCALER_ROTATE_AND_CROP_AUTO = 4;
 
