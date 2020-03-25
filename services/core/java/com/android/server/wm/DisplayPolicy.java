@@ -761,6 +761,8 @@ public class DisplayPolicy {
 
         if (mDisplayContent.isDefaultDisplay) {
             mHasStatusBar = true;
+            // Register content observer only for main display
+            mSettingsObserver = new SettingsObserver(mHandler);
         } else {
             mHasStatusBar = false;
         }
@@ -770,8 +772,6 @@ public class DisplayPolicy {
         mRefreshRatePolicy = new RefreshRatePolicy(mService,
                 mDisplayContent.getDisplayInfo(),
                 mService.mHighRefreshRateBlacklist);
-
-        mSettingsObserver = new SettingsObserver(mHandler);
     }
 
     private void updateNavigationBarState(){
