@@ -487,6 +487,14 @@ public class KeyguardSecurityContainer extends FrameLayout implements KeyguardSe
             if (DEBUG) Log.v(TAG, "inflating id = " + layoutId);
             View v = mInjectionInflationController.injectable(inflater)
                     .inflate(layoutId, mSecurityViewFlipper, false);
+            View fod_view = v.findViewById(R.id.fod_view);
+            if (fod_view != null) {
+                if (mHasFod && mUpdateMonitor.isFingerprintAvailable()) {
+                    fod_view.setVisibility(View.VISIBLE);
+                } else {
+                    fod_view.setVisibility(View.GONE);
+                }
+            }
             mSecurityViewFlipper.addView(v);
             updateSecurityView(v);
             view = (KeyguardSecurityView)v;
