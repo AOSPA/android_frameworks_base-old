@@ -40,7 +40,6 @@ public class NavigationHandle extends View implements ButtonInterface {
     private @ColorInt final int mDarkColor;
     private final int mRadius;
     private final int mBottom;
-    private int mWidth;
 
     private final Resources mRes;
     private final ContentResolver mResolver;
@@ -74,15 +73,15 @@ public class NavigationHandle extends View implements ButtonInterface {
         // Draw that bar
         int navHeight = getHeight();
         int height = mRadius * 2;
-        mWidth = (int) getCustomWidth();
+        int width = getWidth();
         int y = (navHeight - mBottom - height);
-        int padding = (int) getCustomPadding();
-        canvas.drawRoundRect(padding, y, mWidth + padding, y + height, mRadius, mRadius, mPaint);
+        canvas.drawRoundRect(0, y, width, y + height, mRadius, mRadius, mPaint);
     }
 
-    private double getCustomPadding() {
-        int basePadding = (int) (getWidth() / 2) - (int) (mWidth / 2);
-        return basePadding;
+    @Override
+    protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+        setMeasuredDimension(getCustomWidth() + getPaddingLeft() + getPaddingRight(),
+                getDefaultSize(getSuggestedMinimumHeight(), heightMeasureSpec));
     }
 
     @Override
@@ -111,7 +110,7 @@ public class NavigationHandle extends View implements ButtonInterface {
     public void setDelayTouchFeedback(boolean shouldDelay) {
     }
 
-    private double getCustomWidth() {
+    private int getCustomWidth() {
         int baseWidth = mRes.getDimensionPixelSize(R.dimen.navigation_home_handle_width);
         /* 0: small (stock AOSP)
            1: medium
@@ -121,7 +120,7 @@ public class NavigationHandle extends View implements ButtonInterface {
         if (userSelection == 0) {
             return baseWidth;
         } else if (userSelection == 1) {
-            return 1.33 * baseWidth;
+            return (int) (1.33 * baseWidth);
         } else {
             return 2 * baseWidth;
         }
