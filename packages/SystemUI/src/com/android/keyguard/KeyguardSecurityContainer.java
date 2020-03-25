@@ -23,6 +23,8 @@ import static android.view.WindowInsetsAnimation.Callback.DISPATCH_MODE_STOP;
 
 import static com.android.systemui.DejankUtils.whitelistIpcs;
 
+import static com.android.systemui.util.Utils.getFODHeight;
+
 import static java.lang.Integer.max;
 
 import android.animation.Animator;
@@ -33,7 +35,6 @@ import android.app.AlertDialog;
 import android.app.admin.DevicePolicyManager;
 import android.content.Context;
 import android.content.Intent;
-import android.content.pm.PackageManager;
 import android.content.res.ColorStateList;
 import android.graphics.Insets;
 import android.graphics.Rect;
@@ -50,6 +51,7 @@ import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.VelocityTracker;
 import android.view.View;
+import android.view.ViewTreeObserver;
 import android.view.ViewConfiguration;
 import android.view.WindowInsets;
 import android.view.WindowInsetsAnimation;
@@ -112,8 +114,6 @@ public class KeyguardSecurityContainer extends FrameLayout implements KeyguardSe
 
     private static final long IME_DISAPPEAR_DURATION_MS = 125;
 
-    private static final String FOD = "vendor.aospa.biometrics.fingerprint.inscreen";
-
     private KeyguardSecurityModel mSecurityModel;
     private LockPatternUtils mLockPatternUtils;
 
@@ -127,7 +127,6 @@ public class KeyguardSecurityContainer extends FrameLayout implements KeyguardSe
     private InjectionInflationController mInjectionInflationController;
     private boolean mSwipeUpToRetry;
     private AdminSecondaryLockScreenController mSecondaryLockScreenController;
-    private final boolean mHasFod;
 
     private final ViewConfiguration mViewConfiguration;
     private final SpringAnimation mSpringAnimation;
@@ -265,9 +264,6 @@ public class KeyguardSecurityContainer extends FrameLayout implements KeyguardSe
         mKeyguardStateController = Dependency.get(KeyguardStateController.class);
         mSecondaryLockScreenController = new AdminSecondaryLockScreenController(context, this,
                 mUpdateMonitor, mCallback, new Handler(Looper.myLooper()));
-
-        PackageManager packageManager = mContext.getPackageManager();
-        mHasFod = packageManager.hasSystemFeature(FOD);
     }
 
     public void setSecurityCallback(SecurityCallback callback) {
@@ -521,12 +517,8 @@ public class KeyguardSecurityContainer extends FrameLayout implements KeyguardSe
 
     @Override
     public WindowInsets onApplyWindowInsets(WindowInsets insets) {
-
         // Consume bottom insets because we're setting the padding locally (for IME and navbar.)
         int inset;
-        int minBottomMargin = mHasFod && mUpdateMonitor.isFingerprintDetectionRunning() ?
-                getResources().getDimensionPixelSize(
-                        R.dimen.kg_security_container_min_bottom_margin) : 0;
 
         if (sNewInsetsMode == NEW_INSETS_MODE_FULL) {
             int bottomInset = insets.getInsetsIgnoringVisibility(systemBars()).bottom;
@@ -535,8 +527,8 @@ public class KeyguardSecurityContainer extends FrameLayout implements KeyguardSe
         } else {
             inset = insets.getSystemWindowInsetBottom();
         }
-        setPadding(getPaddingLeft(), getPaddingTop(), getPaddingRight(),
-               minBottomMargin > inset ? minBottomMargin : inset);
+        setPadding(getPaddingLeft(), getPaddingTop(), getPaddingRight(), max(mUpdateMonitor
+                .isFingerprintDetectionRunning() ? getFODHeight(mContext, false) : inset, inset));
         return insets.inset(0, 0, 0, inset);
     }
 
