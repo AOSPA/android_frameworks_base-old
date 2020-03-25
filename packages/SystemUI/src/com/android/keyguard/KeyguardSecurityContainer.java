@@ -23,6 +23,8 @@ import static android.view.WindowInsetsAnimation.Callback.DISPATCH_MODE_STOP;
 
 import static com.android.systemui.DejankUtils.whitelistIpcs;
 
+import static com.android.systemui.util.Utils.getFODHeight;
+
 import static java.lang.Integer.max;
 
 import android.animation.Animator;
@@ -50,6 +52,7 @@ import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.VelocityTracker;
 import android.view.View;
+import android.view.ViewTreeObserver;
 import android.view.ViewConfiguration;
 import android.view.WindowInsets;
 import android.view.WindowInsetsAnimation;
@@ -489,11 +492,37 @@ public class KeyguardSecurityContainer extends FrameLayout implements KeyguardSe
                     .inflate(layoutId, mSecurityViewFlipper, false);
             mSecurityViewFlipper.addView(v);
             updateSecurityView(v);
+            if (mHasFod && mUpdateMonitor.isFingerprintAvailable()) {
+                updateFODMargin(v, securityMode);
+            }
             view = (KeyguardSecurityView)v;
             view.reset();
         }
 
         return view;
+    }
+
+    private void updateFODMargin(View v, SecurityMode securityMode) {
+        switch (securityMode) {
+            case Pattern:
+            case PIN:
+                View eca = v.findViewById(R.id.keyguard_selector_fade_container);
+                final ViewTreeObserver observer= eca.getViewTreeObserver();
+                observer.addOnGlobalLayoutListener(new ViewTreeObserver.OnGlobalLayoutListener() {
+                        @Override
+                        public void onGlobalLayout() {
+                            if (eca.getViewTreeObserver().isAlive()) {
+                                v.findViewById(R.id.fod_view).setVisibility(View.VISIBLE);
+                                v.findViewById(R.id.fod_view).getLayoutParams().height = getFODHeight()
+                                        - eca.getHeight();
+                                eca.getViewTreeObserver().removeGlobalOnLayoutListener(this);
+                            }
+                        }
+                    });
+                break;
+            default:
+                break;
+        }
     }
 
     private void updateSecurityView(View view) {
@@ -524,9 +553,6 @@ public class KeyguardSecurityContainer extends FrameLayout implements KeyguardSe
 
         // Consume bottom insets because we're setting the padding locally (for IME and navbar.)
         int inset;
-        int minBottomMargin = mHasFod && mUpdateMonitor.isFingerprintDetectionRunning() ?
-                getResources().getDimensionPixelSize(
-                        R.dimen.kg_security_container_min_bottom_margin) : 0;
 
         if (sNewInsetsMode == NEW_INSETS_MODE_FULL) {
             int bottomInset = insets.getInsetsIgnoringVisibility(systemBars()).bottom;
@@ -535,8 +561,7 @@ public class KeyguardSecurityContainer extends FrameLayout implements KeyguardSe
         } else {
             inset = insets.getSystemWindowInsetBottom();
         }
-        setPadding(getPaddingLeft(), getPaddingTop(), getPaddingRight(),
-               minBottomMargin > inset ? minBottomMargin : inset);
+        setPadding(getPaddingLeft(), getPaddingTop(), getPaddingRight(), inset);
         return insets.inset(0, 0, 0, inset);
     }
 
