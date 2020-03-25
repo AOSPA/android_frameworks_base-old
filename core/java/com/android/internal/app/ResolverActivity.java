@@ -49,6 +49,7 @@ import android.content.pm.ResolveInfo;
 import android.content.pm.UserInfo;
 import android.content.res.Configuration;
 import android.content.res.Resources;
+import android.content.res.TypedArray;
 import android.graphics.Insets;
 import android.net.Uri;
 import android.os.Build;
@@ -65,6 +66,7 @@ import android.stats.devicepolicy.DevicePolicyEnums;
 import android.text.TextUtils;
 import android.util.Log;
 import android.util.Slog;
+import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -1242,12 +1244,12 @@ public class ResolverActivity extends Activity implements
     }
 
     private void maybeLogCrossProfileTargetLaunch(TargetInfo cti, UserHandle currentUserHandle) {
-        if (!hasWorkProfile() || currentUserHandle == getUser()) {
+        if (!hasWorkProfile() || currentUserHandle.equals(getUser())) {
             return;
         }
         DevicePolicyEventLogger
                 .createEvent(DevicePolicyEnums.RESOLVER_CROSS_PROFILE_TARGET_OPENED)
-                .setBoolean(currentUserHandle == getPersonalProfileUserHandle())
+                .setBoolean(currentUserHandle.equals(getPersonalProfileUserHandle()))
                 .setStrings(getMetricsCategory(),
                         cti instanceof ChooserTargetInfo ? "direct_share" : "other_target")
                 .write();
@@ -1303,7 +1305,7 @@ public class ResolverActivity extends Activity implements
         Intent in = new Intent().setAction(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
                 .setData(Uri.fromParts("package", ri.activityInfo.packageName, null))
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_DOCUMENT);
-        startActivity(in);
+        startActivityAsUser(in, mMultiProfilePagerAdapter.getCurrentUserHandle());
     }
 
     @VisibleForTesting
@@ -1486,7 +1488,8 @@ public class ResolverActivity extends Activity implements
 
         DevicePolicyEventLogger
                 .createEvent(DevicePolicyEnums.RESOLVER_AUTOLAUNCH_CROSS_PROFILE_TARGET)
-                .setBoolean(activeListAdapter.getUserHandle() == getPersonalProfileUserHandle())
+                .setBoolean(activeListAdapter.getUserHandle()
+                        .equals(getPersonalProfileUserHandle()))
                 .setStrings(getMetricsCategory())
                 .write();
         safelyStartActivity(activeProfileTarget);
@@ -1605,7 +1608,10 @@ public class ResolverActivity extends Activity implements
         for (int i = 0; i < tabWidget.getChildCount(); i++) {
             View tabView = tabWidget.getChildAt(i);
             TextView title = tabView.findViewById(android.R.id.title);
-            title.setTextColor(getColor(R.color.resolver_tabs_inactive_color));
+            title.setTextAppearance(android.R.style.TextAppearance_DeviceDefault_DialogWindowTitle);
+            title.setTextColor(getAttrColor(this, android.R.attr.textColorTertiary));
+            title.setTextSize(TypedValue.COMPLEX_UNIT_PX,
+                    getResources().getDimension(R.dimen.resolver_tab_text_size));
             if (title.getText().equals(getString(R.string.resolver_personal_tab))) {
                 tabView.setContentDescription(personalContentDescription);
             } else if (title.getText().equals(getString(R.string.resolver_work_tab))) {
@@ -1614,10 +1620,17 @@ public class ResolverActivity extends Activity implements
         }
     }
 
+    private static int getAttrColor(Context context, int attr) {
+        TypedArray ta = context.obtainStyledAttributes(new int[]{attr});
+        int colorAccent = ta.getColor(0, 0);
+        ta.recycle();
+        return colorAccent;
+    }
+
     private void updateActiveTabStyle(TabHost tabHost) {
         TextView title = tabHost.getTabWidget().getChildAt(tabHost.getCurrentTab())
                 .findViewById(android.R.id.title);
-        title.setTextColor(getColor(R.color.resolver_tabs_active_color));
+        title.setTextColor(getAttrColor(this, android.R.attr.colorAccent));
     }
 
     private void setupViewVisibilities() {
@@ -1778,7 +1791,7 @@ public class ResolverActivity extends Activity implements
     @Override // ResolverListCommunicator
     public void onHandlePackagesChanged(ResolverListAdapter listAdapter) {
         if (listAdapter == mMultiProfilePagerAdapter.getActiveListAdapter()) {
-            if (listAdapter.getUserHandle() == getWorkProfileUserHandle()
+            if (listAdapter.getUserHandle().equals(getWorkProfileUserHandle())
                     && mMultiProfilePagerAdapter.isWaitingToEnableWorkProfile()) {
                 // We have just turned on the work profile and entered the pass code to start it,
                 // now we are waiting to receive the ACTION_USER_UNLOCKED broadcast. There is no
@@ -1819,7 +1832,7 @@ public class ResolverActivity extends Activity implements
                     mMultiProfilePagerAdapter.markWorkProfileEnabledBroadcastReceived();
                 }
                 if (mMultiProfilePagerAdapter.getCurrentUserHandle()
-                        == getWorkProfileUserHandle()) {
+                        .equals(getWorkProfileUserHandle())) {
                     mMultiProfilePagerAdapter.rebuildActiveTab(true);
                 } else {
                     mMultiProfilePagerAdapter.clearInactiveProfileCache();

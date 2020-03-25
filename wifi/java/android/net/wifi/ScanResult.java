@@ -715,31 +715,6 @@ public class ScanResult implements Parcelable {
      */
     public AnqpInformationElement[] anqpElements;
 
-    /**
-     * Flag indicating if this AP is a carrier AP. The determination is based
-     * on the AP's SSID and if AP is using EAP security.
-     *
-     * @hide
-     */
-    // TODO(b/144431927): remove once migrated to Suggestions
-    public boolean isCarrierAp;
-
-    /**
-     * The EAP type {@link WifiEnterpriseConfig.Eap} associated with this AP if it is a carrier AP.
-     *
-     * @hide
-     */
-    // TODO(b/144431927): remove once migrated to Suggestions
-    public int carrierApEapType;
-
-    /**
-     * The name of the carrier that's associated with this AP if it is a carrier AP.
-     *
-     * @hide
-     */
-    // TODO(b/144431927): remove once migrated to Suggestions
-    public String carrierName;
-
     /** {@hide} */
     public ScanResult(WifiSsid wifiSsid, String BSSID, long hessid, int anqpDomainId,
             byte[] osuProviders, String caps, int level, int frequency, long tsf) {
@@ -764,9 +739,6 @@ public class ScanResult implements Parcelable {
         this.centerFreq0 = UNSPECIFIED;
         this.centerFreq1 = UNSPECIFIED;
         this.flags = 0;
-        this.isCarrierAp = false;
-        this.carrierApEapType = UNSPECIFIED;
-        this.carrierName = null;
         this.radioChainInfos = null;
         this.mWifiStandard = WIFI_STANDARD_UNKNOWN;
     }
@@ -787,9 +759,6 @@ public class ScanResult implements Parcelable {
         this.centerFreq0 = UNSPECIFIED;
         this.centerFreq1 = UNSPECIFIED;
         this.flags = 0;
-        this.isCarrierAp = false;
-        this.carrierApEapType = UNSPECIFIED;
-        this.carrierName = null;
         this.radioChainInfos = null;
         this.mWifiStandard = WIFI_STANDARD_UNKNOWN;
     }
@@ -817,9 +786,6 @@ public class ScanResult implements Parcelable {
         } else {
             this.flags = 0;
         }
-        this.isCarrierAp = false;
-        this.carrierApEapType = UNSPECIFIED;
-        this.carrierName = null;
         this.radioChainInfos = null;
         this.mWifiStandard = WIFI_STANDARD_UNKNOWN;
     }
@@ -859,9 +825,6 @@ public class ScanResult implements Parcelable {
             venueName = source.venueName;
             operatorFriendlyName = source.operatorFriendlyName;
             flags = source.flags;
-            isCarrierAp = source.isCarrierAp;
-            carrierApEapType = source.carrierApEapType;
-            carrierName = source.carrierName;
             radioChainInfos = source.radioChainInfos;
             this.mWifiStandard = source.mWifiStandard;
         }
@@ -901,9 +864,6 @@ public class ScanResult implements Parcelable {
         sb.append(", standard: ").append(wifiStandardToString(mWifiStandard));
         sb.append(", 80211mcResponder: ");
         sb.append(((flags & FLAG_80211mc_RESPONDER) != 0) ? "is supported" : "is not supported");
-        sb.append(", Carrier AP: ").append(isCarrierAp ? "yes" : "no");
-        sb.append(", Carrier AP EAP Type: ").append(carrierApEapType);
-        sb.append(", Carrier name: ").append(carrierName);
         sb.append(", Radio Chain Infos: ").append(Arrays.toString(radioChainInfos));
         return sb.toString();
     }
@@ -974,9 +934,6 @@ public class ScanResult implements Parcelable {
         } else {
             dest.writeInt(0);
         }
-        dest.writeInt(isCarrierAp ? 1 : 0);
-        dest.writeInt(carrierApEapType);
-        dest.writeString(carrierName);
 
         if (radioChainInfos != null) {
             dest.writeInt(radioChainInfos.length);
@@ -1056,9 +1013,6 @@ public class ScanResult implements Parcelable {
                                 new AnqpInformationElement(vendorId, elementId, payload);
                     }
                 }
-                sr.isCarrierAp = in.readInt() != 0;
-                sr.carrierApEapType = in.readInt();
-                sr.carrierName = in.readString();
                 n = in.readInt();
                 if (n != 0) {
                     sr.radioChainInfos = new RadioChainInfo[n];

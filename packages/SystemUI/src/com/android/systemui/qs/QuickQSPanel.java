@@ -18,6 +18,7 @@ package com.android.systemui.qs;
 
 import static com.android.systemui.util.InjectionInflationController.VIEW_CONTEXT;
 
+import android.annotation.Nullable;
 import android.content.Context;
 import android.content.res.Configuration;
 import android.graphics.Rect;
@@ -26,10 +27,12 @@ import android.view.Gravity;
 import android.view.View;
 import android.widget.LinearLayout;
 
+import com.android.settingslib.bluetooth.LocalBluetoothManager;
 import com.android.systemui.Dependency;
 import com.android.systemui.R;
 import com.android.systemui.broadcast.BroadcastDispatcher;
 import com.android.systemui.dagger.qualifiers.Background;
+import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.dump.DumpManager;
 import com.android.systemui.plugins.qs.QSTile;
 import com.android.systemui.plugins.qs.QSTile.SignalState;
@@ -77,10 +80,12 @@ public class QuickQSPanel extends QSPanel {
             BroadcastDispatcher broadcastDispatcher,
             QSLogger qsLogger,
             NotificationMediaManager notificationMediaManager,
-            @Background Executor backgroundExecutor
+            @Main Executor foregroundExecutor,
+            @Background Executor backgroundExecutor,
+            @Nullable LocalBluetoothManager localBluetoothManager
     ) {
         super(context, attrs, dumpManager, broadcastDispatcher, qsLogger, notificationMediaManager,
-                backgroundExecutor);
+                foregroundExecutor, backgroundExecutor, localBluetoothManager);
         if (mFooter != null) {
             removeView(mFooter.getView());
         }
@@ -100,7 +105,7 @@ public class QuickQSPanel extends QSPanel {
 
             int marginSize = (int) mContext.getResources().getDimension(R.dimen.qqs_media_spacing);
             mMediaPlayer = new QuickQSMediaPlayer(mContext, mHorizontalLinearLayout,
-                    notificationMediaManager, backgroundExecutor);
+                    notificationMediaManager, foregroundExecutor, backgroundExecutor);
             LayoutParams lp2 = new LayoutParams(0, LayoutParams.MATCH_PARENT, 1);
             lp2.setMarginEnd(marginSize);
             lp2.setMarginStart(0);
@@ -154,8 +159,6 @@ public class QuickQSPanel extends QSPanel {
         super.onDetachedFromWindow();
         Dependency.get(TunerService.class).removeTunable(mNumTiles);
     }
-
-
 
     @Override
     protected String getDumpableTag() {

@@ -16,6 +16,7 @@
 
 package com.android.server.pm;
 
+import static android.app.AppOpsManager.MODE_DEFAULT;
 import static android.content.pm.DataLoaderType.INCREMENTAL;
 import static android.content.pm.DataLoaderType.STREAMING;
 import static android.content.pm.PackageInstaller.LOCATION_DATA_APP;
@@ -167,6 +168,8 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
     private static final String TAG_GRANTED_RUNTIME_PERMISSION = "granted-runtime-permission";
     private static final String TAG_WHITELISTED_RESTRICTED_PERMISSION =
             "whitelisted-restricted-permission";
+    private static final String TAG_AUTO_REVOKE_PERMISSIONS_MODE =
+            "auto-revoke-permissions-mode";
     private static final String ATTR_SESSION_ID = "sessionId";
     private static final String ATTR_USER_ID = "userId";
     private static final String ATTR_INSTALLER_PACKAGE_NAME = "installerPackageName";
@@ -319,8 +322,41 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
     @GuardedBy("mLock")
     private int mParentSessionId;
 
+    static class FileEntry {
+        private final int mIndex;
+        private final InstallationFile mFile;
+
+        FileEntry(int index, InstallationFile file) {
+            this.mIndex = index;
+            this.mFile = file;
+        }
+
+        int getIndex() {
+            return this.mIndex;
+        }
+
+        InstallationFile getFile() {
+            return this.mFile;
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            if (!(obj instanceof FileEntry)) {
+                return false;
+            }
+            final FileEntry rhs = (FileEntry) obj;
+            return (mFile.getLocation() == rhs.mFile.getLocation()) && TextUtils.equals(
+                    mFile.getName(), rhs.mFile.getName());
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(mFile.getLocation(), mFile.getName());
+        }
+    }
+
     @GuardedBy("mLock")
-    private ArrayList<InstallationFile> mFiles = new ArrayList<>();
+    private ArraySet<FileEntry> mFiles = new ArraySet<>();
 
     @GuardedBy("mLock")
     private boolean mStagedSessionApplied;
@@ -524,8 +560,12 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
         this.mParentSessionId = parentSessionId;
 
         if (files != null) {
-            for (InstallationFile file : files) {
-                mFiles.add(file);
+            for (int i = 0, size = files.length; i < size; ++i) {
+                InstallationFile file = files[i];
+                if (!mFiles.add(new FileEntry(i, file))) {
+                    throw new IllegalArgumentException(
+                            "Trying to add a duplicate installation file");
+                }
             }
         }
 
@@ -631,6 +671,7 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
             }
             info.grantedRuntimePermissions = params.grantedRuntimePermissions;
             info.whitelistedRestrictedPermissions = params.whitelistedRestrictedPermissions;
+            info.autoRevokePermissionsMode = params.autoRevokePermissionsMode;
             info.installFlags = params.installFlags;
             info.isMultiPackage = params.isMultiPackage;
             info.isStaged = params.isStaged;
@@ -758,9 +799,19 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
             return result;
         }
 
-        String[] result = new String[mFiles.size()];
-        for (int i = 0, size = mFiles.size(); i < size; ++i) {
-            result[i] = mFiles.get(i).getName();
+        InstallationFile[] files = getInstallationFilesLocked();
+        String[] result = new String[files.length];
+        for (int i = 0, size = files.length; i < size; ++i) {
+            result[i] = files[i].getName();
+        }
+        return result;
+    }
+
+    @GuardedBy("mLock")
+    private InstallationFile[] getInstallationFilesLocked() {
+        final InstallationFile[] result = new InstallationFile[mFiles.size()];
+        for (FileEntry fileEntry : mFiles) {
+            result[fileEntry.getIndex()] = fileEntry.getFile();
         }
         return result;
     }
@@ -2468,7 +2519,10 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
             assertCallerIsOwnerOrRootLocked();
             assertPreparedAndNotSealedLocked("addFile");
 
-            mFiles.add(new InstallationFile(location, name, lengthBytes, metadata, signature));
+            if (!mFiles.add(new FileEntry(mFiles.size(),
+                    new InstallationFile(location, name, lengthBytes, metadata, signature)))) {
+                throw new IllegalArgumentException("File already added: " + name);
+            }
         }
     }
 
@@ -2486,7 +2540,10 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
             assertCallerIsOwnerOrRootLocked();
             assertPreparedAndNotSealedLocked("removeFile");
 
-            mFiles.add(new InstallationFile(location, getRemoveMarkerName(name), -1, null, null));
+            if (!mFiles.add(new FileEntry(mFiles.size(),
+                    new InstallationFile(location, getRemoveMarkerName(name), -1, null, null)))) {
+                throw new IllegalArgumentException("File already removed: " + name);
+            }
         }
     }
 
@@ -2506,7 +2563,8 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
         final List<InstallationFileParcel> addedFiles = new ArrayList<>();
         final List<String> removedFiles = new ArrayList<>();
 
-        for (InstallationFile file : mFiles) {
+        final InstallationFile[] files = getInstallationFilesLocked();
+        for (InstallationFile file : files) {
             if (sAddedFilter.accept(new File(this.stageDir, file.getName()))) {
                 addedFiles.add(file.getData());
                 continue;
@@ -2913,6 +2971,13 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
         }
     }
 
+    private static void writeAutoRevokePermissionsMode(@NonNull XmlSerializer out, int mode)
+            throws IOException {
+        out.startTag(null, TAG_AUTO_REVOKE_PERMISSIONS_MODE);
+        writeIntAttribute(out, ATTR_MODE, mode);
+        out.endTag(null, TAG_AUTO_REVOKE_PERMISSIONS_MODE);
+    }
+
 
     private static File buildAppIconFile(int sessionId, @NonNull File sessionsDir) {
         return new File(sessionsDir, "app_icon." + sessionId + ".png");
@@ -2993,6 +3058,7 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
             writeGrantedRuntimePermissionsLocked(out, params.grantedRuntimePermissions);
             writeWhitelistedRestrictedPermissionsLocked(out,
                     params.whitelistedRestrictedPermissions);
+            writeAutoRevokePermissionsMode(out, params.autoRevokePermissionsMode);
 
             // Persist app icon if changed since last written
             File appIconFile = buildAppIconFile(sessionId, sessionsDir);
@@ -3019,7 +3085,9 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
                 writeIntAttribute(out, ATTR_SESSION_ID, childSessionId);
                 out.endTag(null, TAG_CHILD_SESSION);
             }
-            for (InstallationFile file : mFiles) {
+
+            final InstallationFile[] files = getInstallationFilesLocked();
+            for (InstallationFile file : getInstallationFilesLocked()) {
                 out.startTag(null, TAG_SESSION_FILE);
                 writeIntAttribute(out, ATTR_LOCATION, file.getLocation());
                 writeStringAttribute(out, ATTR_NAME, file.getName());
@@ -3136,6 +3204,7 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
         // depth.
         List<String> grantedRuntimePermissions = new ArrayList<>();
         List<String> whitelistedRestrictedPermissions = new ArrayList<>();
+        int autoRevokePermissionsMode = MODE_DEFAULT;
         List<Integer> childSessionIds = new ArrayList<>();
         List<InstallationFile> files = new ArrayList<>();
         int outerDepth = in.getDepth();
@@ -3151,6 +3220,9 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
             if (TAG_WHITELISTED_RESTRICTED_PERMISSION.equals(in.getName())) {
                 whitelistedRestrictedPermissions.add(readStringAttribute(in, ATTR_NAME));
 
+            }
+            if (TAG_AUTO_REVOKE_PERMISSIONS_MODE.equals(in.getName())) {
+                autoRevokePermissionsMode = readIntAttribute(in, ATTR_MODE);
             }
             if (TAG_CHILD_SESSION.equals(in.getName())) {
                 childSessionIds.add(readIntAttribute(in, ATTR_SESSION_ID, SessionInfo.INVALID_ID));
@@ -3173,6 +3245,8 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
         if (whitelistedRestrictedPermissions.size() > 0) {
             params.whitelistedRestrictedPermissions = whitelistedRestrictedPermissions;
         }
+
+        params.autoRevokePermissionsMode = autoRevokePermissionsMode;
 
         int[] childSessionIdsArray;
         if (childSessionIds.size() > 0) {
