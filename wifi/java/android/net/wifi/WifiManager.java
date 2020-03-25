@@ -3253,22 +3253,6 @@ public class WifiManager {
          * @param numClients number of connected clients
          */
         public abstract void onNumClientsChanged(int numClients);
-
-        /**
-         * Called when Stations connected to soft AP.
-         *
-         * @param Macaddr Mac Address of connected Stations to soft AP
-         * @param numClients number of connected clients
-         */
-        public abstract void onStaConnected(String Macaddr, int numClients);
-
-        /**
-         * Called when Stations disconnected to soft AP.
-         *
-         * @param Macaddr Mac Address of Disconnected Stations to soft AP
-         * @param numClients number of connected clients
-         */
-        public abstract void onStaDisconnected(String Macaddr, int numClients);
     }
 
     /**
@@ -3303,22 +3287,6 @@ public class WifiManager {
             }
             mHandler.post(() -> {
                 mCallback.onNumClientsChanged(numClients);
-            });
-        }
-
-        @Override
-        public void onStaConnected(String Macaddr, int numClients) throws RemoteException {
-            Log.v(TAG, "SoftApCallbackProxy: [" + numClients + "]onStaConnected Macaddr =" + Macaddr);
-            mHandler.post(() -> {
-                mCallback.onStaConnected(Macaddr, numClients);
-            });
-        }
-
-        @Override
-        public void onStaDisconnected(String Macaddr, int numClients) throws RemoteException {
-            Log.v(TAG, "SoftApCallbackProxy: [" + numClients + "]onStaDisconnected Macaddr =" + Macaddr);
-            mHandler.post(() -> {
-                mCallback.onStaDisconnected(Macaddr, numClients);
             });
         }
     }
