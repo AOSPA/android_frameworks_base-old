@@ -273,6 +273,12 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
     public void showExtendedDialog(boolean keyguardShowing, boolean isDeviceProvisioned) {
         mKeyguardShowing = keyguardShowing;
         mDeviceProvisioned = isDeviceProvisioned;
+        int userId = getCurrentUser().id;
+        if (mKeyguardShowing && mKeyguardManager.isDeviceSecure(userId)) {
+            // Extended dialog is not permitted on secure keygaurd
+            return;
+        }
+
         if (mDialog != null) {
             mDialog.dismiss();
             mDialog = null;
@@ -680,6 +686,11 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
         }
 
         private void promptExtendedRestart() {
+            int userId = getCurrentUser().id;
+            if (mKeyguardShowing && mKeyguardManager.isDeviceSecure(userId)) {
+                // Avoid prompting for extended dialog since keygaurd is secure
+                return;
+            }
             final SettingConfirmationSnackbarViewCreator
                     mSnackbarViewCreator = new
                     SettingConfirmationSnackbarViewCreator(mContext);
