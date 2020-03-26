@@ -3633,6 +3633,14 @@ public class CarrierConfigManager {
     public static final String KEY_CARRIER_SUPPORTS_MULTIANCHOR_CONFERENCE =
             "carrier_supports_multianchor_conference";
 
+    /**
+     * Determines the default RTT mode.
+     *
+     * @hide
+     */
+    public static final String KEY_DEFAULT_RTT_MODE_INT =
+            "default_rtt_mode_int";
+
     /** The default value for every variable. */
     private final static PersistableBundle sDefaults;
 
@@ -4151,6 +4159,7 @@ public class CarrierConfigManager {
                 new String[0]);
         sDefaults.putStringArray(KEY_MISSED_INCOMING_CALL_SMS_PATTERN_STRING_ARRAY, new String[0]);
         sDefaults.putBoolean(KEY_CARRIER_SUPPORTS_MULTIANCHOR_CONFERENCE, false);
+        sDefaults.putInt(KEY_DEFAULT_RTT_MODE_INT, 0);
     }
 
     /**
