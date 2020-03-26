@@ -571,6 +571,19 @@ public class Annotation {
     public @interface PreciseDisconnectCauses {
     }
 
+    /**
+     * Carrier Privilege Status.
+     */
+    @IntDef(prefix = { "CARRIER_PRIVILEGE_STATUS_" }, value = {
+        TelephonyManager.CARRIER_PRIVILEGE_STATUS_HAS_ACCESS,
+        TelephonyManager.CARRIER_PRIVILEGE_STATUS_NO_ACCESS,
+        TelephonyManager.CARRIER_PRIVILEGE_STATUS_RULES_NOT_LOADED,
+        TelephonyManager.CARRIER_PRIVILEGE_STATUS_ERROR_LOADING_RULES,
+    })
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface CarrierPrivilegeStatus {
+    }
+
     @IntDef({
             Connection.AUDIO_CODEC_NONE,
             Connection.AUDIO_CODEC_AMR,
@@ -615,10 +628,10 @@ public class Annotation {
      */
     @Retention(RetentionPolicy.SOURCE)
     @IntDef(prefix = "OVERRIDE_NETWORK_TYPE_", value = {
-            DisplayInfo.OVERRIDE_NETWORK_TYPE_NONE,
-            DisplayInfo.OVERRIDE_NETWORK_TYPE_LTE_CA,
-            DisplayInfo.OVERRIDE_NETWORK_TYPE_LTE_ADVANCED_PRO,
-            DisplayInfo.OVERRIDE_NETWORK_TYPE_NR_NSA,
-            DisplayInfo.OVERRIDE_NETWORK_TYPE_NR_NSA_MMWAVE})
+            TelephonyDisplayInfo.OVERRIDE_NETWORK_TYPE_NONE,
+            TelephonyDisplayInfo.OVERRIDE_NETWORK_TYPE_LTE_CA,
+            TelephonyDisplayInfo.OVERRIDE_NETWORK_TYPE_LTE_ADVANCED_PRO,
+            TelephonyDisplayInfo.OVERRIDE_NETWORK_TYPE_NR_NSA,
+            TelephonyDisplayInfo.OVERRIDE_NETWORK_TYPE_NR_NSA_MMWAVE})
     public @interface OverrideNetworkType {}
 }

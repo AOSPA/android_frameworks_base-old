@@ -1550,7 +1550,6 @@ public class PackageManagerService extends IPackageManager.Stub
     final @Nullable String mConfiguratorPackage;
     final @Nullable String mAppPredictionServicePackage;
     final @Nullable String mIncidentReportApproverPackage;
-    final @Nullable String[] mTelephonyPackages;
     final @Nullable String mServicesExtensionPackageName;
     final @Nullable String mSharedSystemSharedLibraryPackageName;
     final @Nullable String mRetailDemoPackage;
@@ -3183,7 +3182,6 @@ public class PackageManagerService extends IPackageManager.Stub
             mConfiguratorPackage = getDeviceConfiguratorPackageName();
             mAppPredictionServicePackage = getAppPredictionServicePackageName();
             mIncidentReportApproverPackage = getIncidentReportApproverPackageName();
-            mTelephonyPackages = getTelephonyPackageNames();
             mRetailDemoPackage = getRetailDemoPackageName();
 
             // Now that we know all of the shared libraries, update all clients to have
@@ -7271,8 +7269,8 @@ public class PackageManagerService extends IPackageManager.Stub
                 resolveInfos.set(i, installerInfo);
                 continue;
             }
-            // caller is a full app
             if (ephemeralPkgName == null) {
+                // caller is a full app
                 SettingBase callingSetting =
                         mSettings.getSettingLPr(UserHandle.getAppId(filterCallingUid));
                 PackageSetting resolvedSetting =
@@ -7292,11 +7290,9 @@ public class PackageManagerService extends IPackageManager.Stub
                     && intent.getComponent() == null) {
                 // ephemeral apps can launch other ephemeral apps indirectly
                 continue;
-            }
-            // allow activities that have been explicitly exposed to ephemeral apps
-            final boolean isEphemeralApp = info.activityInfo.applicationInfo.isInstantApp();
-            if (!isEphemeralApp
-                    && ((info.activityInfo.flags & ActivityInfo.FLAG_VISIBLE_TO_INSTANT_APP) != 0)) {
+            } else if (((info.activityInfo.flags & ActivityInfo.FLAG_VISIBLE_TO_INSTANT_APP) != 0)
+                    && !info.activityInfo.applicationInfo.isInstantApp()) {
+                // allow activities that have been explicitly exposed to ephemeral apps
                 continue;
             }
             resolveInfos.remove(i);
@@ -20018,16 +20014,6 @@ public class PackageManagerService extends IPackageManager.Stub
     }
 
     @Override
-    public String[] getTelephonyPackageNames() {
-        String names = mContext.getString(R.string.config_telephonyPackages);
-        String[] telephonyPackageNames = null;
-        if (!TextUtils.isEmpty(names)) {
-            telephonyPackageNames = names.trim().split(",");
-        }
-        return ensureSystemPackageNames(telephonyPackageNames);
-    }
-
-    @Override
     public String getContentCaptureServicePackageName() {
         final String flattenedContentCaptureService =
                 mContext.getString(R.string.config_defaultContentCaptureService);
@@ -23417,8 +23403,6 @@ public class PackageManagerService extends IPackageManager.Stub
                     return filterOnlySystemPackages(mIncidentReportApproverPackage);
                 case PackageManagerInternal.PACKAGE_APP_PREDICTOR:
                     return filterOnlySystemPackages(mAppPredictionServicePackage);
-                case PackageManagerInternal.PACKAGE_TELEPHONY:
-                    return filterOnlySystemPackages(mTelephonyPackages);
                 case PackageManagerInternal.PACKAGE_COMPANION:
                     return filterOnlySystemPackages("com.android.companiondevicemanager");
                 case PackageManagerInternal.PACKAGE_RETAIL_DEMO:

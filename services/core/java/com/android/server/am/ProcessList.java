@@ -71,7 +71,6 @@ import android.content.IntentFilter;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.IPackageManager;
 import android.content.pm.PackageManagerInternal;
-import android.content.pm.ProcessInfo;
 import android.content.res.Resources;
 import android.graphics.Point;
 import android.net.LocalSocket;
@@ -99,7 +98,6 @@ import android.provider.DeviceConfig;
 import android.system.Os;
 import android.text.TextUtils;
 import android.util.ArrayMap;
-import android.util.ArraySet;
 import android.util.EventLog;
 import android.util.LongSparseArray;
 import android.util.Pair;
@@ -139,10 +137,8 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.BitSet;
 import java.util.HashMap;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 /**
  * Activity manager code dealing with processes.
@@ -513,17 +509,11 @@ public final class ProcessList {
      */
     private final int[] mZygoteSigChldMessage = new int[3];
 
-    interface LmkdKillListener {
-        /**
-         * Called when there is a process kill by lmkd.
-         */
-        void onLmkdKillOccurred(int pid, int uid);
-    }
-
     /**
      * BoostFramework Object
      */
     public static BoostFramework mPerfServiceStartHint = new BoostFramework();
+
     final class IsolatedUidRange {
         @VisibleForTesting
         public final int mFirstUid;
@@ -1681,16 +1671,19 @@ public final class ProcessList {
 
     private int decideGwpAsanLevel(ProcessRecord app) {
         // Look at the process attribute first.
-        if (app.processInfo != null && app.processInfo.enableGwpAsan != null) {
-            return app.processInfo.enableGwpAsan ? Zygote.GWP_ASAN_LEVEL_ALWAYS
-                                                 : Zygote.GWP_ASAN_LEVEL_NEVER;
+       if (app.processInfo != null
+                && app.processInfo.gwpAsanMode != ApplicationInfo.GWP_ASAN_DEFAULT) {
+            return app.processInfo.gwpAsanMode == ApplicationInfo.GWP_ASAN_ALWAYS
+                    ? Zygote.GWP_ASAN_LEVEL_ALWAYS
+                    : Zygote.GWP_ASAN_LEVEL_NEVER;
         }
         // Then at the applicaton attribute.
-        if (app.info.isGwpAsanEnabled() != null) {
-            return app.info.isGwpAsanEnabled() ? Zygote.GWP_ASAN_LEVEL_ALWAYS
-                                               : Zygote.GWP_ASAN_LEVEL_NEVER;
+        if (app.info.getGwpAsanMode() != ApplicationInfo.GWP_ASAN_DEFAULT) {
+            return app.info.getGwpAsanMode() == ApplicationInfo.GWP_ASAN_ALWAYS
+                    ? Zygote.GWP_ASAN_LEVEL_ALWAYS
+                    : Zygote.GWP_ASAN_LEVEL_NEVER;
         }
-        // If the app does not specify enableGwpAsan, the default behavior is lottery among the
+        // If the app does not specify gwpAsanMode, the default behavior is lottery among the
         // system apps, and disabled for user apps, unless overwritten by the compat feature.
         if (mPlatformCompat.isChangeEnabled(GWP_ASAN, app.info)) {
             return Zygote.GWP_ASAN_LEVEL_ALWAYS;
@@ -2197,11 +2190,12 @@ public final class ProcessList {
                 app.setHasForegroundActivities(true);
             }
 
+            StorageManagerInternal storageManagerInternal = LocalServices.getService(
+                    StorageManagerInternal.class);
             final Map<String, Pair<String, Long>> pkgDataInfoMap;
             boolean bindMountAppStorageDirs = false;
 
             if (shouldIsolateAppData(app)) {
-                bindMountAppStorageDirs = mVoldAppDataIsolationEnabled;
                 // Get all packages belongs to the same shared uid. sharedPackages is empty array
                 // if it doesn't have shared uid.
                 final PackageManagerInternal pmInt = mService.getPackageManagerInternalLocked();
@@ -2211,9 +2205,9 @@ public final class ProcessList {
                         ? new String[]{app.info.packageName} : sharedPackages, uid);
 
                 int userId = UserHandle.getUserId(uid);
-                if (mVoldAppDataIsolationEnabled) {
-                    StorageManagerInternal storageManagerInternal = LocalServices.getService(
-                            StorageManagerInternal.class);
+                if (mVoldAppDataIsolationEnabled && UserHandle.isApp(app.uid) &&
+                        !storageManagerInternal.isExternalStorageService(uid)) {
+                    bindMountAppStorageDirs = true;
                     if (!storageManagerInternal.prepareStorageDirs(userId, pkgDataInfoMap.keySet(),
                             app.processName)) {
                         // Cannot prepare Android/app and Android/obb directory,

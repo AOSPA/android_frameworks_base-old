@@ -551,28 +551,6 @@
   <java-symbol type="string" name="replace" />
   <java-symbol type="string" name="undo" />
   <java-symbol type="string" name="redo" />
-  <java-symbol type="string" name="email" />
-  <java-symbol type="string" name="email_desc" />
-  <java-symbol type="string" name="dial" />
-  <java-symbol type="string" name="dial_desc" />
-  <java-symbol type="string" name="map" />
-  <java-symbol type="string" name="map_desc" />
-  <java-symbol type="string" name="browse" />
-  <java-symbol type="string" name="browse_desc" />
-  <java-symbol type="string" name="sms" />
-  <java-symbol type="string" name="sms_desc" />
-  <java-symbol type="string" name="add_contact" />
-  <java-symbol type="string" name="add_contact_desc" />
-  <java-symbol type="string" name="view_calendar" />
-  <java-symbol type="string" name="view_calendar_desc" />
-  <java-symbol type="string" name="add_calendar_event" />
-  <java-symbol type="string" name="add_calendar_event_desc" />
-  <java-symbol type="string" name="view_flight" />
-  <java-symbol type="string" name="view_flight_desc" />
-  <java-symbol type="string" name="translate" />
-  <java-symbol type="string" name="translate_desc" />
-  <java-symbol type="string" name="define" />
-  <java-symbol type="string" name="define_desc" />
   <java-symbol type="string" name="textSelectionCABTitle" />
   <java-symbol type="string" name="BaMmi" />
   <java-symbol type="string" name="CLIRDefaultOffNextCallOff" />
@@ -2571,6 +2549,7 @@
   <java-symbol type="bool" name="config_device_wfc_ims_available" />
   <java-symbol type="bool" name="config_carrier_wfc_ims_available" />
   <java-symbol type="bool" name="config_use_voip_mode_for_ims" />
+  <java-symbol type="bool" name="config_allow_ussd_over_ims" />
   <java-symbol type="attr" name="touchscreenBlocksFocus" />
   <java-symbol type="layout" name="resolver_list_with_default" />
   <java-symbol type="string" name="activity_resolver_set_always" />
@@ -3436,7 +3415,6 @@
   <java-symbol type="string" name="config_defaultAutofillService" />
   <java-symbol type="string" name="config_defaultTextClassifierPackage" />
   <java-symbol type="string" name="config_defaultWellbeingPackage" />
-  <java-symbol type="string" name="config_telephonyPackages" />
   <java-symbol type="string" name="config_defaultContentCaptureService" />
   <java-symbol type="string" name="config_defaultAugmentedAutofillService" />
   <java-symbol type="string" name="config_defaultAppPredictionService" />
@@ -3936,9 +3914,7 @@
 
   <!-- Intent resolver and share sheet -->
   <java-symbol type="string" name="resolver_personal_tab" />
-  <java-symbol type="string" name="resolver_personal_tab_accessibility" />
   <java-symbol type="string" name="resolver_work_tab" />
-  <java-symbol type="string" name="resolver_work_tab_accessibility" />
   <java-symbol type="id" name="stub" />
   <java-symbol type="id" name="resolver_empty_state" />
   <java-symbol type="id" name="resolver_empty_state_icon" />
@@ -3948,15 +3924,18 @@
   <java-symbol type="id" name="resolver_empty_state_progress" />
   <java-symbol type="id" name="resolver_tab_divider" />
   <java-symbol type="string" name="resolver_cant_share_with_work_apps" />
+  <java-symbol type="string" name="resolver_cant_share_with_work_apps_explanation" />
   <java-symbol type="string" name="resolver_cant_share_with_personal_apps" />
-  <java-symbol type="string" name="resolver_cant_share_cross_profile_explanation" />
+  <java-symbol type="string" name="resolver_cant_share_with_personal_apps_explanation" />
   <java-symbol type="string" name="resolver_cant_access_work_apps" />
   <java-symbol type="string" name="resolver_cant_access_work_apps_explanation" />
   <java-symbol type="string" name="resolver_cant_access_personal_apps" />
   <java-symbol type="string" name="resolver_cant_access_personal_apps_explanation" />
-  <java-symbol type="string" name="resolver_turn_on_work_apps_view" />
-  <java-symbol type="string" name="resolver_turn_on_work_apps_share" />
-  <java-symbol type="string" name="resolver_no_apps_available" />
+  <java-symbol type="string" name="resolver_turn_on_work_apps" />
+  <java-symbol type="string" name="resolver_no_work_apps_available_share" />
+  <java-symbol type="string" name="resolver_no_work_apps_available_resolve" />
+  <java-symbol type="string" name="resolver_no_personal_apps_available_share" />
+  <java-symbol type="string" name="resolver_no_personal_apps_available_resolve" />
   <java-symbol type="string" name="resolver_switch_on_work" />
   <java-symbol type="drawable" name="ic_work_apps_off" />
   <java-symbol type="drawable" name="ic_sharing_disabled" />
