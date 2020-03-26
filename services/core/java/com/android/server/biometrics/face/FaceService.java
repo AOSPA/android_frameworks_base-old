@@ -27,8 +27,14 @@ import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
+import android.content.BroadcastReceiver;
+import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
+import android.content.ServiceConnection;
+import android.content.pm.PackageManager;
+import android.content.pm.ResolveInfo;
 import android.content.pm.UserInfo;
 import android.hardware.biometrics.BiometricAuthenticator;
 import android.hardware.biometrics.BiometricConstants;
@@ -46,6 +52,7 @@ import android.hardware.face.IFaceServiceReceiver;
 import android.os.Binder;
 import android.os.Build;
 import android.os.Environment;
+import android.os.Handler;
 import android.os.IBinder;
 import android.os.NativeHandle;
 import android.os.RemoteException;
@@ -55,10 +62,12 @@ import android.os.UserHandle;
 import android.os.UserManager;
 import android.provider.Settings;
 import android.util.Slog;
+import android.util.SparseArray;
 
 import com.android.internal.R;
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.logging.MetricsLogger;
+import com.android.internal.os.BackgroundThread;
 import com.android.internal.util.DumpUtils;
 import com.android.server.SystemServerInitThreadPool;
 import com.android.server.biometrics.AuthenticationClient;
@@ -84,6 +93,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import vendor.pa.biometrics.face.V1_0.IExtFaceService;
+import vendor.pa.biometrics.face.V1_0.IExtFaceServiceReceiver;
+
 /**
  * A service to manage multiple clients that want to access the face HAL API.
  * The service is responsible for maintaining a list of clients and dispatching all
@@ -102,6 +114,243 @@ public class FaceService extends BiometricServiceBase {
 
     private static final String NOTIFICATION_TAG = "FaceService";
     private static final int NOTIFICATION_ID = 1;
+
+
+    // The device id for ext face lock
+    private static final int DEVICE_ID = 1108;
+
+    SparseArray<IExtFaceService> mExtFaceServices = new SparseArray<>();
+    IExtFaceServiceReceiver mExtFaceServiceReceiver = new IExtFaceServiceReceiver.Stub() {
+        @Override
+        public void onEnrollResult(int faceId, int userId, int remaining) {
+            mHandler.post(new Runnable() {
+                @Override
+                public final void run() {
+                    FaceService.super.handleEnrollResult(new Face(getBiometricUtils().getUniqueName(getContext(), userId), faceId, DEVICE_ID), remaining);
+                }
+            });
+        }
+
+        @Override
+        public void onAuthenticated(int faceId, int userId, byte[] token) {
+            mHandler.post(new Runnable() {
+                @Override
+                public final void run() {
+                    Face face = new Face("", faceId, DEVICE_ID);
+                    ArrayList<Byte> token_AL = new ArrayList<>(token.length);
+                    for (byte b : token) {
+                        token_AL.add(new Byte(b));
+                    }
+                    FaceService.super.handleAuthenticated(face, token_AL);
+                }
+            });
+        }
+
+        @Override
+        public void onAcquired(int userId, int acquiredInfo, int vendorCode) {
+            mHandler.post(new Runnable() {
+                @Override
+                public final void run() {
+                    FaceService.super.handleAcquired(DEVICE_ID, acquiredInfo, vendorCode);
+                }
+            });
+        }
+
+        @Override
+        public void onError(int error, int vendorCode) {
+            mHandler.post(new Runnable() {
+                @Override
+                public final void run() {
+                    FaceService.super.handleError(DEVICE_ID, error, vendorCode);
+                }
+            });
+        }
+
+        @Override
+        public void onRemoved(int[] faceIds, int userId) throws RemoteException {
+            mHandler.post(new Runnable() {
+                @Override
+                public final void run() {
+                    if (faceIds.length > 0) {
+                        for (int i = 0; i < faceIds.length; i++) {
+                            FaceService.super.handleRemoved(new Face("", faceIds[i], DEVICE_ID), (faceIds.length - i) - 1);
+                        }
+                        return;
+                    }
+                    FaceService.super.handleRemoved(new Face("", 0, DEVICE_ID), 0);
+                }
+            });
+        }
+
+        @Override
+        public void onEnumerate(int[] faceIds, int userId) throws RemoteException {
+            mHandler.post(new Runnable() {
+                @Override
+                public final void run() {
+                    if (faceIds.length > 0) {
+                        for (int i = 0; i < faceIds.length; i++) {
+                            FaceService.super.handleEnumerate(new Face("", faceIds[i], DEVICE_ID), (faceIds.length - i) - 1);
+                        }
+                        return;
+                    }
+                    FaceService.super.handleEnumerate(null, 0);
+                }
+            });
+        }
+
+        @Override
+        public void onLockoutChanged(long duration) throws RemoteException {
+            if (duration == 0) {
+                mCurrentUserLockoutMode = 0;
+            } else if (duration == Long.MAX_VALUE) {
+                mCurrentUserLockoutMode = 2;
+            } else {
+                mCurrentUserLockoutMode = 1;
+            }
+            mHandler.post(new Runnable() {
+                @Override
+                public final void run() {
+                    if (duration == 0) {
+                        notifyLockoutResetMonitors();
+                    }
+                }
+            });
+        }
+    };
+
+    private Handler mExtServiceHandler;
+    public boolean mExtServiceBinding = false;
+    private static final boolean mExtFaceEnabledByProperty = SystemProperties.getBoolean("ro.face.ext_service", false);
+    private final BroadcastReceiver mUserUnlockReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            if (mExtFaceEnabledByProperty) {
+                if (getExtFaceService(mCurrentUserId) == null) {
+                    bindExtFaceService(mCurrentUserId);
+                }
+            }
+        }
+    };
+
+    private class ExtFaceServiceConnection implements ServiceConnection {
+        int mUserId;
+
+        public ExtFaceServiceConnection(int userId) {
+            mUserId = userId;
+        }
+
+        @Override
+        public void onServiceConnected(ComponentName className, IBinder service) {
+            Slog.d(TAG, "ExtFaceService connected");
+            IExtFaceService extFaceService = IExtFaceService.Stub.asInterface(service);
+            if (extFaceService != null) {
+                synchronized (mExtFaceServices) {
+                    try {
+                        extFaceService.setCallback(mExtFaceServiceReceiver);
+                        extFaceService.asBinder().linkToDeath(new IBinder.DeathRecipient() {
+                            @Override
+                            public void binderDied() {
+                                Slog.e(TAG, "ExtFaceService binder died");
+                                mExtFaceServices.remove(mUserId);
+                                if (mUserId == mCurrentUserId) {
+                                    boolean unused = bindExtFaceService(mUserId);
+                                }
+                            }
+                        }, 0);
+                        mExtFaceServices.put(mUserId, extFaceService);
+                        mHandler.post(new Runnable() {
+                            @Override
+                            public final void run() {
+                                if (mExtFaceServices.size() == 1) {
+                                    loadAuthenticatorIds();
+                                }
+                                updateActiveGroup(mUserId, null);
+                                doTemplateCleanupForUser(mUserId);
+                            }
+                        });
+                    } catch (RemoteException e) {
+                        e.printStackTrace();
+                    }
+                    mExtServiceBinding = false;
+                }
+            }
+        }
+
+        @Override
+        public void onServiceDisconnected(ComponentName className) {
+            Slog.d(TAG, "ExtFaceService disconnected");
+            mExtFaceServices.remove(mUserId);
+            mExtServiceBinding = false;
+            if (mUserId == mCurrentUserId) {
+                bindExtFaceService(mUserId);
+            }
+        }
+    }
+
+    private boolean isExtFaceServiceEnabled() {
+        PackageManager pm = getContext().getPackageManager();
+        if (!mExtFaceEnabledByProperty) {
+            return false;
+        }
+        Intent intent = getExtFaceServiceIntent();
+        ResolveInfo info = pm.resolveService(intent, 131072);
+        if (info == null || !info.serviceInfo.isEnabled()) {
+            return false;
+        }
+        return true;
+    }
+
+    private IExtFaceService getExtFaceService(int userId) {
+        if (userId == UserHandle.USER_NULL) {
+            updateActiveGroup(ActivityManager.getCurrentUser(), null);
+        }
+        return mExtFaceServices.get(mCurrentUserId);
+    }
+
+    private boolean bindExtFaceService(int userId) {
+        Slog.d(TAG, "bindExtFaceService");
+        if (!isExtFaceServiceEnabled()) {
+            Slog.d(TAG, "ExtFaceService disabled");
+            return false;
+        } else if (mExtServiceBinding) {
+            Slog.d(TAG, "ExtFaceService is binding");
+            return true;
+        } else {
+            if (userId != UserHandle.USER_NULL && getExtFaceService(userId) == null) {
+                if (createExtFaceService()) {
+                    return true;
+                }
+                return false;
+            }
+            return false;
+        }
+    }
+
+    private Intent getExtFaceServiceIntent() {
+        final String extFacelockServiceName =
+                getString(R.string.config_externalFaceService);
+        Intent intent = new Intent("com.android.ext.faceservice.BIND");
+        intent.setComponent(ComponentName.unflattenFromString(extFacelockServiceName));
+        return intent;
+    }
+
+    private boolean createExtFaceService() {
+        try {
+            Intent intent = getExtFaceServiceIntent();
+            if (intent == null) {
+                Slog.d(TAG, "No ext face lock service found");
+                return false;
+            }
+            boolean result = getContext().bindServiceAsUser(intent, new ExtFaceServiceConnection(userId), 65, UserHandle.of(userId));
+            if (result) {
+                mExtServiceBinding = true;
+            }
+            return result;
+        } catch (Exception e) {
+            Slog.e(TAG, "bindExtFaceService failed", e);
+        }
+        return false;
+    }
 
     /**
      * Events for bugreports.
@@ -219,11 +468,17 @@ public class FaceService extends BiometricServiceBase {
 
         @Override
         public boolean shouldFrameworkHandleLockout() {
+            if (mExtFaceEnabledByProperty){
+                return true;
+            }
             return false;
         }
 
         @Override
         public boolean wasUserDetected() {
+            if (mExtFaceEnabledByProperty){
+                return mLastAcquire != FaceManager.FACE_ACQUIRED_NOT_DETECTED;
+            }
             return mLastAcquire != FaceManager.FACE_ACQUIRED_NOT_DETECTED
                     && mLastAcquire != FaceManager.FACE_ACQUIRED_SENSOR_DIRTY;
         }
@@ -541,6 +796,20 @@ public class FaceService extends BiometricServiceBase {
                     Binder.getCallingUid(), Binder.getCallingPid(),
                     UserHandle.getCallingUserId())) {
                 return false;
+            }
+            if (mExtFaceEnabledByProperty) {
+                boolean enabled = isExtFaceServiceEnabled();
+                if (enabled) {
+                    mHandler.post(new Runnable() {
+                        @Override
+                        public final void run() {
+                            if (getExtFaceService(mCurrentUserId) == null) {
+                                bindExtFaceService(mCurrentUserId);
+                            }
+                        }
+                    });
+                }
+                return enabled;
             }
 
             final long token = Binder.clearCallingIdentity();
@@ -977,6 +1246,20 @@ public class FaceService extends BiometricServiceBase {
     private final DaemonWrapper mDaemonWrapper = new DaemonWrapper() {
         @Override
         public int authenticate(long operationId, int groupId) throws RemoteException {
+            if (mExtFaceEnabledByProperty) {
+                IExtFaceService service = getExtFaceService(mCurrentUserId);
+                if (service != null) {
+                    try{
+                        service.authenticate(operationId);
+                    } catch (Exception e) {
+                        Slog.e(TAG, "authenticate failed", e);
+                    }
+                    return 0;
+                }
+                bindExtFaceService(mCurrentUserId);
+                Slog.w(TAG, "authenticate(): ext face service not started!");
+                return 3;
+            }
             IBiometricsFace daemon = getFaceDaemon();
             if (daemon == null) {
                 Slog.w(TAG, "authenticate(): no face HAL!");
@@ -987,6 +1270,19 @@ public class FaceService extends BiometricServiceBase {
 
         @Override
         public int cancel() throws RemoteException {
+            if (mExtFaceEnabledByProperty) {
+                IExtFaceService service = getExtFaceService(mCurrentUserId);
+                if (service == null) {
+                    return 0;
+                }
+                try{
+                    service.cancel();
+                }catch (Exception e) {
+                    Slog.e(TAG, "cancel failed", e);
+                }
+                service.cancel();
+                return 0;
+            }
             IBiometricsFace daemon = getFaceDaemon();
             if (daemon == null) {
                 Slog.w(TAG, "cancel(): no face HAL!");
@@ -997,6 +1293,20 @@ public class FaceService extends BiometricServiceBase {
 
         @Override
         public int remove(int groupId, int biometricId) throws RemoteException {
+            if (mExtFaceEnabledByProperty) {
+                IExtFaceService service = getExtFaceService(mCurrentUserId);
+                if (service != null) {
+                    try{
+                        service.remove(biometricId);
+                    }catch (Exception e) {
+                        Slog.e(TAG, "remove failed", e);
+                    }
+                    return 0;
+                }
+                bindExtFaceService(mCurrentUserId);
+                Slog.w(TAG, "remove(): ext face service not started!");
+                return 3;
+            }
             IBiometricsFace daemon = getFaceDaemon();
             if (daemon == null) {
                 Slog.w(TAG, "remove(): no face HAL!");
@@ -1007,6 +1317,26 @@ public class FaceService extends BiometricServiceBase {
 
         @Override
         public int enumerate() throws RemoteException {
+            if (mExtFaceEnabledByProperty) {
+                IExtFaceService service = getExtFaceService(mCurrentUserId);
+                if (service != null) {
+                    mExtServiceHandler.post(new Runnable() {
+                        @Override
+                        public final void run() {
+                            try {
+                                service.enumerate();
+                            } catch (Exception e) {
+                                Slog.e(TAG, "enumerate failed", e);
+                                FaceService.super.handleError(DEVICE_ID, 8, 0);
+                            }
+                        }
+                    });
+                    return 0;
+                }
+                bindExtFaceService(mCurrentUserId);
+                Slog.w(TAG, "enumerate(): ext face service not started!");
+                return 3;
+            }
             IBiometricsFace daemon = getFaceDaemon();
             if (daemon == null) {
                 Slog.w(TAG, "enumerate(): no face HAL!");
@@ -1018,6 +1348,27 @@ public class FaceService extends BiometricServiceBase {
         @Override
         public int enroll(byte[] cryptoToken, int groupId, int timeout,
                 ArrayList<Integer> disabledFeatures) throws RemoteException {
+            if (mExtFaceEnabledByProperty) {
+                IExtFaceService service = getExtFaceService(mCurrentUserId);
+                int[] dfs = null;
+                if (disabledFeatures != null && disabledFeatures.size() > 0) {
+                    dfs = new int[disabledFeatures.size()];
+                    for (int i = 0; i < disabledFeatures.size(); i++) {
+                        dfs[i] = disabledFeatures.get(i).intValue();
+                    }
+                }
+                if (service != null) {
+                    try{
+                        service.enroll(cryptoToken, timeout, dfs);
+                    }catch (Exception e) {
+                        Slog.e(TAG, "enroll failed", e);
+                    }
+                    return 0;
+                }
+                bindExtFaceService(mCurrentUserId);
+                Slog.w(FaceService.TAG, "enroll(): ext face service not started!");
+                return 3;
+            }
             IBiometricsFace daemon = getFaceDaemon();
             if (daemon == null) {
                 Slog.w(TAG, "enroll(): no face HAL!");
@@ -1032,6 +1383,20 @@ public class FaceService extends BiometricServiceBase {
 
         @Override
         public void resetLockout(byte[] cryptoToken) throws RemoteException {
+            if (mExtFaceEnabledByProperty) {
+                IExtFaceService service = getExtFaceService(mCurrentUserId);
+                if (service != null) {
+                    try{
+                        service.resetLockout(cryptoToken);
+                    }catch (Exception e) {
+                        Slog.e(TAG, "resetLockout failed", e);
+                    }
+                    return;
+                }
+                bindExtFaceService(mCurrentUserId);
+                Slog.w(TAG, "resetLockout(): ext face service not started!");
+                return;
+            }
             IBiometricsFace daemon = getFaceDaemon();
             if (daemon == null) {
                 Slog.w(TAG, "resetLockout(): no face HAL!");
@@ -1065,6 +1430,8 @@ public class FaceService extends BiometricServiceBase {
                 .getIntArray(R.array.config_face_acquire_enroll_ignorelist);
         mEnrollIgnoreListVendor = getContext().getResources()
                 .getIntArray(R.array.config_face_acquire_vendor_enroll_ignorelist);
+
+        context.registerReceiver(mUserUnlockReceiver, new IntentFilter(Intent.ACTION_USER_UNLOCKED));
     }
 
     @Override
@@ -1080,6 +1447,11 @@ public class FaceService extends BiometricServiceBase {
     public void onStart() {
         super.onStart();
         publishBinderService(Context.FACE_SERVICE, new FaceServiceWrapper());
+        if (mExtFaceEnabledByProperty) {
+            mExtServiceHandler = BackgroundThread.getHandler();
+            mHalDeviceId = DEVICE_ID;
+            return;
+        }
         // Get the face daemon on FaceService's on thread so SystemServerInitThreadPool isn't
         // blocked
         SystemServerInitThreadPool.get().submit(() -> mHandler.post(this::getFaceDaemon),
@@ -1128,6 +1500,28 @@ public class FaceService extends BiometricServiceBase {
 
     @Override
     protected void updateActiveGroup(int userId, String clientPackage) {
+        if (mExtFaceEnabledByProperty) {
+            mCurrentUserId = userId;
+            IExtFaceService service = getExtFaceService(mCurrentUserId);
+            if (service != null) {
+                try {
+                    Map map = mAuthenticatorIds;
+                    Integer valueOf = Integer.valueOf(mCurrentUserId);
+                    long authId = 0;
+                    if (hasEnrolledBiometrics(mCurrentUserId)) {
+                        authId = (long) service.getAuthenticatorId();
+                    }
+                    map.put(valueOf, Long.valueOf(authId));
+                } catch (Exception e) {
+                    Slog.e(TAG, "getAuthenticatorId failed", e);
+                }
+            } else {
+                bindExtFaceService(mCurrentUserId);
+                Slog.w(TAG, "updateActiveGroup(): ext face service not started!");
+            }
+            return;
+        }
+
         IBiometricsFace daemon = getFaceDaemon();
 
         if (daemon != null) {
@@ -1178,7 +1572,16 @@ public class FaceService extends BiometricServiceBase {
 
     @Override
     protected void handleUserSwitching(int userId) {
-        super.handleUserSwitching(userId);
+        if (mExtFaceEnabledByProperty) {
+            updateActiveGroup(userId, null);
+            if (getExtFaceService(userId) != null) {
+                doTemplateCleanupForUser(userId);
+            } else {
+                bindExtFaceService(userId);
+            }
+        } else {
+            super.handleUserSwitching(userId);
+        }
         // Will be updated when we get the callback from HAL
         mCurrentUserLockoutMode = AuthenticationClient.LOCKOUT_NONE;
     }
@@ -1267,6 +1670,20 @@ public class FaceService extends BiometricServiceBase {
     }
 
     private long startGenerateChallenge(IBinder token) {
+        if (mExtFaceEnabledByProperty) {
+            IExtFaceService service = getExtFaceService(mCurrentUserId);
+            if (service != null) {
+                try {
+                    return service.generateChallenge(CHALLENGE_TIMEOUT_SEC);
+                } catch (Exception e) {
+                    Slog.e(TAG, "generateChallenge failed", e);
+                }
+            } else {
+                bindExtFaceService(mCurrentUserId);
+                Slog.w(TAG, "startGenerateChallenge(): ext face service not started!");
+            }
+            return 0;
+        }
         IBiometricsFace daemon = getFaceDaemon();
         if (daemon == null) {
             Slog.w(TAG, "startGenerateChallenge: no face HAL!");
@@ -1281,6 +1698,17 @@ public class FaceService extends BiometricServiceBase {
     }
 
     private int startRevokeChallenge(IBinder token) {
+        if (mExtFaceEnabledByProperty) {
+            IExtFaceService service = getExtFaceService(mCurrentUserId);
+            if (service != null) {
+                try {
+                    return service.revokeChallenge();
+                } catch (Exception e) {
+                    Slog.e(TAG, "startRevokeChallenge failed", e);
+                }
+            }
+            return 0;
+        }
         IBiometricsFace daemon = getFaceDaemon();
         if (daemon == null) {
             Slog.w(TAG, "startRevokeChallenge: no face HAL!");
@@ -1355,7 +1783,8 @@ public class FaceService extends BiometricServiceBase {
         // Additionally, this flag allows turning off face for a device
         // (either permanently through the build or on an individual device).
         if (SystemProperties.getBoolean("ro.face.disable_debug_data", false)
-                || SystemProperties.getBoolean("persist.face.disable_debug_data", false)) {
+                || SystemProperties.getBoolean("persist.face.disable_debug_data", false)
+                || mExtFaceEnabledByProperty) {
             return;
         }
 
