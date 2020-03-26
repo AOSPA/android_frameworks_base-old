@@ -122,7 +122,11 @@ public final class CellIdentityWcdma extends CellIdentity {
     public CellIdentityWcdma(@NonNull android.hardware.radio.V1_5.CellIdentityWcdma cid) {
         this(cid.base.base.lac, cid.base.base.cid, cid.base.base.psc, cid.base.base.uarfcn,
                 cid.base.base.mcc, cid.base.base.mnc, cid.base.operatorNames.alphaLong,
-                cid.base.operatorNames.alphaShort, cid.additionalPlmns, null);
+                cid.base.operatorNames.alphaShort, cid.additionalPlmns,
+                cid.optionalCsgInfo.getDiscriminator()
+                        == android.hardware.radio.V1_5.OptionalCsgInfo.hidl_discriminator.csgInfo
+                                ? new ClosedSubscriberGroupInfo(cid.optionalCsgInfo.csgInfo())
+                                        : null);
     }
 
     private CellIdentityWcdma(@NonNull CellIdentityWcdma cid) {
