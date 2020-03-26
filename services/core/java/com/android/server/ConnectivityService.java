@@ -3488,8 +3488,8 @@ public class ConnectivityService extends IConnectivityManager.Stub
                     // 2. Unvalidated WiFi will not be reaped when validated cellular
                     //    is currently satisfying the request.  This is desirable when
                     //    WiFi ends up validating and out scoring cellular.
-                    nri.mSatisfier.getCurrentScore()
-                            < nai.getCurrentScoreAsValidated())) {
+                    (nri.mSatisfier != null && nri.mSatisfier.getCurrentScore()
+                            < nai.getCurrentScoreAsValidated()))) {
                 return false;
             }
         }
@@ -6738,7 +6738,12 @@ public class ConnectivityService extends IConnectivityManager.Stub
                     log("   accepting network in place of " + previousSatisfier.toShortString());
                 }
                 previousSatisfier.removeRequest(nri.request.requestId);
-                previousSatisfier.lingerRequest(nri.request, now, mLingerDelayMs);
+                if (satisfiesMobileNetworkDataCheck(previousSatisfier.networkCapabilities)) {
+                    previousSatisfier.lingerRequest(nri.request, now, mLingerDelayMs);
+                } else {
+                    previousSatisfier.lingerRequest(nri.request, now,
+                                    mNonDefaultSubscriptionLingerDelayMs);
+                }
             } else {
                 if (VDBG || DDBG) log("   accepting network in place of null");
             }
@@ -6772,7 +6777,18 @@ public class ConnectivityService extends IConnectivityManager.Stub
         for (final NetworkRequestInfo nri : mNetworkRequests.values()) {
             if (nri.request.isListen()) continue;
             final NetworkAgentInfo bestNetwork = mNetworkRanker.getBestNetwork(nri.request, nais);
-            if (bestNetwork != nri.mSatisfier) {
+
+            boolean satisfiesMobileMultiNetworkCheck = false;
+
+            if(bestNetwork != null) {
+                satisfiesMobileMultiNetworkCheck = satisfiesMobileMultiNetworkDataCheck(
+                        bestNetwork.networkCapabilities,
+                        nri.request.networkCapabilities);
+            }
+            if ((bestNetwork == null && nri.mSatisfier == null) ||
+                 (bestNetwork == nri.mSatisfier && satisfiesMobileMultiNetworkCheck)) {
+                continue;
+            } else {
                 // bestNetwork may be null if no network can satisfy this request.
                 changes.addRequestReassignment(new NetworkReassignment.RequestReassignment(
                         nri, nri.mSatisfier, bestNetwork));
@@ -6813,8 +6829,10 @@ public class ConnectivityService extends IConnectivityManager.Stub
         // the linger status.
         for (final NetworkReassignment.RequestReassignment event :
                 changes.getRequestReassignments()) {
-            updateSatisfiersForRematchRequest(event.mRequest, event.mOldNetwork,
-                    event.mNewNetwork, now);
+            if(!(event.mOldNetwork == event.mNewNetwork)) {
+                updateSatisfiersForRematchRequest(event.mRequest, event.mOldNetwork,
+                        event.mNewNetwork, now);
+            }
         }
 
         final NetworkAgentInfo oldDefaultNetwork = getDefaultNetwork();
@@ -6829,6 +6847,11 @@ public class ConnectivityService extends IConnectivityManager.Stub
                 mLingerMonitor.noteLingerDefaultNetwork(oldDefaultNetwork, newDefaultNetwork);
             }
             updateDataActivityTracking(newDefaultNetwork, oldDefaultNetwork);
+            // restore permission to actual value if it becomes the default network again..
+            if (newDefaultNetwork != null && !newDefaultNetwork.isVPN()) {
+                updateNetworkPermissions(newDefaultNetwork,
+                        newDefaultNetwork.networkCapabilities);
+            }
             // Notify system services of the new default.
             makeDefault(newDefaultNetwork);
             // Log 0 -> X and Y -> X default network transitions, where X is the new default.
@@ -6851,8 +6874,13 @@ public class ConnectivityService extends IConnectivityManager.Stub
             if (null != event.mNewNetwork) {
                 notifyNetworkAvailable(event.mNewNetwork, event.mRequest);
             } else {
-                callCallbackForRequest(event.mRequest, event.mOldNetwork,
-                        ConnectivityManager.CALLBACK_LOST, 0);
+                if (satisfiesMobileNetworkDataCheck(event.mOldNetwork.networkCapabilities)) {
+                    callCallbackForRequest(event.mRequest, event.mOldNetwork,
+                            ConnectivityManager.CALLBACK_LOST, 0);
+                } else {
+                    event.mOldNetwork.lingerRequest(event.mRequest.request, now,
+                                                    mNonDefaultSubscriptionLingerDelayMs);
+                }
             }
         }
 
@@ -6883,6 +6911,23 @@ public class ConnectivityService extends IConnectivityManager.Stub
                 applyBackgroundChangeForRematch(nai);
             }
             processNewlySatisfiedListenRequests(nai);
+        }
+
+        for (final NetworkReassignment.RequestReassignment event :
+                changes.getRequestReassignments()) {
+            if (event.mOldNetwork != null &&
+                satisfiesMobileMultiNetworkDataCheck(
+                       event.mOldNetwork.networkCapabilities,
+                       event.mRequest.request.networkCapabilities) == false &&
+                !event.mOldNetwork.isVPN()) {
+                // Force trigger permission change on non-DDS network to close all live connections
+                try {
+                    mNMS.setNetworkPermission(event.mOldNetwork.network.netId,
+                                                         INetd.PERMISSION_NETWORK);
+                } catch (RemoteException e) {
+                    loge("Exception in setNetworkPermission: " + e);
+                }
+            }
         }
 
         for (final NetworkAgentInfo nai : lingeredNetworks) {
@@ -8090,7 +8135,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
         return true;
     }
 
-    private boolean satisfiesMobileMultiNetworkDataCheck(NetworkCapabilities agentNc,
+    public boolean satisfiesMobileMultiNetworkDataCheck(NetworkCapabilities agentNc,
             NetworkCapabilities requestNc) {
         if (requestNc != null && getIntSpecifier(requestNc.getNetworkSpecifier()) < 0) {
             return satisfiesMobileNetworkDataCheck(agentNc);
@@ -8107,7 +8152,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
         return specifier;
     }
 
-    private boolean isBestMobileMultiNetwork(NetworkAgentInfo currentNetwork,
+    public boolean isBestMobileMultiNetwork(NetworkAgentInfo currentNetwork,
             NetworkCapabilities currentRequestNc,
             NetworkAgentInfo newNetwork,
             NetworkCapabilities newRequestNc,
