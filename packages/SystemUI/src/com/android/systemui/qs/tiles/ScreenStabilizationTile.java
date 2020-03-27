@@ -113,7 +113,6 @@ public class ScreenStabilizationTile extends QSTileImpl<BooleanState> {
 
     @Override
     protected void handleLongClick() {
-        showDetail(true);
     }
 
     @Override
@@ -124,7 +123,7 @@ public class ScreenStabilizationTile extends QSTileImpl<BooleanState> {
 
     @Override
     protected void handleSecondaryClick() {
-        handleLongClick();
+        showDetail(true);
     }
 
     @Override
@@ -138,6 +137,7 @@ public class ScreenStabilizationTile extends QSTileImpl<BooleanState> {
         final Drawable mDisable = mContext.getDrawable(R.drawable.ic_screen_stabilization_disabled);
         state.value = (Settings.System.getInt(mContext.getContentResolver(), Settings.System.STABILIZATION_ENABLE, 0) == 1);
         state.label = mContext.getString(R.string.quick_settings_stabilization_label);
+        state.dualTarget = true;
         if (state.value) {
             state.icon = new DrawableIcon(mEnable);
             state.state = Tile.STATE_ACTIVE;
