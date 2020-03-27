@@ -226,6 +226,7 @@ public abstract class QSTileImpl<TState extends State> implements QSTile, Lifecy
                 .addTaggedData(FIELD_STATUS_BAR_STATE,
                         mStatusBarStateController.getState())));
         mHandler.sendEmptyMessage(H.SECONDARY_CLICK);
+        performHapticFeedback(VibrationEffect.get(VibrationEffect.EFFECT_TICK));
     }
 
     public void longClick() {
