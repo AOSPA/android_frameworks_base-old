@@ -87,6 +87,12 @@ public final class SoftApConfiguration implements Parcelable {
     public static final int BAND_6GHZ = 1 << 2;
 
     /**
+     * 2GHz + 5GHz or 2GHz + 6GHz concurrent Dual band.
+     * @hide
+     */
+    public static final int BAND_DUAL = 1 << 3;
+
+    /**
      * Device is allowed to choose the optimal band (2Ghz, 5Ghz, 6Ghz) based on device capability,
      * operating country code and current radio conditions.
      * @hide
@@ -100,13 +106,15 @@ public final class SoftApConfiguration implements Parcelable {
             BAND_2GHZ,
             BAND_5GHZ,
             BAND_6GHZ,
+            BAND_DUAL,
     })
     public @interface BandType {}
 
     private static boolean isBandValid(@BandType int band) {
-        return ((band != 0) && ((band & ~BAND_ANY) == 0));
+        return ((band != 0) && (((band & ~BAND_ANY) == 0) || (band == BAND_DUAL)));
     }
 
+    private static final int MAX_CH_ACS = 0;
     private static final int MIN_CH_2G_BAND = 1;
     private static final int MAX_CH_2G_BAND = 14;
     private static final int MIN_CH_5G_BAND = 34;
@@ -132,6 +140,11 @@ public final class SoftApConfiguration implements Parcelable {
 
             case BAND_6GHZ:
                 if (channel < MIN_CH_6G_BAND || channel >  MAX_CH_6G_BAND) {
+                    return false;
+                }
+                break;
+            case BAND_DUAL:
+                if (channel !=  MAX_CH_ACS) {
                     return false;
                 }
                 break;
@@ -566,6 +579,9 @@ public final class SoftApConfiguration implements Parcelable {
                 break;
             case BAND_ANY:
                 wifiConfig.apBand  = WifiConfiguration.AP_BAND_ANY;
+                break;
+            case BAND_DUAL:
+                wifiConfig.apBand  = WifiConfiguration.AP_BAND_DUAL;
                 break;
             default:
                 Log.e(TAG, "Convert fail, unsupported band setting :" + mBand);
