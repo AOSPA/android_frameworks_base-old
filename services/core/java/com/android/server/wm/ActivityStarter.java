@@ -27,8 +27,10 @@ import static android.app.ActivityManager.START_RETURN_INTENT_TO_CALLER;
 import static android.app.ActivityManager.START_RETURN_LOCK_TASK_MODE_VIOLATION;
 import static android.app.ActivityManager.START_SUCCESS;
 import static android.app.ActivityManager.START_TASK_TO_FRONT;
+import static android.app.ActivityTaskManager.INVALID_TASK_ID;
 import static android.app.WaitResult.LAUNCH_STATE_COLD;
 import static android.app.WaitResult.LAUNCH_STATE_HOT;
+import static android.app.WindowConfiguration.WINDOWING_MODE_MULTI_WINDOW;
 import static android.app.WindowConfiguration.WINDOWING_MODE_SPLIT_SCREEN_PRIMARY;
 import static android.app.WindowConfiguration.WINDOWING_MODE_SPLIT_SCREEN_SECONDARY;
 import static android.app.WindowConfiguration.WINDOWING_MODE_UNDEFINED;
@@ -168,6 +170,8 @@ class ActivityStarter {
 
     // The display to launch the activity onto, barring any strong reason to do otherwise.
     private int mPreferredDisplayId;
+    // The windowing mode to apply to the root task, if possible
+    private int mPreferredWindowingMode;
 
     private Task mInTask;
     @VisibleForTesting
@@ -542,6 +546,7 @@ class ActivityStarter {
         mStartFlags = starter.mStartFlags;
         mSourceRecord = starter.mSourceRecord;
         mPreferredDisplayId = starter.mPreferredDisplayId;
+        mPreferredWindowingMode = starter.mPreferredWindowingMode;
 
         mInTask = starter.mInTask;
         mAddingToTask = starter.mAddingToTask;
@@ -1497,8 +1502,6 @@ class ActivityStarter {
         setInitialState(r, options, inTask, doResume, startFlags, sourceRecord, voiceSession,
                 voiceInteractor, restrictedBgActivity);
 
-        final int preferredWindowingMode = mLaunchParams.mWindowingMode;
-
         computeLaunchingTaskFlags();
 
         computeSourceStack();
@@ -1574,6 +1577,14 @@ class ActivityStarter {
 
         if (!mAvoidMoveToFront && mDoResume) {
             mTargetStack.moveToFront("reuseOrNewTask");
+            if (mOptions != null) {
+                if (mPreferredWindowingMode != WINDOWING_MODE_UNDEFINED) {
+                    mTargetStack.setWindowingMode(mPreferredWindowingMode);
+                }
+                if (mOptions.getTaskAlwaysOnTop()) {
+                    mTargetStack.setAlwaysOnTop(true);
+                }
+            }
         }
 
         mService.mUgmInternal.grantUriPermissionFromIntent(mCallingUid, mStartActivity.packageName,
@@ -1637,7 +1648,7 @@ class ActivityStarter {
         // Update the recent tasks list immediately when the activity starts
         mSupervisor.mRecentTasks.add(mStartActivity.getTask());
         mSupervisor.handleNonResizableTaskIfNeeded(mStartActivity.getTask(),
-                preferredWindowingMode, mPreferredDisplayId, mTargetStack);
+                mPreferredWindowingMode, mPreferredDisplayId, mTargetStack);
 
         return START_SUCCESS;
     }
@@ -1690,9 +1701,10 @@ class ActivityStarter {
 
         mSupervisor.getLaunchParamsController().calculate(targetTask, r.info.windowLayout, r,
                 sourceRecord, mOptions, PHASE_BOUNDS, mLaunchParams);
-        mPreferredDisplayId =
-                mLaunchParams.hasPreferredDisplay() ? mLaunchParams.mPreferredDisplayId
-                        : DEFAULT_DISPLAY;
+        mPreferredDisplayId = mLaunchParams.hasPreferredDisplay()
+                ? mLaunchParams.mPreferredDisplayId
+                : DEFAULT_DISPLAY;
+        mPreferredWindowingMode = mLaunchParams.mWindowingMode;
     }
 
     private int isAllowedToStart(ActivityRecord r, boolean newTask, Task targetTask) {
@@ -2016,6 +2028,7 @@ class ActivityStarter {
         mStartFlags = 0;
         mSourceRecord = null;
         mPreferredDisplayId = INVALID_DISPLAY;
+        mPreferredWindowingMode = WINDOWING_MODE_UNDEFINED;
 
         mInTask = null;
         mAddingToTask = false;
@@ -2064,9 +2077,10 @@ class ActivityStarter {
         // after we located a reusable task (which might be resided in another display).
         mSupervisor.getLaunchParamsController().calculate(inTask, r.info.windowLayout, r,
                 sourceRecord, options, PHASE_DISPLAY, mLaunchParams);
-        mPreferredDisplayId =
-                mLaunchParams.hasPreferredDisplay() ? mLaunchParams.mPreferredDisplayId
-                        : DEFAULT_DISPLAY;
+        mPreferredDisplayId = mLaunchParams.hasPreferredDisplay()
+                ? mLaunchParams.mPreferredDisplayId
+                : DEFAULT_DISPLAY;
+        mPreferredWindowingMode = mLaunchParams.mWindowingMode;
 
         mLaunchMode = r.launchMode;
 
@@ -2108,7 +2122,7 @@ class ActivityStarter {
         }
 
         if (mOptions != null) {
-            if (mOptions.getLaunchTaskId() != -1 && mOptions.getTaskOverlay()) {
+            if (mOptions.getLaunchTaskId() != INVALID_TASK_ID && mOptions.getTaskOverlay()) {
                 r.setTaskOverlay(true);
                 if (!mOptions.canTaskOverlayResume()) {
                     final Task task = mRootWindowContainer.anyTaskForId(
@@ -2301,6 +2315,15 @@ class ActivityStarter {
      * if not or an ActivityRecord with the task into which the new activity should be added.
      */
     private Task getReusableTask() {
+        // If a target task is specified, try to reuse that one
+        if (mOptions != null && mOptions.getLaunchTaskId() != INVALID_TASK_ID) {
+            Task launchTask = mRootWindowContainer.anyTaskForId(mOptions.getLaunchTaskId());
+            if (launchTask != null) {
+                return launchTask;
+            }
+            return null;
+        }
+
         // We may want to try to place the new activity in to an existing task.  We always
         // do this if the target activity is singleTask or singleInstance; we will also do
         // this if NEW_TASK has been requested, and there is not an additional qualifier telling
@@ -2314,12 +2337,7 @@ class ActivityStarter {
         // same component, then instead of launching bring that one to the front.
         putIntoExistingTask &= mInTask == null && mStartActivity.resultTo == null;
         ActivityRecord intentActivity = null;
-        if (mOptions != null && mOptions.getLaunchTaskId() != -1) {
-            Task launchTask = mRootWindowContainer.anyTaskForId(mOptions.getLaunchTaskId());
-            if (launchTask != null) {
-                return launchTask;
-            }
-        } else if (putIntoExistingTask) {
+        if (putIntoExistingTask) {
             if (LAUNCH_SINGLE_INSTANCE == mLaunchMode) {
                 // There can be one and only one instance of single instance activity in the
                 // history, and it is always in its own unique task, so we do a special search.

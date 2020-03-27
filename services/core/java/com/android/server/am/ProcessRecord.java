@@ -387,8 +387,8 @@ class ProcessRecord implements WindowProcessListener {
                     pw.println(processInfo.deniedPermissions.valueAt(i));
                 }
             }
-            if (processInfo.enableGwpAsan != null) {
-                pw.print(prefix); pw.println("  enableGwpAsan=" + processInfo.enableGwpAsan);
+            if (processInfo.gwpAsanMode != ApplicationInfo.GWP_ASAN_DEFAULT) {
+                pw.print(prefix); pw.println("  gwpAsanMode=" + processInfo.gwpAsanMode);
             }
         }
         pw.print(prefix); pw.print("mRequiredAbi="); pw.print(mRequiredAbi);
@@ -642,9 +642,10 @@ class ProcessRecord implements WindowProcessListener {
                     _service.mPackageManagerInt.getProcessesForUid(_uid);
             if (processes != null) {
                 procInfo = processes.get(_processName);
-                if (procInfo != null && procInfo.deniedPermissions == null) {
-                    // If this process hasn't asked for permissions to be denied, then
-                    // we don't care about it.
+                if (procInfo != null && procInfo.deniedPermissions == null
+                        && procInfo.gwpAsanMode == ApplicationInfo.GWP_ASAN_DEFAULT) {
+                    // If this process hasn't asked for permissions to be denied, or for a
+                    // non-default GwpAsan mode, then we don't care about it.
                     procInfo = null;
                 }
             }
@@ -1652,9 +1653,11 @@ class ProcessRecord implements WindowProcessListener {
         // For background ANRs, don't pass the ProcessCpuTracker to
         // avoid spending 1/2 second collecting stats to rank lastPids.
         StringWriter tracesFileException = new StringWriter();
+        // To hold the start and end offset to the ANR trace file respectively.
+        final long[] offsets = new long[2];
         File tracesFile = ActivityManagerService.dumpStackTraces(firstPids,
                 (isSilentAnr()) ? null : processCpuTracker, (isSilentAnr()) ? null : lastPids,
-                nativePids, tracesFileException);
+                nativePids, tracesFileException, offsets);
 
         if (isMonitorCpuUsage()) {
             mService.updateCpuStatsNow();
@@ -1672,6 +1675,10 @@ class ProcessRecord implements WindowProcessListener {
         if (tracesFile == null) {
             // There is no trace file, so dump (only) the alleged culprit's threads to the log
             Process.sendSignal(pid, Process.SIGNAL_QUIT);
+        } else if (offsets[1] > 0) {
+            // We've dumped into the trace file successfully
+            mService.mProcessList.mAppExitInfoTracker.scheduleLogAnrTrace(
+                    pid, uid, getPackageList(), tracesFile, offsets[0], offsets[1]);
         }
 
         FrameworkStatsLog.write(FrameworkStatsLog.ANR_OCCURRED, uid, processName,
