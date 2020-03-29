@@ -375,7 +375,7 @@ public class Utils {
      * @throws IllegalArgumentException if an invalid RSSI level is given.
      */
     public static int getWifiIconResource(int level) {
-        return getWifiIconResource(level, 0 /* generation */, false /* isReady */);
+        return getWifiIconResource(level, 0 /* standard */, false /* isReady */);
     }
 
     /**
@@ -384,12 +384,12 @@ public class Utils {
      * @param level The number of bars to show (0-4)
      * @throws IllegalArgumentException if an invalid RSSI level is given.
      */
-    public static int getWifiIconResource(int level, int generation, boolean isReady) {
+    public static int getWifiIconResource(int level, int standard, boolean isReady) {
         if (level < 0 || level >= WIFI_PIE.length) {
             throw new IllegalArgumentException("No Wifi icon found for level: " + level);
         }
 
-        switch (generation) {
+        switch (standard) {
             case 4:
                 return WIFI_4_PIE[level];
             case 5:

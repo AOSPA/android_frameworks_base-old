@@ -1368,20 +1368,6 @@ public class WifiManager {
     @GuardedBy("mLock")
     private LocalOnlyHotspotObserverProxy mLOHSObserverProxy;
 
-    /* Wi-Fi generation codes */
-    /** @hide */
-    @SystemApi
-    public static final int WIFI_GENERATION_DEFAULT = 0;
-    /** @hide */
-    @SystemApi
-    public static final int WIFI_GENERATION_4 = 4;
-    /** @hide */
-    @SystemApi
-    public static final int WIFI_GENERATION_5 = 5;
-    /** @hide */
-    @SystemApi
-    public static final int WIFI_GENERATION_6 = 6;
-
     /**
      * Create a new WifiManager instance.
      * Applications will almost always want to use
@@ -1739,9 +1725,9 @@ public class WifiManager {
       * @hide no intent to publish
       */
       @SystemApi
-      public int getSoftApWifiGeneration() {
+      public int getSoftApWifiStandard() {
           try {
-              return mService.getSoftApWifiGeneration();
+              return mService.getSoftApWifiStandard();
           } catch (RemoteException e) {
               throw e.rethrowFromSystemServer();
           }
@@ -6542,6 +6528,22 @@ public class WifiManager {
     public boolean isAutoWakeupEnabled() {
         try {
             return mService.isAutoWakeupEnabled();
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+     /**
+      * Get device VHT 8SS capability info.
+      *
+      * @return true if device supports VHT 8SS or false.
+      *
+      * @hide no intent to publish
+      */
+    @SystemApi
+    public boolean isVht8ssCapableDevice() {
+        try {
+            return mService.isVht8ssCapableDevice();
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
