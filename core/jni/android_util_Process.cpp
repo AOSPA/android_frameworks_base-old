@@ -81,8 +81,6 @@ static constexpr ssize_t kProcReadStackBufferSize = 1024;
 // this size and retry until the whole file fits.
 static constexpr ssize_t kProcReadMinHeapBufferSize = 4096;
 
-static int kCgroupFollowForDex2oatOnly = -1;
-
 #if GUARD_THREAD_PRIORITY
 Mutex gKeyCreateMutex;
 static pthread_key_t gBgKey = -1;
@@ -342,6 +340,67 @@ void android_os_Process_setProcessGroup(JNIEnv* env, jobject clazz, int pid, jin
     closedir(d);
 }
 
+void android_os_Process_setCgroupProcsProcessGroup(JNIEnv* env, jobject clazz, int uid, int pid, jint grp, jboolean dex2oat_only)
+{
+    int fd;
+    char path[255];
+    if ((grp == SP_FOREGROUND) || (grp > SP_MAX)) {
+        signalExceptionForGroupError(env, EINVAL, pid);
+        return;
+    }
+
+    //set process group for current process
+    android_os_Process_setProcessGroup(env, clazz, pid, grp);
+
+    //find processes in the same cgroup.procs of current uid and pid
+    snprintf(path, sizeof(path), "/acct/uid_%d/pid_%d/cgroup.procs", uid, pid);
+    fd = open(path, O_RDONLY);
+    if (fd >= 0) {
+        char buffer[256];
+        char ch;
+        int numRead;
+        size_t len=0;
+        for (;;) {
+            numRead=read(fd, &ch, 1);
+            if (numRead <= 0)
+                break;
+            if (ch != '\n') {
+                buffer[len++] = ch;
+            } else {
+                int temp_pid = atoi(buffer);
+                len=0;
+                if (temp_pid == pid)
+                    continue;
+                if (dex2oat_only) {
+                    // check if cmdline of temp_pid is dex2oat
+                    char cmdline[64];
+                    snprintf(cmdline, sizeof(cmdline), "/proc/%d/cmdline", temp_pid);
+                    int cmdline_fd = open(cmdline, O_RDONLY);
+                    if (cmdline_fd >= 0) {
+                        size_t read_size = read(cmdline_fd, buffer, 255);
+                        close(cmdline_fd);
+                        buffer[read_size]='\0';
+                        const char *dex2oat_name1 = "dex2oat"; //for plugins compiler
+                        const char *dex2oat_name2 = "/system/bin/dex2oat"; //for installer
+                        const char *dex2oat_name3 = "/apex/com.android.runtime/bin/dex2oat"; //for installer
+                        if (strncmp(buffer, dex2oat_name1, strlen(dex2oat_name1)) != 0
+                                && strncmp(buffer, dex2oat_name2, strlen(dex2oat_name2)) != 0
+                                && strncmp(buffer, dex2oat_name3, strlen(dex2oat_name3)) != 0) {
+                            continue;
+                        }
+                    } else {
+                        //ALOGE("read %s failed", cmdline);
+                        continue;
+                    }
+                }
+                //set cgroup of temp_pid follow pid
+                android_os_Process_setProcessGroup(env, clazz, temp_pid, grp);
+            }
+        }
+        close(fd);
+    }
+}
+
 void android_os_Process_setProcessFrozen(
         JNIEnv *env, jobject clazz, jint pid, jint uid, jboolean freeze)
 {
@@ -371,75 +430,6 @@ void android_os_Process_enableFreezer(
 
     if (!success) {
         jniThrowException(env, "java/lang/RuntimeException", "Unknown error");
-    }
-}
-
-void android_os_Process_setCgroupProcsProcessGroup(JNIEnv* env, jobject clazz, int uid, int pid, jint grp)
-{
-    int fd;
-    char path[255];
-    if ((grp == SP_FOREGROUND) || (grp > SP_MAX)) {
-        signalExceptionForGroupError(env, EINVAL, pid);
-        return;
-    }
-
-    //read property only for the first time
-    if (kCgroupFollowForDex2oatOnly==-1) {
-        char prop[PROPERTY_VALUE_MAX];
-        kCgroupFollowForDex2oatOnly=0;
-        if (property_get("ro.vendor.qti.cgroup_follow.dex2oat_only", prop, NULL) != 0) {
-            if (strcmp(prop, "true")==0) {
-                kCgroupFollowForDex2oatOnly=1;
-            }
-        }
-    }
-    //set process group for current process
-    android_os_Process_setProcessGroup(env, clazz, pid, grp);
-
-    //find processes in the same cgroup.procs of current uid and pid
-    snprintf(path, sizeof(path), "/acct/uid_%d/pid_%d/cgroup.procs", uid, pid);
-    fd = open(path, O_RDONLY);
-    if (fd >= 0) {
-        char buffer[255];
-        char ch;
-        int numRead;
-        size_t len=0;
-        for (;;) {
-            numRead=read(fd, &ch, 1);
-            if (numRead <= 0) break;
-            if (ch != '\n') {
-                buffer[len++]=ch;
-            } else {
-                int temp_pid = atoi(buffer);
-                len=0;
-                if (temp_pid == pid) continue;
-                if (kCgroupFollowForDex2oatOnly==1) {
-                    //check if cmdline of temp_pid is starts with /system/bin/dex2oat
-                    char cmdline[32];
-                    snprintf(cmdline, sizeof(cmdline), "/proc/%d/cmdline", temp_pid);
-                    int cmdline_fd = open(cmdline, O_RDONLY);
-                    if (cmdline_fd >= 0) {
-                        const char *dex2oat_cmd_str = "/system/bin/dex2oat";
-                        size_t dex2oat_cmd_len = strlen(dex2oat_cmd_str);
-                        size_t read_size = read(cmdline_fd, buffer, dex2oat_cmd_len);
-                        close(cmdline_fd);
-                        if (read_size<dex2oat_cmd_len) {
-                            continue;
-                        }
-                        buffer[read_size]='\0';
-                        if (strcmp(buffer, dex2oat_cmd_str)!=0) {
-                            continue;
-                        }
-                    } else {
-                        //ALOGE("read %s failed", cmdline);
-                        continue;
-                    }
-                }
-                //set cgroup of temp_pid follow pid
-                android_os_Process_setProcessGroup(env, clazz, temp_pid, grp);
-            }
-        }
-        close(fd);
     }
 }
 
@@ -1445,7 +1435,7 @@ static const JNINativeMethod methods[] = {
         {"setThreadGroup", "(II)V", (void*)android_os_Process_setThreadGroup},
         {"setThreadGroupAndCpuset", "(II)V", (void*)android_os_Process_setThreadGroupAndCpuset},
         {"setProcessGroup", "(II)V", (void*)android_os_Process_setProcessGroup},
-        {"setCgroupProcsProcessGroup", "(III)V", (void*)android_os_Process_setCgroupProcsProcessGroup},
+        {"setCgroupProcsProcessGroup", "(IIIZ)V", (void*)android_os_Process_setCgroupProcsProcessGroup},
         {"getProcessGroup", "(I)I", (void*)android_os_Process_getProcessGroup},
         {"getExclusiveCores", "()[I", (void*)android_os_Process_getExclusiveCores},
         {"setSwappiness", "(IZ)Z", (void*)android_os_Process_setSwappiness},
