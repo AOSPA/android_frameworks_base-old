@@ -41,6 +41,7 @@ import com.android.systemui.qs.tiles.LocationTile;
 import com.android.systemui.qs.tiles.NfcTile;
 import com.android.systemui.qs.tiles.NightDisplayTile;
 import com.android.systemui.qs.tiles.RotationLockTile;
+import com.android.systemui.qs.tiles.ScreenRecordTile;
 import com.android.systemui.qs.tiles.UiModeNightTile;
 import com.android.systemui.qs.tiles.ScreenStabilizationTile;
 import com.android.systemui.qs.tiles.UserTile;
@@ -65,6 +66,7 @@ public class QSFactoryImpl implements QSFactory {
     private final Provider<AirplaneModeTile> mAirplaneModeTileProvider;
     private final Provider<WorkModeTile> mWorkModeTileProvider;
     private final Provider<RotationLockTile> mRotationLockTileProvider;
+    private final Provider<ScreenRecordTile> mScreenRecordTileProvider;
     private final Provider<FlashlightTile> mFlashlightTileProvider;
     private final Provider<LocationTile> mLocationTileProvider;
     private final Provider<CastTile> mCastTileProvider;
@@ -89,6 +91,7 @@ public class QSFactoryImpl implements QSFactory {
             Provider<AirplaneModeTile> airplaneModeTileProvider,
             Provider<WorkModeTile> workModeTileProvider,
             Provider<RotationLockTile> rotationLockTileProvider,
+            Provider<ScreenRecordTile> screenRecordTileProvider,
             Provider<FlashlightTile> flashlightTileProvider,
             Provider<LocationTile> locationTileProvider,
             Provider<CastTile> castTileProvider,
@@ -109,6 +112,7 @@ public class QSFactoryImpl implements QSFactory {
         mAirplaneModeTileProvider = airplaneModeTileProvider;
         mWorkModeTileProvider = workModeTileProvider;
         mRotationLockTileProvider = rotationLockTileProvider;
+        mScreenRecordTileProvider = screenRecordTileProvider;
         mFlashlightTileProvider = flashlightTileProvider;
         mLocationTileProvider = locationTileProvider;
         mCastTileProvider = castTileProvider;

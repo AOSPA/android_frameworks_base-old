@@ -69,8 +69,6 @@ public class RecordingService extends Service {
 
     private static final String ACTION_START = "com.android.systemui.screenrecord.START";
     private static final String ACTION_STOP = "com.android.systemui.screenrecord.STOP";
-    private static final String ACTION_PAUSE = "com.android.systemui.screenrecord.PAUSE";
-    private static final String ACTION_RESUME = "com.android.systemui.screenrecord.RESUME";
     private static final String ACTION_CANCEL = "com.android.systemui.screenrecord.CANCEL";
     private static final String ACTION_SHARE = "com.android.systemui.screenrecord.SHARE";
     private static final String ACTION_DELETE = "com.android.systemui.screenrecord.DELETE";
@@ -87,10 +85,15 @@ public class RecordingService extends Service {
     private VirtualDisplay mVirtualDisplay;
     private MediaRecorder mMediaRecorder;
     private Notification.Builder mRecordingNotificationBuilder;
+    private RecordingController mController;
 
     private boolean mUseAudio;
     private boolean mShowTaps;
     private File mTempFile;
+
+    public RecordingService(RecordingController controller) {
+        mController = controller;
+    }
 
     /**
      * Get an intent to start the recording service.
@@ -156,16 +159,6 @@ public class RecordingService extends Service {
             case ACTION_STOP:
                 stopRecording();
                 saveRecording(notificationManager);
-                break;
-
-            case ACTION_PAUSE:
-                mMediaRecorder.pause();
-                setNotificationActions(true, notificationManager);
-                break;
-
-            case ACTION_RESUME:
-                mMediaRecorder.resume();
-                setNotificationActions(false, notificationManager);
                 break;
 
             case ACTION_SHARE:
@@ -270,63 +263,44 @@ public class RecordingService extends Service {
                     null);
 
             mMediaRecorder.start();
+            mController.updateState(true);
+            createRecordingNotification();
         } catch (IOException e) {
             Log.e(TAG, "Error starting screen recording: " + e.getMessage());
             e.printStackTrace();
             throw new RuntimeException(e);
         }
-
-        createRecordingNotification();
     }
 
     private void createRecordingNotification() {
+        String title = null;
         NotificationChannel channel = new NotificationChannel(
                 CHANNEL_ID,
                 getString(R.string.screenrecord_name),
                 NotificationManager.IMPORTANCE_HIGH);
         channel.setDescription(getString(R.string.screenrecord_channel_description));
         channel.enableVibration(true);
-        NotificationManager notificationManager =
+        NotificationManager nm =
                 (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
-        notificationManager.createNotificationChannel(channel);
+        nm.createNotificationChannel(channel);
 
+        Bundle extras = new Bundle();
+        extras.putString("android.substName", getResources().getString(R.string.screenrecord_name));
+        title = mUseAudio ? getResources().getString(R.string.screenrecord_ongoing_screen_and_audio) : 
+                getResources().getString(R.string.screenrecord_ongoing_screen_only)
         mRecordingNotificationBuilder = new Notification.Builder(this, CHANNEL_ID)
-                .setSmallIcon(R.drawable.ic_android)
-                .setContentTitle(getResources().getString(R.string.screenrecord_name))
+                .setSmallIcon(R.drawable.ic_screenrecord)
+                .setContentTitle(title)
                 .setUsesChronometer(true)
+                .setColorized(true)
+                .setColor(getResources().getColor(R.color.GM2_red_700))
                 .setOngoing(true);
-        setNotificationActions(false, notificationManager);
-        Notification notification = mRecordingNotificationBuilder.build();
-        startForeground(NOTIFICATION_ID, notification);
-    }
-
-    private void setNotificationActions(boolean isPaused, NotificationManager notificationManager) {
-        String pauseString = getResources()
-                .getString(isPaused ? R.string.screenrecord_resume_label
-                        : R.string.screenrecord_pause_label);
-        Intent pauseIntent = isPaused ? getResumeIntent(this) : getPauseIntent(this);
-
-        mRecordingNotificationBuilder.setActions(
-                new Notification.Action.Builder(
-                        Icon.createWithResource(this, R.drawable.ic_android),
-                        getResources().getString(R.string.screenrecord_stop_label),
-                        PendingIntent
-                                .getService(this, REQUEST_CODE, getStopIntent(this),
-                                        PendingIntent.FLAG_UPDATE_CURRENT))
-                        .build(),
-                new Notification.Action.Builder(
-                        Icon.createWithResource(this, R.drawable.ic_android), pauseString,
-                        PendingIntent.getService(this, REQUEST_CODE, pauseIntent,
-                                PendingIntent.FLAG_UPDATE_CURRENT))
-                        .build(),
-                new Notification.Action.Builder(
-                        Icon.createWithResource(this, R.drawable.ic_android),
-                        getResources().getString(R.string.screenrecord_cancel_label),
-                        PendingIntent
-                                .getService(this, REQUEST_CODE, getCancelIntent(this),
-                                        PendingIntent.FLAG_UPDATE_CURRENT))
-                        .build());
-        notificationManager.notify(NOTIFICATION_ID, mRecordingNotificationBuilder.build());
+                .setContentIntent(PendingIntent.getService(
+                        this, REQUEST_CODE, getStopIntent(this), 
+                        PendingIntent.FLAG_UPDATE_CURRENT))
+                .addExtras(extras);
+        nm.notify(NOTIFICATION_ID, mRecordingNotificationBuilder.build());
+        startForeground(NOTIFICATION_ID, mRecordingNotificationBuilder.build());
     }
 
     private Notification createSaveNotification(Uri uri) {
@@ -396,6 +370,7 @@ public class RecordingService extends Service {
         mInputSurface.release();
         mVirtualDisplay.release();
         stopSelf();
+        mController.updateState(false);
     }
 
     private void saveRecording(NotificationManager notificationManager) {
@@ -438,14 +413,6 @@ public class RecordingService extends Service {
 
     private static Intent getStopIntent(Context context) {
         return new Intent(context, RecordingService.class).setAction(ACTION_STOP);
-    }
-
-    private static Intent getPauseIntent(Context context) {
-        return new Intent(context, RecordingService.class).setAction(ACTION_PAUSE);
-    }
-
-    private static Intent getResumeIntent(Context context) {
-        return new Intent(context, RecordingService.class).setAction(ACTION_RESUME);
     }
 
     private static Intent getCancelIntent(Context context) {
