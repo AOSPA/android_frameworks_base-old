@@ -68,6 +68,8 @@ import java.util.Objects;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import org.codeaurora.internal.NrConfigType;
+import org.codeaurora.internal.NrIconType;
 
 public class MobileSignalController extends SignalController<
         MobileSignalController.MobileState, MobileSignalController.MobileIconGroup> {
@@ -711,11 +713,22 @@ public class MobileSignalController extends SignalController<
                 }
             }
 
-        }else if ( nr5GIconGroup == null && isSideCarNsaValid() ) {
+        }
+
+        //Modem has centralized logic to display 5G icon based on carrier requirements
+        //For 5G icon display, only query NrIconType reported by modem
+        nr5GIconGroup = null;
+        if ( isSideCarValid() ) {
             nr5GIconGroup = mFiveGState.getIconGroup();
             mCurrentState.iconGroup = nr5GIconGroup;
-            if (DEBUG) {
-                Log.d(mTag,"get 5G NSA icon from side-car");
+            if ( mFiveGState.getSignalLevel() > mCurrentState.level ) {
+                mCurrentState.level = mFiveGState.getSignalLevel();
+            }
+        }else {
+            if (mNetworkToIconLookup.indexOfKey(mDataNetType) >= 0) {
+                mCurrentState.iconGroup = mNetworkToIconLookup.get(mDataNetType);
+            } else {
+                mCurrentState.iconGroup = mDefaultIcons;
             }
         }
 
@@ -962,6 +975,15 @@ public class MobileSignalController extends SignalController<
             registered = true;
         }
         return registered;
+    }
+
+    private boolean isSideCarValid() {
+        return isSideCarSaValid() || isSideCarNsaValid();
+    }
+
+    private boolean isSideCarSaValid() {
+        return mFiveGState.getNrConfigType() == NrConfigType.SA_CONFIGURATION
+                && mFiveGState.getNrIconType() != NrIconType.INVALID;
     }
 
     private boolean isSideCarNsaValid() {
