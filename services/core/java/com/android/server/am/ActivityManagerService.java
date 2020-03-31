@@ -17715,7 +17715,6 @@ public class ActivityManagerService extends IActivityManager.Stub
     @GuardedBy("this")
     final void updateProcessForegroundLocked(ProcessRecord proc, boolean isForeground,
             int fgServiceTypes, boolean oomAdj) {
-
         if (isForeground != proc.hasForegroundServices()
                 || proc.getForegroundServiceTypes() != fgServiceTypes) {
             proc.setHasForegroundServices(isForeground, fgServiceTypes);
@@ -17748,10 +17747,9 @@ public class ActivityManagerService extends IActivityManager.Stub
             ProcessChangeItem item = enqueueProcessChangeItemLocked(proc.pid, proc.info.uid);
             item.changes = ProcessChangeItem.CHANGE_FOREGROUND_SERVICES;
             item.foregroundServiceTypes = fgServiceTypes;
-
-            if (oomAdj) {
-                updateOomAdjLocked(proc, OomAdjuster.OOM_ADJ_REASON_UI_VISIBILITY);
-            }
+        }
+        if (oomAdj) {
+            updateOomAdjLocked(proc, OomAdjuster.OOM_ADJ_REASON_UI_VISIBILITY);
         }
     }
 

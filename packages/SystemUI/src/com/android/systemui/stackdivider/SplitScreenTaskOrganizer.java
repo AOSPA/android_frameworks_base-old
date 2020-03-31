@@ -22,17 +22,19 @@ import static android.app.WindowConfiguration.ACTIVITY_TYPE_UNDEFINED;
 import static android.app.WindowConfiguration.WINDOWING_MODE_SPLIT_SCREEN_PRIMARY;
 import static android.app.WindowConfiguration.WINDOWING_MODE_SPLIT_SCREEN_SECONDARY;
 import static android.view.Display.DEFAULT_DISPLAY;
+import static android.window.WindowOrganizer.TaskOrganizer;
 
 import android.app.ActivityManager.RunningTaskInfo;
-import android.app.ITaskOrganizerController;
 import android.app.WindowConfiguration;
+import android.graphics.Rect;
 import android.os.RemoteException;
 import android.util.Log;
 import android.view.Display;
-import android.view.ITaskOrganizer;
-import android.view.IWindowContainer;
 import android.view.SurfaceControl;
 import android.view.SurfaceSession;
+import android.window.ITaskOrganizer;
+
+import java.util.ArrayList;
 
 class SplitScreenTaskOrganizer extends ITaskOrganizer.Stub {
     private static final String TAG = "SplitScreenTaskOrganizer";
@@ -44,19 +46,20 @@ class SplitScreenTaskOrganizer extends ITaskOrganizer.Stub {
     SurfaceControl mSecondarySurface;
     SurfaceControl mPrimaryDim;
     SurfaceControl mSecondaryDim;
+    ArrayList<SurfaceControl> mHomeAndRecentsSurfaces = new ArrayList<>();
+    Rect mHomeBounds = new Rect();
     final Divider mDivider;
 
     SplitScreenTaskOrganizer(Divider divider) {
         mDivider = divider;
     }
 
-    void init(ITaskOrganizerController organizerController, SurfaceSession session)
-            throws RemoteException {
-        organizerController.registerTaskOrganizer(this, WINDOWING_MODE_SPLIT_SCREEN_PRIMARY);
-        organizerController.registerTaskOrganizer(this, WINDOWING_MODE_SPLIT_SCREEN_SECONDARY);
-        mPrimary = organizerController.createRootTask(Display.DEFAULT_DISPLAY,
+    void init(SurfaceSession session) throws RemoteException {
+        TaskOrganizer.registerOrganizer(this, WINDOWING_MODE_SPLIT_SCREEN_PRIMARY);
+        TaskOrganizer.registerOrganizer(this, WINDOWING_MODE_SPLIT_SCREEN_SECONDARY);
+        mPrimary = TaskOrganizer.createRootTask(Display.DEFAULT_DISPLAY,
                 WindowConfiguration.WINDOWING_MODE_SPLIT_SCREEN_PRIMARY);
-        mSecondary = organizerController.createRootTask(Display.DEFAULT_DISPLAY,
+        mSecondary = TaskOrganizer.createRootTask(Display.DEFAULT_DISPLAY,
                 WindowConfiguration.WINDOWING_MODE_SPLIT_SCREEN_SECONDARY);
         mPrimarySurface = mPrimary.token.getLeash();
         mSecondarySurface = mSecondary.token.getLeash();
@@ -84,15 +87,11 @@ class SplitScreenTaskOrganizer extends ITaskOrganizer.Stub {
     }
 
     @Override
-    public void taskAppeared(RunningTaskInfo taskInfo) {
+    public void onTaskAppeared(RunningTaskInfo taskInfo) {
     }
 
     @Override
-    public void taskVanished(RunningTaskInfo taskInfo) {
-    }
-
-    @Override
-    public void transactionReady(int id, SurfaceControl.Transaction t) {
+    public void onTaskVanished(RunningTaskInfo taskInfo) {
     }
 
     @Override
@@ -108,6 +107,8 @@ class SplitScreenTaskOrganizer extends ITaskOrganizer.Stub {
      * presentations based on the contents of the split regions.
      */
     private void handleTaskInfoChanged(RunningTaskInfo info) {
+        final boolean secondaryWasHomeOrRecents = mSecondary.topActivityType == ACTIVITY_TYPE_HOME
+                || mSecondary.topActivityType == ACTIVITY_TYPE_RECENTS;
         final boolean primaryWasEmpty = mPrimary.topActivityType == ACTIVITY_TYPE_UNDEFINED;
         final boolean secondaryWasEmpty = mSecondary.topActivityType == ACTIVITY_TYPE_UNDEFINED;
         if (info.token.asBinder() == mPrimary.token.asBinder()) {
@@ -117,8 +118,15 @@ class SplitScreenTaskOrganizer extends ITaskOrganizer.Stub {
         }
         final boolean primaryIsEmpty = mPrimary.topActivityType == ACTIVITY_TYPE_UNDEFINED;
         final boolean secondaryIsEmpty = mSecondary.topActivityType == ACTIVITY_TYPE_UNDEFINED;
+        final boolean secondaryIsHomeOrRecents = mSecondary.topActivityType == ACTIVITY_TYPE_HOME
+                || mSecondary.topActivityType == ACTIVITY_TYPE_RECENTS;
         if (DEBUG) {
             Log.d(TAG, "onTaskInfoChanged " + mPrimary + "  " + mSecondary);
+        }
+        if (primaryIsEmpty == primaryWasEmpty && secondaryWasEmpty == secondaryIsEmpty
+                && secondaryWasHomeOrRecents == secondaryIsHomeOrRecents) {
+            // No relevant changes
+            return;
         }
         if (primaryIsEmpty || secondaryIsEmpty) {
             // At-least one of the splits is empty which means we are currently transitioning
@@ -146,8 +154,7 @@ class SplitScreenTaskOrganizer extends ITaskOrganizer.Stub {
                 }
                 mDivider.startEnterSplit();
             }
-        } else if (mSecondary.topActivityType == ACTIVITY_TYPE_HOME
-                || mSecondary.topActivityType == ACTIVITY_TYPE_RECENTS) {
+        } else if (secondaryIsHomeOrRecents) {
             // Both splits are populated but the secondary split has a home/recents stack on top,
             // so enter minimized mode.
             mDivider.ensureMinimizedSplit();

@@ -4440,6 +4440,9 @@
          android.os.action.POWER_SAVE_MODE_CHANGED. -->
     <string name="config_powerSaveModeChangedListenerPackage" translatable="false"></string>
 
+    <!-- Set to true to enable the user switcher on the keyguard. -->
+    <bool name="config_keyguardUserSwitcher">false</bool>
+
     <!-- pdp data retry for cause 29, 33 and 55-->
     <bool name="config_pdp_retry_for_29_33_55_enabled">false</bool>
     <!--pdp data reject retry delay can be configured here -->

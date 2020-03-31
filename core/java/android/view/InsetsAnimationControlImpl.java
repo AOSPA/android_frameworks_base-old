@@ -68,7 +68,6 @@ public class InsetsAnimationControlImpl implements WindowInsetsAnimationControll
     private final @InsetsType int mTypes;
     private final InsetsAnimationControlCallbacks mController;
     private final WindowInsetsAnimation mAnimation;
-    private final boolean mFade;
     private Insets mCurrentInsets;
     private Insets mPendingInsets;
     private float mPendingFraction;
@@ -83,11 +82,10 @@ public class InsetsAnimationControlImpl implements WindowInsetsAnimationControll
             InsetsState state, WindowInsetsAnimationControlListener listener,
             @InsetsType int types,
             InsetsAnimationControlCallbacks controller, long durationMs, Interpolator interpolator,
-            boolean fade, @AnimationType int animationType) {
+            @AnimationType int animationType) {
         mControls = controls;
         mListener = listener;
         mTypes = types;
-        mFade = fade;
         mController = controller;
         mInitialInsetsState = new InsetsState(state, true /* copySources */);
         mCurrentInsets = getInsetsFromState(mInitialInsetsState, frame, null /* typeSideMap */);
@@ -198,11 +196,10 @@ public class InsetsAnimationControlImpl implements WindowInsetsAnimationControll
         if (mCancelled || mFinished) {
             return;
         }
+        mShownOnFinish = shown;
         setInsetsAndAlpha(shown ? mShownInsets : mHiddenInsets, 1f /* alpha */, 1f /* fraction */);
         mFinished = true;
         mListener.onFinished(this);
-
-        mShownOnFinish = shown;
     }
 
     @Override
@@ -261,7 +258,6 @@ public class InsetsAnimationControlImpl implements WindowInsetsAnimationControll
         return state.calculateInsets(frame, null /* ignoringVisibilityState */,
                 false /* isScreenRound */,
                 false /* alwaysConsumeSystemBars */, null /* displayCutout */,
-                null /* legacyContentInsets */, null /* legacyStableInsets */,
                 LayoutParams.SOFT_INPUT_ADJUST_RESIZE /* legacySoftInputMode*/,
                 0 /* legacySystemUiFlags */, typeSideMap)
                .getInsets(mTypes);
@@ -299,13 +295,11 @@ public class InsetsAnimationControlImpl implements WindowInsetsAnimationControll
 
             // If the system is controlling the insets source, the leash can be null.
             if (leash != null) {
-                // TODO: use a better interpolation for fade.
-                alpha = mFade ? ((float) inset / maxInset * 0.3f + 0.7f) : alpha;
                 SurfaceParams params = new SurfaceParams.Builder(leash)
                         .withAlpha(side == ISIDE_FLOATING ? 1 : alpha)
                         .withMatrix(mTmpMatrix)
                         .withVisibility(side == ISIDE_FLOATING
-                                ? state.getSource(source.getType()).isVisible()
+                                ? mShownOnFinish
                                 : inset != 0 /* visible */)
                         .build();
                 surfaceParams.add(params);

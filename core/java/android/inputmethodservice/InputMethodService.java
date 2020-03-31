@@ -878,7 +878,7 @@ public class InputMethodService extends AbstractInputMethodService {
     }
 
     private void notifyImeHidden() {
-        doHideWindow();
+        requestHideSelf(0);
     }
 
     private void removeImeSurface() {
@@ -1249,6 +1249,7 @@ public class InputMethodService extends AbstractInputMethodService {
                 WindowManager.LayoutParams.TYPE_INPUT_METHOD, Gravity.BOTTOM, false);
         mWindow.getWindow().getAttributes().setFitInsetsTypes(statusBars() | navigationBars());
         mWindow.getWindow().getAttributes().setFitInsetsSides(Side.all() & ~Side.BOTTOM);
+        mWindow.getWindow().getAttributes().setFitInsetsIgnoringVisibility(true);
 
         // IME layout should always be inset by navigation bar, no matter its current visibility,
         // unless automotive requests it, since automotive may hide the navigation bar.
@@ -2284,7 +2285,9 @@ public class InputMethodService extends AbstractInputMethodService {
             // When insets API is enabled, it is responsible for client and server side
             // visibility of IME window.
             if (isVisibilityAppliedUsingInsetsConsumer()) {
-                mInputView.dispatchWindowVisibilityChanged(View.GONE);
+                if (mInputView != null) {
+                    mInputView.dispatchWindowVisibilityChanged(View.GONE);
+                }
             } else {
                 mWindow.hide();
             }

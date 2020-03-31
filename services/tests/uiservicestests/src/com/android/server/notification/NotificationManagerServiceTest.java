@@ -17,9 +17,7 @@
 package com.android.server.notification;
 
 import static android.app.ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND;
-import static android.app.ActivityManager.RunningAppProcessInfo.IMPORTANCE_GONE;
 import static android.app.ActivityManager.RunningAppProcessInfo.IMPORTANCE_VISIBLE;
-import static android.app.Notification.CATEGORY_CALL;
 import static android.app.Notification.FLAG_AUTO_CANCEL;
 import static android.app.Notification.FLAG_BUBBLE;
 import static android.app.Notification.FLAG_FOREGROUND_SERVICE;
@@ -165,6 +163,7 @@ import com.android.server.notification.NotificationManagerService.NotificationAs
 import com.android.server.notification.NotificationManagerService.NotificationListeners;
 import com.android.server.statusbar.StatusBarManagerInternal;
 import com.android.server.uri.UriGrantsManagerInternal;
+import com.android.server.wm.ActivityTaskManagerInternal;
 import com.android.server.wm.WindowManagerInternal;
 
 import org.junit.After;
@@ -252,6 +251,8 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
     IBinder mPermOwner;
     @Mock
     IActivityManager mAm;
+    @Mock
+    ActivityTaskManagerInternal mAtm;
     @Mock
     IUriGrantsManager mUgm;
     @Mock
@@ -454,7 +455,7 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
                 mRankingHandler, mPackageManager, mPackageManagerClient, mockLightsManager,
                 mListeners, mAssistants, mConditionProviders,
                 mCompanionMgr, mSnoozeHelper, mUsageStats, mPolicyFile, mActivityManager,
-                mGroupHelper, mAm, mAppUsageStats,
+                mGroupHelper, mAm, mAtm, mAppUsageStats,
                 mock(DevicePolicyManagerInternal.class), mUgm, mUgmInternal,
                 mAppOpsManager, mUm, mHistoryManager, mStatsManager);
         mService.onBootPhase(SystemService.PHASE_SYSTEM_SERVICES_READY);
@@ -676,9 +677,8 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
 
     private Notification.BubbleMetadata.Builder getBubbleMetadataBuilder() {
         PendingIntent pi = PendingIntent.getActivity(mContext, 0, new Intent(), 0);
-        return new Notification.BubbleMetadata.Builder()
-                .createIntentBubble(pi,
-                        Icon.createWithResource(mContext, android.R.drawable.sym_def_app_icon));
+        return new Notification.BubbleMetadata.Builder(pi,
+                Icon.createWithResource(mContext, android.R.drawable.sym_def_app_icon));
     }
 
     private Notification.Builder getMessageStyleNotifBuilder(boolean addBubbleMetadata,
@@ -4704,8 +4704,7 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
         mService.setPreferencesHelper(mPreferencesHelper);
         when(mPreferencesHelper.getImportance(testPackage, mUid)).thenReturn(IMPORTANCE_NONE);
 
-        // this app is in the foreground
-        when(mActivityManager.getUidImportance(mUid)).thenReturn(IMPORTANCE_FOREGROUND);
+        setAppInForegroundForToasts(mUid, true);
 
         // enqueue toast -> toast should still enqueue
         ((INotificationManager) mService.mService).enqueueToast(testPackage, new Binder(),
@@ -4723,8 +4722,7 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
         when(mPackageManager.isPackageSuspendedForUser(testPackage, UserHandle.getUserId(mUid)))
                 .thenReturn(false);
 
-        // this app is NOT in the foreground
-        when(mActivityManager.getUidImportance(mUid)).thenReturn(IMPORTANCE_NONE);
+        setAppInForegroundForToasts(mUid, false);
 
         // enqueue toast -> no toasts enqueued
         ((INotificationManager) mService.mService).enqueueToast(testPackage, new Binder(),
@@ -4742,8 +4740,7 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
         when(mPackageManager.isPackageSuspendedForUser(testPackage, UserHandle.getUserId(mUid)))
                 .thenReturn(false);
 
-        // this app is in the foreground
-        when(mActivityManager.getUidImportance(mUid)).thenReturn(IMPORTANCE_FOREGROUND);
+        setAppInForegroundForToasts(mUid, true);
 
         // enqueue toast -> toast should still enqueue
         ((INotificationManager) mService.mService).enqueueTextToast(testPackage, new Binder(),
@@ -4761,8 +4758,7 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
         when(mPackageManager.isPackageSuspendedForUser(testPackage, UserHandle.getUserId(mUid)))
                 .thenReturn(false);
 
-        // this app is NOT in the foreground
-        when(mActivityManager.getUidImportance(mUid)).thenReturn(IMPORTANCE_NONE);
+        setAppInForegroundForToasts(mUid, false);
 
         // enqueue toast -> toast should still enqueue
         ((INotificationManager) mService.mService).enqueueTextToast(testPackage, new Binder(),
@@ -4820,8 +4816,7 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
         mService.setPreferencesHelper(mPreferencesHelper);
         when(mPreferencesHelper.getImportance(testPackage, mUid)).thenReturn(IMPORTANCE_NONE);
 
-        // this app is NOT in the foreground
-        when(mActivityManager.getUidImportance(mUid)).thenReturn(IMPORTANCE_GONE);
+        setAppInForegroundForToasts(mUid, false);
 
         // enqueue toast -> no toasts enqueued
         ((INotificationManager) mService.mService).enqueueToast(testPackage, new Binder(),
@@ -4843,13 +4838,18 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
         mService.setPreferencesHelper(mPreferencesHelper);
         when(mPreferencesHelper.getImportance(testPackage, mUid)).thenReturn(IMPORTANCE_NONE);
 
-        // this app is NOT in the foreground
-        when(mActivityManager.getUidImportance(mUid)).thenReturn(IMPORTANCE_GONE);
+        setAppInForegroundForToasts(mUid, false);
 
         // enqueue toast -> system toast can still be enqueued
         ((INotificationManager) mService.mService).enqueueToast(testPackage, new Binder(),
                 new TestableToastCallback(), 2000, 0);
         assertEquals(1, mService.mToastQueue.size());
+    }
+
+    private void setAppInForegroundForToasts(int uid, boolean inForeground) {
+        int importance = (inForeground) ? IMPORTANCE_FOREGROUND : IMPORTANCE_NONE;
+        when(mActivityManager.getUidImportance(mUid)).thenReturn(importance);
+        when(mAtm.hasResumedActivity(uid)).thenReturn(inForeground);
     }
 
     @Test
@@ -5236,141 +5236,6 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
     }
 
     @Test
-    public void testFlagBubbleNotifs_flag_phonecall() throws RemoteException {
-        // Bubbles are allowed!
-        setUpPrefsForBubbles(PKG, mUid, true /* global */, true /* app */, true /* channel */);
-
-        // Give it bubble metadata
-        Notification.BubbleMetadata data = getBubbleMetadataBuilder().build();
-        // Give it a person
-        Person person = new Person.Builder()
-                .setName("bubblebot")
-                .build();
-        // Make it a phone call
-        Notification.Builder nb = new Notification.Builder(mContext,
-                mTestNotificationChannel.getId())
-                .setCategory(CATEGORY_CALL)
-                .addPerson(person)
-                .setContentTitle("foo")
-                .setBubbleMetadata(data)
-                .setSmallIcon(android.R.drawable.sym_def_app_icon);
-
-        StatusBarNotification sbn = new StatusBarNotification(PKG, PKG, 1,
-                "testFlagBubbleNotifs_flag_phonecall", mUid, 0,
-                nb.build(), new UserHandle(mUid), null, 0);
-        // Make sure it has foreground service
-        sbn.getNotification().flags |= FLAG_FOREGROUND_SERVICE;
-        NotificationRecord nr = new NotificationRecord(mContext, sbn, mTestNotificationChannel);
-
-        mBinderService.enqueueNotificationWithTag(PKG, PKG, nr.getSbn().getTag(),
-                nr.getSbn().getId(), nr.getSbn().getNotification(), nr.getSbn().getUserId());
-        waitForIdle();
-
-        // yes phone call, yes person, yes foreground service, yes bubble
-        assertTrue(mService.getNotificationRecord(
-                sbn.getKey()).getNotification().isBubbleNotification());
-    }
-
-    @Test
-    public void testFlagBubbleNotifs_noFlag_phonecall_noForegroundService() throws RemoteException {
-        // Bubbles are allowed!
-        setUpPrefsForBubbles(PKG, mUid, true /* global */, true /* app */, true /* channel */);
-
-        // Give it bubble metadata
-        Notification.BubbleMetadata data = getBubbleMetadataBuilder().build();
-        // Give it a person
-        Person person = new Person.Builder()
-                .setName("bubblebot")
-                .build();
-        // Make it a phone call
-        Notification.Builder nb = new Notification.Builder(mContext,
-                mTestNotificationChannel.getId())
-                .setCategory(CATEGORY_CALL)
-                .addPerson(person)
-                .setContentTitle("foo")
-                .setBubbleMetadata(data)
-                .setSmallIcon(android.R.drawable.sym_def_app_icon);
-
-        StatusBarNotification sbn = new StatusBarNotification(PKG, PKG, 1, null, mUid, 0,
-                nb.build(), new UserHandle(mUid), null, 0);
-        NotificationRecord nr = new NotificationRecord(mContext, sbn, mTestNotificationChannel);
-
-        mBinderService.enqueueNotificationWithTag(PKG, PKG, nr.getSbn().getTag(),
-                nr.getSbn().getId(), nr.getSbn().getNotification(), nr.getSbn().getUserId());
-        waitForIdle();
-
-        // yes phone call, yes person, NO foreground service, no bubble
-        assertFalse(mService.getNotificationRecord(
-                sbn.getKey()).getNotification().isBubbleNotification());
-    }
-
-    @Test
-    public void testFlagBubbleNotifs_noFlag_phonecall_noPerson() throws RemoteException {
-        // Bubbles are allowed!
-        setUpPrefsForBubbles(PKG, mUid, true /* global */, true /* app */, true /* channel */);
-
-        // Give it bubble metadata
-        Notification.BubbleMetadata data = getBubbleMetadataBuilder().build();
-        // Make it a phone call
-        Notification.Builder nb = new Notification.Builder(mContext,
-                mTestNotificationChannel.getId())
-                .setCategory(CATEGORY_CALL)
-                .setContentTitle("foo")
-                .setBubbleMetadata(data)
-                .setSmallIcon(android.R.drawable.sym_def_app_icon);
-
-        StatusBarNotification sbn = new StatusBarNotification(PKG, PKG, 1,
-                "testFlagBubbleNotifs_noFlag_phonecall_noPerson", mUid, 0,
-                nb.build(), new UserHandle(mUid), null, 0);
-        // Make sure it has foreground service
-        sbn.getNotification().flags |= FLAG_FOREGROUND_SERVICE;
-        NotificationRecord nr = new NotificationRecord(mContext, sbn, mTestNotificationChannel);
-
-        mBinderService.enqueueNotificationWithTag(PKG, PKG, nr.getSbn().getTag(),
-                nr.getSbn().getId(), nr.getSbn().getNotification(), nr.getSbn().getUserId());
-        waitForIdle();
-
-        // yes phone call, yes foreground service, BUT NO person, no bubble
-        assertFalse(mService.getNotificationRecord(
-                sbn.getKey()).getNotification().isBubbleNotification());
-    }
-
-    @Test
-    public void testFlagBubbleNotifs_noFlag_phonecall_noCategory() throws RemoteException {
-        // Bubbles are allowed!
-        setUpPrefsForBubbles(PKG, mUid, true /* global */, true /* app */, true /* channel */);
-
-        // Give it bubble metadata
-        Notification.BubbleMetadata data = getBubbleMetadataBuilder().build();
-        // Give it a person
-        Person person = new Person.Builder()
-                .setName("bubblebot")
-                .build();
-        // No category
-        Notification.Builder nb = new Notification.Builder(mContext,
-                mTestNotificationChannel.getId())
-                .addPerson(person)
-                .setContentTitle("foo")
-                .setBubbleMetadata(data)
-                .setSmallIcon(android.R.drawable.sym_def_app_icon);
-
-        StatusBarNotification sbn = new StatusBarNotification(PKG, PKG, 1,
-                "testFlagBubbleNotifs_noFlag_phonecall_noCategory", mUid, 0,
-                nb.build(), new UserHandle(mUid), null, 0);
-        // Make sure it has foreground service
-        sbn.getNotification().flags |= FLAG_FOREGROUND_SERVICE;
-        NotificationRecord nr = new NotificationRecord(mContext, sbn, mTestNotificationChannel);
-
-        mBinderService.enqueueNotificationWithTag(PKG, PKG, nr.getSbn().getTag(),
-                nr.getSbn().getId(), nr.getSbn().getNotification(), nr.getSbn().getUserId());
-        waitForIdle();
-
-        // yes person, yes foreground service, BUT NO call, no bubble
-        assertFalse(mService.getNotificationRecord(
-                sbn.getKey()).getNotification().isBubbleNotification());
-    }
-
-    @Test
     public void testFlagBubbleNotifs_noFlag_messaging_appNotAllowed() throws RemoteException {
         // Bubbles are NOT allowed!
         setUpPrefsForBubbles(PKG, mUid, true /* global */, false /* app */, true /* channel */);
@@ -5428,77 +5293,6 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
         // channel not allowed, no bubble
         assertFalse(mService.getNotificationRecord(
                 nr.getSbn().getKey()).getNotification().isBubbleNotification());
-    }
-
-    @Test
-    public void testFlagBubbleNotifs_noFlag_phonecall_notAllowed() throws RemoteException {
-        // Bubbles are not allowed!
-        setUpPrefsForBubbles(PKG, mUid, false /* global */, true /* app */, true /* channel */);
-
-        // Give it bubble metadata
-        Notification.BubbleMetadata data = getBubbleMetadataBuilder().build();
-        // Give it a person
-        Person person = new Person.Builder()
-                .setName("bubblebot")
-                .build();
-        // Make it a phone call
-        Notification.Builder nb = new Notification.Builder(mContext,
-                mTestNotificationChannel.getId())
-                .setCategory(CATEGORY_CALL)
-                .addPerson(person)
-                .setContentTitle("foo")
-                .setBubbleMetadata(data)
-                .setSmallIcon(android.R.drawable.sym_def_app_icon);
-
-        StatusBarNotification sbn = new StatusBarNotification(PKG, PKG, 1,
-                "testFlagBubbleNotifs_noFlag_phonecall_notAllowed", mUid, 0,
-                nb.build(), new UserHandle(mUid), null, 0);
-        // Make sure it has foreground service
-        sbn.getNotification().flags |= FLAG_FOREGROUND_SERVICE;
-
-        mBinderService.enqueueNotificationWithTag(PKG, PKG, sbn.getTag(),
-                sbn.getId(), sbn.getNotification(), sbn.getUserId());
-        waitForIdle();
-
-        // yes phone call, yes person, yes foreground service, but not allowed, no bubble
-        assertFalse(mService.getNotificationRecord(
-                sbn.getKey()).getNotification().isBubbleNotification());
-    }
-
-    @Test
-    public void testFlagBubbleNotifs_noFlag_phonecall_channelNotAllowed() throws RemoteException {
-        // Bubbles are allowed, but not on channel.
-        setUpPrefsForBubbles(PKG, mUid, true /* global */, true /* app */, false /* channel */);
-
-        // Give it bubble metadata
-        Notification.BubbleMetadata data = getBubbleMetadataBuilder().build();
-        // Give it a person
-        Person person = new Person.Builder()
-                .setName("bubblebot")
-                .build();
-        // Make it a phone call
-        Notification.Builder nb = new Notification.Builder(mContext,
-                mTestNotificationChannel.getId())
-                .setCategory(CATEGORY_CALL)
-                .addPerson(person)
-                .setContentTitle("foo")
-                .setBubbleMetadata(data)
-                .setSmallIcon(android.R.drawable.sym_def_app_icon);
-
-        StatusBarNotification sbn = new StatusBarNotification(PKG, PKG, 1,
-                "testFlagBubbleNotifs_noFlag_phonecall_channelNotAllowed", mUid, 0,
-                nb.build(), new UserHandle(mUid), null, 0);
-        // Make sure it has foreground service
-        sbn.getNotification().flags |= FLAG_FOREGROUND_SERVICE;
-        NotificationRecord nr = new NotificationRecord(mContext, sbn, mTestNotificationChannel);
-
-        mBinderService.enqueueNotificationWithTag(PKG, PKG, sbn.getTag(),
-                nr.getSbn().getId(), nr.getSbn().getNotification(), nr.getSbn().getUserId());
-        waitForIdle();
-
-        // yes phone call, yes person, yes foreground service, but channel not allowed, no bubble
-        assertFalse(mService.getNotificationRecord(
-                sbn.getKey()).getNotification().isBubbleNotification());
     }
 
     @Test
@@ -6173,7 +5967,7 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
 
         // Messaging notification with shortcut info
         Notification.BubbleMetadata metadata =
-                getBubbleMetadataBuilder().createShortcutBubble("someshortcutId").build();
+                new Notification.BubbleMetadata.Builder("someshortcutId").build();
         Notification.Builder nb = getMessageStyleNotifBuilder(false /* addDefaultMetadata */,
                 null /* groupKey */, false /* isSummary */);
         nb.setBubbleMetadata(metadata);
@@ -6230,8 +6024,8 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
                 ArgumentCaptor.forClass(LauncherApps.Callback.class);
 
         // Messaging notification with shortcut info
-        Notification.BubbleMetadata metadata =
-                getBubbleMetadataBuilder().createShortcutBubble("someshortcutId").build();
+        Notification.BubbleMetadata metadata = new Notification.BubbleMetadata.Builder(
+                "someshortcutId").build();
         Notification.Builder nb = getMessageStyleNotifBuilder(false /* addDefaultMetadata */,
                 null /* groupKey */, false /* isSummary */);
         nb.setBubbleMetadata(metadata);
@@ -6578,13 +6372,41 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
 
         ShortcutInfo si = mock(ShortcutInfo.class);
         when(si.getShortLabel()).thenReturn("Hello");
+        when(si.isLongLived()).thenReturn(true);
         when(mLauncherApps.getShortcuts(any(), any())).thenReturn(Arrays.asList(si));
 
         List<ConversationChannelWrapper> conversations =
                 mBinderService.getConversationsForPackage(PKG_P, mUid).getList();
         assertEquals(si, conversations.get(0).getShortcutInfo());
         assertEquals(si, conversations.get(1).getShortcutInfo());
+    }
 
+    @Test
+    public void testGetConversationsForPackage_shortcut_notLongLived() throws Exception {
+        mService.setPreferencesHelper(mPreferencesHelper);
+        ArrayList<ConversationChannelWrapper> convos = new ArrayList<>();
+        ConversationChannelWrapper convo1 = new ConversationChannelWrapper();
+        NotificationChannel channel1 = new NotificationChannel("a", "a", 1);
+        channel1.setConversationId("parent1", "convo 1");
+        convo1.setNotificationChannel(channel1);
+        convos.add(convo1);
+
+        ConversationChannelWrapper convo2 = new ConversationChannelWrapper();
+        NotificationChannel channel2 = new NotificationChannel("b", "b", 1);
+        channel2.setConversationId("parent1", "convo 2");
+        convo2.setNotificationChannel(channel2);
+        convos.add(convo2);
+        when(mPreferencesHelper.getConversations(anyString(), anyInt())).thenReturn(convos);
+
+        ShortcutInfo si = mock(ShortcutInfo.class);
+        when(si.getShortLabel()).thenReturn("Hello");
+        when(si.isLongLived()).thenReturn(false);
+        when(mLauncherApps.getShortcuts(any(), any())).thenReturn(Arrays.asList(si));
+
+        List<ConversationChannelWrapper> conversations =
+                mBinderService.getConversationsForPackage(PKG_P, mUid).getList();
+        assertNull(conversations.get(0).getShortcutInfo());
+        assertNull(conversations.get(1).getShortcutInfo());
     }
 
     @Test
