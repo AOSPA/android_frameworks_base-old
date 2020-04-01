@@ -3779,24 +3779,6 @@ public class WifiManager {
                 @SapClientBlockedReason int blockedReason) {
             // Do nothing: can be used to ask user to update client to allowed list or blocked list.
         }
-
-        /**
-         * Called when Stations connected to soft AP.
-         *
-         * @param Macaddr Mac Address of connected Stations to soft AP
-         * @param numClients number of connected clients
-         */
-        default void onStaConnected(@NonNull String Macaddr, int numClients) {
-        }
-
-        /**
-         * Called when Stations disconnected to soft AP.
-         *
-         * @param Macaddr Mac Address of Disconnected Stations to soft AP
-         * @param numClients number of connected clients
-         */
-        default void onStaDisconnected(@NonNull String Macaddr, int numClients) {
-        }
     }
 
     /**
@@ -3874,24 +3856,6 @@ public class WifiManager {
             Binder.clearCallingIdentity();
             mExecutor.execute(() -> {
                 mCallback.onBlockedClientConnecting(client, blockedReason);
-            });
-        }
-
-        @Override
-        public void onStaConnected(String Macaddr, int numClients) throws RemoteException {
-            Log.v(TAG, "SoftApCallbackProxy: [" + numClients + "]onStaConnected Macaddr =" + Macaddr);
-            Binder.clearCallingIdentity();
-            mExecutor.execute(() -> {
-                mCallback.onStaConnected(Macaddr, numClients);
-            });
-        }
-
-        @Override
-        public void onStaDisconnected(String Macaddr, int numClients) throws RemoteException {
-            Log.v(TAG, "SoftApCallbackProxy: [" + numClients + "]onStaDisconnected Macaddr =" + Macaddr);
-            Binder.clearCallingIdentity();
-            mExecutor.execute(() -> {
-                mCallback.onStaDisconnected(Macaddr, numClients);
             });
         }
     }

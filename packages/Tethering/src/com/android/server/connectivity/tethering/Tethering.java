@@ -433,16 +433,6 @@ public class Tethering {
             // Nothing
         }
 
-        @Override
-        public void onStaConnected(String Macaddr, int numConnectedDevices) {
-            // Nothing
-        }
-
-        @Override
-        public void onStaDisconnected(String Macaddr, int numConnectedDevices) {
-            // Nothing
-        }
-
         // Called by wifi when the number of soft AP clients changed.
         @Override
         public void onConnectedClientsChanged(final List<WifiClient> clients) {
