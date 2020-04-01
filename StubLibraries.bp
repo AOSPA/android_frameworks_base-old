@@ -61,11 +61,7 @@ stubs_defaults {
     merge_annotations_dirs: [
         "metalava-manual",
     ],
-    api_levels_annotations_enabled: true,
-    api_levels_annotations_dirs: [
-        "sdk-dir",
-        "api-versions-jars-dir",
-    ],
+    api_levels_annotations_enabled: false,
     filter_packages: packages_to_document,
 }
 
@@ -79,7 +75,11 @@ stubs_defaults {
 stubs_defaults {
     name: "metalava-non-updatable-api-stubs-default",
     defaults: ["metalava-base-api-stubs-default"],
-    sdk_version: "system_current",
+    sdk_version: "core_platform",
+    libs: ["framework-all"],
+    aidl: {
+        local_include_dirs: ["apex/media/framework/java"],
+    },
 }
 
 /////////////////////////////////////////////////////////////////////
@@ -195,6 +195,7 @@ droidstubs {
 droidstubs {
     name: "module-lib-api",
     defaults: ["metalava-full-api-stubs-default"],
+    api_tag_name: "MODULE_LIB",
     arg_files: ["core/res/AndroidManifest.xml"],
     args: metalava_framework_docs_args + module_libs,
     check_api: {

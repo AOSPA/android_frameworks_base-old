@@ -161,6 +161,7 @@ import android.content.pm.DataLoaderType;
 import android.content.pm.FallbackCategoryProvider;
 import android.content.pm.FeatureInfo;
 import android.content.pm.IDexModuleRegisterCallback;
+import android.content.pm.IPackageChangeObserver;
 import android.content.pm.IPackageDataObserver;
 import android.content.pm.IPackageDeleteObserver;
 import android.content.pm.IPackageDeleteObserver2;
@@ -178,6 +179,7 @@ import android.content.pm.InstrumentationInfo;
 import android.content.pm.IntentFilterVerificationInfo;
 import android.content.pm.KeySet;
 import android.content.pm.ModuleInfo;
+import android.content.pm.PackageChangeEvent;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageInfoLite;
 import android.content.pm.PackageInstaller;
@@ -812,6 +814,10 @@ public class PackageManagerService extends IPackageManager.Stub
     private final List<ScanPartition> mDirsToScanAsSystem;
 
     private final OverlayConfig mOverlayConfig;
+
+    @GuardedBy("itself")
+    final private ArrayList<IPackageChangeObserver> mPackageChangeObservers =
+        new ArrayList<>();
 
     /**
      * Unit tests will instantiate, extend and/or mock to mock dependencies / behaviors.
@@ -5095,15 +5101,16 @@ public class PackageManagerService extends IPackageManager.Stub
      * action and a {@code android.intent.category.BROWSABLE} category</li>
      * </ul>
      */
-    int updateFlagsForResolve(int flags, int userId, int callingUid, boolean wantInstantApps) {
+    int updateFlagsForResolve(int flags, int userId, int callingUid, boolean wantInstantApps,
+            boolean matchSystemOnly) {
         return updateFlagsForResolve(flags, userId, callingUid,
-                wantInstantApps, false /*onlyExposedExplicitly*/);
+                wantInstantApps, matchSystemOnly, false /*onlyExposedExplicitly*/);
     }
 
     int updateFlagsForResolve(int flags, int userId, int callingUid,
-            boolean wantInstantApps, boolean onlyExposedExplicitly) {
+            boolean wantInstantApps, boolean onlyExposedExplicitly, boolean matchSystemOnly) {
         // Safe mode means we shouldn't match any third-party components
-        if (mSafeMode) {
+        if (mSafeMode || matchSystemOnly) {
             flags |= PackageManager.MATCH_SYSTEM_ONLY;
         }
         if (getInstantAppPackageName(callingUid) != null) {
@@ -6195,7 +6202,8 @@ public class PackageManagerService extends IPackageManager.Stub
 
             if (!mUserManager.exists(userId)) return null;
             final int callingUid = Binder.getCallingUid();
-            flags = updateFlagsForResolve(flags, userId, filterCallingUid, resolveForStart);
+            flags = updateFlagsForResolve(flags, userId, filterCallingUid, resolveForStart,
+                    intent.isImplicitImageCaptureIntent() /*matchSystemOnly*/);
             mPermissionManager.enforceCrossUserPermission(callingUid, userId,
                     false /*requireFullPermission*/, false /*checkShell*/, "resolve intent");
 
@@ -6227,7 +6235,8 @@ public class PackageManagerService extends IPackageManager.Stub
         intent = updateIntentForResolve(intent);
         final String resolvedType = intent.resolveTypeIfNeeded(mContext.getContentResolver());
         final int flags = updateFlagsForResolve(
-                0, userId, callingUid, false /*includeInstantApps*/);
+                0, userId, callingUid, false /*includeInstantApps*/,
+                intent.isImplicitImageCaptureIntent() /*matchSystemOnly*/);
         final List<ResolveInfo> query = queryIntentActivitiesInternal(intent, resolvedType, flags,
                 userId);
         synchronized (mLock) {
@@ -6548,7 +6557,8 @@ public class PackageManagerService extends IPackageManager.Stub
                 android.provider.Settings.Global.getInt(mContext.getContentResolver(),
                         android.provider.Settings.Global.DEVICE_PROVISIONED, 0) == 1;
         flags = updateFlagsForResolve(
-                flags, userId, callingUid, false /*includeInstantApps*/);
+                flags, userId, callingUid, false /*includeInstantApps*/,
+                intent.isImplicitImageCaptureIntent() /*matchSystemOnly*/);
         intent = updateIntentForResolve(intent);
         // writer
         synchronized (mLock) {
@@ -6760,7 +6770,8 @@ public class PackageManagerService extends IPackageManager.Stub
             }
             synchronized (mLock) {
                 int flags = updateFlagsForResolve(0, parent.id, callingUid,
-                        false /*includeInstantApps*/);
+                        false /*includeInstantApps*/,
+                        intent.isImplicitImageCaptureIntent() /*matchSystemOnly*/);
                 CrossProfileDomainInfo xpDomainInfo = getCrossProfileDomainPreferredLpr(
                         intent, resolvedType, flags, sourceUserId, parent.id);
                 return xpDomainInfo != null;
@@ -6846,7 +6857,8 @@ public class PackageManagerService extends IPackageManager.Stub
         }
 
         flags = updateFlagsForResolve(flags, userId, filterCallingUid, resolveForStart,
-                comp != null || pkgName != null /*onlyExposedExplicitly*/);
+                comp != null || pkgName != null /*onlyExposedExplicitly*/,
+                intent.isImplicitImageCaptureIntent() /*matchSystemOnly*/);
         if (comp != null) {
             final List<ResolveInfo> list = new ArrayList<>(1);
             final ActivityInfo ai = getActivityInfo(comp, flags, userId);
@@ -7631,7 +7643,8 @@ public class PackageManagerService extends IPackageManager.Stub
             String resolvedType, int flags, int userId) {
         if (!mUserManager.exists(userId)) return Collections.emptyList();
         final int callingUid = Binder.getCallingUid();
-        flags = updateFlagsForResolve(flags, userId, callingUid, false /*includeInstantApps*/);
+        flags = updateFlagsForResolve(flags, userId, callingUid, false /*includeInstantApps*/,
+                intent.isImplicitImageCaptureIntent() /*matchSystemOnly*/);
         mPermissionManager.enforceCrossUserPermission(callingUid, userId,
                 false /*requireFullPermission*/, false /*checkShell*/,
                 "query intent activity options");
@@ -7817,7 +7830,8 @@ public class PackageManagerService extends IPackageManager.Stub
                 false /*requireFullPermission*/, false /*checkShell*/,
                 "query intent receivers");
         final String instantAppPkgName = getInstantAppPackageName(callingUid);
-        flags = updateFlagsForResolve(flags, userId, callingUid, false /*includeInstantApps*/);
+        flags = updateFlagsForResolve(flags, userId, callingUid, false /*includeInstantApps*/,
+                intent.isImplicitImageCaptureIntent() /*matchSystemOnly*/);
         ComponentName comp = intent.getComponent();
         if (comp == null) {
             if (intent.getSelector() != null) {
@@ -7907,7 +7921,8 @@ public class PackageManagerService extends IPackageManager.Stub
     private ResolveInfo resolveServiceInternal(Intent intent, String resolvedType, int flags,
             int userId, int callingUid) {
         if (!mUserManager.exists(userId)) return null;
-        flags = updateFlagsForResolve(flags, userId, callingUid, false /*includeInstantApps*/);
+        flags = updateFlagsForResolve(flags, userId, callingUid, false /*includeInstantApps*/,
+                false /* matchSystemOnly */);
         List<ResolveInfo> query = queryIntentServicesInternal(
                 intent, resolvedType, flags, userId, callingUid, false /*includeInstantApps*/);
         if (query != null) {
@@ -7938,7 +7953,8 @@ public class PackageManagerService extends IPackageManager.Stub
                 false /*checkShell*/,
                 "query intent receivers");
         final String instantAppPkgName = getInstantAppPackageName(callingUid);
-        flags = updateFlagsForResolve(flags, userId, callingUid, includeInstantApps);
+        flags = updateFlagsForResolve(flags, userId, callingUid, includeInstantApps,
+                false /* matchSystemOnly */);
         ComponentName comp = intent.getComponent();
         if (comp == null) {
             if (intent.getSelector() != null) {
@@ -8075,7 +8091,8 @@ public class PackageManagerService extends IPackageManager.Stub
         if (!mUserManager.exists(userId)) return Collections.emptyList();
         final int callingUid = Binder.getCallingUid();
         final String instantAppPkgName = getInstantAppPackageName(callingUid);
-        flags = updateFlagsForResolve(flags, userId, callingUid, false /*includeInstantApps*/);
+        flags = updateFlagsForResolve(flags, userId, callingUid, false /*includeInstantApps*/,
+                false /* matchSystemOnly */);
         ComponentName comp = intent.getComponent();
         if (comp == null) {
             if (intent.getSelector() != null) {
@@ -16522,7 +16539,54 @@ public class PackageManagerService extends IPackageManager.Stub
             // BackgroundDexOptService will remove it from its blacklist.
             // TODO: Layering violation
             BackgroundDexOptService.notifyPackageChanged(packageName);
+
+            notifyPackageChangeObserversOnUpdate(reconciledPkg);
         }
+    }
+
+    private void notifyPackageChangeObserversOnUpdate(ReconciledPackage reconciledPkg) {
+      final PackageSetting pkgSetting = reconciledPkg.pkgSetting;
+      final PackageInstalledInfo pkgInstalledInfo = reconciledPkg.installResult;
+      final PackageRemovedInfo pkgRemovedInfo = pkgInstalledInfo.removedInfo;
+
+      PackageChangeEvent pkgChangeEvent = new PackageChangeEvent();
+      pkgChangeEvent.packageName = pkgSetting.pkg.getPackageName();
+      pkgChangeEvent.version = pkgSetting.versionCode;
+      pkgChangeEvent.lastUpdateTimeMillis = pkgSetting.lastUpdateTime;
+      pkgChangeEvent.newInstalled = (pkgRemovedInfo == null || !pkgRemovedInfo.isUpdate);
+      pkgChangeEvent.dataRemoved = (pkgRemovedInfo != null && pkgRemovedInfo.dataRemoved);
+      pkgChangeEvent.isDeleted = false;
+
+      notifyPackageChangeObservers(pkgChangeEvent);
+    }
+
+    private void notifyPackageChangeObserversOnDelete(String packageName, long version) {
+      PackageChangeEvent pkgChangeEvent = new PackageChangeEvent();
+      pkgChangeEvent.packageName = packageName;
+      pkgChangeEvent.version = version;
+      pkgChangeEvent.lastUpdateTimeMillis = 0L;
+      pkgChangeEvent.newInstalled = false;
+      pkgChangeEvent.dataRemoved = false;
+      pkgChangeEvent.isDeleted = true;
+
+      notifyPackageChangeObservers(pkgChangeEvent);
+    }
+
+    private void notifyPackageChangeObservers(PackageChangeEvent event) {
+      try {
+        Trace.traceBegin(TRACE_TAG_PACKAGE_MANAGER, "notifyPackageChangeObservers");
+        synchronized (mPackageChangeObservers) {
+          for(IPackageChangeObserver observer : mPackageChangeObservers) {
+            try {
+              observer.onPackageChanged(event);
+            } catch(RemoteException e) {
+              Log.wtf(TAG, e);
+            }
+          }
+        }
+      } finally {
+        Trace.traceEnd(TRACE_TAG_PACKAGE_MANAGER);
+      }
     }
 
     /**
@@ -17590,6 +17654,7 @@ public class PackageManagerService extends IPackageManager.Stub
             } catch (RemoteException e) {
                 Log.i(TAG, "Observer no longer exists.");
             } //end catch
+            notifyPackageChangeObserversOnDelete(packageName, versionCode);
         });
     }
 
@@ -23062,7 +23127,48 @@ public class PackageManagerService extends IPackageManager.Stub
         }
     }
 
+    private final class PackageChangeObserverDeathRecipient implements IBinder.DeathRecipient {
+        private final IPackageChangeObserver mObserver;
+
+        PackageChangeObserverDeathRecipient(IPackageChangeObserver observer) {
+            mObserver = observer;
+        }
+
+        @Override
+        public void binderDied() {
+            synchronized (mPackageChangeObservers) {
+                mPackageChangeObservers.remove(mObserver);
+                Log.d(TAG, "Size of mPackageChangeObservers after removing dead observer is "
+                    + mPackageChangeObservers.size());
+            }
+        }
+    }
+
     private class PackageManagerNative extends IPackageManagerNative.Stub {
+        @Override
+        public void registerPackageChangeObserver(@NonNull IPackageChangeObserver observer) {
+          synchronized (mPackageChangeObservers) {
+            try {
+                observer.asBinder().linkToDeath(
+                    new PackageChangeObserverDeathRecipient(observer), 0);
+            } catch (RemoteException e) {
+              Log.e(TAG, e.getMessage());
+            }
+            mPackageChangeObservers.add(observer);
+            Log.d(TAG, "Size of mPackageChangeObservers after registry is "
+                + mPackageChangeObservers.size());
+          }
+        }
+
+        @Override
+        public void unregisterPackageChangeObserver(@NonNull IPackageChangeObserver observer) {
+          synchronized (mPackageChangeObservers) {
+            mPackageChangeObservers.remove(observer);
+            Log.d(TAG, "Size of mPackageChangeObservers after unregistry is "
+                + mPackageChangeObservers.size());
+          }
+        }
+
         @Override
         public String[] getAllPackages() {
             return PackageManagerService.this.getAllPackages().toArray(new String[0]);
@@ -24463,7 +24569,8 @@ public class PackageManagerService extends IPackageManager.Stub
         } else {
             synchronized (mLock) {
                 boolean manifestWhitelisted =
-                        mPackages.get(packageName).isAllowDontAutoRevokePermmissions();
+                        mPackages.get(packageName).getAutoRevokePermissions()
+                                == ApplicationInfo.AUTO_REVOKE_DISALLOWED;
                 return manifestWhitelisted;
             }
         }
@@ -24735,15 +24842,6 @@ public class PackageManagerService extends IPackageManager.Stub
     public void setMimeGroup(String packageName, String mimeGroup, List<String> mimeTypes) {
         boolean changed = mSettings.mPackages.get(packageName)
                 .setMimeGroup(mimeGroup, mimeTypes);
-
-        if (changed) {
-            applyMimeGroupChanges(packageName, mimeGroup);
-        }
-    }
-
-    @Override
-    public void clearMimeGroup(String packageName, String mimeGroup) {
-        boolean changed = mSettings.mPackages.get(packageName).clearMimeGroup(mimeGroup);
 
         if (changed) {
             applyMimeGroupChanges(packageName, mimeGroup);

@@ -22,11 +22,10 @@ import static android.app.WindowConfiguration.WINDOWING_MODE_FREEFORM;
 import static android.app.WindowConfiguration.WINDOWING_MODE_SPLIT_SCREEN_PRIMARY;
 import static android.view.InsetsController.ANIMATION_TYPE_HIDE;
 import static android.view.InsetsController.ANIMATION_TYPE_SHOW;
-import static android.view.InsetsController.LAYOUT_INSETS_DURING_ANIMATION_HIDDEN;
-import static android.view.InsetsController.LAYOUT_INSETS_DURING_ANIMATION_SHOWN;
 import static android.view.InsetsState.ITYPE_NAVIGATION_BAR;
 import static android.view.InsetsState.ITYPE_STATUS_BAR;
 import static android.view.SyncRtSurfaceTransactionApplier.applyParams;
+import static android.view.WindowInsetsController.BEHAVIOR_SHOW_BARS_BY_TOUCH;
 import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_FORCE_SHOW_STATUS_BAR;
 import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_STATUS_FORCE_SHOW_NAVIGATION;
 
@@ -93,6 +92,13 @@ class InsetsPolicy {
                 || focusedWin != getNavControlTarget(focusedWin)
                 || focusedWin.getRequestedInsetsState().getSource(ITYPE_NAVIGATION_BAR)
                         .isVisible());
+        updateHideNavInputEventReceiver();
+    }
+
+    private void updateHideNavInputEventReceiver() {
+        mPolicy.updateHideNavInputEventReceiver(!isHidden(ITYPE_NAVIGATION_BAR),
+                mFocusedWin != null
+                        && mFocusedWin.mAttrs.insetsFlags.behavior != BEHAVIOR_SHOW_BARS_BY_TOUCH);
     }
 
     boolean isHidden(@InternalInsetsType int type) {
@@ -171,6 +177,7 @@ class InsetsPolicy {
         if (windowState == getNavControlTarget(mFocusedWin)) {
             mNavBar.setVisible(state.getSource(ITYPE_NAVIGATION_BAR).isVisible());
         }
+        updateHideNavInputEventReceiver();
     }
 
     /**
@@ -299,7 +306,7 @@ class InsetsPolicy {
     private void controlAnimationUnchecked(int typesReady,
             SparseArray<InsetsSourceControl> controls, boolean show, Runnable callback) {
         InsetsPolicyAnimationControlListener listener =
-                new InsetsPolicyAnimationControlListener(show, callback);
+                new InsetsPolicyAnimationControlListener(show, callback, typesReady);
         listener.mControlCallbacks.controlAnimationUnchecked(typesReady, controls, show);
     }
 
@@ -328,8 +335,8 @@ class InsetsPolicy {
         Runnable mFinishCallback;
         InsetsPolicyAnimationControlCallbacks mControlCallbacks;
 
-        InsetsPolicyAnimationControlListener(boolean show, Runnable finishCallback) {
-            super(show, true /* useSfVsync */);
+        InsetsPolicyAnimationControlListener(boolean show, Runnable finishCallback, int types) {
+            super(show, false /* hasCallbacks */, types);
             mFinishCallback = finishCallback;
             mControlCallbacks = new InsetsPolicyAnimationControlCallbacks(this);
         }
@@ -361,7 +368,7 @@ class InsetsPolicy {
                 mAnimationControl = new InsetsAnimationControlImpl(controls,
                         mFocusedWin.getDisplayContent().getBounds(), getState(),
                         mListener, typesReady, this, mListener.getDurationMs(),
-                        InsetsController.INTERPOLATOR, true,
+                        InsetsController.SYSTEM_BARS_INTERPOLATOR,
                         show ? ANIMATION_TYPE_SHOW : ANIMATION_TYPE_HIDE);
                 SurfaceAnimationThread.getHandler().post(
                         () -> mListener.onReady(mAnimationControl, typesReady));

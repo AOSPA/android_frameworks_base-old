@@ -4627,6 +4627,9 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
             } catch (Exception e) {
                 Slog.w(TAG, "Exception thrown sending start: " + intent.getComponent(), e);
             }
+            // The activity may be waiting for stop, but that is no longer appropriate if we are
+            // starting the activity again
+            mStackSupervisor.mStoppingActivities.remove(this);
         }
         return false;
     }
@@ -4676,7 +4679,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
      * and {@link #shouldPauseActivity(ActivityRecord)}.
      */
     private boolean shouldStartActivity() {
-        return mVisibleRequested && isState(STOPPED);
+        return mVisibleRequested && (isState(STOPPED) || isState(STOPPING));
     }
 
     /**
@@ -7704,12 +7707,6 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
             return;
         }
         win.getAnimationFrames(outFrame, outInsets, outStableInsets, outSurfaceInsets);
-        if (isFixedRotationTransforming()) {
-            // This activity has been rotated but the display is still in old rotation. Because the
-            // animation applies in display space coordinates, the rotated animation frames need to
-            // be unrotated to avoid being cropped.
-            unrotateAnimationFrames(outFrame, outInsets, outStableInsets, outSurfaceInsets);
-        }
     }
 
     void setPictureInPictureParams(PictureInPictureParams p) {

@@ -169,6 +169,11 @@ public abstract class ActivityTaskManagerInternal {
     public abstract List<IBinder> getTopVisibleActivities();
 
     /**
+     * Returns whether {@code uid} has any resumed activity.
+     */
+    public abstract boolean hasResumedActivity(int uid);
+
+    /**
      * Notify listeners that contents are drawn for the first time on a single task display.
      *
      * @param displayId An ID of the display on which contents are drawn.
@@ -543,8 +548,11 @@ public abstract class ActivityTaskManagerInternal {
 
     /**
      * Gets bitmap snapshot of the provided task id.
+     *
+     * <p>Warning! this may restore the snapshot from disk so can block, don't call in a latency
+     * sensitive environment.
      */
-    public abstract ActivityManager.TaskSnapshot getTaskSnapshotNoRestore(int taskId,
+    public abstract ActivityManager.TaskSnapshot getTaskSnapshotBlocking(int taskId,
             boolean isLowResolution);
 
     /** Returns true if uid is considered foreground for activity start purposes. */

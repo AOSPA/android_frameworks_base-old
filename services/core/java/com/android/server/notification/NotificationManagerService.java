@@ -27,6 +27,8 @@ import static android.app.Notification.FLAG_ONLY_ALERT_ONCE;
 import static android.app.NotificationChannel.CONVERSATION_CHANNEL_ID_FORMAT;
 import static android.app.NotificationManager.ACTION_APP_BLOCK_STATE_CHANGED;
 import static android.app.NotificationManager.ACTION_AUTOMATIC_ZEN_RULE_STATUS_CHANGED;
+import static android.app.NotificationManager.ACTION_INTERRUPTION_FILTER_CHANGED;
+import static android.app.NotificationManager.ACTION_INTERRUPTION_FILTER_CHANGED_INTERNAL;
 import static android.app.NotificationManager.ACTION_NOTIFICATION_CHANNEL_BLOCK_STATE_CHANGED;
 import static android.app.NotificationManager.ACTION_NOTIFICATION_CHANNEL_GROUP_BLOCK_STATE_CHANGED;
 import static android.app.NotificationManager.ACTION_NOTIFICATION_POLICY_ACCESS_GRANTED_CHANGED;
@@ -137,6 +139,7 @@ import android.app.usage.UsageEvents;
 import android.app.usage.UsageStatsManagerInternal;
 import android.companion.ICompanionDeviceManager;
 import android.compat.annotation.ChangeId;
+import android.compat.annotation.EnabledAfter;
 import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.ContentProvider;
@@ -261,6 +264,7 @@ import com.android.server.pm.PackageManagerService;
 import com.android.server.policy.PhoneWindowManager;
 import com.android.server.statusbar.StatusBarManagerInternal;
 import com.android.server.uri.UriGrantsManagerInternal;
+import com.android.server.wm.ActivityTaskManagerInternal;
 import com.android.server.wm.WindowManagerInternal;
 
 import libcore.io.IoUtils;
@@ -384,13 +388,13 @@ public class NotificationManagerService extends SystemService {
      * still post toasts created with
      * {@link android.widget.Toast#makeText(Context, CharSequence, int)} and its variants while
      * in the background.
-     *
-     * TODO(b/144152069): Add @EnabledAfter(Q) to target R+ after assessing impact on dogfood
      */
     @ChangeId
+    @EnabledAfter(targetSdkVersion = Build.VERSION_CODES.Q)
     private static final long CHANGE_BACKGROUND_CUSTOM_TOAST_BLOCK = 128611929L;
 
     private IActivityManager mAm;
+    private ActivityTaskManagerInternal mAtm;
     private ActivityManager mActivityManager;
     private IPackageManager mPackageManager;
     private PackageManager mPackageManagerClient;
@@ -1858,10 +1862,10 @@ public class NotificationManagerService extends SystemService {
             ICompanionDeviceManager companionManager, SnoozeHelper snoozeHelper,
             NotificationUsageStats usageStats, AtomicFile policyFile,
             ActivityManager activityManager, GroupHelper groupHelper, IActivityManager am,
-            UsageStatsManagerInternal appUsageStats, DevicePolicyManagerInternal dpm,
-            IUriGrantsManager ugm, UriGrantsManagerInternal ugmInternal, AppOpsManager appOps,
-            UserManager userManager, NotificationHistoryManager historyManager,
-            StatsManager statsManager) {
+            ActivityTaskManagerInternal atm, UsageStatsManagerInternal appUsageStats,
+            DevicePolicyManagerInternal dpm, IUriGrantsManager ugm,
+            UriGrantsManagerInternal ugmInternal, AppOpsManager appOps, UserManager userManager,
+            NotificationHistoryManager historyManager, StatsManager statsManager) {
         mHandler = handler;
         Resources resources = getContext().getResources();
         mMaxPackageEnqueueRate = Settings.Global.getFloat(getContext().getContentResolver(),
@@ -1871,6 +1875,7 @@ public class NotificationManagerService extends SystemService {
         mAccessibilityManager =
                 (AccessibilityManager) getContext().getSystemService(Context.ACCESSIBILITY_SERVICE);
         mAm = am;
+        mAtm = atm;
         mUgm = ugm;
         mUgmInternal = ugmInternal;
         mPackageManager = packageManager;
@@ -1908,30 +1913,37 @@ public class NotificationManagerService extends SystemService {
 
             @Override
             void onZenModeChanged() {
-                sendRegisteredOnlyBroadcast(NotificationManager.ACTION_INTERRUPTION_FILTER_CHANGED);
-                getContext().sendBroadcastAsUser(
-                        new Intent(NotificationManager.ACTION_INTERRUPTION_FILTER_CHANGED_INTERNAL)
-                                .addFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY_BEFORE_BOOT),
-                        UserHandle.ALL, android.Manifest.permission.MANAGE_NOTIFICATIONS);
-                synchronized (mNotificationLock) {
-                    updateInterruptionFilterLocked();
-                }
-                mRankingHandler.requestSort();
+                Binder.withCleanCallingIdentity(() -> {
+                    sendRegisteredOnlyBroadcast(ACTION_INTERRUPTION_FILTER_CHANGED);
+                    getContext().sendBroadcastAsUser(
+                            new Intent(ACTION_INTERRUPTION_FILTER_CHANGED_INTERNAL)
+                                    .addFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY_BEFORE_BOOT),
+                            UserHandle.ALL, permission.MANAGE_NOTIFICATIONS);
+                    synchronized (mNotificationLock) {
+                        updateInterruptionFilterLocked();
+                    }
+                    mRankingHandler.requestSort();
+                });
             }
 
             @Override
             void onPolicyChanged() {
-                sendRegisteredOnlyBroadcast(NotificationManager.ACTION_NOTIFICATION_POLICY_CHANGED);
-                mRankingHandler.requestSort();
+                Binder.withCleanCallingIdentity(() -> {
+                    sendRegisteredOnlyBroadcast(
+                            NotificationManager.ACTION_NOTIFICATION_POLICY_CHANGED);
+                    mRankingHandler.requestSort();
+                });
             }
 
             @Override
             void onAutomaticRuleStatusChanged(int userId, String pkg, String id, int status) {
-                Intent intent = new Intent(ACTION_AUTOMATIC_ZEN_RULE_STATUS_CHANGED);
-                intent.setPackage(pkg);
-                intent.putExtra(EXTRA_AUTOMATIC_ZEN_RULE_ID, id);
-                intent.putExtra(EXTRA_AUTOMATIC_ZEN_RULE_STATUS, status);
-                getContext().sendBroadcastAsUser(intent, UserHandle.of(userId));
+                Binder.withCleanCallingIdentity(() -> {
+                    Intent intent = new Intent(ACTION_AUTOMATIC_ZEN_RULE_STATUS_CHANGED);
+                    intent.setPackage(pkg);
+                    intent.putExtra(EXTRA_AUTOMATIC_ZEN_RULE_ID, id);
+                    intent.putExtra(EXTRA_AUTOMATIC_ZEN_RULE_STATUS, status);
+                    getContext().sendBroadcastAsUser(intent, UserHandle.of(userId));
+                });
             }
         });
         mPreferencesHelper = new PreferencesHelper(getContext(),
@@ -2057,6 +2069,7 @@ public class NotificationManagerService extends SystemService {
                         systemDir, "notification_policy.xml"), "notification-policy"),
                 (ActivityManager) getContext().getSystemService(Context.ACTIVITY_SERVICE),
                 getGroupHelper(), ActivityManager.getService(),
+                LocalServices.getService(ActivityTaskManagerInternal.class),
                 LocalServices.getService(UsageStatsManagerInternal.class),
                 LocalServices.getService(DevicePolicyManagerInternal.class),
                 UriGrantsManager.getService(),
@@ -2738,24 +2751,18 @@ public class NotificationManagerService extends SystemService {
         @Override
         public void enqueueTextToast(String pkg, IBinder token, CharSequence text, int duration,
                 int displayId, @Nullable ITransientNotificationCallback callback) {
-            enqueueToast(pkg, token, text, null, duration, displayId, callback, false);
+            enqueueToast(pkg, token, text, null, duration, displayId, callback);
         }
 
         @Override
         public void enqueueToast(String pkg, IBinder token, ITransientNotification callback,
                 int duration, int displayId) {
-            enqueueToast(pkg, token, null, callback, duration, displayId, null, true);
-        }
-
-        @Override
-        public void enqueueTextOrCustomToast(String pkg, IBinder token,
-                ITransientNotification callback, int duration, int displayId, boolean isCustom) {
-            enqueueToast(pkg, token, null, callback, duration, displayId, null, isCustom);
+            enqueueToast(pkg, token, null, callback, duration, displayId, null);
         }
 
         private void enqueueToast(String pkg, IBinder token, @Nullable CharSequence text,
                 @Nullable ITransientNotification callback, int duration, int displayId,
-                @Nullable ITransientNotificationCallback textCallback, boolean isCustom) {
+                @Nullable ITransientNotificationCallback textCallback) {
             if (DBG) {
                 Slog.i(TAG, "enqueueToast pkg=" + pkg + " token=" + token
                         + " duration=" + duration + " displayId=" + displayId);
@@ -2793,10 +2800,16 @@ public class NotificationManagerService extends SystemService {
                 return;
             }
 
-            if (callback != null && !appIsForeground && !isSystemToast && isCustom) {
+            boolean isAppRenderedToast = (callback != null);
+            if (isAppRenderedToast && !isSystemToast && !isPackageInForegroundForToast(pkg,
+                    callingUid)) {
                 boolean block;
                 long id = Binder.clearCallingIdentity();
                 try {
+                    // CHANGE_BACKGROUND_CUSTOM_TOAST_BLOCK is gated on targetSdk, so block will be
+                    // false for apps with targetSdk < R. For apps with targetSdk R+, text toasts
+                    // are not app-rendered, so isAppRenderedToast == true means it's a custom
+                    // toast.
                     block = mPlatformCompat.isChangeEnabledByPackageName(
                             CHANGE_BACKGROUND_CUSTOM_TOAST_BLOCK, pkg,
                             callingUser.getIdentifier());
@@ -2809,11 +2822,6 @@ public class NotificationManagerService extends SystemService {
                     Binder.restoreCallingIdentity(id);
                 }
                 if (block) {
-                    // TODO(b/144152069): Remove informative toast
-                    mUiHandler.post(() -> Toast.makeText(getContext(),
-                            "Background custom toast blocked for package " + pkg + ".\n"
-                                    + "See g.co/dev/toast.",
-                            Toast.LENGTH_SHORT).show());
                     Slog.w(TAG, "Blocking custom toast from package " + pkg
                             + " due to package not in the foreground");
                     return;
@@ -2869,6 +2877,28 @@ public class NotificationManagerService extends SystemService {
                     Binder.restoreCallingIdentity(callingId);
                 }
             }
+        }
+
+        /**
+         * Implementation note: Our definition of foreground for toasts is an implementation matter
+         * and should strike a balance between functionality and anti-abuse effectiveness. We
+         * currently worry about the following cases:
+         * <ol>
+         *     <li>App with fullscreen activity: Allow toasts
+         *     <li>App behind translucent activity from other app: Block toasts
+         *     <li>App in multi-window: Allow toasts
+         *     <li>App with expanded bubble: Allow toasts
+         *     <li>App posting toasts on onCreate(), onStart(), onResume(): Allow toasts
+         *     <li>App posting toasts on onPause(), onStop(), onDestroy(): Block toasts
+         * </ol>
+         * Checking if the UID has any resumed activities satisfy use-cases above.
+         *
+         * <p>Checking if {@code mActivityManager.getUidImportance(callingUid) ==
+         * IMPORTANCE_FOREGROUND} does not work because it considers the app in foreground if it has
+         * any visible activities, failing case 2 in list above.
+         */
+        private boolean isPackageInForegroundForToast(String pkg, int callingUid) {
+            return mAtm.hasResumedActivity(callingUid);
         }
 
         @Override
@@ -3416,7 +3446,7 @@ public class NotificationManagerService extends SystemService {
             ArrayList<ConversationChannelWrapper> conversations =
                     mPreferencesHelper.getConversations(onlyImportant);
             for (ConversationChannelWrapper conversation : conversations) {
-                conversation.setShortcutInfo(mShortcutHelper.getShortcutInfo(
+                conversation.setShortcutInfo(mShortcutHelper.getValidShortcutInfo(
                         conversation.getNotificationChannel().getConversationId(),
                         conversation.getPkg(),
                         UserHandle.of(UserHandle.getUserId(conversation.getUid()))));
@@ -3439,7 +3469,7 @@ public class NotificationManagerService extends SystemService {
             ArrayList<ConversationChannelWrapper> conversations =
                     mPreferencesHelper.getConversations(pkg, uid);
             for (ConversationChannelWrapper conversation : conversations) {
-                conversation.setShortcutInfo(mShortcutHelper.getShortcutInfo(
+                conversation.setShortcutInfo(mShortcutHelper.getValidShortcutInfo(
                         conversation.getNotificationChannel().getConversationId(),
                         pkg,
                         UserHandle.of(UserHandle.getUserId(uid))));
@@ -3601,13 +3631,23 @@ public class NotificationManagerService extends SystemService {
         }
 
         /**
+         * @deprecated Use {@link #getActiveNotificationsWithAttribution(String, String)} instead.
+         */
+        @Deprecated
+        @Override
+        public StatusBarNotification[] getActiveNotifications(String callingPkg) {
+            return getActiveNotificationsWithAttribution(callingPkg, null);
+        }
+
+        /**
          * System-only API for getting a list of current (i.e. not cleared) notifications.
          *
          * Requires ACCESS_NOTIFICATIONS which is signature|system.
          * @returns A list of all the notifications, in natural order.
          */
         @Override
-        public StatusBarNotification[] getActiveNotifications(String callingPkg) {
+        public StatusBarNotification[] getActiveNotificationsWithAttribution(String callingPkg,
+                String callingAttributionTag) {
             // enforce() will ensure the calling uid has the correct permission
             getContext().enforceCallingOrSelfPermission(
                     android.Manifest.permission.ACCESS_NOTIFICATIONS,
@@ -3617,7 +3657,8 @@ public class NotificationManagerService extends SystemService {
             int uid = Binder.getCallingUid();
 
             // noteOp will check to make sure the callingPkg matches the uid
-            if (mAppOps.noteOpNoThrow(AppOpsManager.OP_ACCESS_NOTIFICATIONS, uid, callingPkg)
+            if (mAppOps.noteOpNoThrow(AppOpsManager.OP_ACCESS_NOTIFICATIONS, uid, callingPkg,
+                    callingAttributionTag, null)
                     == AppOpsManager.MODE_ALLOWED) {
                 synchronized (mNotificationLock) {
                     tmp = new StatusBarNotification[mNotificationList.size()];
@@ -3699,12 +3740,24 @@ public class NotificationManagerService extends SystemService {
         }
 
         /**
-         * System-only API for getting a list of recent (cleared, no longer shown) notifications.
+         * @deprecated Use {@link #getHistoricalNotificationsWithAttribution} instead.
          */
+        @Deprecated
         @Override
         @RequiresPermission(android.Manifest.permission.ACCESS_NOTIFICATIONS)
         public StatusBarNotification[] getHistoricalNotifications(String callingPkg, int count,
                 boolean includeSnoozed) {
+            return getHistoricalNotificationsWithAttribution(callingPkg, null, count,
+                    includeSnoozed);
+        }
+
+        /**
+         * System-only API for getting a list of recent (cleared, no longer shown) notifications.
+         */
+        @Override
+        @RequiresPermission(android.Manifest.permission.ACCESS_NOTIFICATIONS)
+        public StatusBarNotification[] getHistoricalNotificationsWithAttribution(String callingPkg,
+                String callingAttributionTag, int count, boolean includeSnoozed) {
             // enforce() will ensure the calling uid has the correct permission
             getContext().enforceCallingOrSelfPermission(
                     android.Manifest.permission.ACCESS_NOTIFICATIONS,
@@ -3714,7 +3767,8 @@ public class NotificationManagerService extends SystemService {
             int uid = Binder.getCallingUid();
 
             // noteOp will check to make sure the callingPkg matches the uid
-            if (mAppOps.noteOpNoThrow(AppOpsManager.OP_ACCESS_NOTIFICATIONS, uid, callingPkg)
+            if (mAppOps.noteOpNoThrow(AppOpsManager.OP_ACCESS_NOTIFICATIONS, uid, callingPkg,
+                    callingAttributionTag, null)
                     == AppOpsManager.MODE_ALLOWED) {
                 synchronized (mArchive) {
                     tmp = mArchive.getArray(count, includeSnoozed);
@@ -3730,7 +3784,8 @@ public class NotificationManagerService extends SystemService {
         @Override
         @WorkerThread
         @RequiresPermission(android.Manifest.permission.ACCESS_NOTIFICATIONS)
-        public NotificationHistory getNotificationHistory(String callingPkg) {
+        public NotificationHistory getNotificationHistory(String callingPkg,
+                String callingAttributionTag) {
             // enforce() will ensure the calling uid has the correct permission
             getContext().enforceCallingOrSelfPermission(
                     android.Manifest.permission.ACCESS_NOTIFICATIONS,
@@ -3738,7 +3793,8 @@ public class NotificationManagerService extends SystemService {
             int uid = Binder.getCallingUid();
 
             // noteOp will check to make sure the callingPkg matches the uid
-            if (mAppOps.noteOpNoThrow(AppOpsManager.OP_ACCESS_NOTIFICATIONS, uid, callingPkg)
+            if (mAppOps.noteOpNoThrow(AppOpsManager.OP_ACCESS_NOTIFICATIONS, uid, callingPkg,
+                    callingAttributionTag, null)
                     == AppOpsManager.MODE_ALLOWED) {
                 IntArray currentUserIds = mUserProfiles.getCurrentProfileIds();
                 Trace.traceBegin(Trace.TRACE_TAG_SYSTEM_SERVER, "notifHistoryReadHistory");
@@ -5610,7 +5666,8 @@ public class NotificationManagerService extends SystemService {
             }
         }
 
-        r.setShortcutInfo(mShortcutHelper.getShortcutInfo(notification.getShortcutId(), pkg, user));
+        r.setShortcutInfo(mShortcutHelper.getValidShortcutInfo(
+                notification.getShortcutId(), pkg, user));
 
         if (!checkDisqualifyingFeatures(userId, notificationUid, id, tag, r,
                 r.getSbn().getOverrideGroupKey() != null)) {

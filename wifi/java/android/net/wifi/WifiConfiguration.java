@@ -2437,6 +2437,8 @@ public class WifiConfiguration implements Parcelable {
         sbuf.append(" lcuid=" + lastConnectUid);
         sbuf.append(" allowAutojoin=" + allowAutojoin);
         sbuf.append(" noInternetAccessExpected=" + noInternetAccessExpected);
+        sbuf.append(" mostRecentlyConnected=" + isMostRecentlyConnected);
+
         sbuf.append(" ");
 
         if (this.lastConnected != 0) {
@@ -3067,5 +3069,12 @@ public class WifiConfiguration implements Parcelable {
     public String getPasspointUniqueId() {
         return mPasspointUniqueId;
     }
+
+    /**
+     * If network is one of the most recently connected.
+     * For framework internal use only. Do not parcel.
+     * @hide
+     */
+    public boolean isMostRecentlyConnected = false;
 
 }
