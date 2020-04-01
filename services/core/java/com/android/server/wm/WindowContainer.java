@@ -68,7 +68,7 @@ import android.util.Pools;
 import android.util.Slog;
 import android.util.proto.ProtoOutputStream;
 import android.view.DisplayInfo;
-import android.view.IWindowContainer;
+import android.window.IWindowContainer;
 import android.view.MagnificationSpec;
 import android.view.RemoteAnimationDefinition;
 import android.view.RemoteAnimationTarget;
@@ -378,10 +378,7 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         if (mSurfaceControl == null) {
             // If we don't yet have a surface, but we now have a parent, we should
             // build a surface.
-            setSurfaceControl(makeSurface().build());
-            getPendingTransaction().show(mSurfaceControl);
-            onSurfaceShown(getPendingTransaction());
-            updateSurfacePosition();
+            createSurfaceControl(false /*force*/);
         } else {
             // If we have a surface but a new parent, we just need to perform a reparent. Go through
             // surface animator such that hierarchy is preserved when animating, i.e.
@@ -397,6 +394,13 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         // Either way we need to ask the parent to assign us a Z-order.
         mParent.assignChildLayers();
         scheduleAnimation();
+    }
+
+    void createSurfaceControl(boolean force) {
+        setSurfaceControl(makeSurface().build());
+        getPendingTransaction().show(mSurfaceControl);
+        onSurfaceShown(getPendingTransaction());
+        updateSurfacePosition();
     }
 
     /**
@@ -1608,6 +1612,12 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         return null;
     }
 
+    void forAllDisplayAreas(Consumer<DisplayArea> callback) {
+        for (int i = mChildren.size() - 1; i >= 0; --i) {
+            mChildren.get(i).forAllDisplayAreas(callback);
+        }
+    }
+
     /**
      * Returns 1, 0, or -1 depending on if this container is greater than, equal to, or lesser than
      * the input container in terms of z-order.
@@ -2321,6 +2331,9 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
     }
 
     void updateSurfacePosition() {
+        // Avoid fighting with the organizer over Surface position.
+        if (isOrganized()) return;
+
         if (mSurfaceControl == null) {
             return;
         }
@@ -2370,6 +2383,13 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
     }
 
     void getRelativeDisplayedPosition(Point outPos) {
+        // In addition to updateSurfacePosition, we keep other code that sets
+        // position from fighting with the organizer
+        if (isOrganized()) {
+            outPos.set(0, 0);
+            return;
+        }
+
         final Rect dispBounds = getDisplayedBounds();
         outPos.set(dispBounds.left, dispBounds.top);
         final WindowContainer parent = getParent();
@@ -2410,8 +2430,12 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         return null;
     }
 
-    RemoteToken getRemoteToken() {
-        return mRemoteToken;
+    /**
+     * @return {@code true} if window container is manage by a
+     *          {@link android.window.WindowOrganizer}
+     */
+    boolean isOrganized() {
+        return false;
     }
 
     static WindowContainer fromBinder(IBinder binder) {
@@ -2435,7 +2459,14 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
 
         @Override
         public SurfaceControl getLeash() {
-            throw new RuntimeException("Not implemented");
+            final WindowContainer wc = getContainer();
+            if (wc == null) return null;
+            // We need to copy the SurfaceControl instead of returning the original
+            // because the Parcel FLAGS PARCELABLE_WRITE_RETURN_VALUE cause SurfaceControls
+            // to release themselves.
+            SurfaceControl sc = new SurfaceControl();
+            sc.copyFrom(wc.getSurfaceControl());
+            return sc;
         }
 
         @Override

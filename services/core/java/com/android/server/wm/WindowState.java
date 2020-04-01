@@ -608,6 +608,11 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
     boolean mSeamlesslyRotated = false;
 
     /**
+     * Indicates if this window is behind IME. Only windows behind IME can get insets from IME.
+     */
+    boolean mBehindIme = false;
+
+    /**
      * Surface insets from the previous call to relayout(), used to track
      * if we are changing the Surface insets.
      */
@@ -3338,7 +3343,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         }
 
         final ActivityStack stack = task.getStack();
-        if (stack == null) {
+        if (stack == null || stack.mCreatedByOrganizer) {
             return;
         }
 
@@ -5656,7 +5661,12 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         // the status bar). In that case we need to use the final frame.
         if (inFreeformWindowingMode()) {
             outFrame.set(getFrameLw());
-        } else if (isLetterboxedAppWindow()) {
+        } else if (isLetterboxedAppWindow() || mToken.isFixedRotationTransforming()) {
+            // 1. The letterbox surfaces should be animated with the owner activity, so use task
+            //    bounds to include them.
+            // 2. If the activity has fixed rotation transform, its windows are rotated in activity
+            //    level. Because the animation runs before display is rotated, task bounds should
+            //    represent the frames in display space coordinates.
             outFrame.set(getTask().getBounds());
         } else if (isDockedResizing()) {
             // If we are animating while docked resizing, then use the stack bounds as the

@@ -241,7 +241,7 @@ public final class PowerManagerService extends SystemService
 
     private final Context mContext;
     private final ServiceThread mHandlerThread;
-    private final PowerManagerHandler mHandler;
+    private final Handler mHandler;
     private final AmbientDisplayConfiguration mAmbientDisplayConfiguration;
     private final BatterySaverController mBatterySaverController;
     private final BatterySaverPolicy mBatterySaverPolicy;
@@ -252,6 +252,7 @@ public final class PowerManagerService extends SystemService
     private final LocalService mLocalService;
     private final NativeWrapper mNativeWrapper;
     private final SystemPropertiesWrapper mSystemProperties;
+    private final Clock mClock;
     private final Injector mInjector;
 
     private LightsManager mLightsManager;
@@ -597,7 +598,7 @@ public final class PowerManagerService extends SystemService
 
         @Override
         public void onForegroundProfileSwitch(@UserIdInt int newProfileId) throws RemoteException {
-            final long now = SystemClock.uptimeMillis();
+            final long now = mClock.uptimeMillis();
             synchronized (mLock) {
                 mForegroundProfile = newProfileId;
                 maybeUpdateForegroundProfileLastActivityLocked(now);
@@ -625,11 +626,11 @@ public final class PowerManagerService extends SystemService
         // Whether profile has been locked last time it timed out.
         boolean mLockingNotified;
 
-        public ProfilePowerState(@UserIdInt int userId, long screenOffTimeout) {
+        public ProfilePowerState(@UserIdInt int userId, long screenOffTimeout, long now) {
             mUserId = userId;
             mScreenOffTimeout = screenOffTimeout;
             // Not accurate but at least won't cause immediate locking of the profile.
-            mLastUserActivityTime = SystemClock.uptimeMillis();
+            mLastUserActivityTime = now;
         }
     }
 
@@ -756,6 +757,15 @@ public final class PowerManagerService extends SystemService
         }
     }
 
+    /** Functional interface for providing time. */
+    @VisibleForTesting
+    interface Clock {
+        /**
+         * Returns current time in milliseconds since boot, not counting time spent in deep sleep.
+         */
+        long uptimeMillis();
+    }
+
     @VisibleForTesting
     static class Injector {
         Notifier createNotifier(Looper looper, Context context, IBatteryStats batteryStats,
@@ -779,6 +789,11 @@ public final class PowerManagerService extends SystemService
                 BatterySavingStats batterySavingStats) {
             return new BatterySaverController(lock, context, BackgroundThread.get().getLooper(),
                     batterySaverPolicy, batterySavingStats);
+        }
+
+        BatterySaverStateMachine createBatterySaverStateMachine(Object lock, Context context,
+                BatterySaverController batterySaverController) {
+            return new BatterySaverStateMachine(lock, context, batterySaverController);
         }
 
         NativeWrapper createNativeWrapper() {
@@ -817,6 +832,17 @@ public final class PowerManagerService extends SystemService
             };
         }
 
+        Clock createClock() {
+            return SystemClock::uptimeMillis;
+        }
+
+        /**
+         * Handler for asynchronous operations performed by the power manager.
+         */
+        Handler createHandler(Looper looper, Handler.Callback callback) {
+            return new Handler(looper, callback, true /*async*/);
+        }
+
         void invalidateIsInteractiveCaches() {
             PowerManager.invalidateIsInteractiveCaches();
         }
@@ -848,12 +874,14 @@ public final class PowerManagerService extends SystemService
         mLocalService = new LocalService();
         mNativeWrapper = injector.createNativeWrapper();
         mSystemProperties = injector.createSystemPropertiesWrapper();
+        mClock = injector.createClock();
         mInjector = injector;
 
         mHandlerThread = new ServiceThread(TAG,
                 Process.THREAD_PRIORITY_DISPLAY, false /*allowIo*/);
         mHandlerThread.start();
-        mHandler = new PowerManagerHandler(mHandlerThread.getLooper());
+        mHandler = injector.createHandler(mHandlerThread.getLooper(),
+                new PowerManagerHandlerCallback());
         mConstants = new Constants(mHandler);
         mAmbientDisplayConfiguration = mInjector.createAmbientDisplayConfiguration(context);
         mAmbientDisplaySuppressionController =
@@ -865,8 +893,8 @@ public final class PowerManagerService extends SystemService
                 mInjector.createBatterySaverPolicy(mLock, mContext, mBatterySavingStats);
         mBatterySaverController = mInjector.createBatterySaverController(mLock, mContext,
                 mBatterySaverPolicy, mBatterySavingStats);
-        mBatterySaverStateMachine = new BatterySaverStateMachine(
-                mLock, mContext, mBatterySaverController);
+        mBatterySaverStateMachine = mInjector.createBatterySaverStateMachine(mLock, mContext,
+                mBatterySaverController);
 
         mInattentiveSleepWarningOverlayController =
                 mInjector.createInattentiveSleepWarningController();
@@ -997,7 +1025,7 @@ public final class PowerManagerService extends SystemService
                 incrementBootCount();
 
             } else if (phase == PHASE_BOOT_COMPLETED) {
-                final long now = SystemClock.uptimeMillis();
+                final long now = mClock.uptimeMillis();
                 mBootCompleted = true;
                 mDirty |= DIRTY_BOOT_COMPLETED;
 
@@ -1006,7 +1034,7 @@ public final class PowerManagerService extends SystemService
                         now, PowerManager.USER_ACTIVITY_EVENT_OTHER, 0, Process.SYSTEM_UID);
 
                 if (sQuiescent) {
-                    goToSleepNoUpdateLocked(SystemClock.uptimeMillis(),
+                    goToSleepNoUpdateLocked(mClock.uptimeMillis(),
                             PowerManager.GO_TO_SLEEP_REASON_QUIESCENT,
                             PowerManager.GO_TO_SLEEP_FLAG_NO_DOZE, Process.SYSTEM_UID);
                 }
@@ -1349,7 +1377,7 @@ public final class PowerManagerService extends SystemService
                 opPackageName = wakeLock.mPackageName;
                 opUid = wakeLock.mOwnerUid;
             }
-            wakeUpNoUpdateLocked(SystemClock.uptimeMillis(),
+            wakeUpNoUpdateLocked(mClock.uptimeMillis(),
                     PowerManager.WAKE_REASON_APPLICATION, wakeLock.mTag,
                     opUid, opPackageName, opUid);
         }
@@ -1415,7 +1443,7 @@ public final class PowerManagerService extends SystemService
     private void applyWakeLockFlagsOnReleaseLocked(WakeLock wakeLock) {
         if ((wakeLock.mFlags & PowerManager.ON_AFTER_RELEASE) != 0
                 && isScreenLock(wakeLock)) {
-            userActivityNoUpdateLocked(SystemClock.uptimeMillis(),
+            userActivityNoUpdateLocked(mClock.uptimeMillis(),
                     PowerManager.USER_ACTIVITY_EVENT_OTHER,
                     PowerManager.USER_ACTIVITY_FLAG_NO_CHANGE_LIGHTS,
                     wakeLock.mOwnerUid);
@@ -1479,7 +1507,7 @@ public final class PowerManagerService extends SystemService
     }
 
     private void restartNofifyLongTimerLocked(WakeLock wakeLock) {
-        wakeLock.mAcquireTime = SystemClock.uptimeMillis();
+        wakeLock.mAcquireTime = mClock.uptimeMillis();
         if ((wakeLock.mFlags & PowerManager.WAKE_LOCK_LEVEL_MASK)
                 == PowerManager.PARTIAL_WAKE_LOCK && mNotifyLongScheduled == 0) {
             enqueueNotifyLongMsgLocked(wakeLock.mAcquireTime + MIN_LONG_WAKE_CHECK_INTERVAL);
@@ -1564,7 +1592,7 @@ public final class PowerManagerService extends SystemService
 
     private void onUserAttention() {
         synchronized (mLock) {
-            if (userActivityNoUpdateLocked(SystemClock.uptimeMillis(),
+            if (userActivityNoUpdateLocked(mClock.uptimeMillis(),
                     PowerManager.USER_ACTIVITY_EVENT_ATTENTION, 0 /* flags */,
                     Process.SYSTEM_UID)) {
                 updatePowerStateLocked();
@@ -1839,7 +1867,7 @@ public final class PowerManagerService extends SystemService
      * had the system not been told the user was inactive.
      */
     private void logSleepTimeoutRecapturedLocked() {
-        final long now = SystemClock.uptimeMillis();
+        final long now = mClock.uptimeMillis();
         final long savedWakeTimeMs = mOverriddenTimeout - now;
         if (savedWakeTimeMs >= 0) {
             EventLogTags.writePowerSoftSleepRequested(savedWakeTimeMs);
@@ -1862,7 +1890,7 @@ public final class PowerManagerService extends SystemService
             }
             if (getWakefulnessLocked() == WAKEFULNESS_AWAKE) {
                 Trace.asyncTraceEnd(Trace.TRACE_TAG_POWER, TRACE_SCREEN_ON, 0);
-                final int latencyMs = (int) (SystemClock.uptimeMillis() - mLastWakeTime);
+                final int latencyMs = (int) (mClock.uptimeMillis() - mLastWakeTime);
                 if (latencyMs >= SCREEN_ON_LATENCY_WARNING_MS) {
                     Slog.w(TAG, "Screen on took " + latencyMs + " ms");
                 }
@@ -1898,7 +1926,7 @@ public final class PowerManagerService extends SystemService
             // Phase 1: Update wakefulness.
             // Loop because the wake lock and user activity computations are influenced
             // by changes in wakefulness.
-            final long now = SystemClock.uptimeMillis();
+            final long now = mClock.uptimeMillis();
             int dirtyPhase2 = 0;
             for (;;) {
                 int dirtyPhase1 = mDirty;
@@ -1991,7 +2019,7 @@ public final class PowerManagerService extends SystemService
                 // and it shuts off right away.
                 // Some devices also wake the device when plugged or unplugged because
                 // they don't have a charging LED.
-                final long now = SystemClock.uptimeMillis();
+                final long now = mClock.uptimeMillis();
                 if (shouldWakeUpWhenPluggedOrUnpluggedLocked(wasPowered, oldPlugType,
                         dockedOnWirelessCharger)) {
                     wakeUpNoUpdateLocked(now, PowerManager.WAKE_REASON_PLUGGED_IN,
@@ -2199,7 +2227,7 @@ public final class PowerManagerService extends SystemService
 
     void checkForLongWakeLocks() {
         synchronized (mLock) {
-            final long now = SystemClock.uptimeMillis();
+            final long now = mClock.uptimeMillis();
             mNotifyLongDispatched = now;
             final long when = now - MIN_LONG_WAKE_CHECK_INTERVAL;
             long nextCheckTime = Long.MAX_VALUE;
@@ -2434,7 +2462,7 @@ public final class PowerManagerService extends SystemService
 
     private boolean isAttentiveTimeoutExpired(long now) {
         long attentiveTimeout = getAttentiveTimeoutLocked();
-        return attentiveTimeout >= 0 && now > mLastUserActivityTime + attentiveTimeout;
+        return attentiveTimeout >= 0 && now >= mLastUserActivityTime + attentiveTimeout;
     }
 
     /**
@@ -2528,7 +2556,7 @@ public final class PowerManagerService extends SystemService
                 if (DEBUG_SPEW) {
                     Slog.d(TAG, "updateWakefulnessLocked: Bed time...");
                 }
-                final long time = SystemClock.uptimeMillis();
+                final long time = mClock.uptimeMillis();
                 if (isAttentiveTimeoutExpired(time)) {
                     changed = goToSleepNoUpdateLocked(time, PowerManager.GO_TO_SLEEP_REASON_TIMEOUT,
                             PowerManager.GO_TO_SLEEP_FLAG_NO_DOZE, Process.SYSTEM_UID);
@@ -2563,7 +2591,7 @@ public final class PowerManagerService extends SystemService
             return false;
         }
 
-        long now = SystemClock.uptimeMillis();
+        long now = mClock.uptimeMillis();
         if (isAttentiveTimeoutExpired(now)) {
             return !isBeingKeptFromInattentiveSleepLocked();
         } else {
@@ -2694,7 +2722,7 @@ public final class PowerManagerService extends SystemService
             }
 
             // Determine whether the dream should continue.
-            long now = SystemClock.uptimeMillis();
+            long now = mClock.uptimeMillis();
             if (wakefulness == WAKEFULNESS_DREAMING) {
                 if (isDreaming && canDreamLocked()) {
                     if (mDreamsBatteryLevelDrainCutoffConfig >= 0
@@ -2876,7 +2904,7 @@ public final class PowerManagerService extends SystemService
     private void updateScreenBrightnessBoostLocked(int dirty) {
         if ((dirty & DIRTY_SCREEN_BRIGHTNESS_BOOST) != 0) {
             if (mScreenBrightnessBoostInProgress) {
-                final long now = SystemClock.uptimeMillis();
+                final long now = mClock.uptimeMillis();
                 mHandler.removeMessages(MSG_SCREEN_BRIGHTNESS_BOOST_TIMEOUT);
                 if (mLastScreenBrightnessBoostTime > mLastSleepTime) {
                     final long boostTimeout = mLastScreenBrightnessBoostTime +
@@ -2963,7 +2991,7 @@ public final class PowerManagerService extends SystemService
             synchronized (mLock) {
                 mProximityPositive = false;
                 mDirty |= DIRTY_PROXIMITY_POSITIVE;
-                userActivityNoUpdateLocked(SystemClock.uptimeMillis(),
+                userActivityNoUpdateLocked(mClock.uptimeMillis(),
                         PowerManager.USER_ACTIVITY_EVENT_OTHER, 0, Process.SYSTEM_UID);
                 updatePowerStateLocked();
             }
@@ -3284,7 +3312,8 @@ public final class PowerManagerService extends SystemService
                 if (profile != null) {
                     profile.mScreenOffTimeout = timeMs;
                 } else {
-                    mProfilePowerState.put(userId, new ProfilePowerState(userId, timeMs));
+                    mProfilePowerState.put(userId, new ProfilePowerState(userId, timeMs,
+                            mClock.uptimeMillis()));
                     // We need to recalculate wake locks for the new profile state.
                     mDirty |= DIRTY_WAKE_LOCKS;
                 }
@@ -3641,14 +3670,14 @@ public final class PowerManagerService extends SystemService
     @VisibleForTesting
     boolean wasDeviceIdleForInternal(long ms) {
         synchronized (mLock) {
-            return mLastUserActivityTime + ms < SystemClock.uptimeMillis();
+            return mLastUserActivityTime + ms < mClock.uptimeMillis();
         }
     }
 
     @VisibleForTesting
     void onUserActivity() {
         synchronized (mLock) {
-            mLastUserActivityTime = SystemClock.uptimeMillis();
+            mLastUserActivityTime = mClock.uptimeMillis();
         }
     }
 
@@ -3657,7 +3686,7 @@ public final class PowerManagerService extends SystemService
             synchronized (mLock) {
                 mForceSuspendActive = true;
                 // Place the system in an non-interactive state
-                goToSleepInternal(SystemClock.uptimeMillis(),
+                goToSleepInternal(mClock.uptimeMillis(),
                         PowerManager.GO_TO_SLEEP_REASON_FORCE_SUSPEND,
                         PowerManager.GO_TO_SLEEP_FLAG_NO_DOZE, uid);
 
@@ -3772,21 +3801,21 @@ public final class PowerManagerService extends SystemService
             if (mNotifyLongScheduled == 0) {
                 pw.print("(none)");
             } else {
-                TimeUtils.formatDuration(mNotifyLongScheduled, SystemClock.uptimeMillis(), pw);
+                TimeUtils.formatDuration(mNotifyLongScheduled, mClock.uptimeMillis(), pw);
             }
             pw.println();
             pw.print("  mNotifyLongDispatched=");
             if (mNotifyLongDispatched == 0) {
                 pw.print("(none)");
             } else {
-                TimeUtils.formatDuration(mNotifyLongDispatched, SystemClock.uptimeMillis(), pw);
+                TimeUtils.formatDuration(mNotifyLongDispatched, mClock.uptimeMillis(), pw);
             }
             pw.println();
             pw.print("  mNotifyLongNextCheck=");
             if (mNotifyLongNextCheck == 0) {
                 pw.print("(none)");
             } else {
-                TimeUtils.formatDuration(mNotifyLongNextCheck, SystemClock.uptimeMillis(), pw);
+                TimeUtils.formatDuration(mNotifyLongNextCheck, mClock.uptimeMillis(), pw);
             }
             pw.println();
             pw.println("  mUserActivitySummary=0x" + Integer.toHexString(mUserActivitySummary));
@@ -4384,15 +4413,11 @@ public final class PowerManagerService extends SystemService
     };
 
     /**
-     * Handler for asynchronous operations performed by the power manager.
+     * Callback for asynchronous operations performed by the power manager.
      */
-    private final class PowerManagerHandler extends Handler {
-        public PowerManagerHandler(Looper looper) {
-            super(looper, null, true /*async*/);
-        }
-
+    private final class PowerManagerHandlerCallback implements Handler.Callback {
         @Override
-        public void handleMessage(Message msg) {
+        public boolean handleMessage(Message msg) {
             switch (msg.what) {
                 case MSG_USER_ACTIVITY_TIMEOUT:
                     handleUserActivityTimeout();
@@ -4410,6 +4435,8 @@ public final class PowerManagerService extends SystemService
                     handleAttentiveTimeout();
                     break;
             }
+
+            return true;
         }
     }
 
@@ -4500,7 +4527,7 @@ public final class PowerManagerService extends SystemService
             }
             if (mNotifiedAcquired) {
                 sb.append(" ACQ=");
-                TimeUtils.formatDuration(mAcquireTime-SystemClock.uptimeMillis(), sb);
+                TimeUtils.formatDuration(mAcquireTime-mClock.uptimeMillis(), sb);
             }
             if (mNotifiedLong) {
                 sb.append(" LONG");
@@ -4812,7 +4839,7 @@ public final class PowerManagerService extends SystemService
 
         @Override // Binder call
         public void userActivity(long eventTime, int event, int flags) {
-            final long now = SystemClock.uptimeMillis();
+            final long now = mClock.uptimeMillis();
             if (mContext.checkCallingOrSelfPermission(android.Manifest.permission.DEVICE_POWER)
                     != PackageManager.PERMISSION_GRANTED
                     && mContext.checkCallingOrSelfPermission(
@@ -4850,7 +4877,7 @@ public final class PowerManagerService extends SystemService
         @Override // Binder call
         public void wakeUp(long eventTime, @WakeReason int reason, String details,
                 String opPackageName) {
-            if (eventTime > SystemClock.uptimeMillis()) {
+            if (eventTime > mClock.uptimeMillis()) {
                 throw new IllegalArgumentException("event time must not be in the future");
             }
 
@@ -4868,7 +4895,7 @@ public final class PowerManagerService extends SystemService
 
         @Override // Binder call
         public void goToSleep(long eventTime, int reason, int flags) {
-            if (eventTime > SystemClock.uptimeMillis()) {
+            if (eventTime > mClock.uptimeMillis()) {
                 throw new IllegalArgumentException("event time must not be in the future");
             }
 
@@ -4886,7 +4913,7 @@ public final class PowerManagerService extends SystemService
 
         @Override // Binder call
         public void nap(long eventTime) {
-            if (eventTime > SystemClock.uptimeMillis()) {
+            if (eventTime > mClock.uptimeMillis()) {
                 throw new IllegalArgumentException("event time must not be in the future");
             }
 
@@ -5281,7 +5308,7 @@ public final class PowerManagerService extends SystemService
 
         @Override // Binder call
         public void boostScreenBrightness(long eventTime) {
-            if (eventTime > SystemClock.uptimeMillis()) {
+            if (eventTime > mClock.uptimeMillis()) {
                 throw new IllegalArgumentException("event time must not be in the future");
             }
 

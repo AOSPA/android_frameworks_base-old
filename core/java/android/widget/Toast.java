@@ -144,9 +144,6 @@ public class Toast {
     @Nullable
     private CharSequence mText;
 
-    // TODO(b/144152069): Remove this after assessing impact on dogfood.
-    private boolean mIsCustomToast;
-
     /**
      * Construct an empty Toast object.  You must call {@link #setView} before you
      * can call {@link #show}.
@@ -214,8 +211,7 @@ public class Toast {
                     service.enqueueTextToast(pkg, mToken, mText, mDuration, displayId, callback);
                 }
             } else {
-                service.enqueueTextOrCustomToast(pkg, mToken, tn, mDuration, displayId,
-                        mIsCustomToast);
+                service.enqueueToast(pkg, mToken, tn, mDuration, displayId);
             }
         } catch (RemoteException e) {
             // Empty
@@ -253,7 +249,6 @@ public class Toast {
      */
     @Deprecated
     public void setView(View view) {
-        mIsCustomToast = true;
         mNextView = view;
     }
 
@@ -755,8 +750,9 @@ public class Toast {
     /**
      * Callback object to be called when the toast is shown or hidden.
      *
-     * Callback methods will be called on the looper thread provided on construction.
+     * <p>Callback methods will be called on the looper thread used for the {@link Toast} object.
      *
+     * @see #makeText(Context, Looper, CharSequence, int)
      * @see #addCallback(Callback)
      */
     public abstract static class Callback {

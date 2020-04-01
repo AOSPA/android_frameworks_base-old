@@ -653,16 +653,16 @@ public class TunerResourceManagerService extends SystemService {
 
     private void enforceTrmAccessPermission(String apiName) {
         getContext().enforceCallingPermission("android.permission.TUNER_RESOURCE_ACCESS",
-                TAG + ": " + "apiName");
+                TAG + ": " + apiName);
     }
 
     private void enforceTunerAccessPermission(String apiName) {
-        getContext().enforceCallingPermission("android.Manifest.permission.ACCESS_TV_TUNER",
-                TAG + ": " + "apiName");
+        getContext().enforceCallingPermission("android.permission.ACCESS_TV_TUNER",
+                TAG + ": " + apiName);
     }
 
     private void enforceDescramblerAccessPermission(String apiName) {
-        getContext().enforceCallingPermission("android.Manifest.permission.ACCESS_TV_DESCRAMBLER",
-                TAG + ": " + "apiName");
+        getContext().enforceCallingPermission("android.permission.ACCESS_TV_DESCRAMBLER",
+                TAG + ": " + apiName);
     }
 }

@@ -80,6 +80,8 @@ import com.android.systemui.R;
 import com.android.systemui.bubbles.animation.ExpandedAnimationController;
 import com.android.systemui.bubbles.animation.PhysicsAnimationLayout;
 import com.android.systemui.bubbles.animation.StackAnimationController;
+import com.android.systemui.model.SysUiState;
+import com.android.systemui.shared.system.QuickStepContract;
 import com.android.systemui.shared.system.SysUiStatsLog;
 import com.android.systemui.util.DismissCircleView;
 import com.android.systemui.util.FloatingContentCoordinator;
@@ -241,6 +243,7 @@ public class BubbleStackView extends FrameLayout {
 
     private BubbleTouchHandler mTouchHandler;
     private BubbleController.BubbleExpandListener mExpandListener;
+    private SysUiState mSysUiState;
 
     private boolean mViewUpdatedRequested = false;
     private boolean mIsExpansionAnimating = false;
@@ -437,13 +440,16 @@ public class BubbleStackView extends FrameLayout {
 
     public BubbleStackView(Context context, BubbleData data,
             @Nullable SurfaceSynchronizer synchronizer,
-            FloatingContentCoordinator floatingContentCoordinator) {
+            FloatingContentCoordinator floatingContentCoordinator,
+            SysUiState sysUiState) {
         super(context);
 
         mBubbleData = data;
         mInflater = LayoutInflater.from(context);
         mTouchHandler = new BubbleTouchHandler(this, data, context);
         setOnTouchListener(mTouchHandler);
+
+        mSysUiState = sysUiState;
 
         Resources res = getResources();
         mMaxBubbles = res.getInteger(R.integer.bubbles_max_rendered);
@@ -940,7 +946,6 @@ public class BubbleStackView extends FrameLayout {
         ViewClippingUtil.setClippingDeactivated(bubble.getIconView(), true, mClippingParameters);
         animateInFlyoutForBubble(bubble);
         updatePointerPosition();
-        updateOverflowBtnVisibility( /*apply */ true);
         requestUpdate();
         logBubbleEvent(bubble, SysUiStatsLog.BUBBLE_UICHANGED__ACTION__POSTED);
     }
@@ -951,16 +956,18 @@ public class BubbleStackView extends FrameLayout {
             Log.d(TAG, "removeBubble: " + bubble);
         }
         // Remove it from the views
-        int removedIndex = mBubbleContainer.indexOfChild(bubble.getIconView());
-        if (removedIndex >= 0) {
-            mBubbleContainer.removeViewAt(removedIndex);
-            bubble.cleanupExpandedState();
-            bubble.setInflated(false);
-            logBubbleEvent(bubble, SysUiStatsLog.BUBBLE_UICHANGED__ACTION__DISMISSED);
-        } else {
-            Log.d(TAG, "was asked to remove Bubble, but didn't find the view! " + bubble);
+        for (int i = 0; i < getBubbleCount(); i++) {
+            View v = mBubbleContainer.getChildAt(i);
+            if (v instanceof BadgedImageView
+                    && ((BadgedImageView) v).getKey().equals(bubble.getKey())) {
+                mBubbleContainer.removeViewAt(i);
+                bubble.cleanupExpandedState();
+                bubble.setInflated(false);
+                logBubbleEvent(bubble, SysUiStatsLog.BUBBLE_UICHANGED__ACTION__DISMISSED);
+                return;
+            }
         }
-        updateOverflowBtnVisibility(/* apply */ true);
+        Log.d(TAG, "was asked to remove Bubble, but didn't find the view! " + bubble);
     }
 
     private void updateOverflowBtnVisibility(boolean apply) {
@@ -1054,6 +1061,11 @@ public class BubbleStackView extends FrameLayout {
         if (shouldExpand == mIsExpanded) {
             return;
         }
+
+        mSysUiState
+                .setFlag(QuickStepContract.SYSUI_STATE_BUBBLES_EXPANDED, shouldExpand)
+                .commitUpdate(mContext.getDisplayId());
+
         if (mIsExpanded) {
             animateCollapse();
             logBubbleEvent(mExpandedBubble, SysUiStatsLog.BUBBLE_UICHANGED__ACTION__COLLAPSED);

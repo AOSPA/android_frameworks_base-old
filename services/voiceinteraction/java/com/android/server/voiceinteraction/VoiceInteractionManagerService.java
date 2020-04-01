@@ -1409,9 +1409,13 @@ public class VoiceInteractionManagerService extends SystemService {
             }
         }
 
+        private boolean isCallerHoldingPermission(String permission) {
+            return mContext.checkCallingOrSelfPermission(permission)
+                    == PackageManager.PERMISSION_GRANTED;
+        }
+
         private void enforceCallingPermission(String permission) {
-            if (mContext.checkCallingOrSelfPermission(permission)
-                    != PackageManager.PERMISSION_GRANTED) {
+            if (!isCallerHoldingPermission(permission)) {
                 throw new SecurityException("Caller does not hold the permission " + permission);
             }
         }
@@ -1424,11 +1428,12 @@ public class VoiceInteractionManagerService extends SystemService {
         }
 
         private void enforceCallerAllowedToEnrollVoiceModel() {
-            if (isCallerCurrentVoiceInteractionService()) {
-                enforceCallingPermission(Manifest.permission.MANAGE_VOICE_KEYPHRASES);
-            } else {
-                enforceCallingPermission(Manifest.permission.KEYPHRASE_ENROLLMENT_APPLICATION);
+            if (isCallerHoldingPermission(Manifest.permission.KEYPHRASE_ENROLLMENT_APPLICATION)) {
+                return;
             }
+
+            enforceCallingPermission(Manifest.permission.MANAGE_VOICE_KEYPHRASES);
+            enforceIsCurrentVoiceInteractionService();
         }
 
         private boolean isCallerCurrentVoiceInteractionService() {

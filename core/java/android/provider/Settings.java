@@ -8070,8 +8070,11 @@ public final class Settings {
         @RequiresPermission(Manifest.permission.WRITE_SECURE_SETTINGS)
         public static final String SYNC_PARENT_SOUNDS = "sync_parent_sounds";
 
-        /** @hide */
+        /**
+         * @hide
+         */
         @UnsupportedAppUsage
+        @TestApi
         public static final String IMMERSIVE_MODE_CONFIRMATIONS = "immersive_mode_confirmations";
 
         /**
@@ -10347,6 +10350,15 @@ public final class Settings {
         @Deprecated
         @SystemApi
         public static final String WIFI_WAKEUP_ENABLED = "wifi_wakeup_enabled";
+
+        /**
+         * Value to specify if wifi settings migration is complete or not.
+         * Note: This should only be used from within {@link android.net.wifi.WifiMigration} class.
+         *
+         * Type: int (0 for false, 1 for true)
+         * @hide
+         */
+        public static final String WIFI_MIGRATION_COMPLETED = "wifi_migration_completed";
 
         /**
          * Value to specify whether network quality scores and badging should be shown in the UI.

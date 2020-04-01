@@ -66,6 +66,7 @@ public class PipResizeGestureHandler {
     private final Point mMaxSize = new Point();
     private final Point mMinSize = new Point();
     private final Rect mLastResizeBounds = new Rect();
+    private final Rect mLastDownBounds = new Rect();
     private final Rect mTmpBounds = new Rect();
     private final int mDelta;
 
@@ -98,14 +99,14 @@ public class PipResizeGestureHandler {
         mEnablePipResize = DeviceConfig.getBoolean(
                 DeviceConfig.NAMESPACE_SYSTEMUI,
                 PIP_USER_RESIZE,
-                /* defaultValue = */ false);
+                /* defaultValue = */ true);
         deviceConfig.addOnPropertiesChangedListener(DeviceConfig.NAMESPACE_SYSTEMUI, mMainExecutor,
                 new DeviceConfig.OnPropertiesChangedListener() {
                     @Override
                     public void onPropertiesChanged(DeviceConfig.Properties properties) {
                         if (properties.getKeyset().contains(PIP_USER_RESIZE)) {
                             mEnablePipResize = properties.getBoolean(
-                                    PIP_USER_RESIZE, /* defaultValue = */ false);
+                                    PIP_USER_RESIZE, /* defaultValue = */ true);
                         }
                     }
                 });
@@ -192,6 +193,7 @@ public class PipResizeGestureHandler {
             mAllowGesture = isWithinTouchRegion((int) ev.getX(), (int) ev.getY());
             if (mAllowGesture) {
                 mDownPoint.set(ev.getX(), ev.getY());
+                mLastDownBounds.set(mMotionHelper.getBounds());
             }
 
         } else if (mAllowGesture) {
@@ -206,9 +208,11 @@ public class PipResizeGestureHandler {
                     final Rect currentPipBounds = mMotionHelper.getBounds();
                     mLastResizeBounds.set(TaskResizingAlgorithm.resizeDrag(ev.getX(), ev.getY(),
                             mDownPoint.x, mDownPoint.y, currentPipBounds, mCtrlType, mMinSize.x,
-                            mMinSize.y, mMaxSize, true, true));
+                            mMinSize.y, mMaxSize, true,
+                            mLastDownBounds.width() > mLastDownBounds.height()));
                     mPipBoundsHandler.transformBoundsToAspectRatio(mLastResizeBounds);
-                    mPipTaskOrganizer.scheduleResizePip(mLastResizeBounds, null);
+                    mPipTaskOrganizer.scheduleUserResizePip(mLastDownBounds, mLastResizeBounds,
+                            null);
                     break;
                 case MotionEvent.ACTION_UP:
                 case MotionEvent.ACTION_CANCEL:

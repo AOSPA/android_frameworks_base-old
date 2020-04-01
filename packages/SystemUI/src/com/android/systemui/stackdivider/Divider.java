@@ -20,11 +20,11 @@ import static android.content.res.Configuration.ORIENTATION_LANDSCAPE;
 import static android.content.res.Configuration.SCREEN_HEIGHT_DP_UNDEFINED;
 import static android.content.res.Configuration.SCREEN_WIDTH_DP_UNDEFINED;
 import static android.view.Display.DEFAULT_DISPLAY;
+import static android.window.WindowOrganizer.TaskOrganizer;
 
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
 import android.animation.ValueAnimator;
-import android.app.ActivityTaskManager;
 import android.content.Context;
 import android.content.res.Configuration;
 import android.graphics.Rect;
@@ -32,12 +32,13 @@ import android.os.Handler;
 import android.os.RemoteException;
 import android.provider.Settings;
 import android.util.Slog;
-import android.view.IWindowContainer;
+import android.window.IWindowContainer;
 import android.view.LayoutInflater;
 import android.view.SurfaceControl;
 import android.view.SurfaceSession;
 import android.view.View;
-import android.view.WindowContainerTransaction;
+import android.window.WindowContainerTransaction;
+import android.window.WindowOrganizer;
 
 import androidx.annotation.Nullable;
 
@@ -177,8 +178,7 @@ public class Divider extends SystemUI implements DividerView.DividerCallbacks,
 
         private boolean getSecondaryHasFocus(int displayId) {
             try {
-                IWindowContainer imeSplit = ActivityTaskManager.getTaskOrganizerController()
-                        .getImeTarget(displayId);
+                IWindowContainer imeSplit = TaskOrganizer.getImeTarget(displayId);
                 return imeSplit != null
                         && (imeSplit.asBinder() == mSplits.mSecondary.token.asBinder());
             } catch (RemoteException e) {
@@ -267,16 +267,17 @@ public class Divider extends SystemUI implements DividerView.DividerCallbacks,
                         SCREEN_WIDTH_DP_UNDEFINED, SCREEN_HEIGHT_DP_UNDEFINED);
             }
             try {
-                ActivityTaskManager.getTaskOrganizerController()
-                        .applyContainerTransaction(wct, null /* organizer */);
+                WindowOrganizer.applyTransaction(wct);
             } catch (RemoteException e) {
             }
 
             // Update all the adjusted-for-ime states
-            mView.setAdjustedForIme(mTargetShown, mTargetShown
-                    ? DisplayImeController.ANIMATION_DURATION_SHOW_MS
-                    : DisplayImeController.ANIMATION_DURATION_HIDE_MS);
-            setAdjustedForIme(mTargetShown);
+            if (!mPaused) {
+                mView.setAdjustedForIme(mTargetShown, mTargetShown
+                        ? DisplayImeController.ANIMATION_DURATION_SHOW_MS
+                        : DisplayImeController.ANIMATION_DURATION_HIDE_MS);
+            }
+            setAdjustedForIme(mTargetShown && !mPaused);
         }
 
         @Override
@@ -390,6 +391,9 @@ public class Divider extends SystemUI implements DividerView.DividerCallbacks,
                 mTargetPrimaryDim = mTargetSecondaryDim = 0.f;
                 updateImeAdjustState();
                 startAsyncAnimation();
+                if (mAnimation != null) {
+                    mAnimation.end();
+                }
             });
         }
 
@@ -469,13 +473,12 @@ public class Divider extends SystemUI implements DividerView.DividerCallbacks,
         mImeController.addPositionProcessor(mImePositionProcessor);
         mDisplayController.addDisplayChangingController(mRotationController);
         try {
-            mSplits.init(ActivityTaskManager.getTaskOrganizerController(), mSurfaceSession);
+            mSplits.init(mSurfaceSession);
             // Set starting tile bounds based on middle target
             final WindowContainerTransaction tct = new WindowContainerTransaction();
             int midPos = mSplitLayout.getSnapAlgorithm().getMiddleTarget().position;
             mSplitLayout.resizeSplits(midPos, tct);
-            ActivityTaskManager.getTaskOrganizerController().applyContainerTransaction(tct,
-                    null /* organizer */);
+            WindowOrganizer.applyTransaction(tct);
         } catch (Exception e) {
             Slog.e(TAG, "Failed to register docked stack listener", e);
         }
@@ -494,8 +497,7 @@ public class Divider extends SystemUI implements DividerView.DividerCallbacks,
             final WindowContainerTransaction tct = new WindowContainerTransaction();
             mSplitLayout.resizeSplits(midPos, tct);
             try {
-                ActivityTaskManager.getTaskOrganizerController().applyContainerTransaction(tct,
-                        null /* organizer */);
+                WindowOrganizer.applyTransaction(tct);
             } catch (RemoteException e) {
             }
         } else if (mRotateSplitLayout != null
@@ -605,15 +607,17 @@ public class Divider extends SystemUI implements DividerView.DividerCallbacks,
                     + mHomeStackResizable + "->" + homeStackResizable + " split:" + inSplitMode());
         }
         WindowContainerTransaction wct = new WindowContainerTransaction();
+        final boolean minimizedChanged = mMinimized != minimized;
         // Update minimized state
-        if (mMinimized != minimized) {
+        if (minimizedChanged) {
             mMinimized = minimized;
         }
         // Always set this because we could be entering split when mMinimized is already true
         wct.setFocusable(mSplits.mPrimary.token, !mMinimized);
 
         // Update home-stack resizability
-        if (mHomeStackResizable != homeStackResizable) {
+        final boolean homeResizableChanged = mHomeStackResizable != homeStackResizable;
+        if (homeResizableChanged) {
             mHomeStackResizable = homeStackResizable;
             if (inSplitMode()) {
                 WindowManagerProxy.applyHomeTasksMinimized(
@@ -629,7 +633,10 @@ public class Divider extends SystemUI implements DividerView.DividerCallbacks,
             if (mMinimized) {
                 mImePositionProcessor.pause(displayId);
             }
-            mView.setMinimizedDockStack(minimized, getAnimDuration(), homeStackResizable);
+            if (minimizedChanged || homeResizableChanged) {
+                // This conflicts with IME adjustment, so only call it when things change.
+                mView.setMinimizedDockStack(minimized, getAnimDuration(), homeStackResizable);
+            }
             if (!mMinimized) {
                 // afterwards so it can end any animations started in view
                 mImePositionProcessor.resume(displayId);

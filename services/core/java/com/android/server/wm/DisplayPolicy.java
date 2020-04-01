@@ -31,7 +31,6 @@ import static android.view.InsetsState.ITYPE_BOTTOM_DISPLAY_CUTOUT;
 import static android.view.InsetsState.ITYPE_BOTTOM_GESTURES;
 import static android.view.InsetsState.ITYPE_BOTTOM_TAPPABLE_ELEMENT;
 import static android.view.InsetsState.ITYPE_CAPTION_BAR;
-import static android.view.InsetsState.ITYPE_IME;
 import static android.view.InsetsState.ITYPE_LEFT_DISPLAY_CUTOUT;
 import static android.view.InsetsState.ITYPE_LEFT_GESTURES;
 import static android.view.InsetsState.ITYPE_NAVIGATION_BAR;
@@ -117,7 +116,6 @@ import static com.android.server.policy.WindowManagerPolicy.TRANSIT_HIDE;
 import static com.android.server.policy.WindowManagerPolicy.TRANSIT_PREVIEW_DONE;
 import static com.android.server.policy.WindowManagerPolicy.TRANSIT_SHOW;
 import static com.android.server.policy.WindowManagerPolicy.WindowManagerFuncs.LID_ABSENT;
-import static com.android.server.wm.ActivityTaskManagerInternal.SleepToken;
 import static com.android.server.wm.ProtoLogGroup.WM_DEBUG_SCREEN_ON;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_ANIM;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_LAYOUT;
@@ -182,7 +180,6 @@ import android.view.WindowManagerPolicyConstants;
 import android.view.accessibility.AccessibilityManager;
 
 import com.android.internal.R;
-import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.policy.GestureNavigationSettingsObserver;
 import com.android.internal.policy.ScreenDecorationsUtils;
@@ -349,15 +346,6 @@ public class DisplayPolicy {
                 }
             };
 
-    @GuardedBy("mHandler")
-    private SleepToken mDreamingSleepToken;
-
-    @GuardedBy("mHandler")
-    private SleepToken mWindowSleepToken;
-
-    private final Runnable mAcquireSleepTokenRunnable;
-    private final Runnable mReleaseSleepTokenRunnable;
-
     // The windows we were told about in focusChanged.
     private WindowState mFocusedWindow;
     private WindowState mLastFocusedWindow;
@@ -416,9 +404,6 @@ public class DisplayPolicy {
     private boolean mShowingDream;
     private boolean mLastShowingDream;
     private boolean mDreamingLockscreen;
-    private boolean mDreamingSleepTokenNeeded;
-    private boolean mWindowSleepTokenNeeded;
-    private boolean mLastWindowSleepTokenNeeded;
     private boolean mAllowLockscreenWhenOn;
 
     private InputConsumer mInputConsumer = null;
@@ -438,7 +423,6 @@ public class DisplayPolicy {
     private RefreshRatePolicy mRefreshRatePolicy;
 
     // -------- PolicyHandler --------
-    private static final int MSG_UPDATE_DREAMING_SLEEP_TOKEN = 1;
     private static final int MSG_REQUEST_TRANSIENT_BARS = 2;
     private static final int MSG_DISPOSE_INPUT_CONSUMER = 3;
     private static final int MSG_ENABLE_POINTER_LOCATION = 4;
@@ -458,9 +442,6 @@ public class DisplayPolicy {
         @Override
         public void handleMessage(Message msg) {
             switch (msg.what) {
-                case MSG_UPDATE_DREAMING_SLEEP_TOKEN:
-                    updateDreamingSleepToken(msg.arg1 != 0);
-                    break;
                 case MSG_REQUEST_TRANSIENT_BARS:
                     synchronized (mLock) {
                         WindowState targetBar = (msg.arg1 == MSG_REQUEST_TRANSIENT_BARS_ARG_STATUS)
@@ -763,20 +744,6 @@ public class DisplayPolicy {
                 mStatusBarController.getAppTransitionListener());
         mImmersiveModeConfirmation = new ImmersiveModeConfirmation(mContext, looper,
                 mService.mVrModeEnabled);
-        mAcquireSleepTokenRunnable = () -> {
-            if (mWindowSleepToken != null) {
-                return;
-            }
-            mWindowSleepToken = service.mAtmInternal.acquireSleepToken(
-                    "WindowSleepTokenOnDisplay" + displayId, displayId);
-        };
-        mReleaseSleepTokenRunnable = () -> {
-            if (mWindowSleepToken == null) {
-                return;
-            }
-            mWindowSleepToken.release();
-            mWindowSleepToken = null;
-        };
 
         // TODO: Make it can take screenshot on external display
         mScreenshotHelper = displayContent.isDefaultDisplay
@@ -1670,14 +1637,8 @@ public class DisplayPolicy {
      */
     public void beginLayoutLw(DisplayFrames displayFrames, int uiMode) {
         displayFrames.onBeginLayout();
-        final InsetsState insetsState =
-                mDisplayContent.getInsetsStateController().getRawInsetsState();
-
-        // Reset the frame of IME so that the layout of windows above IME won't get influenced.
-        // Once we layout the IME, frames will be set again on the source.
-        insetsState.getSource(ITYPE_IME).setFrame(0, 0, 0, 0);
-
-        updateInsetsStateForDisplayCutout(displayFrames, insetsState);
+        updateInsetsStateForDisplayCutout(displayFrames,
+                mDisplayContent.getInsetsStateController().getRawInsetsState());
         mSystemGestures.screenWidth = displayFrames.mUnrestricted.width();
         mSystemGestures.screenHeight = displayFrames.mUnrestricted.height();
 
@@ -1704,25 +1665,7 @@ public class DisplayPolicy {
                 && (mNotificationShade.getAttrs().privateFlags
                 & PRIVATE_FLAG_STATUS_FORCE_SHOW_NAVIGATION) != 0;
 
-        // When the navigation bar isn't visible, we put up a fake input window to catch all
-        // touch events. This way we can detect when the user presses anywhere to bring back the
-        // nav bar and ensure the application doesn't see the event.
-        if (navVisible || navAllowedHidden) {
-            if (mInputConsumer != null) {
-                mInputConsumer.dismiss();
-                mHandler.sendMessage(
-                        mHandler.obtainMessage(MSG_DISPOSE_INPUT_CONSUMER, mInputConsumer));
-                mInputConsumer = null;
-            }
-        } else if (mInputConsumer == null && mStatusBar != null && canHideNavigationBar()) {
-            mInputConsumer = mDisplayContent.getInputMonitor().createInputConsumer(
-                    mHandler.getLooper(),
-                    INPUT_CONSUMER_NAVIGATION,
-                    HideNavInputEventReceiver::new);
-            // As long as mInputConsumer is active, hover events are not dispatched to the app
-            // and the pointer icon is likely to become stale. Hide it to avoid confusion.
-            InputManager.getInstance().setPointerIconType(PointerIcon.TYPE_NULL);
-        }
+        updateHideNavInputEventReceiver(navVisible, navAllowedHidden);
 
         // For purposes of positioning and showing the nav bar, if we have decided that it can't
         // be hidden (because of the screen aspect ratio), then take that into account.
@@ -1742,6 +1685,28 @@ public class DisplayPolicy {
         mLastNavTranslucent = navTranslucent;
         mLastNavAllowedHidden = navAllowedHidden;
         mLastNotificationShadeForcesShowingNavigation = notificationShadeForcesShowingNavigation;
+    }
+
+    void updateHideNavInputEventReceiver(boolean navVisible, boolean navAllowedHidden) {
+        // When the navigation bar isn't visible, we put up a fake input window to catch all
+        // touch events. This way we can detect when the user presses anywhere to bring back the
+        // nav bar and ensure the application doesn't see the event.
+        if (navVisible || navAllowedHidden) {
+            if (mInputConsumer != null) {
+                mInputConsumer.dismiss();
+                mHandler.sendMessage(
+                        mHandler.obtainMessage(MSG_DISPOSE_INPUT_CONSUMER, mInputConsumer));
+                mInputConsumer = null;
+            }
+        } else if (mInputConsumer == null && mStatusBar != null && canHideNavigationBar()) {
+            mInputConsumer = mDisplayContent.getInputMonitor().createInputConsumer(
+                    mHandler.getLooper(),
+                    INPUT_CONSUMER_NAVIGATION,
+                    HideNavInputEventReceiver::new);
+            // As long as mInputConsumer is active, hover events are not dispatched to the app
+            // and the pointer icon is likely to become stale. Hide it to avoid confusion.
+            InputManager.getInstance().setPointerIconType(PointerIcon.TYPE_NULL);
+        }
     }
 
     private static void updateInsetsStateForDisplayCutout(DisplayFrames displayFrames,
@@ -2676,7 +2641,6 @@ public class DisplayPolicy {
 
         mAllowLockscreenWhenOn = false;
         mShowingDream = false;
-        mWindowSleepTokenNeeded = false;
         mIsFreeformWindowOverlappingWithNavBar = false;
     }
 
@@ -2806,15 +2770,6 @@ public class DisplayPolicy {
         // while the dream is showing.
         if (!mShowingDream) {
             mDreamingLockscreen = mService.mPolicy.isKeyguardShowingAndNotOccluded();
-            if (mDreamingSleepTokenNeeded) {
-                mDreamingSleepTokenNeeded = false;
-                mHandler.obtainMessage(MSG_UPDATE_DREAMING_SLEEP_TOKEN, 0, 1).sendToTarget();
-            }
-        } else {
-            if (!mDreamingSleepTokenNeeded) {
-                mDreamingSleepTokenNeeded = true;
-                mHandler.obtainMessage(MSG_UPDATE_DREAMING_SLEEP_TOKEN, 1, 1).sendToTarget();
-            }
         }
 
         if (mStatusBar != null) {
@@ -2890,21 +2845,8 @@ public class DisplayPolicy {
             mService.notifyShowingDreamChanged();
         }
 
-        updateWindowSleepToken();
-
         mService.mPolicy.setAllowLockscreenWhenOn(getDisplayId(), mAllowLockscreenWhenOn);
         return changes;
-    }
-
-    private void updateWindowSleepToken() {
-        if (mWindowSleepTokenNeeded && !mLastWindowSleepTokenNeeded) {
-            mHandler.removeCallbacks(mReleaseSleepTokenRunnable);
-            mHandler.post(mAcquireSleepTokenRunnable);
-        } else if (!mWindowSleepTokenNeeded && mLastWindowSleepTokenNeeded) {
-            mHandler.removeCallbacks(mAcquireSleepTokenRunnable);
-            mHandler.post(mReleaseSleepTokenRunnable);
-        }
-        mLastWindowSleepTokenNeeded = mWindowSleepTokenNeeded;
     }
 
     /**
@@ -3339,21 +3281,6 @@ public class DisplayPolicy {
      */
     public boolean allowAppAnimationsLw() {
         return !mShowingDream;
-    }
-
-    private void updateDreamingSleepToken(boolean acquire) {
-        if (acquire) {
-            final int displayId = getDisplayId();
-            if (mDreamingSleepToken == null) {
-                mDreamingSleepToken = mService.mAtmInternal.acquireSleepToken(
-                        "DreamOnDisplay" + displayId, displayId);
-            }
-        } else {
-            if (mDreamingSleepToken != null) {
-                mDreamingSleepToken.release();
-                mDreamingSleepToken = null;
-            }
-        }
     }
 
     private void requestTransientBars(WindowState swipeTarget) {
@@ -4035,7 +3962,6 @@ public class DisplayPolicy {
         }
         pw.print(prefix); pw.print("mShowingDream="); pw.print(mShowingDream);
         pw.print(" mDreamingLockscreen="); pw.print(mDreamingLockscreen);
-        pw.print(" mDreamingSleepToken="); pw.println(mDreamingSleepToken);
         if (mStatusBar != null) {
             pw.print(prefix); pw.print("mStatusBar="); pw.print(mStatusBar);
         }

@@ -110,6 +110,7 @@ class GnssNetworkConnectivityHandler {
     private int mActiveSubId = -1;
     private final GpsNetInitiatedHandler mNiHandler;
 
+
     private final Context mContext;
 
     // Wakelocks
@@ -186,7 +187,7 @@ class GnssNetworkConnectivityHandler {
         mContext = context;
         mGnssNetworkListener = gnssNetworkListener;
 
-        SubscriptionManager subManager = mContext.getSystemService(SubscriptionManager.class);
+    SubscriptionManager subManager = mContext.getSystemService(SubscriptionManager.class);
         if (subManager != null) {
             subManager.addOnSubscriptionsChangedListener(mOnSubscriptionsChangeListener);
         }

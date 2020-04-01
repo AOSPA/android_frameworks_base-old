@@ -31,12 +31,12 @@ import static android.app.ActivityManager.LOCK_TASK_MODE_NONE;
 import static android.app.ActivityManagerInternal.ALLOW_NON_FULL;
 import static android.app.ActivityTaskManager.INVALID_TASK_ID;
 import static android.app.ActivityTaskManager.RESIZE_MODE_PRESERVE_WINDOW;
+import static android.app.WindowConfiguration.ACTIVITY_TYPE_DREAM;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_UNDEFINED;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FREEFORM;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN;
 import static android.app.WindowConfiguration.WINDOWING_MODE_PINNED;
 import static android.app.WindowConfiguration.WINDOWING_MODE_SPLIT_SCREEN_PRIMARY;
-import static android.app.WindowConfiguration.WINDOWING_MODE_SPLIT_SCREEN_SECONDARY;
 import static android.app.WindowConfiguration.WINDOWING_MODE_UNDEFINED;
 import static android.content.Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS;
 import static android.content.Intent.FLAG_ACTIVITY_NEW_TASK;
@@ -122,6 +122,7 @@ import static com.android.server.wm.RootWindowContainer.MATCH_TASK_IN_STACKS_OR_
 import static com.android.server.wm.Task.LOCK_TASK_AUTH_DONT_LOCK;
 import static com.android.server.wm.Task.REPARENT_KEEP_STACK_AT_FRONT;
 import static com.android.server.wm.Task.REPARENT_LEAVE_STACK_IN_PLACE;
+import static com.android.server.wm.WindowContainer.POSITION_TOP;
 
 import android.Manifest;
 import android.annotation.IntDef;
@@ -144,7 +145,6 @@ import android.app.IApplicationThread;
 import android.app.IAssistDataReceiver;
 import android.app.INotificationManager;
 import android.app.IRequestFinishCallback;
-import android.app.ITaskOrganizerController;
 import android.app.ITaskStackListener;
 import android.app.Notification;
 import android.app.NotificationManager;
@@ -230,8 +230,9 @@ import android.util.proto.ProtoOutputStream;
 import android.view.IRecentsAnimationRunner;
 import android.view.RemoteAnimationAdapter;
 import android.view.RemoteAnimationDefinition;
-import android.view.WindowContainerTransaction;
 import android.view.WindowManager;
+import android.window.IWindowOrganizerController;
+import android.window.WindowContainerTransaction;
 
 import com.android.internal.R;
 import com.android.internal.annotations.VisibleForTesting;
@@ -663,10 +664,8 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
 
     private FontScaleSettingObserver mFontScaleSettingObserver;
 
-    /**
-     * Stores the registration and state of TaskOrganizers in use.
-     */
-    TaskOrganizerController mTaskOrganizerController = new TaskOrganizerController(this);
+    WindowOrganizerController mWindowOrganizerController;
+    TaskOrganizerController mTaskOrganizerController;
 
     private int mDeviceOwnerUid = Process.INVALID_UID;
 
@@ -724,6 +723,8 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         mLifecycleManager = new ClientLifecycleManager();
         mInternal = new LocalService();
         GL_ES_VERSION = SystemProperties.getInt("ro.opengles.version", GL_ES_VERSION_UNDEFINED);
+        mWindowOrganizerController = new WindowOrganizerController(this);
+        mTaskOrganizerController = mWindowOrganizerController.mTaskOrganizerController;
     }
 
     public void onSystemReady() {
@@ -1273,9 +1274,13 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         a.colorMode = ActivityInfo.COLOR_MODE_DEFAULT;
         a.flags |= ActivityInfo.FLAG_EXCLUDE_FROM_RECENTS;
 
+        final ActivityOptions options = ActivityOptions.makeBasic();
+        options.setLaunchActivityType(ACTIVITY_TYPE_DREAM);
+
         try {
             getActivityStartController().obtainStarter(intent, "dream")
                     .setActivityInfo(a)
+                    .setActivityOptions(options.toBundle())
                     .setIsDream(true)
                     .execute();
             return true;
@@ -2348,16 +2353,18 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
                 }
 
                 final ActivityStack stack = task.getStack();
-                // Convert some windowing-mode changes into root-task reparents for split-screen.
-                if (stack.getTile() != null) {
-                    stack.getDisplay().onSplitScreenModeDismissed();
-                }
                 if (toTop) {
                     stack.moveToFront("setTaskWindowingMode", task);
                 }
-                stack.setWindowingMode(windowingMode);
-                stack.getDisplay().ensureActivitiesVisible(null, 0, PRESERVE_WINDOWS,
-                        true /* notifyClients */);
+                // Convert some windowing-mode changes into root-task reparents for split-screen.
+                if (stack.inSplitScreenWindowingMode()) {
+                    stack.getDisplay().onSplitScreenModeDismissed();
+
+                } else {
+                    stack.setWindowingMode(windowingMode);
+                    stack.getDisplay().ensureActivitiesVisible(null, 0, PRESERVE_WINDOWS,
+                            true /* notifyClients */);
+                }
                 return true;
             } finally {
                 Binder.restoreCallingIdentity(ident);
@@ -2754,25 +2761,23 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         }
 
         final int prevMode = task.getWindowingMode();
-        moveTaskToSplitScreenPrimaryTile(task, toTop);
+        moveTaskToSplitScreenPrimaryTask(task, toTop);
         return prevMode != task.getWindowingMode();
     }
 
-    void moveTaskToSplitScreenPrimaryTile(Task task, boolean toTop) {
-        ActivityStack stack = task.getStack();
-        TaskTile tile = null;
-        for (int i = stack.getDisplay().getStackCount() - 1; i >= 0; --i) {
-            tile = stack.getDisplay().getStackAt(i).asTile();
-            if (tile != null && tile.getWindowingMode() == WINDOWING_MODE_SPLIT_SCREEN_PRIMARY) {
-                break;
-            }
+    void moveTaskToSplitScreenPrimaryTask(Task task, boolean toTop) {
+        final DisplayContent display = task.getDisplayContent();
+        final ActivityStack primarySplitTask = display.getRootSplitScreenPrimaryTask();
+        if (primarySplitTask == null) {
+            throw new IllegalStateException("Can't enter split without associated organized task");
         }
-        if (tile == null) {
-            throw new IllegalStateException("Can't enter split without associated tile");
+
+        if (toTop) {
+            display.positionStackAt(POSITION_TOP, primarySplitTask, false /* includingParents */);
         }
         WindowContainerTransaction wct = new WindowContainerTransaction();
-        wct.reparent(stack.mRemoteToken, tile.mRemoteToken, toTop);
-        mTaskOrganizerController.applyContainerTransaction(wct, null);
+        wct.reparent(task.getStack().mRemoteToken, primarySplitTask.mRemoteToken, toTop);
+        mWindowOrganizerController.applyTransaction(wct);
     }
 
     /**
@@ -3238,7 +3243,8 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
 
                 final ActivityStack stack = r.getRootTask();
                 final Task task = stack.getDisplay().createStack(stack.getWindowingMode(),
-                        stack.getActivityType(), !ON_TOP, ainfo, intent);
+                        stack.getActivityType(), !ON_TOP, ainfo, intent,
+                        false /* createdByOrganizer */);
 
                 if (!mRecentTasks.addToBottom(task)) {
                     // The app has too many tasks already and we can't add any more
@@ -4277,19 +4283,9 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         try {
             synchronized (mGlobalLock) {
                 final DisplayContent dc = mRootWindowContainer.getDefaultDisplay();
-                TaskTile primary = null;
-                TaskTile secondary = null;
-                for (int i = dc.getStackCount() - 1; i >= 0; --i) {
-                    final TaskTile t = dc.getStackAt(i).asTile();
-                    if (t == null) {
-                        continue;
-                    }
-                    if (t.getWindowingMode() == WINDOWING_MODE_SPLIT_SCREEN_PRIMARY) {
-                        primary = t;
-                    } else if (t.getWindowingMode() == WINDOWING_MODE_SPLIT_SCREEN_SECONDARY) {
-                        secondary = t;
-                    }
-                }
+                final Task primary = dc.getRootSplitScreenPrimaryTask();
+                final Task secondary = dc.getTask(t -> t.mCreatedByOrganizer && t.isRootTask()
+                        && t.inSplitScreenSecondaryWindowingMode());
                 if (primary == null || secondary == null) {
                     return;
                 }
@@ -4311,7 +4307,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
                     }
                 }
                 wct.setBounds(secondary.mRemoteToken, otherRect);
-                mTaskOrganizerController.applyContainerTransaction(wct, null /* organizer */);
+                mWindowOrganizerController.applyTransaction(wct);
             }
         } finally {
             Binder.restoreCallingIdentity(ident);
@@ -4332,10 +4328,10 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
     }
 
     @Override
-    public ITaskOrganizerController getTaskOrganizerController() {
+    public IWindowOrganizerController getWindowOrganizerController() {
         mAmInternal.enforceCallingPermission(MANAGE_ACTIVITY_STACKS,
-                "getTaskOrganizerController()");
-        return mTaskOrganizerController;
+                "getWindowOrganizerController()");
+        return mWindowOrganizerController;
     }
 
     /**
@@ -6172,6 +6168,20 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         }
 
         @Override
+        public boolean hasResumedActivity(int uid) {
+            synchronized (mGlobalLock) {
+                final ArraySet<WindowProcessController> processes = mProcessMap.getProcesses(uid);
+                for (int i = 0, n = processes.size(); i < n; i++) {
+                    final WindowProcessController process = processes.valueAt(i);
+                    if (process.hasResumedActivity()) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+
+        @Override
         public int startActivitiesAsPackage(String packageName, @Nullable String featureId,
                 int userId, Intent[] intents, Bundle bOptions) {
             Objects.requireNonNull(intents, "intents");
@@ -7462,10 +7472,10 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         }
 
         @Override
-        public ActivityManager.TaskSnapshot getTaskSnapshotNoRestore(int taskId,
-                boolean isLowResolution) {
+        public ActivityManager.TaskSnapshot getTaskSnapshotBlocking(
+                int taskId, boolean isLowResolution) {
             return ActivityTaskManagerService.this.getTaskSnapshot(taskId, isLowResolution,
-                    false /* restoreFromDisk */);
+                    true /* restoreFromDisk */);
         }
 
         @Override

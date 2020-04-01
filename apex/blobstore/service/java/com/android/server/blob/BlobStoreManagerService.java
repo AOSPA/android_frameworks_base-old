@@ -62,7 +62,9 @@ import android.content.res.Resources;
 import android.os.Binder;
 import android.os.Handler;
 import android.os.HandlerThread;
+import android.os.LimitExceededException;
 import android.os.ParcelFileDescriptor;
+import android.os.ParcelableException;
 import android.os.Process;
 import android.os.RemoteCallback;
 import android.os.SystemClock;
@@ -394,12 +396,12 @@ public class BlobStoreManagerService extends SystemService {
                 throw new IllegalArgumentException(
                         "Lease expiry cannot be later than blobs expiry time");
             }
-            if (getTotalUsageBytesLocked(callingUid, callingPackage)
-                    + blobMetadata.getSize() > BlobStoreConfig.getAppDataBytesLimit()) {
-                throw new IllegalStateException("Total amount of data with an active lease"
+            if (blobMetadata.getSize()
+                    > getRemainingLeaseQuotaBytesInternal(callingUid, callingPackage)) {
+                throw new LimitExceededException("Total amount of data with an active lease"
                         + " is exceeding the max limit");
             }
-            blobMetadata.addLeasee(callingPackage, callingUid,
+            blobMetadata.addOrReplaceLeasee(callingPackage, callingUid,
                     descriptionResId, description, leaseExpiryTimeMillis);
             if (LOGV) {
                 Slog.v(TAG, "Acquired lease on " + blobHandle
@@ -442,6 +444,14 @@ public class BlobStoreManagerService extends SystemService {
                 userBlobs.remove(blobHandle);
             }
             writeBlobsInfoAsync();
+        }
+    }
+
+    private long getRemainingLeaseQuotaBytesInternal(int callingUid, String callingPackage) {
+        synchronized (mBlobsLock) {
+            final long remainingQuota = BlobStoreConfig.getAppDataBytesLimit()
+                    - getTotalUsageBytesLocked(callingUid, callingPackage);
+            return remainingQuota > 0 ? remainingQuota : 0;
         }
     }
 
@@ -563,12 +573,16 @@ public class BlobStoreManagerService extends SystemService {
                     final Committer newCommitter = new Committer(session.getOwnerPackageName(),
                             session.getOwnerUid(), session.getBlobAccessMode());
                     final Committer existingCommitter = blob.getExistingCommitter(newCommitter);
-                    blob.addCommitter(newCommitter);
+                    blob.addOrReplaceCommitter(newCommitter);
                     try {
                         writeBlobsInfoLocked();
                         session.sendCommitCallbackResult(COMMIT_RESULT_SUCCESS);
                     } catch (Exception e) {
-                        blob.addCommitter(existingCommitter);
+                        if (existingCommitter == null) {
+                            blob.removeCommitter(newCommitter);
+                        } else {
+                            blob.addOrReplaceCommitter(existingCommitter);
+                        }
                         session.sendCommitCallbackResult(COMMIT_RESULT_ERROR);
                     }
                     getUserSessionsLocked(UserHandle.getUserId(session.getOwnerUid()))
@@ -1302,6 +1316,8 @@ public class BlobStoreManagerService extends SystemService {
                         leaseExpiryTimeMillis, callingUid, packageName);
             } catch (Resources.NotFoundException e) {
                 throw new IllegalArgumentException(e);
+            } catch (LimitExceededException e) {
+                throw new ParcelableException(e);
             }
         }
 
@@ -1321,6 +1337,14 @@ public class BlobStoreManagerService extends SystemService {
             }
 
             releaseLeaseInternal(blobHandle, callingUid, packageName);
+        }
+
+        @Override
+        public long getRemainingLeaseQuotaBytes(@NonNull String packageName) {
+            final int callingUid = Binder.getCallingUid();
+            verifyCallingPackage(callingUid, packageName);
+
+            return getRemainingLeaseQuotaBytesInternal(callingUid, packageName);
         }
 
         @Override

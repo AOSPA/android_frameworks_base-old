@@ -73,7 +73,7 @@ import android.util.ArrayMap;
 import android.util.DisplayMetrics;
 import android.util.Singleton;
 import android.util.Size;
-import android.view.IWindowContainer;
+import android.window.IWindowContainer;
 import android.view.Surface;
 
 import com.android.internal.app.LocalePicker;
@@ -4821,9 +4821,9 @@ public class ActivityManager {
 
     /**
      * Register with {@link HomeVisibilityObserver} with ActivityManager.
+     * TODO: b/144351078 expose as SystemApi
      * @hide
      */
-    @SystemApi
     public void registerHomeVisibilityObserver(@NonNull HomeVisibilityObserver observer) {
         Preconditions.checkNotNull(observer);
         try {
@@ -4838,9 +4838,9 @@ public class ActivityManager {
 
     /**
      * Unregister with {@link HomeVisibilityObserver} with ActivityManager.
+     * TODO: b/144351078 expose as SystemApi
      * @hide
      */
-    @SystemApi
     public void unregisterHomeVisibilityObserver(@NonNull HomeVisibilityObserver observer) {
         Preconditions.checkNotNull(observer);
         try {

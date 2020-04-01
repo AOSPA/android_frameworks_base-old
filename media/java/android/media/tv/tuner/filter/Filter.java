@@ -22,6 +22,7 @@ import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.SystemApi;
 import android.hardware.tv.tuner.V1_0.Constants;
+import android.media.tv.tuner.Tuner;
 import android.media.tv.tuner.Tuner.Result;
 import android.media.tv.tuner.TunerUtils;
 
@@ -179,13 +180,14 @@ public class Filter implements AutoCloseable {
      */
     public static final int STATUS_OVERFLOW = Constants.DemuxFilterStatus.OVERFLOW;
 
-
     private long mNativeContext;
     private FilterCallback mCallback;
     private Executor mExecutor;
     private final int mId;
     private int mMainType;
     private int mSubtype;
+    private Filter mSource;
+    private boolean mStarted;
 
     private native int nativeConfigureFilter(
             int type, int subType, FilterConfiguration settings);
@@ -203,6 +205,9 @@ public class Filter implements AutoCloseable {
     }
 
     private void onFilterStatus(int status) {
+        if (mCallback != null && mExecutor != null) {
+            mExecutor.execute(() -> mCallback.onFilterStatusChanged(this, status));
+        }
     }
 
     private void onFilterEvent(FilterEvent[] events) {
@@ -239,13 +244,12 @@ public class Filter implements AutoCloseable {
      */
     @Result
     public int configure(@NonNull FilterConfiguration config) {
-        // TODO: validate main type, subtype, config, settings
-        int subType;
         Settings s = config.getSettings();
-        if (s != null) {
-            subType = s.getType();
-        } else {
-            subType = TunerUtils.getFilterSubtype(mMainType, mSubtype);
+        int subType = (s == null) ? mSubtype : s.getType();
+        if (mMainType != config.getType() || mSubtype != subType) {
+            throw new IllegalArgumentException("Invalid filter config. filter main type="
+                    + mMainType + ", filter subtype=" + mSubtype + ". config main type="
+                    + config.getType() + ", config subtype=" + subType);
         }
         return nativeConfigureFilter(config.getType(), subType, config);
     }
@@ -268,10 +272,18 @@ public class Filter implements AutoCloseable {
      * @param source the filter instance which provides data input. Switch to
      * use demux as data source if the filter instance is NULL.
      * @return result status of the operation.
+     * @throws IllegalStateException if the data source has been set.
      */
     @Result
     public int setDataSource(@Nullable Filter source) {
-        return nativeSetDataSource(source);
+        if (mSource != null) {
+            throw new IllegalStateException("Data source is existing");
+        }
+        int res = nativeSetDataSource(source);
+        if (res == Tuner.RESULT_SUCCESS) {
+            mSource = source;
+        }
+        return res;
     }
 
     /**
@@ -330,6 +342,9 @@ public class Filter implements AutoCloseable {
      */
     @Override
     public void close() {
-        nativeClose();
+        int res = nativeClose();
+        if (res != Tuner.RESULT_SUCCESS) {
+            TunerUtils.throwExceptionForResult(res, "Failed to close filter.");
+        }
     }
 }
