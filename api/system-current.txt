@@ -9270,7 +9270,6 @@ package android.provider {
     field public static final int VOLUME_HUSH_MUTE = 2; // 0x2
     field public static final int VOLUME_HUSH_OFF = 0; // 0x0
     field public static final int VOLUME_HUSH_VIBRATE = 1; // 0x1
-    field public static final String WIFI_DISCONNECT_DELAY_DURATION = "wifi_disconnect_delay_duration";
   }
 
   public static final class Settings.System extends android.provider.Settings.NameValueTable {

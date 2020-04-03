@@ -6314,14 +6314,6 @@ public final class Settings {
         public static final int LOCATION_CHANGER_QUICK_SETTINGS = 2;
 
         /**
-         * Setting to configure Wifi disconnect delay duration in seconds.
-         * @hide
-         **/
-        @SystemApi
-        public static final String WIFI_DISCONNECT_DELAY_DURATION =
-                "wifi_disconnect_delay_duration";
-
-        /**
          * Location mode is off.
          */
         public static final int LOCATION_MODE_OFF = 0;
