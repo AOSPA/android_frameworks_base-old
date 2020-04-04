@@ -151,6 +151,11 @@ public class BoostFramework {
 
 /** @hide */
     public BoostFramework(Context context) {
+        this(context, false);
+    }
+
+/** @hide */
+    public BoostFramework(Context context, boolean isTrusted) {
         initFunctions();
 
         try {
@@ -160,7 +165,13 @@ public class BoostFramework {
                     mPerf = cons.newInstance(context);
             }
             if (sUxPerfClass != null) {
-                mUxPerf = sUxPerfClass.newInstance();
+                if (isTrusted) {
+                    Constructor cons = sUxPerfClass.getConstructor(Context.class);
+                    if (cons != null)
+                        mUxPerf = cons.newInstance(context);
+                } else {
+                    mUxPerf = sUxPerfClass.newInstance();
+                }
             }
         }
         catch(Exception e) {

@@ -20845,6 +20845,7 @@ public class PackageManagerService extends IPackageManager.Stub
         }, overlayFilter);
 
         mModuleInfoProvider.systemReady();
+        new BoostFramework(mContext, true);
 
         // Installer service might attempt to install some packages that have been staged for
         // installation on reboot. Make sure this is the last component to be call since the
