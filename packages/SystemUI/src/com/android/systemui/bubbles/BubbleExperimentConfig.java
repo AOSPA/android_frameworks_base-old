@@ -90,6 +90,15 @@ public class BubbleExperimentConfig {
     }
 
     /**
+     * When true, show a menu with dismissed and aged-out bubbles.
+     */
+    static boolean allowBubbleOverflow(Context context) {
+        return Settings.Secure.getInt(context.getContentResolver(),
+                ALLOW_BUBBLE_OVERFLOW,
+                ALLOW_BUBBLE_OVERFLOW_DEFAULT ? 1 : 0) != 0;
+    }
+
+    /**
      * Same as {@link #allowAnyNotifToBubble(Context)} except it filters for notifications that
      * are using {@link Notification.MessagingStyle} and have remote input.
      */
@@ -128,16 +137,6 @@ public class BubbleExperimentConfig {
             }
         }
         return false;
-    }
-
-    /**
-     * When true, show a menu when a bubble is long-pressed, which will allow the user to take
-     * actions on that bubble.
-     */
-    static boolean allowBubbleOverflow(Context context) {
-        return Settings.Secure.getInt(context.getContentResolver(),
-                ALLOW_BUBBLE_OVERFLOW,
-                ALLOW_BUBBLE_OVERFLOW_DEFAULT ? 1 : 0) != 0;
     }
 
     /**

@@ -30,6 +30,7 @@ import android.os.RemoteException;
 import android.os.Trace;
 import android.util.Log;
 
+import com.android.internal.os.SomeArgs;
 import com.android.systemui.shared.recents.model.ThumbnailData;
 
 import java.util.ArrayList;
@@ -120,23 +121,14 @@ public class TaskStackChangeListeners extends TaskStackListener {
     }
 
     @Override
-    public void onPinnedActivityRestartAttempt(boolean clearedTask)
-            throws RemoteException {
-        mHandler.removeMessages(H.ON_PINNED_ACTIVITY_RESTART_ATTEMPT);
-        mHandler.obtainMessage(H.ON_PINNED_ACTIVITY_RESTART_ATTEMPT, clearedTask ? 1 : 0, 0)
-                .sendToTarget();
-    }
-
-    @Override
-    public void onPinnedStackAnimationStarted() throws RemoteException {
-        mHandler.removeMessages(H.ON_PINNED_STACK_ANIMATION_STARTED);
-        mHandler.sendEmptyMessage(H.ON_PINNED_STACK_ANIMATION_STARTED);
-    }
-
-    @Override
-    public void onPinnedStackAnimationEnded() throws RemoteException {
-        mHandler.removeMessages(H.ON_PINNED_STACK_ANIMATION_ENDED);
-        mHandler.sendEmptyMessage(H.ON_PINNED_STACK_ANIMATION_ENDED);
+    public void onActivityRestartAttempt(RunningTaskInfo task, boolean homeTaskVisible,
+            boolean clearedTask) throws RemoteException {
+        final SomeArgs args = SomeArgs.obtain();
+        args.arg1 = task;
+        args.argi1 = homeTaskVisible ? 1 : 0;
+        args.argi2 = clearedTask ? 1 : 0;
+        mHandler.removeMessages(H.ON_ACTIVITY_RESTART_ATTEMPT);
+        mHandler.obtainMessage(H.ON_ACTIVITY_RESTART_ATTEMPT, args).sendToTarget();
     }
 
     @Override
@@ -248,12 +240,10 @@ public class TaskStackChangeListeners extends TaskStackListener {
         private static final int ON_TASK_STACK_CHANGED = 1;
         private static final int ON_TASK_SNAPSHOT_CHANGED = 2;
         private static final int ON_ACTIVITY_PINNED = 3;
-        private static final int ON_PINNED_ACTIVITY_RESTART_ATTEMPT = 4;
-        private static final int ON_PINNED_STACK_ANIMATION_ENDED = 5;
+        private static final int ON_ACTIVITY_RESTART_ATTEMPT = 4;
         private static final int ON_ACTIVITY_FORCED_RESIZABLE = 6;
         private static final int ON_ACTIVITY_DISMISSING_DOCKED_STACK = 7;
         private static final int ON_TASK_PROFILE_LOCKED = 8;
-        private static final int ON_PINNED_STACK_ANIMATION_STARTED = 9;
         private static final int ON_ACTIVITY_UNPINNED = 10;
         private static final int ON_ACTIVITY_LAUNCH_ON_SECONDARY_DISPLAY_FAILED = 11;
         private static final int ON_TASK_CREATED = 12;
@@ -310,22 +300,14 @@ public class TaskStackChangeListeners extends TaskStackListener {
                         }
                         break;
                     }
-                    case ON_PINNED_ACTIVITY_RESTART_ATTEMPT: {
+                    case ON_ACTIVITY_RESTART_ATTEMPT: {
+                        final SomeArgs args = (SomeArgs) msg.obj;
+                        final RunningTaskInfo task = (RunningTaskInfo) args.arg1;
+                        final boolean homeTaskVisible = args.argi1 != 0;
+                        final boolean clearedTask = args.argi2 != 0;
                         for (int i = mTaskStackListeners.size() - 1; i >= 0; i--) {
-                            mTaskStackListeners.get(i).onPinnedActivityRestartAttempt(
-                                    msg.arg1 != 0);
-                        }
-                        break;
-                    }
-                    case ON_PINNED_STACK_ANIMATION_STARTED: {
-                        for (int i = mTaskStackListeners.size() - 1; i >= 0; i--) {
-                            mTaskStackListeners.get(i).onPinnedStackAnimationStarted();
-                        }
-                        break;
-                    }
-                    case ON_PINNED_STACK_ANIMATION_ENDED: {
-                        for (int i = mTaskStackListeners.size() - 1; i >= 0; i--) {
-                            mTaskStackListeners.get(i).onPinnedStackAnimationEnded();
+                            mTaskStackListeners.get(i).onActivityRestartAttempt(task,
+                                    homeTaskVisible, clearedTask);
                         }
                         break;
                     }
@@ -444,6 +426,9 @@ public class TaskStackChangeListeners extends TaskStackListener {
                         break;
                     }
                 }
+            }
+            if (msg.obj instanceof SomeArgs) {
+                ((SomeArgs) msg.obj).recycle();
             }
         }
     }

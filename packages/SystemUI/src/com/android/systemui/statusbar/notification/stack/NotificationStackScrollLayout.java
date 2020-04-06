@@ -81,6 +81,8 @@ import android.widget.ScrollView;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.graphics.ColorUtils;
 import com.android.internal.logging.MetricsLogger;
+import com.android.internal.logging.UiEvent;
+import com.android.internal.logging.UiEventLogger;
 import com.android.internal.logging.nano.MetricsProto.MetricsEvent;
 import com.android.internal.statusbar.IStatusBarService;
 import com.android.internal.statusbar.NotificationVisibility;
@@ -502,6 +504,7 @@ public class NotificationStackScrollLayout extends ViewGroup implements ScrollAd
             ServiceManager.getService(Context.STATUS_BAR_SERVICE));
     @VisibleForTesting
     protected final MetricsLogger mMetricsLogger = Dependency.get(MetricsLogger.class);
+    protected final UiEventLogger mUiEventLogger;
     private final NotificationRemoteInputManager mRemoteInputManager =
             Dependency.get(NotificationRemoteInputManager.class);
     private final SysuiColorExtractor mColorExtractor = Dependency.get(SysuiColorExtractor.class);
@@ -547,7 +550,8 @@ public class NotificationStackScrollLayout extends ViewGroup implements ScrollAd
             FeatureFlags featureFlags,
             NotifPipeline notifPipeline,
             NotificationEntryManager entryManager,
-            NotifCollection notifCollection
+            NotifCollection notifCollection,
+            UiEventLogger uiEventLogger
     ) {
         super(context, attrs, 0, 0);
         Resources res = getResources();
@@ -649,6 +653,7 @@ public class NotificationStackScrollLayout extends ViewGroup implements ScrollAd
         mDynamicPrivacyController = dynamicPrivacyController;
         mStatusbarStateController = statusBarStateController;
         initializeForegroundServiceSection(fgsFeatureController);
+        mUiEventLogger = uiEventLogger;
     }
 
     private void initializeForegroundServiceSection(
@@ -815,7 +820,6 @@ public class NotificationStackScrollLayout extends ViewGroup implements ScrollAd
         mBgColor = mContext.getColor(R.color.notification_shade_background_color);
         updateBackgroundDimming();
         mShelf.onUiModeChanged();
-        mSectionsManager.onUiModeChanged();
     }
 
     @ShadeViewRefactor(RefactorComponent.DECORATOR)
@@ -1632,8 +1636,8 @@ public class NotificationStackScrollLayout extends ViewGroup implements ScrollAd
 
     @ShadeViewRefactor(RefactorComponent.COORDINATOR)
     private ExpandableView getChildAtPosition(float touchX, float touchY) {
-        return getChildAtPosition(touchX, touchY, true /* requireMinHeight */);
-
+        return getChildAtPosition(
+                touchX, touchY, true /* requireMinHeight */, true /* ignoreDecors */);
     }
 
     /**
@@ -1642,17 +1646,18 @@ public class NotificationStackScrollLayout extends ViewGroup implements ScrollAd
      * @param touchX           the x coordinate
      * @param touchY           the y coordinate
      * @param requireMinHeight Whether a minimum height is required for a child to be returned.
+     * @param ignoreDecors     Whether decors can be returned
      * @return the child at the given location.
      */
     @ShadeViewRefactor(RefactorComponent.COORDINATOR)
     private ExpandableView getChildAtPosition(float touchX, float touchY,
-            boolean requireMinHeight) {
+            boolean requireMinHeight, boolean ignoreDecors) {
         // find the view under the pointer, accounting for GONE views
         final int count = getChildCount();
         for (int childIdx = 0; childIdx < count; childIdx++) {
             ExpandableView slidingChild = (ExpandableView) getChildAt(childIdx);
             if (slidingChild.getVisibility() != VISIBLE
-                    || slidingChild instanceof StackScrollerDecorView) {
+                    || (ignoreDecors && slidingChild instanceof StackScrollerDecorView)) {
                 continue;
             }
             float childTop = slidingChild.getTranslationY();
@@ -4166,7 +4171,9 @@ public class NotificationStackScrollLayout extends ViewGroup implements ScrollAd
             case MotionEvent.ACTION_DOWN: {
                 final int y = (int) ev.getY();
                 mScrolledToTopOnFirstDown = isScrolledToTop();
-                if (getChildAtPosition(ev.getX(), y, false /* requireMinHeight */) == null) {
+                final ExpandableView childAtTouchPos = getChildAtPosition(
+                        ev.getX(), y, false /* requireMinHeight */, false /* ignoreDecors */);
+                if (childAtTouchPos == null) {
                     setIsBeingDragged(false);
                     recycleVelocityTracker();
                     break;
@@ -5522,7 +5529,8 @@ public class NotificationStackScrollLayout extends ViewGroup implements ScrollAd
     }
 
     @ShadeViewRefactor(RefactorComponent.SHADE_VIEW)
-    private void clearNotifications(
+    @VisibleForTesting
+    void clearNotifications(
             @SelectedRows int selection,
             boolean closeShade) {
         // animate-swipe all dismissable notifications, then animate the shade closed
@@ -5564,6 +5572,9 @@ public class NotificationStackScrollLayout extends ViewGroup implements ScrollAd
                 }
             }
         }
+
+        // Log dismiss event even if there's nothing to dismiss
+        mUiEventLogger.log(NotificationPanelEvent.fromSelection(selection));
 
         if (viewsToRemove.isEmpty()) {
             if (closeShade) {
@@ -6299,8 +6310,6 @@ public class NotificationStackScrollLayout extends ViewGroup implements ScrollAd
             }
 
             if (view instanceof PeopleHubView) {
-                PeopleHubView row = (PeopleHubView) view;
-                row.dismiss(false);
                 mSectionsManager.hidePeopleRow();
             }
 
@@ -6325,8 +6334,11 @@ public class NotificationStackScrollLayout extends ViewGroup implements ScrollAd
 
         @Override
         public View getChildAtPosition(MotionEvent ev) {
-            View child = NotificationStackScrollLayout.this.getChildAtPosition(ev.getX(),
-                    ev.getY());
+            View child = NotificationStackScrollLayout.this.getChildAtPosition(
+                    ev.getX(),
+                    ev.getY(),
+                    true /* requireMinHeight */,
+                    false /* ignoreDecors */);
             if (child instanceof ExpandableNotificationRow) {
                 ExpandableNotificationRow row = (ExpandableNotificationRow) child;
                 ExpandableNotificationRow parent = row.getNotificationParent();
@@ -6734,4 +6746,35 @@ public class NotificationStackScrollLayout extends ViewGroup implements ScrollAd
     public static final int ROWS_HIGH_PRIORITY = 1;
     /** Only rows where entry.isHighPriority() is false. */
     public static final int ROWS_GENTLE = 2;
+
+    /**
+     * Enum for UiEvent logged from this class
+     */
+    enum NotificationPanelEvent implements UiEventLogger.UiEventEnum {
+        INVALID(0),
+        @UiEvent(doc = "User dismissed all notifications from notification panel.")
+        DISMISS_ALL_NOTIFICATIONS_PANEL(312),
+        @UiEvent(doc = "User dismissed all silent notifications from notification panel.")
+        DISMISS_SILENT_NOTIFICATIONS_PANEL(314);
+        private final int mId;
+        NotificationPanelEvent(int id) {
+            mId = id;
+        }
+        @Override public int getId() {
+            return mId;
+        }
+
+        public static UiEventLogger.UiEventEnum fromSelection(@SelectedRows int selection) {
+            if (selection == ROWS_ALL) {
+                return DISMISS_ALL_NOTIFICATIONS_PANEL;
+            }
+            if (selection == ROWS_GENTLE) {
+                return DISMISS_SILENT_NOTIFICATIONS_PANEL;
+            }
+            if (NotificationStackScrollLayout.DEBUG) {
+                throw new IllegalArgumentException("Unexpected selection" + selection);
+            }
+            return INVALID;
+        }
+    }
 }

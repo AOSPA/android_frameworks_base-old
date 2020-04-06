@@ -129,7 +129,7 @@ public final class AppExitInfoTracker {
     private final ProcessMap<AppExitInfoContainer> mData;
 
     /** A pool of raw {@link android.app.ApplicationExitInfo} records. */
-    @GuardedBy("mService")
+    @GuardedBy("mLock")
     private final SynchronizedPool<ApplicationExitInfo> mRawRecordsPool;
 
     /**
@@ -204,8 +204,7 @@ public final class AppExitInfoTracker {
         });
     }
 
-    @GuardedBy("mService")
-    void scheduleNoteProcessDiedLocked(final ProcessRecord app) {
+    void scheduleNoteProcessDied(final ProcessRecord app) {
         if (app == null || app.info == null) {
             return;
         }
@@ -214,11 +213,9 @@ public final class AppExitInfoTracker {
             if (!mAppExitInfoLoaded) {
                 return;
             }
+            mKillHandler.obtainMessage(KillHandler.MSG_PROC_DIED, obtainRawRecordLocked(app))
+                    .sendToTarget();
         }
-        // The current thread is holding the global lock, let's extract the info from it
-        // and schedule the info note task in the kill handler.
-        mKillHandler.obtainMessage(KillHandler.MSG_PROC_DIED, obtainRawRecordLocked(app))
-                .sendToTarget();
     }
 
     void scheduleNoteAppKill(final ProcessRecord app, final @Reason int reason,
@@ -227,8 +224,6 @@ public final class AppExitInfoTracker {
             if (!mAppExitInfoLoaded) {
                 return;
             }
-        }
-        synchronized (mService) {
             if (app == null || app.info == null) {
                 return;
             }
@@ -247,8 +242,6 @@ public final class AppExitInfoTracker {
             if (!mAppExitInfoLoaded) {
                 return;
             }
-        }
-        synchronized (mService) {
             ProcessRecord app;
             synchronized (mService.mPidsSelfLocked) {
                 app = mService.mPidsSelfLocked.get(pid);
@@ -348,6 +341,7 @@ public final class AppExitInfoTracker {
         } else {
             // always override the existing info since we are now more informational.
             info.setReason(raw.getReason());
+            info.setSubReason(raw.getSubReason());
             info.setStatus(0);
             info.setTimestamp(System.currentTimeMillis());
             info.setDescription(raw.getDescription());
@@ -511,9 +505,13 @@ public final class AppExitInfoTracker {
     @VisibleForTesting
     void onPackageRemoved(String packageName, int uid, boolean allUsers) {
         if (packageName != null) {
-            mAppExitInfoSourceZygote.removeByUid(uid, allUsers);
-            mAppExitInfoSourceLmkd.removeByUid(uid, allUsers);
-            mIsolatedUidRecords.removeAppUid(uid, allUsers);
+            final boolean removeUid = TextUtils.isEmpty(
+                    mService.mPackageManagerInt.getNameForUid(uid));
+            if (removeUid) {
+                mAppExitInfoSourceZygote.removeByUid(uid, allUsers);
+                mAppExitInfoSourceLmkd.removeByUid(uid, allUsers);
+                mIsolatedUidRecords.removeAppUid(uid, allUsers);
+            }
             removePackage(packageName, allUsers ? UserHandle.USER_ALL : UserHandle.getUserId(uid));
             schedulePersistProcessExitInfo(true);
         }
@@ -539,6 +537,11 @@ public final class AppExitInfoTracker {
         mService.mContext.registerReceiverForAllUsers(new BroadcastReceiver() {
             @Override
             public void onReceive(Context context, Intent intent) {
+                boolean replacing = intent.getBooleanExtra(
+                        Intent.EXTRA_REPLACING, false);
+                if (replacing) {
+                    return;
+                }
                 int uid = intent.getIntExtra(Intent.EXTRA_UID, UserHandle.USER_NULL);
                 boolean allUsers = intent.getBooleanExtra(
                         Intent.EXTRA_REMOVED_FOR_ALL_USERS, false);
@@ -708,7 +711,7 @@ public final class AppExitInfoTracker {
 
     void dumpHistoryProcessExitInfo(PrintWriter pw, String packageName) {
         pw.println("ACTIVITY MANAGER LRU PROCESSES (dumpsys activity exit-info)");
-        SimpleDateFormat sdf = new SimpleDateFormat();
+        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS");
         synchronized (mLock) {
             pw.println("Last Timestamp of Persistence Into Persistent Storage: "
                     + sdf.format(new Date(mLastAppExitInfoPersistTimestamp)));
@@ -822,7 +825,7 @@ public final class AppExitInfoTracker {
     }
 
     @VisibleForTesting
-    @GuardedBy("mService")
+    @GuardedBy("mLock")
     ApplicationExitInfo obtainRawRecordLocked(ProcessRecord app) {
         ApplicationExitInfo info = mRawRecordsPool.acquire();
         if (info == null) {
@@ -841,15 +844,15 @@ public final class AppExitInfoTracker {
         info.setReason(ApplicationExitInfo.REASON_UNKNOWN);
         info.setStatus(0);
         info.setImportance(procStateToImportance(app.setProcState));
-        info.setPss(app.lastMemInfo == null ? 0 : app.lastMemInfo.getTotalPss());
-        info.setRss(app.lastMemInfo == null ? 0 : app.lastMemInfo.getTotalRss());
+        info.setPss(app.lastPss);
+        info.setRss(app.mLastRss);
         info.setTimestamp(System.currentTimeMillis());
 
         return info;
     }
 
     @VisibleForTesting
-    @GuardedBy("mService")
+    @GuardedBy("mLock")
     void recycleRawRecordLocked(ApplicationExitInfo info) {
         info.setProcessName(null);
         info.setDescription(null);
@@ -1134,8 +1137,6 @@ public final class AppExitInfoTracker {
                     ApplicationExitInfo raw = (ApplicationExitInfo) msg.obj;
                     synchronized (mLock) {
                         handleNoteProcessDiedLocked(raw);
-                    }
-                    synchronized (mService) {
                         recycleRawRecordLocked(raw);
                     }
                 }
@@ -1144,8 +1145,6 @@ public final class AppExitInfoTracker {
                     ApplicationExitInfo raw = (ApplicationExitInfo) msg.obj;
                     synchronized (mLock) {
                         handleNoteAppKillLocked(raw);
-                    }
-                    synchronized (mService) {
                         recycleRawRecordLocked(raw);
                     }
                 }

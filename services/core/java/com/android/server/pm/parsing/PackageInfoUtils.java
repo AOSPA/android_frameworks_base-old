@@ -48,7 +48,7 @@ import android.content.pm.parsing.component.ParsedService;
 import android.os.UserHandle;
 import android.util.ArrayMap;
 import android.util.ArraySet;
-import android.util.Pair;
+import android.util.Slog;
 
 import com.android.internal.util.ArrayUtils;
 import com.android.server.pm.PackageSetting;
@@ -72,6 +72,7 @@ import java.util.Set;
  * @hide
  **/
 public class PackageInfoUtils {
+    private static final String TAG = PackageParser2.TAG;
 
     /**
      * @param pkgSetting See {@link PackageInfoUtils} for description of pkgSetting usage.
@@ -108,12 +109,9 @@ public class PackageInfoUtils {
             return null;
         }
 
-        PackageInfo info = PackageInfoWithoutStateUtils.generateWithoutComponents(pkg, gids, flags,
-                firstInstallTime, lastUpdateTime, grantedPermissions, state, userId, apexInfo,
-                applicationInfo);
-        if (info == null) {
-            return null;
-        }
+        PackageInfo info = PackageInfoWithoutStateUtils.generateWithoutComponentsUnchecked(pkg,
+                gids, flags, firstInstallTime, lastUpdateTime, grantedPermissions, state, userId,
+                apexInfo, applicationInfo);
 
         info.isStub = pkg.isStub();
         info.coreApp = pkg.isCoreApp();
@@ -218,11 +216,8 @@ public class PackageInfoUtils {
             return null;
         }
 
-        ApplicationInfo info = PackageInfoWithoutStateUtils.generateApplicationInfo(pkg, flags,
-                state, userId);
-        if (info == null) {
-            return null;
-        }
+        ApplicationInfo info = PackageInfoWithoutStateUtils.generateApplicationInfoUnchecked(pkg,
+                flags, state, userId);
 
         if (pkgSetting != null) {
             // TODO(b/135203078): Remove PackageParser1/toAppInfoWithoutState and clean all this up
@@ -265,12 +260,13 @@ public class PackageInfoUtils {
         if (applicationInfo == null) {
             applicationInfo = generateApplicationInfo(pkg, flags, state, userId, pkgSetting);
         }
-        ActivityInfo info = PackageInfoWithoutStateUtils.generateActivityInfo(pkg, a, flags, state,
-                applicationInfo, userId);
-        if (info == null) {
+
+        if (applicationInfo == null) {
             return null;
         }
 
+        ActivityInfo info =
+                PackageInfoWithoutStateUtils.generateActivityInfoUnchecked(a, applicationInfo);
         assignSharedFieldsForComponentInfo(info, a, pkgSetting);
         return info;
     }
@@ -300,12 +296,12 @@ public class PackageInfoUtils {
         if (applicationInfo == null) {
             applicationInfo = generateApplicationInfo(pkg, flags, state, userId, pkgSetting);
         }
-        ServiceInfo info = PackageInfoWithoutStateUtils.generateServiceInfo(pkg, s, flags, state,
-                applicationInfo, userId);
-        if (info == null) {
+        if (applicationInfo == null) {
             return null;
         }
 
+        ServiceInfo info =
+                PackageInfoWithoutStateUtils.generateServiceInfoUnchecked(s, applicationInfo);
         assignSharedFieldsForComponentInfo(info, s, pkgSetting);
         return info;
     }
@@ -315,32 +311,24 @@ public class PackageInfoUtils {
      */
     @Nullable
     public static ProviderInfo generateProviderInfo(AndroidPackage pkg, ParsedProvider p,
-            @PackageManager.ComponentInfoFlags int flags, PackageUserState state, int userId,
-            @Nullable PackageSetting pkgSetting) {
-        return generateProviderInfo(pkg, p, flags, state, null, userId, pkgSetting);
-    }
-
-    /**
-     * @param pkgSetting See {@link PackageInfoUtils} for description of pkgSetting usage.
-     */
-    @Nullable
-    private static ProviderInfo generateProviderInfo(AndroidPackage pkg, ParsedProvider p,
             @PackageManager.ComponentInfoFlags int flags, PackageUserState state,
-            @Nullable ApplicationInfo applicationInfo, int userId,
+            @NonNull ApplicationInfo applicationInfo, int userId,
             @Nullable PackageSetting pkgSetting) {
         if (p == null) return null;
         if (!checkUseInstalledOrHidden(pkg, pkgSetting, state, flags)) {
             return null;
         }
-        if (applicationInfo == null) {
+        if (applicationInfo == null || !pkg.getPackageName().equals(applicationInfo.packageName)) {
+            Slog.wtf(TAG, "AppInfo's package name is different. Expected=" + pkg.getPackageName()
+                    + " actual=" + (applicationInfo == null ? "(null AppInfo)"
+                    : applicationInfo.packageName));
             applicationInfo = generateApplicationInfo(pkg, flags, state, userId, pkgSetting);
         }
-        ProviderInfo info = PackageInfoWithoutStateUtils.generateProviderInfo(pkg, p, flags, state,
-                applicationInfo, userId);
-        if (info == null) {
+        if (applicationInfo == null) {
             return null;
         }
-
+        ProviderInfo info = PackageInfoWithoutStateUtils.generateProviderInfoUnchecked(p, flags,
+                applicationInfo);
         assignSharedFieldsForComponentInfo(info, p, pkgSetting);
         return info;
     }
@@ -403,8 +391,9 @@ public class PackageInfoUtils {
         ArrayMap<String, ProcessInfo> retProcs = new ArrayMap<>(numProcs);
         for (String key : procs.keySet()) {
             ParsedProcess proc = procs.get(key);
-            retProcs.put(proc.getName(), new ProcessInfo(proc.getName(),
-                    new ArraySet<>(proc.getDeniedPermissions())));
+            retProcs.put(proc.getName(),
+                    new ProcessInfo(proc.getName(), new ArraySet<>(proc.getDeniedPermissions()),
+                            proc.getEnableGwpAsan()));
         }
         return retProcs;
     }
@@ -479,5 +468,30 @@ public class PackageInfoUtils {
                 | flag(pkg.isOdm(), ApplicationInfo.PRIVATE_FLAG_ODM)
                 | flag(pkg.isSignedWithPlatformKey(), ApplicationInfo.PRIVATE_FLAG_SIGNED_WITH_PLATFORM_KEY);
         // @formatter:on
+    }
+
+    /**
+     * Wraps {@link PackageInfoUtils#generateApplicationInfo} with a cache.
+     */
+    public static class CachedApplicationInfoGenerator {
+        // Map from a package name to the corresponding app info.
+        private ArrayMap<String, ApplicationInfo> mCache = new ArrayMap<>();
+
+        /**
+         * {@link PackageInfoUtils#generateApplicationInfo} with a cache.
+         */
+        @Nullable
+        public ApplicationInfo generate(AndroidPackage pkg,
+                @PackageManager.ApplicationInfoFlags int flags, PackageUserState state, int userId,
+                @Nullable PackageSetting pkgSetting) {
+            ApplicationInfo appInfo = mCache.get(pkg.getPackageName());
+            if (appInfo != null) {
+                return appInfo;
+            }
+            appInfo = PackageInfoUtils.generateApplicationInfo(
+                    pkg, flags, state, userId, pkgSetting);
+            mCache.put(pkg.getPackageName(), appInfo);
+            return appInfo;
+        }
     }
 }

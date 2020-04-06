@@ -20,7 +20,7 @@ import static android.content.pm.ActivityInfo.RESIZE_MODE_FORCE_RESIZEABLE;
 import static android.content.pm.ActivityInfo.RESIZE_MODE_RESIZEABLE;
 import static android.content.pm.ActivityInfo.RESIZE_MODE_RESIZEABLE_VIA_SDK_VERSION;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
-import static android.content.pm.parsing.ParsingPackageImpl.sForString;
+import static android.content.pm.parsing.ParsingPackageImpl.sForInternedString;
 import static android.view.WindowManager.LayoutParams.ROTATION_ANIMATION_UNSPECIFIED;
 
 import android.annotation.Nullable;
@@ -29,13 +29,11 @@ import android.content.ComponentName;
 import android.content.pm.ActivityInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.PackageParser;
-import android.content.pm.parsing.ParsingPackageImpl;
 import android.os.Parcel;
 import android.os.Parcelable;
 import android.text.TextUtils;
 
 import com.android.internal.util.DataClass;
-import com.android.internal.util.Parcelling;
 import com.android.internal.util.Parcelling.BuiltIn.ForInternedString;
 
 /** @hide **/
@@ -79,8 +77,6 @@ public class ParsedActivity extends ParsedMainComponent {
     String requestedVrComponent;
     int rotationAnimation = -1;
     int colorMode;
-
-    boolean preferMinimalPostProcessing;
 
     @Nullable
     ActivityInfo.WindowLayout windowLayout;
@@ -137,7 +133,6 @@ public class ParsedActivity extends ParsedMainComponent {
         activity.setDirectBootAware(false);
         activity.rotationAnimation = ROTATION_ANIMATION_UNSPECIFIED;
         activity.colorMode = ActivityInfo.COLOR_MODE_DEFAULT;
-        activity.preferMinimalPostProcessing = ActivityInfo.MINIMAL_POST_PROCESSING_DEFAULT;
         if (hardwareAccelerated) {
             activity.setFlags(activity.getFlags() | ActivityInfo.FLAG_HARDWARE_ACCELERATED);
         }
@@ -268,11 +263,11 @@ public class ParsedActivity extends ParsedMainComponent {
         super.writeToParcel(dest, flags);
         dest.writeInt(this.theme);
         dest.writeInt(this.uiOptions);
-        sForString.parcel(this.targetActivity, dest, flags);
-        sForString.parcel(this.parentActivityName, dest, flags);
+        dest.writeString(this.targetActivity);
+        dest.writeString(this.parentActivityName);
         dest.writeString(this.taskAffinity);
         dest.writeInt(this.privateFlags);
-        sForString.parcel(this.permission, dest, flags);
+        sForInternedString.parcel(this.permission, dest, flags);
         dest.writeInt(this.launchMode);
         dest.writeInt(this.documentLaunchMode);
         dest.writeInt(this.maxRecents);
@@ -287,7 +282,6 @@ public class ParsedActivity extends ParsedMainComponent {
         dest.writeString(this.requestedVrComponent);
         dest.writeInt(this.rotationAnimation);
         dest.writeInt(this.colorMode);
-        dest.writeBoolean(this.preferMinimalPostProcessing);
         dest.writeBundle(this.metaData);
 
         if (windowLayout != null) {
@@ -311,11 +305,11 @@ public class ParsedActivity extends ParsedMainComponent {
         super(in);
         this.theme = in.readInt();
         this.uiOptions = in.readInt();
-        this.targetActivity = sForString.unparcel(in);
-        this.parentActivityName = sForString.unparcel(in);
+        this.targetActivity = in.readString();
+        this.parentActivityName = in.readString();
         this.taskAffinity = in.readString();
         this.privateFlags = in.readInt();
-        this.permission = sForString.unparcel(in);
+        this.permission = sForInternedString.unparcel(in);
         this.launchMode = in.readInt();
         this.documentLaunchMode = in.readInt();
         this.maxRecents = in.readInt();
@@ -330,7 +324,6 @@ public class ParsedActivity extends ParsedMainComponent {
         this.requestedVrComponent = in.readString();
         this.rotationAnimation = in.readInt();
         this.colorMode = in.readInt();
-        this.preferMinimalPostProcessing = in.readBoolean();
         this.metaData = in.readBundle();
         if (in.readBoolean()) {
             windowLayout = new ActivityInfo.WindowLayout(in);
@@ -438,10 +431,6 @@ public class ParsedActivity extends ParsedMainComponent {
 
     public int getColorMode() {
         return colorMode;
-    }
-
-    public boolean isPreferMinimalPostProcessing() {
-        return preferMinimalPostProcessing;
     }
 
     @Nullable

@@ -79,10 +79,10 @@ import android.os.BatteryStats;
 import android.os.Build;
 import android.os.Environment;
 import android.os.Handler;
-import android.os.IDeviceIdleController;
 import android.os.Looper;
 import android.os.Message;
 import android.os.PowerManager;
+import android.os.PowerWhitelistManager;
 import android.os.Process;
 import android.os.RemoteException;
 import android.os.ServiceManager;
@@ -130,7 +130,8 @@ import java.util.concurrent.CountDownLatch;
 public class AppStandbyController implements AppStandbyInternal {
 
     private static final String TAG = "AppStandbyController";
-    static final boolean DEBUG = true;
+    // Do not submit with true.
+    static final boolean DEBUG = false;
 
     static final boolean COMPRESS_TIME = false;
     private static final long ONE_MINUTE = 60 * 1000;
@@ -831,24 +832,24 @@ public class AppStandbyController implements AppStandbyInternal {
         if (eventType == UsageEvents.Event.NOTIFICATION_SEEN
                 || eventType == UsageEvents.Event.SLICE_PINNED) {
             // Mild usage elevates to WORKING_SET but doesn't change usage time.
-            mAppIdleHistory.reportUsage(appHistory, pkg,
+            mAppIdleHistory.reportUsage(appHistory, pkg, userId,
                     STANDBY_BUCKET_WORKING_SET, subReason,
                     0, elapsedRealtime + mNotificationSeenTimeoutMillis);
             nextCheckDelay = mNotificationSeenTimeoutMillis;
         } else if (eventType == UsageEvents.Event.SYSTEM_INTERACTION) {
-            mAppIdleHistory.reportUsage(appHistory, pkg,
+            mAppIdleHistory.reportUsage(appHistory, pkg, userId,
                     STANDBY_BUCKET_ACTIVE, subReason,
                     0, elapsedRealtime + mSystemInteractionTimeoutMillis);
             nextCheckDelay = mSystemInteractionTimeoutMillis;
         } else if (eventType == UsageEvents.Event.FOREGROUND_SERVICE_START) {
             // Only elevate bucket if this is the first usage of the app
             if (prevBucket != STANDBY_BUCKET_NEVER) return;
-            mAppIdleHistory.reportUsage(appHistory, pkg,
+            mAppIdleHistory.reportUsage(appHistory, pkg, userId,
                     STANDBY_BUCKET_ACTIVE, subReason,
                     0, elapsedRealtime + mInitialForegroundServiceStartTimeoutMillis);
             nextCheckDelay = mInitialForegroundServiceStartTimeoutMillis;
         } else {
-            mAppIdleHistory.reportUsage(appHistory, pkg,
+            mAppIdleHistory.reportUsage(appHistory, pkg, userId,
                     STANDBY_BUCKET_ACTIVE, subReason,
                     elapsedRealtime, elapsedRealtime + mStrongUsageTimeoutMillis);
             nextCheckDelay = mStrongUsageTimeoutMillis;
@@ -1009,7 +1010,7 @@ public class AppStandbyController implements AppStandbyInternal {
                 // We allow all whitelisted apps, including those that don't want to be whitelisted
                 // for idle mode, because app idle (aka app standby) is really not as big an issue
                 // for controlling who participates vs. doze mode.
-                if (mInjector.isPowerSaveWhitelistExceptIdleApp(packageName)) {
+                if (mInjector.isNonIdleWhitelisted(packageName)) {
                     return true;
                 }
             } catch (RemoteException re) {
@@ -1636,12 +1637,12 @@ public class AppStandbyController implements AppStandbyInternal {
 
         private final Context mContext;
         private final Looper mLooper;
-        private IDeviceIdleController mDeviceIdleController;
         private IBatteryStats mBatteryStats;
         private BatteryManager mBatteryManager;
         private PackageManagerInternal mPackageManagerInternal;
         private DisplayManager mDisplayManager;
         private PowerManager mPowerManager;
+        private PowerWhitelistManager mPowerWhitelistManager;
         private CrossProfileAppsInternal mCrossProfileAppsInternal;
         int mBootPhase;
         /**
@@ -1665,8 +1666,7 @@ public class AppStandbyController implements AppStandbyInternal {
 
         void onBootPhase(int phase) {
             if (phase == PHASE_SYSTEM_SERVICES_READY) {
-                mDeviceIdleController = IDeviceIdleController.Stub.asInterface(
-                        ServiceManager.getService(Context.DEVICE_IDLE_CONTROLLER));
+                mPowerWhitelistManager = mContext.getSystemService(PowerWhitelistManager.class);
                 mBatteryStats = IBatteryStats.Stub.asInterface(
                         ServiceManager.getService(BatteryStats.SERVICE_NAME));
                 mPackageManagerInternal = LocalServices.getService(PackageManagerInternal.class);
@@ -1717,8 +1717,8 @@ public class AppStandbyController implements AppStandbyInternal {
             return mBatteryManager.isCharging();
         }
 
-        boolean isPowerSaveWhitelistExceptIdleApp(String packageName) throws RemoteException {
-            return mDeviceIdleController.isPowerSaveWhitelistExceptIdleApp(packageName);
+        boolean isNonIdleWhitelisted(String packageName) throws RemoteException {
+            return mPowerWhitelistManager.isWhitelisted(packageName, false);
         }
 
         File getDataSystemDirectory() {
@@ -1844,7 +1844,7 @@ public class AppStandbyController implements AppStandbyInternal {
                     break;
 
                 case MSG_REPORT_SYNC_SCHEDULED:
-                    final boolean exempted = msg.arg1 > 0 ? true : false;
+                    final boolean exempted = msg.arg2 > 0 ? true : false;
                     if (exempted) {
                         reportExemptedSyncScheduled((String) msg.obj, msg.arg1);
                     } else {

@@ -207,7 +207,7 @@ public class NetworkControllerBaseTest extends SysuiTestCase {
     protected void setupNetworkController() {
         // For now just pretend to be the data sim, so we can test that too.
         mSubId = SubscriptionManager.DEFAULT_SUBSCRIPTION_ID;
-        when(mMockTm.isDataConnectionEnabled()).thenReturn(true);
+        when(mMockTm.isDataConnectionAllowed()).thenReturn(true);
         setDefaultSubId(mSubId);
         setSubscriptions(mSubId);
         mMobileSignalController = mNetworkController.mMobileSignalControllers.get(mSubId);
@@ -235,7 +235,7 @@ public class NetworkControllerBaseTest extends SysuiTestCase {
             subs.add(subscription);
         }
         when(mMockSm.getActiveSubscriptionInfoList()).thenReturn(subs);
-        when(mMockSm.getActiveAndHiddenSubscriptionInfoList()).thenReturn(subs);
+        when(mMockSm.getCompleteActiveSubscriptionInfoList()).thenReturn(subs);
         mNetworkController.doUpdateMobileControllers();
     }
 

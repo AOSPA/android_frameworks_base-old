@@ -22,6 +22,8 @@ import android.os.Binder
 import android.os.UserHandle
 import android.service.controls.Control
 import android.service.controls.DeviceTypes
+import android.service.controls.IControlsSubscriber
+import android.service.controls.IControlsSubscription
 import android.testing.AndroidTestingRunner
 import androidx.test.filters.SmallTest
 import com.android.systemui.SysuiTestCase
@@ -34,12 +36,14 @@ import org.junit.Assert.assertEquals
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.mockito.ArgumentCaptor
+import org.mockito.Captor
 import org.mockito.Mock
 import org.mockito.Mockito
 import org.mockito.Mockito.`when`
 import org.mockito.Mockito.mock
 import org.mockito.Mockito.never
-import org.mockito.Mockito.reset
+import org.mockito.Mockito.times
 import org.mockito.Mockito.verify
 import org.mockito.MockitoAnnotations
 
@@ -48,6 +52,7 @@ import org.mockito.MockitoAnnotations
 class ControlsBindingControllerImplTest : SysuiTestCase() {
 
     companion object {
+        fun <T> capture(argumentCaptor: ArgumentCaptor<T>): T = argumentCaptor.capture()
         fun <T> any(): T = Mockito.any<T>()
         private val TEST_COMPONENT_NAME_1 = ComponentName("TEST_PKG", "TEST_CLS_1")
         private val TEST_COMPONENT_NAME_2 = ComponentName("TEST_PKG", "TEST_CLS_2")
@@ -56,6 +61,15 @@ class ControlsBindingControllerImplTest : SysuiTestCase() {
 
     @Mock
     private lateinit var mockControlsController: ControlsController
+
+    @Captor
+    private lateinit var subscriberCaptor: ArgumentCaptor<IControlsSubscriber.Stub>
+
+    @Captor
+    private lateinit var loadSubscriberCaptor: ArgumentCaptor<IControlsSubscriber.Stub>
+
+    @Captor
+    private lateinit var listStringCaptor: ArgumentCaptor<List<String>>
 
     private val user = UserHandle.of(mContext.userId)
     private val otherUser = UserHandle.of(user.identifier + 1)
@@ -67,6 +81,7 @@ class ControlsBindingControllerImplTest : SysuiTestCase() {
     @Before
     fun setUp() {
         MockitoAnnotations.initMocks(this)
+        providers.clear()
 
         controller = TestableControlsBindingControllerImpl(
                 mContext, executor, Lazy { mockControlsController })
@@ -76,7 +91,6 @@ class ControlsBindingControllerImplTest : SysuiTestCase() {
     fun tearDown() {
         executor.advanceClockToLast()
         executor.runAllReady()
-        providers.clear()
     }
 
     @Test
@@ -93,71 +107,166 @@ class ControlsBindingControllerImplTest : SysuiTestCase() {
         }
         controller.bindAndLoad(TEST_COMPONENT_NAME_1, callback)
 
-        assertEquals(1, providers.size)
-        val provider = providers.first()
-        verify(provider).maybeBindAndLoad(any())
+        verify(providers[0]).maybeBindAndLoad(any())
     }
 
     @Test
-    fun testBindServices() {
-        controller.bindServices(listOf(TEST_COMPONENT_NAME_1, TEST_COMPONENT_NAME_2))
+    fun testBindAndLoad_cancel() {
+        val callback = object : ControlsBindingController.LoadCallback {
+            override fun error(message: String) {}
+
+            override fun accept(t: List<Control>) {}
+        }
+        val subscription = mock(IControlsSubscription::class.java)
+
+        val canceller = controller.bindAndLoad(TEST_COMPONENT_NAME_1, callback)
+
+        verify(providers[0]).maybeBindAndLoad(capture(loadSubscriberCaptor))
+        loadSubscriberCaptor.value.onSubscribe(Binder(), subscription)
+
+        canceller.run()
+        verify(subscription).cancel()
+    }
+
+    @Test
+    fun testBindAndLoad_noCancelAfterOnComplete() {
+        val callback = object : ControlsBindingController.LoadCallback {
+            override fun error(message: String) {}
+
+            override fun accept(t: List<Control>) {}
+        }
+        val subscription = mock(IControlsSubscription::class.java)
+
+        val canceller = controller.bindAndLoad(TEST_COMPONENT_NAME_1, callback)
+
+        verify(providers[0]).maybeBindAndLoad(capture(loadSubscriberCaptor))
+        val b = Binder()
+        loadSubscriberCaptor.value.onSubscribe(b, subscription)
+
+        loadSubscriberCaptor.value.onComplete(b)
+        canceller.run()
+        verify(subscription, never()).cancel()
+    }
+
+    @Test
+    fun testLoad_onCompleteRemovesTimeout() {
+        val callback = object : ControlsBindingController.LoadCallback {
+            override fun error(message: String) {}
+
+            override fun accept(t: List<Control>) {}
+        }
+        val subscription = mock(IControlsSubscription::class.java)
+
+        val canceller = controller.bindAndLoad(TEST_COMPONENT_NAME_1, callback)
+
+        verify(providers[0]).maybeBindAndLoad(capture(subscriberCaptor))
+        val b = Binder()
+        subscriberCaptor.value.onSubscribe(b, subscription)
+
+        subscriberCaptor.value.onComplete(b)
+        verify(providers[0]).cancelLoadTimeout()
+    }
+
+    @Test
+    fun testLoad_onErrorRemovesTimeout() {
+        val callback = object : ControlsBindingController.LoadCallback {
+            override fun error(message: String) {}
+
+            override fun accept(t: List<Control>) {}
+        }
+        val subscription = mock(IControlsSubscription::class.java)
+
+        val canceller = controller.bindAndLoad(TEST_COMPONENT_NAME_1, callback)
+
+        verify(providers[0]).maybeBindAndLoad(capture(subscriberCaptor))
+        val b = Binder()
+        subscriberCaptor.value.onSubscribe(b, subscription)
+
+        subscriberCaptor.value.onError(b, "")
+        verify(providers[0]).cancelLoadTimeout()
+    }
+
+    @Test
+    fun testBindAndLoad_noCancelAfterOnError() {
+        val callback = object : ControlsBindingController.LoadCallback {
+            override fun error(message: String) {}
+
+            override fun accept(t: List<Control>) {}
+        }
+        val subscription = mock(IControlsSubscription::class.java)
+
+        val canceller = controller.bindAndLoad(TEST_COMPONENT_NAME_1, callback)
+
+        verify(providers[0]).maybeBindAndLoad(capture(loadSubscriberCaptor))
+        val b = Binder()
+        loadSubscriberCaptor.value.onSubscribe(b, subscription)
+
+        loadSubscriberCaptor.value.onError(b, "")
+        canceller.run()
+        verify(subscription, never()).cancel()
+    }
+
+    @Test
+    fun testBindService() {
+        controller.bindService(TEST_COMPONENT_NAME_1)
         executor.runAllReady()
 
-        assertEquals(2, providers.size)
-        assertEquals(setOf(TEST_COMPONENT_NAME_1, TEST_COMPONENT_NAME_2),
-                providers.map { it.componentName }.toSet())
-        providers.forEach {
-            verify(it).bindService()
-        }
+        verify(providers[0]).bindService()
     }
 
     @Test
     fun testSubscribe() {
-        val controlInfo1 = ControlInfo(TEST_COMPONENT_NAME_1, "id_1", "", DeviceTypes.TYPE_UNKNOWN)
-        val controlInfo2 = ControlInfo(TEST_COMPONENT_NAME_2, "id_2", "", DeviceTypes.TYPE_UNKNOWN)
-        controller.bindServices(listOf(TEST_COMPONENT_NAME_3))
+        val controlInfo1 = ControlInfo("id_1", "", DeviceTypes.TYPE_UNKNOWN)
+        val controlInfo2 = ControlInfo("id_2", "", DeviceTypes.TYPE_UNKNOWN)
+        val structure =
+            StructureInfo(TEST_COMPONENT_NAME_1, "Home", listOf(controlInfo1, controlInfo2))
 
-        controller.subscribe(listOf(controlInfo1, controlInfo2))
+        controller.subscribe(structure)
 
         executor.runAllReady()
 
-        assertEquals(3, providers.size)
-        val provider1 = providers.first { it.componentName == TEST_COMPONENT_NAME_1 }
-        val provider2 = providers.first { it.componentName == TEST_COMPONENT_NAME_2 }
-        val provider3 = providers.first { it.componentName == TEST_COMPONENT_NAME_3 }
+        val subs = mock(IControlsSubscription::class.java)
+        verify(providers[0]).maybeBindAndSubscribe(
+            capture(listStringCaptor), capture(subscriberCaptor))
+        assertEquals(listStringCaptor.value,
+            listOf(controlInfo1.controlId, controlInfo2.controlId))
 
-        verify(provider1).maybeBindAndSubscribe(listOf(controlInfo1.controlId))
-        verify(provider2).maybeBindAndSubscribe(listOf(controlInfo2.controlId))
-        verify(provider3, never()).maybeBindAndSubscribe(any())
-        verify(provider3).unbindService() // Not needed services will be unbound
+        subscriberCaptor.value.onSubscribe(providers[0].token, subs)
     }
 
     @Test
     fun testUnsubscribe_notRefreshing() {
-        controller.bindServices(listOf(TEST_COMPONENT_NAME_1, TEST_COMPONENT_NAME_2))
+        controller.bindService(TEST_COMPONENT_NAME_2)
         controller.unsubscribe()
 
         executor.runAllReady()
 
-        providers.forEach {
-            verify(it, never()).unsubscribe()
-        }
+        verify(providers[0], never()).cancelSubscription(any())
     }
 
     @Test
     fun testUnsubscribe_refreshing() {
-        val controlInfo1 = ControlInfo(TEST_COMPONENT_NAME_1, "id_1", "", DeviceTypes.TYPE_UNKNOWN)
-        val controlInfo2 = ControlInfo(TEST_COMPONENT_NAME_2, "id_2", "", DeviceTypes.TYPE_UNKNOWN)
+        val controlInfo1 = ControlInfo("id_1", "", DeviceTypes.TYPE_UNKNOWN)
+        val controlInfo2 = ControlInfo("id_2", "", DeviceTypes.TYPE_UNKNOWN)
+        val structure =
+            StructureInfo(TEST_COMPONENT_NAME_1, "Home", listOf(controlInfo1, controlInfo2))
 
-        controller.subscribe(listOf(controlInfo1, controlInfo2))
-
-        controller.unsubscribe()
-
+        controller.subscribe(structure)
         executor.runAllReady()
 
-        providers.forEach {
-            verify(it).unsubscribe()
-        }
+        val subs = mock(IControlsSubscription::class.java)
+        verify(providers[0]).maybeBindAndSubscribe(
+            capture(listStringCaptor), capture(subscriberCaptor))
+        assertEquals(listStringCaptor.value,
+            listOf(controlInfo1.controlId, controlInfo2.controlId))
+
+        subscriberCaptor.value.onSubscribe(providers[0].token, subs)
+        executor.runAllReady()
+
+        controller.unsubscribe()
+        executor.runAllReady()
+
+        verify(providers[0]).cancelSubscription(subs)
     }
 
     @Test
@@ -168,31 +277,37 @@ class ControlsBindingControllerImplTest : SysuiTestCase() {
 
     @Test
     fun testChangeUsers_providersHaveCorrectUser() {
-        controller.bindServices(listOf(TEST_COMPONENT_NAME_1))
-        controller.changeUser(otherUser)
-        controller.bindServices(listOf(TEST_COMPONENT_NAME_2))
+        controller.bindService(TEST_COMPONENT_NAME_1)
+        assertEquals(user, providers[0].user)
 
-        val provider1 = providers.first { it.componentName == TEST_COMPONENT_NAME_1 }
-        assertEquals(user, provider1.user)
-        val provider2 = providers.first { it.componentName == TEST_COMPONENT_NAME_2 }
-        assertEquals(otherUser, provider2.user)
+        controller.changeUser(otherUser)
+
+        controller.bindService(TEST_COMPONENT_NAME_2)
+        assertEquals(otherUser, providers[0].user)
     }
 
     @Test
     fun testChangeUsers_providersUnbound() {
-        controller.bindServices(listOf(TEST_COMPONENT_NAME_1))
+        controller.bindService(TEST_COMPONENT_NAME_1)
         controller.changeUser(otherUser)
 
-        val provider1 = providers.first { it.componentName == TEST_COMPONENT_NAME_1 }
-        verify(provider1).unbindService()
+        verify(providers[0]).unbindService()
 
-        controller.bindServices(listOf(TEST_COMPONENT_NAME_2))
+        controller.bindService(TEST_COMPONENT_NAME_2)
         controller.changeUser(user)
 
-        reset(provider1)
-        val provider2 = providers.first { it.componentName == TEST_COMPONENT_NAME_2 }
-        verify(provider2).unbindService()
-        verify(provider1, never()).unbindService()
+        verify(providers[0]).unbindService()
+    }
+
+    @Test
+    fun testComponentRemoved_existingIsUnbound() {
+        controller.bindService(TEST_COMPONENT_NAME_1)
+
+        controller.onComponentRemoved(TEST_COMPONENT_NAME_1)
+
+        executor.runAllReady()
+
+        verify(providers[0], times(1)).unbindService()
     }
 }
 
@@ -203,7 +318,7 @@ class TestableControlsBindingControllerImpl(
 ) : ControlsBindingControllerImpl(context, executor, lazyController) {
 
     companion object {
-        val providers = mutableSetOf<ControlsProviderLifecycleManager>()
+        val providers = mutableListOf<ControlsProviderLifecycleManager>()
     }
 
     // Replaces the real provider with a mock and puts the mock in a visible set.
@@ -216,7 +331,10 @@ class TestableControlsBindingControllerImpl(
         `when`(provider.componentName).thenReturn(realProvider.componentName)
         `when`(provider.token).thenReturn(token)
         `when`(provider.user).thenReturn(realProvider.user)
+
+        providers.clear()
         providers.add(provider)
+
         return provider
     }
 }

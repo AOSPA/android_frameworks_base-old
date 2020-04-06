@@ -11227,6 +11227,15 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     }
 
     /**
+     * @return {@code true} if any {@link WindowInsetsAnimation.Callback} is registered on the view
+     *         or view tree of the sub-hierarchy {@code false} otherwise.
+     * @hide
+     */
+    public boolean hasWindowInsetsAnimationCallback() {
+        return getListenerInfo().mWindowInsetsAnimationCallback != null;
+    }
+
+    /**
      * Dispatches {@link WindowInsetsAnimation.Callback#onPrepare(WindowInsetsAnimation)}
      * when Window Insets animation is being prepared.
      * @param animation current animation
@@ -11415,13 +11424,17 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     /**
      * Retrieves the single {@link WindowInsetsController} of the window this view is attached to.
      *
-     * @return The {@link WindowInsetsController} or {@code null} if the view isn't attached to a
-     *         a window.
+     * @return The {@link WindowInsetsController} or {@code null} if the view is neither attached to
+     *         a window nor a view tree with a decor.
      * @see Window#getInsetsController()
      */
     public @Nullable WindowInsetsController getWindowInsetsController() {
         if (mAttachInfo != null) {
             return mAttachInfo.mViewRootImpl.getInsetsController();
+        }
+        ViewParent parent = getParent();
+        if (parent instanceof View) {
+            return ((View) parent).getWindowInsetsController();
         }
         return null;
     }
@@ -11468,7 +11481,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
                 outLocalInsets.setEmpty();
                 return in;
             }
-            Pair<Insets, WindowInsets> result = listener.onContentApplyWindowInsets(in);
+            Pair<Insets, WindowInsets> result = listener.onContentApplyWindowInsets(this, in);
             outLocalInsets.set(result.first.toRect());
             return result.second;
         } else {
@@ -29798,7 +29811,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
 
         // accessibility
         CharSequence contentDescription = getContentDescription();
-        stream.addProperty("accessibility:contentDescription",
+        stream.addUserProperty("accessibility:contentDescription",
                 contentDescription == null ? "" : contentDescription.toString());
         stream.addProperty("accessibility:labelFor", getLabelFor());
         stream.addProperty("accessibility:importantForAccessibility", getImportantForAccessibility());

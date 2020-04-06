@@ -458,7 +458,7 @@ public interface WindowManager extends ViewManager {
     }
 
     /**
-     * Returns the largets {@link WindowMetrics} an app may expect in the current system state.
+     * Returns the largest {@link WindowMetrics} an app may expect in the current system state.
      * <p>
      * The metrics describe the size of the largest potential area the window might occupy with
      * {@link LayoutParams#MATCH_PARENT MATCH_PARENT} width and height, and the {@link WindowInsets}
@@ -805,6 +805,7 @@ public interface WindowManager extends ViewManager {
                 @ViewDebug.IntToString(from = TYPE_APPLICATION_OVERLAY,
                         to = "APPLICATION_OVERLAY")
         })
+        @WindowType
         public int type;
 
         /**
@@ -1026,7 +1027,11 @@ public interface WindowManager extends ViewManager {
         /**
          * Window type: panel that slides out from over the status bar
          * In multiuser systems shows on all users' windows.
+         *
+         * @deprecated This became API by accident and was never intended to be used for
+         * applications.
          */
+        @Deprecated
         public static final int TYPE_STATUS_BAR_PANEL   = FIRST_SYSTEM_WINDOW+14;
 
         /**
@@ -1221,6 +1226,14 @@ public interface WindowManager extends ViewManager {
         public static final int TYPE_NOTIFICATION_SHADE = FIRST_SYSTEM_WINDOW + 40;
 
         /**
+         * Window type: used to show the status bar in non conventional parts of the screen (i.e.
+         * the left or the bottom of the screen).
+         * In multiuser systems shows on all users' windows.
+         * @hide
+         */
+        public static final int TYPE_STATUS_BAR_ADDITIONAL = FIRST_SYSTEM_WINDOW + 41;
+
+        /**
          * End of types of system windows.
          */
         public static final int LAST_SYSTEM_WINDOW      = 2999;
@@ -1232,13 +1245,47 @@ public interface WindowManager extends ViewManager {
         public static final int INVALID_WINDOW_TYPE = -1;
 
         /**
+         * @hide
+         */
+        @IntDef(prefix = "TYPE_", value = {
+                TYPE_ACCESSIBILITY_OVERLAY,
+                TYPE_APPLICATION,
+                TYPE_APPLICATION_ATTACHED_DIALOG,
+                TYPE_APPLICATION_MEDIA,
+                TYPE_APPLICATION_OVERLAY,
+                TYPE_APPLICATION_PANEL,
+                TYPE_APPLICATION_STARTING,
+                TYPE_APPLICATION_SUB_PANEL,
+                TYPE_BASE_APPLICATION,
+                TYPE_DRAWN_APPLICATION,
+                TYPE_INPUT_METHOD,
+                TYPE_INPUT_METHOD_DIALOG,
+                TYPE_KEYGUARD,
+                TYPE_KEYGUARD_DIALOG,
+                TYPE_PHONE,
+                TYPE_PRIORITY_PHONE,
+                TYPE_PRIVATE_PRESENTATION,
+                TYPE_SEARCH_BAR,
+                TYPE_STATUS_BAR,
+                TYPE_STATUS_BAR_PANEL,
+                TYPE_SYSTEM_ALERT,
+                TYPE_SYSTEM_DIALOG,
+                TYPE_SYSTEM_ERROR,
+                TYPE_SYSTEM_OVERLAY,
+                TYPE_TOAST,
+                TYPE_WALLPAPER,
+        })
+        @Retention(RetentionPolicy.SOURCE)
+        public @interface WindowType {}
+
+        /**
          * Return true if the window type is an alert window.
          *
          * @param type The window type.
          * @return If the window type is an alert window.
          * @hide
          */
-        public static boolean isSystemAlertWindowType(int type) {
+        public static boolean isSystemAlertWindowType(@WindowType int type) {
             switch (type) {
                 case TYPE_PHONE:
                 case TYPE_PRIORITY_PHONE:
@@ -1575,7 +1622,7 @@ public interface WindowManager extends ViewManager {
          *
          * {@sample development/samples/ApiDemos/res/layout/overscan_activity.xml complete}
          *
-         * @deprecated Overscan areas aren't set by any Android product anymore.
+         * @deprecated Overscan areas aren't set by any Android product anymore as of Android 11.
          */
         @Deprecated
         public static final int FLAG_LAYOUT_IN_OVERSCAN = 0x02000000;
@@ -2765,7 +2812,7 @@ public interface WindowManager extends ViewManager {
          * setting in the system settings menu. In that case, this field is ignored and the display
          * will remain in its current mode.
          *
-         * @see android.content.pm.ActivityInfo#preferMinimalPostProcessing
+         * @see android.content.pm.ActivityInfo#FLAG_PREFER_MINIMAL_POST_PROCESSING
          * @see android.view.Display#isMinimalPostProcessingSupported
          * @see android.view.Window#setPreferMinimalPostProcessing
          */

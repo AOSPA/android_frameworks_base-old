@@ -129,10 +129,6 @@ public class FingerprintManager implements BiometricAuthenticator, BiometricFing
             super(mac);
         }
 
-        public CryptoObject(@NonNull IdentityCredential credential) {
-            super(credential);
-        }
-
         /**
          * Get {@link Signature} object.
          * @return {@link Signature} object or null if this doesn't contain one.
@@ -160,8 +156,9 @@ public class FingerprintManager implements BiometricAuthenticator, BiometricFing
         /**
          * Get {@link IdentityCredential} object.
          * @return {@link IdentityCredential} object or null if this doesn't contain one.
+         * @hide
          */
-        public @Nullable IdentityCredential getIdentityCredential() {
+        public IdentityCredential getIdentityCredential() {
             return super.getIdentityCredential();
         }
     }
@@ -766,26 +763,6 @@ public class FingerprintManager implements BiometricAuthenticator, BiometricFing
             Slog.w(TAG, "isFingerprintHardwareDetected(): Service not connected!");
         }
         return false;
-    }
-
-    /**
-     * Retrieves the authenticator token for binding keys to the lifecycle
-     * of the calling user's fingerprints. Used only by internal clients.
-     *
-     * @hide
-     */
-    @UnsupportedAppUsage
-    public long getAuthenticatorId() {
-        if (mService != null) {
-            try {
-                return mService.getAuthenticatorId(mContext.getOpPackageName());
-            } catch (RemoteException e) {
-                throw e.rethrowFromSystemServer();
-            }
-        } else {
-            Slog.w(TAG, "getAuthenticatorId(): Service not connected!");
-        }
-        return 0;
     }
 
     /**

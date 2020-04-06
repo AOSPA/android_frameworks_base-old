@@ -53,7 +53,6 @@ import android.net.Ikev2VpnProfile;
 import android.net.IpPrefix;
 import android.net.IpSecManager;
 import android.net.IpSecManager.IpSecTunnelInterface;
-import android.net.IpSecManager.UdpEncapsulationSocket;
 import android.net.IpSecTransform;
 import android.net.LinkAddress;
 import android.net.LinkProperties;
@@ -954,18 +953,18 @@ public class Vpn {
                 || isVpnServicePreConsented(context, packageName);
     }
 
-    private int getAppUid(String app, int userHandle) {
+    private int getAppUid(final String app, final int userHandle) {
         if (VpnConfig.LEGACY_VPN.equals(app)) {
             return Process.myUid();
         }
         PackageManager pm = mContext.getPackageManager();
-        int result;
-        try {
-            result = pm.getPackageUidAsUser(app, userHandle);
-        } catch (NameNotFoundException e) {
-            result = -1;
-        }
-        return result;
+        return Binder.withCleanCallingIdentity(() -> {
+            try {
+                return pm.getPackageUidAsUser(app, userHandle);
+            } catch (NameNotFoundException e) {
+                return -1;
+            }
+        });
     }
 
     private boolean doesPackageTargetAtLeastQ(String packageName) {
@@ -2203,7 +2202,6 @@ public class Vpn {
         /** Signal to ensure shutdown is honored even if a new Network is connected. */
         private boolean mIsRunning = true;
 
-        @Nullable private UdpEncapsulationSocket mEncapSocket;
         @Nullable private IpSecTunnelInterface mTunnelIface;
         @Nullable private IkeSession mSession;
         @Nullable private Network mActiveNetwork;
@@ -2354,28 +2352,20 @@ public class Vpn {
                     resetIkeState();
                     mActiveNetwork = network;
 
-                    // TODO(b/149356682): Update this based on new IKE API
-                    mEncapSocket = mIpSecManager.openUdpEncapsulationSocket();
-
-                    // TODO(b/149356682): Update this based on new IKE API
                     final IkeSessionParams ikeSessionParams =
-                            VpnIkev2Utils.buildIkeSessionParams(mProfile, mEncapSocket);
+                            VpnIkev2Utils.buildIkeSessionParams(mContext, mProfile, network);
                     final ChildSessionParams childSessionParams =
                             VpnIkev2Utils.buildChildSessionParams();
 
                     // TODO: Remove the need for adding two unused addresses with
                     // IPsec tunnels.
+                    final InetAddress address = InetAddress.getLocalHost();
                     mTunnelIface =
                             mIpSecManager.createIpSecTunnelInterface(
-                                    ikeSessionParams.getServerAddress() /* unused */,
-                                    ikeSessionParams.getServerAddress() /* unused */,
+                                    address /* unused */,
+                                    address /* unused */,
                                     network);
                     mNetd.setInterfaceUp(mTunnelIface.getInterfaceName());
-
-                    // Socket must be bound to prevent network switches from causing
-                    // the IKE teardown to fail/timeout.
-                    // TODO(b/149356682): Update this based on new IKE API
-                    network.bindSocket(mEncapSocket.getFileDescriptor());
 
                     mSession = mIkev2SessionCreator.createIkeSession(
                             mContext,
@@ -2460,16 +2450,6 @@ public class Vpn {
             if (mSession != null) {
                 mSession.kill(); // Kill here to make sure all resources are released immediately
                 mSession = null;
-            }
-
-            // TODO(b/149356682): Update this based on new IKE API
-            if (mEncapSocket != null) {
-                try {
-                    mEncapSocket.close();
-                } catch (IOException e) {
-                    Log.e(TAG, "Failed to close encap socket", e);
-                }
-                mEncapSocket = null;
             }
         }
 

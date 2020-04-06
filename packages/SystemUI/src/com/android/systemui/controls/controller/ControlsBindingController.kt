@@ -38,39 +38,42 @@ interface ControlsBindingController : UserAwareController {
      *
      * @param component The [ComponentName] of the service to bind
      * @param callback a callback to return the loaded controls to (or an error).
+     * @return a runnable to cancel the load
      */
-    fun bindAndLoad(component: ComponentName, callback: LoadCallback)
+    fun bindAndLoad(component: ComponentName, callback: LoadCallback): Runnable
 
     /**
-     * Request to bind to the given services.
+     * Request to bind to the given service.
      *
-     * @param components a list of [ComponentName] of the services to bind
+     * @param component The [ComponentName] of the service to bind
      */
-    fun bindServices(components: List<ComponentName>)
+    fun bindService(component: ComponentName)
 
     /**
      * Send a subscribe message to retrieve status of a set of controls.
      *
-     * The controls passed do not have to belong to a single [ControlsProviderService]. The
-     * corresponding service [ComponentName] is associated with each control.
-     *
-     * @param controls a list of controls with corresponding [ComponentName] to request status
-     *                 update
+     * @param structureInfo structure containing the controls to update
      */
-    fun subscribe(controls: List<ControlInfo>)
+    fun subscribe(structureInfo: StructureInfo)
 
     /**
      * Send an action performed on a [Control].
      *
-     * @param controlInfo information about the actioned control, including the [ComponentName]
+     * @param componentName name of the component
+     * @param controlInfo information about the actioned control
      * @param action the action performed on the control
      */
-    fun action(controlInfo: ControlInfo, action: ControlAction)
+    fun action(componentName: ComponentName, controlInfo: ControlInfo, action: ControlAction)
 
     /**
      * Unsubscribe from all services to stop status updates.
      */
     fun unsubscribe()
+
+    /**
+     * Notify this controller that this component has been removed (uninstalled).
+     */
+    fun onComponentRemoved(componentName: ComponentName)
 
     /**
      * Consumer for load calls.

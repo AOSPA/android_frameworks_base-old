@@ -580,7 +580,6 @@ public class ServiceState implements Parcelable {
      *
      * @hide
      */
-    @SystemApi
     public @RegState int getDataRegistrationState() {
         return getDataRegState();
     }
@@ -689,8 +688,9 @@ public class ServiceState implements Parcelable {
      * @return true if registration indicates roaming, false otherwise
      * @hide
      */
-    @SystemApi
     public boolean getDataRoamingFromRegistration() {
+        // TODO: all callers should refactor to get roaming state directly from modem
+        // this should not be exposed as a public API
         return mIsDataRoamingFromRegistration;
     }
 
@@ -1411,6 +1411,7 @@ public class ServiceState implements Parcelable {
             DataSpecificRegistrationInfo dsri = nri.getDataSpecificInfo();
             if (dsri != null) {
                 dsri.setIsUsingCarrierAggregation(ca);
+                addNetworkRegistrationInfo(nri);
             }
         }
     }
@@ -1421,7 +1422,6 @@ public class ServiceState implements Parcelable {
      * @return the frequency range of 5G NR.
      * @hide
      */
-    @SystemApi
     public @FrequencyRange int getNrFrequencyRange() {
         return mNrFrequencyRange;
     }
@@ -1999,7 +1999,6 @@ public class ServiceState implements Parcelable {
      * @return the copied ServiceState with location info sanitized.
      * @hide
      */
-    @SystemApi
     @NonNull
     public ServiceState createLocationInfoSanitizedCopy(boolean removeCoarseLocation) {
         ServiceState state = new ServiceState(this);
@@ -2030,11 +2029,12 @@ public class ServiceState implements Parcelable {
     /**
      * The current registered raw data network operator name in long alphanumeric format.
      *
+     * The long format can be up to 16 characters long.
+     *
      * @return long raw name of operator, null if unregistered or unknown
      * @hide
      */
     @Nullable
-    @SystemApi
     public String getOperatorAlphaLongRaw() {
         return mOperatorAlphaLongRaw;
     }
@@ -2049,11 +2049,12 @@ public class ServiceState implements Parcelable {
     /**
      * The current registered raw data network operator name in short alphanumeric format.
      *
+     * The short format can be up to 8 characters long.
+     *
      * @return short raw name of operator, null if unregistered or unknown
      * @hide
      */
     @Nullable
-    @SystemApi
     public String getOperatorAlphaShortRaw() {
         return mOperatorAlphaShortRaw;
     }

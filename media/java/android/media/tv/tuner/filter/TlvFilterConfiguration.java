@@ -17,6 +17,7 @@
 package android.media.tv.tuner.filter;
 
 import android.annotation.NonNull;
+import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
 import android.annotation.SystemApi;
 import android.content.Context;
@@ -28,7 +29,28 @@ import android.media.tv.tuner.TunerUtils;
  * @hide
  */
 @SystemApi
-public class TlvFilterConfiguration extends FilterConfiguration {
+public final class TlvFilterConfiguration extends FilterConfiguration {
+    /**
+     * IPv4 packet type.
+     */
+    public static final int PACKET_TYPE_IPV4 = 0x01;
+    /**
+     * IPv6 packet type.
+     */
+    public static final int PACKET_TYPE_IPV6 = 0x02;
+    /**
+     * Compressed packet type.
+     */
+    public static final int PACKET_TYPE_COMPRESSED = 0x03;
+    /**
+     * Signaling packet type.
+     */
+    public static final int PACKET_TYPE_SIGNALING = 0xFE;
+    /**
+     * NULL packet type.
+     */
+    public static final int PACKET_TYPE_NULL = 0xFF;
+
     private final int mPacketType;
     private final boolean mIsCompressedIpPacket;
     private final boolean mPassthrough;
@@ -48,8 +70,9 @@ public class TlvFilterConfiguration extends FilterConfiguration {
 
     /**
      * Gets packet type.
+     *
+     * <p>The description of each packet type value is shown in ITU-R BT.1869 table 2.
      */
-    @FilterConfiguration.PacketType
     public int getPacketType() {
         return mPacketType;
     }
@@ -86,19 +109,22 @@ public class TlvFilterConfiguration extends FilterConfiguration {
     /**
      * Builder for {@link TlvFilterConfiguration}.
      */
-    public static class Builder extends FilterConfiguration.Builder<Builder> {
+    public static final class Builder {
         private int mPacketType;
         private boolean mIsCompressedIpPacket;
         private boolean mPassthrough;
+        private Settings mSettings;
 
         private Builder() {
         }
 
         /**
          * Sets packet type.
+         *
+         * <p>The description of each packet type value is shown in ITU-R BT.1869 table 2.
          */
         @NonNull
-        public Builder setPacketType(@FilterConfiguration.PacketType int packetType) {
+        public Builder setPacketType(int packetType) {
             mPacketType = packetType;
             return this;
         }
@@ -120,17 +146,21 @@ public class TlvFilterConfiguration extends FilterConfiguration {
         }
 
         /**
+         * Sets filter settings.
+         */
+        @NonNull
+        public Builder setSettings(@Nullable Settings settings) {
+            mSettings = settings;
+            return this;
+        }
+
+        /**
          * Builds a {@link TlvFilterConfiguration} object.
          */
         @NonNull
         public TlvFilterConfiguration build() {
             return new TlvFilterConfiguration(
                     mSettings, mPacketType, mIsCompressedIpPacket, mPassthrough);
-        }
-
-        @Override
-        Builder self() {
-            return this;
         }
     }
 }

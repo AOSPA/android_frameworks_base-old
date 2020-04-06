@@ -18,8 +18,6 @@ package com.android.server.connectivity;
 
 import static android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET;
 import static android.net.NetworkCapabilities.NET_CAPABILITY_MMS;
-import static android.net.NetworkCapabilities.NET_CAPABILITY_NOT_METERED;
-import static android.net.NetworkCapabilities.NET_CAPABILITY_VALIDATED;
 import static android.net.NetworkCapabilities.transportNamesOf;
 
 import android.annotation.NonNull;
@@ -36,7 +34,6 @@ import android.net.NetworkCapabilities;
 import android.net.NetworkInfo;
 import android.net.NetworkMonitorManager;
 import android.net.NetworkRequest;
-import android.net.NetworkScore;
 import android.net.NetworkState;
 import android.os.Handler;
 import android.os.INetworkManagementService;
@@ -165,10 +162,6 @@ public class NetworkAgentInfo implements Comparable<NetworkAgentInfo> {
     // Whether a captive portal was found during the last network validation attempt.
     public boolean lastCaptivePortalDetected;
 
-    // Indicates the captive portal app was opened to show a login UI to the user, but the network
-    // has not validated yet.
-    public volatile boolean captivePortalValidationPending;
-
     // Set to true when partial connectivity was detected.
     public boolean partialConnectivity;
 
@@ -240,10 +233,8 @@ public class NetworkAgentInfo implements Comparable<NetworkAgentInfo> {
     // validated).
     private boolean mLingering;
 
-    // This represents the characteristics of a network that affects how good the network is
-    // considered for a particular use.
-    @NonNull
-    private NetworkScore mNetworkScore;
+    // This represents the quality of the network with no clear scale.
+    private int mScore;
 
     // The list of NetworkRequests being satisfied by this Network.
     private final SparseArray<NetworkRequest> mNetworkRequests = new SparseArray<>();
@@ -272,7 +263,7 @@ public class NetworkAgentInfo implements Comparable<NetworkAgentInfo> {
     private final Handler mHandler;
 
     public NetworkAgentInfo(Messenger messenger, AsyncChannel ac, Network net, NetworkInfo info,
-            LinkProperties lp, NetworkCapabilities nc, @NonNull NetworkScore ns, Context context,
+            LinkProperties lp, NetworkCapabilities nc, int score, Context context,
             Handler handler, NetworkAgentConfig config, ConnectivityService connService, INetd netd,
             IDnsResolver dnsResolver, INetworkManagementService nms, int factorySerialNumber) {
         this.messenger = messenger;
@@ -281,7 +272,7 @@ public class NetworkAgentInfo implements Comparable<NetworkAgentInfo> {
         networkInfo = info;
         linkProperties = lp;
         networkCapabilities = nc;
-        mNetworkScore = ns;
+        mScore = score;
         clatd = new Nat464Xlat(this, netd, dnsResolver, nms);
         mConnService = connService;
         mContext = context;
@@ -479,16 +470,24 @@ public class NetworkAgentInfo implements Comparable<NetworkAgentInfo> {
         return networkCapabilities.hasTransport(NetworkCapabilities.TRANSPORT_VPN);
     }
 
-    /** Gets the current score */
-    public int getCurrentScore() {
+    private int getCurrentScore(boolean pretendValidated) {
+        // TODO: We may want to refactor this into a NetworkScore class that takes a base score from
+        // the NetworkAgent and signals from the NetworkAgent and uses those signals to modify the
+        // score.  The NetworkScore class would provide a nice place to centralize score constants
+        // so they are not scattered about the transports.
+
         // If this network is explicitly selected and the user has decided to use it even if it's
-        // unvalidated, give it the maximum score.
-        if (networkAgentConfig.explicitlySelected && networkAgentConfig.acceptUnvalidated) {
+        // unvalidated, give it the maximum score. Also give it the maximum score if it's explicitly
+        // selected and we're trying to see what its score could be. This ensures that we don't tear
+        // down an explicitly selected network before the user gets a chance to prefer it when
+        // a higher-scoring network (e.g., Ethernet) is available.
+        if (networkAgentConfig.explicitlySelected
+                && (networkAgentConfig.acceptUnvalidated || pretendValidated)) {
             return ConnectivityConstants.EXPLICITLY_SELECTED_NETWORK_SCORE;
         }
 
-        int score = mNetworkScore.getLegacyScore();
-        if (!lastValidated && !ignoreWifiUnvalidationPenalty() && !isVPN()) {
+        int score = mScore;
+        if (!lastValidated && !pretendValidated && !ignoreWifiUnvalidationPenalty() && !isVPN()) {
             score -= ConnectivityConstants.UNVALIDATED_SCORE_PENALTY;
         }
         if (score < 0) score = 0;
@@ -504,13 +503,20 @@ public class NetworkAgentInfo implements Comparable<NetworkAgentInfo> {
         return isWifi && !avoidBadWifi && everValidated;
     }
 
-    public void setNetworkScore(@NonNull NetworkScore ns) {
-        mNetworkScore = ns;
+    // Get the current score for this Network.  This may be modified from what the
+    // NetworkAgent sent, as it has modifiers applied to it.
+    public int getCurrentScore() {
+        return getCurrentScore(false);
     }
 
-    @NonNull
-    public NetworkScore getNetworkScore() {
-        return mNetworkScore;
+    // Get the current score for this Network as if it was validated.  This may be modified from
+    // what the NetworkAgent sent, as it has modifiers applied to it.
+    public int getCurrentScoreAsValidated() {
+        return getCurrentScore(true);
+    }
+
+    public void setScore(final int score) {
+        mScore = score;
     }
 
     public NetworkState getNetworkState() {
@@ -613,41 +619,6 @@ public class NetworkAgentInfo implements Comparable<NetworkAgentInfo> {
         mLingering = false;
     }
 
-    /**
-     * Returns whether this NAI has any chance of ever beating this other agent.
-     *
-     * The chief use case of this is the decision to tear down this network. ConnectivityService
-     * tears down networks that don't satisfy any request, unless they have a chance to beat any
-     * existing satisfier.
-     *
-     * @param other the agent to beat
-     * @return whether this should be given more time to try and beat the other agent
-     * TODO : remove this and migrate to a ranker-based approach
-     */
-    public boolean canPossiblyBeat(@NonNull final NetworkAgentInfo other) {
-        // Any explicitly selected network should be held on.
-        if (networkAgentConfig.explicitlySelected) return true;
-        // An outscored exiting network should be torn down.
-        if (mNetworkScore.isExiting()) return false;
-        // If this network is validated it can be torn down as it can't hope to be better than
-        // it already is.
-        if (networkCapabilities.hasCapability(NET_CAPABILITY_VALIDATED)) return false;
-        // If neither network is validated, keep both until at least one does.
-        if (!other.networkCapabilities.hasCapability(NET_CAPABILITY_VALIDATED)) return true;
-        // If this network is not metered but the other is, it should be preferable if it validates.
-        if (networkCapabilities.hasCapability(NET_CAPABILITY_NOT_METERED)
-                && !other.networkCapabilities.hasCapability(NET_CAPABILITY_NOT_METERED)) {
-            return true;
-        }
-
-        // If the control comes here :
-        // • This network is neither exiting or explicitly selected
-        // • This network is not validated, but the other is
-        // • This network is metered, or both networks are unmetered
-        // Keep it if it's expected to be faster than the other., should it validate.
-        return mNetworkScore.probablyFasterThan(other.mNetworkScore);
-    }
-
     public void dumpLingerTimers(PrintWriter pw) {
         for (LingerTimer timer : mLingerTimers) { pw.println(timer); }
     }
@@ -665,7 +636,6 @@ public class NetworkAgentInfo implements Comparable<NetworkAgentInfo> {
                 + "acceptUnvalidated{" + networkAgentConfig.acceptUnvalidated + "} "
                 + "everCaptivePortalDetected{" + everCaptivePortalDetected + "} "
                 + "lastCaptivePortalDetected{" + lastCaptivePortalDetected + "} "
-                + "captivePortalValidationPending{" + captivePortalValidationPending + "} "
                 + "partialConnectivity{" + partialConnectivity + "} "
                 + "acceptPartialConnectivity{" + networkAgentConfig.acceptPartialConnectivity + "} "
                 + "clat{" + clatd + "} "

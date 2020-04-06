@@ -253,6 +253,67 @@ public class WifiConfigurationTest {
     }
 
     /**
+     * Verifies that getKeyIdForCredentials returns the expected string for Suggestion Enterprise
+     * networks
+     * @throws Exception
+     */
+    @Test
+    public void testGetKeyIdForCredentialsForSuggestion() throws Exception {
+        WifiConfiguration config = new WifiConfiguration();
+        final String mSsid = "TestAP";
+        final String packageName = "TestApp";
+        final String bSsid = MacAddressUtils.createRandomUnicastAddress().toString();
+        String suggestionSuffix = "_" + bSsid + "_" + packageName;
+        config.SSID = mSsid;
+        config.fromWifiNetworkSuggestion = true;
+        config.creatorName = packageName;
+        config.BSSID = bSsid;
+
+        // Test various combinations
+        // EAP with TLS
+        config.allowedKeyManagement.set(KeyMgmt.WPA_EAP);
+        config.enterpriseConfig.setEapMethod(WifiEnterpriseConfig.Eap.TLS);
+        config.enterpriseConfig.setPhase2Method(WifiEnterpriseConfig.Phase2.NONE);
+        String keyId = config.getKeyIdForCredentials(config);
+        assertEquals(keyId, mSsid + "_WPA_EAP_TLS_NULL" + suggestionSuffix);
+
+        // EAP with TTLS & MSCHAPv2
+        config.allowedKeyManagement.set(KeyMgmt.WPA_EAP);
+        config.enterpriseConfig.setEapMethod(WifiEnterpriseConfig.Eap.TTLS);
+        config.enterpriseConfig.setPhase2Method(WifiEnterpriseConfig.Phase2.MSCHAPV2);
+        keyId = config.getKeyIdForCredentials(config);
+        assertEquals(keyId, mSsid + "_WPA_EAP_TTLS_MSCHAPV2" + suggestionSuffix);
+
+        // Suite-B 192 with PWD & GTC
+        config.allowedKeyManagement.clear();
+        config.allowedKeyManagement.set(KeyMgmt.SUITE_B_192);
+        config.enterpriseConfig.setEapMethod(WifiEnterpriseConfig.Eap.PWD);
+        config.enterpriseConfig.setPhase2Method(WifiEnterpriseConfig.Phase2.GTC);
+        keyId = config.getKeyIdForCredentials(config);
+        assertEquals(keyId, mSsid + "_SUITE_B_192_PWD_GTC" + suggestionSuffix);
+
+        // IEEE8021X with SIM
+        config.allowedKeyManagement.clear();
+        config.allowedKeyManagement.set(KeyMgmt.IEEE8021X);
+        config.enterpriseConfig.setEapMethod(WifiEnterpriseConfig.Eap.SIM);
+        config.enterpriseConfig.setPhase2Method(WifiEnterpriseConfig.Phase2.NONE);
+        keyId = config.getKeyIdForCredentials(config);
+        assertEquals(keyId, mSsid + "_IEEE8021X_SIM_NULL" + suggestionSuffix);
+
+        // Try calling this method with non-Enterprise network, expect an exception
+        boolean exceptionThrown = false;
+        try {
+            config.allowedKeyManagement.clear();
+            config.allowedKeyManagement.set(KeyMgmt.WPA2_PSK);
+            config.preSharedKey = "TestPsk";
+            keyId = config.getKeyIdForCredentials(config);
+        } catch (IllegalStateException e) {
+            exceptionThrown = true;
+        }
+        assertTrue(exceptionThrown);
+    }
+
+    /**
      * Verifies that getSsidAndSecurityTypeString returns the correct String for networks of
      * various different security types
      */
@@ -362,7 +423,9 @@ public class WifiConfigurationTest {
 
         assertTrue(config.allowedKeyManagement.get(WifiConfiguration.KeyMgmt.SAE));
         assertTrue(config.allowedPairwiseCiphers.get(WifiConfiguration.PairwiseCipher.CCMP));
+        assertTrue(config.allowedPairwiseCiphers.get(WifiConfiguration.PairwiseCipher.GCMP_256));
         assertTrue(config.allowedGroupCiphers.get(WifiConfiguration.GroupCipher.CCMP));
+        assertTrue(config.allowedGroupCiphers.get(WifiConfiguration.GroupCipher.GCMP_256));
         assertTrue(config.requirePmf);
     }
 
@@ -379,7 +442,9 @@ public class WifiConfigurationTest {
 
         assertTrue(config.allowedKeyManagement.get(WifiConfiguration.KeyMgmt.OWE));
         assertTrue(config.allowedPairwiseCiphers.get(WifiConfiguration.PairwiseCipher.CCMP));
+        assertTrue(config.allowedPairwiseCiphers.get(WifiConfiguration.PairwiseCipher.GCMP_256));
         assertTrue(config.allowedGroupCiphers.get(WifiConfiguration.GroupCipher.CCMP));
+        assertTrue(config.allowedGroupCiphers.get(WifiConfiguration.GroupCipher.GCMP_256));
         assertTrue(config.requirePmf);
     }
 
@@ -395,6 +460,8 @@ public class WifiConfigurationTest {
         config.setSecurityParams(SECURITY_TYPE_EAP_SUITE_B);
 
         assertTrue(config.allowedKeyManagement.get(WifiConfiguration.KeyMgmt.SUITE_B_192));
+        assertTrue(config.allowedKeyManagement.get(WifiConfiguration.KeyMgmt.WPA_EAP));
+        assertTrue(config.allowedKeyManagement.get(WifiConfiguration.KeyMgmt.IEEE8021X));
         assertTrue(config.allowedPairwiseCiphers.get(WifiConfiguration.PairwiseCipher.GCMP_256));
         assertTrue(config.allowedGroupCiphers.get(WifiConfiguration.GroupCipher.GCMP_256));
         assertTrue(config.allowedGroupManagementCiphers

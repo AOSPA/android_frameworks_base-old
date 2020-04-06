@@ -22,11 +22,14 @@ import static junit.framework.Assert.assertTrue;
 import static junit.framework.TestCase.assertFalse;
 
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import android.app.ActivityManager;
+import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.os.Handler;
@@ -39,10 +42,10 @@ import android.testing.TestableLooper.RunWithLooper;
 import androidx.test.filters.SmallTest;
 
 import com.android.internal.util.CollectionUtils;
-import com.android.systemui.DumpController;
 import com.android.systemui.R;
 import com.android.systemui.SysuiTestCase;
 import com.android.systemui.broadcast.BroadcastDispatcher;
+import com.android.systemui.dump.DumpManager;
 import com.android.systemui.plugins.qs.QSFactory;
 import com.android.systemui.plugins.qs.QSTile;
 import com.android.systemui.qs.external.CustomTile;
@@ -76,7 +79,9 @@ import javax.inject.Provider;
 public class QSTileHostTest extends SysuiTestCase {
 
     private static String MOCK_STATE_STRING = "MockState";
-    private static final String CUSTOM_TILE_SPEC = "custom(TEST_PKG/.TEST_CLS)";
+    private static ComponentName CUSTOM_TILE =
+            ComponentName.unflattenFromString("TEST_PKG/.TEST_CLS");
+    private static final String CUSTOM_TILE_SPEC = CustomTile.toSpec(CUSTOM_TILE);
 
     @Mock
     private StatusBarIconController mIconController;
@@ -89,7 +94,7 @@ public class QSTileHostTest extends SysuiTestCase {
     @Mock
     private Provider<AutoTileManager> mAutoTiles;
     @Mock
-    private DumpController mDumpController;
+    private DumpManager mDumpManager;
     @Mock
     private BroadcastDispatcher mBroadcastDispatcher;
     @Mock
@@ -111,27 +116,35 @@ public class QSTileHostTest extends SysuiTestCase {
         mLooper = TestableLooper.get(this);
         mHandler = new Handler(mLooper.getLooper());
         mQSTileHost = new TestQSTileHost(mContext, mIconController, mDefaultFactory, mHandler,
-                mLooper.getLooper(), mPluginManager, mTunerService, mAutoTiles, mDumpController,
+                mLooper.getLooper(), mPluginManager, mTunerService, mAutoTiles, mDumpManager,
                 mBroadcastDispatcher, mStatusBar, mQSLogger);
         setUpTileFactory();
+
+        // Override this config so there are no unexpected tiles
+        mContext.getOrCreateTestableResources().addOverride(
+                com.android.internal.R.string.config_defaultExtraQuickSettingsTiles,
+                "");
+
         Settings.Secure.putStringForUser(mContext.getContentResolver(), QSTileHost.TILES_SETTING,
                 "", ActivityManager.getCurrentUser());
     }
 
     private void setUpTileFactory() {
         when(mMockState.toString()).thenReturn(MOCK_STATE_STRING);
+        // Only create this kind of tiles
         when(mDefaultFactory.createTile(anyString())).thenAnswer(
                 invocation -> {
                     String spec = invocation.getArgument(0);
-                    switch (spec) {
-                        case "spec1":
-                            return new TestTile1(mQSTileHost);
-                        case "spec2":
-                            return new TestTile2(mQSTileHost);
-                        case CUSTOM_TILE_SPEC:
-                            return mCustomTile;
-                        default:
-                            return null;
+                    if ("spec1".equals(spec)) {
+                        return new TestTile1(mQSTileHost);
+                    } else if ("spec2".equals(spec)) {
+                        return new TestTile2(mQSTileHost);
+                    } else if ("na".equals(spec)) {
+                        return new NotAvailableTile(mQSTileHost);
+                    } else if (CUSTOM_TILE_SPEC.equals(spec)) {
+                        return mCustomTile;
+                    } else {
+                        return null;
                     }
                 });
         when(mCustomTile.isAvailable()).thenReturn(true);
@@ -222,14 +235,72 @@ public class QSTileHostTest extends SysuiTestCase {
         verify(mQSLogger).logTileAdded(CUSTOM_TILE_SPEC);
     }
 
+    @Test
+    public void testNoRepeatedSpecs_addTile() {
+        mQSTileHost.onTuningChanged(QSTileHost.TILES_SETTING, "spec1,spec2");
+
+        mQSTileHost.addTile("spec1");
+
+        assertEquals(2, mQSTileHost.mTileSpecs.size());
+        assertEquals("spec1", mQSTileHost.mTileSpecs.get(0));
+        assertEquals("spec2", mQSTileHost.mTileSpecs.get(1));
+    }
+
+    @Test
+    public void testNoRepeatedSpecs_customTile() {
+        mQSTileHost.onTuningChanged(QSTileHost.TILES_SETTING, CUSTOM_TILE_SPEC);
+
+        mQSTileHost.addTile(CUSTOM_TILE);
+
+        assertEquals(1, mQSTileHost.mTileSpecs.size());
+        assertEquals(CUSTOM_TILE_SPEC, mQSTileHost.mTileSpecs.get(0));
+    }
+
+    @Test
+    public void testLoadTileSpec_repeated() {
+        List<String> specs = QSTileHost.loadTileSpecs(mContext, "spec1,spec1,spec2");
+
+        assertEquals(2, specs.size());
+        assertEquals("spec1", specs.get(0));
+        assertEquals("spec2", specs.get(1));
+    }
+
+    @Test
+    public void testLoadTileSpec_repeatedInDefault() {
+        mContext.getOrCreateTestableResources()
+                .addOverride(R.string.quick_settings_tiles_default, "spec1,spec1");
+        List<String> specs = QSTileHost.loadTileSpecs(mContext, "default");
+
+        // Remove spurious tiles, like dbg:mem
+        specs.removeIf(spec -> !"spec1".equals(spec));
+        assertEquals(1, specs.size());
+    }
+
+    @Test
+    public void testLoadTileSpec_repeatedDefaultAndSetting() {
+        mContext.getOrCreateTestableResources()
+                .addOverride(R.string.quick_settings_tiles_default, "spec1");
+        List<String> specs = QSTileHost.loadTileSpecs(mContext, "default,spec1");
+
+        // Remove spurious tiles, like dbg:mem
+        specs.removeIf(spec -> !"spec1".equals(spec));
+        assertEquals(1, specs.size());
+    }
+
+    @Test
+    public void testNotAvailableTile_specNotNull() {
+        mQSTileHost.onTuningChanged(QSTileHost.TILES_SETTING, "na");
+        verify(mQSLogger, never()).logTileDestroyed(isNull(), anyString());
+    }
+
     private static class TestQSTileHost extends QSTileHost {
         TestQSTileHost(Context context, StatusBarIconController iconController,
                 QSFactoryImpl defaultFactory, Handler mainHandler, Looper bgLooper,
                 PluginManager pluginManager, TunerService tunerService,
-                Provider<AutoTileManager> autoTiles, DumpController dumpController,
+                Provider<AutoTileManager> autoTiles, DumpManager dumpManager,
                 BroadcastDispatcher broadcastDispatcher, StatusBar statusBar, QSLogger qsLogger) {
             super(context, iconController, defaultFactory, mainHandler, bgLooper, pluginManager,
-                    tunerService, autoTiles, dumpController, broadcastDispatcher,
+                    tunerService, autoTiles, dumpManager, broadcastDispatcher,
                     Optional.of(statusBar), qsLogger);
         }
 
@@ -306,6 +377,18 @@ public class QSTileHostTest extends SysuiTestCase {
 
         protected TestTile2(QSHost host) {
             super(host);
+        }
+    }
+
+    private class NotAvailableTile extends TestTile {
+
+        protected NotAvailableTile(QSHost host) {
+            super(host);
+        }
+
+        @Override
+        public boolean isAvailable() {
+            return false;
         }
     }
 }

@@ -54,6 +54,7 @@ import com.google.android.exoplayer2.video.ColorInfo;
 
 import java.io.EOFException;
 import java.io.IOException;
+import java.io.InterruptedIOException;
 import java.nio.ByteBuffer;
 import java.util.Collections;
 import java.util.HashMap;
@@ -94,61 +95,84 @@ import java.util.Map;
  * which extracts and publishes all video samples:
  *
  * <pre>
- *
  * class VideoOutputConsumer implements MediaParser.OutputConsumer {
  *
- *     private static final int MAXIMUM_SAMPLE_SIZE = ...;
- *     private byte[] sampleDataBuffer = new byte[MAXIMUM_SAMPLE_SIZE];
+ *     private byte[] sampleDataBuffer = new byte[4096];
+ *     private byte[] discardedDataBuffer = new byte[4096];
  *     private int videoTrackIndex = -1;
  *     private int bytesWrittenCount = 0;
  *
- *     \@Override
- *     public void onSeekMap(int i, @NonNull MediaFormat mediaFormat) { \/* Do nothing. *\/ }
+ *     &#64;Override
+ *     public void onSeekMap(int i, &#64;NonNull MediaFormat mediaFormat) {
+ *       // Do nothing.
+ *     }
  *
- *     \@Override
- *     public void onTrackData(int i, @NonNull TrackData trackData) {
+ *     &#64;Override
+ *     public void onTrackData(int i, &#64;NonNull TrackData trackData) {
  *       MediaFormat mediaFormat = trackData.mediaFormat;
- *       if (videoTrackIndex == -1 && mediaFormat
- *           .getString(MediaFormat.KEY_MIME, \/* defaultValue= *\/ "").startsWith("video/")) {
+ *       if (videoTrackIndex == -1 &&
+ *           mediaFormat
+ *               .getString(MediaFormat.KEY_MIME, &#47;* defaultValue= *&#47; "")
+ *               .startsWith("video/")) {
  *         videoTrackIndex = i;
  *       }
  *     }
  *
- *     \@Override
- *     public void onSampleData(int trackIndex, @NonNull InputReader inputReader)
- *         throws IOException, InterruptedException {
+ *     &#64;Override
+ *     public void onSampleData(int trackIndex, &#64;NonNull InputReader inputReader)
+ *         throws IOException {
  *       int numberOfBytesToRead = (int) inputReader.getLength();
  *       if (videoTrackIndex != trackIndex) {
  *         // Discard contents.
- *         inputReader.read(\/* bytes= *\/ null, \/* offset= *\/ 0, numberOfBytesToRead);
+ *         inputReader.read(
+ *             discardedDataBuffer,
+ *             &#47;* offset= *&#47; 0,
+ *             Math.min(discardDataBuffer.length, numberOfBytesToRead));
+ *       } else {
+ *         ensureSpaceInBuffer(numberOfBytesToRead);
+ *         int bytesRead = inputReader.read(
+ *             sampleDataBuffer, bytesWrittenCount, numberOfBytesToRead);
+ *         bytesWrittenCount += bytesRead;
  *       }
- *       int bytesRead = inputReader.read(sampleDataBuffer, bytesWrittenCount, numberOfBytesToRead);
- *       bytesWrittenCount += bytesRead;
  *     }
  *
- *     \@Override
+ *     &#64;Override
  *     public void onSampleCompleted(
  *         int trackIndex,
- *         long timeUs,
+ *         long timeMicros,
  *         int flags,
  *         int size,
  *         int offset,
- *         \@Nullable CryptoInfo cryptoData) {
+ *         &#64;Nullable CryptoInfo cryptoData) {
  *       if (videoTrackIndex != trackIndex) {
  *         return; // It's not the video track. Ignore.
  *       }
  *       byte[] sampleData = new byte[size];
- *       System.arraycopy(sampleDataBuffer, bytesWrittenCount - size - offset, sampleData, \/*
- *       destPos= *\/ 0, size);
+ *       int sampleStartOffset = bytesWrittenCount - size - offset;
+ *       System.arraycopy(
+ *           sampleDataBuffer,
+ *           sampleStartOffset,
+ *           sampleData,
+ *           &#47;* destPos= *&#47; 0,
+ *           size);
  *       // Place trailing bytes at the start of the buffer.
  *       System.arraycopy(
  *           sampleDataBuffer,
  *           bytesWrittenCount - offset,
  *           sampleDataBuffer,
- *           \/* destPos= *\/ 0,
- *           \/* size= *\/ offset);
- *       publishSample(sampleData, timeUs, flags);
+ *           &#47;* destPos= *&#47; 0,
+ *           &#47;* size= *&#47; offset);
+ *       bytesWrittenCount = bytesWrittenCount - offset;
+ *       publishSample(sampleData, timeMicros, flags);
  *     }
+ *
+ *    private void ensureSpaceInBuffer(int numberOfBytesToRead) {
+ *      int requiredLength = bytesWrittenCount + numberOfBytesToRead;
+ *      if (requiredLength > sampleDataBuffer.length) {
+ *        sampleDataBuffer = Arrays.copyOf(sampleDataBuffer, requiredLength);
+ *      }
+ *    }
+ *
  *   }
  *
  * </pre>
@@ -163,7 +187,7 @@ public final class MediaParser {
      */
     public static final class SeekMap {
 
-        /** Returned by {@link #getDurationUs()} when the duration is unknown. */
+        /** Returned by {@link #getDurationMicros()} when the duration is unknown. */
         public static final int UNKNOWN_DURATION = Integer.MIN_VALUE;
 
         private final com.google.android.exoplayer2.extractor.SeekMap mExoPlayerSeekMap;
@@ -181,26 +205,26 @@ public final class MediaParser {
          * Returns the duration of the stream in microseconds or {@link #UNKNOWN_DURATION} if the
          * duration is unknown.
          */
-        public long getDurationUs() {
+        public long getDurationMicros() {
             return mExoPlayerSeekMap.getDurationUs();
         }
 
         /**
          * Obtains {@link SeekPoint SeekPoints} for the specified seek time in microseconds.
          *
-         * <p>{@code getSeekPoints(timeUs).first} contains the latest seek point for samples with
-         * timestamp equal to or smaller than {@code timeUs}.
+         * <p>{@code getSeekPoints(timeMicros).first} contains the latest seek point for samples
+         * with timestamp equal to or smaller than {@code timeMicros}.
          *
-         * <p>{@code getSeekPoints(timeUs).second} contains the earliest seek point for samples with
-         * timestamp equal to or greater than {@code timeUs}. If a seek point exists for {@code
-         * timeUs}, the returned pair will contain the same {@link SeekPoint} twice.
+         * <p>{@code getSeekPoints(timeMicros).second} contains the earliest seek point for samples
+         * with timestamp equal to or greater than {@code timeMicros}. If a seek point exists for
+         * {@code timeMicros}, the returned pair will contain the same {@link SeekPoint} twice.
          *
-         * @param timeUs A seek time in microseconds.
+         * @param timeMicros A seek time in microseconds.
          * @return The corresponding {@link SeekPoint SeekPoints}.
          */
         @NonNull
-        public Pair<SeekPoint, SeekPoint> getSeekPoints(long timeUs) {
-            SeekPoints seekPoints = mExoPlayerSeekMap.getSeekPoints(timeUs);
+        public Pair<SeekPoint, SeekPoint> getSeekPoints(long timeMicros) {
+            SeekPoints seekPoints = mExoPlayerSeekMap.getSeekPoints(timeMicros);
             return new Pair<>(toSeekPoint(seekPoints.first), toSeekPoint(seekPoints.second));
         }
     }
@@ -230,24 +254,24 @@ public final class MediaParser {
         @NonNull public static final SeekPoint START = new SeekPoint(0, 0);
 
         /** The time of the seek point, in microseconds. */
-        public final long timeUs;
+        public final long timeMicros;
 
         /** The byte offset of the seek point. */
         public final long position;
 
         /**
-         * @param timeUs The time of the seek point, in microseconds.
+         * @param timeMicros The time of the seek point, in microseconds.
          * @param position The byte offset of the seek point.
          */
-        private SeekPoint(long timeUs, long position) {
-            this.timeUs = timeUs;
+        private SeekPoint(long timeMicros, long position) {
+            this.timeMicros = timeMicros;
             this.position = position;
         }
 
         @Override
         @NonNull
         public String toString() {
-            return "[timeUs=" + timeUs + ", position=" + position + "]";
+            return "[timeMicros=" + timeMicros + ", position=" + position + "]";
         }
 
         @Override
@@ -259,12 +283,12 @@ public final class MediaParser {
                 return false;
             }
             SeekPoint other = (SeekPoint) obj;
-            return timeUs == other.timeUs && position == other.position;
+            return timeMicros == other.timeMicros && position == other.position;
         }
 
         @Override
         public int hashCode() {
-            int result = (int) timeUs;
+            int result = (int) timeMicros;
             result = 31 * result + (int) position;
             return result;
         }
@@ -287,8 +311,7 @@ public final class MediaParser {
          *     of the input has been reached.
          * @throws java.io.IOException If an error occurs reading from the source.
          */
-        int read(@NonNull byte[] buffer, int offset, int readLength)
-                throws IOException, InterruptedException;
+        int read(@NonNull byte[] buffer, int offset, int readLength) throws IOException;
 
         /** Returns the current read position (byte offset) in the stream. */
         long getPosition();
@@ -322,53 +345,56 @@ public final class MediaParser {
          *
          * @param seekMap The extracted {@link SeekMap}.
          */
-        void onSeekMap(@NonNull SeekMap seekMap);
+        void onSeekMapFound(@NonNull SeekMap seekMap);
 
         /**
          * Called when the number of tracks is found.
          *
          * @param numberOfTracks The number of tracks in the stream.
          */
-        void onTracksFound(int numberOfTracks);
+        void onTrackCountFound(int numberOfTracks);
 
         /**
-         * Called when new {@link TrackData} is extracted from the stream.
+         * Called when new {@link TrackData} is found in the stream.
          *
          * @param trackIndex The index of the track for which the {@link TrackData} was extracted.
          * @param trackData The extracted {@link TrackData}.
          */
-        void onTrackData(int trackIndex, @NonNull TrackData trackData);
+        void onTrackDataFound(int trackIndex, @NonNull TrackData trackData);
 
         /**
-         * Called to write sample data to the output.
+         * Called when sample data is found in the stream.
          *
-         * <p>Implementers must attempt to consume the entirety of the input, but should surface any
-         * thrown {@link IOException} caused by reading from {@code input}.
+         * <p>If the invocation of this method returns before the entire {@code inputReader} {@link
+         * InputReader#getLength() length} is consumed, the method will be called again for the
+         * implementer to read the remaining data. Implementers should surface any thrown {@link
+         * IOException} caused by reading from {@code input}.
          *
          * @param trackIndex The index of the track to which the sample data corresponds.
          * @param inputReader The {@link InputReader} from which to read the data.
+         * @throws IOException If an exception occurs while reading from {@code inputReader}.
          */
-        void onSampleData(int trackIndex, @NonNull InputReader inputReader)
-                throws IOException, InterruptedException;
+        void onSampleDataFound(int trackIndex, @NonNull InputReader inputReader) throws IOException;
 
         /**
-         * Called once all the data of a sample has been passed to {@link #onSampleData}.
+         * Called once all the data of a sample has been passed to {@link #onSampleDataFound}.
          *
          * <p>Also includes sample metadata, like presentation timestamp and flags.
          *
          * @param trackIndex The index of the track to which the sample corresponds.
-         * @param timeUs The media timestamp associated with the sample, in microseconds.
+         * @param timeMicros The media timestamp associated with the sample, in microseconds.
          * @param flags Flags associated with the sample. See {@link MediaCodec
          *     MediaCodec.BUFFER_FLAG_*}.
          * @param size The size of the sample data, in bytes.
-         * @param offset The number of bytes that have been passed to {@link #onSampleData} since
-         *     the last byte belonging to the sample whose metadata is being passed.
+         * @param offset The number of bytes that have been consumed by {@code onSampleData(int,
+         *     MediaParser.InputReader)} for the specified track, since the last byte belonging to
+         *     the sample whose metadata is being passed.
          * @param cryptoData Encryption data required to decrypt the sample. May be null for
          *     unencrypted samples.
          */
         void onSampleCompleted(
                 int trackIndex,
-                long timeUs,
+                long timeMicros,
                 int flags,
                 int size,
                 int offset,
@@ -606,7 +632,7 @@ public final class MediaParser {
     private Extractor mExtractor;
     private ExtractorInput mExtractorInput;
     private long mPendingSeekPosition;
-    private long mPendingSeekTimeUs;
+    private long mPendingSeekTimeMicros;
 
     // Public methods.
 
@@ -684,10 +710,11 @@ public final class MediaParser {
      *     container data.
      * @return Whether there is any data left to extract. Returns false if the end of input has been
      *     reached.
-     * @throws UnrecognizedInputFormatException
+     * @throws IOException If an error occurs while reading from the {@link SeekableInputReader}.
+     * @throws UnrecognizedInputFormatException If the format cannot be recognized by any of the
+     *     underlying parser implementations.
      */
-    public boolean advance(@NonNull SeekableInputReader seekableInputReader)
-            throws IOException, InterruptedException {
+    public boolean advance(@NonNull SeekableInputReader seekableInputReader) throws IOException {
         if (mExtractorInput == null) {
             // TODO: For efficiency, the same implementation should be used, by providing a
             // clearBuffers() method, or similar.
@@ -700,39 +727,51 @@ public final class MediaParser {
         mDataSource.mInputReader = seekableInputReader;
 
         // TODO: Apply parameters when creating extractor instances.
-        if (mExtractorName != null) {
-            mExtractor = EXTRACTOR_FACTORIES_BY_NAME.get(mExtractorName).createInstance();
-        } else if (mExtractor == null) {
-            for (String parserName : mParserNamesPool) {
-                Extractor extractor = EXTRACTOR_FACTORIES_BY_NAME.get(parserName).createInstance();
-                try {
-                    if (extractor.sniff(mExtractorInput)) {
-                        mExtractorName = parserName;
-                        mExtractor = extractor;
-                        mExtractor.init(new ExtractorOutputAdapter());
-                        break;
+        if (mExtractor == null) {
+            if (mExtractorName != null) {
+                mExtractor = EXTRACTOR_FACTORIES_BY_NAME.get(mExtractorName).createInstance();
+                mExtractor.init(new ExtractorOutputAdapter());
+            } else {
+                for (String parserName : mParserNamesPool) {
+                    Extractor extractor =
+                            EXTRACTOR_FACTORIES_BY_NAME.get(parserName).createInstance();
+                    try {
+                        if (extractor.sniff(mExtractorInput)) {
+                            mExtractorName = parserName;
+                            mExtractor = extractor;
+                            mExtractor.init(new ExtractorOutputAdapter());
+                            break;
+                        }
+                    } catch (EOFException e) {
+                        // Do nothing.
+                    } catch (InterruptedException e) {
+                        // TODO: Remove this exception replacement once we update the ExoPlayer
+                        // version.
+                        throw new InterruptedIOException();
+                    } finally {
+                        mExtractorInput.resetPeekPosition();
                     }
-                } catch (EOFException e) {
-                    // Do nothing.
-                } catch (IOException | InterruptedException e) {
-                    throw new IllegalStateException(e);
-                } finally {
-                    mExtractorInput.resetPeekPosition();
                 }
+                if (mExtractor == null) {
+                    throw UnrecognizedInputFormatException.createForExtractors(mParserNamesPool);
+                }
+                return true;
             }
-            if (mExtractor == null) {
-                throw UnrecognizedInputFormatException.createForExtractors(mParserNamesPool);
-            }
-            return true;
         }
 
         if (isPendingSeek()) {
-            mExtractor.seek(mPendingSeekPosition, mPendingSeekTimeUs);
+            mExtractor.seek(mPendingSeekPosition, mPendingSeekTimeMicros);
             removePendingSeek();
         }
 
         mPositionHolder.position = seekableInputReader.getPosition();
-        int result = mExtractor.read(mExtractorInput, mPositionHolder);
+        int result = 0;
+        try {
+            result = mExtractor.read(mExtractorInput, mPositionHolder);
+        } catch (InterruptedException e) {
+            // TODO: Remove this exception replacement once we update the ExoPlayer version.
+            throw new InterruptedIOException();
+        }
         if (result == Extractor.RESULT_END_OF_INPUT) {
             return false;
         }
@@ -747,7 +786,7 @@ public final class MediaParser {
      * Seeks within the media container being extracted.
      *
      * <p>{@link SeekPoint SeekPoints} can be obtained from the {@link SeekMap} passed to {@link
-     * OutputConsumer#onSeekMap(SeekMap)}.
+     * OutputConsumer#onSeekMapFound(SeekMap)}.
      *
      * <p>Following a call to this method, the {@link InputReader} passed to the next invocation of
      * {@link #advance} must provide data starting from {@link SeekPoint#position} in the stream.
@@ -757,9 +796,9 @@ public final class MediaParser {
     public void seek(@NonNull SeekPoint seekPoint) {
         if (mExtractor == null) {
             mPendingSeekPosition = seekPoint.position;
-            mPendingSeekTimeUs = seekPoint.timeUs;
+            mPendingSeekTimeMicros = seekPoint.timeMicros;
         } else {
-            mExtractor.seek(seekPoint.position, seekPoint.timeUs);
+            mExtractor.seek(seekPoint.position, seekPoint.timeMicros);
         }
     }
 
@@ -797,7 +836,7 @@ public final class MediaParser {
 
     private void removePendingSeek() {
         mPendingSeekPosition = -1;
-        mPendingSeekTimeUs = -1;
+        mPendingSeekTimeMicros = -1;
     }
 
     // Private classes.
@@ -818,13 +857,7 @@ public final class MediaParser {
 
         @Override
         public int read(byte[] buffer, int offset, int readLength) throws IOException {
-            // TODO: Reevaluate interruption in Input.
-            try {
-                return mInputReader.read(buffer, offset, readLength);
-            } catch (InterruptedException e) {
-                // TODO: Remove.
-                throw new RuntimeException();
-            }
+            return mInputReader.read(buffer, offset, readLength);
         }
 
         @Override
@@ -864,12 +897,12 @@ public final class MediaParser {
 
         @Override
         public void endTracks() {
-            mOutputConsumer.onTracksFound(mTrackOutputAdapters.size());
+            mOutputConsumer.onTrackCountFound(mTrackOutputAdapters.size());
         }
 
         @Override
         public void seekMap(com.google.android.exoplayer2.extractor.SeekMap exoplayerSeekMap) {
-            mOutputConsumer.onSeekMap(new SeekMap(exoplayerSeekMap));
+            mOutputConsumer.onSeekMapFound(new SeekMap(exoplayerSeekMap));
         }
     }
 
@@ -883,7 +916,7 @@ public final class MediaParser {
 
         @Override
         public void format(Format format) {
-            mOutputConsumer.onTrackData(
+            mOutputConsumer.onTrackDataFound(
                     mTrackIndex,
                     new TrackData(
                             toMediaFormat(format), toFrameworkDrmInitData(format.drmInitData)));
@@ -891,10 +924,10 @@ public final class MediaParser {
 
         @Override
         public int sampleData(ExtractorInput input, int length, boolean allowEndOfInput)
-                throws IOException, InterruptedException {
+                throws IOException {
             mScratchExtractorInputAdapter.setExtractorInput(input, length);
             long positionBeforeReading = mScratchExtractorInputAdapter.getPosition();
-            mOutputConsumer.onSampleData(mTrackIndex, mScratchExtractorInputAdapter);
+            mOutputConsumer.onSampleDataFound(mTrackIndex, mScratchExtractorInputAdapter);
             return (int) (mScratchExtractorInputAdapter.getPosition() - positionBeforeReading);
         }
 
@@ -902,8 +935,8 @@ public final class MediaParser {
         public void sampleData(ParsableByteArray data, int length) {
             mScratchParsableByteArrayAdapter.resetWithByteArray(data, length);
             try {
-                mOutputConsumer.onSampleData(mTrackIndex, mScratchParsableByteArrayAdapter);
-            } catch (IOException | InterruptedException e) {
+                mOutputConsumer.onSampleDataFound(mTrackIndex, mScratchParsableByteArrayAdapter);
+            } catch (IOException e) {
                 // Unexpected.
                 throw new RuntimeException(e);
             }
@@ -932,9 +965,14 @@ public final class MediaParser {
         // Input implementation.
 
         @Override
-        public int read(byte[] buffer, int offset, int readLength)
-                throws IOException, InterruptedException {
-            int readBytes = mExtractorInput.read(buffer, offset, readLength);
+        public int read(byte[] buffer, int offset, int readLength) throws IOException {
+            int readBytes = 0;
+            try {
+                readBytes = mExtractorInput.read(buffer, offset, readLength);
+            } catch (InterruptedException e) {
+                // TODO: Remove this exception replacement once we update the ExoPlayer version.
+                throw new InterruptedIOException();
+            }
             mCurrentPosition += readBytes;
             return readBytes;
         }
@@ -1114,20 +1152,22 @@ public final class MediaParser {
     static {
         // Using a LinkedHashMap to keep the insertion order when iterating over the keys.
         LinkedHashMap<String, ExtractorFactory> extractorFactoriesByName = new LinkedHashMap<>();
-        extractorFactoriesByName.put("exo.Ac3Parser", Ac3Extractor::new);
-        extractorFactoriesByName.put("exo.Ac4Parser", Ac4Extractor::new);
-        extractorFactoriesByName.put("exo.AdtsParser", AdtsExtractor::new);
-        extractorFactoriesByName.put("exo.AmrParser", AmrExtractor::new);
-        extractorFactoriesByName.put("exo.FlacParser", FlacExtractor::new);
-        extractorFactoriesByName.put("exo.FlvParser", FlvExtractor::new);
-        extractorFactoriesByName.put("exo.FragmentedMp4Parser", FragmentedMp4Extractor::new);
+        // Parsers are ordered to match ExoPlayer's DefaultExtractorsFactory extractor ordering,
+        // which in turn aims to minimize the chances of incorrect extractor selections.
         extractorFactoriesByName.put("exo.MatroskaParser", MatroskaExtractor::new);
-        extractorFactoriesByName.put("exo.Mp3Parser", Mp3Extractor::new);
+        extractorFactoriesByName.put("exo.FragmentedMp4Parser", FragmentedMp4Extractor::new);
         extractorFactoriesByName.put("exo.Mp4Parser", Mp4Extractor::new);
+        extractorFactoriesByName.put("exo.Mp3Parser", Mp3Extractor::new);
+        extractorFactoriesByName.put("exo.AdtsParser", AdtsExtractor::new);
+        extractorFactoriesByName.put("exo.Ac3Parser", Ac3Extractor::new);
+        extractorFactoriesByName.put("exo.TsParser", TsExtractor::new);
+        extractorFactoriesByName.put("exo.FlvParser", FlvExtractor::new);
         extractorFactoriesByName.put("exo.OggParser", OggExtractor::new);
         extractorFactoriesByName.put("exo.PsParser", PsExtractor::new);
-        extractorFactoriesByName.put("exo.TsParser", TsExtractor::new);
         extractorFactoriesByName.put("exo.WavParser", WavExtractor::new);
+        extractorFactoriesByName.put("exo.AmrParser", AmrExtractor::new);
+        extractorFactoriesByName.put("exo.Ac4Parser", Ac4Extractor::new);
+        extractorFactoriesByName.put("exo.FlacParser", FlacExtractor::new);
         EXTRACTOR_FACTORIES_BY_NAME = Collections.unmodifiableMap(extractorFactoriesByName);
 
         HashMap<String, Class> expectedTypeByParameterName = new HashMap<>();

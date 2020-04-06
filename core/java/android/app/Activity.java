@@ -60,6 +60,7 @@ import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
+import android.graphics.drawable.Icon;
 import android.media.AudioManager;
 import android.media.session.MediaController;
 import android.net.Uri;
@@ -6897,7 +6898,7 @@ public class Activity extends ContextThemeWrapper
                 final int size = ActivityManager.getLauncherLargeIconSizeInner(this);
                 final Bitmap icon = Bitmap.createScaledBitmap(taskDescription.getIcon(), size, size,
                         true);
-                mTaskDescription.setIcon(icon);
+                mTaskDescription.setIcon(Icon.createWithBitmap(icon));
             }
         }
         try {
@@ -7942,7 +7943,8 @@ public class Activity extends ContextThemeWrapper
         mCurrentConfig = config;
 
         mWindow.setColorMode(info.colorMode);
-        mWindow.setPreferMinimalPostProcessing(info.preferMinimalPostProcessing);
+        mWindow.setPreferMinimalPostProcessing(
+                (info.flags & ActivityInfo.FLAG_PREFER_MINIMAL_POST_PROCESSING) != 0);
 
         setAutofillOptions(application.getAutofillOptions());
         setContentCaptureOptions(application.getContentCaptureOptions());

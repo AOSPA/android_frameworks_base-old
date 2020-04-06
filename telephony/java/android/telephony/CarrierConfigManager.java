@@ -1588,6 +1588,7 @@ public class CarrierConfigManager {
     /**
      * The string is used to compare with operator name.
      * If it matches the pattern then show specific data icon.
+     * @hide
      */
     public static final String KEY_SHOW_CARRIER_DATA_ICON_PATTERN_STRING =
             "show_carrier_data_icon_pattern_string";
@@ -2407,17 +2408,16 @@ public class CarrierConfigManager {
      * <p> If a measure is not set, signal criteria reporting from modem will not be triggered and
      * not be used for calculating signal level. If multiple measures are set bit, the parameter
      * whose value is smallest is used to indicate the signal level.
+     * <UL>
+     *  <LI>RSRP = 1 << 0</LI>
+     *  <LI>RSRQ = 1 << 1</LI>
+     *  <LI>RSSNR = 1 << 2</LI>
+     * </UL>
+     * <p> The value of this key must be bitwise OR of {@link CellSignalStrengthLte#USE_RSRP},
+     * {@link CellSignalStrengthLte#USE_RSRQ}, {@link CellSignalStrengthLte#USE_RSSNR}.
      *
-     *  RSRP = 1 << 0,
-     *  RSRQ = 1 << 1,
-     *  RSSNR = 1 << 2,
-     *
-     *  The value of this key must be bitwise OR of {@link CellSignalStrengthLte#USE_RSRP},
-     *  {@link CellSignalStrengthLte#USE_RSRQ}, {@link CellSignalStrengthLte#USE_RSSNR}.
-     *
-     * For example, if both RSRP and RSRQ are used, the value of key is 3 (1 << 0 | 1 << 1).
-     * If the key is invalid or not configured, a default value (RSRP = 1 << 0)
-     * will apply.
+     * <p> For example, if both RSRP and RSRQ are used, the value of key is 3 (1 << 0 | 1 << 1).
+     * If the key is invalid or not configured, a default value (RSRP = 1 << 0) will apply.
      *
      * @hide
      */
@@ -2426,16 +2426,18 @@ public class CarrierConfigManager {
 
     /**
      * List of 4 customized 5G SS reference signal received power (SSRSRP) thresholds.
-     *
+     * <p>
      * Reference: 3GPP TS 38.215
-     *
+     * <p>
      * 4 threshold integers must be within the boundaries [-140 dB, -44 dB], and the levels are:
-     *     "NONE: [-140, threshold1]"
-     *     "POOR: (threshold1, threshold2]"
-     *     "MODERATE: (threshold2, threshold3]"
-     *     "GOOD:  (threshold3, threshold4]"
-     *     "EXCELLENT:  (threshold4, -44]"
-     *
+     * <UL>
+     *     <LI>"NONE: [-140, threshold1]"</LI>
+     *     <LI>"POOR: (threshold1, threshold2]"</LI>
+     *     <LI>"MODERATE: (threshold2, threshold3]"</LI>
+     *     <LI>"GOOD:  (threshold3, threshold4]"</LI>
+     *     <LI>"EXCELLENT:  (threshold4, -44]"</LI>
+     * </UL>
+     * <p>
      * This key is considered invalid if the format is violated. If the key is invalid or
      * not configured, a default value set will apply.
      */
@@ -2444,16 +2446,18 @@ public class CarrierConfigManager {
 
     /**
      * List of 4 customized 5G SS reference signal received quality (SSRSRQ) thresholds.
-     *
+     * <p>
      * Reference: 3GPP TS 38.215
-     *
+     * <p>
      * 4 threshold integers must be within the boundaries [-20 dB, -3 dB], and the levels are:
-     *     "NONE: [-20, threshold1]"
-     *     "POOR: (threshold1, threshold2]"
-     *     "MODERATE: (threshold2, threshold3]"
-     *     "GOOD:  (threshold3, threshold4]"
-     *     "EXCELLENT:  (threshold4, -3]"
-     *
+     * <UL>
+     *     <LI>"NONE: [-20, threshold1]"</LI>
+     *     <LI>"POOR: (threshold1, threshold2]"</LI>
+     *     <LI>"MODERATE: (threshold2, threshold3]"</LI>
+     *     <LI>"GOOD:  (threshold3, threshold4]"</LI>
+     *     <LI>"EXCELLENT:  (threshold4, -3]"</LI>
+     * </UL>
+     * <p>
      * This key is considered invalid if the format is violated. If the key is invalid or
      * not configured, a default value set will apply.
      */
@@ -2462,17 +2466,19 @@ public class CarrierConfigManager {
 
     /**
      * List of 4 customized 5G SS signal-to-noise and interference ratio (SSSINR) thresholds.
-     *
+     * <p>
      * Reference: 3GPP TS 38.215,
      *            3GPP TS 38.133 10.1.16.1
-     *
+     * <p>
      * 4 threshold integers must be within the boundaries [-23 dB, 40 dB], and the levels are:
-     *     "NONE: [-23, threshold1]"
-     *     "POOR: (threshold1, threshold2]"
-     *     "MODERATE: (threshold2, threshold3]"
-     *     "GOOD:  (threshold3, threshold4]"
-     *     "EXCELLENT:  (threshold4, 40]"
-     *
+     * <UL>
+     *     <LI>"NONE: [-23, threshold1]"</LI>
+     *     <LI>"POOR: (threshold1, threshold2]"</LI>
+     *     <LI>"MODERATE: (threshold2, threshold3]"</LI>
+     *     <LI>"GOOD:  (threshold3, threshold4]"</LI>
+     *     <LI>"EXCELLENT:  (threshold4, 40]"</LI>
+     * </UL>
+     * <p>
      * This key is considered invalid if the format is violated. If the key is invalid or
      * not configured, a default value set will apply.
      */
@@ -2487,19 +2493,19 @@ public class CarrierConfigManager {
      * <p> If a measure is not set, signal criteria reporting from modem will not be triggered and
      * not be used for calculating signal level. If multiple measures are set bit, the parameter
      * whose value is smallest is used to indicate the signal level.
-     *
-     *  SSRSRP = 1 << 0,
-     *  SSRSRQ = 1 << 1,
-     *  SSSINR = 1 << 2,
-     *
+     * <UL>
+     *  <LI>SSRSRP = 1 << 0</LI>
+     *  <LI>SSRSRQ = 1 << 1</LI>
+     *  <LI>SSSINR = 1 << 2</LI>
+     * </UL>
      *  The value of this key must be bitwise OR of {@link CellSignalStrengthNr#USE_SSRSRP},
      *  {@link CellSignalStrengthNr#USE_SSRSRQ}, {@link CellSignalStrengthNr#USE_SSSINR}.
      *
-     * For example, if both SSRSRP and SSSINR are used, the value of key is 5 (1 << 0 | 1 << 2).
+     * <p> For example, if both SSRSRP and SSSINR are used, the value of key is 5 (1 << 0 | 1 << 2).
      * If the key is invalid or not configured, a default value (SSRSRP = 1 << 0) will apply.
      *
-     *  Reference: 3GPP TS 38.215,
-     *             3GPP TS 38.133 10.1.16.1
+     * <p> Reference: 3GPP TS 38.215,
+     *                3GPP TS 38.133 10.1.16.1
      *
      * @hide
      */
@@ -3004,9 +3010,9 @@ public class CarrierConfigManager {
      * UE wants to display 5G_Plus icon for scenario#1, and 5G icon for scenario#2; otherwise not
      * define.
      * The configuration is: "connected_mmwave:5G_Plus,connected:5G"
+     * @hide
      */
-    public static final String KEY_5G_ICON_CONFIGURATION_STRING =
-            "5g_icon_configuration_string";
+    public static final String KEY_5G_ICON_CONFIGURATION_STRING = "5g_icon_configuration_string";
 
     /**
      * Timeout in seconds for displaying 5G icon, default value is 0 which means the timer is
@@ -3018,12 +3024,14 @@ public class CarrierConfigManager {
      *
      * If 5G is reacquired during this timer, the timer is canceled and restarted when 5G is next
      * lost. Allows us to momentarily lose 5G without blinking the icon.
+     * @hide
      */
     public static final String KEY_5G_ICON_DISPLAY_GRACE_PERIOD_SEC_INT =
             "5g_icon_display_grace_period_sec_int";
 
     /**
      * Controls time in milliseconds until DcTracker reevaluates 5G connection state.
+     * @hide
      */
     public static final String KEY_5G_WATCHDOG_TIME_MS_LONG = "5g_watchdog_time_long";
 
@@ -3056,6 +3064,13 @@ public class CarrierConfigManager {
      */
     public static final String KEY_ASCII_7_BIT_SUPPORT_FOR_LONG_MESSAGE_BOOL =
             "ascii_7_bit_support_for_long_message_bool";
+
+    /**
+     * Controls whether to show wifi calling icon in statusbar when wifi calling is available.
+     * @hide
+     */
+    public static final String KEY_SHOW_WIFI_CALLING_ICON_IN_STATUS_BAR_BOOL =
+            "show_wifi_calling_icon_in_status_bar_bool";
 
     /**
      * Controls RSRP threshold at which OpportunisticNetworkService will decide whether
@@ -3483,7 +3498,7 @@ public class CarrierConfigManager {
      * @hide
      */
     public static final String KEY_DATA_SWITCH_VALIDATION_MIN_GAP_LONG =
-            "data_switch_validation_min_gap_LONG";
+            "data_switch_validation_min_gap_long";
 
     /**
     * A boolean property indicating whether this subscription should be managed as an opportunistic
@@ -3510,14 +3525,14 @@ public class CarrierConfigManager {
         /**
          * Delay in milliseconds to turn off wifi when IMS is registered over wifi.
          */
-        public static final String KEY_WIFI_OFF_DEFERRING_TIME_INT =
-                KEY_PREFIX + "wifi_off_deferring_time_int";
+        public static final String KEY_WIFI_OFF_DEFERRING_TIME_MILLIS_INT =
+                KEY_PREFIX + "wifi_off_deferring_time_millis_int";
 
         private Ims() {}
 
         private static PersistableBundle getDefaults() {
             PersistableBundle defaults = new PersistableBundle();
-            defaults.putInt(KEY_WIFI_OFF_DEFERRING_TIME_INT, 0);
+            defaults.putInt(KEY_WIFI_OFF_DEFERRING_TIME_MILLIS_INT, 4000);
             return defaults;
         }
     }
@@ -3544,6 +3559,15 @@ public class CarrierConfigManager {
      */
     public static final String KEY_SUPPORT_WPS_OVER_IMS_BOOL =
             "support_wps_over_ims_bool";
+
+    /**
+     * The two digital number pattern of MMI code which is defined by carrier.
+     * If the dial number matches this pattern, it will be dialed out normally not USSD.
+     *
+     * @hide
+     */
+    public static final String KEY_MMI_TWO_DIGIT_NUMBER_PATTERN_STRING_ARRAY =
+            "mmi_two_digit_number_pattern_string_array";
 
     /**
      * Holds the list of carrier certificate hashes.
@@ -3574,6 +3598,30 @@ public class CarrierConfigManager {
      */
     public static final String KEY_SHOW_FORWARDED_NUMBER_BOOL =
             "show_forwarded_number_bool";
+
+    /**
+     * The list of originating address of missed incoming call SMS. If the SMS has originator
+     * matched, the SMS will be treated as special SMS for notifying missed incoming call to the
+     * user.
+     *
+     * @hide
+     */
+    public static final String KEY_MISSED_INCOMING_CALL_SMS_ORIGINATOR_STRING_ARRAY =
+            "missed_incoming_call_sms_originator_string_array";
+
+    /**
+     * The patterns of missed incoming call sms. This is the regular expression used for
+     * matching the missed incoming call's date, time, and caller id. The pattern should match
+     * fields for at least month, day, hour, and minute. Year is optional although it is encouraged.
+     *
+     * An usable pattern should look like this:
+     * ^(?<month>0[1-9]|1[012])\/(?<day>0[1-9]|1[0-9]|2[0-9]|3[0-1]) (?<hour>[0-1][0-9]|2[0-3]):
+     * (?<minute>[0-5][0-9])\s*(?<callerId>[0-9]+)\s*$
+     *
+     * @hide
+     */
+    public static final String KEY_MISSED_INCOMING_CALL_SMS_PATTERN_STRING_ARRAY =
+            "missed_incoming_call_sms_pattern_string_array";
 
      /**
      * Flag indicating whether carrier supports multianchor conference.
@@ -3755,7 +3803,7 @@ public class CarrierConfigManager {
         sDefaults.putInt(KEY_IMS_DTMF_TONE_DELAY_INT, 0);
         sDefaults.putInt(KEY_CDMA_DTMF_TONE_DELAY_INT, 100);
         sDefaults.putBoolean(KEY_CALL_FORWARDING_MAP_NON_NUMBER_TO_VOICEMAIL_BOOL, false);
-        sDefaults.putBoolean(KEY_IGNORE_RTT_MODE_SETTING_BOOL, false);
+        sDefaults.putBoolean(KEY_IGNORE_RTT_MODE_SETTING_BOOL, true);
         sDefaults.putInt(KEY_CDMA_3WAYCALL_FLASH_DELAY_INT , 0);
         sDefaults.putBoolean(KEY_SUPPORT_ADHOC_CONFERENCE_CALLS_BOOL, false);
         sDefaults.putBoolean(KEY_SUPPORT_ADD_CONFERENCE_PARTICIPANTS_BOOL, false);
@@ -4029,7 +4077,8 @@ public class CarrierConfigManager {
         sDefaults.putBoolean(KEY_USE_CALLER_ID_USSD_BOOL, false);
         sDefaults.putInt(KEY_CALL_WAITING_SERVICE_CLASS_INT, 1 /* SERVICE_CLASS_VOICE */);
         sDefaults.putString(KEY_5G_ICON_CONFIGURATION_STRING,
-                "connected_mmwave:5G,connected:5G");
+                "connected_mmwave:5G,connected:5G,not_restricted_rrc_idle:5G,"
+                        + "not_restricted_rrc_con:5G");
         sDefaults.putInt(KEY_5G_ICON_DISPLAY_GRACE_PERIOD_SEC_INT, 0);
         /* Default value is 1 hour. */
         sDefaults.putLong(KEY_5G_WATCHDOG_TIME_MS_LONG, 3600000);
@@ -4037,6 +4086,7 @@ public class CarrierConfigManager {
         sDefaults.putBoolean(KEY_UNMETERED_NR_NSA_MMWAVE_BOOL, false);
         sDefaults.putBoolean(KEY_UNMETERED_NR_NSA_SUB6_BOOL, false);
         sDefaults.putBoolean(KEY_ASCII_7_BIT_SUPPORT_FOR_LONG_MESSAGE_BOOL, false);
+        sDefaults.putBoolean(KEY_SHOW_WIFI_CALLING_ICON_IN_STATUS_BAR_BOOL, false);
         /* Default value is minimum RSRP level needed for SIGNAL_STRENGTH_GOOD */
         sDefaults.putInt(KEY_OPPORTUNISTIC_NETWORK_ENTRY_THRESHOLD_RSRP_INT, -108);
         /* Default value is minimum RSRP level needed for SIGNAL_STRENGTH_MODERATE */
@@ -4089,6 +4139,7 @@ public class CarrierConfigManager {
                 new int[] {4 /* BUSY */});
         sDefaults.putBoolean(KEY_PREVENT_CLIR_ACTIVATION_AND_DEACTIVATION_CODE_BOOL, false);
         sDefaults.putLong(KEY_DATA_SWITCH_VALIDATION_TIMEOUT_LONG, 2000);
+        sDefaults.putStringArray(KEY_MMI_TWO_DIGIT_NUMBER_PATTERN_STRING_ARRAY, new String[0]);
         sDefaults.putInt(KEY_PARAMETERS_USED_FOR_LTE_SIGNAL_BAR_INT,
                 CellSignalStrengthLte.USE_RSRP);
         // Default wifi configurations.
@@ -4096,6 +4147,9 @@ public class CarrierConfigManager {
         sDefaults.putBoolean(ENABLE_EAP_METHOD_PREFIX_BOOL, false);
         sDefaults.putBoolean(KEY_SHOW_FORWARDED_NUMBER_BOOL, false);
         sDefaults.putLong(KEY_DATA_SWITCH_VALIDATION_MIN_GAP_LONG, TimeUnit.DAYS.toMillis(1));
+        sDefaults.putStringArray(KEY_MISSED_INCOMING_CALL_SMS_ORIGINATOR_STRING_ARRAY,
+                new String[0]);
+        sDefaults.putStringArray(KEY_MISSED_INCOMING_CALL_SMS_PATTERN_STRING_ARRAY, new String[0]);
         sDefaults.putBoolean(KEY_CARRIER_SUPPORTS_MULTIANCHOR_CONFERENCE, false);
     }
 
@@ -4109,7 +4163,8 @@ public class CarrierConfigManager {
         /** Prefix of all Wifi.KEY_* constants. */
         public static final String KEY_PREFIX = "wifi.";
         /**
-        * It contains the maximum client count definition that the carrier owns.
+        * It contains the maximum client count definition that the carrier sets.
+        * The default is 0, which means that the carrier hasn't set a requirement.
         */
         public static final String KEY_HOTSPOT_MAX_CLIENT_COUNT =
                 KEY_PREFIX + "hotspot_maximum_client_count";

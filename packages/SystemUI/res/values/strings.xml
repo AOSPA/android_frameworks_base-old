@@ -168,6 +168,24 @@
     <!-- Message of notification shown when trying to enable USB debugging but a secondary user is the current foreground user. -->
     <string name="usb_debugging_secondary_user_message">The user currently signed in to this device can\'t turn on USB debugging. To use this feature, switch to the primary user.</string>
 
+    <!-- Title of confirmation dialog for wireless debugging [CHAR LIMIT=NONE] -->
+    <string name="wifi_debugging_title">Allow wireless debugging on this network?</string>
+
+    <!-- Message of confirmation dialog for wireless debugging [CHAR LIMIT=NONE] -->
+    <string name="wifi_debugging_message">Network Name (SSID)\n<xliff:g id="ssid" example="My wifi">%1$s</xliff:g>\n\nWi\u2011Fi Address (BSSID)\n<xliff:g id="bssid" example="AB:CD:EF:12:34:56">%2$s</xliff:g></string>
+
+    <!-- Option to always allow wireless debugging on this network [CHAR LIMIT=NONE] -->
+    <string name="wifi_debugging_always">Always allow on this network</string>
+
+    <!-- Button label for confirming acceptance of enabling wireless debugging [CHAR LIMIT=15] -->
+    <string name="wifi_debugging_allow">Allow</string>
+
+    <!-- Title of notification shown when trying to enable wireless debugging but a secondary user is the current foreground user. [CHAR LIMIT=NONE] -->
+    <string name="wifi_debugging_secondary_user_title">Wireless debugging not allowed</string>
+
+    <!-- Message of notification shown when trying to enable wireless debugging but a secondary user is the current foreground user. [CHAR LIMIT=NONE] -->
+    <string name="wifi_debugging_secondary_user_message">The user currently signed in to this device can\u2019t turn on wireless debugging. To use this feature, switch to the primary user.</string>
+
     <!-- Title of USB contaminant presence dialog [CHAR LIMIT=NONE] -->
     <string name="usb_contaminant_title">USB port disabled</string>
 
@@ -1204,6 +1222,9 @@
     <!-- Section title for notifications that do not vibrate or make noise. [CHAR LIMIT=40] -->
     <string name="notification_section_header_gentle">Silent notifications</string>
 
+    <!-- Section title for notifications that vibrate or make noise. [CHAR LIMIT=40] -->
+    <string name="notification_section_header_alerting">Alerting notifications</string>
+
     <!-- Section title for conversational notifications. [CHAR LIMIT=40] -->
     <string name="notification_section_header_conversations">Conversations</string>
 
@@ -1403,6 +1424,9 @@
 
     <!-- Indication on the keyguard that appears when the user disables trust agents until the next time they unlock manually. [CHAR LIMIT=NONE] -->
     <string name="keyguard_indication_trust_disabled">Device will stay locked until you manually unlock</string>
+
+    <!-- Indication on the keyguard that appears when trust agents unlocks the device and device is plugged in. [CHAR LIMIT=NONE] -->
+    <string name="keyguard_indication_trust_unlocked_plugged_in"><xliff:g id="keyguard_indication" example="Kept unlocked by TrustAgent">%1$s</xliff:g>\n<xliff:g id="power_indication" example="Charging Slowly">%2$s</xliff:g></string>
 
     <!-- Title of notification educating the user about enabling notifications on the lockscreen. [CHAR LIMIT=40] -->
     <string name="hidden_notifications_title">Get notifications faster</string>
@@ -2565,6 +2589,12 @@
     <string name="bubble_accessibility_action_move_bottom_right">Move bottom right</string>
     <!-- Text used for the bubble dismiss area. Bubbles dragged to, or flung towards, this area will go away. [CHAR LIMIT=20] -->
     <string name="bubble_dismiss_text">Dismiss</string>
+    <!-- Title text for the bubbles feature education cling shown when a bubble is on screen for the first time. [CHAR LIMIT=60]-->
+    <string name="bubbles_user_education_title">Keep chats up front</string>
+    <!-- Descriptive text for the bubble feature education cling shown when a bubble is on screen for the first time. [CHAR LIMIT=NONE] -->
+    <string name="bubbles_user_education_description">New chats from <xliff:g id="app_name" example="YouTube">%1$s</xliff:g> will appear as bubbles. Tap a bubble to open it. Drag to move it.\n\nTap the bubble</string>
+    <!-- Text for the bubble "manage" button feature education cling shown when a bubble is on screen for the first time. [CHAR LIMIT=80]-->
+    <string name="bubbles_user_education_manage">Tap Manage to turn off bubbles from this app</string>
 
     <!-- Notification content text when the system navigation mode changes as a result of changing the default launcher [CHAR LIMIT=NONE] -->
     <string name="notification_content_system_nav_changed">System navigation updated. To make changes, go to Settings.</string>
@@ -2593,18 +2623,34 @@
     <string name="controls_providers_subtitle">Choose an app from which to add controls</string>
     <!-- Number of favorites for controls management screen [CHAR LIMIT=NONE]-->
     <plurals name="controls_number_of_favorites">
-        <item quantity="one"><xliff:g id="number" example="1">%s</xliff:g> current favorite.</item>
-        <item quantity="other"><xliff:g id="number" example="3">%s</xliff:g> current favorites.</item>
+        <item quantity="one"><xliff:g id="number" example="1">%s</xliff:g> control added.</item>
+        <item quantity="other"><xliff:g id="number" example="3">%s</xliff:g> controls added.</item>
     </plurals>
 
     <!-- Controls management controls screen default title [CHAR LIMIT=30] -->
     <string name="controls_favorite_default_title">Controls</string>
     <!-- Controls management controls screen subtitle [CHAR LIMIT=NONE] -->
     <string name="controls_favorite_subtitle">Choose controls for quick access</string>
-    <!-- Controls management controls screen favorites header [CHAR LIMIT=50] -->
-    <string name="controls_favorite_header_favorites">Favorites</string>
-    <!-- Controls management controls screen all header [CHAR LIMIT=50] -->
-    <string name="controls_favorite_header_all">All</string>
-    <!-- Controls management controls screen error on load message [CHAR LIMIT=50] -->
+
+    <!-- Controls management controls screen error on load message [CHAR LIMIT=60] -->
     <string name="controls_favorite_load_error">The list of all controls could not be loaded.</string>
+    <!-- Controls management controls screen header for Other zone [CHAR LIMIT=60] -->
+    <string name="controls_favorite_other_zone_header">Other</string>
+
+    <!-- Controls dialog title [CHAR LIMIT=30] -->
+    <string name="controls_dialog_title">Add to Quick Controls</string>
+    <!-- Controls dialog add to favorites [CHAR LIMIT=30] -->
+    <string name="controls_dialog_ok">Add to favorites</string>
+    <!-- Controls dialog message [CHAR LIMIT=NONE] -->
+    <string name="controls_dialog_message"><xliff:g id="app" example="System UI">%s</xliff:g> suggested this control to add to your favorites.</string>
+
+    <!-- Controls PIN entry dialog, switch to alphanumeric keyboard [CHAR LIMIT=100] -->
+    <string name="controls_pin_use_alphanumeric">PIN contains letters or symbols</string>
+    <!-- Controls PIN entry dialog, title [CHAR LIMIT=30] -->
+    <string name="controls_pin_verify">Verify device PIN</string>
+    <!-- Controls PIN entry dialog, text hint [CHAR LIMIT=30] -->
+    <string name="controls_pin_instructions">Enter PIN</string>
+
+    <!-- Tooltip to show in management screen when there are multiple structures [CHAR_LIMIT=50] -->
+    <string name="controls_structure_tooltip">Swipe to see other structures</string>
 </resources>

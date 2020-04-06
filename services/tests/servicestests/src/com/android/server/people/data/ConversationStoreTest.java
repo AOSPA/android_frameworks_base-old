@@ -273,13 +273,36 @@ public final class ConversationStoreTest {
         // Ensure that futures were cancelled and the immediate flush occurred.
         assertEquals(0, mMockScheduledExecutorService.getFutures().size());
 
-        // Expect to see 2 executes: loadConversationFromDisk and saveConversationsToDisk.
-        // loadConversationFromDisk gets called each time we call #resetConversationStore().
-        assertEquals(2, mMockScheduledExecutorService.getExecutes().size());
+        // Expect to see 1 execute: saveConversationsToDisk.
+        assertEquals(1, mMockScheduledExecutorService.getExecutes().size());
 
         resetConversationStore();
         ConversationInfo out1 = mConversationStore.getConversation(SHORTCUT_ID);
         ConversationInfo out2 = mConversationStore.getConversation(SHORTCUT_ID_2);
+        assertEquals(in1, out1);
+        assertEquals(in2, out2);
+    }
+
+    @Test
+    public void testBackupAndRestore() {
+        ConversationInfo in1 = buildConversationInfo(SHORTCUT_ID, LOCUS_ID, CONTACT_URI,
+                PHONE_NUMBER, NOTIFICATION_CHANNEL_ID);
+        ConversationInfo in2 = buildConversationInfo(SHORTCUT_ID_2, LOCUS_ID_2, CONTACT_URI_2,
+                PHONE_NUMBER_2, NOTIFICATION_CHANNEL_ID_2);
+        mConversationStore.addOrUpdate(in1);
+        mConversationStore.addOrUpdate(in2);
+
+        byte[] backupPayload = mConversationStore.getBackupPayload();
+        assertNotNull(backupPayload);
+
+        ConversationStore conversationStore = new ConversationStore(mFile,
+                mMockScheduledExecutorService);
+        ConversationInfo out1 = conversationStore.getConversation(SHORTCUT_ID);
+        assertNull(out1);
+
+        conversationStore.restore(backupPayload);
+        out1 = conversationStore.getConversation(SHORTCUT_ID);
+        ConversationInfo out2 = conversationStore.getConversation(SHORTCUT_ID_2);
         assertEquals(in1, out1);
         assertEquals(in2, out2);
     }

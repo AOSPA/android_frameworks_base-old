@@ -16,12 +16,13 @@
 
 package com.android.systemui.statusbar.phone;
 
+import static java.lang.Float.isNaN;
+
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
 import android.animation.ValueAnimator;
 import android.annotation.IntDef;
 import android.app.AlarmManager;
-import android.content.res.Resources;
 import android.graphics.Color;
 import android.graphics.drawable.Drawable;
 import android.os.Handler;
@@ -45,7 +46,6 @@ import com.android.systemui.DejankUtils;
 import com.android.systemui.Dumpable;
 import com.android.systemui.R;
 import com.android.systemui.colorextraction.SysuiColorExtractor;
-import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.dock.DockManager;
 import com.android.systemui.statusbar.ScrimView;
 import com.android.systemui.statusbar.notification.stack.ViewState;
@@ -116,7 +116,7 @@ public class ScrimController implements ViewTreeObserver.OnPreDrawListener, OnCo
      * A scrim varies its opacity based on a busyness factor, for example
      * how many notifications are currently visible.
      */
-    public static final float BUSY_SCRIM_ALPHA = 0.54f;
+    public static final float BUSY_SCRIM_ALPHA = 0.75f;
 
     /**
      * The most common scrim, the one under the keyguard.
@@ -146,8 +146,6 @@ public class ScrimController implements ViewTreeObserver.OnPreDrawListener, OnCo
     private GradientColors mColors;
     private boolean mNeedsDrawableColorUpdate;
 
-    private float mScrimBehindAlpha;
-    private float mScrimBehindAlphaResValue;
     private float mScrimBehindAlphaKeyguard = SCRIM_BEHIND_ALPHA_KEYGUARD;
 
     // Assuming the shade is expanded during initialization
@@ -192,7 +190,6 @@ public class ScrimController implements ViewTreeObserver.OnPreDrawListener, OnCo
     @Inject
     public ScrimController(LightBarController lightBarController, DozeParameters dozeParameters,
             AlarmManager alarmManager, KeyguardStateController keyguardStateController,
-            @Main Resources resources,
             DelayedWakeLock.Builder delayedWakeLockBuilder, Handler handler,
             KeyguardUpdateMonitor keyguardUpdateMonitor, SysuiColorExtractor sysuiColorExtractor,
             DockManager dockManager) {
@@ -203,14 +200,12 @@ public class ScrimController implements ViewTreeObserver.OnPreDrawListener, OnCo
         mDarkenWhileDragging = !mKeyguardStateController.canDismissLockScreen();
         mKeyguardUpdateMonitor = keyguardUpdateMonitor;
         mKeyguardVisibilityCallback = new KeyguardVisibilityCallback();
-        mScrimBehindAlphaResValue = resources.getFloat(R.dimen.scrim_behind_alpha);
         mHandler = handler;
         mTimeTicker = new AlarmTimeout(alarmManager, this::onHideWallpaperTimeout,
                 "hide_aod_wallpaper", mHandler);
         mWakeLock = delayedWakeLockBuilder.setHandler(mHandler).setTag("Scrims").build();
         // Scrim alpha is initially set to the value on the resource but might be changed
         // to make sure that text on top of it is legible.
-        mScrimBehindAlpha = mScrimBehindAlphaResValue;
         mDozeParameters = dozeParameters;
         mDockManager = dockManager;
         keyguardStateController.addCallback(new KeyguardStateController.Callback() {
@@ -296,6 +291,10 @@ public class ScrimController implements ViewTreeObserver.OnPreDrawListener, OnCo
         mInFrontAlpha = state.getFrontAlpha();
         mBehindAlpha = state.getBehindAlpha();
         mBubbleAlpha = state.getBubbleAlpha();
+        if (isNaN(mBehindAlpha) || isNaN(mInFrontAlpha)) {
+            throw new IllegalStateException("Scrim opacity is NaN for state: " + state + ", front: "
+                    + mInFrontAlpha + ", back: " + mBehindAlpha);
+        }
         applyExpansionToAlpha();
 
         // Scrim might acquire focus when user is navigating with a D-pad or a keyboard.
@@ -423,6 +422,9 @@ public class ScrimController implements ViewTreeObserver.OnPreDrawListener, OnCo
      * @param fraction From 0 to 1 where 0 means collapsed and 1 expanded.
      */
     public void setPanelExpansion(float fraction) {
+        if (isNaN(fraction)) {
+            throw new IllegalArgumentException("Fraction should not be NaN");
+        }
         if (mExpansionFraction != fraction) {
             mExpansionFraction = fraction;
 
@@ -500,6 +502,10 @@ public class ScrimController implements ViewTreeObserver.OnPreDrawListener, OnCo
             mBehindTint = ColorUtils.blendARGB(ScrimState.BOUNCER.getBehindTint(),
                     mState.getBehindTint(), interpolatedFract);
         }
+        if (isNaN(mBehindAlpha) || isNaN(mInFrontAlpha)) {
+            throw new IllegalStateException("Scrim opacity is NaN for state: " + mState
+                    + ", front: " + mInFrontAlpha + ", back: " + mBehindAlpha);
+        }
     }
 
     /**
@@ -555,6 +561,10 @@ public class ScrimController implements ViewTreeObserver.OnPreDrawListener, OnCo
             float newBehindAlpha = mState.getBehindAlpha();
             if (mBehindAlpha != newBehindAlpha) {
                 mBehindAlpha = newBehindAlpha;
+                if (isNaN(mBehindAlpha)) {
+                    throw new IllegalStateException("Scrim opacity is NaN for state: " + mState
+                            + ", back: " + mBehindAlpha);
+                }
                 updateScrims();
             }
         }
@@ -587,7 +597,6 @@ public class ScrimController implements ViewTreeObserver.OnPreDrawListener, OnCo
             int mainColor = mColors.getMainColor();
             float minOpacity = ColorUtils.calculateMinimumBackgroundAlpha(textColor, mainColor,
                     4.5f /* minimumContrast */) / 255f;
-            mScrimBehindAlpha = Math.max(mScrimBehindAlphaResValue, minOpacity);
             dispatchScrimState(mScrimBehind.getViewAlpha());
         }
 
@@ -956,8 +965,11 @@ public class ScrimController implements ViewTreeObserver.OnPreDrawListener, OnCo
         pw.print(" tint=0x");
         pw.println(Integer.toHexString(mScrimForBubble.getTint()));
 
-        pw.print("   mTracking=");
+        pw.print("  mTracking=");
         pw.println(mTracking);
+
+        pw.print("  mExpansionFraction=");
+        pw.println(mExpansionFraction);
     }
 
     public void setWallpaperSupportsAmbientMode(boolean wallpaperSupportsAmbientMode) {
@@ -1004,6 +1016,10 @@ public class ScrimController implements ViewTreeObserver.OnPreDrawListener, OnCo
         // in this case, back-scrim needs to be re-evaluated
         if (mState == ScrimState.AOD || mState == ScrimState.PULSING) {
             float newBehindAlpha = mState.getBehindAlpha();
+            if (isNaN(newBehindAlpha)) {
+                throw new IllegalStateException("Scrim opacity is NaN for state: " + mState
+                        + ", back: " + mBehindAlpha);
+            }
             if (mBehindAlpha != newBehindAlpha) {
                 mBehindAlpha = newBehindAlpha;
                 updateScrims();

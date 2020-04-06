@@ -31,6 +31,7 @@
         android:id="@+id/icon"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
+        android:paddingTop="@dimen/control_padding_adjustment"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
 
@@ -39,6 +40,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:textAppearance="@style/TextAppearance.Control.Status"
+        android:paddingTop="@dimen/control_padding_adjustment"
         android:paddingStart="@dimen/control_status_padding"
         app:layout_constraintBottom_toBottomOf="@+id/icon"
         app:layout_constraintStart_toEndOf="@+id/icon" />
@@ -48,6 +50,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:textAppearance="@style/TextAppearance.Control.Status"
+        android:paddingTop="@dimen/control_padding_adjustment"
         android:paddingStart="@dimen/control_status_padding"
         app:layout_constraintBottom_toBottomOf="@+id/icon"
         app:layout_constraintStart_toEndOf="@+id/status" />
@@ -57,23 +60,37 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:textAppearance="@style/TextAppearance.Control.Title"
+        android:paddingLeft="@dimen/control_padding_adjustment"
+        android:paddingRight="@dimen/control_padding_adjustment"
         app:layout_constraintBottom_toTopOf="@+id/subtitle"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/icon" />
+        app:layout_constraintStart_toStartOf="parent" />
 
     <TextView
         android:id="@+id/subtitle"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:textAppearance="@style/TextAppearance.Control.Subtitle"
+        android:paddingLeft="@dimen/control_padding_adjustment"
+        android:paddingRight="@dimen/control_padding_adjustment"
+        android:paddingBottom="@dimen/control_padding_adjustment"
         app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintStart_toStartOf="parent" />
+        app:layout_constraintStart_toStartOf="parent"/>
 
-    <CheckBox
-        android:id="@+id/favorite"
+    <FrameLayout
+        android:id="@+id/favorite_container"
         android:visibility="gone"
         android:layout_width="48dp"
         android:layout_height="48dp"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintBottom_toBottomOf="parent"/>
+        app:layout_constraintBottom_toBottomOf="parent">
+
+        <CheckBox
+            android:id="@+id/favorite"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="bottom|end"
+            android:button="@drawable/controls_btn_star"/>
+    </FrameLayout>
+
+
 </androidx.constraintlayout.widget.ConstraintLayout>

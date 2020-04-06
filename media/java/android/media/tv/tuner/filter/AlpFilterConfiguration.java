@@ -18,6 +18,7 @@ package android.media.tv.tuner.filter;
 
 import android.annotation.IntDef;
 import android.annotation.NonNull;
+import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
 import android.annotation.SystemApi;
 import android.content.Context;
@@ -33,7 +34,28 @@ import java.lang.annotation.RetentionPolicy;
  * @hide
  */
 @SystemApi
-public class AlpFilterConfiguration extends FilterConfiguration {
+public final class AlpFilterConfiguration extends FilterConfiguration {
+    /**
+     * IPv4 packet type.
+     */
+    public static final int PACKET_TYPE_IPV4 = 0;
+    /**
+     * Compressed packet type.
+     */
+    public static final int PACKET_TYPE_COMPRESSED = 2;
+    /**
+     * Signaling packet type.
+     */
+    public static final int PACKET_TYPE_SIGNALING = 4;
+    /**
+     * Extension packet type.
+     */
+    public static final int PACKET_TYPE_EXTENSION = 6;
+    /**
+     * MPEG-2 TS packet type.
+     */
+    public static final int PACKET_TYPE_MPEG2_TS = 7;
+
     /** @hide */
     @Retention(RetentionPolicy.SOURCE)
     @IntDef(prefix = "LENGTH_TYPE_", value =
@@ -73,8 +95,9 @@ public class AlpFilterConfiguration extends FilterConfiguration {
 
     /**
      * Gets packet type.
+     *
+     * <p>The meaning of each packet type value is shown in ATSC A/330:2019 table 5.2.
      */
-    @FilterConfiguration.PacketType
     public int getPacketType() {
         return mPacketType;
     }
@@ -101,18 +124,21 @@ public class AlpFilterConfiguration extends FilterConfiguration {
     /**
      * Builder for {@link AlpFilterConfiguration}.
      */
-    public static class Builder extends FilterConfiguration.Builder<Builder> {
+    public static final class Builder {
         private int mPacketType;
         private int mLengthType;
+        private Settings mSettings;
 
         private Builder() {
         }
 
         /**
          * Sets packet type.
+         *
+         * <p>The meaning of each packet type value is shown in ATSC A/330:2019 table 5.2.
          */
         @NonNull
-        public Builder setPacketType(@FilterConfiguration.PacketType int packetType) {
+        public Builder setPacketType(int packetType) {
             mPacketType = packetType;
             return this;
         }
@@ -126,16 +152,20 @@ public class AlpFilterConfiguration extends FilterConfiguration {
         }
 
         /**
+         * Sets filter settings.
+         */
+        @NonNull
+        public Builder setSettings(@Nullable Settings settings) {
+            mSettings = settings;
+            return this;
+        }
+
+        /**
          * Builds a {@link AlpFilterConfiguration} object.
          */
         @NonNull
         public AlpFilterConfiguration build() {
             return new AlpFilterConfiguration(mSettings, mPacketType, mLengthType);
-        }
-
-        @Override
-        Builder self() {
-            return this;
         }
     }
 }

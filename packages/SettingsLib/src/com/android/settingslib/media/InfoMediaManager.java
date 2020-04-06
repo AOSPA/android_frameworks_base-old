@@ -15,9 +15,16 @@
  */
 package com.android.settingslib.media;
 
-import static android.media.MediaRoute2Info.DEVICE_TYPE_BLUETOOTH;
-import static android.media.MediaRoute2Info.DEVICE_TYPE_REMOTE_TV;
-import static android.media.MediaRoute2Info.DEVICE_TYPE_UNKNOWN;
+import static android.media.MediaRoute2Info.TYPE_BLUETOOTH_A2DP;
+import static android.media.MediaRoute2Info.TYPE_BUILTIN_SPEAKER;
+import static android.media.MediaRoute2Info.TYPE_GROUP;
+import static android.media.MediaRoute2Info.TYPE_HEARING_AID;
+import static android.media.MediaRoute2Info.TYPE_REMOTE_SPEAKER;
+import static android.media.MediaRoute2Info.TYPE_REMOTE_TV;
+import static android.media.MediaRoute2Info.TYPE_UNKNOWN;
+import static android.media.MediaRoute2Info.TYPE_WIRED_HEADPHONES;
+import static android.media.MediaRoute2Info.TYPE_WIRED_HEADSET;
+import static android.media.MediaRoute2ProviderService.REASON_UNKNOWN_ERROR;
 
 import android.app.Notification;
 import android.bluetooth.BluetoothAdapter;
@@ -44,6 +51,7 @@ import java.util.concurrent.Executors;
 public class InfoMediaManager extends MediaManager {
 
     private static final String TAG = "InfoMediaManager";
+    private static final boolean DEBUG = false;
 
     @VisibleForTesting
     final RouterManagerCallback mMediaRouterCallback = new RouterManagerCallback();
@@ -160,6 +168,26 @@ public class InfoMediaManager extends MediaManager {
 
         Log.w(TAG, "removeDeviceFromMedia() Ignoring deselecting a non-deselectable device : "
                 + device.getName());
+
+        return false;
+    }
+
+    /**
+     * Release session to stop playing media on MediaDevice.
+     */
+    boolean releaseSession() {
+        if (TextUtils.isEmpty(mPackageName)) {
+            Log.w(TAG, "releaseSession() package name is null or empty!");
+            return false;
+        }
+
+        final RoutingSessionInfo info = getRoutingSessionInfo();
+        if (info != null) {
+            mRouterManager.getControllerForSession(info).release();
+            return true;
+        }
+
+        Log.w(TAG, "releaseSession() Ignoring release session : " + mPackageName);
 
         return false;
     }
@@ -285,6 +313,21 @@ public class InfoMediaManager extends MediaManager {
         return -1;
     }
 
+    CharSequence getSessionName() {
+        if (TextUtils.isEmpty(mPackageName)) {
+            Log.w(TAG, "Unable to get session name. The package name is null or empty!");
+            return null;
+        }
+
+        final RoutingSessionInfo info = getRoutingSessionInfo();
+        if (info != null) {
+            return info.getName();
+        }
+
+        Log.w(TAG, "Unable to get session name for package: " + mPackageName);
+        return null;
+    }
+
     private void refreshDevices() {
         mMediaDevices.clear();
         mCurrentConnectedDevice = null;
@@ -298,38 +341,49 @@ public class InfoMediaManager extends MediaManager {
 
     private void buildAllRoutes() {
         for (MediaRoute2Info route : mRouterManager.getAllRoutes()) {
-            addMediaDevice(route);
+            if (DEBUG) {
+                Log.d(TAG, "buildAllRoutes() route : " + route.getName());
+            }
+            if (route.isSystemRoute()) {
+                addMediaDevice(route);
+            }
         }
     }
 
     private void buildAvailableRoutes() {
         for (MediaRoute2Info route : mRouterManager.getAvailableRoutes(mPackageName)) {
+            if (DEBUG) {
+                Log.d(TAG, "buildAvailableRoutes() route : " + route.getName());
+            }
             addMediaDevice(route);
         }
     }
 
     private void addMediaDevice(MediaRoute2Info route) {
-        final int deviceType = route.getDeviceType();
+        final int deviceType = route.getType();
         MediaDevice mediaDevice = null;
         switch (deviceType) {
-            case DEVICE_TYPE_UNKNOWN:
+            case TYPE_UNKNOWN:
+            case TYPE_REMOTE_TV:
+            case TYPE_REMOTE_SPEAKER:
+            case TYPE_GROUP:
                 //TODO(b/148765806): use correct device type once api is ready.
-                final String defaultRoute = "DEFAULT_ROUTE";
-                if (TextUtils.equals(defaultRoute, route.getOriginalId())) {
-                    mediaDevice =
-                            new PhoneMediaDevice(mContext, mRouterManager, route, mPackageName);
-                } else {
-                    mediaDevice = new InfoMediaDevice(mContext, mRouterManager, route,
-                            mPackageName);
-                    if (!TextUtils.isEmpty(mPackageName)
-                            && TextUtils.equals(route.getClientPackageName(), mPackageName)) {
-                        mCurrentConnectedDevice = mediaDevice;
-                    }
+                mediaDevice = new InfoMediaDevice(mContext, mRouterManager, route,
+                        mPackageName);
+                if (!TextUtils.isEmpty(mPackageName)
+                        && TextUtils.equals(route.getClientPackageName(), mPackageName)
+                        && mCurrentConnectedDevice == null) {
+                    mCurrentConnectedDevice = mediaDevice;
                 }
                 break;
-            case DEVICE_TYPE_REMOTE_TV:
+            case TYPE_BUILTIN_SPEAKER:
+            case TYPE_WIRED_HEADSET:
+            case TYPE_WIRED_HEADPHONES:
+                mediaDevice =
+                        new PhoneMediaDevice(mContext, mRouterManager, route, mPackageName);
                 break;
-            case DEVICE_TYPE_BLUETOOTH:
+            case TYPE_HEARING_AID:
+            case TYPE_BLUETOOTH_A2DP:
                 final BluetoothDevice device =
                         BluetoothAdapter.getDefaultAdapter().getRemoteDevice(route.getOriginalId());
                 final CachedBluetoothDevice cachedDevice =
@@ -364,12 +418,41 @@ public class InfoMediaManager extends MediaManager {
 
         @Override
         public void onRoutesChanged(List<MediaRoute2Info> routes) {
-            refreshDevices();
+            mMediaDevices.clear();
+            mCurrentConnectedDevice = null;
+            if (TextUtils.isEmpty(mPackageName)) {
+                buildAllRoutes();
+            } else {
+                buildAvailableRoutes();
+            }
+
+            final String id = mCurrentConnectedDevice != null
+                    ? mCurrentConnectedDevice.getId()
+                    : null;
+            dispatchConnectedDeviceChanged(id);
         }
 
         @Override
         public void onRoutesRemoved(List<MediaRoute2Info> routes) {
             refreshDevices();
+        }
+
+        @Override
+        public void onTransferred(RoutingSessionInfo oldSession, RoutingSessionInfo newSession) {
+            if (DEBUG) {
+                Log.d(TAG, "onTransferred() oldSession : " + oldSession.getName()
+                        + ", newSession : " + newSession.getName());
+            }
+        }
+
+        @Override
+        public void onTransferFailed(RoutingSessionInfo session, MediaRoute2Info route) {
+            dispatchOnRequestFailed(REASON_UNKNOWN_ERROR);
+        }
+
+        @Override
+        public void onRequestFailed(int reason) {
+            dispatchOnRequestFailed(reason);
         }
     }
 }

@@ -39,8 +39,8 @@ import android.testing.TestableResources;
 
 import com.android.internal.logging.MetricsLogger;
 import com.android.keyguard.KeyguardUpdateMonitor;
-import com.android.systemui.DumpController;
 import com.android.systemui.SysuiTestCase;
+import com.android.systemui.dump.DumpManager;
 import com.android.systemui.keyguard.KeyguardViewMediator;
 import com.android.systemui.statusbar.NotificationMediaManager;
 import com.android.systemui.statusbar.policy.KeyguardStateController;
@@ -48,6 +48,7 @@ import com.android.systemui.statusbar.policy.KeyguardStateController;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
@@ -57,7 +58,7 @@ import org.mockito.MockitoAnnotations;
 public class BiometricsUnlockControllerTest extends SysuiTestCase {
 
     @Mock
-    private DumpController mDumpController;
+    private DumpManager mDumpManager;
     @Mock
     private NotificationMediaManager mMediaManager;
     @Mock
@@ -107,7 +108,7 @@ public class BiometricsUnlockControllerTest extends SysuiTestCase {
                 mKeyguardViewMediator, mScrimController, mStatusBar, mShadeController,
                 mNotificationShadeWindowController, mKeyguardStateController, mHandler,
                 mUpdateMonitor, res.getResources(), mKeyguardBypassController, mDozeParameters,
-                mMetricsLogger, mDumpController);
+                mMetricsLogger, mDumpManager);
         mBiometricUnlockController.setStatusBarKeyguardViewManager(mStatusBarKeyguardViewManager);
     }
 
@@ -325,11 +326,13 @@ public class BiometricsUnlockControllerTest extends SysuiTestCase {
         mBiometricUnlockController.onFinishedGoingToSleep(-1);
         verify(mHandler, never()).post(any());
 
+        ArgumentCaptor<Runnable> captor = ArgumentCaptor.forClass(Runnable.class);
         // the value of isStrongBiometric doesn't matter here since we only care about the returned
         // value of isUnlockingWithBiometricAllowed()
         mBiometricUnlockController.onBiometricAuthenticated(1 /* userId */,
                 BiometricSourceType.FACE, true /* isStrongBiometric */);
         mBiometricUnlockController.onFinishedGoingToSleep(-1);
-        verify(mHandler).post(any());
+        verify(mHandler).post(captor.capture());
+        captor.getValue().run();
     }
 }

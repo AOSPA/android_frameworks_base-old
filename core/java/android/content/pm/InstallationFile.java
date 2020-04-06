@@ -19,81 +19,81 @@ package android.content.pm;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.SystemApi;
-import android.os.Parcel;
-import android.os.Parcelable;
 
 /**
- * Defines the properties of a file in an installation session.
+ * Definition of a file in a streaming installation session.
+ * You can use this class to retrieve the information of such a file, such as its name, size and
+ * metadata. These file attributes will be consistent with those used in:
+ * {@code PackageInstaller.Session#addFile}, when the file was first added into the session.
+ *
+ * WARNING: This is a system API to aid internal development.
+ * Use at your own risk. It will change or be removed without warning.
+ *
+ * @see android.content.pm.PackageInstaller.Session#addFile
  * @hide
  */
 @SystemApi
-public final class InstallationFile implements Parcelable {
-    private final @PackageInstaller.FileLocation int mLocation;
-    private final @NonNull String mName;
-    private final long mLengthBytes;
-    private final @Nullable byte[] mMetadata;
-    private final @Nullable byte[] mSignature;
+public final class InstallationFile {
+    private final @NonNull InstallationFileParcel mParcel;
 
+    /**
+     * Constructor, internal use only
+     * @hide
+     */
     public InstallationFile(@PackageInstaller.FileLocation int location, @NonNull String name,
             long lengthBytes, @Nullable byte[] metadata, @Nullable byte[] signature) {
-        mLocation = location;
-        mName = name;
-        mLengthBytes = lengthBytes;
-        mMetadata = metadata;
-        mSignature = signature;
+        mParcel = new InstallationFileParcel();
+        mParcel.location = location;
+        mParcel.name = name;
+        mParcel.size = lengthBytes;
+        mParcel.metadata = metadata;
+        mParcel.signature = signature;
     }
 
+    /**
+     * Installation Location of this file. Can be one of the following three locations:
+     * <ul>
+     *     <li>(1) {@code PackageInstaller.LOCATION_DATA_APP}</li>
+     *     <li>(2) {@code PackageInstaller.LOCATION_MEDIA_OBB}</li>
+     *     <li>(3) {@code PackageInstaller.LOCATION_MEDIA_DATA}</li>
+     * </ul>
+     * @see android.content.pm.PackageInstaller
+     * @return Integer that denotes the installation location of the file.
+     */
     public @PackageInstaller.FileLocation int getLocation() {
-        return mLocation;
+        return mParcel.location;
     }
 
+    /**
+     * @return Name of the file.
+     */
     public @NonNull String getName() {
-        return mName;
+        return mParcel.name;
     }
 
+    /**
+     * @return File size in bytes.
+     */
     public long getLengthBytes() {
-        return mLengthBytes;
+        return mParcel.size;
     }
 
+    /**
+     * @return File metadata as a byte array
+     */
     public @Nullable byte[] getMetadata() {
-        return mMetadata;
+        return mParcel.metadata;
     }
 
+    /**
+     * @return File signature info as a byte array
+     */
     public @Nullable byte[] getSignature() {
-        return mSignature;
+        return mParcel.signature;
     }
 
-    private InstallationFile(Parcel source) {
-        mLocation = source.readInt();
-        mName = source.readString();
-        mLengthBytes = source.readLong();
-        mMetadata = source.createByteArray();
-        mSignature = source.createByteArray();
+    /** @hide */
+    public @NonNull InstallationFileParcel getData() {
+        return mParcel;
     }
-
-    @Override
-    public int describeContents() {
-        return 0;
-    }
-
-    @Override
-    public void writeToParcel(@NonNull Parcel dest, int flags) {
-        dest.writeInt(mLocation);
-        dest.writeString(mName);
-        dest.writeLong(mLengthBytes);
-        dest.writeByteArray(mMetadata);
-        dest.writeByteArray(mSignature);
-    }
-
-    public static final @NonNull Creator<InstallationFile> CREATOR =
-            new Creator<InstallationFile>() {
-        public InstallationFile createFromParcel(Parcel source) {
-            return new InstallationFile(source);
-        }
-
-        public InstallationFile[] newArray(int size) {
-            return new InstallationFile[size];
-        }
-    };
-
 }

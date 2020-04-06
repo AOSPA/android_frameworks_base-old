@@ -16,6 +16,12 @@
 
 package com.android.server.wm;
 
+import static android.graphics.Matrix.MSCALE_X;
+import static android.graphics.Matrix.MSCALE_Y;
+import static android.graphics.Matrix.MSKEW_X;
+import static android.graphics.Matrix.MSKEW_Y;
+import static android.graphics.Matrix.MTRANS_X;
+import static android.graphics.Matrix.MTRANS_Y;
 import static android.view.WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED;
 import static android.view.WindowManager.LayoutParams.FLAG_SCALED;
 import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_IS_ROUNDED_CORNERS_OVERLAY;
@@ -217,6 +223,10 @@ class WindowStateAnimator {
     int mXOffset = 0;
     int mYOffset = 0;
 
+    // A scale factor for the surface contents, that will be applied from the center of the visible
+    // region.
+    float mWallpaperScale = 1f;
+
     /**
      * A flag to determine if the WSA needs to offset its position to compensate for the stack's
      * position update before the WSA surface has resized.
@@ -383,8 +393,9 @@ class WindowStateAnimator {
             // Make sure to reparent any children of the new surface back to the preserved
             // surface before destroying it.
             if (mSurfaceController != null && mPendingDestroySurface != null) {
-                mPostDrawTransaction.reparentChildren(mSurfaceController.mSurfaceControl,
-                        mPendingDestroySurface.mSurfaceControl).apply();
+                mPostDrawTransaction.reparentChildren(
+                    mSurfaceController.getClientViewRootSurface(),
+                    mPendingDestroySurface.mSurfaceControl).apply();
             }
             destroySurfaceLocked();
             mSurfaceDestroyDeferred = true;
@@ -413,9 +424,9 @@ class WindowStateAnimator {
                 // child layers need to be reparented to the new surface to make this
                 // transparent to the app.
                 if (mWin.mActivityRecord == null || mWin.mActivityRecord.isRelaunching() == false) {
-                    mPostDrawTransaction.reparentChildren(mPendingDestroySurface.mSurfaceControl,
-                            mSurfaceController.mSurfaceControl)
-                            .apply();
+                    mPostDrawTransaction.reparentChildren(
+                        mPendingDestroySurface.getClientViewRootSurface(),
+                        mSurfaceController.mSurfaceControl).apply();
                 }
             }
         }
@@ -875,7 +886,7 @@ class WindowStateAnimator {
 
         if (mSurfaceResized && (mAttrType == TYPE_BASE_APPLICATION) &&
             (task != null) && (task.getMainWindowSizeChangeTransaction() != null)) {
-            mSurfaceController.deferTransactionUntil(mWin.getDeferTransactionBarrier(),
+            mSurfaceController.deferTransactionUntil(mWin.getClientViewRootSurface(),
                     mWin.getFrameNumber());
             SurfaceControl.mergeToGlobalTransaction(task.getMainWindowSizeChangeTransaction());
             task.setMainWindowSizeChangeTransaction(null);
@@ -902,15 +913,9 @@ class WindowStateAnimator {
             boolean allowStretching = false;
             task.getStack().getFinalAnimationSourceHintBounds(mTmpSourceBounds);
             // If we don't have source bounds, we can attempt to use the content insets
-            // in the following scenario:
-            //    1. We have content insets.
-            //    2. We are not transitioning to full screen
-            // We have to be careful to check "lastAnimatingBoundsWasToFullscreen" rather than
-            // the mBoundsAnimating state, as we may have already left it and only be here
-            // because of the force-scale until resize state.
+            // if we have content insets.
             if (mTmpSourceBounds.isEmpty() && (mWin.mLastRelayoutContentInsets.width() > 0
-                    || mWin.mLastRelayoutContentInsets.height() > 0)
-                        && !task.getStack().lastAnimatingBoundsWasToFullscreen()) {
+                    || mWin.mLastRelayoutContentInsets.height() > 0)) {
                 mTmpSourceBounds.set(task.getStack().mPreAnimationBounds);
                 mTmpSourceBounds.inset(mWin.mLastRelayoutContentInsets);
                 allowStretching = true;
@@ -1018,7 +1023,7 @@ class WindowStateAnimator {
                         // the WS position is reset (so the stack position is shown) at the same
                         // time that the buffer size changes.
                         setOffsetPositionForStackResize(false);
-                        mSurfaceController.deferTransactionUntil(mWin.getDeferTransactionBarrier(),
+                        mSurfaceController.deferTransactionUntil(mWin.getClientViewRootSurface(),
                                 mWin.getFrameNumber());
                     } else {
                         final ActivityStack stack = mWin.getRootTask();
@@ -1039,7 +1044,12 @@ class WindowStateAnimator {
                         }
                     }
                 }
-                mSurfaceController.setPositionInTransaction(xOffset, yOffset, recoveringMemory);
+                if (!mIsWallpaper) {
+                    mSurfaceController.setPositionInTransaction(xOffset, yOffset, recoveringMemory);
+                } else {
+                    setWallpaperPositionAndScale(
+                            xOffset, yOffset, mWallpaperScale, recoveringMemory);
+                }
             }
         }
 
@@ -1049,18 +1059,22 @@ class WindowStateAnimator {
         // comes in at the new size (normally position and crop are unfrozen).
         // deferTransactionUntil accomplishes this for us.
         if (wasForceScaled && !mForceScaleUntilResize) {
-            mSurfaceController.deferTransactionUntil(mWin.getDeferTransactionBarrier(),
+            mSurfaceController.deferTransactionUntil(mWin.getClientViewRootSurface(),
                     mWin.getFrameNumber());
             mSurfaceController.forceScaleableInTransaction(false);
         }
 
 
         if (!w.mSeamlesslyRotated) {
-            applyCrop(clipRect, recoveringMemory);
-            mSurfaceController.setMatrixInTransaction(mDsDx * w.mHScale * mExtraHScale,
-                    mDtDx * w.mVScale * mExtraVScale,
-                    mDtDy * w.mHScale * mExtraHScale,
-                    mDsDy * w.mVScale * mExtraVScale, recoveringMemory);
+            if (!mIsWallpaper) {
+                applyCrop(clipRect, recoveringMemory);
+                mSurfaceController.setMatrixInTransaction(mDsDx * w.mHScale * mExtraHScale,
+                        mDtDx * w.mVScale * mExtraVScale,
+                        mDtDy * w.mHScale * mExtraHScale,
+                        mDsDy * w.mVScale * mExtraVScale, recoveringMemory);
+            } else {
+                setWallpaperPositionAndScale(mXOffset, mYOffset, mWallpaperScale, recoveringMemory);
+            }
         }
 
         if (mSurfaceResized) {
@@ -1207,18 +1221,18 @@ class WindowStateAnimator {
         mSurfaceController.setTransparentRegionHint(region);
     }
 
-    boolean setWallpaperOffset(int dx, int dy) {
-        if (mXOffset == dx && mYOffset == dy) {
+    boolean setWallpaperOffset(int dx, int dy, float scale) {
+        if (mXOffset == dx && mYOffset == dy && Float.compare(mWallpaperScale, scale) == 0) {
             return false;
         }
         mXOffset = dx;
         mYOffset = dy;
+        mWallpaperScale = scale;
 
         try {
             if (SHOW_LIGHT_TRANSACTIONS) Slog.i(TAG, ">>> OPEN TRANSACTION setWallpaperOffset");
             mService.openSurfaceTransaction();
-            mSurfaceController.setPositionInTransaction(dx, dy, false);
-            applyCrop(null, false);
+            setWallpaperPositionAndScale(dx, dy, scale, false);
         } catch (RuntimeException e) {
             Slog.w(TAG, "Error positioning surface of " + mWin
                     + " pos=(" + dx + "," + dy + ")", e);
@@ -1228,6 +1242,27 @@ class WindowStateAnimator {
                     "<<< CLOSE TRANSACTION setWallpaperOffset");
             return true;
         }
+    }
+
+    private void setWallpaperPositionAndScale(int dx, int dy, float scale,
+            boolean recoveringMemory) {
+        DisplayInfo displayInfo = mWin.getDisplayInfo();
+        Matrix matrix = mWin.mTmpMatrix;
+        matrix.setTranslate(dx, dy);
+        matrix.postScale(scale, scale, displayInfo.logicalWidth / 2f,
+                displayInfo.logicalHeight / 2f);
+        matrix.getValues(mWin.mTmpMatrixArray);
+        matrix.reset();
+
+        mSurfaceController.setPositionInTransaction(mWin.mTmpMatrixArray[MTRANS_X],
+                mWin.mTmpMatrixArray[MTRANS_Y], recoveringMemory);
+        mSurfaceController.setMatrixInTransaction(
+                mDsDx * mWin.mTmpMatrixArray[MSCALE_X] * mWin.mHScale * mExtraHScale,
+                mDtDx * mWin.mTmpMatrixArray[MSKEW_Y] * mWin.mVScale * mExtraVScale,
+                mDtDy * mWin.mTmpMatrixArray[MSKEW_X] * mWin.mHScale * mExtraHScale,
+                mDsDy * mWin.mTmpMatrixArray[MSCALE_Y] * mWin.mVScale * mExtraVScale,
+                recoveringMemory);
+        applyCrop(null, recoveringMemory);
     }
 
     /**
@@ -1294,8 +1329,9 @@ class WindowStateAnimator {
         if (mPendingDestroySurface != null && mDestroyPreservedSurfaceUponRedraw) {
             final SurfaceControl pendingSurfaceControl = mPendingDestroySurface.mSurfaceControl;
             mPostDrawTransaction.reparent(pendingSurfaceControl, null);
-            mPostDrawTransaction.reparentChildren(pendingSurfaceControl,
-                    mSurfaceController.mSurfaceControl);
+            mPostDrawTransaction.reparentChildren(
+                mPendingDestroySurface.getClientViewRootSurface(),
+                mSurfaceController.mSurfaceControl);
         }
 
         SurfaceControl.mergeToGlobalTransaction(mPostDrawTransaction);
@@ -1527,10 +1563,10 @@ class WindowStateAnimator {
         mOffsetPositionForStackResize = offsetPositionForStackResize;
     }
 
-    SurfaceControl getDeferTransactionBarrier() {
+    SurfaceControl getClientViewRootSurface() {
         if (!hasSurface()) {
             return null;
         }
-        return mSurfaceController.getDeferTransactionBarrier();
+        return mSurfaceController.getClientViewRootSurface();
     }
 }

@@ -423,6 +423,9 @@ public final class SurfaceControl implements Parcelable {
         if (mNativeObject != 0) {
             release();
         }
+      	if (nativeObject != 0) {
+            mCloseGuard.open("release");
+        }
         mNativeObject = nativeObject;
     }
 
@@ -870,15 +873,12 @@ public final class SurfaceControl implements Parcelable {
 
     private SurfaceControl(Parcel in) {
         readFromParcel(in);
-        // TODO(b/150410543) Re-enable CloseGuard.
-        //mCloseGuard.open("release");
     }
 
     /**
      * @hide
      */
     public SurfaceControl() {
-        mCloseGuard.open("release");
     }
 
     public void readFromParcel(Parcel in) {
@@ -976,8 +976,8 @@ public final class SurfaceControl implements Parcelable {
         if (mNativeObject != 0) {
             nativeRelease(mNativeObject);
             mNativeObject = 0;
+            mCloseGuard.close();
         }
-        mCloseGuard.close();
     }
 
     /**
@@ -1308,6 +1308,11 @@ public final class SurfaceControl implements Parcelable {
      * @hide
      */
     public static final class DisplayConfig {
+        /**
+         * Invalid display config id.
+         */
+        public static final int INVALID_DISPLAY_CONFIG_ID = -1;
+
         public int width;
         public int height;
         public float xDpi;
@@ -1317,6 +1322,14 @@ public final class SurfaceControl implements Parcelable {
         public long appVsyncOffsetNanos;
         public long presentationDeadlineNanos;
 
+        /**
+         * The config group ID this config is associated to.
+         * Configs in the same group are similar from vendor's perspective and switching between
+         * configs within the same group can be done seamlessly in most cases.
+         * @see: android.hardware.graphics.composer@2.4::IComposerClient::Attribute::CONFIG_GROUP
+         */
+        public int configGroup;
+
         @Override
         public String toString() {
             return "DisplayConfig{width=" + width
@@ -1325,7 +1338,8 @@ public final class SurfaceControl implements Parcelable {
                     + ", yDpi=" + yDpi
                     + ", refreshRate=" + refreshRate
                     + ", appVsyncOffsetNanos=" + appVsyncOffsetNanos
-                    + ", presentationDeadlineNanos=" + presentationDeadlineNanos + "}";
+                    + ", presentationDeadlineNanos=" + presentationDeadlineNanos
+                    + ", configGroup=" + configGroup + "}";
         }
     }
 

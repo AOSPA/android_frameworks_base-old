@@ -16,6 +16,9 @@
 
 package com.android.systemui.bubbles;
 
+import android.content.Context;
+import android.provider.Settings;
+
 import java.util.List;
 
 /**
@@ -41,14 +44,30 @@ public class BubbleDebugConfig {
     static final boolean DEBUG_BUBBLE_EXPANDED_VIEW = false;
     static final boolean DEBUG_EXPERIMENTS = true;
     static final boolean DEBUG_OVERFLOW = false;
+    static final boolean DEBUG_USER_EDUCATION = false;
 
-    static String formatBubblesString(List<Bubble> bubbles, Bubble selected) {
+    private static final boolean FORCE_SHOW_USER_EDUCATION = false;
+    private static final String FORCE_SHOW_USER_EDUCATION_SETTING =
+            "force_show_bubbles_user_education";
+
+    /**
+     * @return whether we should force show user education for bubbles. Used for debugging & demos.
+     */
+    static boolean forceShowUserEducation(Context context) {
+        boolean forceShow = Settings.Secure.getInt(context.getContentResolver(),
+                FORCE_SHOW_USER_EDUCATION_SETTING, 0) != 0;
+        return FORCE_SHOW_USER_EDUCATION || forceShow;
+    }
+
+    static String formatBubblesString(List<Bubble> bubbles, BubbleViewProvider selected) {
         StringBuilder sb = new StringBuilder();
         for (Bubble bubble : bubbles) {
             if (bubble == null) {
                 sb.append("   <null> !!!!!\n");
             } else {
-                boolean isSelected = (selected != null && bubble == selected);
+                boolean isSelected = (selected != null
+                        && selected.getKey() != BubbleOverflow.KEY
+                        && bubble == selected);
                 String arrow = isSelected ? "=>" : "  ";
                 sb.append(String.format("%s Bubble{act=%12d, ongoing=%d, key=%s}\n",
                         arrow,

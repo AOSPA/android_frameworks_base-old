@@ -32,7 +32,7 @@
 #include <frameworks/base/cmds/statsd/src/statsd_config.pb.h>
 #include <frameworks/base/cmds/statsd/src/uid_data.pb.h>
 #include <private/android_filesystem_config.h>
-#include <statslog.h>
+#include <statslog_statsd.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/system_properties.h>
@@ -767,7 +767,8 @@ status_t StatsService::cmd_log_app_breadcrumb(int out, const Vector<String8>& ar
     }
     if (good) {
         dprintf(out, "Logging AppBreadcrumbReported(%d, %d, %d) to statslog.\n", uid, label, state);
-        android::util::stats_write(android::util::APP_BREADCRUMB_REPORTED, uid, label, state);
+        android::os::statsd::util::stats_write(
+                android::os::statsd::util::APP_BREADCRUMB_REPORTED, uid, label, state);
     } else {
         print_cmd_help(out);
         return UNKNOWN_ERROR;
@@ -930,8 +931,6 @@ Status StatsService::informOnePackage(const string& app, int32_t uid, int64_t ve
     ENFORCE_UID(AID_SYSTEM);
 
     VLOG("StatsService::informOnePackage was called");
-    // TODO(b/149254662): This is gross. We should consider changing statsd
-    // internals to use std::string.
     String16 utf16App = String16(app.c_str());
     String16 utf16VersionString = String16(versionString.c_str());
     String16 utf16Installer = String16(installer.c_str());
@@ -1190,19 +1189,20 @@ Status StatsService::unsetBroadcastSubscriber(int64_t configId,
 Status StatsService::sendAppBreadcrumbAtom(int32_t label, int32_t state) {
     // Permission check not necessary as it's meant for applications to write to
     // statsd.
-    android::util::stats_write(util::APP_BREADCRUMB_REPORTED,
+    android::os::statsd::util::stats_write(android::os::statsd::util::APP_BREADCRUMB_REPORTED,
                                (int32_t) AIBinder_getCallingUid(), label,
                                state);
     return Status::ok();
 }
 
-Status StatsService::registerPullAtomCallback(int32_t uid, int32_t atomTag, int64_t coolDownNs,
-                                    int64_t timeoutNs, const std::vector<int32_t>& additiveFields,
-                                    const shared_ptr<IPullAtomCallback>& pullerCallback) {
+Status StatsService::registerPullAtomCallback(int32_t uid, int32_t atomTag, int64_t coolDownMillis,
+                                              int64_t timeoutMillis,
+                                              const std::vector<int32_t>& additiveFields,
+                                              const shared_ptr<IPullAtomCallback>& pullerCallback) {
     ENFORCE_UID(AID_SYSTEM);
-
     VLOG("StatsService::registerPullAtomCallback called.");
-    mPullerManager->RegisterPullAtomCallback(uid, atomTag, coolDownNs, timeoutNs, additiveFields,
+    mPullerManager->RegisterPullAtomCallback(uid, atomTag, MillisToNano(coolDownMillis),
+                                             MillisToNano(timeoutMillis), additiveFields,
                                              pullerCallback);
     return Status::ok();
 }

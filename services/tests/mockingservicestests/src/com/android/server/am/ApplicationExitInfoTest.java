@@ -55,6 +55,7 @@ import android.system.OsConstants;
 import android.text.TextUtils;
 import android.util.Pair;
 
+import com.android.server.LocalServices;
 import com.android.server.ServiceThread;
 import com.android.server.appop.AppOpsService;
 import com.android.server.wm.ActivityTaskManagerService;
@@ -125,6 +126,8 @@ public class ApplicationExitInfoTest {
         mAms.mActivityTaskManager.initialize(null, null, mContext.getMainLooper());
         mAms.mAtmInternal = spy(mAms.mActivityTaskManager.getAtmInternal());
         mAms.mPackageManagerInt = mPackageManagerInt;
+        doReturn(new ComponentName("", "")).when(mPackageManagerInt).getSystemUiServiceComponent();
+        LocalServices.addService(PackageManagerInternal.class, mPackageManagerInt);
     }
 
     @After
@@ -847,8 +850,8 @@ public class ApplicationExitInfoTest {
         app.connectionGroup = connectionGroup;
         app.setProcState = procState;
         app.lastMemInfo = spy(new Debug.MemoryInfo());
-        doReturn((int) pss).when(app.lastMemInfo).getTotalPss();
-        doReturn((int) rss).when(app.lastMemInfo).getTotalRss();
+        app.lastPss = pss;
+        app.mLastRss = rss;
         return app;
     }
 

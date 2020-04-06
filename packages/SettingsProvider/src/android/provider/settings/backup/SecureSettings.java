@@ -142,6 +142,8 @@ public class SecureSettings {
         Settings.Secure.NOTIFICATION_NEW_INTERRUPTION_MODEL,
         Settings.Secure.TRUST_AGENTS_EXTEND_UNLOCK,
         Settings.Secure.UI_NIGHT_MODE,
+        Settings.Secure.DARK_THEME_CUSTOM_START_TIME,
+        Settings.Secure.DARK_THEME_CUSTOM_END_TIME,
         Settings.Secure.LOCK_SCREEN_WHEN_TRUST_LOST,
         Settings.Secure.SKIP_DIRECTION,
         Settings.Secure.THEME_CUSTOMIZATION_OVERLAY_PACKAGES,
@@ -163,5 +165,6 @@ public class SecureSettings {
         Settings.Secure.AWARE_TAP_PAUSE_TOUCH_COUNT,
         Settings.Secure.PEOPLE_STRIP,
         Settings.Secure.ACCESSIBILITY_MAGNIFICATION_MODE,
+        Settings.Secure.ACCESSIBILITY_BUTTON_LONG_PRESS_TARGETS,
     };
 }

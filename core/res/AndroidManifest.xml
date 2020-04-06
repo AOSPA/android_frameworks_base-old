@@ -550,6 +550,7 @@
     <protected-broadcast android:name="com.android.server.telecom.intent.action.CALLS_ADD_ENTRY" />
     <protected-broadcast android:name="com.android.settings.location.MODE_CHANGING" />
     <protected-broadcast android:name="com.android.settings.bluetooth.ACTION_DISMISS_PAIRING" />
+    <protected-broadcast android:name="com.android.settings.wifi.action.NETWORK_REQUEST" />
 
     <protected-broadcast android:name="NotificationManagerService.TIMEOUT" />
     <protected-broadcast android:name="ScheduleConditionProvider.EVALUATE" />
@@ -1219,6 +1220,16 @@
                 android:description="@string/permdesc_callCompanionApp"
                 android:protectionLevel="normal" />
 
+    <!-- Exempt this uid from restrictions to background audio recoding
+     <p>Protection level: signature|privileged
+     @hide
+     @SystemApi
+    -->
+    <permission android:name="android.permission.EXEMPT_FROM_AUDIO_RECORD_RESTRICTIONS"
+                android:label="@string/permlab_exemptFromAudioRecordRestrictions"
+                android:description="@string/permdesc_exemptFromAudioRecordRestrictions"
+                android:protectionLevel="signature|privileged" />
+
     <!-- Allows a calling app to continue a call which was started in another app.  An example is a
          video calling app that wants to continue a voice call on the user's mobile network.<p>
          When the handover of a call from one app to another takes place, there are two devices
@@ -1337,7 +1348,7 @@
         android:description="@string/permdesc_camera"
         android:protectionLevel="dangerous|instant" />
 
-      <!-- @SystemApi Required in addition to android.permission.CAMERA to be able to access
+    <!-- @SystemApi Required in addition to android.permission.CAMERA to be able to access
            system only camera devices.
            <p>Protection level: system|signature
            @hide -->
@@ -1346,6 +1357,15 @@
         android:label="@string/permlab_systemCamera"
         android:description="@string/permdesc_systemCamera"
         android:protectionLevel="system|signature" />
+
+    <!-- Allows receiving the camera service notifications when a camera is opened
+            (by a certain application package) or closed.
+        @hide -->
+    <permission android:name="android.permission.CAMERA_OPEN_CLOSE_LISTENER"
+        android:permissionGroup="android.permission-group.UNDEFINED"
+        android:label="@string/permlab_cameraOpenCloseListener"
+        android:description="@string/permdesc_cameraOpenCloseListener"
+        android:protectionLevel="signature" />
 
     <!-- ====================================================================== -->
     <!-- Permissions for accessing the device sensors                           -->
@@ -1855,6 +1875,9 @@
         android:protectionLevel="normal" />
 
     <!-- @SystemApi Allows an internal user to use privileged SecureElement APIs.
+         Applications holding this permission can access OMAPI reset system API
+         and bypass OMAPI AccessControlEnforcer.
+         <p>Not for use by third-party applications.
          @hide -->
     <permission android:name="android.permission.SECURE_ELEMENT_PRIVILEGED"
         android:protectionLevel="signature|privileged" />
@@ -3760,7 +3783,8 @@
     <permission android:name="android.permission.ADJUST_RUNTIME_PERMISSIONS_POLICY"
                 android:protectionLevel="signature|installer" />
 
-    <!-- @hide Allows an application to upgrade runtime permissions. -->
+    <!-- @SystemApi @TestApi Allows an application to upgrade runtime permissions.
+    @hide -->
     <permission android:name="android.permission.UPGRADE_RUNTIME_PERMISSIONS"
                 android:protectionLevel="signature" />
 
@@ -5017,6 +5041,16 @@
     <permission android:name="android.permission.ACCESS_LOCUS_ID_USAGE_STATS"
                 android:protectionLevel="signature|appPredictor" />
 
+    <!-- Feature Id for Country Detector. -->
+    <feature android:featureId="CountryDetector" android:label="@string/country_detector"/>
+    <!-- Feature Id for Location service. -->
+    <feature android:featureId="LocationService" android:label="@string/location_service"/>
+    <!-- Feature Id for Sensor Notification service. -->
+    <feature android:featureId="SensorNotificationService"
+             android:label="@string/sensor_notification_service"/>
+    <!-- Feature Id for Twilight service. -->
+    <feature android:featureId="TwilightService" android:label="@string/twilight_service"/>
+
     <application android:process="system"
                  android:persistent="true"
                  android:hasCode="false"
@@ -5204,6 +5238,7 @@
         <activity android:name="com.android.internal.app.BlockedAppActivity"
                 android:theme="@style/Theme.Dialog.Confirmation"
                 android:excludeFromRecents="true"
+                android:lockTaskMode="always"
                 android:process=":ui">
         </activity>
 

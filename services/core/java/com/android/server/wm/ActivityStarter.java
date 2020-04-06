@@ -29,7 +29,6 @@ import static android.app.ActivityManager.START_SUCCESS;
 import static android.app.ActivityManager.START_TASK_TO_FRONT;
 import static android.app.WaitResult.LAUNCH_STATE_COLD;
 import static android.app.WaitResult.LAUNCH_STATE_HOT;
-import static android.app.WindowConfiguration.WINDOWING_MODE_PINNED;
 import static android.app.WindowConfiguration.WINDOWING_MODE_SPLIT_SCREEN_PRIMARY;
 import static android.app.WindowConfiguration.WINDOWING_MODE_SPLIT_SCREEN_SECONDARY;
 import static android.app.WindowConfiguration.WINDOWING_MODE_UNDEFINED;
@@ -97,7 +96,6 @@ import android.content.pm.PackageManagerInternal;
 import android.content.pm.ResolveInfo;
 import android.content.pm.UserInfo;
 import android.content.res.Configuration;
-import android.graphics.Rect;
 import android.os.Binder;
 import android.os.Bundle;
 import android.os.IBinder;
@@ -180,6 +178,9 @@ class ActivityStarter {
     private Intent mNewTaskIntent;
     private ActivityStack mSourceStack;
     private ActivityStack mTargetStack;
+    // The task that the last activity was started into. We currently reset the actual start
+    // activity's task and as a result may not have a reference to the task in all cases
+    private Task mTargetTask;
     private boolean mMovedToFront;
     private boolean mNoAnimation;
     private boolean mKeepCurTransition;
@@ -339,6 +340,7 @@ class ActivityStarter {
         int filterCallingUid;
         PendingIntentRecord originatingPendingIntent;
         boolean allowBackgroundActivityStart;
+        boolean isDream;
 
         /**
          * If set to {@code true}, allows this activity start to look into
@@ -390,6 +392,7 @@ class ActivityStarter {
             filterCallingUid = UserHandle.USER_NULL;
             originatingPendingIntent = null;
             allowBackgroundActivityStart = false;
+            isDream = false;
         }
 
         /**
@@ -430,6 +433,7 @@ class ActivityStarter {
             filterCallingUid = request.filterCallingUid;
             originatingPendingIntent = request.originatingPendingIntent;
             allowBackgroundActivityStart = request.allowBackgroundActivityStart;
+            isDream = request.isDream;
         }
 
         /**
@@ -547,6 +551,7 @@ class ActivityStarter {
         mNewTaskIntent = starter.mNewTaskIntent;
         mSourceStack = starter.mSourceStack;
 
+        mTargetTask = starter.mTargetTask;
         mTargetStack = starter.mTargetStack;
         mMovedToFront = starter.mMovedToFront;
         mNoAnimation = starter.mNoAnimation;
@@ -617,12 +622,15 @@ class ActivityStarter {
 
             int res;
             synchronized (mService.mGlobalLock) {
-                final ActivityStack stack = mRootWindowContainer.getTopDisplayFocusedStack();
-                stack.mConfigWillChange = mRequest.globalConfig != null
+                final boolean globalConfigWillChange = mRequest.globalConfig != null
                         && mService.getGlobalConfiguration().diff(mRequest.globalConfig) != 0;
+                final ActivityStack stack = mRootWindowContainer.getTopDisplayFocusedStack();
+                if (stack != null) {
+                    stack.mConfigWillChange = globalConfigWillChange;
+                }
                 if (DEBUG_CONFIGURATION) {
                     Slog.v(TAG_CONFIGURATION, "Starting activity when config will change = "
-                            + stack.mConfigWillChange);
+                            + globalConfigWillChange);
                 }
 
                 final long origId = Binder.clearCallingIdentity();
@@ -635,7 +643,7 @@ class ActivityStarter {
 
                 Binder.restoreCallingIdentity(origId);
 
-                if (stack.mConfigWillChange) {
+                if (globalConfigWillChange) {
                     // If the caller also wants to switch to a new configuration, do so now.
                     // This allows a clean switch, as we are waiting for the current activity
                     // to pause (so we will not destroy it), and have not yet started the
@@ -643,7 +651,9 @@ class ActivityStarter {
                     mService.mAmInternal.enforceCallingPermission(
                             android.Manifest.permission.CHANGE_CONFIGURATION,
                             "updateConfiguration()");
-                    stack.mConfigWillChange = false;
+                    if (stack != null) {
+                        stack.mConfigWillChange = false;
+                    }
                     if (DEBUG_CONFIGURATION) {
                         Slog.v(TAG_CONFIGURATION,
                                 "Updating to new configuration after starting activity.");
@@ -974,7 +984,7 @@ class ActivityStarter {
                 restrictedBgActivity = shouldAbortBackgroundActivityStart(callingUid,
                         callingPid, callingPackage, realCallingUid, realCallingPid, callerApp,
                         request.originatingPendingIntent, request.allowBackgroundActivityStart,
-                        intent);
+                        request.isDream, intent);
             } finally {
                 Trace.traceEnd(Trace.TRACE_TAG_WINDOW_MANAGER);
             }
@@ -1184,11 +1194,16 @@ class ActivityStarter {
     boolean shouldAbortBackgroundActivityStart(int callingUid, int callingPid,
             final String callingPackage, int realCallingUid, int realCallingPid,
             WindowProcessController callerApp, PendingIntentRecord originatingPendingIntent,
-            boolean allowBackgroundActivityStart, Intent intent) {
+            boolean allowBackgroundActivityStart, boolean isDream, Intent intent) {
         // don't abort for the most important UIDs
         final int callingAppId = UserHandle.getAppId(callingUid);
         if (callingUid == Process.ROOT_UID || callingAppId == Process.SYSTEM_UID
                 || callingAppId == Process.NFC_UID) {
+            return false;
+        }
+
+        // don't abort if this is the dream activity
+        if (isDream) {
             return false;
         }
         // don't abort if the callingUid has a visible window or is a persistent system process
@@ -1360,7 +1375,10 @@ class ActivityStarter {
         // it waits for the new activity to become visible instead, {@link #waitResultIfNeeded}.
         mSupervisor.reportWaitingActivityLaunchedIfNeeded(r, result);
 
-        if (startedActivityStack == null) {
+        final Task targetTask = r.getTask() != null
+                ? r.getTask()
+                : mTargetTask;
+        if (startedActivityStack == null || targetTask == null) {
             return;
         }
 
@@ -1371,19 +1389,10 @@ class ActivityStarter {
             // The activity was already running so it wasn't started, but either brought to the
             // front or the new intent was delivered to it since it was already in front. Notify
             // anyone interested in this piece of information.
-            switch (startedActivityStack.getWindowingMode()) {
-                case WINDOWING_MODE_PINNED:
-                    mService.getTaskChangeNotificationController().notifyPinnedActivityRestartAttempt(
-                            clearedTask);
-                    break;
-                case WINDOWING_MODE_SPLIT_SCREEN_PRIMARY:
-                    final ActivityStack homeStack =
-                            startedActivityStack.getDisplay().getOrCreateRootHomeTask();
-                    if (homeStack != null && homeStack.shouldBeVisible(null /* starting */)) {
-                        mService.mWindowManager.showRecentApps();
-                    }
-                    break;
-            }
+            final ActivityStack homeStack = targetTask.getDisplayContent().getRootHomeTask();
+            final boolean homeTaskVisible = homeStack != null && homeStack.shouldBeVisible(null);
+            mService.getTaskChangeNotificationController().notifyActivityRestartAttempt(
+                    targetTask.getTaskInfo(), homeTaskVisible, clearedTask);
         }
     }
 
@@ -1509,6 +1518,7 @@ class ActivityStarter {
         // Compute if there is an existing task that should be used for.
         final Task targetTask = reusedTask != null ? reusedTask : computeTargetTask();
         final boolean newTask = targetTask == null;
+        mTargetTask = targetTask;
 
         computeLaunchParams(r, sourceRecord, targetTask);
 
@@ -1533,9 +1543,11 @@ class ActivityStarter {
         // If the activity being launched is the same as the one currently at the top, then
         // we need to check if it should only be launched once.
         final ActivityStack topStack = mRootWindowContainer.getTopDisplayFocusedStack();
-        startResult = deliverToCurrentTopIfNeeded(topStack);
-        if (startResult != START_SUCCESS) {
-            return startResult;
+        if (topStack != null) {
+            startResult = deliverToCurrentTopIfNeeded(topStack);
+            if (startResult != START_SUCCESS) {
+                return startResult;
+            }
         }
 
         if (mTargetStack == null) {
@@ -1566,11 +1578,16 @@ class ActivityStarter {
 
         mService.mUgmInternal.grantUriPermissionFromIntent(mCallingUid, mStartActivity.packageName,
                 mIntent, mStartActivity.getUriPermissionsLocked(), mStartActivity.mUserId);
-        mService.getPackageManagerInternalLocked().grantImplicitAccess(
-                mStartActivity.mUserId, mIntent,
-                mCallingUid,
-                UserHandle.getAppId(mStartActivity.info.applicationInfo.uid)
-        );
+        if (mStartActivity.resultTo != null && mStartActivity.resultTo.info != null) {
+            // we need to resolve resultTo to a uid as grantImplicitAccess deals explicitly in UIDs
+            final PackageManagerInternal pmInternal =
+                    mService.getPackageManagerInternalLocked();
+            final int resultToUid = pmInternal.getPackageUidInternal(
+                            mStartActivity.resultTo.info.packageName, 0, mStartActivity.mUserId);
+            pmInternal.grantImplicitAccess(mStartActivity.mUserId, mIntent,
+                    UserHandle.getAppId(mStartActivity.info.applicationInfo.uid) /*recipient*/,
+                    resultToUid /*visible*/, true /*direct*/);
+        }
         if (newTask) {
             EventLogTags.writeWmCreateTask(mStartActivity.mUserId,
                     mStartActivity.getTask().mTaskId);
@@ -2009,6 +2026,7 @@ class ActivityStarter {
         mSourceStack = null;
 
         mTargetStack = null;
+        mTargetTask = null;
         mMovedToFront = false;
         mNoAnimation = false;
         mKeepCurTransition = false;
@@ -2130,10 +2148,13 @@ class ActivityStarter {
         if ((startFlags & START_FLAG_ONLY_IF_NEEDED) != 0) {
             ActivityRecord checkedCaller = sourceRecord;
             if (checkedCaller == null) {
-                checkedCaller = mRootWindowContainer.getTopDisplayFocusedStack()
-                        .topRunningNonDelayedActivityLocked(mNotTop);
+                ActivityStack topFocusedStack = mRootWindowContainer.getTopDisplayFocusedStack();
+                if (topFocusedStack != null) {
+                    checkedCaller = topFocusedStack.topRunningNonDelayedActivityLocked(mNotTop);
+                }
             }
-            if (!checkedCaller.mActivityComponent.equals(r.mActivityComponent)) {
+            if (checkedCaller == null
+                    || !checkedCaller.mActivityComponent.equals(r.mActivityComponent)) {
                 // Caller is not the same as launcher, so always needed.
                 mStartFlags &= ~START_FLAG_ONLY_IF_NEEDED;
             }
@@ -2411,7 +2432,6 @@ class ActivityStarter {
                 mNewTaskIntent != null ? mNewTaskIntent : mIntent, mVoiceSession,
                 mVoiceInteractor, toTop, mStartActivity, mSourceRecord, mOptions);
         addOrReparentStartingActivity(task, "setTaskFromReuseOrCreateNewTask - mReuseTask");
-        updateBounds(mStartActivity.getTask(), mLaunchParams.mBounds);
 
         if (DEBUG_TASKS) {
             Slog.v(TAG_TASKS, "Starting new activity " + mStartActivity
@@ -2432,21 +2452,6 @@ class ActivityStarter {
         activity.deliverNewIntentLocked(mCallingUid, mStartActivity.intent,
                 mStartActivity.launchedFromPackage);
         mIntentDelivered = true;
-    }
-
-    @VisibleForTesting
-    void updateBounds(Task task, Rect bounds) {
-        if (bounds.isEmpty()) {
-            return;
-        }
-
-        final Task rootTask = task.getRootTask();
-        if (rootTask != null && rootTask.inPinnedWindowingMode()) {
-            mService.animateResizePinnedStack(rootTask.mTaskId, bounds, -1);
-        } else {
-            // TODO: I don't believe it is possible to reach this else condition anymore...
-            task.setBounds(bounds);
-        }
     }
 
     private void addOrReparentStartingActivity(Task parent, String reason) {
@@ -2699,6 +2704,11 @@ class ActivityStarter {
 
     ActivityStarter setAllowBackgroundActivityStart(boolean allowBackgroundActivityStart) {
         mRequest.allowBackgroundActivityStart = allowBackgroundActivityStart;
+        return this;
+    }
+
+    ActivityStarter setIsDream(boolean isDream) {
+        mRequest.isDream = isDream;
         return this;
     }
 

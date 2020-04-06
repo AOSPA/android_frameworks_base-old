@@ -26,11 +26,9 @@ cc_binary_host {
         "java_writer_q.cpp",
         "main.cpp",
         "native_writer.cpp",
-        "native_writer_q.cpp",
         "utils.cpp",
     ],
     cflags: [
-        //"-DSTATS_SCHEMA_LEGACY",
         "-Wall",
         "-Werror",
     ],
@@ -121,13 +119,14 @@ cc_library {
     shared_libs: [
         "liblog",
         "libcutils",
-        "libstatssocket",
     ],
-    apex_available: [
-        "//apex_available:platform",
-        //TODO(b/149781190): Remove this once statsd no longer depends on libstatslog
-        "com.android.os.statsd",
-        "test_com.android.os.statsd",
-    ],
+    target: {
+        android: {
+            shared_libs: ["libstatssocket"],
+        },
+        host: {
+            static_libs: ["libstatssocket"],
+        },
+    },
 }
 

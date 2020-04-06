@@ -49,15 +49,20 @@ public abstract class ControlTemplate {
 
     /**
      * Singleton representing a {@link Control} with no input.
+     * @hide
      */
     public static final @NonNull ControlTemplate NO_TEMPLATE = new ControlTemplate("") {
         @Override
         public int getTemplateType() {
-            return TYPE_NONE;
+            return TYPE_NO_TEMPLATE;
         }
     };
 
-    public static final @NonNull ControlTemplate ERROR_TEMPLATE = new ControlTemplate("") {
+    /**
+     * Object returned when there is an unparcelling error.
+     * @hide
+     */
+    private static final @NonNull ControlTemplate ERROR_TEMPLATE = new ControlTemplate("") {
         @Override
         public int getTemplateType() {
             return TYPE_ERROR;
@@ -70,22 +75,24 @@ public abstract class ControlTemplate {
     @Retention(RetentionPolicy.SOURCE)
     @IntDef({
             TYPE_ERROR,
-            TYPE_NONE,
+            TYPE_NO_TEMPLATE,
             TYPE_TOGGLE,
             TYPE_RANGE,
-            TYPE_THUMBNAIL,
             TYPE_TOGGLE_RANGE,
             TYPE_TEMPERATURE,
             TYPE_STATELESS
     })
     public @interface TemplateType {}
 
+    /**
+     * Type identifier of the template returned by {@link #getErrorTemplate()}.
+     */
     public static final @TemplateType int TYPE_ERROR = -1;
 
     /**
-     * Type identifier of {@link ControlTemplate#NO_TEMPLATE}.
+     * Type identifier of {@link ControlTemplate#getNoTemplateObject}.
      */
-    public static final @TemplateType int TYPE_NONE = 0;
+    public static final @TemplateType int TYPE_NO_TEMPLATE = 0;
 
     /**
      * Type identifier of {@link ToggleTemplate}.
@@ -98,14 +105,18 @@ public abstract class ControlTemplate {
     public static final @TemplateType int TYPE_RANGE = 2;
 
     /**
-     * Type identifier of {@link ThumbnailTemplate}.
+     * Type identifier of {@link ToggleRangeTemplate}.
      */
-    public static final @TemplateType int TYPE_THUMBNAIL = 3;
-
     public static final @TemplateType int TYPE_TOGGLE_RANGE = 6;
 
+    /**
+     * Type identifier of {@link TemperatureControlTemplate}.
+     */
     public static final @TemplateType int TYPE_TEMPERATURE = 7;
 
+    /**
+     * Type identifier of {@link StatelessTemplate}.
+     */
     public static final @TemplateType int TYPE_STATELESS = 8;
 
     private @NonNull final String mTemplateId;
@@ -176,15 +187,13 @@ public abstract class ControlTemplate {
                     return new ToggleTemplate(bundle);
                 case TYPE_RANGE:
                     return new RangeTemplate(bundle);
-                case TYPE_THUMBNAIL:
-                    return new ThumbnailTemplate(bundle);
                 case TYPE_TOGGLE_RANGE:
                     return new ToggleRangeTemplate(bundle);
                 case TYPE_TEMPERATURE:
                     return new TemperatureControlTemplate(bundle);
                 case TYPE_STATELESS:
                     return new StatelessTemplate(bundle);
-                case TYPE_NONE:
+                case TYPE_NO_TEMPLATE:
                     return NO_TEMPLATE;
                 case TYPE_ERROR:
                 default:
@@ -195,4 +204,27 @@ public abstract class ControlTemplate {
             return ERROR_TEMPLATE;
         }
     }
+
+    /**
+     * @return a singleton {@link ControlTemplate} used for indicating an error in unparceling.
+     */
+    @NonNull
+    public static ControlTemplate getErrorTemplate() {
+        return ERROR_TEMPLATE;
+    }
+
+    /**
+     * Get a singleton {@link ControlTemplate} that has no features.
+     *
+     * This template has no distinctive field, not even an identifier. Used for a {@link Control}
+     * that accepts no type of input, or when there is no known state.
+     *
+     * @return a singleton {@link ControlTemplate} to indicate no specific template is used by
+     *         this {@link Control}
+     */
+    @NonNull
+    public static ControlTemplate getNoTemplateObject() {
+        return NO_TEMPLATE;
+    }
+
 }

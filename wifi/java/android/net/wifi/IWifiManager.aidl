@@ -98,7 +98,7 @@ interface IWifiManager
 
     void setMacRandomizationSettingPasspointEnabled(String fqdn, boolean enable);
 
-    void setMeteredOverridePasspoint(String fqdn, int meteredOverride);
+    void setPasspointMeteredOverride(String fqdn, int meteredOverride);
 
     boolean startScan(String packageName, String featureId);
 

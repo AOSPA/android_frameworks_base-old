@@ -17,12 +17,12 @@
 package com.android.systemui.statusbar.policy;
 
 import static android.net.NetworkCapabilities.NET_CAPABILITY_VALIDATED;
+import static android.net.NetworkCapabilities.TRANSPORT_CELLULAR;
 import static android.net.wifi.WifiManager.TrafficStateCallback.DATA_ACTIVITY_IN;
 import static android.net.wifi.WifiManager.TrafficStateCallback.DATA_ACTIVITY_INOUT;
 import static android.net.wifi.WifiManager.TrafficStateCallback.DATA_ACTIVITY_NONE;
 import static android.net.wifi.WifiManager.TrafficStateCallback.DATA_ACTIVITY_OUT;
 import static android.telephony.PhoneStateListener.LISTEN_ACTIVE_DATA_SUBSCRIPTION_ID_CHANGE;
-import static android.telephony.TelephonyManager.MODEM_COUNT_DUAL_MODEM;
 
 import android.content.BroadcastReceiver;
 import android.content.Context;
@@ -158,6 +158,7 @@ public class NetworkControllerImpl extends BroadcastReceiver
     ServiceState mLastServiceState;
     private boolean mUserSetup;
     private boolean mSimDetected;
+    private boolean mForceCellularValidated;
 
     @VisibleForTesting
     FiveGServiceClient mFiveGServiceClient;
@@ -288,10 +289,39 @@ public class NetworkControllerImpl extends BroadcastReceiver
         mPhoneStateListener = new PhoneStateListener(mReceiverHandler::post) {
             @Override
             public void onActiveDataSubscriptionIdChanged(int subId) {
+                // For data switching from A to B, we assume B is validated for up to 2 seconds iff:
+                // 1) A and B are in the same subscription group e.g. CBRS data switch. And
+                // 2) A was validated before the switch.
+                // This is to provide smooth transition for UI without showing cross during data
+                // switch.
+                if (keepCellularValidationBitInSwitch(mActiveMobileDataSubscription, subId)) {
+                    if (DEBUG) Log.d(TAG, ": mForceCellularValidated to true.");
+                    mForceCellularValidated = true;
+                    mReceiverHandler.removeCallbacks(mClearForceValidated);
+                    mReceiverHandler.postDelayed(mClearForceValidated, 2000);
+                }
                 mActiveMobileDataSubscription = subId;
                 doUpdateMobileControllers();
             }
         };
+    }
+
+    private final Runnable mClearForceValidated = () -> {
+        if (DEBUG) Log.d(TAG, ": mClearForceValidated");
+        mForceCellularValidated = false;
+        updateConnectivity();
+    };
+
+    boolean isInGroupDataSwitch(int subId1, int subId2) {
+        SubscriptionInfo info1 = mSubscriptionManager.getActiveSubscriptionInfo(subId1);
+        SubscriptionInfo info2 = mSubscriptionManager.getActiveSubscriptionInfo(subId2);
+        return (info1 != null && info2 != null && info1.getGroupUuid() != null
+            && info1.getGroupUuid().equals(info2.getGroupUuid()));
+    }
+
+    boolean keepCellularValidationBitInSwitch(int sourceSubId, int destSubId) {
+        return mValidatedTransports.get(TRANSPORT_CELLULAR)
+                && isInGroupDataSwitch(sourceSubId, destSubId);
     }
 
     public DataSaverController getDataSaverController() {
@@ -582,7 +612,7 @@ public class NetworkControllerImpl extends BroadcastReceiver
     }
 
     private void filterMobileSubscriptionInSameGroup(List<SubscriptionInfo> subscriptions) {
-        if (subscriptions.size() == MODEM_COUNT_DUAL_MODEM) {
+        if (subscriptions.size() == 2) {
             SubscriptionInfo info1 = subscriptions.get(0);
             SubscriptionInfo info2 = subscriptions.get(1);
             if (info1.getGroupUuid() != null && info1.getGroupUuid().equals(info2.getGroupUuid())) {
@@ -607,7 +637,7 @@ public class NetworkControllerImpl extends BroadcastReceiver
     @VisibleForTesting
     void doUpdateMobileControllers() {
         List<SubscriptionInfo> subscriptions = mSubscriptionManager
-                .getActiveAndHiddenSubscriptionInfoList();
+                .getCompleteActiveSubscriptionInfoList();
         if (subscriptions == null) {
             subscriptions = Collections.emptyList();
         }
@@ -801,6 +831,8 @@ public class NetworkControllerImpl extends BroadcastReceiver
                 }
             }
         }
+
+        if (mForceCellularValidated) mValidatedTransports.set(TRANSPORT_CELLULAR);
 
         if (CHATTY) {
             Log.d(TAG, "updateConnectivity: mConnectedTransports=" + mConnectedTransports);

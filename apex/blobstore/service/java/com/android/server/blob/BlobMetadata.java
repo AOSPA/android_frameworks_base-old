@@ -16,7 +16,7 @@
 package com.android.server.blob;
 
 import static android.app.blob.XmlTags.ATTR_DESCRIPTION;
-import static android.app.blob.XmlTags.ATTR_DESCRIPTION_RES_ID;
+import static android.app.blob.XmlTags.ATTR_DESCRIPTION_RES_NAME;
 import static android.app.blob.XmlTags.ATTR_EXPIRY_TIME;
 import static android.app.blob.XmlTags.ATTR_ID;
 import static android.app.blob.XmlTags.ATTR_PACKAGE;
@@ -26,16 +26,19 @@ import static android.app.blob.XmlTags.TAG_ACCESS_MODE;
 import static android.app.blob.XmlTags.TAG_BLOB_HANDLE;
 import static android.app.blob.XmlTags.TAG_COMMITTER;
 import static android.app.blob.XmlTags.TAG_LEASEE;
+import static android.os.Process.INVALID_UID;
 import static android.system.OsConstants.O_RDONLY;
 
 import static com.android.server.blob.BlobStoreConfig.TAG;
+import static com.android.server.blob.BlobStoreConfig.XML_VERSION_ADD_DESC_RES_NAME;
 import static com.android.server.blob.BlobStoreConfig.XML_VERSION_ADD_STRING_DESC;
+import static com.android.server.blob.BlobStoreUtils.getDescriptionResourceId;
+import static com.android.server.blob.BlobStoreUtils.getPackageResources;
 
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.app.blob.BlobHandle;
 import android.content.Context;
-import android.content.pm.PackageManager;
 import android.content.res.ResourceId;
 import android.content.res.Resources;
 import android.os.ParcelFileDescriptor;
@@ -61,6 +64,7 @@ import java.io.File;
 import java.io.FileDescriptor;
 import java.io.IOException;
 import java.util.Objects;
+import java.util.function.Consumer;
 
 class BlobMetadata {
     private final Object mMetadataLock = new Object();
@@ -88,7 +92,7 @@ class BlobMetadata {
     private final ArrayMap<String, ArraySet<RevocableFileDescriptor>> mRevocableFds =
             new ArrayMap<>();
 
-    // Do not access this directly, instead use getSessionFile().
+    // Do not access this directly, instead use #getBlobFile().
     private File mBlobFile;
 
     BlobMetadata(Context context, long blobId, BlobHandle blobHandle, int userId) {
@@ -112,12 +116,16 @@ class BlobMetadata {
 
     void addCommitter(@NonNull Committer committer) {
         synchronized (mMetadataLock) {
+            // We need to override the committer data, so first remove any existing
+            // committer before adding the new one.
+            mCommitters.remove(committer);
             mCommitters.add(committer);
         }
     }
 
     void addCommitters(ArraySet<Committer> committers) {
         synchronized (mMetadataLock) {
+            mCommitters.clear();
             mCommitters.addAll(committers);
         }
     }
@@ -147,13 +155,18 @@ class BlobMetadata {
     void addLeasee(String callingPackage, int callingUid, int descriptionResId,
             CharSequence description, long leaseExpiryTimeMillis) {
         synchronized (mMetadataLock) {
-            mLeasees.add(new Leasee(callingPackage, callingUid,
-                    descriptionResId, description, leaseExpiryTimeMillis));
+            // We need to override the leasee data, so first remove any existing
+            // leasee before adding the new one.
+            final Leasee leasee = new Leasee(mContext, callingPackage, callingUid,
+                    descriptionResId, description, leaseExpiryTimeMillis);
+            mLeasees.remove(leasee);
+            mLeasees.add(leasee);
         }
     }
 
     void addLeasees(ArraySet<Leasee> leasees) {
         synchronized (mMetadataLock) {
+            mLeasees.clear();
             mLeasees.addAll(leasees);
         }
     }
@@ -178,7 +191,11 @@ class BlobMetadata {
         }
     }
 
-    boolean isAccessAllowedForCaller(String callingPackage, int callingUid) {
+    long getSize() {
+        return getBlobFile().length();
+    }
+
+    boolean isAccessAllowedForCaller(@NonNull String callingPackage, int callingUid) {
         // TODO: verify blob is still valid (expiryTime is not elapsed)
         synchronized (mMetadataLock) {
             // Check if packageName already holds a lease on the blob.
@@ -207,6 +224,65 @@ class BlobMetadata {
             }
         }
         return false;
+    }
+
+    boolean isALeasee(@NonNull String packageName) {
+        return isALeasee(packageName, INVALID_UID);
+    }
+
+    boolean isALeasee(int uid) {
+        return isALeasee(null, uid);
+    }
+
+    boolean hasOtherLeasees(@NonNull String packageName) {
+        return hasOtherLeasees(packageName, INVALID_UID);
+    }
+
+    boolean hasOtherLeasees(int uid) {
+        return hasOtherLeasees(null, uid);
+    }
+
+    boolean isALeasee(@Nullable String packageName, int uid) {
+        synchronized (mMetadataLock) {
+            // Check if the package is a leasee of the data blob.
+            for (int i = 0, size = mLeasees.size(); i < size; ++i) {
+                final Leasee leasee = mLeasees.valueAt(i);
+                if (packageName != null && uid != INVALID_UID
+                        && leasee.equals(packageName, uid)) {
+                    return true;
+                } else if (packageName != null && leasee.packageName.equals(packageName)) {
+                    return true;
+                } else if (uid != INVALID_UID && leasee.uid == uid) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private boolean hasOtherLeasees(@Nullable String packageName, int uid) {
+        synchronized (mMetadataLock) {
+            if (mCommitters.size() > 1 || mLeasees.size() > 1) {
+                return true;
+            }
+            for (int i = 0, size = mLeasees.size(); i < size; ++i) {
+                final Leasee leasee = mLeasees.valueAt(i);
+                // TODO: Also exclude packages which are signed with same cert?
+                if (packageName != null && uid != INVALID_UID
+                        && !leasee.equals(packageName, uid)) {
+                    return true;
+                } else if (packageName != null && !leasee.packageName.equals(packageName)) {
+                    return true;
+                } else if (uid != INVALID_UID && leasee.uid != uid) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    void forEachLeasee(Consumer<Leasee> consumer) {
+        mLeasees.forEach(consumer);
     }
 
     File getBlobFile() {
@@ -390,59 +466,103 @@ class BlobMetadata {
     }
 
     static final class Leasee extends Accessor {
-        public final int descriptionResId;
+        public final String descriptionResEntryName;
         public final CharSequence description;
         public final long expiryTimeMillis;
 
-        Leasee(String packageName, int uid, int descriptionResId, CharSequence description,
-                long expiryTimeMillis) {
+        Leasee(@NonNull Context context, @NonNull String packageName,
+                int uid, int descriptionResId,
+                @Nullable CharSequence description, long expiryTimeMillis) {
             super(packageName, uid);
-            this.descriptionResId = descriptionResId;
+            final Resources packageResources = getPackageResources(context, packageName,
+                    UserHandle.getUserId(uid));
+            this.descriptionResEntryName = getResourceEntryName(packageResources, descriptionResId);
+            this.expiryTimeMillis = expiryTimeMillis;
+            this.description = description == null
+                    ? getDescription(packageResources, descriptionResId)
+                    : description;
+        }
+
+        Leasee(String packageName, int uid, @Nullable String descriptionResEntryName,
+                @Nullable CharSequence description, long expiryTimeMillis) {
+            super(packageName, uid);
+            this.descriptionResEntryName = descriptionResEntryName;
             this.expiryTimeMillis = expiryTimeMillis;
             this.description = description;
+        }
+
+        @Nullable
+        private static String getResourceEntryName(@Nullable Resources packageResources,
+                int resId) {
+            if (!ResourceId.isValid(resId) || packageResources == null) {
+                return null;
+            }
+            return packageResources.getResourceEntryName(resId);
+        }
+
+        @Nullable
+        private static String getDescription(@NonNull Context context,
+                @NonNull String descriptionResEntryName, @NonNull String packageName, int userId) {
+            if (descriptionResEntryName == null || descriptionResEntryName.isEmpty()) {
+                return null;
+            }
+            final Resources resources = getPackageResources(context, packageName, userId);
+            if (resources == null) {
+                return null;
+            }
+            final int resId = getDescriptionResourceId(resources, descriptionResEntryName,
+                    packageName);
+            return resId == Resources.ID_NULL ? null : resources.getString(resId);
+        }
+
+        @Nullable
+        private static String getDescription(@Nullable Resources packageResources,
+                int descriptionResId) {
+            if (!ResourceId.isValid(descriptionResId) || packageResources == null) {
+                return null;
+            }
+            return packageResources.getString(descriptionResId);
         }
 
         boolean isStillValid() {
             return expiryTimeMillis == 0 || expiryTimeMillis <= System.currentTimeMillis();
         }
 
-        void dump(Context context, IndentingPrintWriter fout) {
+        void dump(@NonNull Context context, @NonNull IndentingPrintWriter fout) {
             fout.println("desc: " + getDescriptionToDump(context));
             fout.println("expiryMs: " + expiryTimeMillis);
         }
 
-        private String getDescriptionToDump(Context context) {
-            String desc = null;
-            if (ResourceId.isValid(descriptionResId)) {
-                try {
-                    final Resources leaseeRes = context.getPackageManager()
-                            .getResourcesForApplicationAsUser(
-                                    packageName, UserHandle.getUserId(uid));
-                    desc = leaseeRes.getString(descriptionResId);
-                } catch (PackageManager.NameNotFoundException e) {
-                    Slog.d(TAG, "Unknown package in user " + UserHandle.getUserId(uid) + ": "
-                            + packageName, e);
-                    desc = "<none>";
-                }
-            } else {
+        @NonNull
+        private String getDescriptionToDump(@NonNull Context context) {
+            String desc = getDescription(context, descriptionResEntryName, packageName,
+                    UserHandle.getUserId(uid));
+            if (desc == null) {
                 desc = description.toString();
             }
-            return desc;
+            return desc == null ? "<none>" : desc;
         }
 
         void writeToXml(@NonNull XmlSerializer out) throws IOException {
             XmlUtils.writeStringAttribute(out, ATTR_PACKAGE, packageName);
             XmlUtils.writeIntAttribute(out, ATTR_UID, uid);
-            XmlUtils.writeIntAttribute(out, ATTR_DESCRIPTION_RES_ID, descriptionResId);
+            XmlUtils.writeStringAttribute(out, ATTR_DESCRIPTION_RES_NAME, descriptionResEntryName);
             XmlUtils.writeLongAttribute(out, ATTR_EXPIRY_TIME, expiryTimeMillis);
             XmlUtils.writeStringAttribute(out, ATTR_DESCRIPTION, description);
         }
 
         @NonNull
-        static Leasee createFromXml(@NonNull XmlPullParser in, int version) throws IOException {
+        static Leasee createFromXml(@NonNull XmlPullParser in, int version)
+                throws IOException {
             final String packageName = XmlUtils.readStringAttribute(in, ATTR_PACKAGE);
             final int uid = XmlUtils.readIntAttribute(in, ATTR_UID);
-            final int descriptionResId = XmlUtils.readIntAttribute(in, ATTR_DESCRIPTION_RES_ID);
+            final String descriptionResEntryName;
+            if (version >= XML_VERSION_ADD_DESC_RES_NAME) {
+                descriptionResEntryName = XmlUtils.readStringAttribute(
+                        in, ATTR_DESCRIPTION_RES_NAME);
+            } else {
+                descriptionResEntryName = null;
+            }
             final long expiryTimeMillis = XmlUtils.readLongAttribute(in, ATTR_EXPIRY_TIME);
             final CharSequence description;
             if (version >= XML_VERSION_ADD_STRING_DESC) {
@@ -451,7 +571,8 @@ class BlobMetadata {
                 description = null;
             }
 
-            return new Leasee(packageName, uid, descriptionResId, description, expiryTimeMillis);
+            return new Leasee(packageName, uid, descriptionResEntryName,
+                    description, expiryTimeMillis);
         }
     }
 

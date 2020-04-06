@@ -764,8 +764,9 @@ public final class KeyGenParameterSpec implements AlgorithmParameterSpec, UserAu
         private @KeyProperties.BlockModeEnum String[] mBlockModes;
         private boolean mRandomizedEncryptionRequired = true;
         private boolean mUserAuthenticationRequired;
-        private int mUserAuthenticationValidityDurationSeconds = -1;
-        private @KeyProperties.AuthEnum int mUserAuthenticationType;
+        private int mUserAuthenticationValidityDurationSeconds = 0;
+        private @KeyProperties.AuthEnum int mUserAuthenticationType =
+                KeyProperties.AUTH_BIOMETRIC_STRONG;
         private boolean mUserPresenceRequired = false;
         private byte[] mAttestationChallenge = null;
         private boolean mUniqueIdIncluded = false;
@@ -1240,7 +1241,8 @@ public final class KeyGenParameterSpec implements AlgorithmParameterSpec, UserAu
             if (seconds == -1) {
                 return setUserAuthenticationParameters(0, KeyProperties.AUTH_BIOMETRIC_STRONG);
             }
-            return setUserAuthenticationParameters(seconds, KeyProperties.AUTH_BIOMETRIC_STRONG);
+            return setUserAuthenticationParameters(seconds, KeyProperties.AUTH_DEVICE_CREDENTIAL
+                                                            | KeyProperties.AUTH_BIOMETRIC_STRONG);
         }
 
         /**
@@ -1264,8 +1266,7 @@ public final class KeyGenParameterSpec implements AlgorithmParameterSpec, UserAu
          * successfully.
          *
          * @param timeout duration in seconds or {@code 0} if user authentication must take place
-         *        for every use of the key. {@code -1} is also accepted for legacy purposes. It is
-         *        functionally the same as {@code 0}.
+         *        for every use of the key.
          * @param type set of authentication types which can authorize use of the key. See
          *        {@link KeyProperties}.{@code AUTH} flags.
          *
@@ -1275,12 +1276,10 @@ public final class KeyGenParameterSpec implements AlgorithmParameterSpec, UserAu
          * @see KeyguardManager
          */
         @NonNull
-        public Builder setUserAuthenticationParameters(@IntRange(from = -1) int timeout,
+        public Builder setUserAuthenticationParameters(@IntRange(from = 0) int timeout,
                                                        @KeyProperties.AuthEnum int type) {
-            if (timeout < -1) {
-                throw new IllegalArgumentException("timeout must be -1 or larger");
-            } else if (timeout == -1) {
-                timeout = 0;
+            if (timeout < 0) {
+                throw new IllegalArgumentException("timeout must be 0 or larger");
             }
             mUserAuthenticationValidityDurationSeconds = timeout;
             mUserAuthenticationType = type;

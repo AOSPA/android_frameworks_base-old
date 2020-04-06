@@ -23,7 +23,6 @@ import android.annotation.SystemApi;
 import android.app.ContextImpl.ServiceInitializationState;
 import android.app.admin.DevicePolicyManager;
 import android.app.admin.IDevicePolicyManager;
-import android.app.appsearch.AppSearchManagerFrameworkInitializer;
 import android.app.blob.BlobStoreManagerFrameworkInitializer;
 import android.app.contentsuggestions.ContentSuggestionsManager;
 import android.app.contentsuggestions.IContentSuggestionsManager;
@@ -186,7 +185,6 @@ import android.telephony.TelephonyFrameworkInitializer;
 import android.telephony.TelephonyRegistryManager;
 import android.util.ArrayMap;
 import android.util.Log;
-import android.util.Slog;
 import android.view.ContextThemeWrapper;
 import android.view.LayoutInflater;
 import android.view.WindowManager;
@@ -222,8 +220,6 @@ import java.util.Objects;
 @SystemApi
 public final class SystemServiceRegistry {
     private static final String TAG = "SystemServiceRegistry";
-
-    private static final boolean ENABLE_SERVICE_NOT_FOUND_WTF = true;
 
     // Service registry information.
     // This information is never changed once static initialization has completed.
@@ -922,17 +918,11 @@ public final class SystemServiceRegistry {
                     @Override
                     public BiometricManager createService(ContextImpl ctx)
                             throws ServiceNotFoundException {
-                        if (BiometricManager.hasBiometrics(ctx)) {
-                            final IBinder binder =
-                                    ServiceManager.getServiceOrThrow(Context.AUTH_SERVICE);
-                            final IAuthService service =
-                                    IAuthService.Stub.asInterface(binder);
-                            return new BiometricManager(ctx.getOuterContext(), service);
-                        } else {
-                            // Allow access to the manager when service is null. This saves memory
-                            // on devices without biometric hardware.
-                            return new BiometricManager(ctx.getOuterContext(), null);
-                        }
+                        final IBinder binder =
+                                ServiceManager.getServiceOrThrow(Context.AUTH_SERVICE);
+                        final IAuthService service =
+                                IAuthService.Stub.asInterface(binder);
+                        return new BiometricManager(ctx.getOuterContext(), service);
                     }
                 });
 
@@ -1306,9 +1296,6 @@ public final class SystemServiceRegistry {
                     throws ServiceNotFoundException {
                     return new LightsManager(ctx);
                 }});
-        //TODO(b/136132412): refactor this: 1) merge IIncrementalManager.aidl and
-        //IIncrementalManagerNative.aidl, 2) implement the binder interface in
-        //IncrementalManagerService.java, 3) use JNI to call native functions
         registerService(Context.INCREMENTAL_SERVICE, IncrementalManager.class,
                 new CachedServiceFetcher<IncrementalManager>() {
                     @Override
@@ -1340,6 +1327,13 @@ public final class SystemServiceRegistry {
                         IBinder b = ServiceManager.getServiceOrThrow(Context.APP_INTEGRITY_SERVICE);
                         return new AppIntegrityManager(IAppIntegrityManager.Stub.asInterface(b));
                     }});
+        registerService(Context.DREAM_SERVICE, DreamManager.class,
+                new CachedServiceFetcher<DreamManager>() {
+                    @Override
+                    public DreamManager createService(ContextImpl ctx)
+                            throws ServiceNotFoundException {
+                        return new DreamManager(ctx);
+                    }});
 
         sInitializing = true;
         try {
@@ -1348,7 +1342,6 @@ public final class SystemServiceRegistry {
             JobSchedulerFrameworkInitializer.registerServiceWrappers();
             BlobStoreManagerFrameworkInitializer.initialize();
             TelephonyFrameworkInitializer.registerServiceWrappers();
-            AppSearchManagerFrameworkInitializer.initialize();
             WifiFrameworkInitializer.registerServiceWrappers();
             StatsFrameworkInitializer.registerServiceWrappers();
         } finally {
@@ -1376,29 +1369,8 @@ public final class SystemServiceRegistry {
      * @hide
      */
     public static Object getSystemService(ContextImpl ctx, String name) {
-        if (name == null) {
-            return null;
-        }
-        final ServiceFetcher<?> fetcher = SYSTEM_SERVICE_FETCHERS.get(name);
-        if (ENABLE_SERVICE_NOT_FOUND_WTF && fetcher == null) {
-            // This should be a caller bug.
-            Slog.wtf(TAG, "Unknown manager requested: " + name);
-            return null;
-        }
-
-        final Object ret = fetcher.getService(ctx);
-        if (ENABLE_SERVICE_NOT_FOUND_WTF && ret == null) {
-            // Some services do return null in certain situations, so don't do WTF for them.
-            switch (name) {
-                case Context.CONTENT_CAPTURE_MANAGER_SERVICE:
-                case Context.APP_PREDICTION_SERVICE:
-                case Context.INCREMENTAL_SERVICE:
-                    return null;
-            }
-            Slog.wtf(TAG, "Manager wrapper not available: " + name);
-            return null;
-        }
-        return ret;
+        ServiceFetcher<?> fetcher = SYSTEM_SERVICE_FETCHERS.get(name);
+        return fetcher != null ? fetcher.getService(ctx) : null;
     }
 
     /**
@@ -1406,15 +1378,7 @@ public final class SystemServiceRegistry {
      * @hide
      */
     public static String getSystemServiceName(Class<?> serviceClass) {
-        if (serviceClass == null) {
-            return null;
-        }
-        final String serviceName = SYSTEM_SERVICE_NAMES.get(serviceClass);
-        if (ENABLE_SERVICE_NOT_FOUND_WTF && serviceName == null) {
-            // This should be a caller bug.
-            Slog.wtf(TAG, "Unknown manager requested: " + serviceClass.getCanonicalName());
-        }
-        return serviceName;
+        return SYSTEM_SERVICE_NAMES.get(serviceClass);
     }
 
     /**
@@ -1711,9 +1675,7 @@ public final class SystemServiceRegistry {
                         try {
                             cache.wait();
                         } catch (InterruptedException e) {
-                            // This shouldn't normally happen, but if someone interrupts the
-                            // thread, it will.
-                            Slog.wtf(TAG, "getService() interrupted");
+                            Log.w(TAG, "getService() interrupted");
                             Thread.currentThread().interrupt();
                             return null;
                         }

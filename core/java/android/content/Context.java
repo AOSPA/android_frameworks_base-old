@@ -71,6 +71,7 @@ import android.view.DisplayAdjustments;
 import android.view.View;
 import android.view.ViewDebug;
 import android.view.WindowManager;
+import android.view.WindowManager.LayoutParams.WindowType;
 import android.view.autofill.AutofillManager.AutofillClient;
 import android.view.contentcapture.ContentCaptureManager.ContentCaptureClient;
 import android.view.textclassifier.TextClassificationManager;
@@ -2543,12 +2544,13 @@ public abstract class Context {
      *
      * @see #sendOrderedBroadcast(Intent, String, BroadcastReceiver, Handler, int, String, Bundle)
      * @see android.app.BroadcastOptions
+     * @hide
      */
-    public void sendOrderedBroadcast(@RequiresPermission @NonNull Intent intent,
+    public void sendOrderedBroadcast(@RequiresPermission @NonNull Intent intent, int initialCode,
             @Nullable String receiverPermission, @Nullable String receiverAppOp,
-            @Nullable Bundle options, @Nullable BroadcastReceiver resultReceiver,
-            @Nullable Handler scheduler, int initialCode, @Nullable String initialData,
-            @Nullable Bundle initialExtras) {
+            @Nullable BroadcastReceiver resultReceiver, @Nullable Handler scheduler,
+            @Nullable String initialData, @Nullable Bundle initialExtras,
+            @Nullable Bundle options) {
         throw new RuntimeException("Not implemented. Must override in a subclass.");
     }
 
@@ -5108,16 +5110,6 @@ public abstract class Context {
 
     /**
      * Use with {@link #getSystemService(String)} to retrieve an
-     * {@link android.app.appsearch.AppSearchManager} for
-     * indexing and querying app data managed by the system.
-     *
-     * @see #getSystemService(String)
-     * @hide
-     */
-    public static final String APP_SEARCH_SERVICE = "app_search";
-
-    /**
-     * Use with {@link #getSystemService(String)} to retrieve an
      * {@link android.content.integrity.AppIntegrityManager}.
      * @hide
      */
@@ -5137,7 +5129,7 @@ public abstract class Context {
      * {@link android.os.incremental.IncrementalManager}.
      * @hide
      */
-    public static final String INCREMENTAL_SERVICE = "incremental_service";
+    public static final String INCREMENTAL_SERVICE = "incremental";
 
     /**
      * Use with {@link #getSystemService(String)} to retrieve an
@@ -5155,6 +5147,17 @@ public abstract class Context {
      * @hide
      */
     public static final String LIGHTS_SERVICE = "lights";
+
+    /**
+     * Use with {@link #getSystemService(String)} to retrieve a
+     * {@link android.app.DreamManager} for controlling Dream states.
+     *
+     * @see #getSystemService(String)
+
+     * @hide
+     */
+    @TestApi
+    public static final String DREAM_SERVICE = "dream";
 
     /**
      * Determine whether the given permission is allowed for a particular
@@ -5818,7 +5821,7 @@ public abstract class Context {
      * @see #WALLPAPER_SERVICE
      * @throws IllegalArgumentException if token is invalid
      */
-    public @NonNull Context createWindowContext(int type, @Nullable Bundle options)  {
+    public @NonNull Context createWindowContext(@WindowType int type, @Nullable Bundle options)  {
         throw new RuntimeException("Not implemented. Must override in a subclass.");
     }
 

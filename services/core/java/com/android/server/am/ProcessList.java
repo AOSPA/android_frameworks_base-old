@@ -25,6 +25,7 @@ import static android.net.NetworkPolicyManager.isProcStateAllowedWhileOnRestrict
 import static android.os.MessageQueue.OnFileDescriptorEventListener.EVENT_INPUT;
 import static android.os.Process.SYSTEM_UID;
 import static android.os.Process.THREAD_PRIORITY_BACKGROUND;
+import static android.os.Process.ZYGOTE_POLICY_FLAG_EMPTY;
 import static android.os.Process.getFreeMemory;
 import static android.os.Process.getTotalMemory;
 import static android.os.Process.killProcessQuiet;
@@ -60,6 +61,7 @@ import android.app.ApplicationExitInfo.SubReason;
 import android.app.IApplicationThread;
 import android.app.IUidObserver;
 import android.compat.annotation.ChangeId;
+import android.compat.annotation.Disabled;
 import android.compat.annotation.EnabledAfter;
 import android.content.BroadcastReceiver;
 import android.content.ComponentName;
@@ -69,6 +71,7 @@ import android.content.IntentFilter;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.IPackageManager;
 import android.content.pm.PackageManagerInternal;
+import android.content.pm.ProcessInfo;
 import android.content.res.Resources;
 import android.graphics.Point;
 import android.net.LocalSocket;
@@ -80,13 +83,11 @@ import android.os.Bundle;
 import android.os.DropBoxManager;
 import android.os.Handler;
 import android.os.IBinder;
-import android.os.IVold;
 import android.os.Looper;
 import android.os.Message;
 import android.os.PowerManager;
 import android.os.Process;
 import android.os.RemoteException;
-import android.os.ServiceManager;
 import android.os.StrictMode;
 import android.os.SystemClock;
 import android.os.SystemProperties;
@@ -345,6 +346,14 @@ public final class ProcessList {
     @ChangeId
     @EnabledAfter(targetSdkVersion = VersionCodes.Q)
     private static final long NATIVE_HEAP_POINTER_TAGGING = 135754954; // This is a bug id.
+
+    /**
+     * Enable sampled memory bug detection in the app.
+     * @see <a href="https://source.android.com/devices/tech/debug/gwp-asan">GWP-ASan</a>.
+     */
+    @ChangeId
+    @Disabled
+    private static final long GWP_ASAN = 135634846; // This is a bug id.
 
     /**
      * Apps have no access to the private data directories of any other app, even if the other
@@ -1640,12 +1649,34 @@ public final class ProcessList {
         return gidArray;
     }
 
+    private int decideGwpAsanLevel(ProcessRecord app) {
+        // Look at the process attribute first.
+        if (app.processInfo != null && app.processInfo.enableGwpAsan != null) {
+            return app.processInfo.enableGwpAsan ? Zygote.GWP_ASAN_LEVEL_ALWAYS
+                                                 : Zygote.GWP_ASAN_LEVEL_NEVER;
+        }
+        // Then at the applicaton attribute.
+        if (app.info.isGwpAsanEnabled() != null) {
+            return app.info.isGwpAsanEnabled() ? Zygote.GWP_ASAN_LEVEL_ALWAYS
+                                               : Zygote.GWP_ASAN_LEVEL_NEVER;
+        }
+        // If the app does not specify enableGwpAsan, the default behavior is lottery among the
+        // system apps, and disabled for user apps, unless overwritten by the compat feature.
+        if (mPlatformCompat.isChangeEnabled(GWP_ASAN, app.info)) {
+            return Zygote.GWP_ASAN_LEVEL_ALWAYS;
+        }
+        if ((app.info.flags & ApplicationInfo.FLAG_SYSTEM) != 0) {
+            return Zygote.GWP_ASAN_LEVEL_LOTTERY;
+        }
+        return Zygote.GWP_ASAN_LEVEL_NEVER;
+    }
+
     /**
      * @return {@code true} if process start is successful, false otherwise.
      */
     @GuardedBy("mService")
     boolean startProcessLocked(ProcessRecord app, HostingRecord hostingRecord,
-            boolean disableHiddenApiChecks, boolean disableTestApiChecks,
+            int zygotePolicyFlags, boolean disableHiddenApiChecks, boolean disableTestApiChecks,
             boolean mountExtStorageFull, String abiOverride) {
         if (app.pendingStart) {
             return true;
@@ -1738,8 +1769,7 @@ public final class ProcessList {
             }
             // Run the app in safe mode if its manifest requests so or the
             // system is booted in safe mode.
-            if ((app.info.flags & ApplicationInfo.FLAG_VM_SAFE_MODE) != 0 ||
-                    mService.mSafeMode == true) {
+            if ((app.info.flags & ApplicationInfo.FLAG_VM_SAFE_MODE) != 0 || mService.mSafeMode) {
                 runtimeFlags |= Zygote.DEBUG_ENABLE_SAFEMODE;
             }
             if ((app.info.privateFlags & ApplicationInfo.PRIVATE_FLAG_PROFILEABLE_BY_SHELL) != 0) {
@@ -1810,6 +1840,8 @@ public final class ProcessList {
                 runtimeFlags |= Zygote.MEMORY_TAG_LEVEL_TBI;
             }
 
+            runtimeFlags |= decideGwpAsanLevel(app);
+
             String invokeWith = null;
             if ((app.info.flags & ApplicationInfo.FLAG_DEBUGGABLE) != 0) {
                 // Debuggable apps may include a wrapper script with their library directory.
@@ -1851,8 +1883,8 @@ public final class ProcessList {
             final String entryPoint = "android.app.ActivityThread";
 
             return startProcessLocked(hostingRecord, entryPoint, app, uid, gids,
-                    runtimeFlags, mountExternal, seInfo, requiredAbi, instructionSet, invokeWith,
-                    startTime);
+                    runtimeFlags, zygotePolicyFlags, mountExternal, seInfo, requiredAbi,
+                    instructionSet, invokeWith, startTime);
         } catch (RuntimeException e) {
             Slog.e(ActivityManagerService.TAG, "Failure starting process " + app.processName, e);
 
@@ -1869,9 +1901,8 @@ public final class ProcessList {
     }
 
     @GuardedBy("mService")
-    boolean startProcessLocked(HostingRecord hostingRecord,
-            String entryPoint,
-            ProcessRecord app, int uid, int[] gids, int runtimeFlags, int mountExternal,
+    boolean startProcessLocked(HostingRecord hostingRecord, String entryPoint, ProcessRecord app,
+            int uid, int[] gids, int runtimeFlags, int zygotePolicyFlags, int mountExternal,
             String seInfo, String requiredAbi, String instructionSet, String invokeWith,
             long startTime) {
         app.pendingStart = true;
@@ -1900,15 +1931,15 @@ public final class ProcessList {
             if (DEBUG_PROCESSES) Slog.i(TAG_PROCESSES,
                     "Posting procStart msg for " + app.toShortString());
             mService.mProcStartHandler.post(() -> handleProcessStart(
-                    app, entryPoint, gids, runtimeFlags, mountExternal, requiredAbi,
-                    instructionSet, invokeWith, startSeq));
+                    app, entryPoint, gids, runtimeFlags, zygotePolicyFlags, mountExternal,
+                    requiredAbi, instructionSet, invokeWith, startSeq));
             return true;
         } else {
             try {
                 final Process.ProcessStartResult startResult = startProcess(hostingRecord,
                         entryPoint, app,
-                        uid, gids, runtimeFlags, mountExternal, seInfo, requiredAbi, instructionSet,
-                        invokeWith, startTime);
+                        uid, gids, runtimeFlags, zygotePolicyFlags, mountExternal, seInfo,
+                        requiredAbi, instructionSet, invokeWith, startTime);
                 handleProcessStartedLocked(app, startResult.pid, startResult.usingWrapper,
                         startSeq, false);
             } catch (RuntimeException e) {
@@ -1928,8 +1959,8 @@ public final class ProcessList {
      * <p>Note: this function doesn't hold the global AM lock intentionally.</p>
      */
     private void handleProcessStart(final ProcessRecord app, final String entryPoint,
-            final int[] gids, final int runtimeFlags, final int mountExternal,
-            final String requiredAbi, final String instructionSet,
+            final int[] gids, final int runtimeFlags, int zygotePolicyFlags,
+            final int mountExternal, final String requiredAbi, final String instructionSet,
             final String invokeWith, final long startSeq) {
         // If there is a precede instance of the process, wait for its death with a timeout.
         // Use local reference since we are not using locks here
@@ -1964,8 +1995,10 @@ public final class ProcessList {
         }
         try {
             final Process.ProcessStartResult startResult = startProcess(app.hostingRecord,
-                    entryPoint, app, app.startUid, gids, runtimeFlags, mountExternal,
-                    app.seInfo, requiredAbi, instructionSet, invokeWith, app.startTime);
+                    entryPoint, app, app.startUid, gids, runtimeFlags, zygotePolicyFlags,
+                    mountExternal, app.seInfo, requiredAbi, instructionSet, invokeWith,
+                    app.startTime);
+
             synchronized (mService) {
                 handleProcessStartedLocked(app, startResult, startSeq);
             }
@@ -2118,9 +2151,9 @@ public final class ProcessList {
     }
 
     private Process.ProcessStartResult startProcess(HostingRecord hostingRecord, String entryPoint,
-            ProcessRecord app, int uid, int[] gids, int runtimeFlags, int mountExternal,
-            String seInfo, String requiredAbi, String instructionSet, String invokeWith,
-            long startTime) {
+            ProcessRecord app, int uid, int[] gids, int runtimeFlags, int zygotePolicyFlags,
+            int mountExternal, String seInfo, String requiredAbi, String instructionSet,
+            String invokeWith, long startTime) {
         try {
             Trace.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER, "Start proc: " +
                     app.processName);
@@ -2168,14 +2201,15 @@ public final class ProcessList {
                         app.processName, uid, uid, gids, runtimeFlags, mountExternal,
                         app.info.targetSdkVersion, seInfo, requiredAbi, instructionSet,
                         app.info.dataDir, null, app.info.packageName,
-                        /*useUsapPool=*/ false, isTopApp, app.mDisabledCompatChanges,
-                        pkgDataInfoMap, new String[]{PROC_START_SEQ_IDENT + app.startSeq});
+                        /*zygotePolicyFlags=*/ ZYGOTE_POLICY_FLAG_EMPTY, isTopApp,
+                        app.mDisabledCompatChanges, pkgDataInfoMap,
+                        new String[]{PROC_START_SEQ_IDENT + app.startSeq});
             } else {
                 startResult = Process.start(entryPoint,
                         app.processName, uid, uid, gids, runtimeFlags, mountExternal,
                         app.info.targetSdkVersion, seInfo, requiredAbi, instructionSet,
-                        app.info.dataDir, invokeWith, app.info.packageName, isTopApp,
-                        app.mDisabledCompatChanges, pkgDataInfoMap,
+                        app.info.dataDir, invokeWith, app.info.packageName, zygotePolicyFlags,
+                        isTopApp, app.mDisabledCompatChanges, pkgDataInfoMap,
                         new String[]{PROC_START_SEQ_IDENT + app.startSeq});
             }
             if (mPerfServiceStartHint != null) {
@@ -2193,14 +2227,14 @@ public final class ProcessList {
     }
 
     @GuardedBy("mService")
-    final void startProcessLocked(ProcessRecord app, HostingRecord hostingRecord) {
-        startProcessLocked(app, hostingRecord, null /* abiOverride */);
+    void startProcessLocked(ProcessRecord app, HostingRecord hostingRecord, int zygotePolicyFlags) {
+        startProcessLocked(app, hostingRecord, zygotePolicyFlags, null /* abiOverride */);
     }
 
     @GuardedBy("mService")
     final boolean startProcessLocked(ProcessRecord app, HostingRecord hostingRecord,
-            String abiOverride) {
-        return startProcessLocked(app, hostingRecord,
+            int zygotePolicyFlags, String abiOverride) {
+        return startProcessLocked(app, hostingRecord, zygotePolicyFlags,
                 false /* disableHiddenApiChecks */, false /* disableTestApiChecks */,
                 false /* mountExtStorageFull */, abiOverride);
     }
@@ -2208,8 +2242,9 @@ public final class ProcessList {
     @GuardedBy("mService")
     final ProcessRecord startProcessLocked(String processName, ApplicationInfo info,
             boolean knownToBeDead, int intentFlags, HostingRecord hostingRecord,
-            boolean allowWhileBooting, boolean isolated, int isolatedUid, boolean keepIfLarge,
-            String abiOverride, String entryPoint, String[] entryPointArgs, Runnable crashHandler) {
+            int zygotePolicyFlags, boolean allowWhileBooting, boolean isolated, int isolatedUid,
+            boolean keepIfLarge, String abiOverride, String entryPoint, String[] entryPointArgs,
+            Runnable crashHandler) {
         long startTime = SystemClock.uptimeMillis();
         ProcessRecord app;
         if (!isolated) {
@@ -2320,7 +2355,8 @@ public final class ProcessList {
         }
 
         checkSlow(startTime, "startProcess: stepping in to startProcess");
-        final boolean success = startProcessLocked(app, hostingRecord, abiOverride);
+        final boolean success =
+                startProcessLocked(app, hostingRecord, zygotePolicyFlags, abiOverride);
         checkSlow(startTime, "startProcess: done starting proc!");
         return success ? app : null;
     }
@@ -2343,6 +2379,19 @@ public final class ProcessList {
         if (app.startSeq > expectedStartSeq) {
             if (sb == null) sb = new StringBuilder();
             sb.append("seq=" + app.startSeq + ",expected=" + expectedStartSeq + ";");
+        }
+        try {
+            AppGlobals.getPackageManager().checkPackageStartable(app.info.packageName, app.userId);
+        } catch (RemoteException e) {
+            // unexpected; ignore
+        } catch (SecurityException e) {
+            if (mService.mConstants.FLAG_PROCESS_START_ASYNC) {
+                if (sb == null) sb = new StringBuilder();
+                sb.append("Package is frozen;");
+            } else {
+                // we're not being started async and so should throw to the caller.
+                throw e;
+            }
         }
         return sb == null ? null : sb.toString();
     }
@@ -2375,7 +2424,7 @@ public final class ProcessList {
             killProcessQuiet(pid);
             Process.killProcessGroup(app.uid, app.pid);
             noteAppKill(app, ApplicationExitInfo.REASON_OTHER,
-                    ApplicationExitInfo.SUBREASON_UNKNOWN, reason);
+                    ApplicationExitInfo.SUBREASON_INVALID_START, reason);
             return false;
         }
         mService.mBatteryStatsService.noteProcessStart(app.processName, app.info.uid);
@@ -2393,9 +2442,7 @@ public final class ProcessList {
             // Ignore
         }
 
-        if (app.isPersistent()) {
-            Watchdog.getInstance().processStarted(app.processName, pid);
-        }
+        Watchdog.getInstance().processStarted(app.processName, pid);
 
         checkSlow(app.startTime, "startProcess: building log message");
         StringBuilder buf = mStringBuilder;
@@ -2462,7 +2509,7 @@ public final class ProcessList {
                         killProcessQuiet(app.pid);
                         ProcessList.killProcessGroup(app.uid, app.pid);
                         noteAppKill(app, ApplicationExitInfo.REASON_OTHER,
-                                ApplicationExitInfo.SUBREASON_UNKNOWN, "hasn't been killed");
+                                ApplicationExitInfo.SUBREASON_REMOVE_LRU, "hasn't been killed");
                     } else {
                         app.pendingStart = false;
                     }
@@ -2480,10 +2527,11 @@ public final class ProcessList {
 
     @GuardedBy("mService")
     boolean killPackageProcessesLocked(String packageName, int appId, int userId, int minOomAdj,
-            String reason) {
+            int reasonCode, int subReason, String reason) {
         return killPackageProcessesLocked(packageName, appId, userId, minOomAdj,
                 false /* callerWillRestart */, true /* allowRestart */, true /* doit */,
-                false /* evenPersistent */, false /* setRemoved */, reason);
+                false /* evenPersistent */, false /* setRemoved */, reasonCode,
+                subReason, reason);
     }
 
     @GuardedBy("mService")
@@ -2516,7 +2564,8 @@ public final class ProcessList {
     @GuardedBy("mService")
     final boolean killPackageProcessesLocked(String packageName, int appId,
             int userId, int minOomAdj, boolean callerWillRestart, boolean allowRestart,
-            boolean doit, boolean evenPersistent, boolean setRemoved, String reason) {
+            boolean doit, boolean evenPersistent, boolean setRemoved, int reasonCode,
+            int subReason, String reason) {
         ArrayList<ProcessRecord> procs = new ArrayList<>();
 
         // Remove all processes this package may have touched: all with the
@@ -2588,7 +2637,8 @@ public final class ProcessList {
 
         int N = procs.size();
         for (int i=0; i<N; i++) {
-            removeProcessLocked(procs.get(i), callerWillRestart, allowRestart, reason);
+            removeProcessLocked(procs.get(i), callerWillRestart, allowRestart,
+                    reasonCode, subReason, reason);
         }
         killAppZygotesLocked(packageName, appId, userId, false /* force */);
         mService.updateOomAdjLocked(OomAdjuster.OOM_ADJ_REASON_PROCESS_END);
@@ -2597,13 +2647,14 @@ public final class ProcessList {
 
     @GuardedBy("mService")
     boolean removeProcessLocked(ProcessRecord app,
-            boolean callerWillRestart, boolean allowRestart, String reason) {
-        return removeProcessLocked(app, callerWillRestart, allowRestart, reason,
-                ApplicationExitInfo.REASON_OTHER);
+            boolean callerWillRestart, boolean allowRestart, int reasonCode, String reason) {
+        return removeProcessLocked(app, callerWillRestart, allowRestart, reasonCode,
+                ApplicationExitInfo.SUBREASON_UNKNOWN, reason);
     }
 
-    boolean removeProcessLocked(ProcessRecord app,
-            boolean callerWillRestart, boolean allowRestart, String reason, int reasonCode) {
+    @GuardedBy("mService")
+    boolean removeProcessLocked(ProcessRecord app, boolean callerWillRestart,
+            boolean allowRestart, int reasonCode, int subReason, String reason) {
         final String name = app.processName;
         final int uid = app.uid;
         if (DEBUG_PROCESSES) Slog.d(TAG_PROCESSES,
@@ -2639,11 +2690,12 @@ public final class ProcessList {
                     needRestart = true;
                 }
             }
-            app.kill(reason, reasonCode, true);
+            app.kill(reason, reasonCode, subReason, true);
             mService.handleAppDiedLocked(app, willRestart, allowRestart);
             if (willRestart) {
                 removeLruProcessLocked(app);
-                mService.addAppLocked(app.info, null, false, null /* ABI override */);
+                mService.addAppLocked(app.info, null, false, null /* ABI override */,
+                        ZYGOTE_POLICY_FLAG_EMPTY);
             }
         } else {
             mRemovedProcesses.add(app);
@@ -2836,7 +2888,8 @@ public final class ProcessList {
 
         final int N = procs.size();
         for (int i = 0; i < N; i++) {
-            removeProcessLocked(procs.get(i), false, true, "kill all background except");
+            removeProcessLocked(procs.get(i), false, true, ApplicationExitInfo.REASON_OTHER,
+                    ApplicationExitInfo.SUBREASON_KILL_ALL_BG_EXCEPT, "kill all background except");
         }
     }
 
@@ -3765,7 +3818,8 @@ public final class ProcessList {
             Slog.i(TAG, "note: " + app + " died, saving the exit info");
         }
 
-        mAppExitInfoTracker.scheduleNoteProcessDiedLocked(app);
+        Watchdog.getInstance().processDied(app.processName, app.pid);
+        mAppExitInfoTracker.scheduleNoteProcessDied(app);
     }
 
     /**
@@ -4001,7 +4055,8 @@ public final class ProcessList {
                 return false;
             }
 
-            app.kill(reason, ApplicationExitInfo.REASON_OTHER, true);
+            app.kill(reason, ApplicationExitInfo.REASON_OTHER,
+                    ApplicationExitInfo.SUBREASON_IMPERCEPTIBLE, true);
 
             if (!app.isolated) {
                 mLastProcessKillTimes.put(app.processName, app.uid, SystemClock.uptimeMillis());

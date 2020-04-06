@@ -1173,6 +1173,10 @@ public class WallpaperManagerService extends IWallpaperManager.Stub
             }
         };
 
+        private Runnable mTryToRebindRunnable = () -> {
+            tryToRebind();
+        };
+
         WallpaperConnection(WallpaperInfo info, WallpaperData wallpaper, int clientUid) {
             mInfo = info;
             mWallpaper = wallpaper;
@@ -1279,7 +1283,7 @@ public class WallpaperManagerService extends IWallpaperManager.Stub
                         saveSettingsLocked(mWallpaper.userId);
                     }
                     FgThread.getHandler().removeCallbacks(mResetRunnable);
-                    mContext.getMainThreadHandler().removeCallbacks(this::tryToRebind);
+                    mContext.getMainThreadHandler().removeCallbacks(mTryToRebindRunnable);
                 }
             }
         }
@@ -1337,7 +1341,7 @@ public class WallpaperManagerService extends IWallpaperManager.Stub
                         < WALLPAPER_RECONNECT_TIMEOUT_MS) {
                     // Bind fail without timeout, schedule rebind
                     Slog.w(TAG, "Rebind fail! Try again later");
-                    mContext.getMainThreadHandler().postDelayed(this::tryToRebind, 1000);
+                    mContext.getMainThreadHandler().postDelayed(mTryToRebindRunnable, 1000);
                 } else {
                     // Timeout
                     Slog.w(TAG, "Reverting to built-in wallpaper!");
@@ -2174,47 +2178,6 @@ public class WallpaperManagerService extends IWallpaperManager.Stub
                         // yet. This means it will be created with the previous dimensions, so we
                         // need to update it to the new dimensions once it attaches.
                         connector.mPaddingChanged = true;
-                    }
-                }
-            }
-        }
-    }
-
-    /**
-     * Called when the wallpaper needs to zoom out.
-     *
-     * @param zoom from 0 to 1 (inclusive) where 1 means fully zoomed out, 0 means fully zoomed in.
-     * @param callingPackage package name calling this API.
-     * @param displayId id of the display whose zoom is updating.
-     */
-    public void setWallpaperZoomOut(float zoom, String callingPackage, int displayId) {
-        if (!isWallpaperSupported(callingPackage)) {
-            return;
-        }
-        synchronized (mLock) {
-            if (!isValidDisplay(displayId)) {
-                throw new IllegalArgumentException("Cannot find display with id=" + displayId);
-            }
-            int userId = UserHandle.getCallingUserId();
-            if (mCurrentUserId != userId) {
-                return; // Don't change the properties now
-            }
-            WallpaperData wallpaper = getWallpaperSafeLocked(userId, FLAG_SYSTEM);
-            if (zoom < 0 || zoom > 1f) {
-                throw new IllegalArgumentException("zoom must be between 0 and one: " + zoom);
-            }
-
-            if (wallpaper.connection != null) {
-                final WallpaperConnection.DisplayConnector connector = wallpaper.connection
-                        .getDisplayConnectorOrCreate(displayId);
-                final IWallpaperEngine engine = connector != null ? connector.mEngine : null;
-                if (engine != null) {
-                    try {
-                        engine.setZoomOut(zoom);
-                    } catch (RemoteException e) {
-                        if (DEBUG) {
-                            Slog.w(TAG, "Couldn't set wallpaper zoom", e);
-                        }
                     }
                 }
             }

@@ -64,7 +64,6 @@ public class NotificationHistoryDatabaseTest extends UiServiceTestCase {
     Context mContext;
     @Mock
     AlarmManager mAlarmManager;
-    TestFileAttrProvider mFileAttrProvider;
 
     NotificationHistoryDatabase mDataBase;
 
@@ -103,11 +102,9 @@ public class NotificationHistoryDatabaseTest extends UiServiceTestCase {
         when(mContext.getUser()).thenReturn(getContext().getUser());
         when(mContext.getPackageName()).thenReturn(getContext().getPackageName());
 
-        mFileAttrProvider = new TestFileAttrProvider();
         mRootDir = new File(mContext.getFilesDir(), "NotificationHistoryDatabaseTest");
 
-        mDataBase = new NotificationHistoryDatabase(
-                mContext, mFileWriteHandler, mRootDir, mFileAttrProvider);
+        mDataBase = new NotificationHistoryDatabase(mContext, mFileWriteHandler, mRootDir);
         mDataBase.init();
     }
 
@@ -127,7 +124,7 @@ public class NotificationHistoryDatabaseTest extends UiServiceTestCase {
         // add 5 files with a creation date of "today"
         for (long i = cal.getTimeInMillis(); i >= 5; i--) {
             File file = mock(File.class);
-            mFileAttrProvider.creationDates.put(file, i);
+            when(file.getName()).thenReturn(String.valueOf(i));
             AtomicFile af = new AtomicFile(file);
             expectedFiles.add(af);
             mDataBase.mHistoryFiles.addLast(af);
@@ -137,7 +134,7 @@ public class NotificationHistoryDatabaseTest extends UiServiceTestCase {
         // Add 5 more files more than retainDays old
         for (int i = 5; i >= 0; i--) {
             File file = mock(File.class);
-            mFileAttrProvider.creationDates.put(file, cal.getTimeInMillis() - i);
+            when(file.getName()).thenReturn(String.valueOf(cal.getTimeInMillis() - i));
             AtomicFile af = new AtomicFile(file);
             mDataBase.mHistoryFiles.addLast(af);
         }
@@ -165,10 +162,10 @@ public class NotificationHistoryDatabaseTest extends UiServiceTestCase {
     }
 
     @Test
-    public void testOnlyOneWriteRunnableInQueue() {
+    public void testForceWriteToDisk_bypassesExistingWrites() {
         when(mFileWriteHandler.hasCallbacks(any())).thenReturn(true);
         mDataBase.forceWriteToDisk();
-        verify(mFileWriteHandler, never()).post(any());
+        verify(mFileWriteHandler, times(1)).post(any());
     }
 
     @Test
@@ -332,12 +329,25 @@ public class NotificationHistoryDatabaseTest extends UiServiceTestCase {
         verify(af, never()).startWrite();
     }
 
-    private class TestFileAttrProvider implements NotificationHistoryDatabase.FileAttrProvider {
-        public Map<File, Long> creationDates = new HashMap<>();
+    @Test
+    public void testWriteBufferRunnable() throws Exception {
+        NotificationHistory nh = mock(NotificationHistory.class);
+        when(nh.getPooledStringsToWrite()).thenReturn(new String[]{});
+        when(nh.getNotificationsToWrite()).thenReturn(new ArrayList<>());
+        NotificationHistoryDatabase.WriteBufferRunnable wbr =
+                mDataBase.new WriteBufferRunnable();
 
-        @Override
-        public long getCreationTime(File file) {
-            return creationDates.get(file);
-        }
+        mDataBase.mBuffer = nh;
+        wbr.currentTime = 5;
+        wbr.latestNotificationsFile = mock(AtomicFile.class);
+        File file = mock(File.class);
+        when(file.getName()).thenReturn("5");
+        when(wbr.latestNotificationsFile.getBaseFile()).thenReturn(file);
+
+        wbr.run();
+
+        assertThat(mDataBase.mHistoryFiles.size()).isEqualTo(1);
+        assertThat(mDataBase.mBuffer).isNotEqualTo(nh);
+        verify(mAlarmManager, times(1)).setExactAndAllowWhileIdle(anyInt(), anyLong(), any());
     }
 }

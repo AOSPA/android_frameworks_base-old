@@ -22,8 +22,6 @@ import android.app.IActivityTaskManager;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.backup.IBackupManager;
-import android.app.timedetector.TimeDetector;
-import android.app.timezonedetector.TimeZoneDetector;
 import android.app.usage.UsageStatsManagerInternal;
 import android.content.Context;
 import android.content.Intent;
@@ -66,7 +64,6 @@ public class DevicePolicyManagerServiceTestable extends DevicePolicyManagerServi
      * Overrides {@link #Owners} for dependency injection.
      */
     public static class OwnersTestable extends Owners {
-        public static final String LEGACY_FILE = "legacy.xml";
 
         public OwnersTestable(MockSystemServices services) {
             super(services.userManager, services.userManagerInternal,
@@ -235,16 +232,6 @@ public class DevicePolicyManagerServiceTestable extends DevicePolicyManagerServi
 
         @Override
         AlarmManager getAlarmManager() {return services.alarmManager;}
-
-        @Override
-        TimeDetector getTimeDetector() {
-            return services.timeDetector;
-        }
-
-        @Override
-        TimeZoneDetector getTimeZoneDetector() {
-            return services.timeZoneDetector;
-        }
 
         @Override
         LockPatternUtils newLockPatternUtils() {

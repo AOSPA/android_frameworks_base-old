@@ -40,7 +40,6 @@ import static android.app.WindowConfiguration.ACTIVITY_TYPE_HOME;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_RECENTS;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_UNDEFINED;
 import static android.app.WindowConfiguration.ROTATION_UNDEFINED;
-import static android.app.WindowConfiguration.WINDOWING_MODE_FREEFORM;
 import static android.app.WindowConfiguration.WINDOWING_MODE_PINNED;
 import static android.app.WindowConfiguration.WINDOWING_MODE_SPLIT_SCREEN_PRIMARY;
 import static android.app.WindowConfiguration.activityTypeToString;
@@ -106,7 +105,6 @@ import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION_STARTING;
 import static android.view.WindowManager.LayoutParams.TYPE_BASE_APPLICATION;
 import static android.view.WindowManager.TRANSIT_ACTIVITY_CLOSE;
 import static android.view.WindowManager.TRANSIT_DOCK_TASK_FROM_RECENTS;
-import static android.view.WindowManager.TRANSIT_TASK_CHANGE_WINDOWING_MODE;
 import static android.view.WindowManager.TRANSIT_TASK_CLOSE;
 import static android.view.WindowManager.TRANSIT_TASK_OPEN_BEHIND;
 import static android.view.WindowManager.TRANSIT_UNSET;
@@ -202,6 +200,7 @@ import static com.android.server.wm.TaskPersister.IMAGE_EXTENSION;
 import static com.android.server.wm.WindowContainer.AnimationFlags.CHILDREN;
 import static com.android.server.wm.WindowContainer.AnimationFlags.PARENTS;
 import static com.android.server.wm.WindowContainer.AnimationFlags.TRANSITION;
+import static com.android.server.wm.WindowContainerChildProto.ACTIVITY;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_ANIM;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_LAYOUT_REPEATS;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_STARTING_WINDOW_VERBOSE;
@@ -285,7 +284,6 @@ import android.view.DisplayInfo;
 import android.view.IAppTransitionAnimationSpecsFuture;
 import android.view.IApplicationToken;
 import android.view.InputApplicationHandle;
-import android.view.RemoteAnimationAdapter;
 import android.view.RemoteAnimationDefinition;
 import android.view.RemoteAnimationTarget;
 import android.view.SurfaceControl;
@@ -583,12 +581,6 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
      */
     private boolean mCurrentLaunchCanTurnScreenOn = true;
 
-    /**
-     * This leash is used to "freeze" the app surface in place after the state change, but before
-     * the animation is ready to start.
-     */
-    private SurfaceControl mTransitChangeLeash = null;
-
     /** Whether our surface was set to be showing in the last call to {@link #prepareSurfaces} */
     private boolean mLastSurfaceShowing = true;
 
@@ -843,7 +835,10 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
                         pw.print(" icon="); pw.print(taskDescription.getInMemoryIcon() != null
                                 ? taskDescription.getInMemoryIcon().getByteCount() + " bytes"
                                 : "null");
-                        pw.print(" iconResource="); pw.print(taskDescription.getIconResource());
+                        pw.print(" iconResource=");
+                                pw.print(taskDescription.getIconResourcePackage());
+                                pw.print("/");
+                                pw.print(taskDescription.getIconResource());
                         pw.print(" iconFilename="); pw.print(taskDescription.getIconFilename());
                         pw.print(" primaryColor=");
                         pw.println(Integer.toHexString(taskDescription.getPrimaryColor()));
@@ -1332,15 +1327,6 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
             mDisplayContent.executeAppTransition();
         }
 
-        if (prevDc.mChangingApps.remove(this)) {
-            // This gets called *after* the ActivityRecord has been reparented to the new display.
-            // That reparenting resulted in this window changing modes (eg. FREEFORM -> FULLSCREEN),
-            // so this token is now "frozen" while waiting for the animation to start on prevDc
-            // (which will be cancelled since the window is no-longer a child). However, since this
-            // is no longer a child of prevDc, this won't be notified of the cancelled animation,
-            // so we need to cancel the change transition here.
-            clearChangeLeash(getPendingTransaction(), true /* cancel */);
-        }
         prevDc.mClosingApps.remove(this);
 
         if (prevDc.mFocusedApp == this) {
@@ -1727,7 +1713,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
 
         final ActivityManager.TaskSnapshot snapshot =
                 mWmService.mTaskSnapshotController.getSnapshot(task.mTaskId, task.mUserId,
-                        false /* restoreFromDisk */, false /* reducedResolution */);
+                        false /* restoreFromDisk */, false /* isLowResolution */);
         final int type = getStartingWindowType(newTask, taskSwitch, processRunning,
                 allowTaskSnapshot, activityCreated, fromRecents, snapshot);
 
@@ -3098,7 +3084,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         commitVisibility(false /* visible */, true /* performLayout */);
 
         getDisplayContent().mOpeningApps.remove(this);
-        getDisplayContent().mChangingApps.remove(this);
+        getDisplayContent().mChangingContainers.remove(this);
         getDisplayContent().mUnknownAppVisibilityController.appRemovedOrHidden(this);
         mWmService.mTaskSnapshotController.onAppRemoved(this);
         mStackSupervisor.getActivityMetricsLogger().notifyActivityRemoved(this);
@@ -3174,7 +3160,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
 
         // Reset the last saved PiP snap fraction on removal.
         mDisplayContent.mPinnedStackControllerLocked.resetReentryBounds(mActivityComponent);
-
+        mWmService.mEmbeddedWindowController.onActivityRemoved(this);
         mRemovingFromDisplay = false;
     }
 
@@ -3851,13 +3837,6 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
                     mDisplayContent.setLayoutNeeded();
                 }
                 mWmService.mH.obtainMessage(H.NOTIFY_ACTIVITY_DRAWN, token).sendToTarget();
-
-                // Notify the pinned stack upon all windows drawn. If there was an animation in
-                // progress then this signal will resume that animation.
-                final ActivityStack pinnedStack = mDisplayContent.getRootPinnedTask();
-                if (pinnedStack != null) {
-                    pinnedStack.onAllWindowsDrawn();
-                }
             }
         }
     }
@@ -4008,13 +3987,11 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
                 appToken, visible, appTransition, isVisible(), mVisibleRequested,
                 Debug.getCallers(6));
 
+        onChildVisibilityRequested(visible);
+
         final DisplayContent displayContent = getDisplayContent();
         displayContent.mOpeningApps.remove(this);
         displayContent.mClosingApps.remove(this);
-        if (isInChangeTransition()) {
-            clearChangeLeash(getPendingTransaction(), true /* cancel */);
-        }
-        displayContent.mChangingApps.remove(this);
         waitingToShow = false;
         mVisibleRequested = visible;
         mLastDeferHidingClient = deferHidingClient;
@@ -4211,13 +4188,6 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         final DisplayContent displayContent = getDisplayContent();
         if (!displayContent.mClosingApps.contains(this)
                 && !displayContent.mOpeningApps.contains(this)) {
-            // The token is not closing nor opening, so even if there is an animation set, that
-            // doesn't mean that it goes through the normal app transition cycle so we have
-            // to inform the docked controller about visibility change.
-            // TODO(multi-display): notify docked divider on all displays where visibility was
-            // affected.
-            displayContent.getDockedDividerController().notifyAppVisibilityChanged();
-
             // Take the screenshot before possibly hiding the WSA, otherwise the screenshot
             // will not be taken.
             mWmService.mTaskSnapshotController.notifyAppVisibilityChanged(this, visible);
@@ -5836,11 +5806,6 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         return isGame;
     }
 
-    @Override
-    boolean isChangingAppTransition() {
-        return task != null ? task.isChangingAppTransition() : super.isChangingAppTransition();
-    }
-
     /**
      * Creates a layer to apply crop to an animation.
      */
@@ -5861,84 +5826,19 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
                 this, endDeferFinishCallback);
     }
 
-    private boolean shouldStartChangeTransition(int prevWinMode, int newWinMode) {
-        if (mWmService.mDisableTransitionAnimation
-                || !isVisible()
-                || getDisplayContent().mAppTransition.isTransitionSet()
-                || getSurfaceControl() == null) {
-            return false;
-        }
-        // Only do an animation into and out-of freeform mode for now. Other mode
-        // transition animations are currently handled by system-ui.
-        return (prevWinMode == WINDOWING_MODE_FREEFORM) != (newWinMode == WINDOWING_MODE_FREEFORM);
-    }
-
     @Override
     boolean isWaitingForTransitionStart() {
         final DisplayContent dc = getDisplayContent();
         return dc != null && dc.mAppTransition.isTransitionSet()
                 && (dc.mOpeningApps.contains(this)
                 || dc.mClosingApps.contains(this)
-                || dc.mChangingApps.contains(this));
+                || dc.mChangingContainers.contains(this));
     }
 
-    /**
-     * Initializes a change transition. Because the app is visible already, there is a small period
-     * of time where the user can see the app content/window update before the transition starts.
-     * To prevent this, we immediately take a snapshot and place the app/snapshot into a leash which
-     * "freezes" the location/crop until the transition starts.
-     * <p>
-     * Here's a walk-through of the process:
-     * 1. Create a temporary leash ("interim-change-leash") and reparent the app to it.
-     * 2. Set the temporary leash's position/crop to the current state.
-     * 3. Create a snapshot and place that at the top of the leash to cover up content changes.
-     * 4. Once the transition is ready, it will reparent the app to the animation leash.
-     * 5. Detach the interim-change-leash.
-     */
-    private void initializeChangeTransition(Rect startBounds) {
-        mDisplayContent.prepareAppTransition(TRANSIT_TASK_CHANGE_WINDOWING_MODE,
-                false /* alwaysKeepCurrent */, 0, false /* forceOverride */);
-        mDisplayContent.mChangingApps.add(this);
-        mTransitStartRect.set(startBounds);
-
-        final SurfaceControl.Builder builder = makeAnimationLeash()
-                .setParent(getAnimationLeashParent())
-                .setName(getSurfaceControl() + " - interim-change-leash");
-        mTransitChangeLeash = builder.build();
-        Transaction t = getPendingTransaction();
-        t.setWindowCrop(mTransitChangeLeash, startBounds.width(), startBounds.height());
-        t.setPosition(mTransitChangeLeash, startBounds.left, startBounds.top);
-        t.show(mTransitChangeLeash);
-        t.reparent(getSurfaceControl(), mTransitChangeLeash);
-        onAnimationLeashCreated(t, mTransitChangeLeash);
-
-        // Skip creating snapshot if this transition is controlled by a remote animator which
-        // doesn't need it.
-        ArraySet<Integer> activityTypes = new ArraySet<>();
-        activityTypes.add(getActivityType());
-        RemoteAnimationAdapter adapter =
-                mDisplayContent.mAppTransitionController.getRemoteAnimationOverride(
-                        this, TRANSIT_TASK_CHANGE_WINDOWING_MODE, activityTypes);
-        if (adapter != null && !adapter.getChangeNeedsSnapshot()) {
-            return;
-        }
-
-        if (mThumbnail == null && task != null && !hasCommittedReparentToAnimationLeash()) {
-            SurfaceControl.ScreenshotGraphicBuffer snapshot =
-                    mWmService.mTaskSnapshotController.createTaskSnapshot(
-                            task, 1 /* scaleFraction */);
-            if (snapshot != null) {
-                mThumbnail = new WindowContainerThumbnail(mWmService.mSurfaceFactory, t, this,
-                        snapshot.getGraphicBuffer(), true /* relative */);
-            }
-        }
-    }
-
-    @Override
-    public void onAnimationLeashCreated(Transaction t, SurfaceControl leash) {
+    private int getAnimationLayer() {
         // The leash is parented to the animation layer. We need to preserve the z-order by using
         // the prefix order index, but we boost if necessary.
-        int layer = 0;
+        int layer;
         if (!inPinnedWindowingMode()) {
             layer = getPrefixOrderIndex();
         } else {
@@ -5951,21 +5851,17 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         if (mNeedsZBoost) {
             layer += Z_BOOST_BASE;
         }
-        if (!mNeedsAnimationBoundsLayer) {
-            t.setLayer(leash, layer);
-        }
+        return layer;
+    }
 
-        final DisplayContent dc = getDisplayContent();
-        dc.assignStackOrdering();
+    @Override
+    public void onAnimationLeashCreated(Transaction t, SurfaceControl leash) {
+        t.setLayer(leash, getAnimationLayer());
+        getDisplayContent().assignStackOrdering();
+    }
 
-        if (leash == mTransitChangeLeash) {
-            // This is a temporary state so skip any animation notifications
-            return;
-        } else if (mTransitChangeLeash != null) {
-            // unparent mTransitChangeLeash for clean-up
-            clearChangeLeash(t, false /* cancel */);
-        }
-
+    @Override
+    public void onLeashAnimationStarting(Transaction t, SurfaceControl leash) {
         if (mAnimatingActivityRegistry != null) {
             mAnimatingActivityRegistry.notifyStarting(this);
         }
@@ -5993,7 +5889,8 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
                 // surface size has already same as the animating container.
                 t.setWindowCrop(mAnimationBoundsLayer, mTmpRect);
             }
-            t.setLayer(mAnimationBoundsLayer, layer);
+            t.setLayer(leash, 0);
+            t.setLayer(mAnimationBoundsLayer, getAnimationLayer());
 
             // Reparent leash to animation bounds layer.
             t.reparent(leash, mAnimationBoundsLayer);
@@ -6023,10 +5920,6 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
      */
     boolean isSurfaceShowing() {
         return mLastSurfaceShowing;
-    }
-
-    boolean isInChangeTransition() {
-        return mTransitChangeLeash != null || AppTransition.isChangeTransit(mTransit);
     }
 
     void attachThumbnailAnimation() {
@@ -6165,31 +6058,6 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         Trace.traceEnd(TRACE_TAG_WINDOW_MANAGER);
     }
 
-    /**
-     * @param cancel {@code true} if clearing the leash due to cancelling instead of transferring
-     *                            to another leash.
-     */
-    private void clearChangeLeash(Transaction t, boolean cancel) {
-        if (mTransitChangeLeash == null) {
-            return;
-        }
-        if (cancel) {
-            clearThumbnail();
-            SurfaceControl sc = getSurfaceControl();
-            SurfaceControl parentSc = getParentSurfaceControl();
-            // Don't reparent if surface is getting destroyed
-            if (parentSc != null && sc != null) {
-                t.reparent(sc, getParentSurfaceControl());
-            }
-        }
-        t.hide(mTransitChangeLeash);
-        t.remove(mTransitChangeLeash);
-        mTransitChangeLeash = null;
-        if (cancel) {
-            onAnimationLeashLost(t);
-        }
-    }
-
     void clearAnimatingFlags() {
         boolean wallpaperMightChange = false;
         for (int i = mChildren.size() - 1; i >= 0; i--) {
@@ -6205,7 +6073,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
     void cancelAnimation() {
         cancelAnimationOnly();
         clearThumbnail();
-        clearChangeLeash(getPendingTransaction(), true /* cancel */);
+        mSurfaceFreezer.unfreeze(getPendingTransaction());
     }
 
     /**
@@ -6250,6 +6118,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         mRemoteAnimationDefinition = null;
     }
 
+    @Override
     RemoteAnimationDefinition getRemoteAnimationDefinition() {
         return mRemoteAnimationDefinition;
     }
@@ -6346,10 +6215,12 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
 
     /**
      * @return {@code true} if this activity is in size compatibility mode that uses the different
-     *         density or bounds from its parent.
+     *         density than its parent or its bounds don't fit in parent naturally.
      */
     boolean inSizeCompatMode() {
-        if (mCompatDisplayInsets == null || !shouldUseSizeCompatMode()) {
+        if (mCompatDisplayInsets == null || !shouldUseSizeCompatMode()
+                // The orientation is different from parent when transforming.
+                || isFixedRotationTransforming()) {
             return false;
         }
         final Rect appBounds = getConfiguration().windowConfiguration.getAppBounds();
@@ -6387,8 +6258,8 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         // The rest of the condition is that only one side is smaller than the parent, but it still
         // needs to exclude the cases where the size is limited by the fixed aspect ratio.
         if (info.maxAspectRatio > 0) {
-            final float aspectRatio =
-                    (float) Math.max(appWidth, appHeight) / Math.min(appWidth, appHeight);
+            final float aspectRatio = (0.5f + Math.max(appWidth, appHeight))
+                    / Math.min(appWidth, appHeight);
             if (aspectRatio >= info.maxAspectRatio) {
                 // The current size has reached the max aspect ratio.
                 return false;
@@ -6468,26 +6339,25 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         }
 
         // The role of CompatDisplayInsets is like the override bounds.
-        final DisplayContent display = getDisplay();
-        if (display != null) {
-            mCompatDisplayInsets = new CompatDisplayInsets(display.mDisplayContent,
-                    getWindowConfiguration().getBounds(),
-                    getWindowConfiguration().tasksAreFloating());
-        }
+        mCompatDisplayInsets = new CompatDisplayInsets(mDisplayContent, this);
     }
 
-    private void clearSizeCompatMode() {
+    @VisibleForTesting
+    void clearSizeCompatMode() {
+        mSizeCompatScale = 1f;
+        mSizeCompatBounds = null;
         mCompatDisplayInsets = null;
         onRequestedOverrideConfigurationChanged(EMPTY);
     }
 
     @Override
     public boolean matchParentBounds() {
-        if (super.matchParentBounds()) {
+        if (super.matchParentBounds() && mCompatDisplayInsets == null) {
             return true;
         }
-        // An activity in size compatibility mode may have override bounds which equals to its
-        // parent bounds, so the exact bounds should also be checked.
+        // An activity in size compatibility mode may have resolved override bounds, so the exact
+        // bounds should also be checked. Otherwise IME window will show with offset. See
+        // {@link DisplayContent#isImeAttachedToApp}.
         final WindowContainer parent = getParent();
         return parent == null || parent.getBounds().equals(getResolvedOverrideBounds());
     }
@@ -6507,7 +6377,8 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
             // can use the resolved configuration directly. Otherwise (e.g. fixed aspect ratio),
             // the rotated configuration is used as parent configuration to compute the actual
             // resolved configuration. It is like putting the activity in a rotated container.
-            mTmpConfig.setTo(resolvedConfig);
+            mTmpConfig.setTo(newParentConfiguration);
+            mTmpConfig.updateFrom(resolvedConfig);
             newParentConfiguration = mTmpConfig;
         }
         if (mCompatDisplayInsets != null) {
@@ -6515,17 +6386,31 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         } else {
             // We ignore activities' requested orientation in multi-window modes. Task level may
             // take them into consideration when calculating bounds.
-            if (getParent() != null && getParent().inMultiWindowMode()) {
+            if (inMultiWindowMode()) {
                 resolvedConfig.orientation = Configuration.ORIENTATION_UNDEFINED;
             }
-            applyAspectRatio(resolvedConfig.windowConfiguration.getBounds(),
-                    newParentConfiguration.windowConfiguration.getAppBounds(),
-                    newParentConfiguration.windowConfiguration.getBounds());
-            // If the activity has override bounds, the relative configuration (e.g. screen size,
-            // layout) needs to be resolved according to the bounds.
-            if (task != null && !resolvedConfig.windowConfiguration.getBounds().isEmpty()) {
-                task.computeConfigResourceOverrides(getResolvedOverrideConfiguration(),
-                        newParentConfiguration);
+            final Rect parentAppBounds = newParentConfiguration.windowConfiguration.getAppBounds();
+            final Rect parentBounds = newParentConfiguration.windowConfiguration.getBounds();
+            // Use tmp bounds to calculate aspect ratio so we can know whether the activity should
+            // use restricted size (resolvedBounds may be the requested override bounds).
+            mTmpBounds.setEmpty();
+            applyAspectRatio(mTmpBounds, parentAppBounds, parentBounds);
+            // If the out bounds is not empty, it means the activity cannot fill parent's app
+            // bounds, then the relative configuration (e.g. screen size, layout) needs to be
+            // resolved according to the bounds.
+            if (!mTmpBounds.isEmpty()) {
+                final Rect resolvedBounds = resolvedConfig.windowConfiguration.getBounds();
+                resolvedBounds.set(mTmpBounds);
+                // Exclude the horizontal decor area because the activity will be centered
+                // horizontally in parent's app bounds to balance the visual appearance.
+                resolvedBounds.left = parentAppBounds.left;
+                task.computeConfigResourceOverrides(resolvedConfig, newParentConfiguration,
+                        getFixedRotationTransformDisplayInfo());
+                final int offsetX = getHorizontalCenterOffset(
+                        parentAppBounds.width(), resolvedBounds.width());
+                if (offsetX > 0) {
+                    offsetBounds(resolvedConfig, offsetX - resolvedBounds.left, 0 /* offsetY */);
+                }
             }
         }
 
@@ -6543,65 +6428,41 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
     private void resolveSizeCompatModeConfiguration(Configuration newParentConfiguration) {
         final Configuration resolvedConfig = getResolvedOverrideConfiguration();
         final Rect resolvedBounds = resolvedConfig.windowConfiguration.getBounds();
-
-        Rect parentBounds = new Rect(newParentConfiguration.windowConfiguration.getBounds());
-
-        int orientation = getRequestedConfigurationOrientation();
-        if (orientation == ORIENTATION_UNDEFINED) {
-            orientation = newParentConfiguration.orientation;
-        }
-        int rotation = resolvedConfig.windowConfiguration.getRotation();
-        if (rotation == ROTATION_UNDEFINED) {
-            rotation = newParentConfiguration.windowConfiguration.getRotation();
+        final int requestedOrientation = getRequestedConfigurationOrientation();
+        final boolean orientationRequested = requestedOrientation != ORIENTATION_UNDEFINED;
+        final int orientation = orientationRequested
+                ? requestedOrientation
+                : newParentConfiguration.orientation;
+        int rotation = newParentConfiguration.windowConfiguration.getRotation();
+        final boolean canChangeOrientation = handlesOrientationChangeFromDescendant();
+        if (canChangeOrientation && mCompatDisplayInsets.mIsRotatable
+                && !mCompatDisplayInsets.mIsFloating) {
+            // Use parent rotation because the original display can rotate by requested orientation.
+            resolvedConfig.windowConfiguration.setRotation(rotation);
+        } else {
+            final int overrideRotation = resolvedConfig.windowConfiguration.getRotation();
+            if (overrideRotation != ROTATION_UNDEFINED) {
+                rotation = overrideRotation;
+            }
         }
 
         // Use compat insets to lock width and height. We should not use the parent width and height
         // because apps in compat mode should have a constant width and height. The compat insets
         // are locked when the app is first launched and are never changed after that, so we can
         // rely on them to contain the original and unchanging width and height of the app.
-        final Rect compatDisplayBounds = mTmpBounds;
-        mCompatDisplayInsets.getDisplayBoundsByRotation(compatDisplayBounds, rotation);
         final Rect containingAppBounds = new Rect();
-        mCompatDisplayInsets.getFrameByOrientation(containingAppBounds, orientation);
-
-        // Center containingAppBounds horizontally and aligned to top of parent. Both
-        // are usually the same unless the app was frozen with an orientation letterbox.
-        int left = compatDisplayBounds.left + compatDisplayBounds.width() / 2
-                - containingAppBounds.width() / 2;
-        resolvedBounds.set(left, compatDisplayBounds.top, left + containingAppBounds.width(),
-                compatDisplayBounds.top + containingAppBounds.height());
-
-        if (rotation != ROTATION_UNDEFINED) {
-            // Ensure the parent and container bounds won't overlap with insets.
-            Task.intersectWithInsetsIfFits(containingAppBounds, compatDisplayBounds,
-                    mCompatDisplayInsets.mNonDecorInsets[rotation]);
-            Task.intersectWithInsetsIfFits(parentBounds, compatDisplayBounds,
-                    mCompatDisplayInsets.mNonDecorInsets[rotation]);
+        final Rect containingBounds = mTmpBounds;
+        mCompatDisplayInsets.getContainerBounds(containingAppBounds, containingBounds, rotation,
+                orientation, orientationRequested, canChangeOrientation);
+        resolvedBounds.set(containingAppBounds);
+        // The size of floating task is fixed (only swap), so the aspect ratio is already correct.
+        if (!mCompatDisplayInsets.mIsFloating) {
+            applyAspectRatio(resolvedBounds, containingAppBounds, containingBounds);
         }
 
-        applyAspectRatio(resolvedBounds, containingAppBounds, compatDisplayBounds);
-
-        // Center horizontally in parent and align to top of parent - this is a UX choice
-        left = parentBounds.left + parentBounds.width() / 2 - resolvedBounds.width() / 2;
-        resolvedBounds.set(left, parentBounds.top, left + resolvedBounds.width(),
-                parentBounds.top + resolvedBounds.height());
-
-        // We want to get as much of the app on the screen even if insets cover it. This is because
-        // insets change but an app's bounds are more permanent after launch. After computing insets
-        // and horizontally centering resolvedBounds, the resolvedBounds may end up outside parent
-        // bounds. This is okay only if the resolvedBounds exceed their parent on the bottom and
-        // right, because that is clipped when the final bounds are computed. To reach this state,
-        // we first try and push the app as much inside the parent towards the top and left (the
-        // min). The app may then end up outside the parent by going too far left and top, so we
-        // push it back into the parent by taking the max with parent left and top.
-        Rect fullParentBounds = newParentConfiguration.windowConfiguration.getBounds();
-        resolvedBounds.offsetTo(Math.max(fullParentBounds.left,
-                Math.min(fullParentBounds.right - resolvedBounds.width(), resolvedBounds.left)),
-                Math.max(fullParentBounds.top,
-                        Math.min(fullParentBounds.bottom - resolvedBounds.height(),
-                                resolvedBounds.top)));
-
-        // Use resolvedBounds to compute other override configurations such as appBounds
+        // Use resolvedBounds to compute other override configurations such as appBounds. The bounds
+        // are calculated in compat container space. The actual position on screen will be applied
+        // later, so the calculation is simpler that doesn't need to involve offset from parent.
         task.computeConfigResourceOverrides(resolvedConfig, newParentConfiguration,
                 mCompatDisplayInsets);
         // Use current screen layout as source because the size of app is independent to parent.
@@ -6614,6 +6475,79 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         if (resolvedConfig.screenWidthDp == resolvedConfig.screenHeightDp) {
             resolvedConfig.orientation = newParentConfiguration.orientation;
         }
+
+        // Below figure is an example that puts an activity which was launched in a larger container
+        // into a smaller container.
+        //   The outermost rectangle is the real display bounds.
+        //   "@" is the parent app bounds.
+        //   "#" is the {@code resolvedBounds} that applies to application.
+        //   "*" is the {@code mSizeCompatBounds} that used to show on screen if scaled.
+        // ------------------------------
+        // |                            |
+        // |    @@@@*********@@@@###    |
+        // |    @   *       *   @  #    |
+        // |    @   *       *   @  #    |
+        // |    @   *       *   @  #    |
+        // |    @@@@*********@@@@  #    |
+        // ---------#--------------#-----
+        //          #              #
+        //          ################
+        // The application is still layouted in "#" since it was launched, and it will be visually
+        // scaled and positioned to "*".
+
+        // Calculates the scale and offset to horizontal center the size compatibility bounds into
+        // the region which is available to application.
+        final Rect parentBounds = newParentConfiguration.windowConfiguration.getBounds();
+        final Rect parentAppBounds = newParentConfiguration.windowConfiguration.getAppBounds();
+        final Rect resolvedAppBounds = resolvedConfig.windowConfiguration.getAppBounds();
+        final int contentW = resolvedAppBounds.width();
+        final int contentH = resolvedAppBounds.height();
+        final int viewportW = parentAppBounds.width();
+        final int viewportH = parentAppBounds.height();
+        // Only allow to scale down.
+        mSizeCompatScale = (contentW <= viewportW && contentH <= viewportH)
+                ? 1f : Math.min((float) viewportW / contentW, (float) viewportH / contentH);
+        final int screenTopInset = parentAppBounds.top - parentBounds.top;
+        final boolean topNotAligned = screenTopInset != resolvedAppBounds.top - resolvedBounds.top;
+        if (mSizeCompatScale != 1f || topNotAligned) {
+            if (mSizeCompatBounds == null) {
+                mSizeCompatBounds = new Rect();
+            }
+            mSizeCompatBounds.set(resolvedAppBounds);
+            mSizeCompatBounds.offsetTo(0, 0);
+            mSizeCompatBounds.scale(mSizeCompatScale);
+            // The insets are included in height, e.g. the area of real cutout shouldn't be scaled.
+            mSizeCompatBounds.bottom += screenTopInset;
+        } else {
+            mSizeCompatBounds = null;
+        }
+
+        // Center horizontally in parent (app bounds) and align to top of parent (bounds)
+        // - this is a UX choice.
+        final int offsetX = getHorizontalCenterOffset(
+                (int) viewportW, (int) (contentW * mSizeCompatScale));
+        // Above coordinates are in "@" space, now place "*" and "#" to screen space.
+        final int screenPosX = parentAppBounds.left + offsetX;
+        final int screenPosY = parentBounds.top;
+        if (screenPosX > 0 || screenPosY > 0) {
+            if (mSizeCompatBounds != null) {
+                mSizeCompatBounds.offset(screenPosX, screenPosY);
+            }
+            // Add the global coordinates and remove the local coordinates.
+            final int dx = screenPosX - resolvedBounds.left;
+            final int dy = screenPosY - resolvedBounds.top;
+            offsetBounds(resolvedConfig, dx, dy);
+        }
+    }
+
+    /** @return The horizontal offset of putting the content in the center of viewport. */
+    private static int getHorizontalCenterOffset(int viewportW, int contentW) {
+        return (int) ((viewportW - contentW + 1) * 0.5f);
+    }
+
+    private static void offsetBounds(Configuration inOutConfig, int offsetX, int offsetY) {
+        inOutConfig.windowConfiguration.getBounds().offset(offsetX, offsetY);
+        inOutConfig.windowConfiguration.getAppBounds().offset(offsetX, offsetY);
     }
 
     @Override
@@ -6647,40 +6581,6 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         return task != null ? task.getBounds() : getBounds();
     }
 
-    /**
-     * Calculates the scale and offset to horizontal center the size compatibility bounds into the
-     * region which is available to application.
-     */
-    private void calculateCompatBoundsTransformation(Configuration newParentConfig) {
-        final Rect parentAppBounds = newParentConfig.windowConfiguration.getAppBounds();
-        final Rect parentBounds = newParentConfig.windowConfiguration.getBounds();
-        final Rect viewportBounds = parentAppBounds != null ? parentAppBounds : parentBounds;
-        final Rect appBounds = getWindowConfiguration().getAppBounds();
-        final Rect contentBounds = appBounds != null ? appBounds : getResolvedOverrideBounds();
-        final float contentW = contentBounds.width();
-        final float contentH = contentBounds.height();
-        final float viewportW = viewportBounds.width();
-        final float viewportH = viewportBounds.height();
-        // Only allow to scale down.
-        mSizeCompatScale = (contentW <= viewportW && contentH <= viewportH)
-                ? 1 : Math.min(viewportW / contentW, viewportH / contentH);
-        final int offsetX = (int) ((viewportW - contentW * mSizeCompatScale + 1) * 0.5f)
-                + viewportBounds.left;
-
-        if (mSizeCompatBounds == null) {
-            mSizeCompatBounds = new Rect();
-        }
-        mSizeCompatBounds.set(contentBounds);
-        mSizeCompatBounds.offsetTo(0, 0);
-        mSizeCompatBounds.scale(mSizeCompatScale);
-        // Ensure to align the top with the parent.
-        mSizeCompatBounds.top = parentBounds.top;
-        // The decor inset is included in height.
-        mSizeCompatBounds.bottom += viewportBounds.top;
-        mSizeCompatBounds.left += offsetX;
-        mSizeCompatBounds.right += offsetX;
-    }
-
     @Override
     public void onConfigurationChanged(Configuration newParentConfig) {
         if (mCompatDisplayInsets != null) {
@@ -6710,37 +6610,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
                 return;
             }
         }
-        final int prevWinMode = getWindowingMode();
-        mTmpPrevBounds.set(getBounds());
         super.onConfigurationChanged(newParentConfig);
-
-        if (shouldUseSizeCompatMode()) {
-            final Rect overrideBounds = getResolvedOverrideBounds();
-            if (task != null && !overrideBounds.isEmpty()) {
-                final Rect taskBounds = task.getBounds();
-                // Since we only center the activity horizontally, if only the fixed height is
-                // smaller than its container, the override bounds don't need to take effect.
-                if ((overrideBounds.width() != taskBounds.width()
-                        || overrideBounds.height() > taskBounds.height())) {
-                    calculateCompatBoundsTransformation(newParentConfig);
-                    updateSurfacePosition();
-                } else if (mSizeCompatBounds != null) {
-                    mSizeCompatBounds = null;
-                    mSizeCompatScale = 1f;
-                    updateSurfacePosition();
-                }
-            } else if (overrideBounds.isEmpty()) {
-                mSizeCompatBounds = null;
-                mSizeCompatScale = 1f;
-                updateSurfacePosition();
-            }
-        }
-
-        final int newWinMode = getWindowingMode();
-        if ((prevWinMode != newWinMode) && (mDisplayContent != null)
-                && shouldStartChangeTransition(prevWinMode, newWinMode)) {
-            initializeChangeTransition(mTmpPrevBounds);
-        }
 
         // Configuration's equality doesn't consider seq so if only seq number changes in resolved
         // override configuration. Therefore ConfigurationContainer doesn't change merged override
@@ -6779,18 +6649,8 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         // for the next re-entry into PiP (assuming the activity is not hidden or destroyed)
         final ActivityStack pinnedStack = mDisplayContent.getRootPinnedTask();
         if (pinnedStack == null) return;
-        final Rect stackBounds;
-        if (pinnedStack.lastAnimatingBoundsWasToFullscreen()) {
-            // We are animating the bounds, use the pre-animation bounds to save the snap
-            // fraction
-            stackBounds = pinnedStack.mPreAnimationBounds;
-        } else {
-            // We skip the animation if the fullscreen configuration is not compatible, so
-            // use the current bounds to calculate the saved snap fraction instead
-            // (see PinnedActivityStack.skipResizeAnimation())
-            stackBounds = mTmpRect;
-            pinnedStack.getBounds(stackBounds);
-        }
+        final Rect stackBounds = mTmpRect;
+        pinnedStack.getBounds(stackBounds);
         mDisplayContent.mPinnedStackControllerLocked.saveReentryBounds(
                 mActivityComponent, stackBounds);
     }
@@ -7394,12 +7254,11 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
                 componentSpecified = Boolean.parseBoolean(attrValue);
             } else if (ATTR_USERID.equals(attrName)) {
                 userId = Integer.parseInt(attrValue);
-            } else if (attrName.startsWith(ATTR_TASKDESCRIPTION_PREFIX)) {
-                taskDescription.restoreFromXml(attrName, attrValue);
-            } else {
+            } else if (!attrName.startsWith(ATTR_TASKDESCRIPTION_PREFIX)) {
                 Log.d(TAG, "Unknown ActivityRecord attribute=" + attrName);
             }
         }
+        taskDescription.restoreFromXml(in);
 
         int event;
         while (((event = in.next()) != END_DOCUMENT) &&
@@ -7619,6 +7478,11 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
     }
 
     @Override
+    long getProtoFieldId() {
+        return ACTIVITY;
+    }
+
+    @Override
     public void dumpDebug(ProtoOutputStream proto, long fieldId,
             @WindowTraceLogLevel int logLevel) {
         // Critical log level logs only visible elements to mitigate performance overheard
@@ -7637,6 +7501,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         }
     }
 
+    @Override
     void writeIdentifierToProto(ProtoOutputStream proto, long fieldId) {
         final long token = proto.start(fieldId);
         proto.write(HASH_CODE, System.identityHashCode(this));
@@ -7648,12 +7513,13 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
     /**
      * The precomputed insets of the display in each rotation. This is used to make the size
      * compatibility mode activity compute the configuration without relying on its current display.
+     * This currently only supports fullscreen and freeform windowing mode.
      */
     static class CompatDisplayInsets {
-        private final int mDisplayWidth;
-        private final int mDisplayHeight;
         private final int mWidth;
         private final int mHeight;
+        final boolean mIsFloating;
+        final boolean mIsRotatable;
 
         /**
          * The nonDecorInsets for each rotation. Includes the navigation bar and cutout insets. It
@@ -7667,30 +7533,34 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
          */
         final Rect[] mStableInsets = new Rect[4];
 
-        /**
-         * Sets bounds to {@link Task} bounds. For apps in freeform, the task bounds are the
-         * parent bounds from the app's perspective. No insets because within a window.
-         */
-        CompatDisplayInsets(DisplayContent display, Rect activityBounds, boolean isFloating) {
-            mDisplayWidth = display.mBaseDisplayWidth;
-            mDisplayHeight = display.mBaseDisplayHeight;
-            mWidth = activityBounds.width();
-            mHeight = activityBounds.height();
-            if (isFloating) {
-                Rect emptyRect = new Rect();
+        /** Constructs the environment to simulate the bounds behavior of the given container. */
+        CompatDisplayInsets(DisplayContent display, WindowContainer container) {
+            mIsFloating = container.getWindowConfiguration().tasksAreFloating();
+            mIsRotatable = !mIsFloating && !display.ignoreRotationForApps();
+            if (mIsFloating) {
+                final Rect containerBounds = container.getWindowConfiguration().getBounds();
+                mWidth = containerBounds.width();
+                mHeight = containerBounds.height();
+                // For apps in freeform, the task bounds are the parent bounds from the app's
+                // perspective. No insets because within a window.
+                final Rect emptyRect = new Rect();
                 for (int rotation = 0; rotation < 4; rotation++) {
                     mNonDecorInsets[rotation] = emptyRect;
                     mStableInsets[rotation] = emptyRect;
                 }
                 return;
             }
+
+            // If the activity is not floating, assume it fills the display.
+            mWidth = display.mBaseDisplayWidth;
+            mHeight = display.mBaseDisplayHeight;
             final DisplayPolicy policy = display.getDisplayPolicy();
             for (int rotation = 0; rotation < 4; rotation++) {
                 mNonDecorInsets[rotation] = new Rect();
                 mStableInsets[rotation] = new Rect();
                 final boolean rotated = (rotation == ROTATION_90 || rotation == ROTATION_270);
-                final int dw = rotated ? mDisplayHeight : mDisplayWidth;
-                final int dh = rotated ? mDisplayWidth : mDisplayHeight;
+                final int dw = rotated ? mHeight : mWidth;
+                final int dh = rotated ? mWidth : mHeight;
                 final DisplayCutout cutout = display.calculateDisplayCutoutForRotation(rotation)
                         .getDisplayCutout();
                 policy.getNonDecorInsetsLw(rotation, dw, dh, cutout, mNonDecorInsets[rotation]);
@@ -7699,10 +7569,10 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
             }
         }
 
-        void getDisplayBoundsByRotation(Rect outBounds, int rotation) {
+        void getBoundsByRotation(Rect outBounds, int rotation) {
             final boolean rotated = (rotation == ROTATION_90 || rotation == ROTATION_270);
-            final int dw = rotated ? mDisplayHeight : mDisplayWidth;
-            final int dh = rotated ? mDisplayWidth : mDisplayHeight;
+            final int dw = rotated ? mHeight : mWidth;
+            final int dh = rotated ? mWidth : mHeight;
             outBounds.set(0, 0, dw, dh);
         }
 
@@ -7712,6 +7582,51 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
             final boolean isLandscape = orientation == ORIENTATION_LANDSCAPE;
             outBounds.set(0, 0, isLandscape ? longSide : shortSide,
                     isLandscape ? shortSide : longSide);
+        }
+
+        /** Gets the horizontal centered container bounds for size compatibility mode. */
+        void getContainerBounds(Rect outAppBounds, Rect outBounds, int rotation, int orientation,
+                boolean orientationRequested, boolean canChangeOrientation) {
+            if (mIsFloating) {
+                getFrameByOrientation(outBounds, orientation);
+                outAppBounds.set(outBounds);
+                return;
+            }
+
+            if (mIsRotatable && canChangeOrientation) {
+                getBoundsByRotation(outBounds, rotation);
+                if (orientationRequested) {
+                    getFrameByOrientation(outAppBounds, orientation);
+                } else {
+                    outAppBounds.set(outBounds);
+                }
+            } else {
+                outBounds.set(0, 0, mWidth, mHeight);
+                getFrameByOrientation(outAppBounds, orientation);
+                if (orientationRequested && !canChangeOrientation
+                        && (outAppBounds.width() > outAppBounds.height()) != (mWidth > mHeight)) {
+                    // The orientation is mismatched but the display cannot rotate. The bounds will
+                    // fit to the short side of display.
+                    if (orientation == ORIENTATION_LANDSCAPE) {
+                        outAppBounds.bottom = (int) ((float) mWidth * mWidth / mHeight);
+                        outAppBounds.right = mWidth;
+                    } else {
+                        outAppBounds.bottom = mHeight;
+                        outAppBounds.right = (int) ((float) mHeight * mHeight / mWidth);
+                    }
+                    outAppBounds.offset(getHorizontalCenterOffset(outBounds.width(),
+                            outAppBounds.width()), 0 /* dy */);
+                } else {
+                    outAppBounds.set(outBounds);
+                }
+            }
+
+            if (rotation != ROTATION_UNDEFINED) {
+                // Ensure the app bounds won't overlap with insets.
+                Task.intersectWithInsetsIfFits(outAppBounds, outBounds, mNonDecorInsets[rotation]);
+            }
+            // The horizontal position is centered and it should not cover insets.
+            outBounds.left = outAppBounds.left;
         }
     }
 
@@ -7738,11 +7653,16 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         return new RemoteAnimationTarget(task.mTaskId, record.getMode(),
                 record.mAdapter.mCapturedLeash, !fillsParent(),
                 mainWindow.mWinAnimator.mLastClipRect, insets,
-                getPrefixOrderIndex(), record.mAdapter.mPosition,
+                getPrefixOrderIndex(), record.mAdapter.mPosition, record.mAdapter.mLocalBounds,
                 record.mAdapter.mStackBounds, task.getWindowConfiguration(),
                 false /*isNotInRecents*/,
                 record.mThumbnailAdapter != null ? record.mThumbnailAdapter.mCapturedLeash : null,
                 record.mStartBounds);
+    }
+
+    @Override
+    boolean canCreateRemoteAnimationTarget() {
+        return true;
     }
 
     @Override

@@ -165,6 +165,10 @@ public class DividerView extends FrameLayout implements OnTouchListener,
     // The view is removed or in the process of been removed from the system.
     private boolean mRemoved;
 
+    // Whether the surface for this view has been hidden regardless of actual visibility. This is
+    // used interact with keyguard.
+    private boolean mSurfaceHidden = false;
+
     private final Handler mHandler = new Handler() {
         @Override
         public void handleMessage(Message msg) {
@@ -328,7 +332,8 @@ public class DividerView extends FrameLayout implements OnTouchListener,
             // Our window doesn't cover entire display, so we use the display frame to re-calculate
             // the insets.
             final InsetsState state = getWindowInsetsController().getState();
-            insets = state.calculateInsets(state.getDisplayFrame(), insets.isRound(),
+            insets = state.calculateInsets(state.getDisplayFrame(),
+                    null /* ignoringVisibilityState */, insets.isRound(),
                     insets.shouldAlwaysConsumeSystemBars(), insets.getDisplayCutout(),
                     null /* legacyContentInsets */, null /* legacyStableInsets */,
                     0 /* legacySystemUiFlags */,
@@ -413,6 +418,10 @@ public class DividerView extends FrameLayout implements OnTouchListener,
 
     /** Unlike setVisible, this directly hides the surface without changing view visibility. */
     void setHidden(boolean hidden) {
+        if (mSurfaceHidden == hidden) {
+            return;
+        }
+        mSurfaceHidden = hidden;
         post(() -> {
             final SurfaceControl sc = getWindowSurfaceControl();
             if (sc == null) {
@@ -427,6 +436,10 @@ public class DividerView extends FrameLayout implements OnTouchListener,
             t.apply();
             mTiles.releaseTransaction(t);
         });
+    }
+
+    boolean isHidden() {
+        return mSurfaceHidden;
     }
 
     public boolean startDragging(boolean animate, boolean touching) {
@@ -934,6 +947,9 @@ public class DividerView extends FrameLayout implements OnTouchListener,
     }
 
     public void setAdjustedForIme(boolean adjustedForIme, long animDuration) {
+        if (mAdjustedForIme == adjustedForIme) {
+            return;
+        }
         updateDockSide();
         mHandle.animate()
                 .setInterpolator(IME_ADJUST_INTERPOLATOR)
@@ -1067,7 +1083,7 @@ public class DividerView extends FrameLayout implements OnTouchListener,
 
     void setResizeDimLayer(Transaction t, boolean primary, float alpha) {
         SurfaceControl dim = primary ? mTiles.mPrimaryDim : mTiles.mSecondaryDim;
-        if (alpha <= 0.f) {
+        if (alpha <= 0.001f) {
             t.hide(dim);
         } else {
             t.setAlpha(dim, alpha);

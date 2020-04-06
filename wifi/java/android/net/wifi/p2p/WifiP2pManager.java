@@ -1826,9 +1826,7 @@ public class WifiP2pManager {
      * @hide
      */
     @SystemApi
-    @RequiresPermission(allOf = {
-            android.Manifest.permission.CONNECTIVITY_INTERNAL,
-            android.Manifest.permission.CONFIGURE_WIFI_DISPLAY})
+    @RequiresPermission(android.Manifest.permission.CONFIGURE_WIFI_DISPLAY)
     public void setMiracastMode(@MiracastMode int mode) {
         try {
             mService.setMiracastMode(mode);

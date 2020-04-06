@@ -49,6 +49,7 @@ public final class RoutingSessionInfo implements Parcelable {
     private static final String TAG = "RoutingSessionInfo";
 
     final String mId;
+    final CharSequence mName;
     final String mClientPackageName;
     @Nullable
     final String mProviderId;
@@ -69,10 +70,10 @@ public final class RoutingSessionInfo implements Parcelable {
         Objects.requireNonNull(builder, "builder must not be null.");
 
         mId = builder.mId;
+        mName = builder.mName;
         mClientPackageName = builder.mClientPackageName;
         mProviderId = builder.mProviderId;
 
-        // TODO: Needs to check that the routes already have unique IDs.
         mSelectedRoutes = Collections.unmodifiableList(
                 convertToUniqueRouteIds(builder.mSelectedRoutes));
         mSelectableRoutes = Collections.unmodifiableList(
@@ -94,6 +95,7 @@ public final class RoutingSessionInfo implements Parcelable {
         Objects.requireNonNull(src, "src must not be null.");
 
         mId = ensureString(src.readString());
+        mName = TextUtils.CHAR_SEQUENCE_CREATOR.createFromParcel(src);
         mClientPackageName = ensureString(src.readString());
         mProviderId = src.readString();
 
@@ -111,10 +113,7 @@ public final class RoutingSessionInfo implements Parcelable {
     }
 
     private static String ensureString(String str) {
-        if (str != null) {
-            return str;
-        }
-        return "";
+        return str != null ? str : "";
     }
 
     private static <T> List<T> ensureList(List<? extends T> list) {
@@ -140,6 +139,14 @@ public final class RoutingSessionInfo implements Parcelable {
         } else {
             return mId;
         }
+    }
+
+    /**
+     * Gets the user-visible name of the session. It may be {@code null}.
+     */
+    @Nullable
+    public CharSequence getName() {
+        return mName;
     }
 
     /**
@@ -169,7 +176,7 @@ public final class RoutingSessionInfo implements Parcelable {
     }
 
     /**
-     * Gets the list of ids of selected routes for the session. It shouldn't be empty.
+     * Gets the list of IDs of selected routes for the session. It shouldn't be empty.
      */
     @NonNull
     public List<String> getSelectedRoutes() {
@@ -177,7 +184,7 @@ public final class RoutingSessionInfo implements Parcelable {
     }
 
     /**
-     * Gets the list of ids of selectable routes for the session.
+     * Gets the list of IDs of selectable routes for the session.
      */
     @NonNull
     public List<String> getSelectableRoutes() {
@@ -185,7 +192,7 @@ public final class RoutingSessionInfo implements Parcelable {
     }
 
     /**
-     * Gets the list of ids of deselectable routes for the session.
+     * Gets the list of IDs of deselectable routes for the session.
      */
     @NonNull
     public List<String> getDeselectableRoutes() {
@@ -193,7 +200,7 @@ public final class RoutingSessionInfo implements Parcelable {
     }
 
     /**
-     * Gets the list of ids of transferable routes for the session.
+     * Gets the list of IDs of transferable routes for the session.
      */
     @NonNull
     public List<String> getTransferableRoutes() {
@@ -255,6 +262,7 @@ public final class RoutingSessionInfo implements Parcelable {
     @Override
     public void writeToParcel(@NonNull Parcel dest, int flags) {
         dest.writeString(mId);
+        dest.writeCharSequence(mName);
         dest.writeString(mClientPackageName);
         dest.writeString(mProviderId);
         dest.writeStringList(mSelectedRoutes);
@@ -279,6 +287,7 @@ public final class RoutingSessionInfo implements Parcelable {
 
         RoutingSessionInfo other = (RoutingSessionInfo) obj;
         return Objects.equals(mId, other.mId)
+                && Objects.equals(mName, other.mName)
                 && Objects.equals(mClientPackageName, other.mClientPackageName)
                 && Objects.equals(mProviderId, other.mProviderId)
                 && Objects.equals(mSelectedRoutes, other.mSelectedRoutes)
@@ -292,7 +301,7 @@ public final class RoutingSessionInfo implements Parcelable {
 
     @Override
     public int hashCode() {
-        return Objects.hash(mId, mClientPackageName, mProviderId,
+        return Objects.hash(mId, mName, mClientPackageName, mProviderId,
                 mSelectedRoutes, mSelectableRoutes, mDeselectableRoutes, mTransferableRoutes,
                 mVolumeMax, mVolumeHandling, mVolume);
     }
@@ -302,6 +311,7 @@ public final class RoutingSessionInfo implements Parcelable {
         StringBuilder result = new StringBuilder()
                 .append("RoutingSessionInfo{ ")
                 .append("sessionId=").append(mId)
+                .append(", name=").append(mName)
                 .append(", selectedRoutes={")
                 .append(String.join(",", mSelectedRoutes))
                 .append("}")
@@ -345,7 +355,8 @@ public final class RoutingSessionInfo implements Parcelable {
     public static final class Builder {
         // TODO: Reorder these (important ones first)
         final String mId;
-        final String mClientPackageName;
+        CharSequence mName;
+        String mClientPackageName;
         String mProviderId;
         final List<String> mSelectedRoutes;
         final List<String> mSelectableRoutes;
@@ -374,10 +385,10 @@ public final class RoutingSessionInfo implements Parcelable {
             if (TextUtils.isEmpty(id)) {
                 throw new IllegalArgumentException("id must not be empty");
             }
-            Objects.requireNonNull(clientPackageName, "clientPackageName must not be null");
 
             mId = id;
-            mClientPackageName = clientPackageName;
+            mClientPackageName =
+                    Objects.requireNonNull(clientPackageName, "clientPackageName must not be null");
             mSelectedRoutes = new ArrayList<>();
             mSelectableRoutes = new ArrayList<>();
             mDeselectableRoutes = new ArrayList<>();
@@ -394,6 +405,7 @@ public final class RoutingSessionInfo implements Parcelable {
             Objects.requireNonNull(sessionInfo, "sessionInfo must not be null");
 
             mId = sessionInfo.mId;
+            mName = sessionInfo.mName;
             mClientPackageName = sessionInfo.mClientPackageName;
             mProviderId = sessionInfo.mProviderId;
 
@@ -402,12 +414,40 @@ public final class RoutingSessionInfo implements Parcelable {
             mDeselectableRoutes = new ArrayList<>(sessionInfo.mDeselectableRoutes);
             mTransferableRoutes = new ArrayList<>(sessionInfo.mTransferableRoutes);
 
+            if (mProviderId != null) {
+                // They must have unique IDs.
+                mSelectedRoutes.replaceAll(MediaRouter2Utils::getOriginalId);
+                mSelectableRoutes.replaceAll(MediaRouter2Utils::getOriginalId);
+                mDeselectableRoutes.replaceAll(MediaRouter2Utils::getOriginalId);
+                mTransferableRoutes.replaceAll(MediaRouter2Utils::getOriginalId);
+            }
+
             mVolumeHandling = sessionInfo.mVolumeHandling;
             mVolumeMax = sessionInfo.mVolumeMax;
             mVolume = sessionInfo.mVolume;
 
             mControlHints = sessionInfo.mControlHints;
             mIsSystemSession = sessionInfo.mIsSystemSession;
+        }
+
+        /**
+         * Sets the user-visible name of the session.
+         */
+        @NonNull
+        public Builder setName(@Nullable CharSequence name) {
+            mName = name;
+            return this;
+        }
+
+        /**
+         * Sets the client package name of the session.
+         *
+         * @hide
+         */
+        @NonNull
+        public Builder setClientPackageName(@Nullable String packageName) {
+            mClientPackageName = packageName;
+            return this;
         }
 
         /**

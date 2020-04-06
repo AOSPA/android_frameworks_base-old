@@ -33,7 +33,6 @@
 #include "idmap2/BinaryStreamVisitor.h"
 #include "idmap2/FileUtils.h"
 #include "idmap2/Idmap.h"
-#include "idmap2/Policies.h"
 #include "idmap2/SysTrace.h"
 #include "utils/String8.h"
 
@@ -42,10 +41,11 @@ using android::binder::Status;
 using android::idmap2::BinaryStreamVisitor;
 using android::idmap2::Idmap;
 using android::idmap2::IdmapHeader;
-using android::idmap2::PolicyBitmask;
 using android::idmap2::utils::kIdmapCacheDir;
 using android::idmap2::utils::kIdmapFilePermissionMask;
 using android::idmap2::utils::UidHasWriteAccessToPath;
+
+using PolicyBitmask = android::ResTable_overlayable_policy_header::PolicyBitmask;
 
 namespace {
 
@@ -113,7 +113,7 @@ Status Idmap2Service::verifyIdmap(const std::string& overlay_apk_path,
 Status Idmap2Service::createIdmap(const std::string& target_apk_path,
                                   const std::string& overlay_apk_path, int32_t fulfilled_policies,
                                   bool enforce_overlayable, int32_t user_id ATTRIBUTE_UNUSED,
-                                  std::unique_ptr<std::string>* _aidl_return) {
+                                  aidl::nullable<std::string>* _aidl_return) {
   assert(_aidl_return);
   SYSTRACE << "Idmap2Service::createIdmap " << target_apk_path << " " << overlay_apk_path;
   _aidl_return->reset(nullptr);
@@ -155,7 +155,7 @@ Status Idmap2Service::createIdmap(const std::string& target_apk_path,
     return error("failed to write to idmap path " + idmap_path);
   }
 
-  *_aidl_return = std::make_unique<std::string>(idmap_path);
+  *_aidl_return = aidl::make_nullable<std::string>(idmap_path);
   return ok();
 }
 

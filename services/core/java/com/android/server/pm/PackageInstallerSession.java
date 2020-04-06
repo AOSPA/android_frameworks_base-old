@@ -69,6 +69,7 @@ import android.content.pm.IPackageInstallObserver2;
 import android.content.pm.IPackageInstallerSession;
 import android.content.pm.IPackageInstallerSessionFileSystemConnector;
 import android.content.pm.InstallationFile;
+import android.content.pm.InstallationFileParcel;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageInstaller;
 import android.content.pm.PackageInstaller.SessionInfo;
@@ -564,11 +565,41 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
         }
     }
 
-    public SessionInfo generateInfo() {
-        return generateInfo(true);
+    /**
+     * Returns {@code true} if the {@link SessionInfo} object should be produced with potentially
+     * sensitive data scrubbed from its fields.
+     *
+     * @param callingUid the uid of the caller; the recipient of the {@link SessionInfo} that may
+     *                   need to be scrubbed
+     */
+    private boolean shouldScrubData(int callingUid) {
+        return !(callingUid < Process.FIRST_APPLICATION_UID || getInstallerUid() == callingUid);
     }
 
-    public SessionInfo generateInfo(boolean includeIcon) {
+    /**
+     * Generates a {@link SessionInfo} object for the provided uid. This may result in some fields
+     * that may contain sensitive info being filtered.
+     *
+     * @param includeIcon true if the icon should be included in the object
+     * @param callingUid the uid of the caller; the recipient of the {@link SessionInfo} that may
+     *                   need to be scrubbed
+     * @see #shouldScrubData(int)
+     */
+    public SessionInfo generateInfoForCaller(boolean includeIcon, int callingUid) {
+        return generateInfoInternal(includeIcon, shouldScrubData(callingUid));
+    }
+
+    /**
+     * Generates a {@link SessionInfo} object to ensure proper hiding of sensitive fields.
+     *
+     * @param includeIcon true if the icon should be included in the object
+     * @see #generateInfoForCaller(boolean, int)
+     */
+    public SessionInfo generateInfoScrubbed(boolean includeIcon) {
+        return generateInfoInternal(includeIcon, true /*scrubData*/);
+    }
+
+    private SessionInfo generateInfoInternal(boolean includeIcon, boolean scrubData) {
         final SessionInfo info = new SessionInfo();
         synchronized (mLock) {
             info.sessionId = sessionId;
@@ -591,9 +622,13 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
             info.appLabel = params.appLabel;
 
             info.installLocation = params.installLocation;
-            info.originatingUri = params.originatingUri;
+            if (!scrubData) {
+                info.originatingUri = params.originatingUri;
+            }
             info.originatingUid = params.originatingUid;
-            info.referrerUri = params.referrerUri;
+            if (!scrubData) {
+                info.referrerUri = params.referrerUri;
+            }
             info.grantedRuntimePermissions = params.grantedRuntimePermissions;
             info.whitelistedRestrictedPermissions = params.whitelistedRestrictedPermissions;
             info.installFlags = params.installFlags;
@@ -1072,9 +1107,9 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
             IPackageInstallerSessionFileSystemConnector.Stub {
         final Set<String> mAddedFiles = new ArraySet<>();
 
-        FileSystemConnector(List<InstallationFile> addedFiles) {
-            for (InstallationFile file : addedFiles) {
-                mAddedFiles.add(file.getName());
+        FileSystemConnector(List<InstallationFileParcel> addedFiles) {
+            for (InstallationFileParcel file : addedFiles) {
+                mAddedFiles.add(file.name);
             }
         }
 
@@ -1709,8 +1744,8 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
         }
 
         mRelinquished = true;
-        return new PackageManagerService.ActiveInstallSession(mPackageName, stageDir,
-                localObserver, params, mInstallerUid, mInstallSource, user, mSigningDetails);
+        return new PackageManagerService.ActiveInstallSession(mPackageName, stageDir, localObserver,
+                sessionId, params, mInstallerUid, mInstallSource, user, mSigningDetails);
     }
 
     private static void maybeRenameFile(File from, File to) throws PackageManagerException {
@@ -2468,14 +2503,14 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
             return true;
         }
 
-        final List<InstallationFile> addedFiles = new ArrayList<>(mFiles.size());
+        final List<InstallationFileParcel> addedFiles = new ArrayList<>();
+        final List<String> removedFiles = new ArrayList<>();
+
         for (InstallationFile file : mFiles) {
             if (sAddedFilter.accept(new File(this.stageDir, file.getName()))) {
-                addedFiles.add(file);
+                addedFiles.add(file.getData());
+                continue;
             }
-        }
-        final List<String> removedFiles = new ArrayList<>(mFiles.size());
-        for (InstallationFile file : mFiles) {
             if (sRemovedFilter.accept(new File(this.stageDir, file.getName()))) {
                 String name = file.getName().substring(
                         0, file.getName().length() - REMOVE_MARKER_EXTENSION.length());
@@ -2518,7 +2553,10 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
                             break;
                         }
                         case IDataLoaderStatusListener.DATA_LOADER_STARTED: {
-                            dataLoader.prepareImage(addedFiles, removedFiles);
+                            dataLoader.prepareImage(
+                                    addedFiles.toArray(
+                                            new InstallationFileParcel[addedFiles.size()]),
+                                    removedFiles.toArray(new String[removedFiles.size()]));
                             break;
                         }
                         case IDataLoaderStatusListener.DATA_LOADER_IMAGE_READY: {
@@ -2571,13 +2609,8 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
         control.callback = connector;
 
         final DataLoaderParams params = this.params.dataLoaderParams;
-
-        Bundle dataLoaderParams = new Bundle();
-        dataLoaderParams.putParcelable("componentName", params.getComponentName());
-        dataLoaderParams.putParcelable("control", control);
-        dataLoaderParams.putParcelable("params", params.getData());
-
-        if (!dataLoaderManager.initializeDataLoader(sessionId, dataLoaderParams, listener)) {
+        if (!dataLoaderManager.initializeDataLoader(
+                sessionId, params.getData(), control, listener)) {
             throw new PackageManagerException(INSTALL_FAILED_MEDIA_UNAVAILABLE,
                     "Failed to initialize data loader");
         }
@@ -2689,7 +2722,7 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
         final boolean isNewInstall = extras == null || !extras.getBoolean(Intent.EXTRA_REPLACING);
         if (success && isNewInstall && mPm.mInstallerService.okToSendBroadcasts()
                 && (params.installFlags & PackageManager.INSTALL_DRY_RUN) == 0) {
-            mPm.sendSessionCommitBroadcast(generateInfo(), userId);
+            mPm.sendSessionCommitBroadcast(generateInfoScrubbed(true /*icon*/), userId);
         }
 
         mCallback.onSessionFinished(this, success);

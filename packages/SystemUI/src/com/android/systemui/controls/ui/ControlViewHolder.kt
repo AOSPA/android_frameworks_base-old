@@ -19,13 +19,12 @@ package com.android.systemui.controls.ui
 import android.content.Context
 import android.graphics.BlendMode
 import android.graphics.drawable.ClipDrawable
-import android.graphics.drawable.Icon
 import android.graphics.drawable.LayerDrawable
 import android.service.controls.Control
 import android.service.controls.actions.ControlAction
 import android.service.controls.templates.ControlTemplate
+import android.service.controls.templates.StatelessTemplate
 import android.service.controls.templates.TemperatureControlTemplate
-import android.service.controls.templates.ThumbnailTemplate
 import android.service.controls.templates.ToggleRangeTemplate
 import android.service.controls.templates.ToggleTemplate
 import android.view.View
@@ -57,6 +56,7 @@ class ControlViewHolder(
     lateinit var cws: ControlWithState
     var cancelUpdate: Runnable? = null
     var behavior: Behavior? = null
+    var lastAction: ControlAction? = null
 
     init {
         val ld = layout.getBackground() as LayerDrawable
@@ -97,15 +97,7 @@ class ControlViewHolder(
     }
 
     fun actionResponse(@ControlAction.ResponseResult response: Int) {
-        val text = when (response) {
-            ControlAction.RESPONSE_OK -> "Success"
-            ControlAction.RESPONSE_FAIL -> "Error"
-            else -> ""
-        }
-
-        if (!text.isEmpty()) {
-            setTransientStatus(text)
-        }
+        // TODO: b/150931809 - handle response codes
     }
 
     fun setTransientStatus(tempStatus: String) {
@@ -122,27 +114,33 @@ class ControlViewHolder(
     }
 
     fun action(action: ControlAction) {
-        controlsController.action(cws.ci, action)
+        lastAction = action
+        controlsController.action(cws.componentName, cws.ci, action)
     }
 
     private fun findBehavior(status: Int, template: ControlTemplate): KClass<out Behavior> {
         return when {
             status == Control.STATUS_UNKNOWN -> UnknownBehavior::class
             template is ToggleTemplate -> ToggleBehavior::class
+            template is StatelessTemplate -> TouchBehavior::class
             template is ToggleRangeTemplate -> ToggleRangeBehavior::class
             template is TemperatureControlTemplate -> TemperatureControlBehavior::class
-            template is ThumbnailTemplate -> StaticBehavior::class
             else -> DefaultBehavior::class
         }
     }
 
-    internal fun applyRenderInfo(ri: RenderInfo) {
+    internal fun applyRenderInfo(enabled: Boolean, offset: Int = 0) {
+        setEnabled(enabled)
+
+        val deviceType = cws.control?.let { it.getDeviceType() } ?: cws.ci.deviceType
+        val ri = RenderInfo.lookup(context, cws.componentName, deviceType, enabled, offset)
+
         val fg = context.getResources().getColorStateList(ri.foreground, context.getTheme())
         val bg = context.getResources().getColorStateList(ri.background, context.getTheme())
         status.setTextColor(fg)
         statusExtra.setTextColor(fg)
 
-        icon.setImageIcon(Icon.createWithResource(context, ri.iconResourceId))
+        icon.setImageDrawable(ri.icon)
         icon.setImageTintList(fg)
 
         clipLayer.getDrawable().apply {
@@ -151,7 +149,7 @@ class ControlViewHolder(
         }
     }
 
-    fun setEnabled(enabled: Boolean) {
+    private fun setEnabled(enabled: Boolean) {
         status.setEnabled(enabled)
         icon.setEnabled(enabled)
     }

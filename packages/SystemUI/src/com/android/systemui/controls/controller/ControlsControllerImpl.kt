@@ -16,6 +16,7 @@
 
 package com.android.systemui.controls.controller
 
+import android.app.ActivityManager
 import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.ComponentName
@@ -30,17 +31,16 @@ import android.os.UserHandle
 import android.provider.Settings
 import android.service.controls.Control
 import android.service.controls.actions.ControlAction
-import android.util.ArrayMap
 import android.util.Log
-import com.android.internal.annotations.GuardedBy
 import com.android.internal.annotations.VisibleForTesting
-import com.android.systemui.DumpController
 import com.android.systemui.Dumpable
 import com.android.systemui.broadcast.BroadcastDispatcher
 import com.android.systemui.controls.ControlStatus
+import com.android.systemui.controls.ControlsServiceInfo
 import com.android.systemui.controls.management.ControlsListingController
 import com.android.systemui.controls.ui.ControlsUiController
 import com.android.systemui.dagger.qualifiers.Background
+import com.android.systemui.dump.DumpManager
 import com.android.systemui.util.concurrency.DelayableExecutor
 import java.io.FileDescriptor
 import java.io.PrintWriter
@@ -59,7 +59,7 @@ class ControlsControllerImpl @Inject constructor (
     private val listingController: ControlsListingController,
     private val broadcastDispatcher: BroadcastDispatcher,
     optionalWrapper: Optional<ControlsFavoritePersistenceWrapper>,
-    dumpController: DumpController
+    dumpManager: DumpManager
 ) : Dumpable, ControlsController {
 
     companion object {
@@ -67,24 +67,22 @@ class ControlsControllerImpl @Inject constructor (
         internal const val CONTROLS_AVAILABLE = "systemui.controls_available"
         internal val URI = Settings.Secure.getUriFor(CONTROLS_AVAILABLE)
         private const val USER_CHANGE_RETRY_DELAY = 500L // ms
+        private const val DEFAULT_ENABLED = 1
     }
-
-    // Map of map: ComponentName -> (String -> ControlInfo).
-    //
-    @GuardedBy("currentFavorites")
-    private val currentFavorites = ArrayMap<ComponentName, MutableList<ControlInfo>>()
-            .withDefault { mutableListOf() }
 
     private var userChanging: Boolean = true
 
-    private val contentResolver: ContentResolver
-        get() = context.contentResolver
-    override var available = Settings.Secure.getInt(contentResolver, CONTROLS_AVAILABLE, 0) != 0
-        private set
+    private var loadCanceller: Runnable? = null
 
-    private var currentUser = context.user
+    private var currentUser = UserHandle.of(ActivityManager.getCurrentUser())
     override val currentUserId
         get() = currentUser.identifier
+
+    private val contentResolver: ContentResolver
+        get() = context.contentResolver
+    override var available = Settings.Secure.getIntForUser(
+            contentResolver, CONTROLS_AVAILABLE, DEFAULT_ENABLED, currentUserId) != 0
+        private set
 
     private val persistenceWrapper = optionalWrapper.orElseGet {
         ControlsFavoritePersistenceWrapper(
@@ -104,13 +102,8 @@ class ControlsControllerImpl @Inject constructor (
                 userContext.filesDir, ControlsFavoritePersistenceWrapper.FILE_NAME)
         persistenceWrapper.changeFile(fileName)
         available = Settings.Secure.getIntForUser(contentResolver, CONTROLS_AVAILABLE,
-                /* default */ 0, newUser.identifier) != 0
-        synchronized(currentFavorites) {
-            currentFavorites.clear()
-        }
-        if (available) {
-            loadFavorites()
-        }
+                DEFAULT_ENABLED, newUser.identifier) != 0
+        resetFavorites(available)
         bindingController.changeUser(newUser)
         listingController.changeUser(newUser)
         userChanging = false
@@ -120,6 +113,7 @@ class ControlsControllerImpl @Inject constructor (
         override fun onReceive(context: Context, intent: Intent) {
             if (intent.action == Intent.ACTION_USER_SWITCHED) {
                 userChanging = true
+                listingController.removeCallback(listingCallback)
                 val newUser =
                         UserHandle.of(intent.getIntExtra(Intent.EXTRA_USER_HANDLE, sendingUserId))
                 if (currentUser == newUser) {
@@ -133,28 +127,56 @@ class ControlsControllerImpl @Inject constructor (
 
     @VisibleForTesting
     internal val settingObserver = object : ContentObserver(null) {
-        override fun onChange(selfChange: Boolean, uri: Uri, userId: Int) {
+        override fun onChange(
+            selfChange: Boolean,
+            uris: Collection<Uri>,
+            flags: Int,
+            userId: Int
+        ) {
             // Do not listen to changes in the middle of user change, those will be read by the
             // user-switch receiver.
             if (userChanging || userId != currentUserId) {
                 return
             }
             available = Settings.Secure.getIntForUser(contentResolver, CONTROLS_AVAILABLE,
-                    /* default */ 0, currentUserId) != 0
-            synchronized(currentFavorites) {
-                currentFavorites.clear()
-            }
-            if (available) {
-                loadFavorites()
+                DEFAULT_ENABLED, currentUserId) != 0
+            resetFavorites(available)
+        }
+    }
+
+    // Handling of removed components
+
+    /**
+     * Check if any component has been removed and if so, remove all its favorites.
+     *
+     * If some component has been removed, the new set of favorites will also be saved.
+     */
+    private val listingCallback = object : ControlsListingController.ControlsListingCallback {
+        override fun onServicesUpdated(serviceInfos: List<ControlsServiceInfo>) {
+            executor.execute {
+                val serviceInfoSet = serviceInfos.map(ControlsServiceInfo::componentName).toSet()
+                val favoriteComponentSet = Favorites.getAllStructures().map {
+                    it.componentName
+                }.toSet()
+
+                var changed = false
+                favoriteComponentSet.subtract(serviceInfoSet).forEach {
+                    changed = true
+                    Favorites.removeStructures(it)
+                    bindingController.onComponentRemoved(it)
+                }
+
+                // Check if something has been removed, if so, store the new list
+                if (changed) {
+                    persistenceWrapper.storeFavorites(Favorites.getAllStructures())
+                }
             }
         }
     }
 
     init {
-        dumpController.registerDumpable(this)
-        if (available) {
-            loadFavorites()
-        }
+        dumpManager.registerDumpable(javaClass.name, this)
+        resetFavorites(available)
         userChanging = false
         broadcastDispatcher.registerReceiver(
                 userSwitchReceiver,
@@ -163,6 +185,15 @@ class ControlsControllerImpl @Inject constructor (
                 UserHandle.ALL
         )
         contentResolver.registerContentObserver(URI, false, settingObserver, UserHandle.USER_ALL)
+    }
+
+    private fun resetFavorites(shouldLoad: Boolean) {
+        Favorites.clear()
+
+        if (shouldLoad) {
+            Favorites.load(persistenceWrapper.readFavorites())
+            listingController.addCallback(listingCallback)
+        }
     }
 
     private fun confirmAvailability(): Boolean {
@@ -177,15 +208,6 @@ class ControlsControllerImpl @Inject constructor (
         return true
     }
 
-    private fun loadFavorites() {
-        val infos = persistenceWrapper.readFavorites()
-        synchronized(currentFavorites) {
-            infos.forEach {
-                currentFavorites.getOrPut(it.component, { mutableListOf() }).add(it)
-            }
-        }
-    }
-
     override fun loadForComponent(
         componentName: ComponentName,
         dataCallback: Consumer<ControlsController.LoadData>
@@ -193,8 +215,9 @@ class ControlsControllerImpl @Inject constructor (
         if (!confirmAvailability()) {
             if (userChanging) {
                 // Try again later, userChanging should not last forever. If so, we have bigger
-                // problems
-                executor.executeDelayed(
+                // problems. This will return a runnable that allows to cancel the delayed version,
+                // it will not be able to cancel the load if
+                loadCanceller = executor.executeDelayed(
                         { loadForComponent(componentName, dataCallback) },
                         USER_CHANGE_RETRY_DELAY,
                         TimeUnit.MILLISECONDS
@@ -204,114 +227,94 @@ class ControlsControllerImpl @Inject constructor (
             }
             return
         }
-        bindingController.bindAndLoad(
+        loadCanceller = bindingController.bindAndLoad(
                 componentName,
                 object : ControlsBindingController.LoadCallback {
                     override fun accept(controls: List<Control>) {
-                        val loadData = synchronized(currentFavorites) {
-                            val favoritesForComponentKeys: List<String> =
-                                    currentFavorites.getValue(componentName).map { it.controlId }
-                            val changed = updateFavoritesLocked(componentName, controls,
-                                    favoritesForComponentKeys)
+                        loadCanceller = null
+                        executor.execute {
+                            val favoritesForComponentKeys = Favorites
+                                .getControlsForComponent(componentName).map { it.controlId }
+
+                            val changed = Favorites.updateControls(componentName, controls)
                             if (changed) {
-                                persistenceWrapper.storeFavorites(favoritesAsListLocked())
+                                persistenceWrapper.storeFavorites(Favorites.getAllStructures())
                             }
-                            val removed = findRemovedLocked(favoritesForComponentKeys.toSet(),
-                                    controls)
+                            val removed = findRemoved(favoritesForComponentKeys.toSet(), controls)
                             val controlsWithFavorite = controls.map {
-                                ControlStatus(it, it.controlId in favoritesForComponentKeys)
+                                ControlStatus(
+                                    it,
+                                    componentName,
+                                    it.controlId in favoritesForComponentKeys
+                                )
                             }
-                            createLoadDataObject(
-                                    currentFavorites.getValue(componentName)
-                                            .filter { it.controlId in removed }
-                                            .map { createRemovedStatus(it) } +
-                                            controlsWithFavorite,
-                                    favoritesForComponentKeys
+                            val loadData = createLoadDataObject(
+                                Favorites.getControlsForComponent(componentName)
+                                    .filter { it.controlId in removed }
+                                    .map { createRemovedStatus(componentName, it) } +
+                                controlsWithFavorite,
+                                favoritesForComponentKeys
                             )
+                            dataCallback.accept(loadData)
                         }
-                        dataCallback.accept(loadData)
                     }
 
                     override fun error(message: String) {
-                        val loadData = synchronized(currentFavorites) {
-                            val favoritesForComponent = currentFavorites.getValue(componentName)
-                            val favoritesForComponentKeys = favoritesForComponent
-                                    .map { it.controlId }
-                            createLoadDataObject(
-                                    favoritesForComponent.map { createRemovedStatus(it, false) },
-                                    favoritesForComponentKeys,
-                                    true
-                            )
+                        loadCanceller = null
+                        executor.execute {
+                            val loadData = Favorites.getControlsForComponent(componentName)
+                                .let { controls ->
+                                val keys = controls.map { it.controlId }
+                                createLoadDataObject(
+                                        controls.map {
+                                            createRemovedStatus(componentName, it, false)
+                                        },
+                                        keys,
+                                        true
+                                )
+                            }
+                            dataCallback.accept(loadData)
                         }
-                        dataCallback.accept(loadData)
                     }
                 }
         )
     }
 
+    override fun cancelLoad() {
+        loadCanceller?.let {
+            executor.execute(it)
+        }
+    }
+
     private fun createRemovedStatus(
+        componentName: ComponentName,
         controlInfo: ControlInfo,
         setRemoved: Boolean = true
     ): ControlStatus {
         val intent = Intent(Intent.ACTION_MAIN).apply {
             addCategory(Intent.CATEGORY_LAUNCHER)
-            this.`package` = controlInfo.component.packageName
+            this.`package` = componentName.packageName
         }
         val pendingIntent = PendingIntent.getActivity(context,
-                controlInfo.component.hashCode(),
+                componentName.hashCode(),
                 intent,
                 0)
         val control = Control.StatelessBuilder(controlInfo.controlId, pendingIntent)
                 .setTitle(controlInfo.controlTitle)
                 .setDeviceType(controlInfo.deviceType)
                 .build()
-        return ControlStatus(control, true, setRemoved)
+        return ControlStatus(control, componentName, true, setRemoved)
     }
 
-    @GuardedBy("currentFavorites")
-    private fun findRemovedLocked(favoriteKeys: Set<String>, list: List<Control>): Set<String> {
+    private fun findRemoved(favoriteKeys: Set<String>, list: List<Control>): Set<String> {
         val controlsKeys = list.map { it.controlId }
         return favoriteKeys.minus(controlsKeys)
     }
 
-    @GuardedBy("currentFavorites")
-    private fun updateFavoritesLocked(
-        componentName: ComponentName,
-        list: List<Control>,
-        favoriteKeys: List<String>
-    ): Boolean {
-        val favorites = currentFavorites.get(componentName) ?: mutableListOf()
-        if (favoriteKeys.isEmpty()) return false // early return
-        var changed = false
-        list.forEach { control ->
-            if (control.controlId in favoriteKeys) {
-                val index = favorites.indexOfFirst { it.controlId == control.controlId }
-                val value = favorites[index]
-                if (value.controlTitle != control.title ||
-                        value.deviceType != control.deviceType) {
-                    favorites[index] = value.copy(
-                            controlTitle = control.title,
-                            deviceType = control.deviceType
-                    )
-                    changed = true
-                }
-            }
-        }
-        return changed
-    }
-
-    @GuardedBy("currentFavorites")
-    private fun favoritesAsListLocked(): List<ControlInfo> {
-        return currentFavorites.flatMap { it.value }
-    }
-
-    override fun subscribeToFavorites() {
+    override fun subscribeToFavorites(structureInfo: StructureInfo) {
         if (!confirmAvailability()) return
-        // Make a copy of the favorites list
-        val favorites = synchronized(currentFavorites) {
-            currentFavorites.flatMap { it.value }
-        }
-        bindingController.subscribe(favorites)
+
+        bindingController.subscribe(structureInfo)
     }
 
     override fun unsubscribe() {
@@ -319,44 +322,25 @@ class ControlsControllerImpl @Inject constructor (
         bindingController.unsubscribe()
     }
 
-    override fun changeFavoriteStatus(controlInfo: ControlInfo, state: Boolean) {
+    override fun addFavorite(
+        componentName: ComponentName,
+        structureName: CharSequence,
+        controlInfo: ControlInfo
+    ) {
         if (!confirmAvailability()) return
-        var changed = false
-        val listOfControls = synchronized(currentFavorites) {
-            if (state) {
-                if (controlInfo.component !in currentFavorites) {
-                    currentFavorites.put(controlInfo.component, mutableListOf())
-                    changed = true
-                }
-                val controlsForComponent = currentFavorites.getValue(controlInfo.component)
-                if (controlsForComponent.firstOrNull {
-                            it.controlId == controlInfo.controlId
-                        } == null) {
-                    controlsForComponent.add(controlInfo)
-                    changed = true
-                }
-            } else {
-                changed = currentFavorites.get(controlInfo.component)
-                        ?.remove(controlInfo) != null
+        executor.execute {
+            if (Favorites.addFavorite(componentName, structureName, controlInfo)) {
+                persistenceWrapper.storeFavorites(Favorites.getAllStructures())
             }
-            favoritesAsListLocked()
-        }
-        if (changed) {
-            persistenceWrapper.storeFavorites(listOfControls)
         }
     }
 
-    override fun replaceFavoritesForComponent(
-        componentName: ComponentName,
-        favorites: List<ControlInfo>
-    ) {
+    override fun replaceFavoritesForStructure(structureInfo: StructureInfo) {
         if (!confirmAvailability()) return
-        val filtered = favorites.filter { it.component == componentName }
-        val listOfControls = synchronized(currentFavorites) {
-            currentFavorites.put(componentName, filtered.toMutableList())
-            favoritesAsListLocked()
+        executor.execute {
+            Favorites.replaceControls(structureInfo)
+            persistenceWrapper.storeFavorites(Favorites.getAllStructures())
         }
-        persistenceWrapper.storeFavorites(listOfControls)
     }
 
     override fun refreshStatus(componentName: ComponentName, control: Control) {
@@ -365,17 +349,12 @@ class ControlsControllerImpl @Inject constructor (
             return
         }
         executor.execute {
-            synchronized(currentFavorites) {
-                val favoriteKeysForComponent =
-                        currentFavorites.get(componentName)?.map { it.controlId } ?: emptyList()
-                val changed = updateFavoritesLocked(
-                        componentName,
-                        listOf(control),
-                        favoriteKeysForComponent
-                )
-                if (changed) {
-                    persistenceWrapper.storeFavorites(favoritesAsListLocked())
-                }
+            val changed = Favorites.updateControls(
+                componentName,
+                listOf(control)
+            )
+            if (changed) {
+                persistenceWrapper.storeFavorites(Favorites.getAllStructures())
             }
         }
         uiController.onRefreshState(componentName, listOf(control))
@@ -386,41 +365,22 @@ class ControlsControllerImpl @Inject constructor (
         uiController.onActionResponse(componentName, controlId, response)
     }
 
-    override fun getFavoriteControls(): List<ControlInfo> {
-        if (!confirmAvailability()) return emptyList()
-        synchronized(currentFavorites) {
-            return favoritesAsListLocked()
-        }
-    }
-
-    override fun action(controlInfo: ControlInfo, action: ControlAction) {
+    override fun action(
+        componentName: ComponentName,
+        controlInfo: ControlInfo,
+        action: ControlAction
+    ) {
         if (!confirmAvailability()) return
-        bindingController.action(controlInfo, action)
+        bindingController.action(componentName, controlInfo, action)
     }
 
-    override fun clearFavorites() {
-        if (!confirmAvailability()) return
-        val changed = synchronized(currentFavorites) {
-            currentFavorites.isNotEmpty().also {
-                currentFavorites.clear()
-            }
-        }
-        if (changed) {
-            persistenceWrapper.storeFavorites(emptyList())
-        }
-    }
+    override fun getFavorites(): List<StructureInfo> = Favorites.getAllStructures()
 
-    override fun countFavoritesForComponent(componentName: ComponentName): Int {
-        return synchronized(currentFavorites) {
-            currentFavorites.get(componentName)?.size ?: 0
-        }
-    }
+    override fun countFavoritesForComponent(componentName: ComponentName): Int =
+        Favorites.getControlsForComponent(componentName).size
 
-    override fun getFavoritesForComponent(componentName: ComponentName): List<ControlInfo> {
-        return synchronized(currentFavorites) {
-            currentFavorites.get(componentName) ?: emptyList()
-        }
-    }
+    override fun getFavoritesForComponent(componentName: ComponentName): List<StructureInfo> =
+        Favorites.getStructuresForComponent(componentName)
 
     override fun dump(fd: FileDescriptor, pw: PrintWriter, args: Array<out String>) {
         pw.println("ControlsController state:")
@@ -428,11 +388,134 @@ class ControlsControllerImpl @Inject constructor (
         pw.println("  Changing users: $userChanging")
         pw.println("  Current user: ${currentUser.identifier}")
         pw.println("  Favorites:")
-        synchronized(currentFavorites) {
-            favoritesAsListLocked().forEach {
-                pw.println("    ${ it }")
+        Favorites.getAllStructures().forEach { s ->
+            pw.println("    ${ s }")
+            s.controls.forEach { c ->
+                pw.println("      ${ c }")
             }
         }
         pw.println(bindingController.toString())
+    }
+}
+
+/**
+ * Relies on immutable data for thread safety. When necessary to update favMap, use reassignment to
+ * replace it, which will not disrupt any ongoing map traversal.
+ *
+ * Update/replace calls should use thread isolation to avoid race conditions.
+ */
+private object Favorites {
+    private var favMap = mapOf<ComponentName, List<StructureInfo>>()
+
+    fun getAllStructures(): List<StructureInfo> = favMap.flatMap { it.value }
+
+    fun getStructuresForComponent(componentName: ComponentName): List<StructureInfo> =
+        favMap.get(componentName) ?: emptyList()
+
+    fun getControlsForStructure(structure: StructureInfo): List<ControlInfo> =
+        getStructuresForComponent(structure.componentName)
+            .firstOrNull { it.structure == structure.structure }
+            ?.controls ?: emptyList()
+
+    fun getControlsForComponent(componentName: ComponentName): List<ControlInfo> =
+        getStructuresForComponent(componentName).flatMap { it.controls }
+
+    fun load(structures: List<StructureInfo>) {
+        favMap = structures.groupBy { it.componentName }
+    }
+
+    fun updateControls(componentName: ComponentName, controls: List<Control>): Boolean {
+        val controlsById = controls.associateBy { it.controlId }
+
+        // utilize a new map to allow for changes to structure names
+        val structureToControls = mutableMapOf<CharSequence, MutableList<ControlInfo>>()
+
+        // Must retain the current control order within each structure
+        var changed = false
+        getStructuresForComponent(componentName).forEach { s ->
+            s.controls.forEach { c ->
+                val (sName, ci) = controlsById.get(c.controlId)?.let { updatedControl ->
+                    val controlInfo = if (updatedControl.title != c.controlTitle ||
+                        updatedControl.deviceType != c.deviceType) {
+                        changed = true
+                        c.copy(
+                            controlTitle = updatedControl.title,
+                            deviceType = updatedControl.deviceType
+                        )
+                    } else { c }
+
+                    val updatedStructure = updatedControl.structure ?: ""
+                    if (s.structure != updatedStructure) {
+                        changed = true
+                    }
+
+                    Pair(updatedStructure, controlInfo)
+                } ?: Pair(s.structure, c)
+
+                structureToControls.getOrPut(sName, { mutableListOf() }).add(ci)
+            }
+        }
+        if (!changed) return false
+
+        val structures = structureToControls.map { (s, cs) -> StructureInfo(componentName, s, cs) }
+
+        val newFavMap = favMap.toMutableMap()
+        newFavMap.put(componentName, structures)
+        favMap = newFavMap
+
+        return true
+    }
+
+    fun removeStructures(componentName: ComponentName) {
+        val newFavMap = favMap.toMutableMap()
+        newFavMap.remove(componentName)
+        favMap = newFavMap
+    }
+
+    fun addFavorite(
+        componentName: ComponentName,
+        structureName: CharSequence,
+        controlInfo: ControlInfo
+    ): Boolean {
+        // Check if control is in favorites
+        if (getControlsForComponent(componentName)
+                        .any { it.controlId == controlInfo.controlId }) {
+            return false
+        }
+        val structureInfo = favMap.get(componentName)
+                ?.firstOrNull { it.structure == structureName }
+                ?: StructureInfo(componentName, structureName, emptyList())
+        val newStructureInfo = structureInfo.copy(controls = structureInfo.controls + controlInfo)
+        replaceControls(newStructureInfo)
+        return true
+    }
+
+    fun replaceControls(updatedStructure: StructureInfo) {
+        val newFavMap = favMap.toMutableMap()
+        val structures = mutableListOf<StructureInfo>()
+        val componentName = updatedStructure.componentName
+
+        var replaced = false
+        getStructuresForComponent(componentName).forEach { s ->
+            val newStructure = if (s.structure == updatedStructure.structure) {
+                replaced = true
+                updatedStructure
+            } else { s }
+
+            if (!newStructure.controls.isEmpty()) {
+                structures.add(newStructure)
+            }
+        }
+
+        if (!replaced && !updatedStructure.controls.isEmpty()) {
+            structures.add(updatedStructure)
+        }
+
+        newFavMap.put(componentName, structures)
+        favMap = newFavMap
+    }
+
+    fun clear() {
+        favMap = mapOf<ComponentName, List<StructureInfo>>()
     }
 }

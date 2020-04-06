@@ -190,7 +190,10 @@ class InsetsSourceProvider {
 
     /** @return A new source computed by the specified window frame in the given display frames. */
     InsetsSource createSimulatedSource(DisplayFrames displayFrames, WindowFrames windowFrames) {
-        final InsetsSource source = new InsetsSource(mSource);
+        // Don't copy visible frame because it might not be calculated in the provided display
+        // frames and it is not significant for this usage.
+        final InsetsSource source = new InsetsSource(mSource.getType());
+        source.setVisible(mSource.isVisible());
         mTmpRect.set(windowFrames.mFrame);
         if (mFrameProvider != null) {
             mFrameProvider.accept(displayFrames, mWin, mTmpRect);
@@ -271,7 +274,7 @@ class InsetsSourceProvider {
             // window crop of the surface controls (including the leash) until the client finishes
             // drawing the new frame of the new orientation. Although we cannot defer the reparent
             // operation, it is fine, because reparent won't cause any visual effect.
-            final SurfaceControl barrier = mWin.getDeferTransactionBarrier();
+            final SurfaceControl barrier = mWin.getClientViewRootSurface();
             t.deferTransactionUntil(mWin.getSurfaceControl(), barrier, frameNumber);
             t.deferTransactionUntil(leash, barrier, frameNumber);
         }

@@ -667,6 +667,9 @@
     <!-- Setting Checkbox title for enabling Bluetooth Gabeldorsche. [CHAR LIMIT=40] -->
     <string name="bluetooth_enable_gabeldorsche">Enable Gabeldorsche</string>
 
+    <!-- Setting Checkbox title for enabling Enhanced Connectivity [CHAR LIMIT=80] -->
+    <string name="enhanced_connectivity">Enhanced Connectivity</string>
+
     <!-- UI debug setting: Select Bluetooth AVRCP Version -->
     <string name="bluetooth_select_avrcp_version_string">Bluetooth AVRCP Version</string>
     <!-- UI debug setting: Select Bluetooth AVRCP Version -->
@@ -778,6 +781,9 @@
     <string name="bluetooth_disable_absolute_volume_summary">Disables the Bluetooth absolute volume feature in case of volume issues with remote devices such as unacceptably loud volume or lack of control.</string>
     <!-- Summary of checkbox for enabling Bluetooth Gabeldorche features [CHAR LIMIT=none] -->
     <string name="bluetooth_enable_gabeldorsche_summary">Enables the Bluetooth Gabeldorsche feature stack.</string>
+
+    <!-- Summary of checkbox for enabling Enhanced Connectivity features [CHAR LIMIT=NONE] -->
+    <string name="enhanced_connectivity_summary">Enables the Enhanced Connectivity feature.</string>
 
     <!-- Title of checkbox setting that enables the terminal app. [CHAR LIMIT=32] -->
     <string name="enable_terminal_title">Local terminal</string>
@@ -901,10 +907,10 @@
     <!-- UI debug setting: enable gpu debug layers summary [CHAR LIMIT=50] -->
     <string name="enable_gpu_debug_layers_summary">Allow loading GPU debug layers for debug apps</string>
 
-    <!-- UI debug setting: enable verbose vendor logging [CHAR LIMIT=30] -->
+    <!-- UI debug setting: enable verbose vendor logging [CHAR LIMIT=60] -->
     <string name="enable_verbose_vendor_logging">Enable verbose vendor logging</string>
-    <!-- UI debug setting: enable verbose vendor logging summary [CHAR LIMIT=100] -->
-    <string name="enable_verbose_vendor_logging_summary">Allow additional vendor logs to be included in bug reports, may contain private information</string>
+    <!-- UI debug setting: enable verbose vendor logging summary [CHAR LIMIT=NONE] -->
+    <string name="enable_verbose_vendor_logging_summary">Include additional device-specific vendor logs in bug reports, which may contain private information, use more battery, and/or use more storage.</string>
 
     <!-- UI debug setting: scaling factor for window animations [CHAR LIMIT=25] -->
     <string name="window_animation_scale_title">Window animation scale</string>
@@ -1048,7 +1054,7 @@
     <!-- Title for the accessibility preference to configure display color space correction. [CHAR LIMIT=NONE] -->
     <string name="accessibility_display_daltonizer_preference_title">Color correction</string>
     <!-- Subtitle for the accessibility preference to configure display color space correction. [CHAR LIMIT=NONE] -->
-    <string name="accessibility_display_daltonizer_preference_subtitle">Color correction helps people with colorblindness see more accurate colors</string>
+    <string name="accessibility_display_daltonizer_preference_subtitle">Color correction helps the device display more accurate colors. Color correction may be helpful for people with colorblindness.</string>
     <!-- Summary shown for color space correction preference when its value is overridden by another preference [CHAR LIMIT=35] -->
     <string name="daltonizer_type_overridden">Overridden by <xliff:g id="title" example="Simulate color space">%1$s</xliff:g></string>
 

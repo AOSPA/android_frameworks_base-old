@@ -20,6 +20,7 @@ import static com.android.systemui.Dependency.TIME_TICK_HANDLER_NAME;
 
 import android.app.INotificationManager;
 import android.content.Context;
+import android.content.SharedPreferences;
 import android.hardware.display.AmbientDisplayConfiguration;
 import android.hardware.display.NightDisplayListener;
 import android.os.Handler;
@@ -27,6 +28,7 @@ import android.os.HandlerThread;
 import android.os.ServiceManager;
 import android.util.DisplayMetrics;
 import android.view.Choreographer;
+import android.view.IWindowManager;
 import android.view.LayoutInflater;
 import android.view.WindowManager;
 
@@ -34,6 +36,7 @@ import com.android.internal.logging.MetricsLogger;
 import com.android.internal.util.NotificationMessagingUtil;
 import com.android.internal.widget.LockPatternUtils;
 import com.android.keyguard.ViewMediatorCallback;
+import com.android.systemui.Prefs;
 import com.android.systemui.dagger.qualifiers.Background;
 import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.doze.AlwaysOnDisplayPolicy;
@@ -45,6 +48,7 @@ import com.android.systemui.shared.system.ActivityManagerWrapper;
 import com.android.systemui.shared.system.DevicePolicyManagerWrapper;
 import com.android.systemui.statusbar.CommandQueue;
 import com.android.systemui.statusbar.NavigationBarController;
+import com.android.systemui.statusbar.phone.AutoHideController;
 import com.android.systemui.statusbar.phone.ConfigurationControllerImpl;
 import com.android.systemui.statusbar.policy.ConfigurationController;
 import com.android.systemui.statusbar.policy.DataSaverController;
@@ -79,7 +83,14 @@ public class DependencyProvider {
 
     /** */
     @Provides
-    public AmbientDisplayConfiguration provideAmbientDispalyConfiguration(Context context) {
+    @Main
+    public SharedPreferences provideSharePreferences(Context context) {
+        return Prefs.get(context);
+    }
+
+    /** */
+    @Provides
+    public AmbientDisplayConfiguration provideAmbientDisplayConfiguration(Context context) {
         return new AmbientDisplayConfiguration(context);
     }
 
@@ -155,6 +166,14 @@ public class DependencyProvider {
     @Provides
     public ConfigurationController provideConfigurationController(Context context) {
         return new ConfigurationControllerImpl(context);
+    }
+
+    /** */
+    @Singleton
+    @Provides
+    public AutoHideController provideAutoHideController(Context context,
+            @Main Handler mainHandler, IWindowManager iWindowManager) {
+        return new AutoHideController(context, mainHandler, iWindowManager);
     }
 
     @Singleton

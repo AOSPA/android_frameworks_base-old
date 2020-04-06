@@ -33,6 +33,7 @@ import static com.android.server.pm.PackageManagerService.PLATFORM_PACKAGE_NAME;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.UserIdInt;
+import android.app.compat.ChangeIdStateCache;
 import android.content.ComponentName;
 import android.content.Intent;
 import android.content.IntentFilter;
@@ -439,6 +440,11 @@ public final class Settings {
         mBackupStoppedPackagesFilename = new File(mSystemDir, "packages-stopped-backup.xml");
     }
 
+    private static void invalidatePackageCache() {
+        PackageManager.invalidatePackageInfoCache();
+        ChangeIdStateCache.invalidate();
+    }
+
     PackageSetting getPackageLPr(String pkgName) {
         return mPackages.get(pkgName);
     }
@@ -517,6 +523,9 @@ public final class Settings {
                 p.secondaryCpuAbiString, p.cpuAbiOverrideString,
                 p.appId, p.versionCode, p.pkgFlags, p.pkgPrivateFlags,
                 p.usesStaticLibraries, p.usesStaticLibrariesVersions, p.mimeGroups);
+        if (ret != null) {
+            ret.getPkgState().setUpdatedSystemApp(false);
+        }
         mDisabledSysPackages.remove(name);
         return ret;
     }
@@ -1310,13 +1319,12 @@ public final class Settings {
         }
     }
 
-    boolean areDefaultRuntimePermissionsGrantedLPr(int userId) {
-        return mRuntimePermissionsPersistence
-                .areDefaultRuntimePermissionsGrantedLPr(userId);
+    boolean isPermissionUpgradeNeededLPr(int userId) {
+        return mRuntimePermissionsPersistence.isPermissionUpgradeNeeded(userId);
     }
 
-    void setRuntimePermissionsFingerPrintLPr(@NonNull String fingerPrint, @UserIdInt int userId) {
-        mRuntimePermissionsPersistence.setRuntimePermissionsFingerPrintLPr(fingerPrint, userId);
+    void updateRuntimePermissionsFingerprintLPr(@UserIdInt int userId) {
+        mRuntimePermissionsPersistence.updateRuntimePermissionsFingerprintLPr(userId);
     }
 
     int getDefaultRuntimePermissionsVersionLPr(int userId) {
@@ -1325,6 +1333,10 @@ public final class Settings {
 
     void setDefaultRuntimePermissionsVersionLPr(int version, int userId) {
         mRuntimePermissionsPersistence.setVersionLPr(version, userId);
+    }
+
+    void setPermissionControllerVersion(long version) {
+        mRuntimePermissionsPersistence.setPermissionControllerVersion(version);
     }
 
     public VersionInfo findOrCreateVersion(String volumeUuid) {
@@ -1971,6 +1983,8 @@ public final class Settings {
     }
 
     void writePackageRestrictionsLPr(int userId) {
+        invalidatePackageCache();
+
         if (DEBUG_MU) {
             Log.i(TAG, "Writing package restrictions for user=" + userId);
         }
@@ -2377,6 +2391,12 @@ public final class Settings {
         //Debug.startMethodTracing("/data/system/packageprof", 8 * 1024 * 1024);
 
         final long startTime = SystemClock.uptimeMillis();
+
+        // Whenever package manager changes something on the system, it writes out whatever it
+        // changed in the form of a settings object change, and it does so under its internal
+        // lock --- so if we invalidate the package cache here, we end up invalidating at the
+        // right time.
+        invalidatePackageCache();
 
         // Keep the old settings around until we know the new ones have
         // been successfully written.
@@ -4820,6 +4840,8 @@ public final class Settings {
             pw.print(ps.getHidden(user.id));
             pw.print(" suspended=");
             pw.print(ps.getSuspended(user.id));
+            pw.print(" distractionFlags=");
+            pw.print(ps.getDistractionFlags(user.id));
             pw.print(" stopped=");
             pw.print(ps.getStopped(user.id));
             pw.print(" notLaunched=");
@@ -5277,6 +5299,8 @@ public final class Settings {
         private static final int UPGRADE_VERSION = -1;
         private static final int INITIAL_VERSION = 0;
 
+        private String mExtendedFingerprint;
+
         private final RuntimePermissionsPersistence mPersistence =
                 RuntimePermissionsPersistence.createInstance();
 
@@ -5301,7 +5325,7 @@ public final class Settings {
 
         @GuardedBy("mLock")
         // The mapping keys are user ids.
-        private final SparseBooleanArray mDefaultPermissionsGranted = new SparseBooleanArray();
+        private final SparseBooleanArray mPermissionUpgradeNeeded = new SparseBooleanArray();
 
         public RuntimePermissionPersistence(Object persistenceLock) {
             mPersistenceLock = persistenceLock;
@@ -5319,15 +5343,34 @@ public final class Settings {
         }
 
         @GuardedBy("Settings.this.mLock")
-        public boolean areDefaultRuntimePermissionsGrantedLPr(int userId) {
-            return mDefaultPermissionsGranted.get(userId);
+        public boolean isPermissionUpgradeNeeded(int userId) {
+            return mPermissionUpgradeNeeded.get(userId, true);
         }
 
         @GuardedBy("Settings.this.mLock")
-        public void setRuntimePermissionsFingerPrintLPr(@NonNull String fingerPrint,
-                @UserIdInt int userId) {
-            mFingerprints.put(userId, fingerPrint);
+        public void updateRuntimePermissionsFingerprintLPr(@UserIdInt int userId) {
+            if (mExtendedFingerprint == null) {
+                throw new RuntimeException("The version of the permission controller hasn't been "
+                        + "set before trying to update the fingerprint.");
+            }
+            mFingerprints.put(userId, mExtendedFingerprint);
             writePermissionsForUserAsyncLPr(userId);
+        }
+
+        public void setPermissionControllerVersion(long version) {
+            int numUser = mFingerprints.size();
+            mExtendedFingerprint = getExtendedFingerprint(version);
+
+            for (int i = 0;  i < numUser; i++) {
+                int userId = mFingerprints.keyAt(i);
+                String fingerprint = mFingerprints.valueAt(i);
+                mPermissionUpgradeNeeded.put(userId,
+                        !TextUtils.equals(mExtendedFingerprint, fingerprint));
+            }
+        }
+
+        private String getExtendedFingerprint(long version) {
+            return Build.FINGERPRINT + "?pc_version=" + version;
         }
 
         public void writePermissionsForUserSyncLPr(int userId) {
@@ -5407,7 +5450,7 @@ public final class Settings {
                         packagePermissions, sharedUserPermissions);
             }
 
-            mPersistence.writeAsUser(runtimePermissions, UserHandle.of(userId));
+            mPersistence.writeForUser(runtimePermissions, UserHandle.of(userId));
         }
 
         @NonNull
@@ -5442,7 +5485,7 @@ public final class Settings {
                 revokeRuntimePermissionsAndClearFlags(sb, userId);
             }
 
-            mDefaultPermissionsGranted.delete(userId);
+            mPermissionUpgradeNeeded.delete(userId);
             mVersions.delete(userId);
             mFingerprints.remove(userId);
         }
@@ -5461,12 +5504,12 @@ public final class Settings {
         }
 
         public void deleteUserRuntimePermissionsFile(int userId) {
-            mPersistence.deleteAsUser(UserHandle.of(userId));
+            mPersistence.deleteForUser(UserHandle.of(userId));
         }
 
         @GuardedBy("Settings.this.mLock")
         public void readStateForUserSyncLPr(int userId) {
-            RuntimePermissionsState runtimePermissions = mPersistence.readAsUser(UserHandle.of(
+            RuntimePermissionsState runtimePermissions = mPersistence.readForUser(UserHandle.of(
                     userId));
             if (runtimePermissions == null) {
                 readLegacyStateForUserSyncLPr(userId);
@@ -5484,8 +5527,6 @@ public final class Settings {
 
             String fingerprint = runtimePermissions.getFingerprint();
             mFingerprints.put(userId, fingerprint);
-            boolean defaultPermissionsGranted = Build.FINGERPRINT.equals(fingerprint);
-            mDefaultPermissionsGranted.put(userId, defaultPermissionsGranted);
 
             boolean isUpgradeToR = getInternalVersion().sdkVersion < Build.VERSION_CODES.R;
 
@@ -5617,7 +5658,7 @@ public final class Settings {
 
             } catch (XmlPullParserException | IOException e) {
                 throw new IllegalStateException("Failed parsing permissions file: "
-                        + permissionsFile , e);
+                        + permissionsFile, e);
             } finally {
                 IoUtils.closeQuietly(in);
             }
@@ -5645,8 +5686,6 @@ public final class Settings {
                         mVersions.put(userId, version);
                         String fingerprint = parser.getAttributeValue(null, ATTR_FINGERPRINT);
                         mFingerprints.put(userId, fingerprint);
-                        final boolean defaultsGranted = Build.FINGERPRINT.equals(fingerprint);
-                        mDefaultPermissionsGranted.put(userId, defaultsGranted);
                     } break;
 
                     case TAG_PACKAGE: {
@@ -5705,13 +5744,14 @@ public final class Settings {
                         if (granted) {
                             permissionsState.grantRuntimePermission(bp, userId);
                             permissionsState.updatePermissionFlags(bp, userId,
-                                        PackageManager.MASK_PERMISSION_FLAGS_ALL, flags);
+                                    PackageManager.MASK_PERMISSION_FLAGS_ALL, flags);
                         } else {
                             permissionsState.updatePermissionFlags(bp, userId,
                                     PackageManager.MASK_PERMISSION_FLAGS_ALL, flags);
                         }
 
-                    } break;
+                    }
+                    break;
                 }
             }
         }

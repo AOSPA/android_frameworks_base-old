@@ -19,6 +19,7 @@ package android.media;
 import static com.android.internal.util.function.pooled.PooledLambda.obtainMessage;
 
 import android.annotation.CallSuper;
+import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.SdkConstant;
@@ -37,6 +38,8 @@ import android.util.Log;
 
 import com.android.internal.annotations.GuardedBy;
 
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -51,7 +54,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * Media apps which use {@link MediaRouter2} can request to play their media on the routes.
  * </p><p>
  * When {@link MediaRouter2 media router} wants to play media on a route,
- * {@link #onCreateSession(String, String, long, Bundle)} will be called to handle the request.
+ * {@link #onCreateSession(long, String, String, Bundle)} will be called to handle the request.
  * A session can be considered as a group of currently selected routes for each connection.
  * Create and manage the sessions by yourself, and notify the {@link RoutingSessionInfo
  * session infos} when there are any changes.
@@ -61,6 +64,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * a {@link MediaRouter2 media router} by an application. See
  * {@link #onDiscoveryPreferenceChanged(RouteDiscoveryPreference)} for the details.
  * </p>
+ * Use {@link #notifyRequestFailed(long, int)} to notify the failure with previously received
+ * request ID.
  */
 public abstract class MediaRoute2ProviderService extends Service {
     private static final String TAG = "MR2ProviderService";
@@ -73,13 +78,59 @@ public abstract class MediaRoute2ProviderService extends Service {
     public static final String SERVICE_INTERFACE = "android.media.MediaRoute2ProviderService";
 
     /**
-     * The request ID to pass {@link #notifySessionCreated(RoutingSessionInfo, long)}
+     * The request ID to pass {@link #notifySessionCreated(long, RoutingSessionInfo)}
      * when {@link MediaRoute2ProviderService} created a session although there was no creation
      * request.
      *
-     * @see #notifySessionCreated(RoutingSessionInfo, long)
+     * @see #notifySessionCreated(long, RoutingSessionInfo)
      */
-    public static final long REQUEST_ID_UNKNOWN = 0;
+    public static final long REQUEST_ID_NONE = 0;
+
+    /**
+     * The request has failed due to unknown reason.
+     *
+     * @see #notifyRequestFailed(long, int)
+     */
+    public static final int REASON_UNKNOWN_ERROR = 0;
+
+    /**
+     * The request has failed since this service rejected the request.
+     *
+     * @see #notifyRequestFailed(long, int)
+     */
+    public static final int REASON_REJECTED = 1;
+
+    /**
+     * The request has failed due to a network error.
+     *
+     * @see #notifyRequestFailed(long, int)
+     */
+    public static final int REASON_NETWORK_ERROR = 2;
+
+    /**
+     * The request has failed since the requested route is no longer available.
+     *
+     * @see #notifyRequestFailed(long, int)
+     */
+    public static final int REASON_ROUTE_NOT_AVAILABLE = 3;
+
+    /**
+     * The request has failed since the request is not valid. For example, selecting a route
+     * which is not selectable.
+     *
+     * @see #notifyRequestFailed(long, int)
+     */
+    public static final int REASON_INVALID_COMMAND = 4;
+
+    /**
+     * @hide
+     */
+    @IntDef(prefix = "REASON_", value = {
+            REASON_UNKNOWN_ERROR, REASON_REJECTED, REASON_NETWORK_ERROR, REASON_ROUTE_NOT_AVAILABLE,
+            REASON_INVALID_COMMAND
+    })
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface Reason {}
 
     private final Handler mHandler;
     private final Object mSessionLock = new Object();
@@ -116,20 +167,23 @@ public abstract class MediaRoute2ProviderService extends Service {
     /**
      * Called when a volume setting is requested on a route of the provider
      *
+     * @param requestId the id of this request
      * @param routeId the id of the route
      * @param volume the target volume
-     * @see MediaRoute2Info#getVolumeMax()
+     * @see MediaRoute2Info.Builder#setVolume(int)
      */
-    public abstract void onSetRouteVolume(@NonNull String routeId, int volume);
+    public abstract void onSetRouteVolume(long requestId, @NonNull String routeId, int volume);
 
     /**
      * Called when {@link MediaRouter2.RoutingController#setVolume(int)} is called on
      * a routing session of the provider
      *
+     * @param requestId the id of this request
      * @param sessionId the id of the routing session
      * @param volume the target volume
+     * @see RoutingSessionInfo.Builder#setVolume(int)
      */
-    public abstract void onSetSessionVolume(@NonNull String sessionId, int volume);
+    public abstract void onSetSessionVolume(long requestId, @NonNull String sessionId, int volume);
 
     /**
      * Gets information of the session with the given id.
@@ -161,23 +215,25 @@ public abstract class MediaRoute2ProviderService extends Service {
     /**
      * Notifies clients of that the session is created and ready for use.
      * <p>
-     * If this session is created without any creation request, use {@link #REQUEST_ID_UNKNOWN}
+     * If this session is created without any creation request, use {@link #REQUEST_ID_NONE}
      * as the request ID.
      *
+     * @param requestId id of the previous request to create this session provided in
+     *                  {@link #onCreateSession(long, String, String, Bundle)}. Can be
+     *                  {@link #REQUEST_ID_NONE} if this session is created without any request.
      * @param sessionInfo information of the new session.
      *                    The {@link RoutingSessionInfo#getId() id} of the session must be unique.
-     * @param requestId id of the previous request to create this session provided in
-     *                  {@link #onCreateSession(String, String, long, Bundle)}
-     * @see #onCreateSession(String, String, long, Bundle)
+     * @see #onCreateSession(long, String, String, Bundle)
      * @see #getSessionInfo(String)
      */
-    public final void notifySessionCreated(@NonNull RoutingSessionInfo sessionInfo,
-            long requestId) {
+    public final void notifySessionCreated(long requestId,
+            @NonNull RoutingSessionInfo sessionInfo) {
         Objects.requireNonNull(sessionInfo, "sessionInfo must not be null");
 
         String sessionId = sessionInfo.getId();
         synchronized (mSessionLock) {
             if (mSessionInfo.containsKey(sessionId)) {
+                // TODO: Notify failure to the requester, and throw exception if needed.
                 Log.w(TAG, "Ignoring duplicate session id.");
                 return;
             }
@@ -191,27 +247,9 @@ public abstract class MediaRoute2ProviderService extends Service {
             // TODO: Calling binder calls in multiple thread may cause timing issue.
             //       Consider to change implementations to avoid the problems.
             //       For example, post binder calls, always send all sessions at once, etc.
-            mRemoteCallback.notifySessionCreated(sessionInfo, requestId);
+            mRemoteCallback.notifySessionCreated(requestId, sessionInfo);
         } catch (RemoteException ex) {
             Log.w(TAG, "Failed to notify session created.");
-        }
-    }
-
-    /**
-     * Notifies clients of that the session could not be created.
-     *
-     * @param requestId id of the previous request to create the session provided in
-     *                  {@link #onCreateSession(String, String, long, Bundle)}.
-     * @see #onCreateSession(String, String, long, Bundle)
-     */
-    public final void notifySessionCreationFailed(long requestId) {
-        if (mRemoteCallback == null) {
-            return;
-        }
-        try {
-            mRemoteCallback.notifySessionCreationFailed(requestId);
-        } catch (RemoteException ex) {
-            Log.w(TAG, "Failed to notify session creation failed.");
         }
     }
 
@@ -246,7 +284,7 @@ public abstract class MediaRoute2ProviderService extends Service {
      * Notifies that the session is released.
      *
      * @param sessionId id of the released session.
-     * @see #onReleaseSession(String)
+     * @see #onReleaseSession(long, String)
      */
     public final void notifySessionReleased(@NonNull String sessionId) {
         if (TextUtils.isEmpty(sessionId)) {
@@ -273,10 +311,33 @@ public abstract class MediaRoute2ProviderService extends Service {
     }
 
     /**
+     * Notifies to the client that the request has failed.
+     *
+     * @param requestId the ID of the previous request
+     * @param reason the reason why the request has failed
+     *
+     * @see #REASON_UNKNOWN_ERROR
+     * @see #REASON_REJECTED
+     * @see #REASON_NETWORK_ERROR
+     * @see #REASON_ROUTE_NOT_AVAILABLE
+     * @see #REASON_INVALID_COMMAND
+     */
+    public final void notifyRequestFailed(long requestId, @Reason int reason) {
+        if (mRemoteCallback == null) {
+            return;
+        }
+        try {
+            mRemoteCallback.notifyRequestFailed(requestId, reason);
+        } catch (RemoteException ex) {
+            Log.w(TAG, "Failed to notify that the request has failed.");
+        }
+    }
+
+    /**
      * Called when the service receives a request to create a session.
      * <p>
      * You should create and maintain your own session and notifies the client of
-     * session info. Call {@link #notifySessionCreated(RoutingSessionInfo, long)}
+     * session info. Call {@link #notifySessionCreated(long, RoutingSessionInfo)}
      * with the given {@code requestId} to notify the information of a new session.
      * The created session must have the same route feature and must include the given route
      * specified by {@code routeId}.
@@ -286,11 +347,11 @@ public abstract class MediaRoute2ProviderService extends Service {
      * {@link Bundle} which contains how to control the session.
      * <p>
      * If you can't create the session or want to reject the request, call
-     * {@link #notifySessionCreationFailed(long)} with the given {@code requestId}.
+     * {@link #notifyRequestFailed(long, int)} with the given {@code requestId}.
      *
+     * @param requestId the id of this request
      * @param packageName the package name of the application that selected the route
      * @param routeId the id of the route initially being connected
-     * @param requestId the id of this session creation request
      * @param sessionHints an optional bundle of app-specific arguments sent by
      *                     {@link MediaRouter2}, or null if none. The contents of this bundle
      *                     may affect the result of session creation.
@@ -299,8 +360,8 @@ public abstract class MediaRoute2ProviderService extends Service {
      * @see RoutingSessionInfo.Builder#addSelectedRoute(String)
      * @see RoutingSessionInfo.Builder#setControlHints(Bundle)
      */
-    public abstract void onCreateSession(@NonNull String packageName, @NonNull String routeId,
-            long requestId, @Nullable Bundle sessionHints);
+    public abstract void onCreateSession(long requestId, @NonNull String packageName,
+            @NonNull String routeId, @Nullable Bundle sessionHints);
 
     /**
      * Called when the session should be released. A client of the session or system can request
@@ -312,44 +373,48 @@ public abstract class MediaRoute2ProviderService extends Service {
      * Note: Calling {@link #notifySessionReleased(String)} will <em>NOT</em> trigger
      * this method to be called.
      *
+     * @param requestId the id of this request
      * @param sessionId id of the session being released.
      * @see #notifySessionReleased(String)
      * @see #getSessionInfo(String)
      */
-    public abstract void onReleaseSession(@NonNull String sessionId);
+    public abstract void onReleaseSession(long requestId, @NonNull String sessionId);
 
-    //TODO: make a way to reject the request
     /**
      * Called when a client requests selecting a route for the session.
      * After the route is selected, call {@link #notifySessionUpdated(RoutingSessionInfo)}
      * to update session info.
      *
+     * @param requestId the id of this request
      * @param sessionId id of the session
      * @param routeId id of the route
      */
-    public abstract void onSelectRoute(@NonNull String sessionId, @NonNull String routeId);
+    public abstract void onSelectRoute(long requestId, @NonNull String sessionId,
+            @NonNull String routeId);
 
-    //TODO: make a way to reject the request
     /**
      * Called when a client requests deselecting a route from the session.
      * After the route is deselected, call {@link #notifySessionUpdated(RoutingSessionInfo)}
      * to update session info.
      *
+     * @param requestId the id of this request
      * @param sessionId id of the session
      * @param routeId id of the route
      */
-    public abstract void onDeselectRoute(@NonNull String sessionId, @NonNull String routeId);
+    public abstract void onDeselectRoute(long requestId, @NonNull String sessionId,
+            @NonNull String routeId);
 
-    //TODO: make a way to reject the request
     /**
      * Called when a client requests transferring a session to a route.
      * After the transfer is finished, call {@link #notifySessionUpdated(RoutingSessionInfo)}
      * to update session info.
      *
+     * @param requestId the id of this request
      * @param sessionId id of the session
      * @param routeId id of the route
      */
-    public abstract void onTransferToRoute(@NonNull String sessionId, @NonNull String routeId);
+    public abstract void onTransferToRoute(long requestId, @NonNull String sessionId,
+            @NonNull String routeId);
 
     /**
      * Called when the {@link RouteDiscoveryPreference discovery preference} has changed.
@@ -439,27 +504,27 @@ public abstract class MediaRoute2ProviderService extends Service {
         }
 
         @Override
-        public void setRouteVolume(String routeId, int volume) {
+        public void setRouteVolume(long requestId, String routeId, int volume) {
             if (!checkCallerisSystem()) {
                 return;
             }
             mHandler.sendMessage(obtainMessage(MediaRoute2ProviderService::onSetRouteVolume,
-                    MediaRoute2ProviderService.this, routeId, volume));
+                    MediaRoute2ProviderService.this, requestId, routeId, volume));
         }
 
         @Override
-        public void requestCreateSession(String packageName, String routeId, long requestId,
+        public void requestCreateSession(long requestId, String packageName, String routeId,
                 @Nullable Bundle requestCreateSession) {
             if (!checkCallerisSystem()) {
                 return;
             }
             mHandler.sendMessage(obtainMessage(MediaRoute2ProviderService::onCreateSession,
-                    MediaRoute2ProviderService.this, packageName, routeId, requestId,
+                    MediaRoute2ProviderService.this, requestId, packageName, routeId,
                     requestCreateSession));
         }
 
         @Override
-        public void selectRoute(@NonNull String sessionId, String routeId) {
+        public void selectRoute(long requestId, String sessionId, String routeId) {
             if (!checkCallerisSystem()) {
                 return;
             }
@@ -468,11 +533,11 @@ public abstract class MediaRoute2ProviderService extends Service {
                 return;
             }
             mHandler.sendMessage(obtainMessage(MediaRoute2ProviderService::onSelectRoute,
-                    MediaRoute2ProviderService.this, sessionId, routeId));
+                    MediaRoute2ProviderService.this, requestId, sessionId, routeId));
         }
 
         @Override
-        public void deselectRoute(@NonNull String sessionId, String routeId) {
+        public void deselectRoute(long requestId, String sessionId, String routeId) {
             if (!checkCallerisSystem()) {
                 return;
             }
@@ -481,11 +546,11 @@ public abstract class MediaRoute2ProviderService extends Service {
                 return;
             }
             mHandler.sendMessage(obtainMessage(MediaRoute2ProviderService::onDeselectRoute,
-                    MediaRoute2ProviderService.this, sessionId, routeId));
+                    MediaRoute2ProviderService.this, requestId, sessionId, routeId));
         }
 
         @Override
-        public void transferToRoute(@NonNull String sessionId, String routeId) {
+        public void transferToRoute(long requestId, String sessionId, String routeId) {
             if (!checkCallerisSystem()) {
                 return;
             }
@@ -494,20 +559,20 @@ public abstract class MediaRoute2ProviderService extends Service {
                 return;
             }
             mHandler.sendMessage(obtainMessage(MediaRoute2ProviderService::onTransferToRoute,
-                    MediaRoute2ProviderService.this, sessionId, routeId));
+                    MediaRoute2ProviderService.this, requestId, sessionId, routeId));
         }
 
         @Override
-        public void setSessionVolume(String sessionId, int volume) {
+        public void setSessionVolume(long requestId, String sessionId, int volume) {
             if (!checkCallerisSystem()) {
                 return;
             }
             mHandler.sendMessage(obtainMessage(MediaRoute2ProviderService::onSetSessionVolume,
-                    MediaRoute2ProviderService.this, sessionId, volume));
+                    MediaRoute2ProviderService.this, requestId, sessionId, volume));
         }
 
         @Override
-        public void releaseSession(@NonNull String sessionId) {
+        public void releaseSession(long requestId, String sessionId) {
             if (!checkCallerisSystem()) {
                 return;
             }
@@ -516,7 +581,7 @@ public abstract class MediaRoute2ProviderService extends Service {
                 return;
             }
             mHandler.sendMessage(obtainMessage(MediaRoute2ProviderService::onReleaseSession,
-                    MediaRoute2ProviderService.this, sessionId));
+                    MediaRoute2ProviderService.this, requestId, sessionId));
         }
     }
 }

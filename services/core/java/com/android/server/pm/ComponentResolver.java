@@ -28,6 +28,7 @@ import android.content.ComponentName;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.ActivityInfo;
+import android.content.pm.ApplicationInfo;
 import android.content.pm.AuxiliaryResolveInfo;
 import android.content.pm.InstantAppResolveInfo;
 import android.content.pm.PackageManager;
@@ -56,6 +57,7 @@ import com.android.internal.annotations.GuardedBy;
 import com.android.internal.util.ArrayUtils;
 import com.android.server.IntentResolver;
 import com.android.server.pm.parsing.PackageInfoUtils;
+import com.android.server.pm.parsing.PackageInfoUtils.CachedApplicationInfoGenerator;
 import com.android.server.pm.parsing.pkg.AndroidPackage;
 
 import java.io.PrintWriter;
@@ -272,6 +274,7 @@ public class ComponentResolver {
             return null;
         }
         List<ProviderInfo> providerList = null;
+        CachedApplicationInfoGenerator appInfoGenerator = null;
         synchronized (mLock) {
             for (int i = mProviders.mProviders.size() - 1; i >= 0; --i) {
                 final ParsedProvider p = mProviders.mProviders.valueAt(i);
@@ -300,8 +303,18 @@ public class ComponentResolver {
                         && (p.getMetaData() == null || !p.getMetaData().containsKey(metaDataKey))) {
                     continue;
                 }
+                if (appInfoGenerator == null) {
+                    appInfoGenerator = new CachedApplicationInfoGenerator();
+                }
+                final PackageUserState state = ps.readUserState(userId);
+                final ApplicationInfo appInfo =
+                        appInfoGenerator.generate(pkg, flags, state, userId, ps);
+                if (appInfo == null) {
+                    continue;
+                }
+
                 final ProviderInfo info = PackageInfoUtils.generateProviderInfo(
-                        pkg, p, flags, ps.readUserState(userId), userId, ps);
+                        pkg, p, flags, state, appInfo, userId, ps);
                 if (info == null) {
                     continue;
                 }
@@ -330,14 +343,20 @@ public class ComponentResolver {
             if (pkg == null) {
                 return null;
             }
-            return PackageInfoUtils.generateProviderInfo(pkg, p, flags,
-                    ps.readUserState(userId), userId, ps);
+            final PackageUserState state = ps.readUserState(userId);
+            ApplicationInfo appInfo = PackageInfoUtils.generateApplicationInfo(
+                    pkg, flags, state, userId, ps);
+            if (appInfo == null) {
+                return null;
+            }
+            return PackageInfoUtils.generateProviderInfo(pkg, p, flags, state, appInfo, userId, ps);
         }
     }
 
     void querySyncProviders(List<String> outNames, List<ProviderInfo> outInfo, boolean safeMode,
             int userId) {
         synchronized (mLock) {
+            CachedApplicationInfoGenerator appInfoGenerator = null;
             for (int i = mProvidersByAuthority.size() - 1; i >= 0; --i) {
                 final ParsedProvider p = mProvidersByAuthority.valueAt(i);
                 if (!p.isSyncable()) {
@@ -359,9 +378,18 @@ public class ComponentResolver {
                 if (safeMode && !pkg.isSystem()) {
                     continue;
                 }
-                final ProviderInfo info =
-                        PackageInfoUtils.generateProviderInfo(pkg, p, 0,
-                                ps.readUserState(userId), userId, ps);
+                if (appInfoGenerator == null) {
+                    appInfoGenerator = new CachedApplicationInfoGenerator();
+                }
+                final PackageUserState state = ps.readUserState(userId);
+                final ApplicationInfo appInfo =
+                        appInfoGenerator.generate(pkg, 0, state, userId, ps);
+                if (appInfo == null) {
+                    continue;
+                }
+
+                final ProviderInfo info = PackageInfoUtils.generateProviderInfo(
+                        pkg, p, 0, state, appInfo, userId, ps);
                 if (info == null) {
                     continue;
                 }
@@ -1706,8 +1734,13 @@ public class ComponentResolver {
             if (userState.instantApp && ps.isUpdateAvailable()) {
                 return null;
             }
+            final ApplicationInfo appInfo = PackageInfoUtils.generateApplicationInfo(
+                    pkg, mFlags, userState, userId, ps);
+            if (appInfo == null) {
+                return null;
+            }
             ProviderInfo pi = PackageInfoUtils.generateProviderInfo(pkg, provider, mFlags,
-                    userState, userId, ps);
+                    userState, appInfo, userId, ps);
             if (pi == null) {
                 return null;
             }

@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-#include <binder/ProcessState.h>
 #include <jni.h>
 #include <log/log.h>
 #include <stats_event.h>
@@ -24,7 +23,6 @@
 #include <thread>
 
 using std::this_thread::sleep_for;
-using namespace android;
 
 namespace {
 static int32_t sAtomTag;
@@ -32,19 +30,6 @@ static int32_t sPullReturnVal;
 static int64_t sLatencyMillis;
 static int32_t sAtomsPerPull;
 static int32_t sNumPulls = 0;
-
-static bool initialized = false;
-
-static void init() {
-    if (!initialized) {
-        initialized = true;
-        // Set up the binder
-        sp<ProcessState> ps(ProcessState::self());
-        ps->setThreadPoolMaxThreadCount(9);
-        ps->startThreadPool();
-        ps->giveThreadPoolName();
-    }
-}
 
 static AStatsManager_PullAtomCallbackReturn pullAtomCallback(int32_t atomTag, AStatsEventList* data,
                                                              void* /*cookie*/) {
@@ -65,7 +50,6 @@ Java_com_android_internal_os_statsd_libstats_LibStatsPullTests_registerStatsPull
         JNIEnv* /*env*/, jobject /* this */, jint atomTag, jlong timeoutNs, jlong coolDownNs,
         jint pullRetVal, jlong latencyMillis, int atomsPerPull)
 {
-    init();
     sAtomTag = atomTag;
     sPullReturnVal = pullRetVal;
     sLatencyMillis = latencyMillis;

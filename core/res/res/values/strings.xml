@@ -423,6 +423,14 @@
          [CHAR LIMIT=NONE] -->
     <string name="location_changed_notification_text">Tap to see your location settings.</string>
 
+    <!-- Feature Id for Country Detector. [CHAR LIMIT=NONE]-->
+    <string name="country_detector">Country Detector</string>
+    <!-- Feature Id for Location service. [CHAR LIMIT=NONE]-->
+    <string name="location_service">Location Service</string>
+    <!-- Feature Id for Sensor Notification service. [CHAR LIMIT=NONE]-->
+    <string name="sensor_notification_service">Sensor Notification Service</string>
+    <!-- Feature Id for Twilight service. [CHAR LIMIT=NONE]-->
+    <string name="twilight_service">Twilight Service</string>
 
     <!-- Factory reset warning dialog strings--> <skip />
     <!-- Shows up in the dialog's title to warn about an impeding factory reset. [CHAR LIMIT=NONE] -->
@@ -577,6 +585,12 @@
 
     <!-- Format for build summary info [CHAR LIMIT=NONE] -->
     <string name="bugreport_status" translatable="false">%s (%s)</string>
+
+    <!-- Toast for taking screenshot with bugreport successfully. [CHAR_LIMIT=100] -->
+    <string name="bugreport_screenshot_success_toast">Screenshot taken with bug report</string>
+
+    <!-- Toast for failed to take screenshot with bugreport. [CHAR_LIMIT=100] -->
+    <string name="bugreport_screenshot_failure_toast">Failed to take screenshot with bug report</string>
 
     <!-- label for item that enables silent mode in phone options dialog -->
     <string name="global_action_toggle_silent_mode">Silent mode</string>
@@ -1154,6 +1168,11 @@
     <!-- Description of an application permission, listed so the user can choose whether they want to allow the application to do this. [CHAR_LIMIT=NONE] -->
     <string name="permdesc_systemCamera">This privileged | system app can take pictures and record videos using a system camera at any time. Requires the android.permission.CAMERA permission to be held by the app as well</string>
 
+    <!-- Title of an application permission, listed so the user can choose whether they want to allow the application to do this. [CHAR_LIMIT=NONE] -->
+    <string name="permlab_cameraOpenCloseListener">Allow an application or service to receive callbacks about camera devices being opened or closed.</string>
+    <!-- Description of an application permission, listed so the user can choose whether they want to allow the application to do this. [CHAR_LIMIT=NONE] -->
+    <string name="permdesc_cameraOpenCloseListener">This signature app can receive callbacks when any camera device is being opened (by what application package) or closed.</string>
+
     <!-- Title of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
     <string name="permlab_vibrate">control vibration</string>
     <!-- Description of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
@@ -1200,6 +1219,14 @@
         device. This includes information such as call numbers for calls and the state of the
         calls.</string>
 
+    <!-- Title of an application permission. When granted the app is exempt from audio record
+    restrictions.
+    [CHAR LIMIT=NONE]-->
+    <string name="permlab_exemptFromAudioRecordRestrictions">exempt from audio record restrictions</string>
+    <!-- Description of an application permission. When granted the app is exempt from audio record
+    restrictions. [CHAR LIMIT=NONE]-->
+    <string name="permdesc_exemptFromAudioRecordRestrictions">Exempt the app from restrictions to record audio.</string>
+
     <!-- Title of an application permission.  When granted the user is giving access to a third
          party app to continue a call which originated in another app.  For example, the user
          could be in a voice call over their carrier's mobile network, and a third party video
@@ -1217,11 +1244,15 @@
     <string name="permdesc_readPhoneNumbers">Allows the app to access the phone numbers of the device.</string>
 
     <!-- Title of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
+    <string name="permlab_wakeLock" product="automotive">keep car screen turned on</string>
+    <!-- Title of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
     <string name="permlab_wakeLock" product="tablet">prevent tablet from sleeping</string>
     <!-- Title of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
     <string name="permlab_wakeLock" product="tv">prevent your Android TV device from sleeping</string>
     <!-- Title of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
     <string name="permlab_wakeLock" product="default">prevent phone from sleeping</string>
+    <!-- Description of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
+    <string name="permdesc_wakeLock" product="automotive">Allows the app to keep the car screen turned on.</string>
     <!-- Description of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
     <string name="permdesc_wakeLock" product="tablet">Allows the app to prevent the tablet from going to sleep.</string>
     <!-- Description of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
@@ -3386,8 +3417,6 @@
     <!-- A notification is shown when connected network without internet due to private dns validation failed. This is the notification's message. [CHAR LIMIT=NONE] -->
     <string name="private_dns_broken_detailed">Private DNS server cannot be accessed</string>
 
-    <!-- A notification is shown after the user logs in to a captive portal network, to indicate that the network should now have internet connectivity. This is the message of notification. [CHAR LIMIT=50] -->
-    <string name="captive_portal_logged_in_detailed">Connected</string>
     <!-- A notification is shown when the user connects to a network that doesn't have access to some services (e.g. Push notifications may not work). This is the notification's title. [CHAR LIMIT=50] -->
     <string name="network_partial_connectivity"><xliff:g id="network_ssid" example="GoogleGuest">%1$s</xliff:g> has limited connectivity</string>
 
@@ -3529,6 +3558,12 @@
     <!-- Message of notification shown when ADB is actively connected to the phone. -->
     <string name="adb_active_notification_message">Tap to turn off USB debugging</string>
     <string name="adb_active_notification_message" product="tv">Select to disable USB debugging.</string>
+    <!-- Title of notification shown when ADB Wireless is actively connected to the phone. [CHAR LIMIT=NONE] -->
+    <string name="adbwifi_active_notification_title">Wireless debugging connected</string>
+    <!-- Message of notification shown when ADB Wireless is actively connected to the phone. [CHAR LIMIT=NONE] -->
+    <string name="adbwifi_active_notification_message">Tap to turn off wireless debugging</string>
+    <!-- Message of notification shown when ADB Wireless is actively connected to the TV. [CHAR LIMIT=NONE] -->
+    <string name="adbwifi_active_notification_message" product="tv">Select to disable wireless debugging.</string>
 
     <!-- Title of notification shown when Test Harness Mode is enabled. [CHAR LIMIT=NONE] -->
     <string name="test_harness_mode_notification_title">Test Harness Mode enabled</string>
@@ -4381,12 +4416,72 @@
         accessibility feature.
     </string>
 
+    <!-- Title for a warning about security implications of enabling an accessibility
+    service. [CHAR LIMIT=NONE] -->
+    <string name="accessibility_enable_service_title">Allow
+        <xliff:g id="service" example="TalkBack">%1$s</xliff:g> to have full control of your
+        device?</string>
+
+    <!-- Warning that the device data will not be encrypted with password or PIN if
+    enabling an accessibility service and there is a secure lock setup. [CHAR LIMIT=NONE] -->
+    <string name="accessibility_enable_service_encryption_warning">If you turn on
+        <xliff:g id="service" example="TalkBack">%1$s</xliff:g>, your device won’t use your screen
+        lock to enhance data encryption.
+    </string>
+
+    <!-- Warning description that explains that it's appropriate for accessibility
+     services to have full control to help users with accessibility needs. [CHAR LIMIT=NONE] -->
+    <string name="accessibility_service_warning_description">Full control is appropriate for apps
+        that help you with accessibility needs, but not for most apps.
+    </string>
+
+    <!-- Title for the screen control in accessibility dialog. [CHAR LIMIT=NONE] -->
+    <string name="accessibility_service_screen_control_title">View and control screen</string>
+
+    <!-- Description for the screen control in accessibility dialog. [CHAR LIMIT=NONE] -->
+    <string name="accessibility_service_screen_control_description">It can read all content on the
+        screen and display content over other apps.
+    </string>
+
+    <!-- Title for the action perform in accessibility dialog. [CHAR LIMIT=NONE] -->
+    <string name="accessibility_service_action_perform_title">View and perform actions</string>
+
+    <!-- Description for the action perform in accessibility dialog. [CHAR LIMIT=NONE] -->
+    <string name="accessibility_service_action_perform_description">It can track your interactions
+        with an app or a hardware sensor, and interact with apps on your behalf.
+    </string>
+
+    <!-- String for the allow button in accessibility permission dialog. [CHAR LIMIT=10] -->
+    <string name="accessibility_dialog_button_allow">Allow</string>
+    <!-- String for the deny button in accessibility permission dialog. [CHAR LIMIT=10] -->
+    <string name="accessibility_dialog_button_deny">Deny</string>
+
+    <!-- Title for accessibility select shortcut menu dialog. [CHAR LIMIT=100] -->
+    <string name="accessibility_select_shortcut_menu_title">Tap a feature to start using it:</string>
+
+    <!-- Title for accessibility edit shortcut selection menu dialog, and dialog is triggered
+    from accessibility button. [CHAR LIMIT=100] -->
+    <string name="accessibility_edit_shortcut_menu_button_title">Choose apps to use with the
+        accessibility button
+    </string>
+
+    <!-- Title for accessibility edit shortcut selection menu dialog, and dialog is triggered
+    from volume key shortcut. [CHAR LIMIT=100] -->
+    <string name="accessibility_edit_shortcut_menu_volume_title">Choose apps to use with the
+        volume key shortcut
+    </string>
+
+    <!-- Text for showing the warning to user when uncheck the legacy app item in the accessibility
+    shortcut menu, user can aware the service to be disabled. [CHAR LIMIT=100] -->
+    <string name="accessibility_uncheck_legacy_item_warning">
+        <xliff:g id="service_name" example="TalkBack">%s</xliff:g> has been turned off</string>
+
     <!-- Text in button that edit the accessibility shortcut menu, user can delete
     any service item in the menu list. [CHAR LIMIT=100] -->
     <string name="edit_accessibility_shortcut_menu_button">Edit shortcuts</string>
 
-    <!-- Text in button that cancel the accessibility shortcut menu changed status. [CHAR LIMIT=100] -->
-    <string name="cancel_accessibility_shortcut_menu_button">Cancel</string>
+    <!-- Text in button that complete the accessibility shortcut menu changed status. [CHAR LIMIT=100] -->
+    <string name="done_accessibility_shortcut_menu_button">Done</string>
 
     <!-- Text in button that turns off the accessibility shortcut -->
     <string name="disable_accessibility_shortcut">Turn off Shortcut</string>
@@ -4906,6 +5001,8 @@
     <string name="importance_from_user">You set the importance of these notifications.</string>
     <string name="importance_from_person">This is important because of the people involved.</string>
 
+    <string name="notification_history_title_placeholder">Custom app notification</string>
+
     <!-- Message to user that app trying to create user for an account that already exists. [CHAR LIMIT=none] -->
     <string name="user_creation_account_exists">Allow <xliff:g id="app" example="Gmail">%1$s</xliff:g> to create a new User with <xliff:g id="account" example="foobar@gmail.com">%2$s</xliff:g> (a User with this account already exists) ?</string>
     <!-- Message to user that app is trying to create user for a specified account. [CHAR LIMIT=none] -->
@@ -5346,26 +5443,36 @@
         <xliff:g id="package_name" example="com.android.example">%1$s</xliff:g> has been put into the RESTRICTED bucket</string>
 
     <!-- ResolverActivity - profile tabs -->
-    <!-- Label for the perosnal tab of the share sheet and intent resolver [CHAR LIMIT=NONE] -->
+    <!-- Label of a tab on a screen. A user can tap this tap to switch to the 'Personal' view (that shows their personal content) if they have a work profile on their device. [CHAR LIMIT=NONE] -->
     <string name="resolver_personal_tab">Personal</string>
-    <!-- Label for the work tab of the share sheet and intent resolver [CHAR LIMIT=NONE] -->
+    <!-- Label of a tab on a screen. A user can tap this tab to switch to the 'Work' view (that shows their work content) if they have a work profile on their device. [CHAR LIMIT=NONE] -->
     <string name="resolver_work_tab">Work</string>
-    <!-- Label to indicate that the user cannot share with work apps [CHAR LIMIT=NONE] -->
+    <!-- Accessibility label for the personal tab button. [CHAR LIMIT=NONE] -->
+    <string name="resolver_personal_tab_accessibility">Personal view</string>
+    <!-- Accessibility label for the work tab button. [CHAR LIMIT=NONE] -->
+    <string name="resolver_work_tab_accessibility">Work view</string>
+    <!-- Title of a screen. This text lets the user know that their IT admin doesn't allow them to share personal content with work apps. [CHAR LIMIT=NONE] -->
     <string name="resolver_cant_share_with_work_apps">Can\u2019t share with work apps</string>
-    <!-- Label to indicate that the user cannot share with personal apps [CHAR LIMIT=NONE] -->
+    <!-- Title of a screen. This text lets the user know that their IT admin doesn't allow them to share work content with personal apps. [CHAR LIMIT=NONE] -->
     <string name="resolver_cant_share_with_personal_apps">Can\u2019t share with personal apps</string>
-    <!-- Label to explain to the user that sharing between personal and work apps is not enabled by the IT admin [CHAR LIMIT=NONE] -->
-    <string name="resolver_cant_share_cross_profile_explanation">Your IT admin blocked sharing between personal and work apps</string>
-    <!-- Label to indicate that the user has to turn on work apps in order to access work data [CHAR LIMIT=NONE] -->
-    <string name="resolver_turn_on_work_apps">Turn on work apps</string>
-    <!-- Label to explain that the user has to turn on work apps in order to access work data [CHAR LIMIT=NONE] -->
-    <string name="resolver_turn_on_work_apps_explanation">Turn on work apps to access work apps &amp; contacts</string>
-    <!-- Label to indicate that no apps are resolved [CHAR LIMIT=NONE] -->
+    <!-- Error message. This text is explaining that the user's IT admin doesn't allow sharing between personal and work apps. [CHAR LIMIT=NONE] -->
+    <string name="resolver_cant_share_cross_profile_explanation">Your IT admin blocked sharing between personal and work profiles</string>
+    <!-- Title of an error screen. This error message lets the user know that their IT admin blocked access to work apps, and the personal content that they're trying to view in a work app, such as Chrome, isn't allowed. [CHAR LIMIT=NONE] -->
+    <string name="resolver_cant_access_work_apps">Can\u2019t access work apps</string>
+    <!-- Error message. This message lets the user know that their IT admin blocked access to work apps, and the personal content that they're trying to view in a work app, such as Chrome, isn't allowed. [CHAR LIMIT=NONE] -->
+    <string name="resolver_cant_access_work_apps_explanation">Your IT admin doesn\u2019t let you view personal content in work apps</string>
+    <!-- Title of an error screen. This error message lets the user know that their IT admin blocked access to personal apps, and the work content that they're trying to view in a personal app, such as Chrome, isn't allowed. [CHAR LIMIT=NONE] -->
+    <string name="resolver_cant_access_personal_apps">Can\u2019t access personal apps</string>
+    <!-- Error message. This message lets the user know that their IT admin blocked access to personal apps, and the work content that they're trying to view in a personal app, such as Chrome, isn't allowed. [CHAR LIMIT=NONE] -->
+    <string name="resolver_cant_access_personal_apps_explanation">Your IT admin doesn\u2019t let you view work content in personal apps</string>
+    <!-- Error message. This text lets the user know that they need to turn on work apps in order to share content. There's also a button a user can tap to turn on the apps. [CHAR LIMIT=NONE] -->
+    <string name="resolver_turn_on_work_apps_share">Turn on work profile to share content</string>
+    <!-- Error message. This text lets the user know that they need to turn on work apps in order to view content. There's also a button a user can tap to turn on the apps. [CHAR LIMIT=NONE] -->
+    <string name="resolver_turn_on_work_apps_view">Turn on work profile to view content</string>
+    <!-- Error message. This text lets the user know that work apps aren't available on the device. [CHAR LIMIT=NONE] -->
     <string name="resolver_no_apps_available">No apps available</string>
-    <!-- Label to explain that no apps are resolved [CHAR LIMIT=NONE] -->
-    <string name="resolver_no_apps_available_explanation">We couldn\u2019t find any apps</string>
-    <!-- Button which switches on the disabled work profile [CHAR LIMIT=NONE] -->
-    <string name="resolver_switch_on_work">Switch on work</string>
+    <!-- Button text. This button turns on a user's work profile so they can access their work apps and data. [CHAR LIMIT=NONE] -->
+    <string name="resolver_switch_on_work">Turn on</string>
 
     <!-- Title of an application permission, listed so the user can choose whether they want to allow the application to do this. [CHAR LIMIT=NONE] -->
     <string name="permlab_accessCallAudio">Record or play audio in telephony calls</string>

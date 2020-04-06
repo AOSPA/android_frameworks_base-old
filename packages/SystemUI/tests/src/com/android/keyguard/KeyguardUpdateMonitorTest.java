@@ -62,11 +62,12 @@ import android.testing.TestableContext;
 import android.testing.TestableLooper;
 
 import com.android.internal.telephony.TelephonyIntents;
-import com.android.systemui.DumpController;
 import com.android.systemui.SysuiTestCase;
 import com.android.systemui.broadcast.BroadcastDispatcher;
+import com.android.systemui.dump.DumpManager;
 import com.android.systemui.statusbar.phone.KeyguardBypassController;
 
+import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -96,7 +97,7 @@ public class KeyguardUpdateMonitorTest extends SysuiTestCase {
             DATA_ROAMING_DISABLE, null, null, null, null, false, null, "", true, TEST_GROUP_UUID,
             TEST_CARRIER_ID, 0);
     @Mock
-    private DumpController mDumpController;
+    private DumpManager mDumpManager;
     @Mock
     private KeyguardUpdateMonitor.StrongAuthTracker mStrongAuthTracker;
     @Mock
@@ -155,6 +156,11 @@ public class KeyguardUpdateMonitorTest extends SysuiTestCase {
         mTestableLooper = TestableLooper.get(this);
         allowTestableLooperAsMainThread();
         mKeyguardUpdateMonitor = new TestableKeyguardUpdateMonitor(context);
+    }
+
+    @After
+    public void tearDown() {
+        mKeyguardUpdateMonitor.destroy();
     }
 
     @Test
@@ -510,7 +516,7 @@ public class KeyguardUpdateMonitorTest extends SysuiTestCase {
         List<SubscriptionInfo> list = new ArrayList<>();
         list.add(TEST_SUBSCRIPTION);
         list.add(TEST_SUBSCRIPTION_2);
-        when(mSubscriptionManager.getActiveAndHiddenSubscriptionInfoList()).thenReturn(list);
+        when(mSubscriptionManager.getCompleteActiveSubscriptionInfoList()).thenReturn(list);
         mKeyguardUpdateMonitor.mPhoneStateListener.onActiveDataSubscriptionIdChanged(
                 TEST_SUBSCRIPTION_2.getSubscriptionId());
         mTestableLooper.processAllMessages();
@@ -612,7 +618,7 @@ public class KeyguardUpdateMonitorTest extends SysuiTestCase {
         protected TestableKeyguardUpdateMonitor(Context context) {
             super(context,
                     TestableLooper.get(KeyguardUpdateMonitorTest.this).getLooper(),
-                    mBroadcastDispatcher, mDumpController, mBackgroundExecutor);
+                    mBroadcastDispatcher, mDumpManager, mBackgroundExecutor);
             mStrongAuthTracker = KeyguardUpdateMonitorTest.this.mStrongAuthTracker;
         }
 

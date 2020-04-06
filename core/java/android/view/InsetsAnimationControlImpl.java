@@ -16,6 +16,7 @@
 
 package android.view;
 
+import static android.view.InsetsController.AnimationType;
 import static android.view.InsetsState.ISIDE_BOTTOM;
 import static android.view.InsetsState.ISIDE_FLOATING;
 import static android.view.InsetsState.ISIDE_LEFT;
@@ -30,9 +31,7 @@ import android.util.ArraySet;
 import android.util.SparseArray;
 import android.util.SparseIntArray;
 import android.util.SparseSetArray;
-import android.view.InsetsController.LayoutInsetsDuringAnimation;
 import android.view.InsetsState.InternalInsetsSide;
-import android.view.InsetsState.InternalInsetsType;
 import android.view.SyncRtSurfaceTransactionApplier.SurfaceParams;
 import android.view.WindowInsets.Type.InsetsType;
 import android.view.WindowInsetsAnimation.Bounds;
@@ -48,7 +47,8 @@ import java.util.ArrayList;
  * @hide
  */
 @VisibleForTesting
-public class InsetsAnimationControlImpl implements WindowInsetsAnimationController  {
+public class InsetsAnimationControlImpl implements WindowInsetsAnimationController,
+        InsetsAnimationControlRunner {
 
     private final Rect mTmpFrame = new Rect();
 
@@ -64,10 +64,10 @@ public class InsetsAnimationControlImpl implements WindowInsetsAnimationControll
     private final Insets mShownInsets;
     private final Matrix mTmpMatrix = new Matrix();
     private final InsetsState mInitialInsetsState;
+    private final @AnimationType int mAnimationType;
     private final @InsetsType int mTypes;
     private final InsetsAnimationControlCallbacks mController;
     private final WindowInsetsAnimation mAnimation;
-    private final Rect mFrame;
     private final boolean mFade;
     private Insets mCurrentInsets;
     private Insets mPendingInsets;
@@ -75,15 +75,15 @@ public class InsetsAnimationControlImpl implements WindowInsetsAnimationControll
     private boolean mFinished;
     private boolean mCancelled;
     private boolean mShownOnFinish;
-    private float mCurrentAlpha;
-    private float mPendingAlpha;
+    private float mCurrentAlpha = 1.0f;
+    private float mPendingAlpha = 1.0f;
 
     @VisibleForTesting
     public InsetsAnimationControlImpl(SparseArray<InsetsSourceControl> controls, Rect frame,
             InsetsState state, WindowInsetsAnimationControlListener listener,
             @InsetsType int types,
             InsetsAnimationControlCallbacks controller, long durationMs, Interpolator interpolator,
-            boolean fade, @LayoutInsetsDuringAnimation int layoutInsetsDuringAnimation) {
+            boolean fade, @AnimationType int animationType) {
         mControls = controls;
         mListener = listener;
         mTypes = types;
@@ -96,14 +96,14 @@ public class InsetsAnimationControlImpl implements WindowInsetsAnimationControll
                 null /* typeSideMap */);
         mShownInsets = calculateInsets(mInitialInsetsState, frame, controls, true /* shown */,
                 mTypeSideMap);
-        mFrame = new Rect(frame);
         buildTypeSourcesMap(mTypeSideMap, mSideSourceMap, mControls);
 
         mAnimation = new WindowInsetsAnimation(mTypes, interpolator,
                 durationMs);
         mAnimation.setAlpha(getCurrentAlpha());
+        mAnimationType = animationType;
         mController.startAnimation(this, listener, types, mAnimation,
-                new Bounds(mHiddenInsets, mShownInsets), layoutInsetsDuringAnimation);
+                new Bounds(mHiddenInsets, mShownInsets));
     }
 
     @Override
@@ -131,8 +131,9 @@ public class InsetsAnimationControlImpl implements WindowInsetsAnimationControll
         return mTypes;
     }
 
-    boolean controlsInternalType(@InternalInsetsType int type) {
-        return InsetsState.toInternalType(mTypes).contains(type);
+    @Override
+    public @AnimationType int getAnimationType() {
+        return mAnimationType;
     }
 
     @Override
@@ -147,7 +148,7 @@ public class InsetsAnimationControlImpl implements WindowInsetsAnimationControll
         }
         mPendingFraction = sanitize(fraction);
         mPendingInsets = sanitize(insets);
-        mPendingAlpha = 1 - sanitize(alpha);
+        mPendingAlpha = sanitize(alpha);
         mController.scheduleApplyChangeInsets();
     }
 
@@ -160,23 +161,23 @@ public class InsetsAnimationControlImpl implements WindowInsetsAnimationControll
             return false;
         }
         final Insets offset = Insets.subtract(mShownInsets, mPendingInsets);
-        final Float alphaOffset = 1 - mPendingAlpha;
         ArrayList<SurfaceParams> params = new ArrayList<>();
         updateLeashesForSide(ISIDE_LEFT, offset.left, mShownInsets.left, mPendingInsets.left,
-                params, state, alphaOffset);
+                params, state, mPendingAlpha);
         updateLeashesForSide(ISIDE_TOP, offset.top, mShownInsets.top, mPendingInsets.top, params,
-                state, alphaOffset);
+                state, mPendingAlpha);
         updateLeashesForSide(ISIDE_RIGHT, offset.right, mShownInsets.right, mPendingInsets.right,
-                params, state, alphaOffset);
+                params, state, mPendingAlpha);
         updateLeashesForSide(ISIDE_BOTTOM, offset.bottom, mShownInsets.bottom,
-                mPendingInsets.bottom, params, state, alphaOffset);
+                mPendingInsets.bottom, params, state, mPendingAlpha);
         updateLeashesForSide(ISIDE_FLOATING, 0 /* offset */, 0 /* inset */, 0 /* maxInset */,
-                params, state, alphaOffset);
+                params, state, mPendingAlpha);
 
         mController.applySurfaceParams(params.toArray(new SurfaceParams[params.size()]));
         mCurrentInsets = mPendingInsets;
         mAnimation.setFraction(mPendingFraction);
-        mCurrentAlpha = 1 - alphaOffset;
+        mCurrentAlpha = mPendingAlpha;
+        mAnimation.setAlpha(mPendingAlpha);
         if (mFinished) {
             mController.notifyFinished(this, mShownOnFinish);
         }
@@ -199,7 +200,8 @@ public class InsetsAnimationControlImpl implements WindowInsetsAnimationControll
         return mAnimation.getFraction();
     }
 
-    public void onCancelled() {
+    @Override
+    public void cancel() {
         if (mFinished) {
             return;
         }
@@ -211,12 +213,17 @@ public class InsetsAnimationControlImpl implements WindowInsetsAnimationControll
         return mCancelled;
     }
 
-    WindowInsetsAnimation getAnimation() {
+    @Override
+    public WindowInsetsAnimation getAnimation() {
         return mAnimation;
     }
 
     WindowInsetsAnimationControlListener getListener() {
         return mListener;
+    }
+
+    SparseArray<InsetsSourceControl> getControls() {
+        return mControls;
     }
 
     private Insets calculateInsets(InsetsState state, Rect frame,
@@ -232,7 +239,8 @@ public class InsetsAnimationControlImpl implements WindowInsetsAnimationControll
 
     private Insets getInsetsFromState(InsetsState state, Rect frame,
             @Nullable @InternalInsetsSide SparseIntArray typeSideMap) {
-        return state.calculateInsets(frame, false /* isScreenRound */,
+        return state.calculateInsets(frame, null /* ignoringVisibilityState */,
+                false /* isScreenRound */,
                 false /* alwaysConsumeSystemBars */, null /* displayCutout */,
                 null /* legacyContentInsets */, null /* legacyStableInsets */,
                 LayoutParams.SOFT_INPUT_ADJUST_RESIZE /* legacySoftInputMode*/,
@@ -251,8 +259,8 @@ public class InsetsAnimationControlImpl implements WindowInsetsAnimationControll
         return alpha >= 1 ? 1 : (alpha <= 0 ? 0 : alpha);
     }
 
-    private void updateLeashesForSide(@InternalInsetsSide int side, int offset, int inset,
-            int maxInset, ArrayList<SurfaceParams> surfaceParams, InsetsState state, Float alpha) {
+    private void updateLeashesForSide(@InternalInsetsSide int side, int offset, int maxInset,
+            int inset, ArrayList<SurfaceParams> surfaceParams, InsetsState state, Float alpha) {
         ArraySet<InsetsSourceControl> items = mSideSourceMap.get(side);
         if (items == null) {
             return;
@@ -267,16 +275,21 @@ public class InsetsAnimationControlImpl implements WindowInsetsAnimationControll
             mTmpFrame.set(source.getFrame());
             addTranslationToMatrix(side, offset, mTmpMatrix, mTmpFrame);
 
+            state.getSource(source.getType()).setVisible(side == ISIDE_FLOATING || inset != 0);
             state.getSource(source.getType()).setFrame(mTmpFrame);
 
             // If the system is controlling the insets source, the leash can be null.
             if (leash != null) {
                 // TODO: use a better interpolation for fade.
-                alpha = mFade ? ((float) maxInset / inset * 0.3f + 0.7f) : alpha;
-                surfaceParams.add(new SurfaceParams(leash, side == ISIDE_FLOATING ? 1 : alpha,
-                        mTmpMatrix, null /* windowCrop */, 0 /* layer */, 0f /* cornerRadius*/,
-                        side == ISIDE_FLOATING ? state.getSource(source.getType()).isVisible()
-                                : inset != 0 /* visible */));
+                alpha = mFade ? ((float) inset / maxInset * 0.3f + 0.7f) : alpha;
+                SurfaceParams params = new SurfaceParams.Builder(leash)
+                        .withAlpha(side == ISIDE_FLOATING ? 1 : alpha)
+                        .withMatrix(mTmpMatrix)
+                        .withVisibility(side == ISIDE_FLOATING
+                                ? state.getSource(source.getType()).isVisible()
+                                : inset != 0 /* visible */)
+                        .build();
+                surfaceParams.add(params);
             }
         }
     }

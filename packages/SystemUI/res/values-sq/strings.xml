@@ -63,6 +63,12 @@
     <string name="usb_debugging_allow" msgid="1722643858015321328">"Lejo"</string>
     <string name="usb_debugging_secondary_user_title" msgid="7843050591380107998">"Korrigjimi i USB-së nuk lejohet"</string>
     <string name="usb_debugging_secondary_user_message" msgid="3740347841470403244">"Përdoruesi i identifikuar aktualisht në këtë pajisje nuk mund ta aktivizojë korrigjimin e USB-së. Për ta përdorur këtë funksion, kalo te përdoruesi parësor."</string>
+    <string name="wifi_debugging_title" msgid="7300007687492186076">"Do ta lejosh korrigjimin me lidhjen pa tel në këtë rrjet?"</string>
+    <string name="wifi_debugging_message" msgid="5461204211731802995">"Emri i rrjetit (SSID)\n<xliff:g id="SSID_0">%1$s</xliff:g>\n\nAdresa Wi‑Fi (BSSID)\n<xliff:g id="BSSID_1">%2$s</xliff:g>"</string>
+    <string name="wifi_debugging_always" msgid="2968383799517975155">"Shfaq gjithmonë në këtë rrjet"</string>
+    <string name="wifi_debugging_allow" msgid="4573224609684957886">"Lejo"</string>
+    <string name="wifi_debugging_secondary_user_title" msgid="2493201475880517725">"Korrigjimi me lidhjen pa tel nuk lejohet"</string>
+    <string name="wifi_debugging_secondary_user_message" msgid="4492383073970079751">"Përdoruesi i identifikuar aktualisht në këtë pajisje nuk mund ta aktivizojë korrigjimin me lidhjen pa tel. Për ta përdorur këtë veçori, kalo te përdoruesi parësor."</string>
     <string name="usb_contaminant_title" msgid="894052515034594113">"Porta e USB-së është çaktivizuar"</string>
     <string name="usb_contaminant_message" msgid="7730476585174719805">"Për të mbrojtur pajisjen tënde nga lëngjet apo papastërtitë, porta e USB-së është çaktivizuar dhe nuk do t\'i dallojë aksesorët.\n\nDo të njoftohesh kur të mos jetë problem përdorimi përsëri i portës USB."</string>
     <string name="usb_port_enabled" msgid="531823867664717018">"Porta USB është aktivizuar për të zbuluar karikuesit dhe aksesorët"</string>
@@ -367,7 +373,7 @@
     <string name="quick_settings_inversion_label" msgid="5078769633069667698">"Shkëmbe ngjyrat"</string>
     <string name="quick_settings_color_space_label" msgid="537528291083575559">"Modaliteti i korrigjimit të ngjyrës"</string>
     <string name="quick_settings_more_settings" msgid="2878235926753776694">"Cilësime të tjera"</string>
-    <string name="quick_settings_done" msgid="2163641301648855793">"U krye!"</string>
+    <string name="quick_settings_done" msgid="2163641301648855793">"U krye"</string>
     <string name="quick_settings_connected" msgid="3873605509184830379">"I lidhur"</string>
     <string name="quick_settings_connected_battery_level" msgid="1322075669498906959">"E lidhur, bateria <xliff:g id="BATTERY_LEVEL_AS_PERCENTAGE">%1$s</xliff:g>"</string>
     <string name="quick_settings_connecting" msgid="2381969772953268809">"Po lidhet..."</string>
@@ -488,6 +494,7 @@
     <string name="manage_notifications_text" msgid="6885645344647733116">"Menaxho"</string>
     <string name="manage_notifications_history_text" msgid="57055985396576230">"Historiku"</string>
     <string name="notification_section_header_gentle" msgid="3044910806569985386">"Njoftimet në heshtje"</string>
+    <string name="notification_section_header_alerting" msgid="3168140660646863240">"Njoftimet sinjalizuese"</string>
     <string name="notification_section_header_conversations" msgid="821834744538345661">"Bisedat"</string>
     <string name="accessibility_notification_section_header_gentle_clear_all" msgid="6490207897764933919">"Pastro të gjitha njoftimet në heshtje"</string>
     <string name="dnd_suppressing_shade_text" msgid="5588252250634464042">"Njoftimet janë vendosur në pauzë nga modaliteti \"Mos shqetëso\""</string>
@@ -551,6 +558,7 @@
     <string name="monitoring_description_app_personal_work" msgid="6175816356939166101">"Profili yt i punës menaxhohet nga <xliff:g id="ORGANIZATION">%1$s</xliff:g>. Profili është i lidhur me <xliff:g id="APPLICATION_WORK">%2$s</xliff:g>, i cili mund të monitorojë aktivitetin tënd të punës në rrjet, duke përfshirë mail-et, aplikacionet dhe sajtet e uebit.\n\nJe lidhur gjithashtu edhe me <xliff:g id="APPLICATION_PERSONAL">%3$s</xliff:g>, i cili mund të monitorojë aktivitetin tënd personal në rrjet."</string>
     <string name="keyguard_indication_trust_unlocked" msgid="7395154975733744547">"Mbajtur shkyçur nga TrustAgent"</string>
     <string name="keyguard_indication_trust_disabled" msgid="6820793704816727918">"Pajisje do të qëndrojë e kyçur derisa ta shkyçësh manualisht"</string>
+    <string name="keyguard_indication_trust_unlocked_plugged_in" msgid="2323452175329362855">"<xliff:g id="KEYGUARD_INDICATION">%1$s</xliff:g>\n<xliff:g id="POWER_INDICATION">%2$s</xliff:g>"</string>
     <string name="hidden_notifications_title" msgid="1782412844777612795">"Merr njoftime më shpejt"</string>
     <string name="hidden_notifications_text" msgid="5899627470450792578">"Shikoji para se t\'i shkyçësh"</string>
     <string name="hidden_notifications_cancel" msgid="4805370226181001278">"Jo, faleminderit!"</string>
@@ -686,10 +694,8 @@
     <string name="notification_channel_summary_low" msgid="7300447764759926720">"Të ndihmon të fokusohesh pa tinguj ose dridhje."</string>
     <string name="notification_channel_summary_default" msgid="3539949463907902037">"Të tërheq vëmendjen me tinguj ose dridhje."</string>
     <string name="notification_channel_summary_bubble" msgid="7235935211580860537">"Mban vëmendjen tënde me një shkurtore pluskuese te kjo përmbajtje."</string>
-    <!-- no translation found for bubble_overflow_empty_title (3120029421991510842) -->
-    <skip />
-    <!-- no translation found for bubble_overflow_empty_subtitle (3106801169793396894) -->
-    <skip />
+    <string name="bubble_overflow_empty_title" msgid="3120029421991510842">"Nuk ka flluska të fundit"</string>
+    <string name="bubble_overflow_empty_subtitle" msgid="198257239740933131">"Flluskat e fundit dhe flluskat e hequra do të shfaqen këtu."</string>
     <string name="notification_unblockable_desc" msgid="2073030886006190804">"Këto njoftime nuk mund të modifikohen."</string>
     <string name="notification_multichannel_desc" msgid="7414593090056236179">"Ky grup njoftimesh nuk mund të konfigurohet këtu"</string>
     <string name="notification_delegate_header" msgid="1264510071031479920">"Njoftim i dërguar me përfaqësues"</string>
@@ -974,6 +980,9 @@
     <string name="bubble_accessibility_action_move_bottom_left" msgid="6339015902495504715">"Zhvendos poshtë majtas"</string>
     <string name="bubble_accessibility_action_move_bottom_right" msgid="7471571700628346212">"Lëvize poshtë djathtas"</string>
     <string name="bubble_dismiss_text" msgid="7071770411580452911">"Hiq"</string>
+    <string name="bubbles_user_education_title" msgid="3385222165904578710">"Mbaji bisedat në plan të parë"</string>
+    <string name="bubbles_user_education_description" msgid="6663205638091146934">"Bisedat e reja nga <xliff:g id="APP_NAME">%1$s</xliff:g> do të shfaqen si flluska. Trokit mbi një flluskë për ta hapur atë. Zvarrit për ta zhvendosur atë.\n\nTrokit mbi flluskë"</string>
+    <string name="bubbles_user_education_manage" msgid="1391639189507036423">"Trokit \"Menaxho\" për të çaktivizuar flluskat nga ky aplikacion"</string>
     <string name="notification_content_system_nav_changed" msgid="5077913144844684544">"Navigimi i sistemit u përditësua. Për të bërë ndryshime, shko te \"Cilësimet\"."</string>
     <string name="notification_content_gesture_nav_available" msgid="4431460803004659888">"Shko te \"Cilësimet\" për të përditësuar navigimin e sistemit"</string>
     <string name="inattentive_sleep_warning_title" msgid="3891371591713990373">"Në gatishmëri"</string>
@@ -983,16 +992,20 @@
     <string name="quick_controls_title" msgid="525285759614231333">"Kontrollet e shpejta"</string>
     <string name="controls_providers_title" msgid="8844124515157926071">"Shto kontrollet"</string>
     <string name="controls_providers_subtitle" msgid="8187768950110836569">"Zgjidh një aplikacion nga i cili do të shtosh kontrollet"</string>
-    <plurals name="controls_number_of_favorites" formatted="false" msgid="5867139290551373147">
-      <item quantity="other"><xliff:g id="NUMBER_1">%s</xliff:g> të preferuara aktuale.</item>
-      <item quantity="one"><xliff:g id="NUMBER_0">%s</xliff:g> e preferuar aktuale.</item>
+    <plurals name="controls_number_of_favorites" formatted="false" msgid="1057347832073807380">
+      <item quantity="other">U shtuan <xliff:g id="NUMBER_1">%s</xliff:g> kontrolle.</item>
+      <item quantity="one">U shtua <xliff:g id="NUMBER_0">%s</xliff:g> kontroll.</item>
     </plurals>
     <string name="controls_favorite_default_title" msgid="967742178688938137">"Kontrollet"</string>
     <string name="controls_favorite_subtitle" msgid="4049644994401173949">"Zgjidh kontrollet për qasjen e shpejtë"</string>
-    <!-- no translation found for controls_favorite_header_favorites (3118600046217493471) -->
+    <string name="controls_favorite_header_favorites" msgid="3118600046217493471">"Të preferuarit"</string>
+    <string name="controls_favorite_header_all" msgid="7507855973418969992">"Të gjitha"</string>
+    <string name="controls_favorite_load_error" msgid="2533215155804455348">"Lista e të gjitha kontrolleve nuk mund të ngarkohej."</string>
+    <string name="controls_favorite_other_zone_header" msgid="9089613266575525252">"Tjetër"</string>
+    <!-- no translation found for controls_dialog_title (8806193219278278442) -->
     <skip />
-    <!-- no translation found for controls_favorite_header_all (7507855973418969992) -->
+    <!-- no translation found for controls_dialog_ok (7011816381344485651) -->
     <skip />
-    <!-- no translation found for controls_favorite_load_error (2533215155804455348) -->
+    <!-- no translation found for controls_dialog_message (6292099631702047540) -->
     <skip />
 </resources>

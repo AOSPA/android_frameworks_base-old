@@ -124,12 +124,13 @@ public final class CachedAppOptimizer {
     static final int COMPACT_PROCESS_MSG = 1;
     static final int COMPACT_SYSTEM_MSG = 2;
     static final int SET_FROZEN_PROCESS_MSG = 3;
+    static final int REPORT_UNFREEZE_MSG = 4;
 
     //TODO:change this static definition into a configurable flag.
     static final int FREEZE_TIMEOUT_MS = 500;
 
     static final int DO_FREEZE = 1;
-    static final int DO_UNFREEZE = 2;
+    static final int REPORT_UNFREEZE = 2;
 
     /**
      * This thread must be moved to the system background cpuset.
@@ -621,11 +622,41 @@ public final class CachedAppOptimizer {
     }
 
     @GuardedBy("mAm")
-    void unfreezeAppAsync(ProcessRecord app) {
+    void unfreezeAppLocked(ProcessRecord app) {
         mFreezeHandler.removeMessages(SET_FROZEN_PROCESS_MSG, app);
 
-        mFreezeHandler.sendMessage(
-                mFreezeHandler.obtainMessage(SET_FROZEN_PROCESS_MSG, DO_UNFREEZE, 0, app));
+        if (!app.frozen) {
+            if (DEBUG_FREEZER) {
+                Slog.d(TAG_AM,
+                        "Skipping unfreeze for process " + app.pid + " "
+                        + app.processName + " (not frozen)");
+            }
+            return;
+        }
+
+        long freezeTime = app.freezeUnfreezeTime;
+
+        try {
+            Process.setProcessFrozen(app.pid, app.uid, false);
+
+            app.freezeUnfreezeTime = SystemClock.uptimeMillis();
+            app.frozen = false;
+        } catch (Exception e) {
+            Slog.e(TAG_AM, "Unable to unfreeze " + app.pid + " " + app.processName
+                    + ". Any related user experience might be hanged.");
+        }
+
+        if (!app.frozen) {
+            if (DEBUG_FREEZER) {
+                Slog.d(TAG_AM, "sync unfroze " + app.pid + " " + app.processName);
+            }
+
+            mFreezeHandler.sendMessage(
+                    mFreezeHandler.obtainMessage(REPORT_UNFREEZE_MSG,
+                        app.pid,
+                        (int) Math.min(app.freezeUnfreezeTime - freezeTime, Integer.MAX_VALUE),
+                        app.processName));
+        }
     }
 
     private static final class LastCompactionStats {
@@ -897,14 +928,19 @@ public final class CachedAppOptimizer {
 
         @Override
         public void handleMessage(Message msg) {
-            if (msg.what != SET_FROZEN_PROCESS_MSG) {
-                return;
-            }
+            switch (msg.what) {
+                case SET_FROZEN_PROCESS_MSG:
+                    freezeProcess((ProcessRecord) msg.obj);
+                    break;
+                case REPORT_UNFREEZE_MSG:
+                    int pid = msg.arg1;
+                    int frozenDuration = msg.arg2;
+                    String processName = (String) msg.obj;
 
-            if (msg.arg1 == DO_FREEZE) {
-                freezeProcess((ProcessRecord) msg.obj);
-            } else if (msg.arg1 == DO_UNFREEZE) {
-                unfreezeProcess((ProcessRecord) msg.obj);
+                    reportUnfreeze(pid, frozenDuration, processName);
+                    break;
+                default:
+                    return;
             }
         }
 
@@ -918,10 +954,12 @@ public final class CachedAppOptimizer {
                 pid = proc.pid;
                 name = proc.processName;
 
-                if (proc.curAdj <= ProcessList.CACHED_APP_MIN_ADJ) {
+                if (proc.curAdj < ProcessList.CACHED_APP_MIN_ADJ
+                        || proc.shouldNotFreeze) {
                     if (DEBUG_FREEZER) {
                         Slog.d(TAG_AM, "Skipping freeze for process " + pid
-                                + " " + name + " (not cached)");
+                                + " " + name + " curAdj = " + proc.curAdj
+                                + ", shouldNotFreeze = " + proc.shouldNotFreeze);
                     }
                     return;
                 }
@@ -965,61 +1003,18 @@ public final class CachedAppOptimizer {
             }
         }
 
-        private void unfreezeProcess(ProcessRecord proc) {
-            final int pid;
-            final String name;
-            final long frozenDuration;
-            final boolean frozen;
+        private void reportUnfreeze(int pid, int frozenDuration, String processName) {
 
-            synchronized (mAm) {
-                pid = proc.pid;
-                name = proc.processName;
+            EventLog.writeEvent(EventLogTags.AM_UNFREEZE, pid, processName);
 
-                if (!proc.frozen) {
-                    if (DEBUG_FREEZER) {
-                        Slog.d(TAG_AM,
-                                "Skipping unfreeze for process " + pid + " "
-                                + name + " (not frozen)");
-                    }
-                    return;
-                }
-
-                if (pid == 0) {
-                    // Not a real process, either being launched or killed
-                    return;
-                }
-
-                long freezeTime = proc.freezeUnfreezeTime;
-
-                try {
-                    Process.setProcessFrozen(proc.pid, proc.uid, false);
-
-                    proc.freezeUnfreezeTime = SystemClock.uptimeMillis();
-                    proc.frozen = false;
-                } catch (Exception e) {
-                    Slog.w(TAG_AM, "Unable to unfreeze " + pid + " " + name);
-                }
-
-                frozenDuration = proc.freezeUnfreezeTime - freezeTime;
-                frozen = proc.frozen;
-            }
-
-            if (!frozen) {
-                if (DEBUG_FREEZER) {
-                    Slog.d(TAG_AM, "unfroze " + pid + " " + name);
-                }
-
-                EventLog.writeEvent(EventLogTags.AM_UNFREEZE, pid, name);
-
-                // See above for why we're not taking mPhenotypeFlagLock here
-                if (mRandom.nextFloat() < mFreezerStatsdSampleRate) {
-                    FrameworkStatsLog.write(
-                            FrameworkStatsLog.APP_FREEZE_CHANGED,
-                            FrameworkStatsLog.APP_FREEZE_CHANGED__ACTION__UNFREEZE_APP,
-                            pid,
-                            name,
-                            frozenDuration);
-                }
+            // See above for why we're not taking mPhenotypeFlagLock here
+            if (mRandom.nextFloat() < mFreezerStatsdSampleRate) {
+                FrameworkStatsLog.write(
+                        FrameworkStatsLog.APP_FREEZE_CHANGED,
+                        FrameworkStatsLog.APP_FREEZE_CHANGED__ACTION__UNFREEZE_APP,
+                        pid,
+                        processName,
+                        frozenDuration);
             }
         }
     }

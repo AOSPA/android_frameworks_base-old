@@ -54,6 +54,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
+import android.os.ParcelFileDescriptor;
 import android.os.PersistableBundle;
 import android.os.Process;
 import android.os.RemoteException;
@@ -333,21 +334,6 @@ public class TelephonyManager {
     };
 
     /** @hide */
-    @IntDef(prefix = {"MODEM_COUNT_"},
-            value = {
-                    MODEM_COUNT_NO_MODEM,
-                    MODEM_COUNT_SINGLE_MODEM,
-                    MODEM_COUNT_DUAL_MODEM,
-                    MODEM_COUNT_TRI_MODEM
-            })
-    public @interface ModemCount {}
-
-    public static final int MODEM_COUNT_NO_MODEM     = 0;
-    public static final int MODEM_COUNT_SINGLE_MODEM = 1;
-    public static final int MODEM_COUNT_DUAL_MODEM   = 2;
-    public static final int MODEM_COUNT_TRI_MODEM    = 3;
-
-    /** @hide */
     @UnsupportedAppUsage
     public TelephonyManager(Context context) {
       this(context, SubscriptionManager.DEFAULT_SUBSCRIPTION_ID);
@@ -465,22 +451,22 @@ public class TelephonyManager {
      * Returns 2 for Dual standby mode (Dual SIM functionality).
      * Returns 3 for Tri standby mode (Tri SIM functionality).
      */
-    public @ModemCount int getActiveModemCount() {
+    public int getActiveModemCount() {
         int modemCount = 1;
         switch (getMultiSimConfiguration()) {
             case UNKNOWN:
-                modemCount = MODEM_COUNT_SINGLE_MODEM;
+                modemCount = 1;
                 // check for voice and data support, 0 if not supported
                 if (!isVoiceCapable() && !isSmsCapable() && !isDataCapable()) {
-                    modemCount = MODEM_COUNT_NO_MODEM;
+                    modemCount = 0;
                 }
                 break;
             case DSDS:
             case DSDA:
-                modemCount = MODEM_COUNT_DUAL_MODEM;
+                modemCount = 2;
                 break;
             case TSTS:
-                modemCount = MODEM_COUNT_TRI_MODEM;
+                modemCount = 3;
                 break;
         }
         return modemCount;
@@ -493,7 +479,7 @@ public class TelephonyManager {
      * dual-SIM capable device operating in single SIM mode (only one logical modem is turned on),
      * {@link #getActiveModemCount} returns 1 while this API returns 2.
      */
-    public @ModemCount int getSupportedModemCount() {
+    public int getSupportedModemCount() {
         return TelephonyProperties.max_active_modems().orElse(getActiveModemCount());
     }
 
@@ -1057,7 +1043,7 @@ public class TelephonyManager {
      * or that all steps during multi-SIM change are done. To know those information you still need
      * to listen to SIM_STATE changes or active subscription changes.
      *
-     * See extra of {@link #EXTRA_NUM_OF_ACTIVE_SIM_SUPPORTED} for updated value.
+     * See extra of {@link #EXTRA_ACTIVE_SIM_SUPPORTED_COUNT} for updated value.
      */
     public static final String ACTION_MULTI_SIM_CONFIG_CHANGED =
             "android.telephony.action.MULTI_SIM_CONFIG_CHANGED";
@@ -1067,6 +1053,8 @@ public class TelephonyManager {
      * The number of active SIM supported by current multi-SIM config. It's not related to how many
      * SIM/subscriptions are currently active.
      *
+     * Same value will be returned by {@link #getActiveModemCount()}.
+     *
      * For single SIM mode, it's 1.
      * For DSDS or DSDA mode, it's 2.
      * For triple-SIM mode, it's 3.
@@ -1075,8 +1063,8 @@ public class TelephonyManager {
      *
      * type: integer
      */
-    public static final String EXTRA_NUM_OF_ACTIVE_SIM_SUPPORTED =
-            "android.telephony.extra.NUM_OF_ACTIVE_SIM_SUPPORTED";
+    public static final String EXTRA_ACTIVE_SIM_SUPPORTED_COUNT =
+            "android.telephony.extra.ACTIVE_SIM_SUPPORTED_COUNT";
 
     /**
      * @hide
@@ -2386,7 +2374,12 @@ public class TelephonyManager {
     public static final int PHONE_TYPE_CDMA = PhoneConstants.PHONE_TYPE_CDMA;
     /** Phone is via SIP. */
     public static final int PHONE_TYPE_SIP = PhoneConstants.PHONE_TYPE_SIP;
-    /** Phone is via IMS. */
+
+    /**
+     * Phone is via IMS.
+     *
+     * @hide
+     */
     public static final int PHONE_TYPE_IMS = PhoneConstants.PHONE_TYPE_IMS;
 
     /**
@@ -2394,7 +2387,6 @@ public class TelephonyManager {
      *
      * @hide
      */
-    @SystemApi
     public static final int PHONE_TYPE_THIRD_PARTY = PhoneConstants.PHONE_TYPE_THIRD_PARTY;
 
     /**
@@ -2791,39 +2783,22 @@ public class TelephonyManager {
     /**
      * Returns the ISO-3166 country code equivalent of the MCC (Mobile Country Code) of the current
      * registered operator or the cell nearby, if available.
-     * <p>
-     * The ISO-3166 country code is provided in lowercase 2 character format.
-     * <p>
-     * Note: In multi-sim, this returns a shared emergency network country iso from other
-     * subscription if the subscription used to create the TelephonyManager doesn't camp on
-     * a network due to some reason (e.g. pin/puk locked), or sim is absent in the corresponding
-     * slot.
+     *
      * Note: Result may be unreliable on CDMA networks (use {@link #getPhoneType()} to determine
      * if on a CDMA network).
      * <p>
      * @return the lowercase 2 character ISO-3166 country code, or empty string if not available.
      */
     public String getNetworkCountryIso() {
-        try {
-            ITelephony telephony = getITelephony();
-            if (telephony == null) return "";
-            return telephony.getNetworkCountryIsoForPhone(getPhoneId(),
-                    null /* no permission check */, null);
-        } catch (RemoteException ex) {
-            return "";
-        }
+        return getNetworkCountryIso(getSlotIndex());
     }
 
     /**
      * Returns the ISO-3166 country code equivalent of the MCC (Mobile Country Code) of the current
-     * registered operator or the cell nearby, if available.
-     * <p>
-     * The ISO-3166 country code is provided in lowercase 2 character format.
-     * <p>
-     * Note: In multi-sim, this returns a shared emergency network country iso from other
-     * subscription if the subscription used to create the TelephonyManager doesn't camp on
-     * a network due to some reason (e.g. pin/puk locked), or sim is absent in the corresponding
-     * slot.
+     * registered operator or the cell nearby, if available. This is same as
+     * {@link #getNetworkCountryIso()} but allowing specifying the SIM slot index. This is used for
+     * accessing network country info from the SIM slot that does not have SIM inserted.
+     *
      * Note: Result may be unreliable on CDMA networks (use {@link #getPhoneType()} to determine
      * if on a CDMA network).
      * <p>
@@ -2834,25 +2809,32 @@ public class TelephonyManager {
      *
      * @throws IllegalArgumentException when the slotIndex is invalid.
      *
-     * {@hide}
      */
-    @SystemApi
-    @TestApi
     @NonNull
-    @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE)
     public String getNetworkCountryIso(int slotIndex) {
         try {
-            if (!SubscriptionManager.isValidSlotIndex(slotIndex)) {
+            if (slotIndex != SubscriptionManager.DEFAULT_SIM_SLOT_INDEX
+                    && !SubscriptionManager.isValidSlotIndex(slotIndex)) {
                 throw new IllegalArgumentException("invalid slot index " + slotIndex);
             }
 
             ITelephony telephony = getITelephony();
             if (telephony == null) return "";
-            return telephony.getNetworkCountryIsoForPhone(slotIndex, getOpPackageName(),
-                    getFeatureId());
+            return telephony.getNetworkCountryIsoForPhone(slotIndex);
         } catch (RemoteException ex) {
             return "";
         }
+    }
+
+    /**
+     * @hide
+     * @deprecated Use {@link #getNetworkCountryIso(int)} instead.
+     */
+    @Deprecated
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.Q,
+            publicAlternatives = "Use {@link #getNetworkCountryIso(int)} instead.")
+    public String getNetworkCountryIsoForPhone(int phoneId) {
+        return getNetworkCountryIso(phoneId);
     }
 
     /*
@@ -3095,64 +3077,6 @@ public class TelephonyManager {
         } catch (NullPointerException ex) {
             // This could happen before phone restarts due to crashing
             return NETWORK_TYPE_UNKNOWN;
-        }
-    }
-
-    /**
-     * Network Class Definitions.
-     * Do not change this order, it is used for sorting during emergency calling in
-     * {@link TelephonyConnectionService#getFirstPhoneForEmergencyCall()}. Any newer technologies
-     * should be added after the current definitions.
-     */
-    /** Unknown network class. {@hide} */
-    public static final int NETWORK_CLASS_UNKNOWN = 0;
-    /** Class of broadly defined "2G" networks. {@hide} */
-    @UnsupportedAppUsage
-    public static final int NETWORK_CLASS_2_G = 1;
-    /** Class of broadly defined "3G" networks. {@hide} */
-    @UnsupportedAppUsage
-    public static final int NETWORK_CLASS_3_G = 2;
-    /** Class of broadly defined "4G" networks. {@hide} */
-    @UnsupportedAppUsage
-    public static final int NETWORK_CLASS_4_G = 3;
-    /** Class of broadly defined "5G" networks. {@hide} */
-    public static final int NETWORK_CLASS_5_G = 4;
-
-    /**
-     * Return general class of network type, such as "3G" or "4G". In cases
-     * where classification is contentious, this method is conservative.
-     *
-     * @hide
-     */
-    @UnsupportedAppUsage
-    public static int getNetworkClass(int networkType) {
-        switch (networkType) {
-            case NETWORK_TYPE_GPRS:
-            case NETWORK_TYPE_GSM:
-            case NETWORK_TYPE_EDGE:
-            case NETWORK_TYPE_CDMA:
-            case NETWORK_TYPE_1xRTT:
-            case NETWORK_TYPE_IDEN:
-                return NETWORK_CLASS_2_G;
-            case NETWORK_TYPE_UMTS:
-            case NETWORK_TYPE_EVDO_0:
-            case NETWORK_TYPE_EVDO_A:
-            case NETWORK_TYPE_HSDPA:
-            case NETWORK_TYPE_HSUPA:
-            case NETWORK_TYPE_HSPA:
-            case NETWORK_TYPE_EVDO_B:
-            case NETWORK_TYPE_EHRPD:
-            case NETWORK_TYPE_HSPAP:
-            case NETWORK_TYPE_TD_SCDMA:
-                return NETWORK_CLASS_3_G;
-            case NETWORK_TYPE_LTE:
-            case NETWORK_TYPE_IWLAN:
-            case NETWORK_TYPE_LTE_CA:
-                return NETWORK_CLASS_4_G;
-            case NETWORK_TYPE_NR:
-                return NETWORK_CLASS_5_G;
-            default:
-                return NETWORK_CLASS_UNKNOWN;
         }
     }
 
@@ -3846,29 +3770,6 @@ public class TelephonyManager {
     }
 
     /**
-     * Returns the ISO-3166 country code equivalent for the SIM provider's country code
-     * of the default subscription
-     * <p>
-     * The ISO-3166 country code is provided in lowercase 2 character format.
-     * @return the lowercase 2 character ISO-3166 country code, or empty string is not available.
-     * <p>
-     * Note: This API is introduced to unblock mainlining work as the following APIs in
-     * Linkify.java invokes getSimCountryIso() without a context. TODO(Bug 144576376): remove
-     * this API once the following APIs are redesigned to access telephonymanager with a context.
-     *
-     * {@link Linkify#addLinks(@NonNull Spannable text, @LinkifyMask int mask)}
-     * {@link Linkify#addLinks(@NonNull Spannable text, @LinkifyMask int mask,
-               @Nullable Function<String, URLSpan> urlSpanFactory)}
-     *
-     * @hide
-     */
-    @SystemApi
-    @NonNull
-    public static String getDefaultSimCountryIso() {
-        return getSimCountryIso(SubscriptionManager.getDefaultSubscriptionId());
-    }
-
-    /**
      * Returns the ISO country code equivalent for the SIM provider's country code.
      *
      * @param subId for which SimCountryIso is returned
@@ -3962,19 +3863,19 @@ public class TelephonyManager {
     }
 
     /**
-     * Return if the current radio has global mode enabled, meaning it supports
-     * both 3GPP and 3GPP2 radio technologies at the same time.
+     * Return if the current radio can support both 3GPP and 3GPP2 radio technologies at the same
+     * time. This is also known as global mode, which includes LTE, CDMA, EvDo and GSM/WCDMA.
      *
      * <p>If this object has been created with {@link #createForSubscriptionId}, applies to the
      * given subId. Otherwise, applies to {@link SubscriptionManager#getDefaultSubscriptionId()}.
      *
-     * @return {@code true} if global mode is enabled
-     *         {@code false} if global mode is not enabled or unknown
+     * @return {@code true} if 3GPP and 3GPP2 radio technologies can be supported at the same time
+     *         {@code false} if not supported or unknown
      * @hide
      */
     @SystemApi
     @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE)
-    public boolean isGlobalModeEnabled() {
+    public boolean isLteCdmaEvdoGsmWcdmaEnabled() {
         return getLteOnCdmaMode(getSubId()) == PhoneConstants.LTE_ON_CDMA_TRUE;
     }
 
@@ -5692,7 +5593,6 @@ public class TelephonyManager {
      * @hide
      */
     @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE)
-    @SystemApi
     @NonNull
     public CdmaEriInformation getCdmaEriInformation() {
         return new CdmaEriInformation(
@@ -8034,21 +7934,19 @@ public class TelephonyManager {
      * app has carrier privileges (see {@link #hasCarrierPrivileges}).
      *
      * @param operatorNumeric the PLMN ID of the network to select.
-     * @param ran the initial suggested radio access network type.
-     *         If registration fails, the RAN is not available after, the RAN is not within the
-     *         network types specified by {@link #setPreferredNetworkTypeBitmask}, or the value is
-     *         {@link AccessNetworkConstants.AccessNetworkType#UNKNOWN}, modem will select
-     *         the next best RAN for network registration.
      * @param persistSelection whether the selection will persist until reboot.
      *         If true, only allows attaching to the selected PLMN until reboot; otherwise,
      *         attach to the chosen PLMN and resume normal network selection next time.
+     * @param ran the initial suggested radio access network type.
+     *         If registration fails, the RAN is not available after, the RAN is not within the
+     *         network types specified by the preferred network types, or the value is
+     *         {@link AccessNetworkConstants.AccessNetworkType#UNKNOWN}, modem will select
+     *         the next best RAN for network registration.
      * @return {@code true} on success; {@code false} on any failure.
-     * @hide
      */
     @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE)
-    @SystemApi
     public boolean setNetworkSelectionModeManual(@NonNull String operatorNumeric,
-            @AccessNetworkConstants.RadioAccessNetworkType int ran, boolean persistSelection) {
+            boolean persistSelection, @AccessNetworkConstants.RadioAccessNetworkType int ran) {
         return setNetworkSelectionModeManual(new OperatorInfo("" /* operatorAlphaLong */,
                 "" /* operatorAlphaShort */, operatorNumeric, ran), persistSelection);
     }
@@ -8814,7 +8712,6 @@ public class TelephonyManager {
      *
      * @hide
      */
-    @SystemApi
     @Nullable
     @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE)
     public PinResult supplyPinReportPinResult(@NonNull String pin) {
@@ -8839,7 +8736,6 @@ public class TelephonyManager {
      *
      * @hide
      */
-    @SystemApi
     @Nullable
     @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE)
     public PinResult supplyPukReportPinResult(@NonNull String puk, @NonNull String pin) {
@@ -9031,7 +8927,10 @@ public class TelephonyManager {
     }
 
     /**
-     * Shut down all the live radios over all the slot index.
+     * Shut down all the live radios over all the slot indexes.
+     *
+     * <p>To know when the radio has completed powering off, use
+     * {@link PhoneStateListener#LISTEN_SERVICE_STATE LISTEN_SERVICE_STATE}.
      *
      * @hide
      */
@@ -9044,7 +8943,8 @@ public class TelephonyManager {
                 telephony.shutdownMobileRadios();
             }
         } catch (RemoteException e) {
-            Log.e(TAG, "Error calling ITelephony#shutdownMobileRadios", e);
+            Log.e(TAG, "Error calling ITelephony#shutdownAllRadios", e);
+            e.rethrowAsRuntimeException();
         }
     }
 
@@ -9063,7 +8963,8 @@ public class TelephonyManager {
                 return telephony.needMobileRadioShutdown();
             }
         } catch (RemoteException e) {
-            Log.e(TAG, "Error calling ITelephony#needMobileRadioShutdown", e);
+            Log.e(TAG, "Error calling ITelephony#isAnyRadioPoweredOn", e);
+            e.rethrowAsRuntimeException();
         }
         return false;
     }
@@ -11098,7 +10999,6 @@ public class TelephonyManager {
      * @param enabled True if enabling the data, otherwise disabling.
      * @hide
      */
-    @SystemApi
     @RequiresPermission(Manifest.permission.MODIFY_PHONE_STATE)
     public void setPolicyDataEnabled(boolean enabled) {
         try {
@@ -11201,7 +11101,6 @@ public class TelephonyManager {
      * @param isEnabled {@code true} for enabling; {@code false} for disabling.
      * @hide
      */
-    @SystemApi
     @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE)
     public void setAlwaysReportSignalStrength(boolean isEnabled) {
         try {
@@ -11236,21 +11135,21 @@ public class TelephonyManager {
     }
 
     /**
-     * Checks whether cellular data connection is enabled in the device.
+     * Checks whether cellular data connection is allowed in the device.
      *
-     * Whether cellular data connection is enabled, meaning upon request whether will try to setup
-     * metered data connection considering all factors below:
-     * 1) User turned on data setting {@link #isDataEnabled}.
-     * 2) Carrier allows data to be on.
-     * 3) Network policy.
-     * And possibly others.
-     *
-     * @return {@code true} if the overall data connection is capable; {@code false} if not.
+     * <p>Whether cellular data connection is allowed considers all factors below:
+     * <UL>
+     *   <LI>User turned on data setting {@link #isDataEnabled}.</LI>
+     *   <LI>Carrier allows data to be on.</LI>
+     *   <LI>Network policy.</LI>
+     *   <LI>And possibly others.</LI>
+     * </UL>
+     * @return {@code true} if the overall data connection is allowed; {@code false} if not.
      * @hide
      */
     @SystemApi
     @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE)
-    public boolean isDataConnectionEnabled() {
+    public boolean isDataConnectionAllowed() {
         boolean retVal = false;
         try {
             int subId = getSubId(SubscriptionManager.getDefaultDataSubscriptionId());
@@ -11258,8 +11157,9 @@ public class TelephonyManager {
             if (telephony != null)
                 retVal = telephony.isDataEnabled(subId);
         } catch (RemoteException e) {
-            Log.e(TAG, "Error isDataConnectionEnabled", e);
+            Log.e(TAG, "Error isDataConnectionAllowed", e);
         } catch (NullPointerException e) {
+            return false;
         }
         return retVal;
     }
@@ -11629,6 +11529,55 @@ public class TelephonyManager {
     @SystemApi
     public static final long NETWORK_TYPE_BITMASK_IWLAN = (1 << (NETWORK_TYPE_IWLAN -1));
 
+    /** @hide */
+    public static final long NETWORK_CLASS_BITMASK_2G = NETWORK_TYPE_BITMASK_GSM
+                | NETWORK_TYPE_BITMASK_GPRS
+                | NETWORK_TYPE_BITMASK_EDGE
+                | NETWORK_TYPE_BITMASK_CDMA
+                | NETWORK_TYPE_BITMASK_1xRTT;
+
+    /** @hide */
+    public static final long NETWORK_CLASS_BITMASK_3G = NETWORK_TYPE_BITMASK_EVDO_0
+            | NETWORK_TYPE_BITMASK_EVDO_A
+            | NETWORK_TYPE_BITMASK_EVDO_B
+            | NETWORK_TYPE_BITMASK_EHRPD
+            | NETWORK_TYPE_BITMASK_HSUPA
+            | NETWORK_TYPE_BITMASK_HSDPA
+            | NETWORK_TYPE_BITMASK_HSPA
+            | NETWORK_TYPE_BITMASK_HSPAP
+            | NETWORK_TYPE_BITMASK_UMTS
+            | NETWORK_TYPE_BITMASK_TD_SCDMA;
+
+    /** @hide */
+    public static final long NETWORK_CLASS_BITMASK_4G = NETWORK_TYPE_BITMASK_LTE
+            | NETWORK_TYPE_BITMASK_LTE_CA
+            | NETWORK_TYPE_BITMASK_IWLAN;
+
+    /** @hide */
+    public static final long NETWORK_CLASS_BITMASK_5G = NETWORK_TYPE_BITMASK_NR;
+
+    /** @hide */
+    public static final long NETWORK_STANDARDS_FAMILY_BITMASK_3GPP = NETWORK_TYPE_BITMASK_GSM
+            | NETWORK_TYPE_BITMASK_GPRS
+            | NETWORK_TYPE_BITMASK_EDGE
+            | NETWORK_TYPE_BITMASK_HSUPA
+            | NETWORK_TYPE_BITMASK_HSDPA
+            | NETWORK_TYPE_BITMASK_HSPA
+            | NETWORK_TYPE_BITMASK_HSPAP
+            | NETWORK_TYPE_BITMASK_UMTS
+            | NETWORK_TYPE_BITMASK_TD_SCDMA
+            | NETWORK_TYPE_BITMASK_LTE
+            | NETWORK_TYPE_BITMASK_LTE_CA
+            | NETWORK_TYPE_BITMASK_NR;
+
+    /** @hide */
+    public static final long NETWORK_STANDARDS_FAMILY_BITMASK_3GPP2 = NETWORK_TYPE_BITMASK_CDMA
+            | NETWORK_TYPE_BITMASK_1xRTT
+            | NETWORK_TYPE_BITMASK_EVDO_0
+            | NETWORK_TYPE_BITMASK_EVDO_A
+            | NETWORK_TYPE_BITMASK_EVDO_B
+            | NETWORK_TYPE_BITMASK_EHRPD;
+
     /**
      * @return Modem supported radio access family bitmask
      *
@@ -11690,11 +11639,9 @@ public class TelephonyManager {
     }
 
     /**
-     * Override the file path for testing OTA emergency number database in a file partition.
+     * Override the file path for OTA emergency number database in a file partition.
      *
-     * @param otaFilePath The test OTA emergency number database file path;
-     *                    if "RESET", recover the original database file partition.
-     *                    Format: <root file folder>@<file path>
+     * @param otaParcelFileDescriptor parcelable file descriptor for OTA emergency number database.
      *
      * <p> Requires permission:
      * {@link android.Manifest.permission#READ_ACTIVE_EMERGENCY_SESSION}
@@ -11704,16 +11651,42 @@ public class TelephonyManager {
     @RequiresPermission(android.Manifest.permission.READ_ACTIVE_EMERGENCY_SESSION)
     @SystemApi
     @TestApi
-    public void updateTestOtaEmergencyNumberDbFilePath(@NonNull String otaFilePath) {
+    public void updateOtaEmergencyNumberDbFilePath(
+            @NonNull ParcelFileDescriptor otaParcelFileDescriptor) {
         try {
             ITelephony telephony = getITelephony();
             if (telephony != null) {
-                telephony.updateTestOtaEmergencyNumberDbFilePath(otaFilePath);
+                telephony.updateOtaEmergencyNumberDbFilePath(otaParcelFileDescriptor);
             } else {
                 throw new IllegalStateException("telephony service is null.");
             }
         } catch (RemoteException ex) {
-            Log.e(TAG, "notifyOtaEmergencyNumberDatabaseInstalled RemoteException", ex);
+            Log.e(TAG, "updateOtaEmergencyNumberDbFilePath RemoteException", ex);
+            ex.rethrowAsRuntimeException();
+        }
+    }
+
+    /**
+     * Reset the file path to default for OTA emergency number database in a file partition.
+     *
+     * <p> Requires permission:
+     * {@link android.Manifest.permission#READ_ACTIVE_EMERGENCY_SESSION}
+     *
+     * @hide
+     */
+    @RequiresPermission(android.Manifest.permission.READ_ACTIVE_EMERGENCY_SESSION)
+    @SystemApi
+    @TestApi
+    public void resetOtaEmergencyNumberDbFilePath() {
+        try {
+            ITelephony telephony = getITelephony();
+            if (telephony != null) {
+                telephony.resetOtaEmergencyNumberDbFilePath();
+            } else {
+                throw new IllegalStateException("telephony service is null.");
+            }
+        } catch (RemoteException ex) {
+            Log.e(TAG, "resetOtaEmergencyNumberDbFilePath RemoteException", ex);
             ex.rethrowAsRuntimeException();
         }
     }
@@ -11915,7 +11888,7 @@ public class TelephonyManager {
     }
 
     /**
-     * A test API to return the emergency number db version.
+     * Returns the emergency number database version.
      *
      * <p>Requires Permission:
      *   {@link android.Manifest.permission#READ_PRIVILEGED_PHONE_STATE READ_PRIVILEGED_PHONE_STATE}
@@ -11924,6 +11897,7 @@ public class TelephonyManager {
      */
     @TestApi
     @SystemApi
+    @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE)
     public int getEmergencyNumberDbVersion() {
         try {
             ITelephony telephony = getITelephony();
@@ -12253,12 +12227,14 @@ public class TelephonyManager {
 
     /**
      * It indicates whether modem is enabled or not per slot.
-     * It's the corresponding status of {@link #enableModemForSlot}.
+     * It's the corresponding status of TelephonyManager.enableModemForSlot.
      *
+     * <p>Requires Permission:
+     * READ_PRIVILEGED_PHONE_STATE or
+     * {@link android.Manifest.permission#READ_PHONE_STATE READ_PHONE_STATE}
      * @param slotIndex which slot it's checking.
-     * @hide
      */
-    @SystemApi
+    @RequiresPermission(android.Manifest.permission.READ_PHONE_STATE)
     public boolean isModemEnabledForSlot(int slotIndex) {
         try {
             ITelephony telephony = getITelephony();
@@ -12639,14 +12615,32 @@ public class TelephonyManager {
     @TestApi
     @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE)
     public void setSystemSelectionChannels(@NonNull List<RadioAccessSpecifier> specifiers,
+            @NonNull @CallbackExecutor Executor executor,
+            @NonNull Consumer<Boolean> callback) {
+        Objects.requireNonNull(specifiers, "Specifiers must not be null.");
+        Objects.requireNonNull(executor, "Executor must not be null.");
+        Objects.requireNonNull(callback, "Callback must not be null.");
+        setSystemSelectionChannelsInternal(specifiers, executor, callback);
+    }
+
+    /**
+     * Same as {@link #setSystemSelectionChannels(List, Executor, Consumer<Boolean>)}, but to be
+     * used when the caller does not need feedback on the results of the operation.
+     * @param specifiers which bands to scan.
+     * @hide
+     */
+    @SystemApi
+    @TestApi
+    @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE)
+    public void setSystemSelectionChannels(@NonNull List<RadioAccessSpecifier> specifiers) {
+        Objects.requireNonNull(specifiers, "Specifiers must not be null.");
+        setSystemSelectionChannelsInternal(specifiers, null, null);
+    }
+
+
+    private void setSystemSelectionChannelsInternal(@NonNull List<RadioAccessSpecifier> specifiers,
             @Nullable @CallbackExecutor Executor executor,
             @Nullable Consumer<Boolean> callback) {
-        Objects.requireNonNull(specifiers, "Specifiers must not be null.");
-        if (callback != null) {
-            Objects.requireNonNull(executor, "Executor must not be null when"
-                    + " the callback is nonnull");
-        }
-
         IBooleanConsumer aidlConsumer = callback == null ? null : new IBooleanConsumer.Stub() {
             @Override
             public void accept(boolean result) {
@@ -12678,7 +12672,8 @@ public class TelephonyManager {
      * {@hide}
      */
     @SystemApi
-    public boolean isCurrentSimOperator(@NonNull String mccmnc, @MvnoType int mvnoType,
+    @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE)
+    public boolean matchesCurrentSimOperator(@NonNull String mccmnc, @MvnoType int mvnoType,
             @Nullable String mvnoMatchData) {
         try {
             if (!mccmnc.equals(getSimOperator())) {

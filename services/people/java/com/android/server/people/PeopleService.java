@@ -17,6 +17,7 @@
 package com.android.server.people;
 
 import android.annotation.NonNull;
+import android.annotation.Nullable;
 import android.annotation.UserIdInt;
 import android.app.prediction.AppPredictionContext;
 import android.app.prediction.AppPredictionSessionId;
@@ -71,13 +72,13 @@ public class PeopleService extends SystemService {
     }
 
     @Override
-    public void onUnlockUser(@NonNull TargetUser targetUser) {
-        mDataManager.onUserUnlocked(targetUser.getUserIdentifier());
+    public void onUserUnlocked(@NonNull TargetUser user) {
+        mDataManager.onUserUnlocked(user.getUserIdentifier());
     }
 
     @Override
-    public void onStopUser(@NonNull TargetUser targetUser) {
-        mDataManager.onUserStopped(targetUser.getUserIdentifier());
+    public void onUserStopping(@NonNull TargetUser user) {
+        mDataManager.onUserStopping(user.getUserIdentifier());
     }
 
     @VisibleForTesting
@@ -145,14 +146,15 @@ public class PeopleService extends SystemService {
             mDataManager.pruneDataForUser(userId, signal);
         }
 
+        @Nullable
         @Override
-        public byte[] backupConversationInfos(@UserIdInt int userId) {
-            return new byte[0];
+        public byte[] getBackupPayload(@UserIdInt int userId) {
+            return mDataManager.getBackupPayload(userId);
         }
 
         @Override
-        public void restoreConversationInfos(@UserIdInt int userId, @NonNull String key,
-                @NonNull byte[] payload) {
+        public void restore(@UserIdInt int userId, @NonNull byte[] payload) {
+            mDataManager.restore(userId, payload);
         }
 
         @VisibleForTesting

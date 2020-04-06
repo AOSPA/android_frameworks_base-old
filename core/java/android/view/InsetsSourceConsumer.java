@@ -16,12 +16,11 @@
 
 package android.view;
 
-import static android.view.InsetsController.ANIMATION_TYPE_NONE;
+import static android.view.InsetsController.AnimationType;
 import static android.view.InsetsState.toPublicType;
 
 import android.annotation.IntDef;
 import android.annotation.Nullable;
-import android.util.MutableShort;
 import android.view.InsetsState.InternalInsetsType;
 import android.view.SurfaceControl.Transaction;
 import android.view.WindowInsets.Type.InsetsType;
@@ -59,9 +58,10 @@ public class InsetsSourceConsumer {
 
     protected final InsetsController mController;
     protected boolean mRequestedVisible;
+    protected final InsetsState mState;
+    protected final @InternalInsetsType int mType;
+
     private final Supplier<Transaction> mTransactionSupplier;
-    private final @InternalInsetsType int mType;
-    private final InsetsState mState;
     private @Nullable InsetsSourceControl mSourceControl;
     private boolean mHasWindowFocus;
 
@@ -87,6 +87,7 @@ public class InsetsSourceConsumer {
         if (mSourceControl == control) {
             return;
         }
+        final InsetsSourceControl lastControl = mSourceControl;
         mSourceControl = control;
 
         // We are loosing control
@@ -97,25 +98,27 @@ public class InsetsSourceConsumer {
             mState.getSource(getType()).setVisible(
                     mController.getLastDispatchedState().getSource(getType()).isVisible());
             applyLocalVisibilityOverride();
-            return;
-        }
-
-        // We are gaining control, and need to run an animation since previous state didn't match
-        if (mRequestedVisible != mState.getSource(mType).isVisible()) {
-            if (mRequestedVisible) {
-                showTypes[0] |= toPublicType(getType());
+        } else {
+            // We are gaining control, and need to run an animation since previous state
+            // didn't match
+            if (mRequestedVisible != mState.getSource(mType).isVisible()) {
+                if (mRequestedVisible) {
+                    showTypes[0] |= toPublicType(getType());
+                } else {
+                    hideTypes[0] |= toPublicType(getType());
+                }
             } else {
-                hideTypes[0] |= toPublicType(getType());
+              // We are gaining control, but don't need to run an animation.
+              // However make sure that the leash visibility is still up to date.
+              if (applyLocalVisibilityOverride()) {
+                  mController.notifyVisibilityChanged();
+              }
+              applyHiddenToControl();
             }
-            return;
         }
-
-        // We are gaining control, but don't need to run an animation. However make sure that the
-        // leash visibility is still up to date.
-        if (applyLocalVisibilityOverride()) {
-            mController.notifyVisibilityChanged();
+        if (lastControl != null) {
+            lastControl.release(mController::releaseSurfaceControlFromRt);
         }
-        applyHiddenToControl();
     }
 
     @VisibleForTesting
@@ -137,6 +140,10 @@ public class InsetsSourceConsumer {
         setRequestedVisible(false);
     }
 
+    void hide(boolean animationFinished, @AnimationType int animationType) {
+        hide();
+    }
+
     /**
      * Called when current window gains focus
      */
@@ -156,7 +163,8 @@ public class InsetsSourceConsumer {
     }
 
     boolean applyLocalVisibilityOverride() {
-        final boolean isVisible = mState.getSource(mType).isVisible();
+        InsetsSource source = mState.peekSource(mType);
+        final boolean isVisible = source != null && source.isVisible();
         final boolean hasControl = mSourceControl != null;
 
         // We still need to let the legacy app know the visibility change even if we don't have the
@@ -197,6 +205,13 @@ public class InsetsSourceConsumer {
      * Notify listeners that window is now hidden.
      */
     void notifyHidden() {
+        // no-op for types that always return ShowResult#SHOW_IMMEDIATELY.
+    }
+
+    /**
+     * Remove surface on which this consumer type is drawn.
+     */
+    public void removeSurface() {
         // no-op for types that always return ShowResult#SHOW_IMMEDIATELY.
     }
 

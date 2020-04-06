@@ -2340,7 +2340,6 @@ public abstract class Connection extends Conferenceable {
      *        See {@link TelecomManager} for valid values.
      */
     public final void setAddress(Uri address, int presentation) {
-        checkImmutable();
         Log.d(this, "setAddress %s", address);
         mAddress = address;
         mAddressPresentation = presentation;

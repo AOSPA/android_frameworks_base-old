@@ -17,8 +17,6 @@
 package com.android.server.wm;
 
 import static android.app.ActivityTaskManager.INVALID_TASK_ID;
-import static android.app.ActivityTaskManager.SPLIT_SCREEN_CREATE_MODE_BOTTOM_OR_RIGHT;
-import static android.app.ActivityTaskManager.SPLIT_SCREEN_CREATE_MODE_TOP_OR_LEFT;
 import static android.app.ITaskStackListener.FORCED_RESIZEABLE_REASON_SPLIT_SCREEN;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_ASSISTANT;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_HOME;
@@ -39,16 +37,10 @@ import static android.content.pm.ActivityInfo.CONFIG_SCREEN_LAYOUT;
 import static android.content.pm.ActivityInfo.FLAG_RESUME_WHILE_PAUSING;
 import static android.content.pm.ActivityInfo.FLAG_SHOW_FOR_ALL_USERS;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSET;
-import static android.content.res.Configuration.ORIENTATION_PORTRAIT;
 import static android.os.Trace.TRACE_TAG_WINDOW_MANAGER;
 import static android.view.Display.DEFAULT_DISPLAY;
 import static android.view.Display.FLAG_CAN_SHOW_WITH_INSECURE_KEYGUARD;
 import static android.view.Display.INVALID_DISPLAY;
-import static android.view.WindowManager.DOCKED_BOTTOM;
-import static android.view.WindowManager.DOCKED_INVALID;
-import static android.view.WindowManager.DOCKED_LEFT;
-import static android.view.WindowManager.DOCKED_RIGHT;
-import static android.view.WindowManager.DOCKED_TOP;
 import static android.view.WindowManager.TRANSIT_ACTIVITY_CLOSE;
 import static android.view.WindowManager.TRANSIT_ACTIVITY_OPEN;
 import static android.view.WindowManager.TRANSIT_CRASHING_ACTIVITY_CLOSE;
@@ -98,17 +90,7 @@ import static com.android.server.wm.ActivityTaskManagerDebugConfig.TAG_WITH_CLAS
 import static com.android.server.wm.ActivityTaskManagerService.H.FIRST_ACTIVITY_STACK_MSG;
 import static com.android.server.wm.ActivityTaskManagerService.RELAUNCH_REASON_FREE_RESIZE;
 import static com.android.server.wm.ActivityTaskManagerService.RELAUNCH_REASON_WINDOWING_MODE_RESIZE;
-import static com.android.server.wm.BoundsAnimationController.FADE_IN;
-import static com.android.server.wm.BoundsAnimationController.NO_PIP_MODE_CHANGED_CALLBACKS;
-import static com.android.server.wm.BoundsAnimationController.SCHEDULE_PIP_MODE_CHANGED_ON_END;
-import static com.android.server.wm.BoundsAnimationController.SCHEDULE_PIP_MODE_CHANGED_ON_START;
-import static com.android.server.wm.DragResizeMode.DRAG_RESIZE_MODE_DOCKED_DIVIDER;
-import static com.android.server.wm.TaskProto.ACTIVITIES;
 import static com.android.server.wm.TaskProto.ACTIVITY_TYPE;
-import static com.android.server.wm.TaskProto.ADJUSTED_BOUNDS;
-import static com.android.server.wm.TaskProto.ADJUSTED_FOR_IME;
-import static com.android.server.wm.TaskProto.ADJUST_DIVIDER_AMOUNT;
-import static com.android.server.wm.TaskProto.ADJUST_IME_AMOUNT;
 import static com.android.server.wm.TaskProto.ANIMATING_BOUNDS;
 import static com.android.server.wm.TaskProto.BOUNDS;
 import static com.android.server.wm.TaskProto.CREATED_BY_ORGANIZER;
@@ -117,7 +99,6 @@ import static com.android.server.wm.TaskProto.DISPLAYED_BOUNDS;
 import static com.android.server.wm.TaskProto.DISPLAY_ID;
 import static com.android.server.wm.TaskProto.FILLS_PARENT;
 import static com.android.server.wm.TaskProto.LAST_NON_FULLSCREEN_BOUNDS;
-import static com.android.server.wm.TaskProto.MINIMIZE_AMOUNT;
 import static com.android.server.wm.TaskProto.MIN_HEIGHT;
 import static com.android.server.wm.TaskProto.MIN_WIDTH;
 import static com.android.server.wm.TaskProto.ORIG_ACTIVITY;
@@ -127,7 +108,6 @@ import static com.android.server.wm.TaskProto.RESUMED_ACTIVITY;
 import static com.android.server.wm.TaskProto.ROOT_TASK_ID;
 import static com.android.server.wm.TaskProto.SURFACE_HEIGHT;
 import static com.android.server.wm.TaskProto.SURFACE_WIDTH;
-import static com.android.server.wm.TaskProto.TASKS;
 import static com.android.server.wm.TaskProto.WINDOW_CONTAINER;
 import static com.android.server.wm.WindowContainer.AnimationFlags.CHILDREN;
 import static com.android.server.wm.WindowContainer.AnimationFlags.TRANSITION;
@@ -172,7 +152,6 @@ import android.util.Log;
 import android.util.Slog;
 import android.util.proto.ProtoOutputStream;
 import android.view.Display;
-import android.view.DisplayCutout;
 import android.view.DisplayInfo;
 import android.view.ITaskOrganizer;
 import android.view.SurfaceControl;
@@ -183,8 +162,6 @@ import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.app.IVoiceInteractor;
 import com.android.internal.os.logging.MetricsLoggerWrapper;
-import com.android.internal.policy.DividerSnapAlgorithm;
-import com.android.internal.policy.DockedDividerUtils;
 import com.android.internal.util.function.pooled.PooledConsumer;
 import com.android.internal.util.function.pooled.PooledFunction;
 import com.android.internal.util.function.pooled.PooledLambda;
@@ -205,7 +182,7 @@ import java.util.function.Consumer;
 /**
  * State and management of a single stack of activities.
  */
-public class ActivityStack extends Task implements BoundsAnimationTarget {
+public class ActivityStack extends Task {
     private static final String TAG = TAG_WITH_CLASS_NAME ? "ActivityStack" : TAG_ATM;
     static final String TAG_ADD_REMOVE = TAG + POSTFIX_ADD_REMOVE;
     private static final String TAG_APP = TAG + POSTFIX_APP;
@@ -244,13 +221,6 @@ public class ActivityStack extends Task implements BoundsAnimationTarget {
 
     /** Stack is completely invisible. */
     static final int STACK_VISIBILITY_INVISIBLE = 2;
-
-    /** Minimum size of an adjusted stack bounds relative to original stack bounds. Used to
-     * restrict IME adjustment so that a min portion of top stack remains visible.*/
-    private static final float ADJUSTED_STACK_FRACTION_MIN = 0.3f;
-
-    /** Dimming amount for non-focused stack when stacks are IME-adjusted. */
-    private static final float IME_ADJUST_DIM_AMOUNT = 0.25f;
 
     enum ActivityState {
         INITIALIZING,
@@ -303,27 +273,9 @@ public class ActivityStack extends Task implements BoundsAnimationTarget {
     /** For Pinned stack controlling. */
     private Rect mTmpToBounds = new Rect();
 
-    /** Stack bounds adjusted to screen content area (taking into account IM windows, etc.) */
-    private final Rect mAdjustedBounds = new Rect();
-
-    /**
-     * Fully adjusted IME bounds. These are different from {@link #mAdjustedBounds} because they
-     * represent the state when the animation has ended.
-     */
-    private final Rect mFullyAdjustedImeBounds = new Rect();
-
     /** Detach this stack from its display when animation completes. */
     // TODO: maybe tie this to WindowContainer#removeChild some how...
     private boolean mDeferRemoval;
-
-    private final Rect mTmpAdjustedBounds = new Rect();
-    private boolean mAdjustedForIme;
-    private boolean mImeGoingAway;
-    private WindowState mImeWin;
-    private float mMinimizeAmount;
-    private float mAdjustImeAmount;
-    private float mAdjustDividerAmount;
-    private final int mDockedStackMinimizeThickness;
 
     // If this is true, we are in the bounds animating mode. The task will be down or upscaled to
     // perfectly fit the region it would have been cropped to. We may also avoid certain logic we
@@ -332,11 +284,8 @@ public class ActivityStack extends Task implements BoundsAnimationTarget {
     // Set when an animation has been requested but has not yet started from the UI thread. This is
     // cleared when the animation actually starts.
     private boolean mBoundsAnimatingRequested = false;
-    private boolean mBoundsAnimatingToFullscreen = false;
-    private boolean mCancelCurrentBoundsAnimation = false;
     private Rect mBoundsAnimationTarget = new Rect();
     private Rect mBoundsAnimationSourceHintBounds = new Rect();
-    private @BoundsAnimationController.AnimationType int mAnimationType;
 
     Rect mPreAnimationBounds = new Rect();
 
@@ -414,8 +363,7 @@ public class ActivityStack extends Task implements BoundsAnimationTarget {
             final PooledFunction f = PooledLambda.obtainFunction(
                     EnsureVisibleActivitiesConfigHelper::processActivity, this,
                     PooledLambda.__(ActivityRecord.class));
-            forAllActivities(f, start.getTask(), true /*includeBoundary*/,
-                    true /*traverseTopToBottom*/);
+            forAllActivities(f, start, true /*includeBoundary*/, true /*traverseTopToBottom*/);
             f.recycle();
 
             if (mUpdateConfig) {
@@ -614,9 +562,9 @@ public class ActivityStack extends Task implements BoundsAnimationTarget {
         }
     }
 
-    ActivityStack(DisplayContent display, int id, ActivityStackSupervisor supervisor,
-            int activityType, ActivityInfo info, Intent intent) {
-        this(supervisor.mService, id, info, intent, null /*voiceSession*/, null /*voiceInteractor*/,
+    ActivityStack(ActivityTaskManagerService atmService, int id, int activityType,
+            ActivityInfo info, Intent intent) {
+        this(atmService, id, info, intent, null /*voiceSession*/, null /*voiceInteractor*/,
                 null /*taskDescription*/, null /*stack*/);
 
         setActivityType(activityType);
@@ -659,8 +607,6 @@ public class ActivityStack extends Task implements BoundsAnimationTarget {
                 _realActivitySuspended, userSetupComplete, minWidth, minHeight, info, _voiceSession,
                 _voiceInteractor, stack);
 
-        mDockedStackMinimizeThickness = mWmService.mContext.getResources().getDimensionPixelSize(
-                com.android.internal.R.dimen.docked_stack_minimize_thickness);
         EventLogTags.writeWmStackCreated(id);
         mHandler = new ActivityStackHandler(mStackSupervisor.mLooper);
         mCurrentUser = mAtmService.mAmInternal.getCurrentUserId();
@@ -710,14 +656,6 @@ public class ActivityStack extends Task implements BoundsAnimationTarget {
 
         if (prevWindowingMode != getWindowingMode()) {
             mDisplayContent.onStackWindowingModeChanged(this);
-
-            if (inSplitScreenSecondaryWindowingMode()) {
-                // When the stack is resized due to entering split screen secondary, offset the
-                // windows to compensate for the new stack position.
-                forAllWindows(w -> {
-                    w.mWinAnimator.setOffsetPositionForStackResize(true);
-                }, true);
-            }
         }
 
         final DisplayContent display = getDisplay();
@@ -799,17 +737,6 @@ public class ActivityStack extends Task implements BoundsAnimationTarget {
         setWindowingMode(windowingMode, false /* animate */, false /* showRecents */,
                 false /* enteringSplitScreenMode */, false /* deferEnsuringVisibility */,
                 false /* creating */);
-        if (windowingMode == WINDOWING_MODE_PINNED) {
-            // This stack will be visible before SystemUI requests PiP animation to start, and if
-            // the selected animation type is fade in, this stack will be close first. If the
-            // animation does not start early, user may see this full screen window appear again
-            // after the closing transition finish, which could cause screen to flicker.
-            // Check if animation should start here in advance.
-            final BoundsAnimationController controller = getDisplay().mBoundsAnimationController;
-            if (controller.isAnimationTypeFadeIn()) {
-                setPinnedStackAlpha(0f);
-            }
-        }
     }
 
     /**
@@ -913,6 +840,9 @@ public class ActivityStack extends Task implements BoundsAnimationTarget {
             final ConfigurationContainer parent = getParent();
             likelyResolvedMode = parent != null ? parent.getWindowingMode()
                     : WINDOWING_MODE_FULLSCREEN;
+        }
+        if (currentMode == WINDOWING_MODE_PINNED) {
+            mAtmService.getTaskChangeNotificationController().notifyActivityUnpinned();
         }
         if (sendNonResizeableNotification && likelyResolvedMode != WINDOWING_MODE_FULLSCREEN
                 && topActivity != null && !topActivity.noDisplay
@@ -1226,8 +1156,8 @@ public class ActivityStack extends Task implements BoundsAnimationTarget {
 
     @Override
     boolean isFocusable() {
-        return super.isFocusable() && !(inSplitScreenPrimaryWindowingMode()
-                && mRootWindowContainer.mIsDockMinimized);
+        // Special check for tile which isn't really in the hierarchy
+        return mTile != null ? mTile.isFocusable() : super.isFocusable();
     }
 
     boolean isTopActivityFocusable() {
@@ -1547,11 +1477,11 @@ public class ActivityStack extends Task implements BoundsAnimationTarget {
 
         if (resumeNext) {
             final ActivityStack topStack = mRootWindowContainer.getTopDisplayFocusedStack();
-            if (!topStack.shouldSleepOrShutDownActivities()) {
+            if (topStack != null && !topStack.shouldSleepOrShutDownActivities()) {
                 mRootWindowContainer.resumeFocusedStacksTopActivities(topStack, prev, null);
             } else {
                 checkReadyForSleep();
-                ActivityRecord top = topStack.topRunningActivity();
+                final ActivityRecord top = topStack != null ? topStack.topRunningActivity() : null;
                 if (top == null || (prev != null && top != prev)) {
                     // If there are no more activities available to run, do resume anyway to start
                     // something. Also if the top activity on the stack is not the just paused
@@ -2501,8 +2431,10 @@ public class ActivityStack extends Task implements BoundsAnimationTarget {
         }
         Task task = null;
         if (!newTask && isOrhasTask) {
+            // Starting activity cannot be occluding activity, otherwise starting window could be
+            // remove immediately without transferring to starting activity.
             final ActivityRecord occludingActivity = getActivity(
-                    (ar) -> !ar.finishing && ar.occludesParent(), true, rTask);
+                    (ar) -> !ar.finishing && ar.occludesParent(), true, r);
             if (occludingActivity != null) {
                 // Here it is!  Now, if this is not yet visible (occluded by another task) to the
                 // user, then just add it without starting; it will get started when the user
@@ -3397,7 +3329,7 @@ public class ActivityStack extends Task implements BoundsAnimationTarget {
         if (DisplayContent.alwaysCreateStack(getWindowingMode(), getActivityType())) {
             // This stack will only contain one task, so just return itself since all stacks ara now
             // tasks and all tasks are now stacks.
-            task = reuseAsLeafTask(voiceSession, voiceInteractor, info, activity);
+            task = reuseAsLeafTask(voiceSession, voiceInteractor, intent, info, activity);
         } else {
             // Create child task since this stack can contain multiple tasks.
             final int taskId = activity != null
@@ -3531,91 +3463,6 @@ public class ActivityStack extends Task implements BoundsAnimationTarget {
         }
     }
 
-    void animateResizePinnedStack(Rect toBounds, Rect sourceHintBounds, int animationDuration,
-            boolean fromFullscreen) {
-        if (!inPinnedWindowingMode()) return;
-
-        /**
-         * TODO(b/146594635): Remove all PIP animation code from WM once SysUI handles animation.
-         * If this PIP Task is controlled by a TaskOrganizer, the animation occurs entirely
-         * on the TaskOrganizer side, so we just hand over the leash without doing any animation.
-         * We have to be careful to not schedule the enter-pip callback as the TaskOrganizer
-         * needs to have flexibility to schedule that at an appropriate point in the animation.
-         */
-        if (isControlledByTaskOrganizer()) return;
-        if (toBounds == null /* toFullscreen */) {
-            final Configuration parentConfig = getParent().getConfiguration();
-            final ActivityRecord top = topRunningNonOverlayTaskActivity();
-            if (top != null && !top.isConfigurationCompatible(parentConfig)) {
-                // The final orientation of this activity will change after moving to full screen.
-                // Start freezing screen here to prevent showing a temporary full screen window.
-                top.startFreezingScreenLocked(CONFIG_SCREEN_LAYOUT);
-                dismissPip();
-                return;
-            }
-        }
-
-        // Get the from-bounds
-        final Rect fromBounds = new Rect();
-        getBounds(fromBounds);
-
-        // Get non-null fullscreen to-bounds for animating if the bounds are null
-        @BoundsAnimationController.SchedulePipModeChangedState int schedulePipModeChangedState =
-                NO_PIP_MODE_CHANGED_CALLBACKS;
-        final boolean toFullscreen = toBounds == null;
-        if (toFullscreen) {
-            if (fromFullscreen) {
-                throw new IllegalArgumentException("Should not defer scheduling PiP mode"
-                        + " change on animation to fullscreen.");
-            }
-            schedulePipModeChangedState = SCHEDULE_PIP_MODE_CHANGED_ON_START;
-
-            mWmService.getStackBounds(
-                    WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_STANDARD, mTmpToBounds);
-            if (!mTmpToBounds.isEmpty()) {
-                // If there is a fullscreen bounds, use that
-                toBounds = new Rect(mTmpToBounds);
-            } else {
-                // Otherwise, use the display bounds
-                toBounds = new Rect();
-                getDisplayContent().getBounds(toBounds);
-            }
-        } else if (fromFullscreen) {
-            schedulePipModeChangedState = SCHEDULE_PIP_MODE_CHANGED_ON_END;
-        }
-
-        setAnimationFinalBounds(sourceHintBounds, toBounds, toFullscreen);
-
-        final Rect finalToBounds = toBounds;
-        final @BoundsAnimationController.SchedulePipModeChangedState int
-                finalSchedulePipModeChangedState = schedulePipModeChangedState;
-        final DisplayContent displayContent = getDisplayContent();
-        @BoundsAnimationController.AnimationType int intendedAnimationType =
-                displayContent.mBoundsAnimationController.getAnimationType();
-        if (intendedAnimationType == FADE_IN) {
-            if (fromFullscreen) {
-                setPinnedStackAlpha(0f);
-            }
-            if (toBounds.width() == fromBounds.width()
-                    && toBounds.height() == fromBounds.height()) {
-                intendedAnimationType = BoundsAnimationController.BOUNDS;
-            } else if (!fromFullscreen && !toBounds.equals(fromBounds)) {
-                // intendedAnimationType may have been reset at the end of RecentsAnimation,
-                // force it to BOUNDS type if we know for certain we're animating to
-                // a different bounds, especially for expand and collapse of PiP window.
-                intendedAnimationType = BoundsAnimationController.BOUNDS;
-            }
-        }
-
-        final @BoundsAnimationController.AnimationType int animationType = intendedAnimationType;
-        mCancelCurrentBoundsAnimation = false;
-        displayContent.mBoundsAnimationController.getHandler().post(() -> {
-            displayContent.mBoundsAnimationController.animateBounds(this, fromBounds,
-                    finalToBounds, animationDuration, finalSchedulePipModeChangedState,
-                    fromFullscreen, toFullscreen, animationType);
-        });
-    }
-
     void dismissPip() {
         if (!isActivityTypeStandardOrUndefined()) {
             throw new IllegalArgumentException(
@@ -3644,60 +3491,8 @@ public class ActivityStack extends Task implements BoundsAnimationTarget {
         });
     }
 
-    private void updatePictureInPictureModeForPinnedStackAnimation(Rect targetStackBounds,
-            boolean forceUpdate) {
-        // It is guaranteed that the activities requiring the update will be in the pinned stack at
-        // this point (either reparented before the animation into PiP, or before reparenting after
-        // the animation out of PiP)
-        if (!isAttached()) {
-            return;
-        }
-        final PooledConsumer c = PooledLambda.obtainConsumer(
-                ActivityStackSupervisor::updatePictureInPictureMode, mStackSupervisor,
-                PooledLambda.__(Task.class), targetStackBounds, forceUpdate);
-        forAllLeafTasks(c, true /* traverseTopToBottom */);
-        c.recycle();
-    }
-
     void prepareFreezingTaskBounds() {
         forAllLeafTasks(Task::prepareFreezingBounds, true /* traverseTopToBottom */);
-    }
-
-    /**
-     * Overrides the adjusted bounds, i.e. sets temporary layout bounds which are different from
-     * the normal task bounds.
-     *
-     * @param bounds The adjusted bounds.
-     */
-    private void setAdjustedBounds(Rect bounds) {
-        if (mAdjustedBounds.equals(bounds) && !isAnimatingForIme()) {
-            return;
-        }
-
-        mAdjustedBounds.set(bounds);
-        final boolean adjusted = !mAdjustedBounds.isEmpty();
-        Rect insetBounds = null;
-        if (adjusted && isAdjustedForMinimizedDockedStack()) {
-            insetBounds = getRawBounds();
-        } else if (adjusted && mAdjustedForIme) {
-            if (mImeGoingAway) {
-                insetBounds = getRawBounds();
-            } else {
-                insetBounds = mFullyAdjustedImeBounds;
-            }
-        }
-
-        if (!matchParentBounds()) {
-            final boolean alignBottom = mAdjustedForIme && getDockSide() == DOCKED_TOP;
-            final PooledConsumer c = PooledLambda.obtainConsumer(Task::alignToAdjustedBounds,
-                    PooledLambda.__(Task.class), adjusted ? mAdjustedBounds : getRawBounds(),
-                    insetBounds, alignBottom);
-            forAllLeafTasks(c, true /* traverseTopToBottom */);
-            c.recycle();
-        }
-
-        mDisplayContent.setLayoutNeeded();
-        updateSurfaceBounds();
     }
 
     @Override
@@ -3718,8 +3513,6 @@ public class ActivityStack extends Task implements BoundsAnimationTarget {
 
         final int result = super.setBounds(!inMultiWindowMode() ? null : bounds);
 
-        updateAdjustedBounds();
-
         updateSurfaceBounds();
         return result;
     }
@@ -3739,47 +3532,6 @@ public class ActivityStack extends Task implements BoundsAnimationTarget {
     @Override
     public void getBounds(Rect bounds) {
         bounds.set(getBounds());
-    }
-
-    @Override
-    public Rect getBounds() {
-        // If we're currently adjusting for IME or minimized docked stack, we use the adjusted
-        // bounds; otherwise, no need to adjust the output bounds if fullscreen or the docked
-        // stack is visible since it is already what we want to represent to the rest of the
-        // system.
-        if (!mAdjustedBounds.isEmpty()) {
-            return mAdjustedBounds;
-        } else {
-            return super.getBounds();
-        }
-    }
-
-    /**
-     * Sets the bounds animation target bounds ahead of an animation.  This can't currently be done
-     * in onAnimationStart() since that is started on the UiThread.
-     */
-    private void setAnimationFinalBounds(Rect sourceHintBounds, Rect destBounds,
-            boolean toFullscreen) {
-        if (mAnimationType == BoundsAnimationController.BOUNDS) {
-            mBoundsAnimatingRequested = true;
-        }
-        mBoundsAnimatingToFullscreen = toFullscreen;
-        if (destBounds != null) {
-            mBoundsAnimationTarget.set(destBounds);
-        } else {
-            mBoundsAnimationTarget.setEmpty();
-        }
-        if (sourceHintBounds != null) {
-            mBoundsAnimationSourceHintBounds.set(sourceHintBounds);
-        } else if (!mBoundsAnimating) {
-            // If the bounds are already animating, we don't want to reset the source hint. This is
-            // because the source hint is sent when starting the animation from the client that
-            // requested to enter pip. Other requests can adjust the pip bounds during an animation,
-            // but could accidentally reset the source hint bounds.
-            mBoundsAnimationSourceHintBounds.setEmpty();
-        }
-
-        mPreAnimationBounds.set(getRawBounds());
     }
 
     /**
@@ -3811,137 +3563,6 @@ public class ActivityStack extends Task implements BoundsAnimationTarget {
     /** Bounds of the stack with other system factors taken into consideration. */
     void getDimBounds(Rect out) {
         getBounds(out);
-    }
-
-    /**
-     * Reset the current animation running on {@link #mBoundsAnimationTarget}.
-     *
-     * @param destinationBounds the final destination bounds
-     */
-    void resetCurrentBoundsAnimation(Rect destinationBounds) {
-        boolean animating = (mBoundsAnimatingRequested || mBoundsAnimating)
-                && !mBoundsAnimationTarget.isEmpty();
-
-        // The final boundary is updated while there is an existing boundary animation. Let's
-        // cancel this animation to prevent the obsolete animation overwritten updated bounds.
-        if (animating && !destinationBounds.equals(mBoundsAnimationTarget)) {
-            final BoundsAnimationController controller =
-                    getDisplayContent().mBoundsAnimationController;
-            controller.getHandler().post(() -> controller.cancel(this));
-        }
-        // Once we've set the bounds based on the rotation of the old bounds in the new
-        // orientation, clear the animation target bounds since they are obsolete, and
-        // cancel any currently running animations
-        mBoundsAnimationTarget.setEmpty();
-        mBoundsAnimationSourceHintBounds.setEmpty();
-        mCancelCurrentBoundsAnimation = true;
-    }
-
-    /**
-     * Updates the passed-in {@code inOutBounds} based on the current state of the
-     * docked controller. This gets run *after* the override configuration is updated, so it's
-     * safe to rely on the controller's state in here (though eventually this dependence should
-     * be removed).
-     *
-     * This does NOT modify this TaskStack's configuration. However, it does, for the time-being,
-     * update docked controller state.
-     *
-     * @param parentConfig the parent configuration for reference.
-     * @param inOutBounds the bounds to update (both input and output).
-     */
-    void calculateDockedBoundsForConfigChange(Configuration parentConfig, Rect inOutBounds) {
-        final boolean primary =
-                getRequestedOverrideWindowingMode() == WINDOWING_MODE_SPLIT_SCREEN_PRIMARY;
-        repositionSplitScreenStackAfterRotation(parentConfig, primary, inOutBounds);
-        final DisplayCutout cutout = mDisplayContent.getDisplayInfo().displayCutout;
-        snapDockedStackAfterRotation(parentConfig, cutout, inOutBounds);
-        if (primary) {
-            final int newDockSide = getDockSide(parentConfig, inOutBounds);
-            // Update the dock create mode and clear the dock create bounds, these
-            // might change after a rotation and the original values will be invalid.
-            mWmService.setDockedStackCreateStateLocked(
-                    (newDockSide == DOCKED_LEFT || newDockSide == DOCKED_TOP)
-                            ? SPLIT_SCREEN_CREATE_MODE_TOP_OR_LEFT
-                            : SPLIT_SCREEN_CREATE_MODE_BOTTOM_OR_RIGHT,
-                    null);
-            mDisplayContent.getDockedDividerController().notifyDockSideChanged(newDockSide);
-        }
-    }
-
-    /**
-     * Some primary split screen sides are not allowed by the policy. This method queries the policy
-     * and moves the primary stack around if needed.
-     *
-     * @param parentConfig the configuration of the stack's parent.
-     * @param primary true if adjusting the primary docked stack, false for secondary.
-     * @param inOutBounds the bounds of the stack to adjust.
-     */
-    void repositionSplitScreenStackAfterRotation(Configuration parentConfig, boolean primary,
-            Rect inOutBounds) {
-        final int dockSide = getDockSide(mDisplayContent, parentConfig, inOutBounds);
-        final int otherDockSide = DockedDividerUtils.invertDockSide(dockSide);
-        final int primaryDockSide = primary ? dockSide : otherDockSide;
-        if (mDisplayContent.getDockedDividerController()
-                .canPrimaryStackDockTo(primaryDockSide,
-                        parentConfig.windowConfiguration.getBounds(),
-                        parentConfig.windowConfiguration.getRotation())) {
-            return;
-        }
-        final Rect parentBounds = parentConfig.windowConfiguration.getBounds();
-        switch (otherDockSide) {
-            case DOCKED_LEFT:
-                int movement = inOutBounds.left;
-                inOutBounds.left -= movement;
-                inOutBounds.right -= movement;
-                break;
-            case DOCKED_RIGHT:
-                movement = parentBounds.right - inOutBounds.right;
-                inOutBounds.left += movement;
-                inOutBounds.right += movement;
-                break;
-            case DOCKED_TOP:
-                movement = inOutBounds.top;
-                inOutBounds.top -= movement;
-                inOutBounds.bottom -= movement;
-                break;
-            case DOCKED_BOTTOM:
-                movement = parentBounds.bottom - inOutBounds.bottom;
-                inOutBounds.top += movement;
-                inOutBounds.bottom += movement;
-                break;
-        }
-    }
-
-    /**
-     * Snaps the bounds after rotation to the closest snap target for the docked stack.
-     */
-    void snapDockedStackAfterRotation(Configuration parentConfig, DisplayCutout displayCutout,
-            Rect outBounds) {
-
-        // Calculate the current position.
-        final int dividerSize = mDisplayContent.getDockedDividerController().getContentWidth();
-        final int dockSide = getDockSide(parentConfig, outBounds);
-        final int dividerPosition = DockedDividerUtils.calculatePositionForBounds(outBounds,
-                dockSide, dividerSize);
-        final int displayWidth = parentConfig.windowConfiguration.getBounds().width();
-        final int displayHeight = parentConfig.windowConfiguration.getBounds().height();
-
-        // Snap the position to a target.
-        final int rotation = parentConfig.windowConfiguration.getRotation();
-        final int orientation = parentConfig.orientation;
-        mDisplayContent.getDisplayPolicy().getStableInsetsLw(rotation, displayWidth, displayHeight,
-                displayCutout, outBounds);
-        final DividerSnapAlgorithm algorithm = new DividerSnapAlgorithm(
-                mWmService.mContext.getResources(), displayWidth, displayHeight,
-                dividerSize, orientation == Configuration.ORIENTATION_PORTRAIT, outBounds,
-                getDockSide(), isMinimizedDockAndHomeStackResizable());
-        final DividerSnapAlgorithm.SnapTarget target =
-                algorithm.calculateNonDismissingSnapTarget(dividerPosition);
-
-        // Recalculate the bounds based on the position of the target.
-        DockedDividerUtils.calculateBoundsForPosition(target.position, dockSide,
-                outBounds, displayWidth, displayHeight,
-                dividerSize);
     }
 
     /**
@@ -4134,445 +3755,8 @@ public class ActivityStack extends Task implements BoundsAnimationTarget {
         }
     }
 
-    /**
-     * Determines the stack and task bounds of the other stack when in docked mode. The current task
-     * bounds is passed in but depending on the stack, the task and stack must match. Only in
-     * minimized mode with resizable launcher, the other stack ignores calculating the stack bounds
-     * and uses the task bounds passed in as the stack and task bounds, otherwise the stack bounds
-     * is calculated and is also used for its task bounds.
-     * If any of the out bounds are empty, it represents default bounds
-     *
-     * @param currentTempTaskBounds the current task bounds of the other stack
-     * @param outStackBounds the calculated stack bounds of the other stack
-     * @param outTempTaskBounds the calculated task bounds of the other stack
-     */
-    void getStackDockedModeBounds(Rect dockedBounds,
-            Rect currentTempTaskBounds, Rect outStackBounds, Rect outTempTaskBounds) {
-        final Configuration parentConfig = getParent().getConfiguration();
-        outTempTaskBounds.setEmpty();
-
-        if (dockedBounds == null || dockedBounds.isEmpty()) {
-            // Calculate the primary docked bounds.
-            final boolean dockedOnTopOrLeft = mWmService.mDockedStackCreateMode
-                    == SPLIT_SCREEN_CREATE_MODE_TOP_OR_LEFT;
-            getStackDockedModeBounds(parentConfig,
-                    true /* primary */, outStackBounds, dockedBounds,
-                    mDisplayContent.mDividerControllerLocked.getContentWidth(), dockedOnTopOrLeft);
-            return;
-        }
-        final int dockedSide = getDockSide(parentConfig, dockedBounds);
-
-        // When the home stack is resizable, should always have the same stack and task bounds
-        if (isActivityTypeHome()) {
-            final Task homeTask = getTopMostTask();
-            if (homeTask == null || homeTask.isResizeable()) {
-                // Calculate the home stack bounds when in docked mode and the home stack is
-                // resizeable.
-                getDisplayContent().mDividerControllerLocked
-                        .getHomeStackBoundsInDockedMode(parentConfig,
-                                dockedSide, outStackBounds);
-            } else {
-                // Home stack isn't resizeable, so don't specify stack bounds.
-                outStackBounds.setEmpty();
-            }
-
-            outTempTaskBounds.set(outStackBounds);
-            return;
-        }
-
-        // When minimized state, the stack bounds for all non-home and docked stack bounds should
-        // match the passed task bounds
-        if (isMinimizedDockAndHomeStackResizable() && currentTempTaskBounds != null) {
-            outStackBounds.set(currentTempTaskBounds);
-            return;
-        }
-
-        if (dockedSide == DOCKED_INVALID) {
-            // Not sure how you got here...Only thing we can do is return current bounds.
-            Slog.e(TAG_WM, "Failed to get valid docked side for docked stack");
-            outStackBounds.set(getRawBounds());
-            return;
-        }
-
-        final boolean dockedOnTopOrLeft = dockedSide == DOCKED_TOP || dockedSide == DOCKED_LEFT;
-        getStackDockedModeBounds(parentConfig,
-                false /* primary */, outStackBounds, dockedBounds,
-                mDisplayContent.mDividerControllerLocked.getContentWidth(), dockedOnTopOrLeft);
-    }
-
-    /**
-     * Outputs the bounds a stack should be given the presence of a docked stack on the display.
-     * @param parentConfig The parent configuration.
-     * @param primary {@code true} if getting the primary stack bounds.
-     * @param outBounds Output bounds that should be used for the stack.
-     * @param dockedBounds Bounds of the docked stack.
-     * @param dockDividerWidth We need to know the width of the divider make to the output bounds
-     *                         close to the side of the dock.
-     * @param dockOnTopOrLeft If the docked stack is on the top or left side of the screen.
-     */
-    private void getStackDockedModeBounds(Configuration parentConfig, boolean primary,
-            Rect outBounds, Rect dockedBounds, int dockDividerWidth,
-            boolean dockOnTopOrLeft) {
-        final Rect displayRect = parentConfig.windowConfiguration.getBounds();
-        final boolean splitHorizontally = displayRect.width() > displayRect.height();
-
-        outBounds.set(displayRect);
-        if (primary) {
-            if (mWmService.mDockedStackCreateBounds != null) {
-                outBounds.set(mWmService.mDockedStackCreateBounds);
-                return;
-            }
-
-            // The initial bounds of the docked stack when it is created about half the screen space
-            // and its bounds can be adjusted after that. The bounds of all other stacks are
-            // adjusted to occupy whatever screen space the docked stack isn't occupying.
-            final DisplayCutout displayCutout = mDisplayContent.getDisplayInfo().displayCutout;
-            mDisplayContent.getDisplayPolicy().getStableInsetsLw(
-                    parentConfig.windowConfiguration.getRotation(),
-                    displayRect.width(), displayRect.height(), displayCutout, mTmpRect2);
-            final int position = new DividerSnapAlgorithm(mWmService.mContext.getResources(),
-                    displayRect.width(),
-                    displayRect.height(),
-                    dockDividerWidth,
-                    parentConfig.orientation == ORIENTATION_PORTRAIT,
-                    mTmpRect2).getMiddleTarget().position;
-
-            if (dockOnTopOrLeft) {
-                if (splitHorizontally) {
-                    outBounds.right = position;
-                } else {
-                    outBounds.bottom = position;
-                }
-            } else {
-                if (splitHorizontally) {
-                    outBounds.left = position + dockDividerWidth;
-                } else {
-                    outBounds.top = position + dockDividerWidth;
-                }
-            }
-            return;
-        }
-
-        // Other stacks occupy whatever space is left by the docked stack.
-        if (!dockOnTopOrLeft) {
-            if (splitHorizontally) {
-                outBounds.right = dockedBounds.left - dockDividerWidth;
-            } else {
-                outBounds.bottom = dockedBounds.top - dockDividerWidth;
-            }
-        } else {
-            if (splitHorizontally) {
-                outBounds.left = dockedBounds.right + dockDividerWidth;
-            } else {
-                outBounds.top = dockedBounds.bottom + dockDividerWidth;
-            }
-        }
-        DockedDividerUtils.sanitizeStackBounds(outBounds, !dockOnTopOrLeft);
-    }
-
-    void resetDockedStackToMiddle() {
-        if (!inSplitScreenPrimaryWindowingMode()) {
-            throw new IllegalStateException("Not a docked stack=" + this);
-        }
-
-        mWmService.mDockedStackCreateBounds = null;
-
-        final Rect bounds = new Rect();
-        final Rect tempBounds = new Rect();
-        getStackDockedModeBounds(null /* dockedBounds */, null /* currentTempTaskBounds */,
-                bounds, tempBounds);
-        mStackSupervisor.resizeDockedStackLocked(bounds, null /* tempTaskBounds */,
-                null /* tempTaskInsetBounds */, null /* tempOtherTaskBounds */,
-                null /* tempOtherTaskInsetBounds */, false /* preserveWindows */,
-                false /* deferResume */);
-    }
-
-    /**
-     * Adjusts the stack bounds if the IME is visible.
-     *
-     * @param imeWin The IME window.
-     * @param keepLastAmount Use {@code true} to keep the last adjusted amount from
-     *                       {@link DockedStackDividerController} for adjusting the stack bounds,
-     *                       Use {@code false} to reset adjusted amount as 0.
-     * @see #updateAdjustForIme(float, float, boolean)
-     */
-    void setAdjustedForIme(WindowState imeWin, boolean keepLastAmount) {
-        mImeWin = imeWin;
-        mImeGoingAway = false;
-        if (!mAdjustedForIme || keepLastAmount) {
-            mAdjustedForIme = true;
-            DockedStackDividerController controller = getDisplayContent().mDividerControllerLocked;
-            final float adjustImeAmount = keepLastAmount ? controller.mLastAnimationProgress : 0f;
-            final float adjustDividerAmount = keepLastAmount ? controller.mLastDividerProgress : 0f;
-            updateAdjustForIme(adjustImeAmount, adjustDividerAmount, true /* force */);
-        }
-    }
-
-    boolean isAdjustedForIme() {
-        return mAdjustedForIme;
-    }
-
-    boolean isAnimatingForIme() {
-        return mImeWin != null && mImeWin.isAnimatingLw();
-    }
-
-    /**
-     * Update the stack's bounds (crop or position) according to the IME window's
-     * current position. When IME window is animated, the bottom stack is animated
-     * together to track the IME window's current position, and the top stack is
-     * cropped as necessary.
-     *
-     * @return true if a traversal should be performed after the adjustment.
-     */
-    boolean updateAdjustForIme(float adjustAmount, float adjustDividerAmount, boolean force) {
-        if (adjustAmount != mAdjustImeAmount
-                || adjustDividerAmount != mAdjustDividerAmount || force) {
-            mAdjustImeAmount = adjustAmount;
-            mAdjustDividerAmount = adjustDividerAmount;
-            updateAdjustedBounds();
-            return isVisible();
-        } else {
-            return false;
-        }
-    }
-
-    /**
-     * Resets the adjustment after it got adjusted for the IME.
-     * @param adjustBoundsNow if true, reset and update the bounds immediately and forget about
-     *                        animations; otherwise, set flag and animates the window away together
-     *                        with IME window.
-     */
-    void resetAdjustedForIme(boolean adjustBoundsNow) {
-        if (adjustBoundsNow) {
-            mImeWin = null;
-            mImeGoingAway = false;
-            mAdjustImeAmount = 0f;
-            mAdjustDividerAmount = 0f;
-            if (!mAdjustedForIme) {
-                return;
-            }
-            mAdjustedForIme = false;
-            updateAdjustedBounds();
-            mWmService.setResizeDimLayer(false, getWindowingMode(), 1.0f);
-        } else {
-            mImeGoingAway |= mAdjustedForIme;
-        }
-    }
-
-    /**
-     * Sets the amount how much we currently minimize our stack.
-     *
-     * @param minimizeAmount The amount, between 0 and 1.
-     * @return Whether the amount has changed and a layout is needed.
-     */
-    boolean setAdjustedForMinimizedDock(float minimizeAmount) {
-        if (minimizeAmount != mMinimizeAmount) {
-            mMinimizeAmount = minimizeAmount;
-            updateAdjustedBounds();
-            return isVisible();
-        } else {
-            return false;
-        }
-    }
-
     boolean shouldIgnoreInput() {
-        return isAdjustedForMinimizedDockedStack()
-                || (inSplitScreenPrimaryWindowingMode() && isMinimizedDockAndHomeStackResizable());
-    }
-
-    /**
-     * Puts all visible tasks that are adjusted for IME into resizing mode and adds the windows
-     * to the list of to be drawn windows the service is waiting for.
-     */
-    void beginImeAdjustAnimation() {
-        forAllLeafTasks((t) -> {
-            if (t.hasContentToDisplay()) {
-                t.setDragResizing(true, DRAG_RESIZE_MODE_DOCKED_DIVIDER);
-                t.setWaitingForDrawnIfResizingChanged();
-            }
-        }, true /* traverseTopToBottom */);
-    }
-
-    /** Resets the resizing state of all windows. */
-    void endImeAdjustAnimation() {
-        forAllLeafTasks((t) -> {
-            t.setDragResizing(false, DRAG_RESIZE_MODE_DOCKED_DIVIDER);
-        }, true /* traverseTopToBottom */);
-    }
-
-    private int getMinTopStackBottom(final Rect displayContentRect, int originalStackBottom) {
-        return displayContentRect.top + (int)
-                ((originalStackBottom - displayContentRect.top) * ADJUSTED_STACK_FRACTION_MIN);
-    }
-
-    private boolean adjustForIME(final WindowState imeWin) {
-        // To prevent task stack resize animation may flicking when playing app transition
-        // animation & IME window enter animation in parallel, we need to make sure app
-        // transition is done and then adjust task size for IME, skip the new adjusted frame when
-        // app transition is still running.
-        if (getDisplayContent().mAppTransition.isRunning()) {
-            return false;
-        }
-
-        final int dockedSide = getDockSide();
-        final boolean dockedTopOrBottom = dockedSide == DOCKED_TOP || dockedSide == DOCKED_BOTTOM;
-        if (imeWin == null || !dockedTopOrBottom) {
-            return false;
-        }
-
-        final Rect displayStableRect = mTmpRect;
-        final Rect contentBounds = mTmpRect2;
-
-        // Calculate the content bounds excluding the area occupied by IME
-        getDisplayContent().getStableRect(displayStableRect);
-        contentBounds.set(displayStableRect);
-        int imeTop = Math.max(imeWin.getFrameLw().top, contentBounds.top);
-
-        imeTop += imeWin.getGivenContentInsetsLw().top;
-        if (contentBounds.bottom > imeTop) {
-            contentBounds.bottom = imeTop;
-        }
-
-        final int yOffset = displayStableRect.bottom - contentBounds.bottom;
-
-        final int dividerWidth =
-                getDisplayContent().mDividerControllerLocked.getContentWidth();
-        final int dividerWidthInactive =
-                getDisplayContent().mDividerControllerLocked.getContentWidthInactive();
-
-        if (dockedSide == DOCKED_TOP) {
-            // If this stack is docked on top, we make it smaller so the bottom stack is not
-            // occluded by IME. We shift its bottom up by the height of the IME, but
-            // leaves at least 30% of the top stack visible.
-            final int minTopStackBottom =
-                    getMinTopStackBottom(displayStableRect, getRawBounds().bottom);
-            final int bottom = Math.max(
-                    getRawBounds().bottom - yOffset + dividerWidth - dividerWidthInactive,
-                    minTopStackBottom);
-            mTmpAdjustedBounds.set(getRawBounds());
-            mTmpAdjustedBounds.bottom = (int) (mAdjustImeAmount * bottom + (1 - mAdjustImeAmount)
-                    * getRawBounds().bottom);
-            mFullyAdjustedImeBounds.set(getRawBounds());
-        } else {
-            // When the stack is on bottom and has no focus, it's only adjusted for divider width.
-            final int dividerWidthDelta = dividerWidthInactive - dividerWidth;
-
-            // When the stack is on bottom and has focus, it needs to be moved up so as to
-            // not occluded by IME, and at the same time adjusted for divider width.
-            // We try to move it up by the height of the IME window, but only to the extent
-            // that leaves at least 30% of the top stack visible.
-            // 'top' is where the top of bottom stack will move to in this case.
-            final int topBeforeImeAdjust =
-                    getRawBounds().top - dividerWidth + dividerWidthInactive;
-            final int minTopStackBottom =
-                    getMinTopStackBottom(displayStableRect,
-                            getRawBounds().top - dividerWidth);
-            final int top = Math.max(
-                    getRawBounds().top - yOffset, minTopStackBottom + dividerWidthInactive);
-
-            mTmpAdjustedBounds.set(getRawBounds());
-            // Account for the adjustment for IME and divider width separately.
-            // (top - topBeforeImeAdjust) is the amount of movement due to IME only,
-            // and dividerWidthDelta is due to divider width change only.
-            mTmpAdjustedBounds.top =
-                    getRawBounds().top + (int) (mAdjustImeAmount * (top - topBeforeImeAdjust)
-                            + mAdjustDividerAmount * dividerWidthDelta);
-            mFullyAdjustedImeBounds.set(getRawBounds());
-            mFullyAdjustedImeBounds.top = top;
-            mFullyAdjustedImeBounds.bottom = top + getRawBounds().height();
-        }
-        return true;
-    }
-
-    private boolean adjustForMinimizedDockedStack(float minimizeAmount) {
-        final int dockSide = getDockSide();
-        if (dockSide == DOCKED_INVALID && !mTmpAdjustedBounds.isEmpty()) {
-            return false;
-        }
-
-        if (dockSide == DOCKED_TOP) {
-            mWmService.getStableInsetsLocked(DEFAULT_DISPLAY, mTmpRect);
-            int topInset = mTmpRect.top;
-            mTmpAdjustedBounds.set(getRawBounds());
-            mTmpAdjustedBounds.bottom = (int) (minimizeAmount * topInset + (1 - minimizeAmount)
-                    * getRawBounds().bottom);
-        } else if (dockSide == DOCKED_LEFT) {
-            mTmpAdjustedBounds.set(getRawBounds());
-            final int width = getRawBounds().width();
-            mTmpAdjustedBounds.right =
-                    (int) (minimizeAmount * mDockedStackMinimizeThickness
-                            + (1 - minimizeAmount) * getRawBounds().right);
-            mTmpAdjustedBounds.left = mTmpAdjustedBounds.right - width;
-        } else if (dockSide == DOCKED_RIGHT) {
-            mTmpAdjustedBounds.set(getRawBounds());
-            mTmpAdjustedBounds.left =
-                    (int) (minimizeAmount * (getRawBounds().right - mDockedStackMinimizeThickness)
-                            + (1 - minimizeAmount) * getRawBounds().left);
-        }
-        return true;
-    }
-
-    boolean isMinimizedDockAndHomeStackResizable() {
-        return mDisplayContent.mDividerControllerLocked.isMinimizedDock()
-                && mDisplayContent.mDividerControllerLocked.isHomeStackResizable();
-    }
-
-    /**
-     * @return the distance in pixels how much the stack gets minimized from it's original size
-     */
-    int getMinimizeDistance() {
-        final int dockSide = getDockSide();
-        if (dockSide == DOCKED_INVALID) {
-            return 0;
-        }
-
-        if (dockSide == DOCKED_TOP) {
-            mWmService.getStableInsetsLocked(DEFAULT_DISPLAY, mTmpRect);
-            int topInset = mTmpRect.top;
-            return getRawBounds().bottom - topInset;
-        } else if (dockSide == DOCKED_LEFT || dockSide == DOCKED_RIGHT) {
-            return getRawBounds().width() - mDockedStackMinimizeThickness;
-        } else {
-            return 0;
-        }
-    }
-
-    /**
-     * Updates the adjustment depending on it's current state.
-     */
-    private void updateAdjustedBounds() {
-        boolean adjust = false;
-        if (mMinimizeAmount != 0f) {
-            adjust = adjustForMinimizedDockedStack(mMinimizeAmount);
-        } else if (mAdjustedForIme) {
-            adjust = adjustForIME(mImeWin);
-        }
-        if (!adjust) {
-            mTmpAdjustedBounds.setEmpty();
-        }
-        setAdjustedBounds(mTmpAdjustedBounds);
-
-        final boolean isImeTarget = (mWmService.getImeFocusStackLocked() == this);
-        if (mAdjustedForIme && adjust && !isImeTarget) {
-            final float alpha = Math.max(mAdjustImeAmount, mAdjustDividerAmount)
-                    * IME_ADJUST_DIM_AMOUNT;
-            mWmService.setResizeDimLayer(true, getWindowingMode(), alpha);
-        }
-    }
-
-    void applyAdjustForImeIfNeeded(Task task) {
-        if (mMinimizeAmount != 0f || !mAdjustedForIme || mAdjustedBounds.isEmpty()) {
-            return;
-        }
-
-        final Rect insetBounds = mImeGoingAway ? getRawBounds() : mFullyAdjustedImeBounds;
-        task.alignToAdjustedBounds(mAdjustedBounds, insetBounds, getDockSide() == DOCKED_TOP);
-        mDisplayContent.setLayoutNeeded();
-    }
-
-
-    boolean isAdjustedForMinimizedDockedStack() {
-        return mMinimizeAmount != 0f;
+        return inSplitScreenPrimaryWindowingMode() && !isFocusable();
     }
 
     @Override
@@ -4580,17 +3764,6 @@ public class ActivityStack extends Task implements BoundsAnimationTarget {
         pw.println(prefix + "mStackId=" + getRootTaskId());
         pw.println(prefix + "mDeferRemoval=" + mDeferRemoval);
         pw.println(prefix + "mBounds=" + getRawBounds().toShortString());
-        if (mMinimizeAmount != 0f) {
-            pw.println(prefix + "mMinimizeAmount=" + mMinimizeAmount);
-        }
-        if (mAdjustedForIme) {
-            pw.println(prefix + "mAdjustedForIme=true");
-            pw.println(prefix + "mAdjustImeAmount=" + mAdjustImeAmount);
-            pw.println(prefix + "mAdjustDividerAmount=" + mAdjustDividerAmount);
-        }
-        if (!mAdjustedBounds.isEmpty()) {
-            pw.println(prefix + "mAdjustedBounds=" + mAdjustedBounds.toShortString());
-        }
         for (int taskNdx = mChildren.size() - 1; taskNdx >= 0; taskNdx--) {
             mChildren.get(taskNdx).dump(pw, prefix + "  ", dumpAll);
         }
@@ -4606,143 +3779,6 @@ public class ActivityStack extends Task implements BoundsAnimationTarget {
             }
         }
         mAnimatingActivityRegistry.dump(pw, "AnimatingApps:", prefix);
-    }
-
-    /**
-     * For docked workspace (or workspace that's side-by-side to the docked), provides
-     * information which side of the screen was the dock anchored.
-     */
-    int getDockSide() {
-        return getDockSide(mDisplayContent.getConfiguration(), getRawBounds());
-    }
-
-    int getDockSideForDisplay(DisplayContent dc) {
-        return getDockSide(dc, dc.getConfiguration(), getRawBounds());
-    }
-
-    int getDockSide(Configuration parentConfig, Rect bounds) {
-        if (mDisplayContent == null) {
-            return DOCKED_INVALID;
-        }
-        return getDockSide(mDisplayContent, parentConfig, bounds);
-    }
-
-    private int getDockSide(DisplayContent dc, Configuration parentConfig, Rect bounds) {
-        return dc.getDockedDividerController().getDockSide(bounds,
-                parentConfig.windowConfiguration.getBounds(),
-                parentConfig.orientation, parentConfig.windowConfiguration.getRotation());
-    }
-
-    boolean hasTaskForUser(int userId) {
-        final PooledPredicate p = PooledLambda.obtainPredicate(
-                Task::isTaskForUser, PooledLambda.__(Task.class), userId);
-        final Task task = getTask(p);
-        p.recycle();
-        return task != null;
-    }
-
-    public boolean setPinnedStackSize(Rect displayedBounds, Rect configBounds) {
-        // Hold the lock since this is called from the BoundsAnimator running on the UiThread
-        synchronized (mWmService.mGlobalLock) {
-            if (mCancelCurrentBoundsAnimation) {
-                return false;
-            }
-            mStackSupervisor.resizePinnedStack(displayedBounds, configBounds);
-        }
-
-        return true;
-    }
-
-    void onAllWindowsDrawn() {
-        if (!mBoundsAnimating && !mBoundsAnimatingRequested) {
-            return;
-        }
-
-        getDisplayContent().mBoundsAnimationController.onAllWindowsDrawn();
-    }
-
-    @Override  // AnimatesBounds
-    public boolean onAnimationStart(boolean schedulePipModeChangedCallback, boolean forceUpdate,
-            @BoundsAnimationController.AnimationType int animationType) {
-        // Hold the lock since this is called from the BoundsAnimator running on the UiThread
-        synchronized (mWmService.mGlobalLock) {
-            if (!isAttached()) {
-                // Don't run the animation if the stack is already detached
-                return false;
-            }
-
-            if (animationType == BoundsAnimationController.BOUNDS) {
-                mBoundsAnimatingRequested = false;
-                mBoundsAnimating = true;
-            }
-            mAnimationType = animationType;
-
-            // If we are changing UI mode, as in the PiP to fullscreen
-            // transition, then we need to wait for the window to draw.
-            if (schedulePipModeChangedCallback) {
-                forAllWindows((w) -> {
-                    w.mWinAnimator.resetDrawState();
-                }, false /* traverseTopToBottom */);
-            }
-        }
-
-        if (inPinnedWindowingMode()) {
-            try {
-                mWmService.mActivityTaskManager.notifyPinnedStackAnimationStarted();
-            } catch (RemoteException e) {
-                // I don't believe you...
-            }
-
-            if ((schedulePipModeChangedCallback || animationType == FADE_IN)) {
-                // We need to schedule the PiP mode change before the animation up. It is possible
-                // in this case for the animation down to not have been completed, so always
-                // force-schedule and update to the client to ensure that it is notified that it
-                // is no longer in picture-in-picture mode
-                updatePictureInPictureModeForPinnedStackAnimation(null, forceUpdate);
-            }
-        }
-        return true;
-    }
-
-    @Override  // AnimatesBounds
-    public void onAnimationEnd(boolean schedulePipModeChangedCallback, Rect finalStackSize,
-            boolean moveToFullscreen) {
-        synchronized (mWmService.mGlobalLock) {
-            if (inPinnedWindowingMode()) {
-                // Update to the final bounds if requested. This is done here instead of in the
-                // bounds animator to allow us to coordinate this after we notify the PiP mode
-                // changed
-
-                if (schedulePipModeChangedCallback) {
-                    // We need to schedule the PiP mode change after the animation down, so use the
-                    // final bounds
-                    updatePictureInPictureModeForPinnedStackAnimation(mBoundsAnimationTarget,
-                            false /* forceUpdate */);
-                }
-
-                if (mAnimationType == BoundsAnimationController.FADE_IN) {
-                    setPinnedStackAlpha(1f);
-                    mWmService.mAtmService.notifyPinnedStackAnimationEnded();
-                    return;
-                }
-
-                if (finalStackSize != null && !mCancelCurrentBoundsAnimation) {
-                    setPinnedStackSize(finalStackSize, null);
-                } else {
-                    // We have been canceled, so the final stack size is null, still run the
-                    // animation-end logic
-                    onPipAnimationEndResize();
-                }
-
-                mWmService.mAtmService.notifyPinnedStackAnimationEnded();
-                if (moveToFullscreen) {
-                    ((ActivityStack) this).dismissPip();
-                }
-            } else {
-                // No PiP animation, just run the normal animation-end logic
-                onPipAnimationEndResize();
-            }
-        }
     }
 
     /**
@@ -4792,42 +3828,6 @@ public class ActivityStack extends Task implements BoundsAnimationTarget {
         getDisplayContent().getPinnedStackController().setActions(actions);
     }
 
-    /** Called immediately prior to resizing the tasks at the end of the pinned stack animation. */
-    void onPipAnimationEndResize() {
-        mBoundsAnimating = false;
-        forAllLeafTasks(Task::clearPreserveNonFloatingState, false /* traverseTopToBottom */);
-        mWmService.requestTraversal();
-    }
-
-    @Override
-    public boolean shouldDeferStartOnMoveToFullscreen() {
-        synchronized (mWmService.mGlobalLock) {
-            if (!isAttached()) {
-                // Unnecessary to pause the animation because the stack is detached.
-                return false;
-            }
-
-            // Workaround for the recents animation -- normally we need to wait for the new activity
-            // to show before starting the PiP animation, but because we start and show the home
-            // activity early for the recents animation prior to the PiP animation starting, there
-            // is no subsequent all-drawn signal. In this case, we can skip the pause when the home
-            // stack is already visible and drawn.
-            final ActivityStack homeStack = mDisplayContent.getRootHomeTask();
-            if (homeStack == null) {
-                return true;
-            }
-            final Task homeTask = homeStack.getTopMostTask();
-            if (homeTask == null) {
-                return true;
-            }
-            final ActivityRecord homeApp = homeTask.getTopVisibleActivity();
-            if (!homeTask.isVisible() || homeApp == null) {
-                return true;
-            }
-            return !homeApp.allDrawn;
-        }
-    }
-
     /**
      * @return True if we are currently animating the pinned stack from fullscreen to non-fullscreen
      *         bounds and we have a deferred PiP mode changed callback set with the animation.
@@ -4847,25 +3847,6 @@ public class ActivityStack extends Task implements BoundsAnimationTarget {
 
     public boolean isForceScaled() {
         return mBoundsAnimating;
-    }
-
-    public boolean isAnimatingBounds() {
-        return mBoundsAnimating;
-    }
-
-    public boolean lastAnimatingBoundsWasToFullscreen() {
-        return mBoundsAnimatingToFullscreen;
-    }
-
-    public boolean isAnimatingBoundsToFullscreen() {
-        return isAnimatingBounds() && lastAnimatingBoundsWasToFullscreen();
-    }
-
-    public boolean pinnedStackResizeDisallowed() {
-        if (mBoundsAnimating && mCancelCurrentBoundsAnimation) {
-            return true;
-        }
-        return false;
     }
 
     /** Returns true if a removal action is still being deferred. */
@@ -4892,21 +3873,6 @@ public class ActivityStack extends Task implements BoundsAnimationTarget {
                 || activityType == ACTIVITY_TYPE_HOME
                 || activityType == ACTIVITY_TYPE_RECENTS
                 || activityType == ACTIVITY_TYPE_ASSISTANT;
-    }
-
-    @Override
-    public boolean setPinnedStackAlpha(float alpha) {
-        // Hold the lock since this is called from the BoundsAnimator running on the UiThread
-        synchronized (mWmService.mGlobalLock) {
-            final SurfaceControl sc = getSurfaceControl();
-            if (sc == null || !sc.isValid()) {
-                // If the stack is already removed, don't bother updating any stack animation
-                return false;
-            }
-            getPendingTransaction().setAlpha(sc, mCancelCurrentBoundsAnimation ? 1 : alpha);
-            scheduleAnimation();
-            return !mCancelCurrentBoundsAnimation;
-        }
     }
 
     public DisplayInfo getDisplayInfo() {
@@ -4967,9 +3933,10 @@ public class ActivityStack extends Task implements BoundsAnimationTarget {
             return;
         }
         if (mTile != null) {
-            reparentSurfaceControl(getPendingTransaction(), mTile.getSurfaceControl());
+            // don't use reparentSurfaceControl because we need to bypass taskorg check
+            mSurfaceAnimator.reparent(getPendingTransaction(), mTile.getSurfaceControl());
         } else if (mTile == null && origTile != null) {
-            reparentSurfaceControl(getPendingTransaction(), getParentSurfaceControl());
+            mSurfaceAnimator.reparent(getPendingTransaction(), getParentSurfaceControl());
         }
     }
 
@@ -5002,17 +3969,6 @@ public class ActivityStack extends Task implements BoundsAnimationTarget {
         proto.write(DISPLAY_ID, getDisplayId());
         proto.write(ROOT_TASK_ID, getRootTaskId());
 
-        for (int i = mChildren.size() - 1; i >= 0; --i) {
-            final WindowContainer child = mChildren.get(i);
-            if (child instanceof Task) {
-                child.dumpDebug(proto, TASKS, logLevel);
-            } else if (child instanceof ActivityRecord) {
-                child.dumpDebug(proto, ACTIVITIES, logLevel);
-            } else {
-                throw new IllegalStateException("Unknown child type: " + child);
-            }
-        }
-
         if (mResumedActivity != null) {
             mResumedActivity.writeIdentifierToProto(proto, RESUMED_ACTIVITY);
         }
@@ -5028,26 +3984,14 @@ public class ActivityStack extends Task implements BoundsAnimationTarget {
         proto.write(MIN_HEIGHT, mMinHeight);
 
         proto.write(FILLS_PARENT, matchParentBounds());
+        getRawBounds().dumpDebug(proto, BOUNDS);
 
-        if (!matchParentBounds()) {
-            final Rect bounds = getRequestedOverrideBounds();
-            bounds.dumpDebug(proto, BOUNDS);
-        } else if (getStack().getTile() != null) {
-            // use tile's bounds here for cts.
-            final Rect bounds = getStack().getTile().getRequestedOverrideBounds();
-            bounds.dumpDebug(proto, BOUNDS);
-        }
         getOverrideDisplayedBounds().dumpDebug(proto, DISPLAYED_BOUNDS);
-        mAdjustedBounds.dumpDebug(proto, ADJUSTED_BOUNDS);
         if (mLastNonFullscreenBounds != null) {
             mLastNonFullscreenBounds.dumpDebug(proto, LAST_NON_FULLSCREEN_BOUNDS);
         }
 
         proto.write(DEFER_REMOVAL, mDeferRemoval);
-        proto.write(MINIMIZE_AMOUNT, mMinimizeAmount);
-        proto.write(ADJUSTED_FOR_IME, mAdjustedForIme);
-        proto.write(ADJUST_IME_AMOUNT, mAdjustImeAmount);
-        proto.write(ADJUST_DIVIDER_AMOUNT, mAdjustDividerAmount);
         proto.write(ANIMATING_BOUNDS, mBoundsAnimating);
 
         if (mSurfaceControl != null) {

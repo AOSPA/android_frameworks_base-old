@@ -23,6 +23,7 @@ import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
+import android.annotation.SuppressLint;
 import android.annotation.SystemApi;
 import android.annotation.TestApi;
 import android.annotation.UserIdInt;
@@ -82,6 +83,7 @@ import java.io.OutputStream;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Objects;
 import java.util.Random;
@@ -629,7 +631,10 @@ public abstract class ContentResolver implements ContentInterface {
     /** @hide */
     @IntDef(flag = true, prefix = { "NOTIFY_" }, value = {
             NOTIFY_SYNC_TO_NETWORK,
-            NOTIFY_SKIP_NOTIFY_FOR_DESCENDANTS
+            NOTIFY_SKIP_NOTIFY_FOR_DESCENDANTS,
+            NOTIFY_INSERT,
+            NOTIFY_UPDATE,
+            NOTIFY_DELETE
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface NotifyFlags {}
@@ -649,6 +654,36 @@ public abstract class ContentResolver implements ContentInterface {
      * when sending the former, so that observers of "X and descendants" only see the latter.
      */
     public static final int NOTIFY_SKIP_NOTIFY_FOR_DESCENDANTS = 1<<1;
+
+    /**
+     * Flag for {@link #notifyChange(Uri, ContentObserver, int)}: typically set
+     * by a {@link ContentProvider} to indicate that this notification is the
+     * result of an {@link ContentProvider#insert} call.
+     * <p>
+     * Sending these detailed flags are optional, but providers are strongly
+     * recommended to send them.
+     */
+    public static final int NOTIFY_INSERT = 1 << 2;
+
+    /**
+     * Flag for {@link #notifyChange(Uri, ContentObserver, int)}: typically set
+     * by a {@link ContentProvider} to indicate that this notification is the
+     * result of an {@link ContentProvider#update} call.
+     * <p>
+     * Sending these detailed flags are optional, but providers are strongly
+     * recommended to send them.
+     */
+    public static final int NOTIFY_UPDATE = 1 << 3;
+
+    /**
+     * Flag for {@link #notifyChange(Uri, ContentObserver, int)}: typically set
+     * by a {@link ContentProvider} to indicate that this notification is the
+     * result of a {@link ContentProvider#delete} call.
+     * <p>
+     * Sending these detailed flags are optional, but providers are strongly
+     * recommended to send them.
+     */
+    public static final int NOTIFY_DELETE = 1 << 4;
 
     /**
      * No exception, throttled by app standby normally.
@@ -2639,6 +2674,15 @@ public abstract class ContentResolver implements ContentInterface {
                 ContentProvider.getUserIdFromUri(uri, mContext.getUserId()));
     }
 
+    /** @removed */
+    @Deprecated
+    public void notifyChange(@NonNull Iterable<Uri> uris, @Nullable ContentObserver observer,
+            @NotifyFlags int flags) {
+        final Collection<Uri> asCollection = new ArrayList<>();
+        uris.forEach(asCollection::add);
+        notifyChange(asCollection, observer, flags);
+    }
+
     /**
      * Notify registered observers that several rows have been updated.
      * <p>
@@ -2663,7 +2707,7 @@ public abstract class ContentResolver implements ContentInterface {
      * @param flags Flags such as {@link #NOTIFY_SYNC_TO_NETWORK} or
      *            {@link #NOTIFY_SKIP_NOTIFY_FOR_DESCENDANTS}.
      */
-    public void notifyChange(@NonNull Iterable<Uri> uris, @Nullable ContentObserver observer,
+    public void notifyChange(@NonNull Collection<Uri> uris, @Nullable ContentObserver observer,
             @NotifyFlags int flags) {
         Objects.requireNonNull(uris, "uris");
 
@@ -3830,6 +3874,18 @@ public abstract class ContentResolver implements ContentInterface {
         return queryArgs;
     }
 
+    /** @hide */
+    public static @NonNull Bundle includeSqlSelectionArgs(@NonNull Bundle queryArgs,
+            @Nullable String selection, @Nullable String[] selectionArgs) {
+        if (selection != null) {
+            queryArgs.putString(QUERY_ARG_SQL_SELECTION, selection);
+        }
+        if (selectionArgs != null) {
+            queryArgs.putStringArray(QUERY_ARG_SQL_SELECTION_ARGS, selectionArgs);
+        }
+        return queryArgs;
+    }
+
     /**
      * Returns structured sort args formatted as an SQL sort clause.
      *
@@ -3972,6 +4028,10 @@ public abstract class ContentResolver implements ContentInterface {
      * @hide
      */
     @SystemApi
+    @TestApi
+    // We can't accept an already-opened FD here, since these methods are
+    // rewriting actual filesystem paths
+    @SuppressLint("StreamFiles")
     public static @NonNull Uri decodeFromFile(@NonNull File file) {
         return translateDeprecatedDataPath(file.getAbsolutePath());
     }
@@ -3988,6 +4048,10 @@ public abstract class ContentResolver implements ContentInterface {
      * @hide
      */
     @SystemApi
+    @TestApi
+    // We can't accept an already-opened FD here, since these methods are
+    // rewriting actual filesystem paths
+    @SuppressLint("StreamFiles")
     public static @NonNull File encodeToFile(@NonNull Uri uri) {
         return new File(translateDeprecatedDataPath(uri));
     }

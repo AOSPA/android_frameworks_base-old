@@ -1763,6 +1763,12 @@ final class ActivityManagerShellCommand extends ShellCommand {
     }
 
     private boolean switchUserAndWaitForComplete(int userId) throws RemoteException {
+        UserInfo currentUser = mInterface.getCurrentUser();
+        if (currentUser != null && userId == currentUser.id) {
+            // Already switched to the correct user, exit early.
+            return true;
+        }
+
         // Register switch observer.
         final CountDownLatch switchLatch = new CountDownLatch(1);
         mInterface.registerUserSwitchObserver(
@@ -1777,13 +1783,18 @@ final class ActivityManagerShellCommand extends ShellCommand {
 
         // Switch.
         boolean switched = mInterface.switchUser(userId);
+        if (!switched) {
+            // Switching failed, don't wait for the user switch observer.
+            return false;
+        }
 
         // Wait.
         try {
-            switchLatch.await(USER_OPERATION_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+            switched = switchLatch.await(USER_OPERATION_TIMEOUT_MS, TimeUnit.MILLISECONDS);
         } catch (InterruptedException e) {
-            getErrPrintWriter().println("Thread interrupted unexpectedly.");
+            getErrPrintWriter().println("Error: Thread interrupted unexpectedly.");
         }
+
         return switched;
     }
 
@@ -1815,7 +1826,7 @@ final class ActivityManagerShellCommand extends ShellCommand {
         if (switched) {
             return 0;
         } else {
-            pw.printf("Failed to switch to user %d\n", userId);
+            pw.printf("Error: Failed to switch to user %d\n", userId);
             return 1;
         }
     }
@@ -2570,10 +2581,6 @@ final class ActivityManagerShellCommand extends ShellCommand {
         switch (op) {
             case "move-task":
                 return runStackMoveTask(pw);
-            case "resize-animated":
-                return runStackResizeAnimated(pw);
-            case "resize-docked-stack":
-                return runStackResizeDocked(pw);
             case "positiontask":
                 return runStackPositionTask(pw);
             case "list":
@@ -2645,34 +2652,6 @@ final class ActivityManagerShellCommand extends ShellCommand {
         }
 
         mTaskInterface.moveTaskToStack(taskId, stackId, toTop);
-        return 0;
-    }
-
-    int runStackResizeAnimated(PrintWriter pw) throws RemoteException {
-        String stackIdStr = getNextArgRequired();
-        int stackId = Integer.parseInt(stackIdStr);
-        final Rect bounds;
-        if ("null".equals(peekNextArg())) {
-            bounds = null;
-        } else {
-            bounds = getBounds();
-            if (bounds == null) {
-                getErrPrintWriter().println("Error: invalid input bounds");
-                return -1;
-            }
-        }
-        mTaskInterface.animateResizePinnedStack(stackId, bounds, -1);
-        return 0;
-    }
-
-    int runStackResizeDocked(PrintWriter pw) throws RemoteException {
-        final Rect bounds = getBounds();
-        final Rect taskBounds = getBounds();
-        if (bounds == null || taskBounds == null) {
-            getErrPrintWriter().println("Error: invalid input bounds");
-            return -1;
-        }
-        mTaskInterface.resizeDockedStack(bounds, taskBounds, null, null, null);
         return 0;
     }
 
@@ -2952,25 +2931,35 @@ final class ActivityManagerShellCommand extends ShellCommand {
         final PlatformCompat platformCompat = (PlatformCompat)
                 ServiceManager.getService(Context.PLATFORM_COMPAT_SERVICE);
         String toggleValue = getNextArgRequired();
-        if (toggleValue.equals("reset-all")) {
-            final String packageName = getNextArgRequired();
-            pw.println("Reset all changes for " + packageName + " to default value.");
-            platformCompat.clearOverrides(packageName);
-            return 0;
-        }
-        long changeId;
-        String changeIdString = getNextArgRequired();
-        try {
-            changeId = Long.parseLong(changeIdString);
-        } catch (NumberFormatException e) {
-            changeId = platformCompat.lookupChangeId(changeIdString);
-        }
-        if (changeId == -1) {
-            pw.println("Unknown or invalid change: '" + changeIdString + "'.");
-            return -1;
+        boolean toggleAll = false;
+        int targetSdkVersion = -1;
+        long changeId = -1;
+
+        if (toggleValue.endsWith("-all")) {
+            toggleValue = toggleValue.substring(0, toggleValue.lastIndexOf("-all"));
+            toggleAll = true;
+            if (!toggleValue.equals("reset")) {
+                try {
+                    targetSdkVersion = Integer.parseInt(getNextArgRequired());
+                } catch (NumberFormatException e) {
+                    pw.println("Invalid targetSdkVersion!");
+                    return -1;
+                }
+            }
+        } else {
+            String changeIdString = getNextArgRequired();
+            try {
+                changeId = Long.parseLong(changeIdString);
+            } catch (NumberFormatException e) {
+                changeId = platformCompat.lookupChangeId(changeIdString);
+            }
+            if (changeId == -1) {
+                pw.println("Unknown or invalid change: '" + changeIdString + "'.");
+                return -1;
+            }
         }
         String packageName = getNextArgRequired();
-        if (!platformCompat.isKnownChangeId(changeId)) {
+        if (!toggleAll && !platformCompat.isKnownChangeId(changeId)) {
             pw.println("Warning! Change " + changeId + " is not known yet. Enabling/disabling it"
                     + " could have no effect.");
         }
@@ -2979,22 +2968,49 @@ final class ActivityManagerShellCommand extends ShellCommand {
         try {
             switch (toggleValue) {
                 case "enable":
-                    enabled.add(changeId);
-                    CompatibilityChangeConfig overrides =
-                            new CompatibilityChangeConfig(
-                                    new Compatibility.ChangeConfig(enabled, disabled));
-                    platformCompat.setOverrides(overrides, packageName);
-                    pw.println("Enabled change " + changeId + " for " + packageName + ".");
+                    if (toggleAll) {
+                        int numChanges = platformCompat.enableTargetSdkChanges(packageName,
+                                                                               targetSdkVersion);
+                        if (numChanges == 0) {
+                            pw.println("No changes were enabled.");
+                            return -1;
+                        }
+                        pw.println("Enabled " + numChanges + " changes gated by targetSdkVersion "
+                                + targetSdkVersion + " for " + packageName + ".");
+                    } else {
+                        enabled.add(changeId);
+                        CompatibilityChangeConfig overrides =
+                                new CompatibilityChangeConfig(
+                                        new Compatibility.ChangeConfig(enabled, disabled));
+                        platformCompat.setOverrides(overrides, packageName);
+                        pw.println("Enabled change " + changeId + " for " + packageName + ".");
+                    }
                     return 0;
                 case "disable":
-                    disabled.add(changeId);
-                    overrides =
-                            new CompatibilityChangeConfig(
-                                    new Compatibility.ChangeConfig(enabled, disabled));
-                    platformCompat.setOverrides(overrides, packageName);
-                    pw.println("Disabled change " + changeId + " for " + packageName + ".");
+                    if (toggleAll) {
+                        int numChanges = platformCompat.disableTargetSdkChanges(packageName,
+                                                                                targetSdkVersion);
+                        if (numChanges == 0) {
+                            pw.println("No changes were disabled.");
+                            return -1;
+                        }
+                        pw.println("Disabled " + numChanges + " changes gated by targetSdkVersion "
+                                + targetSdkVersion + " for " + packageName + ".");
+                    } else {
+                        disabled.add(changeId);
+                        CompatibilityChangeConfig overrides =
+                                new CompatibilityChangeConfig(
+                                        new Compatibility.ChangeConfig(enabled, disabled));
+                        platformCompat.setOverrides(overrides, packageName);
+                        pw.println("Disabled change " + changeId + " for " + packageName + ".");
+                    }
                     return 0;
                 case "reset":
+                    if (toggleAll) {
+                        platformCompat.clearOverrides(packageName);
+                        pw.println("Reset all changes for " + packageName + " to default value.");
+                        return 0;
+                    }
                     if (platformCompat.clearOverride(changeId, packageName)) {
                         pw.println("Reset change " + changeId + " for " + packageName
                                 + " to default value.");
@@ -3285,8 +3301,6 @@ final class ActivityManagerShellCommand extends ShellCommand {
             pw.println("       move-task <TASK_ID> <STACK_ID> [true|false]");
             pw.println("           Move <TASK_ID> from its current stack to the top (true) or");
             pw.println("           bottom (false) of <STACK_ID>.");
-            pw.println("       resize-animated <STACK_ID> <LEFT,TOP,RIGHT,BOTTOM>");
-            pw.println("           Same as resize, but allow animation.");
             pw.println("       resize-docked-stack <LEFT,TOP,RIGHT,BOTTOM> [<TASK_LEFT,TASK_TOP,TASK_RIGHT,TASK_BOTTOM>]");
             pw.println("           Change docked stack to <LEFT,TOP,RIGHT,BOTTOM>");
             pw.println("           and supplying temporary different task bounds indicated by");
@@ -3327,6 +3341,8 @@ final class ActivityManagerShellCommand extends ShellCommand {
             pw.println("         enable|disable|reset <CHANGE_ID|CHANGE_NAME> <PACKAGE_NAME>");
             pw.println("            Toggles a change either by id or by name for <PACKAGE_NAME>.");
             pw.println("            It kills <PACKAGE_NAME> (to allow the toggle to take effect).");
+            pw.println("         enable-all|disable-all <targetSdkVersion> <PACKAGE_NAME");
+            pw.println("            Toggles all changes that are gated by <targetSdkVersion>.");
             pw.println("         reset-all <PACKAGE_NAME>");
             pw.println("            Removes all existing overrides for all changes for ");
             pw.println("            <PACKAGE_NAME> (back to default behaviour).");

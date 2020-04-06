@@ -128,11 +128,12 @@ public class StagingManager {
         }
     }
 
-    ParceledListSlice<PackageInstaller.SessionInfo> getSessions() {
+    ParceledListSlice<PackageInstaller.SessionInfo> getSessions(int callingUid) {
         final List<PackageInstaller.SessionInfo> result = new ArrayList<>();
         synchronized (mStagedSessions) {
             for (int i = 0; i < mStagedSessions.size(); i++) {
-                result.add(mStagedSessions.valueAt(i).generateInfo(false));
+                final PackageInstallerSession stagedSession = mStagedSessions.valueAt(i);
+                result.add(stagedSession.generateInfoForCaller(false /*icon*/, callingUid));
             }
         }
         return new ParceledListSlice<>(result);
@@ -331,7 +332,8 @@ public class StagingManager {
     }
 
     // Reverts apex sessions and user data (if checkpoint is supported). Also reboots the device.
-    private void abortCheckpoint() {
+    private void abortCheckpoint(String errorMsg) {
+        Slog.e(TAG, "Aborting checkpoint: " + errorMsg);
         try {
             if (supportsCheckpoint() && needsCheckpoint()) {
                 mApexManager.revertActiveSessions();
@@ -504,6 +506,8 @@ public class StagingManager {
             // mode. If not, we fail all sessions.
             if (supportsCheckpoint() && !needsCheckpoint()) {
                 // TODO(b/146343545): Persist failure reason across checkpoint reboot
+                Slog.d(TAG, "Reverting back to safe state. Marking " + session.sessionId
+                        + " as failed.");
                 session.setStagedSessionFailed(SessionInfo.STAGED_SESSION_UNKNOWN,
                         "Reverting back to safe state");
                 return;
@@ -524,26 +528,29 @@ public class StagingManager {
 
         if (hasApex) {
             if (apexSessionInfo == null) {
+                String errorMsg = "apexd did not know anything about a staged session supposed to"
+                        + " be activated";
                 session.setStagedSessionFailed(SessionInfo.STAGED_SESSION_ACTIVATION_FAILED,
-                        "apexd did not know anything about a staged session supposed to be"
-                        + "activated");
-                abortCheckpoint();
+                        errorMsg);
+                abortCheckpoint(errorMsg);
                 return;
             }
             if (isApexSessionFailed(apexSessionInfo)) {
+                String errorMsg = "APEX activation failed. Check logcat messages from apexd for "
+                        + "more information.";
                 session.setStagedSessionFailed(SessionInfo.STAGED_SESSION_ACTIVATION_FAILED,
-                        "APEX activation failed. Check logcat messages from apexd for "
-                                + "more information.");
-                abortCheckpoint();
+                        errorMsg);
+                abortCheckpoint(errorMsg);
                 return;
             }
             if (!apexSessionInfo.isActivated && !apexSessionInfo.isSuccess) {
                 // Apexd did not apply the session for some unknown reason. There is no guarantee
                 // that apexd will install it next time. Safer to proactively mark as failed.
+                String errorMsg = "Staged session " + session.sessionId + "at boot didn't "
+                        + "activate nor fail. Marking it as failed anyway.";
                 session.setStagedSessionFailed(SessionInfo.STAGED_SESSION_ACTIVATION_FAILED,
-                        "Staged session " + session.sessionId + "at boot didn't "
-                                + "activate nor fail. Marking it as failed anyway.");
-                abortCheckpoint();
+                        errorMsg);
+                abortCheckpoint(errorMsg);
                 return;
             }
             snapshotAndRestoreForApexSession(session);
@@ -556,7 +563,7 @@ public class StagingManager {
             installApksInSession(session);
         } catch (PackageManagerException e) {
             session.setStagedSessionFailed(e.error, e.getMessage());
-            abortCheckpoint();
+            abortCheckpoint(e.getMessage());
 
             // If checkpoint is not supported, we have to handle failure for one staged session.
             if (!hasApex) {
@@ -1246,7 +1253,7 @@ public class StagingManager {
             try {
                 IStorageManager storageManager = PackageHelper.getStorageManager();
                 if (storageManager.supportsCheckpoint()) {
-                    storageManager.startCheckpoint(1);
+                    storageManager.startCheckpoint(2);
                 }
             } catch (Exception e) {
                 // Failed to get hold of StorageManager

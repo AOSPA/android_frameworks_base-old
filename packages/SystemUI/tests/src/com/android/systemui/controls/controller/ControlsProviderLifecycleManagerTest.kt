@@ -1,7 +1,7 @@
 /*
  * Copyright (C) 2020 The Android Open Source Project
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
+ * Licensed under the Apache License, Version 2.0 (149the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
@@ -43,6 +43,7 @@ import org.mockito.ArgumentMatchers.eq
 import org.mockito.Captor
 import org.mockito.Mock
 import org.mockito.Mockito.`when`
+import org.mockito.Mockito.never
 import org.mockito.Mockito.verify
 import org.mockito.MockitoAnnotations
 
@@ -83,7 +84,6 @@ class ControlsProviderLifecycleManagerTest : SysuiTestCase() {
                 context,
                 executor,
                 actionCallbackService,
-                subscriberService,
                 UserHandle.of(0),
                 componentName
         )
@@ -97,19 +97,25 @@ class ControlsProviderLifecycleManagerTest : SysuiTestCase() {
     @Test
     fun testBindService() {
         manager.bindService()
+        executor.runAllReady()
         assertTrue(mContext.isBound(componentName))
     }
 
     @Test
     fun testUnbindService() {
         manager.bindService()
+        executor.runAllReady()
+
         manager.unbindService()
+        executor.runAllReady()
+
         assertFalse(mContext.isBound(componentName))
     }
 
     @Test
     fun testMaybeBindAndLoad() {
         manager.maybeBindAndLoad(subscriberService)
+        executor.runAllReady()
 
         verify(service).load(subscriberService)
 
@@ -119,14 +125,17 @@ class ControlsProviderLifecycleManagerTest : SysuiTestCase() {
     @Test
     fun testMaybeUnbind_bindingAndCallback() {
         manager.maybeBindAndLoad(subscriberService)
+        executor.runAllReady()
 
         manager.unbindService()
+        executor.runAllReady()
         assertFalse(mContext.isBound(componentName))
     }
 
     @Test
     fun testMaybeBindAndLoad_timeout() {
         manager.maybeBindAndLoad(subscriberService)
+        executor.runAllReady()
 
         executor.advanceClockToLast()
         executor.runAllReady()
@@ -135,9 +144,23 @@ class ControlsProviderLifecycleManagerTest : SysuiTestCase() {
     }
 
     @Test
+    fun testMaybeBindAndLoad_timeoutCancelled() {
+        manager.maybeBindAndLoad(subscriberService)
+        executor.runAllReady()
+
+        manager.cancelLoadTimeout()
+
+        executor.advanceClockToLast()
+        executor.runAllReady()
+
+        verify(subscriberService, never()).onError(any(), anyString())
+    }
+
+    @Test
     fun testMaybeBindAndSubscribe() {
         val list = listOf("TEST_ID")
-        manager.maybeBindAndSubscribe(list)
+        manager.maybeBindAndSubscribe(list, subscriberService)
+        executor.runAllReady()
 
         assertTrue(mContext.isBound(componentName))
         verify(service).subscribe(list, subscriberService)
@@ -148,6 +171,7 @@ class ControlsProviderLifecycleManagerTest : SysuiTestCase() {
         val controlId = "TEST_ID"
         val action = ControlAction.ERROR_ACTION
         manager.maybeBindAndSendAction(controlId, action)
+        executor.runAllReady()
 
         assertTrue(mContext.isBound(componentName))
         verify(service).action(eq(controlId), capture(wrapperCaptor),

@@ -72,6 +72,33 @@ public class WindowContainerTransaction implements Parcelable {
     }
 
     /**
+     * Resize a container's app bounds. This is the bounds used to report appWidth/Height to an
+     * app's DisplayInfo. It is derived by subtracting the overlapping portion of the navbar from
+     * the full bounds.
+     */
+    public WindowContainerTransaction setAppBounds(IWindowContainer container, Rect appBounds) {
+        Change chg = getOrCreateChange(container.asBinder());
+        chg.mConfiguration.windowConfiguration.setAppBounds(appBounds);
+        chg.mConfigSetMask |= ActivityInfo.CONFIG_WINDOW_CONFIGURATION;
+        chg.mWindowSetMask |= WindowConfiguration.WINDOW_CONFIG_APP_BOUNDS;
+        return this;
+    }
+
+    /**
+     * Resize a container's configuration size. The configuration size is what gets reported to the
+     * app via screenWidth/HeightDp and influences which resources get loaded. This size is
+     * derived by subtracting the overlapping portions of both the statusbar and the navbar from
+     * the full bounds.
+     */
+    public WindowContainerTransaction setScreenSizeDp(IWindowContainer container, int w, int h) {
+        Change chg = getOrCreateChange(container.asBinder());
+        chg.mConfiguration.screenWidthDp = w;
+        chg.mConfiguration.screenHeightDp = h;
+        chg.mConfigSetMask |= ActivityInfo.CONFIG_SCREEN_SIZE;
+        return this;
+    }
+
+    /**
      * Notify activies within the hiearchy of a container that they have entered picture-in-picture
      * mode with the given bounds.
      */
@@ -100,6 +127,31 @@ public class WindowContainerTransaction implements Parcelable {
         Change chg = getOrCreateChange(container.asBinder());
         chg.mBoundsChangeTransaction = t;
         chg.mChangeMask |= Change.CHANGE_BOUNDS_TRANSACTION;
+        return this;
+    }
+
+    /**
+     * Set the windowing mode of children of a given root task, without changing
+     * the windowing mode of the Task itself. This can be used during transitions
+     * for example to make the activity render it's fullscreen configuration
+     * while the Task is still in PIP, so you can complete the animation.
+     *
+     * TODO(b/134365562): Can be removed once TaskOrg drives full-screen
+     */
+    public WindowContainerTransaction setActivityWindowingMode(IWindowContainer container,
+            int windowingMode) {
+        Change chg = getOrCreateChange(container.asBinder());
+        chg.mActivityWindowingMode = windowingMode;
+        return this;
+    }
+
+    /**
+     * Sets the windowing mode of the given container.
+     */
+    public WindowContainerTransaction setWindowingMode(IWindowContainer container,
+            int windowingMode) {
+        Change chg = getOrCreateChange(container.asBinder());
+        chg.mWindowingMode = windowingMode;
         return this;
     }
 
@@ -161,7 +213,8 @@ public class WindowContainerTransaction implements Parcelable {
 
     @Override
     public String toString() {
-        return "WindowContainerTransaction { changes = " + mChanges + " }";
+        return "WindowContainerTransaction { changes = " + mChanges + " hops = " + mHierarchyOps
+                + " }";
     }
 
     @Override
@@ -207,6 +260,9 @@ public class WindowContainerTransaction implements Parcelable {
         private Rect mPinnedBounds = null;
         private SurfaceControl.Transaction mBoundsChangeTransaction = null;
 
+        private int mActivityWindowingMode = -1;
+        private int mWindowingMode = -1;
+
         public Change() {}
 
         protected Change(Parcel in) {
@@ -223,6 +279,17 @@ public class WindowContainerTransaction implements Parcelable {
                 mBoundsChangeTransaction =
                     SurfaceControl.Transaction.CREATOR.createFromParcel(in);
             }
+
+            mWindowingMode = in.readInt();
+            mActivityWindowingMode = in.readInt();
+        }
+
+        public int getWindowingMode() {
+            return mWindowingMode;
+        }
+
+        public int getActivityWindowingMode() {
+            return mActivityWindowingMode;
         }
 
         public Configuration getConfiguration() {
@@ -269,6 +336,11 @@ public class WindowContainerTransaction implements Parcelable {
                     (mConfigSetMask & ActivityInfo.CONFIG_WINDOW_CONFIGURATION) != 0
                             && ((mWindowSetMask & WindowConfiguration.WINDOW_CONFIG_BOUNDS)
                                     != 0);
+            final boolean changesAppBounds =
+                    (mConfigSetMask & ActivityInfo.CONFIG_WINDOW_CONFIGURATION) != 0
+                            && ((mWindowSetMask & WindowConfiguration.WINDOW_CONFIG_APP_BOUNDS)
+                                    != 0);
+            final boolean changesSs = (mConfigSetMask & ActivityInfo.CONFIG_SCREEN_SIZE) != 0;
             final boolean changesSss =
                     (mConfigSetMask & ActivityInfo.CONFIG_SMALLEST_SCREEN_SIZE) != 0;
             StringBuilder sb = new StringBuilder();
@@ -276,8 +348,15 @@ public class WindowContainerTransaction implements Parcelable {
             if (changesBounds) {
                 sb.append("bounds:" + mConfiguration.windowConfiguration.getBounds() + ",");
             }
+            if (changesAppBounds) {
+                sb.append("appbounds:" + mConfiguration.windowConfiguration.getAppBounds() + ",");
+            }
             if (changesSss) {
                 sb.append("ssw:" + mConfiguration.smallestScreenWidthDp + ",");
+            }
+            if (changesSs) {
+                sb.append("sw/h:" + mConfiguration.screenWidthDp + "x"
+                        + mConfiguration.screenHeightDp + ",");
             }
             if ((mChangeMask & CHANGE_FOCUSABLE) != 0) {
                 sb.append("focusable:" + mFocusable + ",");
@@ -300,6 +379,9 @@ public class WindowContainerTransaction implements Parcelable {
             if (mBoundsChangeTransaction != null) {
                 mBoundsChangeTransaction.writeToParcel(dest, flags);
             }
+
+            dest.writeInt(mWindowingMode);
+            dest.writeInt(mActivityWindowingMode);
         }
 
         @Override

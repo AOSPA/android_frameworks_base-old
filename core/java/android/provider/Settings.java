@@ -53,7 +53,9 @@ import android.location.LocationManager;
 import android.net.ConnectivityManager;
 import android.net.NetworkScoreManager;
 import android.net.Uri;
+import android.net.wifi.SoftApConfiguration;
 import android.net.wifi.WifiManager;
+import android.net.wifi.p2p.WifiP2pManager;
 import android.os.BatteryManager;
 import android.os.Binder;
 import android.os.Build.VERSION_CODES;
@@ -96,7 +98,8 @@ import java.util.Set;
  * The Settings provider contains global system-level device preferences.
  */
 public final class Settings {
-    private static final boolean DEFAULT_OVERRIDEABLE_BY_RESTORE = false;
+    /** @hide */
+    public static final boolean DEFAULT_OVERRIDEABLE_BY_RESTORE = false;
 
     // Intent actions for Settings
 
@@ -701,13 +704,15 @@ public final class Settings {
      * Weak or above, as defined by the CDD. Only biometrics that meet or exceed Strong, as defined
      * in the CDD are allowed to participate in Keystore operations.
      * <p>
-     * Input: extras {@link #EXTRA_BIOMETRIC_MINIMUM_STRENGTH_REQUIRED} as an integer, with
+     * Input: extras {@link #EXTRA_BIOMETRIC_AUTHENTICATORS_ALLOWED} as an integer, with
      * constants defined in {@link android.hardware.biometrics.BiometricManager.Authenticators},
      * e.g. {@link android.hardware.biometrics.BiometricManager.Authenticators#BIOMETRIC_STRONG}.
      * If not specified, the default behavior is
      * {@link android.hardware.biometrics.BiometricManager.Authenticators#BIOMETRIC_WEAK}.
      * <p>
-     * Output: Nothing.
+     * Output: Nothing. Note that callers should still check
+     * {@link android.hardware.biometrics.BiometricManager#canAuthenticate(int)}
+     * afterwards to ensure that the user actually completed enrollment.
      */
     @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
     public static final String ACTION_BIOMETRIC_ENROLL =
@@ -717,12 +722,12 @@ public final class Settings {
      * Activity Extra: The minimum strength to request enrollment for.
      * <p>
      * This can be passed as an extra field to the {@link #ACTION_BIOMETRIC_ENROLL} intent to
-     * indicate that only enrollment for sensors that meet this strength should be shown. The
-     * value should be one of the biometric strength constants defined in
+     * indicate that only enrollment for sensors that meet these requirements should be shown. The
+     * value should be a combination of the constants defined in
      * {@link android.hardware.biometrics.BiometricManager.Authenticators}.
      */
-    public static final String EXTRA_BIOMETRIC_MINIMUM_STRENGTH_REQUIRED =
-            "android.provider.extra.BIOMETRIC_MINIMUM_STRENGTH_REQUIRED";
+    public static final String EXTRA_BIOMETRIC_AUTHENTICATORS_ALLOWED =
+            "android.provider.extra.BIOMETRIC_AUTHENTICATORS_ALLOWED";
 
     /**
      * Activity Action: Show settings to allow configuration of cast endpoints.
@@ -6618,6 +6623,18 @@ public final class Settings {
                 "accessibility_button_target_component";
 
         /**
+         * Setting specifying the accessibility services, accessibility shortcut targets,
+         * or features to be toggled via the long press accessibility button in the navigation bar.
+         *
+         * <p> This is a colon-separated string list which contains the flattened
+         * {@link ComponentName} and the class name of a system class implementing a supported
+         * accessibility feature.
+         * @hide
+         */
+        public static final String ACCESSIBILITY_BUTTON_LONG_PRESS_TARGETS =
+                "accessibility_button_long_press_targets";
+
+        /**
          * The system class name of magnification controller which is a target to be toggled via
          * accessibility shortcut or accessibility button.
          *
@@ -7846,12 +7863,20 @@ public final class Settings {
         public static final String UI_NIGHT_MODE = "ui_night_mode";
 
         /**
-         * The current night mode that has been overrided by the system.  Owned
+         * The current night mode that has been overridden to turn on by the system.  Owned
          * and controlled by UiModeManagerService.  Constants are as per
          * UiModeManager.
          * @hide
          */
-        public static final String UI_NIGHT_MODE_OVERRIDE = "ui_night_mode_override";
+        public static final String UI_NIGHT_MODE_OVERRIDE_ON = "ui_night_mode_override_on";
+
+        /**
+         * The current night mode that has been overridden to turn off by the system.  Owned
+         * and controlled by UiModeManagerService.  Constants are as per
+         * UiModeManager.
+         * @hide
+         */
+        public static final String UI_NIGHT_MODE_OVERRIDE_OFF = "ui_night_mode_override_off";
 
         /**
          * Whether screensavers are enabled.
@@ -9287,9 +9312,15 @@ public final class Settings {
         public static final String CUSTOM_BUGREPORT_HANDLER_USER = "custom_bugreport_handler_user";
 
         /**
-         * Whether ADB is enabled.
+         * Whether ADB over USB is enabled.
          */
         public static final String ADB_ENABLED = "adb_enabled";
+
+        /**
+         * Whether ADB over Wifi is enabled.
+         * @hide
+         */
+        public static final String ADB_WIFI_ENABLED = "adb_wifi_enabled";
 
         /**
          * Whether Views are allowed to save their attribute data.
@@ -10280,7 +10311,8 @@ public final class Settings {
        /**
         * Setting to allow scans to be enabled even wifi is turned off for connectivity.
         * @hide
-        * @deprecated To be removed.
+        * @deprecated To be removed. Use {@link WifiManager#setScanAlwaysAvailable(boolean)} for
+        * setting the value and {@link WifiManager#isScanAlwaysAvailable()} for query.
         */
        public static final String WIFI_SCAN_ALWAYS_AVAILABLE =
                 "wifi_scan_always_enabled";
@@ -10300,7 +10332,9 @@ public final class Settings {
          *
          * Type: int (0 for false, 1 for true)
          * @hide
-         * @deprecated To be removed.
+         * @deprecated To be removed. Use {@link SoftApConfiguration.Builder#
+         * setAutoShutdownEnabled(boolean)} for setting the value and {@link SoftApConfiguration#
+         * isAutoShutdownEnabled()} for query.
          */
         public static final String SOFT_AP_TIMEOUT_ENABLED = "soft_ap_timeout_enabled";
 
@@ -10309,7 +10343,8 @@ public final class Settings {
          *
          * Type: int (0 for false, 1 for true)
          * @hide
-         * @deprecated Use {@link WifiManager#isAutoWakeupEnabled()} instead.
+         * @deprecated Use {@link WifiManager#setAutoWakeupEnabled(boolean)} for setting the value
+         * and {@link WifiManager#isAutoWakeupEnabled()} for query.
          */
         @Deprecated
         @SystemApi
@@ -10389,7 +10424,8 @@ public final class Settings {
          *
          * Type: int (0 for false, 1 for true)
          * @hide
-         * @deprecated To be removed.
+         * @deprecated Use {@link WifiManager#setScanThrottleEnabled(boolean)} for setting the value
+         * and {@link WifiManager#isScanThrottleEnabled()} for query.
          */
         public static final String WIFI_SCAN_THROTTLE_ENABLED = "wifi_scan_throttle_enabled";
 
@@ -10492,7 +10528,8 @@ public final class Settings {
         * Setting to enable verbose logging in Wi-Fi; disabled by default, and setting to 1
         * will enable it. In the future, additional values may be supported.
         * @hide
-        * @deprecated To be removed.
+        * @deprecated Use {@link WifiManager#setVerboseLoggingEnabled(boolean)} for setting the
+        * value and {@link WifiManager#isVerboseLoggingEnabled()} for query.
         */
        public static final String WIFI_VERBOSE_LOGGING_ENABLED =
                "wifi_verbose_logging_enabled";
@@ -10570,7 +10607,9 @@ public final class Settings {
        /**
         * The Wi-Fi peer-to-peer device name
         * @hide
-        * @deprecated To be removed.
+        * @deprecated Use {@link WifiP2pManager#setDeviceName(WifiP2pManager.Channel, String,
+        * WifiP2pManager.ActionListener)} for setting the value and
+        * {@link android.net.wifi.p2p.WifiP2pDevice#deviceName} for query.
         */
        public static final String WIFI_P2P_DEVICE_NAME = "wifi_p2p_device_name";
 
@@ -10630,6 +10669,17 @@ public final class Settings {
         * change the ringer mode. See AudioManager.
         */
        public static final String MODE_RINGER = "mode_ringer";
+
+        /**
+         * Specifies whether Enhanced Connectivity is enabled or not. This setting allows the
+         * Connectivity Thermal Power Manager to actively help the device to save power in 5G
+         * scenarios
+         * Type: int 1 is enabled, 0 is disabled
+         *
+         * @hide
+         */
+        public static final String ENHANCED_CONNECTIVITY_ENABLED =
+                "enhanced_connectivity_enable";
 
         /**
          * Overlay display devices setting.

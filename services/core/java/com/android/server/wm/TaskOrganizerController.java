@@ -128,7 +128,7 @@ class TaskOrganizerController extends ITaskOrganizerController.Stub
 
         void removeTask(Task t) {
             try {
-                mOrganizer.taskVanished(t.getRemoteToken());
+                mOrganizer.taskVanished(t.getTaskInfo());
             } catch (Exception e) {
                 Slog.e(TAG, "Exception sending taskVanished callback" + e);
             }
@@ -253,8 +253,7 @@ class TaskOrganizerController extends ITaskOrganizerController.Stub
                 final int nextId = display.getNextStackId();
                 TaskTile tile = new TaskTile(mService, nextId, windowingMode);
                 display.addTile(tile);
-                RunningTaskInfo out = new RunningTaskInfo();
-                tile.fillTaskInfo(out);
+                RunningTaskInfo out = tile.getTaskInfo();
                 mLastSentTaskInfos.put(tile, out);
                 return out;
             }
@@ -306,7 +305,8 @@ class TaskOrganizerController extends ITaskOrganizerController.Stub
         task.fillTaskInfo(mTmpTaskInfo);
         boolean changed = lastInfo == null
                 || mTmpTaskInfo.topActivityType != lastInfo.topActivityType
-                || mTmpTaskInfo.isResizable() != lastInfo.isResizable();
+                || mTmpTaskInfo.isResizable() != lastInfo.isResizable()
+                || mTmpTaskInfo.pictureInPictureParams != lastInfo.pictureInPictureParams;
         if (!(changed || force)) {
             return;
         }
@@ -411,9 +411,7 @@ class TaskOrganizerController extends ITaskOrganizerController.Stub
                                 && !ArrayUtils.contains(activityTypes, as.getActivityType())) {
                             continue;
                         }
-                        final RunningTaskInfo info = new RunningTaskInfo();
-                        as.fillTaskInfo(info);
-                        out.add(info);
+                        out.add(as.getTaskInfo());
                     }
                 }
                 return out;
@@ -446,9 +444,7 @@ class TaskOrganizerController extends ITaskOrganizerController.Stub
                             && !ArrayUtils.contains(activityTypes, task.getActivityType())) {
                         continue;
                     }
-                    final RunningTaskInfo info = new RunningTaskInfo();
-                    task.fillTaskInfo(info);
-                    out.add(info);
+                    out.add(task.getTaskInfo());
                 }
                 return out;
             }
@@ -467,8 +463,9 @@ class TaskOrganizerController extends ITaskOrganizerController.Stub
         int configMask = change.getConfigSetMask();
         int windowMask = change.getWindowSetMask();
         configMask &= ActivityInfo.CONFIG_WINDOW_CONFIGURATION
-                | ActivityInfo.CONFIG_SMALLEST_SCREEN_SIZE;
-        windowMask &= WindowConfiguration.WINDOW_CONFIG_BOUNDS;
+                | ActivityInfo.CONFIG_SMALLEST_SCREEN_SIZE | ActivityInfo.CONFIG_SCREEN_SIZE;
+        windowMask &= (WindowConfiguration.WINDOW_CONFIG_BOUNDS
+                | WindowConfiguration.WINDOW_CONFIG_APP_BOUNDS);
         int effects = 0;
         if (configMask != 0) {
             Configuration c = new Configuration(container.getRequestedOverrideConfiguration());
@@ -556,18 +553,28 @@ class TaskOrganizerController extends ITaskOrganizerController.Stub
             WindowContainerTransaction.Change c) {
         int effects = sanitizeAndApplyChange(wc, c);
 
+        final Task tr = wc.asTask();
+
         final SurfaceControl.Transaction t = c.getBoundsChangeTransaction();
         if (t != null) {
-            Task tr = (Task) wc;
             tr.setMainWindowSizeChangeTransaction(t);
         }
 
         Rect enterPipBounds = c.getEnterPipBounds();
         if (enterPipBounds != null) {
-            Task tr = (Task) wc;
             mService.mStackSupervisor.updatePictureInPictureMode(tr,
                     enterPipBounds, true);
         }
+
+        final int windowingMode = c.getWindowingMode();
+        if (windowingMode > -1) {
+            tr.setWindowingMode(windowingMode);
+        }
+        final int childWindowingMode = c.getActivityWindowingMode();
+        if (childWindowingMode > -1) {
+            tr.setActivityWindowingMode(childWindowingMode);
+        }
+
         return effects;
     }
 

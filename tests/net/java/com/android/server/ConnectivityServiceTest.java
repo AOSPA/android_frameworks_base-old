@@ -2058,15 +2058,14 @@ public class ConnectivityServiceTest {
         assertEquals(mCellNetworkAgent.getNetwork(), mCm.getActiveNetwork());
         assertEquals(defaultCallback.getLastAvailableNetwork(), mCm.getActiveNetwork());
 
-        // Bring up validated wifi.
+        // Bring up wifi with a score of 70.
         // Cell is lingered because it would not satisfy any request, even if it validated.
         mWiFiNetworkAgent = new TestNetworkAgentWrapper(TRANSPORT_WIFI);
-        mWiFiNetworkAgent.connect(true);   // Score: 60
+        mWiFiNetworkAgent.adjustScore(50);
+        mWiFiNetworkAgent.connect(false);   // Score: 70
         callback.expectAvailableCallbacksUnvalidated(mWiFiNetworkAgent);
-        // TODO: Investigate sending validated before losing.
         callback.expectCallback(CallbackEntry.LOSING, mCellNetworkAgent);
-        callback.expectCapabilitiesWith(NET_CAPABILITY_VALIDATED, mWiFiNetworkAgent);
-        defaultCallback.expectAvailableThenValidatedCallbacks(mWiFiNetworkAgent);
+        defaultCallback.expectAvailableCallbacksUnvalidated(mWiFiNetworkAgent);
         assertEquals(mWiFiNetworkAgent.getNetwork(), mCm.getActiveNetwork());
         assertEquals(defaultCallback.getLastAvailableNetwork(), mCm.getActiveNetwork());
 
@@ -2752,9 +2751,6 @@ public class ConnectivityServiceTest {
 
         // Expect NET_CAPABILITY_VALIDATED onAvailable callback.
         validatedCallback.expectAvailableDoubleValidatedCallbacks(mWiFiNetworkAgent);
-        // Expect no notification to be shown when captive portal disappears by itself
-        verify(mNotificationManager, never()).notifyAsUser(
-                anyString(), eq(NotificationType.LOGGED_IN.eventId), any(), any());
 
         // Break network connectivity.
         // Expect NET_CAPABILITY_VALIDATED onLost callback.
@@ -2816,8 +2812,6 @@ public class ConnectivityServiceTest {
         mWiFiNetworkAgent.mNetworkMonitor.forceReevaluation(Process.myUid());
         validatedCallback.expectAvailableCallbacksValidated(mWiFiNetworkAgent);
         captivePortalCallback.expectCallback(CallbackEntry.LOST, mWiFiNetworkAgent);
-        verify(mNotificationManager, times(1)).notifyAsUser(anyString(),
-                eq(NotificationType.LOGGED_IN.eventId), any(), eq(UserHandle.ALL));
 
         mCm.unregisterNetworkCallback(validatedCallback);
         mCm.unregisterNetworkCallback(captivePortalCallback);
@@ -5850,7 +5844,7 @@ public class ConnectivityServiceTest {
 
         mWiFiNetworkAgent = new TestNetworkAgentWrapper(TRANSPORT_WIFI);
         mWiFiNetworkAgent.connect(true);
-        trustedCallback.expectAvailableThenValidatedCallbacks(mWiFiNetworkAgent);
+        trustedCallback.expectAvailableDoubleValidatedCallbacks(mWiFiNetworkAgent);
         verify(mNetworkManagementService).setDefaultNetId(eq(mWiFiNetworkAgent.getNetwork().netId));
         reset(mNetworkManagementService);
 
@@ -5928,6 +5922,12 @@ public class ConnectivityServiceTest {
         final LinkAddress myIpv6 = new LinkAddress("2001:db8:1::1/64");
         final String kNat64PrefixString = "2001:db8:64:64:64:64::";
         final IpPrefix kNat64Prefix = new IpPrefix(InetAddress.getByName(kNat64PrefixString), 96);
+        final RouteInfo defaultRoute = new RouteInfo((IpPrefix) null, myIpv6.getAddress(),
+                                                     MOBILE_IFNAME);
+        final RouteInfo ipv6Subnet = new RouteInfo(myIpv6, null, MOBILE_IFNAME);
+        final RouteInfo ipv4Subnet = new RouteInfo(myIpv4, null, MOBILE_IFNAME);
+        final RouteInfo stackedDefault = new RouteInfo((IpPrefix) null, myIpv4.getAddress(),
+                                                       CLAT_PREFIX + MOBILE_IFNAME);
 
         final NetworkRequest networkRequest = new NetworkRequest.Builder()
                 .addTransportType(TRANSPORT_CELLULAR)
@@ -5940,15 +5940,13 @@ public class ConnectivityServiceTest {
         final LinkProperties cellLp = new LinkProperties();
         cellLp.setInterfaceName(MOBILE_IFNAME);
         cellLp.addLinkAddress(myIpv6);
-        cellLp.addRoute(new RouteInfo((IpPrefix) null, myIpv6.getAddress(), MOBILE_IFNAME));
-        cellLp.addRoute(new RouteInfo(myIpv6, null, MOBILE_IFNAME));
+        cellLp.addRoute(defaultRoute);
+        cellLp.addRoute(ipv6Subnet);
         mCellNetworkAgent = new TestNetworkAgentWrapper(TRANSPORT_CELLULAR, cellLp);
         reset(mNetworkManagementService);
         reset(mMockDnsResolver);
         reset(mMockNetd);
         reset(mBatteryStatsService);
-        when(mNetworkManagementService.getInterfaceConfig(CLAT_PREFIX + MOBILE_IFNAME))
-                .thenReturn(getClatInterfaceConfig(myIpv4));
 
         // Connect with ipv6 link properties. Expect prefix discovery to be started.
         mCellNetworkAgent.connect(true);
@@ -5956,6 +5954,7 @@ public class ConnectivityServiceTest {
         waitForIdle();
 
         verify(mMockNetd, times(1)).networkCreatePhysical(eq(cellNetId), anyInt());
+        assertRoutesAdded(cellNetId, ipv6Subnet, defaultRoute);
         verify(mMockDnsResolver, times(1)).createNetworkCache(eq(cellNetId));
         verify(mBatteryStatsService).noteNetworkInterfaceType(cellLp.getInterfaceName(),
                 TYPE_MOBILE);
@@ -5971,6 +5970,7 @@ public class ConnectivityServiceTest {
         cellLp.addLinkAddress(myIpv4);
         mCellNetworkAgent.sendLinkProperties(cellLp);
         networkCallback.expectCallback(CallbackEntry.LINK_PROPERTIES_CHANGED, mCellNetworkAgent);
+        assertRoutesAdded(cellNetId, ipv4Subnet);
         verify(mMockDnsResolver, times(1)).stopPrefix64Discovery(cellNetId);
         verify(mMockDnsResolver, atLeastOnce()).setResolverConfiguration(any());
 
@@ -5981,15 +5981,18 @@ public class ConnectivityServiceTest {
 
         verifyNoMoreInteractions(mMockNetd);
         verifyNoMoreInteractions(mMockDnsResolver);
+        reset(mNetworkManagementService);
         reset(mMockNetd);
         reset(mMockDnsResolver);
+        when(mNetworkManagementService.getInterfaceConfig(CLAT_PREFIX + MOBILE_IFNAME))
+                .thenReturn(getClatInterfaceConfig(myIpv4));
 
         // Remove IPv4 address. Expect prefix discovery to be started again.
         cellLp.removeLinkAddress(myIpv4);
-        cellLp.removeRoute(new RouteInfo(myIpv4, null, MOBILE_IFNAME));
         mCellNetworkAgent.sendLinkProperties(cellLp);
         networkCallback.expectCallback(CallbackEntry.LINK_PROPERTIES_CHANGED, mCellNetworkAgent);
         verify(mMockDnsResolver, times(1)).startPrefix64Discovery(cellNetId);
+        assertRoutesRemoved(cellNetId, ipv4Subnet);
 
         // When NAT64 prefix discovery succeeds, LinkProperties are updated and clatd is started.
         Nat464Xlat clat = getNat464Xlat(mCellNetworkAgent);
@@ -6008,6 +6011,7 @@ public class ConnectivityServiceTest {
         List<LinkProperties> stackedLps = mCm.getLinkProperties(mCellNetworkAgent.getNetwork())
                 .getStackedLinks();
         assertEquals(makeClatLinkProperties(myIpv4), stackedLps.get(0));
+        assertRoutesAdded(cellNetId, stackedDefault);
 
         // Change trivial linkproperties and see if stacked link is preserved.
         cellLp.addDnsServer(InetAddress.getByName("8.8.8.8"));
@@ -6033,9 +6037,10 @@ public class ConnectivityServiceTest {
         // Add ipv4 address, expect that clatd and prefix discovery are stopped and stacked
         // linkproperties are cleaned up.
         cellLp.addLinkAddress(myIpv4);
-        cellLp.addRoute(new RouteInfo(myIpv4, null, MOBILE_IFNAME));
+        cellLp.addRoute(ipv4Subnet);
         mCellNetworkAgent.sendLinkProperties(cellLp);
         networkCallback.expectCallback(CallbackEntry.LINK_PROPERTIES_CHANGED, mCellNetworkAgent);
+        assertRoutesAdded(cellNetId, ipv4Subnet);
         verify(mMockNetd, times(1)).clatdStop(MOBILE_IFNAME);
         verify(mMockDnsResolver, times(1)).stopPrefix64Discovery(cellNetId);
 
@@ -6046,6 +6051,7 @@ public class ConnectivityServiceTest {
         expected.setNat64Prefix(kNat64Prefix);
         assertEquals(expected, actualLpAfterIpv4);
         assertEquals(0, actualLpAfterIpv4.getStackedLinks().size());
+        assertRoutesRemoved(cellNetId, stackedDefault);
 
         // The interface removed callback happens but has no effect after stop is called.
         clat.interfaceRemoved(CLAT_PREFIX + MOBILE_IFNAME);
@@ -6053,8 +6059,11 @@ public class ConnectivityServiceTest {
 
         verifyNoMoreInteractions(mMockNetd);
         verifyNoMoreInteractions(mMockDnsResolver);
+        reset(mNetworkManagementService);
         reset(mMockNetd);
         reset(mMockDnsResolver);
+        when(mNetworkManagementService.getInterfaceConfig(CLAT_PREFIX + MOBILE_IFNAME))
+                .thenReturn(getClatInterfaceConfig(myIpv4));
 
         // Stopping prefix discovery causes netd to tell us that the NAT64 prefix is gone.
         mService.mNetdEventCallback.onNat64PrefixEvent(cellNetId, false /* added */,
@@ -6068,6 +6077,7 @@ public class ConnectivityServiceTest {
         cellLp.removeDnsServer(InetAddress.getByName("8.8.8.8"));
         mCellNetworkAgent.sendLinkProperties(cellLp);
         networkCallback.expectCallback(CallbackEntry.LINK_PROPERTIES_CHANGED, mCellNetworkAgent);
+        assertRoutesRemoved(cellNetId, ipv4Subnet);  // Directly-connected routes auto-added.
         verify(mMockDnsResolver, times(1)).startPrefix64Discovery(cellNetId);
         mService.mNetdEventCallback.onNat64PrefixEvent(cellNetId, true /* added */,
                 kNat64PrefixString, 96);
@@ -6079,15 +6089,20 @@ public class ConnectivityServiceTest {
         clat.interfaceLinkStateChanged(CLAT_PREFIX + MOBILE_IFNAME, true);
         networkCallback.expectLinkPropertiesThat(mCellNetworkAgent,
                 (lp) -> lp.getStackedLinks().size() == 1 && lp.getNat64Prefix() != null);
+        assertRoutesAdded(cellNetId, stackedDefault);
 
         // NAT64 prefix is removed. Expect that clat is stopped.
         mService.mNetdEventCallback.onNat64PrefixEvent(cellNetId, false /* added */,
                 kNat64PrefixString, 96);
         networkCallback.expectLinkPropertiesThat(mCellNetworkAgent,
                 (lp) -> lp.getStackedLinks().size() == 0 && lp.getNat64Prefix() == null);
+        assertRoutesRemoved(cellNetId, ipv4Subnet, stackedDefault);
+
+        // Stop has no effect because clat is already stopped.
         verify(mMockNetd, times(1)).clatdStop(MOBILE_IFNAME);
         networkCallback.expectLinkPropertiesThat(mCellNetworkAgent,
                 (lp) -> lp.getStackedLinks().size() == 0);
+        verifyNoMoreInteractions(mMockNetd);
 
         // Clean up.
         mCellNetworkAgent.disconnect();
@@ -6655,6 +6670,20 @@ public class ConnectivityServiceTest {
         }
     }
 
+    private void assertRoutesAdded(int netId, RouteInfo... routes) throws Exception {
+        InOrder inOrder = inOrder(mNetworkManagementService);
+        for (int i = 0; i < routes.length; i++) {
+            inOrder.verify(mNetworkManagementService).addRoute(eq(netId), eq(routes[i]));
+        }
+    }
+
+    private void assertRoutesRemoved(int netId, RouteInfo... routes) throws Exception {
+        InOrder inOrder = inOrder(mNetworkManagementService);
+        for (int i = 0; i < routes.length; i++) {
+            inOrder.verify(mNetworkManagementService).removeRoute(eq(netId), eq(routes[i]));
+        }
+    }
+
     @Test
     public void testRegisterUnregisterConnectivityDiagnosticsCallback() throws Exception {
         final NetworkRequest wifiRequest =
@@ -6716,7 +6745,7 @@ public class ConnectivityServiceTest {
     public void testCheckConnectivityDiagnosticsPermissionsNetworkStack() throws Exception {
         final NetworkAgentInfo naiWithoutUid =
                 new NetworkAgentInfo(
-                        null, null, null, null, null, new NetworkCapabilities(), null,
+                        null, null, null, null, null, new NetworkCapabilities(), 0,
                         mServiceContext, null, null, mService, null, null, null, 0);
 
         mServiceContext.setPermission(
@@ -6732,7 +6761,7 @@ public class ConnectivityServiceTest {
     public void testCheckConnectivityDiagnosticsPermissionsNoLocationPermission() throws Exception {
         final NetworkAgentInfo naiWithoutUid =
                 new NetworkAgentInfo(
-                        null, null, null, null, null, new NetworkCapabilities(), null,
+                        null, null, null, null, null, new NetworkCapabilities(), 0,
                         mServiceContext, null, null, mService, null, null, null, 0);
 
         mServiceContext.setPermission(android.Manifest.permission.NETWORK_STACK, PERMISSION_DENIED);
@@ -6748,7 +6777,7 @@ public class ConnectivityServiceTest {
     public void testCheckConnectivityDiagnosticsPermissionsActiveVpn() throws Exception {
         final NetworkAgentInfo naiWithoutUid =
                 new NetworkAgentInfo(
-                        null, null, null, null, null, new NetworkCapabilities(), null,
+                        null, null, null, null, null, new NetworkCapabilities(), 0,
                         mServiceContext, null, null, mService, null, null, null, 0);
 
         setupLocationPermissions(Build.VERSION_CODES.Q, true, AppOpsManager.OPSTR_FINE_LOCATION,
@@ -6774,7 +6803,7 @@ public class ConnectivityServiceTest {
         nc.setAdministratorUids(Arrays.asList(Process.myUid()));
         final NetworkAgentInfo naiWithUid =
                 new NetworkAgentInfo(
-                        null, null, null, null, null, nc, null, mServiceContext, null, null,
+                        null, null, null, null, null, nc, 0, mServiceContext, null, null,
                         mService, null, null, null, 0);
 
         setupLocationPermissions(Build.VERSION_CODES.Q, true, AppOpsManager.OPSTR_FINE_LOCATION,
@@ -6796,7 +6825,7 @@ public class ConnectivityServiceTest {
         nc.setAdministratorUids(Arrays.asList(Process.myUid()));
         final NetworkAgentInfo naiWithUid =
                 new NetworkAgentInfo(
-                        null, null, null, null, null, nc, null, mServiceContext, null, null,
+                        null, null, null, null, null, nc, 0, mServiceContext, null, null,
                         mService, null, null, null, 0);
 
         setupLocationPermissions(Build.VERSION_CODES.Q, true, AppOpsManager.OPSTR_FINE_LOCATION,

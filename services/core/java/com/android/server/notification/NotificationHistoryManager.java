@@ -38,7 +38,6 @@ import android.util.SparseBooleanArray;
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.server.IoThread;
-import com.android.server.notification.NotificationHistoryDatabase.NotificationHistoryFileAttrProvider;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -182,7 +181,6 @@ public class NotificationHistoryManager {
         }
     }
 
-    // TODO: wire this up to AMS when power button is long pressed
     public void triggerWriteToDisk() {
         synchronized (mLock) {
             final int userCount = mUserState.size();
@@ -291,7 +289,7 @@ public class NotificationHistoryManager {
             final File historyDir = new File(Environment.getDataSystemCeDirectory(userId),
                     DIRECTORY_PER_USER);
             userHistory = NotificationHistoryDatabaseFactory.create(mContext, IoThread.getHandler(),
-                    historyDir, new NotificationHistoryFileAttrProvider());
+                    historyDir);
             if (mUserUnlockedStates.get(userId)) {
                 try {
                     userHistory.init();
@@ -360,7 +358,9 @@ public class NotificationHistoryManager {
                     false, this, UserHandle.USER_ALL);
             synchronized (mLock) {
                 for (UserInfo userInfo : mUserManager.getUsers()) {
-                    update(null, userInfo.id);
+                    if (!userInfo.isProfile()) {
+                        update(null, userInfo.id);
+                    }
                 }
             }
         }
@@ -381,7 +381,10 @@ public class NotificationHistoryManager {
                 boolean historyEnabled = Settings.Secure.getIntForUser(resolver,
                         Settings.Secure.NOTIFICATION_HISTORY_ENABLED, 0, userId)
                         != 0;
-                onHistoryEnabledChanged(userId, historyEnabled);
+                int[] profiles = mUserManager.getProfileIds(userId, true);
+                for (int profileId : profiles) {
+                    onHistoryEnabledChanged(profileId, historyEnabled);
+                }
             }
         }
     }

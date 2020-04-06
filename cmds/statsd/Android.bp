@@ -113,8 +113,8 @@ cc_defaults {
         "libbase",
         "libcutils",
         "libprotoutil",
-        "libstatslog",
         "libstatsmetadata",
+        "libstatslog_statsd",
         "libsysutils",
         "libutils",
     ],
@@ -122,7 +122,6 @@ cc_defaults {
         "libbinder_ndk",
         "libincident",
         "liblog",
-        "libstatssocket",
         "statsd-aidl-ndk_platform",
     ],
 }
@@ -165,10 +164,6 @@ cc_library_static {
     export_generated_headers: [
         "atoms_info.h",
     ],
-    shared_libs: [
-        "libcutils",
-        "libstatslog",
-    ],
     apex_available: [
         //TODO(b/149782403): Remove this once statsd no longer links against libstatsmetadata
         "com.android.os.statsd",
@@ -176,6 +171,37 @@ cc_library_static {
     ],
 }
 
+genrule {
+    name: "statslog_statsd.h",
+    tools: ["stats-log-api-gen"],
+    cmd: "$(location stats-log-api-gen) --header $(genDir)/statslog_statsd.h --module statsd --namespace android,os,statsd,util",
+    out: [
+        "statslog_statsd.h",
+    ],
+}
+
+genrule {
+    name: "statslog_statsd.cpp",
+    tools: ["stats-log-api-gen"],
+    cmd: "$(location stats-log-api-gen) --cpp $(genDir)/statslog_statsd.cpp --module statsd --namespace android,os,statsd,util --importHeader statslog_statsd.h",
+    out: [
+        "statslog_statsd.cpp",
+    ],
+}
+
+cc_library_static {
+    name: "libstatslog_statsd",
+    generated_sources: ["statslog_statsd.cpp"],
+    generated_headers: ["statslog_statsd.h"],
+    export_generated_headers: ["statslog_statsd.h"],
+    apex_available: [
+        "com.android.os.statsd",
+        "test_com.android.os.statsd",
+    ],
+    shared_libs: [
+        "libstatssocket",
+    ]
+}
 
 // =========
 // statsd
@@ -215,7 +241,10 @@ cc_binary {
         type: "lite",
     },
 
-    shared_libs: ["libgtest_prod"],
+    shared_libs: [
+        "libgtest_prod",
+        "libstatssocket",
+    ],
 
     apex_available: [
         "com.android.os.statsd",
@@ -302,11 +331,8 @@ cc_test {
     static_libs: [
         "libgmock",
         "libplatformprotos",
-
-        // TODO(b/149842105): Make libstatssocket shared and remove libcutils once statsd_test is
-        // moved to the apex.
-        "libstatssocket",
-        "libcutils",
+        "libstatslog", //TODO(b/150976524): remove this when the tests no longer hardcode atoms.
+        "libstatssocket_private",
     ],
 
     proto: {

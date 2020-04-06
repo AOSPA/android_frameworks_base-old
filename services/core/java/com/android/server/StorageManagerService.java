@@ -280,7 +280,7 @@ class StorageManagerService extends IStorageManager.Stub
         }
 
         @Override
-        public void onStartUser(TargetUser user) {
+        public void onUserStarting(TargetUser user) {
             mStorageManagerService.snapshotAndMonitorLegacyStorageAppOp(user.getUserHandle());
         }
     }
@@ -335,6 +335,8 @@ class StorageManagerService extends IStorageManager.Stub
             Manifest.permission.READ_EXTERNAL_STORAGE,
             Manifest.permission.WRITE_EXTERNAL_STORAGE
     };
+
+    @Nullable public static String sMediaStoreAuthorityProcessName;
 
     private final AtomicFile mSettingsFile;
 
@@ -1841,6 +1843,7 @@ class StorageManagerService extends IStorageManager.Stub
                 UserHandle.getUserId(UserHandle.USER_SYSTEM));
         if (provider != null) {
             mMediaStoreAuthorityAppId = UserHandle.getAppId(provider.applicationInfo.uid);
+            sMediaStoreAuthorityProcessName = provider.applicationInfo.processName;
         }
 
         provider = mPmInternal.resolveContentProvider(
@@ -4381,18 +4384,24 @@ class StorageManagerService extends IStorageManager.Stub
                     final IVold vold = IVold.Stub.asInterface(
                             ServiceManager.getServiceOrThrow("vold"));
                     for (String pkg : packageList) {
-                        final String obbDir =
-                                String.format("/storage/emulated/%d/Android/obb", userId);
-                        final String packageObbDir = String.format("%s/%s/", obbDir, pkg);
+                        final String packageObbDir =
+                                String.format("/storage/emulated/%d/Android/obb/%s/", userId, pkg);
+                        final String packageDataDir =
+                                String.format("/storage/emulated/%d/Android/data/%s/",
+                                        userId, pkg);
 
-                        // Create package obb dir if it doesn't exist.
+                        // Create package obb and data dir if it doesn't exist.
                         File file = new File(packageObbDir);
                         if (!file.exists()) {
                             vold.setupAppDir(packageObbDir, mPmInternal.getPackage(pkg).getUid());
                         }
+                        file = new File(packageDataDir);
+                        if (!file.exists()) {
+                            vold.setupAppDir(packageDataDir, mPmInternal.getPackage(pkg).getUid());
+                        }
                     }
                 } catch (ServiceManager.ServiceNotFoundException | RemoteException e) {
-                    Slog.e(TAG, "Unable to create obb directories for " + processName, e);
+                    Slog.e(TAG, "Unable to create obb and data directories for " + processName, e);
                 }
             }
         }
@@ -4473,8 +4482,11 @@ class StorageManagerService extends IStorageManager.Stub
                     mVold.fixupAppDir(packageObbDir.getCanonicalPath() + "/", uid);
                 } catch (IOException e) {
                     Log.e(TAG, "Failed to get canonical path for " + packageName);
-                } catch (RemoteException e) {
-                    Log.e(TAG, "Failed to fixup app dir for " + packageName);
+                } catch (RemoteException | ServiceSpecificException e) {
+                    // TODO(b/149975102) there is a known case where this fails, when a new
+                    // user is setup and we try to fixup app dirs for some existing apps.
+                    // For now catch the exception and don't crash.
+                    Log.e(TAG, "Failed to fixup app dir for " + packageName, e);
                 }
             }
         }
@@ -4509,42 +4521,42 @@ class StorageManagerService extends IStorageManager.Stub
         }
 
         public void onAppOpsChanged(int code, int uid, @Nullable String packageName, int mode) {
-            if (mIsFuseEnabled) {
-                // When using FUSE, we may need to kill the app if the op changes
-                switch(code) {
-                    case OP_REQUEST_INSTALL_PACKAGES:
-                        // Always kill regardless of op change, to remount apps /storage
-                        killAppForOpChange(code, uid, packageName);
-                        return;
-                    case OP_MANAGE_EXTERNAL_STORAGE:
-                        if (mode != MODE_ALLOWED) {
-                            // Only kill if op is denied, to lose external_storage gid
-                            // Killing when op is granted to pickup the gid automatically, results
-                            // in a bad UX, especially since the gid only gives access to unreliable
-                            // volumes, USB OTGs that are rarely mounted. The app will get the
-                            // external_storage gid on next organic restart.
+            final long token = Binder.clearCallingIdentity();
+            try {
+                if (mIsFuseEnabled) {
+                    // When using FUSE, we may need to kill the app if the op changes
+                    switch(code) {
+                        case OP_REQUEST_INSTALL_PACKAGES:
+                            // Always kill regardless of op change, to remount apps /storage
                             killAppForOpChange(code, uid, packageName);
-                        }
-                        return;
-                    case OP_LEGACY_STORAGE:
-                        updateLegacyStorageApps(packageName, uid, mode == MODE_ALLOWED);
-                        return;
+                            return;
+                        case OP_MANAGE_EXTERNAL_STORAGE:
+                            if (mode != MODE_ALLOWED) {
+                                // Only kill if op is denied, to lose external_storage gid
+                                // Killing when op is granted to pickup the gid automatically,
+                                // results in a bad UX, especially since the gid only gives access
+                                // to unreliable volumes, USB OTGs that are rarely mounted. The app
+                                // will get the external_storage gid on next organic restart.
+                                killAppForOpChange(code, uid, packageName);
+                            }
+                            return;
+                        case OP_LEGACY_STORAGE:
+                            updateLegacyStorageApps(packageName, uid, mode == MODE_ALLOWED);
+                            return;
+                    }
                 }
-            }
 
-            if (mode == MODE_ALLOWED && (code == OP_READ_EXTERNAL_STORAGE
-                    || code == OP_WRITE_EXTERNAL_STORAGE
-                    || code == OP_REQUEST_INSTALL_PACKAGES)) {
-                final long token = Binder.clearCallingIdentity();
-                try {
+                if (mode == MODE_ALLOWED && (code == OP_READ_EXTERNAL_STORAGE
+                                || code == OP_WRITE_EXTERNAL_STORAGE
+                                || code == OP_REQUEST_INSTALL_PACKAGES)) {
                     final UserManagerInternal userManagerInternal =
                             LocalServices.getService(UserManagerInternal.class);
                     if (userManagerInternal.isUserInitialized(UserHandle.getUserId(uid))) {
                         onExternalStoragePolicyChanged(uid, packageName);
                     }
-                } finally {
-                    Binder.restoreCallingIdentity(token);
                 }
+            } finally {
+                Binder.restoreCallingIdentity(token);
             }
         }
     }

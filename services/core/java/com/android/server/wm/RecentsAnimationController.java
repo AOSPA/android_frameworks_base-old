@@ -26,7 +26,6 @@ import static android.view.WindowManager.LayoutParams.TYPE_BASE_APPLICATION;
 import static com.android.server.policy.WindowManagerPolicy.FINISH_LAYOUT_REDO_WALLPAPER;
 import static com.android.server.wm.ActivityTaskManagerInternal.APP_TRANSITION_RECENTS_ANIM;
 import static com.android.server.wm.AnimationAdapterProto.REMOTE;
-import static com.android.server.wm.BoundsAnimationController.FADE_IN;
 import static com.android.server.wm.ProtoLogGroup.WM_DEBUG_RECENTS_ANIMATIONS;
 import static com.android.server.wm.RemoteAnimationAdapterWrapperProto.TARGET;
 import static com.android.server.wm.SurfaceAnimator.ANIMATION_TYPE_RECENTS;
@@ -55,6 +54,7 @@ import android.view.SurfaceControl;
 import android.view.SurfaceControl.Transaction;
 
 import com.android.internal.annotations.VisibleForTesting;
+import com.android.internal.inputmethod.SoftInputShowHideReason;
 import com.android.internal.util.function.pooled.PooledConsumer;
 import com.android.internal.util.function.pooled.PooledFunction;
 import com.android.internal.util.function.pooled.PooledLambda;
@@ -124,10 +124,6 @@ public class RecentsAnimationController implements DeathRecipient {
     // Whether or not the input consumer is enabled. The input consumer must be both registered and
     // enabled for it to start intercepting touch events.
     private boolean mInputConsumerEnabled;
-
-    // Whether or not the recents animation should cause the primary split-screen stack to be
-    // minimized
-    private boolean mSplitScreenMinimized;
 
     private final Rect mTmpRect = new Rect();
 
@@ -204,7 +200,7 @@ public class RecentsAnimationController implements DeathRecipient {
                             snapshotController.snapshotTasks(tasks);
                             snapshotController.addSkipClosingAppSnapshotTasks(tasks);
                             return snapshotController.getSnapshot(taskId, 0 /* userId */,
-                                    false /* restoreFromDisk */, false /* reducedResolution */);
+                                    false /* restoreFromDisk */, false /* isLowResolution */);
                         }
                     }
                     return null;
@@ -231,7 +227,6 @@ public class RecentsAnimationController implements DeathRecipient {
                 mCallbacks.onAnimationFinished(moveHomeToTop
                         ? REORDER_MOVE_TO_TOP
                         : REORDER_MOVE_TO_ORIGINAL_POSITION, sendUserLeaveHint);
-                mDisplayContent.mBoundsAnimationController.setAnimationType(FADE_IN);
             } finally {
                 Binder.restoreCallingIdentity(token);
             }
@@ -278,41 +273,17 @@ public class RecentsAnimationController implements DeathRecipient {
         }
 
         @Override
-        public void setSplitScreenMinimized(boolean minimized) {
-            final long token = Binder.clearCallingIdentity();
-            try {
-                synchronized (mService.getWindowManagerLock()) {
-                    if (mCanceled) {
-                        return;
-                    }
-
-                    mSplitScreenMinimized = minimized;
-                    mService.checkSplitScreenMinimizedChanged(true /* animate */);
-                }
-            } finally {
-                Binder.restoreCallingIdentity(token);
-            }
-        }
-
-        @Override
         public void hideCurrentInputMethod() {
             final long token = Binder.clearCallingIdentity();
             try {
                 final InputMethodManagerInternal inputMethodManagerInternal =
                         LocalServices.getService(InputMethodManagerInternal.class);
                 if (inputMethodManagerInternal != null) {
-                    inputMethodManagerInternal.hideCurrentInputMethod();
+                    inputMethodManagerInternal.hideCurrentInputMethod(
+                            SoftInputShowHideReason.HIDE_RECENTS_ANIMATION);
                 }
             } finally {
                 Binder.restoreCallingIdentity(token);
-            }
-        }
-
-        @Override
-        @Deprecated
-        public void setCancelWithDeferredScreenshot(boolean screenshot) {
-            synchronized (mService.mGlobalLock) {
-                setDeferredCancel(true /* deferred */, screenshot);
             }
         }
 
@@ -508,7 +479,7 @@ public class RecentsAnimationController implements DeathRecipient {
         }
 
         if (mTargetActivityRecord != null) {
-            final ArrayMap<ActivityRecord, Integer> reasons = new ArrayMap<>(1);
+            final ArrayMap<WindowContainer, Integer> reasons = new ArrayMap<>(1);
             reasons.put(mTargetActivityRecord, APP_TRANSITION_RECENTS_ANIM);
             mService.mAtmService.mStackSupervisor.getActivityMetricsLogger()
                     .notifyTransitionStarting(reasons);
@@ -633,7 +604,7 @@ public class RecentsAnimationController implements DeathRecipient {
         snapshotController.snapshotTasks(tasks);
         snapshotController.addSkipClosingAppSnapshotTasks(tasks);
         final TaskSnapshot taskSnapshot = snapshotController.getSnapshot(task.mTaskId,
-                task.mUserId, false /* restoreFromDisk */, false /* reducedResolution */);
+                task.mUserId, false /* restoreFromDisk */, false /* isLowResolution */);
         if (taskSnapshot == null) {
             return null;
         }
@@ -746,10 +717,6 @@ public class RecentsAnimationController implements DeathRecipient {
         }
     }
 
-    boolean isSplitScreenMinimized() {
-        return mSplitScreenMinimized;
-    }
-
     boolean isWallpaperVisible(WindowState w) {
         return w != null && w.mAttrs.type == TYPE_BASE_APPLICATION &&
                 ((w.mActivityRecord != null && mTargetActivityRecord == w.mActivityRecord)
@@ -837,11 +804,11 @@ public class RecentsAnimationController implements DeathRecipient {
      *
      * This avoids any screen rotation animation when animating to the Recents view.
      */
-    void applyFixedRotationTransformIfNeeded(@NonNull WindowToken wallpaper) {
+    void linkFixedRotationTransformIfNeeded(@NonNull WindowToken wallpaper) {
         if (mTargetActivityRecord == null) {
             return;
         }
-        wallpaper.applyFixedRotationTransform(mTargetActivityRecord);
+        wallpaper.linkFixedRotationTransform(mTargetActivityRecord);
     }
 
     @VisibleForTesting
@@ -853,15 +820,19 @@ public class RecentsAnimationController implements DeathRecipient {
         private @AnimationType int mLastAnimationType;
         private final boolean mIsRecentTaskInvisible;
         private RemoteAnimationTarget mTarget;
-        private final Point mPosition = new Point();
         private final Rect mBounds = new Rect();
+        // The bounds of the target relative to its parent.
+        private Rect mLocalBounds = new Rect();
 
         TaskAnimationAdapter(Task task, boolean isRecentTaskInvisible) {
             mTask = task;
             mIsRecentTaskInvisible = isRecentTaskInvisible;
-            final WindowContainer container = mTask.getParent();
-            mBounds.set(container.getDisplayedBounds());
-            mPosition.set(mBounds.left, mBounds.top);
+            mBounds.set(mTask.getDisplayedBounds());
+
+            mLocalBounds.set(mBounds);
+            Point tmpPos = new Point();
+            mTask.getRelativeDisplayedPosition(tmpPos);
+            mLocalBounds.offsetTo(tmpPos.x, tmpPos.y);
         }
 
         RemoteAnimationTarget createRemoteAnimationTarget() {
@@ -880,8 +851,9 @@ public class RecentsAnimationController implements DeathRecipient {
                     : MODE_CLOSING;
             mTarget = new RemoteAnimationTarget(mTask.mTaskId, mode, mCapturedLeash,
                     !topApp.fillsParent(), mainWindow.mWinAnimator.mLastClipRect,
-                    insets, mTask.getPrefixOrderIndex(), mPosition, mBounds,
-                    mTask.getWindowConfiguration(), mIsRecentTaskInvisible, null, null);
+                    insets, mTask.getPrefixOrderIndex(), new Point(mBounds.left, mBounds.top),
+                    mLocalBounds, mBounds, mTask.getWindowConfiguration(),
+                    mIsRecentTaskInvisible, null, null);
             return mTarget;
         }
 
@@ -895,8 +867,8 @@ public class RecentsAnimationController implements DeathRecipient {
                 @AnimationType int type, OnAnimationFinishedCallback finishCallback) {
             // Restore z-layering, position and stack crop until client has a chance to modify it.
             t.setLayer(animationLeash, mTask.getPrefixOrderIndex());
-            t.setPosition(animationLeash, mPosition.x, mPosition.y);
-            mTmpRect.set(mBounds);
+            t.setPosition(animationLeash, mLocalBounds.left, mLocalBounds.top);
+            mTmpRect.set(mLocalBounds);
             mTmpRect.offsetTo(0, 0);
             t.setWindowCrop(animationLeash, mTmpRect);
             mCapturedLeash = animationLeash;
@@ -930,7 +902,7 @@ public class RecentsAnimationController implements DeathRecipient {
                 pw.print(prefix); pw.println("Target: null");
             }
             pw.println("mIsRecentTaskInvisible=" + mIsRecentTaskInvisible);
-            pw.println("mPosition=" + mPosition);
+            pw.println("mLocalBounds=" + mLocalBounds);
             pw.println("mBounds=" + mBounds);
             pw.println("mIsRecentTaskInvisible=" + mIsRecentTaskInvisible);
         }
@@ -952,7 +924,6 @@ public class RecentsAnimationController implements DeathRecipient {
         pw.print(innerPrefix); pw.println("mPendingAnimations=" + mPendingAnimations.size());
         pw.print(innerPrefix); pw.println("mCanceled=" + mCanceled);
         pw.print(innerPrefix); pw.println("mInputConsumerEnabled=" + mInputConsumerEnabled);
-        pw.print(innerPrefix); pw.println("mSplitScreenMinimized=" + mSplitScreenMinimized);
         pw.print(innerPrefix); pw.println("mTargetActivityRecord=" + mTargetActivityRecord);
         pw.print(innerPrefix); pw.println("isTargetOverWallpaper=" + isTargetOverWallpaper());
         pw.print(innerPrefix); pw.println("mRequestDeferCancelUntilNextTransition="

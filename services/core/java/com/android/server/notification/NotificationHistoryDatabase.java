@@ -84,14 +84,12 @@ public class NotificationHistoryDatabase {
     // Current version of the database files schema
     private int mCurrentVersion;
     private final WriteBufferRunnable mWriteBufferRunnable;
-    private final FileAttrProvider mFileAttrProvider;
 
     // Object containing posted notifications that have not yet been written to disk
     @VisibleForTesting
     NotificationHistory mBuffer;
 
-    public NotificationHistoryDatabase(Context context, Handler fileWriteHandler, File dir,
-            FileAttrProvider fileAttrProvider) {
+    public NotificationHistoryDatabase(Context context, Handler fileWriteHandler, File dir) {
         mContext = context;
         mAlarmManager = context.getSystemService(AlarmManager.class);
         mCurrentVersion = DEFAULT_CURRENT_VERSION;
@@ -101,7 +99,6 @@ public class NotificationHistoryDatabase {
         mHistoryFiles = new LinkedList<>();
         mBuffer = new NotificationHistory();
         mWriteBufferRunnable = new WriteBufferRunnable();
-        mFileAttrProvider = fileAttrProvider;
 
         IntentFilter deletionFilter = new IntentFilter(ACTION_HISTORY_DELETION);
         deletionFilter.addDataScheme(SCHEME_DELETION);
@@ -131,8 +128,8 @@ public class NotificationHistoryDatabase {
         }
 
         // Sort with newest files first
-        Arrays.sort(files, (lhs, rhs) -> Long.compare(mFileAttrProvider.getCreationTime(rhs),
-                mFileAttrProvider.getCreationTime(lhs)));
+        Arrays.sort(files, (lhs, rhs) -> Long.compare(Long.parseLong(rhs.getName()),
+                Long.parseLong(lhs.getName())));
 
         for (File file : files) {
             mHistoryFiles.addLast(new AtomicFile(file));
@@ -160,9 +157,7 @@ public class NotificationHistoryDatabase {
     }
 
     public void forceWriteToDisk() {
-        if (!mFileWriteHandler.hasCallbacks(mWriteBufferRunnable)) {
-            mFileWriteHandler.post(mWriteBufferRunnable);
-        }
+        mFileWriteHandler.post(mWriteBufferRunnable);
     }
 
     public void onPackageRemoved(String packageName) {
@@ -255,10 +250,9 @@ public class NotificationHistoryDatabase {
 
             for (int i = mHistoryFiles.size() - 1; i >= 0; i--) {
                 final AtomicFile currentOldestFile = mHistoryFiles.get(i);
-                final long creationTime =
-                        mFileAttrProvider.getCreationTime(currentOldestFile.getBaseFile());
+                final long creationTime = Long.parseLong(currentOldestFile.getBaseFile().getName());
                 if (DEBUG) {
-                    Slog.d(TAG, "Pruning " + currentOldestFile.getBaseFile().getName()
+                    Slog.d(TAG, "File " + currentOldestFile.getBaseFile().getName()
                             + " created on " + creationTime);
                 }
                 if (creationTime <= retentionBoundary.getTimeInMillis()) {
@@ -270,11 +264,15 @@ public class NotificationHistoryDatabase {
                     mHistoryFiles.removeLast();
                 } else {
                     // all remaining files are newer than the cut off; schedule jobs to delete
-                    final long deletionTime = creationTime + (retentionDays * HISTORY_RETENTION_MS);
-                    scheduleDeletion(currentOldestFile.getBaseFile(), deletionTime);
+                    scheduleDeletion(currentOldestFile.getBaseFile(), creationTime, retentionDays);
                 }
             }
         }
+    }
+
+    private void scheduleDeletion(File file, long creationTime, int retentionDays) {
+        final long deletionTime = creationTime + (retentionDays * HISTORY_RETENTION_MS);
+        scheduleDeletion(file, deletionTime);
     }
 
     private void scheduleDeletion(File file, long deletionTime) {
@@ -334,17 +332,28 @@ public class NotificationHistoryDatabase {
         }
     };
 
-    private final class WriteBufferRunnable implements Runnable {
+    final class WriteBufferRunnable implements Runnable {
+        long currentTime = 0;
+        AtomicFile latestNotificationsFile;
+
         @Override
         public void run() {
             if (DEBUG) Slog.d(TAG, "WriteBufferRunnable");
             synchronized (mLock) {
-                final AtomicFile latestNotificationsFiles = new AtomicFile(
-                        new File(mHistoryDir, String.valueOf(System.currentTimeMillis())));
+                if (currentTime == 0) {
+                    currentTime = System.currentTimeMillis();
+                }
+                if (latestNotificationsFile == null) {
+                    latestNotificationsFile = new AtomicFile(
+                            new File(mHistoryDir, String.valueOf(currentTime)));
+                }
                 try {
-                    writeLocked(latestNotificationsFiles, mBuffer);
-                    mHistoryFiles.addFirst(latestNotificationsFiles);
+                    writeLocked(latestNotificationsFile, mBuffer);
+                    mHistoryFiles.addFirst(latestNotificationsFile);
                     mBuffer = new NotificationHistory();
+
+                    scheduleDeletion(latestNotificationsFile.getBaseFile(), currentTime,
+                            HISTORY_RETENTION_DAYS);
                 } catch (IOException e) {
                     Slog.e(TAG, "Failed to write buffer to disk. not flushing buffer", e);
                 }
@@ -444,7 +453,7 @@ public class NotificationHistoryDatabase {
 
         @Override
         public void run() {
-            if (DEBUG) Slog.d(TAG, "RemoveConversationRunnable");
+            if (DEBUG) Slog.d(TAG, "RemoveConversationRunnable " + mPkg + " "  + mConversationId);
             synchronized (mLock) {
                 // Remove from pending history
                 mBuffer.removeConversationFromWrite(mPkg, mConversationId);
@@ -468,25 +477,5 @@ public class NotificationHistoryDatabase {
                 }
             }
         }
-    }
-
-    public static final class NotificationHistoryFileAttrProvider implements
-            NotificationHistoryDatabase.FileAttrProvider {
-        final static String TAG = "NotifHistoryFileDate";
-
-        public long getCreationTime(File file) {
-            try {
-                BasicFileAttributes attr = Files.readAttributes(FileSystems.getDefault().getPath(
-                        file.getAbsolutePath()), BasicFileAttributes.class);
-                return attr.creationTime().to(TimeUnit.MILLISECONDS);
-            } catch (Exception e) {
-                Slog.w(TAG, "Cannot read creation data for file; using file name");
-                return Long.valueOf(file.getName());
-            }
-        }
-    }
-
-    interface FileAttrProvider {
-        long getCreationTime(File file);
     }
 }

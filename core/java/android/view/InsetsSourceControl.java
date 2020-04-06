@@ -22,6 +22,8 @@ import android.os.Parcel;
 import android.os.Parcelable;
 import android.view.InsetsState.InternalInsetsType;
 
+import java.util.function.Consumer;
+
 /**
  * Represents a parcelable object to allow controlling a single {@link InsetsSource}.
  * @hide
@@ -92,6 +94,12 @@ public class InsetsSourceControl implements Parcelable {
         dest.writeInt(mType);
         dest.writeParcelable(mLeash, 0 /* flags*/);
         dest.writeParcelable(mSurfacePosition, 0 /* flags*/);
+    }
+
+    public void release(Consumer<SurfaceControl> surfaceReleaseConsumer) {
+        if (mLeash != null) {
+            surfaceReleaseConsumer.accept(mLeash);
+        }
     }
 
     public static final @android.annotation.NonNull Creator<InsetsSourceControl> CREATOR

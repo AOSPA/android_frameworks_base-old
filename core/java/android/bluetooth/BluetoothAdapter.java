@@ -1237,9 +1237,9 @@ public final class BluetoothAdapter {
             mServiceLock.readLock().lock();
             if (mManagerService != null) {
                 SystemProperties.set("persist.bluetooth.factoryreset", "true");
-                return mManagerService.factoryReset();
+                return mManagerService.factoryReset() && mManagerService.onFactoryReset();
             }
-            Log.e(TAG, "factoryReset(): IBluetooth Service is null");
+            Log.e(TAG, "factoryReset(): Setting persist.bluetooth.factoryreset to retry later");
         } catch (RemoteException e) {
             Log.e(TAG, "", e);
         } finally {

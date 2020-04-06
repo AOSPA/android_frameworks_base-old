@@ -30,10 +30,13 @@ import android.app.trust.TrustManager;
 import android.content.ContentResolver;
 import android.content.Context;
 import android.content.pm.IPackageManager;
+import android.content.pm.LauncherApps;
+import android.content.pm.PackageManager;
 import android.content.res.Resources;
 import android.hardware.SensorPrivacyManager;
 import android.media.AudioManager;
 import android.net.ConnectivityManager;
+import android.os.BatteryStats;
 import android.os.Handler;
 import android.os.PowerManager;
 import android.os.ServiceManager;
@@ -49,6 +52,7 @@ import android.view.WindowManager;
 import android.view.WindowManagerGlobal;
 import android.view.accessibility.AccessibilityManager;
 
+import com.android.internal.app.IBatteryStats;
 import com.android.internal.statusbar.IStatusBarService;
 import com.android.internal.util.LatencyTracker;
 import com.android.settingslib.bluetooth.LocalBluetoothManager;
@@ -123,6 +127,13 @@ public class SystemServicesModule {
 
     @Provides
     @Singleton
+    static IBatteryStats provideIBatteryStats() {
+        return IBatteryStats.Stub.asInterface(
+                ServiceManager.getService(BatteryStats.SERVICE_NAME));
+    }
+
+    @Provides
+    @Singleton
     static IDreamManager provideIDreamManager() {
         return IDreamManager.Stub.asInterface(
                 ServiceManager.checkService(DreamService.DREAM_SERVICE));
@@ -167,6 +178,12 @@ public class SystemServicesModule {
         return LatencyTracker.getInstance(context);
     }
 
+    @Singleton
+    @Provides
+    static LauncherApps provideLauncherApps(Context context) {
+        return context.getSystemService(LauncherApps.class);
+    }
+
     @SuppressLint("MissingPermission")
     @Singleton
     @Provides
@@ -180,6 +197,12 @@ public class SystemServicesModule {
     @Provides
     static NotificationManager provideNotificationManager(Context context) {
         return context.getSystemService(NotificationManager.class);
+    }
+
+    @Singleton
+    @Provides
+    static PackageManager providePackageManager(Context context) {
+        return context.getPackageManager();
     }
 
     @Singleton
@@ -209,6 +232,7 @@ public class SystemServicesModule {
 
     @Provides
     @Singleton
+    @Nullable
     static TelecomManager provideTelecomManager(Context context) {
         return context.getSystemService(TelecomManager.class);
     }

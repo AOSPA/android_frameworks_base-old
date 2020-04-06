@@ -21,6 +21,9 @@ import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.SystemApi;
 import android.hardware.tv.tuner.V1_0.Constants;
+import android.media.tv.tuner.TunerConstants.Result;
+import android.media.tv.tuner.filter.Filter;
+import android.os.ParcelFileDescriptor;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -33,7 +36,7 @@ import java.lang.annotation.RetentionPolicy;
  * @hide
  */
 @SystemApi
-public class DvrPlayback extends Dvr {
+public class DvrPlayback implements AutoCloseable {
 
 
     /** @hide */
@@ -66,15 +69,117 @@ public class DvrPlayback extends Dvr {
      */
     public static final int PLAYBACK_STATUS_FULL = Constants.PlaybackStatus.SPACE_FULL;
 
+    private long mNativeContext;
 
-
+    private native int nativeAttachFilter(Filter filter);
+    private native int nativeDetachFilter(Filter filter);
+    private native int nativeConfigureDvr(DvrSettings settings);
+    private native int nativeStartDvr();
+    private native int nativeStopDvr();
+    private native int nativeFlushDvr();
+    private native int nativeClose();
+    private native void nativeSetFileDescriptor(int fd);
     private native long nativeRead(long size);
     private native long nativeRead(byte[] bytes, long offset, long size);
 
     private DvrPlayback() {
-        super(Dvr.TYPE_PLAYBACK);
     }
 
+
+    /**
+     * Attaches a filter to DVR interface for recording.
+     *
+     * <p>There can be multiple filters attached. Attached filters are independent, so the order
+     * doesn't matter.
+     *
+     * @param filter the filter to be attached.
+     * @return result status of the operation.
+     */
+    @Result
+    public int attachFilter(@NonNull Filter filter) {
+        return nativeAttachFilter(filter);
+    }
+
+    /**
+     * Detaches a filter from DVR interface.
+     *
+     * @param filter the filter to be detached.
+     * @return result status of the operation.
+     */
+    @Result
+    public int detachFilter(@NonNull Filter filter) {
+        return nativeDetachFilter(filter);
+    }
+
+    /**
+     * Configures the DVR.
+     *
+     * @param settings the settings of the DVR interface.
+     * @return result status of the operation.
+     */
+    @Result
+    public int configure(@NonNull DvrSettings settings) {
+        return nativeConfigureDvr(settings);
+    }
+
+    /**
+     * Starts DVR.
+     *
+     * <p>Starts consuming playback data or producing data for recording.
+     *
+     * @return result status of the operation.
+     */
+    @Result
+    public int start() {
+        return nativeStartDvr();
+    }
+
+    /**
+     * Stops DVR.
+     *
+     * <p>Stops consuming playback data or producing data for recording.
+     * <p>Does nothing if the filter is stopped or not started.</p>
+     *
+     * @return result status of the operation.
+     */
+    @Result
+    public int stop() {
+        return nativeStopDvr();
+    }
+
+    /**
+     * Flushed DVR data.
+     *
+     * <p>The data in DVR buffer is cleared.
+     *
+     * @return result status of the operation.
+     */
+    @Result
+    public int flush() {
+        return nativeFlushDvr();
+    }
+
+    /**
+     * Closes the DVR instance to release resources.
+     */
+    @Override
+    public void close() {
+        nativeClose();
+    }
+
+    /**
+     * Sets file descriptor to read data.
+     *
+     * <p>When a read operation of the filter object is happening, this method should not be
+     * called.
+     *
+     * @param fd the file descriptor to read data.
+     * @see #read(long)
+     * @see #read(byte[], long, long)
+     */
+    public void setFileDescriptor(@NonNull ParcelFileDescriptor fd) {
+        nativeSetFileDescriptor(fd.getFd());
+    }
 
     /**
      * Reads data from the file for DVR playback.

@@ -27,6 +27,7 @@ import android.media.tv.tuner.TunerUtils;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
+import java.util.concurrent.Executor;
 
 /**
  * Tuner data filter.
@@ -43,6 +44,10 @@ public class Filter implements AutoCloseable {
     @Retention(RetentionPolicy.SOURCE)
     public @interface Type {}
 
+    /**
+     * Undefined filter type.
+     */
+    public static final int TYPE_UNDEFINED = 0;
     /**
      * TS filter type.
      */
@@ -177,6 +182,7 @@ public class Filter implements AutoCloseable {
 
     private long mNativeContext;
     private FilterCallback mCallback;
+    private Executor mExecutor;
     private final int mId;
     private int mMainType;
     private int mSubtype;
@@ -199,6 +205,12 @@ public class Filter implements AutoCloseable {
     private void onFilterStatus(int status) {
     }
 
+    private void onFilterEvent(FilterEvent[] events) {
+        if (mCallback != null && mExecutor != null) {
+            mExecutor.execute(() -> mCallback.onFilterEvent(this, events));
+        }
+    }
+
     /** @hide */
     public void setMainType(@Type int mainType) {
         mMainType = mainType;
@@ -209,9 +221,11 @@ public class Filter implements AutoCloseable {
     }
 
     /** @hide */
-    public void setCallback(FilterCallback cb) {
+    public void setCallback(FilterCallback cb, Executor executor) {
         mCallback = cb;
+        mExecutor = executor;
     }
+
     /** @hide */
     public FilterCallback getCallback() {
         return mCallback;
@@ -239,7 +253,6 @@ public class Filter implements AutoCloseable {
     /**
      * Gets the filter Id.
      */
-    @Result
     public int getId() {
         return nativeGetId();
     }
@@ -264,6 +277,8 @@ public class Filter implements AutoCloseable {
     /**
      * Starts filtering data.
      *
+     * <p>Does nothing if the filter is already started.
+     *
      * @return result status of the operation.
      */
     @Result
@@ -274,6 +289,8 @@ public class Filter implements AutoCloseable {
 
     /**
      * Stops filtering data.
+     *
+     * <p>Does nothing if the filter is stopped or not started.
      *
      * @return result status of the operation.
      */
@@ -303,14 +320,13 @@ public class Filter implements AutoCloseable {
      * @param size the maximum number of bytes to read.
      * @return the number of bytes read.
      */
-    @Result
     public int read(@NonNull byte[] buffer, @BytesLong long offset, @BytesLong long size) {
         size = Math.min(size, buffer.length - offset);
         return nativeRead(buffer, offset, size);
     }
 
     /**
-     * Releases the Filter instance.
+     * Stops filtering data and releases the Filter instance.
      */
     @Override
     public void close() {

@@ -16,8 +16,6 @@
 
 package com.android.systemui.statusbar.notification.people
 
-import android.app.PendingIntent
-import android.content.Intent
 import android.graphics.drawable.Drawable
 import android.testing.AndroidTestingRunner
 import android.view.View
@@ -30,12 +28,12 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.mockito.Mock
 import org.mockito.Mockito
-import org.mockito.Mockito.`when`
 import org.mockito.Mockito.mock
 import org.mockito.Mockito.verify
 import org.mockito.junit.MockitoJUnit
 import org.mockito.junit.MockitoRule
 import kotlin.reflect.KClass
+import org.mockito.Mockito.`when` as whenever
 
 @SmallTest
 @RunWith(AndroidTestingRunner::class)
@@ -43,31 +41,26 @@ class PeopleHubViewControllerTest : SysuiTestCase() {
 
     @JvmField @Rule val mockito: MockitoRule = MockitoJUnit.rule()
 
-    @Mock private lateinit var mockViewBoundary: PeopleHubSectionFooterViewBoundary
+    @Mock private lateinit var mockViewBoundary: PeopleHubViewBoundary
     @Mock private lateinit var mockActivityStarter: ActivityStarter
 
     @Test
     fun testBindViewModelToViewBoundary() {
         val fakePerson1 = fakePersonViewModel("name")
         val fakeViewModel = PeopleHubViewModel(sequenceOf(fakePerson1), true)
+
+        val mockFactory = mock(PeopleHubViewModelFactory::class.java)
+        whenever(mockFactory.createWithAssociatedClickView(any())).thenReturn(fakeViewModel)
+
+        val mockClickView = mock(View::class.java)
+        whenever(mockViewBoundary.associatedViewForClickAnimation).thenReturn(mockClickView)
+
         val fakePersonViewAdapter1 = FakeDataListener<PersonViewModel?>()
         val fakePersonViewAdapter2 = FakeDataListener<PersonViewModel?>()
-        val mockClickView = mock(View::class.java)
-        `when`(mockViewBoundary.associatedViewForClickAnimation).thenReturn(mockClickView)
-        `when`(mockViewBoundary.personViewAdapters)
+        whenever(mockViewBoundary.personViewAdapters)
                 .thenReturn(sequenceOf(fakePersonViewAdapter1, fakePersonViewAdapter2))
-        val mockFactory = mock(PeopleHubViewModelFactory::class.java)
-        `when`(mockFactory.createWithAssociatedClickView(any())).thenReturn(fakeViewModel)
-        val mockSubscription = mock(Subscription::class.java)
-        val fakeFactoryDataSource = object : DataSource<PeopleHubViewModelFactory> {
-            override fun registerListener(
-                listener: DataListener<PeopleHubViewModelFactory>
-            ): Subscription {
-                listener.onDataChanged(mockFactory)
-                return mockSubscription
-            }
-        }
-        val adapter = PeopleHubSectionFooterViewAdapterImpl(fakeFactoryDataSource)
+
+        val adapter = PeopleHubViewAdapterImpl(FakeDataSource(mockFactory))
 
         adapter.bindView(mockViewBoundary)
 
@@ -78,27 +71,41 @@ class PeopleHubViewControllerTest : SysuiTestCase() {
     }
 
     @Test
+    fun testBindViewModelToViewBoundary_moreDataThanCanBeDisplayed_displaysMostRecent() {
+        val fakePerson1 = fakePersonViewModel("person1")
+        val fakePerson2 = fakePersonViewModel("person2")
+        val fakePerson3 = fakePersonViewModel("person3")
+        val fakePeople = sequenceOf(fakePerson3, fakePerson2, fakePerson1)
+        val fakeViewModel = PeopleHubViewModel(fakePeople, true)
+
+        val mockFactory = mock(PeopleHubViewModelFactory::class.java)
+        whenever(mockFactory.createWithAssociatedClickView(any())).thenReturn(fakeViewModel)
+
+        whenever(mockViewBoundary.associatedViewForClickAnimation)
+                .thenReturn(mock(View::class.java))
+
+        val fakePersonViewAdapter1 = FakeDataListener<PersonViewModel?>()
+        val fakePersonViewAdapter2 = FakeDataListener<PersonViewModel?>()
+        whenever(mockViewBoundary.personViewAdapters)
+                .thenReturn(sequenceOf(fakePersonViewAdapter1, fakePersonViewAdapter2))
+
+        val adapter = PeopleHubViewAdapterImpl(FakeDataSource(mockFactory))
+
+        adapter.bindView(mockViewBoundary)
+
+        assertThat(fakePersonViewAdapter1.lastSeen).isEqualTo(Maybe.Just(fakePerson3))
+        assertThat(fakePersonViewAdapter2.lastSeen).isEqualTo(Maybe.Just(fakePerson2))
+    }
+
+    @Test
     fun testViewModelDataSourceTransformsModel() {
-        val fakeClickIntent = PendingIntent.getActivity(context, 0, Intent("action"), 0)
-        val fakePerson = fakePersonModel("id", "name", fakeClickIntent)
+        val fakeClickRunnable = mock(Runnable::class.java)
+        val fakePerson = fakePersonModel("id", "name", fakeClickRunnable)
         val fakeModel = PeopleHubModel(listOf(fakePerson))
-        val mockSubscription = mock(Subscription::class.java)
-        val fakeModelDataSource = object : DataSource<PeopleHubModel> {
-            override fun registerListener(listener: DataListener<PeopleHubModel>): Subscription {
-                listener.onDataChanged(fakeModel)
-                return mockSubscription
-            }
-        }
-        val fakeSettingDataSource = object : DataSource<Boolean> {
-            override fun registerListener(listener: DataListener<Boolean>): Subscription {
-                listener.onDataChanged(true)
-                return mockSubscription
-            }
-        }
+        val fakeModelDataSource = FakeDataSource(fakeModel)
         val factoryDataSource = PeopleHubViewModelFactoryDataSourceImpl(
                 mockActivityStarter,
-                fakeModelDataSource,
-                fakeSettingDataSource
+                fakeModelDataSource
         )
         val fakeListener = FakeDataListener<PeopleHubViewModelFactory>()
         val mockClickView = mock(View::class.java)
@@ -115,46 +122,7 @@ class PeopleHubViewControllerTest : SysuiTestCase() {
 
         people[0].onClick()
 
-        verify(mockActivityStarter).startPendingIntentDismissingKeyguard(
-                same(fakeClickIntent),
-                any(),
-                same(mockClickView)
-        )
-    }
-
-    @Test
-    fun testViewModelDataSource_notVisibleIfSettingDisabled() {
-        val fakeClickIntent = PendingIntent.getActivity(context, 0, Intent("action"), 0)
-        val fakePerson = fakePersonModel("id", "name", fakeClickIntent)
-        val fakeModel = PeopleHubModel(listOf(fakePerson))
-        val mockSubscription = mock(Subscription::class.java)
-        val fakeModelDataSource = object : DataSource<PeopleHubModel> {
-            override fun registerListener(listener: DataListener<PeopleHubModel>): Subscription {
-                listener.onDataChanged(fakeModel)
-                return mockSubscription
-            }
-        }
-        val fakeSettingDataSource = object : DataSource<Boolean> {
-            override fun registerListener(listener: DataListener<Boolean>): Subscription {
-                listener.onDataChanged(false)
-                return mockSubscription
-            }
-        }
-        val factoryDataSource = PeopleHubViewModelFactoryDataSourceImpl(
-                mockActivityStarter,
-                fakeModelDataSource,
-                fakeSettingDataSource
-        )
-        val fakeListener = FakeDataListener<PeopleHubViewModelFactory>()
-        val mockClickView = mock(View::class.java)
-
-        factoryDataSource.registerListener(fakeListener)
-
-        val viewModel = (fakeListener.lastSeen as Maybe.Just).value
-                .createWithAssociatedClickView(mockClickView)
-        assertThat(viewModel.isVisible).isFalse()
-        val people = viewModel.people.toList()
-        assertThat(people.size).isEqualTo(0)
+        verify(fakeClickRunnable).run()
     }
 }
 
@@ -178,10 +146,10 @@ private fun <T> castNull(): T = null as T
 private fun fakePersonModel(
     id: String,
     name: CharSequence,
-    clickIntent: PendingIntent,
+    clickRunnable: Runnable,
     userId: Int = 0
 ): PersonModel =
-        PersonModel(id, name, mock(Drawable::class.java), clickIntent, userId)
+        PersonModel(id, userId, name, mock(Drawable::class.java), clickRunnable)
 
 private fun fakePersonViewModel(name: CharSequence): PersonViewModel =
         PersonViewModel(name, mock(Drawable::class.java), mock({}.javaClass))

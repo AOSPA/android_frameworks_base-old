@@ -51,6 +51,7 @@ import static android.content.Context.BIND_ALLOW_WHITELIST_MANAGEMENT;
 import static android.content.Context.BIND_AUTO_CREATE;
 import static android.content.Context.BIND_FOREGROUND_SERVICE;
 import static android.content.Context.BIND_NOT_PERCEPTIBLE;
+import static android.content.pm.LauncherApps.ShortcutQuery.FLAG_MATCH_CACHED;
 import static android.content.pm.LauncherApps.ShortcutQuery.FLAG_MATCH_DYNAMIC;
 import static android.content.pm.LauncherApps.ShortcutQuery.FLAG_MATCH_PINNED;
 import static android.content.pm.PackageManager.FEATURE_LEANBACK;
@@ -380,7 +381,7 @@ public class NotificationManagerService extends SystemService {
     private static final int EVENTLOG_ENQUEUE_STATUS_IGNORED = 2;
     private static final long MIN_PACKAGE_OVERRATE_LOG_INTERVAL = 5000; // milliseconds
 
-    private static final long DELAY_FOR_ASSISTANT_TIME = 100;
+    private static final long DELAY_FOR_ASSISTANT_TIME = 200;
 
     private static final String ACTION_NOTIFICATION_TIMEOUT =
             NotificationManagerService.class.getSimpleName() + ".TIMEOUT";
@@ -569,17 +570,17 @@ public class NotificationManagerService extends SystemService {
 
         public StatusBarNotification[] getArray(int count, boolean includeSnoozed) {
             if (count == 0) count = mBufferSize;
-            final StatusBarNotification[] a
-                    = new StatusBarNotification[Math.min(count, mBuffer.size())];
+            List<StatusBarNotification> a = new ArrayList();
             Iterator<Pair<StatusBarNotification, Integer>> iter = descendingIterator();
             int i=0;
             while (iter.hasNext() && i < count) {
                 Pair<StatusBarNotification, Integer> pair = iter.next();
                 if (pair.second != REASON_SNOOZED || includeSnoozed) {
-                    a[i++] = pair.first;
+                    i++;
+                    a.add(pair.first);
                 }
             }
-            return a;
+            return  a.toArray(new StatusBarNotification[a.size()]);
         }
 
     }
@@ -772,7 +773,7 @@ public class NotificationManagerService extends SystemService {
                         parser, mAllowedManagedServicePackages, forRestore, userId);
                 migratedManagedServices = true;
             } else if (mSnoozeHelper.XML_TAG_NAME.equals(parser.getName())) {
-                mSnoozeHelper.readXml(parser);
+                mSnoozeHelper.readXml(parser, System.currentTimeMillis());
             }
             if (LOCKSCREEN_ALLOW_SECURE_NOTIFICATIONS_TAG.equals(parser.getName())) {
                 if (forRestore && userId != UserHandle.USER_SYSTEM) {
@@ -873,6 +874,11 @@ public class NotificationManagerService extends SystemService {
 
     @VisibleForTesting
     final NotificationDelegate mNotificationDelegate = new NotificationDelegate() {
+
+        @Override
+        public void prepareForPossibleShutdown() {
+            mHistoryManager.triggerWriteToDisk();
+        }
 
         @Override
         public void onSetDisabled(int status) {
@@ -1978,7 +1984,8 @@ public class NotificationManagerService extends SystemService {
         mPreferencesHelper = new PreferencesHelper(getContext(),
                 mPackageManagerClient,
                 mRankingHandler,
-                mZenModeHelper);
+                mZenModeHelper,
+                new NotificationChannelLoggerImpl());
         mRankingHelper = new RankingHelper(getContext(),
                 mRankingHandler,
                 mPreferencesHelper,
@@ -2067,19 +2074,16 @@ public class NotificationManagerService extends SystemService {
 
     @Override
     public void onStart() {
-        SnoozeHelper snoozeHelper = new SnoozeHelper(getContext(), new SnoozeHelper.Callback() {
-            @Override
-            public void repost(int userId, NotificationRecord r) {
-                try {
-                    if (DBG) {
-                        Slog.d(TAG, "Reposting " + r.getKey());
-                    }
-                    enqueueNotificationInternal(r.getSbn().getPackageName(), r.getSbn().getOpPkg(),
-                            r.getSbn().getUid(), r.getSbn().getInitialPid(), r.getSbn().getTag(),
-                            r.getSbn().getId(),  r.getSbn().getNotification(), userId);
-                } catch (Exception e) {
-                    Slog.e(TAG, "Cannot un-snooze notification", e);
+        SnoozeHelper snoozeHelper = new SnoozeHelper(getContext(), (userId, r, muteOnReturn) -> {
+            try {
+                if (DBG) {
+                    Slog.d(TAG, "Reposting " + r.getKey());
                 }
+                enqueueNotificationInternal(r.getSbn().getPackageName(), r.getSbn().getOpPkg(),
+                        r.getSbn().getUid(), r.getSbn().getInitialPid(), r.getSbn().getTag(),
+                        r.getSbn().getId(),  r.getSbn().getNotification(), userId, true);
+            } catch (Exception e) {
+                Slog.e(TAG, "Cannot un-snooze notification", e);
             }
         }, mUserProfiles);
 
@@ -2185,19 +2189,19 @@ public class NotificationManagerService extends SystemService {
 
     private void registerNotificationPreferencesPullers() {
         mPullAtomCallback = new StatsPullAtomCallbackImpl();
-        mStatsManager.registerPullAtomCallback(
+        mStatsManager.setPullAtomCallback(
                 PACKAGE_NOTIFICATION_PREFERENCES,
                 null, // use default PullAtomMetadata values
                 BackgroundThread.getExecutor(),
                 mPullAtomCallback
         );
-        mStatsManager.registerPullAtomCallback(
+        mStatsManager.setPullAtomCallback(
                 PACKAGE_NOTIFICATION_CHANNEL_PREFERENCES,
                 null, // use default PullAtomMetadata values
                 BackgroundThread.getExecutor(),
                 mPullAtomCallback
         );
-        mStatsManager.registerPullAtomCallback(
+        mStatsManager.setPullAtomCallback(
                 PACKAGE_NOTIFICATION_CHANNEL_GROUP_PREFERENCES,
                 null, // use default PullAtomMetadata values
                 BackgroundThread.getExecutor(),
@@ -2322,6 +2326,8 @@ public class NotificationManagerService extends SystemService {
             mConditionProviders.onBootPhaseAppsCanStart();
             mHistoryManager.onBootPhaseAppsCanStart();
             registerDeviceConfigChange();
+        } else if (phase == SystemService.PHASE_ACTIVITY_MANAGER_READY) {
+            mSnoozeHelper.scheduleRepostsForPersistedNotifications(System.currentTimeMillis());
         }
     }
 
@@ -2678,6 +2684,7 @@ public class NotificationManagerService extends SystemService {
                 mHistoryManager.addNotification(new HistoricalNotification.Builder()
                         .setPackage(r.getSbn().getPackageName())
                         .setUid(r.getSbn().getUid())
+                        .setUserId(r.getUserId())
                         .setChannelId(r.getChannel().getId())
                         .setChannelName(r.getChannel().getName().toString())
                         .setPostedTimeMs(System.currentTimeMillis())
@@ -2697,8 +2704,13 @@ public class NotificationManagerService extends SystemService {
         CharSequence title = null;
         if (n.extras != null) {
             title = n.extras.getCharSequence(Notification.EXTRA_TITLE);
+            if (title == null) {
+                title = n.extras.getCharSequence(Notification.EXTRA_TITLE_BIG);
+            }
         }
-        return title == null? null : String.valueOf(title);
+        return title == null ? getContext().getResources().getString(
+            com.android.internal.R.string.notification_history_title_placeholder)
+            : String.valueOf(title);
     }
 
     /**
@@ -3446,16 +3458,10 @@ public class NotificationManagerService extends SystemService {
             ArrayList<ConversationChannelWrapper> conversations =
                     mPreferencesHelper.getConversations(onlyImportant);
             for (ConversationChannelWrapper conversation : conversations) {
-                LauncherApps.ShortcutQuery query = new LauncherApps.ShortcutQuery()
-                        .setPackage(conversation.getPkg())
-                        .setQueryFlags(FLAG_MATCH_DYNAMIC | FLAG_MATCH_PINNED)
-                        .setShortcutIds(Arrays.asList(
-                                conversation.getNotificationChannel().getConversationId()));
-                List<ShortcutInfo> shortcuts = mLauncherAppsService.getShortcuts(
-                        query, UserHandle.of(UserHandle.getUserId(conversation.getUid())));
-                if (shortcuts != null && !shortcuts.isEmpty()) {
-                    conversation.setShortcutInfo(shortcuts.get(0));
-                }
+                conversation.setShortcutInfo(getShortcutInfo(
+                        conversation.getNotificationChannel().getConversationId(),
+                        conversation.getPkg(),
+                        UserHandle.of(UserHandle.getUserId(conversation.getUid()))));
             }
             return new ParceledListSlice<>(conversations);
         }
@@ -3475,16 +3481,10 @@ public class NotificationManagerService extends SystemService {
             ArrayList<ConversationChannelWrapper> conversations =
                     mPreferencesHelper.getConversations(pkg, uid);
             for (ConversationChannelWrapper conversation : conversations) {
-                LauncherApps.ShortcutQuery query = new LauncherApps.ShortcutQuery()
-                        .setPackage(pkg)
-                        .setQueryFlags(FLAG_MATCH_DYNAMIC | FLAG_MATCH_PINNED)
-                        .setShortcutIds(Arrays.asList(
-                                conversation.getNotificationChannel().getConversationId()));
-                List<ShortcutInfo> shortcuts = mLauncherAppsService.getShortcuts(
-                        query, UserHandle.of(UserHandle.getUserId(uid)));
-                if (shortcuts != null && !shortcuts.isEmpty()) {
-                    conversation.setShortcutInfo(shortcuts.get(0));
-                }
+                conversation.setShortcutInfo(getShortcutInfo(
+                        conversation.getNotificationChannel().getConversationId(),
+                        pkg,
+                        UserHandle.of(UserHandle.getUserId(uid))));
             }
             return new ParceledListSlice<>(conversations);
         }
@@ -3992,7 +3992,7 @@ public class NotificationManagerService extends SystemService {
                 synchronized (mNotificationLock) {
                     final ManagedServiceInfo info =
                             mAssistants.checkServiceTokenLocked(token);
-                    unsnoozeNotificationInt(key, info);
+                    unsnoozeNotificationInt(key, info, false);
                 }
             } finally {
                 Binder.restoreCallingIdentity(identity);
@@ -4015,7 +4015,7 @@ public class NotificationManagerService extends SystemService {
                     if (!info.isSystem) {
                         throw new SecurityException("Not allowed to unsnooze before deadline");
                     }
-                    unsnoozeNotificationInt(key, info);
+                    unsnoozeNotificationInt(key, info, true);
                 }
             } finally {
                 Binder.restoreCallingIdentity(identity);
@@ -5474,6 +5474,11 @@ public class NotificationManagerService extends SystemService {
             });
         }
 
+        @Override
+        public void onConversationRemoved(String pkg, int uid, String conversationId) {
+            onConversationRemovedInternal(pkg, uid, conversationId);
+        }
+
         @GuardedBy("mNotificationLock")
         private void removeForegroundServiceFlagLocked(NotificationRecord r) {
             if (r == null) {
@@ -5529,6 +5534,13 @@ public class NotificationManagerService extends SystemService {
     void enqueueNotificationInternal(final String pkg, final String opPkg, final int callingUid,
             final int callingPid, final String tag, final int id, final Notification notification,
             int incomingUserId) {
+        enqueueNotificationInternal(pkg, opPkg, callingUid, callingPid, tag, id, notification,
+        incomingUserId, false);
+    }
+
+    void enqueueNotificationInternal(final String pkg, final String opPkg, final int callingUid,
+        final int callingPid, final String tag, final int id, final Notification notification,
+        int incomingUserId, boolean postSilently) {
         if (DBG) {
             Slog.v(TAG, "enqueueNotificationInternal: pkg=" + pkg + " id=" + id
                     + " notification=" + notification);
@@ -5609,6 +5621,7 @@ public class NotificationManagerService extends SystemService {
                 user, null, System.currentTimeMillis());
         final NotificationRecord r = new NotificationRecord(getContext(), n, channel);
         r.setIsAppImportanceLocked(mPreferencesHelper.getIsAppImportanceLocked(pkg, callingUid));
+        r.setPostSilently(postSilently);
 
         if ((notification.flags & Notification.FLAG_FOREGROUND_SERVICE) != 0) {
             final boolean fgServiceShown = channel.isFgServiceShown();
@@ -5638,6 +5651,8 @@ public class NotificationManagerService extends SystemService {
                 r.updateNotificationChannel(channel);
             }
         }
+
+        r.setShortcutInfo(getShortcutInfo(notification.getShortcutId(), pkg, user));
 
         if (!checkDisqualifyingFeatures(userId, notificationUid, id, tag, r,
                 r.getSbn().getOverrideGroupKey() != null)) {
@@ -5676,7 +5691,7 @@ public class NotificationManagerService extends SystemService {
         mHandler.post(new EnqueueNotificationRunnable(userId, r, isAppForeground));
     }
 
-    public void onConversationRemoved(String pkg, int uid, String conversationId) {
+    private void onConversationRemovedInternal(String pkg, int uid, String conversationId) {
         checkCallerIsSystem();
         Preconditions.checkStringNotEmpty(pkg);
         Preconditions.checkStringNotEmpty(conversationId);
@@ -5952,20 +5967,33 @@ public class NotificationManagerService extends SystemService {
         return false;
     }
 
+    private ShortcutInfo getShortcutInfo(String shortcutId, String packageName, UserHandle user) {
+        final long token = Binder.clearCallingIdentity();
+        try {
+            if (shortcutId == null || packageName == null || user == null) {
+                return null;
+            }
+            LauncherApps.ShortcutQuery query = new LauncherApps.ShortcutQuery();
+            if (packageName != null) {
+                query.setPackage(packageName);
+            }
+            if (shortcutId != null) {
+                query.setShortcutIds(Arrays.asList(shortcutId));
+            }
+            query.setQueryFlags(FLAG_MATCH_DYNAMIC | FLAG_MATCH_PINNED | FLAG_MATCH_CACHED);
+            List<ShortcutInfo> shortcuts = mLauncherAppsService.getShortcuts(query, user);
+            ShortcutInfo shortcutInfo = shortcuts != null && shortcuts.size() > 0
+                    ? shortcuts.get(0)
+                    : null;
+            return shortcutInfo;
+        } finally {
+            Binder.restoreCallingIdentity(token);
+        }
+    }
+
     private boolean hasValidShortcutInfo(String shortcutId, String packageName, UserHandle user) {
-        LauncherApps.ShortcutQuery query = new LauncherApps.ShortcutQuery();
-        if (packageName != null) {
-            query.setPackage(packageName);
-        }
-        if (shortcutId != null) {
-            query.setShortcutIds(Arrays.asList(shortcutId));
-        }
-        query.setQueryFlags(FLAG_MATCH_DYNAMIC | FLAG_MATCH_PINNED);
-        List<ShortcutInfo> shortcuts = mLauncherAppsService.getShortcuts(query, user);
-        ShortcutInfo shortcutInfo = shortcuts != null && shortcuts.size() > 0
-                ? shortcuts.get(0)
-                : null;
-        return shortcutInfo != null;
+        ShortcutInfo shortcutInfo = getShortcutInfo(shortcutId, packageName, user);
+        return shortcutInfo != null && shortcutInfo.isLongLived();
     }
 
     private void logBubbleError(String key, String failureMessage) {
@@ -7029,6 +7057,11 @@ public class NotificationManagerService extends SystemService {
             return true;
         }
 
+        // Suppressed because a user manually unsnoozed something (or similar)
+        if (record.shouldPostSilently()) {
+            return true;
+        }
+
         // muted by listener
         final String disableEffects = disableNotificationEffects(record);
         if (disableEffects != null) {
@@ -8043,13 +8076,12 @@ public class NotificationManagerService extends SystemService {
         mHandler.post(new SnoozeNotificationRunnable(key, duration, snoozeCriterionId));
     }
 
-    void unsnoozeNotificationInt(String key, ManagedServiceInfo listener) {
+    void unsnoozeNotificationInt(String key, ManagedServiceInfo listener, boolean muteOnReturn) {
         String listenerName = listener == null ? null : listener.component.toShortString();
         if (DBG) {
             Slog.d(TAG, String.format("unsnooze event(%s, %s)", key, listenerName));
         }
-        mSnoozeHelper.cleanupPersistedContext(key);
-        mSnoozeHelper.repost(key);
+        mSnoozeHelper.repost(key, muteOnReturn);
         handleSavePolicyFile();
     }
 
@@ -8564,7 +8596,8 @@ public class NotificationManagerService extends SystemService {
                     record.getSmartReplies(),
                     record.canBubble(),
                     record.isInterruptive(),
-                    record.isConversation()
+                    record.isConversation(),
+                    record.getShortcutInfo()
             );
             rankings.add(ranking);
         }

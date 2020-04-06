@@ -23,7 +23,6 @@ import static android.content.Intent.ACTION_USER_STOPPED;
 import static android.content.Intent.ACTION_USER_UNLOCKED;
 import static android.os.BatteryManager.BATTERY_STATUS_UNKNOWN;
 import static android.telephony.PhoneStateListener.LISTEN_ACTIVE_DATA_SUBSCRIPTION_ID_CHANGE;
-import static android.telephony.TelephonyManager.MODEM_COUNT_DUAL_MODEM;
 
 import static com.android.internal.widget.LockPatternUtils.StrongAuthTracker.STRONG_AUTH_REQUIRED_AFTER_BOOT;
 import static com.android.internal.widget.LockPatternUtils.StrongAuthTracker.STRONG_AUTH_REQUIRED_AFTER_DPM_LOCK_NOW;
@@ -88,12 +87,12 @@ import com.android.internal.widget.LockPatternUtils;
 import com.android.settingslib.WirelessUtils;
 import com.android.settingslib.fuelgauge.BatteryStatus;
 import com.android.systemui.DejankUtils;
-import com.android.systemui.DumpController;
 import com.android.systemui.Dumpable;
 import com.android.systemui.R;
 import com.android.systemui.broadcast.BroadcastDispatcher;
 import com.android.systemui.dagger.qualifiers.Background;
 import com.android.systemui.dagger.qualifiers.Main;
+import com.android.systemui.dump.DumpManager;
 import com.android.systemui.shared.system.ActivityManagerWrapper;
 import com.android.systemui.shared.system.TaskStackChangeListener;
 import com.android.systemui.statusbar.phone.KeyguardBypassController;
@@ -263,6 +262,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
     private final IDreamManager mDreamManager;
     private boolean mIsDreaming;
     private final DevicePolicyManager mDevicePolicyManager;
+    private final BroadcastDispatcher mBroadcastDispatcher;
     private boolean mLogoutEnabled;
     // If the user long pressed the lock icon, disabling face auth for the current session.
     private boolean mLockIconPressed;
@@ -379,7 +379,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
         if (DEBUG_SIM_STATES) {
             Log.v(TAG, "onSubscriptionInfoChanged()");
             List<SubscriptionInfo> sil = mSubscriptionManager
-                    .getActiveAndHiddenSubscriptionInfoList();
+                    .getCompleteActiveSubscriptionInfoList();
             if (sil != null) {
                 for (SubscriptionInfo subInfo : sil) {
                     Log.v(TAG, "SubInfo:" + subInfo);
@@ -433,10 +433,10 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
     public List<SubscriptionInfo> getSubscriptionInfo(boolean forceReload) {
         List<SubscriptionInfo> sil = mSubscriptionInfo;
         if (sil == null || forceReload) {
-            sil = mSubscriptionManager.getActiveAndHiddenSubscriptionInfoList();
+            sil = mSubscriptionManager.getCompleteActiveSubscriptionInfoList();
         }
         if (sil == null) {
-            // getActiveAndHiddenSubscriptionInfoList was null callers expect an empty list.
+            // getCompleteActiveSubscriptionInfoList was null callers expect an empty list.
             mSubscriptionInfo = new ArrayList<SubscriptionInfo>();
         } else {
             mSubscriptionInfo = sil;
@@ -454,7 +454,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
      */
     public List<SubscriptionInfo> getFilteredSubscriptionInfo(boolean forceReload) {
         List<SubscriptionInfo> subscriptions = getSubscriptionInfo(false);
-        if (subscriptions.size() == MODEM_COUNT_DUAL_MODEM) {
+        if (subscriptions.size() == 2) {
             SubscriptionInfo info1 = subscriptions.get(0);
             SubscriptionInfo info2 = subscriptions.get(1);
             if (info1.getGroupUuid() != null && info1.getGroupUuid().equals(info2.getGroupUuid())) {
@@ -1086,7 +1086,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
                 mHandler.sendEmptyMessage(MSG_TIME_UPDATE);
             } else if (Intent.ACTION_TIMEZONE_CHANGED.equals(action)) {
                 final Message msg = mHandler.obtainMessage(
-                        MSG_TIMEZONE_UPDATE, intent.getStringExtra("time-zone"));
+                        MSG_TIMEZONE_UPDATE, intent.getStringExtra(Intent.EXTRA_TIMEZONE));
                 mHandler.sendMessage(msg);
             } else if (Intent.ACTION_BATTERY_CHANGED.equals(action)) {
 
@@ -1475,14 +1475,15 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
             Context context,
             @Main Looper mainLooper,
             BroadcastDispatcher broadcastDispatcher,
-            DumpController dumpController,
+            DumpManager dumpManager,
             @Background Executor backgroundExecutor) {
         mContext = context;
         mSubscriptionManager = SubscriptionManager.from(context);
         mDeviceProvisioned = isDeviceProvisionedInSettingsDb();
         mStrongAuthTracker = new StrongAuthTracker(context, this::notifyStrongAuthStateChanged);
-        dumpController.registerDumpable(this);
         mBackgroundExecutor = backgroundExecutor;
+        mBroadcastDispatcher = broadcastDispatcher;
+        dumpManager.registerDumpable(getClass().getName(), this);
 
         mHandler = new Handler(mainLooper) {
             @Override
@@ -1617,7 +1618,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
         filter.addAction(TelephonyManager.ACTION_PHONE_STATE_CHANGED);
         filter.addAction(AudioManager.RINGER_MODE_CHANGED_ACTION);
         filter.addAction(DevicePolicyManager.ACTION_DEVICE_POLICY_MANAGER_STATE_CHANGED);
-        broadcastDispatcher.registerReceiverWithHandler(mBroadcastReceiver, filter, mHandler);
+        mBroadcastDispatcher.registerReceiverWithHandler(mBroadcastReceiver, filter, mHandler);
 
         final IntentFilter allUserFilter = new IntentFilter();
         allUserFilter.addAction(Intent.ACTION_USER_INFO_CHANGED);
@@ -1628,25 +1629,12 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
         allUserFilter.addAction(ACTION_USER_UNLOCKED);
         allUserFilter.addAction(ACTION_USER_STOPPED);
         allUserFilter.addAction(ACTION_USER_REMOVED);
-        broadcastDispatcher.registerReceiverWithHandler(mBroadcastAllReceiver, allUserFilter,
+        mBroadcastDispatcher.registerReceiverWithHandler(mBroadcastAllReceiver, allUserFilter,
                 mHandler, UserHandle.ALL);
 
         mSubscriptionManager.addOnSubscriptionsChangedListener(mSubscriptionListener);
         try {
-            ActivityManager.getService().registerUserSwitchObserver(
-                    new UserSwitchObserver() {
-                        @Override
-                        public void onUserSwitching(int newUserId, IRemoteCallback reply) {
-                            mHandler.sendMessage(mHandler.obtainMessage(MSG_USER_SWITCHING,
-                                    newUserId, 0, reply));
-                        }
-
-                        @Override
-                        public void onUserSwitchComplete(int newUserId) throws RemoteException {
-                            mHandler.sendMessage(mHandler.obtainMessage(MSG_USER_SWITCH_COMPLETE,
-                                    newUserId, 0));
-                        }
-                    }, TAG);
+            ActivityManager.getService().registerUserSwitchObserver(mUserSwitchObserver, TAG);
         } catch (RemoteException e) {
             e.rethrowAsRuntimeException();
         }
@@ -1700,6 +1688,20 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
             telephony.listen(mPhoneStateListener, LISTEN_ACTIVE_DATA_SUBSCRIPTION_ID_CHANGE);
         }
     }
+
+    private final UserSwitchObserver mUserSwitchObserver = new UserSwitchObserver() {
+        @Override
+        public void onUserSwitching(int newUserId, IRemoteCallback reply) {
+            mHandler.sendMessage(mHandler.obtainMessage(MSG_USER_SWITCHING,
+                    newUserId, 0, reply));
+        }
+
+        @Override
+        public void onUserSwitchComplete(int newUserId) throws RemoteException {
+            mHandler.sendMessage(mHandler.obtainMessage(MSG_USER_SWITCH_COMPLETE,
+                    newUserId, 0));
+        }
+    };
 
     private void updateAirplaneModeState() {
         // ACTION_AIRPLANE_MODE_CHANGED do not broadcast if device set AirplaneMode ON and boot
@@ -2749,6 +2751,35 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
                 }
             }
         }
+    }
+
+    /**
+     * Unregister all listeners.
+     */
+    public void destroy() {
+        // TODO: inject these dependencies:
+        TelephonyManager telephony =
+                (TelephonyManager) mContext.getSystemService(Context.TELEPHONY_SERVICE);
+        if (telephony != null) {
+            telephony.listen(mPhoneStateListener, PhoneStateListener.LISTEN_NONE);
+        }
+
+        mSubscriptionManager.removeOnSubscriptionsChangedListener(mSubscriptionListener);
+
+        if (mDeviceProvisionedObserver != null) {
+            mContext.getContentResolver().unregisterContentObserver(mDeviceProvisionedObserver);
+        }
+
+        try {
+            ActivityManager.getService().unregisterUserSwitchObserver(mUserSwitchObserver);
+        } catch (RemoteException e) {
+            Log.d(TAG, "RemoteException onDestroy. cannot unregister userSwitchObserver");
+        }
+
+        ActivityManagerWrapper.getInstance().unregisterTaskStackListener(mTaskStackListener);
+
+        mBroadcastDispatcher.unregisterReceiver(mBroadcastReceiver);
+        mBroadcastDispatcher.unregisterReceiver(mBroadcastAllReceiver);
     }
 
     @Override

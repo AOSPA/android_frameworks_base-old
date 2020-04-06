@@ -60,10 +60,8 @@ import android.util.ArrayMap;
 import android.util.ArraySet;
 import android.util.Log;
 import android.util.Slog;
-import android.util.SparseIntArray;
 import android.util.Xml;
 
-import com.android.internal.annotations.GuardedBy;
 import com.android.internal.util.ArrayUtils;
 import com.android.internal.util.XmlUtils;
 import com.android.server.LocalServices;
@@ -152,8 +150,8 @@ public final class DefaultPermissionGrantPolicy {
 
     private static final Set<String> FOREGROUND_LOCATION_PERMISSIONS = new ArraySet<>();
     static {
-        ALWAYS_LOCATION_PERMISSIONS.add(Manifest.permission.ACCESS_FINE_LOCATION);
-        ALWAYS_LOCATION_PERMISSIONS.add(Manifest.permission.ACCESS_COARSE_LOCATION);
+        FOREGROUND_LOCATION_PERMISSIONS.add(Manifest.permission.ACCESS_FINE_LOCATION);
+        FOREGROUND_LOCATION_PERMISSIONS.add(Manifest.permission.ACCESS_COARSE_LOCATION);
     }
 
     private static final Set<String> COARSE_BACKGROUND_LOCATION_PERMISSIONS = new ArraySet<>();
@@ -226,9 +224,6 @@ public final class DefaultPermissionGrantPolicy {
     private final PackageManagerInternal mServiceInternal;
     private final PermissionManagerService mPermissionManager;
 
-    @GuardedBy("mLock")
-    private SparseIntArray mDefaultPermissionsGrantedUsers = new SparseIntArray();
-
     DefaultPermissionGrantPolicy(Context context, Looper looper,
             @NonNull PermissionManagerService permissionManager) {
         mContext = context;
@@ -297,19 +292,10 @@ public final class DefaultPermissionGrantPolicy {
         }
     }
 
-    public boolean wereDefaultPermissionsGrantedSinceBoot(int userId) {
-        synchronized (mLock) {
-            return mDefaultPermissionsGrantedUsers.indexOfKey(userId) >= 0;
-        }
-    }
-
     public void grantDefaultPermissions(int userId) {
         grantPermissionsToSysComponentsAndPrivApps(userId);
         grantDefaultSystemHandlerPermissions(userId);
         grantDefaultPermissionExceptions(userId);
-        synchronized (mLock) {
-            mDefaultPermissionsGrantedUsers.put(userId, userId);
-        }
     }
 
     private void grantRuntimePermissionsForSystemPackage(int userId, PackageInfo pkg) {
@@ -733,7 +719,7 @@ public final class DefaultPermissionGrantPolicy {
         if (!TextUtils.isEmpty(contentCapturePackageName)) {
             grantPermissionsToSystemPackage(contentCapturePackageName, userId,
                     PHONE_PERMISSIONS, SMS_PERMISSIONS, ALWAYS_LOCATION_PERMISSIONS,
-                    CONTACTS_PERMISSIONS);
+                    CONTACTS_PERMISSIONS, STORAGE_PERMISSIONS);
         }
 
         // Atthention Service

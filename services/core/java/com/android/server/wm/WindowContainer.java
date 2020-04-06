@@ -25,9 +25,14 @@ import static android.content.res.Configuration.ORIENTATION_LANDSCAPE;
 import static android.content.res.Configuration.ORIENTATION_PORTRAIT;
 import static android.content.res.Configuration.ORIENTATION_UNDEFINED;
 import static android.os.Trace.TRACE_TAG_WINDOW_MANAGER;
+import static android.os.UserHandle.USER_NULL;
 import static android.view.SurfaceControl.Transaction;
 
 import static com.android.server.policy.WindowManagerPolicy.FINISH_LAYOUT_REDO_WALLPAPER;
+import static com.android.server.wm.AppTransition.MAX_APP_TRANSITION_DURATION;
+import static com.android.server.wm.IdentifierProto.HASH_CODE;
+import static com.android.server.wm.IdentifierProto.TITLE;
+import static com.android.server.wm.IdentifierProto.USER_ID;
 import static com.android.server.wm.ProtoLogGroup.WM_DEBUG_APP_TRANSITIONS;
 import static com.android.server.wm.ProtoLogGroup.WM_DEBUG_APP_TRANSITIONS_ANIM;
 import static com.android.server.wm.ProtoLogGroup.WM_DEBUG_ORIENTATION;
@@ -35,6 +40,7 @@ import static com.android.server.wm.SurfaceAnimator.ANIMATION_TYPE_APP_TRANSITIO
 import static com.android.server.wm.WindowContainer.AnimationFlags.CHILDREN;
 import static com.android.server.wm.WindowContainer.AnimationFlags.PARENTS;
 import static com.android.server.wm.WindowContainer.AnimationFlags.TRANSITION;
+import static com.android.server.wm.WindowContainerChildProto.WINDOW_CONTAINER;
 import static com.android.server.wm.WindowContainerProto.CONFIGURATION_CONTAINER;
 import static com.android.server.wm.WindowContainerProto.ORIENTATION;
 import static com.android.server.wm.WindowContainerProto.SURFACE_ANIMATOR;
@@ -64,6 +70,7 @@ import android.util.proto.ProtoOutputStream;
 import android.view.DisplayInfo;
 import android.view.IWindowContainer;
 import android.view.MagnificationSpec;
+import android.view.RemoteAnimationDefinition;
 import android.view.RemoteAnimationTarget;
 import android.view.SurfaceControl;
 import android.view.SurfaceControl.Builder;
@@ -94,7 +101,7 @@ import java.util.function.Predicate;
  * changes are made to this class.
  */
 class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<E>
-        implements Comparable<WindowContainer>, Animatable,
+        implements Comparable<WindowContainer>, Animatable, SurfaceFreezer.Freezable,
                    BLASTSyncEngine.TransactionReadyListener {
 
     private static final String TAG = TAG_WITH_CLASS_NAME ? "WindowContainer" : TAG_WM;
@@ -169,6 +176,7 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
      * Applied as part of the animation pass in "prepareSurfaces".
      */
     protected final SurfaceAnimator mSurfaceAnimator;
+    final SurfaceFreezer mSurfaceFreezer;
     protected final WindowManagerService mWmService;
 
     private final Point mTmpPos = new Point();
@@ -252,7 +260,6 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
      * where it represents the starting-state snapshot.
      */
     WindowContainerThumbnail mThumbnail;
-    final Rect mTransitStartRect = new Rect();
     final Point mTmpPoint = new Point();
     protected final Rect mTmpRect = new Rect();
     final Rect mTmpPrevBounds = new Rect();
@@ -268,7 +275,7 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
     RemoteToken mRemoteToken = null;
 
     BLASTSyncEngine mBLASTSyncEngine = new BLASTSyncEngine();
-    SurfaceControl.Transaction mBLASTSyncTransaction = new SurfaceControl.Transaction();
+    SurfaceControl.Transaction mBLASTSyncTransaction;
     boolean mUsingBLASTSyncTransaction = false;
     BLASTSyncEngine.TransactionReadyListener mWaitingListener;
     int mWaitingSyncId;
@@ -276,7 +283,9 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
     WindowContainer(WindowManagerService wms) {
         mWmService = wms;
         mPendingTransaction = wms.mTransactionFactory.get();
+        mBLASTSyncTransaction = wms.mTransactionFactory.get();
         mSurfaceAnimator = new SurfaceAnimator(this, this::onAnimationFinished, wms);
+        mSurfaceFreezer = new SurfaceFreezer(this, wms);
     }
 
     @Override
@@ -524,13 +533,6 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
 
         if (mSurfaceControl != null) {
             getPendingTransaction().remove(mSurfaceControl);
-
-            // Merge to parent transaction to ensure the transactions on this WindowContainer are
-            // applied in native even if WindowContainer is removed.
-            if (mParent != null) {
-                mParent.getPendingTransaction().merge(getPendingTransaction());
-            }
-
             setSurfaceControl(null);
             mLastSurfacePosition.set(0, 0);
             scheduleAnimation();
@@ -841,7 +843,7 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
      * @return {@code true} if the container is in changing app transition.
      */
     boolean isChangingAppTransition() {
-        return false;
+        return mDisplayContent != null && mDisplayContent.mChangingContainers.contains(this);
     }
 
     void sendAppVisibilityToClients() {
@@ -890,6 +892,31 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
             }
         }
         return false;
+    }
+
+    /**
+     * Called when the visibility of a child is asked to change. This is before visibility actually
+     * changes (eg. a transition animation might play out first).
+     */
+    void onChildVisibilityRequested(boolean visible) {
+        // If we are changing visibility, then a snapshot isn't necessary and we are no-longer
+        // part of a change transition.
+        mSurfaceFreezer.unfreeze(getPendingTransaction());
+        if (mDisplayContent != null) {
+            mDisplayContent.mChangingContainers.remove(this);
+        }
+        WindowContainer parent = getParent();
+        if (parent != null) {
+            parent.onChildVisibilityRequested(visible);
+        }
+    }
+
+    void writeIdentifierToProto(ProtoOutputStream proto, long fieldId) {
+        final long token = proto.start(fieldId);
+        proto.write(HASH_CODE, System.identityHashCode(this));
+        proto.write(USER_ID, USER_NULL);
+        proto.write(TITLE, "WindowContainer");
+        proto.end(token);
     }
 
     /**
@@ -1794,7 +1821,23 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         if (mSurfaceAnimator.isAnimating()) {
             mSurfaceAnimator.dumpDebug(proto, SURFACE_ANIMATOR);
         }
+
+        // add children to proto
+        for (int i = 0; i < getChildCount(); i++) {
+            final long childToken = proto.start(WindowContainerProto.CHILDREN);
+            final E child = getChildAt(i);
+            child.dumpDebug(proto, child.getProtoFieldId(), logLevel);
+            proto.end(childToken);
+        }
         proto.end(token);
+    }
+
+    /**
+     * @return a proto field id to identify where to add the derived class to the generic window
+     * container proto.
+     */
+    long getProtoFieldId() {
+        return WINDOW_CONTAINER;
     }
 
     private ForAllWindowsConsumerWrapper obtainConsumerWrapper(Consumer<WindowState> consumer) {
@@ -1924,7 +1967,8 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
 
         // TODO: This should use isVisible() but because isVisible has a really weird meaning at
         // the moment this doesn't work for all animatable window containers.
-        mSurfaceAnimator.startAnimation(t, anim, hidden, type, animationFinishedCallback);
+        mSurfaceAnimator.startAnimation(t, anim, hidden, type, animationFinishedCallback,
+                mSurfaceFreezer);
     }
 
     void startAnimation(Transaction t, AnimationAdapter anim, boolean hidden,
@@ -1938,6 +1982,11 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
 
     void cancelAnimation() {
         mSurfaceAnimator.cancelAnimation();
+    }
+
+    @Override
+    public SurfaceControl getFreezeSnapshotTarget() {
+        return null;
     }
 
     @Override
@@ -2009,8 +2058,9 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
                         getDisplayContent().pendingLayoutChanges |= FINISH_LAYOUT_REDO_WALLPAPER;
                     }
                     if (thumbnailAdapter != null) {
-                        mThumbnail.startAnimation(
-                                getPendingTransaction(), thumbnailAdapter, !isVisible());
+                        mSurfaceFreezer.mSnapshot.startAnimation(getPendingTransaction(),
+                                thumbnailAdapter, ANIMATION_TYPE_APP_TRANSITION,
+                                (type, anim) -> { });
                     }
                 }
             } else {
@@ -2054,9 +2104,11 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
 
         // Delaying animation start isn't compatible with remote animations at all.
         if (controller != null && !mSurfaceAnimator.isAnimationStartDelayed()) {
+            final Rect localBounds = new Rect(mTmpRect);
+            localBounds.offsetTo(mTmpPoint.x, mTmpPoint.y);
             final RemoteAnimationController.RemoteAnimationRecord adapters =
-                    controller.createRemoteAnimationRecord(this, mTmpPoint, mTmpRect,
-                            (isChanging ? mTransitStartRect : null));
+                    controller.createRemoteAnimationRecord(this, mTmpPoint, localBounds,
+                            mTmpRect, (isChanging ? mSurfaceFreezer.mFreezeBounds : null));
             resultAdapters = new Pair<>(adapters.mAdapter, adapters.mThumbnailAdapter);
         } else if (isChanging) {
             final float durationScale = mWmService.getTransitionAnimationScaleLocked();
@@ -2064,14 +2116,15 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
             mTmpRect.offsetTo(mTmpPoint.x, mTmpPoint.y);
 
             final AnimationAdapter adapter = new LocalAnimationAdapter(
-                    new WindowChangeAnimationSpec(mTransitStartRect, mTmpRect, displayInfo,
-                            durationScale, true /* isAppAnimation */, false /* isThumbnail */),
+                    new WindowChangeAnimationSpec(mSurfaceFreezer.mFreezeBounds, mTmpRect,
+                            displayInfo, durationScale, true /* isAppAnimation */,
+                            false /* isThumbnail */),
                     getSurfaceAnimationRunner());
 
-            final AnimationAdapter thumbnailAdapter = mThumbnail != null
-                    ? new LocalAnimationAdapter(new WindowChangeAnimationSpec(mTransitStartRect,
-                    mTmpRect, displayInfo, durationScale, true /* isAppAnimation */,
-                    true /* isThumbnail */), getSurfaceAnimationRunner())
+            final AnimationAdapter thumbnailAdapter = mSurfaceFreezer.mSnapshot != null
+                    ? new LocalAnimationAdapter(new WindowChangeAnimationSpec(
+                    mSurfaceFreezer.mFreezeBounds, mTmpRect, displayInfo, durationScale,
+                    true /* isAppAnimation */, true /* isThumbnail */), getSurfaceAnimationRunner())
                     : null;
             resultAdapters = new Pair<>(adapter, thumbnailAdapter);
             mTransit = transit;
@@ -2140,7 +2193,16 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
                 displayConfig.uiMode, displayConfig.orientation, frame, displayFrame, insets,
                 surfaceInsets, stableInsets, isVoiceInteraction, inFreeformWindowingMode(), this);
         if (a != null) {
-            if (DEBUG_ANIM) logWithStack(TAG, "Loaded animation " + a + " for " + this);
+            if (a != null) {
+                // Setup the maximum app transition duration to prevent malicious app may set a long
+                // animation duration or infinite repeat counts for the app transition through
+                // ActivityOption#makeCustomAnimation or WindowManager#overridePendingTransition.
+                a.restrictDuration(MAX_APP_TRANSITION_DURATION);
+            }
+            if (DEBUG_ANIM) {
+                logWithStack(TAG, "Loaded animation " + a + " for " + this
+                        + ", duration: " + ((a != null) ? a.getDuration() : 0));
+            }
             final int containingWidth = frame.width();
             final int containingHeight = frame.height();
             a.initialize(containingWidth, containingHeight, width, height);
@@ -2152,6 +2214,10 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
     RemoteAnimationTarget createRemoteAnimationTarget(
             RemoteAnimationController.RemoteAnimationRecord record) {
         return null;
+    }
+
+    boolean canCreateRemoteAnimationTarget() {
+        return false;
     }
 
     boolean okToDisplay() {
@@ -2189,6 +2255,7 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
     @Override
     public void onAnimationLeashLost(Transaction t) {
         mLastLayer = -1;
+        mSurfaceFreezer.unfreeze(t);
         reassignLayer(t);
     }
 
@@ -2327,6 +2394,10 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
 
     void setSurfaceControl(SurfaceControl sc) {
         mSurfaceControl = sc;
+    }
+
+    RemoteAnimationDefinition getRemoteAnimationDefinition() {
+        return null;
     }
 
     /** Cheap way of doing cast and instanceof. */

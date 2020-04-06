@@ -21,6 +21,7 @@ import android.annotation.UserIdInt;
 import android.view.inputmethod.InlineSuggestionsRequest;
 import android.view.inputmethod.InputMethodInfo;
 
+import com.android.internal.inputmethod.SoftInputShowHideReason;
 import com.android.internal.view.IInlineSuggestionsRequestCallback;
 import com.android.internal.view.InlineSuggestionsRequestInfo;
 import com.android.server.LocalServices;
@@ -43,15 +44,9 @@ public abstract class InputMethodManagerInternal {
     }
 
     /**
-     * Called by the power manager to tell the input method manager whether it
-     * should start watching for wake events.
-     */
-    public abstract void setInteractive(boolean interactive);
-
-    /**
      * Hides the current input method, if visible.
      */
-    public abstract void hideCurrentInputMethod();
+    public abstract void hideCurrentInputMethod(@SoftInputShowHideReason int reason);
 
     /**
      * Returns the list of installed input methods for the specified user.
@@ -102,11 +97,7 @@ public abstract class InputMethodManagerInternal {
     private static final InputMethodManagerInternal NOP =
             new InputMethodManagerInternal() {
                 @Override
-                public void setInteractive(boolean interactive) {
-                }
-
-                @Override
-                public void hideCurrentInputMethod() {
+                public void hideCurrentInputMethod(@SoftInputShowHideReason int reason) {
                 }
 
                 @Override

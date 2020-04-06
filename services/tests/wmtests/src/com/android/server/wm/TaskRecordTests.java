@@ -111,7 +111,6 @@ public class TaskRecordTests extends ActivityTestsBase {
 
     @Before
     public void setUp() throws Exception {
-        Task.setTaskFactory(null);
         mParentBounds = new Rect(10 /*left*/, 30 /*top*/, 80 /*right*/, 60 /*bottom*/);
         removeGlobalMinSizeRestriction();
     }
@@ -148,11 +147,16 @@ public class TaskRecordTests extends ActivityTestsBase {
         TestTaskFactory factory = new TestTaskFactory();
         Task.setTaskFactory(factory);
 
-        assertFalse(factory.mCreated);
+        try {
+            assertFalse(factory.mCreated);
 
-        Task.create(null, 0, null, null, null, null);
+            Task.create(mService, 0 /*taskId*/, 0 /*activityType*/,
+                    new ActivityInfo(), new Intent());
 
-        assertTrue(factory.mCreated);
+            assertTrue(factory.mCreated);
+        } finally {
+            Task.setTaskFactory(null);
+        }
     }
 
     @Test
@@ -273,8 +277,8 @@ public class TaskRecordTests extends ActivityTestsBase {
     public void testFullscreenBoundsForcedOrientation() {
         final Rect fullScreenBounds = new Rect(0, 0, 1920, 1080);
         final Rect fullScreenBoundsPort = new Rect(0, 0, 1080, 1920);
-        DisplayContent display = new TestDisplayContent.Builder(
-                mService, fullScreenBounds.width(), fullScreenBounds.height()).build();
+        final DisplayContent display = new TestDisplayContent.Builder(mService,
+                fullScreenBounds.width(), fullScreenBounds.height()).setCanRotate(false).build();
         assertTrue(mRootWindowContainer.getDisplayContent(display.mDisplayId) != null);
         // Fix the display orientation to landscape which is the natural rotation (0) for the test
         // display.
@@ -392,7 +396,7 @@ public class TaskRecordTests extends ActivityTestsBase {
         // Setup the display with a top stable inset. The later assertion will ensure the inset is
         // excluded from screenHeightDp.
         final int statusBarHeight = 100;
-        final DisplayContent displayContent = mock(DisplayContent.class);
+        final DisplayContent displayContent = task.mDisplayContent;
         final DisplayPolicy policy = mock(DisplayPolicy.class);
         doAnswer(invocationOnMock -> {
             final Rect insets = invocationOnMock.<Rect>getArgument(0);
@@ -406,9 +410,7 @@ public class TaskRecordTests extends ActivityTestsBase {
         // Without limiting to be inside the parent bounds, the out screen size should keep relative
         // to the input bounds.
         final ActivityRecord.CompatDisplayInsets compatIntsets =
-                new ActivityRecord.CompatDisplayInsets(displayContent, new Rect(0, 0,
-                        displayContent.mBaseDisplayWidth, displayContent.mBaseDisplayHeight),
-                        false);
+                new ActivityRecord.CompatDisplayInsets(displayContent, task);
         task.computeConfigResourceOverrides(inOutConfig, parentConfig, compatIntsets);
 
         assertEquals((shortSide - statusBarHeight) * DENSITY_DEFAULT / parentConfig.densityDpi,
@@ -509,7 +511,7 @@ public class TaskRecordTests extends ActivityTestsBase {
         info.targetActivity = targetClassName;
 
         final Task task = Task.create(mService, 1 /* taskId */, info, intent,
-                null /* taskDescription */, null /*stack*/);
+                null /* voiceSession */, null /* voiceInteractor */, null /*stack*/);
         assertEquals("The alias activity component should be saved in task intent.", aliasClassName,
                 task.intent.getComponent().getClassName());
 
@@ -997,17 +999,16 @@ public class TaskRecordTests extends ActivityTestsBase {
         private boolean mCreated = false;
 
         @Override
-        Task create(ActivityTaskManagerService service, int taskId, ActivityInfo info,
-                Intent intent, IVoiceInteractionSession voiceSession,
-                IVoiceInteractor voiceInteractor, ActivityStack stack) {
+        Task create(ActivityTaskManagerService service, int taskId, int activityType,
+                ActivityInfo info, Intent intent) {
             mCreated = true;
             return null;
         }
 
         @Override
         Task create(ActivityTaskManagerService service, int taskId, ActivityInfo info,
-                Intent intent, ActivityManager.TaskDescription taskDescription,
-                ActivityStack stack) {
+                Intent intent, IVoiceInteractionSession voiceSession,
+                IVoiceInteractor voiceInteractor, ActivityStack stack) {
             mCreated = true;
             return null;
         }

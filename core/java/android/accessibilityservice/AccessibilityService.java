@@ -22,6 +22,7 @@ import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
+import android.annotation.TestApi;
 import android.app.Service;
 import android.compat.annotation.UnsupportedAppUsage;
 import android.content.Context;
@@ -47,6 +48,8 @@ import android.util.Slog;
 import android.util.SparseArray;
 import android.view.Display;
 import android.view.KeyEvent;
+import android.view.SurfaceControl;
+import android.view.SurfaceView;
 import android.view.WindowManager;
 import android.view.WindowManagerImpl;
 import android.view.accessibility.AccessibilityEvent;
@@ -572,6 +575,26 @@ public abstract class AccessibilityService extends Service {
      */
     public static final int SHOW_MODE_HARD_KEYBOARD_OVERRIDDEN = 0x40000000;
 
+    /**
+     * The interval time of calling
+     * {@link AccessibilityService#takeScreenshot(int, Executor, Consumer)} API.
+     * @hide
+     */
+    @TestApi
+    public static final int ACCESSIBILITY_TAKE_SCREENSHOT_REQUEST_INTERVAL_TIMES_MS = 1000;
+
+    /** @hide */
+    public static final String KEY_ACCESSIBILITY_SCREENSHOT_HARDWAREBUFFER =
+            "screenshot_hardwareBuffer";
+
+    /** @hide */
+    public static final String KEY_ACCESSIBILITY_SCREENSHOT_COLORSPACE =
+            "screenshot_colorSpace";
+
+    /** @hide */
+    public static final String KEY_ACCESSIBILITY_SCREENSHOT_TIMESTAMP =
+            "screenshot_timestamp";
+
     private int mConnectionId = AccessibilityInteractionClient.NO_ID;
 
     @UnsupportedAppUsage
@@ -597,17 +620,6 @@ public abstract class AccessibilityService extends Service {
 
     private FingerprintGestureController mFingerprintGestureController;
 
-    /** @hide */
-    public static final String KEY_ACCESSIBILITY_SCREENSHOT_HARDWAREBUFFER =
-            "screenshot_hardwareBuffer";
-
-    /** @hide */
-    public static final String KEY_ACCESSIBILITY_SCREENSHOT_COLORSPACE =
-            "screenshot_colorSpace";
-
-    /** @hide */
-    public static final String KEY_ACCESSIBILITY_SCREENSHOT_TIMESTAMP =
-            "screenshot_timestamp";
 
     /**
      * Callback for {@link android.view.accessibility.AccessibilityEvent}s.
@@ -1822,6 +1834,14 @@ public abstract class AccessibilityService extends Service {
      * setting the {@link AccessibilityServiceInfo#FLAG_RETRIEVE_INTERACTIVE_WINDOWS}
      * flag. Otherwise, the search will be performed only in the active window.
      * </p>
+     * <p>
+     * <strong>Note:</strong> If the view with {@link AccessibilityNodeInfo#FOCUS_INPUT}
+     * is on an embedded view hierarchy which is embedded in a {@link SurfaceView} via
+     * {@link SurfaceView#setChildSurfacePackage}, there is a limitation that this API
+     * won't be able to find the node for the view. It's because views don't know about
+     * the embedded hierarchies. Instead, you could traverse all the nodes to find the
+     * focus.
+     * </p>
      *
      * @param focus The focus to find. One of {@link AccessibilityNodeInfo#FOCUS_INPUT} or
      *         {@link AccessibilityNodeInfo#FOCUS_ACCESSIBILITY}.
@@ -1918,23 +1938,28 @@ public abstract class AccessibilityService extends Service {
      * to declare the capability to take screenshot by setting the
      * {@link android.R.styleable#AccessibilityService_canTakeScreenshot}
      * property in its meta-data. For details refer to {@link #SERVICE_META_DATA}.
-     * Besides, This API is only supported for default display now
-     * {@link Display#DEFAULT_DISPLAY}.
+     * This API only will support {@link Display#DEFAULT_DISPLAY} until {@link SurfaceControl}
+     * supports non-default displays.
      * </p>
      *
      * @param displayId The logic display id, must be {@link Display#DEFAULT_DISPLAY} for
      *                  default display.
      * @param executor Executor on which to run the callback.
      * @param callback The callback invoked when the taking screenshot is done.
-     *                 The {@link AccessibilityService.ScreenshotResult} will be null for an
-     *                 invalid display.
      *
-     * @return {@code true} if the taking screenshot accepted, {@code false} if not.
+     * @return {@code true} if the taking screenshot accepted, {@code false} if too little time
+     * has elapsed since the last screenshot, invalid display or internal errors.
+     * @throws IllegalArgumentException if displayId is not {@link Display#DEFAULT_DISPLAY}.
      */
     public boolean takeScreenshot(int displayId, @NonNull @CallbackExecutor Executor executor,
             @NonNull Consumer<ScreenshotResult> callback) {
         Preconditions.checkNotNull(executor, "executor cannot be null");
         Preconditions.checkNotNull(callback, "callback cannot be null");
+
+        if (displayId != Display.DEFAULT_DISPLAY) {
+            throw new IllegalArgumentException("DisplayId isn't the default display");
+        }
+
         final IAccessibilityServiceConnection connection =
                 AccessibilityInteractionClient.getInstance().getConnection(
                         mConnectionId);
@@ -1942,11 +1967,7 @@ public abstract class AccessibilityService extends Service {
             return false;
         }
         try {
-            connection.takeScreenshot(displayId, new RemoteCallback((result) -> {
-                if (result == null) {
-                    sendScreenshotResult(executor, callback, null);
-                    return;
-                }
+            return connection.takeScreenshot(displayId, new RemoteCallback((result) -> {
                 final HardwareBuffer hardwareBuffer =
                         result.getParcelable(KEY_ACCESSIBILITY_SCREENSHOT_HARDWAREBUFFER);
                 final ParcelableColorSpace colorSpace =
@@ -1959,7 +1980,6 @@ public abstract class AccessibilityService extends Service {
         } catch (RemoteException re) {
             throw new RuntimeException(re);
         }
-        return true;
     }
 
     /**
@@ -2396,6 +2416,10 @@ public abstract class AccessibilityService extends Service {
 
         /**
          * Gets the {@link HardwareBuffer} representing a memory buffer of the screenshot.
+         * <p>
+         * <strong>Note:</strong> The application should call {@link HardwareBuffer#close()} when
+         * the buffer is no longer needed to free the underlying resources.
+         * </p>
          *
          * @return the hardware buffer
          */

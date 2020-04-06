@@ -124,6 +124,9 @@
     <!-- Increased height of a collapsed media notification in the status bar -->
     <dimen name="notification_min_height_media">160dp</dimen>
 
+    <!-- Increased height of a collapsed messaging notification in the status bar -->
+    <dimen name="notification_min_height_messaging">118dp</dimen>
+
     <!-- Height of a small notification in the status bar which was used before android N -->
     <dimen name="notification_min_height_legacy">64dp</dimen>
 
@@ -181,8 +184,8 @@
     <!-- Vertical translation of pulsing notification animations -->
     <dimen name="pulsing_notification_appear_translation">10dp</dimen>
 
-    <!-- The amount the content shifts upwards when transforming into the icon -->
-    <dimen name="notification_icon_transform_content_shift">32dp</dimen>
+    <!-- The amount the content shifts upwards when transforming into the shelf -->
+    <dimen name="shelf_transform_content_shift">32dp</dimen>
 
     <!-- The padding on the bottom of the notifications on the keyguard -->
     <dimen name="keyguard_indication_bottom_padding">12sp</dimen>
@@ -302,7 +305,7 @@
     <dimen name="global_screenshot_legacy_bg_padding">20dp</dimen>
     <dimen name="global_screenshot_bg_padding">20dp</dimen>
     <dimen name="global_screenshot_x_scale">80dp</dimen>
-    <dimen name="screenshot_preview_elevation">8dp</dimen>
+    <dimen name="screenshot_preview_elevation">6dp</dimen>
     <dimen name="screenshot_offset_y">48dp</dimen>
     <dimen name="screenshot_offset_x">16dp</dimen>
     <dimen name="screenshot_dismiss_button_tappable_size">48dp</dimen>
@@ -311,13 +314,13 @@
     <dimen name="screenshot_action_container_corner_radius">10dp</dimen>
     <dimen name="screenshot_action_container_padding_vertical">10dp</dimen>
     <dimen name="screenshot_action_container_margin_horizontal">8dp</dimen>
-    <dimen name="screenshot_action_container_padding_left">100dp</dimen>
+    <dimen name="screenshot_action_container_padding_left">96dp</dimen>
     <dimen name="screenshot_action_container_padding_right">8dp</dimen>
     <!-- Radius of the chip background on global screenshot actions -->
     <dimen name="screenshot_button_corner_radius">20dp</dimen>
-    <dimen name="screenshot_action_chip_margin_horizontal">4dp</dimen>
-    <dimen name="screenshot_action_chip_padding_vertical">10dp</dimen>
-    <dimen name="screenshot_action_chip_icon_size">20dp</dimen>
+    <dimen name="screenshot_action_chip_margin_right">8dp</dimen>
+    <dimen name="screenshot_action_chip_padding_vertical">7dp</dimen>
+    <dimen name="screenshot_action_chip_icon_size">18dp</dimen>
     <dimen name="screenshot_action_chip_padding_start">8dp</dimen>
     <!-- Padding between icon and text -->
     <dimen name="screenshot_action_chip_padding_middle">8dp</dimen>
@@ -744,7 +747,7 @@
     <!-- The top padding of the clear all button -->
     <dimen name="clear_all_padding_top">12dp</dimen>
 
-    <dimen name="notification_section_header_height">48dp</dimen>
+    <dimen name="notification_section_header_height">56dp</dimen>
     <dimen name="notification_section_header_padding_left">16dp</dimen>
 
     <!-- Largest size an avatar might need to be drawn in the user picker, status bar, or
@@ -980,6 +983,9 @@
     <!-- The touchable/draggable edge size for PIP resize. -->
     <dimen name="pip_resize_edge_size">30dp</dimen>
 
+    <!-- The corner radius for PiP window. -->
+    <dimen name="pip_corner_radius">8dp</dimen>
+
     <dimen name="default_gear_space">18dp</dimen>
     <dimen name="cell_overlay_padding">18dp</dimen>
 
@@ -1128,8 +1134,10 @@
     <dimen name="bubble_padding_top">16dp</dimen>
     <!-- Size of individual bubbles. -->
     <dimen name="individual_bubble_size">60dp</dimen>
+    <!-- Size of bubble bitmap. -->
+    <dimen name="bubble_bitmap_size">52dp</dimen>
     <!-- Size of bubble icon bitmap. -->
-    <dimen name="bubble_icon_bitmap_size">52dp</dimen>
+    <dimen name="bubble_overflow_icon_bitmap_size">24dp</dimen>
     <!-- Extra padding added to the touchable rect for bubbles so they are easier to grab. -->
     <dimen name="bubble_touch_padding">12dp</dimen>
     <!-- Size of the circle around the bubbles when they're in the dismiss target. -->
@@ -1141,6 +1149,12 @@
     <dimen name="bubble_expanded_view_slop">8dp</dimen>
     <!-- Default (and minimum) height of the expanded view shown when the bubble is expanded -->
     <dimen name="bubble_expanded_default_height">180dp</dimen>
+    <!-- Default height of bubble overflow -->
+    <dimen name="bubble_overflow_height">380dp</dimen>
+    <!-- Bubble overflow padding when there are no bubbles  -->
+    <dimen name="bubble_overflow_empty_state_padding">16dp</dimen>
+    <!-- Margin of overflow bubbles -->
+    <dimen name="bubble_overflow_margin">16dp</dimen>
     <!-- Height of the triangle that points to the expanded bubble -->
     <dimen name="bubble_pointer_height">4dp</dimen>
     <!-- Width of the triangle that points to the expanded bubble -->
@@ -1148,7 +1162,7 @@
     <!-- Extra padding around the dismiss target for bubbles -->
     <dimen name="bubble_dismiss_slop">16dp</dimen>
     <!-- Height of button allowing users to adjust settings for bubbles. -->
-    <dimen name="bubble_settings_size">48dp</dimen>
+    <dimen name="bubble_manage_button_height">48dp</dimen>
     <!-- How far, horizontally, to animate the expanded view over when animating in/out. -->
     <dimen name="bubble_expanded_animate_x_distance">100dp</dimen>
     <!-- How far, vertically, to animate the expanded view over when animating in/out. -->
@@ -1164,15 +1178,24 @@
     <!-- How far offscreen the bubble stack rests. Cuts off padding and part of icon bitmap. -->
     <dimen name="bubble_stack_offscreen">9dp</dimen>
     <!-- How far down the screen the stack starts. -->
-    <dimen name="bubble_stack_starting_offset_y">96dp</dimen>
+    <dimen name="bubble_stack_starting_offset_y">120dp</dimen>
     <!-- Space between the pointer triangle and the bubble expanded view -->
     <dimen name="bubble_pointer_margin">8dp</dimen>
-    <!-- Height of the permission prompt shown with bubbles -->
-    <dimen name="bubble_permission_height">120dp</dimen>
     <!-- Padding applied to the bubble dismiss target. Touches in this padding cause the bubbles to
          snap to the dismiss target. -->
     <dimen name="bubble_dismiss_target_padding_x">40dp</dimen>
     <dimen name="bubble_dismiss_target_padding_y">20dp</dimen>
+
+    <dimen name="dismiss_circle_size">52dp</dimen>
+    <dimen name="dismiss_target_x_size">24dp</dimen>
+
+    <!-- Bubbles user education views -->
+    <dimen name="bubbles_manage_education_width">160dp</dimen>
+    <!-- The inset from the top bound of the manage button to place the user education. -->
+    <dimen name="bubbles_manage_education_top_inset">10dp</dimen>
+    <!-- Size of padding for the user education cling, this should at minimum be larger than
+        individual_bubble_size + some padding. -->
+    <dimen name="bubble_stack_user_education_side_inset">72dp</dimen>
 
     <!-- Size of the RAT type for CellularTile -->
     <dimen name="celltile_rat_type_size">10sp</dimen>
@@ -1199,10 +1222,18 @@
     <dimen name="magnifier_up_down_controls_height">40dp</dimen>
 
     <!-- Home Controls -->
+    <dimen name="controls_header_side_margin">32dp</dimen>
+    <dimen name="controls_header_app_icon_size">40dp</dimen>
+    <dimen name="controls_list_side_margin">16dp</dimen>
+    <dimen name="controls_top_margin">44dp</dimen>
+    <dimen name="control_header_text_size">22sp</dimen>
+    <dimen name="control_text_size">14sp</dimen>
     <dimen name="control_spacing">4dp</dimen>
-    <dimen name="control_corner_radius">15dp</dimen>
-    <dimen name="control_height">100dp</dimen>
-    <dimen name="control_padding">15dp</dimen>
+    <dimen name="control_list_divider">1dp</dimen>
+    <dimen name="control_corner_radius">12dp</dimen>
+    <dimen name="control_height">106dp</dimen>
+    <dimen name="control_padding">12dp</dimen>
+    <dimen name="control_padding_adjustment">4dp</dimen>
     <dimen name="control_status_normal">12sp</dimen>
     <dimen name="control_status_expanded">18sp</dimen>
     <dimen name="control_base_item_margin">2dp</dimen>
@@ -1218,12 +1249,17 @@
     <dimen name="controls_app_icon_size">32dp</dimen>
     <dimen name="controls_app_icon_frame_side_padding">8dp</dimen>
     <dimen name="controls_app_icon_frame_top_padding">4dp</dimen>
+    <dimen name="controls_app_icon_frame_bottom_padding">@dimen/controls_app_icon_frame_top_padding</dimen>
     <dimen name="controls_app_bottom_margin">8dp</dimen>
     <dimen name="controls_app_text_padding">8dp</dimen>
     <dimen name="controls_app_divider_height">2dp</dimen>
     <dimen name="controls_app_divider_side_margin">32dp</dimen>
 
     <dimen name="controls_card_margin">2dp</dimen>
+    <item name="control_card_elevation" type="dimen" format="float">15</item>
+
+    <dimen name="controls_dialog_padding">8dp</dimen>
+    <dimen name="controls_dialog_control_width">200dp</dimen>
 
     <!-- Screen Record -->
     <dimen name="screenrecord_dialog_padding">18dp</dimen>

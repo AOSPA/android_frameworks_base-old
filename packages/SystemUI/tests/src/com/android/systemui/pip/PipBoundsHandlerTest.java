@@ -16,13 +16,8 @@
 
 package com.android.systemui.pip;
 
-import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
-import static org.mockito.ArgumentMatchers.anyInt;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.ArgumentMatchers.isNull;
-import static org.mockito.Mockito.reset;
-import static org.mockito.Mockito.verify;
 
 import android.content.ComponentName;
 import android.graphics.Rect;
@@ -31,7 +26,6 @@ import android.testing.TestableLooper;
 import android.testing.TestableResources;
 import android.view.DisplayInfo;
 import android.view.Gravity;
-import android.view.IPinnedStackController;
 
 import androidx.test.filters.SmallTest;
 
@@ -40,9 +34,6 @@ import com.android.systemui.SysuiTestCase;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.mockito.ArgumentCaptor;
-import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
 
 /**
  * Unit tests against {@link PipBoundsHandler}, including but not limited to:
@@ -54,29 +45,29 @@ import org.mockito.MockitoAnnotations;
 @SmallTest
 @TestableLooper.RunWithLooper(setAsMainLooper = true)
 public class PipBoundsHandlerTest extends SysuiTestCase {
-    private static final int ROUNDING_ERROR_MARGIN = 10;
+    private static final int ROUNDING_ERROR_MARGIN = 16;
+    private static final float ASPECT_RATIO_ERROR_MARGIN = 0.01f;
+    private static final float DEFAULT_ASPECT_RATIO = 1f;
+    private static final float MIN_ASPECT_RATIO = 0.5f;
+    private static final float MAX_ASPECT_RATIO = 2f;
+    private static final Rect EMPTY_CURRENT_BOUNDS = null;
 
     private PipBoundsHandler mPipBoundsHandler;
     private DisplayInfo mDefaultDisplayInfo;
-    private Rect mDefaultDisplayRect;
-
-    @Mock
-    private IPinnedStackController mPinnedStackController;
 
     @Before
     public void setUp() throws Exception {
-        mPipBoundsHandler = new PipBoundsHandler(mContext);
-        MockitoAnnotations.initMocks(this);
         initializeMockResources();
+        mPipBoundsHandler = new PipBoundsHandler(mContext, new PipSnapAlgorithm(mContext));
 
         mPipBoundsHandler.onDisplayInfoChanged(mDefaultDisplayInfo);
-        mPipBoundsHandler.setPinnedStackController(mPinnedStackController);
     }
 
     private void initializeMockResources() {
         final TestableResources res = mContext.getOrCreateTestableResources();
         res.addOverride(
-                com.android.internal.R.dimen.config_pictureInPictureDefaultAspectRatio, 1f);
+                com.android.internal.R.dimen.config_pictureInPictureDefaultAspectRatio,
+                DEFAULT_ASPECT_RATIO);
         res.addOverride(
                 com.android.internal.R.integer.config_defaultPictureInPictureGravity,
                 Gravity.END | Gravity.BOTTOM);
@@ -86,155 +77,169 @@ public class PipBoundsHandlerTest extends SysuiTestCase {
                 com.android.internal.R.string.config_defaultPictureInPictureScreenEdgeInsets,
                 "16x16");
         res.addOverride(
-                com.android.internal.R.dimen.config_pictureInPictureMinAspectRatio, 0.5f);
+                com.android.internal.R.dimen.config_pictureInPictureMinAspectRatio,
+                MIN_ASPECT_RATIO);
         res.addOverride(
-                com.android.internal.R.dimen.config_pictureInPictureMaxAspectRatio, 2f);
+                com.android.internal.R.dimen.config_pictureInPictureMaxAspectRatio,
+                MAX_ASPECT_RATIO);
 
         mDefaultDisplayInfo = new DisplayInfo();
         mDefaultDisplayInfo.displayId = 1;
         mDefaultDisplayInfo.logicalWidth = 1000;
         mDefaultDisplayInfo.logicalHeight = 1500;
-        mDefaultDisplayRect = new Rect(0, 0,
-                mDefaultDisplayInfo.logicalWidth, mDefaultDisplayInfo.logicalHeight);
     }
 
     @Test
-    public void setShelfHeight_offsetBounds() throws Exception {
-        final ArgumentCaptor<Rect> destinationBounds = ArgumentCaptor.forClass(Rect.class);
+    public void getDefaultAspectRatio() {
+        assertEquals("Default aspect ratio matches resources",
+                DEFAULT_ASPECT_RATIO, mPipBoundsHandler.getDefaultAspectRatio(),
+                ASPECT_RATIO_ERROR_MARGIN);
+    }
+
+    @Test
+    public void onConfigurationChanged_reloadResources() {
+        final float newDefaultAspectRatio = (DEFAULT_ASPECT_RATIO + MAX_ASPECT_RATIO) / 2;
+        final TestableResources res = mContext.getOrCreateTestableResources();
+        res.addOverride(com.android.internal.R.dimen.config_pictureInPictureDefaultAspectRatio,
+                newDefaultAspectRatio);
+
+        mPipBoundsHandler.onConfigurationChanged();
+
+        assertEquals("Default aspect ratio should be reloaded",
+                mPipBoundsHandler.getDefaultAspectRatio(), newDefaultAspectRatio,
+                ASPECT_RATIO_ERROR_MARGIN);
+    }
+
+    @Test
+    public void getDestinationBounds_returnBoundsMatchesAspectRatio() {
+        final float[] aspectRatios = new float[] {
+                (MIN_ASPECT_RATIO + DEFAULT_ASPECT_RATIO) / 2,
+                DEFAULT_ASPECT_RATIO,
+                (MAX_ASPECT_RATIO + DEFAULT_ASPECT_RATIO) / 2
+        };
+        for (float aspectRatio : aspectRatios) {
+            final Rect destinationBounds = mPipBoundsHandler.getDestinationBounds(
+                    aspectRatio, EMPTY_CURRENT_BOUNDS);
+            final float actualAspectRatio =
+                    destinationBounds.width() / (destinationBounds.height() * 1f);
+            assertEquals("Destination bounds matches the given aspect ratio",
+                    aspectRatio, actualAspectRatio, ASPECT_RATIO_ERROR_MARGIN);
+        }
+    }
+
+    @Test
+    public void getDestinationBounds_invalidAspectRatio_returnsDefaultAspectRatio() {
+        final float[] invalidAspectRatios = new float[] {
+                MIN_ASPECT_RATIO / 2,
+                MAX_ASPECT_RATIO * 2
+        };
+        for (float aspectRatio : invalidAspectRatios) {
+            final Rect destinationBounds = mPipBoundsHandler.getDestinationBounds(
+                    aspectRatio, EMPTY_CURRENT_BOUNDS);
+            final float actualAspectRatio =
+                    destinationBounds.width() / (destinationBounds.height() * 1f);
+            assertEquals("Destination bounds fallbacks to default aspect ratio",
+                    mPipBoundsHandler.getDefaultAspectRatio(), actualAspectRatio,
+                    ASPECT_RATIO_ERROR_MARGIN);
+        }
+    }
+
+    @Test
+    public void  getDestinationBounds_withCurrentBounds_returnBoundsMatchesAspectRatio() {
+        final float aspectRatio = (DEFAULT_ASPECT_RATIO + MAX_ASPECT_RATIO) / 2;
+        final Rect currentBounds = new Rect(0, 0, 0, 100);
+        currentBounds.right = (int) (currentBounds.height() * aspectRatio) + currentBounds.left;
+
+        final Rect destinationBounds = mPipBoundsHandler.getDestinationBounds(
+                aspectRatio, currentBounds);
+
+        final float actualAspectRatio =
+                destinationBounds.width() / (destinationBounds.height() * 1f);
+        assertEquals("Destination bounds matches the given aspect ratio",
+                aspectRatio, actualAspectRatio, ASPECT_RATIO_ERROR_MARGIN);
+    }
+
+    @Test
+    public void setShelfHeight_offsetBounds() {
         final int shelfHeight = 100;
-
-        mPipBoundsHandler.onPrepareAnimation(null, 1f, null);
-
-        verify(mPinnedStackController).startAnimation(
-                destinationBounds.capture(), isNull(), anyInt());
-        final Rect lastPosition = destinationBounds.getValue();
-        // Reset the pinned stack controller since we will do another verify later on
-        reset(mPinnedStackController);
+        final Rect oldPosition = mPipBoundsHandler.getDestinationBounds(
+                DEFAULT_ASPECT_RATIO, EMPTY_CURRENT_BOUNDS);
 
         mPipBoundsHandler.setShelfHeight(true, shelfHeight);
-        mPipBoundsHandler.onPrepareAnimation(null, 1f, null);
+        final Rect newPosition = mPipBoundsHandler.getDestinationBounds(
+                DEFAULT_ASPECT_RATIO, EMPTY_CURRENT_BOUNDS);
 
-        verify(mPinnedStackController).startAnimation(
-                destinationBounds.capture(), isNull(), anyInt());
-        lastPosition.offset(0, -shelfHeight);
-        assertBoundsWithMargin("PiP bounds offset by shelf height",
-                lastPosition, destinationBounds.getValue());
+        oldPosition.offset(0, -shelfHeight);
+        assertBoundsWithMargin("offsetBounds by shelf", oldPosition, newPosition);
     }
 
     @Test
-    public void onImeVisibilityChanged_offsetBounds() throws Exception {
-        final ArgumentCaptor<Rect> destinationBounds = ArgumentCaptor.forClass(Rect.class);
+    public void onImeVisibilityChanged_offsetBounds() {
         final int imeHeight = 100;
-
-        mPipBoundsHandler.onPrepareAnimation(null, 1f, null);
-
-        verify(mPinnedStackController).startAnimation(
-                destinationBounds.capture(), isNull(), anyInt());
-        final Rect lastPosition = destinationBounds.getValue();
-        // Reset the pinned stack controller since we will do another verify later on
-        reset(mPinnedStackController);
+        final Rect oldPosition = mPipBoundsHandler.getDestinationBounds(
+                DEFAULT_ASPECT_RATIO, EMPTY_CURRENT_BOUNDS);
 
         mPipBoundsHandler.onImeVisibilityChanged(true, imeHeight);
-        mPipBoundsHandler.onPrepareAnimation(null, 1f, null);
+        final Rect newPosition = mPipBoundsHandler.getDestinationBounds(
+                DEFAULT_ASPECT_RATIO, EMPTY_CURRENT_BOUNDS);
 
-        verify(mPinnedStackController).startAnimation(
-                destinationBounds.capture(), isNull(), anyInt());
-        lastPosition.offset(0, -imeHeight);
-        assertBoundsWithMargin("PiP bounds offset by IME height",
-                lastPosition, destinationBounds.getValue());
+        oldPosition.offset(0, -imeHeight);
+        assertBoundsWithMargin("offsetBounds by IME", oldPosition, newPosition);
     }
 
     @Test
-    public void onPrepareAnimation_startAnimation() throws Exception {
-        final Rect sourceRectHint = new Rect(100, 100, 200, 200);
-        final ArgumentCaptor<Rect> destinationBounds = ArgumentCaptor.forClass(Rect.class);
-
-        mPipBoundsHandler.onPrepareAnimation(sourceRectHint, 1f, null);
-
-        verify(mPinnedStackController).startAnimation(
-                destinationBounds.capture(), eq(sourceRectHint), anyInt());
-        final Rect capturedDestinationBounds = destinationBounds.getValue();
-        assertFalse("Destination bounds is not empty",
-                capturedDestinationBounds.isEmpty());
-        assertBoundsWithMargin("Destination bounds within Display",
-                mDefaultDisplayRect, capturedDestinationBounds);
-    }
-
-    @Test
-    public void onSaveReentryBounds_restoreLastPosition() throws Exception {
+    public void onSaveReentryBounds_restoreLastPosition() {
         final ComponentName componentName = new ComponentName(mContext, "component1");
-        final ArgumentCaptor<Rect> destinationBounds = ArgumentCaptor.forClass(Rect.class);
+        final Rect oldPosition = mPipBoundsHandler.getDestinationBounds(
+                DEFAULT_ASPECT_RATIO, EMPTY_CURRENT_BOUNDS);
 
-        mPipBoundsHandler.onPrepareAnimation(null, 1f, null);
+        oldPosition.offset(0, -100);
+        mPipBoundsHandler.onSaveReentryBounds(componentName, oldPosition);
 
-        verify(mPinnedStackController).startAnimation(
-                destinationBounds.capture(), isNull(), anyInt());
-        final Rect lastPosition = destinationBounds.getValue();
-        lastPosition.offset(0, -100);
-        mPipBoundsHandler.onSaveReentryBounds(componentName, lastPosition);
-        // Reset the pinned stack controller since we will do another verify later on
-        reset(mPinnedStackController);
+        final Rect newPosition = mPipBoundsHandler.getDestinationBounds(
+                DEFAULT_ASPECT_RATIO, EMPTY_CURRENT_BOUNDS);
 
-        mPipBoundsHandler.onPrepareAnimation(null, 1f, null);
-
-        verify(mPinnedStackController).startAnimation(
-                destinationBounds.capture(), isNull(), anyInt());
-        assertBoundsWithMargin("Last position is restored",
-                lastPosition, destinationBounds.getValue());
+        assertBoundsWithMargin("restoreLastPosition", oldPosition, newPosition);
     }
 
     @Test
-    public void onResetReentryBounds_componentMatch_useDefaultBounds() throws Exception {
+    public void onResetReentryBounds_useDefaultBounds() {
         final ComponentName componentName = new ComponentName(mContext, "component1");
-        final ArgumentCaptor<Rect> destinationBounds = ArgumentCaptor.forClass(Rect.class);
-
-        mPipBoundsHandler.onPrepareAnimation(null, 1f, null);
-
-        verify(mPinnedStackController).startAnimation(
-                destinationBounds.capture(), isNull(), anyInt());
-        final Rect defaultBounds = new Rect(destinationBounds.getValue());
+        final Rect defaultBounds = mPipBoundsHandler.getDestinationBounds(
+                DEFAULT_ASPECT_RATIO, EMPTY_CURRENT_BOUNDS);
         final Rect newBounds = new Rect(defaultBounds);
         newBounds.offset(0, -100);
         mPipBoundsHandler.onSaveReentryBounds(componentName, newBounds);
-        // Reset the pinned stack controller since we will do another verify later on
-        reset(mPinnedStackController);
 
         mPipBoundsHandler.onResetReentryBounds(componentName);
-        mPipBoundsHandler.onPrepareAnimation(null, 1f, null);
+        final Rect actualBounds = mPipBoundsHandler.getDestinationBounds(
+                DEFAULT_ASPECT_RATIO, EMPTY_CURRENT_BOUNDS);
 
-        verify(mPinnedStackController).startAnimation(
-                destinationBounds.capture(), isNull(), anyInt());
-        final Rect actualBounds = destinationBounds.getValue();
-        assertBoundsWithMargin("Use default bounds", defaultBounds, actualBounds);
+        assertBoundsWithMargin("useDefaultBounds", defaultBounds, actualBounds);
     }
 
     @Test
-    public void onResetReentryBounds_componentMismatch_restoreLastPosition() throws Exception {
+    public void onResetReentryBounds_componentMismatch_restoreLastPosition() {
         final ComponentName componentName = new ComponentName(mContext, "component1");
-        final ArgumentCaptor<Rect> destinationBounds = ArgumentCaptor.forClass(Rect.class);
-
-        mPipBoundsHandler.onPrepareAnimation(null, 1f, null);
-
-        verify(mPinnedStackController).startAnimation(
-                destinationBounds.capture(), isNull(), anyInt());
-        final Rect defaultBounds = new Rect(destinationBounds.getValue());
+        final Rect defaultBounds = mPipBoundsHandler.getDestinationBounds(
+                DEFAULT_ASPECT_RATIO, EMPTY_CURRENT_BOUNDS);
         final Rect newBounds = new Rect(defaultBounds);
         newBounds.offset(0, -100);
         mPipBoundsHandler.onSaveReentryBounds(componentName, newBounds);
-        // Reset the pinned stack controller since we will do another verify later on
-        reset(mPinnedStackController);
 
         mPipBoundsHandler.onResetReentryBounds(new ComponentName(mContext, "component2"));
-        mPipBoundsHandler.onPrepareAnimation(null, 1f, null);
+        final Rect actualBounds = mPipBoundsHandler.getDestinationBounds(
+                DEFAULT_ASPECT_RATIO, EMPTY_CURRENT_BOUNDS);
 
-        verify(mPinnedStackController).startAnimation(
-                destinationBounds.capture(), isNull(), anyInt());
-        final Rect actualBounds = destinationBounds.getValue();
-        assertBoundsWithMargin("Last position is restored", newBounds, actualBounds);
+        assertBoundsWithMargin("restoreLastPosition", newBounds, actualBounds);
     }
 
-    private void assertBoundsWithMargin(String msg, Rect expected, Rect actual) {
-        expected.inset(-ROUNDING_ERROR_MARGIN, -ROUNDING_ERROR_MARGIN);
-        assertTrue(msg, expected.contains(actual));
+    private void assertBoundsWithMargin(String from, Rect expected, Rect actual) {
+        final Rect expectedWithMargin = new Rect(expected);
+        expectedWithMargin.inset(-ROUNDING_ERROR_MARGIN, -ROUNDING_ERROR_MARGIN);
+        assertTrue(from + ": expect " + expected
+                + " contains " + actual
+                + " with error margin " + ROUNDING_ERROR_MARGIN,
+                expectedWithMargin.contains(actual));
     }
 }

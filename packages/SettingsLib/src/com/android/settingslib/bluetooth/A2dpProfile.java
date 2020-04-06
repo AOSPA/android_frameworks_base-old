@@ -165,7 +165,9 @@ public class A2dpProfile implements LocalBluetoothProfile {
         if (mBluetoothAdapter == null) {
             return false;
         }
-        return mBluetoothAdapter.setActiveDevice(device, ACTIVE_DEVICE_AUDIO);
+        return device == null
+                ? mBluetoothAdapter.removeActiveDevice(ACTIVE_DEVICE_AUDIO)
+                : mBluetoothAdapter.setActiveDevice(device, ACTIVE_DEVICE_AUDIO);
     }
 
     public BluetoothDevice getActiveDevice() {
@@ -222,7 +224,11 @@ public class A2dpProfile implements LocalBluetoothProfile {
             if (V) Log.d(TAG,"mService is null.");
             return false;
         }
-        int support = mService.supportsOptionalCodecs(device);
+        BluetoothDevice bluetoothDevice = (device == null) ? device : mService.getActiveDevice();
+        if (bluetoothDevice == null) {
+            return false;
+        }
+        int support = mService.isOptionalCodecsSupported(bluetoothDevice);
         return support == BluetoothA2dp.OPTIONAL_CODECS_SUPPORTED;
     }
 
@@ -232,19 +238,23 @@ public class A2dpProfile implements LocalBluetoothProfile {
             if (V) Log.d(TAG,"mService is null.");
             return false;
         }
-        int enabled = mService.getOptionalCodecsEnabled(device);
+        BluetoothDevice bluetoothDevice = (device == null) ? device : mService.getActiveDevice();
+        if (bluetoothDevice == null) {
+            return false;
+        }
+        int enabled = mService.isOptionalCodecsEnabled(bluetoothDevice);
         if (enabled != BluetoothA2dp.OPTIONAL_CODECS_PREF_UNKNOWN) {
             return enabled == BluetoothA2dp.OPTIONAL_CODECS_PREF_ENABLED;
-        } else if (getConnectionStatus(device) != BluetoothProfile.STATE_CONNECTED &&
-                supportsHighQualityAudio(device)) {
+        } else if (getConnectionStatus(bluetoothDevice) != BluetoothProfile.STATE_CONNECTED
+                && supportsHighQualityAudio(bluetoothDevice)) {
             // Since we don't have a stored preference and the device isn't connected, just return
             // true since the default behavior when the device gets connected in the future would be
             // to have optional codecs enabled.
             return true;
         }
         BluetoothCodecConfig codecConfig = null;
-        if (mService.getCodecStatus(device) != null) {
-            codecConfig = mService.getCodecStatus(device).getCodecConfig();
+        if (mService.getCodecStatus(bluetoothDevice) != null) {
+            codecConfig = mService.getCodecStatus(bluetoothDevice).getCodecConfig();
         }
         if (codecConfig != null)  {
             return !codecConfig.isMandatoryCodec();
@@ -262,21 +272,26 @@ public class A2dpProfile implements LocalBluetoothProfile {
             if (V) Log.d(TAG,"mService is null.");
             return;
         }
-        mService.setOptionalCodecsEnabled(device, prefValue);
-        if (getConnectionStatus(device) != BluetoothProfile.STATE_CONNECTED) {
+        BluetoothDevice bluetoothDevice = (device == null) ? device : mService.getActiveDevice();
+        if (bluetoothDevice == null) {
+            return;
+        }
+        mService.setOptionalCodecsEnabled(bluetoothDevice, prefValue);
+        if (getConnectionStatus(bluetoothDevice) != BluetoothProfile.STATE_CONNECTED) {
             return;
         }
         if (enabled) {
-            mService.enableOptionalCodecs(device);
+            mService.enableOptionalCodecs(bluetoothDevice);
         } else {
-            mService.disableOptionalCodecs(device);
+            mService.disableOptionalCodecs(bluetoothDevice);
         }
     }
 
     public String getHighQualityAudioOptionLabel(BluetoothDevice device) {
         if (V) Log.d(TAG, " execute getHighQualityAudioOptionLabel()");
+        BluetoothDevice bluetoothDevice = (device == null) ? device : mService.getActiveDevice();
         int unknownCodecId = R.string.bluetooth_profile_a2dp_high_quality_unknown_codec;
-        if (!supportsHighQualityAudio(device)
+        if (bluetoothDevice == null || !supportsHighQualityAudio(device)
                 || getConnectionStatus(device) != BluetoothProfile.STATE_CONNECTED) {
             return mContext.getString(unknownCodecId);
         }

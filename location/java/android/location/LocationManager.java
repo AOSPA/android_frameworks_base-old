@@ -35,6 +35,7 @@ import android.annotation.SystemService;
 import android.annotation.TestApi;
 import android.app.AlarmManager;
 import android.app.PendingIntent;
+import android.app.PropertyInvalidatedCache;
 import android.compat.Compatibility;
 import android.compat.annotation.ChangeId;
 import android.compat.annotation.EnabledAfter;
@@ -83,6 +84,33 @@ import java.util.function.Consumer;
 @SystemService(Context.LOCATION_SERVICE)
 @RequiresFeature(PackageManager.FEATURE_LOCATION)
 public class LocationManager {
+
+    @GuardedBy("mLock")
+    private PropertyInvalidatedCache<Integer, Boolean> mLocationEnabledCache =
+            new PropertyInvalidatedCache<Integer, Boolean>(
+                4,
+                CACHE_KEY_LOCATION_ENABLED_PROPERTY) {
+                @Override
+                protected Boolean recompute(Integer userHandle) {
+                    try {
+                        return mService.isLocationEnabledForUser(userHandle);
+                    } catch (RemoteException e) {
+                        throw e.rethrowFromSystemServer();
+                    }
+                }
+            };
+
+    private final Object mLock = new Object();
+
+    /**
+     * For apps targeting Android R and above, {@link #getProvider(String)} will no longer throw any
+     * security exceptions.
+     *
+     * @hide
+     */
+    @ChangeId
+    @EnabledAfter(targetSdkVersion = Build.VERSION_CODES.Q)
+    private static final long GET_PROVIDER_SECURITY_EXCEPTIONS = 150935354L;
 
     /**
      * For apps targeting Android K and above, supplied {@link PendingIntent}s must be targeted to a
@@ -462,6 +490,13 @@ public class LocationManager {
      */
     @SystemApi
     public boolean isLocationEnabledForUser(@NonNull UserHandle userHandle) {
+        synchronized (mLock) {
+            if (mLocationEnabledCache != null) {
+                return mLocationEnabledCache.query(userHandle.getIdentifier());
+            }
+        }
+
+        // fallback if cache is disabled
         try {
             return mService.isLocationEnabledForUser(userHandle.getIdentifier());
         } catch (RemoteException e) {
@@ -1391,6 +1426,22 @@ public class LocationManager {
      */
     public @Nullable LocationProvider getProvider(@NonNull String provider) {
         Preconditions.checkArgument(provider != null, "invalid null provider");
+
+        if (!Compatibility.isChangeEnabled(GET_PROVIDER_SECURITY_EXCEPTIONS)) {
+            if (NETWORK_PROVIDER.equals(provider) || FUSED_PROVIDER.equals(provider)) {
+                try {
+                    mContext.enforcePermission(ACCESS_FINE_LOCATION, Process.myPid(),
+                            Process.myUid(), null);
+                } catch (SecurityException e) {
+                    mContext.enforcePermission(ACCESS_COARSE_LOCATION, Process.myPid(),
+                            Process.myUid(), null);
+                }
+            } else {
+                mContext.enforcePermission(ACCESS_FINE_LOCATION, Process.myPid(), Process.myUid(),
+                        null);
+            }
+        }
+
         try {
             ProviderProperties properties = mService.getProviderProperties(provider);
             if (properties == null) {
@@ -2556,22 +2607,28 @@ public class LocationManager {
             mRemoteCancellationSignal = remoteCancellationSignal;
         }
 
-        public synchronized void cancel() {
-            mExecutor = null;
-            mConsumer = null;
+        public void cancel() {
+            ICancellationSignal cancellationSignal;
+            synchronized (this) {
+                mExecutor = null;
+                mConsumer = null;
 
-            if (mAlarmManager != null) {
-                mAlarmManager.cancel(this);
-                mAlarmManager = null;
+                if (mAlarmManager != null) {
+                    mAlarmManager.cancel(this);
+                    mAlarmManager = null;
+                }
+
+                // ensure only one cancel event will go through
+                cancellationSignal = mRemoteCancellationSignal;
+                mRemoteCancellationSignal = null;
             }
 
-            if (mRemoteCancellationSignal != null) {
+            if (cancellationSignal != null) {
                 try {
-                    mRemoteCancellationSignal.cancel();
+                    cancellationSignal.cancel();
                 } catch (RemoteException e) {
                     // ignore
                 }
-                mRemoteCancellationSignal = null;
             }
         }
 
@@ -3126,6 +3183,29 @@ public class LocationManager {
             public void onLocationBatch(List<Location> locations) {
                 execute((listener) -> listener.onLocationBatch(locations));
             }
+
+        }
+    }
+
+    /**
+     * @hide
+     */
+    public static final String CACHE_KEY_LOCATION_ENABLED_PROPERTY =
+            "cache_key.location_enabled";
+
+    /**
+     * @hide
+     */
+    public static void invalidateLocalLocationEnabledCaches() {
+        PropertyInvalidatedCache.invalidateCache(CACHE_KEY_LOCATION_ENABLED_PROPERTY);
+    }
+
+    /**
+     * @hide
+     */
+    public void disableLocalLocationEnabledCaches() {
+        synchronized (mLock) {
+            mLocationEnabledCache = null;
         }
     }
 }

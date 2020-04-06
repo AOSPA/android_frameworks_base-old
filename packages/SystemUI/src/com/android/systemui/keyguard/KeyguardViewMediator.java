@@ -80,15 +80,16 @@ import com.android.keyguard.KeyguardDisplayManager;
 import com.android.keyguard.KeyguardSecurityView;
 import com.android.keyguard.KeyguardUpdateMonitor;
 import com.android.keyguard.KeyguardUpdateMonitorCallback;
+import com.android.keyguard.KeyguardViewController;
 import com.android.keyguard.ViewMediatorCallback;
 import com.android.systemui.Dependency;
-import com.android.systemui.DumpController;
 import com.android.systemui.Dumpable;
 import com.android.systemui.R;
 import com.android.systemui.SystemUI;
 import com.android.systemui.SystemUIFactory;
 import com.android.systemui.broadcast.BroadcastDispatcher;
 import com.android.systemui.dagger.qualifiers.UiBackground;
+import com.android.systemui.dump.DumpManager;
 import com.android.systemui.keyguard.dagger.KeyguardModule;
 import com.android.systemui.plugins.FalsingManager;
 import com.android.systemui.statusbar.phone.BiometricUnlockController;
@@ -96,7 +97,7 @@ import com.android.systemui.statusbar.phone.KeyguardBypassController;
 import com.android.systemui.statusbar.phone.NotificationPanelViewController;
 import com.android.systemui.statusbar.phone.NotificationShadeWindowController;
 import com.android.systemui.statusbar.phone.StatusBar;
-import com.android.systemui.statusbar.phone.StatusBarKeyguardViewManager;
+import com.android.systemui.util.DeviceConfigProxy;
 import com.android.systemui.util.InjectionInflationController;
 
 import java.io.FileDescriptor;
@@ -236,7 +237,7 @@ public class KeyguardViewMediator extends SystemUI implements Dumpable {
      */
     private PowerManager.WakeLock mShowKeyguardWakeLock;
 
-    private final Lazy<StatusBarKeyguardViewManager> mStatusBarKeyguardViewManagerLazy;
+    private final Lazy<KeyguardViewController> mKeyguardViewControllerLazy;
 
     // these are protected by synchronized (this)
 
@@ -378,6 +379,17 @@ public class KeyguardViewMediator extends SystemUI implements Dumpable {
     private boolean mWakeAndUnlocking;
     private IKeyguardDrawnCallback mDrawnCallback;
     private CharSequence mCustomMessage;
+
+    private final DeviceConfig.OnPropertiesChangedListener mOnPropertiesChangedListener =
+            new DeviceConfig.OnPropertiesChangedListener() {
+            @Override
+            public void onPropertiesChanged(DeviceConfig.Properties properties) {
+                if (properties.getKeyset().contains(NAV_BAR_HANDLE_SHOW_OVER_LOCKSCREEN)) {
+                    mShowHomeOverLockscreen = properties.getBoolean(
+                            NAV_BAR_HANDLE_SHOW_OVER_LOCKSCREEN, true /* defaultValue */);
+                }
+            }
+    };
 
     KeyguardUpdateMonitorCallback mUpdateCallback = new KeyguardUpdateMonitorCallback() {
 
@@ -590,7 +602,7 @@ public class KeyguardViewMediator extends SystemUI implements Dumpable {
 
         @Override
         public void setNeedsInput(boolean needsInput) {
-            mStatusBarKeyguardViewManagerLazy.get().setNeedsInput(needsInput);
+            mKeyguardViewControllerLazy.get().setNeedsInput(needsInput);
         }
 
         @Override
@@ -604,7 +616,7 @@ public class KeyguardViewMediator extends SystemUI implements Dumpable {
             mKeyguardDonePending = true;
             mHideAnimationRun = true;
             mHideAnimationRunning = true;
-            mStatusBarKeyguardViewManagerLazy.get()
+            mKeyguardViewControllerLazy.get()
                     .startPreHideAnimation(mHideAnimationFinishedRunnable);
             mHandler.sendEmptyMessageDelayed(KEYGUARD_DONE_PENDING_TIMEOUT,
                     KEYGUARD_DONE_PENDING_TIMEOUT_MS);
@@ -636,7 +648,7 @@ public class KeyguardViewMediator extends SystemUI implements Dumpable {
 
         @Override
         public void onCancelClicked() {
-            mStatusBarKeyguardViewManagerLazy.get().onCancelClicked();
+            mKeyguardViewControllerLazy.get().onCancelClicked();
         }
 
         @Override
@@ -693,6 +705,8 @@ public class KeyguardViewMediator extends SystemUI implements Dumpable {
         }
     };
 
+    private DeviceConfigProxy mDeviceConfig;
+
     /**
      * Injected constructor. See {@link KeyguardModule}.
      */
@@ -702,37 +716,33 @@ public class KeyguardViewMediator extends SystemUI implements Dumpable {
             LockPatternUtils lockPatternUtils,
             BroadcastDispatcher broadcastDispatcher,
             NotificationShadeWindowController notificationShadeWindowController,
-            Lazy<StatusBarKeyguardViewManager> statusBarKeyguardViewManagerLazy,
+            Lazy<KeyguardViewController> statusBarKeyguardViewManagerLazy,
             DismissCallbackRegistry dismissCallbackRegistry,
-            KeyguardUpdateMonitor keyguardUpdateMonitor, DumpController dumpController,
+            KeyguardUpdateMonitor keyguardUpdateMonitor, DumpManager dumpManager,
             @UiBackground Executor uiBgExecutor, PowerManager powerManager,
-            TrustManager trustManager) {
+            TrustManager trustManager,
+            DeviceConfigProxy deviceConfig) {
         super(context);
         mFalsingManager = falsingManager;
         mLockPatternUtils = lockPatternUtils;
         mBroadcastDispatcher = broadcastDispatcher;
         mNotificationShadeWindowController = notificationShadeWindowController;
-        mStatusBarKeyguardViewManagerLazy = statusBarKeyguardViewManagerLazy;
+        mKeyguardViewControllerLazy = statusBarKeyguardViewManagerLazy;
         mDismissCallbackRegistry = dismissCallbackRegistry;
         mUiBgExecutor = uiBgExecutor;
         mUpdateMonitor = keyguardUpdateMonitor;
         mPM = powerManager;
         mTrustManager = trustManager;
-        dumpController.registerDumpable(this);
-        mShowHomeOverLockscreen = DeviceConfig.getBoolean(
+        dumpManager.registerDumpable(getClass().getName(), this);
+        mDeviceConfig = deviceConfig;
+        mShowHomeOverLockscreen = mDeviceConfig.getBoolean(
                 DeviceConfig.NAMESPACE_SYSTEMUI,
                 NAV_BAR_HANDLE_SHOW_OVER_LOCKSCREEN,
                 /* defaultValue = */ true);
-        DeviceConfig.addOnPropertiesChangedListener(DeviceConfig.NAMESPACE_SYSTEMUI, mHandler::post,
-                new DeviceConfig.OnPropertiesChangedListener() {
-                    @Override
-                    public void onPropertiesChanged(DeviceConfig.Properties properties) {
-                        if (properties.getKeyset().contains(NAV_BAR_HANDLE_SHOW_OVER_LOCKSCREEN)) {
-                            mShowHomeOverLockscreen = properties.getBoolean(
-                                    NAV_BAR_HANDLE_SHOW_OVER_LOCKSCREEN, true /* defaultValue */);
-                        }
-                    }
-                });
+        mDeviceConfig.addOnPropertiesChangedListener(
+                DeviceConfig.NAMESPACE_SYSTEMUI,
+                mHandler::post,
+                mOnPropertiesChangedListener);
     }
 
     public void userActivity() {
@@ -1279,7 +1289,7 @@ public class KeyguardViewMediator extends SystemUI implements Dumpable {
             if (mOccluded != isOccluded) {
                 mOccluded = isOccluded;
                 mUpdateMonitor.setKeyguardOccluded(isOccluded);
-                mStatusBarKeyguardViewManagerLazy.get().setOccluded(isOccluded,
+                mKeyguardViewControllerLazy.get().setOccluded(isOccluded,
                         (Dependency.get(KeyguardUpdateMonitor.class).isSimPinSecure()?false:animate)
                         && mDeviceInteractive);
                 adjustStatusBarLocked();
@@ -1351,7 +1361,7 @@ public class KeyguardViewMediator extends SystemUI implements Dumpable {
         }
 
         // if the keyguard is already showing, don't bother
-        if (mStatusBarKeyguardViewManagerLazy.get().isShowing()) {
+        if (mKeyguardViewControllerLazy.get().isShowing()) {
             if (DEBUG) Log.d(TAG, "doKeyguard: not showing because it is already showing");
             resetStateLocked();
             return;
@@ -1415,7 +1425,7 @@ public class KeyguardViewMediator extends SystemUI implements Dumpable {
                 mDismissCallbackRegistry.addCallback(callback);
             }
             mCustomMessage = message;
-            mStatusBarKeyguardViewManagerLazy.get().dismissAndCollapse();
+            mKeyguardViewControllerLazy.get().dismissAndCollapse();
         } else if (callback != null) {
             new DismissCallbackWrapper(callback).notifyDismissError();
         }
@@ -1682,7 +1692,7 @@ public class KeyguardViewMediator extends SystemUI implements Dumpable {
         } else if (!mHideAnimationRun) {
             mHideAnimationRun = true;
             mHideAnimationRunning = true;
-            mStatusBarKeyguardViewManagerLazy.get()
+            mKeyguardViewControllerLazy.get()
                     .startPreHideAnimation(mHideAnimationFinishedRunnable);
         }
     }
@@ -1839,7 +1849,7 @@ public class KeyguardViewMediator extends SystemUI implements Dumpable {
             mHiding = false;
             mWakeAndUnlocking = false;
             setShowingLocked(true);
-            mStatusBarKeyguardViewManagerLazy.get().show(options);
+            mKeyguardViewControllerLazy.get().show(options);
             resetKeyguardDonePendingLocked();
             mHideAnimationRun = false;
             adjustStatusBarLocked();
@@ -1864,22 +1874,22 @@ public class KeyguardViewMediator extends SystemUI implements Dumpable {
         public void run() {
             Trace.beginSection("KeyguardViewMediator.mKeyGuardGoingAwayRunnable");
             if (DEBUG) Log.d(TAG, "keyguardGoingAway");
-            mStatusBarKeyguardViewManagerLazy.get().keyguardGoingAway();
+            mKeyguardViewControllerLazy.get().keyguardGoingAway();
 
             int flags = 0;
-            if (mStatusBarKeyguardViewManagerLazy.get().shouldDisableWindowAnimationsForUnlock()
+            if (mKeyguardViewControllerLazy.get().shouldDisableWindowAnimationsForUnlock()
                     || (mWakeAndUnlocking && !mPulsing)) {
                 flags |= WindowManagerPolicyConstants
                         .KEYGUARD_GOING_AWAY_FLAG_NO_WINDOW_ANIMATIONS;
             }
-            if (mStatusBarKeyguardViewManagerLazy.get().isGoingToNotificationShade()
+            if (mKeyguardViewControllerLazy.get().isGoingToNotificationShade()
                     || (mWakeAndUnlocking && mPulsing)) {
                 flags |= WindowManagerPolicyConstants.KEYGUARD_GOING_AWAY_FLAG_TO_SHADE;
             }
-            if (mStatusBarKeyguardViewManagerLazy.get().isUnlockWithWallpaper()) {
+            if (mKeyguardViewControllerLazy.get().isUnlockWithWallpaper()) {
                 flags |= WindowManagerPolicyConstants.KEYGUARD_GOING_AWAY_FLAG_WITH_WALLPAPER;
             }
-            if (mStatusBarKeyguardViewManagerLazy.get().shouldSubtleWindowAnimationsForUnlock()) {
+            if (mKeyguardViewControllerLazy.get().shouldSubtleWindowAnimationsForUnlock()) {
                 flags |= WindowManagerPolicyConstants
                         .KEYGUARD_GOING_AWAY_FLAG_SUBTLE_WINDOW_ANIMATIONS;
             }
@@ -1965,7 +1975,7 @@ public class KeyguardViewMediator extends SystemUI implements Dumpable {
                 // Hack level over 9000: To speed up wake-and-unlock sequence, force it to report
                 // the next draw from here so we don't have to wait for window manager to signal
                 // this to our ViewRootImpl.
-                mStatusBarKeyguardViewManagerLazy.get().getViewRootImpl().setReportNextDraw();
+                mKeyguardViewControllerLazy.get().getViewRootImpl().setReportNextDraw();
                 notifyDrawn(mDrawnCallback);
                 mDrawnCallback = null;
             }
@@ -1979,7 +1989,7 @@ public class KeyguardViewMediator extends SystemUI implements Dumpable {
             setShowingLocked(false);
             mWakeAndUnlocking = false;
             mDismissCallbackRegistry.notifyDismissSucceeded();
-            mStatusBarKeyguardViewManagerLazy.get().hide(startTime, fadeoutDuration);
+            mKeyguardViewControllerLazy.get().hide(startTime, fadeoutDuration);
             resetKeyguardDonePendingLocked();
             mHideAnimationRun = false;
             adjustStatusBarLocked();
@@ -2028,7 +2038,7 @@ public class KeyguardViewMediator extends SystemUI implements Dumpable {
     private void handleReset() {
         synchronized (KeyguardViewMediator.this) {
             if (DEBUG) Log.d(TAG, "handleReset");
-            mStatusBarKeyguardViewManagerLazy.get().reset(true /* hideBouncerWhenShowing */);
+            mKeyguardViewControllerLazy.get().reset(true /* hideBouncerWhenShowing */);
         }
     }
 
@@ -2041,7 +2051,7 @@ public class KeyguardViewMediator extends SystemUI implements Dumpable {
         synchronized (KeyguardViewMediator.this) {
             if (DEBUG) Log.d(TAG, "handleVerifyUnlock");
             setShowingLocked(true);
-            mStatusBarKeyguardViewManagerLazy.get().dismissAndCollapse();
+            mKeyguardViewControllerLazy.get().dismissAndCollapse();
         }
         Trace.endSection();
     }
@@ -2049,7 +2059,7 @@ public class KeyguardViewMediator extends SystemUI implements Dumpable {
     private void handleNotifyStartedGoingToSleep() {
         synchronized (KeyguardViewMediator.this) {
             if (DEBUG) Log.d(TAG, "handleNotifyStartedGoingToSleep");
-            mStatusBarKeyguardViewManagerLazy.get().onStartedGoingToSleep();
+            mKeyguardViewControllerLazy.get().onStartedGoingToSleep();
         }
     }
 
@@ -2060,7 +2070,7 @@ public class KeyguardViewMediator extends SystemUI implements Dumpable {
     private void handleNotifyFinishedGoingToSleep() {
         synchronized (KeyguardViewMediator.this) {
             if (DEBUG) Log.d(TAG, "handleNotifyFinishedGoingToSleep");
-            mStatusBarKeyguardViewManagerLazy.get().onFinishedGoingToSleep();
+            mKeyguardViewControllerLazy.get().onFinishedGoingToSleep();
         }
     }
 
@@ -2068,7 +2078,7 @@ public class KeyguardViewMediator extends SystemUI implements Dumpable {
         Trace.beginSection("KeyguardViewMediator#handleMotifyStartedWakingUp");
         synchronized (KeyguardViewMediator.this) {
             if (DEBUG) Log.d(TAG, "handleNotifyWakingUp");
-            mStatusBarKeyguardViewManagerLazy.get().onStartedWakingUp();
+            mKeyguardViewControllerLazy.get().onStartedWakingUp();
         }
         Trace.endSection();
     }
@@ -2077,7 +2087,7 @@ public class KeyguardViewMediator extends SystemUI implements Dumpable {
         Trace.beginSection("KeyguardViewMediator#handleNotifyScreenTurningOn");
         synchronized (KeyguardViewMediator.this) {
             if (DEBUG) Log.d(TAG, "handleNotifyScreenTurningOn");
-            mStatusBarKeyguardViewManagerLazy.get().onScreenTurningOn();
+            mKeyguardViewControllerLazy.get().onScreenTurningOn();
             if (callback != null) {
                 if (mWakeAndUnlocking) {
                     mDrawnCallback = callback;
@@ -2096,7 +2106,7 @@ public class KeyguardViewMediator extends SystemUI implements Dumpable {
         }
         synchronized (this) {
             if (DEBUG) Log.d(TAG, "handleNotifyScreenTurnedOn");
-            mStatusBarKeyguardViewManagerLazy.get().onScreenTurnedOn();
+            mKeyguardViewControllerLazy.get().onScreenTurnedOn();
         }
         Trace.endSection();
     }
@@ -2140,14 +2150,26 @@ public class KeyguardViewMediator extends SystemUI implements Dumpable {
         Trace.endSection();
     }
 
-    public StatusBarKeyguardViewManager registerStatusBar(StatusBar statusBar,
+    /**
+     * Registers the StatusBar to which the Keyguard View is mounted.
+     *
+     * @param statusBar
+     * @param container
+     * @param panelView
+     * @param biometricUnlockController
+     * @param lockIconContainer
+     * @param notificationContainer
+     * @param bypassController
+     * @return the View Controller for the Keyguard View this class is mediating.
+     */
+    public KeyguardViewController registerStatusBar(StatusBar statusBar,
             ViewGroup container, NotificationPanelViewController panelView,
             BiometricUnlockController biometricUnlockController, ViewGroup lockIconContainer,
             View notificationContainer, KeyguardBypassController bypassController) {
-        mStatusBarKeyguardViewManagerLazy.get().registerStatusBar(statusBar, container, panelView,
+        mKeyguardViewControllerLazy.get().registerStatusBar(statusBar, container, panelView,
                 biometricUnlockController, mDismissCallbackRegistry, lockIconContainer,
                 notificationContainer, bypassController, mFalsingManager);
-        return mStatusBarKeyguardViewManagerLazy.get();
+        return mKeyguardViewControllerLazy.get();
     }
 
     public void startKeyguardExitAnimation(long startTime, long fadeoutDuration) {

@@ -19,6 +19,7 @@ package android.service.controls.templates;
 import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.os.Bundle;
+import android.service.controls.Control;
 import android.util.Log;
 
 import com.android.internal.util.Preconditions;
@@ -26,6 +27,13 @@ import com.android.internal.util.Preconditions;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 
+/**
+ * A template for a temperature related {@link Control} that supports multiple modes.
+ *
+ * Both the current mode and the active mode for the control can be specified. The combination of
+ * the {@link Control#getDeviceType} and the current and active mode will determine colors and
+ * transitions for the UI element.
+ */
 public final class TemperatureControlTemplate extends ControlTemplate {
 
     private static final String TAG = "ThermostatTemplate";
@@ -51,16 +59,35 @@ public final class TemperatureControlTemplate extends ControlTemplate {
     public @interface Mode {}
 
     private static final int NUM_MODES = 6;
+
+    /**
+     * Use when the current or active mode of the device is not known
+     */
     public static final @Mode int MODE_UNKNOWN = 0;
 
+    /**
+     * Indicates that the current or active mode of the device is off.
+     */
     public static final @Mode int MODE_OFF = 1;
 
+    /**
+     * Indicates that the current or active mode of the device is set to heat.
+     */
     public static final @Mode int MODE_HEAT = 2;
 
+    /**
+     * Indicates that the current or active mode of the device is set to cool.
+     */
     public static final @Mode int MODE_COOL = 3;
 
+    /**
+     * Indicates that the current or active mode of the device is set to heat-cool.
+     */
     public static final @Mode int MODE_HEAT_COOL = 4;
 
+    /**
+     * Indicates that the current or active mode of the device is set to eco.
+     */
     public static final @Mode int MODE_ECO = 5;
 
     /**
@@ -76,10 +103,29 @@ public final class TemperatureControlTemplate extends ControlTemplate {
     })
     public @interface ModeFlag {}
 
+    /**
+     * Flag to indicate that the device supports off mode.
+     */
     public static final int FLAG_MODE_OFF = 1 << MODE_OFF;
+
+    /**
+     * Flag to indicate that the device supports heat mode.
+     */
     public static final int FLAG_MODE_HEAT = 1 << MODE_HEAT;
+
+    /**
+     * Flag to indicate that the device supports cool mode.
+     */
     public static final int FLAG_MODE_COOL = 1 << MODE_COOL;
+
+    /**
+     * Flag to indicate that the device supports heat-cool mode.
+     */
     public static final int FLAG_MODE_HEAT_COOL = 1 << MODE_HEAT_COOL;
+
+    /**
+     * Flag to indicate that the device supports eco mode.
+     */
     public static final int FLAG_MODE_ECO = 1 << MODE_ECO;
     private static final int ALL_FLAGS =
             FLAG_MODE_OFF |
@@ -102,6 +148,18 @@ public final class TemperatureControlTemplate extends ControlTemplate {
     private final @Mode int mCurrentActiveMode;
     private final @ModeFlag int mModes;
 
+    /**
+     * Construct a new {@link TemperatureControlTemplate}.
+     *
+     * The current and active mode have to be among the ones supported by the flags.
+     *
+     * @param templateId the identifier for this template object
+     * @param controlTemplate a template to use for interaction with the user
+     * @param currentMode the current mode for the {@link Control}
+     * @param currentActiveMode the current active mode for the {@link Control}
+     * @param modesFlag a flag representing the available modes for the {@link Control}
+     * @throws IllegalArgumentException if the parameters passed do not make a valid template.
+     */
     public TemperatureControlTemplate(@NonNull String templateId,
             @NonNull ControlTemplate controlTemplate,
             @Mode int currentMode,
@@ -179,6 +237,9 @@ public final class TemperatureControlTemplate extends ControlTemplate {
         return mModes;
     }
 
+    /**
+     * @return {@link ControlTemplate#TYPE_TEMPERATURE}
+     */
     @Override
     public int getTemplateType() {
         return TYPE;

@@ -346,6 +346,11 @@ public class PermissionManagerService extends IPermissionManager.Stub {
 
     PermissionManagerService(Context context,
             @NonNull Object externalLock) {
+        // The package info cache is the cache for package and permission information.
+        PackageManager.invalidatePackageInfoCache();
+        PermissionManager.disablePermissionCache();
+        PermissionManager.disablePackageNamePermissionCache();
+
         mContext = context;
         mLock = externalLock;
         mPackageManagerInt = LocalServices.getService(PackageManagerInternal.class);
@@ -2789,7 +2794,7 @@ public class PermissionManagerService extends IPermissionManager.Stub {
             }
 
             if ((changedInstallPermission || replace) && !ps.areInstallPermissionsFixed() &&
-                    !ps.isSystem() || !ps.getPkgState().isUpdatedSystemApp()) {
+                    !ps.isSystem() || ps.getPkgState().isUpdatedSystemApp()) {
                 // This is the first that we have heard about this package, so the
                 // permissions we have now selected are fixed until explicitly
                 // changed.
@@ -4218,7 +4223,7 @@ public class PermissionManagerService extends IPermissionManager.Stub {
 
         int[] grantPermissionsUserIds = EMPTY_INT_ARRAY;
         for (int userId : UserManagerService.getInstance().getUserIds()) {
-            if (!mPackageManagerInt.areDefaultRuntimePermissionsGranted(userId)) {
+            if (mPackageManagerInt.isPermissionUpgradeNeeded(userId)) {
                 grantPermissionsUserIds = ArrayUtils.appendInt(
                         grantPermissionsUserIds, userId);
             }
@@ -4466,6 +4471,9 @@ public class PermissionManagerService extends IPermissionManager.Stub {
         @Override
         public void setCheckPermissionDelegate(CheckPermissionDelegate delegate) {
             synchronized (mLock) {
+                if (delegate != null || mCheckPermissionDelegate != null) {
+                    PackageManager.invalidatePackageInfoCache();
+                }
                 mCheckPermissionDelegate = delegate;
             }
         }
@@ -4616,13 +4624,6 @@ public class PermissionManagerService extends IPermissionManager.Stub {
             synchronized (mLock) {
                 mDefaultPermissionGrantPolicy
                         .grantDefaultPermissionsToDefaultBrowser(packageName, userId);
-            }
-        }
-
-        @Override
-        public boolean wereDefaultPermissionsGrantedSinceBoot(int userId) {
-            synchronized (mLock) {
-                return mDefaultPermissionGrantPolicy.wereDefaultPermissionsGrantedSinceBoot(userId);
             }
         }
 

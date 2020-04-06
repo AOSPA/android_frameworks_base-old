@@ -147,10 +147,10 @@ public class ActivityManagerWrapper {
     /**
      * @return the task snapshot for the given {@param taskId}.
      */
-    public @NonNull ThumbnailData getTaskThumbnail(int taskId, boolean reducedResolution) {
+    public @NonNull ThumbnailData getTaskThumbnail(int taskId, boolean isLowResolution) {
         ActivityManager.TaskSnapshot snapshot = null;
         try {
-            snapshot = ActivityTaskManager.getService().getTaskSnapshot(taskId, reducedResolution);
+            snapshot = ActivityTaskManager.getService().getTaskSnapshot(taskId, isLowResolution);
         } catch (RemoteException e) {
             Log.w(TAG, "Failed to retrieve task snapshot", e);
         }
@@ -370,8 +370,7 @@ public class ActivityManagerWrapper {
             Rect initialBounds) {
         try {
             return ActivityTaskManager.getService().setTaskWindowingModeSplitScreenPrimary(taskId,
-                    createMode, true /* onTop */, false /* animate */, initialBounds,
-                    true /* showRecents */);
+                    true /* onTop */);
         } catch (RemoteException e) {
             return false;
         }

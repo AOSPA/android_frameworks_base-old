@@ -241,6 +241,7 @@ public class ChooserActivity extends ResolverActivity implements
     private int mChooserRowServiceSpacing;
 
     private int mCurrAvailableWidth = 0;
+    private int mLastNumberOfChildren = -1;
 
     private static final String TARGET_DETAILS_FRAGMENT_TAG = "targetDetailsFragment";
     // TODO: Update to handle landscape instead of using static value
@@ -967,6 +968,7 @@ public class ChooserActivity extends ResolverActivity implements
         super.onConfigurationChanged(newConfig);
 
         adjustPreviewWidth(newConfig.orientation, null);
+        updateStickyContentPreview();
     }
 
     private boolean shouldDisplayLandscape(int orientation) {
@@ -987,8 +989,6 @@ public class ChooserActivity extends ResolverActivity implements
         updateLayoutWidth(R.id.content_preview_text_layout, width, parent);
         updateLayoutWidth(R.id.content_preview_title_layout, width, parent);
         updateLayoutWidth(R.id.content_preview_file_layout, width, parent);
-        findViewById(R.id.content_preview_container)
-                .setVisibility(shouldShowStickyContentPreview() ? View.VISIBLE : View.GONE);
     }
 
     private void updateLayoutWidth(int layoutResourceId, int width, View parent) {
@@ -2398,14 +2398,22 @@ public class ChooserActivity extends ResolverActivity implements
         }
 
         final int availableWidth = right - left - v.getPaddingLeft() - v.getPaddingRight();
-        if (gridAdapter.consumeLayoutRequest()
+        boolean isLayoutUpdated = gridAdapter.consumeLayoutRequest()
                 || gridAdapter.calculateChooserTargetWidth(availableWidth)
                 || recyclerView.getAdapter() == null
-                || availableWidth != mCurrAvailableWidth) {
+                || availableWidth != mCurrAvailableWidth;
+        if (isLayoutUpdated
+                || mLastNumberOfChildren != recyclerView.getChildCount()) {
             mCurrAvailableWidth = availableWidth;
-            recyclerView.setAdapter(gridAdapter);
-            ((GridLayoutManager) recyclerView.getLayoutManager())
-                    .setSpanCount(gridAdapter.getMaxTargetsPerRow());
+            if (isLayoutUpdated
+                    && mChooserMultiProfilePagerAdapter.getCurrentUserHandle() != getUser()) {
+                // This fixes b/150936654 - empty work tab in share sheet when swiping
+                mChooserMultiProfilePagerAdapter.getActiveAdapterView()
+                        .setAdapter(mChooserMultiProfilePagerAdapter.getCurrentRootAdapter());
+                return;
+            } else if (mChooserMultiProfilePagerAdapter.getCurrentUserHandle() != getUser()) {
+                return;
+            }
 
             getMainThreadHandler().post(() -> {
                 if (mResolverDrawerLayout == null || gridAdapter == null) {
@@ -2415,7 +2423,8 @@ public class ChooserActivity extends ResolverActivity implements
                 final int bottomInset = mSystemWindowInsets != null
                                             ? mSystemWindowInsets.bottom : 0;
                 int offset = bottomInset;
-                int rowsToShow = gridAdapter.getProfileRowCount()
+                int rowsToShow = gridAdapter.getContentPreviewRowCount()
+                        + gridAdapter.getProfileRowCount()
                         + gridAdapter.getServiceTargetRowCount()
                         + gridAdapter.getCallerAndRankedTargetRowCount();
 
@@ -2434,51 +2443,70 @@ public class ChooserActivity extends ResolverActivity implements
                     return;
                 }
 
-                if (shouldShowStickyContentPreview()) {
-                    offset += findViewById(R.id.content_preview_container).getHeight();
+                View stickyContentPreview = findViewById(R.id.content_preview_container);
+                if (shouldShowStickyContentPreview() && isStickyContentPreviewShowing()) {
+                    offset += stickyContentPreview.getHeight();
                 }
 
                 if (shouldShowTabs()) {
                     offset += findViewById(R.id.tabs).getHeight();
                 }
 
-                int directShareHeight = 0;
-                rowsToShow = Math.min(4, rowsToShow);
-                for (int i = 0, childCount = recyclerView.getChildCount();
-                        i < childCount && rowsToShow > 0; i++) {
-                    View child = recyclerView.getChildAt(i);
-                    if (((GridLayoutManager.LayoutParams)
-                            child.getLayoutParams()).getSpanIndex() != 0) {
-                        continue;
-                    }
-                    int height = child.getHeight();
-                    offset += height;
-
-                    if (gridAdapter.getTargetType(
-                            recyclerView.getChildAdapterPosition(child))
-                            == ChooserListAdapter.TARGET_SERVICE) {
-                        directShareHeight = height;
-                    }
-                    rowsToShow--;
+                View tabDivider = findViewById(R.id.resolver_tab_divider);
+                if (tabDivider.getVisibility() == View.VISIBLE) {
+                    offset += tabDivider.getHeight();
                 }
 
-                boolean isExpandable = getResources().getConfiguration().orientation
-                        == Configuration.ORIENTATION_PORTRAIT && !isInMultiWindowMode();
-                if (directShareHeight != 0 && isSendAction(getTargetIntent())
-                        && isExpandable) {
-                    // make sure to leave room for direct share 4->8 expansion
-                    int requiredExpansionHeight =
-                            (int) (directShareHeight / DIRECT_SHARE_EXPANSION_RATE);
-                    int topInset = mSystemWindowInsets != null ? mSystemWindowInsets.top : 0;
-                    int minHeight = bottom - top - mResolverDrawerLayout.getAlwaysShowHeight()
-                                        - requiredExpansionHeight - topInset - bottomInset;
+                if (recyclerView.getVisibility() == View.VISIBLE) {
+                    int directShareHeight = 0;
+                    rowsToShow = Math.min(4, rowsToShow);
+                    mLastNumberOfChildren = recyclerView.getChildCount();
+                    for (int i = 0, childCount = recyclerView.getChildCount();
+                            i < childCount && rowsToShow > 0; i++) {
+                        View child = recyclerView.getChildAt(i);
+                        if (((GridLayoutManager.LayoutParams)
+                                child.getLayoutParams()).getSpanIndex() != 0) {
+                            continue;
+                        }
+                        int height = child.getHeight();
+                        offset += height;
 
-                    offset = Math.min(offset, minHeight);
+                        if (gridAdapter.getTargetType(
+                                recyclerView.getChildAdapterPosition(child))
+                                == ChooserListAdapter.TARGET_SERVICE) {
+                            directShareHeight = height;
+                        }
+                        rowsToShow--;
+                    }
+
+                    boolean isExpandable = getResources().getConfiguration().orientation
+                            == Configuration.ORIENTATION_PORTRAIT && !isInMultiWindowMode();
+                    if (directShareHeight != 0 && isSendAction(getTargetIntent())
+                            && isExpandable) {
+                        // make sure to leave room for direct share 4->8 expansion
+                        int requiredExpansionHeight =
+                                (int) (directShareHeight / DIRECT_SHARE_EXPANSION_RATE);
+                        int topInset = mSystemWindowInsets != null ? mSystemWindowInsets.top : 0;
+                        int minHeight = bottom - top - mResolverDrawerLayout.getAlwaysShowHeight()
+                                - requiredExpansionHeight - topInset - bottomInset;
+
+                        offset = Math.min(offset, minHeight);
+                    }
+                } else {
+                    ViewGroup currentEmptyStateView = getCurrentEmptyStateView();
+                    if (currentEmptyStateView.getVisibility() == View.VISIBLE) {
+                        offset += currentEmptyStateView.getHeight();
+                    }
                 }
 
                 mResolverDrawerLayout.setCollapsibleHeightReserved(Math.min(offset, bottom - top));
             });
         }
+    }
+
+    private ViewGroup getCurrentEmptyStateView() {
+        int currentPage = mChooserMultiProfilePagerAdapter.getCurrentPage();
+        return mChooserMultiProfilePagerAdapter.getItem(currentPage).getEmptyStateView();
     }
 
     static class BaseChooserTargetComparator implements Comparator<ChooserTarget> {
@@ -2526,6 +2554,14 @@ public class ChooserActivity extends ResolverActivity implements
         setupScrollListener();
 
         ChooserListAdapter chooserListAdapter = (ChooserListAdapter) listAdapter;
+        if (chooserListAdapter.getUserHandle()
+                == mChooserMultiProfilePagerAdapter.getCurrentUserHandle()) {
+            mChooserMultiProfilePagerAdapter.getActiveAdapterView()
+                    .setAdapter(mChooserMultiProfilePagerAdapter.getCurrentRootAdapter());
+            mChooserMultiProfilePagerAdapter
+                    .setupListAdapter(mChooserMultiProfilePagerAdapter.getCurrentPage());
+        }
+
         if (chooserListAdapter.mDisplayList == null
                 || chooserListAdapter.mDisplayList.isEmpty()) {
             chooserListAdapter.notifyDataSetChanged();
@@ -2617,14 +2653,29 @@ public class ChooserActivity extends ResolverActivity implements
      * we instead show the content preview as a regular list item.
      */
     private boolean shouldShowStickyContentPreview() {
-        return shouldShowTabs()
-                && mMultiProfilePagerAdapter.getListAdapterForUserHandle(
-                        UserHandle.of(UserHandle.myUserId())).getCount() > 0
-                && isSendAction(getTargetIntent())
+        return shouldShowStickyContentPreviewNoOrientationCheck()
                 && getResources().getBoolean(R.bool.sharesheet_show_content_preview);
     }
 
+    private boolean shouldShowStickyContentPreviewNoOrientationCheck() {
+        return shouldShowTabs()
+                && mMultiProfilePagerAdapter.getListAdapterForUserHandle(
+                UserHandle.of(UserHandle.myUserId())).getCount() > 0
+                && isSendAction(getTargetIntent());
+    }
+
     private void updateStickyContentPreview() {
+        if (shouldShowStickyContentPreviewNoOrientationCheck()) {
+            // The sticky content preview is only shown when we show the work and personal tabs.
+            // We don't show it in landscape as otherwise there is no room for scrolling.
+            // If the sticky content preview will be shown at some point with orientation change,
+            // then always preload it to avoid subsequent resizing of the share sheet.
+            ViewGroup contentPreviewContainer = findViewById(R.id.content_preview_container);
+            if (contentPreviewContainer.getChildCount() == 0) {
+                ViewGroup contentPreviewView = createContentPreviewView(contentPreviewContainer);
+                contentPreviewContainer.addView(contentPreviewView);
+            }
+        }
         if (shouldShowStickyContentPreview()) {
             showStickyContentPreview();
         } else {
@@ -2633,15 +2684,23 @@ public class ChooserActivity extends ResolverActivity implements
     }
 
     private void showStickyContentPreview() {
+        if (isStickyContentPreviewShowing()) {
+            return;
+        }
         ViewGroup contentPreviewContainer = findViewById(R.id.content_preview_container);
         contentPreviewContainer.setVisibility(View.VISIBLE);
-        ViewGroup contentPreviewView = createContentPreviewView(contentPreviewContainer);
-        contentPreviewContainer.addView(contentPreviewView);
+    }
+
+    private boolean isStickyContentPreviewShowing() {
+        ViewGroup contentPreviewContainer = findViewById(R.id.content_preview_container);
+        return contentPreviewContainer.getVisibility() == View.VISIBLE;
     }
 
     private void hideStickyContentPreview() {
+        if (!isStickyContentPreviewShowing()) {
+            return;
+        }
         ViewGroup contentPreviewContainer = findViewById(R.id.content_preview_container);
-        contentPreviewContainer.removeAllViews();
         contentPreviewContainer.setVisibility(View.GONE);
     }
 

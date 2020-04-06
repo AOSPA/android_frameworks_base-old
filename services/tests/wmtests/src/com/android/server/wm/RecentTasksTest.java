@@ -17,7 +17,6 @@
 package com.android.server.wm;
 
 import static android.app.ActivityManager.RECENT_WITH_EXCLUDED;
-import static android.app.ActivityTaskManager.SPLIT_SCREEN_CREATE_MODE_TOP_OR_LEFT;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_HOME;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_STANDARD;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_UNDEFINED;
@@ -978,10 +977,7 @@ public class RecentTasksTest extends ActivityTestsBase {
                 () -> mService.setTaskWindowingMode(taskId, WINDOWING_MODE_FULLSCREEN,
                         false/* toTop */));
         assertNotRestoreTask(
-                () -> mService.setTaskWindowingModeSplitScreenPrimary(taskId,
-                        SPLIT_SCREEN_CREATE_MODE_TOP_OR_LEFT,
-                        false /* toTop */, false /* animate */, null /* initialBounds */,
-                        true /* showRecents */));
+                () -> mService.setTaskWindowingModeSplitScreenPrimary(taskId, false /* toTop */));
     }
 
     @Test
@@ -1024,6 +1020,29 @@ public class RecentTasksTest extends ActivityTestsBase {
         verify(controller, times(4)).notifyTaskListUpdated();
     }
 
+    @Test
+    public void testTaskInfo_expectNoExtras() {
+        doNothing().when(mRecentTasks).loadUserRecentsLocked(anyInt());
+        doReturn(true).when(mRecentTasks).isUserRunning(anyInt(), anyInt());
+
+        final Bundle data = new Bundle();
+        data.putInt("key", 100);
+        final Task task1 = createTaskBuilder(".Task").build();
+        final ActivityRecord r1 = new ActivityBuilder(mService)
+                .setTask(task1)
+                .setIntentExtras(data)
+                .build();
+        mRecentTasks.add(r1.getTask());
+
+        final List<RecentTaskInfo> infos = mRecentTasks.getRecentTasks(MAX_VALUE, 0 /* flags */,
+                true /* getTasksAllowed */, TEST_USER_0_ID, 0).getList();
+        assertTrue(infos.size() == 1);
+        for (int i = 0; i < infos.size(); i++)  {
+            final Bundle extras = infos.get(i).baseIntent.getExtras();
+            assertTrue(extras == null || extras.isEmpty());
+        }
+    }
+
     /**
      * Ensures that the raw recent tasks list is in the provided order. Note that the expected tasks
      * should be ordered from least to most recent.
@@ -1044,8 +1063,7 @@ public class RecentTasksTest extends ActivityTestsBase {
         doNothing().when(mRecentTasks).loadUserRecentsLocked(anyInt());
         doReturn(true).when(mRecentTasks).isUserRunning(anyInt(), anyInt());
         List<RecentTaskInfo> infos = mRecentTasks.getRecentTasks(MAX_VALUE, getRecentTaskFlags,
-                true /* getTasksAllowed */, false /* getDetailedTasks */,
-                TEST_USER_0_ID, 0).getList();
+                true /* getTasksAllowed */, TEST_USER_0_ID, 0).getList();
         assertTrue(expectedTasks.length == infos.size());
         for (int i = 0; i < infos.size(); i++)  {
             assertTrue(expectedTasks[i].mTaskId == infos.get(i).taskId);
@@ -1096,18 +1114,10 @@ public class RecentTasksTest extends ActivityTestsBase {
         assertSecurityException(expectCallable,
                 () -> mService.moveTaskToStack(0, INVALID_STACK_ID, true));
         assertSecurityException(expectCallable,
-                () -> mService.setTaskWindowingModeSplitScreenPrimary(0,
-                        SPLIT_SCREEN_CREATE_MODE_TOP_OR_LEFT, true, true, new Rect(), true));
+                () -> mService.setTaskWindowingModeSplitScreenPrimary(0, true));
         assertSecurityException(expectCallable, () -> mService.dismissPip(true, 0));
         assertSecurityException(expectCallable,
                 () -> mService.moveTopActivityToPinnedStack(INVALID_STACK_ID, new Rect()));
-        assertSecurityException(expectCallable,
-                () -> mService.animateResizePinnedStack(INVALID_STACK_ID, new Rect(), -1));
-        assertSecurityException(expectCallable,
-                () -> mService.resizeDockedStack(new Rect(), new Rect(), new Rect(), new Rect(),
-                        new Rect()));
-        assertSecurityException(expectCallable,
-                () -> mService.resizePinnedStack(new Rect(), new Rect()));
         assertSecurityException(expectCallable, () -> mService.getAllStackInfos());
         assertSecurityException(expectCallable,
                 () -> mService.getStackInfo(WINDOWING_MODE_UNDEFINED, ACTIVITY_TYPE_UNDEFINED));
@@ -1341,11 +1351,9 @@ public class RecentTasksTest extends ActivityTestsBase {
 
         @Override
         ParceledListSlice<RecentTaskInfo> getRecentTasks(int maxNum, int flags,
-                boolean getTasksAllowed,
-                boolean getDetailedTasks, int userId, int callingUid) {
+                boolean getTasksAllowed, int userId, int callingUid) {
             mLastAllowed = getTasksAllowed;
-            return super.getRecentTasks(maxNum, flags, getTasksAllowed, getDetailedTasks, userId,
-                    callingUid);
+            return super.getRecentTasks(maxNum, flags, getTasksAllowed, userId, callingUid);
         }
 
         @Override

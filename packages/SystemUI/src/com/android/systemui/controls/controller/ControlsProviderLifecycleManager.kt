@@ -58,7 +58,6 @@ class ControlsProviderLifecycleManager(
     private val context: Context,
     private val executor: DelayableExecutor,
     private val actionCallbackService: IControlsActionCallback.Stub,
-    private val subscriberService: IControlsSubscriber.Stub,
     val user: UserHandle,
     val componentName: ComponentName
 ) : IBinder.DeathRecipient {
@@ -96,29 +95,30 @@ class ControlsProviderLifecycleManager(
     }
 
     private fun bindService(bind: Boolean) {
-        requiresBound = bind
-        if (bind) {
-            if (bindTryCount == MAX_BIND_RETRIES) {
-                return
+        executor.execute {
+            requiresBound = bind
+            if (bind) {
+                if (bindTryCount != MAX_BIND_RETRIES) {
+                    if (DEBUG) {
+                        Log.d(TAG, "Binding service $intent")
+                    }
+                    bindTryCount++
+                    try {
+                        context.bindServiceAsUser(intent, serviceConnection, BIND_FLAGS, user)
+                    } catch (e: SecurityException) {
+                        Log.e(TAG, "Failed to bind to service", e)
+                    }
+                }
+            } else {
+                if (DEBUG) {
+                    Log.d(TAG, "Unbinding service $intent")
+                }
+                bindTryCount = 0
+                wrapper?.run {
+                    context.unbindService(serviceConnection)
+                }
+                wrapper = null
             }
-            if (DEBUG) {
-                Log.d(TAG, "Binding service $intent")
-            }
-            bindTryCount++
-            try {
-                context.bindServiceAsUser(intent, serviceConnection, BIND_FLAGS, user)
-            } catch (e: SecurityException) {
-                Log.e(TAG, "Failed to bind to service", e)
-            }
-        } else {
-            if (DEBUG) {
-                Log.d(TAG, "Unbinding service $intent")
-            }
-            bindTryCount = 0
-            wrapper?.run {
-                context.unbindService(serviceConnection)
-            }
-            wrapper = null
         }
     }
 
@@ -156,10 +156,9 @@ class ControlsProviderLifecycleManager(
             load(msg.subscriber)
         }
 
-        queue.filter { it is Message.Subscribe }.flatMap { (it as Message.Subscribe).list }.run {
-            if (this.isNotEmpty()) {
-                subscribe(this)
-            }
+        queue.filter { it is Message.Subscribe }.forEach {
+            val msg = it as Message.Subscribe
+            subscribe(msg.list, msg.subscriber)
         }
         queue.filter { it is Message.Action }.forEach {
             val msg = it as Message.Action
@@ -184,9 +183,9 @@ class ControlsProviderLifecycleManager(
         }
     }
 
-    private fun unqueueMessage(message: Message) {
+    private fun unqueueMessageType(type: Int) {
         synchronized(queuedMessages) {
-            queuedMessages.removeIf { it.type == message.type }
+            queuedMessages.removeIf { it.type == type }
         }
     }
 
@@ -218,7 +217,7 @@ class ControlsProviderLifecycleManager(
      * @param subscriber the subscriber that manages coordination for loading controls
      */
     fun maybeBindAndLoad(subscriber: IControlsSubscriber.Stub) {
-        unqueueMessage(Message.Unbind)
+        unqueueMessageType(MSG_UNBIND)
         onLoadCanceller = executor.executeDelayed({
             // Didn't receive a response in time, log and send back error
             Log.d(TAG, "Timeout waiting onLoad for $componentName")
@@ -229,6 +228,11 @@ class ControlsProviderLifecycleManager(
         invokeOrQueue({ load(subscriber) }, Message.Load(subscriber))
     }
 
+    fun cancelLoadTimeout() {
+        onLoadCanceller?.run()
+        onLoadCanceller = null
+    }
+
     /**
      * Request a subscription to the [Publisher] returned by [ControlsProviderService.publisherFor]
      *
@@ -236,16 +240,20 @@ class ControlsProviderLifecycleManager(
      *
      * @param controlIds a list of the ids of controls to send status back.
      */
-    fun maybeBindAndSubscribe(controlIds: List<String>) {
-        invokeOrQueue({ subscribe(controlIds) }, Message.Subscribe(controlIds))
+    fun maybeBindAndSubscribe(controlIds: List<String>, subscriber: IControlsSubscriber) {
+        invokeOrQueue(
+            { subscribe(controlIds, subscriber) },
+            Message.Subscribe(controlIds, subscriber)
+        )
     }
 
-    private fun subscribe(controlIds: List<String>) {
+    private fun subscribe(controlIds: List<String>, subscriber: IControlsSubscriber) {
         if (DEBUG) {
             Log.d(TAG, "subscribe $componentName - $controlIds")
         }
-        if (!(wrapper?.subscribe(controlIds, subscriberService) ?: false)) {
-            queueMessage(Message.Subscribe(controlIds))
+
+        if (!(wrapper?.subscribe(controlIds, subscriber) ?: false)) {
+            queueMessage(Message.Subscribe(controlIds, subscriber))
             binderDied()
         }
     }
@@ -275,10 +283,13 @@ class ControlsProviderLifecycleManager(
     /**
      * Starts the subscription to the [ControlsProviderService] and requests status of controls.
      *
-     * @param subscription the subscriber to use to request controls
+     * @param subscription the subscription to use to request controls
      * @see maybeBindAndLoad
      */
     fun startSubscription(subscription: IControlsSubscription) {
+        if (DEBUG) {
+            Log.d(TAG, "startSubscription: $subscription")
+        }
         synchronized(subscriptions) {
             subscriptions.add(subscription)
         }
@@ -286,30 +297,26 @@ class ControlsProviderLifecycleManager(
     }
 
     /**
-     * Unsubscribe from this service, cancelling all status requests.
+     * Cancels the subscription to the [ControlsProviderService].
+     *
+     * @param subscription the subscription to cancel
+     * @see maybeBindAndLoad
      */
-    fun unsubscribe() {
+    fun cancelSubscription(subscription: IControlsSubscription) {
         if (DEBUG) {
-            Log.d(TAG, "unsubscribe $componentName")
+            Log.d(TAG, "cancelSubscription: $subscription")
         }
-        unqueueMessage(Message.Subscribe(emptyList())) // Removes all subscribe messages
-
-        val subs = synchronized(subscriptions) {
-            ArrayList(subscriptions).also {
-                subscriptions.clear()
-            }
+        synchronized(subscriptions) {
+            subscriptions.remove(subscription)
         }
-
-        subs.forEach {
-            wrapper?.cancel(it)
-        }
+        wrapper?.cancel(subscription)
     }
 
     /**
      * Request bind to the service.
      */
     fun bindService() {
-        unqueueMessage(Message.Unbind)
+        unqueueMessageType(MSG_UNBIND)
         bindService(true)
     }
 
@@ -319,6 +326,17 @@ class ControlsProviderLifecycleManager(
     fun unbindService() {
         onLoadCanceller?.run()
         onLoadCanceller = null
+
+        // be sure to cancel all subscriptions
+        val subs = synchronized(subscriptions) {
+            ArrayList(subscriptions).also {
+                subscriptions.clear()
+            }
+        }
+
+        subs.forEach {
+            wrapper?.cancel(it)
+        }
 
         bindService(false)
     }
@@ -342,7 +360,7 @@ class ControlsProviderLifecycleManager(
         object Unbind : Message() {
             override val type = MSG_UNBIND
         }
-        class Subscribe(val list: List<String>) : Message() {
+        class Subscribe(val list: List<String>, val subscriber: IControlsSubscriber) : Message() {
             override val type = MSG_SUBSCRIBE
         }
         class Action(val id: String, val action: ControlAction) : Message() {

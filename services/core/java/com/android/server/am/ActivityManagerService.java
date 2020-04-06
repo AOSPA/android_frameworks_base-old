@@ -65,6 +65,10 @@ import static android.os.Process.SHELL_UID;
 import static android.os.Process.SIGNAL_USR1;
 import static android.os.Process.SYSTEM_UID;
 import static android.os.Process.THREAD_PRIORITY_FOREGROUND;
+import static android.os.Process.ZYGOTE_POLICY_FLAG_BATCH_LAUNCH;
+import static android.os.Process.ZYGOTE_POLICY_FLAG_EMPTY;
+import static android.os.Process.ZYGOTE_POLICY_FLAG_LATENCY_SENSITIVE;
+import static android.os.Process.ZYGOTE_POLICY_FLAG_SYSTEM_PROCESS;
 import static android.os.Process.ZYGOTE_PROCESS;
 import static android.os.Process.getTotalMemory;
 import static android.os.Process.isThreadInProcess;
@@ -79,6 +83,8 @@ import static android.os.Process.setProcessGroup;
 import static android.os.Process.setCgroupProcsProcessGroup;
 import static android.os.Process.setThreadPriority;
 import static android.os.Process.setThreadScheduler;
+import static android.permission.PermissionManager.KILL_APP_REASON_GIDS_CHANGED;
+import static android.permission.PermissionManager.KILL_APP_REASON_PERMISSIONS_REVOKED;
 import static android.provider.Settings.Global.ALWAYS_FINISH_ACTIVITIES;
 import static android.provider.Settings.Global.DEBUG_APP;
 import static android.provider.Settings.Global.NETWORK_ACCESS_TIMEOUT_MS;
@@ -220,6 +226,7 @@ import android.content.pm.PathPermission;
 import android.content.pm.PermissionInfo;
 import android.content.pm.ProcessInfo;
 import android.content.pm.ProviderInfo;
+import android.content.pm.ProviderInfoList;
 import android.content.pm.ResolveInfo;
 import android.content.pm.SELinuxUtil;
 import android.content.pm.ServiceInfo;
@@ -3078,7 +3085,7 @@ public class ActivityManagerService extends IActivityManager.Stub
             info.targetSdkVersion = Build.VERSION.SDK_INT;
             ProcessRecord proc = mProcessList.startProcessLocked(processName, info /* info */,
                     false /* knownToBeDead */, 0 /* intentFlags */,
-                    sNullHostingRecord  /* hostingRecord */,
+                    sNullHostingRecord  /* hostingRecord */, ZYGOTE_POLICY_FLAG_EMPTY,
                     true /* allowWhileBooting */, true /* isolated */,
                     uid, true /* keepIfLarge */, abiOverride, entryPoint, entryPointArgs,
                     crashHandler);
@@ -3089,12 +3096,12 @@ public class ActivityManagerService extends IActivityManager.Stub
     @GuardedBy("this")
     final ProcessRecord startProcessLocked(String processName,
             ApplicationInfo info, boolean knownToBeDead, int intentFlags,
-            HostingRecord hostingRecord, boolean allowWhileBooting,
+            HostingRecord hostingRecord, int zygotePolicyFlags, boolean allowWhileBooting,
             boolean isolated, boolean keepIfLarge) {
         return mProcessList.startProcessLocked(processName, info, knownToBeDead, intentFlags,
-                hostingRecord, allowWhileBooting, isolated, 0 /* isolatedUid */, keepIfLarge,
-                null /* ABI override */, null /* entryPoint */, null /* entryPointArgs */,
-                null /* crashHandler */);
+                hostingRecord, zygotePolicyFlags, allowWhileBooting, isolated, 0 /* isolatedUid */,
+                keepIfLarge, null /* ABI override */, null /* entryPoint */,
+                null /* entryPointArgs */, null /* crashHandler */);
     }
 
     boolean isAllowedWhileBooting(ApplicationInfo ai) {
@@ -3639,6 +3646,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                             false /* knownToBeDead */,
                             0 /* intentFlags */,
                            sNullHostingRecord /* hostingRecord */,
+                           ZYGOTE_POLICY_FLAG_EMPTY /* zygotePolicyFlags */,
                            false /* allowWhileBooting */,
                            false /* isolated */,
                            true /* keepIfLarge */);
@@ -3922,10 +3930,11 @@ public class ActivityManagerService extends IActivityManager.Stub
      * @param firstPids of dalvik VM processes to dump stack traces for first
      * @param lastPids of dalvik VM processes to dump stack traces for last
      * @param nativePids optional list of native pids to dump stack crawls
+     * @param logExceptionCreatingFile optional writer to which we log errors creating the file
      */
     public static File dumpStackTraces(ArrayList<Integer> firstPids,
             ProcessCpuTracker processCpuTracker, SparseArray<Boolean> lastPids,
-            ArrayList<Integer> nativePids) {
+            ArrayList<Integer> nativePids, StringWriter logExceptionCreatingFile) {
         ArrayList<Integer> extraPids = null;
 
         Slog.i(TAG, "dumpStackTraces pids=" + lastPids + " nativepids=" + nativePids);
@@ -3965,8 +3974,15 @@ public class ActivityManagerService extends IActivityManager.Stub
         // NOTE: We should consider creating the file in native code atomically once we've
         // gotten rid of the old scheme of dumping and lot of the code that deals with paths
         // can be removed.
-        File tracesFile = createAnrDumpFile(tracesDir);
-        if (tracesFile == null) {
+        File tracesFile;
+        try {
+            tracesFile = createAnrDumpFile(tracesDir);
+        } catch (IOException e) {
+            Slog.w(TAG, "Exception creating ANR dump file:", e);
+            if (logExceptionCreatingFile != null) {
+                logExceptionCreatingFile.append("----- Exception creating ANR dump file -----\n");
+                e.printStackTrace(new PrintWriter(logExceptionCreatingFile));
+            }
             return null;
         }
 
@@ -3977,7 +3993,7 @@ public class ActivityManagerService extends IActivityManager.Stub
     @GuardedBy("ActivityManagerService.class")
     private static SimpleDateFormat sAnrFileDateFormat;
 
-    private static synchronized File createAnrDumpFile(File tracesDir) {
+    private static synchronized File createAnrDumpFile(File tracesDir) throws IOException {
         if (sAnrFileDateFormat == null) {
             sAnrFileDateFormat = new SimpleDateFormat("yyyy-MM-dd-HH-mm-ss-SSS");
         }
@@ -3985,18 +4001,12 @@ public class ActivityManagerService extends IActivityManager.Stub
         final String formattedDate = sAnrFileDateFormat.format(new Date());
         final File anrFile = new File(tracesDir, "anr_" + formattedDate);
 
-        try {
-            if (anrFile.createNewFile()) {
-                FileUtils.setPermissions(anrFile.getAbsolutePath(), 0600, -1, -1); // -rw-------
-                return anrFile;
-            } else {
-                Slog.w(TAG, "Unable to create ANR dump file: createNewFile failed");
-            }
-        } catch (IOException ioe) {
-            Slog.w(TAG, "Exception creating ANR dump file:", ioe);
+        if (anrFile.createNewFile()) {
+            FileUtils.setPermissions(anrFile.getAbsolutePath(), 0600, -1, -1); // -rw-------
+            return anrFile;
+        } else {
+            throw new IOException("Unable to create ANR dump file: createNewFile failed");
         }
-
-        return null;
     }
 
     /**
@@ -4307,7 +4317,8 @@ public class ActivityManagerService extends IActivityManager.Stub
                 }
                 synchronized (this) {
                     mProcessList.killPackageProcessesLocked(packageName, appId, targetUserId,
-                            ProcessList.SERVICE_ADJ, "kill background");
+                            ProcessList.SERVICE_ADJ, ApplicationExitInfo.REASON_USER_REQUESTED,
+                            ApplicationExitInfo.SUBREASON_UNKNOWN, "kill background");
                 }
             }
         } finally {
@@ -4333,7 +4344,10 @@ public class ActivityManagerService extends IActivityManager.Stub
                 // because this method is also used to simulate low memory.
                 mAllowLowerMemLevel = true;
                 mProcessList.killPackageProcessesLocked(null /* packageName */, -1 /* appId */,
-                        UserHandle.USER_ALL, ProcessList.CACHED_APP_MIN_ADJ, "kill all background");
+                        UserHandle.USER_ALL, ProcessList.CACHED_APP_MIN_ADJ,
+                        ApplicationExitInfo.REASON_USER_REQUESTED,
+                        ApplicationExitInfo.SUBREASON_UNKNOWN,
+                        "kill all background");
 
                 doLowMemReportIfNeededLocked(null);
             }
@@ -4825,7 +4839,11 @@ public class ActivityManagerService extends IActivityManager.Stub
         boolean didSomething = mProcessList.killPackageProcessesLocked(packageName, appId, userId,
                 ProcessList.INVALID_ADJ, callerWillRestart, false /* allowRestart */, doit,
                 evenPersistent, true /* setRemoved */,
-                packageName == null ? ("stop user " + userId) : ("stop " + packageName));
+                packageName == null ? ApplicationExitInfo.REASON_USER_STOPPED
+                        : ApplicationExitInfo.REASON_USER_REQUESTED,
+                ApplicationExitInfo.SUBREASON_UNKNOWN,
+                (packageName == null ? ("stop user " + userId) : ("stop " + packageName))
+                + " due to " + reason);
 
         didSomething |=
                 mAtmInternal.onForceStopPackage(packageName, doit, evenPersistent, userId);
@@ -4888,7 +4906,10 @@ public class ActivityManagerService extends IActivityManager.Stub
     @GuardedBy("this")
     private final void processContentProviderPublishTimedOutLocked(ProcessRecord app) {
         cleanupAppInLaunchingProvidersLocked(app, true);
-        mProcessList.removeProcessLocked(app, false, true, "timeout publishing content providers");
+        mProcessList.removeProcessLocked(app, false, true,
+                ApplicationExitInfo.REASON_INITIALIZATION_FAILURE,
+                ApplicationExitInfo.SUBREASON_UNKNOWN,
+                "timeout publishing content providers");
     }
 
     @GuardedBy("this")
@@ -4993,7 +5014,7 @@ public class ActivityManagerService extends IActivityManager.Stub
             if (pid > 0 && pid != MY_PID) {
                 killProcessQuiet(pid);
                 //TODO: killProcessGroup(app.info.uid, pid);
-                mProcessList.noteAppKill(app, ApplicationExitInfo.REASON_OTHER,
+                mProcessList.noteAppKill(app, ApplicationExitInfo.REASON_INITIALIZATION_FAILURE,
                         ApplicationExitInfo.SUBREASON_UNKNOWN, "attach failed");
             } else {
                 try {
@@ -5025,7 +5046,8 @@ public class ActivityManagerService extends IActivityManager.Stub
         } catch (RemoteException e) {
             app.resetPackageList(mProcessStats);
             mProcessList.startProcessLocked(app,
-                    new HostingRecord("link fail", processName));
+                    new HostingRecord("link fail", processName),
+                    ZYGOTE_POLICY_FLAG_EMPTY);
             return false;
         }
 
@@ -5228,12 +5250,13 @@ public class ActivityManagerService extends IActivityManager.Stub
             if (mPlatformCompat != null) {
                 mPlatformCompat.resetReporting(app.info);
             }
+            final ProviderInfoList providerList = ProviderInfoList.fromList(providers);
             if (app.isolatedEntryPoint != null) {
                 // This is an isolated process which should just call an entry point instead of
                 // being bound to an application.
                 thread.runIsolatedEntryPoint(app.isolatedEntryPoint, app.isolatedEntryPointArgs);
             } else if (instr2 != null) {
-                thread.bindApplication(processName, appInfo, providers,
+                thread.bindApplication(processName, appInfo, providerList,
                         instr2.mClass,
                         profilerInfo, instr2.mArguments,
                         instr2.mWatcher,
@@ -5246,7 +5269,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                         buildSerial, autofillOptions, contentCaptureOptions,
                         app.mDisabledCompatChanges);
             } else {
-                thread.bindApplication(processName, appInfo, providers, null, profilerInfo,
+                thread.bindApplication(processName, appInfo, providerList, null, profilerInfo,
                         null, null, null, testMode,
                         mBinderTransactionTrackingEnabled, enableTrackAllocation,
                         isRestrictedBackupMode || !normalMode, app.isPersistent(),
@@ -5447,7 +5470,9 @@ public class ActivityManagerService extends IActivityManager.Stub
                 for (int ip=0; ip<NP; ip++) {
                     if (DEBUG_PROCESSES) Slog.v(TAG_PROCESSES, "Starting process on hold: "
                             + procs.get(ip));
-                    mProcessList.startProcessLocked(procs.get(ip), new HostingRecord("on-hold"));
+                    mProcessList.startProcessLocked(procs.get(ip),
+                            new HostingRecord("on-hold"),
+                            ZYGOTE_POLICY_FLAG_BATCH_LAUNCH);
                 }
             }
             if (mFactoryTest == FactoryTest.FACTORY_TEST_LOW_LEVEL) {
@@ -6362,9 +6387,9 @@ public class ActivityManagerService extends IActivityManager.Stub
     }
 
     @VisibleForTesting
-    public void grantImplicitAccess(int userId, Intent intent, int callingUid, int targetAppId) {
+    public void grantImplicitAccess(int userId, Intent intent, int visibleUid, int recipientAppId) {
         getPackageManagerInternalLocked().
-                grantImplicitAccess(userId, intent, callingUid, targetAppId);
+                grantImplicitAccess(userId, intent, recipientAppId, visibleUid, true /*direct*/);
     }
 
     /**
@@ -6510,8 +6535,8 @@ public class ActivityManagerService extends IActivityManager.Stub
     }
 
     @Override
-    public ActivityManager.TaskSnapshot getTaskSnapshot(int taskId, boolean reducedResolution) {
-        return mActivityTaskManager.getTaskSnapshot(taskId, reducedResolution);
+    public ActivityManager.TaskSnapshot getTaskSnapshot(int taskId, boolean isLowResolution) {
+        return mActivityTaskManager.getTaskSnapshot(taskId, isLowResolution);
     }
 
     @Override
@@ -6587,14 +6612,6 @@ public class ActivityManagerService extends IActivityManager.Stub
     @Override
     public boolean moveTopActivityToPinnedStack(int stackId, Rect bounds) {
         return mActivityTaskManager.moveTopActivityToPinnedStack(stackId, bounds);
-    }
-
-    @Override
-    public void resizeDockedStack(Rect dockedBounds, Rect tempDockedTaskBounds,
-            Rect tempDockedTaskInsetBounds,
-            Rect tempOtherTaskBounds, Rect tempOtherTaskInsetBounds) {
-        mActivityTaskManager.resizeDockedStack(dockedBounds, tempDockedTaskBounds,
-                tempDockedTaskInsetBounds, tempOtherTaskBounds, tempOtherTaskInsetBounds);
     }
 
     @Override
@@ -7307,8 +7324,9 @@ public class ActivityManagerService extends IActivityManager.Stub
                             proc = startProcessLocked(cpi.processName,
                                     cpr.appInfo, false, 0,
                                     new HostingRecord("content provider",
-                                    new ComponentName(cpi.applicationInfo.packageName,
-                                            cpi.name)), false, false, false);
+                                        new ComponentName(cpi.applicationInfo.packageName,
+                                                cpi.name)),
+                                    ZYGOTE_POLICY_FLAG_EMPTY, false, false, false);
                             checkTime(startTime, "getContentProviderImpl: after start process");
                             if (proc == null) {
                                 Slog.w(TAG, "Unable to launch app "
@@ -7342,10 +7360,8 @@ public class ActivityManagerService extends IActivityManager.Stub
             }
             checkTime(startTime, "getContentProviderImpl: done!");
 
-            grantImplicitAccess(userId, null /*intent*/,
-                    UserHandle.getAppId(Binder.getCallingUid()),
-                    UserHandle.getAppId(cpi.applicationInfo.uid)
-            );
+            grantImplicitAccess(userId, null /*intent*/, callingUid,
+                    UserHandle.getAppId(cpi.applicationInfo.uid));
         }
 
         // Wait for the provider to be published...
@@ -7868,7 +7884,8 @@ public class ActivityManagerService extends IActivityManager.Stub
                         .getPersistentApplications(STOCK_PM_FLAGS | matchFlags).getList();
                 for (ApplicationInfo app : apps) {
                     if (!"android".equals(app.packageName)) {
-                        addAppLocked(app, null, false, null /* ABI override */);
+                        addAppLocked(app, null, false, null /* ABI override */,
+                                ZYGOTE_POLICY_FLAG_BATCH_LAUNCH);
                     }
                 }
             } catch (RemoteException ex) {
@@ -8139,23 +8156,25 @@ public class ActivityManagerService extends IActivityManager.Stub
 
     @GuardedBy("this")
     final ProcessRecord addAppLocked(ApplicationInfo info, String customProcess, boolean isolated,
-            String abiOverride) {
+            String abiOverride, int zygotePolicyFlags) {
         return addAppLocked(info, customProcess, isolated, false /* disableHiddenApiChecks */,
-                false /* mountExtStorageFull */, abiOverride);
+                false /* mountExtStorageFull */, abiOverride, zygotePolicyFlags);
     }
 
     @GuardedBy("this")
     final ProcessRecord addAppLocked(ApplicationInfo info, String customProcess, boolean isolated,
-            boolean disableHiddenApiChecks, boolean mountExtStorageFull, String abiOverride) {
+            boolean disableHiddenApiChecks, boolean mountExtStorageFull, String abiOverride,
+            int zygotePolicyFlags) {
         return addAppLocked(info, customProcess, isolated, disableHiddenApiChecks,
-                false /* disableTestApiChecks */, mountExtStorageFull, abiOverride);
+                false /* disableTestApiChecks */, mountExtStorageFull, abiOverride,
+                zygotePolicyFlags);
     }
 
     // TODO: Move to ProcessList?
     @GuardedBy("this")
     final ProcessRecord addAppLocked(ApplicationInfo info, String customProcess, boolean isolated,
             boolean disableHiddenApiChecks, boolean disableTestApiChecks,
-            boolean mountExtStorageFull, String abiOverride) {
+            boolean mountExtStorageFull, String abiOverride, int zygotePolicyFlags) {
         ProcessRecord app;
         if (!isolated) {
             app = getProcessRecordLocked(customProcess != null ? customProcess : info.processName,
@@ -8190,7 +8209,8 @@ public class ActivityManagerService extends IActivityManager.Stub
             mPersistentStartingProcesses.add(app);
             mProcessList.startProcessLocked(app, new HostingRecord("added application",
                     customProcess != null ? customProcess : app.processName),
-                    disableHiddenApiChecks, disableTestApiChecks, mountExtStorageFull, abiOverride);
+                    zygotePolicyFlags, disableHiddenApiChecks, disableTestApiChecks,
+                    mountExtStorageFull, abiOverride);
         }
 
         return app;
@@ -9127,7 +9147,8 @@ public class ActivityManagerService extends IActivityManager.Stub
                 }
                 int adj = proc.setAdj;
                 if (adj >= worstType && !proc.killedByAm) {
-                    proc.kill(reason, ApplicationExitInfo.REASON_OTHER, true);
+                    proc.kill(reason, ApplicationExitInfo.REASON_OTHER,
+                            ApplicationExitInfo.SUBREASON_KILL_PID, true);
                     killed = true;
                 }
             }
@@ -9141,10 +9162,17 @@ public class ActivityManagerService extends IActivityManager.Stub
         synchronized (this) {
             final long identity = Binder.clearCallingIdentity();
             try {
+                boolean permissionChange = KILL_APP_REASON_PERMISSIONS_REVOKED.equals(reason)
+                        || KILL_APP_REASON_GIDS_CHANGED.equals(reason);
                 mProcessList.killPackageProcessesLocked(null /* packageName */, appId, userId,
                         ProcessList.PERSISTENT_PROC_ADJ, false /* callerWillRestart */,
                         true /* callerWillRestart */, true /* doit */, true /* evenPersistent */,
-                        false /* setRemoved */, reason != null ? reason : "kill uid");
+                        false /* setRemoved */,
+                        permissionChange ? ApplicationExitInfo.REASON_PERMISSION_CHANGE
+                        : ApplicationExitInfo.REASON_OTHER,
+                        permissionChange ? ApplicationExitInfo.SUBREASON_UNKNOWN
+                        : ApplicationExitInfo.SUBREASON_KILL_UID,
+                        reason != null ? reason : "kill uid");
             } finally {
                 Binder.restoreCallingIdentity(identity);
             }
@@ -9469,7 +9497,10 @@ public class ActivityManagerService extends IActivityManager.Stub
                 for (int i=procsToKill.size()-1; i>=0; i--) {
                     ProcessRecord proc = procsToKill.get(i);
                     Slog.i(TAG, "Removing system update proc: " + proc);
-                    mProcessList.removeProcessLocked(proc, true, false, "system update done");
+                    mProcessList.removeProcessLocked(proc, true, false,
+                            ApplicationExitInfo.REASON_OTHER,
+                            ApplicationExitInfo.SUBREASON_SYSTEM_UPDATE_DONE,
+                            "system update done");
                 }
             }
 
@@ -14473,7 +14504,8 @@ public class ActivityManagerService extends IActivityManager.Stub
                             + cpr.name.flattenToShortString()
                             + " in dying proc " + (proc != null ? proc.processName : "??")
                             + " (adj " + (proc != null ? proc.setAdj : "??") + ")",
-                            ApplicationExitInfo.REASON_OTHER,
+                            ApplicationExitInfo.REASON_DEPENDENCY_DIED,
+                            ApplicationExitInfo.SUBREASON_UNKNOWN,
                             true);
                 }
             } else if (capp.thread != null && conn.provider.provider != null) {
@@ -14697,7 +14729,8 @@ public class ActivityManagerService extends IActivityManager.Stub
             mProcessList.addProcessNameLocked(app);
             app.pendingStart = false;
             mProcessList.startProcessLocked(app,
-                    new HostingRecord("restart", app.processName));
+                    new HostingRecord("restart", app.processName),
+                    ZYGOTE_POLICY_FLAG_EMPTY);
             return true;
         } else if (app.pid > 0 && app.pid != MY_PID) {
             // Goodbye!
@@ -15060,7 +15093,7 @@ public class ActivityManagerService extends IActivityManager.Stub
             ProcessRecord proc = startProcessLocked(app.processName, app,
                     false, 0,
                     new HostingRecord("backup", hostingName),
-                    false, false, false);
+                    ZYGOTE_POLICY_FLAG_SYSTEM_PROCESS, false, false, false);
             if (proc == null) {
                 Slog.e(TAG, "Unable to start backup agent process " + r);
                 return false;
@@ -15964,7 +15997,10 @@ public class ActivityManagerService extends IActivityManager.Stub
                                                 -1);
                                         mProcessList.killPackageProcessesLocked(ssp,
                                                 UserHandle.getAppId(extraUid),
-                                                userId, ProcessList.INVALID_ADJ, "change " + ssp);
+                                                userId, ProcessList.INVALID_ADJ,
+                                                ApplicationExitInfo.REASON_USER_REQUESTED,
+                                                ApplicationExitInfo.SUBREASON_UNKNOWN,
+                                                "change " + ssp);
                                     }
                                     cleanupDisabledPackageComponentsLocked(ssp, userId,
                                             intent.getStringArrayExtra(
@@ -16699,7 +16735,8 @@ public class ActivityManagerService extends IActivityManager.Stub
             }
 
             ProcessRecord app = addAppLocked(ai, defProcess, false, disableHiddenApiChecks,
-                    disableTestApiChecks, mountExtStorageFull, abiOverride);
+                    disableTestApiChecks, mountExtStorageFull, abiOverride,
+                    ZYGOTE_POLICY_FLAG_EMPTY);
             app.setActiveInstrumentation(activeInstr);
             activeInstr.mFinished = false;
             activeInstr.mSourceUid = callingUid;
@@ -17110,6 +17147,7 @@ public class ActivityManagerService extends IActivityManager.Stub
             proc.lastCachedPss = pss;
             proc.lastCachedSwapPss = swapPss;
         }
+        proc.mLastRss = rss;
 
         final SparseArray<Pair<Long, String>> watchUids
                 = mMemWatchProcesses.getMap().get(proc.processName);
@@ -18098,7 +18136,8 @@ public class ActivityManagerService extends IActivityManager.Stub
                 mProcessList.mRemovedProcesses.remove(i);
 
                 if (app.isPersistent()) {
-                    addAppLocked(app.info, null, false, null /* ABI override */);
+                    addAppLocked(app.info, null, false, null /* ABI override */,
+                            ZYGOTE_POLICY_FLAG_BATCH_LAUNCH);
                 }
             }
         }
@@ -18699,7 +18738,10 @@ public class ActivityManagerService extends IActivityManager.Stub
 
                 final int N = procs.size();
                 for (int i = 0; i < N; i++) {
-                    mProcessList.removeProcessLocked(procs.get(i), false, true, "kill all fg");
+                    mProcessList.removeProcessLocked(procs.get(i), false, true,
+                            ApplicationExitInfo.REASON_OTHER,
+                            ApplicationExitInfo.SUBREASON_KILL_ALL_FG,
+                            "kill all fg");
                 }
             }
         }
@@ -18921,7 +18963,8 @@ public class ActivityManagerService extends IActivityManager.Stub
                     final ProcessRecord pr = (ProcessRecord) wpc.mOwner;
                     if (pr.setSchedGroup == ProcessList.SCHED_GROUP_BACKGROUND
                             && pr.curReceivers.isEmpty()) {
-                        pr.kill("remove task", ApplicationExitInfo.REASON_OTHER, true);
+                        pr.kill("remove task", ApplicationExitInfo.REASON_USER_REQUESTED,
+                                ApplicationExitInfo.SUBREASON_UNKNOWN, true);
                     } else {
                         // We delay killing processes that are not in the background or running a
                         // receiver.
@@ -18938,7 +18981,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                         true /* keepIfLarge */);
                 if (proc != null) {
                     mProcessList.removeProcessLocked(proc, false /* callerWillRestart */,
-                            true /* allowRestart */, reason);
+                            true /* allowRestart */,  ApplicationExitInfo.REASON_OTHER, reason);
                 }
             }
         }
@@ -19310,8 +19353,8 @@ public class ActivityManagerService extends IActivityManager.Stub
                     // preempted by other processes before attaching the process of top app.
                     startProcessLocked(processName, info, knownToBeDead, 0 /* intentFlags */,
                             new HostingRecord(hostingType, hostingName, isTop),
-                            false /* allowWhileBooting */, false /* isolated */,
-                            true /* keepIfLarge */);
+                            ZYGOTE_POLICY_FLAG_LATENCY_SENSITIVE, false /* allowWhileBooting */,
+                            false /* isolated */, true /* keepIfLarge */);
                 }
             } finally {
                 Trace.traceEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER);
@@ -19429,7 +19472,7 @@ public class ActivityManagerService extends IActivityManager.Stub
         @Override
         public void showWhileInUseDebugToast(int uid, int op, int mode) {
             synchronized (ActivityManagerService.this) {
-                ActivityManagerService.this.mServices.showWhileInUseDebugNotificationLocked(
+                ActivityManagerService.this.mServices.showWhileInUseDebugToastLocked(
                         uid, op, mode);
             }
         }
@@ -19624,7 +19667,10 @@ public class ActivityManagerService extends IActivityManager.Stub
         try {
             synchronized(this) {
                 mProcessList.killPackageProcessesLocked(packageName, UserHandle.getAppId(pkgUid),
-                        userId, ProcessList.FOREGROUND_APP_ADJ, "dep: " + packageName);
+                        userId, ProcessList.FOREGROUND_APP_ADJ,
+                        ApplicationExitInfo.REASON_DEPENDENCY_DIED,
+                        ApplicationExitInfo.SUBREASON_UNKNOWN,
+                        "dep: " + packageName);
             }
         } finally {
             Binder.restoreCallingIdentity(callingId);

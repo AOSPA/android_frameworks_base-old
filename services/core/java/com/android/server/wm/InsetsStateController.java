@@ -16,15 +16,22 @@
 
 package com.android.server.wm;
 
+import static android.app.WindowConfiguration.WINDOWING_MODE_UNDEFINED;
 import static android.view.InsetsState.ITYPE_CAPTION_BAR;
 import static android.view.InsetsState.ITYPE_IME;
+import static android.view.InsetsState.ITYPE_INVALID;
 import static android.view.InsetsState.ITYPE_NAVIGATION_BAR;
 import static android.view.InsetsState.ITYPE_STATUS_BAR;
 import static android.view.ViewRootImpl.NEW_INSETS_MODE_FULL;
 import static android.view.ViewRootImpl.sNewInsetsMode;
+import static android.view.WindowManager.LayoutParams.TYPE_INPUT_METHOD;
+import static android.view.WindowManager.LayoutParams.TYPE_NAVIGATION_BAR;
+import static android.view.WindowManager.LayoutParams.TYPE_STATUS_BAR;
 
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.app.WindowConfiguration;
+import android.app.WindowConfiguration.WindowingMode;
 import android.util.ArrayMap;
 import android.util.ArraySet;
 import android.util.SparseArray;
@@ -32,6 +39,7 @@ import android.view.InsetsSource;
 import android.view.InsetsSourceControl;
 import android.view.InsetsState;
 import android.view.InsetsState.InternalInsetsType;
+import android.view.WindowManager;
 
 import java.io.PrintWriter;
 import java.util.ArrayList;
@@ -61,8 +69,7 @@ class InsetsStateController {
             w.notifyInsetsChanged();
         }
     };
-    private final InsetsControlTarget mEmptyImeControlTarget = () -> {
-    };
+    private final InsetsControlTarget mEmptyImeControlTarget = new InsetsControlTarget() { };
 
     InsetsStateController(DisplayContent displayContent) {
         mDisplayContent = displayContent;
@@ -70,45 +77,80 @@ class InsetsStateController {
 
     /**
      * When dispatching window state to the client, we'll need to exclude the source that represents
-     * the window that is being dispatched.
+     * the window that is being dispatched. We also need to exclude certain types of insets source
+     * for client within specific windowing modes.
      *
      * @param target The client we dispatch the state to.
      * @return The state stripped of the necessary information.
      */
-    InsetsState getInsetsForDispatch(WindowState target) {
+    InsetsState getInsetsForDispatch(@NonNull WindowState target) {
         final InsetsSourceProvider provider = target.getControllableInsetProvider();
-        if (provider == null) {
-            return mState;
+        final @InternalInsetsType int type = provider != null
+                ? provider.getSource().getType() : ITYPE_INVALID;
+        return getInsetsForTypeAndWindowingMode(type, target.getWindowingMode());
+    }
+
+    InsetsState getInsetsForWindowMetrics(@NonNull WindowManager.LayoutParams attrs) {
+        final @InternalInsetsType int type = getInsetsTypeForWindowType(attrs.type);
+        final WindowToken token = mDisplayContent.getWindowToken(attrs.token);
+        final @WindowingMode int windowingMode = token != null
+                ? token.getWindowingMode() : WINDOWING_MODE_UNDEFINED;
+        return getInsetsForTypeAndWindowingMode(type, windowingMode);
+    }
+
+    private static @InternalInsetsType int getInsetsTypeForWindowType(int type) {
+        switch(type) {
+            case TYPE_STATUS_BAR:
+                return ITYPE_STATUS_BAR;
+            case TYPE_NAVIGATION_BAR:
+                return ITYPE_NAVIGATION_BAR;
+            case TYPE_INPUT_METHOD:
+                return ITYPE_IME;
+            default:
+                return ITYPE_INVALID;
         }
+    }
 
-        final InsetsState state = new InsetsState();
-        state.set(mState);
-        final int type = provider.getSource().getType();
-        state.removeSource(type);
+    /** @see #getInsetsForDispatch */
+    private InsetsState getInsetsForTypeAndWindowingMode(@InternalInsetsType int type,
+            @WindowingMode int windowingMode) {
+        InsetsState state = mState;
 
-        // Navigation bar doesn't get influenced by anything else
-        if (type == ITYPE_NAVIGATION_BAR) {
-            state.removeSource(ITYPE_IME);
-            state.removeSource(ITYPE_STATUS_BAR);
-            state.removeSource(ITYPE_CAPTION_BAR);
-        }
+        if (type != ITYPE_INVALID) {
+            state = new InsetsState(state);
+            state.removeSource(type);
 
-        // Status bar doesn't get influenced by caption bar
-        if (type == ITYPE_STATUS_BAR) {
-            state.removeSource(ITYPE_CAPTION_BAR);
-        }
+            // Navigation bar doesn't get influenced by anything else
+            if (type == ITYPE_NAVIGATION_BAR) {
+                state.removeSource(ITYPE_IME);
+                state.removeSource(ITYPE_STATUS_BAR);
+                state.removeSource(ITYPE_CAPTION_BAR);
+            }
 
-        // IME needs different frames for certain cases (e.g. navigation bar in gesture nav).
-        if (type == ITYPE_IME) {
-            for (int i = mProviders.size() - 1; i >= 0; i--) {
-                InsetsSourceProvider otherProvider = mProviders.valueAt(i);
-                if (otherProvider.overridesImeFrame()) {
-                    InsetsSource override =
-                            new InsetsSource(state.getSource(otherProvider.getSource().getType()));
-                    override.setFrame(otherProvider.getImeOverrideFrame());
-                    state.addSource(override);
+            // Status bar doesn't get influenced by caption bar
+            if (type == ITYPE_STATUS_BAR) {
+                state.removeSource(ITYPE_CAPTION_BAR);
+            }
+
+            // IME needs different frames for certain cases (e.g. navigation bar in gesture nav).
+            if (type == ITYPE_IME) {
+                for (int i = mProviders.size() - 1; i >= 0; i--) {
+                    InsetsSourceProvider otherProvider = mProviders.valueAt(i);
+                    if (otherProvider.overridesImeFrame()) {
+                        InsetsSource override =
+                                new InsetsSource(
+                                        state.getSource(otherProvider.getSource().getType()));
+                        override.setFrame(otherProvider.getImeOverrideFrame());
+                        state.addSource(override);
+                    }
                 }
             }
+        }
+
+        if (WindowConfiguration.isFloating(windowingMode)) {
+            state = new InsetsState(state);
+            state.removeSource(ITYPE_STATUS_BAR);
+            state.removeSource(ITYPE_NAVIGATION_BAR);
         }
 
         return state;

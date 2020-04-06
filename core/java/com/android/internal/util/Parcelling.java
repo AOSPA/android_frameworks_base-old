@@ -167,6 +167,33 @@ public interface Parcelling<T> {
             }
         }
 
+        class ForStringSet implements Parcelling<Set<String>> {
+            @Override
+            public void parcel(Set<String> item, Parcel dest, int parcelFlags) {
+                if (item == null) {
+                    dest.writeInt(-1);
+                } else {
+                    dest.writeInt(item.size());
+                    for (String string : item) {
+                        dest.writeString(string);
+                    }
+                }
+            }
+
+            @Override
+            public Set<String> unparcel(Parcel source) {
+                final int size = source.readInt();
+                if (size < 0) {
+                    return emptySet();
+                }
+                Set<String> set = new ArraySet<>();
+                for (int count = 0; count < size; count++) {
+                    set.add(source.readString());
+                }
+                return set;
+            }
+        }
+
         class ForInternedStringSet implements Parcelling<Set<String>> {
             @Override
             public void parcel(Set<String> item, Parcel dest, int parcelFlags) {
@@ -187,6 +214,33 @@ public interface Parcelling<T> {
                     return emptySet();
                 }
                 Set<String> set = new ArraySet<>();
+                for (int count = 0; count < size; count++) {
+                    set.add(TextUtils.safeIntern(source.readString()));
+                }
+                return set;
+            }
+        }
+
+        class ForInternedStringArraySet implements Parcelling<ArraySet<String>> {
+            @Override
+            public void parcel(ArraySet<String> item, Parcel dest, int parcelFlags) {
+                if (item == null) {
+                    dest.writeInt(-1);
+                } else {
+                    dest.writeInt(item.size());
+                    for (String string : item) {
+                        dest.writeString(string);
+                    }
+                }
+            }
+
+            @Override
+            public ArraySet<String> unparcel(Parcel source) {
+                final int size = source.readInt();
+                if (size < 0) {
+                  return null;
+                }
+                ArraySet<String> set = new ArraySet<>();
                 for (int count = 0; count < size; count++) {
                     set.add(TextUtils.safeIntern(source.readString()));
                 }

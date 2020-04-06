@@ -18,6 +18,7 @@ package android.service.dataloader;
 
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.annotation.RequiresPermission;
 import android.annotation.SystemApi;
 import android.app.Service;
 import android.content.Intent;
@@ -27,8 +28,8 @@ import android.content.pm.FileSystemControlParcel;
 import android.content.pm.IDataLoader;
 import android.content.pm.IDataLoaderStatusListener;
 import android.content.pm.InstallationFile;
+import android.content.pm.InstallationFileParcel;
 import android.content.pm.NamedParcelFileDescriptor;
-import android.os.Bundle;
 import android.os.IBinder;
 import android.os.ParcelFileDescriptor;
 import android.util.ExceptionUtils;
@@ -36,7 +37,6 @@ import android.util.Slog;
 
 import java.io.IOException;
 import java.util.Collection;
-import java.util.List;
 
 /**
  * The base class for implementing data loader service to control data loaders. Expecting
@@ -105,18 +105,11 @@ public abstract class DataLoaderService extends Service {
         private int mId;
 
         @Override
-        public void create(int id, @NonNull Bundle options,
+        public void create(int id, @NonNull DataLoaderParamsParcel params,
+                @NonNull FileSystemControlParcel control,
                 @NonNull IDataLoaderStatusListener listener)
-                throws IllegalArgumentException, RuntimeException {
+                throws RuntimeException {
             mId = id;
-            final DataLoaderParamsParcel params = options.getParcelable("params");
-            if (params == null) {
-                throw new IllegalArgumentException("Must specify data loader params");
-            }
-            final FileSystemControlParcel control = options.getParcelable("control");
-            if (control == null) {
-                throw new IllegalArgumentException("Must specify control parcel");
-            }
             try {
                 if (!nativeCreateDataLoader(id, control, params, listener)) {
                     Slog.e(TAG, "Failed to create native loader for " + mId);
@@ -178,9 +171,9 @@ public abstract class DataLoaderService extends Service {
         }
 
         @Override
-        public void prepareImage(List<InstallationFile> addedFiles, List<String> removedFiles) {
+        public void prepareImage(InstallationFileParcel[] addedFiles, String[] removedFiles) {
             if (!nativePrepareImage(mId, addedFiles, removedFiles)) {
-                Slog.w(TAG, "Failed to destroy loader: " + mId);
+                Slog.w(TAG, "Failed to prepare image for data loader: " + mId);
             }
         }
     }
@@ -214,6 +207,7 @@ public abstract class DataLoaderService extends Service {
          * @throws IOException if trouble opening the file for writing, such as lack of disk space
          *                     or unavailable media.
          */
+        @RequiresPermission(android.Manifest.permission.INSTALL_PACKAGES)
         public void writeData(@NonNull String name, long offsetBytes, long lengthBytes,
                 @NonNull ParcelFileDescriptor incomingFd) throws IOException {
             try {
@@ -240,7 +234,7 @@ public abstract class DataLoaderService extends Service {
     private native boolean nativeDestroyDataLoader(int storageId);
 
     private native boolean nativePrepareImage(int storageId,
-            List<InstallationFile> addedFiles, List<String> removedFiles);
+            InstallationFileParcel[] addedFiles, String[] removedFiles);
 
     private static native void nativeWriteData(long nativeInstance, String name, long offsetBytes,
             long lengthBytes, ParcelFileDescriptor incomingFd);

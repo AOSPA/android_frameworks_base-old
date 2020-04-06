@@ -16,18 +16,15 @@
 
 package android.net.wifi;
 
-import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.SystemApi;
 import android.compat.annotation.UnsupportedAppUsage;
+import android.net.wifi.WifiAnnotations.ChannelWidth;
+import android.net.wifi.WifiAnnotations.WifiStandard;
 import android.os.Parcel;
 import android.os.Parcelable;
 
-import com.android.internal.annotations.VisibleForTesting;
-
-import java.lang.annotation.Retention;
-import java.lang.annotation.RetentionPolicy;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -211,19 +208,19 @@ public class ScanResult implements Parcelable {
 
     /**
      * @hide
-     * Security key management scheme: DPP.
-     */
-    public static final int KEY_MGMT_DPP = 15;
-    /**
-     * @hide
      * Security key management scheme: FILS_SHA256.
      */
-    public static final int KEY_MGMT_FILS_SHA256 = 16;
+    public static final int KEY_MGMT_FILS_SHA256 = 15;
     /**
      * @hide
      * Security key management scheme: FILS_SHA384.
      */
-    public static final int KEY_MGMT_FILS_SHA384 = 17;
+    public static final int KEY_MGMT_FILS_SHA384 = 16;
+    /**
+     * @hide
+     * Security key management scheme: DPP.
+     */
+    public static final int KEY_MGMT_DPP = 17;
     /**
      * @hide
      * No cipher suite.
@@ -320,17 +317,6 @@ public class ScanResult implements Parcelable {
      */
     public static final int WIFI_STANDARD_11AX = 6;
 
-    /** @hide */
-    @IntDef(prefix = { "WIFI_STANDARD_" }, value = {
-            WIFI_STANDARD_UNKNOWN,
-            WIFI_STANDARD_LEGACY,
-            WIFI_STANDARD_11N,
-            WIFI_STANDARD_11AC,
-            WIFI_STANDARD_11AX
-    })
-    @Retention(RetentionPolicy.SOURCE)
-    public @interface WifiStandard{}
-
     /**
      * AP wifi standard.
      */
@@ -375,7 +361,7 @@ public class ScanResult implements Parcelable {
      * {@link #CHANNEL_WIDTH_80MHZ}, {@link #CHANNEL_WIDTH_160MHZ}
      * or {@link #CHANNEL_WIDTH_80MHZ_PLUS_MHZ}.
      */
-    public int channelWidth;
+    public @ChannelWidth int channelWidth;
 
     /**
      * Not used if the AP bandwidth is 20 MHz
@@ -881,19 +867,7 @@ public class ScanResult implements Parcelable {
         }
     }
 
-    /**
-     * Construct an empty scan result.
-     *
-     * Test code has a need to construct a ScanResult in a specific state.
-     * (Note that mocking using Mockito does not work if the object needs to be parceled and
-     * unparceled.)
-     * Export a @SystemApi default constructor to allow tests to construct an empty ScanResult
-     * object. The test can then directly set the fields it cares about.
-     *
-     * @hide
-     */
-    @SystemApi
-    @VisibleForTesting
+    /** Construct an empty scan result. */
     public ScanResult() {
     }
 

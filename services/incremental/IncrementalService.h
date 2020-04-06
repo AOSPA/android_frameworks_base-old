@@ -19,7 +19,6 @@
 #include <android-base/strings.h>
 #include <android-base/unique_fd.h>
 #include <android/content/pm/DataLoaderParamsParcel.h>
-#include <android/os/incremental/IIncrementalManager.h>
 #include <binder/IServiceManager.h>
 #include <utils/String16.h>
 #include <utils/StrongPointer.h>
@@ -31,6 +30,7 @@
 #include <limits>
 #include <map>
 #include <mutex>
+#include <span>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -96,8 +96,7 @@ public:
 
     std::optional<std::future<void>> onSystemReady();
 
-    StorageId createStorage(std::string_view mountPoint,
-                            DataLoaderParamsParcel&& dataLoaderParams,
+    StorageId createStorage(std::string_view mountPoint, DataLoaderParamsParcel&& dataLoaderParams,
                             const DataLoaderStatusListener& dataLoaderStatusListener,
                             CreateOptions options = CreateOptions::Default);
     StorageId createLinkedStorage(std::string_view mountPoint, StorageId linkedStorage,
@@ -133,7 +132,8 @@ public:
                                  std::string_view libDirRelativePath, std::string_view abi);
     class IncrementalDataLoaderListener : public android::content::pm::BnDataLoaderStatusListener {
     public:
-        IncrementalDataLoaderListener(IncrementalService& incrementalService, DataLoaderStatusListener externalListener)
+        IncrementalDataLoaderListener(IncrementalService& incrementalService,
+                                      DataLoaderStatusListener externalListener)
               : incrementalService(incrementalService), externalListener(externalListener) {}
         // Callbacks interface
         binder::Status onStatusChanged(MountId mount, int newStatus) override;
@@ -170,7 +170,7 @@ private:
         std::optional<DataLoaderParamsParcel> savedDataLoaderParams;
         std::atomic<int> nextStorageDirNo{0};
         std::atomic<int> dataLoaderStatus = -1;
-        std::condition_variable dataLoaderReady;
+        bool dataLoaderStartRequested = false;
         TimePoint connectionLostTime = TimePoint();
         const IncrementalService& incrementalService;
 
@@ -206,7 +206,10 @@ private:
                            std::string&& source, std::string&& target, BindKind kind,
                            std::unique_lock<std::mutex>& mainLock);
 
-    bool prepareDataLoader(IncFsMount& ifs, DataLoaderParamsParcel* params = nullptr, const DataLoaderStatusListener* externalListener = nullptr);
+    bool prepareDataLoader(IncFsMount& ifs, DataLoaderParamsParcel* params = nullptr,
+                           const DataLoaderStatusListener* externalListener = nullptr);
+    bool startDataLoader(MountId mountId) const;
+
     BindPathMap::const_iterator findStorageLocked(std::string_view path) const;
     StorageId findStorageId(std::string_view path) const;
 
@@ -218,7 +221,7 @@ private:
 
     // Member variables
     std::unique_ptr<VoldServiceWrapper> mVold;
-    std::unique_ptr<IncrementalManagerWrapper> mIncrementalManager;
+    std::unique_ptr<DataLoaderManagerWrapper> mDataLoaderManager;
     std::unique_ptr<IncFsWrapper> mIncFs;
     const std::string mIncrementalDir;
 

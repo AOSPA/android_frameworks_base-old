@@ -42,7 +42,6 @@ import static android.provider.Settings.Global.DEVELOPMENT_FORCE_RESIZABLE_ACTIV
 import static android.provider.Settings.Global.DEVELOPMENT_RENDER_SHADOWS_IN_COMPOSITOR;
 import static android.view.Display.DEFAULT_DISPLAY;
 import static android.view.Display.INVALID_DISPLAY;
-import static android.view.WindowManager.DOCKED_INVALID;
 import static android.view.WindowManager.LayoutParams.FIRST_APPLICATION_WINDOW;
 import static android.view.WindowManager.LayoutParams.FIRST_SUB_WINDOW;
 import static android.view.WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM;
@@ -59,7 +58,6 @@ import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_IS_ROUNDED_CO
 import static android.view.WindowManager.LayoutParams.SYSTEM_FLAG_HIDE_NON_SYSTEM_OVERLAY_WINDOWS;
 import static android.view.WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY;
 import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION_STARTING;
-import static android.view.WindowManager.LayoutParams.TYPE_DOCK_DIVIDER;
 import static android.view.WindowManager.LayoutParams.TYPE_DREAM;
 import static android.view.WindowManager.LayoutParams.TYPE_INPUT_METHOD;
 import static android.view.WindowManager.LayoutParams.TYPE_INPUT_METHOD_DIALOG;
@@ -215,7 +213,6 @@ import android.view.IDisplayFoldListener;
 import android.view.IDisplayWindowInsetsController;
 import android.view.IDisplayWindowListener;
 import android.view.IDisplayWindowRotationController;
-import android.view.IDockedStackListener;
 import android.view.IInputFilter;
 import android.view.IOnKeyguardExitResult;
 import android.view.IPinnedStackListener;
@@ -1173,10 +1170,9 @@ public class WindowManagerService extends IWindowManager.Stub
         mAnimator = new WindowAnimator(this);
         mRoot = new RootWindowContainer(this);
 
-        mUseBLAST = SystemProperties.getBoolean(
-                    String.join(".", "persist.device_config",
+        mUseBLAST = DeviceConfig.getBoolean(
                     DeviceConfig.NAMESPACE_WINDOW_MANAGER_NATIVE_BOOT,
-                    WM_USE_BLAST_ADAPTER_FLAG), false);
+                    WM_USE_BLAST_ADAPTER_FLAG, false);
 
         mWindowPlacerLocked = new WindowSurfacePlacer(this);
         mTaskSnapshotController = new TaskSnapshotController(this);
@@ -1295,7 +1291,7 @@ public class WindowManagerService extends IWindowManager.Stub
         mConstants.start(new HandlerExecutor(mH));
 
         LocalServices.addService(WindowManagerInternal.class, new LocalService());
-        mEmbeddedWindowController = new EmbeddedWindowController(mGlobalLock);
+        mEmbeddedWindowController = new EmbeddedWindowController(mAtmService);
 
         mDisplayAreaPolicyProvider = DisplayAreaPolicy.Provider.fromResources(
                 mContext.getResources());
@@ -1641,14 +1637,6 @@ public class WindowManagerService extends IWindowManager.Stub
                 }
             }
 
-            // If the window is being added to a stack that's currently adjusted for IME,
-            // make sure to apply the same adjust to this new window.
-            win.applyAdjustForImeIfNeeded();
-
-            if (type == TYPE_DOCK_DIVIDER) {
-                mRoot.getDisplayContent(displayId).getDockedDividerController().setWindow(win);
-            }
-
             final WindowStateAnimator winAnimator = win.mWinAnimator;
             winAnimator.mEnterAnimationPending = true;
             winAnimator.mEnteringAnimation = true;
@@ -1661,23 +1649,8 @@ public class WindowManagerService extends IWindowManager.Stub
                 prepareNoneTransitionForRelaunching(activity);
             }
 
-            final DisplayFrames displayFrames = displayContent.mDisplayFrames;
-            // TODO: Not sure if onDisplayInfoUpdated() call is needed.
-            final DisplayInfo displayInfo = displayContent.getDisplayInfo();
-            displayFrames.onDisplayInfoUpdated(displayInfo,
-                    displayContent.calculateDisplayCutoutForRotation(displayInfo.rotation));
-            final Rect taskBounds;
-            final boolean floatingStack;
-            if (activity != null && activity.getTask() != null) {
-                taskBounds = mTmpRect;
-                tokenActivity.getTask().getBounds(mTmpRect);
-                floatingStack = activity.getTask().isFloating();
-            } else {
-                taskBounds = null;
-                floatingStack = false;
-            }
-            if (displayPolicy.getLayoutHintLw(win.mAttrs, taskBounds, displayFrames, floatingStack,
-                    outFrame, outContentInsets, outStableInsets, outDisplayCutout)) {
+            if (displayPolicy.getLayoutHint(win.mAttrs, token, outFrame, outContentInsets,
+                    outStableInsets, outDisplayCutout)) {
                 res |= WindowManagerGlobal.ADD_FLAG_ALWAYS_CONSUME_SYSTEM_BARS;
             }
             outInsetsState.set(win.getInsetsState(),
@@ -1931,7 +1904,7 @@ public class WindowManagerService extends IWindowManager.Stub
         if (dc.mCurrentFocus == null) {
             dc.mWinRemovedSinceNullFocus.add(win);
         }
-        mEmbeddedWindowController.removeWindowsWithHost(win);
+        mEmbeddedWindowController.onWindowRemoved(win);
         mPendingRemove.remove(win);
         mResizingWindows.remove(win);
         updateNonSystemOverlayWindowsVisibilityIfNeeded(win, false /* surfaceShown */);
@@ -2153,6 +2126,7 @@ public class WindowManagerService extends IWindowManager.Stub
             int privateFlagChanges = 0;
             if (attrs != null) {
                 displayPolicy.adjustWindowParamsLw(win, attrs, pid, uid);
+                win.mToken.adjustWindowParams(win, attrs);
                 // if they don't have the permission, mask out the status bar bits
                 if (seq == win.mSeq) {
                     int systemUiVisibility = attrs.systemUiVisibility
@@ -2477,10 +2451,6 @@ public class WindowManagerService extends IWindowManager.Stub
             // of a transaction to avoid artifacts.
             win.mAnimatingExit = true;
         } else {
-            final DisplayContent displayContent = win.getDisplayContent();
-            if (displayContent.mInputMethodWindow == win) {
-                displayContent.setInputMethodWindowLocked(null);
-            }
             boolean stopped = win.mActivityRecord != null ? win.mActivityRecord.mAppStopped : true;
             // We set mDestroying=true so ActivityRecord#notifyAppStopped in-to destroy surfaces
             // will later actually destroy the surface if we do not do so here. Normally we leave
@@ -2588,11 +2558,18 @@ public class WindowManagerService extends IWindowManager.Stub
     @Override
     public void addWindowToken(IBinder binder, int type, int displayId) {
         addWindowTokenWithOptions(binder, type, displayId, null /* options */,
-                null /* packageName */);
+                null /* packageName */, false /* fromClientToken */);
     }
 
+    @Override
     public int addWindowTokenWithOptions(IBinder binder, int type, int displayId, Bundle options,
             String packageName) {
+        return addWindowTokenWithOptions(binder, type, displayId, options, packageName,
+                true /* fromClientToken */);
+    }
+
+    private int addWindowTokenWithOptions(IBinder binder, int type, int displayId, Bundle options,
+            String packageName, boolean fromClientToken) {
         final boolean callerCanManageAppTokens =
                 checkCallingPermission(MANAGE_APP_TOKENS, "addWindowToken()");
         if (!callerCanManageAppTokens) {
@@ -2633,7 +2610,8 @@ public class WindowManagerService extends IWindowManager.Stub
                 if (type == TYPE_WALLPAPER) {
                     new WallpaperWindowToken(this, binder, true, dc, callerCanManageAppTokens);
                 } else {
-                    new WindowToken(this, binder, type, true, dc, callerCanManageAppTokens);
+                    new WindowToken(this, binder, type, true, dc, callerCanManageAppTokens,
+                            false /* roundedCornerOverlay */, fromClientToken);
                 }
             }
         } finally {
@@ -2812,16 +2790,6 @@ public class WindowManagerService extends IWindowManager.Stub
         if (wtoken != null) {
             wtoken.setMainWindowOpaque(isOpaque);
         }
-    }
-
-    void setDockedStackCreateStateLocked(int mode, Rect bounds) {
-        mDockedStackCreateMode = mode;
-        mDockedStackCreateBounds = bounds;
-    }
-
-    void checkSplitScreenMinimizedChanged(boolean animate) {
-        final DisplayContent displayContent = getDefaultDisplayContentLocked();
-        displayContent.getDockedDividerController().checkMinimizeChanged(animate);
     }
 
     boolean isValidPictureInPictureAspectRatio(DisplayContent displayContent, float aspectRatio) {
@@ -3309,10 +3277,6 @@ public class WindowManagerService extends IWindowManager.Stub
 
             // Notify whether the docked stack exists for the current user
             final DisplayContent displayContent = getDefaultDisplayContentLocked();
-            final ActivityStack stack =
-                    displayContent.getRootSplitScreenPrimaryTask();
-            displayContent.mDividerControllerLocked.notifyDockedStackExistsChanged(
-                    stack != null && stack.hasTaskForUser(newUserId));
 
             mRoot.forAllDisplays(dc -> dc.mAppTransition.setCurrentUser(newUserId));
 
@@ -3658,10 +3622,14 @@ public class WindowManagerService extends IWindowManager.Stub
         return true;
     }
 
-    public TaskSnapshot getTaskSnapshot(int taskId, int userId, boolean reducedResolution,
+    /**
+     * Retrieves a snapshot. If restoreFromDisk equals equals {@code true}, DO NOT HOLD THE WINDOW
+     * MANAGER LOCK WHEN CALLING THIS METHOD!
+     */
+    public TaskSnapshot getTaskSnapshot(int taskId, int userId, boolean isLowResolution,
             boolean restoreFromDisk) {
         return mTaskSnapshotController.getSnapshot(taskId, userId, restoreFromDisk,
-                reducedResolution);
+                isLowResolution);
     }
 
     /**
@@ -4697,7 +4665,7 @@ public class WindowManagerService extends IWindowManager.Stub
         public static final int RESET_ANR_MESSAGE = 38;
         public static final int WALLPAPER_DRAW_PENDING_TIMEOUT = 39;
 
-        public static final int UPDATE_DOCKED_STACK_DIVIDER = 41;
+        public static final int UPDATE_MULTI_WINDOW_STACKS = 41;
 
         public static final int WINDOW_REPLACEMENT_TIMEOUT = 46;
 
@@ -4710,6 +4678,7 @@ public class WindowManagerService extends IWindowManager.Stub
         public static final int RECOMPUTE_FOCUS = 61;
         public static final int ON_POINTER_DOWN_OUTSIDE_FOCUS = 62;
         public static final int LAYOUT_AND_ASSIGN_WINDOW_LAYERS_IF_NEEDED = 63;
+        public static final int WINDOW_STATE_BLAST_SYNC_TIMEOUT = 64;
 
         /**
          * Used to denote that an integer field in a message will not be used.
@@ -4842,7 +4811,7 @@ public class WindowManagerService extends IWindowManager.Stub
                     synchronized (mGlobalLock) {
                         // Since we're holding both mWindowMap and mAnimator we don't need to
                         // hold mAnimator.mLayoutToAnim.
-                        if (mAnimator.isAnimating() || mAnimator.isAnimationScheduled()) {
+                        if (mAnimator.isAnimationScheduled()) {
                             // If we are animating, don't do the gc now but
                             // delay a bit so we don't interrupt the animation.
                             sendEmptyMessageDelayed(H.FORCE_GC, 2000);
@@ -5004,11 +4973,10 @@ public class WindowManagerService extends IWindowManager.Stub
                     }
                     break;
                 }
-                case UPDATE_DOCKED_STACK_DIVIDER: {
+                case UPDATE_MULTI_WINDOW_STACKS: {
                     synchronized (mGlobalLock) {
                         final DisplayContent displayContent = getDefaultDisplayContentLocked();
                         if (displayContent != null) {
-                            displayContent.getDockedDividerController().reevaluateVisibility(false);
                             displayContent.adjustForImeIfNeeded();
                         }
                     }
@@ -5088,6 +5056,13 @@ public class WindowManagerService extends IWindowManager.Stub
                     synchronized (mGlobalLock) {
                         final DisplayContent displayContent = (DisplayContent) msg.obj;
                         displayContent.layoutAndAssignWindowLayersIfNeeded();
+                    }
+                    break;
+                }
+                case WINDOW_STATE_BLAST_SYNC_TIMEOUT: {
+                    synchronized (mGlobalLock) {
+                      final WindowState ws = (WindowState) msg.obj;
+                      ws.finishDrawing(null);
                     }
                     break;
                 }
@@ -6185,7 +6160,7 @@ public class WindowManagerService extends IWindowManager.Stub
                 }
 
                 mRoot.forAllWindows((w) -> {
-                    if ((!visibleOnly || w.mWinAnimator.getShown())
+                    if ((!visibleOnly || w.isVisible())
                             && (!appsOnly || w.mActivityRecord != null)) {
                         windows.add(w);
                     }
@@ -6570,11 +6545,7 @@ public class WindowManagerService extends IWindowManager.Stub
 
     @Override
     public int getDockedStackSide() {
-        synchronized (mGlobalLock) {
-            final ActivityStack dockedStack = getDefaultDisplayContentLocked()
-                    .getRootSplitScreenPrimaryTask();
-            return dockedStack == null ? DOCKED_INVALID : dockedStack.getDockSide();
-        }
+        return 0;
     }
 
     void setDockedStackResizing(boolean resizing) {
@@ -6588,14 +6559,6 @@ public class WindowManagerService extends IWindowManager.Stub
             final DisplayContent dc = getDefaultDisplayContentLocked();
             dc.getDockedDividerController().setTouchRegion(touchRegion);
             dc.updateTouchExcludeRegion();
-        }
-    }
-
-    @Override
-    public void setResizeDimLayer(boolean visible, int targetWindowingMode, float alpha) {
-        synchronized (mGlobalLock) {
-            getDefaultDisplayContentLocked().getDockedDividerController().setResizeDimLayer(
-                    visible, targetWindowingMode, alpha);
         }
     }
 
@@ -6614,17 +6577,6 @@ public class WindowManagerService extends IWindowManager.Stub
 
     static int dipToPixel(int dip, DisplayMetrics displayMetrics) {
         return (int)TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, dip, displayMetrics);
-    }
-
-    @Override
-    public void registerDockedStackListener(IDockedStackListener listener) {
-        mAtmInternal.enforceCallerIsRecentsOrHasPermission(REGISTER_WINDOW_MANAGER_LISTENERS,
-                "registerDockedStackListener()");
-        synchronized (mGlobalLock) {
-            // TODO(multi-display): The listener is registered on the default display only.
-            getDefaultDisplayContentLocked().mDividerControllerLocked.registerDockedStackListener(
-                    listener);
-        }
     }
 
     @Override
@@ -7509,27 +7461,28 @@ public class WindowManagerService extends IWindowManager.Stub
                     return;
                 }
                 imeTarget = imeTarget.getImeControlTarget();
-
-                final int displayId = imeTarget.getDisplayId();
-                mRoot.getDisplayContent(displayId).getInsetsStateController().getImeSourceProvider()
+                imeTarget.getDisplayContent().getInsetsStateController().getImeSourceProvider()
                         .scheduleShowImePostLayout(imeTarget);
             }
         }
 
         @Override
-        public void hideIme(int displayId) {
+        public void hideIme(IBinder imeTargetWindowToken) {
             synchronized (mGlobalLock) {
-                final DisplayContent dc = mRoot.getDisplayContent(displayId);
-                if (dc != null) {
-                    InsetsControlTarget imeControlTarget = dc.mInputMethodControlTarget;
-                    if (imeControlTarget == null) {
-                        return;
-                    }
-                    // If there was a pending IME show(), reset it as IME has been
-                    // requested to be hidden.
-                    dc.getInsetsStateController().getImeSourceProvider().abortShowImePostLayout();
-                    imeControlTarget.hideInsets(WindowInsets.Type.ime(), true /* fromIme */);
+                WindowState imeTarget = mWindowMap.get(imeTargetWindowToken);
+                if (imeTarget == null) {
+                    // The target window no longer exists.
+                    return;
                 }
+                final DisplayContent dc = imeTarget.getImeControlTarget().getDisplayContent();
+                // If there was a pending IME show(), reset it as IME has been
+                // requested to be hidden.
+                dc.getInsetsStateController().getImeSourceProvider().abortShowImePostLayout();
+                if (dc.mInputMethodControlTarget == null) {
+                    return;
+                }
+                dc.mInputMethodControlTarget.hideInsets(
+                        WindowInsets.Type.ime(), true /* fromIme */);
             }
         }
 
@@ -8091,35 +8044,28 @@ public class WindowManagerService extends IWindowManager.Stub
     }
 
     @Override
-    public void getWindowInsets(WindowManager.LayoutParams attrs,
+    public boolean getWindowInsets(WindowManager.LayoutParams attrs,
             int displayId, Rect outContentInsets, Rect outStableInsets,
-            DisplayCutout.ParcelableWrapper displayCutout) {
-        synchronized (mGlobalLock) {
-            final DisplayContent dc = mRoot.getDisplayContentOrCreate(displayId);
-            if (dc == null) {
-                throw new WindowManager.InvalidDisplayException("Display#" + displayId
-                        + "could not be found!");
+            DisplayCutout.ParcelableWrapper outDisplayCutout, InsetsState outInsetsState) {
+        final long origId = Binder.clearCallingIdentity();
+        try {
+            synchronized (mGlobalLock) {
+                final DisplayContent dc = getDisplayContentOrCreate(displayId, attrs.token);
+                if (dc == null) {
+                    throw new WindowManager.InvalidDisplayException("Display#" + displayId
+                            + "could not be found!");
+                }
+                final WindowToken windowToken = dc.getWindowToken(attrs.token);
+                final InsetsStateController insetsStateController =
+                        dc.getInsetsStateController();
+                outInsetsState.set(insetsStateController.getInsetsForWindowMetrics(attrs));
+
+                return dc.getDisplayPolicy().getLayoutHint(attrs, windowToken,
+                        mTmpRect /* outFrame */, outContentInsets, outStableInsets,
+                        outDisplayCutout);
             }
-            final WindowToken windowToken = dc.getWindowToken(attrs.token);
-            final ActivityRecord activity;
-            if (windowToken != null && windowToken.asActivityRecord() != null) {
-                activity = windowToken.asActivityRecord();
-            } else {
-                activity = null;
-            }
-            final Rect taskBounds = new Rect();
-            final boolean floatingStack;
-            if (activity != null && activity.getTask() != null) {
-                final Task task = activity.getTask();
-                task.getBounds(taskBounds);
-                floatingStack = task.isFloating();
-            } else {
-                floatingStack = false;
-            }
-            final DisplayFrames displayFrames = dc.mDisplayFrames;
-            final DisplayPolicy policy = dc.getDisplayPolicy();
-            policy.getLayoutHintLw(attrs, taskBounds, displayFrames, floatingStack,
-                    new Rect(), outContentInsets, outStableInsets, displayCutout);
+        } finally {
+            Binder.restoreCallingIdentity(origId);
         }
     }
 }

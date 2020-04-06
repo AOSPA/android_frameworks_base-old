@@ -716,7 +716,7 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
             }
         };
 
-        mGnssMetrics = new GnssMetrics(mBatteryStats);
+        mGnssMetrics = new GnssMetrics(mContext, mBatteryStats);
         mNtpTimeHelper = new NtpTimeHelper(mContext, mLooper, this);
         GnssSatelliteBlacklistHelper gnssSatelliteBlacklistHelper =
                 new GnssSatelliteBlacklistHelper(mContext,
@@ -809,10 +809,15 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
 
         locationRequest.setProvider(provider);
 
-        // Ignore location settings if in emergency mode.
-        if (isUserEmergency && mNIHandler.getInEmergency()) {
-            locationRequest.setLocationSettingsIgnored(true);
-            durationMillis *= EMERGENCY_LOCATION_UPDATE_DURATION_MULTIPLIER;
+        // Ignore location settings if in emergency mode. This is only allowed for
+        // isUserEmergency request (introduced in HAL v2.0), or DBH request in HAL v1.1.
+        if (mNIHandler.getInEmergency()) {
+            GnssConfiguration.HalInterfaceVersion halVersion =
+                    mGnssConfiguration.getHalInterfaceVersion();
+            if (isUserEmergency || (halVersion.mMajor < 2 && !independentFromGnss)) {
+                locationRequest.setLocationSettingsIgnored(true);
+                durationMillis *= EMERGENCY_LOCATION_UPDATE_DURATION_MULTIPLIER;
+            }
         }
 
         Log.i(TAG,

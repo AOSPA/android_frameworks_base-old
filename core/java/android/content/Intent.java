@@ -26,6 +26,7 @@ import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
 import android.annotation.SdkConstant;
 import android.annotation.SdkConstant.SdkConstantType;
+import android.annotation.SuppressLint;
 import android.annotation.SystemApi;
 import android.annotation.TestApi;
 import android.app.AppGlobals;
@@ -86,6 +87,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
+import java.util.TimeZone;
 
 /**
  * An intent is an abstract description of an operation to be performed.  It
@@ -1881,6 +1883,20 @@ public class Intent implements Parcelable, Cloneable {
             "android.intent.action.MANAGE_PERMISSIONS";
 
     /**
+     * Activity action: Launch UI to manage auto-revoke state.
+     * <p>
+     * Input: {@link #EXTRA_PACKAGE_NAME} specifies the package whose
+     * auto-revoke state will be reviewed (mandatory).
+     * </p>
+     * <p>
+     * Output: Nothing.
+     * </p>
+     */
+    @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
+    public static final String ACTION_AUTO_REVOKE_PERMISSIONS =
+            "android.intent.action.AUTO_REVOKE_PERMISSIONS";
+
+    /**
      * Activity action: Launch UI to review permissions for an app.
      * The system uses this intent if permission review for apps not
      * supporting the new runtime permissions model is enabled. In
@@ -2298,7 +2314,8 @@ public class Intent implements Parcelable, Cloneable {
     /**
      * Broadcast Action: The timezone has changed. The intent will have the following extra values:</p>
      * <ul>
-     *   <li><em>time-zone</em> - The java.util.TimeZone.getID() value identifying the new time zone.</li>
+     *   <li>{@link #EXTRA_TIMEZONE} - The java.util.TimeZone.getID() value identifying the new
+     *   time zone.</li>
      * </ul>
      *
      * <p class="note">This is a protected intent that can only be sent
@@ -4092,8 +4109,6 @@ public class Intent implements Parcelable, Cloneable {
      * @hide
      * @deprecated Use {@link #ACTION_SIM_CARD_STATE_CHANGED}
      */
-    @Deprecated
-    @SystemApi
     public static final String EXTRA_SIM_STATE = "ss";
 
     /**
@@ -4101,8 +4116,6 @@ public class Intent implements Parcelable, Cloneable {
      * @hide
      * @deprecated Use {@link #ACTION_SIM_CARD_STATE_CHANGED}
      */
-    @Deprecated
-    @SystemApi
     public static final String SIM_STATE_UNKNOWN = "UNKNOWN";
 
     /**
@@ -4110,8 +4123,6 @@ public class Intent implements Parcelable, Cloneable {
      * @hide
      * @deprecated Use {@link #ACTION_SIM_CARD_STATE_CHANGED}
      */
-    @Deprecated
-    @SystemApi
     public static final String SIM_STATE_NOT_READY = "NOT_READY";
 
     /**
@@ -4119,8 +4130,6 @@ public class Intent implements Parcelable, Cloneable {
      * @hide
      * @deprecated Use {@link #ACTION_SIM_CARD_STATE_CHANGED}
      */
-    @Deprecated
-    @SystemApi
     public static final String SIM_STATE_ABSENT = "ABSENT";
 
     /**
@@ -4128,8 +4137,6 @@ public class Intent implements Parcelable, Cloneable {
      * @hide
      * @deprecated Use {@link #ACTION_SIM_CARD_STATE_CHANGED}
      */
-    @Deprecated
-    @SystemApi
     public static final String SIM_STATE_PRESENT = "PRESENT";
 
     /**
@@ -4137,8 +4144,6 @@ public class Intent implements Parcelable, Cloneable {
      * @hide
      * @deprecated Use {@link #ACTION_SIM_CARD_STATE_CHANGED}
      */
-    @Deprecated
-    @SystemApi
     static public final String SIM_STATE_CARD_IO_ERROR = "CARD_IO_ERROR";
 
     /**
@@ -4147,8 +4152,6 @@ public class Intent implements Parcelable, Cloneable {
      * @hide
      * @deprecated Use {@link #ACTION_SIM_CARD_STATE_CHANGED}
      */
-    @Deprecated
-    @SystemApi
     static public final String SIM_STATE_CARD_RESTRICTED = "CARD_RESTRICTED";
 
     /**
@@ -4156,8 +4159,6 @@ public class Intent implements Parcelable, Cloneable {
      * @hide
      * @deprecated Use {@link #ACTION_SIM_CARD_STATE_CHANGED}
      */
-    @Deprecated
-    @SystemApi
     public static final String SIM_STATE_LOCKED = "LOCKED";
 
     /**
@@ -4165,8 +4166,6 @@ public class Intent implements Parcelable, Cloneable {
      * @hide
      * @deprecated Use {@link #ACTION_SIM_CARD_STATE_CHANGED}
      */
-    @Deprecated
-    @SystemApi
     public static final String SIM_STATE_READY = "READY";
 
     /**
@@ -4174,8 +4173,6 @@ public class Intent implements Parcelable, Cloneable {
      * @hide
      * @deprecated Use {@link #ACTION_SIM_CARD_STATE_CHANGED}
      */
-    @Deprecated
-    @SystemApi
     public static final String SIM_STATE_IMSI = "IMSI";
 
     /**
@@ -4183,8 +4180,6 @@ public class Intent implements Parcelable, Cloneable {
      * @hide
      * @deprecated Use {@link #ACTION_SIM_CARD_STATE_CHANGED}
      */
-    @Deprecated
-    @SystemApi
     public static final String SIM_STATE_LOADED = "LOADED";
 
     /**
@@ -4199,8 +4194,6 @@ public class Intent implements Parcelable, Cloneable {
      * @hide
      * @deprecated Use {@link #ACTION_SIM_APPLICATION_STATE_CHANGED}
      */
-    @Deprecated
-    @SystemApi
     public static final String EXTRA_SIM_LOCKED_REASON = "reason";
 
     /**
@@ -4208,8 +4201,6 @@ public class Intent implements Parcelable, Cloneable {
      * @hide
      * @deprecated Use {@link #ACTION_SIM_APPLICATION_STATE_CHANGED}
      */
-    @Deprecated
-    @SystemApi
     public static final String SIM_LOCKED_ON_PIN = "PIN";
 
     /**
@@ -4218,8 +4209,6 @@ public class Intent implements Parcelable, Cloneable {
      * @deprecated Use {@link #ACTION_SIM_APPLICATION_STATE_CHANGED}
      */
     /* PUK means ICC is locked on PUK1 */
-    @Deprecated
-    @SystemApi
     public static final String SIM_LOCKED_ON_PUK = "PUK";
 
     /**
@@ -4227,8 +4216,6 @@ public class Intent implements Parcelable, Cloneable {
      * @hide
      * @deprecated Use {@link #ACTION_SIM_APPLICATION_STATE_CHANGED}
      */
-    @Deprecated
-    @SystemApi
     public static final String SIM_LOCKED_NETWORK = "NETWORK";
 
     /**
@@ -4236,8 +4223,6 @@ public class Intent implements Parcelable, Cloneable {
      * @hide
      * @deprecated Use {@link #ACTION_SIM_APPLICATION_STATE_CHANGED}
      */
-    @Deprecated
-    @SystemApi
     public static final String SIM_ABSENT_ON_PERM_DISABLED = "PERM_DISABLED";
 
     /**
@@ -4248,8 +4233,6 @@ public class Intent implements Parcelable, Cloneable {
      * @deprecated Use {@link #ACTION_SIM_CARD_STATE_CHANGED} or
      * {@link #ACTION_SIM_APPLICATION_STATE_CHANGED}
      */
-    @Deprecated
-    @SystemApi
     public static final String EXTRA_REBROADCAST_ON_UNLOCK = "rebroadcastOnUnlock";
 
     /**
@@ -4986,12 +4969,15 @@ public class Intent implements Parcelable, Cloneable {
      *     android:description="@string/shortcut_target_description"
      *     android:summary="@string/shortcut_target_summary"
      *     android:animatedImageDrawable="@drawable/shortcut_target_animated_image"
-     *     android:htmlDescription="@string/shortcut_target_html_description" /&gt;
+     *     android:htmlDescription="@string/shortcut_target_html_description"
+     *     android:settingsActivity="com.example.android.shortcut.target.SettingsActivity" /&gt;
      * </pre>
      * <p>
      * Both description and summary are necessary. The system will ignore the accessibility
      * shortcut target if they are missing. The animated image and html description are supported
-     * to help users understand how to use the shortcut target.
+     * to help users understand how to use the shortcut target. The settings activity is a
+     * component name that allows the user to modify the settings for this accessibility shortcut
+     * target.
      * </p>
      */
     @SdkConstant(SdkConstantType.INTENT_CATEGORY)
@@ -5812,6 +5798,14 @@ public class Intent implements Parcelable, Cloneable {
      * </p>
      */
     public static final String EXTRA_TIME = "android.intent.extra.TIME";
+
+    /**
+     * Extra sent with {@link #ACTION_TIMEZONE_CHANGED} specifying the new time zone of the device.
+     *
+     * <p>Type: String, the same as returned by {@link TimeZone#getID()} to identify time zones.
+     */
+    @SuppressLint("ActionValue")
+    public static final String EXTRA_TIMEZONE = "time-zone";
 
     /**
      * Optional int extra for {@link #ACTION_TIME_CHANGED} that indicates the

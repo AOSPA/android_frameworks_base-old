@@ -359,8 +359,8 @@
   <java-symbol type="bool" name="config_enableMultiUserUI"/>
   <java-symbol type="bool" name="config_enableNewAutoSelectNetworkUI"/>
   <java-symbol type="bool" name="config_disableUsbPermissionDialogs"/>
-  <java-symbol type="dimen" name="config_fullTaskSnapshotScale" />
-  <java-symbol type="dimen" name="config_reducedTaskSnapshotScale" />
+  <java-symbol type="dimen" name="config_highResTaskSnapshotScale" />
+  <java-symbol type="dimen" name="config_lowResTaskSnapshotScale" />
   <java-symbol type="bool" name="config_use16BitTaskSnapshotPixelFormat" />
   <java-symbol type="bool" name="config_hasRecents" />
   <java-symbol type="string" name="config_recentsComponentName" />
@@ -688,7 +688,6 @@
   <java-symbol type="string" name="capability_title_canControlMagnification" />
   <java-symbol type="string" name="capability_desc_canPerformGestures" />
   <java-symbol type="string" name="capability_title_canPerformGestures" />
-  <java-symbol type="string" name="captive_portal_logged_in_detailed" />
   <java-symbol type="string" name="capital_off" />
   <java-symbol type="string" name="capital_on" />
   <java-symbol type="string" name="cfTemplateForwarded" />
@@ -1628,6 +1627,7 @@
   <java-symbol type="style" name="TextAppearance.SlidingTabNormal" />
   <java-symbol type="style" name="Theme.DeviceDefault.Dialog.NoFrame" />
   <java-symbol type="style" name="Theme.IconMenu" />
+  <java-symbol type="style" name="Theme.Dream" />
   <java-symbol type="style" name="Theme.DeviceDefault.VoiceInteractionSession" />
   <java-symbol type="style" name="Pointer" />
   <java-symbol type="style" name="LargePointer" />
@@ -1707,9 +1707,7 @@
   <java-symbol type="dimen" name="docked_stack_divider_insets" />
   <java-symbol type="dimen" name="docked_stack_minimize_thickness" />
   <java-symbol type="dimen" name="pip_minimized_visible_size" />
-  <java-symbol type="dimen" name="pip_fling_deceleration" />
   <java-symbol type="integer" name="config_dockedStackDividerSnapMode" />
-  <java-symbol type="integer" name="config_pictureInPictureSnapMode" />
   <java-symbol type="fraction" name="docked_stack_divider_fixed_ratio" />
   <java-symbol type="fraction" name="thumbnail_fullscreen_scale" />
   <java-symbol type="integer" name="thumbnail_width_tv" />
@@ -1804,6 +1802,8 @@
   <java-symbol type="string" name="bugreport_option_full_title" />
   <java-symbol type="string" name="bugreport_option_interactive_summary" />
   <java-symbol type="string" name="bugreport_option_interactive_title" />
+  <java-symbol type="string" name="bugreport_screenshot_failure_toast" />
+  <java-symbol type="string" name="bugreport_screenshot_success_toast" />
   <java-symbol type="string" name="bugreport_status" />
   <java-symbol type="string" name="bugreport_title" />
   <java-symbol type="string" name="faceunlock_multiple_failures" />
@@ -2025,6 +2025,8 @@
   <java-symbol type="string" name="accessibility_binding_label" />
   <java-symbol type="string" name="adb_active_notification_message" />
   <java-symbol type="string" name="adb_active_notification_title" />
+  <java-symbol type="string" name="adbwifi_active_notification_message" />
+  <java-symbol type="string" name="adbwifi_active_notification_title" />
   <java-symbol type="string" name="test_harness_mode_notification_title" />
   <java-symbol type="string" name="test_harness_mode_notification_message" />
   <java-symbol type="string" name="console_running_notification_title" />
@@ -2171,6 +2173,8 @@
   <java-symbol type="integer" name="config_attentiveWarningDuration" />
   <java-symbol type="string" name="config_customAdbPublicKeyConfirmationComponent" />
   <java-symbol type="string" name="config_customAdbPublicKeyConfirmationSecondaryUserComponent" />
+  <java-symbol type="string" name="config_customAdbWifiNetworkConfirmationComponent" />
+  <java-symbol type="string" name="config_customAdbWifiNetworkConfirmationSecondaryUserComponent" />
   <java-symbol type="string" name="config_customVpnConfirmDialogComponent" />
   <java-symbol type="string" name="config_customVpnAlwaysOnDisconnectedDialogComponent" />
   <java-symbol type="string" name="config_platformVpnConfirmDialogComponent" />
@@ -2747,7 +2751,6 @@
   <java-symbol type="string" name="chooser_no_direct_share_targets" />
   <java-symbol type="drawable" name="chooser_row_layer_list" />
   <java-symbol type="dimen" name="chooser_view_spacing" />
-  <java-symbol type="dimen" name="chooser_target_width" />
   <java-symbol type="dimen" name="chooser_edge_margin_thin" />
   <java-symbol type="dimen" name="chooser_edge_margin_normal" />
   <java-symbol type="dimen" name="chooser_preview_image_font_size"/>
@@ -3065,6 +3068,7 @@
   <!-- Override Wake Key Behavior When Screen is Off -->
   <java-symbol type="bool" name="config_wakeOnDpadKeyPress" />
   <java-symbol type="bool" name="config_wakeOnAssistKeyPress" />
+  <java-symbol type="bool" name="config_wakeOnBackKeyPress" />
 
   <!-- Pinner Service -->
   <java-symbol type="array" name="config_defaultPinnerServiceFiles" />
@@ -3250,22 +3254,33 @@
   <java-symbol type="string" name="config_defaultAccessibilityService" />
   <java-symbol type="string" name="accessibility_shortcut_spoken_feedback" />
 
+  <java-symbol type="string" name="accessibility_select_shortcut_menu_title" />
+  <java-symbol type="string" name="accessibility_edit_shortcut_menu_button_title" />
+  <java-symbol type="string" name="accessibility_edit_shortcut_menu_volume_title" />
+  <java-symbol type="string" name="accessibility_uncheck_legacy_item_warning" />
+
+  <java-symbol type="layout" name="accessibility_enable_service_encryption_warning" />
+  <java-symbol type="id" name="accessibility_permissionDialog_icon" />
+  <java-symbol type="id" name="accessibility_permissionDialog_title" />
+  <java-symbol type="id" name="accessibility_encryption_warning" />
+  <java-symbol type="id" name="accessibility_permission_enable_allow_button" />
+  <java-symbol type="id" name="accessibility_permission_enable_deny_button" />
+  <java-symbol type="string" name="accessibility_enable_service_title" />
+  <java-symbol type="string" name="accessibility_enable_service_encryption_warning" />
+
   <!-- Accessibility Button -->
   <java-symbol type="layout" name="accessibility_button_chooser_item" />
+  <java-symbol type="id" name="accessibility_button_target_checkbox" />
   <java-symbol type="id" name="accessibility_button_target_icon" />
   <java-symbol type="id" name="accessibility_button_target_label" />
-  <java-symbol type="id" name="accessibility_button_target_item_container" />
-  <java-symbol type="id" name="accessibility_button_target_view_item" />
   <java-symbol type="id" name="accessibility_button_target_switch_item" />
   <java-symbol type="string" name="accessibility_magnification_chooser_text" />
   <java-symbol type="string" name="edit_accessibility_shortcut_menu_button" />
-  <java-symbol type="string" name="cancel_accessibility_shortcut_menu_button" />
+  <java-symbol type="string" name="done_accessibility_shortcut_menu_button" />
 
   <java-symbol type="drawable" name="ic_accessibility_color_inversion" />
   <java-symbol type="drawable" name="ic_accessibility_color_correction" />
   <java-symbol type="drawable" name="ic_accessibility_magnification" />
-
-  <java-symbol type="drawable" name="ic_delete_item" />
 
   <!-- com.android.internal.widget.RecyclerView -->
   <java-symbol type="id" name="item_touch_helper_previous_elevation"/>
@@ -3701,7 +3716,7 @@
   <java-symbol type="string" name="config_defaultModuleMetadataProvider" />
 
   <!-- For Secondary Launcher -->
-  <java-symbol type="string" name="config_secondaryHomeComponent" />
+  <java-symbol type="string" name="config_secondaryHomePackage" />
   <java-symbol type="bool" name="config_useSystemProvidedLauncherForSecondary" />
 
   <java-symbol type="string" name="battery_saver_notification_channel_name" />
@@ -3894,28 +3909,34 @@
   <java-symbol type="color" name="resolver_tabs_active_color" />
   <java-symbol type="color" name="resolver_tabs_inactive_color" />
   <java-symbol type="string" name="resolver_personal_tab" />
+  <java-symbol type="string" name="resolver_personal_tab_accessibility" />
   <java-symbol type="string" name="resolver_work_tab" />
+  <java-symbol type="string" name="resolver_work_tab_accessibility" />
   <java-symbol type="id" name="stub" />
   <java-symbol type="id" name="resolver_empty_state" />
   <java-symbol type="id" name="resolver_empty_state_icon" />
   <java-symbol type="id" name="resolver_empty_state_title" />
   <java-symbol type="id" name="resolver_empty_state_subtitle" />
   <java-symbol type="id" name="resolver_empty_state_button" />
+  <java-symbol type="id" name="resolver_empty_state_progress" />
   <java-symbol type="id" name="resolver_tab_divider" />
   <java-symbol type="string" name="resolver_cant_share_with_work_apps" />
   <java-symbol type="string" name="resolver_cant_share_with_personal_apps" />
   <java-symbol type="string" name="resolver_cant_share_cross_profile_explanation" />
-  <java-symbol type="string" name="resolver_turn_on_work_apps" />
-  <java-symbol type="string" name="resolver_turn_on_work_apps_explanation" />
+  <java-symbol type="string" name="resolver_cant_access_work_apps" />
+  <java-symbol type="string" name="resolver_cant_access_work_apps_explanation" />
+  <java-symbol type="string" name="resolver_cant_access_personal_apps" />
+  <java-symbol type="string" name="resolver_cant_access_personal_apps_explanation" />
+  <java-symbol type="string" name="resolver_turn_on_work_apps_view" />
+  <java-symbol type="string" name="resolver_turn_on_work_apps_share" />
   <java-symbol type="string" name="resolver_no_apps_available" />
-  <java-symbol type="string" name="resolver_no_apps_available_explanation" />
-  <java-symbol type="string" name="resolver_no_apps_available_explanation" />
   <java-symbol type="string" name="resolver_switch_on_work" />
   <java-symbol type="drawable" name="ic_work_apps_off" />
   <java-symbol type="drawable" name="ic_sharing_disabled" />
   <java-symbol type="drawable" name="ic_no_apps" />
   <java-symbol type="dimen" name="resolver_empty_state_height" />
   <java-symbol type="dimen" name="resolver_empty_state_height_with_tabs" />
+  <java-symbol type="dimen" name="resolver_max_collapsed_height_with_tabs" />
   <java-symbol type="bool" name="sharesheet_show_content_preview" />
 
   <!-- Toast message for background started foreground service while-in-use permission restriction feature -->
@@ -3927,6 +3948,15 @@
   <java-symbol type="bool" name="config_expandLockScreenUserSwitcher" />
 
   <java-symbol type="string" name="loading" />
+
+  <java-symbol type="array" name="config_toastCrossUserPackages" />
+
+  <java-symbol type="string" name="notification_history_title_placeholder" />
+
+  <java-symbol type="string" name="config_customMediaKeyDispatcher" />
+  <java-symbol type="string" name="config_customSessionPolicyProvider" />
+  <!-- The max scale for the wallpaper when it's zoomed in -->
+  <java-symbol type="dimen" name="config_wallpaperMaxScale"/>
 
   <!-- For Pdn throttle feature -->
   <java-symbol type="bool" name="config_pdp_retry_for_29_33_55_enabled" />

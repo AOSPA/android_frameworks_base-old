@@ -58,6 +58,7 @@ import static android.provider.Settings.Secure.USER_SETUP_COMPLETE;
 import static android.view.Display.DEFAULT_DISPLAY;
 import static android.view.Display.INVALID_DISPLAY;
 import static android.view.SurfaceControl.METADATA_TASK_ID;
+import static android.view.WindowManager.TRANSIT_TASK_CHANGE_WINDOWING_MODE;
 
 import static com.android.internal.policy.DecorView.DECOR_SHADOW_FOCUSED_HEIGHT_IN_DIP;
 import static com.android.internal.policy.DecorView.DECOR_SHADOW_UNFOCUSED_HEIGHT_IN_DIP;
@@ -78,9 +79,13 @@ import static com.android.server.wm.ActivityTaskManagerDebugConfig.TAG_ATM;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.TAG_WITH_CLASS_NAME;
 import static com.android.server.wm.ActivityTaskManagerService.TAG_STACK;
 import static com.android.server.wm.DragResizeMode.DRAG_RESIZE_MODE_DOCKED_DIVIDER;
+import static com.android.server.wm.IdentifierProto.HASH_CODE;
+import static com.android.server.wm.IdentifierProto.TITLE;
+import static com.android.server.wm.IdentifierProto.USER_ID;
 import static com.android.server.wm.ProtoLogGroup.WM_DEBUG_ADD_REMOVE;
 import static com.android.server.wm.WindowContainer.AnimationFlags.CHILDREN;
 import static com.android.server.wm.WindowContainer.AnimationFlags.TRANSITION;
+import static com.android.server.wm.WindowContainerChildProto.TASK;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_STACK;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_TASK_MOVEMENT;
 import static com.android.server.wm.WindowManagerDebugConfig.TAG_WM;
@@ -119,10 +124,13 @@ import android.os.Trace;
 import android.os.UserHandle;
 import android.provider.Settings;
 import android.service.voice.IVoiceInteractionSession;
+import android.util.ArraySet;
 import android.util.DisplayMetrics;
 import android.util.Slog;
+import android.util.proto.ProtoOutputStream;
 import android.view.DisplayInfo;
 import android.view.ITaskOrganizer;
+import android.view.RemoteAnimationAdapter;
 import android.view.RemoteAnimationTarget;
 import android.view.Surface;
 import android.view.SurfaceControl;
@@ -574,10 +582,10 @@ class Task extends WindowContainer<WindowContainer> {
     }
 
     Task reuseAsLeafTask(IVoiceInteractionSession _voiceSession, IVoiceInteractor _voiceInteractor,
-            ActivityInfo info, ActivityRecord activity) {
+            Intent intent, ActivityInfo info, ActivityRecord activity) {
         voiceSession = _voiceSession;
         voiceInteractor = _voiceInteractor;
-        setIntent(activity);
+        setIntent(activity, intent, info);
         setMinDimensions(info);
         return this;
     }
@@ -896,11 +904,11 @@ class Task extends WindowContainer<WindowContainer> {
     /**
      * DO NOT HOLD THE ACTIVITY MANAGER LOCK WHEN CALLING THIS METHOD!
      */
-    TaskSnapshot getSnapshot(boolean reducedResolution, boolean restoreFromDisk) {
+    TaskSnapshot getSnapshot(boolean isLowResolution, boolean restoreFromDisk) {
 
         // TODO: Move this to {@link TaskWindowContainerController} once recent tasks are more
         // synchronized between AM and WM.
-        return mAtmService.mWindowManager.getTaskSnapshot(mTaskId, mUserId, reducedResolution,
+        return mAtmService.mWindowManager.getTaskSnapshot(mTaskId, mUserId, isLowResolution,
                 restoreFromDisk);
     }
 
@@ -912,12 +920,23 @@ class Task extends WindowContainer<WindowContainer> {
         return SystemClock.elapsedRealtime() - lastActiveTime;
     }
 
-    /** Sets the original intent, and the calling uid and package. */
+    /** @see #setIntent(ActivityRecord, Intent, ActivityInfo) */
     void setIntent(ActivityRecord r) {
+        setIntent(r, null /* intent */, null /* info */);
+    }
+
+    /**
+     * Sets the original intent, and the calling uid and package.
+     *
+     * @param r The activity that started the task
+     * @param intent The task info which could be different from {@code r.intent} if set.
+     * @param info The activity info which could be different from {@code r.info} if set.
+     */
+    void setIntent(ActivityRecord r, @Nullable Intent intent, @Nullable ActivityInfo info) {
         mCallingUid = r.launchedFromUid;
         mCallingPackage = r.launchedFromPackage;
         mCallingFeatureId = r.launchedFromFeatureId;
-        setIntent(r.intent, r.info);
+        setIntent(intent != null ? intent : r.intent, info != null ? info : r.info);
         setLockTaskAuth(r);
 
         final WindowContainer parent = getParent();
@@ -1731,8 +1750,8 @@ class Task extends WindowContainer<WindowContainer> {
             if (td.getLabel() == null) {
                 td.setLabel(atd.getLabel());
             }
-            if (td.getIconResource() == 0) {
-                td.setIcon(atd.getIconResource());
+            if (td.getRawIcon() == null) {
+                td.setIcon(atd.getRawIcon());
             }
             if (td.getIconFilename() == null) {
                 td.setIconFilename(atd.getIconFilename());
@@ -1884,11 +1903,19 @@ class Task extends WindowContainer<WindowContainer> {
                     .setBounds(mLastNonFullscreenBounds);
         }
 
+        final int prevWinMode = getWindowingMode();
+        mTmpPrevBounds.set(getBounds());
         final boolean wasInMultiWindowMode = inMultiWindowMode();
         super.onConfigurationChanged(newParentConfig);
         if (wasInMultiWindowMode != inMultiWindowMode()) {
             mStackSupervisor.scheduleUpdateMultiWindowMode(this);
             updateShadowsRadius(isFocused(), getPendingTransaction());
+        }
+
+        final int newWinMode = getWindowingMode();
+        if ((prevWinMode != newWinMode) && (mDisplayContent != null)
+                && shouldStartChangeTransition(prevWinMode, newWinMode)) {
+            initializeChangeTransition(mTmpPrevBounds);
         }
 
         // If the configuration supports persistent bounds (eg. Freeform), keep track of the
@@ -1902,6 +1929,63 @@ class Task extends WindowContainer<WindowContainer> {
         // TODO: Should also take care of Pip mode changes here.
 
         saveLaunchingStateIfNeeded();
+    }
+
+    /**
+     * Initializes a change transition. See {@link SurfaceFreezer} for more information.
+     */
+    private void initializeChangeTransition(Rect startBounds) {
+        mDisplayContent.prepareAppTransition(TRANSIT_TASK_CHANGE_WINDOWING_MODE,
+                false /* alwaysKeepCurrent */, 0, false /* forceOverride */);
+        mDisplayContent.mChangingContainers.add(this);
+
+        mSurfaceFreezer.freeze(getPendingTransaction(), startBounds);
+    }
+
+    private boolean shouldStartChangeTransition(int prevWinMode, int newWinMode) {
+        if (mWmService.mDisableTransitionAnimation
+                || !isVisible()
+                || getDisplayContent().mAppTransition.isTransitionSet()
+                || getSurfaceControl() == null) {
+            return false;
+        }
+        // Only do an animation into and out-of freeform mode for now. Other mode
+        // transition animations are currently handled by system-ui.
+        return (prevWinMode == WINDOWING_MODE_FREEFORM) != (newWinMode == WINDOWING_MODE_FREEFORM);
+    }
+
+    @VisibleForTesting
+    boolean isInChangeTransition() {
+        return mSurfaceFreezer.hasLeash() || AppTransition.isChangeTransit(mTransit);
+    }
+
+    @Override
+    public SurfaceControl getFreezeSnapshotTarget() {
+        final int transit = mDisplayContent.mAppTransition.getAppTransition();
+        if (!AppTransition.isChangeTransit(transit)) {
+            return null;
+        }
+        // Skip creating snapshot if this transition is controlled by a remote animator which
+        // doesn't need it.
+        final ArraySet<Integer> activityTypes = new ArraySet<>();
+        activityTypes.add(getActivityType());
+        final RemoteAnimationAdapter adapter =
+                mDisplayContent.mAppTransitionController.getRemoteAnimationOverride(
+                        this, transit, activityTypes);
+        if (adapter != null && !adapter.getChangeNeedsSnapshot()) {
+            return null;
+        }
+        return getSurfaceControl();
+    }
+
+    @Override
+    void writeIdentifierToProto(ProtoOutputStream proto, long fieldId) {
+        final long token = proto.start(fieldId);
+        proto.write(HASH_CODE, System.identityHashCode(this));
+        proto.write(USER_ID, mUserId);
+        proto.write(TITLE, intent != null && intent.getComponent() != null
+                ? intent.getComponent().flattenToShortString() : "Task");
+        proto.end(token);
     }
 
     /**
@@ -2036,21 +2120,30 @@ class Task extends WindowContainer<WindowContainer> {
         intersectWithInsetsIfFits(outStableBounds, mTmpBounds, mTmpInsets);
     }
 
-    /**
-     * Asks docked-divider controller for the smallestwidthdp given bounds.
-     * @param bounds bounds to calculate smallestwidthdp for.
-     */
-    private int getSmallestScreenWidthDpForDockedBounds(Rect bounds) {
-        DisplayContent dc = getDisplayContent();
-        if (dc != null) {
-            return dc.getDockedDividerController().getSmallestWidthDpForBounds(bounds);
+    void computeConfigResourceOverrides(@NonNull Configuration inOutConfig,
+            @NonNull Configuration parentConfig, @Nullable DisplayInfo overrideDisplayInfo) {
+        if (overrideDisplayInfo != null) {
+            // Make sure the screen related configs can be computed by the provided display info.
+            inOutConfig.windowConfiguration.setAppBounds(null);
+            inOutConfig.screenLayout = Configuration.SCREENLAYOUT_UNDEFINED;
+            inOutConfig.screenWidthDp = Configuration.SCREEN_WIDTH_DP_UNDEFINED;
+            inOutConfig.screenHeightDp = Configuration.SCREEN_HEIGHT_DP_UNDEFINED;
         }
-        return Configuration.SMALLEST_SCREEN_WIDTH_DP_UNDEFINED;
+        computeConfigResourceOverrides(inOutConfig, parentConfig, overrideDisplayInfo,
+                null /* compatInsets */);
     }
 
     void computeConfigResourceOverrides(@NonNull Configuration inOutConfig,
             @NonNull Configuration parentConfig) {
-        computeConfigResourceOverrides(inOutConfig, parentConfig, null /* compatInsets */);
+        computeConfigResourceOverrides(inOutConfig, parentConfig, null /* overrideDisplayInfo */,
+                null /* compatInsets */);
+    }
+
+    void computeConfigResourceOverrides(@NonNull Configuration inOutConfig,
+            @NonNull Configuration parentConfig,
+            @Nullable ActivityRecord.CompatDisplayInsets compatInsets) {
+        computeConfigResourceOverrides(inOutConfig, parentConfig, null /* overrideDisplayInfo */,
+                compatInsets);
     }
 
     /**
@@ -2062,7 +2155,7 @@ class Task extends WindowContainer<WindowContainer> {
      * just be inherited from the parent configuration.
      **/
     void computeConfigResourceOverrides(@NonNull Configuration inOutConfig,
-            @NonNull Configuration parentConfig,
+            @NonNull Configuration parentConfig, @Nullable DisplayInfo overrideDisplayInfo,
             @Nullable ActivityRecord.CompatDisplayInsets compatInsets) {
         int windowingMode = inOutConfig.windowConfiguration.getWindowingMode();
         if (windowingMode == WINDOWING_MODE_UNDEFINED) {
@@ -2105,9 +2198,11 @@ class Task extends WindowContainer<WindowContainer> {
             if (insideParentBounds && WindowConfiguration.isFloating(windowingMode)) {
                 mTmpNonDecorBounds.set(mTmpFullBounds);
                 mTmpStableBounds.set(mTmpFullBounds);
-            } else if (insideParentBounds && getDisplayContent() != null) {
-                final DisplayInfo di = new DisplayInfo();
-                getDisplayContent().mDisplay.getDisplayInfo(di);
+            } else if (insideParentBounds
+                    && (overrideDisplayInfo != null || getDisplayContent() != null)) {
+                final DisplayInfo di = overrideDisplayInfo != null
+                        ? overrideDisplayInfo
+                        : getDisplayContent().getDisplayInfo();
 
                 // For calculating screenWidthDp, screenWidthDp, we use the stable inset screen
                 // area, i.e. the screen area without the system bars.
@@ -2124,7 +2219,7 @@ class Task extends WindowContainer<WindowContainer> {
                 if (rotation != ROTATION_UNDEFINED && compatInsets != null) {
                     mTmpNonDecorBounds.set(mTmpFullBounds);
                     mTmpStableBounds.set(mTmpFullBounds);
-                    compatInsets.getDisplayBoundsByRotation(mTmpBounds, rotation);
+                    compatInsets.getBoundsByRotation(mTmpBounds, rotation);
                     intersectWithInsetsIfFits(mTmpNonDecorBounds, mTmpBounds,
                             compatInsets.mNonDecorInsets[rotation]);
                     intersectWithInsetsIfFits(mTmpStableBounds, mTmpBounds,
@@ -2614,11 +2709,21 @@ class Task extends WindowContainer<WindowContainer> {
         if (!isRootTask) {
             adjustBoundsForDisplayChangeIfNeeded(dc);
         }
+        final DisplayContent prevDc = mDisplayContent;
         super.onDisplayChanged(dc);
         if (!isRootTask) {
             final int displayId = (dc != null) ? dc.getDisplayId() : INVALID_DISPLAY;
             mWmService.mAtmService.getTaskChangeNotificationController().notifyTaskDisplayChanged(
                     mTaskId, displayId);
+        }
+        if (prevDc != null && prevDc.mChangingContainers.remove(this)) {
+            // This gets called *after* this has been reparented to the new display.
+            // That reparenting resulted in this window changing modes (eg. FREEFORM -> FULLSCREEN),
+            // so this token is now "frozen" while waiting for the animation to start on prevDc
+            // (which will be cancelled since the window is no-longer a child). However, since this
+            // is no longer a child of prevDc, this won't be notified of the cancelled animation,
+            // so we need to cancel the change transition here.
+            mSurfaceFreezer.unfreeze(getPendingTransaction());
         }
     }
 
@@ -2908,8 +3013,7 @@ class Task extends WindowContainer<WindowContainer> {
      * we will have a jump at the end.
      */
     boolean isFloating() {
-        return getWindowConfiguration().tasksAreFloating()
-                && !getStack().isAnimatingBoundsToFullscreen() && !mPreserveNonFloatingState;
+        return getWindowConfiguration().tasksAreFloating() && !mPreserveNonFloatingState;
     }
 
     /**
@@ -3011,20 +3115,16 @@ class Task extends WindowContainer<WindowContainer> {
         return forAllTasks((t) -> { return t != this && t.isTaskAnimating(); });
     }
 
-    /**
-     * @return {@code true} if changing app transition is running.
-     */
-    @Override
-    boolean isChangingAppTransition() {
-        final ActivityRecord activity = getTopVisibleActivity();
-        return activity != null && getDisplayContent().mChangingApps.contains(activity);
-    }
-
     @Override
     RemoteAnimationTarget createRemoteAnimationTarget(
             RemoteAnimationController.RemoteAnimationRecord record) {
         final ActivityRecord activity = getTopMostActivity();
         return activity != null ? activity.createRemoteAnimationTarget(record) : null;
+    }
+
+    @Override
+    boolean canCreateRemoteAnimationTarget() {
+        return true;
     }
 
     WindowState getTopVisibleAppMainWindow() {
@@ -3221,8 +3321,8 @@ class Task extends WindowContainer<WindowContainer> {
     }
 
     /**
-     * Fills in a {@link TaskInfo} with information from this task.
-     * @param info the {@link TaskInfo} to fill in
+     * Fills in a {@link TaskInfo} with information from this task. Note that the base intent in the
+     * task info will not include any extras or clip data.
      */
     void fillTaskInfo(TaskInfo info) {
         getNumRunningActivities(mReuseActivitiesReport);
@@ -3234,7 +3334,7 @@ class Task extends WindowContainer<WindowContainer> {
         final Intent baseIntent = getBaseIntent();
         // Make a copy of base intent because this is like a snapshot info.
         // Besides, {@link RecentTasks#getRecentTasksImpl} may modify it.
-        info.baseIntent = baseIntent == null ? new Intent() : new Intent(baseIntent);
+        info.baseIntent = baseIntent == null ? new Intent() : baseIntent.cloneFilter();
         info.baseActivity = mReuseActivitiesReport.base != null
                 ? mReuseActivitiesReport.base.intent.getComponent()
                 : null;
@@ -3576,16 +3676,16 @@ class Task extends WindowContainer<WindowContainer> {
         sTaskFactory = factory;
     }
 
+    static Task create(ActivityTaskManagerService service, int taskId, int activityType,
+            ActivityInfo info, Intent intent) {
+        return getTaskFactory().create(service, taskId, activityType, info, intent);
+    }
+
     static Task create(ActivityTaskManagerService service, int taskId, ActivityInfo info,
             Intent intent, IVoiceInteractionSession voiceSession,
             IVoiceInteractor voiceInteractor, ActivityStack stack) {
         return getTaskFactory().create(
                 service, taskId, info, intent, voiceSession, voiceInteractor, stack);
-    }
-
-    static Task create(ActivityTaskManagerService service, int taskId, ActivityInfo info,
-            Intent intent, TaskDescription taskDescription, ActivityStack stack) {
-        return getTaskFactory().create(service, taskId, info, intent, taskDescription, stack);
     }
 
     static Task restoreFromXml(XmlPullParser in, ActivityStackSupervisor stackSupervisor)
@@ -3599,18 +3699,16 @@ class Task extends WindowContainer<WindowContainer> {
      * {@link #setTaskFactory(TaskFactory)}.
      */
     static class TaskFactory {
+        Task create(ActivityTaskManagerService service, int taskId, int activityType,
+                ActivityInfo info, Intent intent) {
+            return new ActivityStack(service, taskId, activityType, info, intent);
+        }
 
         Task create(ActivityTaskManagerService service, int taskId, ActivityInfo info,
                 Intent intent, IVoiceInteractionSession voiceSession,
                 IVoiceInteractor voiceInteractor, ActivityStack stack) {
             return new ActivityStack(service, taskId, info, intent, voiceSession, voiceInteractor,
                     null /*taskDescription*/, stack);
-        }
-
-        Task create(ActivityTaskManagerService service, int taskId, ActivityInfo info,
-                Intent intent, TaskDescription taskDescription, ActivityStack stack) {
-            return new ActivityStack(service, taskId, info, intent, null /*voiceSession*/,
-                    null /*voiceInteractor*/, taskDescription, stack);
         }
 
         /**
@@ -3770,13 +3868,12 @@ class Task extends WindowContainer<WindowContainer> {
                         persistTaskVersion = Integer.parseInt(attrValue);
                         break;
                     default:
-                        if (attrName.startsWith(TaskDescription.ATTR_TASKDESCRIPTION_PREFIX)) {
-                            taskDescription.restoreFromXml(attrName, attrValue);
-                        } else {
+                        if (!attrName.startsWith(TaskDescription.ATTR_TASKDESCRIPTION_PREFIX)) {
                             Slog.w(TAG, "Task: Unknown attribute=" + attrName);
                         }
                 }
             }
+            taskDescription.restoreFromXml(in);
 
             int event;
             while (((event = in.next()) != XmlPullParser.END_DOCUMENT)
@@ -3874,12 +3971,12 @@ class Task extends WindowContainer<WindowContainer> {
 
     boolean isControlledByTaskOrganizer() {
         final Task rootTask = getRootTask();
-        return rootTask == this && rootTask.mTaskOrganizer != null
-                // TODO(task-hierarchy): Figure out how to control nested tasks.
-                // For now, if this is in a tile let WM drive.
-                && !(rootTask instanceof TaskTile)
-                && !(rootTask instanceof ActivityStack
-                        && ((ActivityStack) rootTask).getTile() != null);
+        // if the rootTask is a "child" of a tile, then don't consider it a root task.
+        // TODO: remove this along with removing tile.
+        if (((ActivityStack) rootTask).getTile() != null) {
+            return false;
+        }
+        return rootTask == this && rootTask.mTaskOrganizer != null;
     }
 
     @Override
@@ -4025,4 +4122,17 @@ class Task extends WindowContainer<WindowContainer> {
     SurfaceControl.Transaction getMainWindowSizeChangeTransaction() {
         return mMainWindowSizeChangeTransaction;
     }
+
+    void setActivityWindowingMode(int windowingMode) {
+        PooledConsumer c = PooledLambda.obtainConsumer(ActivityRecord::setWindowingMode,
+            PooledLambda.__(ActivityRecord.class), windowingMode);
+        forAllActivities(c);
+        c.recycle();
+    }
+
+    @Override
+    long getProtoFieldId() {
+        return TASK;
+    }
+
 }

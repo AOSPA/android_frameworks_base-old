@@ -6607,6 +6607,16 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
         return mTransformation instanceof PasswordTransformationMethod;
     }
 
+    /**
+     * Returns true if the current inputType is any type of password.
+     *
+     * @hide
+     */
+    public boolean isAnyPasswordInputType() {
+        final int inputType = getInputType();
+        return isPasswordInputType(inputType) || isVisiblePasswordInputType(inputType);
+    }
+
     static boolean isPasswordInputType(int inputType) {
         final int variation =
                 inputType & (EditorInfo.TYPE_MASK_CLASS | EditorInfo.TYPE_MASK_VARIATION);
@@ -11763,13 +11773,8 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
             if (isTextEditable() && isFocused()) {
                 CharSequence imeActionLabel = mContext.getResources().getString(
                         com.android.internal.R.string.keyboardview_keycode_enter);
-                if (getImeActionId() != 0 && getImeActionLabel() != null) {
+                if (getImeActionLabel() != null) {
                     imeActionLabel = getImeActionLabel();
-                    final int imeActionId = getImeActionId();
-                    // put ime action id into the extra data with ACTION_ARGUMENT_IME_ACTION_ID_INT.
-                    final Bundle argument = info.getExtras();
-                    argument.putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_IME_ACTION_ID_INT,
-                            imeActionId);
                 }
                 AccessibilityNodeInfo.AccessibilityAction action =
                         new AccessibilityNodeInfo.AccessibilityAction(
@@ -11881,7 +11886,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
         if (extraDataKey.equals(AccessibilityNodeInfo.EXTRA_DATA_RENDERING_INFO_KEY)) {
             final AccessibilityNodeInfo.ExtraRenderingInfo extraRenderingInfo =
                     AccessibilityNodeInfo.ExtraRenderingInfo.obtain();
-            extraRenderingInfo.setLayoutParams(getLayoutParams().width, getLayoutParams().height);
+            extraRenderingInfo.setLayoutSize(getLayoutParams().width, getLayoutParams().height);
             extraRenderingInfo.setTextSizeInPx(getTextSize());
             extraRenderingInfo.setTextSizeUnit(getTextSizeUnit());
             info.setExtraRenderingInfo(extraRenderingInfo);
@@ -12100,13 +12105,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
             } return true;
             case R.id.accessibilityActionImeEnter: {
                 if (isFocused() && isTextEditable()) {
-                    final int imeActionId = (arguments != null) ? arguments.getInt(
-                            AccessibilityNodeInfo.ACTION_ARGUMENT_IME_ACTION_ID_INT,
-                            EditorInfo.IME_ACTION_UNSPECIFIED)
-                            : EditorInfo.IME_ACTION_UNSPECIFIED;
-                    if (imeActionId == getImeActionId()) {
-                        onEditorAction(imeActionId);
-                    }
+                    onEditorAction(getImeActionId());
                 }
             } return true;
             default: {
@@ -13174,7 +13173,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
         stream.addProperty("text:selectionStart", getSelectionStart());
         stream.addProperty("text:selectionEnd", getSelectionEnd());
         stream.addProperty("text:curTextColor", mCurTextColor);
-        stream.addProperty("text:text", mText == null ? null : mText.toString());
+        stream.addUserProperty("text:text", mText == null ? null : mText.toString());
         stream.addProperty("text:gravity", mGravity);
     }
 

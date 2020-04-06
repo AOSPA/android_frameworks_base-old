@@ -94,6 +94,7 @@ public class BubbleExpandedView extends LinearLayout implements View.OnClickList
 
     private Point mDisplaySize;
     private int mMinHeight;
+    private int mOverflowHeight;
     private int mSettingsIconHeight;
     private int mPointerWidth;
     private int mPointerHeight;
@@ -218,6 +219,7 @@ public class BubbleExpandedView extends LinearLayout implements View.OnClickList
         mWindowManager.getDefaultDisplay().getRealSize(mDisplaySize);
         Resources res = getResources();
         mMinHeight = res.getDimensionPixelSize(R.dimen.bubble_expanded_default_height);
+        mOverflowHeight = res.getDimensionPixelSize(R.dimen.bubble_overflow_height);
         mPointerMargin = res.getDimensionPixelSize(R.dimen.bubble_pointer_margin);
         mExpandedViewTouchSlop = res.getDimensionPixelSize(R.dimen.bubble_expanded_view_slop);
     }
@@ -241,7 +243,7 @@ public class BubbleExpandedView extends LinearLayout implements View.OnClickList
         mPointerView.setVisibility(INVISIBLE);
 
         mSettingsIconHeight = getContext().getResources().getDimensionPixelSize(
-                R.dimen.bubble_settings_size);
+                R.dimen.bubble_manage_button_height);
         mSettingsIcon = findViewById(R.id.settings_button);
         mSettingsIcon.setOnClickListener(this);
 
@@ -306,7 +308,14 @@ public class BubbleExpandedView extends LinearLayout implements View.OnClickList
         mKeyboardVisible = false;
         mNeedsNewHeight = false;
         if (mActivityView != null) {
-            mActivityView.setForwardedInsets(Insets.of(0, 0, 0, 0));
+            // TODO: Temporary hack to offset the view until we can properly inset Bubbles again.
+            if (sNewInsetsMode == NEW_INSETS_MODE_FULL) {
+                mStackView.animate()
+                        .setDuration(100)
+                        .translationY(0);
+            } else {
+                mActivityView.setForwardedInsets(Insets.of(0, 0, 0, 0));
+            }
         }
         if (DEBUG_BUBBLE_EXPANDED_VIEW) {
             Log.d(TAG, "onDetachedFromWindow: bubble=" + getBubbleKey());
@@ -349,7 +358,10 @@ public class BubbleExpandedView extends LinearLayout implements View.OnClickList
 
             // TODO: Temporary hack to offset the view until we can properly inset Bubbles again.
             if (sNewInsetsMode == NEW_INSETS_MODE_FULL) {
-                mStackView.animate().translationY(-insetsBottom);
+                mStackView.animate()
+                        .setDuration(100)
+                        .translationY(-insetsBottom)
+                        .withEndAction(() -> mActivityView.onLocationChanged());
             } else {
                 mActivityView.setForwardedInsets(Insets.of(0, 0, 0, insetsBottom));
             }
@@ -420,20 +432,19 @@ public class BubbleExpandedView extends LinearLayout implements View.OnClickList
         return true;
     }
 
-    // TODO(138116789) Fix overflow height.
     void updateHeight() {
         if (DEBUG_BUBBLE_EXPANDED_VIEW) {
             Log.d(TAG, "updateHeight: bubble=" + getBubbleKey());
         }
         if (usingActivityView()) {
-            float desiredHeight = mMinHeight;
+            float desiredHeight = mOverflowHeight;
             if (!mIsOverflow) {
                 desiredHeight = Math.max(mBubble.getDesiredHeight(mContext), mMinHeight);
             }
             float height = Math.min(desiredHeight, getMaxExpandedHeight());
-            height = Math.max(height, mMinHeight);
+            height = Math.max(height, mIsOverflow? mOverflowHeight : mMinHeight);
             LayoutParams lp = (LayoutParams) mActivityView.getLayoutParams();
-            mNeedsNewHeight =  lp.height != height;
+            mNeedsNewHeight = lp.height != height;
             if (!mKeyboardVisible) {
                 // If the keyboard is visible... don't adjust the height because that will cause
                 // a configuration change and the keyboard will be lost.
@@ -527,6 +538,16 @@ public class BubbleExpandedView extends LinearLayout implements View.OnClickList
         float pointerLeft = x - halfPointerWidth;
         mPointerView.setTranslationX(pointerLeft);
         mPointerView.setVisibility(VISIBLE);
+    }
+
+    /**
+     * Position of the manage button displayed in the expanded view. Used for placing user
+     * education about the manage button.
+     */
+    public Rect getManageButtonLocationOnScreen() {
+        mTempLoc = mSettingsIcon.getLocationOnScreen();
+        return new Rect(mTempLoc[0], mTempLoc[1], mTempLoc[0] + mSettingsIcon.getWidth(),
+                mTempLoc[1] + mSettingsIcon.getHeight());
     }
 
     /**

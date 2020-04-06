@@ -106,7 +106,6 @@ import com.android.server.emergency.EmergencyAffordanceService;
 import com.android.server.gpu.GpuService;
 import com.android.server.hdmi.HdmiControlService;
 import com.android.server.incident.IncidentCompanionService;
-import com.android.server.incremental.IncrementalManagerService;
 import com.android.server.input.InputManagerService;
 import com.android.server.inputmethod.InputMethodManagerService;
 import com.android.server.inputmethod.InputMethodSystemProperty;
@@ -299,8 +298,6 @@ public final class SystemServer {
             "com.android.server.DeviceIdleController";
     private static final String BLOB_STORE_MANAGER_SERVICE_CLASS =
             "com.android.server.blob.BlobStoreManagerService";
-    private static final String APP_SEARCH_MANAGER_SERVICE_CLASS =
-            "com.android.server.appsearch.AppSearchManagerService";
 
     private static final String TETHERING_CONNECTOR_CLASS = "android.net.ITetheringConnector";
 
@@ -339,7 +336,7 @@ public final class SystemServer {
     private ContentResolver mContentResolver;
     private EntropyMixer mEntropyMixer;
     private DataLoaderManagerService mDataLoaderManagerService;
-    private IncrementalManagerService mIncrementalManagerService;
+    private long mIncrementalServiceHandle = 0;
 
     private boolean mOnlyCore;
     private boolean mFirstBoot;
@@ -382,6 +379,16 @@ public final class SystemServer {
     private static native void spawnFdLeakCheckThread();
 
     /**
+     * Start native Incremental Service and get its handle.
+     */
+    private static native long startIncrementalService();
+
+    /**
+     * Inform Incremental Service that system is ready.
+     */
+    private static native void setIncrementalServiceSystemReady(long incrementalServiceHandle);
+
+    /**
      * The main entry point from zygote.
      */
     public static void main(String[] args) {
@@ -398,6 +405,7 @@ public final class SystemServer {
         mStartCount = SystemProperties.getInt(SYSPROP_START_COUNT, 0) + 1;
         mRuntimeStartElapsedTime = SystemClock.elapsedRealtime();
         mRuntimeStartUptime = SystemClock.uptimeMillis();
+        Process.setStartTimes(mRuntimeStartElapsedTime, mRuntimeStartUptime);
 
         // Remember if it's runtime restart(when sys.boot_completed is already set) or reboot
         // We don't use "mStartCount > 1" here because it'll be wrong on a FDE device.
@@ -748,8 +756,8 @@ public final class SystemServer {
         t.traceEnd();
 
         // Incremental service needs to be started before package manager
-        t.traceBegin("StartIncrementalManagerService");
-        mIncrementalManagerService = IncrementalManagerService.start(mSystemContext);
+        t.traceBegin("StartIncrementalService");
+        mIncrementalServiceHandle = startIncrementalService();
         t.traceEnd();
 
         // Power manager needs to be started early because other services need it.
@@ -1945,16 +1953,14 @@ public final class SystemServer {
                 t.traceEnd();
             }
 
-            if (hasFeatureFace || hasFeatureIris || hasFeatureFingerprint) {
-                // Start this service after all biometric services.
-                t.traceBegin("StartBiometricService");
-                mSystemServiceManager.startService(BiometricService.class);
-                t.traceEnd();
+            // Start this service after all biometric services.
+            t.traceBegin("StartBiometricService");
+            mSystemServiceManager.startService(BiometricService.class);
+            t.traceEnd();
 
-                t.traceBegin("StartAuthService");
-                mSystemServiceManager.startService(AuthService.class);
-                t.traceEnd();
-            }
+            t.traceBegin("StartAuthService");
+            mSystemServiceManager.startService(AuthService.class);
+            t.traceEnd();
 
 
             t.traceBegin("StartBackgroundDexOptService");
@@ -2190,9 +2196,9 @@ public final class SystemServer {
         mPackageManagerService.systemReady();
         t.traceEnd();
 
-        if (mIncrementalManagerService != null) {
-            t.traceBegin("MakeIncrementalManagerServiceReady");
-            mIncrementalManagerService.systemReady();
+        if (mIncrementalServiceHandle != 0) {
+            t.traceBegin("MakeIncrementalServiceReady");
+            setIncrementalServiceSystemReady(mIncrementalServiceHandle);
             t.traceEnd();
         }
 
@@ -2224,10 +2230,6 @@ public final class SystemServer {
 
         t.traceBegin("StartBootPhaseDeviceSpecificServicesReady");
         mSystemServiceManager.startBootPhase(t, SystemService.PHASE_DEVICE_SPECIFIC_SERVICES_READY);
-        t.traceEnd();
-
-        t.traceBegin("AppSearchManagerService");
-        mSystemServiceManager.startService(APP_SEARCH_MANAGER_SERVICE_CLASS);
         t.traceEnd();
 
         ConcurrentUtils.waitForFutureNoInterrupt(mBlobStoreServiceStart,

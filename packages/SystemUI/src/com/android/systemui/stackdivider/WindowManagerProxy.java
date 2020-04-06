@@ -21,6 +21,7 @@ import static android.app.WindowConfiguration.ACTIVITY_TYPE_RECENTS;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN;
 import static android.view.Display.DEFAULT_DISPLAY;
 
+import android.annotation.NonNull;
 import android.app.ActivityManager;
 import android.app.ActivityTaskManager;
 import android.graphics.Rect;
@@ -137,17 +138,13 @@ public class WindowManagerProxy {
         return resizable;
     }
 
-    static void applyHomeTasksMinimized(SplitDisplayLayout layout, IWindowContainer parent) {
-        applyHomeTasksMinimized(layout, parent, null /* transaction */);
-    }
-
     /**
      * Assign a fixed override-bounds to home tasks that reflect their geometry while the primary
      * split is minimized. This actually "sticks out" of the secondary split area, but when in
      * minimized mode, the secondary split gets a 'negative' crop to expose it.
      */
     static boolean applyHomeTasksMinimized(SplitDisplayLayout layout, IWindowContainer parent,
-            WindowContainerTransaction t) {
+            @NonNull WindowContainerTransaction wct) {
         // Resize the home/recents stacks to the larger minimized-state size
         final Rect homeBounds;
         final ArrayList<IWindowContainer> homeStacks = new ArrayList<>();
@@ -158,18 +155,8 @@ public class WindowManagerProxy {
             homeBounds = new Rect(0, 0, layout.mDisplayLayout.width(),
                     layout.mDisplayLayout.height());
         }
-        WindowContainerTransaction wct = t != null ? t : new WindowContainerTransaction();
         for (int i = homeStacks.size() - 1; i >= 0; --i) {
             wct.setBounds(homeStacks.get(i), homeBounds);
-        }
-        if (t != null) {
-            return isHomeResizable;
-        }
-        try {
-            ActivityTaskManager.getTaskOrganizerController().applyContainerTransaction(wct,
-                    null /* organizer */);
-        } catch (RemoteException e) {
-            Log.e(TAG, "Failed to resize home stacks ", e);
         }
         return isHomeResizable;
     }
@@ -292,10 +279,21 @@ public class WindowManagerProxy {
             for (int i = freeHomeAndRecents.size() - 1; i >= 0; --i) {
                 wct.setBounds(freeHomeAndRecents.get(i).token, null);
             }
+            // Reset focusable to true
+            wct.setFocusable(tiles.mPrimary.token, true /* focusable */);
             ActivityTaskManager.getTaskOrganizerController().applyContainerTransaction(wct,
                     null /* organizer */);
         } catch (RemoteException e) {
             Log.w(TAG, "Failed to remove stack: " + e);
+        }
+    }
+
+    static void applyContainerTransaction(WindowContainerTransaction wct) {
+        try {
+            ActivityTaskManager.getTaskOrganizerController().applyContainerTransaction(wct,
+                    null /* organizer */);
+        } catch (RemoteException e) {
+            Log.w(TAG, "Error setting focusability: " + e);
         }
     }
 }

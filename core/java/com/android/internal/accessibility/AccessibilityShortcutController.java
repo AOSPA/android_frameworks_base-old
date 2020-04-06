@@ -56,6 +56,7 @@ import com.android.internal.util.function.pooled.PooledLambda;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
@@ -133,7 +134,7 @@ public class AccessibilityShortcutController {
         // Keep track of state of shortcut settings
         final ContentObserver co = new ContentObserver(handler) {
             @Override
-            public void onChange(boolean selfChange, Uri uri, int userId) {
+            public void onChange(boolean selfChange, Collection<Uri> uris, int flags, int userId) {
                 if (userId == mUserId) {
                     onSettingsChanged();
                 }
@@ -412,8 +413,13 @@ public class AccessibilityShortcutController {
      * Class to wrap TextToSpeech for shortcut dialog spoken feedback.
      */
     private class TtsPrompt implements TextToSpeech.OnInitListener {
+        private static final int RETRY_MILLIS = 1000;
+
         private final CharSequence mText;
+
+        private int mRetryCount = 3;
         private boolean mDismiss;
+        private boolean mLanguageReady = false;
         private TextToSpeech mTts;
 
         TtsPrompt(String serviceName) {
@@ -437,17 +443,15 @@ public class AccessibilityShortcutController {
                 playNotificationTone();
                 return;
             }
-            mHandler.sendMessage(PooledLambda.obtainMessage(TtsPrompt::play, this));
+            mHandler.sendMessage(PooledLambda.obtainMessage(
+                    TtsPrompt::waitForTtsReady, this));
         }
 
         private void play() {
             if (mDismiss) {
                 return;
             }
-            int status = TextToSpeech.ERROR;
-            if (setLanguage(Locale.getDefault())) {
-                status = mTts.speak(mText, TextToSpeech.QUEUE_FLUSH, null, null);
-            }
+            final int status = mTts.speak(mText, TextToSpeech.QUEUE_FLUSH, null, null);
             if (status != TextToSpeech.SUCCESS) {
                 Slog.d(TAG, "Tts play fail");
                 playNotificationTone();
@@ -455,21 +459,42 @@ public class AccessibilityShortcutController {
         }
 
         /**
-         * @return false if tts language is not available
+         * Waiting for tts is ready to speak. Trying again if tts language pack is not available
+         * or tts voice data is not installed yet.
          */
-        private boolean setLanguage(final Locale locale) {
-            int status = mTts.isLanguageAvailable(locale);
-            if (status == TextToSpeech.LANG_MISSING_DATA
-                    || status == TextToSpeech.LANG_NOT_SUPPORTED) {
-                return false;
+        private void waitForTtsReady() {
+            if (mDismiss) {
+                return;
             }
-            mTts.setLanguage(locale);
-            Voice voice = mTts.getVoice();
-            if (voice == null || (voice.getFeatures() != null && voice.getFeatures()
-                    .contains(TextToSpeech.Engine.KEY_FEATURE_NOT_INSTALLED))) {
-                return false;
+            if (!mLanguageReady) {
+                final int status = mTts.setLanguage(Locale.getDefault());
+                // True if language is available and TTS#loadVoice has called once
+                // that trigger TTS service to start initialization.
+                mLanguageReady = status != TextToSpeech.LANG_MISSING_DATA
+                    && status != TextToSpeech.LANG_NOT_SUPPORTED;
             }
-            return true;
+            if (mLanguageReady) {
+                final Voice voice = mTts.getVoice();
+                final boolean voiceDataInstalled = voice != null
+                        && voice.getFeatures() != null
+                        && !voice.getFeatures().contains(
+                                TextToSpeech.Engine.KEY_FEATURE_NOT_INSTALLED);
+                if (voiceDataInstalled) {
+                    mHandler.sendMessage(PooledLambda.obtainMessage(
+                            TtsPrompt::play, this));
+                    return;
+                }
+            }
+
+            if (mRetryCount == 0) {
+                Slog.d(TAG, "Tts not ready to speak.");
+                playNotificationTone();
+                return;
+            }
+            // Retry if TTS service not ready yet.
+            mRetryCount -= 1;
+            mHandler.sendMessageDelayed(PooledLambda.obtainMessage(
+                    TtsPrompt::waitForTtsReady, this), RETRY_MILLIS);
         }
     }
 

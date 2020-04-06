@@ -16,13 +16,8 @@
 
 package android.media.tv.tuner.filter;
 
-import android.annotation.IntDef;
-import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.SystemApi;
-
-import java.lang.annotation.Retention;
-import java.lang.annotation.RetentionPolicy;
 
 /**
  * Filter configuration used to configure filters.
@@ -31,26 +26,6 @@ import java.lang.annotation.RetentionPolicy;
  */
 @SystemApi
 public abstract class FilterConfiguration {
-
-    /** @hide */
-    @IntDef(prefix = "PACKET_TYPE_", value =
-            {PACKET_TYPE_IPV4, PACKET_TYPE_COMPRESSED, PACKET_TYPE_SIGNALING})
-    @Retention(RetentionPolicy.SOURCE)
-    public @interface PacketType {}
-
-    /**
-     * IP v4 packet type.
-     */
-    public static final int PACKET_TYPE_IPV4 = 0;
-    /**
-     * Compressed packet type.
-     */
-    public static final int PACKET_TYPE_COMPRESSED = 2;
-    /**
-     * Signaling packet type.
-     */
-    public static final int PACKET_TYPE_SIGNALING = 4;
-
 
     @Nullable
     /* package */ final Settings mSettings;
@@ -71,27 +46,5 @@ public abstract class FilterConfiguration {
     @Nullable
     public Settings getSettings() {
         return mSettings;
-    }
-
-    /**
-     * Builder for {@link FilterConfiguration}.
-     *
-     * @param <T> The subclass to be built.
-     */
-    public abstract static class Builder<T extends Builder<T>> {
-        /* package */ Settings mSettings;
-
-        /* package */ Builder() {
-        }
-
-        /**
-         * Sets filter settings.
-         */
-        @NonNull
-        public T setSettings(@Nullable Settings settings) {
-            mSettings = settings;
-            return self();
-        }
-        /* package */ abstract T self();
     }
 }

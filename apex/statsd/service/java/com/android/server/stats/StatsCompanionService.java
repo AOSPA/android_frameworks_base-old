@@ -21,11 +21,13 @@ import android.app.AlarmManager;
 import android.app.AlarmManager.OnAlarmListener;
 import android.app.StatsManager;
 import android.content.BroadcastReceiver;
+import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
+import android.content.pm.ResolveInfo;
 import android.os.Binder;
 import android.os.Bundle;
 import android.os.Handler;
@@ -52,6 +54,7 @@ import java.io.FileDescriptor;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.PrintWriter;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -85,12 +88,6 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
 
     public static final int DEATH_THRESHOLD = 10;
 
-    // TODO(b/149090705): Implement an alternative to sending broadcast with @hide flag
-    // FLAG_RECEIVER_INCLUDE_BACKGROUND. Instead of using the flag, find the
-    // list of registered broadcast receivers and send them directed broadcasts
-    // to wake them up. See b/147374337.
-    private static final int FLAG_RECEIVER_INCLUDE_BACKGROUND = 0x01000000;
-
     static final class CompanionHandler extends Handler {
         CompanionHandler(Looper looper) {
             super(looper);
@@ -106,9 +103,6 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
     private final OnAlarmListener mAnomalyAlarmListener = new AnomalyAlarmListener();
     private final OnAlarmListener mPullingAlarmListener = new PullingAlarmListener();
     private final OnAlarmListener mPeriodicAlarmListener = new PeriodicAlarmListener();
-    private final BroadcastReceiver mAppUpdateReceiver;
-    private final BroadcastReceiver mUserUpdateReceiver;
-    private final ShutdownEventReceiver mShutdownEventReceiver;
 
     private StatsManagerService mStatsManagerService;
 
@@ -122,27 +116,6 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
         super();
         mContext = context;
         mAlarmManager = (AlarmManager) mContext.getSystemService(Context.ALARM_SERVICE);
-        mAppUpdateReceiver = new AppUpdateReceiver();
-        mUserUpdateReceiver = new BroadcastReceiver() {
-            @Override
-            public void onReceive(Context context, Intent intent) {
-                synchronized (sStatsdLock) {
-                    if (sStatsd == null) {
-                        Log.w(TAG, "Could not access statsd for UserUpdateReceiver");
-                        return;
-                    }
-                    try {
-                        // Pull the latest state of UID->app name, version mapping.
-                        // Needed since the new user basically has a version of every app.
-                        informAllUidsLocked(context);
-                    } catch (RemoteException e) {
-                        Log.e(TAG, "Failed to inform statsd latest update of all apps", e);
-                        forgetEverythingLocked();
-                    }
-                }
-            }
-        };
-        mShutdownEventReceiver = new ShutdownEventReceiver();
         if (DEBUG) Log.d(TAG, "Registered receiver for ACTION_PACKAGE_REPLACED and ADDED.");
         HandlerThread handlerThread = new HandlerThread(TAG);
         handlerThread.start();
@@ -166,9 +139,18 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
         return ret;
     }
 
-    // Assumes that sStatsdLock is held.
-    @GuardedBy("sStatsdLock")
-    private void informAllUidsLocked(Context context) throws RemoteException {
+    /**
+     * Non-blocking call to retrieve a reference to statsd
+     *
+     * @return IStatsd object if statsd is ready, null otherwise.
+     */
+    private static IStatsd getStatsdNonblocking() {
+        synchronized (sStatsdLock) {
+            return sStatsd;
+        }
+    }
+
+    private static void informAllUidsLocked(Context context) throws RemoteException {
         UserManager um = (UserManager) context.getSystemService(Context.USER_SERVICE);
         PackageManager pm = context.getPackageManager();
         final List<UserHandle> users = um.getUserHandles(true);
@@ -277,7 +259,6 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
                         if (!replacing) {
                             // Don't bother sending an update if we're right about to get another
                             // intent for the new version that's added.
-                            PackageManager pm = context.getPackageManager();
                             String app = intent.getData().getSchemeSpecificPart();
                             sStatsd.informOnePackageRemoved(app, uid);
                         }
@@ -307,22 +288,42 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
         }
     }
 
-    public final static class AnomalyAlarmListener implements OnAlarmListener {
+    private static final class UserUpdateReceiver extends BroadcastReceiver {
         @Override
-        public void onAlarm() {
-            Log.i(TAG, "StatsCompanionService believes an anomaly has occurred at time "
-                    + System.currentTimeMillis() + "ms.");
+        public void onReceive(Context context, Intent intent) {
             synchronized (sStatsdLock) {
                 if (sStatsd == null) {
-                    Log.w(TAG, "Could not access statsd to inform it of anomaly alarm firing");
+                    Log.w(TAG, "Could not access statsd for UserUpdateReceiver");
                     return;
                 }
                 try {
-                    // Two-way call to statsd to retain AlarmManager wakelock
-                    sStatsd.informAnomalyAlarmFired();
+                    // Pull the latest state of UID->app name, version mapping.
+                    // Needed since the new user basically has a version of every app.
+                    informAllUidsLocked(context);
                 } catch (RemoteException e) {
-                    Log.w(TAG, "Failed to inform statsd of anomaly alarm firing", e);
+                    Log.e(TAG, "Failed to inform statsd latest update of all apps", e);
                 }
+            }
+        }
+    }
+
+    public static final class AnomalyAlarmListener implements OnAlarmListener {
+        @Override
+        public void onAlarm() {
+            if (DEBUG) {
+                Log.i(TAG, "StatsCompanionService believes an anomaly has occurred at time "
+                        + System.currentTimeMillis() + "ms.");
+            }
+            IStatsd statsd = getStatsdNonblocking();
+            if (statsd == null) {
+                Log.w(TAG, "Could not access statsd to inform it of anomaly alarm firing");
+                return;
+            }
+            try {
+                // Two-way call to statsd to retain AlarmManager wakelock
+                statsd.informAnomalyAlarmFired();
+            } catch (RemoteException e) {
+                Log.w(TAG, "Failed to inform statsd of anomaly alarm firing", e);
             }
             // AlarmManager releases its own wakelock here.
         }
@@ -334,17 +335,16 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
             if (DEBUG) {
                 Log.d(TAG, "Time to poll something.");
             }
-            synchronized (sStatsdLock) {
-                if (sStatsd == null) {
-                    Log.w(TAG, "Could not access statsd to inform it of pulling alarm firing.");
-                    return;
-                }
-                try {
-                    // Two-way call to statsd to retain AlarmManager wakelock
-                    sStatsd.informPollAlarmFired();
-                } catch (RemoteException e) {
-                    Log.w(TAG, "Failed to inform statsd of pulling alarm firing.", e);
-                }
+            IStatsd statsd = getStatsdNonblocking();
+            if (statsd == null) {
+                Log.w(TAG, "Could not access statsd to inform it of pulling alarm firing.");
+                return;
+            }
+            try {
+                // Two-way call to statsd to retain AlarmManager wakelock
+                statsd.informPollAlarmFired();
+            } catch (RemoteException e) {
+                Log.w(TAG, "Failed to inform statsd of pulling alarm firing.", e);
             }
         }
     }
@@ -355,17 +355,16 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
             if (DEBUG) {
                 Log.d(TAG, "Time to trigger periodic alarm.");
             }
-            synchronized (sStatsdLock) {
-                if (sStatsd == null) {
-                    Log.w(TAG, "Could not access statsd to inform it of periodic alarm firing.");
-                    return;
-                }
-                try {
-                    // Two-way call to statsd to retain AlarmManager wakelock
-                    sStatsd.informAlarmForSubscriberTriggeringFired();
-                } catch (RemoteException e) {
-                    Log.w(TAG, "Failed to inform statsd of periodic alarm firing.", e);
-                }
+            IStatsd statsd = getStatsdNonblocking();
+            if (statsd == null) {
+                Log.w(TAG, "Could not access statsd to inform it of periodic alarm firing.");
+                return;
+            }
+            try {
+                // Two-way call to statsd to retain AlarmManager wakelock
+                statsd.informAlarmForSubscriberTriggeringFired();
+            } catch (RemoteException e) {
+                Log.w(TAG, "Failed to inform statsd of periodic alarm firing.", e);
             }
             // AlarmManager releases its own wakelock here.
         }
@@ -383,17 +382,19 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
                 return;
             }
 
-            Log.i(TAG, "StatsCompanionService noticed a shutdown.");
-            synchronized (sStatsdLock) {
-                if (sStatsd == null) {
-                    Log.w(TAG, "Could not access statsd to inform it of a shutdown event.");
-                    return;
-                }
-                try {
-                    sStatsd.informDeviceShutdown();
-                } catch (Exception e) {
-                    Log.w(TAG, "Failed to inform statsd of a shutdown event.", e);
-                }
+            if (DEBUG) {
+                Log.i(TAG, "StatsCompanionService noticed a shutdown.");
+            }
+            IStatsd statsd = getStatsdNonblocking();
+            if (statsd == null) {
+                Log.w(TAG, "Could not access statsd to inform it of a shutdown event.");
+                return;
+            }
+            try {
+                // two way binder call
+                statsd.informDeviceShutdown();
+            } catch (Exception e) {
+                Log.w(TAG, "Failed to inform statsd of a shutdown event.", e);
             }
         }
     }
@@ -498,12 +499,28 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
             Log.d(TAG, "learned that statsdReady");
         }
         sayHiToStatsd(); // tell statsd that we're ready too and link to it
-        mContext.sendBroadcastAsUser(new Intent(StatsManager.ACTION_STATSD_STARTED)
-                        .addFlags(FLAG_RECEIVER_INCLUDE_BACKGROUND),
-                UserHandle.SYSTEM, android.Manifest.permission.DUMP);
+
+        final Intent intent = new Intent(StatsManager.ACTION_STATSD_STARTED);
+        // Retrieve list of broadcast receivers for this broadcast & send them directed broadcasts
+        // to wake them up (if they're in background).
+        List<ResolveInfo> resolveInfos =
+                mContext.getPackageManager().queryBroadcastReceiversAsUser(
+                        intent, 0, UserHandle.SYSTEM);
+        if (resolveInfos == null || resolveInfos.isEmpty()) {
+            return; // No need to send broadcast.
+        }
+
+        for (ResolveInfo resolveInfo : resolveInfos) {
+            Intent intentToSend = new Intent(intent);
+            intentToSend.setComponent(new ComponentName(
+                    resolveInfo.activityInfo.applicationInfo.packageName,
+                    resolveInfo.activityInfo.name));
+            mContext.sendBroadcastAsUser(intentToSend, UserHandle.SYSTEM,
+                    android.Manifest.permission.DUMP);
+        }
     }
 
-    @Override
+    @Override // Binder call
     public void triggerUidSnapshot() {
         StatsCompanion.enforceStatsdCallingUid();
         synchronized (sStatsdLock) {
@@ -513,7 +530,7 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
             } catch (RemoteException e) {
                 Log.e(TAG, "Failed to trigger uid snapshot.", e);
             } finally {
-                restoreCallingIdentity(token);
+                Binder.restoreCallingIdentity(token);
             }
         }
     }
@@ -527,15 +544,28 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
     // Statsd related code
 
     /**
-     * Fetches the statsd IBinder service.
-     * Note: This should only be called from sayHiToStatsd. All other clients should use the cached
-     * sStatsd with a null check.
+     * Fetches the statsd IBinder service. This is a blocking call.
+     * Note: This should only be called from {@link #sayHiToStatsd()}. All other clients should use
+     * the cached sStatsd via {@link #getStatsdNonblocking()}.
      */
-    private static IStatsd fetchStatsdService() {
-        return IStatsd.Stub.asInterface(StatsFrameworkInitializer
-            .getStatsServiceManager()
-            .getStatsdServiceRegisterer()
-            .get());
+    private IStatsd fetchStatsdService(StatsdDeathRecipient deathRecipient) {
+        synchronized (sStatsdLock) {
+            if (sStatsd == null) {
+                sStatsd = IStatsd.Stub.asInterface(StatsFrameworkInitializer
+                        .getStatsServiceManager()
+                        .getStatsdServiceRegisterer()
+                        .get());
+                if (sStatsd != null) {
+                    try {
+                        sStatsd.asBinder().linkToDeath(deathRecipient, /* flags */ 0);
+                    } catch (RemoteException e) {
+                        Log.e(TAG, "linkToDeath(StatsdDeathRecipient) failed");
+                        statsdNotReadyLocked();
+                    }
+                }
+            }
+            return sStatsd;
+        }
     }
 
     /**
@@ -555,67 +585,84 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
      * statsd.
      */
     private void sayHiToStatsd() {
-        synchronized (sStatsdLock) {
-            if (sStatsd != null) {
-                Log.e(TAG, "Trying to fetch statsd, but it was already fetched",
-                        new IllegalStateException(
-                                "sStatsd is not null when being fetched"));
-                return;
-            }
-            sStatsd = fetchStatsdService();
-            if (sStatsd == null) {
-                Log.i(TAG,
-                        "Could not yet find statsd to tell it that StatsCompanion is "
-                                + "alive.");
-                return;
-            }
-            mStatsManagerService.statsdReady(sStatsd);
-            if (DEBUG) Log.d(TAG, "Saying hi to statsd");
+        if (getStatsdNonblocking() != null) {
+            Log.e(TAG, "Trying to fetch statsd, but it was already fetched",
+                    new IllegalStateException(
+                            "sStatsd is not null when being fetched"));
+            return;
+        }
+        StatsdDeathRecipient deathRecipient = new StatsdDeathRecipient();
+        IStatsd statsd = fetchStatsdService(deathRecipient);
+        if (statsd == null) {
+            Log.i(TAG,
+                    "Could not yet find statsd to tell it that StatsCompanion is "
+                            + "alive.");
+            return;
+        }
+        mStatsManagerService.statsdReady(statsd);
+        if (DEBUG) Log.d(TAG, "Saying hi to statsd");
+        try {
+            statsd.statsCompanionReady();
+
+            cancelAnomalyAlarm();
+            cancelPullingAlarm();
+
+            BroadcastReceiver appUpdateReceiver = new AppUpdateReceiver();
+            BroadcastReceiver userUpdateReceiver = new UserUpdateReceiver();
+            BroadcastReceiver shutdownEventReceiver = new ShutdownEventReceiver();
+
+            // Setup broadcast receiver for updates.
+            IntentFilter filter = new IntentFilter(Intent.ACTION_PACKAGE_REPLACED);
+            filter.addAction(Intent.ACTION_PACKAGE_ADDED);
+            filter.addAction(Intent.ACTION_PACKAGE_REMOVED);
+            filter.addDataScheme("package");
+            mContext.registerReceiverForAllUsers(appUpdateReceiver, filter, null, null);
+
+            // Setup receiver for user initialize (which happens once for a new user)
+            // and
+            // if a user is removed.
+            filter = new IntentFilter(Intent.ACTION_USER_INITIALIZE);
+            filter.addAction(Intent.ACTION_USER_REMOVED);
+            mContext.registerReceiverForAllUsers(userUpdateReceiver, filter, null, null);
+
+            // Setup receiver for device reboots or shutdowns.
+            filter = new IntentFilter(Intent.ACTION_REBOOT);
+            filter.addAction(Intent.ACTION_SHUTDOWN);
+            mContext.registerReceiverForAllUsers(
+                    shutdownEventReceiver, filter, null, null);
+
+            // Only add the receivers if the registration is successful.
+            deathRecipient.addRegisteredBroadcastReceivers(
+                    List.of(appUpdateReceiver, userUpdateReceiver, shutdownEventReceiver));
+
+            final long token = Binder.clearCallingIdentity();
             try {
-                sStatsd.statsCompanionReady();
-                // If the statsCompanionReady two-way binder call returns, link to statsd.
-                try {
-                    sStatsd.asBinder().linkToDeath(new StatsdDeathRecipient(), 0);
-                } catch (RemoteException e) {
-                    Log.e(TAG, "linkToDeath(StatsdDeathRecipient) failed", e);
-                    forgetEverythingLocked();
-                }
-                // Setup broadcast receiver for updates.
-                IntentFilter filter = new IntentFilter(Intent.ACTION_PACKAGE_REPLACED);
-                filter.addAction(Intent.ACTION_PACKAGE_ADDED);
-                filter.addAction(Intent.ACTION_PACKAGE_REMOVED);
-                filter.addDataScheme("package");
-                mContext.registerReceiverForAllUsers(mAppUpdateReceiver, filter, null, null);
-
-                // Setup receiver for user initialize (which happens once for a new user)
-                // and
-                // if a user is removed.
-                filter = new IntentFilter(Intent.ACTION_USER_INITIALIZE);
-                filter.addAction(Intent.ACTION_USER_REMOVED);
-                mContext.registerReceiverForAllUsers(mUserUpdateReceiver, filter, null, null);
-
-                // Setup receiver for device reboots or shutdowns.
-                filter = new IntentFilter(Intent.ACTION_REBOOT);
-                filter.addAction(Intent.ACTION_SHUTDOWN);
-                mContext.registerReceiverForAllUsers(
-                        mShutdownEventReceiver, filter, null, null);
-                final long token = Binder.clearCallingIdentity();
-                try {
-                    // Pull the latest state of UID->app name, version mapping when
-                    // statsd starts.
-                    informAllUidsLocked(mContext);
-                } finally {
-                    restoreCallingIdentity(token);
-                }
-                Log.i(TAG, "Told statsd that StatsCompanionService is alive.");
-            } catch (RemoteException e) {
-                Log.e(TAG, "Failed to inform statsd that statscompanion is ready", e);
-                forgetEverythingLocked();
+                // Pull the latest state of UID->app name, version mapping when
+                // statsd starts.
+                informAllUidsLocked(mContext);
+            } finally {
+                Binder.restoreCallingIdentity(token);
             }
+            Log.i(TAG, "Told statsd that StatsCompanionService is alive.");
+        } catch (RemoteException e) {
+            Log.e(TAG, "Failed to inform statsd that statscompanion is ready", e);
         }
     }
 
     private class StatsdDeathRecipient implements IBinder.DeathRecipient {
+
+        private List<BroadcastReceiver> mReceiversToUnregister;
+
+        StatsdDeathRecipient() {
+            mReceiversToUnregister = new ArrayList<>();
+        }
+
+        public void addRegisteredBroadcastReceivers(List<BroadcastReceiver> receivers) {
+            synchronized (sStatsdLock) {
+                mReceiversToUnregister.addAll(receivers);
+            }
+        }
+
         @Override
         public void binderDied() {
             Log.i(TAG, "Statsd is dead - erase all my knowledge, except pullers");
@@ -644,20 +691,18 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
                         }
                     }
                 }
-                forgetEverythingLocked();
+                // We only unregister in binder death becaseu receivers can only be unregistered
+                // once, or an IllegalArgumentException is thrown.
+                for (BroadcastReceiver receiver: mReceiversToUnregister) {
+                    mContext.unregisterReceiver(receiver);
+                }
+                statsdNotReadyLocked();
             }
         }
     }
 
-    @GuardedBy("StatsCompanionService.sStatsdLock")
-    private void forgetEverythingLocked() {
+    private void statsdNotReadyLocked() {
         sStatsd = null;
-        mContext.unregisterReceiver(mAppUpdateReceiver);
-        mContext.unregisterReceiver(mUserUpdateReceiver);
-        mContext.unregisterReceiver(mShutdownEventReceiver);
-        cancelAnomalyAlarm();
-        cancelPullingAlarm();
-
         mStatsManagerService.statsdNotReady();
     }
 

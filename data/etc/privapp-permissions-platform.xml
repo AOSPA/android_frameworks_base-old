@@ -164,6 +164,7 @@ applications that come with the platform
         <permission name="android.permission.REBOOT"/>
         <permission name="android.permission.REGISTER_CALL_PROVIDER"/>
         <permission name="android.permission.REGISTER_SIM_SUBSCRIPTION"/>
+        <permission name="android.permission.REGISTER_STATS_PULL_ATOM"/>
         <permission name="android.permission.SEND_RESPOND_VIA_MESSAGE"/>
         <permission name="android.permission.SET_TIME_ZONE"/>
         <permission name="android.permission.SHUTDOWN"/>
@@ -195,6 +196,7 @@ applications that come with the platform
         <permission name="android.permission.GET_ACCOUNTS_PRIVILEGED"/>
         <permission name="android.permission.INTERACT_ACROSS_USERS"/>
         <permission name="android.permission.MANAGE_USERS"/>
+        <permission name="android.permission.READ_PRIVILEGED_PHONE_STATE"/>
         <permission name="android.permission.UPDATE_APP_OPS_STATS"/>
         <permission name="android.permission.USE_RESERVED_DISK"/>
     </privapp-permissions>
@@ -228,6 +230,9 @@ applications that come with the platform
         <permission name="android.permission.INTERACT_ACROSS_USERS"/>
         <permission name="android.permission.MODIFY_PHONE_STATE"/>
         <permission name="android.permission.USE_RESERVED_DISK"/>
+        <!-- Permissions required for reading and logging compat changes -->
+        <permission name="android.permission.LOG_COMPAT_CHANGE" />
+        <permission name="android.permission.READ_COMPAT_CHANGE_CONFIG" />
     </privapp-permissions>
 
     <privapp-permissions package="com.android.networkstack">
@@ -330,6 +335,7 @@ applications that come with the platform
         <!-- Needed for test only -->
         <permission name="android.permission.READ_PRECISE_PHONE_STATE" />
         <permission name="android.permission.READ_PRIVILEGED_PHONE_STATE"/>
+        <permission name="android.permission.READ_WIFI_CREDENTIAL"/>
         <permission name="android.permission.REAL_GET_TASKS"/>
         <permission name="android.permission.READ_PRIVILEGED_PHONE_STATE"/>
         <permission name="android.permission.REGISTER_CALL_PROVIDER"/>
@@ -386,6 +392,10 @@ applications that come with the platform
         <permission name="android.permission.ACCESS_VIBRATOR_STATE"/>
         <!-- Permission required for UsageStatsTest CTS test. -->
         <permission name="android.permission.MANAGE_NOTIFICATIONS"/>
+        <!-- Permission required for CompanionDeviceManager CTS test. -->
+        <permission name="android.permission.COMPANION_APPROVE_WIFI_CONNECTIONS" />
+        <!-- Permission required for testing registering pull atom callbacks. -->
+        <permission name="android.permission.REGISTER_STATS_PULL_ATOM"/>
     </privapp-permissions>
 
     <privapp-permissions package="com.android.statementservice">
@@ -415,5 +425,9 @@ applications that come with the platform
     <privapp-permissions package="com.android.settings">
         <permission name="android.permission.INSTALL_DYNAMIC_SYSTEM"/>
         <permission name="android.permission.BIND_CELL_BROADCAST_SERVICE"/>
+    </privapp-permissions>
+
+    <privapp-permissions package="com.android.bips">
+        <permission name="android.permission.SUBSTITUTE_SHARE_TARGET_APP_NAME_AND_ICON"/>
     </privapp-permissions>
 </permissions>

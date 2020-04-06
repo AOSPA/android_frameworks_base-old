@@ -16,10 +16,15 @@
 
 package com.android.systemui.statusbar.notification.people
 
-import android.app.PendingIntent
 import android.graphics.drawable.Drawable
 
-/** `ViewModel` for PeopleHub view. */
+/**
+ * `ViewModel` for PeopleHub view.
+ *
+ * @param people ViewModels for individual people in PeopleHub, in order that they should be
+ *  displayed
+ * @param isVisible Whether or not the whole PeopleHub UI is visible
+ **/
 data class PeopleHubViewModel(val people: Sequence<PersonViewModel>, val isVisible: Boolean)
 
 /** `ViewModel` for a single "Person' in PeopleHub. */
@@ -29,16 +34,21 @@ data class PersonViewModel(
     val onClick: () -> Unit
 )
 
-/** `Model` for PeopleHub. */
+/**
+ * `Model` for PeopleHub.
+ *
+ * @param people Models for individual people in PeopleHub, in order that they should be displayed
+ **/
 data class PeopleHubModel(val people: Collection<PersonModel>)
 
 /** `Model` for a single "Person" in PeopleHub. */
 data class PersonModel(
     val key: PersonKey,
+    val userId: Int,
+    // TODO: these should live in the ViewModel
     val name: CharSequence,
     val avatar: Drawable,
-    val clickIntent: PendingIntent,
-    val userId: Int
+    val clickRunnable: Runnable
 )
 
 /** Unique identifier for a Person in PeopleHub. */

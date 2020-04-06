@@ -66,11 +66,9 @@ import static com.android.server.wm.ProtoLogGroup.WM_DEBUG_KEEP_SCREEN_ON;
 import static com.android.server.wm.ProtoLogGroup.WM_DEBUG_ORIENTATION;
 import static com.android.server.wm.ProtoLogGroup.WM_SHOW_SURFACE_ALLOC;
 import static com.android.server.wm.ProtoLogGroup.WM_SHOW_TRANSACTIONS;
-import static com.android.server.wm.RootWindowContainerProto.DISPLAYS;
 import static com.android.server.wm.RootWindowContainerProto.IS_HOME_RECENTS_COMPONENT;
 import static com.android.server.wm.RootWindowContainerProto.KEYGUARD_CONTROLLER;
 import static com.android.server.wm.RootWindowContainerProto.PENDING_ACTIVITIES;
-import static com.android.server.wm.RootWindowContainerProto.WINDOWS;
 import static com.android.server.wm.RootWindowContainerProto.WINDOW_CONTAINER;
 import static com.android.server.wm.Task.REPARENT_LEAVE_STACK_IN_PLACE;
 import static com.android.server.wm.Task.REPARENT_MOVE_STACK_TO_FRONT;
@@ -257,9 +255,6 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
      * activities.
      */
     final ArrayList<ActivityTaskManagerInternal.SleepToken> mSleepTokens = new ArrayList<>();
-
-    /** Is dock currently minimized. */
-    boolean mIsDockMinimized;
 
     /** Set when a power hint has started, but not ended. */
     private boolean mPowerHintSent;
@@ -1011,9 +1006,7 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
         // Send any pending task-info changes that were queued-up during a layout deferment
         mWmService.mAtmService.mTaskOrganizerController.dispatchPendingTaskInfoChanges();
 
-        if (DEBUG_WINDOW_TRACE) Slog.e(TAG,
-                "performSurfacePlacementInner exit: animating="
-                        + mWmService.mAnimator.isAnimating());
+        if (DEBUG_WINDOW_TRACE) Slog.e(TAG, "performSurfacePlacementInner exit");
     }
 
     private void checkAppTransitionReady(WindowSurfacePlacer surfacePlacer) {
@@ -1283,18 +1276,6 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
 
         final long token = proto.start(fieldId);
         super.dumpDebug(proto, WINDOW_CONTAINER, logLevel);
-        if (mWmService.mDisplayReady) {
-            final int count = mChildren.size();
-            for (int i = 0; i < count; ++i) {
-                final DisplayContent displayContent = mChildren.get(i);
-                displayContent.dumpDebug(proto, DISPLAYS, logLevel);
-            }
-        }
-        if (logLevel == WindowTraceLogLevel.ALL) {
-            forAllWindows((w) -> {
-                w.dumpDebug(proto, WINDOWS, logLevel);
-            }, true);
-        }
 
         mStackSupervisor.getKeyguardController().dumpDebug(proto, KEYGUARD_CONTROLLER);
         proto.write(IS_HOME_RECENTS_COMPONENT,
@@ -1985,12 +1966,13 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
     }
 
     boolean switchUser(int userId, UserState uss) {
-        final int focusStackId = getTopDisplayFocusedStack().getRootTaskId();
+        final ActivityStack topFocusedStack = getTopDisplayFocusedStack();
+        final int focusStackId = topFocusedStack != null
+                ? topFocusedStack.getRootTaskId() : INVALID_TASK_ID;
         // We dismiss the docked stack whenever we switch users.
         final ActivityStack dockedStack = getDefaultDisplay().getRootSplitScreenPrimaryTask();
         if (dockedStack != null) {
-            mStackSupervisor.moveTasksToFullscreenStackLocked(
-                    dockedStack, dockedStack.isFocusedStackOnDisplay());
+            getDefaultDisplay().onSplitScreenModeDismissed();
         }
         // Also dismiss the pinned stack whenever we switch users. Removing the pinned stack will
         // also cause all tasks to be moved to the fullscreen stack at a position that is
@@ -2149,19 +2131,6 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
             mService.continueWindowLayout();
         }
 
-        // TODO(b/146594635): Remove all PIP animation code from WM once SysUI handles animation.
-        // Notify the pinned stack controller to prepare the PiP animation, expect callback
-        // delivered from SystemUI to WM to start the animation. Unless we are using
-        // the TaskOrganizer in which case the animation will be entirely handled
-        // on that side.
-        if (mService.mTaskOrganizerController.getTaskOrganizer(WINDOWING_MODE_PINNED)
-                == null) {
-            final PinnedStackController pinnedStackController =
-                display.mDisplayContent.getPinnedStackController();
-            pinnedStackController.prepareAnimation(sourceHintBounds, aspectRatio,
-                    null /* stackBounds */);
-        }
-
         // TODO: revisit the following statement after the animation is moved from WM to SysUI.
         // Update the visibility of all activities after the they have been reparented to the new
         // stack.  This MUST run after the animation above is scheduled to ensure that the windows
@@ -2177,21 +2146,6 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
         for (int displayNdx = getChildCount() - 1; displayNdx >= 0; --displayNdx) {
             final DisplayContent display = getChildAt(displayNdx);
             display.mDisplayContent.executeAppTransition();
-        }
-    }
-
-    void setDockedStackMinimized(boolean minimized) {
-        // Get currently focused stack before setting mIsDockMinimized. We do this because if
-        // split-screen is active, primary stack will not be focusable (see #isFocusable) while
-        // still occluding other stacks. This will cause getTopDisplayFocusedStack() to return null.
-        final ActivityStack current = getTopDisplayFocusedStack();
-        mIsDockMinimized = minimized;
-        if (mIsDockMinimized) {
-            if (current.inSplitScreenPrimaryWindowingMode()) {
-                // The primary split-screen stack can't be focused while it is minimize, so move
-                // focus to something else.
-                current.adjustFocusToNextFocusableStack("setDockedStackMinimized");
-            }
         }
     }
 
@@ -2297,8 +2251,8 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
                 final ActivityStack focusedStack = display.getFocusedStack();
                 if (focusedStack != null) {
                     result |= focusedStack.resumeTopActivityUncheckedLocked(target, targetOptions);
-                } else if (targetStack == null && display.getStackCount() == 0) {
-                    result |= resumeHomeActivity(null /* prev */, "empty-display",
+                } else if (targetStack == null) {
+                    result |= resumeHomeActivity(null /* prev */, "no-focusable-task",
                             display.mDisplayId);
                 }
             }
@@ -3489,7 +3443,12 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
     ArrayList<ActivityRecord> getDumpActivities(String name, boolean dumpVisibleStacksOnly,
             boolean dumpFocusedStackOnly) {
         if (dumpFocusedStackOnly) {
-            return getTopDisplayFocusedStack().getDumpActivitiesLocked(name);
+            final ActivityStack topFocusedStack = getTopDisplayFocusedStack();
+            if (topFocusedStack != null) {
+                return topFocusedStack.getDumpActivitiesLocked(name);
+            } else {
+                return new ArrayList<>();
+            }
         } else {
             ArrayList<ActivityRecord> activities = new ArrayList<>();
             int numDisplays = getChildCount();

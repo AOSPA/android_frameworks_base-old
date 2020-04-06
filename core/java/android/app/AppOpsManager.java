@@ -16,10 +16,6 @@
 
 package android.app;
 
-import static android.util.StatsLogInternal.RUNTIME_APP_OP_ACCESS__SAMPLING_STRATEGY__DEFAULT;
-import static android.util.StatsLogInternal.RUNTIME_APP_OP_ACCESS__SAMPLING_STRATEGY__RARELY_USED;
-import static android.util.StatsLogInternal.RUNTIME_APP_OP_ACCESS__SAMPLING_STRATEGY__UNIFORM;
-
 import android.Manifest;
 import android.annotation.CallbackExecutor;
 import android.annotation.IntDef;
@@ -31,6 +27,7 @@ import android.annotation.SystemApi;
 import android.annotation.SystemService;
 import android.annotation.TestApi;
 import android.app.usage.UsageStatsManager;
+import android.compat.Compatibility;
 import android.compat.annotation.ChangeId;
 import android.compat.annotation.EnabledAfter;
 import android.compat.annotation.UnsupportedAppUsage;
@@ -74,6 +71,7 @@ import com.android.internal.os.RuntimeInit;
 import com.android.internal.os.ZygoteInit;
 import com.android.internal.util.ArrayUtils;
 import com.android.internal.util.DataClass;
+import com.android.internal.util.FrameworkStatsLog;
 import com.android.internal.util.Parcelling;
 import com.android.internal.util.Preconditions;
 
@@ -165,7 +163,7 @@ import java.util.function.Supplier;
  * might also make sense inside of a single app if the access is forwarded between two features of
  * the app.
  *
- * <p>An app can register an {@link AppOpsCollector} to get informed about what accesses the
+ * <p>An app can register an {@link OnOpNotedCallback} to get informed about what accesses the
  * system is tracking for it. As each runtime permission has an associated app-op this API is
  * particularly useful for an app that want to find unexpected private data accesses.
  */
@@ -209,16 +207,16 @@ public class AppOpsManager {
 
     private static final Object sLock = new Object();
 
-    /** Current {@link AppOpsCollector}. Change via {@link #setNotedAppOpsCollector} */
+    /** Current {@link OnOpNotedCallback}. Change via {@link #setOnOpNotedCallback} */
     @GuardedBy("sLock")
-    private static @Nullable AppOpsCollector sNotedAppOpsCollector;
+    private static @Nullable OnOpNotedCallback sOnOpNotedCallback;
 
     /**
      * Additional collector that collect accesses and forwards a few of them them via
      * {@link IAppOpsService#reportRuntimeAppOpAccessMessageAndGetConfig}.
      */
-    private static AppOpsCollector sMessageCollector =
-            new AppOpsCollector() {
+    private static OnOpNotedCallback sMessageCollector =
+            new OnOpNotedCallback() {
                 @Override
                 public void onNoted(@NonNull SyncNotedAppOp op) {
                     reportStackTraceIfNeeded(op);
@@ -387,6 +385,22 @@ public class AppOpsManager {
      * when watching a particular op, not when watching a package.
      */
     public static final int WATCH_FOREGROUND_CHANGES = 1 << 0;
+
+    /**
+     * Flag for {@link #startWatchingMode} that causes the callback to happen on the switch-op
+     * instead the op the callback was registered. (This simulates pre-R behavior).
+     *
+     * @hide
+     */
+    public static final int CALL_BACK_ON_SWITCHED_OP = 1 << 1;
+
+    /**
+     * Flag to determine whether we should log noteOp/startOp calls to make sure they
+     * are correctly used
+     *
+     * @hide
+     */
+    public static final boolean NOTE_OP_COLLECTION_ENABLED = false;
 
     /**
      * @hide
@@ -666,15 +680,31 @@ public class AppOpsManager {
         }
     }
 
+    // These constants are redefined here to work around a metalava limitation/bug where
+    // @IntDef is not able to see @hide symbols when they are hidden via package hiding:
+    // frameworks/base/core/java/com/android/internal/package.html
+
+    /** @hide */
+    public static final int SAMPLING_STRATEGY_DEFAULT =
+            FrameworkStatsLog.RUNTIME_APP_OP_ACCESS__SAMPLING_STRATEGY__DEFAULT;
+
+    /** @hide */
+    public static final int SAMPLING_STRATEGY_UNIFORM =
+            FrameworkStatsLog.RUNTIME_APP_OP_ACCESS__SAMPLING_STRATEGY__UNIFORM;
+
+    /** @hide */
+    public static final int SAMPLING_STRATEGY_RARELY_USED =
+            FrameworkStatsLog.RUNTIME_APP_OP_ACCESS__SAMPLING_STRATEGY__RARELY_USED;
+
     /**
      * Strategies used for message sampling
      * @hide
      */
     @Retention(RetentionPolicy.SOURCE)
-    @IntDef(prefix = {"RUNTIME_APP_OPS_ACCESS__SAMPLING_STRATEGY__"}, value = {
-            RUNTIME_APP_OP_ACCESS__SAMPLING_STRATEGY__DEFAULT,
-            RUNTIME_APP_OP_ACCESS__SAMPLING_STRATEGY__UNIFORM,
-            RUNTIME_APP_OP_ACCESS__SAMPLING_STRATEGY__RARELY_USED
+    @IntDef(prefix = {"SAMPLING_STRATEGY_"}, value = {
+            SAMPLING_STRATEGY_DEFAULT,
+            SAMPLING_STRATEGY_UNIFORM,
+            SAMPLING_STRATEGY_RARELY_USED
     })
     public @interface SamplingStrategy {}
 
@@ -1038,9 +1068,12 @@ public class AppOpsManager {
     /** @hide Access telephony call audio */
     public static final int OP_ACCESS_CALL_AUDIO = 96;
 
+    /** @hide Auto-revoke app permissions if app is unused for an extended period */
+    public static final int OP_AUTO_REVOKE_PERMISSIONS_IF_UNUSED = 97;
+
     /** @hide */
     @UnsupportedAppUsage
-    public static final int _NUM_OP = 97;
+    public static final int _NUM_OP = 98;
 
     /** Access to coarse location information. */
     public static final String OPSTR_COARSE_LOCATION = "android:coarse_location";
@@ -1335,6 +1368,11 @@ public class AppOpsManager {
     @SystemApi
     public static final String OPSTR_ACCESS_CALL_AUDIO = "android:access_call_audio";
 
+    /** @hide Auto-revoke app permissions if app is unused for an extended period */
+    @SystemApi
+    public static final String OPSTR_AUTO_REVOKE_PERMISSIONS_IF_UNUSED =
+            "android:auto_revoke_permissions_if_unused";
+
     /** @hide Communicate cross-profile within the same profile group. */
     @SystemApi
     public static final String OPSTR_INTERACT_ACROSS_PROFILES = "android:interact_across_profiles";
@@ -1424,6 +1462,7 @@ public class AppOpsManager {
             OP_INTERACT_ACROSS_PROFILES,
             OP_LOADER_USAGE_STATS,
             OP_ACCESS_CALL_AUDIO,
+            OP_AUTO_REVOKE_PERMISSIONS_IF_UNUSED,
     };
 
     /**
@@ -1532,6 +1571,7 @@ public class AppOpsManager {
             OP_ACTIVATE_PLATFORM_VPN,           // ACTIVATE_PLATFORM_VPN
             OP_LOADER_USAGE_STATS,              // LOADER_USAGE_STATS
             OP_ACCESS_CALL_AUDIO,               // ACCESS_CALL_AUDIO
+            OP_AUTO_REVOKE_PERMISSIONS_IF_UNUSED, //AUTO_REVOKE_PERMISSIONS_IF_UNUSED
     };
 
     /**
@@ -1635,6 +1675,7 @@ public class AppOpsManager {
             OPSTR_ACTIVATE_PLATFORM_VPN,
             OPSTR_LOADER_USAGE_STATS,
             OPSTR_ACCESS_CALL_AUDIO,
+            OPSTR_AUTO_REVOKE_PERMISSIONS_IF_UNUSED,
     };
 
     /**
@@ -1739,6 +1780,7 @@ public class AppOpsManager {
             "ACTIVATE_PLATFORM_VPN",
             "LOADER_USAGE_STATS",
             "ACCESS_CALL_AUDIO",
+            "AUTO_REVOKE_PERMISSIONS_IF_UNUSED",
     };
 
     /**
@@ -1844,6 +1886,7 @@ public class AppOpsManager {
             null, // no permission for OP_ACTIVATE_PLATFORM_VPN
             android.Manifest.permission.LOADER_USAGE_STATS,
             Manifest.permission.ACCESS_CALL_AUDIO,
+            null, // no permission for OP_AUTO_REVOKE_PERMISSIONS_IF_UNUSED
     };
 
     /**
@@ -1949,110 +1992,112 @@ public class AppOpsManager {
             null, // ACTIVATE_PLATFORM_VPN
             null, // LOADER_USAGE_STATS
             null, // ACCESS_CALL_AUDIO
+            null, // AUTO_REVOKE_PERMISSIONS_IF_UNUSED
     };
 
     /**
-     * This specifies whether each option should allow the system
-     * (and system ui) to bypass the user restriction when active.
+     * In which cases should an app be allowed to bypass the {@link #setUserRestriction user
+     * restriction} for a certain app-op.
      */
-    private static boolean[] sOpAllowSystemRestrictionBypass = new boolean[] {
-            true, //COARSE_LOCATION
-            true, //FINE_LOCATION
-            false, //GPS
-            false, //VIBRATE
-            false, //READ_CONTACTS
-            false, //WRITE_CONTACTS
-            false, //READ_CALL_LOG
-            false, //WRITE_CALL_LOG
-            false, //READ_CALENDAR
-            false, //WRITE_CALENDAR
-            true, //WIFI_SCAN
-            false, //POST_NOTIFICATION
-            false, //NEIGHBORING_CELLS
-            false, //CALL_PHONE
-            false, //READ_SMS
-            false, //WRITE_SMS
-            false, //RECEIVE_SMS
-            false, //RECEIVE_EMERGECY_SMS
-            false, //RECEIVE_MMS
-            false, //RECEIVE_WAP_PUSH
-            false, //SEND_SMS
-            false, //READ_ICC_SMS
-            false, //WRITE_ICC_SMS
-            false, //WRITE_SETTINGS
-            true, //SYSTEM_ALERT_WINDOW
-            false, //ACCESS_NOTIFICATIONS
-            false, //CAMERA
-            false, //RECORD_AUDIO
-            false, //PLAY_AUDIO
-            false, //READ_CLIPBOARD
-            false, //WRITE_CLIPBOARD
-            false, //TAKE_MEDIA_BUTTONS
-            false, //TAKE_AUDIO_FOCUS
-            false, //AUDIO_MASTER_VOLUME
-            false, //AUDIO_VOICE_VOLUME
-            false, //AUDIO_RING_VOLUME
-            false, //AUDIO_MEDIA_VOLUME
-            false, //AUDIO_ALARM_VOLUME
-            false, //AUDIO_NOTIFICATION_VOLUME
-            false, //AUDIO_BLUETOOTH_VOLUME
-            false, //WAKE_LOCK
-            false, //MONITOR_LOCATION
-            false, //MONITOR_HIGH_POWER_LOCATION
-            false, //GET_USAGE_STATS
-            false, //MUTE_MICROPHONE
-            true, //TOAST_WINDOW
-            false, //PROJECT_MEDIA
-            false, //ACTIVATE_VPN
-            false, //WALLPAPER
-            false, //ASSIST_STRUCTURE
-            false, //ASSIST_SCREENSHOT
-            false, //READ_PHONE_STATE
-            false, //ADD_VOICEMAIL
-            false, // USE_SIP
-            false, // PROCESS_OUTGOING_CALLS
-            false, // USE_FINGERPRINT
-            false, // BODY_SENSORS
-            false, // READ_CELL_BROADCASTS
-            false, // MOCK_LOCATION
-            false, // READ_EXTERNAL_STORAGE
-            false, // WRITE_EXTERNAL_STORAGE
-            false, // TURN_ON_SCREEN
-            false, // GET_ACCOUNTS
-            false, // RUN_IN_BACKGROUND
-            false, // AUDIO_ACCESSIBILITY_VOLUME
-            false, // READ_PHONE_NUMBERS
-            false, // REQUEST_INSTALL_PACKAGES
-            false, // ENTER_PICTURE_IN_PICTURE_ON_HIDE
-            false, // INSTANT_APP_START_FOREGROUND
-            false, // ANSWER_PHONE_CALLS
-            false, // OP_RUN_ANY_IN_BACKGROUND
-            false, // OP_CHANGE_WIFI_STATE
-            false, // OP_REQUEST_DELETE_PACKAGES
-            false, // OP_BIND_ACCESSIBILITY_SERVICE
-            false, // ACCEPT_HANDOVER
-            false, // MANAGE_IPSEC_HANDOVERS
-            false, // START_FOREGROUND
-            true, // BLUETOOTH_SCAN
-            false, // USE_BIOMETRIC
-            false, // ACTIVITY_RECOGNITION
-            false, // SMS_FINANCIAL_TRANSACTIONS
-            false, // READ_MEDIA_AUDIO
-            false, // WRITE_MEDIA_AUDIO
-            false, // READ_MEDIA_VIDEO
-            false, // WRITE_MEDIA_VIDEO
-            false, // READ_MEDIA_IMAGES
-            false, // WRITE_MEDIA_IMAGES
-            false, // LEGACY_STORAGE
-            false, // ACCESS_ACCESSIBILITY
-            false, // READ_DEVICE_IDENTIFIERS
-            false, // ACCESS_MEDIA_LOCATION
-            false, // QUERY_ALL_PACKAGES
-            false, // MANAGE_EXTERNAL_STORAGE
-            false, // INTERACT_ACROSS_PROFILES
-            false, // ACTIVATE_PLATFORM_VPN
-            false, // LOADER_USAGE_STATS
-            false, // ACCESS_CALL_AUDIO
+    private static RestrictionBypass[] sOpAllowSystemRestrictionBypass = new RestrictionBypass[] {
+            new RestrictionBypass(true, false), //COARSE_LOCATION
+            new RestrictionBypass(true, false), //FINE_LOCATION
+            null, //GPS
+            null, //VIBRATE
+            null, //READ_CONTACTS
+            null, //WRITE_CONTACTS
+            null, //READ_CALL_LOG
+            null, //WRITE_CALL_LOG
+            null, //READ_CALENDAR
+            null, //WRITE_CALENDAR
+            new RestrictionBypass(true, false), //WIFI_SCAN
+            null, //POST_NOTIFICATION
+            null, //NEIGHBORING_CELLS
+            null, //CALL_PHONE
+            null, //READ_SMS
+            null, //WRITE_SMS
+            null, //RECEIVE_SMS
+            null, //RECEIVE_EMERGECY_SMS
+            null, //RECEIVE_MMS
+            null, //RECEIVE_WAP_PUSH
+            null, //SEND_SMS
+            null, //READ_ICC_SMS
+            null, //WRITE_ICC_SMS
+            null, //WRITE_SETTINGS
+            new RestrictionBypass(true, false), //SYSTEM_ALERT_WINDOW
+            null, //ACCESS_NOTIFICATIONS
+            null, //CAMERA
+            new RestrictionBypass(false, true), //RECORD_AUDIO
+            null, //PLAY_AUDIO
+            null, //READ_CLIPBOARD
+            null, //WRITE_CLIPBOARD
+            null, //TAKE_MEDIA_BUTTONS
+            null, //TAKE_AUDIO_FOCUS
+            null, //AUDIO_MASTER_VOLUME
+            null, //AUDIO_VOICE_VOLUME
+            null, //AUDIO_RING_VOLUME
+            null, //AUDIO_MEDIA_VOLUME
+            null, //AUDIO_ALARM_VOLUME
+            null, //AUDIO_NOTIFICATION_VOLUME
+            null, //AUDIO_BLUETOOTH_VOLUME
+            null, //WAKE_LOCK
+            null, //MONITOR_LOCATION
+            null, //MONITOR_HIGH_POWER_LOCATION
+            null, //GET_USAGE_STATS
+            null, //MUTE_MICROPHONE
+            new RestrictionBypass(true, false), //TOAST_WINDOW
+            null, //PROJECT_MEDIA
+            null, //ACTIVATE_VPN
+            null, //WALLPAPER
+            null, //ASSIST_STRUCTURE
+            null, //ASSIST_SCREENSHOT
+            null, //READ_PHONE_STATE
+            null, //ADD_VOICEMAIL
+            null, // USE_SIP
+            null, // PROCESS_OUTGOING_CALLS
+            null, // USE_FINGERPRINT
+            null, // BODY_SENSORS
+            null, // READ_CELL_BROADCASTS
+            null, // MOCK_LOCATION
+            null, // READ_EXTERNAL_STORAGE
+            null, // WRITE_EXTERNAL_STORAGE
+            null, // TURN_ON_SCREEN
+            null, // GET_ACCOUNTS
+            null, // RUN_IN_BACKGROUND
+            null, // AUDIO_ACCESSIBILITY_VOLUME
+            null, // READ_PHONE_NUMBERS
+            null, // REQUEST_INSTALL_PACKAGES
+            null, // ENTER_PICTURE_IN_PICTURE_ON_HIDE
+            null, // INSTANT_APP_START_FOREGROUND
+            null, // ANSWER_PHONE_CALLS
+            null, // OP_RUN_ANY_IN_BACKGROUND
+            null, // OP_CHANGE_WIFI_STATE
+            null, // OP_REQUEST_DELETE_PACKAGES
+            null, // OP_BIND_ACCESSIBILITY_SERVICE
+            null, // ACCEPT_HANDOVER
+            null, // MANAGE_IPSEC_HANDOVERS
+            null, // START_FOREGROUND
+            new RestrictionBypass(true, false), // BLUETOOTH_SCAN
+            null, // USE_BIOMETRIC
+            null, // ACTIVITY_RECOGNITION
+            null, // SMS_FINANCIAL_TRANSACTIONS
+            null, // READ_MEDIA_AUDIO
+            null, // WRITE_MEDIA_AUDIO
+            null, // READ_MEDIA_VIDEO
+            null, // WRITE_MEDIA_VIDEO
+            null, // READ_MEDIA_IMAGES
+            null, // WRITE_MEDIA_IMAGES
+            null, // LEGACY_STORAGE
+            null, // ACCESS_ACCESSIBILITY
+            null, // READ_DEVICE_IDENTIFIERS
+            null, // ACCESS_MEDIA_LOCATION
+            null, // QUERY_ALL_PACKAGES
+            null, // MANAGE_EXTERNAL_STORAGE
+            null, // INTERACT_ACROSS_PROFILES
+            null, // ACTIVATE_PLATFORM_VPN
+            null, // LOADER_USAGE_STATS
+            null, // ACCESS_CALL_AUDIO
+            null, // AUTO_REVOKE_PERMISSIONS_IF_UNUSED
     };
 
     /**
@@ -2156,6 +2201,7 @@ public class AppOpsManager {
             AppOpsManager.MODE_IGNORED, // ACTIVATE_PLATFORM_VPN
             AppOpsManager.MODE_DEFAULT, // LOADER_USAGE_STATS
             AppOpsManager.MODE_DEFAULT, // ACCESS_CALL_AUDIO
+            AppOpsManager.MODE_DEFAULT, // OP_AUTO_REVOKE_PERMISSIONS_IF_UNUSED
     };
 
     /**
@@ -2263,6 +2309,7 @@ public class AppOpsManager {
             false, // ACTIVATE_PLATFORM_VPN
             false, // LOADER_USAGE_STATS
             false, // ACCESS_CALL_AUDIO
+            false, // AUTO_REVOKE_PERMISSIONS_IF_UNUSED
     };
 
     /**
@@ -2446,11 +2493,11 @@ public class AppOpsManager {
     }
 
     /**
-     * Retrieve whether the op allows the system (and system ui) to
-     * bypass the user restriction.
+     * Retrieve whether the op allows to bypass the user restriction.
+     *
      * @hide
      */
-    public static boolean opAllowSystemBypassRestriction(int op) {
+    public static RestrictionBypass opAllowSystemBypassRestriction(int op) {
         return sOpAllowSystemRestrictionBypass[op];
     }
 
@@ -2494,6 +2541,29 @@ public class AppOpsManager {
      */
     public static boolean opAllowsReset(int op) {
         return !sOpDisableReset[op];
+    }
+
+    /**
+     * When to not enforce {@link #setUserRestriction restrictions}.
+     *
+     * @hide
+     */
+    public static class RestrictionBypass {
+        /** Does the app need to be privileged to bypass the restriction */
+        public boolean isPrivileged;
+
+        /**
+         * Does the app need to have the EXEMPT_FROM_AUDIO_RESTRICTIONS permission to bypass the
+         * restriction
+         */
+        public boolean isRecordAudioRestrictionExcept;
+
+        public RestrictionBypass(boolean isPrivileged, boolean isRecordAudioRestrictionExcept) {
+            this.isPrivileged = isPrivileged;
+            this.isRecordAudioRestrictionExcept = isRecordAudioRestrictionExcept;
+        }
+
+        public static RestrictionBypass UNRESTRICTED = new RestrictionBypass(true, true);
     }
 
     /**
@@ -6650,6 +6720,13 @@ public class AppOpsManager {
                 };
                 mModeWatchers.put(callback, cb);
             }
+
+            // See CALL_BACK_ON_CHANGED_LISTENER_WITH_SWITCHED_OP_CHANGE
+            if (!Compatibility.isChangeEnabled(
+                    CALL_BACK_ON_CHANGED_LISTENER_WITH_SWITCHED_OP_CHANGE)) {
+                flags |= CALL_BACK_ON_SWITCHED_OP;
+            }
+
             try {
                 mService.startWatchingModeWithFlags(op, packageName, flags, cb);
             } catch (RemoteException e) {
@@ -6910,11 +6987,7 @@ public class AppOpsManager {
      * Does not throw a security exception, does not translate {@link #MODE_FOREGROUND}.
      */
     public int unsafeCheckOpRaw(@NonNull String op, int uid, @NonNull String packageName) {
-        try {
-            return mService.checkOperationRaw(strOpToOp(op), uid, packageName);
-        } catch (RemoteException e) {
-            throw e.rethrowFromSystemServer();
-        }
+        return unsafeCheckOpRawNoThrow(op, uid, packageName);
     }
 
     /**
@@ -6923,8 +6996,17 @@ public class AppOpsManager {
      * {@link #MODE_FOREGROUND}.
      */
     public int unsafeCheckOpRawNoThrow(@NonNull String op, int uid, @NonNull String packageName) {
+        return unsafeCheckOpRawNoThrow(strOpToOp(op), uid, packageName);
+    }
+
+    /**
+     * Returns the <em>raw</em> mode associated with the op.
+     * Does not throw a security exception, does not translate {@link #MODE_FOREGROUND}.
+     * @hide
+     */
+    public int unsafeCheckOpRawNoThrow(int op, int uid, @NonNull String packageName) {
         try {
-            return mService.checkOperationRaw(strOpToOp(op), uid, packageName);
+            return mService.checkOperationRaw(op, uid, packageName);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -7085,6 +7167,7 @@ public class AppOpsManager {
     public int noteOpNoThrow(int op, int uid, @Nullable String packageName,
             @Nullable String featureId, @Nullable String message) {
         try {
+            collectNoteOpCallsForValidation(op);
             int collectionMode = getNotedOpCollectionMode(uid, packageName, op);
             if (collectionMode == COLLECT_ASYNC) {
                 if (message == null) {
@@ -7245,6 +7328,7 @@ public class AppOpsManager {
         int myUid = Process.myUid();
 
         try {
+            collectNoteOpCallsForValidation(op);
             int collectionMode = getNotedOpCollectionMode(proxiedUid, proxiedPackageName, op);
             if (collectionMode == COLLECT_ASYNC) {
                 if (message == null) {
@@ -7565,6 +7649,7 @@ public class AppOpsManager {
     public int startOpNoThrow(int op, int uid, @NonNull String packageName,
             boolean startIfModeDefault, @Nullable String featureId, @Nullable String message) {
         try {
+            collectNoteOpCallsForValidation(op);
             int collectionMode = getNotedOpCollectionMode(uid, packageName, op);
             if (collectionMode == COLLECT_ASYNC) {
                 if (message == null) {
@@ -7753,8 +7838,8 @@ public class AppOpsManager {
      */
     private void collectNotedOpForSelf(int op, @Nullable String featureId) {
         synchronized (sLock) {
-            if (sNotedAppOpsCollector != null) {
-                sNotedAppOpsCollector.onSelfNoted(new SyncNotedAppOp(op, featureId));
+            if (sOnOpNotedCallback != null) {
+                sOnOpNotedCallback.onSelfNoted(new SyncNotedAppOp(op, featureId));
             }
         }
         sMessageCollector.onSelfNoted(new SyncNotedAppOp(op, featureId));
@@ -7903,8 +7988,8 @@ public class AppOpsManager {
                 synchronized (sLock) {
                     for (int code = notedAppOps.nextSetBit(0); code != -1;
                             code = notedAppOps.nextSetBit(code + 1)) {
-                        if (sNotedAppOpsCollector != null) {
-                            sNotedAppOpsCollector.onNoted(new SyncNotedAppOp(code, featureId));
+                        if (sOnOpNotedCallback != null) {
+                            sOnOpNotedCallback.onNoted(new SyncNotedAppOp(code, featureId));
                         }
                     }
                 }
@@ -7917,33 +8002,45 @@ public class AppOpsManager {
     }
 
     /**
-     * Register a new {@link AppOpsCollector}.
+     * Set a new {@link OnOpNotedCallback}.
      *
-     * <p>There can only ever be one collector per process. If there currently is a collector
-     * registered, it will be unregistered.
+     * <p>There can only ever be one collector per process. If there currently is another callback
+     * set, this will fail.
      *
-     * <p><b>Only appops related to dangerous permissions are collected.</b>
+     * @param asyncExecutor executor to execute {@link OnOpNotedCallback#onAsyncNoted} on, {@code
+     * null} to unset
+     * @param callback listener to set, {@code null} to unset
      *
-     * @param collector The collector to set or {@code null} to unregister.
+     * @throws IllegalStateException If another callback is already registered
      */
-    public void setNotedAppOpsCollector(@Nullable AppOpsCollector collector) {
+    public void setOnOpNotedCallback(@Nullable @CallbackExecutor Executor asyncExecutor,
+            @Nullable OnOpNotedCallback callback) {
+        Preconditions.checkState((callback == null) == (asyncExecutor == null));
+
         synchronized (sLock) {
-            if (sNotedAppOpsCollector != null) {
+            if (callback == null) {
+                Preconditions.checkState(sOnOpNotedCallback != null,
+                        "No callback is currently registered");
+
                 try {
                     mService.stopWatchingAsyncNoted(mContext.getPackageName(),
-                            sNotedAppOpsCollector.mAsyncCb);
+                            sOnOpNotedCallback.mAsyncCb);
                 } catch (RemoteException e) {
                     e.rethrowFromSystemServer();
                 }
-            }
 
-            sNotedAppOpsCollector = collector;
+                sOnOpNotedCallback = null;
+            } else {
+                Preconditions.checkState(sOnOpNotedCallback == null,
+                        "Another callback is already registered");
 
-            if (sNotedAppOpsCollector != null) {
+                callback.mAsyncExecutor = asyncExecutor;
+                sOnOpNotedCallback = callback;
+
                 List<AsyncNotedAppOp> missedAsyncOps = null;
                 try {
                     mService.startWatchingAsyncNoted(mContext.getPackageName(),
-                            sNotedAppOpsCollector.mAsyncCb);
+                            sOnOpNotedCallback.mAsyncCb);
                     missedAsyncOps = mService.extractAsyncOps(mContext.getPackageName());
                 } catch (RemoteException e) {
                     e.rethrowFromSystemServer();
@@ -7953,10 +8050,9 @@ public class AppOpsManager {
                     int numMissedAsyncOps = missedAsyncOps.size();
                     for (int i = 0; i < numMissedAsyncOps; i++) {
                         final AsyncNotedAppOp asyncNotedAppOp = missedAsyncOps.get(i);
-                        if (sNotedAppOpsCollector != null) {
-                            sNotedAppOpsCollector.getAsyncNotedExecutor().execute(
-                                    () -> sNotedAppOpsCollector.onAsyncNoted(
-                                            asyncNotedAppOp));
+                        if (sOnOpNotedCallback != null) {
+                            sOnOpNotedCallback.getAsyncNotedExecutor().execute(
+                                    () -> sOnOpNotedCallback.onAsyncNoted(asyncNotedAppOp));
                         }
                     }
                 }
@@ -7964,27 +8060,50 @@ public class AppOpsManager {
         }
     }
 
+    // TODO moltmann: Remove
     /**
-     * @return {@code true} iff the process currently is currently collecting noted appops.
+     * Will be removed before R ships, leave it just to not break apps immediately.
      *
-     * @see #setNotedAppOpsCollector(AppOpsCollector)
+     * @removed
      *
      * @hide
      */
-    public static boolean isCollectingNotedAppOps() {
-        return sNotedAppOpsCollector != null;
+    @SystemApi
+    @Deprecated
+    public void setNotedAppOpsCollector(@Nullable AppOpsCollector collector) {
+        synchronized (sLock) {
+            if (collector != null) {
+                if (isListeningForOpNoted()) {
+                    setOnOpNotedCallback(null, null);
+                }
+                setOnOpNotedCallback(new HandlerExecutor(Handler.getMain()), collector);
+            } else if (sOnOpNotedCallback != null) {
+                setOnOpNotedCallback(null, null);
+            }
+        }
     }
 
     /**
-     * Callback an app can {@link #setNotedAppOpsCollector register} to monitor the app-ops the
-     * system has tracked for it. I.e. each time any app calls {@link #noteOp} or {@link #startOp}
-     * one of the callback methods of this object is called.
+     * @return {@code true} iff the process currently is currently collecting noted appops.
      *
-     * <p><b>There will be a callback for all app-ops related to runtime permissions, but not
+     * @see #setOnOpNotedCallback
+     *
+     * @hide
+     */
+    public static boolean isListeningForOpNoted() {
+        return sOnOpNotedCallback != null;
+    }
+
+    /**
+     * Callback an app can {@link #setOnOpNotedCallback set} to monitor the app-ops the
+     * system has tracked for it. I.e. each time any app calls {@link #noteOp} or {@link #startOp}
+     * one of a method of this object is called.
+     *
+     * <p><b>There will be a call for all app-ops related to runtime permissions, but not
      * necessarily for all other app-ops.
      *
      * <pre>
-     * setNotedAppOpsCollector(new AppOpsCollector() {
+     * setOnOpNotedCallback(getMainExecutor(), new OnOpNotedCallback() {
      *     ArraySet<Pair<String, String>> opsNotedForThisProcess = new ArraySet<>();
      *
      *     private synchronized void addAccess(String op, String accessLocation) {
@@ -8009,24 +8128,36 @@ public class AppOpsManager {
      * });
      * </pre>
      *
-     * @see #setNotedAppOpsCollector
+     * @see #setOnOpNotedCallback
      */
-    public abstract static class AppOpsCollector {
+    public abstract static class OnOpNotedCallback {
+        private @NonNull Executor mAsyncExecutor;
+
         /** Callback registered with the system. This will receive the async notes ops */
         private final IAppOpsAsyncNotedCallback mAsyncCb = new IAppOpsAsyncNotedCallback.Stub() {
             @Override
             public void opNoted(AsyncNotedAppOp op) {
                 Objects.requireNonNull(op);
 
-                getAsyncNotedExecutor().execute(() -> onAsyncNoted(op));
+                long token = Binder.clearCallingIdentity();
+                try {
+                    getAsyncNotedExecutor().execute(() -> onAsyncNoted(op));
+                } finally {
+                    Binder.restoreCallingIdentity(token);
+                }
             }
         };
 
+        // TODO moltmann: Remove
         /**
+         * Will be removed before R ships.
+         *
          * @return The executor for the system to use when calling {@link #onAsyncNoted}.
+         *
+         * @hide
          */
-        public @NonNull Executor getAsyncNotedExecutor() {
-            return new HandlerExecutor(Handler.getMain());
+        protected @NonNull Executor getAsyncNotedExecutor() {
+            return mAsyncExecutor;
         }
 
         /**
@@ -8036,7 +8167,7 @@ public class AppOpsManager {
          * <p>Called on the calling thread before the API returns. This allows the app to e.g.
          * collect stack traces to figure out where the access came from.
          *
-         * @param op The op noted
+         * @param op op noted
          */
         public abstract void onNoted(@NonNull SyncNotedAppOp op);
 
@@ -8046,7 +8177,7 @@ public class AppOpsManager {
          * <p>This is very similar to {@link #onNoted} only that the tracking was not caused by the
          * API provider in a separate process, but by one in the app's own process.
          *
-         * @param op The op noted
+         * @param op op noted
          */
         public abstract void onSelfNoted(@NonNull SyncNotedAppOp op);
 
@@ -8058,13 +8189,29 @@ public class AppOpsManager {
          * guaranteed. Due to how async calls work in Android this might even be delivered slightly
          * before the private data is delivered to the app.
          *
-         * <p>If the app is not running or no {@link AppOpsCollector} is registered a small amount
-         * of noted app-ops are buffered and then delivered as soon as a collector is registered.
+         * <p>If the app is not running or no {@link OnOpNotedCallback} is registered a small amount
+         * of noted app-ops are buffered and then delivered as soon as a listener is registered.
          *
-         * @param asyncOp The op noted
+         * @param asyncOp op noted
          */
         public abstract void onAsyncNoted(@NonNull AsyncNotedAppOp asyncOp);
     }
+
+    // TODO moltmann: Remove
+    /**
+     * Will be removed before R ships, leave it just to not break apps immediately.
+     *
+     * @removed
+     *
+     * @hide
+     */
+    @SystemApi
+    @Deprecated
+    public abstract static class AppOpsCollector extends OnOpNotedCallback {
+        public @NonNull Executor getAsyncNotedExecutor() {
+            return new HandlerExecutor(Handler.getMain());
+        }
+    };
 
     /**
      * Generate a stack trace used for noted app-ops logging.
@@ -8473,5 +8620,25 @@ public class AppOpsManager {
      */
     public static int leftCircularDistance(int from, int to, int size) {
         return (to + size - from) % size;
+    }
+
+    /**
+     * Helper method for noteOp, startOp and noteProxyOp to call AppOpsService to collect/log
+     * stack traces
+     *
+     * <p> For each call, the stacktrace op code, package name and long version code will be
+     * passed along where it will be logged/collected
+     *
+     * @param op The operation to note
+     */
+    private void collectNoteOpCallsForValidation(int op) {
+        if (NOTE_OP_COLLECTION_ENABLED) {
+            try {
+                mService.collectNoteOpCallsForValidation(getFormattedStackTrace(),
+                        op, mContext.getOpPackageName(), mContext.getApplicationInfo().longVersionCode);
+            } catch (RemoteException e) {
+                // Swallow error, only meant for logging ops, should not affect flow of the code
+            }
+        }
     }
 }

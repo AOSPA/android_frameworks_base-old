@@ -1634,14 +1634,20 @@ public final class InputMethodManager {
     @Deprecated
     @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 123768499)
     public void showSoftInputUnchecked(int flags, ResultReceiver resultReceiver) {
-        try {
-            Log.w(TAG, "showSoftInputUnchecked() is a hidden method, which will be removed "
-                    + "soon. If you are using android.support.v7.widget.SearchView, please update "
-                    + "to version 26.0 or newer version.");
-            mService.showSoftInput(
-                    mClient, mCurRootView.getView().getWindowToken(), flags, resultReceiver);
-        } catch (RemoteException e) {
-            throw e.rethrowFromSystemServer();
+        synchronized (mH) {
+            try {
+                Log.w(TAG, "showSoftInputUnchecked() is a hidden method, which will be"
+                        + " removed soon. If you are using android.support.v7.widget.SearchView,"
+                        + " please update to version 26.0 or newer version.");
+                if (mCurRootView == null || mCurRootView.getView() == null) {
+                    Log.w(TAG, "No current root view, ignoring showSoftInputUnchecked()");
+                    return;
+                }
+                mService.showSoftInput(
+                        mClient, mCurRootView.getView().getWindowToken(), flags, resultReceiver);
+            } catch (RemoteException e) {
+                throw e.rethrowFromSystemServer();
+            }
         }
     }
 
@@ -1709,7 +1715,7 @@ public final class InputMethodManager {
             }
 
             try {
-                return mService.hideSoftInput(mClient, flags, resultReceiver);
+                return mService.hideSoftInput(mClient, windowToken, flags, resultReceiver);
             } catch (RemoteException e) {
                 throw e.rethrowFromSystemServer();
             }
@@ -1858,6 +1864,7 @@ public final class InputMethodManager {
         // system can verify the consistency between the uid of this process and package name passed
         // from here. See comment of Context#getOpPackageName() for details.
         tba.packageName = view.getContext().getOpPackageName();
+        tba.autofillId = view.getAutofillId();
         tba.fieldId = view.getId();
         InputConnection ic = view.onCreateInputConnection(tba);
         if (DEBUG) Log.v(TAG, "Starting input: tba=" + tba + " ic=" + ic);
@@ -1985,10 +1992,17 @@ public final class InputMethodManager {
 
     @UnsupportedAppUsage
     void closeCurrentInput() {
-        try {
-            mService.hideSoftInput(mClient, HIDE_NOT_ALWAYS, null);
-        } catch (RemoteException e) {
-            throw e.rethrowFromSystemServer();
+        synchronized (mH) {
+            if (mCurRootView == null || mCurRootView.getView() == null) {
+                Log.w(TAG, "No current root view, ignoring closeCurrentInput()");
+                return;
+            }
+            try {
+                mService.hideSoftInput(
+                        mClient, mCurRootView.getView().getWindowToken(), HIDE_NOT_ALWAYS, null);
+            } catch (RemoteException e) {
+                throw e.rethrowFromSystemServer();
+            }
         }
     }
 
@@ -2049,6 +2063,21 @@ public final class InputMethodManager {
             try {
                 if (mCurMethod != null) {
                     mCurMethod.notifyImeHidden();
+                }
+            } catch (RemoteException re) {
+            }
+        }
+    }
+
+    /**
+     * Notify IME directly to remove surface as it is no longer visible.
+     * @hide
+     */
+    public void removeImeSurface() {
+        synchronized (mH) {
+            try {
+                if (mCurMethod != null) {
+                    mCurMethod.removeImeSurface();
                 }
             } catch (RemoteException re) {
             }

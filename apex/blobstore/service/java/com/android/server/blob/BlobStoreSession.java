@@ -96,6 +96,10 @@ class BlobStoreSession extends IBlobStoreSession.Stub {
     @GuardedBy("mRevocableFds")
     private ArrayList<RevocableFileDescriptor> mRevocableFds = new ArrayList<>();
 
+    // This will be accessed from only one thread at any point of time, so no need to grab
+    // a lock for this.
+    private byte[] mDataDigest;
+
     @GuardedBy("mSessionLock")
     private int mState = STATE_CLOSED;
 
@@ -343,12 +347,12 @@ class BlobStoreSession extends IBlobStoreSession.Stub {
 
     @Override
     public void close() {
-        closeSession(STATE_CLOSED);
+        closeSession(STATE_CLOSED, false /* sendCallback */);
     }
 
     @Override
     public void abandon() {
-        closeSession(STATE_ABANDONED);
+        closeSession(STATE_ABANDONED, true /* sendCallback */);
     }
 
     @Override
@@ -356,11 +360,11 @@ class BlobStoreSession extends IBlobStoreSession.Stub {
         synchronized (mSessionLock) {
             mBlobCommitCallback = callback;
 
-            closeSession(STATE_COMMITTED);
+            closeSession(STATE_COMMITTED, true /* sendCallback */);
         }
     }
 
-    private void closeSession(int state) {
+    private void closeSession(int state, boolean sendCallback) {
         assertCallerIsOwner();
         synchronized (mSessionLock) {
             if (mState != STATE_OPENED) {
@@ -377,23 +381,27 @@ class BlobStoreSession extends IBlobStoreSession.Stub {
             mState = state;
             revokeAllFdsLocked();
 
-            mListener.onStateChanged(this);
+            if (sendCallback) {
+                mListener.onStateChanged(this);
+            }
         }
     }
 
-    void verifyBlobData() {
-        byte[] actualDigest = null;
+    void computeDigest() {
         try {
             Trace.traceBegin(TRACE_TAG_SYSTEM_SERVER,
                     "computeBlobDigest-i" + mSessionId + "-l" + getSessionFile().length());
-            actualDigest = FileUtils.digest(getSessionFile(), mBlobHandle.algorithm);
+            mDataDigest = FileUtils.digest(getSessionFile(), mBlobHandle.algorithm);
         } catch (IOException | NoSuchAlgorithmException e) {
             Slog.e(TAG, "Error computing the digest", e);
         } finally {
             Trace.traceEnd(TRACE_TAG_SYSTEM_SERVER);
         }
+    }
+
+    void verifyBlobData() {
         synchronized (mSessionLock) {
-            if (actualDigest != null && Arrays.equals(actualDigest, mBlobHandle.digest)) {
+            if (mDataDigest != null && Arrays.equals(mDataDigest, mBlobHandle.digest)) {
                 mState = STATE_VERIFIED_VALID;
                 // Commit callback will be sent once the data is persisted.
             } else {
@@ -451,6 +459,10 @@ class BlobStoreSession extends IBlobStoreSession.Stub {
                 return "<abandoned>";
             case STATE_COMMITTED:
                 return "<committed>";
+            case STATE_VERIFIED_VALID:
+                return "<verified_valid>";
+            case STATE_VERIFIED_INVALID:
+                return "<verified_invalid>";
             default:
                 Slog.wtf(TAG, "Unknown state: " + state);
                 return "<unknown>";

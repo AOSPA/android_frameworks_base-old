@@ -27,7 +27,11 @@ import com.android.systemui.statusbar.notification.NotificationFilter
 import com.android.systemui.statusbar.notification.NotificationSectionsFeatureManager
 import com.android.systemui.statusbar.notification.collection.provider.HighPriorityProvider
 import com.android.systemui.statusbar.notification.people.PeopleNotificationIdentifier
+import com.android.systemui.statusbar.notification.people.PeopleNotificationIdentifier.Companion.TYPE_IMPORTANT_PERSON
+import com.android.systemui.statusbar.notification.people.PeopleNotificationIdentifier.Companion.TYPE_NON_PERSON
+import com.android.systemui.statusbar.notification.people.PeopleNotificationIdentifier.Companion.TYPE_PERSON
 import com.android.systemui.statusbar.notification.stack.NotificationSectionsManager.BUCKET_ALERTING
+import com.android.systemui.statusbar.notification.stack.NotificationSectionsManager.BUCKET_HEADS_UP
 import com.android.systemui.statusbar.notification.stack.NotificationSectionsManager.BUCKET_PEOPLE
 import com.android.systemui.statusbar.notification.stack.NotificationSectionsManager.BUCKET_SILENT
 import com.android.systemui.statusbar.phone.NotificationGroupManager
@@ -71,11 +75,14 @@ open class NotificationRankingManager @Inject constructor(
         val aRank = a.ranking.rank
         val bRank = b.ranking.rank
 
-        val aIsPeople = a.isPeopleNotification()
-        val bIsPeople = b.isPeopleNotification()
+        val aPersonType = a.getPeopleNotificationType()
+        val bPersonType = b.getPeopleNotificationType()
 
-        val aIsImportantPeople = a.isImportantPeopleNotification()
-        val bIsImportantPeople = b.isImportantPeopleNotification()
+        val aIsPeople = aPersonType == TYPE_PERSON
+        val bIsPeople = bPersonType == TYPE_PERSON
+
+        val aIsImportantPeople = aPersonType == TYPE_IMPORTANT_PERSON
+        val bIsImportantPeople = bPersonType == TYPE_IMPORTANT_PERSON
 
         val aMedia = isImportantMedia(a)
         val bMedia = isImportantMedia(b)
@@ -90,12 +97,12 @@ open class NotificationRankingManager @Inject constructor(
         val bIsHighPriority = b.isHighPriority()
 
         when {
-            usePeopleFiltering && aIsPeople != bIsPeople -> if (aIsPeople) -1 else 1
-            usePeopleFiltering && aIsImportantPeople != bIsImportantPeople ->
-                if (aIsImportantPeople) -1 else 1
             aHeadsUp != bHeadsUp -> if (aHeadsUp) -1 else 1
             // Provide consistent ranking with headsUpManager
             aHeadsUp -> headsUpManager.compare(a, b)
+            usePeopleFiltering && aIsPeople != bIsPeople -> if (aIsPeople) -1 else 1
+            usePeopleFiltering && aIsImportantPeople != bIsImportantPeople ->
+                if (aIsImportantPeople) -1 else 1
             // Upsort current media notification.
             aMedia != bMedia -> if (aMedia) -1 else 1
             // Upsort PRIORITY_MAX system notifications
@@ -162,7 +169,9 @@ open class NotificationRankingManager @Inject constructor(
         isMedia: Boolean,
         isSystemMax: Boolean
     ) {
-        if (usePeopleFiltering && entry.isPeopleNotification()) {
+        if (usePeopleFiltering && isHeadsUp) {
+            entry.bucket = BUCKET_HEADS_UP
+        } else if (usePeopleFiltering && entry.getPeopleNotificationType() != TYPE_NON_PERSON) {
             entry.bucket = BUCKET_PEOPLE
         } else if (isHeadsUp || isMedia || isSystemMax || entry.isHighPriority()) {
             entry.bucket = BUCKET_ALERTING
@@ -195,11 +204,8 @@ open class NotificationRankingManager @Inject constructor(
         }
     }
 
-    private fun NotificationEntry.isPeopleNotification() =
-            peopleNotificationIdentifier.isPeopleNotification(sbn, ranking)
-
-    private fun NotificationEntry.isImportantPeopleNotification() =
-            peopleNotificationIdentifier.isImportantPeopleNotification(sbn, ranking)
+    private fun NotificationEntry.getPeopleNotificationType() =
+            peopleNotificationIdentifier.getPeopleNotificationType(sbn, ranking)
 
     private fun NotificationEntry.isHighPriority() =
             highPriorityProvider.isHighPriority(this)

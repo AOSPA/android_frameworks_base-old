@@ -1278,20 +1278,21 @@
     <integer name="config_screenBrightnessSettingDefault">102</integer>
 
     <!-- Minimum screen brightness setting allowed by power manager.
-        The user is forbidden from setting the brightness below this level.
-        Equivalent to 10/255. -->
-    <item name="config_screenBrightnessSettingMinimumFloat" format="float" type="dimen">0.035433073</item>
+         -2 is invalid so setting will resort to int value specified above.
+         Set this to 0.0 to allow screen to go to minimal brightness.
+         The user is forbidden from setting the brightness below this level. -->
+    <item name="config_screenBrightnessSettingMinimumFloat" format="float" type="dimen">-2</item>
 
     <!-- Maximum screen brightness allowed by the power manager.
-         The user is forbidden from setting the brightness above this level.
-         This value is a fraction between 3.5% and 100%. -->
-    <item name="config_screenBrightnessSettingMaximumFloat" format="float" type="dimen">1.0</item>
+         -2 is invalid so setting will resort to int value specified above.
+         Set this to 1.0 for maximum brightness range.
+         The user is forbidden from setting the brightness above this level. -->
+    <item name="config_screenBrightnessSettingMaximumFloat" format="float" type="dimen">-2</item>
 
-    <!-- Default screen brightness setting.
-         Must be in the range specified by minimum and maximum.
-         This value is a fraction between 3.5% and 100%.
-         Equivalent to 102/255 (default for this device)    -->
-    <item name="config_screenBrightnessSettingDefaultFloat" format="float" type="dimen">0.397637795276</item>
+    <!-- Default screen brightness setting set.
+         -2 is invalid so setting will resort to int value specified above.
+         Must be in the range specified by minimum and maximum. -->
+    <item name="config_screenBrightnessSettingDefaultFloat" format="float" type="dimen">-2</item>
 
     <!-- Note: This setting is deprecated, please use
     config_screenBrightnessSettingForVrDefaultFloat instead -->
@@ -2026,7 +2027,10 @@
          a keyboard is present. -->
     <bool name="config_showMenuShortcutsWhenKeyboardPresent">false</bool>
 
-    <!-- Do not translate. Defines the slots is Two Digit Number for dialing normally not USSD -->
+    <!-- Do not translate. Defines the slots is Two Digit Number for dialing normally not USSD.
+
+         Note: This config is deprecated, please use carrier config which is
+               CarrierConfigManager.KEY_MMI_TWO_DIGIT_NUMBER_PATTERN_STRING_ARRAY instead. -->
     <string-array name="config_twoDigitNumberPattern" translatable="false">
     </string-array>
 
@@ -2591,6 +2595,18 @@
     <string name="config_customAdbPublicKeyConfirmationSecondaryUserComponent"
             >com.android.systemui/com.android.systemui.usb.UsbDebuggingSecondaryUserActivity</string>
 
+    <!-- Name of the activity or service that prompts the user to reject, accept, or whitelist
+         a wireless network for wireless debugging.
+         Can be customized for other product types -->
+    <string name="config_customAdbWifiNetworkConfirmationComponent"
+            >com.android.systemui/com.android.systemui.wifi.WifiDebuggingActivity</string>
+
+    <!-- Name of the activity that prompts the secondary user to acknowledge she/he needs to
+         switch to the primary user to enable wireless debugging.
+         Can be customized for other product types -->
+    <string name="config_customAdbWifiNetworkConfirmationSecondaryUserComponent"
+            >com.android.systemui/com.android.systemui.wifi.WifiDebuggingSecondaryUserActivity</string>
+
     <!-- Component name of the activity that shows the usb containment status. -->
     <string name="config_usbContaminantActivity" translatable="false"
             >com.android.systemui/com.android.systemui.usb.UsbContaminantActivity</string>
@@ -2738,12 +2754,14 @@
     <string name="config_defaultNetworkScorerPackageName"></string>
 
     <!-- The amount to scale fullscreen snapshots for Overview and snapshot starting windows. -->
-    <item name="config_fullTaskSnapshotScale" format="float" type="dimen">1.0</item>
+    <item name="config_highResTaskSnapshotScale" format="float" type="dimen">1.0</item>
 
     <!-- The amount to scale reduced scale snapshots for Overview and snapshot starting windows.
          Reduced scale snapshots are loaded before full screen snapshots to improve load times and
-         minimize the chance the user will see an empty task card. -->
-    <item name="config_reducedTaskSnapshotScale" format="float" type="dimen">0.5</item>
+         minimize the chance the user will see an empty task card. If set to 0, reduced scale
+         snapshots are disabled, and snapshots will only be stored at config_highResTaskSnapshotScale
+         -->
+    <item name="config_lowResTaskSnapshotScale" format="float" type="dimen">0.5</item>
 
     <!-- Feature flag to store TaskSnapshot in 16 bit pixel format to save memory. -->
     <bool name="config_use16BitTaskSnapshotPixelFormat">false</bool>
@@ -3354,16 +3372,6 @@
          ratio larger than this is considered to wide and short to be usable. Currently 2.39:1. -->
     <item name="config_pictureInPictureMaxAspectRatio" format="float" type="dimen">2.39</item>
 
-    <!-- The snap mode to use for picture-in-picture. These values correspond to constants defined
-         in PipSnapAlgorithm and should not be changed independently.
-             0 - Snap to the four corners
-             1 - Snap to the four corners and the mid-points on the long edge in each orientation
-             2 - Snap anywhere along the edge of the screen
-             3 - Snap anywhere along the edge of the screen and magnet to corners
-             4 - Snap to the long edges in each orientation and magnet to corners
-    -->
-    <integer name="config_pictureInPictureSnapMode">4</integer>
-
     <!-- Controls the snap mode for the docked stack divider
              0 - 3 snap targets: left/top has 16:9 ratio, 1:1, and right/bottom has 16:9 ratio
              1 - 3 snap targets: fixed ratio, 1:1, (1 - fixed ratio)
@@ -3642,7 +3650,7 @@
          Example: "com.android.phone,com.android.stk,com.android.providers.telephony"
          (Note: shell is included for testing purposes)
      -->
-    <string name="config_telephonyPackages" translatable="false">"com.android.phone,com.android.stk,com.android.providers.telephony,com.android.ons,com.android.cellbroadcastservice,com.android.cellbroadcastreceiver,com.android.shell"</string>
+    <string name="config_telephonyPackages" translatable="false">"com.android.phone,com.android.stk,com.android.providers.telephony,com.android.ons"</string>
 
     <!-- The component name for the default system attention service.
          This service must be trusted, as it can be activated without explicit consent of the user.
@@ -3963,14 +3971,14 @@
     <!-- Component name for the default module metadata provider on this device -->
     <string name="config_defaultModuleMetadataProvider" translatable="false">com.android.modulemetadata</string>
 
-    <!-- This is the default launcher component to use on secondary displays that support system
-         decorations.
-         This launcher activity must support multiple instances and have corresponding launch mode
-         set in AndroidManifest.
+    <!-- This is the default launcher package with an activity to use on secondary displays that
+         support system decorations.
+         This launcher package must have an activity that supports multiple instances and has
+         corresponding launch mode set in AndroidManifest.
          {@see android.view.Display#FLAG_SHOULD_SHOW_SYSTEM_DECORATIONS} -->
-    <string name="config_secondaryHomeComponent" translatable="false">com.android.launcher3/com.android.launcher3.SecondaryDisplayLauncher</string>
+    <string name="config_secondaryHomePackage" translatable="false">com.android.launcher3</string>
 
-    <!-- Force secondary home launcher specified in config_secondaryHomeComponent always. If this is
+    <!-- Force secondary home launcher specified in config_secondaryHomePackage always. If this is
          not set, secondary home launcher can be replaced by user. -->
     <bool name ="config_useSystemProvidedLauncherForSecondary">false</bool>
 
@@ -4410,9 +4418,28 @@
          Determines whether the specified key groups can be used to wake up the device. -->
     <bool name="config_wakeOnDpadKeyPress">true</bool>
     <bool name="config_wakeOnAssistKeyPress">true</bool>
+    <bool name="config_wakeOnBackKeyPress">true</bool>
 
     <!-- Whether to default to an expanded list of users on the lock screen user switcher. -->
     <bool name="config_expandLockScreenUserSwitcher">false</bool>
+
+    <!-- Toasts posted from these packages will be shown to the current user, regardless of the user
+         the process belongs to. This is useful for packages that run under a single user but serve
+         multiple users, e.g. the system.
+         These packages MUST be able to add flag SYSTEM_FLAG_SHOW_FOR_ALL_USERS to a window. -->
+    <string-array name="config_toastCrossUserPackages" translatable="false">
+        <item>android</item>
+        <item>com.android.systemui</item>
+    </string-array>
+
+    <!-- Package name of custom media key dispatcher class used by MediaSessionService. -->
+    <string name="config_customMediaKeyDispatcher"></string>
+
+    <!-- Package name of custom session policy provider class used by MediaSessionService. -->
+    <string name="config_customSessionPolicyProvider"></string>
+
+    <!-- The max scale for the wallpaper when it's zoomed in -->
+    <item name="config_wallpaperMaxScale" format="float" type="dimen">1</item>
 
     <!-- pdp data retry for cause 29, 33 and 55-->
     <bool name="config_pdp_retry_for_29_33_55_enabled">false</bool>

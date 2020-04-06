@@ -192,7 +192,10 @@
     <uses-permission android:name="android.permission.READ_CLIPBOARD_IN_BACKGROUND" />
     <!-- Permission needed to wipe the device for Test Harness Mode -->
     <uses-permission android:name="android.permission.ENABLE_TEST_HARNESS_MODE" />
+
+    <!-- Permissions required to test CompanionDeviceManager teses in CTS -->
     <uses-permission android:name="android.permission.MANAGE_COMPANION_DEVICES" />
+    <uses-permission android:name="android.permission.COMPANION_APPROVE_WIFI_CONNECTIONS" />
 
     <uses-permission android:name="android.permission.MANAGE_APPOPS" />
 
@@ -265,6 +268,15 @@
 
     <!-- Permission needed to test mainline permission module rollback -->
     <uses-permission android:name="android.permission.UPGRADE_RUNTIME_PERMISSIONS" />
+
+    <!-- Permission needed to read wifi network credentials for CtsNetTestCases -->
+    <uses-permission android:name="android.permission.READ_WIFI_CREDENTIAL" />
+
+    <!-- Permission needed to test registering pull atom callbacks -->
+    <uses-permission android:name="android.permission.REGISTER_STATS_PULL_ATOM" />
+
+    <!-- Permission needed to modify settings overrideable by restore in CTS tests -->
+    <uses-permission android:name="android.permission.MODIFY_SETTINGS_OVERRIDEABLE_BY_RESTORE" />
 
     <application android:label="@string/app_label"
                 android:theme="@android:style/Theme.DeviceDefault.DayNight"

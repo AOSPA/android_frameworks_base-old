@@ -97,6 +97,7 @@ import android.text.TextUtils;
 import android.text.format.DateUtils;
 import android.util.ArraySet;
 import android.util.PrintWriterPrinter;
+import android.util.Slog;
 import android.util.SparseArray;
 
 import com.android.internal.content.PackageHelper;
@@ -139,6 +140,7 @@ class PackageManagerShellCommand extends ShellCommand {
     /** Path where ART profiles snapshots are dumped for the shell user */
     private final static String ART_PROFILE_SNAPSHOT_DEBUG_LOCATION = "/data/misc/profman/";
     private static final int DEFAULT_WAIT_MS = 60 * 1000;
+    private static final String TAG = "PackageManagerShellCommand";
 
     final IPackageManager mInterface;
     final IPermissionManager mPermissionManager;
@@ -293,6 +295,8 @@ class PackageManagerShellCommand extends ShellCommand {
                     return runRollbackApp();
                 case "get-moduleinfo":
                     return runGetModuleInfo();
+                case "log-visibility":
+                    return runLogVisibility();
                 default: {
                     String nextArg = getNextArg();
                     if (nextArg == null) {
@@ -353,6 +357,36 @@ class PackageManagerShellCommand extends ShellCommand {
             }
         } catch (RemoteException e) {
             pw.println("Failure [" + e.getClass().getName() + " - " + e.getMessage() + "]");
+            return -1;
+        }
+        return 1;
+    }
+
+    private int runLogVisibility() {
+        final PrintWriter pw = getOutPrintWriter();
+        boolean enable = true;
+
+        String opt;
+        while ((opt = getNextOption()) != null) {
+            switch (opt) {
+                case "--disable":
+                    enable = false;
+                    break;
+                case "--enable":
+                    enable = true;
+                    break;
+                default:
+                    pw.println("Error: Unknown option: " + opt);
+                    return -1;
+            }
+        }
+
+        String packageName = getNextArg();
+        if (packageName != null) {
+            LocalServices.getService(PackageManagerInternal.class)
+                    .setVisibilityLogging(packageName, enable);
+        } else {
+            getErrPrintWriter().println("Error: no package specified");
             return -1;
         }
         return 1;
@@ -2998,83 +3032,101 @@ class PackageManagerShellCommand extends ShellCommand {
             for (String arg : args) {
                 final int delimLocation = arg.indexOf(':');
 
-                // 2. File with specified size read from stdin.
                 if (delimLocation != -1) {
-                    final String[] fileDesc = arg.split(":");
-                    String name = null;
-                    long sizeBytes = -1;
-                    String metadata;
-                    byte[] signature = null;
-
-                    try {
-                        if (fileDesc.length > 0) {
-                            name = fileDesc[0];
-                        }
-                        if (fileDesc.length > 1) {
-                            sizeBytes = Long.parseUnsignedLong(fileDesc[1]);
-                        }
-                        if (fileDesc.length > 2 && !TextUtils.isEmpty(fileDesc[2])) {
-                            metadata = fileDesc[2];
-                        } else {
-                            metadata = name;
-                        }
-                        if (fileDesc.length > 3) {
-                            signature = Base64.getDecoder().decode(fileDesc[3]);
-                        }
-                    } catch (IllegalArgumentException e) {
-                        getErrPrintWriter().println(
-                                "Unable to parse file parameters: " + arg + ", reason: " + e);
+                    // 2. File with specified size read from stdin.
+                    if (processArgForStdin(arg, session) != 0) {
                         return 1;
                     }
-
-                    if (TextUtils.isEmpty(name)) {
-                        getErrPrintWriter().println("Empty file name in: " + arg);
-                        return 1;
-                    }
-
-                    if (signature != null) {
-                        // Streaming/adb mode.
-                        metadata = "+" + metadata;
-                    } else {
-                        // Singleshot read from stdin.
-                        metadata = "-" + metadata;
-                    }
-
-                    try {
-                        if (V4Signature.readFrom(signature) == null) {
-                            getErrPrintWriter().println("V4 signature is invalid in: " + arg);
-                            return 1;
-                        }
-                    } catch (Exception e) {
-                        getErrPrintWriter().println("V4 signature is invalid: " + e + " in " + arg);
-                        return 1;
-                    }
-
-                    session.addFile(LOCATION_DATA_APP, name, sizeBytes,
-                            metadata.getBytes(StandardCharsets.UTF_8), signature);
-                    continue;
+                } else {
+                    // 3. Local file.
+                    processArgForLocalFile(arg, session);
                 }
-
-                // 3. Local file.
-                final String inPath = arg;
-
-                final File file = new File(inPath);
-                final String name = file.getName();
-                final long size = file.length();
-                final byte[] metadata = inPath.getBytes(StandardCharsets.UTF_8);
-
-                // Try to load a v4 signature for the APK.
-                final V4Signature v4signature = V4Signature.readFrom(
-                        new File(inPath + V4Signature.EXT));
-                final byte[] v4signatureBytes =
-                        (v4signature != null) ? v4signature.toByteArray() : null;
-
-                session.addFile(LOCATION_DATA_APP, name, size, metadata, v4signatureBytes);
             }
             return 0;
         } finally {
             IoUtils.closeQuietly(session);
         }
+    }
+
+    private int processArgForStdin(String arg, PackageInstaller.Session session) {
+        final String[] fileDesc = arg.split(":");
+        String name, metadata;
+        long sizeBytes;
+        byte[] signature = null;
+
+        try {
+            if (fileDesc.length < 2) {
+                getErrPrintWriter().println("Must specify file name and size");
+                return 1;
+            }
+            name = fileDesc[0];
+            sizeBytes = Long.parseUnsignedLong(fileDesc[1]);
+            metadata = name;
+
+            if (fileDesc.length > 2 && !TextUtils.isEmpty(fileDesc[2])) {
+                metadata = fileDesc[2];
+            }
+            if (fileDesc.length > 3) {
+                signature = Base64.getDecoder().decode(fileDesc[3]);
+            }
+        } catch (IllegalArgumentException e) {
+            getErrPrintWriter().println(
+                    "Unable to parse file parameters: " + arg + ", reason: " + e);
+            return 1;
+        }
+
+        if (TextUtils.isEmpty(name)) {
+            getErrPrintWriter().println("Empty file name in: " + arg);
+            return 1;
+        }
+
+        if (signature != null) {
+            // Streaming/adb mode.
+            metadata = "+" + metadata;
+            try {
+                if (V4Signature.readFrom(signature) == null) {
+                    getErrPrintWriter().println("V4 signature is invalid in: " + arg);
+                    return 1;
+                }
+            } catch (Exception e) {
+                getErrPrintWriter().println(
+                        "V4 signature is invalid: " + e + " in " + arg);
+                return 1;
+            }
+        } else {
+            // Single-shot read from stdin.
+            metadata = "-" + metadata;
+        }
+
+        session.addFile(LOCATION_DATA_APP, name, sizeBytes,
+                metadata.getBytes(StandardCharsets.UTF_8), signature);
+        return 0;
+    }
+
+    private void processArgForLocalFile(String arg, PackageInstaller.Session session) {
+        final String inPath = arg;
+
+        final File file = new File(inPath);
+        final String name = file.getName();
+        final long size = file.length();
+        final byte[] metadata = inPath.getBytes(StandardCharsets.UTF_8);
+
+        byte[] v4signatureBytes = null;
+        // Try to load the v4 signature file for the APK; it might not exist.
+        final String v4SignaturePath = inPath + V4Signature.EXT;
+        final ParcelFileDescriptor pfd = openFileForSystem(v4SignaturePath, "r");
+        if (pfd != null) {
+            try {
+                final V4Signature v4signature = V4Signature.readFrom(pfd);
+                v4signatureBytes = v4signature.toByteArray();
+            } catch (IOException ex) {
+                Slog.e(TAG, "V4 signature file exists but failed to be parsed.", ex);
+            } finally {
+                IoUtils.closeQuietly(pfd);
+            }
+        }
+
+        session.addFile(LOCATION_DATA_APP, name, size, metadata, v4signatureBytes);
     }
 
     private int doWriteSplits(int sessionId, ArrayList<String> splitPaths, long sessionSizeBytes,
@@ -3694,6 +3746,11 @@ class PackageManagerShellCommand extends ShellCommand {
         pw.println("    By default, without any argument only installed modules are shown.");
         pw.println("      --all: show all module info");
         pw.println("      --installed: show only installed modules");
+        pw.println("");
+        pw.println("  log-visibility [--enable|--disable] <PACKAGE>");
+        pw.println("    Turns on debug logging when visibility is blocked for the given package.");
+        pw.println("      --enable: turn on debug logging (default)");
+        pw.println("      --disable: turn off debug logging");
         pw.println("");
         Intent.printIntentArgsHelp(pw , "");
     }

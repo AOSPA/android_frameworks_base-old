@@ -25,9 +25,9 @@ import android.telephony.gsm.GsmCellLocation;
 import android.text.TextUtils;
 import android.util.ArraySet;
 
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 
@@ -54,6 +54,8 @@ public final class CellIdentityLte extends CellIdentity {
     private final int mEarfcn;
     // cell bandwidth, in kHz
     private final int mBandwidth;
+    // cell bands
+    private final int[] mBands;
 
     // a list of additional PLMN-IDs reported for this cell
     private final ArraySet<String> mAdditionalPlmns;
@@ -70,6 +72,7 @@ public final class CellIdentityLte extends CellIdentity {
         mPci = CellInfo.UNAVAILABLE;
         mTac = CellInfo.UNAVAILABLE;
         mEarfcn = CellInfo.UNAVAILABLE;
+        mBands = new int[] {};
         mBandwidth = CellInfo.UNAVAILABLE;
         mAdditionalPlmns = new ArraySet<>();
         mCsgInfo = null;
@@ -87,8 +90,9 @@ public final class CellIdentityLte extends CellIdentity {
      */
     @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
     public CellIdentityLte(int mcc, int mnc, int ci, int pci, int tac) {
-        this(ci, pci, tac, CellInfo.UNAVAILABLE, CellInfo.UNAVAILABLE, String.valueOf(mcc),
-                String.valueOf(mnc), null, null, new ArraySet<>(), null);
+        this(ci, pci, tac, CellInfo.UNAVAILABLE, new int[] {}, CellInfo.UNAVAILABLE,
+                String.valueOf(mcc), String.valueOf(mnc), null, null, new ArraySet<>(),
+                null);
     }
 
     /**
@@ -107,15 +111,17 @@ public final class CellIdentityLte extends CellIdentity {
      *
      * @hide
      */
-    public CellIdentityLte(int ci, int pci, int tac, int earfcn, int bandwidth,
-            @Nullable String mccStr, @Nullable String mncStr, @Nullable String alphal,
-            @Nullable String alphas, @NonNull Collection<String> additionalPlmns,
+    public CellIdentityLte(int ci, int pci, int tac, int earfcn, @NonNull int[] bands,
+            int bandwidth, @Nullable String mccStr, @Nullable String mncStr,
+            @Nullable String alphal, @Nullable String alphas,
+            @NonNull Collection<String> additionalPlmns,
             @Nullable ClosedSubscriberGroupInfo csgInfo) {
         super(TAG, CellInfo.TYPE_LTE, mccStr, mncStr, alphal, alphas);
         mCi = inRangeOrUnavailable(ci, 0, MAX_CI);
         mPci = inRangeOrUnavailable(pci, 0, MAX_PCI);
         mTac = inRangeOrUnavailable(tac, 0, MAX_TAC);
         mEarfcn = inRangeOrUnavailable(earfcn, 0, MAX_EARFCN);
+        mBands = bands;
         mBandwidth = inRangeOrUnavailable(bandwidth, 0, MAX_BANDWIDTH);
         mAdditionalPlmns = new ArraySet<>(additionalPlmns.size());
         for (String plmn : additionalPlmns) {
@@ -128,28 +134,29 @@ public final class CellIdentityLte extends CellIdentity {
 
     /** @hide */
     public CellIdentityLte(@NonNull android.hardware.radio.V1_0.CellIdentityLte cid) {
-        this(cid.ci, cid.pci, cid.tac, cid.earfcn,
+        this(cid.ci, cid.pci, cid.tac, cid.earfcn, new int[] {},
                 CellInfo.UNAVAILABLE, cid.mcc, cid.mnc, "", "", new ArraySet<>(), null);
     }
 
     /** @hide */
     public CellIdentityLte(@NonNull android.hardware.radio.V1_2.CellIdentityLte cid) {
-        this(cid.base.ci, cid.base.pci, cid.base.tac, cid.base.earfcn, cid.bandwidth,
-                cid.base.mcc, cid.base.mnc, cid.operatorNames.alphaLong,
+        this(cid.base.ci, cid.base.pci, cid.base.tac, cid.base.earfcn, new int[] {},
+                cid.bandwidth, cid.base.mcc, cid.base.mnc, cid.operatorNames.alphaLong,
                 cid.operatorNames.alphaShort, new ArraySet<>(), null);
     }
 
     /** @hide */
     public CellIdentityLte(@NonNull android.hardware.radio.V1_5.CellIdentityLte cid) {
         this(cid.base.base.ci, cid.base.base.pci, cid.base.base.tac, cid.base.base.earfcn,
-                cid.base.bandwidth, cid.base.base.mcc, cid.base.base.mnc,
-                cid.base.operatorNames.alphaLong, cid.base.operatorNames.alphaShort,
-                cid.additionalPlmns, cid.optionalCsgInfo.csgInfo() != null
+                cid.bands.stream().mapToInt(Integer::intValue).toArray(), cid.base.bandwidth,
+                cid.base.base.mcc, cid.base.base.mnc, cid.base.operatorNames.alphaLong,
+                cid.base.operatorNames.alphaShort, cid.additionalPlmns,
+                cid.optionalCsgInfo.csgInfo() != null
                         ? new ClosedSubscriberGroupInfo(cid.optionalCsgInfo.csgInfo()) : null);
     }
 
     private CellIdentityLte(@NonNull CellIdentityLte cid) {
-        this(cid.mCi, cid.mPci, cid.mTac, cid.mEarfcn, cid.mBandwidth, cid.mMccStr,
+        this(cid.mCi, cid.mPci, cid.mTac, cid.mEarfcn, cid.mBands, cid.mBandwidth, cid.mMccStr,
                 cid.mMncStr, cid.mAlphaLong, cid.mAlphaShort, cid.mAdditionalPlmns, cid.mCsgInfo);
     }
 
@@ -157,7 +164,7 @@ public final class CellIdentityLte extends CellIdentity {
     @Override
     public @NonNull CellIdentityLte sanitizeLocationInfo() {
         return new CellIdentityLte(CellInfo.UNAVAILABLE, CellInfo.UNAVAILABLE, CellInfo.UNAVAILABLE,
-                CellInfo.UNAVAILABLE, CellInfo.UNAVAILABLE,
+                CellInfo.UNAVAILABLE, mBands, CellInfo.UNAVAILABLE,
                 mMccStr, mMncStr, mAlphaLong, mAlphaShort, mAdditionalPlmns, null);
     }
 
@@ -222,12 +229,11 @@ public final class CellIdentityLte extends CellIdentity {
      *
      * Reference: 3GPP TS 36.101 section 5.5
      *
-     * @return List of band number or empty list if not available.
+     * @return Array of band number or empty array if not available.
      */
     @NonNull
-    public List<Integer> getBands() {
-        // Todo: Add actual support
-        return Collections.emptyList();
+    public int[] getBands() {
+        return Arrays.copyOf(mBands, mBands.length);
     }
 
     /**
@@ -309,8 +315,8 @@ public final class CellIdentityLte extends CellIdentity {
 
     @Override
     public int hashCode() {
-        return Objects.hash(mCi, mPci, mTac,
-                mAdditionalPlmns.hashCode(), mCsgInfo, super.hashCode());
+        return Objects.hash(mCi, mPci, mTac, mEarfcn, Arrays.hashCode(mBands),
+                mBandwidth, mAdditionalPlmns.hashCode(), mCsgInfo, super.hashCode());
     }
 
     @Override
@@ -328,6 +334,7 @@ public final class CellIdentityLte extends CellIdentity {
                 && mPci == o.mPci
                 && mTac == o.mTac
                 && mEarfcn == o.mEarfcn
+                && Arrays.equals(mBands, o.mBands)
                 && mBandwidth == o.mBandwidth
                 && TextUtils.equals(mMccStr, o.mMccStr)
                 && TextUtils.equals(mMncStr, o.mMncStr)
@@ -343,6 +350,7 @@ public final class CellIdentityLte extends CellIdentity {
         .append(" mPci=").append(mPci)
         .append(" mTac=").append(mTac)
         .append(" mEarfcn=").append(mEarfcn)
+        .append(" mBands=").append(mBands)
         .append(" mBandwidth=").append(mBandwidth)
         .append(" mMcc=").append(mMccStr)
         .append(" mMnc=").append(mMncStr)
@@ -362,6 +370,7 @@ public final class CellIdentityLte extends CellIdentity {
         dest.writeInt(mPci);
         dest.writeInt(mTac);
         dest.writeInt(mEarfcn);
+        dest.writeIntArray(mBands);
         dest.writeInt(mBandwidth);
         dest.writeArraySet(mAdditionalPlmns);
         dest.writeParcelable(mCsgInfo, flags);
@@ -374,6 +383,7 @@ public final class CellIdentityLte extends CellIdentity {
         mPci = in.readInt();
         mTac = in.readInt();
         mEarfcn = in.readInt();
+        mBands = in.createIntArray();
         mBandwidth = in.readInt();
         mAdditionalPlmns = (ArraySet<String>) in.readArraySet(null);
         mCsgInfo = in.readParcelable(null);

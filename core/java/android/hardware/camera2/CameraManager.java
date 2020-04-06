@@ -134,8 +134,16 @@ public final class CameraManager {
     }
 
     /**
-     * Return the list of combinations of currently connected camera devices identifiers, which
+     * Return the set of combinations of currently connected camera device identifiers, which
      * support configuring camera device sessions concurrently.
+     *
+     * <p>The devices in these combinations can be concurrently configured by the same
+     * client camera application. Using these camera devices concurrently by two different
+     * applications is not guaranteed to be supported, however.</p>
+     *
+     * <p>Each device in a combination, is guaranteed to support stream combinations which may be
+     * obtained by querying {@link #getCameraCharacteristics} for the key
+     * {@link android.hardware.camera2.CameraCharacteristics#SCALER_MANDATORY_CONCURRENT_STREAM_COMBINATIONS}.</p>
      *
      * <p>The set of combinations may include camera devices that may be in use by other camera API
      * clients.</p>
@@ -177,7 +185,7 @@ public final class CameraManager {
      * to be used for exploring the entire space of supported concurrent stream combinations. The
      * available mandatory concurrent stream combinations may be obtained by querying
      * {@link #getCameraCharacteristics} for the key
-     * SCALER_MANDATORY_CONCURRENT_STREAM_COMBINATIONS. </p>
+     * {@link android.hardware.camera2.CameraCharacteristics#SCALER_MANDATORY_CONCURRENT_STREAM_COMBINATIONS}. </p>
      *
      * <p>Note that session parameters will be ignored and calls to
      * {@link SessionConfiguration#setSessionParameters} are not required.</p>
@@ -841,6 +849,33 @@ public final class CameraManager {
                 @NonNull String physicalCameraId) {
             // default empty implementation
         }
+
+        /**
+         * A camera device has been opened by an application.
+         *
+         * <p>The default implementation of this method does nothing.</p>
+         *
+         * @param cameraId The unique identifier of the new camera.
+         * @param packageId The package Id of the application opening the camera.
+         *
+         * @see #onCameraClosed
+         */
+        /** @hide */
+        public void onCameraOpened(@NonNull String cameraId, @NonNull String packageId) {
+            // default empty implementation
+        }
+
+        /**
+         * A previously-opened camera has been closed.
+         *
+         * <p>The default implementation of this method does nothing.</p>
+         *
+         * @param cameraId The unique identifier of the closed camera.
+         */
+        /** @hide */
+        public void onCameraClosed(@NonNull String cameraId) {
+            // default empty implementation
+        }
     }
 
     /**
@@ -1286,6 +1321,12 @@ public final class CameraManager {
                 }
                 @Override
                 public void onCameraAccessPrioritiesChanged() {
+                }
+                @Override
+                public void onCameraOpened(String id, String clientPackageId) {
+                }
+                @Override
+                public void onCameraClosed(String id) {
                 }};
 
             String[] cameraIds = null;
@@ -1526,6 +1567,38 @@ public final class CameraManager {
                         @Override
                         public void run() {
                             callback.onCameraAccessPrioritiesChanged();
+                        }
+                    });
+            } finally {
+                Binder.restoreCallingIdentity(ident);
+            }
+        }
+
+        private void postSingleCameraOpenedUpdate(final AvailabilityCallback callback,
+                final Executor executor, final String id, final String packageId) {
+            final long ident = Binder.clearCallingIdentity();
+            try {
+                executor.execute(
+                    new Runnable() {
+                        @Override
+                        public void run() {
+                            callback.onCameraOpened(id, packageId);
+                        }
+                    });
+            } finally {
+                Binder.restoreCallingIdentity(ident);
+            }
+        }
+
+        private void postSingleCameraClosedUpdate(final AvailabilityCallback callback,
+                final Executor executor, final String id) {
+            final long ident = Binder.clearCallingIdentity();
+            try {
+                executor.execute(
+                    new Runnable() {
+                        @Override
+                        public void run() {
+                            callback.onCameraClosed(id);
                         }
                     });
             } finally {
@@ -1921,6 +1994,32 @@ public final class CameraManager {
                     final AvailabilityCallback callback = mCallbackMap.keyAt(i);
 
                     postSingleAccessPriorityChangeUpdate(callback, executor);
+                }
+            }
+        }
+
+        @Override
+        public void onCameraOpened(String cameraId, String clientPackageId) {
+            synchronized (mLock) {
+                final int callbackCount = mCallbackMap.size();
+                for (int i = 0; i < callbackCount; i++) {
+                    Executor executor = mCallbackMap.valueAt(i);
+                    final AvailabilityCallback callback = mCallbackMap.keyAt(i);
+
+                    postSingleCameraOpenedUpdate(callback, executor, cameraId, clientPackageId);
+                }
+            }
+        }
+
+        @Override
+        public void onCameraClosed(String cameraId) {
+            synchronized (mLock) {
+                final int callbackCount = mCallbackMap.size();
+                for (int i = 0; i < callbackCount; i++) {
+                    Executor executor = mCallbackMap.valueAt(i);
+                    final AvailabilityCallback callback = mCallbackMap.keyAt(i);
+
+                    postSingleCameraClosedUpdate(callback, executor, cameraId);
                 }
             }
         }

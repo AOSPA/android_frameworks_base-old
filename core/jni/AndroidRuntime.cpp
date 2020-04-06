@@ -109,13 +109,13 @@ extern int register_android_util_SeempLog(JNIEnv* env);
 extern int register_android_app_admin_SecurityLog(JNIEnv* env);
 extern int register_android_content_AssetManager(JNIEnv* env);
 extern int register_android_util_EventLog(JNIEnv* env);
-extern int register_android_util_StatsLogInternal(JNIEnv* env);
 extern int register_android_util_Log(JNIEnv* env);
 extern int register_android_util_MemoryIntArray(JNIEnv* env);
 extern int register_android_content_StringBlock(JNIEnv* env);
 extern int register_android_content_XmlBlock(JNIEnv* env);
 extern int register_android_content_res_ApkAssets(JNIEnv* env);
 extern int register_android_graphics_BLASTBufferQueue(JNIEnv* env);
+extern int register_android_graphics_SurfaceTexture(JNIEnv* env);
 extern int register_android_view_DisplayEventReceiver(JNIEnv* env);
 extern int register_android_view_InputApplicationHandle(JNIEnv* env);
 extern int register_android_view_InputWindowHandle(JNIEnv* env);
@@ -1437,7 +1437,6 @@ static const RegJNIRec gRegJNI[] = {
         REG_JNI(register_android_util_EventLog),
         REG_JNI(register_android_util_Log),
         REG_JNI(register_android_util_MemoryIntArray),
-        REG_JNI(register_android_util_StatsLogInternal),
         REG_JNI(register_android_app_admin_SecurityLog),
         REG_JNI(register_android_content_AssetManager),
         REG_JNI(register_android_content_StringBlock),
@@ -1487,6 +1486,7 @@ static const RegJNIRec gRegJNI[] = {
         REG_JNI(register_android_graphics_classes),
         REG_JNI(register_android_graphics_BLASTBufferQueue),
         REG_JNI(register_android_graphics_GraphicBuffer),
+        REG_JNI(register_android_graphics_SurfaceTexture),
         REG_JNI(register_android_database_CursorWindow),
         REG_JNI(register_android_database_SQLiteConnection),
         REG_JNI(register_android_database_SQLiteGlobal),

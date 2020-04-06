@@ -149,7 +149,6 @@ public class NavigationBarController implements Callbacks {
             AutoHideController autoHideController = isOnDefaultDisplay
                     ? Dependency.get(AutoHideController.class)
                     : new AutoHideController(context, mHandler,
-                            Dependency.get(NotificationRemoteInputManager.class),
                             Dependency.get(IWindowManager.class));
             navBar.setAutoHideController(autoHideController);
             navBar.restoreAppearanceAndTransientState();
@@ -166,6 +165,7 @@ public class NavigationBarController implements Callbacks {
     private void removeNavigationBar(int displayId) {
         NavigationBarFragment navBar = mNavigationBars.get(displayId);
         if (navBar != null) {
+            navBar.setAutoHideController(/* autoHideController */ null);
             View navigationWindow = navBar.getView().getRootView();
             WindowManagerGlobal.getInstance()
                     .removeView(navigationWindow, true /* immediate */);

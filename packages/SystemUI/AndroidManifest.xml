@@ -147,6 +147,7 @@
     <uses-permission android:name="android.permission.CONFIGURE_WIFI_DISPLAY" />
 
     <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.CAMERA_OPEN_CLOSE_LISTENER" />
 
     <!-- Screen Capturing -->
     <uses-permission android:name="android.permission.MANAGE_MEDIA_PROJECTION" />
@@ -180,6 +181,8 @@
 
     <!-- Adding Controls to SystemUI -->
     <uses-permission android:name="android.permission.BIND_CONTROLS" />
+    <!-- Check foreground controls applications -->
+    <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS" />
 
     <!-- Quick Settings tile: Night Mode / Dark Theme -->
     <uses-permission android:name="android.permission.MODIFY_DAY_NIGHT_MODE" />
@@ -281,6 +284,12 @@
              -->
         <service android:name="SystemUIService"
             android:exported="true"
+        />
+
+        <!-- Service for dumping extremely verbose content during a bug report -->
+        <service android:name=".dump.SystemUIAuxiliaryDumpService"
+             android:exported="false"
+             android:permission="com.android.systemui.permission.SELF"
         />
 
         <!-- On user switch, this service is started to ensure that the associated SystemUI
@@ -452,6 +461,25 @@
             android:exported="true">
         </activity-alias>
         <activity android:name=".usb.UsbDebuggingSecondaryUserActivity"
+            android:theme="@style/Theme.SystemUI.Dialog.Alert"
+            android:finishOnCloseSystemDialogs="true"
+            android:excludeFromRecents="true">
+        </activity>
+
+        <!-- started from WirelessDebuggingManager -->
+        <activity android:name=".wifi.WifiDebuggingActivity"
+            android:permission="android.permission.MANAGE_DEBUGGING"
+            android:theme="@style/Theme.SystemUI.Dialog.Alert"
+            android:finishOnCloseSystemDialogs="true"
+            android:excludeFromRecents="true">
+        </activity>
+        <activity-alias
+            android:name=".WifiDebuggingActivityAlias"
+            android:permission="android.permission.DUMP"
+            android:targetActivity=".wifi.WifiDebuggingActivity"
+            android:exported="true">
+        </activity-alias>
+        <activity android:name=".wifi.WifiDebuggingSecondaryUserActivity"
             android:theme="@style/Theme.SystemUI.Dialog.Alert"
             android:finishOnCloseSystemDialogs="true"
             android:excludeFromRecents="true">
@@ -660,6 +688,25 @@
                   android:configChanges="screenSize|smallestScreenSize|screenLayout|orientation|keyboard|keyboardHidden"
                   android:visibleToInstantApps="true">
         </activity>
+
+        <receiver android:name=".controls.management.ControlsRequestReceiver">
+            <intent-filter>
+                <action android:name="android.service.controls.action.ADD_CONTROL" />
+            </intent-filter>
+        </receiver>
+
+        <!-- started from ControlsFavoritingActivity -->
+        <activity
+            android:name=".controls.management.ControlsRequestDialog"
+            android:exported="true"
+            android:theme="@style/Theme.ControlsRequestDialog"
+            android:finishOnCloseSystemDialogs="true"
+            android:showForAllUsers="true"
+            android:clearTaskOnLaunch="true"
+            android:launchMode="singleTask"
+            android:configChanges="screenSize|smallestScreenSize|screenLayout|orientation|keyboard|keyboardHidden"
+            android:excludeFromRecents="true"
+            android:visibleToInstantApps="true"/>
 
         <!-- Doze with notifications, run in main sysui process for every user  -->
         <service

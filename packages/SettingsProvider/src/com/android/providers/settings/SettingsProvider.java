@@ -989,6 +989,11 @@ public class SettingsProvider extends ContentProvider {
                             String value = setting != null ? setting.getValue() : null;
                             updateGlobalSetting(Settings.Global.ADB_ENABLED,
                                     value, null, true, userId, true);
+
+                            setting = getGlobalSetting(Settings.Global.ADB_WIFI_ENABLED);
+                            value = setting != null ? setting.getValue() : null;
+                            updateGlobalSetting(Settings.Global.ADB_WIFI_ENABLED,
+                                    value, null, true, userId, true);
                         }
                     } finally {
                         Binder.restoreCallingIdentity(identity);
@@ -2773,6 +2778,11 @@ public class SettingsProvider extends ContentProvider {
         public boolean insertSettingLocked(int type, int userId, String name, String value,
                 String tag, boolean makeDefault, boolean forceNonSystemPackage, String packageName,
                 boolean forceNotify, Set<String> criticalSettings, boolean overrideableByRestore) {
+            if (overrideableByRestore != Settings.DEFAULT_OVERRIDEABLE_BY_RESTORE) {
+                getContext().enforceCallingOrSelfPermission(
+                        Manifest.permission.MODIFY_SETTINGS_OVERRIDEABLE_BY_RESTORE,
+                        "Caller is not allowed to modify settings overrideable by restore");
+            }
             final int key = makeKey(type, userId);
 
             boolean success = false;

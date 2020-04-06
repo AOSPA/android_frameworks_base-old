@@ -21,10 +21,12 @@ import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.content.Context;
+import android.content.pm.ShortcutInfo;
 import android.os.UserHandle;
 import android.service.notification.SnoozeCriterion;
 import android.service.notification.StatusBarNotification;
 
+import com.android.internal.logging.InstanceId;
 import com.android.systemui.statusbar.RankingBuilder;
 import com.android.systemui.statusbar.SbnBuilder;
 
@@ -137,6 +139,11 @@ public class NotificationEntryBuilder {
 
     public NotificationEntryBuilder setPostTime(long postTime) {
         mSbnBuilder.setPostTime(postTime);
+        return this;
+    }
+
+    public NotificationEntryBuilder setInstanceId(InstanceId instanceId) {
+        mSbnBuilder.setInstanceId(instanceId);
         return this;
     }
 
@@ -264,6 +271,11 @@ public class NotificationEntryBuilder {
 
     public NotificationEntryBuilder setSmartReplies(CharSequence... smartReplies) {
         mRankingBuilder.setSmartReplies(smartReplies);
+        return this;
+    }
+
+    public NotificationEntryBuilder setShortcutInfo(ShortcutInfo shortcutInfo) {
+        mRankingBuilder.setShortcutInfo(shortcutInfo);
         return this;
     }
 }

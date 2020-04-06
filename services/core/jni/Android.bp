@@ -24,6 +24,7 @@ cc_library_static {
         "BroadcastRadio/regions.cpp",
         "stats/PowerStatsPuller.cpp",
         "stats/SubsystemSleepStatePuller.cpp",
+        "com_android_server_adb_AdbDebuggingManager.cpp",
         "com_android_server_am_BatteryStatsService.cpp",
         "com_android_server_connectivity_Vpn.cpp",
         "com_android_server_ConsumerIrService.cpp",
@@ -55,7 +56,6 @@ cc_library_static {
         "com_android_server_PersistentDataBlockService.cpp",
         "com_android_server_am_CachedAppOptimizer.cpp",
         "com_android_server_am_LowMemDetector.cpp",
-        "com_android_server_incremental_IncrementalManagerService.cpp",
         "com_android_server_pm_PackageManagerShellCommandDataLoader.cpp",
         "com_android_server_activityTriggerService.cpp",
         "onload.cpp",
@@ -87,6 +87,8 @@ cc_library_static {
 cc_defaults {
     name: "libservices.core-libs",
     shared_libs: [
+        "libadb_pairing_server",
+        "libadb_pairing_connection",
         "libandroid_runtime",
         "libandroidfw",
         "libaudioclient",
@@ -145,6 +147,7 @@ cc_defaults {
         "android.hardware.light@2.0",
         "android.hardware.power@1.0",
         "android.hardware.power@1.1",
+        "android.hardware.power-cpp",
         "android.hardware.power.stats@1.0",
         "android.hardware.thermal@1.0",
         "android.hardware.tv.cec@1.0",

@@ -16,6 +16,8 @@
 
 package com.android.settingslib.schedulesprovider;
 
+import android.app.PendingIntent;
+import android.content.Context;
 import android.content.Intent;
 import android.os.Parcel;
 import android.os.Parcelable;
@@ -24,32 +26,30 @@ import android.text.TextUtils;
 import androidx.annotation.NonNull;
 
 /**
- * This is a schedule data item. It contains the schedule title text, the summary text which
- * displays on the summary of the Settings preference and an {@link Intent}. Intent is able to
- * launch the editing page of the schedule data when user clicks this item (preference).
+ * Schedule data item containing the schedule title text, the summary text which is displayed on the
+ * summary of the Settings preference and a {@link PendingIntent} which Settings will launch
+ * when the user clicks on the preference.
  */
 public class ScheduleInfo implements Parcelable {
     private static final String TAG = "ScheduleInfo";
     private final String mTitle;
     private final String mSummary;
-    private final Intent mIntent;
+    private final PendingIntent mPendingIntent;
 
     public ScheduleInfo(Builder builder) {
         mTitle = builder.mTitle;
         mSummary = builder.mSummary;
-        mIntent = builder.mIntent;
+        mPendingIntent = builder.mPendingIntent;
     }
 
-    protected ScheduleInfo(Parcel in) {
+    private ScheduleInfo(Parcel in) {
         mTitle = in.readString();
         mSummary = in.readString();
-        mIntent = in.readParcelable(Intent.class.getClassLoader());
+        mPendingIntent = in.readParcelable(PendingIntent.class.getClassLoader());
     }
 
     /**
      * Returns the title text.
-     *
-     * @return The title.
      */
     public String getTitle() {
         return mTitle;
@@ -57,18 +57,17 @@ public class ScheduleInfo implements Parcelable {
 
     /**
      * Returns the summary text.
-     *
-     * @return The summary.
      */
     public String getSummary() {
         return mSummary;
     }
 
     /**
-     * Returns an {@link Intent}.
+     * Returns a {@link PendingIntent} which Settings will launch when the user clicks on a
+     * schedule preference.
      */
-    public Intent getIntent() {
-        return mIntent;
+    public PendingIntent getPendingIntent() {
+        return mPendingIntent;
     }
 
     /**
@@ -77,14 +76,15 @@ public class ScheduleInfo implements Parcelable {
      * @return {@code true} if all member variables are valid.
      */
     public boolean isValid() {
-        return !TextUtils.isEmpty(mTitle) && !TextUtils.isEmpty(mSummary) && (mIntent != null);
+        return !TextUtils.isEmpty(mTitle) && !TextUtils.isEmpty(mSummary)
+                && (mPendingIntent != null);
     }
 
     @Override
     public void writeToParcel(Parcel dest, int flags) {
         dest.writeString(mTitle);
         dest.writeString(mSummary);
-        dest.writeParcelable(mIntent, flags);
+        dest.writeParcelable(mPendingIntent, flags);
     }
 
     @Override
@@ -107,20 +107,16 @@ public class ScheduleInfo implements Parcelable {
     @NonNull
     @Override
     public String toString() {
-        return "title : " + mTitle + " summary : " + mSummary + (mIntent == null
-                ? " and intent is null." : ".");
+        return "title: " + mTitle + ", summary: " + mSummary + ", pendingIntent: " + mPendingIntent;
     }
 
     /**
      * A simple builder for {@link ScheduleInfo}.
      */
     public static class Builder {
-        @NonNull
         private String mTitle;
-        @NonNull
         private String mSummary;
-        @NonNull
-        private Intent mIntent;
+        private PendingIntent mPendingIntent;
 
         /**
          * Sets the title.
@@ -145,13 +141,15 @@ public class ScheduleInfo implements Parcelable {
         }
 
         /**
-         * Sets the {@link Intent}.
+         * Sets the {@link PendingIntent}.
+         * <p>The {@link PendingIntent} should be created with
+         * {@link PendingIntent#getActivity(Context, int, Intent, int)}.
          *
-         * @param intent The action when user clicks the preference.
+         * @param pendingIntent The pending intent to send when the user clicks the preference.
          * @return This instance.
          */
-        public Builder setIntent(@NonNull Intent intent) {
-            mIntent = intent;
+        public Builder setPendingIntent(@NonNull PendingIntent pendingIntent) {
+            mPendingIntent = pendingIntent;
             return this;
         }
 

@@ -27,8 +27,8 @@ import android.os.Bundle;
 oneway interface IMediaRoute2ProviderServiceCallback {
     // TODO: Change it to updateRoutes?
     void updateState(in MediaRoute2ProviderInfo providerInfo);
-    void notifySessionCreated(in RoutingSessionInfo sessionInfo, long requestId);
-    void notifySessionCreationFailed(long requestId);
+    void notifySessionCreated(long requestId, in RoutingSessionInfo sessionInfo);
     void notifySessionUpdated(in RoutingSessionInfo sessionInfo);
     void notifySessionReleased(in RoutingSessionInfo sessionInfo);
+    void notifyRequestFailed(long requestId, int reason);
 }

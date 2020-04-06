@@ -21,6 +21,7 @@ import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.UserIdInt;
+import android.annotation.WorkerThread;
 import android.content.ComponentName;
 import android.content.ContentResolver;
 import android.content.Intent;
@@ -237,6 +238,34 @@ public abstract class PackageManagerInternal {
     public abstract boolean isPackageSuspended(String packageName, int userId);
 
     /**
+     * Removes all package suspensions imposed by any non-system packages.
+     */
+    public abstract void removeAllNonSystemPackageSuspensions(int userId);
+
+    /**
+     * Removes all suspensions imposed on the given package by non-system packages.
+     */
+    public abstract void removeNonSystemPackageSuspensions(String packageName, int userId);
+
+    /**
+     * Removes all {@link PackageManager.DistractionRestriction restrictions} set on the given
+     * package
+     */
+    public abstract void removeDistractingPackageRestrictions(String packageName, int userId);
+
+    /**
+     * Removes all {@link PackageManager.DistractionRestriction restrictions} set on all the
+     * packages.
+     */
+    public abstract void removeAllDistractingPackageRestrictions(int userId);
+
+    /**
+     * Flushes package restrictions for the given user immediately to disk.
+     */
+    @WorkerThread
+    public abstract void flushPackageRestrictions(int userId);
+
+    /**
      * Get the name of the package that suspended the given package. Packages can be suspended by
      * device administrators or apps holding {@link android.Manifest.permission#MANAGE_USERS} or
      * {@link android.Manifest.permission#SUSPEND_APPS}.
@@ -429,8 +458,8 @@ public abstract class PackageManagerInternal {
             Bundle verificationBundle, int userId);
 
     /**
-     * Grants implicit access based on an interaction between two apps. This grants the target app
-     * access to the calling application's package metadata.
+     * Grants implicit access based on an interaction between two apps. This grants access to the
+     * from one application to the other's package metadata.
      * <p>
      * When an application explicitly tries to interact with another application [via an
      * activity, service or provider that is either declared in the caller's
@@ -439,14 +468,22 @@ public abstract class PackageManagerInternal {
      * metadata about the calling app. If the calling application uses an implicit intent [ie
      * action VIEW, category BROWSABLE], it remains hidden from the launched app.
      * <p>
+     * If an interaction is not explicit, the {@code direct} argument should be set to false as
+     * visibility should not be granted in some cases. This method handles that logic.
+     * <p>
      * @param userId the user
      * @param intent the intent that triggered the grant
-     * @param callingUid The uid of the calling application
-     * @param targetAppId The app ID of the target application
+     * @param recipientAppId The app ID of the application that is being given access to {@code
+     *                       visibleUid}
+     * @param visibleUid The uid of the application that is becoming accessible to {@code
+     *                   recipientAppId}
+     * @param direct true if the access is being made due to direct interaction between visibleUid
+     *               and recipientAppId.
      */
     public abstract void grantImplicitAccess(
-            @UserIdInt int userId, Intent intent, int callingUid,
-            @AppIdInt int targetAppId);
+            @UserIdInt int userId, Intent intent,
+            @AppIdInt int recipientAppId, int visibleUid,
+            boolean direct);
 
     public abstract boolean isInstantAppInstallerComponent(ComponentName component);
     /**
@@ -808,18 +845,11 @@ public abstract class PackageManagerInternal {
             "android.content.pm.extra.ENABLE_ROLLBACK_TOKEN";
 
     /**
-     * Extra field name for the installFlags of a request to enable rollback
+     * Extra field name for the session id of a request to enable rollback
      * for a package.
      */
-    public static final String EXTRA_ENABLE_ROLLBACK_INSTALL_FLAGS =
-            "android.content.pm.extra.ENABLE_ROLLBACK_INSTALL_FLAGS";
-
-    /**
-     * Extra field name for the user id an install is associated with when
-     * enabling rollback.
-     */
-    public static final String EXTRA_ENABLE_ROLLBACK_USER =
-            "android.content.pm.extra.ENABLE_ROLLBACK_USER";
+    public static final String EXTRA_ENABLE_ROLLBACK_SESSION_ID =
+            "android.content.pm.extra.ENABLE_ROLLBACK_SESSION_ID";
 
     /**
      * Used as the {@code enableRollbackCode} argument for
@@ -897,13 +927,11 @@ public abstract class PackageManagerInternal {
             IntentSender intentSender, int flags);
 
     /**
-     * Get fingerprint of build that updated the runtime permissions for a user.
+     * Update fingerprint of build that updated the runtime permissions for a user.
      *
      * @param userId The user to update
-     * @param fingerPrint The fingerprint to set
      */
-    public abstract void setRuntimePermissionsFingerPrint(@NonNull String fingerPrint,
-            @UserIdInt int userId);
+    public abstract void updateRuntimePermissionsFingerprint(@UserIdInt int userId);
 
     /**
      * Migrates legacy obb data to its new location.
@@ -931,8 +959,8 @@ public abstract class PackageManagerInternal {
     public abstract boolean isCallerInstallerOfRecord(
             @NonNull AndroidPackage pkg, int callingUid);
 
-    /** Returns whether or not default runtime permissions are granted for the given user */
-    public abstract boolean areDefaultRuntimePermissionsGranted(@UserIdInt int userId);
+    /** Returns whether or not permissions need to be upgraded for the given user */
+    public abstract boolean isPermissionUpgradeNeeded(@UserIdInt int userId);
 
     /** Sets the enforcement of reading external storage */
     public abstract void setReadExternalStorageEnforced(boolean enforced);
@@ -956,4 +984,11 @@ public abstract class PackageManagerInternal {
      * Returns MIME types contained in {@code mimeGroup} from {@code packageName} package
      */
     public abstract List<String> getMimeGroup(String packageName, String mimeGroup);
+
+    /**
+     * Toggles visibility logging to help in debugging the app enumeration feature.
+     * @param packageName the package name that should begin logging
+     * @param enabled true if visibility blocks should be logged
+     */
+    public abstract void setVisibilityLogging(String packageName, boolean enabled);
 }

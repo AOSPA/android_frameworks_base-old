@@ -60,6 +60,7 @@ import android.os.RemoteException;
 import android.os.UserHandle;
 import android.util.Log;
 import android.util.Pair;
+import android.view.KeyEvent;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.View;
@@ -223,6 +224,15 @@ public class PipMenuActivity extends Activity {
 
         // Hide without an animation.
         getWindow().setExitTransition(null);
+    }
+
+    @Override
+    public boolean onKeyUp(int keyCode, KeyEvent event) {
+        if (keyCode == KeyEvent.KEYCODE_ESCAPE) {
+            hideMenu();
+            return true;
+        }
+        return super.onKeyUp(keyCode, event);
     }
 
     @Override
@@ -559,7 +569,7 @@ public class PipMenuActivity extends Activity {
 
     private void showSettings() {
         final Pair<ComponentName, Integer> topPipActivityInfo =
-                PipUtils.getTopPinnedActivity(this, ActivityManager.getService());
+                PipUtils.getTopPipActivity(this, ActivityManager.getService());
         if (topPipActivityInfo.first != null) {
             final UserHandle user = UserHandle.of(topPipActivityInfo.second);
             final Intent settingsIntent = new Intent(ACTION_PICTURE_IN_PICTURE_SETTINGS,

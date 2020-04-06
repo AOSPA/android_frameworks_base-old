@@ -52,6 +52,12 @@ public:
 
     JavaThread(JavaThread &&) = delete; // uses "this" ptr, not moveable.
 
+    ~JavaThread() {
+        join(); // manually block until the future is ready as std::future
+                // destructor doesn't block unless it comes from std::async
+                // and it is the last reference to shared state.
+    }
+
     void join() const {
         mFuture.wait();
     }
@@ -64,7 +70,9 @@ private:
     static int staticFunction(void *data) {
         JavaThread *jt = static_cast<JavaThread *>(data);
         jt->mF();
-        jt->mIsClosed = true;
+        jt->mIsClosed = true;  // set the flag that we are closed
+                               // now before we allow the destructor to execute;
+                               // otherwise there may be a use after free.
         jt->mPromise.set_value();
         return 0;
     }

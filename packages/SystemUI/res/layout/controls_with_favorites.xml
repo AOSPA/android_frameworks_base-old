@@ -20,32 +20,36 @@
   <androidx.constraintlayout.widget.ConstraintLayout
       android:layout_width="match_parent"
       android:layout_height="wrap_content"
-      android:paddingBottom="20dp">
+      android:layout_marginTop="@dimen/controls_top_margin">
 
-    <TextView
-        android:text="@string/quick_controls_title"
+    <LinearLayout
+        android:id="@+id/controls_header"
+        android:orientation="horizontal"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:singleLine="true"
+        android:layout_marginStart="@dimen/controls_header_side_margin"
+        android:layout_marginEnd="@dimen/controls_header_side_margin"
         android:gravity="center"
-        android:textSize="25sp"
-        android:textColor="@*android:color/foreground_material_dark"
-        android:fontFamily="@*android:string/config_headlineFontFamily"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent" />
+        app:layout_constraintTop_toTopOf="parent" >
 
-    <ImageView
-        android:id="@+id/controls_more"
-        android:src="@drawable/ic_more_vert"
-        android:layout_width="34dp"
-        android:layout_height="24dp" 
-        android:layout_marginEnd="10dp"
-        android:tint="@*android:color/foreground_material_dark"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintTop_toTopOf="parent" />
+      <ImageView
+          android:id="@+id/app_icon"
+          android:layout_gravity="center"
+          android:layout_width="@dimen/controls_header_app_icon_size"
+          android:layout_height="@dimen/controls_header_app_icon_size"
+          android:layout_marginEnd="10dp" />
+
+      <TextView
+          style="@style/Control.Spinner.Header"
+          android:clickable="false"
+          android:id="@+id/app_or_structure_spinner"
+          android:layout_width="wrap_content"
+          android:layout_height="wrap_content"
+          android:layout_gravity="center" />
+    </LinearLayout>
 
   </androidx.constraintlayout.widget.ConstraintLayout>
 
@@ -53,5 +57,8 @@
       android:id="@+id/global_actions_controls_list"
       android:layout_width="match_parent"
       android:layout_height="wrap_content"
-      android:orientation="vertical" />
+      android:orientation="vertical"
+      android:paddingTop="30dp"
+      android:layout_marginLeft="@dimen/controls_list_side_margin"
+      android:layout_marginRight="@dimen/controls_list_side_margin" />
 </merge>

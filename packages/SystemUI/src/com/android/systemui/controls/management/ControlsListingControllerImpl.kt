@@ -16,6 +16,7 @@
 
 package com.android.systemui.controls.management
 
+import android.app.ActivityManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.pm.ServiceInfo
@@ -23,7 +24,6 @@ import android.os.UserHandle
 import android.service.controls.ControlsProviderService
 import android.util.Log
 import com.android.internal.annotations.VisibleForTesting
-import com.android.settingslib.applications.DefaultAppInfo
 import com.android.settingslib.applications.ServiceListing
 import com.android.settingslib.widget.CandidateInfo
 import com.android.systemui.controls.ControlsServiceInfo
@@ -72,7 +72,7 @@ class ControlsListingControllerImpl @VisibleForTesting constructor(
 
     private var availableServices = emptyList<ServiceInfo>()
 
-    override var currentUserId = context.userId
+    override var currentUserId = ActivityManager.getCurrentUser()
         private set
 
     private val serviceListingCallback = ServiceListing.Callback {
@@ -88,6 +88,8 @@ class ControlsListingControllerImpl @VisibleForTesting constructor(
 
     init {
         serviceListing.addCallback(serviceListingCallback)
+        serviceListing.setListening(true)
+        serviceListing.reload()
     }
 
     override fun changeUser(newUser: UserHandle) {
@@ -95,11 +97,12 @@ class ControlsListingControllerImpl @VisibleForTesting constructor(
             callbacks.clear()
             availableServices = emptyList()
             serviceListing.setListening(false)
-            serviceListing.removeCallback(serviceListingCallback)
             currentUserId = newUser.identifier
             val contextForUser = context.createContextAsUser(newUser, 0)
             serviceListing = serviceListingBuilder(contextForUser)
             serviceListing.addCallback(serviceListingCallback)
+            serviceListing.setListening(true)
+            serviceListing.reload()
         }
     }
 
@@ -118,12 +121,7 @@ class ControlsListingControllerImpl @VisibleForTesting constructor(
         backgroundExecutor.execute {
             Log.d(TAG, "Subscribing callback")
             callbacks.add(listener)
-            if (callbacks.size == 1) {
-                serviceListing.setListening(true)
-                serviceListing.reload()
-            } else {
-                listener.onServicesUpdated(getCurrentServices())
-            }
+            listener.onServicesUpdated(getCurrentServices())
         }
     }
 
@@ -136,9 +134,6 @@ class ControlsListingControllerImpl @VisibleForTesting constructor(
         backgroundExecutor.execute {
             Log.d(TAG, "Unsubscribing callback")
             callbacks.remove(listener)
-            if (callbacks.size == 0) {
-                serviceListing.setListening(false)
-            }
         }
     }
 
@@ -146,7 +141,7 @@ class ControlsListingControllerImpl @VisibleForTesting constructor(
      * @return a list of components that satisfy the requirements to be a
      *         [ControlsProviderService]
      */
-    override fun getCurrentServices(): List<CandidateInfo> =
+    override fun getCurrentServices(): List<ControlsServiceInfo> =
             availableServices.map { ControlsServiceInfo(context, it) }
 
     /**
@@ -156,7 +151,7 @@ class ControlsListingControllerImpl @VisibleForTesting constructor(
      * @return a label as returned by [CandidateInfo.loadLabel] or `null`.
      */
     override fun getAppLabel(name: ComponentName): CharSequence? {
-        return getCurrentServices().firstOrNull { (it as? DefaultAppInfo)?.componentName == name }
+        return getCurrentServices().firstOrNull { it.componentName == name }
                 ?.loadLabel()
     }
 }

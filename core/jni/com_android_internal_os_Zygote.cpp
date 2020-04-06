@@ -136,6 +136,11 @@ static jmethodID gCreateSystemServerClassLoader;
 static bool gIsSecurityEnforced = true;
 
 /**
+ * True if the app process is running in its mount namespace.
+ */
+static bool gInAppMountNamespace = false;
+
+/**
  * The maximum number of characters (not including a null terminator) that a
  * process name may contain.
  */
@@ -353,10 +358,14 @@ static const std::array<const std::string, MOUNT_EXTERNAL_COUNT> ExternalStorage
 
 // Must match values in com.android.internal.os.Zygote.
 enum RuntimeFlags : uint32_t {
-  DEBUG_ENABLE_JDWP = 1,
-  PROFILE_FROM_SHELL = 1 << 15,
-  MEMORY_TAG_LEVEL_MASK = (1 << 19) | (1 << 20),
-  MEMORY_TAG_LEVEL_TBI = 1 << 19,
+    DEBUG_ENABLE_JDWP = 1,
+    PROFILE_FROM_SHELL = 1 << 15,
+    MEMORY_TAG_LEVEL_MASK = (1 << 19) | (1 << 20),
+    MEMORY_TAG_LEVEL_TBI = 1 << 19,
+    GWP_ASAN_LEVEL_MASK = (1 << 21) | (1 << 22),
+    GWP_ASAN_LEVEL_NEVER = 0 << 21,
+    GWP_ASAN_LEVEL_LOTTERY = 1 << 21,
+    GWP_ASAN_LEVEL_ALWAYS = 2 << 21,
 };
 
 enum UnsolicitedZygoteMessageTypes : uint32_t {
@@ -550,6 +559,17 @@ static void SetGids(JNIEnv* env, jintArray managed_gids, fail_fn_t fail_fn) {
   }
 }
 
+static void ensureInAppMountNamespace(fail_fn_t fail_fn) {
+  if (gInAppMountNamespace) {
+    // In app mount namespace already
+    return;
+  }
+  if (unshare(CLONE_NEWNS) == -1) {
+    fail_fn(CREATE_ERROR("Failed to unshare(): %s", strerror(errno)));
+  }
+  gInAppMountNamespace = true;
+}
+
 // Sets the resource limits via setrlimit(2) for the values in the
 // two-dimensional array of integers that's passed in. The second dimension
 // contains a tuple of length 3: (resource, rlim_cur, rlim_max). nullptr is
@@ -635,12 +655,6 @@ static void PreApplicationInit() {
 
   // Set the jemalloc decay time to 1.
   mallopt(M_DECAY_TIME, 1);
-
-  // Maybe initialize GWP-ASan here. Must be called after
-  // mallopt(M_SET_ZYGOTE_CHILD).
-  bool ForceEnableGwpAsan = false;
-  android_mallopt(M_INITIALIZE_GWP_ASAN, &ForceEnableGwpAsan,
-                  sizeof(ForceEnableGwpAsan));
 }
 
 static void SetUpSeccompFilter(uid_t uid, bool is_child_zygote) {
@@ -808,31 +822,6 @@ static void MountAppDataTmpFs(const std::string& target_dir,
   }
 }
 
-static void BindMountObbPackage(std::string_view package_name, int userId, fail_fn_t fail_fn) {
-
-  // TODO(148772775): Pass primary volume name from zygote argument to here
-  std::string source;
-  if (IsFilesystemSupported("sdcardfs")) {
-    source = StringPrintf("/mnt/runtime/default/emulated/%d/Android/obb/%s",
-        userId, package_name.data());
-  } else {
-    source = StringPrintf("/mnt/pass_through/%d/emulated/%d/Android/obb/%s",
-        userId, userId, package_name.data());
-  }
-  std::string target(
-      StringPrintf("/storage/emulated/%d/Android/obb/%s", userId, package_name.data()));
-
-  if (access(source.c_str(), F_OK) != 0) {
-    fail_fn(CREATE_ERROR("Cannot access source %s: %s", source.c_str(), strerror(errno)));
-  }
-
-  if (access(target.c_str(), F_OK) != 0) {
-    fail_fn(CREATE_ERROR("Cannot access target %s: %s", target.c_str(), strerror(errno)));
-  }
-
-  BindMount(source, target, fail_fn);
-}
-
 // Create a private mount namespace and bind mount appropriate emulated
 // storage for the given user.
 static void MountEmulatedStorage(uid_t uid, jint mount_mode,
@@ -851,9 +840,7 @@ static void MountEmulatedStorage(uid_t uid, jint mount_mode,
   }
 
   // Create a second private mount namespace for our process
-  if (unshare(CLONE_NEWNS) == -1) {
-    fail_fn(CREATE_ERROR("Failed to unshare(): %s", strerror(errno)));
-  }
+  ensureInAppMountNamespace(fail_fn);
 
   // Handle force_mount_namespace with MOUNT_EXTERNAL_NONE.
   if (mount_mode == MOUNT_EXTERNAL_NONE) {
@@ -1359,6 +1346,7 @@ static void isolateAppData(JNIEnv* env, jobjectArray pkg_data_info_list,
   if ((size % 3) != 0) {
     fail_fn(CREATE_ERROR("Wrong pkg_inode_list size %d", size));
   }
+  ensureInAppMountNamespace(fail_fn);
 
   // Mount tmpfs on all possible data directories, so app no longer see the original apps data.
   char internalCePath[PATH_MAX];
@@ -1555,10 +1543,39 @@ static void isolateJitProfile(JNIEnv* env, jobjectArray pkg_data_info_list,
   }
 }
 
-// Bind mount all obb directories that are visible to this app.
+static void BindMountStorageToLowerFs(const userid_t user_id, const char* dir_name,
+    const char* package, fail_fn_t fail_fn) {
+
+  bool hasPackage = (package != nullptr);
+  bool hasSdcardFs = IsFilesystemSupported("sdcardfs");
+  std::string source;
+  if (hasSdcardFs) {
+    source = hasPackage ?
+        StringPrintf("/mnt/runtime/default/emulated/%d/%s/%s", user_id, dir_name, package) :
+        StringPrintf("/mnt/runtime/default/emulated/%d/%s", user_id, dir_name);
+  } else {
+    source = hasPackage ?
+        StringPrintf("/mnt/pass_through/%d/emulated/%d/%s/%s",
+            user_id, user_id, dir_name, package) :
+        StringPrintf("/mnt/pass_through/%d/emulated/%d/%s", user_id, user_id, dir_name);
+  }
+  std::string target = hasPackage ?
+      StringPrintf("/storage/emulated/%d/%s/%s", user_id, dir_name, package) :
+      StringPrintf("/storage/emulated/%d/%s", user_id, dir_name);
+
+  if (access(source.c_str(), F_OK) != 0) {
+    fail_fn(CREATE_ERROR("Error accessing %s: %s", source.c_str(), strerror(errno)));
+  }
+  if (access(target.c_str(), F_OK) != 0) {
+    fail_fn(CREATE_ERROR("Error accessing %s: %s", target.c_str(), strerror(errno)));
+  }
+  BindMount(source, target, fail_fn);
+}
+
+// Bind mount all obb & data directories that are visible to this app.
 // If app data isolation is not enabled for this process, bind mount the whole obb
-// directory instead.
-static void BindMountAppObbDirs(JNIEnv* env, jobjectArray pkg_data_info_list,
+// and data directory instead.
+static void BindMountStorageDirs(JNIEnv* env, jobjectArray pkg_data_info_list,
     uid_t uid, const char* process_name, jstring managed_nice_name, fail_fn_t fail_fn) {
 
   auto extract_fn = std::bind(ExtractJString, env, process_name, managed_nice_name, _1);
@@ -1586,18 +1603,8 @@ static void BindMountAppObbDirs(JNIEnv* env, jobjectArray pkg_data_info_list,
 
   if (size == 0) {
     // App data isolation is not enabled for this process, so we bind mount to whole obb/ dir.
-    std::string source;
-    if (IsFilesystemSupported("sdcardfs")) {
-      source = StringPrintf("/mnt/runtime/default/emulated/%d/Android/obb", user_id);
-    } else {
-      source = StringPrintf("/mnt/pass_through/%d/emulated/%d/Android/obb", user_id, user_id);
-    }
-    std::string target(StringPrintf("/storage/emulated/%d/Android/obb", user_id));
-
-    if (access(source.c_str(), F_OK) != 0) {
-      fail_fn(CREATE_ERROR("Error accessing %s: %s", source.c_str(), strerror(errno)));
-    }
-    BindMount(source, target, fail_fn);
+    BindMountStorageToLowerFs(user_id, "Android/obb", /* package */ nullptr, fail_fn);
+    BindMountStorageToLowerFs(user_id, "Android/data", /* package */ nullptr, fail_fn);
     return;
   }
 
@@ -1605,7 +1612,8 @@ static void BindMountAppObbDirs(JNIEnv* env, jobjectArray pkg_data_info_list,
   for (int i = 0; i < size; i += 3) {
     jstring package_str = (jstring) (env->GetObjectArrayElement(pkg_data_info_list, i));
     std::string packageName = extract_fn(package_str).value();
-    BindMountObbPackage(packageName, user_id, fail_fn);
+    BindMountStorageToLowerFs(user_id, "Android/obb", packageName.c_str(), fail_fn);
+    BindMountStorageToLowerFs(user_id, "Android/data", packageName.c_str(), fail_fn);
   }
 }
 
@@ -1660,7 +1668,7 @@ static void SpecializeCommon(JNIEnv* env, uid_t uid, gid_t gid, jintArray gids,
   if ((mount_external != MOUNT_EXTERNAL_INSTALLER) &&
         GetBoolProperty(kPropFuse, false) &&
         GetBoolProperty(ANDROID_VOLD_APP_DATA_ISOLATION_ENABLED_PROPERTY, false)) {
-    BindMountAppObbDirs(env, pkg_data_info_list, uid, process_name, managed_nice_name, fail_fn);
+    BindMountStorageDirs(env, pkg_data_info_list, uid, process_name, managed_nice_name, fail_fn);
   }
 
   // If this zygote isn't root, it won't be able to create a process group,
@@ -1745,6 +1753,18 @@ static void SpecializeCommon(JNIEnv* env, uid_t uid, gid_t gid, jintArray gids,
       heap_tagging_level = M_HEAP_TAGGING_LEVEL_NONE;
   }
   android_mallopt(M_SET_HEAP_TAGGING_LEVEL, &heap_tagging_level, sizeof(heap_tagging_level));
+
+  bool forceEnableGwpAsan = false;
+  switch (runtime_flags & RuntimeFlags::GWP_ASAN_LEVEL_MASK) {
+      default:
+      case RuntimeFlags::GWP_ASAN_LEVEL_NEVER:
+          break;
+      case RuntimeFlags::GWP_ASAN_LEVEL_ALWAYS:
+          forceEnableGwpAsan = true;
+          [[fallthrough]];
+      case RuntimeFlags::GWP_ASAN_LEVEL_LOTTERY:
+          android_mallopt(M_INITIALIZE_GWP_ASAN, &forceEnableGwpAsan, sizeof(forceEnableGwpAsan));
+  }
 
   if (NeedsNoRandomizeWorkaround()) {
     // Work around ARM kernel ASLR lossage (http://b/5817320).

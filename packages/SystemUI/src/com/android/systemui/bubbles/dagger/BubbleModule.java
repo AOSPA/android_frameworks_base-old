@@ -18,15 +18,15 @@ package com.android.systemui.bubbles.dagger;
 
 import android.content.Context;
 
-import com.android.systemui.DumpController;
 import com.android.systemui.bubbles.BubbleController;
 import com.android.systemui.bubbles.BubbleData;
+import com.android.systemui.dump.DumpManager;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.statusbar.FeatureFlags;
 import com.android.systemui.statusbar.NotificationLockscreenUserManager;
 import com.android.systemui.statusbar.notification.NotificationEntryManager;
-import com.android.systemui.statusbar.notification.NotificationInterruptionStateProvider;
 import com.android.systemui.statusbar.notification.collection.NotifPipeline;
+import com.android.systemui.statusbar.notification.interruption.NotificationInterruptStateProvider;
 import com.android.systemui.statusbar.phone.NotificationGroupManager;
 import com.android.systemui.statusbar.phone.NotificationShadeWindowController;
 import com.android.systemui.statusbar.phone.ShadeController;
@@ -54,14 +54,14 @@ public interface BubbleModule {
             ShadeController shadeController,
             BubbleData data,
             ConfigurationController configurationController,
-            NotificationInterruptionStateProvider interruptionStateProvider,
+            NotificationInterruptStateProvider interruptionStateProvider,
             ZenModeController zenModeController,
             NotificationLockscreenUserManager notifUserManager,
             NotificationGroupManager groupManager,
             NotificationEntryManager entryManager,
             NotifPipeline notifPipeline,
             FeatureFlags featureFlags,
-            DumpController dumpController,
+            DumpManager dumpManager,
             FloatingContentCoordinator floatingContentCoordinator) {
         return new BubbleController(
                 context,
@@ -78,7 +78,7 @@ public interface BubbleModule {
                 entryManager,
                 notifPipeline,
                 featureFlags,
-                dumpController,
+                dumpManager,
                 floatingContentCoordinator);
     }
 }
