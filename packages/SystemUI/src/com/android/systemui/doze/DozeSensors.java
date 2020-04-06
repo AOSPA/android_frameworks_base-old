@@ -44,6 +44,7 @@ import com.android.internal.logging.UiEvent;
 import com.android.internal.logging.UiEventLogger;
 import com.android.internal.logging.UiEventLoggerImpl;
 import com.android.keyguard.KeyguardUpdateMonitor;
+import com.android.systemui.R;
 import com.android.systemui.biometrics.AuthController;
 import com.android.systemui.plugins.SensorManagerPlugin;
 import com.android.systemui.statusbar.phone.DozeParameters;
@@ -71,6 +72,7 @@ public class DozeSensors {
     private final SecureSettings mSecureSettings;
     private final Callback mCallback;
     private final boolean mScreenOffUdfpsEnabled;
+    private final boolean mProxSensorSupported;
     @VisibleForTesting
     protected TriggerSensor[] mSensors;
 
@@ -118,6 +120,8 @@ public class DozeSensors {
         mProximitySensor.setTag(TAG);
         mSelectivelyRegisterProxSensors = dozeParameters.getSelectivelyRegisterSensorsUsingProx();
         mListeningProxSensors = !mSelectivelyRegisterProxSensors;
+        mProxSensorSupported = mContext.getResources().getBoolean(
+                R.bool.doze_proximity_sensor_supported);
         mScreenOffUdfpsEnabled =
                 config.screenOffUdfpsEnabled(KeyguardUpdateMonitor.getCurrentUser());
 
@@ -210,6 +214,7 @@ public class DozeSensors {
                         false /* touchscreen */, dozeLog),
         };
 
+        if (!mProxSensorSupported) return;
         setProxListening(false);  // Don't immediately start listening when we register.
         mProximitySensor.register(
                 proximityEvent -> {
@@ -379,6 +384,7 @@ public class DozeSensors {
         for (TriggerSensor s : mSensors) {
             idpw.println("Sensor: " + s.toString());
         }
+        if (!mProxSensorSupported) return;
         idpw.println("ProxSensor: " + mProximitySensor.toString());
     }
 
@@ -386,7 +392,7 @@ public class DozeSensors {
      * @return true if prox is currently near, false if far or null if unknown.
      */
     public Boolean isProximityCurrentlyNear() {
-        return mProximitySensor.isNear();
+        return mProxSensorSupported ? mProximitySensor.isNear() : null;
     }
 
     @VisibleForTesting
