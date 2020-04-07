@@ -210,7 +210,6 @@ public class TetheringTest {
     private PhoneStateListener mPhoneStateListener;
     private InterfaceConfigurationParcel mInterfaceConfiguration;
 
-
     private class TestContext extends BroadcastInterceptingContext {
         TestContext(Context base) {
             super(base);
@@ -485,6 +484,7 @@ public class TetheringTest {
         mServiceContext.registerReceiver(mBroadcastReceiver,
                 new IntentFilter(ACTION_TETHER_STATE_CHANGED));
         mTethering = makeTethering();
+        mTethering.startStateMachineUpdaters();
         verify(mStatsManager, times(1)).registerNetworkStatsProvider(anyString(), any());
         verify(mNetd).registerUnsolicitedEventListener(any());
         final ArgumentCaptor<PhoneStateListener> phoneListenerCaptor =
@@ -1073,13 +1073,15 @@ public class TetheringTest {
         when(mUserManager.getUserRestrictions()).thenReturn(newRestrictions);
 
         final Tethering.UserRestrictionActionListener ural =
-                new Tethering.UserRestrictionActionListener(mUserManager, mockTethering);
+                new Tethering.UserRestrictionActionListener(
+                        mUserManager, mockTethering, mNotificationUpdater);
         ural.mDisallowTethering = currentDisallow;
 
         ural.onUserRestrictionsChanged();
 
-        verify(mockTethering, times(expectedInteractionsWithShowNotification))
-                .untetherAll();
+        verify(mNotificationUpdater, times(expectedInteractionsWithShowNotification))
+                .notifyTetheringDisabledByRestriction();
+        verify(mockTethering, times(expectedInteractionsWithShowNotification)).untetherAll();
     }
 
     @Test
@@ -1087,7 +1089,7 @@ public class TetheringTest {
         final String[] emptyActiveIfacesList = new String[]{};
         final boolean currDisallow = false;
         final boolean nextDisallow = true;
-        final int expectedInteractionsWithShowNotification = 0;
+        final int expectedInteractionsWithShowNotification = 1;
 
         runUserRestrictionsChange(currDisallow, nextDisallow, emptyActiveIfacesList,
                 expectedInteractionsWithShowNotification);
@@ -1399,6 +1401,7 @@ public class TetheringTest {
         mPhoneStateListener.onActiveDataSubscriptionIdChanged(fakeSubId);
         final TetheringConfiguration newConfig = mTethering.getTetheringConfiguration();
         assertEquals(fakeSubId, newConfig.activeDataSubId);
+        verify(mNotificationUpdater, times(1)).onActiveDataSubscriptionIdChanged(eq(fakeSubId));
     }
 
     @Test

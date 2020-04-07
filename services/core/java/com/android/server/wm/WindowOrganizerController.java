@@ -241,9 +241,6 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
                                 + " multi-window mode... newParent=" + newParent + " task=" + task);
                         return 0;
                     } else {
-                        // Clear the window crop on root task since it may not be updated after
-                        // reparent (no longer be a root task)
-                        task.getSurfaceControl().setWindowCrop(null);
                         task.reparent((ActivityStack) newParent,
                                 hop.getToTop() ? POSITION_TOP : POSITION_BOTTOM,
                                 false /*moveParents*/, "sanitizeAndApplyHierarchyOp");
@@ -252,9 +249,10 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
                     final ActivityStack rootTask =
                             (ActivityStack) (newParent != null ? newParent : task.getRootTask());
                     if (hop.getToTop()) {
-                        as.getDisplay().positionStackAtTop(rootTask, false /* includingParents */);
+                        as.getDisplay().mTaskContainers.positionStackAtTop(rootTask,
+                                false /* includingParents */);
                     } else {
-                        as.getDisplay().positionStackAtBottom(rootTask);
+                        as.getDisplay().mTaskContainers.positionStackAtBottom(rootTask);
                     }
                 }
             } else {
@@ -264,9 +262,9 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
             // Ugh, of course ActivityStack has its own special reorder logic...
             if (task.isRootTask()) {
                 if (hop.getToTop()) {
-                    dc.positionStackAtTop(as, false /* includingParents */);
+                    dc.mTaskContainers.positionStackAtTop(as, false /* includingParents */);
                 } else {
-                    dc.positionStackAtBottom(as);
+                    dc.mTaskContainers.positionStackAtBottom(as);
                 }
             } else {
                 task.getParent().positionChildAt(

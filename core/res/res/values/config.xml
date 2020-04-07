@@ -2409,8 +2409,7 @@
           - to henceforth disable feature and try to undo its previous effects: 0
         Note: This list must be kept current with PACKAGE_WHITELIST_MODE_PROP in
         frameworks/base/services/core/java/com/android/server/pm/UserSystemPackageInstaller.java -->
-    <integer name="config_userTypePackageWhitelistMode">29</integer> <!-- 1+4+8+16 -->
-    <!-- TODO(b/143200798): Change to value 13, i.e. 1+4+8, when b/143200798 is resolved. -->
+    <integer name="config_userTypePackageWhitelistMode">13</integer> <!-- 1+4+8 -->
 
     <!-- Whether UI for multi user should be shown -->
     <bool name="config_enableMultiUserUI">false</bool>
@@ -2781,6 +2780,10 @@
     <!-- SystemUi service component -->
     <string name="config_systemUIServiceComponent" translatable="false"
             >com.android.systemui/com.android.systemui.SystemUIService</string>
+
+    <!-- Package handling Quick controls -->
+    <string name="config_controlsPackage" translatable="false"
+            >com.android.systemui</string>
 
     <!-- Keyguard component -->
     <string name="config_keyguardComponent" translatable="false"
@@ -4442,6 +4445,9 @@
 
     <!-- Set to true to enable the user switcher on the keyguard. -->
     <bool name="config_keyguardUserSwitcher">false</bool>
+
+    <!-- Set to true to make assistant show in front of the dream/screensaver. -->
+    <bool name="config_assistantOnTopOfDream">false</bool>
 
     <!-- pdp data retry for cause 29, 33 and 55-->
     <bool name="config_pdp_retry_for_29_33_55_enabled">false</bool>

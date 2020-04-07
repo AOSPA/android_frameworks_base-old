@@ -1535,7 +1535,7 @@ class ProcessRecord implements WindowProcessListener {
 
     void appNotResponding(String activityShortComponentName, ApplicationInfo aInfo,
             String parentShortComponentName, WindowProcessController parentProcess,
-            boolean aboveSystem, String annotation) {
+            boolean aboveSystem, String annotation, boolean onlyDumpSelf) {
         ArrayList<Integer> firstPids = new ArrayList<>(5);
         SparseArray<Boolean> lastPids = new SparseArray<>(20);
 
@@ -1547,6 +1547,7 @@ class ProcessRecord implements WindowProcessListener {
             mService.updateCpuStatsNow();
         }
 
+        final boolean isSilentAnr;
         synchronized (mService) {
             // PowerManager.reboot() can block for a long time, so ignore ANRs while shutting down.
             if (mService.mAtmInternal.isShuttingDown()) {
@@ -1577,8 +1578,9 @@ class ProcessRecord implements WindowProcessListener {
             // Dump thread traces as quickly as we can, starting with "interesting" processes.
             firstPids.add(pid);
 
-            // Don't dump other PIDs if it's a background ANR
-            if (!isSilentAnr()) {
+            // Don't dump other PIDs if it's a background ANR or is requested to only dump self.
+            isSilentAnr = isSilentAnr();
+            if (!isSilentAnr && !onlyDumpSelf) {
                 int parentPid = pid;
                 if (parentProcess != null && parentProcess.getPid() > 0) {
                     parentPid = parentProcess.getPid();
@@ -1632,7 +1634,7 @@ class ProcessRecord implements WindowProcessListener {
 
         // don't dump native PIDs for background ANRs unless it is the process of interest
         String[] nativeProc = null;
-        if (isSilentAnr()) {
+        if (isSilentAnr || onlyDumpSelf) {
             for (int i = 0; i < NATIVE_STACKS_OF_INTEREST.length; i++) {
                 if (NATIVE_STACKS_OF_INTEREST[i].equals(processName)) {
                     nativeProc = new String[] { processName };
@@ -1656,7 +1658,7 @@ class ProcessRecord implements WindowProcessListener {
         // To hold the start and end offset to the ANR trace file respectively.
         final long[] offsets = new long[2];
         File tracesFile = ActivityManagerService.dumpStackTraces(firstPids,
-                (isSilentAnr()) ? null : processCpuTracker, (isSilentAnr()) ? null : lastPids,
+                isSilentAnr ? null : processCpuTracker, isSilentAnr ? null : lastPids,
                 nativePids, tracesFileException, offsets);
 
         if (isMonitorCpuUsage()) {

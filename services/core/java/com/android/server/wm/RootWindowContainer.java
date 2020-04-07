@@ -36,7 +36,6 @@ import static android.view.Display.DEFAULT_DISPLAY;
 import static android.view.Display.INVALID_DISPLAY;
 import static android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON;
 import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_SUSTAINED_PERFORMANCE_MODE;
-import static android.view.WindowManager.LayoutParams.TYPE_DREAM;
 import static android.view.WindowManager.LayoutParams.TYPE_KEYGUARD_DIALOG;
 import static android.view.WindowManager.TRANSIT_CRASHING_ACTIVITY_CLOSE;
 import static android.view.WindowManager.TRANSIT_SHOW_SINGLE_TASK_DISPLAY;
@@ -796,10 +795,10 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
         return leakedSurface || killedApps;
     }
 
-    void performSurfacePlacement(boolean recoveringMemory) {
+    void performSurfacePlacement() {
         Trace.traceBegin(TRACE_TAG_WINDOW_MANAGER, "performSurfacePlacement");
         try {
-            performSurfacePlacementNoTrace(recoveringMemory);
+            performSurfacePlacementNoTrace();
         } finally {
             Trace.traceEnd(TRACE_TAG_WINDOW_MANAGER);
         }
@@ -807,7 +806,7 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
 
     // "Something has changed!  Let's make it correct now."
     // TODO: Super crazy long method that should be broken down...
-    void performSurfacePlacementNoTrace(boolean recoveringMemory) {
+    void performSurfacePlacementNoTrace() {
         if (DEBUG_WINDOW_TRACE) Slog.v(TAG, "performSurfacePlacementInner: entry. Called by "
                 + Debug.getCallers(3));
 
@@ -842,7 +841,7 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
         Trace.traceBegin(TRACE_TAG_WINDOW_MANAGER, "applySurfaceChanges");
         mWmService.openSurfaceTransaction();
         try {
-            applySurfaceChangesTransaction(recoveringMemory);
+            applySurfaceChangesTransaction();
         } catch (RuntimeException e) {
             Slog.wtf(TAG, "Unhandled exception in Window Manager", e);
         } finally {
@@ -1042,7 +1041,7 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
         }
     }
 
-    private void applySurfaceChangesTransaction(boolean recoveringMemory) {
+    private void applySurfaceChangesTransaction() {
         mHoldScreenWindow = null;
         mObscuringWindow = null;
 
@@ -1065,7 +1064,7 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
         final int count = mChildren.size();
         for (int j = 0; j < count; ++j) {
             final DisplayContent dc = mChildren.get(j);
-            dc.applySurfaceChangesTransaction(recoveringMemory);
+            dc.applySurfaceChangesTransaction();
         }
 
         // Give the display manager a chance to adjust properties like display rotation if it needs
@@ -1138,7 +1137,7 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
                 // While a dream or keyguard is showing, obscure ordinary application content on
                 // secondary displays (by forcibly enabling mirroring unless there is other content
                 // we want to show) but still allow opaque keyguard dialogs to be shown.
-                if (type == TYPE_DREAM || mWmService.mPolicy.isKeyguardShowing()) {
+                if (w.isDreamWindow() || mWmService.mPolicy.isKeyguardShowing()) {
                     mObscureApplicationContentOnSecondaryDisplays = true;
                 }
                 displayHasContent = true;
@@ -1372,7 +1371,8 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
 
         final DisplayContent defaultDisplay = getDefaultDisplay();
 
-        defaultDisplay.getOrCreateStack(WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_HOME, ON_TOP);
+        defaultDisplay.mTaskContainers.getOrCreateStack(WINDOWING_MODE_FULLSCREEN,
+                ACTIVITY_TYPE_HOME, ON_TOP);
         positionChildAt(POSITION_TOP, defaultDisplay, false /* includingParents */);
     }
 
@@ -1441,7 +1441,7 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
     }
 
     ActivityRecord getDefaultDisplayHomeActivityForUser(int userId) {
-        return getDisplayContent(DEFAULT_DISPLAY).getHomeActivityForUser(userId);
+        return getDisplayContent(DEFAULT_DISPLAY).mTaskContainers.getHomeActivityForUser(userId);
     }
 
     boolean startHomeOnAllDisplays(int userId, String reason) {
@@ -1637,7 +1637,7 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
             displayId = DEFAULT_DISPLAY;
         }
 
-        final ActivityRecord r = getDisplayContent(displayId).getHomeActivity();
+        final ActivityRecord r = getDisplayContent(displayId).mTaskContainers.getHomeActivity();
         final String myReason = reason + " resumeHomeActivity";
 
         // Only resume home activity if isn't finishing.
@@ -1838,7 +1838,8 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
         // focus order.
         for (int i = getChildCount() - 1; i >= 0; --i) {
             final DisplayContent display = getChildAt(i);
-            final ActivityRecord resumedActivityOnDisplay = display.getResumedActivity();
+            final ActivityRecord resumedActivityOnDisplay = display.mTaskContainers
+                    .getResumedActivity();
             if (resumedActivityOnDisplay != null) {
                 return resumedActivityOnDisplay;
             }
@@ -1971,8 +1972,8 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
         final int focusStackId = topFocusedStack != null
                 ? topFocusedStack.getRootTaskId() : INVALID_TASK_ID;
         // We dismiss the docked stack whenever we switch users.
-        if (getDefaultDisplay().isSplitScreenModeActivated()) {
-            getDefaultDisplay().onSplitScreenModeDismissed();
+        if (getDefaultDisplay().mTaskContainers.isSplitScreenModeActivated()) {
+            getDefaultDisplay().mTaskContainers.onSplitScreenModeDismissed();
         }
         // Also dismiss the pinned stack whenever we switch users. Removing the pinned stack will
         // also cause all tasks to be moved to the fullscreen stack at a position that is
@@ -1994,7 +1995,7 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
         final int restoreStackId = mUserStackInFront.get(userId);
         ActivityStack stack = getStack(restoreStackId);
         if (stack == null) {
-            stack = getDefaultDisplay().getOrCreateRootHomeTask();
+            stack = getDefaultDisplay().mTaskContainers.getOrCreateRootHomeTask();
         }
         final boolean homeInFront = stack.isActivityTypeHome();
         if (stack.isOnHomeDisplay()) {
@@ -2017,7 +2018,7 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
     void updateUserStack(int userId, ActivityStack stack) {
         if (userId != mCurrentUser) {
             if (stack == null) {
-                stack = getDefaultDisplay().getOrCreateRootHomeTask();
+                stack = getDefaultDisplay().mTaskContainers.getOrCreateRootHomeTask();
             }
 
             mUserStackInFront.put(userId, stack.getRootTaskId());
@@ -2114,8 +2115,9 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
             } else {
                 // In the case of multiple activities, we will create a new task for it and then
                 // move the PIP activity into the task.
-                stack = display.createStack(WINDOWING_MODE_PINNED, r.getActivityType(), ON_TOP,
-                        r.info, r.intent, false /* createdByOrganizer */);
+                stack = display.mTaskContainers.createStack(WINDOWING_MODE_PINNED,
+                        r.getActivityType(), ON_TOP, r.info, r.intent,
+                        false /* createdByOrganizer */);
 
                 // There are multiple activities in the task and moving the top activity should
                 // reveal/leave the other activities in their original task.
@@ -2154,7 +2156,8 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
         // Looking up task on preferred display first
         final DisplayContent preferredDisplay = getDisplayContent(preferredDisplayId);
         if (preferredDisplay != null) {
-            preferredDisplay.findTaskLocked(r, true /* isPreferredDisplay */, mTmpFindTaskResult);
+            preferredDisplay.mTaskContainers.findTaskLocked(r, true /* isPreferredDisplay */,
+                    mTmpFindTaskResult);
             if (mTmpFindTaskResult.mIdealMatch) {
                 return mTmpFindTaskResult.mRecord;
             }
@@ -2166,7 +2169,8 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
                 continue;
             }
 
-            display.findTaskLocked(r, false /* isPreferredDisplay */, mTmpFindTaskResult);
+            display.mTaskContainers.findTaskLocked(r, false /* isPreferredDisplay */,
+                    mTmpFindTaskResult);
             if (mTmpFindTaskResult.mIdealMatch) {
                 return mTmpFindTaskResult.mRecord;
             }
@@ -2233,7 +2237,8 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
                     resumedOnDisplay |= result;
                     continue;
                 }
-                if (display.isTopStack(stack) && topRunningActivity.isState(RESUMED)) {
+                if (display.mTaskContainers.isTopStack(stack)
+                        && topRunningActivity.isState(RESUMED)) {
                     // Kick off any lingering app transitions form the MoveTaskToFront operation,
                     // but only consider the top task and stack on that display.
                     stack.executeAppTransition(targetOptions);
@@ -2289,6 +2294,9 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
                                 TRANSIT_SHOW_SINGLE_TASK_DISPLAY, false);
                     }
                     stack.awakeFromSleepingLocked();
+                    if (display.isSingleTaskInstance()) {
+                        display.executeAppTransition();
+                    }
                     if (stack.isFocusedStackOnDisplay()
                             && !mStackSupervisor.getKeyguardController()
                             .isKeyguardOrAodShowing(display.mDisplayId)) {
@@ -2305,7 +2313,7 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
 
     protected ActivityStack getStack(int stackId) {
         for (int i = getChildCount() - 1; i >= 0; --i) {
-            final ActivityStack stack = getChildAt(i).getStack(stackId);
+            final ActivityStack stack = getChildAt(i).mTaskContainers.getStack(stackId);
             if (stack != null) {
                 return stack;
             }
@@ -2781,7 +2789,8 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
             }
             final DisplayContent display = getDisplayContentOrCreate(displayId);
             if (display != null) {
-                stack = display.getOrCreateStack(r, options, candidateTask, activityType, onTop);
+                stack = display.mTaskContainers.getOrCreateStack(r, options, candidateTask,
+                        activityType, onTop);
                 if (stack != null) {
                     return stack;
                 }
@@ -2803,8 +2812,8 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
             display = stack.getDisplay();
             if (display != null && canLaunchOnDisplay(r, display.mDisplayId)) {
                 if (windowingMode == WindowConfiguration.WINDOWING_MODE_UNDEFINED) {
-                    windowingMode = display.resolveWindowingMode(r, options, candidateTask,
-                            activityType);
+                    windowingMode = display.mTaskContainers.resolveWindowingMode(r, options,
+                            candidateTask, activityType);
                 }
                 // Always allow organized tasks that created by organizer since the activity type
                 // of an organized task is decided by the activity type of its top child, which
@@ -2828,12 +2837,13 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
         if (display == null || !canLaunchOnDisplay(r, display.mDisplayId)) {
             display = getDefaultDisplay();
             if (windowingMode == WindowConfiguration.WINDOWING_MODE_UNDEFINED) {
-                windowingMode = display.resolveWindowingMode(r, options, candidateTask,
-                        activityType);
+                windowingMode = display.mTaskContainers.resolveWindowingMode(r, options,
+                        candidateTask, activityType);
             }
         }
 
-        return display.getOrCreateStack(r, options, candidateTask, activityType, onTop);
+        return display.mTaskContainers.getOrCreateStack(r, options, candidateTask, activityType,
+                onTop);
     }
 
     /** @return true if activity record is null or can be launched on provided display. */
@@ -2852,7 +2862,8 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
      * @param candidateTask The possible task the activity might be put in.
      * @return Existing stack if there is a valid one, new dynamic stack if it is valid or null.
      */
-    private ActivityStack getValidLaunchStackOnDisplay(int displayId, @NonNull ActivityRecord r,
+    @VisibleForTesting
+    ActivityStack getValidLaunchStackOnDisplay(int displayId, @NonNull ActivityRecord r,
             @Nullable Task candidateTask, @Nullable ActivityOptions options,
             @Nullable LaunchParamsController.LaunchParams launchParams) {
         final DisplayContent displayContent = getDisplayContentOrCreate(displayId);
@@ -2873,6 +2884,13 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
             if (attachedDisplayId == INVALID_DISPLAY || attachedDisplayId == displayId) {
                 return candidateTask.getStack();
             }
+            // Or the candidate task is already a root task that can be reused by reparenting
+            // it to the target display.
+            if (candidateTask.isRootTask()) {
+                final ActivityStack stack = candidateTask.getStack();
+                displayContent.moveStackToDisplay(stack, true /* onTop */);
+                return stack;
+            }
         }
 
         int windowingMode;
@@ -2885,8 +2903,8 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
             windowingMode = options != null ? options.getLaunchWindowingMode()
                     : r.getWindowingMode();
         }
-        windowingMode = displayContent.validateWindowingMode(windowingMode, r, candidateTask,
-                r.getActivityType());
+        windowingMode = displayContent.mTaskContainers.validateWindowingMode(windowingMode, r,
+                candidateTask, r.getActivityType());
 
         // Return the topmost valid stack on the display.
         for (int i = displayContent.getStackCount() - 1; i >= 0; --i) {
@@ -2974,8 +2992,8 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
             // was on.
             preferredDisplay = getDisplayContent(currentFocus.mPrevDisplayId);
         }
-        final ActivityStack preferredFocusableStack = preferredDisplay.getNextFocusableStack(
-                currentFocus, ignoreCurrent);
+        final ActivityStack preferredFocusableStack = preferredDisplay.mTaskContainers
+                .getNextFocusableStack(currentFocus, ignoreCurrent);
         if (preferredFocusableStack != null) {
             return preferredFocusableStack;
         }
@@ -2993,8 +3011,8 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
                 // We've already checked this one
                 continue;
             }
-            final ActivityStack nextFocusableStack = display.getNextFocusableStack(currentFocus,
-                    ignoreCurrent);
+            final ActivityStack nextFocusableStack = display.mTaskContainers
+                    .getNextFocusableStack(currentFocus, ignoreCurrent);
             if (nextFocusableStack != null) {
                 return nextFocusableStack;
             }
@@ -3385,11 +3403,10 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
 
     @VisibleForTesting
     void getRunningTasks(int maxNum, List<ActivityManager.RunningTaskInfo> list,
-            @WindowConfiguration.ActivityType int ignoreActivityType,
-            @WindowConfiguration.WindowingMode int ignoreWindowingMode, int callingUid,
-            boolean allowed, boolean crossUser, ArraySet<Integer> profileIds) {
-        mStackSupervisor.getRunningTasks().getTasks(maxNum, list, ignoreActivityType,
-                ignoreWindowingMode, this, callingUid, allowed, crossUser, profileIds);
+            boolean filterOnlyVisibleRecents, int callingUid, boolean allowed, boolean crossUser,
+            ArraySet<Integer> profileIds) {
+        mStackSupervisor.getRunningTasks().getTasks(maxNum, list, filterOnlyVisibleRecents, this,
+                callingUid, allowed, crossUser, profileIds);
     }
 
     void sendPowerHintForLaunchStartIfNeeded(boolean forceSend, ActivityRecord targetActivity) {
@@ -3407,7 +3424,8 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
             boolean allFocusedProcessesDiffer = true;
             for (int displayNdx = 0; displayNdx < getChildCount(); ++displayNdx) {
                 final DisplayContent displayContent = getChildAt(displayNdx);
-                final ActivityRecord resumedActivity = displayContent.getResumedActivity();
+                final ActivityRecord resumedActivity = displayContent.mTaskContainers
+                        .getResumedActivity();
                 final WindowProcessController resumedActivityProcess =
                         resumedActivity == null ? null : resumedActivity.app;
 
@@ -3478,6 +3496,7 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
             final DisplayContent display = getChildAt(i);
             display.dump(pw, prefix, true /* dumpAll */);
         }
+        pw.println();
     }
 
     /**
@@ -3508,8 +3527,8 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
                 printed = stack.dump(fd, pw, dumpAll, dumpClient, dumpPackage, needSep);
                 needSep = printed;
             }
-            printThisActivity(pw, displayContent.getResumedActivity(), dumpPackage, needSep,
-                    " ResumedActivity:");
+            printThisActivity(pw, displayContent.mTaskContainers.getResumedActivity(), dumpPackage,
+                    needSep, " ResumedActivity:");
         }
 
         printed |= dumpHistoryList(fd, pw, mStackSupervisor.mFinishingActivities, "  ",

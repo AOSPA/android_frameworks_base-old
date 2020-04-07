@@ -16,8 +16,8 @@
 
 package android.view;
 
+import static android.view.InsetsState.ITYPE_CAPTION_BAR;
 import static android.view.InsetsState.ITYPE_IME;
-import static android.view.InsetsState.toInternalType;
 import static android.view.InsetsState.toPublicType;
 import static android.view.WindowInsets.Type.all;
 import static android.view.WindowInsets.Type.ime;
@@ -367,6 +367,7 @@ public class InsetsController implements WindowInsetsController, InsetsAnimation
     private int mLastLegacySystemUiFlags;
     private DisplayCutout mLastDisplayCutout;
     private boolean mStartingAnimation;
+    private int mCaptionInsetsHeight = 0;
 
     private SyncRtSurfaceTransactionApplier mApplier;
 
@@ -454,40 +455,49 @@ public class InsetsController implements WindowInsetsController, InsetsAnimation
         return mState;
     }
 
+    @Override
+    public boolean isRequestedVisible(int type) {
+        return getSourceConsumer(type).isRequestedVisible();
+    }
+
     public InsetsState getLastDispatchedState() {
         return mLastDispachedState;
     }
 
     @VisibleForTesting
     public boolean onStateChanged(InsetsState state) {
-        boolean localStateChanged = !mState.equals(state);
+        boolean localStateChanged = !mState.equals(state, true /* excludingCaptionInsets */)
+                || !captionInsetsUnchanged();
         if (!localStateChanged && mLastDispachedState.equals(state)) {
             return false;
         }
-        updateState(state);
+        mState.set(state);
         mLastDispachedState.set(state, true /* copySources */);
         applyLocalVisibilityOverride();
         if (localStateChanged) {
             mViewRoot.notifyInsetsChanged();
         }
-        if (!mState.equals(mLastDispachedState)) {
+        if (!mState.equals(mLastDispachedState, true /* excludingCaptionInsets */)) {
             sendStateToWindowManager();
+        }
+        if (mCaptionInsetsHeight != 0) {
+            mState.getSource(ITYPE_CAPTION_BAR).setFrame(new Rect(mFrame.left, mFrame.top,
+                    mFrame.right, mFrame.top + mCaptionInsetsHeight));
         }
         return true;
     }
 
-    private void updateState(InsetsState newState) {
-        mState.setDisplayFrame(newState.getDisplayFrame());
-        for (int i = newState.getSourcesCount() - 1; i >= 0; i--) {
-            InsetsSource source = newState.sourceAt(i);
-            getSourceConsumer(source.getType()).updateSource(source);
+    private boolean captionInsetsUnchanged() {
+        if (mState.peekSource(ITYPE_CAPTION_BAR) == null
+                && mCaptionInsetsHeight == 0) {
+            return true;
         }
-        for (int i = mState.getSourcesCount() - 1; i >= 0; i--) {
-            InsetsSource source = mState.sourceAt(i);
-            if (newState.peekSource(source.getType()) == null) {
-                mState.removeSource(source.getType());
-            }
+        if (mState.peekSource(ITYPE_CAPTION_BAR) != null
+                && mCaptionInsetsHeight
+                == mState.peekSource(ITYPE_CAPTION_BAR).getFrame().height()) {
+            return true;
         }
+        return false;
     }
 
     /**
@@ -869,15 +879,8 @@ public class InsetsController implements WindowInsetsController, InsetsAnimation
             control.cancel();
         }
         for (int i = mRunningAnimations.size() - 1; i >= 0; i--) {
-            RunningAnimation runningAnimation = mRunningAnimations.get(i);
-            if (runningAnimation.runner == control) {
+            if (mRunningAnimations.get(i).runner == control) {
                 mRunningAnimations.remove(i);
-                ArraySet<Integer> types = toInternalType(control.getTypes());
-                for (int j = types.size() - 1; j >= 0; j--) {
-                    if (getSourceConsumer(types.valueAt(j)).notifyAnimationFinished()) {
-                        mViewRoot.notifyInsetsChanged();
-                    }
-                }
                 break;
             }
         }
@@ -964,6 +967,7 @@ public class InsetsController implements WindowInsetsController, InsetsAnimation
         InsetsState tmpState = new InsetsState();
         for (int i = mSourceConsumers.size() - 1; i >= 0; i--) {
             final InsetsSourceConsumer consumer = mSourceConsumers.valueAt(i);
+            if (consumer.getType() == ITYPE_CAPTION_BAR) continue;
             if (consumer.getControl() != null) {
                 tmpState.addSource(mState.getSource(consumer.getType()));
             }
@@ -1056,6 +1060,7 @@ public class InsetsController implements WindowInsetsController, InsetsAnimation
                 }
                 mViewRoot.mView.dispatchWindowInsetsAnimationStart(animation, bounds);
                 mStartingAnimation = true;
+                controller.mReadyDispatched = true;
                 listener.onReady(controller, types);
                 mStartingAnimation = false;
                 return true;
@@ -1102,6 +1107,11 @@ public class InsetsController implements WindowInsetsController, InsetsAnimation
             return 0;
         }
         return mViewRoot.mWindowAttributes.insetsFlags.appearance;
+    }
+
+    @Override
+    public void setCaptionInsetsHeight(int height) {
+        mCaptionInsetsHeight = height;
     }
 
     @Override

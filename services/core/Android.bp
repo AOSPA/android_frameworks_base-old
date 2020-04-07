@@ -131,10 +131,6 @@ java_library_static {
         "overlayable_policy_aidl-java",
         "vendor.qti.hardware.servicetracker-V1.0-java",
     ],
-
-    plugins: [
-        "compat-changeid-annotation-processor",
-    ],
 }
 
 java_genrule {
@@ -155,6 +151,10 @@ java_library {
     static_libs: ["services.core.priorityboosted"],
 }
 
+java_library_host {
+    name: "core_cts_test_resources",
+    srcs: ["java/com/android/server/notification/SmallHash.java"]
+}
 
 prebuilt_etc {
     name: "gps_debug.conf",

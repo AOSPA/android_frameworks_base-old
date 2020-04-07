@@ -21,8 +21,10 @@ import static com.google.common.truth.Truth.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -43,6 +45,7 @@ import androidx.test.platform.app.InstrumentationRegistry;
 import androidx.test.runner.AndroidJUnit4;
 
 import com.android.frameworks.servicestests.R;
+import com.android.server.pm.parsing.PackageParser2;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -57,24 +60,31 @@ import java.io.InputStream;
 @SmallTest
 @Presubmit
 @RunWith(AndroidJUnit4.class)
+
 public class ApexManagerTest {
     private static final String TEST_APEX_PKG = "com.android.apex.test";
     private static final int TEST_SESSION_ID = 99999999;
     private static final int[] TEST_CHILD_SESSION_ID = {8888, 7777};
     private ApexManager mApexManager;
     private Context mContext;
+    private PackageParser2 mPackageParser2;
 
     private IApexService mApexService = mock(IApexService.class);
 
     @Before
     public void setUp() throws RemoteException {
         mContext = InstrumentationRegistry.getInstrumentation().getContext();
-        mApexManager = new ApexManager.ApexManagerImpl(mApexService);
+        ApexManager.ApexManagerImpl managerImpl = spy(new ApexManager.ApexManagerImpl());
+        doReturn(mApexService).when(managerImpl).waitForApexService();
+        mApexManager = managerImpl;
+        mPackageParser2 = new PackageParser2(null, false, null, null, null);
     }
 
     @Test
     public void testGetPackageInfo_setFlagsMatchActivePackage() throws RemoteException {
         when(mApexService.getAllPackages()).thenReturn(createApexInfo(true, false));
+        mApexManager.scanApexPackagesTraced(mPackageParser2,
+                ParallelPackageParser.makeExecutorService());
         final PackageInfo activePkgPi = mApexManager.getPackageInfo(TEST_APEX_PKG,
                 ApexManager.MATCH_ACTIVE_PACKAGE);
 
@@ -90,6 +100,8 @@ public class ApexManagerTest {
     @Test
     public void testGetPackageInfo_setFlagsMatchFactoryPackage() throws RemoteException {
         when(mApexService.getAllPackages()).thenReturn(createApexInfo(false, true));
+        mApexManager.scanApexPackagesTraced(mPackageParser2,
+                ParallelPackageParser.makeExecutorService());
         PackageInfo factoryPkgPi = mApexManager.getPackageInfo(TEST_APEX_PKG,
                 ApexManager.MATCH_FACTORY_PACKAGE);
 
@@ -105,6 +117,8 @@ public class ApexManagerTest {
     @Test
     public void testGetPackageInfo_setFlagsNone() throws RemoteException {
         when(mApexService.getAllPackages()).thenReturn(createApexInfo(false, true));
+        mApexManager.scanApexPackagesTraced(mPackageParser2,
+                ParallelPackageParser.makeExecutorService());
 
         assertThat(mApexManager.getPackageInfo(TEST_APEX_PKG, 0)).isNull();
     }
@@ -112,6 +126,8 @@ public class ApexManagerTest {
     @Test
     public void testGetActivePackages() throws RemoteException {
         when(mApexService.getAllPackages()).thenReturn(createApexInfo(true, true));
+        mApexManager.scanApexPackagesTraced(mPackageParser2,
+                ParallelPackageParser.makeExecutorService());
 
         assertThat(mApexManager.getActivePackages()).isNotEmpty();
     }
@@ -119,6 +135,8 @@ public class ApexManagerTest {
     @Test
     public void testGetActivePackages_noneActivePackages() throws RemoteException {
         when(mApexService.getAllPackages()).thenReturn(createApexInfo(false, true));
+        mApexManager.scanApexPackagesTraced(mPackageParser2,
+                ParallelPackageParser.makeExecutorService());
 
         assertThat(mApexManager.getActivePackages()).isEmpty();
     }
@@ -126,6 +144,8 @@ public class ApexManagerTest {
     @Test
     public void testGetFactoryPackages() throws RemoteException {
         when(mApexService.getAllPackages()).thenReturn(createApexInfo(false, true));
+        mApexManager.scanApexPackagesTraced(mPackageParser2,
+                ParallelPackageParser.makeExecutorService());
 
         assertThat(mApexManager.getFactoryPackages()).isNotEmpty();
     }
@@ -133,6 +153,8 @@ public class ApexManagerTest {
     @Test
     public void testGetFactoryPackages_noneFactoryPackages() throws RemoteException {
         when(mApexService.getAllPackages()).thenReturn(createApexInfo(true, false));
+        mApexManager.scanApexPackagesTraced(mPackageParser2,
+                ParallelPackageParser.makeExecutorService());
 
         assertThat(mApexManager.getFactoryPackages()).isEmpty();
     }
@@ -140,6 +162,8 @@ public class ApexManagerTest {
     @Test
     public void testGetInactivePackages() throws RemoteException {
         when(mApexService.getAllPackages()).thenReturn(createApexInfo(false, true));
+        mApexManager.scanApexPackagesTraced(mPackageParser2,
+                ParallelPackageParser.makeExecutorService());
 
         assertThat(mApexManager.getInactivePackages()).isNotEmpty();
     }
@@ -147,6 +171,8 @@ public class ApexManagerTest {
     @Test
     public void testGetInactivePackages_noneInactivePackages() throws RemoteException {
         when(mApexService.getAllPackages()).thenReturn(createApexInfo(true, false));
+        mApexManager.scanApexPackagesTraced(mPackageParser2,
+                ParallelPackageParser.makeExecutorService());
 
         assertThat(mApexManager.getInactivePackages()).isEmpty();
     }
@@ -154,6 +180,8 @@ public class ApexManagerTest {
     @Test
     public void testIsApexPackage() throws RemoteException {
         when(mApexService.getAllPackages()).thenReturn(createApexInfo(false, true));
+        mApexManager.scanApexPackagesTraced(mPackageParser2,
+                ParallelPackageParser.makeExecutorService());
 
         assertThat(mApexManager.isApexPackage(TEST_APEX_PKG)).isTrue();
     }

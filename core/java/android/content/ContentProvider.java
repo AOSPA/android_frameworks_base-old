@@ -47,8 +47,8 @@ import android.os.Bundle;
 import android.os.CancellationSignal;
 import android.os.IBinder;
 import android.os.ICancellationSignal;
-import android.os.Parcel;
 import android.os.ParcelFileDescriptor;
+import android.os.ParcelableException;
 import android.os.Process;
 import android.os.RemoteCallback;
 import android.os.RemoteException;
@@ -307,19 +307,8 @@ public abstract class ContentProvider implements ContentInterface, ComponentCall
             try {
                 result.putString(ContentResolver.REMOTE_CALLBACK_RESULT, getType(uri));
             } catch (Exception e) {
-                Parcel parcel = Parcel.obtain();
-                try {
-                    try {
-                        parcel.writeException(e);
-                    } catch (Exception ex) {
-                        // getType threw an unparcelable exception. Wrap the message into
-                        // a parcelable exception type
-                        parcel.writeException(new IllegalStateException(e.getMessage()));
-                    }
-                    result.putByteArray(ContentResolver.REMOTE_CALLBACK_ERROR, parcel.marshall());
-                } finally {
-                    parcel.recycle();
-                }
+                result.putParcelable(ContentResolver.REMOTE_CALLBACK_ERROR,
+                        new ParcelableException(e));
             }
             callback.sendResult(result);
         }
@@ -602,8 +591,13 @@ public abstract class ContentProvider implements ContentInterface, ComponentCall
         public void canonicalizeAsync(String callingPkg, @Nullable String attributionTag, Uri uri,
                 RemoteCallback callback) {
             final Bundle result = new Bundle();
-            result.putParcelable(ContentResolver.REMOTE_CALLBACK_RESULT,
-                    canonicalize(callingPkg, attributionTag, uri));
+            try {
+                result.putParcelable(ContentResolver.REMOTE_CALLBACK_RESULT,
+                        canonicalize(callingPkg, attributionTag, uri));
+            } catch (Exception e) {
+                result.putParcelable(ContentResolver.REMOTE_CALLBACK_ERROR,
+                        new ParcelableException(e));
+            }
             callback.sendResult(result);
         }
 

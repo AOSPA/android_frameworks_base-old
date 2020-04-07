@@ -49,7 +49,6 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
-import android.os.RemoteException;
 import android.os.ResultReceiver;
 import android.os.SystemClock;
 import android.provider.Settings;
@@ -60,7 +59,6 @@ import android.text.method.MovementMethod;
 import android.util.Log;
 import android.util.PrintWriterPrinter;
 import android.util.Printer;
-import android.util.Size;
 import android.view.Gravity;
 import android.view.KeyCharacterMap;
 import android.view.KeyEvent;
@@ -75,7 +73,6 @@ import android.view.WindowInsets;
 import android.view.WindowInsets.Side;
 import android.view.WindowManager;
 import android.view.animation.AnimationUtils;
-import android.view.autofill.AutofillId;
 import android.view.inputmethod.CompletionInfo;
 import android.view.inputmethod.CursorAnchorInfo;
 import android.view.inputmethod.EditorInfo;
@@ -446,18 +443,7 @@ public class InputMethodService extends AbstractInputMethodService {
     final Insets mTmpInsets = new Insets();
     final int[] mTmpLocation = new int[2];
 
-    /**
-     * We use a separate {@code mInlineLock} to make sure {@code mInlineSuggestionSession} is
-     * only accessed synchronously. Although when the lock is introduced, all the calls are from
-     * the main thread so the lock is not really necessarily (but for the same reason it also
-     * doesn't hurt), it's still being added as a safety guard to make sure in the future we
-     * don't add more code causing race condition when updating the {@code
-     * mInlineSuggestionSession}.
-     */
-    private final Object mInlineLock = new Object();
-    @GuardedBy("mInlineLock")
-    @Nullable
-    private InlineSuggestionSession mInlineSuggestionSession;
+    private InlineSuggestionSessionController mInlineSuggestionSessionController;
 
     private boolean mAutomotiveHideNavBarForKeyboard;
     private boolean mIsAutomotive;
@@ -555,7 +541,7 @@ public class InputMethodService extends AbstractInputMethodService {
             if (DEBUG) {
                 Log.d(TAG, "InputMethodService received onCreateInlineSuggestionsRequest()");
             }
-            handleOnCreateInlineSuggestionsRequest(requestInfo, cb);
+            mInlineSuggestionSessionController.onMakeInlineSuggestionsRequest(requestInfo, cb);
         }
 
         /**
@@ -822,47 +808,6 @@ public class InputMethodService extends AbstractInputMethodService {
      */
     public boolean onInlineSuggestionsResponse(@NonNull InlineSuggestionsResponse response) {
         return false;
-    }
-
-    @MainThread
-    private void handleOnCreateInlineSuggestionsRequest(
-            @NonNull InlineSuggestionsRequestInfo requestInfo,
-            @NonNull IInlineSuggestionsRequestCallback callback) {
-        if (!mInputStarted) {
-            try {
-                Log.w(TAG, "onStartInput() not called yet");
-                callback.onInlineSuggestionsUnsupported();
-            } catch (RemoteException e) {
-                Log.w(TAG, "Failed to call onInlineSuggestionsUnsupported.", e);
-            }
-            return;
-        }
-
-        synchronized (mInlineLock) {
-            if (mInlineSuggestionSession != null) {
-                mInlineSuggestionSession.invalidateSession();
-            }
-            mInlineSuggestionSession = new InlineSuggestionSession(requestInfo.getComponentName(),
-                    callback, this::getEditorInfoPackageName, this::getEditorInfoAutofillId,
-                    () -> onCreateInlineSuggestionsRequest(requestInfo.getUiExtras()),
-                    this::getHostInputToken, this::onInlineSuggestionsResponse, mInputViewStarted);
-        }
-    }
-
-    @Nullable
-    private String getEditorInfoPackageName() {
-        if (mInputEditorInfo != null) {
-            return mInputEditorInfo.packageName;
-        }
-        return null;
-    }
-
-    @Nullable
-    private AutofillId getEditorInfoAutofillId() {
-        if (mInputEditorInfo != null) {
-            return mInputEditorInfo.autofillId;
-        }
-        return null;
     }
 
     /**
@@ -1270,6 +1215,10 @@ public class InputMethodService extends AbstractInputMethodService {
 
         initViews();
         mWindow.getWindow().setLayout(MATCH_PARENT, WRAP_CONTENT);
+
+        mInlineSuggestionSessionController = new InlineSuggestionSessionController(
+                this::onCreateInlineSuggestionsRequest, this::getHostInputToken,
+                this::onInlineSuggestionsResponse);
     }
 
     /**
@@ -1480,8 +1429,8 @@ public class InputMethodService extends AbstractInputMethodService {
      */
     public int getMaxWidth() {
         final WindowManager windowManager = getSystemService(WindowManager.class);
-        final Size windowSize = windowManager.getCurrentWindowMetrics().getSize();
-        return windowSize.getWidth();
+        final Rect windowBounds = windowManager.getCurrentWindowMetrics().getBounds();
+        return windowBounds.width();
     }
     
     /**
@@ -2113,6 +2062,7 @@ public class InputMethodService extends AbstractInputMethodService {
      */
     private boolean dispatchOnShowInputRequested(int flags, boolean configChange) {
         final boolean result = onShowInputRequested(flags, configChange);
+        mInlineSuggestionSessionController.notifyOnShowInputRequested(result);
         if (result) {
             mShowInputFlags = flags;
         } else {
@@ -2212,11 +2162,7 @@ public class InputMethodService extends AbstractInputMethodService {
             if (!mInputViewStarted) {
                 if (DEBUG) Log.v(TAG, "CALL: onStartInputView");
                 mInputViewStarted = true;
-                synchronized (mInlineLock) {
-                    if (mInlineSuggestionSession != null) {
-                        mInlineSuggestionSession.notifyOnStartInputView(getEditorInfoAutofillId());
-                    }
-                }
+                mInlineSuggestionSessionController.notifyOnStartInputView();
                 onStartInputView(mInputEditorInfo, false);
             }
         } else if (!mCandidatesViewStarted) {
@@ -2257,11 +2203,7 @@ public class InputMethodService extends AbstractInputMethodService {
     private void finishViews(boolean finishingInput) {
         if (mInputViewStarted) {
             if (DEBUG) Log.v(TAG, "CALL: onFinishInputView");
-            synchronized (mInlineLock) {
-                if (mInlineSuggestionSession != null) {
-                    mInlineSuggestionSession.notifyOnFinishInputView(getEditorInfoAutofillId());
-                }
-            }
+            mInlineSuggestionSessionController.notifyOnFinishInputView();
             onFinishInputView(finishingInput);
         } else if (mCandidatesViewStarted) {
             if (DEBUG) Log.v(TAG, "CALL: onFinishCandidatesView");
@@ -2356,6 +2298,7 @@ public class InputMethodService extends AbstractInputMethodService {
         if (DEBUG) Log.v(TAG, "CALL: doFinishInput");
         finishViews(true /* finishingInput */);
         if (mInputStarted) {
+            mInlineSuggestionSessionController.notifyOnFinishInput();
             if (DEBUG) Log.v(TAG, "CALL: onFinishInput");
             onFinishInput();
         }
@@ -2372,17 +2315,16 @@ public class InputMethodService extends AbstractInputMethodService {
         mStartedInputConnection = ic;
         mInputEditorInfo = attribute;
         initialize();
+        mInlineSuggestionSessionController.notifyOnStartInput(
+                attribute == null ? null : attribute.packageName,
+                attribute == null ? null : attribute.autofillId);
         if (DEBUG) Log.v(TAG, "CALL: onStartInput");
         onStartInput(attribute, restarting);
         if (mDecorViewVisible) {
             if (mShowInputRequested) {
                 if (DEBUG) Log.v(TAG, "CALL: onStartInputView");
                 mInputViewStarted = true;
-                synchronized (mInlineLock) {
-                    if (mInlineSuggestionSession != null) {
-                        mInlineSuggestionSession.notifyOnStartInputView(getEditorInfoAutofillId());
-                    }
-                }
+                mInlineSuggestionSessionController.notifyOnStartInputView();
                 onStartInputView(mInputEditorInfo, restarting);
                 startExtractingText(true);
             } else if (mCandidatesVisibility == View.VISIBLE) {

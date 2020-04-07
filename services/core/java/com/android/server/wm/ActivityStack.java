@@ -679,7 +679,7 @@ public class ActivityStack extends Task {
             // Since always on top is only on when the stack is freeform or pinned, the state
             // can be toggled when the windowing mode changes. We must make sure the stack is
             // placed properly when always on top state changes.
-            display.positionStackAtTop(this, false /* includingParents */);
+            display.mTaskContainers.positionStackAtTop(this, false /* includingParents */);
         }
     }
 
@@ -751,7 +751,7 @@ public class ActivityStack extends Task {
         // Need to make sure windowing mode is supported. If we in the process of creating the stack
         // no need to resolve the windowing mode again as it is already resolved to the right mode.
         if (!creating) {
-            windowingMode = display.validateWindowingMode(windowingMode,
+            windowingMode = display.mTaskContainers.validateWindowingMode(windowingMode,
                     null /* ActivityRecord */, topTask, getActivityType());
         }
         if (display.getRootSplitScreenPrimaryTask() == this
@@ -761,7 +761,8 @@ public class ActivityStack extends Task {
             windowingMode = mRestoreOverrideWindowingMode;
         }
 
-        final boolean alreadyInSplitScreenMode = display.isSplitScreenModeActivated();
+        final boolean alreadyInSplitScreenMode = display.mTaskContainers
+                .isSplitScreenModeActivated();
 
         // Don't send non-resizeable notifications if the windowing mode changed was a side effect
         // of us entering split-screen mode.
@@ -778,7 +779,7 @@ public class ActivityStack extends Task {
                 // warning toast about it.
                 mAtmService.getTaskChangeNotificationController()
                         .notifyActivityDismissingDockedStack();
-                display.onSplitScreenModeDismissed();
+                display.mTaskContainers.onSplitScreenModeDismissed();
             }
         }
 
@@ -870,7 +871,7 @@ public class ActivityStack extends Task {
                 // TODO (b/78247419): Fix the rotation animation from fullscreen to minimized mode
                 final boolean isRecentsComponentHome =
                         mAtmService.getRecentTasks().isRecentsComponentHomeActivity(mCurrentUser);
-                final ActivityStack recentStack = display.getOrCreateStack(
+                final ActivityStack recentStack = display.mTaskContainers.getOrCreateStack(
                         WINDOWING_MODE_SPLIT_SCREEN_SECONDARY,
                         isRecentsComponentHome ? ACTIVITY_TYPE_HOME : ACTIVITY_TYPE_RECENTS,
                         true /* onTop */);
@@ -1067,7 +1068,7 @@ public class ActivityStack extends Task {
             // cutting between them.
             // TODO(b/70677280): This is a workaround until we can fix as part of b/70677280.
             final ActivityStack topFullScreenStack =
-                    display.getTopStackInWindowingMode(WINDOWING_MODE_FULLSCREEN);
+                    display.mTaskContainers.getTopStackInWindowingMode(WINDOWING_MODE_FULLSCREEN);
             if (topFullScreenStack != null) {
                 final ActivityStack primarySplitScreenStack = display.getRootSplitScreenPrimaryTask();
                 if (primarySplitScreenStack != null && display.getIndexOf(topFullScreenStack)
@@ -1080,11 +1081,11 @@ public class ActivityStack extends Task {
         if (!isActivityTypeHome() && returnsToHomeStack()) {
             // Make sure the home stack is behind this stack since that is where we should return to
             // when this stack is no longer visible.
-            display.moveHomeStackToFront(reason + " returnToHome");
+            display.mTaskContainers.moveHomeStackToFront(reason + " returnToHome");
         }
 
         if (isRootTask()) {
-            display.positionStackAtTop(this, false /* includingParents */, reason);
+            display.mTaskContainers.positionStackAtTop(this, false /* includingParents */, reason);
         }
         if (task == null) {
             task = this;
@@ -1101,7 +1102,7 @@ public class ActivityStack extends Task {
             return;
         }
 
-        getDisplay().positionStackAtBottom(this, reason);
+        getDisplay().mTaskContainers.positionStackAtBottom(this, reason);
         if (task != null && task != this) {
             positionChildAtBottom(task);
         }
@@ -1478,7 +1479,7 @@ public class ActivityStack extends Task {
 
     boolean isTopStackOnDisplay() {
         final DisplayContent display = getDisplay();
-        return display != null && display.isTopStack(this);
+        return display != null && display.mTaskContainers.isTopStack(this);
     }
 
     /**
@@ -1685,7 +1686,8 @@ public class ActivityStack extends Task {
      */
     boolean isTopSplitScreenStack() {
         return inSplitScreenWindowingMode()
-                && this == getDisplay().getTopStackInWindowingMode(getWindowingMode());
+                && this == getDisplay().mTaskContainers
+                .getTopStackInWindowingMode(getWindowingMode());
     }
 
     /** @return True if the resizing of the primary-split-screen stack affects this stack size. */
@@ -1918,7 +1920,7 @@ public class ActivityStack extends Task {
 
         // If the top activity is the resumed one, nothing to do.
         if (mResumedActivity == next && next.isState(RESUMED)
-                && display.allResumedActivitiesComplete()) {
+                && display.mTaskContainers.allResumedActivitiesComplete()) {
             // Make sure we have executed any pending transitions, since there
             // should be nothing left to do at this point.
             executeAppTransition(options);
@@ -2008,7 +2010,7 @@ public class ActivityStack extends Task {
         mStackSupervisor.setLaunchSource(next.info.applicationInfo.uid);
 
         ActivityRecord lastResumed = null;
-        final ActivityStack lastFocusedStack = display.getLastFocusedStack();
+        final ActivityStack lastFocusedStack = display.mTaskContainers.getLastFocusedStack();
         if (lastFocusedStack != null && lastFocusedStack != this) {
             // So, why aren't we using prev here??? See the param comment on the method. prev doesn't
             // represent the last resumed activity. However, the last focus stack does if it isn't null.
@@ -2022,7 +2024,7 @@ public class ActivityStack extends Task {
             }
         }
 
-        boolean pausing = display.pauseBackStacks(userLeaving, next);
+        boolean pausing = display.mTaskContainers.pauseBackStacks(userLeaving, next);
         if (mResumedActivity != null) {
             if (DEBUG_STATES) Slog.d(TAG_STATES,
                     "resumeTopActivityLocked: Pausing " + mResumedActivity);
@@ -2051,7 +2053,7 @@ public class ActivityStack extends Task {
             }
             return true;
         } else if (mResumedActivity == next && next.isState(RESUMED)
-                && display.allResumedActivitiesComplete()) {
+                && display.mTaskContainers.allResumedActivitiesComplete()) {
             // It is possible for the activity to be resumed when we paused back stacks above if the
             // next activity doesn't have to wait for pause to complete.
             // So, nothing else to-do except:
@@ -2388,8 +2390,7 @@ public class ActivityStack extends Task {
         if (!newTask && isOrhasTask) {
             // Starting activity cannot be occluding activity, otherwise starting window could be
             // remove immediately without transferring to starting activity.
-            final ActivityRecord occludingActivity = getActivity(
-                    (ar) -> !ar.finishing && ar.occludesParent(), true, r);
+            final ActivityRecord occludingActivity = getOccludingActivityAbove(r);
             if (occludingActivity != null) {
                 // Here it is!  Now, if this is not yet visible (occluded by another task) to the
                 // user, then just add it without starting; it will get started when the user
@@ -2594,7 +2595,7 @@ public class ActivityStack extends Task {
         if (stack.isActivityTypeHome() && (top == null || !top.mVisibleRequested)) {
             // If we will be focusing on the home stack next and its current top activity isn't
             // visible, then use the move the home stack task to top to make the activity visible.
-            stack.getDisplay().moveHomeActivityToTop(reason);
+            stack.getDisplay().mTaskContainers.moveHomeActivityToTop(reason);
             return stack;
         }
 
@@ -3120,6 +3121,14 @@ public class ActivityStack extends Task {
         task.setOverrideDisplayedBounds(bounds == null || bounds.isEmpty() ? null : bounds);
     }
 
+    /**
+     * Returns the top-most activity that occludes the given one, or @{code null} if none.
+     */
+    @Nullable
+    private ActivityRecord getOccludingActivityAbove(ActivityRecord activity) {
+        return getActivity((ar) -> ar.occludesParent(), true /* traverseTopToBottom */, activity);
+    }
+
     boolean willActivityBeVisible(IBinder token) {
         final ActivityRecord r = ActivityRecord.forTokenLocked(token);
         if (r == null) {
@@ -3127,9 +3136,7 @@ public class ActivityStack extends Task {
         }
 
         // See if there is an occluding activity on-top of this one.
-        final ActivityRecord occludingActivity = getActivity((ar) ->
-                ar.occludesParent() && !ar.finishing,
-                r, false /*includeBoundary*/, true /*traverseTopToBottom*/);
+        final ActivityRecord occludingActivity = getOccludingActivityAbove(r);
         if (occludingActivity != null) return false;
 
         if (r.finishing) Slog.e(TAG, "willActivityBeVisible: Returning false,"
@@ -3350,7 +3357,7 @@ public class ActivityStack extends Task {
         final boolean wasResumed = topRunningActivity == task.getStack().mResumedActivity;
 
         boolean toTop = position >= getChildCount();
-        boolean includingParents = toTop || getDisplay().getNextFocusableStack(this,
+        boolean includingParents = toTop || getDisplay().mTaskContainers.getNextFocusableStack(this,
                 true /* ignoreCurrent */) == null;
         if (WindowManagerDebugConfig.DEBUG_STACK) {
             Slog.i(TAG_WM, "positionChildAt: positioning task=" + task + " at " + position);
@@ -3394,7 +3401,7 @@ public class ActivityStack extends Task {
         // always on top windows. Since the position the stack should be inserted into is calculated
         // properly in {@link DisplayContent#getTopInsertPosition()} in both cases, we can just
         // request that the stack is put at top here.
-        display.positionStackAtTop(this, false /* includingParents */);
+        display.mTaskContainers.positionStackAtTop(this, false /* includingParents */);
     }
 
     /** NOTE: Should only be called from {@link Task#reparent}. */
@@ -3435,17 +3442,11 @@ public class ActivityStack extends Task {
                     "Can't exit pinned mode if it's not pinned already.");
         }
 
-        // give pinned stack a chance to save current bounds, this should happen before reparent.
-        final ActivityRecord top = topRunningNonOverlayTaskActivity();
-        if (top != null && top.isVisible()) {
-            top.savePinnedStackBounds();
-        }
-
         mWmService.inSurfaceTransaction(() -> {
             final Task task = getBottomMostTask();
             setWindowingMode(WINDOWING_MODE_UNDEFINED);
 
-            getDisplay().positionStackAtTop(this, false /* includingParents */);
+            getDisplay().mTaskContainers.positionStackAtTop(this, false /* includingParents */);
 
             mStackSupervisor.scheduleUpdatePictureInPictureModeIfNeeded(task, this);
             MetricsLoggerWrapper.logPictureInPictureFullScreen(mAtmService.mContext,
@@ -3565,7 +3566,7 @@ public class ActivityStack extends Task {
         // If there are other focusable stacks on the display, the z-order of the display should not
         // be changed just because a task was placed at the bottom. E.g. if it is moving the topmost
         // task to bottom, the next focusable stack on the same display should be focused.
-        final ActivityStack nextFocusableStack = getDisplay().getNextFocusableStack(
+        final ActivityStack nextFocusableStack = getDisplay().mTaskContainers.getNextFocusableStack(
                 child.getStack(), true /* ignoreCurrent */);
         positionChildAtBottom(child, nextFocusableStack == null /* includingParents */);
         child.updateTaskMovement(true);

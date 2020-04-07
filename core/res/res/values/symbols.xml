@@ -365,6 +365,7 @@
   <java-symbol type="bool" name="config_hasRecents" />
   <java-symbol type="string" name="config_recentsComponentName" />
   <java-symbol type="string" name="config_systemUIServiceComponent" />
+  <java-symbol type="string" name="config_controlsPackage" />
   <java-symbol type="string" name="config_screenRecorderComponent" />
   <java-symbol type="string" name="config_somnambulatorComponent" />
   <java-symbol type="string" name="config_screenshotServiceComponent" />
@@ -3923,6 +3924,8 @@
   <java-symbol type="dimen" name="conversation_icon_container_top_padding_small_avatar" />
   <java-symbol type="dimen" name="conversation_icon_container_top_padding_no_app_name" />
   <java-symbol type="layout" name="notification_template_material_conversation" />
+  <java-symbol type="dimen" name="button_padding_horizontal_material" />
+  <java-symbol type="dimen" name="button_inset_horizontal_material" />
   <java-symbol type="layout" name="conversation_face_pile_layout" />
 
   <!-- Intent resolver and share sheet -->
@@ -3958,7 +3961,7 @@
   <java-symbol type="dimen" name="resolver_empty_state_height" />
   <java-symbol type="dimen" name="resolver_empty_state_height_with_tabs" />
   <java-symbol type="dimen" name="resolver_max_collapsed_height_with_tabs" />
-  <java-symbol type="bool" name="sharesheet_show_content_preview" />
+  <java-symbol type="bool" name="resolver_landscape_phone" />
   <java-symbol type="dimen" name="resolver_tab_text_size" />
 
   <!-- Toast message for background started foreground service while-in-use permission restriction feature -->
@@ -3982,6 +3985,9 @@
 
   <!-- Set to true to enable the user switcher on the keyguard. -->
   <java-symbol type="bool" name="config_keyguardUserSwitcher" />
+
+  <!-- Set to true to make assistant show in front of the dream/screensaver. -->
+  <java-symbol type="bool" name="config_assistantOnTopOfDream"/>
 
   <!-- For Pdn throttle feature -->
   <java-symbol type="bool" name="config_pdp_retry_for_29_33_55_enabled" />

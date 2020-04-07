@@ -6576,13 +6576,6 @@ public final class Settings {
          * Setting specifying if the accessibility shortcut is enabled.
          * @hide
          */
-        public static final String ACCESSIBILITY_SHORTCUT_ENABLED =
-                "accessibility_shortcut_enabled";
-
-        /**
-         * Setting specifying if the accessibility shortcut is enabled.
-         * @hide
-         */
         public static final String ACCESSIBILITY_SHORTCUT_ON_LOCK_SCREEN =
                 "accessibility_shortcut_on_lock_screen";
 
@@ -6608,11 +6601,9 @@ public final class Settings {
                 "accessibility_shortcut_target_service";
 
         /**
-         * Setting specifying the accessibility services, accessibility shortcut targets,
-         * or features to be toggled via the accessibility button in the navigation bar.
-         *
-         * <p> This is a colon-separated string list which contains the flattened
-         * {@link ComponentName} and the class name of a system class implementing a supported
+         * Setting specifying the accessibility service or feature to be toggled via the
+         * accessibility button in the navigation bar. This is either a flattened
+         * {@link ComponentName} or the class name of a system class implementing a supported
          * accessibility feature.
          * @hide
          */
@@ -6621,15 +6612,14 @@ public final class Settings {
 
         /**
          * Setting specifying the accessibility services, accessibility shortcut targets,
-         * or features to be toggled via the long press accessibility button in the navigation bar.
+         * or features to be toggled via the accessibility button in the navigation bar.
          *
          * <p> This is a colon-separated string list which contains the flattened
          * {@link ComponentName} and the class name of a system class implementing a supported
          * accessibility feature.
          * @hide
          */
-        public static final String ACCESSIBILITY_BUTTON_LONG_PRESS_TARGETS =
-                "accessibility_button_long_press_targets";
+        public static final String ACCESSIBILITY_BUTTON_TARGETS = "accessibility_button_targets";
 
         /**
          * The system class name of magnification controller which is a target to be toggled via
@@ -6794,8 +6784,8 @@ public final class Settings {
          * zoom in the display content and is targeted to low vision users. The current
          * magnification scale is controlled by {@link #ACCESSIBILITY_DISPLAY_MAGNIFICATION_SCALE}.
          *
-         * @deprecated Use {@link #ACCESSIBILITY_BUTTON_TARGET_COMPONENT} instead.
-         * {@link #ACCESSIBILITY_BUTTON_TARGET_COMPONENT} holds the magnification system class name
+         * @deprecated Use {@link #ACCESSIBILITY_BUTTON_TARGETS} instead.
+         * {@link #ACCESSIBILITY_BUTTON_TARGETS} holds the magnification system class name
          * when navigation bar magnification is enabled.
          * @hide
          */
@@ -8593,6 +8583,16 @@ public final class Settings {
         public static final String QS_TILES = "sysui_qs_tiles";
 
         /**
+         * Whether this user has enabled Quick controls.
+         *
+         * 0 indicates disabled and 1 indicates enabled. A non existent value should be treated as
+         * enabled.
+         *
+         * @hide
+         */
+        public static final String CONTROLS_ENABLED = "controls_enabled";
+
+        /**
          * Specifies whether the web action API is enabled.
          *
          * @hide
@@ -9659,14 +9659,6 @@ public final class Settings {
         @TestApi
         public static final String LOCATION_IGNORE_SETTINGS_PACKAGE_WHITELIST =
                 "location_ignore_settings_package_whitelist";
-
-        /**
-         * Maximum staleness allowed for last location when returned to clients with only foreground
-         * location permissions.
-         * @hide
-         */
-        public static final String LOCATION_LAST_LOCATION_MAX_AGE_MILLIS =
-                "location_last_location_max_age_millis";
 
         /**
         * Whether TV will switch to MHL port when a mobile device is plugged in.
@@ -13091,6 +13083,18 @@ public final class Settings {
                 "chained_battery_attribution_enabled";
 
         /**
+         * Toggle to enable/disable the incremental ADB installation by default.
+         * If not set, default adb installations are incremental; set to zero to use full ones.
+         * Note: only ADB uses it, no usages in the Framework code.
+         * <p>
+         * Type: int (0 to disable, 1 to enable)
+         *
+         * @hide
+         */
+        public static final String ENABLE_ADB_INCREMENTAL_INSTALL_DEFAULT =
+                "enable_adb_incremental_install_default";
+
+        /**
          * The packages whitelisted to be run in autofill compatibility mode. The list
          * of packages is {@code ":"} colon delimited, and each entry has the name of the
          * package and an optional list of url bar resource ids (the list is delimited by
@@ -14197,6 +14201,23 @@ public final class Settings {
          */
         public static final String APPOP_HISTORY_PARAMETERS =
                 "appop_history_parameters";
+
+        /**
+         * Auto revoke parameters. These parameters are represented by
+         * a comma-delimited key-value list.
+         *
+         * <pre>
+         *     enabledForPreRApps    (bolean)
+         *     unusedThresholdMs     (long)
+         *     checkFrequencyMs      (long)
+         * </pre>
+         *
+         * Ex: "enabledForPreRApps=false,unusedThresholdMs=7776000000,checkFrequencyMs=1296000000"
+         *
+         * @hide
+         */
+        public static final String AUTO_REVOKE_PARAMETERS =
+                "auto_revoke_parameters";
 
         /**
          * Delay for sending ACTION_CHARGING after device is plugged in.

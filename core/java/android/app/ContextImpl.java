@@ -1763,7 +1763,6 @@ class ContextImpl extends Context {
         return bindServiceCommon(service, conn, flags, instanceName, null, executor, getUser());
     }
 
-    /** @hide */
     @Override
     public boolean bindServiceAsUser(Intent service, ServiceConnection conn, int flags,
             UserHandle user) {
@@ -1920,7 +1919,9 @@ class ContextImpl extends Context {
         return SystemServiceRegistry.getSystemServiceName(serviceClass);
     }
 
-    private boolean isUiContext() {
+    /** @hide */
+    @Override
+    public boolean isUiContext() {
         return mIsSystemOrSystemUiContext || mIsUiContext || isSystemOrSystemUI();
     }
 
@@ -2414,8 +2415,7 @@ class ContextImpl extends Context {
                 : CompatibilityInfo.DEFAULT_COMPATIBILITY_INFO;
         final List<ResourcesLoader> loaders = mResources.getLoaders();
 
-        // TODO(b/128338354): Rename to createTokenResources
-        return mResourcesManager.createBaseActivityResources(mToken, resDir, splitResDirs,
+        return mResourcesManager.createBaseTokenResources(mToken, resDir, splitResDirs,
                 overlayDirs, libDirs, displayId, null /* overrideConfig */,
                 compatInfo, mClassLoader, loaders);
     }
@@ -2684,7 +2684,7 @@ class ContextImpl extends Context {
 
         // Create the base resources for which all configuration contexts for this Activity
         // will be rebased upon.
-        context.setResources(resourcesManager.createBaseActivityResources(activityToken,
+        context.setResources(resourcesManager.createBaseTokenResources(activityToken,
                 packageInfo.getResDir(),
                 splitDirs,
                 packageInfo.getOverlayDirs(),
