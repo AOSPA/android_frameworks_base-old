@@ -107,6 +107,7 @@ import android.annotation.CallbackExecutor;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
+import android.annotation.UserIdInt;
 import android.annotation.WorkerThread;
 import android.app.ActivityManager;
 import android.app.ActivityManagerInternal;
@@ -1213,10 +1214,12 @@ public class NotificationManagerService extends SystemService {
                         // apps querying noMan will know that their notification is not showing
                         // as a bubble.
                         r.getNotification().flags &= ~FLAG_BUBBLE;
+                        r.setFlagBubbleRemoved(true);
                     } else {
                         // Enqueue will trigger resort & if the flag is allowed to be true it'll
                         // be applied there.
                         r.getNotification().flags |= FLAG_ONLY_ALERT_ONCE;
+                        r.setFlagBubbleRemoved(false);
                         mHandler.post(new EnqueueNotificationRunnable(r.getUser().getIdentifier(),
                                 r, isAppForeground));
                     }
@@ -1579,7 +1582,9 @@ public class NotificationManagerService extends SystemService {
                 }
             } else if (action.equals(Intent.ACTION_USER_PRESENT)) {
                 // turn off LED when user passes through lock screen
-                mNotificationLight.turnOff();
+                if (mNotificationLight != null) {
+                    mNotificationLight.turnOff();
+                }
             } else if (action.equals(Intent.ACTION_USER_SWITCHED)) {
                 final int userId = intent.getIntExtra(Intent.EXTRA_USER_HANDLE, USER_NULL);
                 mUserProfiles.updateCache(context);
@@ -1865,7 +1870,8 @@ public class NotificationManagerService extends SystemService {
             ActivityTaskManagerInternal atm, UsageStatsManagerInternal appUsageStats,
             DevicePolicyManagerInternal dpm, IUriGrantsManager ugm,
             UriGrantsManagerInternal ugmInternal, AppOpsManager appOps, UserManager userManager,
-            NotificationHistoryManager historyManager, StatsManager statsManager) {
+            NotificationHistoryManager historyManager, StatsManager statsManager,
+            TelephonyManager telephonyManager) {
         mHandler = handler;
         Resources resources = getContext().getResources();
         mMaxPackageEnqueueRate = Settings.Global.getFloat(getContext().getContentResolver(),
@@ -2008,7 +2014,15 @@ public class NotificationManagerService extends SystemService {
         mInterruptionFilter = mZenModeHelper.getZenModeListenerInterruptionFilter();
 
         mUserProfiles.updateCache(getContext());
-        listenForCallState();
+
+        telephonyManager.listen(new PhoneStateListener() {
+            @Override
+            public void onCallStateChanged(int state, String incomingNumber) {
+                if (mCallState == state) return;
+                if (DBG) Slog.d(TAG, "Call state changed: " + callStateToString(state));
+                mCallState = state;
+            }
+        }, PhoneStateListener.LISTEN_CALL_STATE);
 
         mSettingsObserver = new SettingsObserver(mHandler);
 
@@ -2078,7 +2092,8 @@ public class NotificationManagerService extends SystemService {
                 getContext().getSystemService(UserManager.class),
                 new NotificationHistoryManager(getContext(), handler),
                 mStatsManager = (StatsManager) getContext().getSystemService(
-                        Context.STATS_MANAGER));
+                        Context.STATS_MANAGER),
+                getContext().getSystemService(TelephonyManager.class));
 
         // register for various Intents
         IntentFilter filter = new IntentFilter();
@@ -2840,20 +2855,18 @@ public class NotificationManagerService extends SystemService {
                         record = mToastQueue.get(index);
                         record.update(duration);
                     } else {
-                        // Limit the number of toasts that any given package except the android
-                        // package can enqueue.  Prevents DOS attacks and deals with leaks.
-                        if (!isSystemToast) {
-                            int count = 0;
-                            final int N = mToastQueue.size();
-                            for (int i = 0; i < N; i++) {
-                                final ToastRecord r = mToastQueue.get(i);
-                                if (r.pkg.equals(pkg)) {
-                                    count++;
-                                    if (count >= MAX_PACKAGE_NOTIFICATIONS) {
-                                        Slog.e(TAG, "Package has already posted " + count
-                                                + " toasts. Not showing more. Package=" + pkg);
-                                        return;
-                                    }
+                        // Limit the number of toasts that any given package can enqueue.
+                        // Prevents DOS attacks and deals with leaks.
+                        int count = 0;
+                        final int N = mToastQueue.size();
+                        for (int i = 0; i < N; i++) {
+                            final ToastRecord r = mToastQueue.get(i);
+                            if (r.pkg.equals(pkg)) {
+                                count++;
+                                if (count >= MAX_PACKAGE_NOTIFICATIONS) {
+                                    Slog.e(TAG, "Package has already posted " + count
+                                            + " toasts. Not showing more. Package=" + pkg);
+                                    return;
                                 }
                             }
                         }
@@ -4193,7 +4206,7 @@ public class NotificationManagerService extends SystemService {
         @Override
         public int getInterruptionFilterFromListener(INotificationListener token)
                 throws RemoteException {
-            synchronized (mNotificationLight) {
+            synchronized (mNotificationLock) {
                 return mInterruptionFilter;
             }
         }
@@ -5636,6 +5649,7 @@ public class NotificationManagerService extends SystemService {
         final NotificationRecord r = new NotificationRecord(getContext(), n, channel);
         r.setIsAppImportanceLocked(mPreferencesHelper.getIsAppImportanceLocked(pkg, callingUid));
         r.setPostSilently(postSilently);
+        r.setFlagBubbleRemoved(false);
 
         if ((notification.flags & Notification.FLAG_FOREGROUND_SERVICE) != 0) {
             final boolean fgServiceShown = channel.isFgServiceShown();
@@ -6773,7 +6787,7 @@ public class NotificationManagerService extends SystemService {
         if (canShowLightsLocked(record, aboveThreshold)) {
             mLights.add(key);
             updateLightsLocked();
-            if (mUseAttentionLight) {
+            if (mUseAttentionLight && mAttentionLight != null) {
                 mAttentionLight.pulse();
             }
             blink = true;
@@ -7974,6 +7988,10 @@ public class NotificationManagerService extends SystemService {
     @GuardedBy("mNotificationLock")
     void updateLightsLocked()
     {
+        if (mNotificationLight == null) {
+            return;
+        }
+
         // handle notification lights
         NotificationRecord ledNotification = null;
         while (ledNotification == null && !mLights.isEmpty()) {
@@ -8348,17 +8366,6 @@ public class NotificationManagerService extends SystemService {
             case TelephonyManager.CALL_STATE_OFFHOOK: return "CALL_STATE_OFFHOOK";
             default: return "CALL_STATE_UNKNOWN_" + state;
         }
-    }
-
-    private void listenForCallState() {
-        getContext().getSystemService(TelephonyManager.class).listen(new PhoneStateListener() {
-            @Override
-            public void onCallStateChanged(int state, String incomingNumber) {
-                if (mCallState == state) return;
-                if (DBG) Slog.d(TAG, "Call state changed: " + callStateToString(state));
-                mCallState = state;
-            }
-        }, PhoneStateListener.LISTEN_CALL_STATE);
     }
 
     /**

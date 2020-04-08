@@ -5788,7 +5788,7 @@ public abstract class Context {
      * {@link android.view.LayoutInflater inflating} views, such that they can be inflated with
      * proper {@link Resources}.
      *
-     * Below is a sample code to <b>add an application overlay window on the primary display:<b/>
+     * Below is a sample code to <b>add an application overlay window on the primary display:</b>
      * <pre class="prettyprint">
      * ...
      * final DisplayManager dm = anyContext.getSystemService(DisplayManager.class);
@@ -6102,5 +6102,14 @@ public abstract class Context {
             throw new IllegalArgumentException("Non-UI context used to display UI; "
                     + "get a UI context from ActivityThread#getSystemUiContext()");
         }
+    }
+
+    /**
+     * Indicates if this context is a visual context such as {@link android.app.Activity} or
+     * a context created from {@link #createWindowContext(int, Bundle)}.
+     * @hide
+     */
+    public boolean isUiContext() {
+        throw new RuntimeException("Not implemented. Must override in a subclass.");
     }
 }

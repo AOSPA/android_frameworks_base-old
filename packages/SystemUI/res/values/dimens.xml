@@ -1219,12 +1219,14 @@
     <dimen name="magnifier_up_down_controls_height">40dp</dimen>
 
     <!-- Home Controls -->
-    <dimen name="controls_header_side_margin">32dp</dimen>
+    <dimen name="controls_header_side_margin">4dp</dimen>
+    <dimen name="controls_header_menu_size">48dp</dimen>
     <dimen name="controls_header_app_icon_size">40dp</dimen>
     <dimen name="controls_list_side_margin">16dp</dimen>
     <dimen name="controls_top_margin">44dp</dimen>
     <dimen name="control_header_text_size">22sp</dimen>
     <dimen name="control_text_size">14sp</dimen>
+    <dimen name="control_icon_size">24dp</dimen>
     <dimen name="control_spacing">4dp</dimen>
     <dimen name="control_list_divider">1dp</dimen>
     <dimen name="control_corner_radius">12dp</dimen>
@@ -1265,4 +1267,7 @@
     <dimen name="screenrecord_status_icon_radius">5dp</dimen>
 
     <dimen name="kg_user_switcher_text_size">16sp</dimen>
+
+    <!-- Opacity at which the background for the shutdown UI will be drawn. -->
+    <item name="shutdown_scrim_behind_alpha" format="float" type="dimen">0.95</item>
 </resources>

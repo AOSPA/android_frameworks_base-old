@@ -990,7 +990,7 @@ public class AppOpsManager {
     /** @hide Control whether an application is allowed to run in the background. */
     @UnsupportedAppUsage
     public static final int OP_RUN_IN_BACKGROUND =
-            AppProtoEnums.APP_OP_RUN_ANY_IN_BACKGROUND;
+            AppProtoEnums.APP_OP_RUN_IN_BACKGROUND;
     /** @hide */
     @UnsupportedAppUsage
     public static final int OP_AUDIO_ACCESSIBILITY_VOLUME =
@@ -1088,8 +1088,9 @@ public class AppOpsManager {
     public static final int OP_ACTIVATE_PLATFORM_VPN = AppProtoEnums.APP_OP_ACTIVATE_PLATFORM_VPN;
     /** @hide */
     public static final int OP_LOADER_USAGE_STATS = AppProtoEnums.APP_OP_LOADER_USAGE_STATS;
-    /** @hide Access telephony call audio */
-    public static final int OP_ACCESS_CALL_AUDIO = AppProtoEnums.APP_OP_ACCESS_CALL_AUDIO;
+
+    // App op deprecated/removed.
+    private static final int OP_DEPRECATED_1 = AppProtoEnums.APP_OP_DEPRECATED_1;
 
     /** @hide Auto-revoke app permissions if app is unused for an extended period */
     public static final int OP_AUTO_REVOKE_PERMISSIONS_IF_UNUSED =
@@ -1396,9 +1397,6 @@ public class AppOpsManager {
     @SystemApi
     public static final String OPSTR_MANAGE_EXTERNAL_STORAGE =
             "android:manage_external_storage";
-    /** @hide Access telephony call audio */
-    @SystemApi
-    public static final String OPSTR_ACCESS_CALL_AUDIO = "android:access_call_audio";
 
     /** @hide Auto-revoke app permissions if app is unused for an extended period */
     @SystemApi
@@ -1498,9 +1496,6 @@ public class AppOpsManager {
             OP_MANAGE_EXTERNAL_STORAGE,
             OP_INTERACT_ACROSS_PROFILES,
             OP_LOADER_USAGE_STATS,
-            OP_ACCESS_CALL_AUDIO,
-            OP_AUTO_REVOKE_PERMISSIONS_IF_UNUSED,
-            OP_AUTO_REVOKE_MANAGED_BY_INSTALLER,
     };
 
     /**
@@ -1608,7 +1603,7 @@ public class AppOpsManager {
             OP_INTERACT_ACROSS_PROFILES,        //INTERACT_ACROSS_PROFILES
             OP_ACTIVATE_PLATFORM_VPN,           // ACTIVATE_PLATFORM_VPN
             OP_LOADER_USAGE_STATS,              // LOADER_USAGE_STATS
-            OP_ACCESS_CALL_AUDIO,               // ACCESS_CALL_AUDIO
+            OP_DEPRECATED_1,                    // deprecated
             OP_AUTO_REVOKE_PERMISSIONS_IF_UNUSED, //AUTO_REVOKE_PERMISSIONS_IF_UNUSED
             OP_AUTO_REVOKE_MANAGED_BY_INSTALLER, //OP_AUTO_REVOKE_MANAGED_BY_INSTALLER
     };
@@ -1713,7 +1708,7 @@ public class AppOpsManager {
             OPSTR_INTERACT_ACROSS_PROFILES,
             OPSTR_ACTIVATE_PLATFORM_VPN,
             OPSTR_LOADER_USAGE_STATS,
-            OPSTR_ACCESS_CALL_AUDIO,
+            "", // deprecated
             OPSTR_AUTO_REVOKE_PERMISSIONS_IF_UNUSED,
             OPSTR_AUTO_REVOKE_MANAGED_BY_INSTALLER,
     };
@@ -1819,7 +1814,7 @@ public class AppOpsManager {
             "INTERACT_ACROSS_PROFILES",
             "ACTIVATE_PLATFORM_VPN",
             "LOADER_USAGE_STATS",
-            "ACCESS_CALL_AUDIO",
+            "deprecated",
             "AUTO_REVOKE_PERMISSIONS_IF_UNUSED",
             "AUTO_REVOKE_MANAGED_BY_INSTALLER",
     };
@@ -1926,7 +1921,7 @@ public class AppOpsManager {
             android.Manifest.permission.INTERACT_ACROSS_PROFILES,
             null, // no permission for OP_ACTIVATE_PLATFORM_VPN
             android.Manifest.permission.LOADER_USAGE_STATS,
-            Manifest.permission.ACCESS_CALL_AUDIO,
+            null, // deprecated operation
             null, // no permission for OP_AUTO_REVOKE_PERMISSIONS_IF_UNUSED
             null, // no permission for OP_AUTO_REVOKE_MANAGED_BY_INSTALLER
     };
@@ -2033,7 +2028,7 @@ public class AppOpsManager {
             null, // INTERACT_ACROSS_PROFILES
             null, // ACTIVATE_PLATFORM_VPN
             null, // LOADER_USAGE_STATS
-            null, // ACCESS_CALL_AUDIO
+            null, // deprecated operation
             null, // AUTO_REVOKE_PERMISSIONS_IF_UNUSED
             null, // AUTO_REVOKE_MANAGED_BY_INSTALLER
     };
@@ -2139,7 +2134,7 @@ public class AppOpsManager {
             null, // INTERACT_ACROSS_PROFILES
             null, // ACTIVATE_PLATFORM_VPN
             null, // LOADER_USAGE_STATS
-            null, // ACCESS_CALL_AUDIO
+            null, // deprecated operation
             null, // AUTO_REVOKE_PERMISSIONS_IF_UNUSED
             null, // AUTO_REVOKE_MANAGED_BY_INSTALLER
     };
@@ -2244,7 +2239,7 @@ public class AppOpsManager {
             AppOpsManager.MODE_DEFAULT, // INTERACT_ACROSS_PROFILES
             AppOpsManager.MODE_IGNORED, // ACTIVATE_PLATFORM_VPN
             AppOpsManager.MODE_DEFAULT, // LOADER_USAGE_STATS
-            AppOpsManager.MODE_DEFAULT, // ACCESS_CALL_AUDIO
+            AppOpsManager.MODE_IGNORED, // deprecated operation
             AppOpsManager.MODE_DEFAULT, // OP_AUTO_REVOKE_PERMISSIONS_IF_UNUSED
             AppOpsManager.MODE_ALLOWED, // OP_AUTO_REVOKE_MANAGED_BY_INSTALLER
     };
@@ -2353,7 +2348,7 @@ public class AppOpsManager {
             false, // INTERACT_ACROSS_PROFILES
             false, // ACTIVATE_PLATFORM_VPN
             false, // LOADER_USAGE_STATS
-            false, // ACCESS_CALL_AUDIO
+            false, // deprecated operation
             false, // AUTO_REVOKE_PERMISSIONS_IF_UNUSED
             false, // AUTO_REVOKE_MANAGED_BY_INSTALLER
     };

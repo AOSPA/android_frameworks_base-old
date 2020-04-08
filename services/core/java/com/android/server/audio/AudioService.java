@@ -52,6 +52,7 @@ import android.content.IntentFilter;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
+import android.content.pm.PackageManagerInternal;
 import android.content.pm.ResolveInfo;
 import android.content.pm.UserInfo;
 import android.content.res.Configuration;
@@ -579,6 +580,9 @@ public class AudioService extends IAudioService.Stub
     @GuardedBy("mSettingsLock")
     private int mAssistantUid;
 
+    @GuardedBy("mSettingsLock")
+    private int mCurrentImeUid;
+
     private final Object mSupportedSystemUsagesLock = new Object();
     @GuardedBy("mSupportedSystemUsagesLock")
     private @AttributeSystemUsage int[] mSupportedSystemUsages =
@@ -636,6 +640,9 @@ public class AudioService extends IAudioService.Stub
                     null /* obj */,  0 /* delay */);
         }
     };
+
+    @GuardedBy("mSettingsLock")
+    private boolean mRttEnabled = false;
 
     ///////////////////////////////////////////////////////////////////////////
     // Construction
@@ -1056,7 +1063,8 @@ public class AudioService extends IAudioService.Stub
             sendEncodedSurroundMode(mContentResolver, "onAudioServerDied");
             sendEnabledSurroundFormats(mContentResolver, true);
             updateAssistantUId(true);
-            updateRttEanbled(mContentResolver);
+            updateCurrentImeUid(true);
+            AudioSystem.setRttEnabled(mRttEnabled);
         }
         synchronized (mAccessibilityServiceUidsLock) {
             AudioSystem.setA11yServicesUids(mAccessibilityServiceUids);
@@ -1601,10 +1609,35 @@ public class AudioService extends IAudioService.Stub
         }
     }
 
-    private void updateRttEanbled(ContentResolver cr) {
-        final boolean rttEnabled = Settings.Secure.getIntForUser(cr,
-                    Settings.Secure.RTT_CALLING_MODE, 0, UserHandle.USER_CURRENT) != 0;
-        AudioSystem.setRttEnabled(rttEnabled);
+    @GuardedBy("mSettingsLock")
+    private void updateCurrentImeUid(boolean forceUpdate) {
+        String imeId = Settings.Secure.getStringForUser(
+                mContentResolver,
+                Settings.Secure.DEFAULT_INPUT_METHOD, UserHandle.USER_CURRENT);
+        if (TextUtils.isEmpty(imeId)) {
+            Log.e(TAG, "updateCurrentImeUid() could not find current IME");
+            return;
+        }
+        ComponentName componentName = ComponentName.unflattenFromString(imeId);
+        if (componentName == null) {
+            Log.e(TAG, "updateCurrentImeUid() got invalid service name for "
+                    + Settings.Secure.DEFAULT_INPUT_METHOD + ": " + imeId);
+            return;
+        }
+        String packageName = componentName.getPackageName();
+        int currentUserId = LocalServices.getService(ActivityManagerInternal.class)
+                .getCurrentUserId();
+        int currentImeUid = LocalServices.getService(PackageManagerInternal.class)
+                .getPackageUidInternal(packageName, 0 /* flags */, currentUserId);
+        if (currentImeUid < 0) {
+            Log.e(TAG, "updateCurrentImeUid() could not find UID for package: " + packageName);
+            return;
+        }
+
+        if (currentImeUid != mCurrentImeUid || forceUpdate) {
+            AudioSystem.setCurrentImeUid(currentImeUid);
+            mCurrentImeUid = currentImeUid;
+        }
     }
 
     private void readPersistedSettings() {
@@ -1651,7 +1684,8 @@ public class AudioService extends IAudioService.Stub
             sendEncodedSurroundMode(cr, "readPersistedSettings");
             sendEnabledSurroundFormats(cr, true);
             updateAssistantUId(true);
-            updateRttEanbled(cr);
+            updateCurrentImeUid(true);
+            AudioSystem.setRttEnabled(mRttEnabled);
         }
 
         mMuteAffectedStreams = System.getIntForUser(cr,
@@ -2339,6 +2373,13 @@ public class AudioService extends IAudioService.Stub
 
         // For legacy reason, propagate to all streams associated to this volume group
         for (final int groupedStream : vgs.getLegacyStreamTypes()) {
+            try {
+                ensureValidStreamType(groupedStream);
+            } catch (IllegalArgumentException e) {
+                Log.d(TAG, "volume group " + volumeGroup + " has internal streams (" + groupedStream
+                        + "), do not change associated stream volume");
+                continue;
+            }
             setStreamVolume(groupedStream, index, flags, callingPackage, callingPackage,
                             Binder.getCallingUid());
         }
@@ -3703,6 +3744,27 @@ public class AudioService extends IAudioService.Stub
         return mIsCallScreeningModeSupported;
     }
 
+    /** @see AudioManager#setRttEnabled() */
+    @Override
+    public void setRttEnabled(boolean rttEnabled) {
+        if (mContext.checkCallingOrSelfPermission(
+                android.Manifest.permission.MODIFY_PHONE_STATE)
+                != PackageManager.PERMISSION_GRANTED) {
+            Log.w(TAG, "MODIFY_PHONE_STATE Permission Denial: setRttEnabled from pid="
+                    + Binder.getCallingPid() + ", uid=" + Binder.getCallingUid());
+            return;
+        }
+        synchronized (mSettingsLock) {
+            mRttEnabled = rttEnabled;
+            final long identity = Binder.clearCallingIdentity();
+            try {
+                AudioSystem.setRttEnabled(rttEnabled);
+            } finally {
+                Binder.restoreCallingIdentity(identity);
+            }
+        }
+    }
+
     //==========================================================================================
     // Sound Effects
     //==========================================================================================
@@ -4944,10 +5006,6 @@ public class AudioService extends IAudioService.Stub
 
         public void applyAllVolumes() {
             synchronized (VolumeGroupState.class) {
-                if (mLegacyStreamType != AudioSystem.STREAM_DEFAULT) {
-                    // No-op to avoid regression with stream based volume management
-                    return;
-                }
                 // apply device specific volumes first
                 int index;
                 for (int i = 0; i < mIndexMap.size(); i++) {
@@ -5886,7 +5944,7 @@ public class AudioService extends IAudioService.Stub
             mContentResolver.registerContentObserver(Settings.Secure.getUriFor(
                     Settings.Secure.VOICE_INTERACTION_SERVICE), false, this);
             mContentResolver.registerContentObserver(Settings.Secure.getUriFor(
-                    Settings.Secure.RTT_CALLING_MODE), false, this);
+                    Settings.Secure.DEFAULT_INPUT_METHOD), false, this);
         }
 
         @Override
@@ -5910,7 +5968,7 @@ public class AudioService extends IAudioService.Stub
                 updateEncodedSurroundOutput();
                 sendEnabledSurroundFormats(mContentResolver, mSurroundModeChanged);
                 updateAssistantUId(false);
-                updateRttEanbled(mContentResolver);
+                updateCurrentImeUid(false);
             }
         }
 

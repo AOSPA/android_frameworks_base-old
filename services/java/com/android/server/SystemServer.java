@@ -145,7 +145,6 @@ import com.android.server.power.ThermalManagerService;
 import com.android.server.recoverysystem.RecoverySystemService;
 import com.android.server.restrictions.RestrictionsManagerService;
 import com.android.server.role.RoleManagerService;
-import com.android.server.rollback.RollbackManagerService;
 import com.android.server.security.FileIntegrityService;
 import com.android.server.security.KeyAttestationApplicationIdProviderService;
 import com.android.server.security.KeyChainSystemService;
@@ -298,6 +297,8 @@ public final class SystemServer {
             "com.android.server.DeviceIdleController";
     private static final String BLOB_STORE_MANAGER_SERVICE_CLASS =
             "com.android.server.blob.BlobStoreManagerService";
+    private static final String ROLLBACK_MANAGER_SERVICE_CLASS =
+            "com.android.server.rollback.RollbackManagerService";
 
     private static final String TETHERING_CONNECTOR_CLASS = "android.net.ITetheringConnector";
 
@@ -968,7 +969,7 @@ public final class SystemServer {
 
         // Manages apk rollbacks.
         t.traceBegin("StartRollbackManagerService");
-        mSystemServiceManager.startService(RollbackManagerService.class);
+        mSystemServiceManager.startService(ROLLBACK_MANAGER_SERVICE_CLASS);
         t.traceEnd();
 
         // Service to capture bugreports.
@@ -1075,7 +1076,8 @@ public final class SystemServer {
             t.traceEnd();
 
             t.traceBegin("StartTelephonyRegistry");
-            telephonyRegistry = new TelephonyRegistry(context);
+            telephonyRegistry = new TelephonyRegistry(
+                    context, new TelephonyRegistry.ConfigurationProvider());
             ServiceManager.addService("telephony.registry", telephonyRegistry);
             t.traceEnd();
 
@@ -1422,7 +1424,7 @@ public final class SystemServer {
 
             t.traceBegin("StartIpSecService");
             try {
-                ipSecService = IpSecService.create(context);
+                ipSecService = IpSecService.create(context, networkManagement);
                 ServiceManager.addService(Context.IPSEC_SERVICE, ipSecService);
             } catch (Throwable e) {
                 reportWtf("starting IpSec Service", e);

@@ -72,7 +72,6 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.Executor;
-import java.util.stream.Collectors;
 
 /**
  * Offers the ability to install, upgrade, and remove applications on the
@@ -589,9 +588,15 @@ public class PackageInstaller {
      *      * {@link SessionInfo#isStagedSessionActive()}.
      */
     public @NonNull List<SessionInfo> getActiveStagedSessions() {
-        return getStagedSessions().stream()
-                .filter(s -> s.isStagedSessionActive())
-                .collect(Collectors.toList());
+        final List<SessionInfo> activeStagedSessions = new ArrayList<>();
+        final List<SessionInfo> stagedSessions = getStagedSessions();
+        for (int i = 0; i < stagedSessions.size(); i++) {
+            final SessionInfo sessionInfo = stagedSessions.get(i);
+            if (sessionInfo.isStagedSessionActive()) {
+                activeStagedSessions.add(sessionInfo);
+            }
+        }
+        return activeStagedSessions;
     }
 
     /**
@@ -1118,6 +1123,7 @@ public class PackageInstaller {
          * {@hide}
          */
         @SystemApi
+        @RequiresPermission(android.Manifest.permission.USE_INSTALLER_V2)
         public @Nullable DataLoaderParams getDataLoaderParams() {
             try {
                 DataLoaderParamsParcel data = mSession.getDataLoaderParams();
@@ -1157,6 +1163,7 @@ public class PackageInstaller {
          * {@hide}
          */
         @SystemApi
+        @RequiresPermission(android.Manifest.permission.USE_INSTALLER_V2)
         public void addFile(@FileLocation int location, @NonNull String name, long lengthBytes,
                 @NonNull byte[] metadata, @Nullable byte[] signature) {
             try {
@@ -1180,6 +1187,7 @@ public class PackageInstaller {
          * {@hide}
          */
         @SystemApi
+        @RequiresPermission(android.Manifest.permission.USE_INSTALLER_V2)
         public void removeFile(@FileLocation int location, @NonNull String name) {
             try {
                 mSession.removeFile(location, name);
@@ -1927,7 +1935,9 @@ public class PackageInstaller {
          * {@hide}
          */
         @SystemApi
-        @RequiresPermission(Manifest.permission.INSTALL_PACKAGES)
+        @RequiresPermission(allOf = {
+                Manifest.permission.INSTALL_PACKAGES,
+                Manifest.permission.USE_INSTALLER_V2})
         public void setDataLoaderParams(@NonNull DataLoaderParams dataLoaderParams) {
             this.dataLoaderParams = dataLoaderParams;
         }

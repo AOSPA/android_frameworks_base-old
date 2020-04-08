@@ -32,7 +32,6 @@ import static android.app.ActivityManagerInternal.ALLOW_NON_FULL;
 import static android.app.ActivityTaskManager.INVALID_TASK_ID;
 import static android.app.ActivityTaskManager.RESIZE_MODE_PRESERVE_WINDOW;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_DREAM;
-import static android.app.WindowConfiguration.ACTIVITY_TYPE_UNDEFINED;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FREEFORM;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN;
 import static android.app.WindowConfiguration.WINDOWING_MODE_PINNED;
@@ -2358,7 +2357,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
                 }
                 // Convert some windowing-mode changes into root-task reparents for split-screen.
                 if (stack.inSplitScreenWindowingMode()) {
-                    stack.getDisplay().onSplitScreenModeDismissed();
+                    stack.getDisplay().mTaskContainers.onSplitScreenModeDismissed();
 
                 } else {
                     stack.setWindowingMode(windowingMode);
@@ -2421,7 +2420,12 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
                 return;
             }
             ActivityStack stack = r.getRootTask();
-            if (stack != null && stack.isSingleTaskInstance()) {
+            final TaskOrganizerController taskOrgController =
+                    mWindowOrganizerController.mTaskOrganizerController;
+            if (taskOrgController.handleInterceptBackPressedOnTaskRoot(stack)) {
+                // This task is handled by a task organizer that has requested the back pressed
+                // callback
+            } else if (stack != null && (stack.isSingleTaskInstance())) {
                 // Single-task stacks are used for activities which are presented in floating
                 // windows above full screen activities. Instead of directly finishing the
                 // task, a task change listener is used to notify SystemUI so the action can be
@@ -2615,13 +2619,16 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
 
     @Override
     public List<ActivityManager.RunningTaskInfo> getTasks(int maxNum) {
-        return getFilteredTasks(maxNum, ACTIVITY_TYPE_UNDEFINED, WINDOWING_MODE_UNDEFINED);
+        return getFilteredTasks(maxNum, false /* filterForVisibleRecents */);
     }
 
+    /**
+     * @param filterOnlyVisibleRecents whether to filter the tasks based on whether they would ever
+     *                                 be visible in the recent task list in systemui
+     */
     @Override
     public List<ActivityManager.RunningTaskInfo> getFilteredTasks(int maxNum,
-            @WindowConfiguration.ActivityType int ignoreActivityType,
-            @WindowConfiguration.WindowingMode int ignoreWindowingMode) {
+            boolean filterOnlyVisibleRecents) {
         final int callingUid = Binder.getCallingUid();
         final int callingPid = Binder.getCallingPid();
         final boolean crossUser = isCrossUserAllowed(callingPid, callingUid);
@@ -2637,8 +2644,8 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
             if (DEBUG_ALL) Slog.v(TAG, "getTasks: max=" + maxNum);
 
             final boolean allowed = isGetTasksAllowed("getTasks", callingPid, callingUid);
-            mRootWindowContainer.getRunningTasks(maxNum, list, ignoreActivityType,
-                    ignoreWindowingMode, callingUid, allowed, crossUser, callingProfileIds);
+            mRootWindowContainer.getRunningTasks(maxNum, list, filterOnlyVisibleRecents, callingUid,
+                    allowed, crossUser, callingProfileIds);
         }
 
         return list;
@@ -2773,7 +2780,8 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         }
 
         if (toTop) {
-            display.positionStackAt(POSITION_TOP, primarySplitTask, false /* includingParents */);
+            display.mTaskContainers.positionStackAt(POSITION_TOP, primarySplitTask,
+                    false /* includingParents */);
         }
         WindowContainerTransaction wct = new WindowContainerTransaction();
         wct.reparent(task.getStack().mRemoteToken, primarySplitTask.mRemoteToken, toTop);
@@ -3242,8 +3250,8 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
                 }
 
                 final ActivityStack stack = r.getRootTask();
-                final Task task = stack.getDisplay().createStack(stack.getWindowingMode(),
-                        stack.getActivityType(), !ON_TOP, ainfo, intent,
+                final Task task = stack.getDisplay().mTaskContainers.createStack(
+                        stack.getWindowingMode(), stack.getActivityType(), !ON_TOP, ainfo, intent,
                         false /* createdByOrganizer */);
 
                 if (!mRecentTasks.addToBottom(task)) {
@@ -3306,10 +3314,10 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
                     throw new IllegalArgumentException("resizeTask not allowed on task=" + task);
                 }
                 if (bounds == null && stack.getWindowingMode() == WINDOWING_MODE_FREEFORM) {
-                    stack = stack.getDisplay().getOrCreateStack(
+                    stack = stack.getDisplay().mTaskContainers.getOrCreateStack(
                             WINDOWING_MODE_FULLSCREEN, stack.getActivityType(), ON_TOP);
                 } else if (bounds != null && stack.getWindowingMode() != WINDOWING_MODE_FREEFORM) {
-                    stack = stack.getDisplay().getOrCreateStack(
+                    stack = stack.getDisplay().mTaskContainers.getOrCreateStack(
                             WINDOWING_MODE_FREEFORM, stack.getActivityType(), ON_TOP);
                 }
 
@@ -3981,35 +3989,6 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
             }
             record.setSizeConfigurations(horizontalSizeConfiguration,
                     verticalSizeConfigurations, smallestSizeConfigurations);
-        }
-    }
-
-    /**
-     * Dismisses Pip
-     * @param animate True if the dismissal should be animated.
-     * @param animationDuration The duration of the resize animation in milliseconds or -1 if the
-     *                          default animation duration should be used.
-     */
-    @Override
-    public void dismissPip(boolean animate, int animationDuration) {
-        enforceCallerIsRecentsOrHasPermission(MANAGE_ACTIVITY_STACKS, "dismissPip()");
-        final long ident = Binder.clearCallingIdentity();
-        try {
-            synchronized (mGlobalLock) {
-                final ActivityStack stack =
-                        mRootWindowContainer.getDefaultDisplay().getRootPinnedTask();
-                if (stack == null) {
-                    Slog.w(TAG, "dismissPip: pinned stack not found.");
-                    return;
-                }
-                if (stack.getWindowingMode() != WINDOWING_MODE_PINNED) {
-                    throw new IllegalArgumentException("Stack: " + stack
-                            + " doesn't support animated resize.");
-                }
-                stack.dismissPip();
-            }
-        } finally {
-            Binder.restoreCallingIdentity(ident);
         }
     }
 
@@ -5004,6 +4983,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
             }
             printedAnything = true;
             mStackSupervisor.dump(pw, "  ");
+            mTaskOrganizerController.dump(pw, "  ");
         }
 
         if (!printedAnything) {

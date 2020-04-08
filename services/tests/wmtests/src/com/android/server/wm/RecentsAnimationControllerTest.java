@@ -100,7 +100,7 @@ public class RecentsAnimationControllerTest extends WindowTestsBase {
     @Before
     public void setUp() throws Exception {
         MockitoAnnotations.initMocks(this);
-        doNothing().when(mWm.mRoot).performSurfacePlacement(anyBoolean());
+        doNothing().when(mWm.mRoot).performSurfacePlacement();
         when(mMockRunner.asBinder()).thenReturn(new Binder());
         mDefaultDisplay = mWm.mRoot.getDefaultDisplay();
         mController = spy(new RecentsAnimationController(mWm, mMockRunner, mAnimationCallbacks,
@@ -403,11 +403,11 @@ public class RecentsAnimationControllerTest extends WindowTestsBase {
                 wallpapers.get(0).getConfiguration().orientation);
 
         // Wallpaper's transform state is controlled by home, so the invocation should be no-op.
-        wallpaperWindowToken.clearFixedRotationTransform();
+        wallpaperWindowToken.finishFixedRotationTransform();
         assertTrue(wallpaperWindowToken.hasFixedRotationTransform());
 
         // Wallpaper's transform state should be cleared with home.
-        homeActivity.clearFixedRotationTransform();
+        homeActivity.finishFixedRotationTransform();
         assertFalse(wallpaperWindowToken.hasFixedRotationTransform());
     }
 

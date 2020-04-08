@@ -361,7 +361,8 @@ public final class TelephonyPermissions {
             TelephonyCommonStatsLog.write(TelephonyCommonStatsLog.DEVICE_IDENTIFIER_ACCESS_DENIED,
                     callingPackage, message, /* isPreinstalled= */ false, false);
         }
-        Log.w(LOG_TAG, "reportAccessDeniedToReadIdentifiers:" + callingPackage + ":" + message);
+        Log.w(LOG_TAG, "reportAccessDeniedToReadIdentifiers:" + callingPackage + ":" + message + ":"
+                + subId);
         // if the target SDK is pre-Q then check if the calling package would have previously
         // had access to device identifiers.
         if (callingPackageInfo != null && (
@@ -442,16 +443,40 @@ public final class TelephonyPermissions {
         // NOTE(b/73308711): If an app has one of the following AppOps bits explicitly revoked, they
         // will be denied access, even if they have another permission and AppOps bit if needed.
 
-        // First, check if we can read the phone state and the SDK version is below R.
+        // First, check if the SDK version is below R
+        boolean preR = false;
         try {
             ApplicationInfo info = context.getPackageManager().getApplicationInfoAsUser(
                     callingPackage, 0, UserHandle.getUserHandleForUid(Binder.getCallingUid()));
-            if (info.targetSdkVersion <= Build.VERSION_CODES.Q) {
+            preR = info.targetSdkVersion <= Build.VERSION_CODES.Q;
+        } catch (PackageManager.NameNotFoundException nameNotFoundException) {
+        }
+        if (preR) {
+            // SDK < R allows READ_PHONE_STATE, READ_PRIVILEGED_PHONE_STATE, or carrier privilege
+            try {
                 return checkReadPhoneState(
                         context, subId, pid, uid, callingPackage, callingFeatureId, message);
+            } catch (SecurityException readPhoneStateException) {
             }
-        } catch (SecurityException | PackageManager.NameNotFoundException e) {
+        } else {
+            // SDK >= R allows READ_PRIVILEGED_PHONE_STATE or carrier privilege
+            try {
+                context.enforcePermission(
+                        android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE, pid, uid, message);
+                // Skip checking for runtime permission since caller has privileged permission
+                return true;
+            } catch (SecurityException readPrivilegedPhoneStateException) {
+                if (SubscriptionManager.isValidSubscriptionId(subId)) {
+                    try {
+                        enforceCarrierPrivilege(context, subId, uid, message);
+                        // Skip checking for runtime permission since caller has carrier privilege
+                        return true;
+                    } catch (SecurityException carrierPrivilegeException) {
+                    }
+                }
+            }
         }
+
         // Can be read with READ_SMS too.
         try {
             context.enforcePermission(android.Manifest.permission.READ_SMS, pid, uid, message);
