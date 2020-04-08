@@ -28,8 +28,6 @@ import static android.content.Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS;
 import static android.content.Intent.FLAG_ACTIVITY_MULTIPLE_TASK;
 import static android.content.Intent.FLAG_ACTIVITY_NEW_DOCUMENT;
 import static android.content.Intent.FLAG_ACTIVITY_NEW_TASK;
-import static android.view.Display.DEFAULT_DISPLAY;
-import static android.view.Display.TYPE_VIRTUAL;
 
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.doNothing;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.doReturn;
@@ -56,7 +54,6 @@ import static java.lang.Integer.MAX_VALUE;
 
 import android.app.ActivityManager.RecentTaskInfo;
 import android.app.ActivityManager.RunningTaskInfo;
-import android.app.ActivityOptions;
 import android.app.ActivityTaskManager;
 import android.app.WindowConfiguration;
 import android.content.ComponentName;
@@ -106,7 +103,7 @@ public class RecentTasksTest extends ActivityTestsBase {
             UserManager.USER_TYPE_PROFILE_MANAGED);
     private static final int INVALID_STACK_ID = 999;
 
-    private DisplayContent mDisplay;
+    private TaskDisplayArea mTaskContainer;
     private ActivityStack mStack;
     private TestTaskPersister mTaskPersister;
     private TestRecentTasks mRecentTasks;
@@ -121,7 +118,7 @@ public class RecentTasksTest extends ActivityTestsBase {
     public void setUp() throws Exception {
         mTaskPersister = new TestTaskPersister(mContext.getFilesDir());
         spyOn(mTaskPersister);
-        mDisplay = mRootWindowContainer.getDisplayContent(DEFAULT_DISPLAY);
+        mTaskContainer = mRootWindowContainer.getDefaultTaskDisplayArea();
 
         // Set the recent tasks we should use for testing in this class.
         mRecentTasks = new TestRecentTasks(mService, mTaskPersister);
@@ -133,7 +130,7 @@ public class RecentTasksTest extends ActivityTestsBase {
         mRunningTasks = new TestRunningTasks();
         mService.mStackSupervisor.setRunningTasks(mRunningTasks);
 
-        mStack = mDisplay.createStack(
+        mStack = mTaskContainer.createStack(
                 WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_STANDARD, true /* onTop */);
         mCallbacksRecorder = new CallbacksRecorder();
         mRecentTasks.registerCallback(mCallbacksRecorder);
@@ -308,7 +305,7 @@ public class RecentTasksTest extends ActivityTestsBase {
         // other task
         Task task1 = createTaskBuilder(".Task1")
                 .setFlags(FLAG_ACTIVITY_NEW_TASK | FLAG_ACTIVITY_MULTIPLE_TASK)
-                .setStack(mDisplay.getRootHomeTask()).build();
+                .setStack(mTaskContainer.getRootHomeTask()).build();
         Task task2 = createTaskBuilder(".Task1")
                 .setFlags(FLAG_ACTIVITY_NEW_TASK | FLAG_ACTIVITY_MULTIPLE_TASK)
                 .setStack(mStack).build();
@@ -445,7 +442,8 @@ public class RecentTasksTest extends ActivityTestsBase {
         // tasks because their intents are identical.
         mRecentTasks.add(createTaskBuilder(className).build());
         // Go home to trigger the removal of untracked tasks.
-        mRecentTasks.add(createTaskBuilder(".Home").setStack(mDisplay.getRootHomeTask()).build());
+        mRecentTasks.add(createTaskBuilder(".Home").setStack(mTaskContainer.getRootHomeTask())
+                .build());
 
         // All activities in the invisible task should be finishing or removed.
         assertNull(task1.getTopNonFinishingActivity());
@@ -688,8 +686,8 @@ public class RecentTasksTest extends ActivityTestsBase {
         mRecentTasks.setOnlyTestVisibleRange();
         mRecentTasks.setParameters(-1 /* min */, 3 /* max */, -1 /* ms */);
 
-        final DisplayContent display = mRootWindowContainer.getDefaultDisplay();
-        final Task alwaysOnTopTask = display.createStack(WINDOWING_MODE_MULTI_WINDOW,
+        final TaskDisplayArea taskDisplayArea = mRootWindowContainer.getDefaultTaskDisplayArea();
+        final Task alwaysOnTopTask = taskDisplayArea.createStack(WINDOWING_MODE_MULTI_WINDOW,
                 ACTIVITY_TYPE_STANDARD, true /* onTop */);
         alwaysOnTopTask.setAlwaysOnTop(true);
 
@@ -822,8 +820,8 @@ public class RecentTasksTest extends ActivityTestsBase {
     public void testBackStackTasks_expectNoTrim() {
         mRecentTasks.setParameters(-1 /* min */, 1 /* max */, -1 /* ms */);
 
-        final ActivityStack homeStack = mDisplay.getRootHomeTask();
-        final ActivityStack aboveHomeStack = mDisplay.createStack(
+        final ActivityStack homeStack = mTaskContainer.getRootHomeTask();
+        final ActivityStack aboveHomeStack = mTaskContainer.createStack(
                 WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_STANDARD, true /* onTop */);
 
         // Add a number of tasks (beyond the max) but ensure that nothing is trimmed because all
@@ -840,10 +838,10 @@ public class RecentTasksTest extends ActivityTestsBase {
     public void testBehindHomeStackTasks_expectTaskTrimmed() {
         mRecentTasks.setParameters(-1 /* min */, 1 /* max */, -1 /* ms */);
 
-        final ActivityStack behindHomeStack = mDisplay.createStack(
+        final ActivityStack behindHomeStack = mTaskContainer.createStack(
                 WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_STANDARD, true /* onTop */);
-        final ActivityStack homeStack = mDisplay.getRootHomeTask();
-        final ActivityStack aboveHomeStack = mDisplay.createStack(
+        final ActivityStack homeStack = mTaskContainer.getRootHomeTask();
+        final ActivityStack aboveHomeStack = mTaskContainer.createStack(
                 WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_STANDARD, true /* onTop */);
 
         // Add a number of tasks (beyond the max) but ensure that only the task in the stack behind
@@ -862,10 +860,10 @@ public class RecentTasksTest extends ActivityTestsBase {
     public void testOtherDisplayTasks_expectNoTrim() {
         mRecentTasks.setParameters(-1 /* min */, 1 /* max */, -1 /* ms */);
 
-        final ActivityStack homeStack = mDisplay.getRootHomeTask();
+        final ActivityStack homeStack = mTaskContainer.getRootHomeTask();
         final DisplayContent otherDisplay = addNewDisplayContentAt(DisplayContent.POSITION_TOP);
-        final ActivityStack otherDisplayStack = otherDisplay.createStack(
-                WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_STANDARD, true /* onTop */);
+        final ActivityStack otherDisplayStack = otherDisplay.getDefaultTaskDisplayArea()
+                .createStack(WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_STANDARD, true /* onTop */);
 
         // Add a number of tasks (beyond the max) on each display, ensure that the tasks are not
         // removed
@@ -1071,9 +1069,9 @@ public class RecentTasksTest extends ActivityTestsBase {
     private void assertNotRestoreTask(Runnable action) {
         // Verify stack count doesn't change because task with fullscreen mode and standard type
         // would have its own stack.
-        final int originalStackCount = mDisplay.getStackCount();
+        final int originalStackCount = mTaskContainer.getStackCount();
         action.run();
-        assertEquals(originalStackCount, mDisplay.getStackCount());
+        assertEquals(originalStackCount, mTaskContainer.getStackCount());
     }
 
     @Test

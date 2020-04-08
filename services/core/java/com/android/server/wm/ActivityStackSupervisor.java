@@ -397,15 +397,15 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
     private final MoveTaskToFullscreenHelper mMoveTaskToFullscreenHelper =
             new MoveTaskToFullscreenHelper();
     private class MoveTaskToFullscreenHelper {
-        private DisplayContent mToDisplay;
+        private TaskDisplayArea mToDisplayArea;
         private boolean mOnTop;
         private Task mTopTask;
         private boolean mSchedulePictureInPictureModeChange;
 
-        void process(ActivityStack fromStack, DisplayContent toDisplay, boolean onTop,
+        void process(ActivityStack fromStack, TaskDisplayArea toDisplayArea, boolean onTop,
                 boolean schedulePictureInPictureModeChange) {
             mSchedulePictureInPictureModeChange = schedulePictureInPictureModeChange;
-            mToDisplay = toDisplay;
+            mToDisplayArea = toDisplayArea;
             mOnTop = onTop;
             mTopTask = fromStack.getTopMostTask();
 
@@ -413,7 +413,7 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
                     MoveTaskToFullscreenHelper::processLeafTask, this, PooledLambda.__(Task.class));
             fromStack.forAllLeafTasks(c, false /* traverseTopToBottom */);
             c.recycle();
-            mToDisplay = null;
+            mToDisplayArea = null;
             mTopTask = null;
         }
 
@@ -423,19 +423,18 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
                     task.getActivityType())) {
                 final ActivityStack stack = (ActivityStack) task;
                 stack.setWindowingMode(WINDOWING_MODE_FULLSCREEN);
-                if (mToDisplay.getDisplayId() != stack.getDisplayId()) {
-                    mToDisplay.moveStackToDisplay(stack, mOnTop);
+                if (mToDisplayArea.getDisplayId() != stack.getDisplayId()) {
+                    stack.reparent(mToDisplayArea, mOnTop);
                 } else if (mOnTop) {
-                    mToDisplay.mTaskContainers.positionStackAtTop(stack,
-                            false /* includingParents */);
+                    mToDisplayArea.positionStackAtTop(stack, false /* includingParents */);
                 } else {
-                    mToDisplay.mTaskContainers.positionStackAtBottom(stack);
+                    mToDisplayArea.positionStackAtBottom(stack);
                 }
                 return;
             }
 
-            final ActivityStack toStack = mToDisplay.mTaskContainers.getOrCreateStack(
-                    null, mTmpOptions, task, task.getActivityType(), mOnTop);
+            final ActivityStack toStack = mToDisplayArea.getOrCreateStack(null, mTmpOptions, task,
+                    task.getActivityType(), mOnTop);
             if (task == toStack) {
                 // The task was reused as the root task.
                 return;
@@ -578,8 +577,8 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
     }
 
     void moveRecentsStackToFront(String reason) {
-        final ActivityStack recentsStack = mRootWindowContainer.getDefaultDisplay().getStack(
-                WINDOWING_MODE_UNDEFINED, ACTIVITY_TYPE_RECENTS);
+        final ActivityStack recentsStack = mRootWindowContainer.getDefaultTaskDisplayArea()
+                .getStack(WINDOWING_MODE_UNDEFINED, ACTIVITY_TYPE_RECENTS);
         if (recentsStack != null) {
             recentsStack.moveToFront(reason);
         }
@@ -1451,7 +1450,7 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
                     mRootWindowContainer.getLaunchStack(null, options, task, ON_TOP);
 
             if (stack != currentStack) {
-                moveHomeStackToFrontIfNeeded(flags, stack.getDisplay(), reason);
+                moveHomeStackToFrontIfNeeded(flags, stack.getDisplayArea(), reason);
                 task.reparent(stack, ON_TOP, REPARENT_KEEP_STACK_AT_FRONT, !ANIMATE, DEFER_RESUME,
                         reason);
                 currentStack = stack;
@@ -1470,7 +1469,7 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
         }
 
         if (!reparented) {
-            moveHomeStackToFrontIfNeeded(flags, currentStack.getDisplay(), reason);
+            moveHomeStackToFrontIfNeeded(flags, currentStack.getDisplayArea(), reason);
         }
 
         final ActivityRecord r = task.getTopNonFinishingActivity();
@@ -1484,15 +1483,16 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
                 currentStack, forceNonResizeable);
     }
 
-    private void moveHomeStackToFrontIfNeeded(int flags, DisplayContent display, String reason) {
-        final ActivityStack focusedStack = display.getFocusedStack();
+    private void moveHomeStackToFrontIfNeeded(int flags, TaskDisplayArea taskDisplayArea,
+            String reason) {
+        final ActivityStack focusedStack = taskDisplayArea.getFocusedStack();
 
-        if ((display.getWindowingMode() == WINDOWING_MODE_FULLSCREEN
+        if ((taskDisplayArea.getWindowingMode() == WINDOWING_MODE_FULLSCREEN
                 && (flags & ActivityManager.MOVE_TASK_WITH_HOME) != 0)
                 || (focusedStack != null && focusedStack.isActivityTypeRecents())) {
-            // We move home stack to front when we are on a fullscreen display and caller has
+            // We move home stack to front when we are on a fullscreen display area and caller has
             // requested the home activity to move with it. Or the previous stack is recents.
-            display.mTaskContainers.moveHomeStackToFront(reason);
+            taskDisplayArea.moveHomeStackToFront(reason);
         }
     }
 
@@ -1544,15 +1544,15 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
         mService.deferWindowLayout();
         try {
             final int windowingMode = fromStack.getWindowingMode();
-            final DisplayContent toDisplay =
-                    mRootWindowContainer.getDisplayContent(toDisplayId);
+            final TaskDisplayArea toDisplayArea = mRootWindowContainer
+                    .getDisplayContent(toDisplayId).getDefaultTaskDisplayArea();
 
             if (windowingMode == WINDOWING_MODE_SPLIT_SCREEN_PRIMARY) {
                 // We are moving all tasks from the docked stack to the fullscreen stack,
                 // which is dismissing the docked stack, so resize all other stacks to
                 // fullscreen here already so we don't end up with resize trashing.
-                for (int i = toDisplay.getStackCount() - 1; i >= 0; --i) {
-                    final ActivityStack otherStack = toDisplay.getStackAt(i);
+                for (int i = toDisplayArea.getStackCount() - 1; i >= 0; --i) {
+                    final ActivityStack otherStack = toDisplayArea.getStackAt(i);
                     if (!otherStack.inSplitScreenSecondaryWindowingMode()) {
                         continue;
                     }
@@ -1568,7 +1568,7 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
             if (fromStack.hasChild()) {
                 mTmpOptions.setLaunchWindowingMode(WINDOWING_MODE_FULLSCREEN);
                 mMoveTaskToFullscreenHelper.process(
-                        fromStack, toDisplay, onTop, schedulePictureInPictureModeChange);
+                        fromStack, toDisplayArea, onTop, schedulePictureInPictureModeChange);
             }
 
             mRootWindowContainer.ensureActivitiesVisible(null, 0, PRESERVE_WINDOWS);
@@ -1579,6 +1579,7 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
     }
 
     void moveTasksToFullscreenStackLocked(ActivityStack fromStack, boolean onTop) {
+        // TODO(b/153089193): Support moving within the same task display area
         mWindowManager.inSurfaceTransaction(() ->
                 moveTasksToFullscreenStackInSurfaceTransaction(fromStack, DEFAULT_DISPLAY, onTop));
     }
@@ -1830,7 +1831,7 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
             if (prevStack != null) {
                 return prevStack;
             }
-            stack = stack.getDisplay().createStack(
+            stack = stack.getDisplayArea().createStack(
                     WINDOWING_MODE_FULLSCREEN, stack.getActivityType(), toTop);
         }
         return stack;
@@ -1943,7 +1944,7 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
         mStoppingActivities.remove(r);
 
         final ActivityStack stack = r.getRootTask();
-        if (stack.getDisplay().mTaskContainers.allResumedActivitiesComplete()) {
+        if (stack.getDisplayArea().allResumedActivitiesComplete()) {
             mRootWindowContainer.ensureActivitiesVisible(null, 0, !PRESERVE_WINDOWS);
             // Make sure activity & window visibility should be identical
             // for all displays in this stage.
@@ -2307,7 +2308,7 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
         final boolean isSecondaryDisplayPreferred =
                 (preferredDisplayId != DEFAULT_DISPLAY && preferredDisplayId != INVALID_DISPLAY);
         final boolean inSplitScreenMode = actualStack != null
-                && actualStack.getDisplay().mTaskContainers.isSplitScreenModeActivated();
+                && actualStack.getDisplayArea().isSplitScreenModeActivated();
         if (((!inSplitScreenMode && preferredWindowingMode != WINDOWING_MODE_SPLIT_SCREEN_PRIMARY)
                 && !isSecondaryDisplayPreferred) || !task.isActivityTypeStandardOrUndefined()) {
             return;
@@ -2354,14 +2355,14 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
         if (!task.supportsSplitScreenWindowingMode() || forceNonResizable) {
             // Dismiss docked stack. If task appeared to be in docked stack but is not resizable -
             // we need to move it to top of fullscreen stack, otherwise it will be covered.
-            final DisplayContent display = task.getStack().getDisplay();
-            if (display.mTaskContainers.isSplitScreenModeActivated()) {
+            final TaskDisplayArea taskDisplayArea = task.getDisplayArea();
+            if (taskDisplayArea.isSplitScreenModeActivated()) {
                 // Display a warning toast that we tried to put an app that doesn't support
                 // split-screen in split-screen.
                 mService.getTaskChangeNotificationController()
                         .notifyActivityDismissingDockedStack();
-                display.mTaskContainers.onSplitScreenModeDismissed();
-                display.ensureActivitiesVisible(null, 0, PRESERVE_WINDOWS,
+                taskDisplayArea.onSplitScreenModeDismissed();
+                taskDisplayArea.mDisplayContent.ensureActivitiesVisible(null, 0, PRESERVE_WINDOWS,
                         true /* notifyClients */);
             }
             return;
@@ -2678,7 +2679,7 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
                 // from whatever is started from the recents activity, so move the home stack
                 // forward.
                 // TODO (b/115289124): Multi-display supports for recents.
-                mRootWindowContainer.getDefaultDisplay().mTaskContainers.moveHomeStackToFront(
+                mRootWindowContainer.getDefaultTaskDisplayArea().moveHomeStackToFront(
                         "startActivityFromRecents");
             }
 

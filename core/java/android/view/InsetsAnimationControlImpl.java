@@ -140,7 +140,12 @@ public class InsetsAnimationControlImpl implements WindowInsetsAnimationControll
 
     @Override
     public void setInsetsAndAlpha(Insets insets, float alpha, float fraction) {
-        if (mFinished) {
+        setInsetsAndAlpha(insets, alpha, fraction, false /* allowWhenFinished */);
+    }
+
+    private void setInsetsAndAlpha(Insets insets, float alpha, float fraction,
+            boolean allowWhenFinished) {
+        if (!allowWhenFinished && mFinished) {
             throw new IllegalStateException(
                     "Can't change insets on an animation that is finished.");
         }
@@ -151,7 +156,7 @@ public class InsetsAnimationControlImpl implements WindowInsetsAnimationControll
         mPendingFraction = sanitize(fraction);
         mPendingInsets = sanitize(insets);
         mPendingAlpha = sanitize(alpha);
-        mController.scheduleApplyChangeInsets();
+        mController.scheduleApplyChangeInsets(this);
     }
 
     @VisibleForTesting
@@ -201,8 +206,9 @@ public class InsetsAnimationControlImpl implements WindowInsetsAnimationControll
             return;
         }
         mShownOnFinish = shown;
-        setInsetsAndAlpha(shown ? mShownInsets : mHiddenInsets, 1f /* alpha */, 1f /* fraction */);
         mFinished = true;
+        setInsetsAndAlpha(shown ? mShownInsets : mHiddenInsets, 1f /* alpha */, 1f /* fraction */,
+                true /* allowWhenFinished */);
         mListener.onFinished(this);
     }
 

@@ -36,6 +36,7 @@ import static com.android.server.wm.IdentifierProto.USER_ID;
 import static com.android.server.wm.ProtoLogGroup.WM_DEBUG_APP_TRANSITIONS;
 import static com.android.server.wm.ProtoLogGroup.WM_DEBUG_APP_TRANSITIONS_ANIM;
 import static com.android.server.wm.ProtoLogGroup.WM_DEBUG_ORIENTATION;
+import static com.android.server.wm.SurfaceAnimator.ANIMATION_TYPE_ALL;
 import static com.android.server.wm.SurfaceAnimator.ANIMATION_TYPE_APP_TRANSITION;
 import static com.android.server.wm.WindowContainer.AnimationFlags.CHILDREN;
 import static com.android.server.wm.WindowContainer.AnimationFlags.PARENTS;
@@ -68,7 +69,6 @@ import android.util.Pools;
 import android.util.Slog;
 import android.util.proto.ProtoOutputStream;
 import android.view.DisplayInfo;
-import android.window.IWindowContainer;
 import android.view.MagnificationSpec;
 import android.view.RemoteAnimationDefinition;
 import android.view.RemoteAnimationTarget;
@@ -77,6 +77,8 @@ import android.view.SurfaceControl.Builder;
 import android.view.SurfaceSession;
 import android.view.WindowManager;
 import android.view.animation.Animation;
+import android.window.IWindowContainerToken;
+import android.window.WindowContainerToken;
 
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.util.ToBooleanFunction;
@@ -728,6 +730,13 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         return mDisplayContent;
     }
 
+    /** Get the first node of type {@link DisplayArea} above or at this node. */
+    @Nullable
+    DisplayArea getDisplayArea() {
+        WindowContainer parent = getParent();
+        return parent != null ? parent.getDisplayArea() : null;
+    }
+
     void setWaitingForDrawnIfResizingChanged() {
         for (int i = mChildren.size() - 1; i >= 0; --i) {
             final WindowContainer wc = mChildren.get(i);
@@ -782,7 +791,7 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
      * By default this predicate only checks if this container itself is actually running an
      * animation, but you can extend the check target over its relatives, or relax the condition
      * so that this can return {@code true} if an animation starts soon by giving a combination
-     * of {@link #AnimationFlags}.
+     * of {@link AnimationFlags}.
      *
      * Note that you can give a combination of bitmask flags to specify targets and condition for
      * checking animating status.
@@ -792,12 +801,18 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
      *
      * Note that TRANSITION propagates to parents and children as well.
      *
-     * {@see AnimationFlags#TRANSITION}
-     * {@see AnimationFlags#PARENTS}
-     * {@see AnimationFlags#CHILDREN}
+     * @param flags The combination of bitmask flags to specify targets and condition for
+     *              checking animating status.
+     * @param typesToCheck The combination of bitmask {@link AnimationType} to compare when
+     *                     determining if animating.
+     *
+     * @see AnimationFlags#TRANSITION
+     * @see AnimationFlags#PARENTS
+     * @see AnimationFlags#CHILDREN
      */
-    boolean isAnimating(int flags) {
-        if (mSurfaceAnimator.isAnimating()) {
+    boolean isAnimating(int flags, int typesToCheck) {
+        int animationType = mSurfaceAnimator.getAnimationType();
+        if (mSurfaceAnimator.isAnimating() && (animationType & typesToCheck) > 0) {
             return true;
         }
         if ((flags & TRANSITION) != 0 && isWaitingForTransitionStart()) {
@@ -805,19 +820,39 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         }
         if ((flags & PARENTS) != 0) {
             final WindowContainer parent = getParent();
-            if (parent != null && parent.isAnimating(flags & ~CHILDREN)) {
+            if (parent != null && parent.isAnimating(flags & ~CHILDREN, typesToCheck)) {
                 return true;
             }
         }
         if ((flags & CHILDREN) != 0) {
             for (int i = 0; i < mChildren.size(); ++i) {
                 final WindowContainer wc = mChildren.get(i);
-                if (wc.isAnimating(flags & ~PARENTS)) {
+                if (wc.isAnimating(flags & ~PARENTS, typesToCheck)) {
                     return true;
                 }
             }
         }
         return false;
+    }
+
+    /**
+     * Similar to {@link #isAnimating(int, int)} except provide a bitmask of
+     * {@link AnimationType} to exclude, rather than include
+     * @param flags The combination of bitmask flags to specify targets and condition for
+     *              checking animating status.
+     * @param typesToExclude The combination of bitmask {@link AnimationType} to exclude when
+     *                     checking if animating.
+     */
+    boolean isAnimatingExcluding(int flags, int typesToExclude) {
+        return isAnimating(flags, ANIMATION_TYPE_ALL & ~typesToExclude);
+    }
+
+    /**
+     * @see #isAnimating(int, int)
+     * TODO (b/152333373): Migrate calls to use isAnimating with specified animation type
+     */
+    boolean isAnimating(int flags) {
+        return isAnimating(flags, ANIMATION_TYPE_ALL);
     }
 
     /**
@@ -2442,8 +2477,10 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         return RemoteToken.fromBinder(binder).getContainer();
     }
 
-    static class RemoteToken extends IWindowContainer.Stub {
+    static class RemoteToken extends IWindowContainerToken.Stub {
+
         final WeakReference<WindowContainer> mWeakRef;
+        private WindowContainerToken mWindowContainerToken;
 
         RemoteToken(WindowContainer container) {
             mWeakRef = new WeakReference<>(container);
@@ -2469,6 +2506,13 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
             return sc;
         }
 
+        WindowContainerToken toWindowContainerToken() {
+            if (mWindowContainerToken == null) {
+                mWindowContainerToken = new WindowContainerToken(this);
+            }
+            return mWindowContainerToken;
+        }
+
         @Override
         public String toString() {
             StringBuilder sb = new StringBuilder(128);
@@ -2482,11 +2526,11 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
     }
 
     @Override
-    public void transactionReady(int mSyncId, SurfaceControl.Transaction mergedTransaction) {
+    public void onTransactionReady(int mSyncId, SurfaceControl.Transaction mergedTransaction) {
         mergedTransaction.merge(mBLASTSyncTransaction);
         mUsingBLASTSyncTransaction = false;
 
-        mWaitingListener.transactionReady(mWaitingSyncId, mergedTransaction);
+        mWaitingListener.onTransactionReady(mWaitingSyncId, mergedTransaction);
 
         mWaitingListener = null;
         mWaitingSyncId = -1;

@@ -295,10 +295,10 @@ class InsetsPolicy {
     }
 
     private boolean forceShowsSystemBarsForWindowingMode() {
-        final boolean isDockedStackVisible =
-                mDisplayContent.isStackVisible(WINDOWING_MODE_SPLIT_SCREEN_PRIMARY);
-        final boolean isFreeformStackVisible =
-                mDisplayContent.isStackVisible(WINDOWING_MODE_FREEFORM);
+        final boolean isDockedStackVisible = mDisplayContent.getDefaultTaskDisplayArea()
+                .isStackVisible(WINDOWING_MODE_SPLIT_SCREEN_PRIMARY);
+        final boolean isFreeformStackVisible = mDisplayContent.getDefaultTaskDisplayArea()
+                .isStackVisible(WINDOWING_MODE_FREEFORM);
         final boolean isResizing = mDisplayContent.getDockedDividerController().isResizing();
 
         // We need to force system bars when the docked stack is visible, when the freeform stack
@@ -367,7 +367,6 @@ class InsetsPolicy {
         @Override
         protected void onAnimationFinish() {
             super.onAnimationFinish();
-            mControlCallbacks.mAnimationControl.finish(mAnimatingShown);
             DisplayThread.getHandler().post(mFinishCallback);
         }
 
@@ -399,7 +398,7 @@ class InsetsPolicy {
 
             /** Called on SurfaceAnimationThread without global WM lock held. */
             @Override
-            public void scheduleApplyChangeInsets() {
+            public void scheduleApplyChangeInsets(InsetsAnimationControlRunner runner) {
                 InsetsState state = getState();
                 if (mAnimationControl.applyChangeInsets(state)) {
                     mAnimationControl.finish(mAnimatingShown);
