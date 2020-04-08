@@ -548,52 +548,9 @@ java_library {
     ],
 }
 
-java_library {
-    name: "framework-annotation-proc",
-    srcs: [
-        ":framework-all-sources",
-        "core/java/**/*.logtags",
-    ],
-    sdk_version: "core_platform",
-    libs: [
-        "app-compat-annotations",
-        "ext",
-        "unsupportedappusage",
-    ],
-
-    installable: false,
-    plugins: [
-        "compat-changeid-annotation-processor",
-    ],
-    static_libs: [
-        "framework-internal-utils",
-        "exoplayer2-extractor",
-        "android.hardware.wifi-V1.0-java-constants",
-    ]
-}
-
 platform_compat_config {
     name: "framework-platform-compat-config",
-    src: ":framework-annotation-proc",
-}
-
-// A library including just UnsupportedAppUsage.java classes.
-//
-// Provided for target so that libraries can use it without depending on
-// the whole of framework or the core platform API.
-//
-// Built for host so that the annotation processor can also use this annotation.
-java_library {
-    name: "unsupportedappusage-annotation",
-    host_supported: true,
-    srcs: [
-        "core/java/android/annotation/IntDef.java",
-    ],
-    static_libs: [
-        "art.module.api.annotations",
-    ],
-
-    sdk_version: "core_current",
+    src: ":framework-minus-apex",
 }
 
 // A temporary build target that is conditionally included on the bootclasspath if
@@ -722,6 +679,7 @@ filegroup {
     srcs: [
         "core/java/android/annotation/StringDef.java",
         "core/java/android/net/annotations/PolicyDirection.java",
+        "core/java/com/android/internal/util/HexDump.java",
         "core/java/com/android/internal/util/IState.java",
         "core/java/com/android/internal/util/State.java",
         "core/java/com/android/internal/util/StateMachine.java",
@@ -970,7 +928,6 @@ filegroup {
         "core/java/android/content/pm/InstallationFileLocation.aidl",
         "core/java/android/content/pm/IDataLoaderStatusListener.aidl",
         "core/java/android/content/pm/IPackageInstallerSessionFileSystemConnector.aidl",
-        "core/java/android/content/pm/NamedParcelFileDescriptor.aidl",
     ],
     path: "core/java",
 }
@@ -1294,7 +1251,22 @@ droidstubs {
             removed_api_file: "telephony/api/system-removed.txt",
         },
     },
-    defaults: ["framework-module-stubs-defaults-systemapi"],
+    // TODO: make telephony inherit the shared stubs and remove this
+    args: "--show-annotation android.annotation.SystemApi\\(" +
+            "client=android.annotation.SystemApi.Client.PRIVILEGED_APPS" +
+        "\\) " +
+        "--error UnhiddenSystemApi " +
+        "--hide BroadcastBehavior " +
+        "--hide DeprecationMismatch " +
+        "--hide HiddenSuperclass " +
+        "--hide HiddenTypedefConstant " +
+        "--hide HiddenTypeParameter " +
+        "--hide MissingPermission " +
+        "--hide RequiresPermission " +
+        "--hide SdkConstant " +
+        "--hide Todo " +
+        "--hide Typo " +
+        "--hide UnavailableSymbol ",
     filter_packages: ["android.telephony"],
     sdk_version: "system_current",
 }

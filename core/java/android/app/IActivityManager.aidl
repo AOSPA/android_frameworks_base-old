@@ -99,6 +99,7 @@ interface IActivityManager {
     void unregisterUidObserver(in IUidObserver observer);
     boolean isUidActive(int uid, String callingPackage);
     int getUidProcessState(int uid, in String callingPackage);
+    boolean isUidActiveOrForeground(int uid, String callingPackage);
     // =============== End of transactions used on native side as well ============================
 
     // Special low-level communication with activity manager.
@@ -142,9 +143,6 @@ interface IActivityManager {
             boolean abortBroadcast, int flags);
     void attachApplication(in IApplicationThread app, long startSeq);
     List<ActivityManager.RunningTaskInfo> getTasks(int maxNum);
-    @UnsupportedAppUsage
-    List<ActivityManager.RunningTaskInfo> getFilteredTasks(int maxNum, int ignoreActivityType,
-            int ignoreWindowingMode);
     @UnsupportedAppUsage
     void moveTaskToFront(in IApplicationThread caller, in String callingPackage, int task,
             int flags, in Bundle options);

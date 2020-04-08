@@ -18,6 +18,7 @@ package com.android.systemui.controls.controller
 
 import android.app.ActivityManager
 import android.app.PendingIntent
+import android.app.backup.BackupManager
 import android.content.BroadcastReceiver
 import android.content.ComponentName
 import android.content.ContentResolver
@@ -35,6 +36,7 @@ import android.util.ArrayMap
 import android.util.Log
 import com.android.internal.annotations.VisibleForTesting
 import com.android.systemui.Dumpable
+import com.android.systemui.backup.BackupHelper
 import com.android.systemui.broadcast.BroadcastDispatcher
 import com.android.systemui.controls.ControlStatus
 import com.android.systemui.controls.ControlsServiceInfo
@@ -65,10 +67,11 @@ class ControlsControllerImpl @Inject constructor (
 
     companion object {
         private const val TAG = "ControlsControllerImpl"
-        internal const val CONTROLS_AVAILABLE = "systemui.controls_available"
+        internal const val CONTROLS_AVAILABLE = Settings.Secure.CONTROLS_ENABLED
         internal val URI = Settings.Secure.getUriFor(CONTROLS_AVAILABLE)
         private const val USER_CHANGE_RETRY_DELAY = 500L // ms
         private const val DEFAULT_ENABLED = 1
+        private const val PERMISSION_SELF = "com.android.systemui.permission.SELF"
     }
 
     private var userChanging: Boolean = true
@@ -88,23 +91,35 @@ class ControlsControllerImpl @Inject constructor (
             contentResolver, CONTROLS_AVAILABLE, DEFAULT_ENABLED, currentUserId) != 0
         private set
 
+    private var file = Environment.buildPath(
+        context.filesDir,
+        ControlsFavoritePersistenceWrapper.FILE_NAME
+    )
+    private var auxiliaryFile = Environment.buildPath(
+        context.filesDir,
+        AuxiliaryPersistenceWrapper.AUXILIARY_FILE_NAME
+    )
     private val persistenceWrapper = optionalWrapper.orElseGet {
         ControlsFavoritePersistenceWrapper(
-                Environment.buildPath(
-                    context.filesDir,
-                    ControlsFavoritePersistenceWrapper.FILE_NAME
-                ),
-                executor
+            file,
+            executor,
+            BackupManager(context)
         )
     }
+
+    @VisibleForTesting
+    internal var auxiliaryPersistenceWrapper = AuxiliaryPersistenceWrapper(auxiliaryFile, executor)
 
     private fun setValuesForUser(newUser: UserHandle) {
         Log.d(TAG, "Changing to user: $newUser")
         currentUser = newUser
         val userContext = context.createContextAsUser(currentUser, 0)
-        val fileName = Environment.buildPath(
+        file = Environment.buildPath(
                 userContext.filesDir, ControlsFavoritePersistenceWrapper.FILE_NAME)
-        persistenceWrapper.changeFile(fileName)
+        auxiliaryFile = Environment.buildPath(
+            userContext.filesDir, AuxiliaryPersistenceWrapper.AUXILIARY_FILE_NAME)
+        persistenceWrapper.changeFileAndBackupManager(file, BackupManager(userContext))
+        auxiliaryPersistenceWrapper.changeFile(auxiliaryFile)
         available = Settings.Secure.getIntForUser(contentResolver, CONTROLS_AVAILABLE,
                 DEFAULT_ENABLED, newUser.identifier) != 0
         resetFavorites(available)
@@ -125,6 +140,21 @@ class ControlsControllerImpl @Inject constructor (
                     return
                 }
                 setValuesForUser(newUser)
+            }
+        }
+    }
+
+    @VisibleForTesting
+    internal val restoreFinishedReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            val user = intent.getIntExtra(Intent.EXTRA_USER_ID, UserHandle.USER_NULL)
+            if (user == currentUserId) {
+                executor.execute {
+                    auxiliaryPersistenceWrapper.initialize()
+                    listingController.removeCallback(listingCallback)
+                    persistenceWrapper.storeFavorites(auxiliaryPersistenceWrapper.favorites)
+                    resetFavorites(available)
+                }
             }
         }
     }
@@ -170,7 +200,25 @@ class ControlsControllerImpl @Inject constructor (
                     bindingController.onComponentRemoved(it)
                 }
 
-                // Check if something has been removed, if so, store the new list
+                if (auxiliaryPersistenceWrapper.favorites.isNotEmpty()) {
+                    serviceInfoSet.subtract(favoriteComponentSet).forEach {
+                        val toAdd = auxiliaryPersistenceWrapper.getCachedFavoritesAndRemoveFor(it)
+                        if (toAdd.isNotEmpty()) {
+                            changed = true
+                            toAdd.forEach {
+                                Favorites.replaceControls(it)
+                            }
+                        }
+                    }
+                    // Need to clear the ones that were restored immediately. This will delete
+                    // them from the auxiliary file if they were not deleted. Should only do any
+                    // work the first time after a restore.
+                    serviceInfoSet.intersect(favoriteComponentSet).forEach {
+                        auxiliaryPersistenceWrapper.getCachedFavoritesAndRemoveFor(it)
+                    }
+                }
+
+                // Check if something has been added or removed, if so, store the new list
                 if (changed) {
                     persistenceWrapper.storeFavorites(Favorites.getAllStructures())
                 }
@@ -188,7 +236,20 @@ class ControlsControllerImpl @Inject constructor (
                 executor,
                 UserHandle.ALL
         )
+        context.registerReceiver(
+            restoreFinishedReceiver,
+            IntentFilter(BackupHelper.ACTION_RESTORE_FINISHED),
+            PERMISSION_SELF,
+            null
+        )
         contentResolver.registerContentObserver(URI, false, settingObserver, UserHandle.USER_ALL)
+    }
+
+    fun destroy() {
+        broadcastDispatcher.unregisterReceiver(userSwitchReceiver)
+        context.unregisterReceiver(restoreFinishedReceiver)
+        contentResolver.unregisterContentObserver(settingObserver)
+        listingController.removeCallback(listingCallback)
     }
 
     private fun resetFavorites(shouldLoad: Boolean) {
@@ -252,10 +313,17 @@ class ControlsControllerImpl @Inject constructor (
                                     it.controlId in favoritesForComponentKeys
                                 )
                             }
+                            val removedControls = mutableListOf<ControlStatus>()
+                            Favorites.getStructuresForComponent(componentName).forEach { st ->
+                                st.controls.forEach {
+                                    if (it.controlId in removed) {
+                                        val r = createRemovedStatus(componentName, it, st.structure)
+                                        removedControls.add(r)
+                                    }
+                                }
+                            }
                             val loadData = createLoadDataObject(
-                                Favorites.getControlsForComponent(componentName)
-                                    .filter { it.controlId in removed }
-                                    .map { createRemovedStatus(componentName, it) } +
+                                removedControls +
                                 controlsWithFavorite,
                                 favoritesForComponentKeys
                             )
@@ -266,17 +334,15 @@ class ControlsControllerImpl @Inject constructor (
                     override fun error(message: String) {
                         loadCanceller = null
                         executor.execute {
-                            val loadData = Favorites.getControlsForComponent(componentName)
-                                .let { controls ->
-                                val keys = controls.map { it.controlId }
-                                createLoadDataObject(
-                                        controls.map {
-                                            createRemovedStatus(componentName, it, false)
-                                        },
-                                        keys,
-                                        true
-                                )
-                            }
+                            val controls = Favorites.getStructuresForComponent(componentName)
+                                    .flatMap { st ->
+                                        st.controls.map {
+                                            createRemovedStatus(componentName, it, st.structure,
+                                                    false)
+                                        }
+                                    }
+                            val keys = controls.map { it.control.controlId }
+                            val loadData = createLoadDataObject(controls, keys, true)
                             dataCallback.accept(loadData)
                         }
                     }
@@ -372,6 +438,7 @@ class ControlsControllerImpl @Inject constructor (
     private fun createRemovedStatus(
         componentName: ComponentName,
         controlInfo: ControlInfo,
+        structure: CharSequence,
         setRemoved: Boolean = true
     ): ControlStatus {
         val intent = Intent(Intent.ACTION_MAIN).apply {
@@ -384,6 +451,8 @@ class ControlsControllerImpl @Inject constructor (
                 0)
         val control = Control.StatelessBuilder(controlInfo.controlId, pendingIntent)
                 .setTitle(controlInfo.controlTitle)
+                .setSubtitle(controlInfo.controlSubtitle)
+                .setStructure(structure)
                 .setDeviceType(controlInfo.deviceType)
                 .build()
         return ControlStatus(control, componentName, true, setRemoved)
@@ -431,13 +500,14 @@ class ControlsControllerImpl @Inject constructor (
             Log.d(TAG, "Controls not available")
             return
         }
-        executor.execute {
-            val changed = Favorites.updateControls(
-                componentName,
-                listOf(control)
-            )
-            if (changed) {
-                persistenceWrapper.storeFavorites(Favorites.getAllStructures())
+
+        // Assume that non STATUS_OK responses may contain incomplete or invalid information about
+        // the control, and do not attempt to update it
+        if (control.getStatus() == Control.STATUS_OK) {
+            executor.execute {
+                if (Favorites.updateControls(componentName, listOf(control))) {
+                    persistenceWrapper.storeFavorites(Favorites.getAllStructures())
+                }
             }
         }
         uiController.onRefreshState(componentName, listOf(control))

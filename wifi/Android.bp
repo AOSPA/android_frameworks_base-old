@@ -82,7 +82,6 @@ java_library {
     libs: [
         "framework-annotations-lib",
         "unsupportedappusage", // for android.compat.annotation.UnsupportedAppUsage
-        "unsupportedappusage-annotation", // for dalvik.annotation.compat.UnsupportedAppUsage
         "framework-telephony-stubs",
     ],
     srcs: [
@@ -132,7 +131,10 @@ stubs_defaults {
         ":framework-wifi-updatable-sources",
         ":framework-wifi-util-lib-aidls",
     ],
-    libs: [ "framework-annotations-lib" ],
+    libs: [
+        "framework-annotations-lib",
+        "framework-wifi-util-lib",
+    ],
     sdk_version: "module_current",
 }
 
@@ -172,8 +174,6 @@ java_library {
     name: "framework-wifi-stubs-publicapi",
     srcs: [":framework-wifi-stubs-srcs-publicapi"],
     defaults: ["framework-module-stubs-lib-defaults-publicapi"],
-    // TODO(b/151134996): remove this
-    sdk_version: "current",
 }
 
 java_library {

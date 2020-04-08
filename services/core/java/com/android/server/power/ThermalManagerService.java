@@ -107,7 +107,8 @@ public class ThermalManagerService extends SystemService {
     private final AtomicBoolean mHalReady = new AtomicBoolean();
 
     /** Watches temperatures to forecast when throttling will occur */
-    private final TemperatureWatcher mTemperatureWatcher = new TemperatureWatcher();
+    @VisibleForTesting
+    final TemperatureWatcher mTemperatureWatcher = new TemperatureWatcher();
 
     /** Invalid throttling status */
     private static final int INVALID_THROTTLING = Integer.MIN_VALUE;
@@ -767,7 +768,7 @@ public class ThermalManagerService extends SystemService {
         protected boolean connectToHal() {
             synchronized (mHalLock) {
                 try {
-                    mThermalHal10 = android.hardware.thermal.V1_0.IThermal.getService();
+                    mThermalHal10 = android.hardware.thermal.V1_0.IThermal.getService(true);
                     mThermalHal10.linkToDeath(new DeathRecipient(),
                             THERMAL_HAL_DEATH_COOKIE);
                     Slog.i(TAG,
@@ -902,7 +903,7 @@ public class ThermalManagerService extends SystemService {
         protected boolean connectToHal() {
             synchronized (mHalLock) {
                 try {
-                    mThermalHal11 = android.hardware.thermal.V1_1.IThermal.getService();
+                    mThermalHal11 = android.hardware.thermal.V1_1.IThermal.getService(true);
                     mThermalHal11.linkToDeath(new DeathRecipient(),
                             THERMAL_HAL_DEATH_COOKIE);
                     mThermalHal11.registerThermalCallback(mThermalCallback11);
@@ -1046,7 +1047,7 @@ public class ThermalManagerService extends SystemService {
         protected boolean connectToHal() {
             synchronized (mHalLock) {
                 try {
-                    mThermalHal20 = android.hardware.thermal.V2_0.IThermal.getService();
+                    mThermalHal20 = android.hardware.thermal.V2_0.IThermal.getService(true);
                     mThermalHal20.linkToDeath(new DeathRecipient(), THERMAL_HAL_DEATH_COOKIE);
                     mThermalHal20.registerThermalChangedCallback(mThermalCallback20, false,
                             0 /* not used */);
@@ -1069,16 +1070,19 @@ public class ThermalManagerService extends SystemService {
         }
     }
 
-    private class TemperatureWatcher {
+    @VisibleForTesting
+    class TemperatureWatcher {
         private final Handler mHandler = BackgroundThread.getHandler();
 
         /** Map of skin temperature sensor name to a corresponding list of samples */
         @GuardedBy("mSamples")
-        private final ArrayMap<String, ArrayList<Sample>> mSamples = new ArrayMap<>();
+        @VisibleForTesting
+        final ArrayMap<String, ArrayList<Sample>> mSamples = new ArrayMap<>();
 
         /** Map of skin temperature sensor name to the corresponding SEVERE temperature threshold */
         @GuardedBy("mSamples")
-        private ArrayMap<String, Float> mSevereThresholds = new ArrayMap<>();
+        @VisibleForTesting
+        ArrayMap<String, Float> mSevereThresholds = new ArrayMap<>();
 
         @GuardedBy("mSamples")
         private long mLastForecastCallTimeMillis = 0;
@@ -1146,7 +1150,8 @@ public class ThermalManagerService extends SystemService {
          * Calculates the trend using a linear regression. As the samples are degrees Celsius with
          * associated timestamps in milliseconds, the slope is in degrees Celsius per millisecond.
          */
-        private float getSlopeOf(List<Sample> samples) {
+        @VisibleForTesting
+        float getSlopeOf(List<Sample> samples) {
             long sumTimes = 0L;
             float sumTemperatures = 0.0f;
             for (int s = 0; s < samples.size(); ++s) {
@@ -1177,7 +1182,8 @@ public class ThermalManagerService extends SystemService {
          */
         private static final float DEGREES_BETWEEN_ZERO_AND_ONE = 30.0f;
 
-        private float normalizeTemperature(float temperature, float severeThreshold) {
+        @VisibleForTesting
+        float normalizeTemperature(float temperature, float severeThreshold) {
             synchronized (mSamples) {
                 float zeroNormalized = severeThreshold - DEGREES_BETWEEN_ZERO_AND_ONE;
                 if (temperature <= zeroNormalized) {
@@ -1245,7 +1251,15 @@ public class ThermalManagerService extends SystemService {
             }
         }
 
-        private class Sample {
+        @VisibleForTesting
+        // Since Sample is inside an inner class, we can't make it static
+        // This allows test code to create Sample objects via ThermalManagerService
+        Sample createSampleForTesting(long time, float temperature) {
+            return new Sample(time, temperature);
+        }
+
+        @VisibleForTesting
+        class Sample {
             public long time;
             public float temperature;
 

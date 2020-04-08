@@ -50,6 +50,7 @@ import static org.mockito.ArgumentMatchers.anyInt;
 
 import android.app.ActivityManager.RunningTaskInfo;
 import android.app.ActivityManager.StackInfo;
+import android.app.IRequestFinishCallback;
 import android.app.PictureInPictureParams;
 import android.content.pm.ActivityInfo;
 import android.content.res.Configuration;
@@ -96,10 +97,28 @@ public class TaskOrganizerTests extends WindowTestsBase {
         return registerMockOrganizer(WINDOWING_MODE_MULTI_WINDOW);
     }
 
+    Task createTask(ActivityStack stack, boolean fakeDraw) {
+        final Task task = createTaskInStack(stack, 0);
+
+        if (fakeDraw) {
+            task.setHasBeenVisible(true);
+        }
+        return task;
+    }
+
+    Task createTask(ActivityStack stack) {
+        // Fake draw notifications for most of our tests.
+        return createTask(stack, true);
+    }
+
+    ActivityStack createStack() {
+        return createTaskStackOnDisplay(mDisplayContent);
+    }
+
     @Test
     public void testAppearVanish() throws RemoteException {
-        final ActivityStack stack = createTaskStackOnDisplay(mDisplayContent);
-        final Task task = createTaskInStack(stack, 0 /* userId */);
+        final ActivityStack stack = createStack();
+        final Task task = createTask(stack);
         final ITaskOrganizer organizer = registerMockOrganizer();
 
         task.setTaskOrganizer(organizer);
@@ -110,9 +129,42 @@ public class TaskOrganizerTests extends WindowTestsBase {
     }
 
     @Test
+    public void testAppearWaitsForVisibility() throws RemoteException {
+        final ActivityStack stack = createStack();
+        final Task task = createTask(stack, false);
+        final ITaskOrganizer organizer = registerMockOrganizer();
+
+        task.setTaskOrganizer(organizer);
+
+        verify(organizer, never()).onTaskAppeared(any());
+        task.setHasBeenVisible(true);
+        assertTrue(stack.getHasBeenVisible());
+
+        verify(organizer).onTaskAppeared(any());
+
+        task.removeImmediately();
+        verify(organizer).onTaskVanished(any());
+    }
+
+    @Test
+    public void testNoVanishedIfNoAppear() throws RemoteException {
+        final ActivityStack stack = createStack();
+        final Task task = createTask(stack, false /* hasBeenVisible */);
+        final ITaskOrganizer organizer = registerMockOrganizer();
+
+        // In this test we skip making the Task visible, and verify
+        // that even though a TaskOrganizer is set remove doesn't emit
+        // a vanish callback, because we never emitted appear.
+        task.setTaskOrganizer(organizer);
+        verify(organizer, never()).onTaskAppeared(any());
+        task.removeImmediately();
+        verify(organizer, never()).onTaskVanished(any());
+    }
+
+    @Test
     public void testSwapOrganizer() throws RemoteException {
-        final ActivityStack stack = createTaskStackOnDisplay(mDisplayContent);
-        final Task task = createTaskInStack(stack, 0 /* userId */);
+        final ActivityStack stack = createStack();
+        final Task task = createTask(stack);
         final ITaskOrganizer organizer = registerMockOrganizer(WINDOWING_MODE_MULTI_WINDOW);
         final ITaskOrganizer organizer2 = registerMockOrganizer(WINDOWING_MODE_PINNED);
 
@@ -125,8 +177,8 @@ public class TaskOrganizerTests extends WindowTestsBase {
 
     @Test
     public void testSwapWindowingModes() throws RemoteException {
-        final ActivityStack stack = createTaskStackOnDisplay(mDisplayContent);
-        final Task task = createTaskInStack(stack, 0 /* userId */);
+        final ActivityStack stack = createStack();
+        final Task task = createTask(stack);
         final ITaskOrganizer organizer = registerMockOrganizer(WINDOWING_MODE_MULTI_WINDOW);
         final ITaskOrganizer organizer2 = registerMockOrganizer(WINDOWING_MODE_PINNED);
 
@@ -139,8 +191,8 @@ public class TaskOrganizerTests extends WindowTestsBase {
 
     @Test
     public void testClearOrganizer() throws RemoteException {
-        final ActivityStack stack = createTaskStackOnDisplay(mDisplayContent);
-        final Task task = createTaskInStack(stack, 0 /* userId */);
+        final ActivityStack stack = createStack();
+        final Task task = createTask(stack);
         final ITaskOrganizer organizer = registerMockOrganizer();
 
         stack.setTaskOrganizer(organizer);
@@ -154,8 +206,8 @@ public class TaskOrganizerTests extends WindowTestsBase {
 
     @Test
     public void testUnregisterOrganizer() throws RemoteException {
-        final ActivityStack stack = createTaskStackOnDisplay(mDisplayContent);
-        final Task task = createTaskInStack(stack, 0 /* userId */);
+        final ActivityStack stack = createStack();
+        final Task task = createTask(stack);
         final ITaskOrganizer organizer = registerMockOrganizer();
 
         stack.setWindowingMode(WINDOWING_MODE_MULTI_WINDOW);
@@ -169,12 +221,12 @@ public class TaskOrganizerTests extends WindowTestsBase {
 
     @Test
     public void testUnregisterOrganizerReturnsRegistrationToPrevious() throws RemoteException {
-        final ActivityStack stack = createTaskStackOnDisplay(mDisplayContent);
-        final Task task = createTaskInStack(stack, 0 /* userId */);
-        final ActivityStack stack2 = createTaskStackOnDisplay(mDisplayContent);
-        final Task task2 = createTaskInStack(stack2, 0 /* userId */);
-        final ActivityStack stack3 = createTaskStackOnDisplay(mDisplayContent);
-        final Task task3 = createTaskInStack(stack3, 0 /* userId */);
+        final ActivityStack stack = createStack();
+        final Task task = createTask(stack);
+        final ActivityStack stack2 = createStack();
+        final Task task2 = createTask(stack2);
+        final ActivityStack stack3 = createStack();
+        final Task task3 = createTask(stack3);
         final ITaskOrganizer organizer = registerMockOrganizer(WINDOWING_MODE_MULTI_WINDOW);
 
         // First organizer is registered, verify a task appears when changing windowing mode
@@ -202,9 +254,9 @@ public class TaskOrganizerTests extends WindowTestsBase {
     public void testRegisterTaskOrganizerStackWindowingModeChanges() throws RemoteException {
         final ITaskOrganizer organizer = registerMockOrganizer(WINDOWING_MODE_PINNED);
 
-        final ActivityStack stack = createTaskStackOnDisplay(mDisplayContent);
-        final Task task = createTaskInStack(stack, 0 /* userId */);
-        final Task task2 = createTaskInStack(stack, 0 /* userId */);
+        final ActivityStack stack = createStack();
+        final Task task = createTask(stack);
+        final Task task2 = createTask(stack);
         stack.setWindowingMode(WINDOWING_MODE_PINNED);
         verify(organizer, times(1)).onTaskAppeared(any());
 
@@ -214,8 +266,8 @@ public class TaskOrganizerTests extends WindowTestsBase {
 
     @Test
     public void testRegisterTaskOrganizerWithExistingTasks() throws RemoteException {
-        final ActivityStack stack = createTaskStackOnDisplay(mDisplayContent);
-        final Task task = createTaskInStack(stack, 0 /* userId */);
+        final ActivityStack stack = createStack();
+        final Task task = createTask(stack);
         stack.setWindowingMode(WINDOWING_MODE_PINNED);
 
         final ITaskOrganizer organizer = registerMockOrganizer(WINDOWING_MODE_PINNED);
@@ -369,6 +421,10 @@ public class TaskOrganizerTests extends WindowTestsBase {
             @Override
             public void onTaskInfoChanged(RunningTaskInfo info) throws RemoteException {
             }
+
+            @Override
+            public void onBackPressedOnTaskRoot(RunningTaskInfo taskInfo) {
+            }
         };
         mWm.mAtmService.mTaskOrganizerController.registerTaskOrganizer(listener,
                 WINDOWING_MODE_SPLIT_SCREEN_SECONDARY);
@@ -422,6 +478,10 @@ public class TaskOrganizerTests extends WindowTestsBase {
             public void onTaskInfoChanged(RunningTaskInfo info) throws RemoteException {
                 lastReportedTiles.add(info);
                 called[0] = true;
+            }
+
+            @Override
+            public void onBackPressedOnTaskRoot(RunningTaskInfo taskInfo) {
             }
         };
         mWm.mAtmService.mTaskOrganizerController.registerTaskOrganizer(listener,
@@ -479,6 +539,10 @@ public class TaskOrganizerTests extends WindowTestsBase {
             @Override
             public void onTaskInfoChanged(RunningTaskInfo info) {
                 lastReportedTiles.put(info.token.asBinder(), info);
+            }
+
+            @Override
+            public void onBackPressedOnTaskRoot(RunningTaskInfo taskInfo) {
             }
         };
         mWm.mAtmService.mTaskOrganizerController.registerTaskOrganizer(
@@ -560,8 +624,8 @@ public class TaskOrganizerTests extends WindowTestsBase {
 
     @Test
     public void testTrivialBLASTCallback() throws RemoteException {
-        final ActivityStack stackController1 = createTaskStackOnDisplay(mDisplayContent);
-        final Task task = createTaskInStack(stackController1, 0 /* userId */);
+        final ActivityStack stackController1 = createStack();
+        final Task task = createTask(stackController1);
         final ITaskOrganizer organizer = registerMockOrganizer();
 
         spyOn(task);
@@ -582,8 +646,8 @@ public class TaskOrganizerTests extends WindowTestsBase {
 
     @Test
     public void testOverlappingBLASTCallback() throws RemoteException {
-        final ActivityStack stackController1 = createTaskStackOnDisplay(mDisplayContent);
-        final Task task = createTaskInStack(stackController1, 0 /* userId */);
+        final ActivityStack stackController1 = createStack();
+        final Task task = createTask(stackController1);
         final ITaskOrganizer organizer = registerMockOrganizer();
 
         spyOn(task);
@@ -611,8 +675,8 @@ public class TaskOrganizerTests extends WindowTestsBase {
 
     @Test
     public void testBLASTCallbackWithWindow() {
-        final ActivityStack stackController1 = createTaskStackOnDisplay(mDisplayContent);
-        final Task task = createTaskInStack(stackController1, 0 /* userId */);
+        final ActivityStack stackController1 = createStack();
+        final Task task = createTask(stackController1);
         final ITaskOrganizer organizer = registerMockOrganizer();
         final WindowState w = createAppWindow(task, TYPE_APPLICATION, "Enlightened Window");
         makeWindowVisible(w);
@@ -635,8 +699,8 @@ public class TaskOrganizerTests extends WindowTestsBase {
 
     @Test
     public void testBLASTCallbackWithInvisibleWindow() {
-        final ActivityStack stackController1 = createTaskStackOnDisplay(mDisplayContent);
-        final Task task = createTaskInStack(stackController1, 0 /* userId */);
+        final ActivityStack stackController1 = createStack();
+        final Task task = createTask(stackController1);
         final ITaskOrganizer organizer = registerMockOrganizer();
         final WindowState w = createAppWindow(task, TYPE_APPLICATION, "Enlightened Window");
 
@@ -657,8 +721,8 @@ public class TaskOrganizerTests extends WindowTestsBase {
 
     @Test
     public void testBLASTCallbackWithChildWindow() {
-        final ActivityStack stackController1 = createTaskStackOnDisplay(mDisplayContent);
-        final Task task = createTaskInStack(stackController1, 0 /* userId */);
+        final ActivityStack stackController1 = createStack();
+        final Task task = createTask(stackController1);
         final ITaskOrganizer organizer = registerMockOrganizer();
         final WindowState w = createAppWindow(task, TYPE_APPLICATION, "Enlightened Window");
         final WindowState child = createWindow(w, TYPE_APPLICATION, "Other Window");
@@ -700,6 +764,9 @@ public class TaskOrganizerTests extends WindowTestsBase {
         @Override
         public void onTaskInfoChanged(RunningTaskInfo info) {
         }
+        @Override
+        public void onBackPressedOnTaskRoot(RunningTaskInfo taskInfo) {
+        }
     };
 
     private ActivityRecord makePipableActivity() {
@@ -708,6 +775,8 @@ public class TaskOrganizerTests extends WindowTestsBase {
         record.info.flags |= ActivityInfo.FLAG_SUPPORTS_PICTURE_IN_PICTURE;
         spyOn(record);
         doReturn(true).when(record).checkEnterPictureInPictureState(any(), anyBoolean());
+
+        record.getRootTask().setHasBeenVisible(true);
         return record;
     }
 
@@ -754,5 +823,51 @@ public class TaskOrganizerTests extends WindowTestsBase {
         final Rational ratio = o.mChangedInfo.pictureInPictureParams.getAspectRatioRational();
         assertEquals(3, ratio.getNumerator());
         assertEquals(4, ratio.getDenominator());
+    }
+
+    @Test
+    public void testPreventDuplicateAppear() throws RemoteException {
+        final ActivityStack stack = createStack();
+        final Task task = createTask(stack);
+        final ITaskOrganizer organizer = registerMockOrganizer();
+
+        task.setTaskOrganizer(organizer);
+        // setHasBeenVisible was already called once by the set-up code.
+        task.setHasBeenVisible(true);
+        verify(organizer, times(1)).onTaskAppeared(any());
+
+        task.taskOrganizerUnregistered();
+        task.setTaskOrganizer(organizer);
+        verify(organizer, times(2)).onTaskAppeared(any());
+
+        task.removeImmediately();
+        verify(organizer).onTaskVanished(any());
+    }
+
+    @Test
+    public void testInterceptBackPressedOnTaskRoot() throws RemoteException {
+        final ActivityStack stack = createStack();
+        final Task task = createTask(stack);
+        final ActivityRecord activity = WindowTestUtils.createActivityRecordInTask(
+                stack.mDisplayContent, task);
+        final ITaskOrganizer organizer = registerMockOrganizer(WINDOWING_MODE_MULTI_WINDOW);
+
+        // Setup the task to be controlled by the MW mode organizer
+        stack.setWindowingMode(WINDOWING_MODE_MULTI_WINDOW);
+        assertTrue(stack.isOrganized());
+
+        // Verify a back pressed does not call the organizer
+        mWm.mAtmService.onBackPressedOnTaskRoot(activity.token,
+                new IRequestFinishCallback.Default());
+        verify(organizer, never()).onBackPressedOnTaskRoot(any());
+
+        // Enable intercepting back
+        mWm.mAtmService.mTaskOrganizerController.setInterceptBackPressedOnTaskRoot(organizer,
+                true);
+
+        // Verify now that the back press does call the organizer
+        mWm.mAtmService.onBackPressedOnTaskRoot(activity.token,
+                new IRequestFinishCallback.Default());
+        verify(organizer, times(1)).onBackPressedOnTaskRoot(any());
     }
 }

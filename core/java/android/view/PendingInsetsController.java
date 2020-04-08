@@ -42,6 +42,7 @@ public class PendingInsetsController implements WindowInsetsController {
     private InsetsController mReplayedInsetsController;
     private ArrayList<OnControllableInsetsChangedListener> mControllableInsetsChangedListeners
             = new ArrayList<>();
+    private int mCaptionInsetsHeight = 0;
 
     @Override
     public void show(int types) {
@@ -80,6 +81,11 @@ public class PendingInsetsController implements WindowInsetsController {
     }
 
     @Override
+    public void setCaptionInsetsHeight(int height) {
+        mCaptionInsetsHeight = height;
+    }
+
+    @Override
     public void setSystemBarsBehavior(int behavior) {
         if (mReplayedInsetsController != null) {
             mReplayedInsetsController.setSystemBarsBehavior(behavior);
@@ -99,6 +105,14 @@ public class PendingInsetsController implements WindowInsetsController {
     @Override
     public InsetsState getState() {
         return mDummyState;
+    }
+
+    @Override
+    public boolean isRequestedVisible(int type) {
+
+        // Method is only used once real insets controller is attached, so no need to traverse
+        // requests here.
+        return InsetsState.getDefaultVisibility(type);
     }
 
     @Override
@@ -133,6 +147,9 @@ public class PendingInsetsController implements WindowInsetsController {
         }
         if (mAppearanceMask != 0) {
             controller.setSystemBarsAppearance(mAppearance, mAppearanceMask);
+        }
+        if (mCaptionInsetsHeight != 0) {
+            controller.setCaptionInsetsHeight(mCaptionInsetsHeight);
         }
         int size = mRequests.size();
         for (int i = 0; i < size; i++) {

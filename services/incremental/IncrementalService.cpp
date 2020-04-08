@@ -157,7 +157,6 @@ std::string makeBindMdName() {
 
 IncrementalService::IncFsMount::~IncFsMount() {
     incrementalService.mDataLoaderManager->destroyDataLoader(mountId);
-    control.reset();
     LOG(INFO) << "Unmounting and cleaning up mount " << mountId << " with root '" << root << '\'';
     for (auto&& [target, _] : bindPoints) {
         LOG(INFO) << "\tbind: " << target;
@@ -286,7 +285,6 @@ void IncrementalService::onDump(int fd) {
             dprintf(fd, "\t\t\tpackageName: %s\n", params.packageName.c_str());
             dprintf(fd, "\t\t\tclassName: %s\n", params.className.c_str());
             dprintf(fd, "\t\t\targuments: %s\n", params.arguments.c_str());
-            dprintf(fd, "\t\t\tdynamicArgs: %d\n", int(params.dynamicArgs.size()));
         }
         dprintf(fd, "\t\tstorages (%d):\n", int(mnt.storages.size()));
         for (auto&& [storageId, storage] : mnt.storages) {
@@ -425,9 +423,10 @@ StorageId IncrementalService::createStorage(
             LOG(ERROR) << "Vold::mountIncFs() returned invalid control parcel.";
             return kInvalidStorageId;
         }
-        control.cmd = controlParcel.cmd.release().release();
-        control.pendingReads = controlParcel.pendingReads.release().release();
-        control.logs = controlParcel.log.release().release();
+        int cmd = controlParcel.cmd.release().release();
+        int pendingReads = controlParcel.pendingReads.release().release();
+        int logs = controlParcel.log.release().release();
+        control = mIncFs->createControl(cmd, pendingReads, logs);
     }
 
     std::unique_lock l(mLock);
@@ -966,16 +965,17 @@ bool IncrementalService::mountExistingImage(std::string_view root, std::string_v
     auto mountTarget = path::join(root, constants().mount);
     const auto backing = path::join(root, constants().backing);
 
-    IncFsMount::Control control;
     IncrementalFileSystemControlParcel controlParcel;
     auto status = mVold->mountIncFs(backing, mountTarget, 0, &controlParcel);
     if (!status.isOk()) {
         LOG(ERROR) << "Vold::mountIncFs() failed: " << status.toString8();
         return false;
     }
-    control.cmd = controlParcel.cmd.release().release();
-    control.pendingReads = controlParcel.pendingReads.release().release();
-    control.logs = controlParcel.log.release().release();
+
+    int cmd = controlParcel.cmd.release().release();
+    int pendingReads = controlParcel.pendingReads.release().release();
+    int logs = controlParcel.log.release().release();
+    IncFsMount::Control control = mIncFs->createControl(cmd, pendingReads, logs);
 
     auto ifs = std::make_shared<IncFsMount>(std::string(root), -1, std::move(control), *this);
 
@@ -1085,10 +1085,10 @@ bool IncrementalService::prepareDataLoader(IncrementalService::IncFsMount& ifs,
     }
     FileSystemControlParcel fsControlParcel;
     fsControlParcel.incremental = aidl::make_nullable<IncrementalFileSystemControlParcel>();
-    fsControlParcel.incremental->cmd.reset(base::unique_fd(::dup(ifs.control.cmd)));
+    fsControlParcel.incremental->cmd.reset(base::unique_fd(::dup(ifs.control.cmd())));
     fsControlParcel.incremental->pendingReads.reset(
-            base::unique_fd(::dup(ifs.control.pendingReads)));
-    fsControlParcel.incremental->log.reset(base::unique_fd(::dup(ifs.control.logs)));
+            base::unique_fd(::dup(ifs.control.pendingReads())));
+    fsControlParcel.incremental->log.reset(base::unique_fd(::dup(ifs.control.logs())));
     sp<IncrementalDataLoaderListener> listener =
             new IncrementalDataLoaderListener(*this,
                                               externalListener ? *externalListener

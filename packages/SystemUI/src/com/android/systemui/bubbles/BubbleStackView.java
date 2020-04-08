@@ -22,8 +22,6 @@ import static android.view.ViewGroup.LayoutParams.WRAP_CONTENT;
 import static com.android.systemui.Interpolators.FAST_OUT_SLOW_IN;
 import static com.android.systemui.Prefs.Key.HAS_SEEN_BUBBLES_EDUCATION;
 import static com.android.systemui.Prefs.Key.HAS_SEEN_BUBBLES_MANAGE_EDUCATION;
-import static com.android.systemui.bubbles.BadgedImageView.DOT_STATE_DEFAULT;
-import static com.android.systemui.bubbles.BadgedImageView.DOT_STATE_SUPPRESSED_FOR_FLYOUT;
 import static com.android.systemui.bubbles.BubbleDebugConfig.DEBUG_BUBBLE_STACK_VIEW;
 import static com.android.systemui.bubbles.BubbleDebugConfig.DEBUG_USER_EDUCATION;
 import static com.android.systemui.bubbles.BubbleDebugConfig.TAG_BUBBLES;
@@ -226,7 +224,7 @@ public class BubbleStackView extends FrameLayout {
     private boolean mIsExpanded;
 
     /** Whether the stack is currently on the left side of the screen, or animating there. */
-    private boolean mStackOnLeftOrWillBe = false;
+    private boolean mStackOnLeftOrWillBe = true;
 
     /** Whether a touch gesture, such as a stack/bubble drag or flyout drag, is in progress. */
     private boolean mIsGestureInProgress = false;
@@ -936,16 +934,19 @@ public class BubbleStackView extends FrameLayout {
             mStackOnLeftOrWillBe = mStackAnimationController.isStackOnLeftSide();
         }
 
+        if (bubble.getIconView() == null) {
+            return;
+        }
+
         // Set the dot position to the opposite of the side the stack is resting on, since the stack
         // resting slightly off-screen would result in the dot also being off-screen.
-        bubble.getIconView().setDotPosition(
+        bubble.getIconView().setDotPositionOnLeft(
                 !mStackOnLeftOrWillBe /* onLeft */, false /* animate */);
 
         mBubbleContainer.addView(bubble.getIconView(), 0,
                 new FrameLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT));
         ViewClippingUtil.setClippingDeactivated(bubble.getIconView(), true, mClippingParameters);
         animateInFlyoutForBubble(bubble);
-        updatePointerPosition();
         requestUpdate();
         logBubbleEvent(bubble, SysUiStatsLog.BUBBLE_UICHANGED__ACTION__POSTED);
     }
@@ -961,8 +962,7 @@ public class BubbleStackView extends FrameLayout {
             if (v instanceof BadgedImageView
                     && ((BadgedImageView) v).getKey().equals(bubble.getKey())) {
                 mBubbleContainer.removeViewAt(i);
-                bubble.cleanupExpandedState();
-                bubble.setInflated(false);
+                bubble.cleanupViews();
                 logBubbleEvent(bubble, SysUiStatsLog.BUBBLE_UICHANGED__ACTION__DISMISSED);
                 return;
             }
@@ -1004,8 +1004,8 @@ public class BubbleStackView extends FrameLayout {
             Bubble bubble = bubbles.get(i);
             mBubbleContainer.reorderView(bubble.getIconView(), i);
         }
-
         updateBubbleZOrdersAndDotPosition(false /* animate */);
+        updatePointerPosition();
     }
 
     void showOverflow() {
@@ -1393,7 +1393,7 @@ public class BubbleStackView extends FrameLayout {
     /** Called when a drag operation on an individual bubble has started. */
     public void onBubbleDragStart(View bubble) {
         if (DEBUG_BUBBLE_STACK_VIEW) {
-            Log.d(TAG, "onBubbleDragStart: bubble=" + bubble);
+            Log.d(TAG, "onBubbleDragStart: bubble=" + ((BadgedImageView) bubble).getKey());
         }
 
         if (mBubbleOverflow != null && bubble.equals(mBubbleOverflow.getIconView())) {
@@ -1698,7 +1698,7 @@ public class BubbleStackView extends FrameLayout {
                 || mBubbleToExpandAfterFlyoutCollapse != null
                 || bubbleView == null) {
             if (bubbleView != null) {
-                bubbleView.setDotState(DOT_STATE_DEFAULT);
+                bubbleView.removeDotSuppressionFlag(BadgedImageView.SuppressionFlag.FLYOUT_VISIBLE);
             }
             // Skip the message if none exists, we're expanded or animating expansion, or we're
             // about to expand a bubble from the previous tapped flyout, or if bubble view is null.
@@ -1717,12 +1717,16 @@ public class BubbleStackView extends FrameLayout {
                 mBubbleData.setExpanded(true);
                 mBubbleToExpandAfterFlyoutCollapse = null;
             }
-            bubbleView.setDotState(DOT_STATE_DEFAULT);
+
+            // Stop suppressing the dot now that the flyout has morphed into the dot.
+            bubbleView.removeDotSuppressionFlag(
+                    BadgedImageView.SuppressionFlag.FLYOUT_VISIBLE);
         };
         mFlyout.setVisibility(INVISIBLE);
 
-        // Don't show the dot when we're animating the flyout
-        bubbleView.setDotState(DOT_STATE_SUPPRESSED_FOR_FLYOUT);
+        // Suppress the dot when we are animating the flyout.
+        bubbleView.addDotSuppressionFlag(
+                BadgedImageView.SuppressionFlag.FLYOUT_VISIBLE);
 
         // Start flyout expansion. Post in case layout isn't complete and getWidth returns 0.
         post(() -> {
@@ -1743,6 +1747,11 @@ public class BubbleStackView extends FrameLayout {
                 };
                 mFlyout.postDelayed(mAnimateInFlyout, 200);
             };
+
+            if (bubble.getIconView() == null) {
+                return;
+            }
+
             mFlyout.setupFlyoutStartingAsDot(flyoutMessage,
                     mStackAnimationController.getStackPosition(), getWidth(),
                     mStackAnimationController.isStackOnLeftSide(),
@@ -1877,9 +1886,19 @@ public class BubbleStackView extends FrameLayout {
         for (int i = 0; i < bubbleCount; i++) {
             BadgedImageView bv = (BadgedImageView) mBubbleContainer.getChildAt(i);
             bv.setZ((mMaxBubbles * mBubbleElevation) - i);
+
             // If the dot is on the left, and so is the stack, we need to change the dot position.
             if (bv.getDotPositionOnLeft() == mStackOnLeftOrWillBe) {
-                bv.setDotPosition(!mStackOnLeftOrWillBe, animate);
+                bv.setDotPositionOnLeft(!mStackOnLeftOrWillBe, animate);
+            }
+
+            if (!mIsExpanded && i > 0) {
+                // If we're collapsed and this bubble is behind other bubbles, suppress its dot.
+                bv.addDotSuppressionFlag(
+                        BadgedImageView.SuppressionFlag.BEHIND_STACK);
+            } else {
+                bv.removeDotSuppressionFlag(
+                        BadgedImageView.SuppressionFlag.BEHIND_STACK);
             }
         }
     }
@@ -1889,6 +1908,9 @@ public class BubbleStackView extends FrameLayout {
             return;
         }
         int index = getBubbleIndex(mExpandedBubble);
+        if (index == -1) {
+            return;
+        }
         float bubbleLeftFromScreenLeft = mExpandedAnimationController.getBubbleLeft(index);
         float halfBubble = mBubbleSize / 2f;
         float bubbleCenter = bubbleLeftFromScreenLeft + halfBubble;

@@ -65,6 +65,7 @@ import android.content.ContentResolver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.pm.PackageManager;
 import android.content.res.Configuration;
 import android.database.ContentObserver;
 import android.telephony.SubscriptionInfo;
@@ -5457,12 +5458,25 @@ public class ConnectivityService extends IConnectivityManager.Stub
         }
     }
 
+    private boolean checkUnsupportedStartingFrom(int version, String callingPackageName) {
+        final PackageManager pm = mContext.getPackageManager();
+        final int userId = UserHandle.getCallingUserId();
+        try {
+            final int callingVersion = pm.getApplicationInfoAsUser(
+                    callingPackageName, 0 /* flags */, userId).targetSdkVersion;
+            if (callingVersion < version) return false;
+        } catch (PackageManager.NameNotFoundException e) { }
+        return true;
+    }
+
     @Override
     public NetworkRequest requestNetwork(NetworkCapabilities networkCapabilities,
             Messenger messenger, int timeoutMs, IBinder binder, int legacyType,
             @NonNull String callingPackageName) {
         if (legacyType != TYPE_NONE && !checkNetworkStackPermission()) {
-            throw new SecurityException("Insufficient permissions to specify legacy type");
+            if (checkUnsupportedStartingFrom(Build.VERSION_CODES.M, callingPackageName)) {
+                throw new SecurityException("Insufficient permissions to specify legacy type");
+            }
         }
         final int callingUid = Binder.getCallingUid();
         final NetworkRequest.Type type = (networkCapabilities == null)
@@ -8019,19 +8033,18 @@ public class ConnectivityService extends IConnectivityManager.Stub
             return false;
         }
 
+        final Network[] underlyingNetworks;
         synchronized (mVpns) {
-            if (getVpnIfOwner(callbackUid) != null) {
-                return true;
-            }
+            final Vpn vpn = getVpnIfOwner(callbackUid);
+            underlyingNetworks = (vpn == null) ? null : vpn.getUnderlyingNetworks();
+        }
+        if (underlyingNetworks != null) {
+            if (Arrays.asList(underlyingNetworks).contains(nai.network)) return true;
         }
 
         // Administrator UIDs also contains the Owner UID
         final int[] administratorUids = nai.networkCapabilities.getAdministratorUids();
-        for (final int uid : administratorUids) {
-            if (uid == callbackUid) return true;
-        }
-
-        return false;
+        return ArrayUtils.contains(administratorUids, callbackUid);
     }
 
     @Override
