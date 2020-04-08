@@ -5128,7 +5128,7 @@ public class ActivityManagerService extends IActivityManager.Stub
 
         EventLogTags.writeAmProcBound(app.userId, app.pid, app.processName);
 
-        if (mUxPerf != null && app.hostingRecord != null && "activity".equals(app.hostingRecord.getType())) {
+        if (mUxPerf != null && app.hostingRecord != null && app.hostingRecord.isTopApp()) {
             mUxPerf.perfHint(BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST, app.processName, app.pid, BoostFramework.Launch.TYPE_ATTACH_APPLICATION);
         }
 
