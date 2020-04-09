@@ -90,6 +90,7 @@ public final class SoftApConfiguration implements Parcelable {
      * 2GHz + 5GHz or 2GHz + 6GHz concurrent Dual band.
      * @hide
      */
+    @SystemApi
     public static final int BAND_DUAL = 1 << 3;
 
     /**
