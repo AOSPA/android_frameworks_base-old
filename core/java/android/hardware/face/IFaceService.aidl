@@ -105,4 +105,8 @@ interface IFaceService {
     void getFeature(int userId, int feature, IFaceServiceReceiver receiver, String opPackageName);
 
     void userActivity();
+
+    // Start face enrollment from Ext Service
+    void enrollExt(IBinder token, in byte [] cryptoToken, IFaceServiceReceiver receiver,
+            String opPackageName, in int [] disabledFeatures);
 }

@@ -152,4 +152,7 @@
     <!-- Default value for Horizon light color (Blue) -->
     <integer name="config_AmbientPulseLightColor">0x3980FF</integer>
 
+    <!-- Defines the component for the external face service -->
+    <string name="config_externalFaceService"></string>
+
 </resources>
