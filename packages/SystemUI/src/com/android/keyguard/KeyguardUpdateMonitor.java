@@ -98,6 +98,7 @@ import com.android.internal.util.Preconditions;
 import com.android.internal.widget.LockPatternUtils;
 import com.android.keyguard.KeyguardSecurityModel.SecurityMode;
 import com.android.settingslib.WirelessUtils;
+import com.android.systemui.aospa.ParanoidFaceManager;
 import com.android.systemui.R;
 import com.android.systemui.shared.system.ActivityManagerWrapper;
 import com.android.systemui.shared.system.TaskStackChangeListener;
@@ -266,6 +267,9 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
     private boolean mLogoutEnabled;
     // If the user long pressed the lock icon, disabling face auth for the current session.
     private boolean mLockIconPressed;
+
+    private boolean mPaFaceUnlockServiceChecked = false;
+    private boolean mPaFaceUnlockServiceEnabled = false;
 
     /**
      * Short delay before restarting biometric authentication after a successful try
@@ -453,6 +457,16 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
     private static int sCurrentUser;
     private Runnable mUpdateBiometricListeningState = this::updateBiometricListeningState;
     private static boolean sDisableHandlerCheckForTesting;
+
+    public void stopCameraAndDetectFace() {
+        mFaceManager.setStartStopCamera();
+        updateFaceListeningState();
+        Log.d("keyguard", "complete stopcameraanddetectface");
+    }
+
+    public boolean getCameraStopCompleted() {
+        return mFaceManager.getCameraStopCompleted();
+    }
 
     public synchronized static void setCurrentUser(int currentUser) {
         sCurrentUser = currentUser;
@@ -833,6 +847,13 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
             }
             if (DEBUG_FACE) Log.d(TAG, "Face auth succeeded for user " + userId);
             onFaceAuthenticated(userId);
+            setFaceRunningState(BIOMETRIC_STATE_STOPPED);
+            for (int i = 0; i < mCallbacks.size(); i++) {
+                KeyguardUpdateMonitorCallback cb = (KeyguardUpdateMonitorCallback) mCallbacks.get(i).get();
+                if (cb != null) {
+                    cb.onPaFaceUnlockSuccess();
+                }
+            }
         } finally {
             setFaceRunningState(BIOMETRIC_STATE_STOPPED);
         }
@@ -847,6 +868,13 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
                 cb.onBiometricHelp(msgId, helpString, BiometricSourceType.FACE);
             }
         }
+    }
+
+    private boolean isFaceLockout() {
+        if (mFaceManager != null) {
+            return mFaceManager.isLockout();
+        }
+        return false;
     }
 
     private Runnable mRetryFaceAuthentication = new Runnable() {
@@ -892,6 +920,12 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
     }
 
     private void handleFaceLockoutReset() {
+        for (int i = 0; i < mCallbacks.size(); i++) {
+            KeyguardUpdateMonitorCallback cb = (KeyguardUpdateMonitorCallback) mCallbacks.get(i).get();
+            if (cb != null) {
+                cb.onPaFaceLockoutReset();
+            }
+        }
         updateFaceListeningState();
     }
 
@@ -1019,6 +1053,16 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
 
     public StrongAuthTracker getStrongAuthTracker() {
         return mStrongAuthTracker;
+    }
+
+    public void reportSuccessfulStrongAuthUnlockAttempt() {
+        handleStrongAuthUnlockAttempt(true);
+    }
+
+    public void handleStrongAuthUnlockAttempt(boolean success) {
+        if (success && mFaceManager != null) {
+            mFaceManager.onStrongAuthenticateSuccess();
+        }
     }
 
     private void notifyStrongAuthStateChanged(int userId) {
@@ -1260,7 +1304,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
     private CancellationSignal mFingerprintCancelSignal;
     private CancellationSignal mFaceCancelSignal;
     private FingerprintManager mFpm;
-    private FaceManager mFaceManager;
+    private ParanoidFaceManager mFaceManager;
 
     /**
      * When we receive a
@@ -1489,6 +1533,10 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
     }
 
     private void handleScreenTurnedOff() {
+        if (mFaceManager != null && isPaFaceUnlockServiceEnabled() 
+                    && !isUserInLockdown(getCurrentUser())) {
+            mFaceManager.bind(true);
+        }
         mHardwareFingerprintUnavailableRetryCount = 0;
         mHardwareFaceUnavailableRetryCount = 0;
         final int count = mCallbacks.size();
@@ -1612,8 +1660,10 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
         if (mContext.getPackageManager().hasSystemFeature(PackageManager.FEATURE_FINGERPRINT)) {
             mFpm = (FingerprintManager) context.getSystemService(Context.FINGERPRINT_SERVICE);
         }
-        if (mContext.getPackageManager().hasSystemFeature(PackageManager.FEATURE_FACE)) {
-            mFaceManager = (FaceManager) context.getSystemService(Context.FACE_SERVICE);
+
+        if (isPaFaceUnlockServiceEnabled()) {
+            mFaceManager = new ParanoidFaceManager(mContext, null);
+            registerCallback(mFaceManager.getMonitorCallback());
         }
 
         if (mFpm != null || mFaceManager != null) {
@@ -1775,7 +1825,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
                 && !mSwitchingUser && !isFaceDisabled(user) && becauseCannotSkipBouncer
                 && !mKeyguardGoingAway && mFaceSettingEnabledForUser.get(user) && !mLockIconPressed
                 && strongAuthAllowsScanning && mIsPrimaryUser
-                && !mSecureCameraLaunched;
+                && !mSecureCameraLaunched && !isFaceLockout() && isPaFaceUnlockServiceEnabled();
     }
 
     /**
@@ -2773,5 +2823,21 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
             }
         }
         return mPulsing;
+    }
+
+    public boolean isPaFaceUnlockServiceEnabled() {
+        if (mPaFaceUnlockServiceChecked) {
+            return mPaFaceUnlockServiceEnabled;
+        }
+        long elapsedRealtime = SystemClock.elapsedRealtime();
+        try {
+            mContext.getPackageManager().getPackageInfo("com.paranoid.facesense", 0);
+            mPaFaceUnlockServiceEnabled = mContext.getPackageManager().getApplicationInfo("com.paranoid.facesense", 0).enabled;
+            mPaFaceUnlockServiceChecked = true;
+        } catch (PackageManager.NameNotFoundException unused) {
+            Log.d("KeyguardUpdateMonitor", "isPaFaceUnlockServiceEnabled: NameNotFoundException");
+        }
+        Log.d("KeyguardUpdateMonitor", "isPaFaceUnlockServiceEnabled: " + mPaFaceUnlockServiceEnabled + (SystemClock.elapsedRealtime() - elapsedRealtime));
+        return mPaFaceUnlockServiceEnabled;
     }
 }

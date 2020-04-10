@@ -1,0 +1,278 @@
+package com.android.systemui.aospa;
+
+import android.content.Context;
+import android.hardware.biometrics.CryptoObject;
+import android.hardware.face.Face;
+import android.hardware.face.FaceManager;
+import android.hardware.face.FaceManager.AuthenticationCallback;
+import android.hardware.face.FaceManager.AuthenticationResult;
+import android.hardware.face.IFaceService;
+import android.os.CancellationSignal;
+import android.os.Handler;
+import android.os.Message;
+import android.os.Trace;
+
+import com.android.keyguard.KeyguardUpdateMonitor;
+import com.android.keyguard.KeyguardUpdateMonitorCallback;
+import com.android.systemui.aospa.facesense.ParanoidFaceService;
+import com.android.systemui.aospa.facesense.ParanoidFaceServiceImpl;
+
+import vendor.pa.biometrics.face.V1_0.IFaceServiceReceiver;
+
+public class ParanoidFaceManager extends FaceManager {
+
+    private static final TAG = "ParanoidFaceManager";
+
+    public int LOCKOUT_PENALTY_TIME_INTERVAL = 30000;
+
+    private static final int MSG_ACQUIRED = 101;
+    private static final int MSG_AUTHENTICATION_SUCCEEDED = 102;
+    private static final int MSG_AUTHENTICATION_FAILED = 103;
+    private static final int MSG_LOCKOUT = 201;
+    private static final int MSG_LOCKOUT_RESET = 202;
+
+    private Context mContext;
+
+    public ParanoidFaceService mService;
+    private AuthenticationCallback mAuthenticationCallback;
+    private CryptoObject mCryptoObject;
+    public int mFaceAuthFailCount = 0;
+    public Handler mHandler;
+    public boolean mIsLockOut = false;
+    private final KeyguardUpdateMonitorCallback mKeyguardUpdateMonitorCallback = new KeyguardUpdateMonitorCallback() {
+        @Override
+        public void onKeyguardVisibilityChanged(boolean showing) {
+            Log.d(TAG, "onKeyguardVisibilityChanged: " + showing);
+            if (!showing) {
+                bind(false);
+            }
+        }
+    };
+    private FaceManager.LockoutResetCallback mLockoutResetCallback;
+    private IFaceServiceReceiver mServiceReceiver = new IFaceServiceReceiver.Stub() {
+        @Override
+        public void onAcquired(int i) {
+            mHandler.obtainMessage(MSG_ACQUIRED, i, 0).sendToTarget();
+        }
+
+        @Override
+        public void onAuthenticationSucceeded(long j, int i) {
+            mHandler.obtainMessage(MSG_AUTHENTICATION_SUCCEEDED, i, 0).sendToTarget();
+        }
+
+        @Override
+        public void onAuthenticationFailed(int i) {
+            if (!mIsLockOut && i > 0) {
+                mFaceAuthFailCount = mFaceAuthFailCount + 1;
+                Log.d(TAG, "mFaceAuthFailCount: #" + mFaceAuthFailCount);
+                if (mFaceAuthFailCount >= 5) {
+                    Message obtainMessage = mHandler.obtainMessage(MSG_LOCKOUT);
+                    obtainMessage.arg1 = LOCKOUT_PENALTY_TIME_INTERVAL;
+                    mHandler.sendMessage(obtainMessage);
+                }
+            }
+            mHandler.obtainMessage(MSG_AUTHENTICATION_FAILED).sendToTarget();
+        }
+    };
+
+    public boolean hasEnrolledTemplates() {
+        return true;
+    }
+
+    public boolean hasEnrolledTemplates(int i) {
+        return true;
+    }
+
+    public ParanoidFaceManager(Context context, IFaceService service) {
+        super(context, service);
+        mContext = context;
+        mService = getFaceService();
+        mHandler = new ParanoidFaceHandler(context);
+    }
+
+    public KeyguardUpdateMonitorCallback getMonitorCallback() {
+        return mKeyguardUpdateMonitorCallback;
+    }
+
+    private ParanoidFaceService getFaceService() {
+        if (mService == null) {
+            mService = new ParanoidFaceServiceImpl(mContext, mServiceReceiver);
+        }
+        return mService;
+    }
+
+    public void bind(boolean shouldBind) {
+        if (!shouldBind) {
+            Log.d(TAG, "UnBinding paranoid face service");
+            if (mService != null) {
+                mService.unbindFaceUnlockService();
+            }
+            return;
+        }
+            
+        Log.d(TAG, "Binding paranoid face service");
+        if (mService != null) {
+            mService.bindFaceUnlockService();
+        }
+    }
+
+    public void onStrongAuthenticateSuccess() {
+        Log.d(TAG, "onStrongAuthenticateSuccess");
+        setLockout(0, true);
+    }
+
+    public void authenticate(CryptoObject cryptoObject, CancellationSignal signal, int flags, AuthenticationCallback cb, Handler handler, int userId) {
+        Log.d(TAG, "Trigger face authenticate");
+        if (cb != null) {
+            if (signal != null) {
+                if (signal.isCanceled()) {
+                    Log.d(TAG, "Authentication already canceled");
+                    return;
+                }
+                signal.setOnCancelListener(new OnAuthenticationCancelListener(cryptoObject));
+            }
+            if (mIsLockOut) {
+                cb.onAuthenticationError(7, FaceManager.getErrorString(mContext, 7, 0));
+                return;
+            }
+            bind(true);
+            if (mService != null) {
+                mAuthenticationCallback = cb;
+                mCryptoObject = cryptoObject;
+                mService.setCurrentUserId(userId);
+                mService.startCameraAndDetectFace();
+                return;
+            }
+            return;
+        }
+        throw new IllegalArgumentException("Must supply an authentication callback");
+    }
+
+    private class OnAuthenticationCancelListener implements CancellationSignal.OnCancelListener {
+        private CryptoObject mCrypto;
+
+        OnAuthenticationCancelListener(CryptoObject cryptoObject) {
+            mCrypto = cryptoObject;
+        }
+
+        public void onCancel() {
+            stopAuthentication();
+        }
+    }
+
+    public void stopAuthentication() {
+        if (mService != null) {
+            mService.stopCameraAndDetectFace();
+        }
+    }
+
+    private class ParanoidFaceHandler extends Handler {
+        private ParanoidFaceHandler(Context context) {
+            super(context.getMainLooper());
+        }
+
+        @Override
+        public void handleMessage(Message message) {
+            Trace.beginSection("FaceManager#handleMessage: " + Integer.toString(message.what));
+            if (message.what == MSG_LOCKOUT) {
+                Log.d(TAG, "MSG_LOCKOUT");
+                setLockout(message.arg1, false);
+            } else if (message.what != MSG_LOCKOUT_RESET) {
+                switch (message.what) {
+                    case MSG_ACQUIRED:
+                        Log.d(TAG, "MSG_ACQUIRED");
+                        handleAcquiredResult(message.arg1);
+                        break;
+                    case MSG_AUTHENTICATION_SUCCEEDED:
+                        Log.d(TAG, "MSG_AUTHENTICATION_SUCCEEDED");
+                        mService.setStartStopCamera();
+                        handleAuthSucceeded(message.arg1);
+                        bind(false);
+                        break;
+                    case MSG_AUTHENTICATION_FAILED:
+                        Log.d(TAG, "MSG_AUTHENTICATION_FAILED");
+                        handleAuthFailed();
+                        break;
+                    default:
+                        Log.d(TAG, "Unknown message: " + message.what);
+                        break;
+                }
+            } else {
+                Log.d(TAG, "MSG_UNLOCKOUT");
+                setLockout(0, true);
+            }
+            Trace.endSection();
+        }
+    }
+
+    public void addLockoutResetCallback(FaceManager.LockoutResetCallback lockoutResetCallback) {
+        if (mService != null) {
+            mLockoutResetCallback = lockoutResetCallback;
+        } else {
+            Log.d(TAG, "Cannot add lockout reset callback: Service not connected!");
+        }
+    }
+
+    public boolean isLockout() {
+        return mIsLockOut;
+    }
+
+    public void setLockout(int messageArg, boolean reset) {
+        if (reset) {
+            mIsLockOut = false;
+            mHandler.removeMessages(MSG_LOCKOUT_RESET);
+            if (mLockoutResetCallback != null) {
+                mLockoutResetCallback.onLockoutReset();
+            }
+            Log.d(TAG, "Resettng lockout for face");
+            return;
+        }
+            
+        Log.d(TAG, "Enabling lockout for face");
+        mIsLockOut = true;
+        mFaceAuthFailCount = 0;
+        if (mAuthenticationCallback != null) {
+            mAuthenticationCallback.onAuthenticationError(7, FaceManager.getErrorString(mContext, 7, 0));
+        }
+        mHandler.removeMessages(MSG_LOCKOUT_RESET);
+        mHandler.sendEmptyMessageDelayed(MSG_LOCKOUT_RESET, (long) messageArg);
+    }
+
+    public void handleAcquiredResult(int acquireInfo) {
+        Log.d(TAG, "Sending acquired result " + acquireInfo);
+        if (mAuthenticationCallback != null) {
+            mAuthenticationCallback.onAuthenticationAcquired(acquireInfo);
+        }
+    }
+
+    public void handleAuthSucceeded(int userId) {
+        if (mAuthenticationCallback != null) {
+            mAuthenticationCallback.onAuthenticationSucceeded(new AuthenticationResult(mCryptoObject, (Face) null, userId));
+        }
+        stopAuthentication();
+    }
+
+    public void handleAuthFailed() {
+        if (mAuthenticationCallback != null) {
+            mAuthenticationCallback.onAuthenticationFailed();
+        }
+        stopAuthentication();
+    }
+
+    public boolean isHardwareDetected() {
+        return KeyguardUpdateMonitor.getInstance(mContext).isPaFaceUnlockServiceEnabled();
+    }
+
+    public void setStartStopCamera() {
+        if (mService != null) {
+            mService.setStartStopCamera();
+        }
+    }
+
+    public boolean getCameraStopCompleted() {
+        if (mService != null) {
+            return mService.getCameraStopCompleted();
+        }
+        return true;
+    }
+}
