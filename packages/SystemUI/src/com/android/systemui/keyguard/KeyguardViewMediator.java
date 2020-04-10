@@ -567,6 +567,9 @@ public class KeyguardViewMediator extends SystemUI {
             }
 
             tryKeyguardDone();
+            if (strongAuth) {
+                KeyguardViewMediator.this.mUpdateMonitor.reportSuccessfulStrongAuthUnlockAttempt();
+            }
         }
 
         @Override
@@ -1826,12 +1829,43 @@ public class KeyguardViewMediator extends SystemUI {
             final int keyguardFlag = flags;
             mUiOffloadThread.submit(() -> {
                 try {
-                    ActivityTaskManager.getService().keyguardGoingAway(keyguardFlag);
+                    updateKeyguardGoingAway(keyguardFlag);
                 } catch (RemoteException e) {
                     Log.e(TAG, "Error while calling WindowManager", e);
                 }
             });
             Trace.endSection();
+        }
+
+        public void updateKeyguardGoingAway(int keyguardFlag) {
+            if (mUpdateMonitor.isFaceRunning()) {
+                mUpdateMonitor.setStartingSnapCamera(true);
+                mUpdateMonitor.stopCameraAndDetectFace();
+            }
+            int readTimeout = 15;
+            while (true) {
+                if (readTimeout <= 0) {
+                    break;
+                }
+                try {
+                    if (mUpdateMonitor.getCameraStopCompleted()) {
+                        Log.d(TAG, "getCameraStopCompleted is true");
+                        break;
+                    }
+                    Thread.sleep(100);
+                    Log.d(TAG, "readtimeout is" + readTimeout);
+                    readTimeout += -1;
+                } catch (RemoteException e) {
+                    Log.e(TAG, "Error while calling WindowManager", e);
+                } catch (InterruptedException e2) {
+                    Log.e(TAG, "Error sleep error", e2);
+                } catch (Throwable th) {
+                    mUpdateMonitor.setStartingSnapCamera(false);
+                    throw th;
+                }
+            }
+            ActivityTaskManager.getService().keyguardGoingAway(keyguardFlag);
+            mUpdateMonitor.setStartingSnapCamera(false);
         }
     };
 
