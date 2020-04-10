@@ -2448,7 +2448,8 @@ class Task extends WindowContainer<WindowContainer> {
     Rect updateOverrideConfigurationFromLaunchBounds() {
         // If the task is controlled by another organized task, do not set override
         // configurations and let its parent (organized task) to control it;
-        final Rect bounds = isOrganized() && !isRootTask() ? null : getLaunchBounds();
+        final Task rootTask = getRootTask();
+        final Rect bounds = rootTask != this && rootTask.isOrganized() ? null : getLaunchBounds();
         setBounds(bounds);
         if (bounds != null && !bounds.isEmpty()) {
             // TODO: Review if we actually want to do this - we are setting the launch bounds
@@ -3347,6 +3348,21 @@ class Task extends WindowContainer<WindowContainer> {
 
     @Override
     Dimmer getDimmer() {
+        // If the window is in multi-window mode, we want to dim at the Task level to ensure the dim
+        // bounds match the area the app lives in
+        if (inMultiWindowMode()) {
+            return mDimmer;
+        }
+
+        // If we're not at the root task level, we want to keep traversing through the parents to
+        // find the root.
+        // Once at the root task level, we want to check {@link #isTranslucent(ActivityRecord)}.
+        // If true, we want to get the Dimmer from the level above since we don't want to animate
+        // the dim with the Task.
+        if (!isRootTask() || isTranslucent(null)) {
+            return super.getDimmer();
+        }
+
         return mDimmer;
     }
 
@@ -4105,20 +4121,18 @@ class Task extends WindowContainer<WindowContainer> {
      * Any time any of these conditions are updated, the updating code should call
      * sendTaskAppeared.
      */
-    private boolean taskAppearedReady() {
+    boolean taskAppearedReady() {
         return mSurfaceControl != null && mTaskOrganizer != null && getHasBeenVisible();
     }
 
     private void sendTaskAppeared() {
-        if (taskAppearedReady() && !mTaskAppearedSent) {
-            mTaskAppearedSent = true;
+        if (mTaskOrganizer != null) {
             mAtmService.mTaskOrganizerController.onTaskAppeared(mTaskOrganizer, this);
         }
     }
 
     private void sendTaskVanished() {
-        if (mTaskOrganizer != null && mTaskAppearedSent) {
-            mTaskAppearedSent = false;
+        if (mTaskOrganizer != null) {
             mAtmService.mTaskOrganizerController.onTaskVanished(mTaskOrganizer, this);
         }
    }

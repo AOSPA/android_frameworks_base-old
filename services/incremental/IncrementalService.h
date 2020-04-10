@@ -39,6 +39,7 @@
 
 #include "ServiceWrappers.h"
 #include "android/content/pm/BnDataLoaderStatusListener.h"
+#include "android/os/incremental/BnIncrementalServiceConnector.h"
 #include "incfs.h"
 #include "path.h"
 
@@ -139,7 +140,7 @@ public:
                                       DataLoaderStatusListener externalListener)
               : incrementalService(incrementalService), externalListener(externalListener) {}
         // Callbacks interface
-        binder::Status onStatusChanged(MountId mount, int newStatus) override;
+        binder::Status onStatusChanged(MountId mount, int newStatus) final;
 
     private:
         IncrementalService& incrementalService;
@@ -149,14 +150,27 @@ public:
     class AppOpsListener : public android::BnAppOpsCallback {
     public:
         AppOpsListener(IncrementalService& incrementalService, std::string packageName) : incrementalService(incrementalService), packageName(std::move(packageName)) {}
-        void opChanged(int32_t op, const String16& packageName) override;
+        void opChanged(int32_t op, const String16& packageName) final;
 
     private:
         IncrementalService& incrementalService;
         const std::string packageName;
     };
 
+    class IncrementalServiceConnector : public BnIncrementalServiceConnector {
+    public:
+        IncrementalServiceConnector(IncrementalService& incrementalService, int32_t storage)
+              : incrementalService(incrementalService), storage(storage) {}
+        binder::Status setStorageParams(bool enableReadLogs, int32_t* _aidl_return) final;
+
+    private:
+        IncrementalService& incrementalService;
+        int32_t const storage;
+    };
+
 private:
+    static const bool sEnablePerfLogging;
+
     struct IncFsMount {
         struct Bind {
             StorageId storage;
@@ -227,8 +241,10 @@ private:
     void deleteStorage(IncFsMount& ifs);
     void deleteStorageLocked(IncFsMount& ifs, std::unique_lock<std::mutex>&& ifsLock);
     MountMap::iterator getStorageSlotLocked();
-    std::string normalizePathToStorage(const IfsMountPtr incfs, StorageId storage,
+    std::string normalizePathToStorage(const IfsMountPtr& incfs, StorageId storage,
                                        std::string_view path);
+    std::string normalizePathToStorageLocked(IncFsMount::StorageMap::iterator storageIt,
+                                             std::string_view path);
 
     binder::Status applyStorageParams(IncFsMount& ifs, bool enableReadLogs);
 
