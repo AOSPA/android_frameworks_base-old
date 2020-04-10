@@ -107,7 +107,6 @@ import android.annotation.CallbackExecutor;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
-import android.annotation.UserIdInt;
 import android.annotation.WorkerThread;
 import android.app.ActivityManager;
 import android.app.ActivityManagerInternal;
@@ -155,6 +154,7 @@ import android.content.pm.PackageManager;
 import android.content.pm.PackageManager.NameNotFoundException;
 import android.content.pm.PackageManagerInternal;
 import android.content.pm.ParceledListSlice;
+import android.content.pm.ShortcutInfo;
 import android.content.pm.UserInfo;
 import android.content.res.Resources;
 import android.database.ContentObserver;
@@ -1730,6 +1730,11 @@ public class NotificationManagerService extends SystemService {
     }
 
     @VisibleForTesting
+    void setShortcutHelper(ShortcutHelper helper) {
+        mShortcutHelper = helper;
+    }
+
+    @VisibleForTesting
     void setHints(int hints) {
         mListenerHints = hints;
     }
@@ -2740,15 +2745,15 @@ public class NotificationManagerService extends SystemService {
         return userId == UserHandle.USER_ALL ? UserHandle.USER_SYSTEM : userId;
     }
 
-    private ToastRecord getToastRecord(int pid, String packageName, IBinder token,
+    private ToastRecord getToastRecord(int uid, int pid, String packageName, IBinder token,
             @Nullable CharSequence text, @Nullable ITransientNotification callback, int duration,
             Binder windowToken, int displayId,
             @Nullable ITransientNotificationCallback textCallback) {
         if (callback == null) {
-            return new TextToastRecord(this, mStatusBar, pid, packageName, token, text, duration,
-                    windowToken, displayId, textCallback);
+            return new TextToastRecord(this, mStatusBar, uid, pid, packageName, token, text,
+                    duration, windowToken, displayId, textCallback);
         } else {
-            return new CustomToastRecord(this, pid, packageName, token, callback, duration,
+            return new CustomToastRecord(this, uid, pid, packageName, token, callback, duration,
                     windowToken, displayId);
         }
     }
@@ -2873,8 +2878,8 @@ public class NotificationManagerService extends SystemService {
 
                         Binder windowToken = new Binder();
                         mWindowManagerInternal.addWindowToken(windowToken, TYPE_TOAST, displayId);
-                        record = getToastRecord(callingPid, pkg, token, text, callback, duration,
-                                windowToken, displayId, textCallback);
+                        record = getToastRecord(callingUid, callingPid, pkg, token, text, callback,
+                                duration, windowToken, displayId, textCallback);
                         mToastQueue.add(record);
                         index = mToastQueue.size() - 1;
                         keepProcessAliveForToastIfNeededLocked(callingPid);
@@ -3459,10 +3464,14 @@ public class NotificationManagerService extends SystemService {
             ArrayList<ConversationChannelWrapper> conversations =
                     mPreferencesHelper.getConversations(onlyImportant);
             for (ConversationChannelWrapper conversation : conversations) {
-                conversation.setShortcutInfo(mShortcutHelper.getValidShortcutInfo(
-                        conversation.getNotificationChannel().getConversationId(),
-                        conversation.getPkg(),
-                        UserHandle.of(UserHandle.getUserId(conversation.getUid()))));
+                if (mShortcutHelper == null) {
+                    conversation.setShortcutInfo(null);
+                } else {
+                    conversation.setShortcutInfo(mShortcutHelper.getValidShortcutInfo(
+                            conversation.getNotificationChannel().getConversationId(),
+                            conversation.getPkg(),
+                            UserHandle.of(UserHandle.getUserId(conversation.getUid()))));
+                }
             }
             return new ParceledListSlice<>(conversations);
         }
@@ -3482,10 +3491,14 @@ public class NotificationManagerService extends SystemService {
             ArrayList<ConversationChannelWrapper> conversations =
                     mPreferencesHelper.getConversations(pkg, uid);
             for (ConversationChannelWrapper conversation : conversations) {
-                conversation.setShortcutInfo(mShortcutHelper.getValidShortcutInfo(
-                        conversation.getNotificationChannel().getConversationId(),
-                        pkg,
-                        UserHandle.of(UserHandle.getUserId(uid))));
+                if (mShortcutHelper == null) {
+                    conversation.setShortcutInfo(null);
+                } else {
+                    conversation.setShortcutInfo(mShortcutHelper.getValidShortcutInfo(
+                            conversation.getNotificationChannel().getConversationId(),
+                            pkg,
+                            UserHandle.of(UserHandle.getUserId(uid))));
+                }
             }
             return new ParceledListSlice<>(conversations);
         }
@@ -5680,8 +5693,10 @@ public class NotificationManagerService extends SystemService {
             }
         }
 
-        r.setShortcutInfo(mShortcutHelper.getValidShortcutInfo(
-                notification.getShortcutId(), pkg, user));
+        ShortcutInfo info = mShortcutHelper != null
+                ? mShortcutHelper.getValidShortcutInfo(notification.getShortcutId(), pkg, user)
+                : null;
+        r.setShortcutInfo(info);
 
         if (!checkDisqualifyingFeatures(userId, notificationUid, id, tag, r,
                 r.getSbn().getOverrideGroupKey() != null)) {
@@ -6212,10 +6227,13 @@ public class NotificationManagerService extends SystemService {
                     cancelNotificationLocked(
                             r, mSendDelete, mReason, mRank, mCount, wasPosted, listenerName);
                     cancelGroupChildrenLocked(r, mCallingUid, mCallingPid, listenerName,
-                            mSendDelete, childrenFlagChecker);
+                            mSendDelete, childrenFlagChecker, mReason);
                     updateLightsLocked();
-                    mShortcutHelper.maybeListenForShortcutChangesForBubbles(r, true /* isRemoved */,
-                            mHandler);
+                    if (mShortcutHelper != null) {
+                        mShortcutHelper.maybeListenForShortcutChangesForBubbles(r,
+                                true /* isRemoved */,
+                                mHandler);
+                    }
                 } else {
                     // No notification was found, assume that it is snoozed and cancel it.
                     if (mReason != REASON_SNOOZED) {
@@ -6453,9 +6471,11 @@ public class NotificationManagerService extends SystemService {
                                 + n.getPackageName());
                     }
 
-                    mShortcutHelper.maybeListenForShortcutChangesForBubbles(r,
-                            false /* isRemoved */,
-                            mHandler);
+                    if (mShortcutHelper != null) {
+                        mShortcutHelper.maybeListenForShortcutChangesForBubbles(r,
+                                false /* isRemoved */,
+                                mHandler);
+                    }
 
                     maybeRecordInterruptionLocked(r);
 
@@ -6667,7 +6687,7 @@ public class NotificationManagerService extends SystemService {
         // notification was a summary and its group key changed.
         if (oldIsSummary && (!isSummary || !oldGroup.equals(group))) {
             cancelGroupChildrenLocked(old, callingUid, callingPid, null, false /* sendDelete */,
-                    null);
+                    null, REASON_APP_CANCEL);
         }
     }
 
@@ -7872,7 +7892,7 @@ public class NotificationManagerService extends SystemService {
             final int M = canceledNotifications.size();
             for (int i = 0; i < M; i++) {
                 cancelGroupChildrenLocked(canceledNotifications.get(i), callingUid, callingPid,
-                        listenerName, false /* sendDelete */, flagChecker);
+                        listenerName, false /* sendDelete */, flagChecker, reason);
             }
             updateLightsLocked();
         }
@@ -7943,7 +7963,7 @@ public class NotificationManagerService extends SystemService {
     // Warning: The caller is responsible for invoking updateLightsLocked().
     @GuardedBy("mNotificationLock")
     private void cancelGroupChildrenLocked(NotificationRecord r, int callingUid, int callingPid,
-            String listenerName, boolean sendDelete, FlagChecker flagChecker) {
+            String listenerName, boolean sendDelete, FlagChecker flagChecker, int reason) {
         Notification n = r.getNotification();
         if (!n.isGroupSummary()) {
             return;
@@ -7957,30 +7977,33 @@ public class NotificationManagerService extends SystemService {
         }
 
         cancelGroupChildrenByListLocked(mNotificationList, r, callingUid, callingPid, listenerName,
-                sendDelete, true, flagChecker);
+                sendDelete, true, flagChecker, reason);
         cancelGroupChildrenByListLocked(mEnqueuedNotifications, r, callingUid, callingPid,
-                listenerName, sendDelete, false, flagChecker);
+                listenerName, sendDelete, false, flagChecker, reason);
     }
 
     @GuardedBy("mNotificationLock")
     private void cancelGroupChildrenByListLocked(ArrayList<NotificationRecord> notificationList,
             NotificationRecord parentNotification, int callingUid, int callingPid,
-            String listenerName, boolean sendDelete, boolean wasPosted, FlagChecker flagChecker) {
+            String listenerName, boolean sendDelete, boolean wasPosted, FlagChecker flagChecker,
+            int reason) {
         final String pkg = parentNotification.getSbn().getPackageName();
         final int userId = parentNotification.getUserId();
-        final int reason = REASON_GROUP_SUMMARY_CANCELED;
+        final int childReason = REASON_GROUP_SUMMARY_CANCELED;
         for (int i = notificationList.size() - 1; i >= 0; i--) {
             final NotificationRecord childR = notificationList.get(i);
             final StatusBarNotification childSbn = childR.getSbn();
             if ((childSbn.isGroup() && !childSbn.getNotification().isGroupSummary()) &&
                     childR.getGroupKey().equals(parentNotification.getGroupKey())
                     && (childR.getFlags() & FLAG_FOREGROUND_SERVICE) == 0
-                    && (flagChecker == null || flagChecker.apply(childR.getFlags()))) {
+                    && (flagChecker == null || flagChecker.apply(childR.getFlags()))
+                    && (!childR.getChannel().isImportantConversation()
+                            || reason != REASON_CANCEL)) {
                 EventLogTags.writeNotificationCancel(callingUid, callingPid, pkg, childSbn.getId(),
-                        childSbn.getTag(), userId, 0, 0, reason, listenerName);
+                        childSbn.getTag(), userId, 0, 0, childReason, listenerName);
                 notificationList.remove(i);
                 mNotificationsByKey.remove(childR.getKey());
-                cancelNotificationLocked(childR, sendDelete, reason, wasPosted, listenerName);
+                cancelNotificationLocked(childR, sendDelete, childReason, wasPosted, listenerName);
             }
         }
     }

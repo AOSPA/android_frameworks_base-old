@@ -1683,6 +1683,7 @@
   <java-symbol type="bool" name="config_perDisplayFocusEnabled" />
   <java-symbol type="bool" name="config_showNavigationBar" />
   <java-symbol type="bool" name="config_supportAutoRotation" />
+  <java-symbol type="bool" name="config_dockedStackDividerFreeSnapMode" />
   <java-symbol type="dimen" name="docked_stack_divider_thickness" />
   <java-symbol type="dimen" name="docked_stack_divider_insets" />
   <java-symbol type="dimen" name="docked_stack_minimize_thickness" />
@@ -3927,6 +3928,8 @@
   <java-symbol type="dimen" name="button_padding_horizontal_material" />
   <java-symbol type="dimen" name="button_inset_horizontal_material" />
   <java-symbol type="layout" name="conversation_face_pile_layout" />
+  <java-symbol type="id" name="conversation_unread_count" />
+  <java-symbol type="string" name="unread_convo_overflow" />
 
   <!-- Intent resolver and share sheet -->
   <java-symbol type="string" name="resolver_personal_tab" />
@@ -3988,6 +3991,8 @@
 
   <!-- Set to true to make assistant show in front of the dream/screensaver. -->
   <java-symbol type="bool" name="config_assistantOnTopOfDream"/>
+
+  <java-symbol type="string" name="config_overrideComponentUiPackage" />
 
   <!-- For Pdn throttle feature -->
   <java-symbol type="bool" name="config_pdp_retry_for_29_33_55_enabled" />

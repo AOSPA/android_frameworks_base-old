@@ -219,6 +219,9 @@ public class NotificationPanelViewController extends OverlayViewController {
 
         mNavBarNotificationTouchListener =
                 (v, event) -> {
+                    if (!isInflated()) {
+                        return true;
+                    }
                     boolean consumed = navBarCloseNotificationGestureDetector.onTouchEvent(event);
                     if (consumed) {
                         return true;
@@ -594,6 +597,11 @@ public class NotificationPanelViewController extends OverlayViewController {
         } else {
             animateExpandNotificationsPanel();
         }
+    }
+
+    /** Returns {@code true} if the notification panel is expanded. */
+    public boolean isPanelExpanded() {
+        return mPanelExpanded;
     }
 
     /** Sets the unseen count listener. */

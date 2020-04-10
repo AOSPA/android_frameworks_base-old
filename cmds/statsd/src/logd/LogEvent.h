@@ -28,27 +28,6 @@ namespace android {
 namespace os {
 namespace statsd {
 
-struct AttributionNodeInternal {
-    void set_uid(int32_t id) {
-        mUid = id;
-    }
-
-    void set_tag(const std::string& value) {
-        mTag = value;
-    }
-
-    int32_t uid() const {
-        return mUid;
-    }
-
-    const std::string& tag() const {
-        return mTag;
-    }
-
-    int32_t mUid;
-    std::string mTag;
-};
-
 struct InstallTrainInfo {
     int64_t trainVersionCode;
     std::string trainName;
@@ -82,28 +61,6 @@ public:
      * \return success of the initialization
      */
     bool parseBuffer(uint8_t* buf, size_t len);
-
-    // TODO(b/149590301): delete unused functions below once LogEvent uses the
-    // new socket schema within test code. Really we would like the only entry
-    // points into LogEvent to be the above constructor and parseBuffer functions.
-
-    /**
-     * Constructs a LogEvent with synthetic data for testing. Must call init() before reading.
-     */
-    explicit LogEvent(int32_t tagId, int64_t wallClockTimestampNs, int64_t elapsedTimestampNs);
-
-    // For testing. The timestamp is used as both elapsed real time and logd timestamp.
-    explicit LogEvent(int32_t tagId, int64_t timestampNs, int32_t uid);
-
-    /**
-     * Constructs a KeyValuePairsAtom LogEvent from value maps.
-     */
-    explicit LogEvent(int32_t tagId, int64_t wallClockTimestampNs, int64_t elapsedTimestampNs,
-                      int32_t uid,
-                      const std::map<int32_t, int32_t>& int_map,
-                      const std::map<int32_t, int64_t>& long_map,
-                      const std::map<int32_t, std::string>& string_map,
-                      const std::map<int32_t, float>& float_map);
 
     // Constructs a BinaryPushStateChanged LogEvent from API call.
     explicit LogEvent(const std::string& trainName, int64_t trainVersionCode, bool requiresStaging,
@@ -152,25 +109,6 @@ public:
     std::vector<uint8_t> GetStorage(size_t key, status_t* err) const;
 
     /**
-     * Write test data to the LogEvent. This can only be used when the LogEvent is constructed
-     * using LogEvent(tagId, timestampNs). You need to call init() before you can read from it.
-     */
-    bool write(uint32_t value);
-    bool write(int32_t value);
-    bool write(uint64_t value);
-    bool write(int64_t value);
-    bool write(const std::string& value);
-    bool write(float value);
-    bool write(const std::vector<AttributionNodeInternal>& nodes);
-    bool write(const AttributionNodeInternal& node);
-    bool writeBytes(const std::string& value);
-    bool writeKeyValuePairs(int32_t uid,
-                            const std::map<int32_t, int32_t>& int_map,
-                            const std::map<int32_t, int64_t>& long_map,
-                            const std::map<int32_t, std::string>& string_map,
-                            const std::map<int32_t, float>& float_map);
-
-    /**
      * Return a string representation of this event.
      */
     std::string ToString() const;
@@ -204,6 +142,32 @@ public:
 
     std::vector<FieldValue>* getMutableValues() {
         return &mValues;
+    }
+
+    // Default value = false
+    inline bool shouldTruncateTimestamp() {
+        return mTruncateTimestamp;
+    }
+
+    // Returns the index of the uid field within the FieldValues vector if the
+    // uid exists. If there is no uid field, returns -1.
+    //
+    // If the index within the atom definition is desired, do the following:
+    //    int vectorIndex = LogEvent.getUidFieldIndex();
+    //    if (vectorIndex != -1) {
+    //        FieldValue& v = LogEvent.getValues()[vectorIndex];
+    //        int atomIndex = v.mField.getPosAtDepth(0);
+    //    }
+    // Note that atomIndex is 1-indexed.
+    inline int getUidFieldIndex() {
+        return mUidFieldIndex;
+    }
+
+    // Returns the index of (the first) attribution chain within the atom
+    // definition. Note that the value is 1-indexed. If there is no attribution
+    // chain, returns -1.
+    inline int getAttributionChainIndex() {
+        return mAttributionChainIndex;
     }
 
     inline LogEvent makeCopy() {
@@ -240,15 +204,20 @@ private:
     void parseByteArray(int32_t* pos, int32_t depth, bool* last, uint8_t numAnnotations);
     void parseKeyValuePairs(int32_t* pos, int32_t depth, bool* last, uint8_t numAnnotations);
     void parseAttributionChain(int32_t* pos, int32_t depth, bool* last, uint8_t numAnnotations);
-    void parseAnnotations(uint8_t numAnnotations);
+
+    void parseAnnotations(uint8_t numAnnotations, int firstUidInChainIndex = -1);
+    void parseIsUidAnnotation(uint8_t annotationType);
+    void parseTruncateTimestampAnnotation(uint8_t annotationType);
+    void parsePrimaryFieldAnnotation(uint8_t annotationType);
+    void parsePrimaryFieldFirstUidAnnotation(uint8_t annotationType, int firstUidInChainIndex);
+    void parseExclusiveStateAnnotation(uint8_t annotationType);
+    void parseTriggerStateResetAnnotation(uint8_t annotationType);
+    void parseStateNestedAnnotation(uint8_t annotationType);
 
     /**
      * The below three variables are only valid during the execution of
      * parseBuffer. There are no guarantees about the state of these variables
      * before/after.
-     *
-     * TODO (b/150312423): These shouldn't be member variables. We should pass
-     * them around as parameters.
      */
     uint8_t* mBuf;
     uint32_t mRemainingLen; // number of valid bytes left in the buffer being parsed
@@ -322,6 +291,11 @@ private:
 
     // The pid of the logging client (defaults to -1).
     int32_t mLogPid = -1;
+
+    // Annotations
+    bool mTruncateTimestamp = false;
+    int mUidFieldIndex = -1;
+    int mAttributionChainIndex = -1;
 };
 
 void writeExperimentIdsToProto(const std::vector<int64_t>& experimentIds, std::vector<uint8_t>* protoOut);

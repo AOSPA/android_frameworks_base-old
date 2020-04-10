@@ -105,7 +105,7 @@ import java.util.Set;
  *
  * {@hide}
  */
-public class SoundTriggerMiddlewareValidation implements ISoundTriggerMiddlewareService, Dumpable {
+public class SoundTriggerMiddlewareValidation implements ISoundTriggerMiddlewareInternal, Dumpable {
     private static final String TAG = "SoundTriggerMiddlewareValidation";
 
     private enum ModuleState {
@@ -114,12 +114,14 @@ public class SoundTriggerMiddlewareValidation implements ISoundTriggerMiddleware
         DEAD
     };
 
-    private final @NonNull ISoundTriggerMiddlewareService mDelegate;
+    private Boolean mCaptureState;
+
+    private final @NonNull ISoundTriggerMiddlewareInternal mDelegate;
     private final @NonNull Context mContext;
     private Map<Integer, Set<ModuleService>> mModules;
 
     public SoundTriggerMiddlewareValidation(
-            @NonNull ISoundTriggerMiddlewareService delegate, @NonNull Context context) {
+            @NonNull ISoundTriggerMiddlewareInternal delegate, @NonNull Context context) {
         mDelegate = delegate;
         mContext = context;
     }
@@ -213,23 +215,22 @@ public class SoundTriggerMiddlewareValidation implements ISoundTriggerMiddleware
     }
 
     @Override
-    public void setExternalCaptureState(boolean active) {
-        // Permission check.
-        checkPreemptPermissions();
-        // Input validation (always valid).
-
-        // State validation (always valid).
-
+    public void setCaptureState(boolean active) {
+        // This is an internal call. No permissions needed.
+        //
         // Normally, we would acquire a lock here. However, we do not access any state here so it
         // is safe to not lock. This call is typically done from a different context than all the
         // other calls and may result in a deadlock if we lock here (between the audio server and
         // the system server).
-
-        // From here on, every exception isn't client's fault.
         try {
-            mDelegate.setExternalCaptureState(active);
+            mDelegate.setCaptureState(active);
         } catch (Exception e) {
             throw handleException(e);
+        } finally {
+            // It is safe to lock here - local operation.
+            synchronized (this) {
+                mCaptureState = active;
+            }
         }
     }
 
@@ -247,16 +248,6 @@ public class SoundTriggerMiddlewareValidation implements ISoundTriggerMiddleware
     void checkPermissions() {
         enforcePermission(Manifest.permission.RECORD_AUDIO);
         enforcePermission(Manifest.permission.CAPTURE_AUDIO_HOTWORD);
-    }
-
-    /**
-     * Throws a {@link SecurityException} if caller permanently doesn't have the given permission,
-     * or a {@link ServiceSpecificException} with a {@link Status#TEMPORARY_PERMISSION_DENIED} if
-     * caller temporarily doesn't have the right permissions to preempt active sound trigger
-     * sessions.
-     */
-    void checkPreemptPermissions() {
-        enforcePermission(Manifest.permission.PREEMPT_SOUND_TRIGGER);
     }
 
     /**
@@ -290,8 +281,11 @@ public class SoundTriggerMiddlewareValidation implements ISoundTriggerMiddleware
                 "This implementation is not inteded to be used directly with Binder.");
     }
 
-    @Override public void dump(PrintWriter pw) {
+    @Override
+    public void dump(PrintWriter pw) {
         synchronized (this) {
+            pw.printf("Capture state is %s\n", mCaptureState == null ? "uninitialized"
+                    : (mCaptureState ? "active" : "inactive"));
             if (mModules != null) {
                 for (int handle : mModules.keySet()) {
                     pw.println("=========================================");

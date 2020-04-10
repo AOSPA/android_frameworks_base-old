@@ -73,8 +73,8 @@ import android.util.ArrayMap;
 import android.util.DisplayMetrics;
 import android.util.Singleton;
 import android.util.Size;
-import android.window.IWindowContainer;
 import android.view.Surface;
+import android.window.WindowContainerToken;
 
 import com.android.internal.app.LocalePicker;
 import com.android.internal.app.procstats.ProcessStats;
@@ -2759,7 +2759,7 @@ public class ActivityManager {
         // Index of the stack in the display's stack list, can be used for comparison of stack order
         @UnsupportedAppUsage
         public int position;
-        public IWindowContainer stackToken;
+        public WindowContainerToken stackToken;
         /**
          * The full configuration the stack is currently running in.
          * @hide
@@ -2793,7 +2793,7 @@ public class ActivityManager {
             dest.writeInt(userId);
             dest.writeInt(visible ? 1 : 0);
             dest.writeInt(position);
-            dest.writeStrongInterface(stackToken);
+            stackToken.writeToParcel(dest, 0);
             if (topActivity != null) {
                 dest.writeInt(1);
                 topActivity.writeToParcel(dest, 0);
@@ -2825,7 +2825,7 @@ public class ActivityManager {
             userId = source.readInt();
             visible = source.readInt() > 0;
             position = source.readInt();
-            stackToken = IWindowContainer.Stub.asInterface(source.readStrongBinder());
+            stackToken = WindowContainerToken.CREATOR.createFromParcel(source);
             if (source.readInt() > 0) {
                 topActivity = ComponentName.readFromParcel(source);
             }
@@ -3632,7 +3632,8 @@ public class ActivityManager {
      * Set custom state data for this process. It will be included in the record of
      * {@link ApplicationExitInfo} on the death of the current calling process; the new process
      * of the app can retrieve this state data by calling
-     * {@link ApplicationExitInfo#getProcessStateSummary} on the record returned by
+     * {@link android.app.ApplicationExitInfo#getProcessStateSummary()
+     * ApplicationExitInfo.getProcessStateSummary()} on the record returned by
      * {@link #getHistoricalProcessExitReasons}.
      *
      * <p> This would be useful for the calling app to save its stateful data: if it's
@@ -3657,7 +3658,7 @@ public class ActivityManager {
         }
     }
 
-    /*
+    /**
      * @return Whether or not the low memory kill will be reported in
      * {@link #getHistoricalProcessExitReasons}.
      *

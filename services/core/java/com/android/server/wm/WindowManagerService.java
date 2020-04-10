@@ -194,7 +194,6 @@ import android.util.ArrayMap;
 import android.util.ArraySet;
 import android.util.BoostFramework;
 import android.util.DisplayMetrics;
-import android.util.Log;
 import android.util.MergedConfiguration;
 import android.util.Slog;
 import android.util.SparseArray;
@@ -2337,9 +2336,7 @@ public class WindowManagerService extends IWindowManager.Stub
             Trace.traceEnd(TRACE_TAG_WINDOW_MANAGER);
 
             if (toBeDisplayed && win.mIsWallpaper) {
-                DisplayInfo displayInfo = displayContent.getDisplayInfo();
-                displayContent.mWallpaperController.updateWallpaperOffset(
-                        win, displayInfo.logicalWidth, displayInfo.logicalHeight, false);
+                displayContent.mWallpaperController.updateWallpaperOffset(win, false /* sync */);
             }
             if (win.mActivityRecord != null) {
                 win.mActivityRecord.updateReportedVisibilityLocked();
@@ -2787,7 +2784,6 @@ public class WindowManagerService extends IWindowManager.Stub
                 aspectRatio);
     }
 
-    @Override
     public void getStackBounds(int windowingMode, int activityType, Rect bounds) {
         synchronized (mGlobalLock) {
             final ActivityStack stack = mRoot.getStack(windowingMode, activityType);
@@ -5341,7 +5337,8 @@ public class WindowManagerService extends IWindowManager.Stub
                 throw new IllegalArgumentException(
                         "Requested window " + client + " does not exist");
             }
-            ProtoLog.w(WM_ERROR, "Failed looking up window callers=%s", Debug.getCallers(3));
+            ProtoLog.w(WM_ERROR, "Failed looking up window session=%s callers=%s", session,
+                    Debug.getCallers(3));
             return null;
         }
         if (session != null && win.mSession != session) {
@@ -5349,7 +5346,8 @@ public class WindowManagerService extends IWindowManager.Stub
                 throw new IllegalArgumentException("Requested window " + client + " is in session "
                         + win.mSession + ", not " + session);
             }
-            ProtoLog.w(WM_ERROR, "Failed looking up window callers=%s", Debug.getCallers(3));
+            ProtoLog.w(WM_ERROR, "Failed looking up window session=%s callers=%s", session,
+                    Debug.getCallers(3));
             return null;
         }
 
@@ -6082,10 +6080,20 @@ public class WindowManagerService extends IWindowManager.Stub
         pw.print("  mHasPermanentDpad="); pw.println(mHasPermanentDpad);
         mRoot.dumpTopFocusedDisplayId(pw);
         mRoot.forAllDisplays(dc -> {
+            final int displayId = dc.getDisplayId();
             final WindowState inputMethodTarget = dc.mInputMethodTarget;
             if (inputMethodTarget != null) {
-                pw.print("  mInputMethodTarget in display# "); pw.print(dc.getDisplayId());
+                pw.print("  mInputMethodTarget in display# "); pw.print(displayId);
                 pw.print(' '); pw.println(inputMethodTarget);
+            }
+            if (mAccessibilityController != null) {
+                final Region magnificationRegion = new Region();
+                mAccessibilityController.getMagnificationRegionLocked(displayId,
+                        magnificationRegion);
+                pw.print("  mMagnificationRegion in display# ");
+                pw.print(displayId);
+                pw.print(' ');
+                pw.println(magnificationRegion);
             }
         });
         pw.print("  mInTouchMode="); pw.println(mInTouchMode);
@@ -7351,8 +7359,9 @@ public class WindowManagerService extends IWindowManager.Stub
 
         @Override
         public boolean isStackVisibleLw(int windowingMode) {
-            final DisplayContent dc = getDefaultDisplayContentLocked();
-            return dc.isStackVisible(windowingMode);
+            // TODO(b/153090332): Support multiple task display areas & displays
+            final TaskDisplayArea tc = mRoot.getDefaultTaskDisplayArea();
+            return tc.isStackVisible(windowingMode);
         }
 
         @Override
@@ -7763,19 +7772,30 @@ public class WindowManagerService extends IWindowManager.Stub
     public void syncInputTransactions() {
         waitForAnimationsToComplete();
 
+        // Collect all input transactions from all displays to make sure we could sync all input
+        // windows at same time.
+        final SurfaceControl.Transaction t = mTransactionFactory.get();
         synchronized (mGlobalLock) {
             mWindowPlacerLocked.performSurfacePlacementIfScheduled();
             mRoot.forAllDisplays(displayContent ->
-                    displayContent.getInputMonitor().updateInputWindowsImmediately());
+                    displayContent.getInputMonitor().updateInputWindowsImmediately(t));
         }
 
-        mTransactionFactory.get().syncInputWindows().apply(true);
+        t.syncInputWindows().apply();
     }
 
+    /**
+     * Wait until all container animations and surface operations behalf of WindowManagerService
+     * complete.
+     */
     private void waitForAnimationsToComplete() {
         synchronized (mGlobalLock) {
             long timeoutRemaining = ANIMATION_COMPLETED_TIMEOUT_MS;
-            while (mRoot.isAnimating(TRANSITION | CHILDREN) && timeoutRemaining > 0) {
+            // This could prevent if there is no container animation, we still have to apply the
+            // pending transaction and exit waiting.
+            mAnimator.mNotifyWhenNoAnimation = true;
+            while ((mAnimator.isAnimationScheduled()
+                    || mRoot.isAnimating(TRANSITION | CHILDREN)) && timeoutRemaining > 0) {
                 long startTime = System.currentTimeMillis();
                 try {
                     mGlobalLock.wait(timeoutRemaining);
@@ -7783,9 +7803,11 @@ public class WindowManagerService extends IWindowManager.Stub
                 }
                 timeoutRemaining -= (System.currentTimeMillis() - startTime);
             }
+            mAnimator.mNotifyWhenNoAnimation = false;
 
-            if (mRoot.isAnimating(TRANSITION | CHILDREN)) {
-                Log.w(TAG, "Timed out waiting for animations to complete.");
+            if (mAnimator.isAnimationScheduled()
+                    || mRoot.isAnimating(TRANSITION | CHILDREN)) {
+                Slog.w(TAG, "Timed out waiting for animations to complete.");
             }
         }
     }

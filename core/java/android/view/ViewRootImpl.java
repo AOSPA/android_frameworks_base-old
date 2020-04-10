@@ -130,6 +130,7 @@ import android.view.View.MeasureSpec;
 import android.view.Window.OnContentApplyWindowInsetsListener;
 import android.view.WindowInsets.Type;
 import android.view.WindowInsets.Type.InsetsType;
+import android.view.WindowManager.LayoutParams;
 import android.view.WindowManager.LayoutParams.SoftInputModeFlags;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityManager;
@@ -448,7 +449,7 @@ public final class ViewRootImpl implements ViewParent,
     InputQueue mInputQueue;
     @UnsupportedAppUsage
     FallbackEventHandler mFallbackEventHandler;
-    Choreographer mChoreographer;
+    final Choreographer mChoreographer;
 
     // used in relayout to get SurfaceControl size
     // for BLAST adapter surface setup
@@ -694,10 +695,16 @@ public final class ViewRootImpl implements ViewParent,
     boolean mHaveMoveEvent = false;
 
     public ViewRootImpl(Context context, Display display) {
-        this(context, display, WindowManagerGlobal.getWindowSession());
+        this(context, display, WindowManagerGlobal.getWindowSession(),
+                false /* useSfChoreographer */);
     }
 
     public ViewRootImpl(Context context, Display display, IWindowSession session) {
+        this(context, display, session, false /* useSfChoreographer */);
+    }
+
+    public ViewRootImpl(Context context, Display display, IWindowSession session,
+            boolean useSfChoreographer) {
         mContext = context;
         mWindowSession = session;
         mDisplay = display;
@@ -733,7 +740,8 @@ public final class ViewRootImpl implements ViewParent,
         mDensity = context.getResources().getDisplayMetrics().densityDpi;
         mNoncompatDensity = context.getResources().getDisplayMetrics().noncompatDensityDpi;
         mFallbackEventHandler = new PhoneFallbackEventHandler(context);
-        mChoreographer = Choreographer.getInstance();
+        mChoreographer = useSfChoreographer
+                ? Choreographer.getSfInstance() : Choreographer.getInstance();
         mDisplayManager = (DisplayManager)context.getSystemService(Context.DISPLAY_SERVICE);
         mInsetsController = new InsetsController(this);
 
@@ -1414,6 +1422,10 @@ public final class ViewRootImpl implements ViewParent,
                         | (oldSoftInputMode & WindowManager.LayoutParams.SOFT_INPUT_MASK_ADJUST);
             }
 
+            if ((changes & LayoutParams.SOFT_INPUT_MODE_CHANGED) != 0) {
+                requestFitSystemWindows();
+            }
+
             mWindowAttributesChanged = true;
             scheduleTraversals();
         }
@@ -1744,17 +1756,18 @@ public final class ViewRootImpl implements ViewParent,
                 || !mBlastSurfaceControl.isValid()) {
             return null;
         }
+
+        Surface ret = null;
         if (mBlastBufferQueue == null) {
             mBlastBufferQueue = new BLASTBufferQueue(
                 mBlastSurfaceControl, width, height);
+            // We only return the Surface the first time, as otherwise
+            // it hasn't changed and there is no need to update.
+            ret = mBlastBufferQueue.getSurface();
         }
         mBlastBufferQueue.update(mBlastSurfaceControl, width, height);
 
-        mTransaction.show(mBlastSurfaceControl)
-            .reparent(mBlastSurfaceControl, mSurfaceControl)
-            .apply();
-
-        return mBlastBufferQueue.getSurface();
+        return ret;
     }
 
     private void setBoundsLayerCrop() {
@@ -7355,8 +7368,14 @@ public final class ViewRootImpl implements ViewParent,
             if (!mUseBLASTAdapter) {
                 mSurface.copyFrom(mSurfaceControl);
             } else {
-                mSurface.transferFrom(getOrCreateBLASTSurface(mSurfaceSize.x,
-                        mSurfaceSize.y));
+                final Surface blastSurface = getOrCreateBLASTSurface(mSurfaceSize.x,
+                    mSurfaceSize.y);
+                // If blastSurface == null that means it hasn't changed since the last time we
+                // called. In this situation, avoid calling transferFrom as we would then
+                // inc the generation ID and cause EGL resources to be recreated.
+                if (blastSurface != null) {
+                    mSurface.transferFrom(blastSurface);
+                }
             }
         } else {
             destroySurface();
@@ -9597,5 +9616,13 @@ public final class ViewRootImpl implements ViewParent,
 
     boolean useBLAST() {
         return mUseBLASTAdapter;
+    }
+
+    /**
+     * Returns true if we are about to or currently processing a draw directed
+     * in to a BLAST transaction.
+     */
+    boolean isDrawingToBLASTTransaction() {
+        return mNextReportConsumeBLAST;
     }
 }
