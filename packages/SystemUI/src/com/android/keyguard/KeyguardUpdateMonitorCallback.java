@@ -331,4 +331,14 @@ public class KeyguardUpdateMonitorCallback {
      * Called when a pulsing is received.
      */
     public void onPulsing(boolean pulsing) { }
+
+    /**
+     * Called when the lockout is reset for Paranoid FaceSense.
+     */
+    public void onPaFaceLockoutReset() { }
+
+    /**
+     * Called when auth is successful for Paranoid FaceSense.
+     */
+    public void onPaFaceUnlockSuccess() { }
 }
