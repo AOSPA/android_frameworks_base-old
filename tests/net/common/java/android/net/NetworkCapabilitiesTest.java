@@ -55,9 +55,14 @@ import android.util.ArraySet;
 import androidx.core.os.BuildCompat;
 import androidx.test.runner.AndroidJUnit4;
 
+import com.android.testutils.DevSdkIgnoreRule;
+import com.android.testutils.DevSdkIgnoreRule.IgnoreUpTo;
+
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
+import java.util.Arrays;
 import java.util.Set;
 
 @RunWith(AndroidJUnit4.class)
@@ -65,6 +70,9 @@ import java.util.Set;
 public class NetworkCapabilitiesTest {
     private static final String TEST_SSID = "TEST_SSID";
     private static final String DIFFERENT_TEST_SSID = "DIFFERENT_TEST_SSID";
+
+    @Rule
+    public DevSdkIgnoreRule mDevSdkIgnoreRule = new DevSdkIgnoreRule();
 
     private boolean isAtLeastR() {
         // BuildCompat.isAtLeastR() is used to check the Android version before releasing Android R.
@@ -280,6 +288,7 @@ public class NetworkCapabilitiesTest {
             .addCapability(NET_CAPABILITY_NOT_METERED);
         if (isAtLeastR()) {
             netCap.setOwnerUid(123);
+            netCap.setAdministratorUids(new int[] {5, 11});
         }
         assertParcelingIsLossless(netCap);
         netCap.setSSID(TEST_SSID);
@@ -439,6 +448,23 @@ public class NetworkCapabilitiesTest {
         return range;
     }
 
+    @Test @IgnoreUpTo(Build.VERSION_CODES.Q)
+    public void testSetAdministratorUids() {
+        NetworkCapabilities nc =
+                new NetworkCapabilities().setAdministratorUids(new int[] {2, 1, 3});
+
+        assertArrayEquals(new int[] {1, 2, 3}, nc.getAdministratorUids());
+    }
+
+    @Test @IgnoreUpTo(Build.VERSION_CODES.Q)
+    public void testSetAdministratorUidsWithDuplicates() {
+        try {
+            new NetworkCapabilities().setAdministratorUids(new int[] {1, 1});
+            fail("Expected IllegalArgumentException for duplicate uids");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
     @Test
     public void testCombineCapabilities() {
         NetworkCapabilities nc1 = new NetworkCapabilities();
@@ -491,6 +517,31 @@ public class NetworkCapabilitiesTest {
         assertFalse(nc2.appliesToUid(12));
         assertTrue(nc1.appliesToUid(22));
         assertTrue(nc2.appliesToUid(22));
+    }
+
+    @Test @IgnoreUpTo(Build.VERSION_CODES.Q)
+    public void testCombineCapabilities_AdministratorUids() {
+        final NetworkCapabilities nc1 = new NetworkCapabilities();
+        final NetworkCapabilities nc2 = new NetworkCapabilities();
+
+        final int[] adminUids = {3, 6, 12};
+        nc1.setAdministratorUids(adminUids);
+        nc2.combineCapabilities(nc1);
+        assertTrue(nc2.equalsAdministratorUids(nc1));
+        assertArrayEquals(nc2.getAdministratorUids(), adminUids);
+
+        final int[] adminUidsOtherOrder = {3, 12, 6};
+        nc1.setAdministratorUids(adminUidsOtherOrder);
+        assertTrue(nc2.equalsAdministratorUids(nc1));
+
+        final int[] adminUids2 = {11, 1, 12, 3, 6};
+        nc1.setAdministratorUids(adminUids2);
+        assertFalse(nc2.equalsAdministratorUids(nc1));
+        assertFalse(Arrays.equals(nc2.getAdministratorUids(), adminUids2));
+        try {
+            nc2.combineCapabilities(nc1);
+            fail("Shouldn't be able to combine different lists of admin UIDs");
+        } catch (IllegalStateException expected) { }
     }
 
     @Test

@@ -4791,7 +4791,7 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
         // enqueue toast -> no toasts enqueued
         ((INotificationManager) mService.mService).enqueueTextToast(testPackage, new Binder(),
                 "Text", 2000, 0, null);
-        verify(mStatusBar).showToast(any(), any(), any(), any(), anyInt(), any());
+        verify(mStatusBar).showToast(anyInt(), any(), any(), any(), any(), anyInt(), any());
     }
 
     @Test
@@ -6503,5 +6503,20 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
                 mBinderService.getConversationsForPackage(PKG_P, mUid).getList();
         assertNull(conversations.get(0).getShortcutInfo());
         assertNull(conversations.get(1).getShortcutInfo());
+    }
+
+    @Test
+    public void testShortcutHelperNull_doesntCrashEnqueue() throws RemoteException {
+        mService.setShortcutHelper(null);
+        NotificationRecord nr =
+                generateMessageBubbleNotifRecord(mTestNotificationChannel,
+                        "testShortcutHelperNull_doesntCrashEnqueue");
+        try {
+            mBinderService.enqueueNotificationWithTag(PKG, PKG, nr.getSbn().getTag(),
+                    nr.getSbn().getId(), nr.getSbn().getNotification(), nr.getSbn().getUserId());
+            waitForIdle();
+        } catch (Exception e) {
+            fail(e.getMessage());
+        }
     }
 }

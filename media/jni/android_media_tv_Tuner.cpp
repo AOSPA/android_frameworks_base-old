@@ -124,7 +124,11 @@ using ::android::hardware::tv::tuner::V1_0::FrontendIsdbtGuardInterval;
 using ::android::hardware::tv::tuner::V1_0::FrontendIsdbtMode;
 using ::android::hardware::tv::tuner::V1_0::FrontendIsdbtModulation;
 using ::android::hardware::tv::tuner::V1_0::FrontendIsdbtSettings;
+using ::android::hardware::tv::tuner::V1_0::FrontendModulationStatus;
 using ::android::hardware::tv::tuner::V1_0::FrontendScanAtsc3PlpInfo;
+using ::android::hardware::tv::tuner::V1_0::FrontendStatus;
+using ::android::hardware::tv::tuner::V1_0::FrontendStatusAtsc3PlpInfo;
+using ::android::hardware::tv::tuner::V1_0::FrontendStatusType;
 using ::android::hardware::tv::tuner::V1_0::FrontendType;
 using ::android::hardware::tv::tuner::V1_0::ITuner;
 using ::android::hardware::tv::tuner::V1_0::LnbPosition;
@@ -151,6 +155,7 @@ struct fields_t {
     jmethodID onFilterEventID;
     jmethodID lnbInitID;
     jmethodID onLnbEventID;
+    jmethodID onLnbDiseqcMessageID;
     jmethodID onDvrRecordStatusID;
     jmethodID onDvrPlaybackStatusID;
     jmethodID descramblerInitID;
@@ -166,19 +171,31 @@ static int IP_V6_LENGTH = 16;
 
 namespace android {
 /////////////// LnbCallback ///////////////////////
-LnbCallback::LnbCallback(jweak tunerObj, LnbId id) : mObject(tunerObj), mId(id) {}
+LnbCallback::LnbCallback(jobject lnbObj, LnbId id) : mId(id) {
+    JNIEnv *env = AndroidRuntime::getJNIEnv();
+    mLnb = env->NewWeakGlobalRef(lnbObj);
+}
 
 Return<void> LnbCallback::onEvent(LnbEventType lnbEventType) {
     ALOGD("LnbCallback::onEvent, type=%d", lnbEventType);
     JNIEnv *env = AndroidRuntime::getJNIEnv();
     env->CallVoidMethod(
-            mObject,
+            mLnb,
             gFields.onLnbEventID,
             (jint)lnbEventType);
     return Void();
 }
-Return<void> LnbCallback::onDiseqcMessage(const hidl_vec<uint8_t>& /*diseqcMessage*/) {
+Return<void> LnbCallback::onDiseqcMessage(const hidl_vec<uint8_t>& diseqcMessage) {
     ALOGD("LnbCallback::onDiseqcMessage");
+    JNIEnv *env = AndroidRuntime::getJNIEnv();
+    jbyteArray array = env->NewByteArray(diseqcMessage.size());
+    env->SetByteArrayRegion(
+            array, 0, diseqcMessage.size(), reinterpret_cast<jbyte*>(diseqcMessage[0]));
+
+    env->CallVoidMethod(
+            mLnb,
+            gFields.onLnbDiseqcMessageID,
+            array);
     return Void();
 }
 
@@ -871,6 +888,10 @@ jobject JTuner::openFrontendById(int id) {
         return NULL;
     }
     mFe = fe;
+    mFeId = id;
+    if (mDemux != NULL) {
+        mDemux->setFrontendDataSource(mFeId);
+    }
     sp<FrontendCallback> feCb = new FrontendCallback(mObject, id);
     fe->setCallback(feCb);
 
@@ -1058,49 +1079,49 @@ jobject JTuner::getFrontendInfo(int id) {
             maxSymbolRate, acquireRange, exclusiveGroupId, statusCaps, jcaps);
 }
 
-jobject JTuner::getLnbIds() {
+jintArray JTuner::getLnbIds() {
     ALOGD("JTuner::getLnbIds()");
-    mTuner->getLnbIds([&](Result, const hidl_vec<FrontendId>& lnbIds) {
-        mLnbIds = lnbIds;
+    Result res;
+    hidl_vec<LnbId> lnbIds;
+    mTuner->getLnbIds([&](Result r, const hidl_vec<LnbId>& ids) {
+        lnbIds = ids;
+        res = r;
     });
-    if (mLnbIds.size() == 0) {
+    if (res != Result::SUCCESS || mLnbIds.size() == 0) {
         ALOGW("Lnb isn't available");
         return NULL;
     }
 
+    mLnbIds = lnbIds;
     JNIEnv *env = AndroidRuntime::getJNIEnv();
-    jclass arrayListClazz = env->FindClass("java/util/ArrayList");
-    jmethodID arrayListAdd = env->GetMethodID(arrayListClazz, "add", "(Ljava/lang/Object;)Z");
-    jobject obj = env->NewObject(arrayListClazz, env->GetMethodID(arrayListClazz, "<init>", "()V"));
 
-    jclass integerClazz = env->FindClass("java/lang/Integer");
-    jmethodID intInit = env->GetMethodID(integerClazz, "<init>", "(I)V");
+    jintArray ids = env->NewIntArray(mLnbIds.size());
+    env->SetIntArrayRegion(ids, 0, mLnbIds.size(), reinterpret_cast<jint*>(&mLnbIds[0]));
 
-    for (int i=0; i < mLnbIds.size(); i++) {
-       jobject idObj = env->NewObject(integerClazz, intInit, mLnbIds[i]);
-       env->CallBooleanMethod(obj, arrayListAdd, idObj);
-    }
-    return obj;
+    return ids;
 }
 
 jobject JTuner::openLnbById(int id) {
     sp<ILnb> iLnbSp;
-    mTuner->openLnbById(id, [&](Result, const sp<ILnb>& lnb) {
+    Result r;
+    mTuner->openLnbById(id, [&](Result res, const sp<ILnb>& lnb) {
+        r = res;
         iLnbSp = lnb;
     });
-    if (iLnbSp == nullptr) {
+    if (r != Result::SUCCESS || iLnbSp == nullptr) {
         ALOGE("Failed to open lnb");
         return NULL;
     }
     mLnb = iLnbSp;
-    sp<LnbCallback> lnbCb = new LnbCallback(mObject, id);
-    mLnb->setCallback(lnbCb);
 
     JNIEnv *env = AndroidRuntime::getJNIEnv();
     jobject lnbObj = env->NewObject(
             env->FindClass("android/media/tv/tuner/Lnb"),
             gFields.lnbInitID,
             (jint) id);
+
+    sp<LnbCallback> lnbCb = new LnbCallback(lnbObj, id);
+    mLnb->setCallback(lnbCb);
 
     sp<Lnb> lnbSp = new Lnb(iLnbSp, lnbObj);
     lnbSp->incStrong(lnbObj);
@@ -1125,13 +1146,14 @@ jobject JTuner::openLnbByName(jstring name) {
         return NULL;
     }
     mLnb = iLnbSp;
-    sp<LnbCallback> lnbCb = new LnbCallback(mObject, id);
-    mLnb->setCallback(lnbCb);
 
     jobject lnbObj = env->NewObject(
             env->FindClass("android/media/tv/tuner/Lnb"),
             gFields.lnbInitID,
             id);
+
+    sp<LnbCallback> lnbCb = new LnbCallback(lnbObj, id);
+    mLnb->setCallback(lnbCb);
 
     sp<Lnb> lnbSp = new Lnb(iLnbSp, lnbObj);
     lnbSp->incStrong(lnbObj);
@@ -1202,12 +1224,21 @@ Result JTuner::openDemux() {
         return Result::SUCCESS;
     }
     Result res;
+    uint32_t id;
+    sp<IDemux> demuxSp;
     mTuner->openDemux([&](Result r, uint32_t demuxId, const sp<IDemux>& demux) {
-        mDemux = demux;
-        mDemuxId = demuxId;
+        demuxSp = demux;
+        id = demuxId;
         res = r;
         ALOGD("open demux, id = %d", demuxId);
     });
+    if (res == Result::SUCCESS) {
+        mDemux = demuxSp;
+        mDemuxId = id;
+        if (mFe != NULL) {
+            mDemux->setFrontendDataSource(mFeId);
+        }
+    }
     return res;
 }
 
@@ -1451,6 +1482,254 @@ jobject JTuner::getDemuxCaps() {
     return env->NewObject(clazz, capsInit, numDemux, numRecord, numPlayback, numTsFilter,
             numSectionFilter, numAudioFilter, numVideoFilter, numPesFilter, numPcrFilter,
             numBytesInSectionFilter, filterCaps, linkCaps, bTimeFilter);
+}
+
+jobject JTuner::getFrontendStatus(jintArray types) {
+    if (mFe == NULL) {
+        return NULL;
+    }
+    JNIEnv *env = AndroidRuntime::getJNIEnv();
+    jsize size = env->GetArrayLength(types);
+    std::vector<FrontendStatusType> v(size);
+    env->GetIntArrayRegion(types, 0, size, reinterpret_cast<jint*>(&v[0]));
+
+    Result res;
+    hidl_vec<FrontendStatus> status;
+    mFe->getStatus(v,
+            [&](Result r, const hidl_vec<FrontendStatus>& s) {
+                res = r;
+                status = s;
+            });
+    if (res != Result::SUCCESS) {
+        return NULL;
+    }
+
+    jclass clazz = env->FindClass("android/media/tv/tuner/frontend/FrontendStatus");
+    jmethodID init = env->GetMethodID(clazz, "<init>", "()V");
+    jobject statusObj = env->NewObject(clazz, init);
+
+    jclass intClazz = env->FindClass("java/lang/Integer");
+    jmethodID initInt = env->GetMethodID(intClazz, "<init>", "(I)V");
+    jclass booleanClazz = env->FindClass("java/lang/Boolean");
+    jmethodID initBoolean = env->GetMethodID(booleanClazz, "<init>", "(Z)V");
+
+    for (auto s : status) {
+        switch(s.getDiscriminator()) {
+            case FrontendStatus::hidl_discriminator::isDemodLocked: {
+                jfieldID field = env->GetFieldID(clazz, "mIsDemodLocked", "Ljava/lang/Boolean;");
+                jobject newBooleanObj = env->NewObject(
+                        booleanClazz, initBoolean, static_cast<jboolean>(s.isDemodLocked()));
+                env->SetObjectField(statusObj, field, newBooleanObj);
+                break;
+            }
+            case FrontendStatus::hidl_discriminator::snr: {
+                jfieldID field = env->GetFieldID(clazz, "mSnr", "Ljava/lang/Integer;");
+                jobject newIntegerObj = env->NewObject(
+                        intClazz, initInt, static_cast<jint>(s.snr()));
+                env->SetObjectField(statusObj, field, newIntegerObj);
+                break;
+            }
+            case FrontendStatus::hidl_discriminator::ber: {
+                jfieldID field = env->GetFieldID(clazz, "mBer", "Ljava/lang/Integer;");
+                jobject newIntegerObj = env->NewObject(
+                        intClazz, initInt, static_cast<jint>(s.ber()));
+                env->SetObjectField(statusObj, field, newIntegerObj);
+                break;
+            }
+            case FrontendStatus::hidl_discriminator::per: {
+                jfieldID field = env->GetFieldID(clazz, "mPer", "Ljava/lang/Integer;");
+                jobject newIntegerObj = env->NewObject(
+                        intClazz, initInt, static_cast<jint>(s.per()));
+                env->SetObjectField(statusObj, field, newIntegerObj);
+                break;
+            }
+            case FrontendStatus::hidl_discriminator::preBer: {
+                jfieldID field = env->GetFieldID(clazz, "mPerBer", "Ljava/lang/Integer;");
+                jobject newIntegerObj = env->NewObject(
+                        intClazz, initInt, static_cast<jint>(s.preBer()));
+                env->SetObjectField(statusObj, field, newIntegerObj);
+                break;
+            }
+            case FrontendStatus::hidl_discriminator::signalQuality: {
+                jfieldID field = env->GetFieldID(clazz, "mSignalQuality", "Ljava/lang/Integer;");
+                jobject newIntegerObj = env->NewObject(
+                        intClazz, initInt, static_cast<jint>(s.signalQuality()));
+                env->SetObjectField(statusObj, field, newIntegerObj);
+                break;
+            }
+            case FrontendStatus::hidl_discriminator::signalStrength: {
+                jfieldID field = env->GetFieldID(clazz, "mSignalStrength", "Ljava/lang/Integer;");
+                jobject newIntegerObj = env->NewObject(
+                        intClazz, initInt, static_cast<jint>(s.signalStrength()));
+                env->SetObjectField(statusObj, field, newIntegerObj);
+                break;
+            }
+            case FrontendStatus::hidl_discriminator::symbolRate: {
+                jfieldID field = env->GetFieldID(clazz, "mSymbolRate", "Ljava/lang/Integer;");
+                jobject newIntegerObj = env->NewObject(
+                        intClazz, initInt, static_cast<jint>(s.symbolRate()));
+                env->SetObjectField(statusObj, field, newIntegerObj);
+                break;
+            }
+            case FrontendStatus::hidl_discriminator::innerFec: {
+                jfieldID field = env->GetFieldID(clazz, "mInnerFec", "Ljava/lang/Long;");
+                jclass longClazz = env->FindClass("java/lang/Long");
+                jmethodID initLong = env->GetMethodID(longClazz, "<init>", "(J)V");
+                jobject newLongObj = env->NewObject(
+                        longClazz, initLong, static_cast<jlong>(s.innerFec()));
+                env->SetObjectField(statusObj, field, newLongObj);
+                break;
+            }
+            case FrontendStatus::hidl_discriminator::modulation: {
+                jfieldID field = env->GetFieldID(clazz, "mModulation", "Ljava/lang/Integer;");
+                FrontendModulationStatus modulation = s.modulation();
+                jint intModulation;
+                bool valid = true;
+                switch(modulation.getDiscriminator()) {
+                    case FrontendModulationStatus::hidl_discriminator::dvbc: {
+                        intModulation = static_cast<jint>(modulation.dvbc());
+                        break;
+                    }
+                    case FrontendModulationStatus::hidl_discriminator::dvbs: {
+                        intModulation = static_cast<jint>(modulation.dvbs());
+                        break;
+                    }
+                    case FrontendModulationStatus::hidl_discriminator::isdbs: {
+                        intModulation = static_cast<jint>(modulation.isdbs());
+                        break;
+                    }
+                    case FrontendModulationStatus::hidl_discriminator::isdbs3: {
+                        intModulation = static_cast<jint>(modulation.isdbs3());
+                        break;
+                    }
+                    case FrontendModulationStatus::hidl_discriminator::isdbt: {
+                        intModulation = static_cast<jint>(modulation.isdbt());
+                        break;
+                    }
+                    default: {
+                        valid = false;
+                        break;
+                    }
+                }
+                if (valid) {
+                    jobject newIntegerObj = env->NewObject(intClazz, initInt, intModulation);
+                    env->SetObjectField(statusObj, field, newIntegerObj);
+                }
+                break;
+            }
+            case FrontendStatus::hidl_discriminator::inversion: {
+                jfieldID field = env->GetFieldID(clazz, "mInversion", "Ljava/lang/Integer;");
+                jobject newIntegerObj = env->NewObject(
+                        intClazz, initInt, static_cast<jint>(s.inversion()));
+                env->SetObjectField(statusObj, field, newIntegerObj);
+                break;
+            }
+            case FrontendStatus::hidl_discriminator::lnbVoltage: {
+                jfieldID field = env->GetFieldID(clazz, "mLnbVoltage", "Ljava/lang/Integer;");
+                jobject newIntegerObj = env->NewObject(
+                        intClazz, initInt, static_cast<jint>(s.lnbVoltage()));
+                env->SetObjectField(statusObj, field, newIntegerObj);
+                break;
+            }
+            case FrontendStatus::hidl_discriminator::plpId: {
+                jfieldID field = env->GetFieldID(clazz, "mPlpId", "Ljava/lang/Integer;");
+                jobject newIntegerObj = env->NewObject(
+                        intClazz, initInt, static_cast<jint>(s.plpId()));
+                env->SetObjectField(statusObj, field, newIntegerObj);
+                break;
+            }
+            case FrontendStatus::hidl_discriminator::isEWBS: {
+                jfieldID field = env->GetFieldID(clazz, "mIsEwbs", "Ljava/lang/Boolean;");
+                jobject newBooleanObj = env->NewObject(
+                        booleanClazz, initBoolean, static_cast<jboolean>(s.isEWBS()));
+                env->SetObjectField(statusObj, field, newBooleanObj);
+                break;
+            }
+            case FrontendStatus::hidl_discriminator::agc: {
+                jfieldID field = env->GetFieldID(clazz, "mAgc", "Ljava/lang/Integer;");
+                jobject newIntegerObj = env->NewObject(
+                        intClazz, initInt, static_cast<jint>(s.agc()));
+                env->SetObjectField(statusObj, field, newIntegerObj);
+                break;
+            }
+            case FrontendStatus::hidl_discriminator::isLnaOn: {
+                jfieldID field = env->GetFieldID(clazz, "mIsLnaOn", "Ljava/lang/Boolean;");
+                jobject newBooleanObj = env->NewObject(
+                        booleanClazz, initBoolean, static_cast<jboolean>(s.isLnaOn()));
+                env->SetObjectField(statusObj, field, newBooleanObj);
+                break;
+            }
+            case FrontendStatus::hidl_discriminator::isLayerError: {
+                jfieldID field = env->GetFieldID(clazz, "mIsLayerErrors", "[Z");
+                hidl_vec<bool> layerErr = s.isLayerError();
+
+                jbooleanArray valObj = env->NewBooleanArray(layerErr.size());
+
+                for (size_t i = 0; i < layerErr.size(); i++) {
+                    jboolean x = layerErr[i];
+                    env->SetBooleanArrayRegion(valObj, i, 1, &x);
+                }
+                env->SetObjectField(statusObj, field, valObj);
+                break;
+            }
+            case FrontendStatus::hidl_discriminator::mer: {
+                jfieldID field = env->GetFieldID(clazz, "mMer", "Ljava/lang/Integer;");
+                jobject newIntegerObj = env->NewObject(
+                        intClazz, initInt, static_cast<jint>(s.mer()));
+                env->SetObjectField(statusObj, field, newIntegerObj);
+                break;
+            }
+            case FrontendStatus::hidl_discriminator::freqOffset: {
+                jfieldID field = env->GetFieldID(clazz, "mFreqOffset", "Ljava/lang/Integer;");
+                jobject newIntegerObj = env->NewObject(
+                        intClazz, initInt, static_cast<jint>(s.freqOffset()));
+                env->SetObjectField(statusObj, field, newIntegerObj);
+                break;
+            }
+            case FrontendStatus::hidl_discriminator::hierarchy: {
+                jfieldID field = env->GetFieldID(clazz, "mHierarchy", "Ljava/lang/Integer;");
+                jobject newIntegerObj = env->NewObject(
+                        intClazz, initInt, static_cast<jint>(s.hierarchy()));
+                env->SetObjectField(statusObj, field, newIntegerObj);
+                break;
+            }
+            case FrontendStatus::hidl_discriminator::isRfLocked: {
+                jfieldID field = env->GetFieldID(clazz, "mIsRfLocked", "Ljava/lang/Boolean;");
+                jobject newBooleanObj = env->NewObject(
+                        booleanClazz, initBoolean, static_cast<jboolean>(s.isRfLocked()));
+                env->SetObjectField(statusObj, field, newBooleanObj);
+                break;
+            }
+            case FrontendStatus::hidl_discriminator::plpInfo: {
+                jfieldID field = env->GetFieldID(clazz, "mPlpInfo",
+                        "[Landroid/media/tv/tuner/frontend/FrontendStatus$Atsc3PlpTuningInfo;");
+                jclass plpClazz = env->FindClass(
+                        "android/media/tv/tuner/frontend/FrontendStatus$Atsc3PlpTuningInfo");
+                jmethodID initPlp = env->GetMethodID(plpClazz, "<init>", "(IZI)V");
+
+                hidl_vec<FrontendStatusAtsc3PlpInfo> plpInfos = s.plpInfo();
+
+                jobjectArray valObj = env->NewObjectArray(plpInfos.size(), plpClazz, NULL);
+                for (int i = 0; i < plpInfos.size(); i++) {
+                    auto info = plpInfos[i];
+                    jint plpId = (jint) info.plpId;
+                    jboolean isLocked = (jboolean) info.isLocked;
+                    jint uec = (jint) info.uec;
+
+                    jobject plpObj = env->NewObject(plpClazz, initPlp, plpId, isLocked, uec);
+                    env->SetObjectArrayElement(valObj, i, plpObj);
+                }
+
+                env->SetObjectField(statusObj, field, valObj);
+                break;
+            }
+            default: {
+                break;
+            }
+        }
+    }
+
+    return statusObj;
 }
 
 }  // namespace android
@@ -1990,8 +2269,6 @@ static void android_media_tv_Tuner_native_init(JNIEnv *env) {
 
     gFields.onFrontendEventID = env->GetMethodID(clazz, "onFrontendEvent", "(I)V");
 
-    gFields.onLnbEventID = env->GetMethodID(clazz, "onLnbEvent", "(I)V");
-
     jclass frontendClazz = env->FindClass("android/media/tv/tuner/Tuner$Frontend");
     gFields.frontendInitID =
             env->GetMethodID(frontendClazz, "<init>", "(Landroid/media/tv/tuner/Tuner;I)V");
@@ -1999,6 +2276,8 @@ static void android_media_tv_Tuner_native_init(JNIEnv *env) {
     jclass lnbClazz = env->FindClass("android/media/tv/tuner/Lnb");
     gFields.lnbContext = env->GetFieldID(lnbClazz, "mNativeContext", "J");
     gFields.lnbInitID = env->GetMethodID(lnbClazz, "<init>", "(I)V");
+    gFields.onLnbEventID = env->GetMethodID(lnbClazz, "onEvent", "(I)V");
+    gFields.onLnbDiseqcMessageID = env->GetMethodID(lnbClazz, "onDiseqcMessage", "([B)V");
 
     jclass filterClazz = env->FindClass("android/media/tv/tuner/filter/Filter");
     gFields.filterContext = env->GetFieldID(filterClazz, "mNativeContext", "J");
@@ -2086,8 +2365,10 @@ static int android_media_tv_Tuner_set_lna(JNIEnv *env, jobject thiz, jboolean en
     return tuner->setLna(enable);
 }
 
-static jobject android_media_tv_Tuner_get_frontend_status(JNIEnv, jobject, jintArray) {
-    return NULL;
+static jobject android_media_tv_Tuner_get_frontend_status(
+        JNIEnv* env, jobject thiz, jintArray types) {
+    sp<JTuner> tuner = getTuner(env, thiz);
+    return tuner->getFrontendStatus(types);
 }
 
 static jobject android_media_tv_Tuner_get_av_sync_hw_id(
@@ -2121,7 +2402,7 @@ static jobject android_media_tv_Tuner_get_frontend_info(JNIEnv *env, jobject thi
     return tuner->getFrontendInfo(id);
 }
 
-static jobject android_media_tv_Tuner_get_lnb_ids(JNIEnv *env, jobject thiz) {
+static jintArray android_media_tv_Tuner_get_lnb_ids(JNIEnv *env, jobject thiz) {
     sp<JTuner> tuner = getTuner(env, thiz);
     return tuner->getLnbIds();
 }
@@ -2950,8 +3231,14 @@ static int android_media_tv_Tuner_lnb_send_diseqc_msg(JNIEnv* env, jobject lnb, 
     return (jint) r;
 }
 
-static int android_media_tv_Tuner_close_lnb(JNIEnv*, jobject) {
-    return 0;
+static int android_media_tv_Tuner_close_lnb(JNIEnv* env, jobject lnb) {
+    sp<Lnb> lnbSp = getLnb(env, lnb);
+    Result r = lnbSp->getILnb()->close();
+    if (r == Result::SUCCESS) {
+        lnbSp->decStrong(lnb);
+        env->SetLongField(lnb, gFields.lnbContext, 0);
+    }
+    return (jint) r;
 }
 
 static void android_media_tv_Tuner_dvr_set_fd(JNIEnv *env, jobject dvr, jobject jfd) {
@@ -3125,8 +3412,7 @@ static const JNINativeMethod gTunerMethods[] = {
             (void *)android_media_tv_Tuner_open_filter },
     { "nativeOpenTimeFilter", "()Landroid/media/tv/tuner/filter/TimeFilter;",
             (void *)android_media_tv_Tuner_open_time_filter },
-    { "nativeGetLnbIds", "()Ljava/util/List;",
-            (void *)android_media_tv_Tuner_get_lnb_ids },
+    { "nativeGetLnbIds", "()[I", (void *)android_media_tv_Tuner_get_lnb_ids },
     { "nativeOpenLnbByHandle", "(I)Landroid/media/tv/tuner/Lnb;",
             (void *)android_media_tv_Tuner_open_lnb_by_handle },
     { "nativeOpenLnbByName", "(Ljava/lang/String;)Landroid/media/tv/tuner/Lnb;",

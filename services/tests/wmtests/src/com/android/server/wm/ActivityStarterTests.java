@@ -83,7 +83,7 @@ import android.platform.test.annotations.Presubmit;
 import android.service.voice.IVoiceInteractionSession;
 import android.view.Gravity;
 import android.window.ITaskOrganizer;
-import android.window.IWindowContainer;
+import android.window.WindowContainerToken;
 
 import androidx.test.filters.SmallTest;
 
@@ -327,8 +327,9 @@ public class ActivityStarterTests extends ActivityTestsBase {
 
         if (mockGetLaunchStack) {
             // Instrument the stack and task used.
-            final ActivityStack stack = mRootWindowContainer.getDefaultDisplay().createStack(
-                    WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_STANDARD, true /* onTop */);
+            final ActivityStack stack = mRootWindowContainer.getDefaultTaskDisplayArea()
+                    .createStack(WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_STANDARD,
+                            true /* onTop */);
 
             // Direct starter to use spy stack.
             doReturn(stack).when(mRootWindowContainer)
@@ -497,9 +498,12 @@ public class ActivityStarterTests extends ActivityTestsBase {
     }
 
     private void assertNoTasks(DisplayContent display) {
-        for (int i = display.getStackCount() - 1; i >= 0; --i) {
-            final ActivityStack stack = display.getStackAt(i);
-            assertFalse(stack.hasChild());
+        for (int tdaNdx = display.getTaskDisplayAreaCount() - 1; tdaNdx >= 0; --tdaNdx) {
+            final TaskDisplayArea taskDisplayArea = display.getTaskDisplayAreaAt(tdaNdx);
+            for (int sNdx = taskDisplayArea.getStackCount() - 1; sNdx >= 0; --sNdx) {
+                final ActivityStack stack = taskDisplayArea.getStackAt(sNdx);
+                assertFalse(stack.hasChild());
+            }
         }
     }
 
@@ -747,8 +751,9 @@ public class ActivityStarterTests extends ActivityTestsBase {
         final TestDisplayContent secondaryDisplay =
                 new TestDisplayContent.Builder(mService, 1000, 1500)
                         .setPosition(POSITION_BOTTOM).build();
-        final ActivityStack stack = secondaryDisplay.createStack(WINDOWING_MODE_FULLSCREEN,
-                ACTIVITY_TYPE_STANDARD, true /* onTop */);
+        final TaskDisplayArea secondaryTaskContainer = secondaryDisplay.getDefaultTaskDisplayArea();
+        final ActivityStack stack = secondaryTaskContainer.createStack(
+                WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_STANDARD, true /* onTop */);
 
         // Create an activity record on the top of secondary display.
         final ActivityRecord topActivityOnSecondaryDisplay = createSingleTaskActivityOn(stack);
@@ -769,7 +774,7 @@ public class ActivityStarterTests extends ActivityTestsBase {
         assertEquals(START_DELIVERED_TO_TOP, result);
 
         // Ensure secondary display only creates one stack.
-        verify(secondaryDisplay, times(1)).createStack(anyInt(), anyInt(), anyBoolean());
+        verify(secondaryTaskContainer, times(1)).createStack(anyInt(), anyInt(), anyBoolean());
     }
 
     /**
@@ -787,12 +792,13 @@ public class ActivityStarterTests extends ActivityTestsBase {
                 new TestDisplayContent.Builder(mService, 1000, 1500).build();
         mRootWindowContainer.positionChildAt(POSITION_TOP, secondaryDisplay,
                 false /* includingParents */);
+        final TaskDisplayArea secondaryTaskContainer = secondaryDisplay.getDefaultTaskDisplayArea();
         final ActivityRecord singleTaskActivity = createSingleTaskActivityOn(
-                secondaryDisplay.createStack(WINDOWING_MODE_FULLSCREEN,
+                secondaryTaskContainer.createStack(WINDOWING_MODE_FULLSCREEN,
                         ACTIVITY_TYPE_STANDARD, false /* onTop */));
 
         // Create another activity on top of the secondary display.
-        final ActivityStack topStack = secondaryDisplay.createStack(WINDOWING_MODE_FULLSCREEN,
+        final ActivityStack topStack = secondaryTaskContainer.createStack(WINDOWING_MODE_FULLSCREEN,
                 ACTIVITY_TYPE_STANDARD, true /* onTop */);
         final Task topTask = new TaskBuilder(mSupervisor).setStack(topStack).build();
         new ActivityBuilder(mService).setTask(topTask).build();
@@ -809,7 +815,7 @@ public class ActivityStarterTests extends ActivityTestsBase {
         assertEquals(START_TASK_TO_FRONT, result);
 
         // Ensure secondary display only creates two stacks.
-        verify(secondaryDisplay, times(2)).createStack(anyInt(), anyInt(), anyBoolean());
+        verify(secondaryTaskContainer, times(2)).createStack(anyInt(), anyInt(), anyBoolean());
     }
 
     private ActivityRecord createSingleTaskActivityOn(ActivityStack stack) {
@@ -838,7 +844,8 @@ public class ActivityStarterTests extends ActivityTestsBase {
 
         // Create a secondary display at bottom.
         final TestDisplayContent secondaryDisplay = addNewDisplayContentAt(POSITION_BOTTOM);
-        secondaryDisplay.createStack(WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_STANDARD,
+        final TaskDisplayArea secondaryTaskContainer = secondaryDisplay.getDefaultTaskDisplayArea();
+        secondaryTaskContainer.createStack(WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_STANDARD,
                 true /* onTop */);
 
         // Put an activity on default display as the top focused activity.
@@ -953,7 +960,7 @@ public class ActivityStarterTests extends ActivityTestsBase {
         final ActivityStarter starter = prepareStarter(0 /* flags */);
         starter.mStartActivity = new ActivityBuilder(mService).build();
         final Task task = new TaskBuilder(mService.mStackSupervisor)
-                .setStack(mService.mRootWindowContainer.getDefaultDisplay().createStack(
+                .setStack(mService.mRootWindowContainer.getDefaultTaskDisplayArea().createStack(
                         WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_STANDARD, true /* onTop */))
                 .setUserId(10)
                 .build();
@@ -1016,10 +1023,10 @@ public class ActivityStarterTests extends ActivityTestsBase {
                     WINDOWING_MODE_SPLIT_SCREEN_PRIMARY);
             mService.mTaskOrganizerController.registerTaskOrganizer(this,
                     WINDOWING_MODE_SPLIT_SCREEN_SECONDARY);
-            IWindowContainer primary = mService.mTaskOrganizerController.createRootTask(
+            WindowContainerToken primary = mService.mTaskOrganizerController.createRootTask(
                     displayId, WINDOWING_MODE_SPLIT_SCREEN_PRIMARY).token;
             mPrimary = WindowContainer.fromBinder(primary.asBinder()).asTask();
-            IWindowContainer secondary = mService.mTaskOrganizerController.createRootTask(
+            WindowContainerToken secondary = mService.mTaskOrganizerController.createRootTask(
                     displayId, WINDOWING_MODE_SPLIT_SCREEN_SECONDARY).token;
             mSecondary = WindowContainer.fromBinder(secondary.asBinder()).asTask();
         }
@@ -1039,14 +1046,18 @@ public class ActivityStarterTests extends ActivityTestsBase {
                         == WINDOWING_MODE_SPLIT_SCREEN_PRIMARY) {
                     mInSplit = true;
                     mService.mTaskOrganizerController.setLaunchRoot(mDisplayId,
-                            mSecondary.mRemoteToken);
+                            mSecondary.mRemoteToken.toWindowContainerToken());
                     // move everything to secondary because test expects this but usually sysui
                     // does it.
                     DisplayContent dc = mService.mRootWindowContainer.getDisplayContent(mDisplayId);
-                    for (int i = dc.getStackCount() - 1; i >= 0; --i) {
-                        if (!WindowConfiguration.isSplitScreenWindowingMode(
-                                dc.getStackAt(i).getWindowingMode())) {
-                            dc.getStackAt(i).reparent(mSecondary, POSITION_BOTTOM);
+                    for (int tdaNdx = dc.getTaskDisplayAreaCount() - 1; tdaNdx >= 0; --tdaNdx) {
+                        final TaskDisplayArea taskDisplayArea = dc.getTaskDisplayAreaAt(tdaNdx);
+                        for (int sNdx = taskDisplayArea.getStackCount() - 1; sNdx >= 0; --sNdx) {
+                            final ActivityStack stack = taskDisplayArea.getStackAt(sNdx);
+                            if (!WindowConfiguration.isSplitScreenWindowingMode(
+                                    stack.getWindowingMode())) {
+                                stack.reparent(mSecondary, POSITION_BOTTOM);
+                            }
                         }
                     }
                 }

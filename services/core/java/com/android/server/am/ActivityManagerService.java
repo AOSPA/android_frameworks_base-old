@@ -12201,8 +12201,6 @@ public class ActivityManagerService extends IActivityManager.Stub
 
     void dumpAllowedAssociationsLocked(FileDescriptor fd, PrintWriter pw, String[] args,
             int opti, boolean dumpAll, String dumpPackage) {
-        boolean needSep = false;
-
         pw.println("ACTIVITY MANAGER ALLOWED ASSOCIATION STATE (dumpsys activity allowed-associations)");
         boolean printed = false;
         if (mAllowedAssociations != null) {
@@ -12210,21 +12208,16 @@ public class ActivityManagerService extends IActivityManager.Stub
                 final String pkg = mAllowedAssociations.keyAt(i);
                 final ArraySet<String> asc =
                         mAllowedAssociations.valueAt(i).getAllowedPackageAssociations();
-                boolean printedHeader = false;
+                if (!printed) {
+                    pw.println("  Allowed associations (by restricted package):");
+                    printed = true;
+                }
+                pw.print("  * ");
+                pw.print(pkg);
+                pw.println(":");
                 for (int j = 0; j < asc.size(); j++) {
                     if (dumpPackage == null || pkg.equals(dumpPackage)
                             || asc.valueAt(j).equals(dumpPackage)) {
-                        if (!printed) {
-                            pw.println("  Allowed associations (by restricted package):");
-                            printed = true;
-                            needSep = true;
-                        }
-                        if (!printedHeader) {
-                            pw.print("  * ");
-                            pw.print(pkg);
-                            pw.println(":");
-                            printedHeader = true;
-                        }
                         pw.print("      Allow: ");
                         pw.println(asc.valueAt(j));
                     }
@@ -17780,7 +17773,7 @@ public class ActivityManagerService extends IActivityManager.Stub
 
             proc.setReportedForegroundServiceTypes(fgServiceTypes);
             ProcessChangeItem item = enqueueProcessChangeItemLocked(proc.pid, proc.info.uid);
-            item.changes = ProcessChangeItem.CHANGE_FOREGROUND_SERVICES;
+            item.changes |= ProcessChangeItem.CHANGE_FOREGROUND_SERVICES;
             item.foregroundServiceTypes = fgServiceTypes;
         }
         if (oomAdj) {
@@ -18458,7 +18451,18 @@ public class ActivityManagerService extends IActivityManager.Stub
                     }
                 }
 
-                proc.thread.dumpHeap(managed, mallocInfo, runGc, path, fd, finishCallback);
+                Process.enableFreezer(false);
+
+                final RemoteCallback intermediateCallback = new RemoteCallback(
+                        new RemoteCallback.OnResultListener() {
+                        @Override
+                        public void onResult(Bundle result) {
+                            finishCallback.sendResult(result);
+                            Process.enableFreezer(true);
+                        }
+                    }, null);
+
+                proc.thread.dumpHeap(managed, mallocInfo, runGc, path, fd, intermediateCallback);
                 fd = null;
                 return true;
             }

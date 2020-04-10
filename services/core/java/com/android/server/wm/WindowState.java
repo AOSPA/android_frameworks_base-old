@@ -1101,7 +1101,6 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
                 }
             }
 
-            final ActivityStack stack = getRootTask();
             layoutDisplayFrame = new Rect(windowFrames.mDisplayFrame);
             windowFrames.mDisplayFrame.set(windowFrames.mContainingFrame);
             layoutXDiff = mInsetFrame.left - windowFrames.mContainingFrame.left;
@@ -1205,8 +1204,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
 
         if (mIsWallpaper && (fw != windowFrames.mFrame.width()
                 || fh != windowFrames.mFrame.height())) {
-            dc.mWallpaperController.updateWallpaperOffset(this,
-                    displayInfo.logicalWidth, displayInfo.logicalHeight, false /* sync */);
+            dc.mWallpaperController.updateWallpaperOffset(this, false /* sync */);
         }
 
         // Calculate relative frame
@@ -1518,7 +1516,8 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         // Some system windows (e.g. "Power off" dialog) don't have a task, but we would still
         // associate them with some stack to enable dimming.
         final DisplayContent dc = getDisplayContent();
-        return mAttrs.type >= FIRST_SYSTEM_WINDOW && dc != null ? dc.getRootHomeTask() : null;
+        return mAttrs.type >= FIRST_SYSTEM_WINDOW
+                && dc != null ? dc.getDefaultTaskDisplayArea().getRootHomeTask() : null;
     }
 
     /**
@@ -3427,68 +3426,55 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
     }
 
     void reportResized() {
-        Trace.traceBegin(TRACE_TAG_WINDOW_MANAGER, "wm.reportResized_" + getWindowTag());
+        if (Trace.isTagEnabled(TRACE_TAG_WINDOW_MANAGER)) {
+            Trace.traceBegin(TRACE_TAG_WINDOW_MANAGER, "wm.reportResized_" + getWindowTag());
+        }
+
+        ProtoLog.v(WM_DEBUG_RESIZE, "Reporting new frame to %s: %s", this,
+                mWindowFrames.mCompatFrame);
+        if (mWinAnimator.mDrawState == DRAW_PENDING) {
+            ProtoLog.i(WM_DEBUG_ORIENTATION, "Resizing %s WITH DRAW PENDING", this);
+        }
+
+        getMergedConfiguration(mLastReportedConfiguration);
+        mLastConfigReportedToClient = true;
+
+        final boolean reportOrientation = mReportOrientationChanged;
+        // Always reset these states first, so if {@link IWindow#resized} fails, this
+        // window won't be added to {@link WindowManagerService#mResizingWindows} and set
+        // {@link #mOrientationChanging} to true again by {@link #updateResizingWindowIfNeeded}
+        // that may cause WINDOW_FREEZE_TIMEOUT because resizing the client keeps failing.
+        mReportOrientationChanged = false;
+        mDragResizingChangeReported = true;
+        mWinAnimator.mSurfaceResized = false;
+        mWindowFrames.resetInsetsChanged();
+
+        final Rect frame = mWindowFrames.mCompatFrame;
+        final Rect contentInsets = mWindowFrames.mLastContentInsets;
+        final Rect visibleInsets = mWindowFrames.mLastVisibleInsets;
+        final Rect stableInsets = mWindowFrames.mLastStableInsets;
+        final MergedConfiguration mergedConfiguration = mLastReportedConfiguration;
+        final boolean reportDraw = mWinAnimator.mDrawState == DRAW_PENDING;
+        final boolean forceRelayout = reportOrientation || isDragResizeChanged();
+        final int displayId = getDisplayId();
+        final DisplayCutout displayCutout = getWmDisplayCutout().getDisplayCutout();
+
         try {
-            ProtoLog.v(WM_DEBUG_RESIZE,
-                    "Reporting new frame to %s: %s", this,
-                            mWindowFrames.mCompatFrame);
-            final MergedConfiguration mergedConfiguration =
-                    new MergedConfiguration(getProcessGlobalConfiguration(),
-                    getMergedOverrideConfiguration());
+            mClient.resized(frame, contentInsets, visibleInsets, stableInsets, reportDraw,
+                    mergedConfiguration, getBackdropFrame(frame), forceRelayout,
+                    getDisplayContent().getDisplayPolicy().areSystemBarsForcedShownLw(this),
+                    displayId, new DisplayCutout.ParcelableWrapper(displayCutout));
 
-            setLastReportedMergedConfiguration(mergedConfiguration);
-
-            if (mWinAnimator.mDrawState == DRAW_PENDING) {
-                ProtoLog.i(WM_DEBUG_ORIENTATION,
-                        "Resizing %s WITH DRAW PENDING", this);
-            }
-
-            final Rect frame = mWindowFrames.mCompatFrame;
-            final Rect contentInsets = mWindowFrames.mLastContentInsets;
-            final Rect visibleInsets = mWindowFrames.mLastVisibleInsets;
-            final Rect stableInsets = mWindowFrames.mLastStableInsets;
-            final boolean reportDraw = mWinAnimator.mDrawState == DRAW_PENDING;
-            final boolean reportOrientation = mReportOrientationChanged;
-            final int displayId = getDisplayId();
-            final DisplayCutout displayCutout = getWmDisplayCutout().getDisplayCutout();
-            if (mAttrs.type != WindowManager.LayoutParams.TYPE_APPLICATION_STARTING
-                    && mClient instanceof IWindow.Stub) {
-                // To prevent deadlock simulate one-way call if win.mClient is a local object.
-                mWmService.mH.post(new Runnable() {
-                    @Override
-                    public void run() {
-                        try {
-                            dispatchResized(frame, contentInsets, visibleInsets,
-                                    stableInsets, reportDraw, mergedConfiguration,
-                                    reportOrientation, displayId, displayCutout);
-                        } catch (RemoteException e) {
-                            // Not a remote call, RemoteException won't be raised.
-                        }
-                    }
-                });
-            } else {
-                dispatchResized(frame, contentInsets, visibleInsets, stableInsets,
-                        reportDraw, mergedConfiguration, reportOrientation, displayId,
-                        displayCutout);
-            }
             if (mWmService.mAccessibilityController != null) {
-                mWmService.mAccessibilityController.onSomeWindowResizedOrMovedLocked(
-                        getDisplayId());
+                mWmService.mAccessibilityController.onSomeWindowResizedOrMovedLocked(displayId);
             }
             updateLocationInParentDisplayIfNeeded();
-
-            mWindowFrames.resetInsetsChanged();
-            mWinAnimator.mSurfaceResized = false;
-            mReportOrientationChanged = false;
         } catch (RemoteException e) {
+            // Cancel orientation change of this window to avoid blocking unfreeze display.
             setOrientationChanging(false);
             mLastFreezeDuration = (int)(SystemClock.elapsedRealtime()
                     - mWmService.mDisplayFreezeTime);
-            // We are assuming the hosting process is dead or in a zombie state.
-            Slog.w(TAG, "Failed to report 'resized' to the client of " + this
-                    + ", removing this window.");
-            mWmService.mPendingRemove.add(this);
-            mWmService.mWindowPlacerLocked.requestTraversal();
+            Slog.w(TAG, "Failed to report 'resized' to " + this + " due to " + e);
         }
         Trace.traceEnd(TRACE_TAG_WINDOW_MANAGER);
     }
@@ -3601,20 +3587,6 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
             return INVALID_TASK_ID;
         }
         return stack.mTaskId;
-    }
-
-    private void dispatchResized(Rect frame, Rect contentInsets,
-            Rect visibleInsets, Rect stableInsets, boolean reportDraw,
-            MergedConfiguration mergedConfiguration, boolean reportOrientation, int displayId,
-            DisplayCutout displayCutout)
-            throws RemoteException {
-        final boolean forceRelayout = isDragResizeChanged() || reportOrientation;
-
-        mClient.resized(frame, contentInsets, visibleInsets, stableInsets,
-                reportDraw, mergedConfiguration, getBackdropFrame(frame), forceRelayout,
-                getDisplayContent().getDisplayPolicy().areSystemBarsForcedShownLw(this), displayId,
-                new DisplayCutout.ParcelableWrapper(displayCutout));
-        mDragResizingChangeReported = true;
     }
 
     public void registerFocusObserver(IWindowFocusObserver observer) {
@@ -5012,7 +4984,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
     }
 
     @Override
-    boolean isAnimating(int flags) {
+    boolean isAnimating(int flags, int typesToCheck) {
 
         // If we are an inset provider, all our animations are driven by the inset client, so we
         // aren't really animating.
@@ -5020,7 +4992,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         if (mControllableInsetProvider != null) {
             return false;
         }
-        return super.isAnimating(flags);
+        return super.isAnimating(flags, typesToCheck);
     }
 
     void startAnimation(Animation anim) {
@@ -5752,7 +5724,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         if (mLocalSyncId >= 0) {
             mBLASTSyncEngine.setReady(mLocalSyncId);
         } else {
-            mWaitingListener.transactionReady(mWaitingSyncId, mBLASTSyncTransaction);
+            mWaitingListener.onTransactionReady(mWaitingSyncId, mBLASTSyncTransaction);
         }
 
         mUsingBLASTSyncTransaction = false;

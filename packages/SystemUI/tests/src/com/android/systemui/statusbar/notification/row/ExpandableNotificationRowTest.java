@@ -20,7 +20,6 @@ import static android.app.NotificationManager.IMPORTANCE_DEFAULT;
 
 import static com.android.systemui.statusbar.NotificationEntryHelper.modifyRanking;
 import static com.android.systemui.statusbar.notification.row.NotificationRowContentBinder.FLAG_CONTENT_VIEW_ALL;
-import static com.android.systemui.statusbar.notification.row.NotificationRowContentBinder.FLAG_CONTENT_VIEW_HEADS_UP;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -39,6 +38,7 @@ import static org.mockito.Mockito.when;
 import android.app.AppOpsManager;
 import android.app.NotificationChannel;
 import android.testing.AndroidTestingRunner;
+import android.testing.TestableLooper;
 import android.testing.TestableLooper.RunWithLooper;
 import android.util.ArraySet;
 import android.view.NotificationHeaderView;
@@ -79,7 +79,10 @@ public class ExpandableNotificationRowTest extends SysuiTestCase {
     @Before
     public void setUp() throws Exception {
         allowTestableLooperAsMainThread();
-        mNotificationTestHelper = new NotificationTestHelper(mContext, mDependency);
+        mNotificationTestHelper = new NotificationTestHelper(
+                mContext,
+                mDependency,
+                TestableLooper.get(this));
         mGroupRow = mNotificationTestHelper.createGroup();
         mGroupRow.setHeadsUpAnimatingAwayListener(
                 animatingAway -> mHeadsUpAnimatingAway = animatingAway);
@@ -135,22 +138,13 @@ public class ExpandableNotificationRowTest extends SysuiTestCase {
     }
 
     @Test
-    public void testFreeContentViewWhenSafe() throws Exception {
-        ExpandableNotificationRow row = mNotificationTestHelper.createRow(FLAG_CONTENT_VIEW_ALL);
-
-        row.freeContentViewWhenSafe(FLAG_CONTENT_VIEW_HEADS_UP);
-
-        assertNull(row.getPrivateLayout().getHeadsUpChild());
-    }
-
-    @Test
     public void setNeedsRedactionFreesViewWhenFalse() throws Exception {
         ExpandableNotificationRow row = mNotificationTestHelper.createRow(FLAG_CONTENT_VIEW_ALL);
         row.setNeedsRedaction(true);
         row.getPublicLayout().setVisibility(View.GONE);
 
         row.setNeedsRedaction(false);
-
+        TestableLooper.get(this).processAllMessages();
         assertNull(row.getPublicLayout().getContractedChild());
     }
 
@@ -229,22 +223,19 @@ public class ExpandableNotificationRowTest extends SysuiTestCase {
 
     @Test
     public void testShowAppOpsIcons_header() {
-        NotificationHeaderView mockHeader = mock(NotificationHeaderView.class);
-
         NotificationContentView publicLayout = mock(NotificationContentView.class);
         mGroupRow.setPublicLayout(publicLayout);
         NotificationContentView privateLayout = mock(NotificationContentView.class);
         mGroupRow.setPrivateLayout(privateLayout);
         NotificationChildrenContainer mockContainer = mock(NotificationChildrenContainer.class);
         when(mockContainer.getNotificationChildCount()).thenReturn(1);
-        when(mockContainer.getHeaderView()).thenReturn(mockHeader);
         mGroupRow.setChildrenContainer(mockContainer);
 
         ArraySet<Integer> ops = new ArraySet<>();
         ops.add(AppOpsManager.OP_ANSWER_PHONE_CALLS);
         mGroupRow.showAppOpsIcons(ops);
 
-        verify(mockHeader, times(1)).showAppOpsIcons(ops);
+        verify(mockContainer, times(1)).showAppOpsIcons(ops);
         verify(privateLayout, times(1)).showAppOpsIcons(ops);
         verify(publicLayout, times(1)).showAppOpsIcons(ops);
 

@@ -406,11 +406,12 @@ class KeyguardController {
             // show on top of the lock screen. In this can we want to dismiss the docked
             // stack since it will be complicated/risky to try to put the activity on top
             // of the lock screen in the right fullscreen configuration.
-            final DisplayContent display = mRootWindowContainer.getDefaultDisplay();
-            if (!display.mTaskContainers.isSplitScreenModeActivated()) {
+            final TaskDisplayArea taskDisplayArea = mRootWindowContainer
+                    .getDefaultTaskDisplayArea();
+            if (!taskDisplayArea.isSplitScreenModeActivated()) {
                 return;
             }
-            display.mTaskContainers.onSplitScreenModeDismissed();
+            taskDisplayArea.onSplitScreenModeDismissed();
         }
     }
 
@@ -528,11 +529,14 @@ class KeyguardController {
          * occlusion state.
          */
         private ActivityStack getStackForControllingOccluding(DisplayContent display) {
-            for (int stackNdx = display.getStackCount() - 1; stackNdx >= 0; --stackNdx) {
-                final ActivityStack stack = display.getStackAt(stackNdx);
-                if (stack != null && stack.isFocusableAndVisible()
-                        && !stack.inPinnedWindowingMode()) {
-                    return stack;
+            for (int tdaNdx = display.getTaskDisplayAreaCount() - 1; tdaNdx >= 0; --tdaNdx) {
+                final TaskDisplayArea taskDisplayArea = display.getTaskDisplayAreaAt(tdaNdx);
+                for (int sNdx = taskDisplayArea.getStackCount() - 1; sNdx >= 0; --sNdx) {
+                    final ActivityStack stack = taskDisplayArea.getStackAt(sNdx);
+                    if (stack != null && stack.isFocusableAndVisible()
+                            && !stack.inPinnedWindowingMode()) {
+                        return stack;
+                    }
                 }
             }
             return null;
