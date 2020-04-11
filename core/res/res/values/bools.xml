@@ -31,5 +31,4 @@
     <bool name="use_lock_pattern_drawable">false</bool>
     <bool name="resolver_landscape_phone">true</bool>
     <bool name="config_wifi_dual_sap_mode_enabled">false</bool>
-    <bool name="config_wifi_wap3_sap_mode_enabled">false</bool>
 </resources>

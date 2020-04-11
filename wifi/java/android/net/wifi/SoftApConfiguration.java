@@ -251,10 +251,6 @@ public final class SoftApConfiguration implements Parcelable {
     public static final int SECURITY_TYPE_OWE = 4;
 
     /** @hide */
-    @SystemApi
-    public static final int SECURITY_TYPE_SAE = 5;
-
-    /** @hide */
     @Retention(RetentionPolicy.SOURCE)
     @IntDef(prefix = { "SECURITY_TYPE_" }, value = {
         SECURITY_TYPE_OPEN,
@@ -262,7 +258,6 @@ public final class SoftApConfiguration implements Parcelable {
         SECURITY_TYPE_WPA3_SAE_TRANSITION,
         SECURITY_TYPE_WPA3_SAE,
         SECURITY_TYPE_OWE,
-        SECURITY_TYPE_SAE,
     })
     public @interface SecurityType {}
 
@@ -456,6 +451,7 @@ public final class SoftApConfiguration implements Parcelable {
      * {@link #SECURITY_TYPE_WPA2_PSK},
      * {@link #SECURITY_TYPE_WPA3_SAE_TRANSITION},
      * {@link #SECURITY_TYPE_WPA3_SAE}
+     * {@link #SECURITY_TYPE_OWE},
      */
     public @SecurityType int getSecurityType() {
         return mSecurityType;
@@ -742,10 +738,13 @@ public final class SoftApConfiguration implements Parcelable {
          */
         @NonNull
         public Builder setPassphrase(@Nullable String passphrase, @SecurityType int securityType) {
-            if (securityType == SECURITY_TYPE_OPEN) {
-                if (passphrase != null) {
+            if (securityType == SECURITY_TYPE_OPEN
+                || securityType == SECURITY_TYPE_OWE) {
+                if (!TextUtils.isEmpty(passphrase)) {
                     throw new IllegalArgumentException(
                             "passphrase should be null when security type is open");
+                } else {
+                    passphrase = null;
                 }
             } else {
                 Preconditions.checkStringNotEmpty(passphrase);
