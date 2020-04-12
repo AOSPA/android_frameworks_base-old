@@ -18,6 +18,7 @@ package com.android.systemui.statusbar.phone;
 
 import android.annotation.IntDef;
 import android.content.Context;
+import android.content.res.ColorStateList;
 import android.hardware.biometrics.BiometricSourceType;
 import android.metrics.LogMaker;
 import android.os.Handler;
@@ -138,6 +139,7 @@ public class BiometricUnlockController extends KeyguardUpdateMonitorCallback {
     private ScrimController mScrimController;
     private StatusBar mStatusBar;
     private int mPendingAuthenticatedUserId = -1;
+    private int mPrevFaceErrorMsgId = -1;
     private BiometricSourceType mPendingAuthenticatedBioSourceType = null;
     private boolean mPendingShowBouncer;
     private boolean mHasScreenTurnedOnSinceAuthenticating;
@@ -492,10 +494,23 @@ public class BiometricUnlockController extends KeyguardUpdateMonitorCallback {
     @Override
     public void onBiometricError(int msgId, String errString,
             BiometricSourceType biometricSourceType) {
+        if (biometricSourceType == BiometricSourceType.FACE) {
+            boolean shouldWakeAndUnlock = (mPrevFaceErrorMsgId == 7 || mPrevFaceErrorMsgId == 9 || (msgId != 7 && msgId != 9));
+            mPrevFaceErrorMsgId = msgId;
+            if (shouldWakeAndUnlock) {
+                startWakeAndUnlock(MODE_SHOW_BOUNCER);
+                mStatusBarKeyguardViewManager.showBouncerMessage(errString, ColorStateList.valueOf(-1));
+            }
+        }
         mMetricsLogger.write(new LogMaker(MetricsEvent.BIOMETRIC_AUTH)
                 .setType(MetricsEvent.TYPE_ERROR).setSubtype(toSubtype(biometricSourceType))
                 .addTaggedData(MetricsEvent.FIELD_BIOMETRIC_AUTH_ERROR, msgId));
         cleanup();
+    }
+
+    @Override
+    public void onPaFaceLockoutReset() {
+        mPrevFaceErrorMsgId = -1;
     }
 
     private void cleanup() {

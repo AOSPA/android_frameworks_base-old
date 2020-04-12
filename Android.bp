@@ -175,6 +175,7 @@ java_defaults {
         "core/java/android/hardware/fingerprint/IFingerprintClientActiveCallback.aidl",
         "core/java/android/hardware/face/IFaceService.aidl",
         "core/java/android/hardware/face/IFaceServiceReceiver.aidl",
+        "core/java/android/hardware/face/IParanoidFaceService.aidl",
         "core/java/android/hardware/fingerprint/IFingerprintService.aidl",
         "core/java/android/hardware/fingerprint/IFingerprintServiceReceiver.aidl",
         "core/java/android/hardware/hdmi/IHdmiControlCallback.aidl",
@@ -791,6 +792,7 @@ java_defaults {
         "android.hardware.vibrator-V1.3-java",
         "android.hardware.wifi-V1.0-java-constants",
         "devicepolicyprotosnano",
+        "vendor.pa.biometrics.face.V1_0",
     ],
 
     required: [

@@ -73,6 +73,8 @@ import android.hardware.display.ColorDisplayManager;
 import android.hardware.display.DisplayManager;
 import android.hardware.face.FaceManager;
 import android.hardware.face.IFaceService;
+import android.hardware.face.ParanoidFaceManager;
+import android.hardware.face.IParanoidFaceService;
 import android.hardware.fingerprint.FingerprintManager;
 import android.hardware.fingerprint.IFingerprintService;
 import android.hardware.hdmi.HdmiControlManager;
@@ -927,6 +929,22 @@ final class SystemServiceRegistry {
                         }
                         IFaceService service = IFaceService.Stub.asInterface(binder);
                         return new FaceManager(ctx.getOuterContext(), service);
+                    }
+                });
+
+        registerService(Context.PARANOID_FACE_SERVICE, ParanoidFaceManager.class,
+                new CachedServiceFetcher<ParanoidFaceManager>() {
+                    @Override
+                    public ParanoidFaceManager createService(ContextImpl ctx)
+                            throws ServiceNotFoundException {
+                        final IBinder binder;
+                        if (ctx.getApplicationInfo().targetSdkVersion >= Build.VERSION_CODES.O) {
+                            binder = ServiceManager.getServiceOrThrow(Context.PARANOID_FACE_SERVICE);
+                        } else {
+                            binder = ServiceManager.getService(Context.PARANOID_FACE_SERVICE);
+                        }
+                        IParanoidFaceService service = IParanoidFaceService.Stub.asInterface(binder);
+                        return new ParanoidFaceManager(ctx.getOuterContext(), service);
                     }
                 });
 
