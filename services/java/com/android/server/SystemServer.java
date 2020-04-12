@@ -85,6 +85,7 @@ import com.android.server.attention.AttentionManagerService;
 import com.android.server.audio.AudioService;
 import com.android.server.biometrics.BiometricService;
 import com.android.server.biometrics.face.FaceService;
+import com.android.server.biometrics.face.ParanoidFaceService;
 import com.android.server.biometrics.fingerprint.FingerprintService;
 import com.android.server.biometrics.iris.IrisService;
 import com.android.server.broadcastradio.BroadcastRadioService;
@@ -1814,6 +1815,10 @@ public final class SystemServer {
             if (hasFeatureFace) {
                 traceBeginAndSlog("StartFaceSensor");
                 mSystemServiceManager.startService(FaceService.class);
+                traceEnd();
+
+                traceBeginAndSlog("StartParanoidFaceService");
+                mSystemServiceManager.startService(ParanoidFaceService.class);
                 traceEnd();
             }
 

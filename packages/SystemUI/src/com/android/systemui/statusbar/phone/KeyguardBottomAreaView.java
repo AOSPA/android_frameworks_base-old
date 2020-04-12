@@ -494,6 +494,29 @@ public class KeyguardBottomAreaView extends FrameLayout implements View.OnClickL
     }
 
     public void launchCamera(String source) {
+        KeyguardUpdateMonitor updateMonitor = KeyguardUpdateMonitor.getInstance(mContext);
+        boolean isFaceRunning = updateMonitor.isFaceRunning();
+        if (isFaceRunning) {
+            updateMonitor.setStartingSnapCamera(true);
+            updateMonitor.stopCameraAndDetectFace();
+            int cameraStopTime = 10;
+            while (true) {
+                if (cameraStopTime <= 0) {
+                    break;
+                }
+                try {
+                    if (updateMonitor.getCameraStopCompleted()) {
+                        Log.d("keyguard", "getCameraStopCompleted");
+                        break;
+                    }
+                    Thread.sleep(100);
+                    Log.d("keyguard", "getCameraStopStateTime is" + cameraStopTime);
+                    cameraStopTime--;
+                } catch (Exception e) {
+                }
+            }
+        }
+
         final Intent intent = getCameraIntent();
         intent.putExtra(EXTRA_CAMERA_LAUNCH_SOURCE, source);
         boolean wouldLaunchResolverActivity = mActivityIntentHelper.wouldLaunchResolverActivity(
@@ -533,6 +556,10 @@ public class KeyguardBottomAreaView extends FrameLayout implements View.OnClickL
                             unbindCameraPrewarmService(launched);
                         }
                     });
+
+                    if (isFaceRunning) {
+                        updateMonitor.setStartingSnapCamera(false);
+                    }
                 }
             });
         } else {
@@ -546,6 +573,11 @@ public class KeyguardBottomAreaView extends FrameLayout implements View.OnClickL
                             unbindCameraPrewarmService(isSuccessfulLaunch(resultCode));
                         }
                     });
+
+            if (isFaceRunning) {
+                updateMonitor.setStartingSnapCamera(false);
+                return;
+            }
         }
     }
 
