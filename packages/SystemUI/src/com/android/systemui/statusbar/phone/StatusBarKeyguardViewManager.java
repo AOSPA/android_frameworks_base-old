@@ -190,6 +190,11 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
                 reset(true /* hideBouncerWhenShowing */);
             }
         }
+
+        @Override
+        public void onPaFaceUnlockSuccess() {
+            notifyKeyguardAuthenticated(false);
+        }
     };
 
     public StatusBarKeyguardViewManager(Context context, ViewMediatorCallback callback,
