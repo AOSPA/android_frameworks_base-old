@@ -53,6 +53,10 @@ interface IFaceService {
     void enroll(int userId, IBinder token, in byte [] cryptoToken, IFaceServiceReceiver receiver,
             String opPackageName, in int [] disabledFeatures);
 
+    // Start face enrollment without userId from caller
+    void enrollWithoutUser(IBinder token, in byte [] cryptoToken, IFaceServiceReceiver receiver,
+            String opPackageName, in int [] disabledFeatures);
+
     // Cancel enrollment in progress
     void cancelEnrollment(IBinder token);
 
