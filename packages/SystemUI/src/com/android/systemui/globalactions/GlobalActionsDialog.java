@@ -39,9 +39,11 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.content.pm.UserInfo;
+import android.content.res.ColorStateList;
 import android.content.res.Resources;
 import android.database.ContentObserver;
 import android.graphics.Color;
+import android.graphics.Insets;
 import android.graphics.drawable.Drawable;
 import android.media.AudioManager;
 import android.net.ConnectivityManager;
@@ -70,12 +72,18 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
+import android.view.WindowInsets;
 import android.view.WindowManager;
 import android.view.accessibility.AccessibilityEvent;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.ImageView.ScaleType;
 import android.widget.TextView;
+
+import androidx.annotation.NonNull;
+import androidx.lifecycle.Lifecycle;
+import androidx.lifecycle.LifecycleOwner;
+import androidx.lifecycle.LifecycleRegistry;
 
 import com.android.internal.R;
 import com.android.internal.annotations.VisibleForTesting;
@@ -113,6 +121,7 @@ import com.android.systemui.statusbar.phone.ScrimController;
 import com.android.systemui.statusbar.policy.ConfigurationController;
 import com.android.systemui.statusbar.policy.KeyguardStateController;
 import com.android.systemui.util.EmergencyDialerConstants;
+import com.android.systemui.util.RingerModeTracker;
 import com.android.systemui.util.leak.RotationUtils;
 import com.android.systemui.volume.SystemUIInterpolators.LogAccelerateInterpolator;
 
@@ -129,7 +138,8 @@ import javax.inject.Inject;
 public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
         DialogInterface.OnShowListener,
         ConfigurationController.ConfigurationListener,
-        GlobalActionsPanelPlugin.Callbacks {
+        GlobalActionsPanelPlugin.Callbacks,
+        LifecycleOwner {
 
     public static final String SYSTEM_DIALOG_REASON_KEY = "reason";
     public static final String SYSTEM_DIALOG_REASON_GLOBAL_ACTIONS = "globalactions";
@@ -178,6 +188,9 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
     private final NotificationShadeDepthController mDepthController;
     private final BlurUtils mBlurUtils;
 
+    // Used for RingerModeTracker
+    private final LifecycleRegistry mLifecycle = new LifecycleRegistry(this);
+
     private ArrayList<Action> mItems;
     private ActionsDialog mDialog;
 
@@ -188,7 +201,7 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
 
     private boolean mKeyguardShowing = false;
     private boolean mDeviceProvisioned = false;
-    private ToggleAction.State mAirplaneState = ToggleAction.State.Off;
+    private ToggleState mAirplaneState = ToggleState.Off;
     private boolean mIsWaitingForEcmExit = false;
     private boolean mHasTelephony;
     private boolean mHasVibrator;
@@ -205,12 +218,31 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
     private final IWindowManager mIWindowManager;
     private final Executor mBackgroundExecutor;
     private final ControlsListingController mControlsListingController;
-    private boolean mAnyControlsProviders = false;
+    private List<ControlsServiceInfo> mControlsServiceInfos = new ArrayList<>();
+    private ControlsController mControlsController;
+    private SharedPreferences mControlsPreferences;
+    private final RingerModeTracker mRingerModeTracker;
+    private int mDialogPressDelay = DIALOG_PRESS_DELAY; // ms
 
     @VisibleForTesting
     public enum GlobalActionsEvent implements UiEventLogger.UiEventEnum {
         @UiEvent(doc = "The global actions / power menu surface became visible on the screen.")
-        GA_POWER_MENU_OPEN(337);
+        GA_POWER_MENU_OPEN(337),
+
+        @UiEvent(doc = "The global actions bugreport button was pressed.")
+        GA_BUGREPORT_PRESS(344),
+
+        @UiEvent(doc = "The global actions bugreport button was long pressed.")
+        GA_BUGREPORT_LONG_PRESS(345),
+
+        @UiEvent(doc = "The global actions emergency button was pressed.")
+        GA_EMERGENCY_DIALER_PRESS(346),
+
+        @UiEvent(doc = "The global actions screenshot button was pressed.")
+        GA_SCREENSHOT_PRESS(347),
+
+        @UiEvent(doc = "The global actions screenshot button was long pressed.")
+        GA_SCREENSHOT_LONG_PRESS(348);
 
         private final int mId;
 
@@ -244,7 +276,8 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
             ControlsUiController controlsUiController, IWindowManager iWindowManager,
             @Background Executor backgroundExecutor,
             ControlsListingController controlsListingController,
-            ControlsController controlsController, UiEventLogger uiEventLogger) {
+            ControlsController controlsController, UiEventLogger uiEventLogger,
+            RingerModeTracker ringerModeTracker) {
         mContext = new ContextThemeWrapper(context, com.android.systemui.R.style.qs_theme);
         mWindowManagerFuncs = windowManagerFuncs;
         mAudioManager = audioManager;
@@ -271,6 +304,8 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
         mBackgroundExecutor = backgroundExecutor;
         mControlsListingController = controlsListingController;
         mBlurUtils = blurUtils;
+        mRingerModeTracker = ringerModeTracker;
+        mControlsController = controlsController;
 
         // receive broadcasts
         IntentFilter filter = new IntentFilter();
@@ -290,6 +325,11 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
 
         mShowSilentToggle = SHOW_SILENT_TOGGLE && !resources.getBoolean(
                 R.bool.config_useFixedVolume);
+        if (mShowSilentToggle) {
+            mRingerModeTracker.getRingerMode().observe(this, ringer ->
+                    mHandler.sendEmptyMessage(MESSAGE_REFRESH)
+            );
+        }
 
         mEmergencyAffordanceManager = new EmergencyAffordanceManager(context);
         mScreenshotHelper = new ScreenshotHelper(context);
@@ -309,45 +349,54 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
             }
         });
 
-        String preferredControlsPackage = mContext.getResources()
-                .getString(com.android.systemui.R.string.config_controlsPreferredPackage);
         mControlsListingController.addCallback(list -> {
-            mAnyControlsProviders = !list.isEmpty();
-
-            /*
-             * See if any service providers match the preferred component. If they do,
-             * and there are no current favorites, and we haven't successfully loaded favorites to
-             * date, query the preferred component for a limited number of suggested controls.
-             */
-            ComponentName preferredComponent = null;
-            for (ControlsServiceInfo info : list) {
-                if (info.componentName.getPackageName().equals(preferredControlsPackage)) {
-                    preferredComponent = info.componentName;
-                    break;
-                }
-            }
-
-            if (preferredComponent == null) return;
-
-            SharedPreferences prefs = context.getSharedPreferences(PREFS_CONTROLS_FILE,
-                    Context.MODE_PRIVATE);
-            boolean isSeeded = prefs.getBoolean(PREFS_CONTROLS_SEEDING_COMPLETED, false);
-            boolean hasFavorites = controlsController.getFavorites().size() > 0;
-            if (!isSeeded && !hasFavorites) {
-                controlsController.seedFavoritesForComponent(
-                        preferredComponent,
-                        (accepted) -> {
-                            Log.i(TAG, "Controls seeded: " + accepted);
-                            prefs.edit().putBoolean(PREFS_CONTROLS_SEEDING_COMPLETED,
-                                    accepted).apply();
-                        }
-                );
-            }
+            mControlsServiceInfos = list;
         });
+
+        // Need to be user-specific with the context to make sure we read the correct prefs
+        Context userContext = context.createContextAsUser(
+                new UserHandle(mUserManager.getUserHandle()), 0);
+        mControlsPreferences = userContext.getSharedPreferences(PREFS_CONTROLS_FILE,
+            Context.MODE_PRIVATE);
+
     }
 
+    private void seedFavorites() {
+        if (mControlsServiceInfos.isEmpty()
+                || mControlsController.getFavorites().size() > 0
+                || mControlsPreferences.getBoolean(PREFS_CONTROLS_SEEDING_COMPLETED, false)) {
+            return;
+        }
 
+        /*
+         * See if any service providers match the preferred component. If they do,
+         * and there are no current favorites, and we haven't successfully loaded favorites to
+         * date, query the preferred component for a limited number of suggested controls.
+         */
+        String preferredControlsPackage = mContext.getResources()
+                .getString(com.android.systemui.R.string.config_controlsPreferredPackage);
 
+        ComponentName preferredComponent = null;
+        for (ControlsServiceInfo info : mControlsServiceInfos) {
+            if (info.componentName.getPackageName().equals(preferredControlsPackage)) {
+                preferredComponent = info.componentName;
+                break;
+            }
+        }
+
+        if (preferredComponent == null) {
+            Log.i(TAG, "Controls seeding: No preferred component has been set, will not seed");
+            mControlsPreferences.edit().putBoolean(PREFS_CONTROLS_SEEDING_COMPLETED, true).apply();
+        }
+
+        mControlsController.seedFavoritesForComponent(
+                preferredComponent,
+                (accepted) -> {
+                    Log.i(TAG, "Controls seeded: " + accepted);
+                    mControlsPreferences.edit().putBoolean(PREFS_CONTROLS_SEEDING_COMPLETED,
+                        accepted).apply();
+                });
+    }
 
     /**
      * Show the global actions dialog (creating if necessary)
@@ -393,6 +442,7 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
         awakenIfNecessary();
         mDialog = createDialog();
         prepareDialog();
+        seedFavorites();
 
         // If we only have 1 item and it's a simple press action, just do this action.
         if (mAdapter.getCount() == 1
@@ -594,7 +644,7 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
 
         @Override
         public boolean shouldBeSeparated() {
-            return true;
+            return !shouldShowControls();
         }
 
         @Override
@@ -602,7 +652,12 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
                 Context context, View convertView, ViewGroup parent, LayoutInflater inflater) {
             View v = super.create(context, convertView, parent, inflater);
             int textColor;
-            if (shouldBeSeparated()) {
+            if (shouldShowControls()) {
+                v.setBackgroundTintList(ColorStateList.valueOf(v.getResources().getColor(
+                        com.android.systemui.R.color.global_actions_emergency_background)));
+                textColor = v.getResources().getColor(
+                        com.android.systemui.R.color.global_actions_emergency_text);
+            } else if (shouldBeSeparated()) {
                 textColor = v.getResources().getColor(
                         com.android.systemui.R.color.global_actions_alert_text);
             } else {
@@ -612,7 +667,7 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
             TextView messageView = v.findViewById(R.id.message);
             messageView.setTextColor(textColor);
             messageView.setSelected(true); // necessary for marquee to work
-            ImageView icon = (ImageView) v.findViewById(R.id.icon);
+            ImageView icon = v.findViewById(R.id.icon);
             icon.getDrawable().setTint(textColor);
             return v;
         }
@@ -640,7 +695,8 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
         }
     }
 
-    private class EmergencyDialerAction extends EmergencyAction {
+    @VisibleForTesting
+    class EmergencyDialerAction extends EmergencyAction {
         private EmergencyDialerAction() {
             super(com.android.systemui.R.drawable.ic_emergency_star,
                     R.string.global_action_emergency);
@@ -649,6 +705,7 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
         @Override
         public void onPress() {
             mMetricsLogger.action(MetricsEvent.ACTION_EMERGENCY_DIALER_FROM_POWER_MENU);
+            mUiEventLogger.log(GlobalActionsEvent.GA_EMERGENCY_DIALER_PRESS);
             if (mTelecomManager != null) {
                 Intent intent = mTelecomManager.createLaunchEmergencyDialerIntent(
                         null /* number */);
@@ -660,6 +717,11 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
                 mContext.startActivityAsUser(intent, UserHandle.CURRENT);
             }
         }
+    }
+
+    @VisibleForTesting
+    EmergencyDialerAction makeEmergencyDialerActionForTesting() {
+        return new EmergencyDialerAction();
     }
 
     private final class RestartAction extends SinglePressAction implements LongPressAction {
@@ -692,7 +754,8 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
         }
     }
 
-    private class ScreenshotAction extends SinglePressAction implements LongPressAction {
+    @VisibleForTesting
+    class ScreenshotAction extends SinglePressAction implements LongPressAction {
         public ScreenshotAction() {
             super(R.drawable.ic_screenshot, R.string.global_action_screenshot);
         }
@@ -708,8 +771,9 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
                 public void run() {
                     mScreenshotHelper.takeScreenshot(1, true, true, mHandler, null);
                     mMetricsLogger.action(MetricsEvent.ACTION_SCREENSHOT_POWER_MENU);
+                    mUiEventLogger.log(GlobalActionsEvent.GA_SCREENSHOT_PRESS);
                 }
-            }, 500);
+            }, mDialogPressDelay);
         }
 
         @Override
@@ -725,6 +789,7 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
         @Override
         public boolean onLongPress() {
             if (FeatureFlagUtils.isEnabled(mContext, FeatureFlagUtils.SCREENRECORD_LONG_PRESS)) {
+                mUiEventLogger.log(GlobalActionsEvent.GA_SCREENSHOT_LONG_PRESS);
                 mScreenRecordHelper.launchRecordPrompt();
             } else {
                 onPress();
@@ -733,7 +798,13 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
         }
     }
 
-    private class BugReportAction extends SinglePressAction implements LongPressAction {
+    @VisibleForTesting
+    ScreenshotAction makeScreenshotActionForTesting() {
+        return new ScreenshotAction();
+    }
+
+    @VisibleForTesting
+    class BugReportAction extends SinglePressAction implements LongPressAction {
 
         public BugReportAction() {
             super(R.drawable.ic_lock_bugreport, R.string.bugreport_title);
@@ -756,6 +827,7 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
                         // Take an "interactive" bugreport.
                         mMetricsLogger.action(
                                 MetricsEvent.ACTION_BUGREPORT_FROM_POWER_MENU_INTERACTIVE);
+                        mUiEventLogger.log(GlobalActionsEvent.GA_BUGREPORT_PRESS);
                         if (!mIActivityManager.launchBugReportHandlerApp()) {
                             Log.w(TAG, "Bugreport handler could not be launched");
                             mIActivityManager.requestInteractiveBugReport();
@@ -763,7 +835,7 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
                     } catch (RemoteException e) {
                     }
                 }
-            }, 500);
+            }, mDialogPressDelay);
         }
 
         @Override
@@ -776,6 +848,7 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
             try {
                 // Take a "full" bugreport.
                 mMetricsLogger.action(MetricsEvent.ACTION_BUGREPORT_FROM_POWER_MENU_FULL);
+                mUiEventLogger.log(GlobalActionsEvent.GA_BUGREPORT_LONG_PRESS);
                 mIActivityManager.requestFullBugReport();
             } catch (RemoteException e) {
             }
@@ -790,6 +863,11 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
         public boolean showBeforeProvisioning() {
             return false;
         }
+    }
+
+    @VisibleForTesting
+    BugReportAction makeBugReportActionForTesting() {
+        return new BugReportAction();
     }
 
     private final class LogoutAction extends SinglePressAction {
@@ -819,7 +897,7 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
                 } catch (RemoteException re) {
                     Log.e(TAG, "Couldn't logout user " + re);
                 }
-            }, 500);
+            }, mDialogPressDelay);
         }
     }
 
@@ -982,18 +1060,15 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
         refreshSilentMode();
         mAirplaneModeOn.updateState(mAirplaneState);
         mAdapter.notifyDataSetChanged();
-        if (mShowSilentToggle) {
-            IntentFilter filter = new IntentFilter(AudioManager.RINGER_MODE_CHANGED_ACTION);
-            mBroadcastDispatcher.registerReceiver(mRingerModeReceiver, filter);
-        }
+        mLifecycle.setCurrentState(Lifecycle.State.RESUMED);
     }
 
     private void refreshSilentMode() {
         if (!mHasVibrator) {
-            final boolean silentModeOn =
-                    mAudioManager.getRingerMode() != AudioManager.RINGER_MODE_NORMAL;
+            Integer value = mRingerModeTracker.getRingerMode().getValue();
+            final boolean silentModeOn = value != null && value != AudioManager.RINGER_MODE_NORMAL;
             ((ToggleAction) mSilentModeAction).updateState(
-                    silentModeOn ? ToggleAction.State.On : ToggleAction.State.Off);
+                    silentModeOn ? ToggleState.On : ToggleState.Off);
         }
     }
 
@@ -1005,14 +1080,7 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
             mDialog = null;
         }
         mWindowManagerFuncs.onGlobalActionsHidden();
-        if (mShowSilentToggle) {
-            try {
-                mBroadcastDispatcher.unregisterReceiver(mRingerModeReceiver);
-            } catch (IllegalArgumentException ie) {
-                // ignore this
-                Log.w(TAG, ie);
-            }
-        }
+        mLifecycle.setCurrentState(Lifecycle.State.DESTROYED);
     }
 
     /**
@@ -1021,6 +1089,13 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
     public void onShow(DialogInterface dialog) {
         mMetricsLogger.visible(MetricsEvent.POWER_MENU);
         mUiEventLogger.log(GlobalActionsEvent.GA_POWER_MENU_OPEN);
+    }
+
+    private int getActionLayoutId() {
+        if (shouldShowControls()) {
+            return com.android.systemui.R.layout.global_actions_grid_item_v2;
+        }
+        return com.android.systemui.R.layout.global_actions_grid_item;
     }
 
     /**
@@ -1234,20 +1309,12 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
             }
         }
 
-        protected int getActionLayoutId(Context context) {
-            if (shouldShowControls()) {
-                return com.android.systemui.R.layout.global_actions_grid_item_v2;
-            }
-            return com.android.systemui.R.layout.global_actions_grid_item;
-        }
-
         public View create(
                 Context context, View convertView, ViewGroup parent, LayoutInflater inflater) {
-            View v = inflater.inflate(getActionLayoutId(context), parent,
-                    false);
+            View v = inflater.inflate(getActionLayoutId(), parent, false /* attach */);
 
-            ImageView icon = (ImageView) v.findViewById(R.id.icon);
-            TextView messageView = (TextView) v.findViewById(R.id.message);
+            ImageView icon = v.findViewById(R.id.icon);
+            TextView messageView = v.findViewById(R.id.message);
             messageView.setSelected(true); // necessary for marquee to work
 
             if (mIcon != null) {
@@ -1266,30 +1333,30 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
         }
     }
 
+    private enum ToggleState {
+        Off(false),
+        TurningOn(true),
+        TurningOff(true),
+        On(false);
+
+        private final boolean mInTransition;
+
+        ToggleState(boolean intermediate) {
+            mInTransition = intermediate;
+        }
+
+        public boolean inTransition() {
+            return mInTransition;
+        }
+    }
+
     /**
      * A toggle action knows whether it is on or off, and displays an icon and status message
      * accordingly.
      */
-    private static abstract class ToggleAction implements Action {
+    private abstract class ToggleAction implements Action {
 
-        enum State {
-            Off(false),
-            TurningOn(true),
-            TurningOff(true),
-            On(false);
-
-            private final boolean inTransition;
-
-            State(boolean intermediate) {
-                inTransition = intermediate;
-            }
-
-            public boolean inTransition() {
-                return inTransition;
-            }
-        }
-
-        protected State mState = State.Off;
+        protected ToggleState mState = ToggleState.Off;
 
         // prefs
         protected int mEnabledIconResId;
@@ -1333,13 +1400,12 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
                 LayoutInflater inflater) {
             willCreate();
 
-            View v = inflater.inflate(com.android.systemui.R
-                    .layout.global_actions_grid_item, parent, false);
+            View v = inflater.inflate(getActionLayoutId(), parent, false /* attach */);
 
             ImageView icon = (ImageView) v.findViewById(R.id.icon);
             TextView messageView = (TextView) v.findViewById(R.id.message);
             final boolean enabled = isEnabled();
-            boolean on = ((mState == State.On) || (mState == State.TurningOn));
+            boolean on = ((mState == ToggleState.On) || (mState == ToggleState.TurningOn));
 
             if (messageView != null) {
                 messageView.setText(on ? mEnabledStatusMessageResId : mDisabledStatusMessageResId);
@@ -1364,7 +1430,7 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
                 return;
             }
 
-            final boolean nowOn = !(mState == State.On);
+            final boolean nowOn = !(mState == ToggleState.On);
             onToggle(nowOn);
             changeStateFromPress(nowOn);
         }
@@ -1381,12 +1447,12 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
          * @param buttonOn Whether the button was turned on or off
          */
         protected void changeStateFromPress(boolean buttonOn) {
-            mState = buttonOn ? State.On : State.Off;
+            mState = buttonOn ? ToggleState.On : ToggleState.Off;
         }
 
         abstract void onToggle(boolean on);
 
-        public void updateState(State state) {
+        public void updateState(ToggleState state) {
             mState = state;
         }
     }
@@ -1420,7 +1486,7 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
 
             // In ECM mode airplane state cannot be changed
             if (!TelephonyProperties.in_ecm_mode().orElse(false)) {
-                mState = buttonOn ? State.TurningOn : State.TurningOff;
+                mState = buttonOn ? ToggleState.TurningOn : ToggleState.TurningOff;
                 mAirplaneState = mState;
             }
         }
@@ -1555,18 +1621,9 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
         public void onServiceStateChanged(ServiceState serviceState) {
             if (!mHasTelephony) return;
             final boolean inAirplaneMode = serviceState.getState() == ServiceState.STATE_POWER_OFF;
-            mAirplaneState = inAirplaneMode ? ToggleAction.State.On : ToggleAction.State.Off;
+            mAirplaneState = inAirplaneMode ? ToggleState.On : ToggleState.Off;
             mAirplaneModeOn.updateState(mAirplaneState);
             mAdapter.notifyDataSetChanged();
-        }
-    };
-
-    private BroadcastReceiver mRingerModeReceiver = new BroadcastReceiver() {
-        @Override
-        public void onReceive(Context context, Intent intent) {
-            if (intent.getAction().equals(AudioManager.RINGER_MODE_CHANGED_ACTION)) {
-                mHandler.sendEmptyMessage(MESSAGE_REFRESH);
-            }
         }
     };
 
@@ -1581,6 +1638,11 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
     private static final int MESSAGE_REFRESH = 1;
     private static final int MESSAGE_SHOW = 2;
     private static final int DIALOG_DISMISS_DELAY = 300; // ms
+    private static final int DIALOG_PRESS_DELAY = 850; // ms
+
+    @VisibleForTesting void setZeroDialogPressDelayForTesting() {
+        mDialogPressDelay = 0; // ms
+    }
 
     private Handler mHandler = new Handler() {
         public void handleMessage(Message msg) {
@@ -1614,7 +1676,7 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
                 mContentResolver,
                 Settings.Global.AIRPLANE_MODE_ON,
                 0) == 1;
-        mAirplaneState = airplaneModeOn ? ToggleAction.State.On : ToggleAction.State.Off;
+        mAirplaneState = airplaneModeOn ? ToggleState.On : ToggleState.Off;
         mAirplaneModeOn.updateState(mAirplaneState);
     }
 
@@ -1631,8 +1693,14 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
         intent.putExtra("state", on);
         mContext.sendBroadcastAsUser(intent, UserHandle.ALL);
         if (!mHasTelephony) {
-            mAirplaneState = on ? ToggleAction.State.On : ToggleAction.State.Off;
+            mAirplaneState = on ? ToggleState.On : ToggleState.Off;
         }
+    }
+
+    @NonNull
+    @Override
+    public Lifecycle getLifecycle() {
+        return mLifecycle;
     }
 
     private static final class ActionsDialog extends Dialog implements DialogInterface,
@@ -1888,6 +1956,14 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
                                 mGlobalActionsLayout);
                     })
                     .start();
+            ViewGroup root = (ViewGroup) mGlobalActionsLayout.getRootView();
+            root.setOnApplyWindowInsetsListener((v, windowInsets) -> {
+                if (mControlsUiController != null) {
+                    Insets insets = windowInsets.getInsets(WindowInsets.Type.all());
+                    root.setPadding(insets.left, insets.top, insets.right, insets.bottom);
+                }
+                return WindowInsets.CONSUMED;
+            });
             if (mControlsUiController != null) {
                 mControlsUiController.show(mControlsView);
             }
@@ -2017,6 +2093,6 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
     private boolean shouldShowControls() {
         return mKeyguardStateController.isUnlocked()
                 && mControlsUiController.getAvailable()
-                && mAnyControlsProviders;
+                && !mControlsServiceInfos.isEmpty();
     }
 }

@@ -47,6 +47,7 @@ import android.annotation.Nullable;
 import android.annotation.UserIdInt;
 import android.app.Notification;
 import android.os.RemoteException;
+import android.os.SystemClock;
 import android.os.UserHandle;
 import android.service.notification.NotificationListenerService;
 import android.service.notification.NotificationListenerService.Ranking;
@@ -64,6 +65,7 @@ import com.android.systemui.statusbar.FeatureFlags;
 import com.android.systemui.statusbar.notification.collection.coalescer.CoalescedEvent;
 import com.android.systemui.statusbar.notification.collection.coalescer.GroupCoalescer;
 import com.android.systemui.statusbar.notification.collection.coalescer.GroupCoalescer.BatchableNotificationHandler;
+import com.android.systemui.statusbar.notification.collection.notifcollection.BindEntryEvent;
 import com.android.systemui.statusbar.notification.collection.notifcollection.CleanUpEntryEvent;
 import com.android.systemui.statusbar.notification.collection.notifcollection.CollectionReadyForBuildListener;
 import com.android.systemui.statusbar.notification.collection.notifcollection.DismissedByUserStats;
@@ -387,7 +389,8 @@ public class NotifCollection implements Dumpable {
 
         if (entry == null) {
             // A new notification!
-            entry = new NotificationEntry(sbn, ranking);
+            entry = new NotificationEntry(sbn, ranking, SystemClock.uptimeMillis());
+            mEventQueue.add(new BindEntryEvent(entry, sbn));
             mNotificationSet.put(sbn.getKey(), entry);
 
             mLogger.logNotifPosted(sbn.getKey());
@@ -408,6 +411,7 @@ public class NotifCollection implements Dumpable {
             entry.mCancellationReason = REASON_NOT_CANCELED;
 
             entry.setSbn(sbn);
+            mEventQueue.add(new BindEntryEvent(entry, sbn));
 
             mLogger.logNotifUpdated(sbn.getKey());
             mEventQueue.add(new EntryUpdatedEvent(entry));

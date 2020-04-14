@@ -766,7 +766,7 @@ public class ActivityStack extends Task {
                 // warning toast about it.
                 mAtmService.getTaskChangeNotificationController()
                         .notifyActivityDismissingDockedStack();
-                taskDisplayArea.onSplitScreenModeDismissed();
+                taskDisplayArea.onSplitScreenModeDismissed(this);
             }
         }
 
@@ -791,6 +791,11 @@ public class ActivityStack extends Task {
         }
         if (currentMode == WINDOWING_MODE_PINNED) {
             mAtmService.getTaskChangeNotificationController().notifyActivityUnpinned();
+        }
+        if (likelyResolvedMode == WINDOWING_MODE_PINNED
+                && taskDisplayArea.getRootPinnedTask() != null) {
+            // Can only have 1 pip at a time, so replace an existing pip
+            taskDisplayArea.getRootPinnedTask().dismissPip();
         }
         if (likelyResolvedMode != WINDOWING_MODE_FULLSCREEN
                 && topActivity != null && !topActivity.noDisplay
@@ -1058,6 +1063,9 @@ public class ActivityStack extends Task {
     }
 
     /**
+     * This moves 'task' to the back of this task and also recursively moves this task to the back
+     * of its parents (if applicable).
+     *
      * @param reason The reason for moving the stack to the back.
      * @param task If non-null, the task will be moved to the bottom of the stack.
      **/
@@ -1065,18 +1073,41 @@ public class ActivityStack extends Task {
         if (!isAttached()) {
             return;
         }
-
-        getDisplayArea().positionStackAtBottom(this, reason);
-        if (task != null && task != this) {
-            positionChildAtBottom(task);
+        final TaskDisplayArea displayArea = getDisplayArea();
+        if (!mCreatedByOrganizer) {
+            // If this is just a normal task, so move to back of parent and then move 'task' to
+            // back of this.
+            final WindowContainer parent = getParent();
+            final Task parentTask = parent != null ? parent.asTask() : null;
+            if (parentTask != null) {
+                ((ActivityStack) parentTask).moveToBack(reason, this);
+            } else {
+                displayArea.positionStackAtBottom(this, reason);
+            }
+            if (task != null && task != this) {
+                positionChildAtBottom(task);
+            }
+            return;
         }
-
-        /**
-         * The intent behind moving a primary split screen stack to the back is usually to hide
-         * behind the home stack. Exit split screen in this case.
-         */
-        if (getWindowingMode() == WINDOWING_MODE_SPLIT_SCREEN_PRIMARY) {
-            setWindowingMode(WINDOWING_MODE_UNDEFINED);
+        if (task == null || task == this) {
+            return;
+        }
+        // This is a created-by-organizer task. In this case, let the organizer deal with this
+        // task's ordering. However, we still need to move 'task' to back. The intention is that
+        // this ends up behind the home-task so that it is made invisible; so, if the home task
+        // is not a child of this, reparent 'task' to the back of the home task's actual parent.
+        final ActivityStack home = displayArea.getOrCreateRootHomeTask();
+        final WindowContainer homeParent = home.getParent();
+        final Task homeParentTask = homeParent != null ? homeParent.asTask() : null;
+        if (homeParentTask == null) {
+            ((ActivityStack) task).reparent(displayArea, false /* onTop */);
+        } else if (homeParentTask == this) {
+            // Apparently reparent early-outs if same stack, so we have to explicitly reorder.
+            positionChildAtBottom(task);
+        } else {
+            task.reparent((ActivityStack) homeParentTask, false /* toTop */,
+                    REPARENT_LEAVE_STACK_IN_PLACE, false /* animate */, false /* deferResume */,
+                    "moveToBack");
         }
     }
 
@@ -2318,7 +2349,7 @@ public class ActivityStack extends Task {
         ActivityOptions.abort(options);
         if (DEBUG_STATES) Slog.d(TAG_STATES,
                 "resumeNextFocusableActivityWhenStackIsEmpty: " + reason + ", go home");
-        return mRootWindowContainer.resumeHomeActivity(prev, reason, getDisplayId());
+        return mRootWindowContainer.resumeHomeActivity(prev, reason, getDisplayArea());
     }
 
     void startActivityLocked(ActivityRecord r, ActivityRecord focusedTopActivity,
@@ -3456,18 +3487,6 @@ public class ActivityStack extends Task {
      */
     void getFinalAnimationSourceHintBounds(Rect outBounds) {
         outBounds.set(mBoundsAnimationSourceHintBounds);
-    }
-
-    /**
-     * @return the final animation bounds if the task stack is currently being animated, or the
-     *         current stack bounds otherwise.
-     */
-    void getAnimationOrCurrentBounds(Rect outBounds) {
-        if ((mBoundsAnimatingRequested || mBoundsAnimating) && !mBoundsAnimationTarget.isEmpty()) {
-            getFinalAnimationBounds(outBounds);
-            return;
-        }
-        getBounds(outBounds);
     }
 
     /** Bounds of the stack with other system factors taken into consideration. */

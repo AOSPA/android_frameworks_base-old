@@ -25,6 +25,7 @@ import static android.Manifest.permission.REGISTER_WINDOW_MANAGER_LISTENERS;
 import static android.Manifest.permission.RESTRICTED_VR_ACCESS;
 import static android.Manifest.permission.WRITE_SECURE_SETTINGS;
 import static android.app.ActivityManagerInternal.ALLOW_FULL_ONLY;
+import static android.app.ActivityManagerInternal.ALLOW_NON_FULL;
 import static android.app.ActivityTaskManager.SPLIT_SCREEN_CREATE_MODE_TOP_OR_LEFT;
 import static android.app.AppOpsManager.OP_SYSTEM_ALERT_WINDOW;
 import static android.app.StatusBarManager.DISABLE_MASK;
@@ -32,6 +33,7 @@ import static android.app.admin.DevicePolicyManager.ACTION_DEVICE_POLICY_MANAGER
 import static android.content.pm.PackageManager.FEATURE_FREEFORM_WINDOW_MANAGEMENT;
 import static android.content.pm.PackageManager.FEATURE_PC;
 import static android.content.pm.PackageManager.PERMISSION_GRANTED;
+import static android.os.Process.INVALID_UID;
 import static android.os.Process.SYSTEM_UID;
 import static android.os.Process.myPid;
 import static android.os.Trace.TRACE_TAG_WINDOW_MANAGER;
@@ -72,6 +74,7 @@ import static android.view.WindowManager.LayoutParams.TYPE_WALLPAPER;
 import static android.view.WindowManager.REMOVE_CONTENT_MODE_UNDEFINED;
 import static android.view.WindowManagerGlobal.ADD_OKAY;
 import static android.view.WindowManagerGlobal.RELAYOUT_DEFER_SURFACE_DESTROY;
+import static android.view.WindowManagerGlobal.RELAYOUT_RES_BLAST_SYNC;
 import static android.view.WindowManagerGlobal.RELAYOUT_RES_SURFACE_CHANGED;
 import static android.view.WindowManagerPolicyConstants.NAV_BAR_INVALID;
 
@@ -1361,7 +1364,8 @@ public class WindowManagerService extends IWindowManager.Stub
             LayoutParams attrs, int viewVisibility, int displayId, Rect outFrame,
             Rect outContentInsets, Rect outStableInsets,
             DisplayCutout.ParcelableWrapper outDisplayCutout, InputChannel outInputChannel,
-            InsetsState outInsetsState, InsetsSourceControl[] outActiveControls) {
+            InsetsState outInsetsState, InsetsSourceControl[] outActiveControls,
+            int requestUserId) {
         int[] appOp = new int[1];
         final boolean isRoundedCornerOverlay = (attrs.privateFlags
                 & PRIVATE_FLAG_IS_ROUNDED_CORNERS_OVERLAY) != 0;
@@ -1428,6 +1432,20 @@ public class WindowManagerService extends IWindowManager.Stub
                         "Attempted to add presentation window to a non-suitable display.  "
                                 + "Aborting.");
                 return WindowManagerGlobal.ADD_INVALID_DISPLAY;
+            }
+
+            int userId = UserHandle.getUserId(session.mUid);
+            if (requestUserId != userId) {
+                try {
+                    mAmInternal.handleIncomingUser(callingPid, callingUid, requestUserId,
+                            false /*allowAll*/, ALLOW_NON_FULL, null, null);
+                } catch (Exception exp) {
+                    ProtoLog.w(WM_ERROR, "Trying to add window with invalid user=%d",
+                            requestUserId);
+                    return WindowManagerGlobal.ADD_INVALID_USER;
+                }
+                // It's fine to use this userId
+                userId = requestUserId;
             }
 
             ActivityRecord activity = null;
@@ -1518,7 +1536,7 @@ public class WindowManagerService extends IWindowManager.Stub
             }
 
             final WindowState win = new WindowState(this, session, client, token, parentWindow,
-                    appOp[0], seq, attrs, viewVisibility, session.mUid,
+                    appOp[0], seq, attrs, viewVisibility, session.mUid, userId,
                     session.mCanAddInternalSystemWindow);
             if (win.mDeathRecipient == null) {
                 // Client has apparently died, so there is no reason to
@@ -1838,8 +1856,7 @@ public class WindowManagerService extends IWindowManager.Stub
         if ((w.mAttrs.flags&WindowManager.LayoutParams.FLAG_SECURE) != 0) {
             return true;
         }
-        if (DevicePolicyCache.getInstance().getScreenCaptureDisabled(
-                UserHandle.getUserId(w.mOwnerUid))) {
+        if (DevicePolicyCache.getInstance().getScreenCaptureDisabled(w.mShowUserId)) {
             return true;
         }
         return false;
@@ -2111,6 +2128,10 @@ public class WindowManagerService extends IWindowManager.Stub
             final DisplayContent dc = win.getDisplayContent();
             if (!dc.mWaitingForConfig) {
                 win.finishSeamlessRotation(false /* timeout */);
+            }
+
+            if (win.useBLASTSync()) {
+                result |= RELAYOUT_RES_BLAST_SYNC;
             }
 
             int attrChanges = 0;
@@ -2577,6 +2598,8 @@ public class WindowManagerService extends IWindowManager.Stub
             String packageName, boolean fromClientToken) {
         final boolean callerCanManageAppTokens =
                 checkCallingPermission(MANAGE_APP_TOKENS, "addWindowToken()");
+        // WindowContext users usually don't hold MANAGE_APP_TOKEN permission. Check permissions
+        // by checkAddPermission.
         if (!callerCanManageAppTokens) {
             final int res = mPolicy.checkAddPermission(type, false /* isRoundedCornerOverlay */,
                     packageName, new int[1]);
@@ -2591,7 +2614,7 @@ public class WindowManagerService extends IWindowManager.Stub
             synchronized (mGlobalLock) {
                 if (!callerCanManageAppTokens) {
                     if (packageName == null || !unprivilegedAppCanCreateTokenWith(
-                            null /* parentWindow */, callingUid, type, type, null /* tokenForLog */,
+                            null /* parentWindow */, callingUid, type, type, binder,
                             packageName)) {
                         throw new SecurityException("Requires MANAGE_APP_TOKENS permission");
                     }
@@ -2616,7 +2639,7 @@ public class WindowManagerService extends IWindowManager.Stub
                     new WallpaperWindowToken(this, binder, true, dc, callerCanManageAppTokens);
                 } else {
                     new WindowToken(this, binder, type, true, dc, callerCanManageAppTokens,
-                            false /* roundedCornerOverlay */, fromClientToken);
+                            callingUid, false /* roundedCornerOverlay */, fromClientToken);
                 }
             }
         } finally {
@@ -2639,8 +2662,25 @@ public class WindowManagerService extends IWindowManager.Stub
 
     @Override
     public void removeWindowToken(IBinder binder, int displayId) {
-        if (!checkCallingPermission(MANAGE_APP_TOKENS, "removeWindowToken()")) {
-            throw new SecurityException("Requires MANAGE_APP_TOKENS permission");
+        final boolean callerCanManageAppTokens =
+                checkCallingPermission(MANAGE_APP_TOKENS, "removeWindowToken()");
+        final WindowToken windowToken;
+        synchronized (mGlobalLock) {
+            windowToken = mRoot.getWindowToken(binder);
+        }
+        if (windowToken == null) {
+            ProtoLog.w(WM_ERROR,
+                    "removeWindowToken: Attempted to remove non-existing token: %s", binder);
+            return;
+        }
+        final int callingUid = Binder.getCallingUid();
+
+        // If MANAGE_APP_TOKEN permission is not held(usually from WindowContext), callers can only
+        // remove the window tokens which they added themselves.
+        if (!callerCanManageAppTokens && (windowToken.getOwnerUid() == INVALID_UID
+                || callingUid != windowToken.getOwnerUid())) {
+            throw new SecurityException("removeWindowToken: Requires MANAGE_APP_TOKENS permission"
+                    + " to remove token owned by another uid");
         }
 
         final long origId = Binder.clearCallingIdentity();
@@ -2653,14 +2693,7 @@ public class WindowManagerService extends IWindowManager.Stub
                     return;
                 }
 
-                final WindowToken token = dc.removeWindowToken(binder);
-                if (token == null) {
-                    ProtoLog.w(WM_ERROR,
-                            "removeWindowToken: Attempted to remove non-existing token: %s",
-                            binder);
-                    return;
-                }
-
+                dc.removeWindowToken(binder);
                 dc.getInputMonitor().updateInputWindowsLw(true /*force*/);
             }
         } finally {
@@ -7418,7 +7451,7 @@ public class WindowManagerService extends IWindowManager.Stub
             synchronized (mGlobalLock) {
                 WindowState window = mWindowMap.get(token);
                 if (window != null) {
-                    return UserHandle.getUserId(window.mOwnerUid);
+                    return window.mShowUserId;
                 }
                 return UserHandle.USER_NULL;
             }
@@ -8025,6 +8058,33 @@ public class WindowManagerService extends IWindowManager.Stub
                 }
             } catch (RemoteException e) {
                 Slog.e(TAG, "Failed to set layer tracing");
+            } finally {
+                if (data != null) {
+                    data.recycle();
+                }
+            }
+        } finally {
+            Binder.restoreCallingIdentity(token);
+        }
+    }
+
+    /** Set layer tracing flags. */
+    public void setLayerTracingFlags(int flags) {
+        mAtmInternal.enforceCallerIsRecentsOrHasPermission(android.Manifest.permission.DUMP,
+                "setLayerTracingFlags");
+        long token = Binder.clearCallingIdentity();
+        try {
+            Parcel data = null;
+            try {
+                IBinder sf = ServiceManager.getService("SurfaceFlinger");
+                if (sf != null) {
+                    data = Parcel.obtain();
+                    data.writeInterfaceToken("android.ui.ISurfaceComposer");
+                    data.writeInt(flags);
+                    sf.transact(1033 /* LAYER_TRACE_FLAGS_CODE */, data, null, 0 /* flags */);
+                }
+            } catch (RemoteException e) {
+                Slog.e(TAG, "Failed to set layer tracing flags");
             } finally {
                 if (data != null) {
                     data.recycle();

@@ -112,6 +112,18 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
     private final HashMap<Long, String> mDeletedFiles = new HashMap<>();
     private final CompanionHandler mHandler;
 
+    // Flag that is set when PHASE_BOOT_COMPLETED is triggered in the StatsCompanion lifecycle. This
+    // and the flag mSentBootComplete below is used for synchronization to ensure that the boot
+    // complete signal is only ever sent once to statsd. Two signals are needed because
+    // #sayHiToStatsd can be called from both statsd and #onBootPhase
+    // PHASE_THIRD_PARTY_APPS_CAN_START.
+    @GuardedBy("sStatsdLock")
+    private boolean mBootCompleted = false;
+    // Flag that is set when IStatsd#bootCompleted is called. This flag ensures that boot complete
+    // signal is only ever sent once.
+    @GuardedBy("sStatsdLock")
+    private boolean mSentBootComplete = false;
+
     public StatsCompanionService(Context context) {
         super();
         mContext = context;
@@ -153,7 +165,7 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
         }
     }
 
-    private static void informAllUidsLocked(Context context) throws RemoteException {
+    private static void informAllUids(Context context) {
         UserManager um = (UserManager) context.getSystemService(Context.USER_SERVICE);
         PackageManager pm = context.getPackageManager();
         final List<UserHandle> users = um.getUserHandles(true);
@@ -168,18 +180,26 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
             Log.e(TAG, "Failed to create a pipe to send uid map data.", e);
             return;
         }
-        sStatsd.informAllUidData(fds[0]);
-        try {
-            fds[0].close();
-        } catch (IOException e) {
-            Log.e(TAG, "Failed to close the read side of the pipe.", e);
-        }
-        final ParcelFileDescriptor writeFd = fds[1];
         HandlerThread backgroundThread = new HandlerThread(
                 "statsCompanionService.bg", THREAD_PRIORITY_BACKGROUND);
         backgroundThread.start();
         Handler handler = new Handler(backgroundThread.getLooper());
         handler.post(() -> {
+            IStatsd statsd = getStatsdNonblocking();
+            if (statsd == null) {
+                return;
+            }
+            try {
+                statsd.informAllUidData(fds[0]);
+            } catch (RemoteException e) {
+                Log.e(TAG, "Failed to send uid map to statsd");
+            }
+            try {
+                fds[0].close();
+            } catch (IOException e) {
+                Log.e(TAG, "Failed to close the read side of the pipe.", e);
+            }
+            final ParcelFileDescriptor writeFd = fds[1];
             FileOutputStream fout = new ParcelFileDescriptor.AutoCloseOutputStream(writeFd);
             try {
                 ProtoOutputStream output = new ProtoOutputStream(fout);
@@ -188,7 +208,8 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
                 for (UserHandle userHandle : users) {
                     List<PackageInfo> pi =
                             pm.getInstalledPackagesAsUser(PackageManager.MATCH_UNINSTALLED_PACKAGES
-                                            | PackageManager.MATCH_ANY_USER,
+                                            | PackageManager.MATCH_ANY_USER
+                                            | PackageManager.MATCH_APEX,
                                     userHandle.getIdentifier());
                     for (int j = 0; j < pi.size(); j++) {
                         if (pi.get(j).applicationInfo != null) {
@@ -319,19 +340,9 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
     private static final class UserUpdateReceiver extends BroadcastReceiver {
         @Override
         public void onReceive(Context context, Intent intent) {
-            synchronized (sStatsdLock) {
-                if (sStatsd == null) {
-                    Log.w(TAG, "Could not access statsd for UserUpdateReceiver");
-                    return;
-                }
-                try {
-                    // Pull the latest state of UID->app name, version mapping.
-                    // Needed since the new user basically has a version of every app.
-                    informAllUidsLocked(context);
-                } catch (RemoteException e) {
-                    Log.e(TAG, "Failed to inform statsd latest update of all apps", e);
-                }
-            }
+            // Pull the latest state of UID->app name, version mapping.
+            // Needed since the new user basically has a version of every app.
+            informAllUids(context);
         }
     }
 
@@ -589,21 +600,6 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
     }
 
     @Override // Binder call
-    public void triggerUidSnapshot() {
-        StatsCompanion.enforceStatsdCallingUid();
-        synchronized (sStatsdLock) {
-            final long token = Binder.clearCallingIdentity();
-            try {
-                informAllUidsLocked(mContext);
-            } catch (RemoteException e) {
-                Log.e(TAG, "Failed to trigger uid snapshot.", e);
-            } finally {
-                Binder.restoreCallingIdentity(token);
-            }
-        }
-    }
-
-    @Override // Binder call
     public boolean checkPermission(String permission, int pid, int uid) {
         StatsCompanion.enforceStatsdCallingUid();
         return mContext.checkPermission(permission, pid, uid) == PackageManager.PERMISSION_GRANTED;
@@ -704,10 +700,23 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
                     List.of(appUpdateReceiver, userUpdateReceiver, shutdownEventReceiver));
 
             final long token = Binder.clearCallingIdentity();
+
+            // Used so we can call statsd.bootComplete() outside of the lock.
+            boolean shouldSendBootComplete = false;
+            synchronized (sStatsdLock) {
+                if (mBootCompleted && !mSentBootComplete) {
+                    mSentBootComplete = true;
+                    shouldSendBootComplete = true;
+                }
+            }
+            if (shouldSendBootComplete) {
+                statsd.bootCompleted();
+            }
+
             try {
                 // Pull the latest state of UID->app name, version mapping when
                 // statsd starts.
-                informAllUidsLocked(mContext);
+                informAllUids(mContext);
             } finally {
                 Binder.restoreCallingIdentity(token);
             }
@@ -765,6 +774,7 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
                     mContext.unregisterReceiver(receiver);
                 }
                 statsdNotReadyLocked();
+                mSentBootComplete = false;
             }
         }
     }
@@ -772,6 +782,28 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
     private void statsdNotReadyLocked() {
         sStatsd = null;
         mStatsManagerService.statsdNotReady();
+    }
+
+    void bootCompleted() {
+        IStatsd statsd = getStatsdNonblocking();
+        synchronized (sStatsdLock) {
+            mBootCompleted = true;
+            if (mSentBootComplete) {
+                // do not send a boot complete a second time.
+                return;
+            }
+            if (statsd == null) {
+                // Statsd is not yet ready.
+                // Delay the boot completed ping to {@link #sayHiToStatsd()}
+                return;
+            }
+            mSentBootComplete = true;
+        }
+        try {
+            statsd.bootCompleted();
+        } catch (RemoteException e) {
+            Log.e(TAG, "Failed to notify statsd that boot completed");
+        }
     }
 
     @Override

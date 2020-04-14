@@ -356,8 +356,9 @@
     <protected-broadcast android:name="com.android.server.wifi.action.NetworkSuggestion.USER_ALLOWED_APP" />
     <protected-broadcast android:name="com.android.server.wifi.action.NetworkSuggestion.USER_DISALLOWED_APP" />
     <protected-broadcast android:name="com.android.server.wifi.action.NetworkSuggestion.USER_DISMISSED" />
-    <protected-broadcast android:name="com.android.server.wifi.action.NetworkSuggestion.USER_ALLOWED_CARRIER" />
-    <protected-broadcast android:name="com.android.server.wifi.action.NetworkSuggestion.USER_DISALLOWED_CARRIER" />
+    <protected-broadcast android:name="com.android.server.wifi.action.CarrierNetwork.USER_ALLOWED_CARRIER" />
+    <protected-broadcast android:name="com.android.server.wifi.action.CarrierNetwork.USER_DISALLOWED_CARRIER" />
+    <protected-broadcast android:name="com.android.server.wifi.action.CarrierNetwork.USER_DISMISSED" />
     <protected-broadcast android:name="com.android.server.wifi.ConnectToNetworkNotification.USER_DISMISSED_NOTIFICATION" />
     <protected-broadcast android:name="com.android.server.wifi.ConnectToNetworkNotification.CONNECT_TO_NETWORK" />
     <protected-broadcast android:name="com.android.server.wifi.ConnectToNetworkNotification.PICK_WIFI_NETWORK" />
@@ -1131,9 +1132,9 @@
         android:description="@string/permgroupdesc_phone"
         android:priority="500" />
 
-    <!-- Allows read only access to phone state, including the phone number of the device,
-         current cellular network information, the status of any ongoing calls, and a list of any
-         {@link android.telecom.PhoneAccount}s registered on the device.
+    <!-- Allows read only access to phone state, including the current cellular network information,
+         the status of any ongoing calls, and a list of any {@link android.telecom.PhoneAccount}s
+         registered on the device.
          <p class="note"><strong>Note:</strong> If <em>both</em> your <a
          href="{@docRoot}guide/topics/manifest/uses-sdk-element.html#min">{@code
          minSdkVersion}</a> and <a
@@ -4160,7 +4161,10 @@
          set of pages referenced over time.
          <p>Declaring the permission implies intention to use the API and the user of the
          device can grant permission through the Settings application.
-         <p>Protection level: signature|privileged|appop -->
+         <p>Protection level: signature|privileged|appop
+         <p>A data loader has to be the one which provides data to install an app.
+         <p>A data loader has to have both permission:LOADER_USAGE_STATS AND
+         appop:LOADER_USAGE_STATS allowed to be able to access the read logs. -->
     <permission android:name="android.permission.LOADER_USAGE_STATS"
         android:protectionLevel="signature|privileged|appop" />
     <uses-permission android:name="android.permission.LOADER_USAGE_STATS" />
@@ -5491,6 +5495,13 @@
                 <action android:name="android.intent.action.LOAD_DATA" />
             </intent-filter>
         </service>
+
+        <provider
+            android:name="com.android.server.textclassifier.IconsContentProvider"
+            android:authorities="com.android.textclassifier.icons"
+            android:enabled="true"
+            android:exported="true">
+        </provider>
 
     </application>
 

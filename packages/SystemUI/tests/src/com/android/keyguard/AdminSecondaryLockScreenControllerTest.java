@@ -48,6 +48,7 @@ import androidx.test.filters.SmallTest;
 
 import com.android.systemui.SysuiTestCase;
 
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -99,6 +100,11 @@ public class AdminSecondaryLockScreenControllerTest extends SysuiTestCase {
                 mContext, mParent, mUpdateMonitor, mKeyguardCallback, mHandler);
     }
 
+    @After
+    public void tearDown() {
+        ViewUtils.detachView(mParent);
+    }
+
     @Test
     public void testShow() throws Exception {
         doAnswer(invocation -> {
@@ -115,6 +121,7 @@ public class AdminSecondaryLockScreenControllerTest extends SysuiTestCase {
 
     @Test
     public void testShow_dismissedByCallback() throws Exception {
+        doAnswer(answerVoid(Runnable::run)).when(mHandler).post(any(Runnable.class));
         doAnswer(invocation -> {
             IKeyguardCallback callback = (IKeyguardCallback) invocation.getArguments()[1];
             callback.onDismiss();
@@ -184,7 +191,7 @@ public class AdminSecondaryLockScreenControllerTest extends SysuiTestCase {
 
     private void verifyViewDismissed(SurfaceView v) throws Exception {
         verify(mParent).removeView(v);
-        verify(mKeyguardCallback).dismiss(true, TARGET_USER_ID);
+        verify(mKeyguardCallback).dismiss(true, TARGET_USER_ID, true);
         assertThat(mContext.isBound(mComponentName)).isFalse();
     }
 }

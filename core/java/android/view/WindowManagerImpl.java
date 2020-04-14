@@ -105,7 +105,8 @@ public final class WindowManagerImpl implements WindowManager {
     public void addView(@NonNull View view, @NonNull ViewGroup.LayoutParams params) {
         android.util.SeempLog.record_vg_layout(383,params);
         applyDefaultToken(params);
-        mGlobal.addView(view, params, mContext.getDisplayNoVerify(), mParentWindow);
+        mGlobal.addView(view, params, mContext.getDisplayNoVerify(), mParentWindow,
+                mContext.getUserId());
     }
 
     @Override

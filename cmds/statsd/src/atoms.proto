@@ -384,12 +384,12 @@ message Atom {
         PerfettoUploaded perfetto_uploaded = 229 [(module) = "perfetto"];
         VmsClientConnectionStateChanged vms_client_connection_state_changed =
                 230 [(module) = "car"];
-        MediaProviderScanEvent media_provider_scan_event = 233 [(module) = "mediaprovider"];
-        MediaProviderDeletionEvent media_provider_deletion_event = 234 [(module) = "mediaprovider"];
-        MediaProviderPermissionEvent media_provider_permission_event =
+        MediaProviderScanOccurred media_provider_scan_occurred = 233 [(module) = "mediaprovider"];
+        MediaContentDeleted media_content_deleted = 234 [(module) = "mediaprovider"];
+        MediaProviderPermissionRequested media_provider_permission_requested =
             235 [(module) = "mediaprovider"];
-        MediaProviderSchemaChange media_provider_schema_change = 236 [(module) = "mediaprovider"];
-        MediaProviderIdleMaintenance media_provider_idle_maintenance =
+        MediaProviderSchemaChanged media_provider_schema_changed = 236 [(module) = "mediaprovider"];
+        MediaProviderIdleMaintenanceFinished media_provider_idle_maintenance_finished =
             237 [(module) = "mediaprovider"];
         RebootEscrowRecoveryReported reboot_escrow_recovery_reported = 238 [(module) = "framework"];
         BootTimeEventDuration boot_time_event_duration_reported = 239 [(module) = "framework"];
@@ -419,6 +419,8 @@ message Atom {
         SharesheetStarted sharesheet_started = 259 [(module) = "framework"];
         RankingSelected ranking_selected = 260 [(module) = "framework"];
         TvSettingsUIInteracted tvsettings_ui_interacted = 261 [(module) = "tv_settings"];
+        LauncherStaticLayout launcher_snapshot = 262 [(module) = "sysui"];
+        PackageInstallerV2Reported package_installer_v2_reported = 263 [(module) = "framework"];
         SdkExtensionStatus sdk_extension_status = 354;
     }
 
@@ -2979,14 +2981,98 @@ message ExclusionRectStateChanged {
     optional int32 duration_millis = 7;
 }
 
+/**
+ * Logs when Launcher (HomeScreen) UI has changed or was interacted.
+ *
+ * Logged from:
+ *   packages/apps/Launcher3
+ */
 message LauncherUIChanged {
-    optional android.stats.launcher.LauncherAction action = 1;
+    optional android.stats.launcher.LauncherAction action = 1 [deprecated = true];
     optional android.stats.launcher.LauncherState src_state = 2;
     optional android.stats.launcher.LauncherState dst_state = 3;
-    optional android.stats.launcher.LauncherExtension extension = 4 [(log_mode) = MODE_BYTES];
-    optional bool is_swipe_up_enabled = 5;
+    optional android.stats.launcher.LauncherExtension extension = 4 [(log_mode) = MODE_BYTES, deprecated = true];
+    optional bool is_swipe_up_enabled = 5 [deprecated = true];
+
+    // The event id (e.g., app launch, drag and drop, long press)
+    optional int32 event_id = 6;
+    // The event's source or target id (e.g., icon, task, button)
+    optional int32 target_id = 7;
+    // If the target needs to be tracked, use this id field
+    optional int32 instance_id = 8;
+    optional int32 uid = 9 [(is_uid) = true];
+    optional string package_name = 10;
+    optional string component_name = 11;
+
+    // (x, y) coordinate and the index information of the target on the container
+    optional int32 grid_x = 12;
+    optional int32 grid_y = 13;
+    optional int32 page_id = 14;
+
+    // e.g., folder icon's (x, y) location and index information on the workspace
+    optional int32 grid_x_parent = 15;
+    optional int32 grid_y_parent = 16;
+    optional int32 page_id_parent = 17;
+
+    // e.g., SEARCHBOX_ALLAPPS, FOLDER_WORKSPACE
+    optional int32 hierarchy = 18;
+
+    optional bool is_work_profile = 19;
+
+    // Used to store the predicted rank of the target
+    optional int32 rank = 20;
+
+    // e.g., folderLabelState can be captured in the following two fields
+    optional int32 from_state = 21;
+    optional int32 to_state = 22;
+
+    // e.g., autofilled or suggested texts that are not user entered
+    optional string edittext = 23;
 }
 
+/**
+ * Used for snapshot of the HomeScreen UI elements
+ *
+ * Logged from:
+ *   packages/apps/Launcher3
+ */
+message LauncherStaticLayout {
+    // The event id (e.g., snapshot, drag and drop)
+    optional int32 event_id = 1;
+    // The event's source or target id (e.g., icon, shortcut, widget)
+    optional int32 target_id = 2;
+    // If the target needs to be tracked, use this id field
+    optional int32 instance_id = 3;
+    optional int32 uid = 4 [(is_uid) = true];
+    optional string package_name = 5;
+    optional string component_name = 6;
+
+    // (x, y) coordinate and the index information of the target on the container
+    optional int32 grid_x = 7;
+    optional int32 grid_y = 8;
+    optional int32 page_id = 9;
+
+    // e.g., folder icon's (x, y) location and index information on the workspace
+    optional int32 grid_x_parent = 10;
+    optional int32 grid_y_parent = 11;
+    optional int32 page_id_parent = 12;
+
+    // e.g., WORKSPACE, HOTSEAT, FOLDER_WORKSPACE, FOLDER_HOTSEAT
+    optional int32 hierarchy = 13;
+
+    optional bool is_work_profile = 14;
+
+    // e.g., PIN, WIDGET TRAY, APPS TRAY, PREDICTION
+    optional int32 origin = 15;
+}
+
+/**
+ * Logs when Wallpaper or ThemePicker UI has changed.
+ *
+ * Logged from:
+ *   packages/apps/ThemePicker
+ *   packages/apps/WallpaperPicker2
+ */
 message StyleUIChanged {
     optional android.stats.style.Action action = 1;
     optional int32 color_package_hash = 2;
@@ -4370,7 +4456,7 @@ message VmsClientConnectionStateChanged {
  * Logged from:
  *   packages/providers/MediaProvider/src/com/android/providers/media/scan/ModernMediaScanner.java
  */
-message MediaProviderScanEvent {
+message MediaProviderScanOccurred {
     enum Reason {
         // Scan triggered due to unknown reason
         UNKNOWN = 0;
@@ -4404,15 +4490,13 @@ message MediaProviderScanEvent {
  * Logged from:
  *   packages/providers/MediaProvider/src/com/android/providers/media/MediaProvider.java
  */
-message MediaProviderDeletionEvent {
+message MediaContentDeleted {
     // Volume type that this event pertains to
     optional android.stats.mediaprovider.VolumeType volume_type = 1;
-    // Device timestamp when this deletion event occurred
-    optional int64 timestamp_millis = 2;
-    // App that requested deletion
-    optional string package_name = 3;
+    // UID of app that requested deletion
+    optional int32 uid = 2 [(is_uid) = true];
     // Number of items that were deleted
-    optional int32 item_count = 4;
+    optional int32 item_count = 3;
 }
 
 /**
@@ -4421,7 +4505,7 @@ message MediaProviderDeletionEvent {
  * Logged from:
  *   packages/providers/MediaProvider/src/com/android/providers/media/PermissionActivity.java
  */
-message MediaProviderPermissionEvent {
+message MediaProviderPermissionRequested {
     enum Result {
         UNKNOWN = 0;
         USER_GRANTED = 1;
@@ -4433,14 +4517,12 @@ message MediaProviderPermissionEvent {
 
     // Volume type that this event pertains to
     optional android.stats.mediaprovider.VolumeType volume_type = 1;
-    // Device timestamp when this permission event occurred
-    optional int64 timestamp_millis = 2;
-    // App that requested permission
-    optional string package_name = 3;
+    // UID of app that requested permission
+    optional int32 uid = 2 [(is_uid) = true];
     // Number of items that were requested
-    optional int32 item_count = 4;
+    optional int32 item_count = 3;
     // Result of this request
-    optional Result result = 5;
+    optional Result result = 4;
 }
 
 /**
@@ -4449,7 +4531,7 @@ message MediaProviderPermissionEvent {
  * Logged from:
  *   packages/providers/MediaProvider/src/com/android/providers/media/DatabaseHelper.java
  */
-message MediaProviderSchemaChange {
+message MediaProviderSchemaChanged {
     // Volume type that this event pertains to
     optional android.stats.mediaprovider.VolumeType volume_type = 1;
     // Old database version code
@@ -4468,7 +4550,7 @@ message MediaProviderSchemaChange {
  * Logged from:
  *   packages/providers/MediaProvider/src/com/android/providers/media/MediaProvider.java
  */
-message MediaProviderIdleMaintenance {
+message MediaProviderIdleMaintenanceFinished {
     // Volume type that this event pertains to
     optional android.stats.mediaprovider.VolumeType volume_type = 1;
 
@@ -9220,6 +9302,25 @@ message TvSettingsUIInteracted {
 
     /** Additional information (e.g., navigation direction on page focused) */
     optional string additional_info = 3;
+}
+
+/**
+ * Logs information about a package installation using package installer V2 APIs.
+ *
+ * Logged from:
+ *      frameworks/base/services/core/java/com/android/server/pm/PackageInstallerSession.java
+ */
+message PackageInstallerV2Reported {
+    // Whether this installation uses Incremental File System
+    optional bool is_incremental = 1;
+    // Name of the package that is intended to be installed
+    optional string package_name = 2;
+    // The duration between when the install was requested to when the install has completed
+    optional int64 duration_millis = 3;
+    // Installation result in final integer, which are SystemApi's.
+    // Return_code 1 indicates success.
+    // For full list, see frameworks/base/core/java/android/content/pm/PackageManager.java
+    optional int32 return_code  = 4;
 }
 
 /**
