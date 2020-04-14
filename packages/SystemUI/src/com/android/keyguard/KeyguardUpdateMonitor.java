@@ -1980,6 +1980,8 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
         boolean strongAuthAllowsScanning = (!isEncryptedOrTimedOut || canBypass && !mBouncer)
                 && !isLockOutOrLockDown;
 
+        boolean unlockPossible = !((!mBouncer || !awakeKeyguard) && isFaceAuthOnlyOnSecurityView());
+
         // Only listen if this KeyguardUpdateMonitor belongs to the primary user. There is an
         // instance of KeyguardUpdateMonitor for each user but KeyguardUpdateMonitor is user-aware.
         final boolean shouldListen =
@@ -1988,7 +1990,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
                 && !mSwitchingUser && !isFaceDisabled(user) && becauseCannotSkipBouncer
                 && !mKeyguardGoingAway && mFaceSettingEnabledForUser.get(user) && !mLockIconPressed
                 && strongAuthAllowsScanning && mIsPrimaryUser
-                && !mSecureCameraLaunched;
+                && !mSecureCameraLaunched && unlockPossible;
 
         // Aggregate relevant fields for debug logging.
         if (DEBUG_FACE || DEBUG_SPEW) {
@@ -2155,6 +2157,11 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
         if (mFaceRunningState == BIOMETRIC_STATE_CANCELLING_RESTARTING) {
             setFaceRunningState(BIOMETRIC_STATE_CANCELLING);
         }
+    }
+
+    private boolean isFaceAuthOnlyOnSecurityView() {
+        return Settings.Secure.getInt(mContext.getContentResolver(),
+                Settings.Secure.FACE_UNLOCK_ALWAYS_REQUIRE_SWIPE, 0) != 0;
     }
 
     private boolean isDeviceProvisionedInSettingsDb() {
