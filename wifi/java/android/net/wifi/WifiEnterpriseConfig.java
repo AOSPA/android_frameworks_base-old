@@ -569,12 +569,6 @@ public class WifiEnterpriseConfig implements Parcelable {
         return getFieldValue(KEY_SIMNUM);
     }
 
-    /** @hide */
-    @SystemApi
-    public void setEapErp(@Nullable String eapErp) {
-        setFieldValue(WifiEnterpriseConfig.EAP_ERP, eapErp);
-    }
-
     /**
      * Get the eap method.
      * @return eap method configured
