@@ -32,6 +32,7 @@ import android.annotation.IntRange;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.Size;
+import android.annotation.TestApi;
 import android.compat.annotation.UnsupportedAppUsage;
 import android.graphics.Bitmap;
 import android.graphics.ColorSpace;
@@ -215,6 +216,10 @@ public final class SurfaceControl implements Parcelable {
 
     private static native void nativeSetFrameRate(
             long transactionObj, long nativeObject, float frameRate, int compatibility);
+    private static native long nativeGetHandle(long nativeObject);
+
+    private static native long nativeAcquireFrameRateFlexibilityToken();
+    private static native void nativeReleaseFrameRateFlexibilityToken(long token);
 
     private final CloseGuard mCloseGuard = CloseGuard.get();
     private String mName;
@@ -222,6 +227,7 @@ public final class SurfaceControl implements Parcelable {
      * @hide
      */
     public long mNativeObject;
+    private long mNativeHandle;
 
     // TODO: Move this to native.
     private final Object mSizeLock = new Object();
@@ -427,12 +433,13 @@ public final class SurfaceControl implements Parcelable {
             mCloseGuard.open("release");
         }
         mNativeObject = nativeObject;
+        mNativeHandle = mNativeObject != 0 ? nativeGetHandle(nativeObject) : 0;
     }
 
     /**
      * @hide
      */
-    public void copyFrom(SurfaceControl other) {
+    public void copyFrom(@NonNull SurfaceControl other) {
         mName = other.mName;
         mWidth = other.mWidth;
         mHeight = other.mHeight;
@@ -852,23 +859,19 @@ public final class SurfaceControl implements Parcelable {
             throw new OutOfResourcesException(
                     "Couldn't allocate SurfaceControl native object");
         }
-
+        mNativeHandle = nativeGetHandle(mNativeObject);
         mCloseGuard.open("release");
     }
 
-    /** This is a transfer constructor, useful for transferring a live SurfaceControl native
-     * object to another Java wrapper which could have some different behavior, e.g.
-     * event logging.
+    /**
+     * Copy constructor. Creates a new native object pointing to the same surface as {@code other}.
+     *
+     * @param other The object to copy the surface from.
      * @hide
      */
-    public SurfaceControl(SurfaceControl other) {
-        mName = other.mName;
-        mWidth = other.mWidth;
-        mHeight = other.mHeight;
-        mNativeObject = other.mNativeObject;
-        other.mCloseGuard.close();
-        other.mNativeObject = 0;
-        mCloseGuard.open("release");
+    @TestApi
+    public SurfaceControl(@NonNull SurfaceControl other) {
+        copyFrom(other);
     }
 
     private SurfaceControl(Parcel in) {
@@ -917,6 +920,18 @@ public final class SurfaceControl implements Parcelable {
         if ((flags & Parcelable.PARCELABLE_WRITE_RETURN_VALUE) != 0) {
             release();
         }
+    }
+
+    /**
+     * Checks whether two {@link SurfaceControl} objects represent the same surface.
+     *
+     * @param other The other object to check
+     * @return {@code true} if these two {@link SurfaceControl} objects represent the same surface.
+     * @hide
+     */
+    @TestApi
+    public boolean isSameSurface(@NonNull SurfaceControl other) {
+        return other.mNativeHandle == mNativeHandle;
     }
 
     /**
@@ -976,6 +991,7 @@ public final class SurfaceControl implements Parcelable {
         if (mNativeObject != 0) {
             nativeRelease(mNativeObject);
             mNativeObject = 0;
+            mNativeHandle = 0;
             mCloseGuard.close();
         }
     }
@@ -2870,5 +2886,25 @@ public final class SurfaceControl implements Parcelable {
                         "Unlocked access to synchronized SurfaceControl.Transaction");
             }
         }
+    }
+
+    /**
+     * Acquire a frame rate flexibility token, which allows surface flinger to freely switch display
+     * frame rates. This is used by CTS tests to put the device in a consistent state. See
+     * ISurfaceComposer::acquireFrameRateFlexibilityToken().
+     * @hide
+     */
+    @TestApi
+    public static long acquireFrameRateFlexibilityToken() {
+        return nativeAcquireFrameRateFlexibilityToken();
+    }
+
+    /**
+     * Release a frame rate flexibility token.
+     * @hide
+     */
+    @TestApi
+    public static void releaseFrameRateFlexibilityToken(long token) {
+        nativeReleaseFrameRateFlexibilityToken(token);
     }
 }

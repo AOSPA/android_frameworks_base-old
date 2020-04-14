@@ -54,7 +54,6 @@ import java.util.function.Predicate;
  * - BELOW_TASKS: Can only contain BELOW_TASK DisplayAreas and WindowTokens that go below tasks.
  * - ABOVE_TASKS: Can only contain ABOVE_TASK DisplayAreas and WindowTokens that go above tasks.
  * - ANY: Can contain any kind of DisplayArea, and any kind of WindowToken or the Task container.
- *        Cannot have a sibling that is of type ANY.
  *
  * @param <T> type of the children of the DisplayArea.
  */
@@ -253,6 +252,12 @@ public class DisplayArea<T extends WindowContainer> extends WindowContainer<T> {
             super.prepareSurfaces();
             getBounds(mTmpDimBoundsRect);
 
+            // If SystemUI is dragging for recents, we want to reset the dim state so any dim layer
+            // on the display level fades out.
+            if (forAllTasks(task -> !task.canAffectSystemUiFlags())) {
+                mDimmer.resetDimStates();
+            }
+
             if (mDimmer.updateDims(getPendingTransaction(), mTmpDimBoundsRect)) {
                 scheduleAnimation();
             }
@@ -268,7 +273,6 @@ public class DisplayArea<T extends WindowContainer> extends WindowContainer<T> {
         ANY;
 
         static void checkSiblings(Type bottom, Type top) {
-            checkState(!(bottom == ANY && top == ANY), "ANY cannot be a sibling of ANY");
             checkState(!(bottom != BELOW_TASKS && top == BELOW_TASKS),
                     bottom + " must be above BELOW_TASKS");
             checkState(!(bottom == ABOVE_TASKS && top != ABOVE_TASKS),
