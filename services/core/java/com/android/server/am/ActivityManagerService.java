@@ -14824,6 +14824,28 @@ public class ActivityManagerService extends IActivityManager.Stub
             }
             app.setPid(0);
         }
+
+        // Call Preferred App
+        if (app != null) {
+            ArrayList<ApplicationExitInfo> results = new ArrayList<ApplicationExitInfo>();
+            mProcessList.mAppExitInfoTracker.getExitInfo(
+                    app.processName, app.uid, app.pid, 0, results);
+            if (results != null) {
+                boolean recentAppClose = false;
+                for (int i=0; i<results.size();i++) {
+                    ApplicationExitInfo appExitInfo = results.get(i);
+                    if ((appExitInfo.getReason() == ApplicationExitInfo.REASON_USER_REQUESTED
+                            || appExitInfo.getReason() == ApplicationExitInfo.REASON_USER_STOPPED)
+                                && appExitInfo.getDescription() == "remove task") {
+                        recentAppClose = true;
+                        break;
+                    }
+                }
+                if (recentAppClose) {
+                    mStackSupervisor.startPreferredApps();
+                }
+            }
+        }
         return false;
     }
 
