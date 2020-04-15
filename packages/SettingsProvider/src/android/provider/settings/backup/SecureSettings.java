@@ -69,7 +69,6 @@ public class SecureSettings {
         Settings.Secure.WIFI_NETWORKS_AVAILABLE_NOTIFICATION_ON,            // moved to global
         Settings.Secure.WIFI_NETWORKS_AVAILABLE_REPEAT_DELAY,               // moved to global
         Settings.Secure.WIFI_NUM_OPEN_NETWORKS_KEPT,                        // moved to global
-        Settings.Secure.WIFI_DISCONNECT_DELAY_DURATION,
         Settings.Secure.MOUNT_PLAY_NOTIFICATION_SND,
         Settings.Secure.MOUNT_UMS_AUTOSTART,
         Settings.Secure.MOUNT_UMS_PROMPT,

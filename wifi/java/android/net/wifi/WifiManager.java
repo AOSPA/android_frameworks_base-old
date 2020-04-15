@@ -1179,15 +1179,6 @@ public class WifiManager {
     public static final String EXTRA_COUNTRY_CODE = "country_code";
 
     /**
-     * Broadcast intent action indicating that the user initiated Wifi OFF
-     * or APM ON and Wifi disconnection is in progress
-     * Actual Wifi disconnection happens after mDisconnectDelayDuration seconds.
-     * @hide
-     */
-    public static final String  ACTION_WIFI_DISCONNECT_IN_PROGRESS =
-            "com.qualcomm.qti.net.wifi.WIFI_DISCONNECT_IN_PROGRESS";
-
-    /**
      * Directed broadcast intent action indicating that the device has connected to one of the
      * network suggestions provided by the app. This will be sent post connection to a network
      * which was created with {@link WifiNetworkSuggestion.Builder#setIsAppInteractionRequired(
