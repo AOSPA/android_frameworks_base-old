@@ -1631,14 +1631,14 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
                 procsToKill);
         mService.mH.sendMessage(m);
 
-        if(removeFromRecents) {
-            try {
-                new PreferredAppsTask().execute();
-            } catch (Exception e) {
-                Slog.v (TAG, "Exception: " + e);
-            }
-        }
+    }
 
+    public void startPreferredApps() {
+        try {
+            new PreferredAppsTask().execute();
+        } catch (Exception e) {
+            Slog.v (TAG, "Exception while calling PreferredAppsTask: " + e);
+        }
     }
 
     /**

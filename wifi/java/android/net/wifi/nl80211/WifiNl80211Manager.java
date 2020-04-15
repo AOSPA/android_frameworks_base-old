@@ -246,20 +246,6 @@ public class WifiNl80211Manager {
          * @param bandwidth The new bandwidth of the SoftAp.
          */
         void onSoftApChannelSwitched(int frequencyMhz, @WifiAnnotations.Bandwidth int bandwidth);
-
-        /**
-         * Invoked when the station connected to Any AP.
-         * @hide
-         */
-        @SystemApi
-        void onStaConnected(@NonNull String bssidStr);
-
-        /**
-         * Invoked when the station disconnected to Any AP.
-         * @hide
-         */
-        @SystemApi
-        void onStaDisconnected(@NonNull String bssidStr);
     }
 
     /**
@@ -381,13 +367,7 @@ public class WifiNl80211Manager {
 
         @Override
         public void onConnectedClientsChanged(NativeWifiClient client, boolean isConnected) {
-            if (mVerboseLoggingEnabled) {
-                Log.d(TAG, "onConnectedClientsChanged called with "
-                        + client.getMacAddress() + " isConnected: " + isConnected);
-            }
-
-            Binder.clearCallingIdentity();
-            mExecutor.execute(() -> mSoftApListener.onConnectedClientsChanged(client, isConnected));
+            // Ignore event from wificond. This is handled from hostapd now.
         }
 
         @Override
