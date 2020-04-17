@@ -21,6 +21,10 @@ import static android.app.ActivityManager.RunningAppProcessInfo.IMPORTANCE_VISIB
 import static android.app.Notification.FLAG_AUTO_CANCEL;
 import static android.app.Notification.FLAG_BUBBLE;
 import static android.app.Notification.FLAG_FOREGROUND_SERVICE;
+import static android.app.NotificationChannel.USER_LOCKED_ALLOW_BUBBLE;
+import static android.app.NotificationManager.BUBBLE_PREFERENCE_ALL;
+import static android.app.NotificationManager.BUBBLE_PREFERENCE_NONE;
+import static android.app.NotificationManager.BUBBLE_PREFERENCE_SELECTED;
 import static android.app.NotificationManager.EXTRA_BLOCKED_STATE;
 import static android.app.NotificationManager.IMPORTANCE_DEFAULT;
 import static android.app.NotificationManager.IMPORTANCE_HIGH;
@@ -39,6 +43,7 @@ import static android.app.NotificationManager.Policy.SUPPRESSED_EFFECT_PEEK;
 import static android.app.NotificationManager.Policy.SUPPRESSED_EFFECT_SCREEN_OFF;
 import static android.app.NotificationManager.Policy.SUPPRESSED_EFFECT_SCREEN_ON;
 import static android.app.NotificationManager.Policy.SUPPRESSED_EFFECT_STATUS_BAR;
+import static android.content.pm.ActivityInfo.RESIZE_MODE_RESIZEABLE;
 import static android.content.pm.PackageManager.FEATURE_WATCH;
 import static android.content.pm.PackageManager.PERMISSION_DENIED;
 import static android.content.pm.PackageManager.PERMISSION_GRANTED;
@@ -101,12 +106,14 @@ import android.content.ComponentName;
 import android.content.ContentUris;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.ActivityInfo;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.IPackageManager;
 import android.content.pm.LauncherApps;
 import android.content.pm.PackageManager;
 import android.content.pm.ParceledListSlice;
 import android.content.pm.ShortcutInfo;
+import android.content.pm.ShortcutServiceInternal;
 import android.content.pm.UserInfo;
 import android.content.res.Resources;
 import android.graphics.Color;
@@ -204,7 +211,6 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
     private TestableNotificationManagerService mService;
     private INotificationManager mBinderService;
     private NotificationManagerInternal mInternalService;
-    private TestableBubbleChecker mTestableBubbleChecker;
     private ShortcutHelper mShortcutHelper;
     @Mock
     private IPackageManager mPackageManager;
@@ -228,6 +234,8 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
     private AudioManager mAudioManager;
     @Mock
     private LauncherApps mLauncherApps;
+    @Mock
+    private ShortcutServiceInternal mShortcutServiceInternal;
     @Mock
     ActivityManager mActivityManager;
     @Mock
@@ -347,21 +355,6 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
         }
     }
 
-    private class TestableBubbleChecker extends BubbleExtractor.BubbleChecker {
-
-        TestableBubbleChecker(Context context, ShortcutHelper helper, RankingConfig config,
-                ActivityManager manager) {
-            super(context, helper, config, manager);
-        }
-
-        @Override
-        protected boolean canLaunchInActivityView(Context context, PendingIntent pendingIntent,
-                String packageName) {
-            // Tests for this not being true are in CTS NotificationManagerTest
-            return true;
-        }
-    }
-
     private class TestableToastCallback extends ITransientNotification.Stub {
         @Override
         public void show(IBinder windowToken) {
@@ -476,13 +469,12 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
 
         mShortcutHelper = mService.getShortcutHelper();
         mShortcutHelper.setLauncherApps(mLauncherApps);
+        mShortcutHelper.setShortcutServiceInternal(mShortcutServiceInternal);
 
         // Set the testable bubble extractor
         RankingHelper rankingHelper = mService.getRankingHelper();
         BubbleExtractor extractor = rankingHelper.findExtractor(BubbleExtractor.class);
-        mTestableBubbleChecker = new TestableBubbleChecker(mContext, mShortcutHelper,
-                mService.mPreferencesHelper, mActivityManager);
-        extractor.setBubbleChecker(mTestableBubbleChecker);
+        extractor.setActivityManager(mActivityManager);
 
         // Tests call directly into the Binder.
         mBinderService = mService.getBinderService();
@@ -544,13 +536,13 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
     }
 
     private void setUpPrefsForBubbles(String pkg, int uid, boolean globalEnabled,
-            boolean pkgEnabled, boolean channelEnabled) {
+            int pkgPref, boolean channelEnabled) {
         Settings.Global.putInt(mContext.getContentResolver(),
                 Settings.Global.NOTIFICATION_BUBBLES, globalEnabled ? 1 : 0);
         mService.mPreferencesHelper.updateBubblesEnabled();
         assertEquals(globalEnabled, mService.mPreferencesHelper.bubblesEnabled());
         try {
-            mBinderService.setBubblesAllowed(pkg, uid, pkgEnabled);
+            mBinderService.setBubblesAllowed(pkg, uid, pkgPref);
         } catch (RemoteException e) {
             e.printStackTrace();
         }
@@ -687,19 +679,12 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
                 false);
     }
 
-    private Notification.BubbleMetadata.Builder getBubbleMetadataBuilder() {
-        PendingIntent pi = PendingIntent.getActivity(mContext, 0, new Intent(), 0);
-        return new Notification.BubbleMetadata.Builder(pi,
-                Icon.createWithResource(mContext, android.R.drawable.sym_def_app_icon));
-    }
-
     private Notification.Builder getMessageStyleNotifBuilder(boolean addBubbleMetadata,
             String groupKey, boolean isSummary) {
         // Give it a person
         Person person = new Person.Builder()
                 .setName("bubblebot")
                 .build();
-        // It needs remote input to be bubble-able
         RemoteInput remoteInput = new RemoteInput.Builder("reply_key").setLabel("reply").build();
         PendingIntent inputIntent = PendingIntent.getActivity(mContext, 0, new Intent(), 0);
         Icon icon = Icon.createWithResource(mContext, android.R.drawable.sym_def_app_icon);
@@ -724,9 +709,24 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
             nb.setGroup(groupKey);
         }
         if (addBubbleMetadata) {
-            nb.setBubbleMetadata(getBubbleMetadataBuilder().build());
+            nb.setBubbleMetadata(getBubbleMetadata());
         }
         return nb;
+    }
+
+    private Notification.BubbleMetadata getBubbleMetadata() {
+        PendingIntent pendingIntent = mock(PendingIntent.class);
+        Intent intent = mock(Intent.class);
+        when(pendingIntent.getIntent()).thenReturn(intent);
+
+        ActivityInfo info = new ActivityInfo();
+        info.resizeMode = RESIZE_MODE_RESIZEABLE;
+        when(intent.resolveActivityInfo(any(), anyInt())).thenReturn(info);
+
+        return new Notification.BubbleMetadata.Builder(
+                pendingIntent,
+                Icon.createWithResource(mContext, android.R.drawable.sym_def_app_icon))
+                .build();
     }
 
     private NotificationRecord addGroupWithBubblesAndValidateAdded(boolean summaryAutoCancel)
@@ -786,33 +786,16 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
         userInfos.add(new UserInfo(0, "", 0));
         final ArraySet<ComponentName> validAssistants = new ArraySet<>();
         validAssistants.add(ComponentName.unflattenFromString(testComponent));
-        final String originalComponent = DeviceConfig.getProperty(
-                DeviceConfig.NAMESPACE_SYSTEMUI,
-                SystemUiDeviceConfigFlags.NAS_DEFAULT_SERVICE
-        );
-        DeviceConfig.setProperty(
-                DeviceConfig.NAMESPACE_SYSTEMUI,
-                SystemUiDeviceConfigFlags.NAS_DEFAULT_SERVICE,
-                testComponent,
-                false
-        );
         when(mActivityManager.isLowRamDevice()).thenReturn(false);
         when(mAssistants.queryPackageForServices(isNull(), anyInt(), anyInt()))
                 .thenReturn(validAssistants);
-        when(mAssistants.getDefaultComponents()).thenReturn(new ArraySet<>());
+        when(mAssistants.getDefaultComponents()).thenReturn(validAssistants);
         when(mUm.getEnabledProfiles(anyInt())).thenReturn(userInfos);
 
         mService.setDefaultAssistantForUser(userId);
 
         verify(mAssistants).setPackageOrComponentEnabled(
                 eq(testComponent), eq(userId), eq(true), eq(true));
-
-        DeviceConfig.setProperty(
-                DeviceConfig.NAMESPACE_SYSTEMUI,
-                SystemUiDeviceConfigFlags.NAS_DEFAULT_SERVICE,
-                originalComponent,
-                false
-        );
     }
 
     @Test
@@ -4483,24 +4466,31 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
 
     @Test
     public void testBubble() throws Exception {
-        mBinderService.setBubblesAllowed(PKG, mUid, false);
-        assertFalse(mBinderService.areBubblesAllowedForPackage(PKG, mUid));
+        mBinderService.setBubblesAllowed(PKG, mUid, BUBBLE_PREFERENCE_NONE);
+        assertFalse(mBinderService.areBubblesAllowed(PKG));
+        assertEquals(mBinderService.getBubblePreferenceForPackage(PKG, mUid),
+                BUBBLE_PREFERENCE_NONE);
     }
 
     @Test
-    public void testUserApprovedBubblesForPackage() throws Exception {
-        assertFalse(mBinderService.hasUserApprovedBubblesForPackage(PKG, mUid));
-        mBinderService.setBubblesAllowed(PKG, mUid, true);
-        assertTrue(mBinderService.hasUserApprovedBubblesForPackage(PKG, mUid));
-        assertTrue(mBinderService.areBubblesAllowedForPackage(PKG, mUid));
+    public void testUserApprovedBubblesForPackageSelected() throws Exception {
+        mBinderService.setBubblesAllowed(PKG, mUid, BUBBLE_PREFERENCE_SELECTED);
+        assertEquals(mBinderService.getBubblePreferenceForPackage(PKG, mUid),
+                BUBBLE_PREFERENCE_SELECTED);
+    }
+
+    @Test
+    public void testUserApprovedBubblesForPackageAll() throws Exception {
+        mBinderService.setBubblesAllowed(PKG, mUid, BUBBLE_PREFERENCE_ALL);
+        assertTrue(mBinderService.areBubblesAllowed(PKG));
+        assertEquals(mBinderService.getBubblePreferenceForPackage(PKG, mUid),
+                BUBBLE_PREFERENCE_ALL);
     }
 
     @Test
     public void testUserRejectsBubblesForPackage() throws Exception {
-        assertFalse(mBinderService.hasUserApprovedBubblesForPackage(PKG, mUid));
-        mBinderService.setBubblesAllowed(PKG, mUid, false);
-        assertTrue(mBinderService.hasUserApprovedBubblesForPackage(PKG, mUid));
-        assertFalse(mBinderService.areBubblesAllowedForPackage(PKG, mUid));
+        mBinderService.setBubblesAllowed(PKG, mUid, BUBBLE_PREFERENCE_NONE);
+        assertFalse(mBinderService.areBubblesAllowed(PKG));
     }
 
     @Test
@@ -5166,8 +5156,10 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
 
     @Test
     public void testFlagBubble() throws RemoteException {
-        // Bubbles are allowed!
-        setUpPrefsForBubbles(PKG, mUid, true /* global */, true /* app */, true /* channel */);
+        setUpPrefsForBubbles(PKG, mUid,
+                true /* global */,
+                BUBBLE_PREFERENCE_ALL /* app */,
+                true /* channel */);
 
         NotificationRecord nr =
                 generateMessageBubbleNotifRecord(mTestNotificationChannel, "testFlagBubble");
@@ -5185,8 +5177,10 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
 
     @Test
     public void testFlagBubble_noFlag_appNotAllowed() throws RemoteException {
-        // Bubbles are allowed!
-        setUpPrefsForBubbles(PKG, mUid, true /* global */, false /* app */, true /* channel */);
+        setUpPrefsForBubbles(PKG, mUid,
+                true /* global */,
+                BUBBLE_PREFERENCE_NONE /* app */,
+                true /* channel */);
 
         NotificationRecord nr = generateMessageBubbleNotifRecord(mTestNotificationChannel,
                         "testFlagBubble_noFlag_appNotAllowed");
@@ -5204,15 +5198,17 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
 
     @Test
     public void testFlagBubbleNotifs_noFlag_whenAppForeground() throws RemoteException {
-        // Bubbles are allowed!
-        setUpPrefsForBubbles(PKG, mUid, true /* global */, true /* app */, true /* channel */);
+        setUpPrefsForBubbles(PKG, mUid,
+                true /* global */,
+                BUBBLE_PREFERENCE_ALL /* app */,
+                true /* channel */);
 
         // Notif with bubble metadata but not our other misc requirements
         Notification.Builder nb = new Notification.Builder(mContext,
                 mTestNotificationChannel.getId())
                 .setContentTitle("foo")
                 .setSmallIcon(android.R.drawable.sym_def_app_icon)
-                .setBubbleMetadata(getBubbleMetadataBuilder().build());
+                .setBubbleMetadata(getBubbleMetadata());
         StatusBarNotification sbn = new StatusBarNotification(PKG, PKG, 1, "tag", mUid, 0,
                 nb.build(), new UserHandle(mUid), null, 0);
         NotificationRecord nr = new NotificationRecord(mContext, sbn, mTestNotificationChannel);
@@ -5232,8 +5228,10 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
 
     @Test
     public void testFlagBubbleNotifs_flag_messaging() throws RemoteException {
-        // Bubbles are allowed!
-        setUpPrefsForBubbles(PKG, mUid, true /* global */, true /* app */, true /* channel */);
+        setUpPrefsForBubbles(PKG, mUid,
+                true /* global */,
+                BUBBLE_PREFERENCE_ALL /* app */,
+                true /* channel */);
 
         NotificationRecord nr = generateMessageBubbleNotifRecord(mTestNotificationChannel,
                 "testFlagBubbleNotifs_flag_messaging");
@@ -5249,8 +5247,10 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
 
     @Test
     public void testFlagBubbleNotifs_noFlag_messaging_appNotAllowed() throws RemoteException {
-        // Bubbles are NOT allowed!
-        setUpPrefsForBubbles(PKG, mUid, true /* global */, false /* app */, true /* channel */);
+        setUpPrefsForBubbles(PKG, mUid,
+                true /* global */,
+                BUBBLE_PREFERENCE_NONE /* app */,
+                true /* channel */);
 
         NotificationRecord nr = generateMessageBubbleNotifRecord(mTestNotificationChannel,
                 "testFlagBubbleNotifs_noFlag_messaging_appNotAllowed");
@@ -5267,8 +5267,10 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
 
     @Test
     public void testFlagBubbleNotifs_noFlag_notBubble() throws RemoteException {
-        // Bubbles are allowed!
-        setUpPrefsForBubbles(PKG, mUid, true /* global */, true /* app */, true /* channel */);
+        setUpPrefsForBubbles(PKG, mUid,
+                true /* global */,
+                BUBBLE_PREFERENCE_ALL /* app */,
+                true /* channel */);
 
         // Messaging notif WITHOUT bubble metadata
         Notification.Builder nb = getMessageStyleNotifBuilder(false /* addBubbleMetadata */,
@@ -5291,11 +5293,14 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
 
     @Test
     public void testFlagBubbleNotifs_noFlag_messaging_channelNotAllowed() throws RemoteException {
-        // Bubbles are allowed except on this channel
-        setUpPrefsForBubbles(PKG, mUid, true /* global */, true /* app */, false /* channel */);
+        setUpPrefsForBubbles(PKG, mUid,
+                true /* global */,
+                BUBBLE_PREFERENCE_ALL /* app */,
+                false /* channel */);
 
         NotificationRecord nr = generateMessageBubbleNotifRecord(mTestNotificationChannel,
                 "testFlagBubbleNotifs_noFlag_messaging_channelNotAllowed");
+        nr.getChannel().lockFields(USER_LOCKED_ALLOW_BUBBLE);
 
         // Post the notification
         mBinderService.enqueueNotificationWithTag(PKG, PKG, nr.getSbn().getTag(),
@@ -5488,7 +5493,7 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
     @Test
     public void testAreBubblesAllowedForPackage_crossUser() throws Exception {
         try {
-            mBinderService.areBubblesAllowedForPackage(mContext.getPackageName(),
+            mBinderService.getBubblePreferenceForPackage(mContext.getPackageName(),
                     mUid + UserHandle.PER_USER_RANGE);
             fail("Cannot call cross user without permission");
         } catch (SecurityException e) {
@@ -5497,7 +5502,7 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
 
         // cross user, with permission, no problem
         enableInteractAcrossUsers();
-        mBinderService.areBubblesAllowedForPackage(mContext.getPackageName(),
+        mBinderService.getBubblePreferenceForPackage(mContext.getPackageName(),
                 mUid + UserHandle.PER_USER_RANGE);
     }
 
@@ -5508,8 +5513,10 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
 
     @Test
     public void testNotificationBubbleChanged_false() throws Exception {
-        // Bubbles are allowed!
-        setUpPrefsForBubbles(PKG, mUid, true /* global */, true /* app */, true /* channel */);
+        setUpPrefsForBubbles(PKG, mUid,
+                true /* global */,
+                BUBBLE_PREFERENCE_ALL /* app */,
+                true /* channel */);
 
         // Notif with bubble metadata
         NotificationRecord nr = generateMessageBubbleNotifRecord(mTestNotificationChannel,
@@ -5528,7 +5535,7 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
         assertTrue((notifsBefore[0].getNotification().flags & FLAG_BUBBLE) != 0);
 
         // Notify we're not a bubble
-        mService.mNotificationDelegate.onNotificationBubbleChanged(nr.getKey(), false);
+        mService.mNotificationDelegate.onNotificationBubbleChanged(nr.getKey(), false, 0);
         waitForIdle();
 
         // Make sure we are not a bubble
@@ -5539,8 +5546,10 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
 
     @Test
     public void testNotificationBubbleChanged_true() throws Exception {
-        // Bubbles are allowed!
-        setUpPrefsForBubbles(PKG, mUid, true /* global */, true /* app */, true /* channel */);
+        setUpPrefsForBubbles(PKG, mUid,
+                true /* global */,
+                BUBBLE_PREFERENCE_ALL /* app */,
+                true /* channel */);
 
         // Notif that is not a bubble
         NotificationRecord nr = generateNotificationRecord(mTestNotificationChannel,
@@ -5565,7 +5574,7 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
         reset(mListeners);
 
         // Notify we are now a bubble
-        mService.mNotificationDelegate.onNotificationBubbleChanged(nr.getKey(), true);
+        mService.mNotificationDelegate.onNotificationBubbleChanged(nr.getKey(), true, 0);
         waitForIdle();
 
         // Make sure we are a bubble
@@ -5576,8 +5585,10 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
 
     @Test
     public void testNotificationBubbleChanged_true_notAllowed() throws Exception {
-        // Bubbles are allowed!
-        setUpPrefsForBubbles(PKG, mUid, true /* global */, true /* app */, true /* channel */);
+        setUpPrefsForBubbles(PKG, mUid,
+                true /* global */,
+                BUBBLE_PREFERENCE_ALL /* app */,
+                true /* channel */);
 
         // Notif that is not a bubble
         NotificationRecord nr = generateNotificationRecord(mTestNotificationChannel);
@@ -5594,7 +5605,7 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
         assertEquals((notifsBefore[0].getNotification().flags & FLAG_BUBBLE), 0);
 
         // Notify we are now a bubble
-        mService.mNotificationDelegate.onNotificationBubbleChanged(nr.getKey(), true);
+        mService.mNotificationDelegate.onNotificationBubbleChanged(nr.getKey(), true, 0);
         waitForIdle();
 
         // We still wouldn't be a bubble because the notification didn't meet requirements
@@ -5605,8 +5616,11 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
 
     @Test
     public void testNotificationBubbleIsFlagRemoved_resetOnUpdate() throws Exception {
-        // Bubbles are allowed!
-        setUpPrefsForBubbles(PKG, mUid, true /* global */, true /* app */, true /* channel */);
+        setUpPrefsForBubbles(PKG, mUid,
+                true /* global */,
+                BUBBLE_PREFERENCE_ALL /* app */,
+                true /* channel */);
+
         // Notif with bubble metadata
         NotificationRecord nr = generateMessageBubbleNotifRecord(mTestNotificationChannel,
                 "testNotificationBubbleIsFlagRemoved_resetOnUpdate");
@@ -5619,7 +5633,7 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
         assertFalse(recordToCheck.isFlagBubbleRemoved());
 
         // Notify we're not a bubble
-        mService.mNotificationDelegate.onNotificationBubbleChanged(nr.getKey(), false);
+        mService.mNotificationDelegate.onNotificationBubbleChanged(nr.getKey(), false, 0);
         waitForIdle();
         // Flag should be modified
         recordToCheck = mService.getNotificationRecord(nr.getSbn().getKey());
@@ -5637,8 +5651,11 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
 
     @Test
     public void testNotificationBubbleIsFlagRemoved_resetOnBubbleChangedTrue() throws Exception {
-        // Bubbles are allowed!
-        setUpPrefsForBubbles(PKG, mUid, true /* global */, true /* app */, true /* channel */);
+        setUpPrefsForBubbles(PKG, mUid,
+                true /* global */,
+                BUBBLE_PREFERENCE_ALL /* app */,
+                true /* channel */);
+
         // Notif with bubble metadata
         NotificationRecord nr = generateMessageBubbleNotifRecord(mTestNotificationChannel,
                 "testNotificationBubbleIsFlagRemoved_trueOnBubbleChangedTrue");
@@ -5651,14 +5668,14 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
         assertFalse(recordToCheck.isFlagBubbleRemoved());
 
         // Notify we're not a bubble
-        mService.mNotificationDelegate.onNotificationBubbleChanged(nr.getKey(), false);
+        mService.mNotificationDelegate.onNotificationBubbleChanged(nr.getKey(), false, 0);
         waitForIdle();
         // Flag should be modified
         recordToCheck = mService.getNotificationRecord(nr.getSbn().getKey());
         assertTrue(recordToCheck.isFlagBubbleRemoved());
 
         // Notify we are a bubble
-        mService.mNotificationDelegate.onNotificationBubbleChanged(nr.getKey(), true);
+        mService.mNotificationDelegate.onNotificationBubbleChanged(nr.getKey(), true, 0);
         waitForIdle();
         // And the flag is reset
         assertFalse(recordToCheck.isFlagBubbleRemoved());
@@ -5666,15 +5683,13 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
 
     @Test
     public void testOnBubbleNotificationSuppressionChanged() throws Exception {
-        // Bubbles are allowed!
-        setUpPrefsForBubbles(PKG, mUid, true /* global */, true /* app */, true /* channel */);
+        setUpPrefsForBubbles(PKG, mUid,
+                true /* global */,
+                BUBBLE_PREFERENCE_ALL /* app */,
+                true /* channel */);
 
         // Bubble notification
         NotificationRecord nr = generateMessageBubbleNotifRecord(mTestNotificationChannel, "tag");
-
-        // Bubbles are allowed!
-        setUpPrefsForBubbles(PKG, nr.getSbn().getUserId(), true /* global */,
-                true /* app */, true /* channel */);
 
         mBinderService.enqueueNotificationWithTag(PKG, PKG, nr.getSbn().getTag(),
                 nr.getSbn().getId(), nr.getSbn().getNotification(), nr.getSbn().getUserId());
@@ -5888,8 +5903,10 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
 
     @Test
     public void testNotificationBubbles_disabled_lowRamDevice() throws Exception {
-        // Bubbles are allowed!
-        setUpPrefsForBubbles(PKG, mUid, true /* global */, true /* app */, true /* channel */);
+        setUpPrefsForBubbles(PKG, mUid,
+                true /* global */,
+                BUBBLE_PREFERENCE_ALL /* app */,
+                true /* channel */);
 
         // And we are low ram
         when(mActivityManager.isLowRamDevice()).thenReturn(true);
@@ -5972,8 +5989,10 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
     @Test
     public void testNotificationBubbles_flagAutoExpandForeground_fails_notForeground()
             throws Exception {
-        // Bubbles are allowed!
-        setUpPrefsForBubbles(PKG, mUid, true /* global */, true /* app */, true /* channel */);
+        setUpPrefsForBubbles(PKG, mUid,
+                true /* global */,
+                BUBBLE_PREFERENCE_ALL /* app */,
+                true /* channel */);
 
         NotificationRecord nr = generateMessageBubbleNotifRecord(mTestNotificationChannel,
                 "testNotificationBubbles_flagAutoExpandForeground_fails_notForeground");
@@ -6002,8 +6021,10 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
     @Test
     public void testNotificationBubbles_flagAutoExpandForeground_succeeds_foreground()
             throws RemoteException {
-        // Bubbles are allowed!
-        setUpPrefsForBubbles(PKG, mUid, true /* global */, true /* app */, true /* channel */);
+        setUpPrefsForBubbles(PKG, mUid,
+                true /* global */,
+                BUBBLE_PREFERENCE_ALL /* app */,
+                true /* channel */);
 
         NotificationRecord nr = generateMessageBubbleNotifRecord(mTestNotificationChannel,
                 "testNotificationBubbles_flagAutoExpandForeground_succeeds_foreground");
@@ -6032,8 +6053,10 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
     @Test
     public void testNotificationBubbles_flagRemoved_whenShortcutRemoved()
             throws RemoteException {
-        // Bubbles are allowed!
-        setUpPrefsForBubbles(PKG, mUid, true /* global */, true /* app */, true /* channel */);
+        setUpPrefsForBubbles(PKG, mUid,
+                true /* global */,
+                BUBBLE_PREFERENCE_ALL /* app */,
+                true /* channel */);
 
         ArgumentCaptor<LauncherApps.Callback> launcherAppsCallback =
                 ArgumentCaptor.forClass(LauncherApps.Callback.class);
@@ -6052,8 +6075,11 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
         List<ShortcutInfo> shortcutInfos = new ArrayList<>();
         ShortcutInfo info = mock(ShortcutInfo.class);
         when(info.isLongLived()).thenReturn(true);
+        when(info.isEnabled()).thenReturn(true);
         shortcutInfos.add(info);
         when(mLauncherApps.getShortcuts(any(), any())).thenReturn(shortcutInfos);
+        when(mShortcutServiceInternal.isSharingShortcut(anyInt(), anyString(), anyString(),
+                anyString(), anyInt(), any())).thenReturn(true);
 
         // Test: Send the bubble notification
         mBinderService.enqueueNotificationWithTag(PKG, PKG, nr.getSbn().getTag(),
@@ -6090,8 +6116,10 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
     @Test
     public void testNotificationBubbles_shortcut_stopListeningWhenNotifRemoved()
             throws RemoteException {
-        // Bubbles are allowed!
-        setUpPrefsForBubbles(PKG, mUid, true /* global */, true /* app */, true /* channel */);
+        setUpPrefsForBubbles(PKG, mUid,
+                true /* global */,
+                BUBBLE_PREFERENCE_ALL /* app */,
+                true /* channel */);
 
         ArgumentCaptor<LauncherApps.Callback> launcherAppsCallback =
                 ArgumentCaptor.forClass(LauncherApps.Callback.class);
@@ -6110,8 +6138,11 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
         List<ShortcutInfo> shortcutInfos = new ArrayList<>();
         ShortcutInfo info = mock(ShortcutInfo.class);
         when(info.isLongLived()).thenReturn(true);
+        when(info.isEnabled()).thenReturn(true);
         shortcutInfos.add(info);
         when(mLauncherApps.getShortcuts(any(), any())).thenReturn(shortcutInfos);
+        when(mShortcutServiceInternal.isSharingShortcut(anyInt(), anyString(), anyString(),
+                anyString(), anyInt(), any())).thenReturn(true);
 
         // Test: Send the bubble notification
         mBinderService.enqueueNotificationWithTag(PKG, PKG, nr.getSbn().getTag(),
@@ -6141,8 +6172,10 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
     @Test
     public void testNotificationBubbles_bubbleChildrenStay_whenGroupSummaryDismissed()
             throws Exception {
-        // Bubbles are allowed!
-        setUpPrefsForBubbles(PKG, mUid, true /* global */, true /* app */, true /* channel */);
+        setUpPrefsForBubbles(PKG, mUid,
+                true /* global */,
+                BUBBLE_PREFERENCE_ALL /* app */,
+                true /* channel */);
 
         NotificationRecord nrSummary = addGroupWithBubblesAndValidateAdded(
                 true /* summaryAutoCancel */);
@@ -6165,8 +6198,10 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
     @Test
     public void testNotificationBubbles_bubbleChildrenStay_whenGroupSummaryClicked()
             throws Exception {
-        // Bubbles are allowed!
-        setUpPrefsForBubbles(PKG, mUid, true /* global */, true /* app */, true /* channel */);
+        setUpPrefsForBubbles(PKG, mUid,
+                true /* global */,
+                BUBBLE_PREFERENCE_ALL /* app */,
+                true /* channel */);
 
         NotificationRecord nrSummary = addGroupWithBubblesAndValidateAdded(
                 true /* summaryAutoCancel */);
@@ -6197,8 +6232,12 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
     @Test
     public void testNotificationBubbles_bubbleStays_whenClicked()
             throws Exception {
+        setUpPrefsForBubbles(PKG, mUid,
+                true /* global */,
+                BUBBLE_PREFERENCE_ALL /* app */,
+                true /* channel */);
+
         // GIVEN a notification that has the auto cancels flag (cancel on click) and is a bubble
-        setUpPrefsForBubbles(PKG, mUid, true /* global */, true /* app */, true /* channel */);
         final NotificationRecord nr = generateNotificationRecord(mTestNotificationChannel);
         nr.getSbn().getNotification().flags |= FLAG_BUBBLE | FLAG_AUTO_CANCEL;
         mService.addNotification(nr);
@@ -6243,7 +6282,7 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
 
         mService.loadDefaultApprovedServices(USER_SYSTEM);
 
-        verify(mConditionProviders, times(1)).addDefaultComponentOrPackage("test");
+        verify(mConditionProviders, times(1)).loadDefaultsFromConfig();
     }
 
     // TODO: add tests for the rest of the non-empty cases
@@ -6332,7 +6371,7 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
         assertEquals("friend", friendChannel.getConversationId());
         assertEquals(null, original.getConversationId());
         assertEquals(original.canShowBadge(), friendChannel.canShowBadge());
-        assertEquals(original.canBubble(), friendChannel.canBubble());
+        assertFalse(friendChannel.canBubble()); // can't be modified by app
         assertFalse(original.getId().equals(friendChannel.getId()));
         assertNotNull(friendChannel.getId());
     }
@@ -6446,7 +6485,10 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
         ShortcutInfo si = mock(ShortcutInfo.class);
         when(si.getShortLabel()).thenReturn("Hello");
         when(si.isLongLived()).thenReturn(true);
+        when(si.isEnabled()).thenReturn(true);
         when(mLauncherApps.getShortcuts(any(), any())).thenReturn(Arrays.asList(si));
+        when(mShortcutServiceInternal.isSharingShortcut(anyInt(), anyString(), anyString(),
+                anyString(), anyInt(), any())).thenReturn(true);
 
         List<ConversationChannelWrapper> conversations =
                 mBinderService.getConversationsForPackage(PKG_P, mUid).getList();

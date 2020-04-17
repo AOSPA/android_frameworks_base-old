@@ -293,6 +293,7 @@ import android.view.SurfaceControl.Transaction;
 import android.view.WindowManager;
 import android.view.WindowManager.LayoutParams;
 import android.view.animation.Animation;
+import android.window.WindowContainerToken;
 
 import com.android.internal.R;
 import com.android.internal.annotations.VisibleForTesting;
@@ -433,6 +434,8 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
     final boolean stateNotNeeded; // As per ActivityInfo.flags
     @VisibleForTesting
     int mHandoverLaunchDisplayId = INVALID_DISPLAY; // Handover launch display id to next activity.
+    @VisibleForTesting
+    TaskDisplayArea mHandoverTaskDisplayArea; // Handover launch task display area.
     private final boolean componentSpecified;  // did caller specify an explicit component?
     final boolean rootVoiceInteraction;  // was this the root activity of a voice interaction?
 
@@ -1380,8 +1383,8 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
             final Rect spaceToFill = transformedBounds != null
                     ? transformedBounds
                     : inMultiWindowMode()
-                            ? task.getDisplayedBounds()
-                            : getRootTask().getParent().getDisplayedBounds();
+                            ? task.getBounds()
+                            : getRootTask().getParent().getBounds();
             mLetterbox.layout(spaceToFill, w.getFrameLw(), mTmpPoint);
         } else if (mLetterbox != null) {
             mLetterbox.hide();
@@ -1663,7 +1666,11 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
             if (usageReport != null) {
                 appTimeTracker = new AppTimeTracker(usageReport);
             }
-            // Gets launch display id from options. It returns INVALID_DISPLAY if not set.
+            // Gets launch task display area and display id from options. Returns
+            // null/INVALID_DISPLAY if not set.
+            final WindowContainerToken daToken = options.getLaunchTaskDisplayArea();
+            mHandoverTaskDisplayArea = daToken != null
+                    ? (TaskDisplayArea) WindowContainer.fromBinder(daToken.asBinder()) : null;
             mHandoverLaunchDisplayId = options.getLaunchDisplayId();
         }
 
@@ -2676,6 +2683,17 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         if (isState(PAUSING)) {
             // Activity is marked as finishing and will be processed once it completes.
             return this;
+        }
+
+        // Ensure activity visibilities and update lockscreen occluded/dismiss state when
+        // finishing the top activity that occluded keyguard. So that, the
+        // ActivityStack#mTopActivityOccludesKeyguard can be updated and the activity below won't
+        // be resumed.
+        if (isState(PAUSED)
+                && mStackSupervisor.getKeyguardController().isKeyguardLocked()
+                && getStack().topActivityOccludesKeyguard()) {
+            getStack().ensureActivitiesVisible(null /* starting */, 0 /* configChanges */,
+                    false /* preserveWindows */, false /* notifyClients */);
         }
 
         boolean activityRemoved = false;
@@ -5141,26 +5159,48 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
     }
 
     void startFreezingScreen() {
+        startFreezingScreen(ROTATION_UNDEFINED /* overrideOriginalDisplayRotation */);
+    }
+
+    void startFreezingScreen(int overrideOriginalDisplayRotation) {
         ProtoLog.i(WM_DEBUG_ORIENTATION,
                 "Set freezing of %s: visible=%b freezing=%b visibleRequested=%b. %s",
                 appToken, isVisible(), mFreezingScreen, mVisibleRequested,
                 new RuntimeException().fillInStackTrace());
-        if (mVisibleRequested) {
-            if (!mFreezingScreen) {
-                mFreezingScreen = true;
-                mWmService.registerAppFreezeListener(this);
-                mWmService.mAppsFreezingScreen++;
-                if (mWmService.mAppsFreezingScreen == 1) {
-                    mWmService.startFreezingDisplayLocked(0, 0, getDisplayContent());
-                    mWmService.mH.removeMessages(H.APP_FREEZE_TIMEOUT);
-                    mWmService.mH.sendEmptyMessageDelayed(H.APP_FREEZE_TIMEOUT, 2000);
+        if (!mVisibleRequested) {
+            return;
+        }
+
+        // If the override is given, the rotation of display doesn't change but we still want to
+        // cover the activity whose configuration is changing by freezing the display and running
+        // the rotation animation.
+        final boolean forceRotation = overrideOriginalDisplayRotation != ROTATION_UNDEFINED;
+        if (!mFreezingScreen) {
+            mFreezingScreen = true;
+            mWmService.registerAppFreezeListener(this);
+            mWmService.mAppsFreezingScreen++;
+            if (mWmService.mAppsFreezingScreen == 1) {
+                if (forceRotation) {
+                    // Make sure normal rotation animation will be applied.
+                    mDisplayContent.getDisplayRotation().cancelSeamlessRotation();
                 }
+                mWmService.startFreezingDisplay(0 /* exitAnim */, 0 /* enterAnim */,
+                        mDisplayContent, overrideOriginalDisplayRotation);
+                mWmService.mH.removeMessages(H.APP_FREEZE_TIMEOUT);
+                mWmService.mH.sendEmptyMessageDelayed(H.APP_FREEZE_TIMEOUT, 2000);
             }
-            final int count = mChildren.size();
-            for (int i = 0; i < count; i++) {
-                final WindowState w = mChildren.get(i);
-                w.onStartFreezingScreen();
-            }
+        }
+        if (forceRotation) {
+            // The rotation of the real display won't change, so in order to unfreeze the screen
+            // via {@link #checkAppWindowsReadyToShow}, the windows have to be able to call
+            // {@link WindowState#reportResized} (it is skipped if the window is freezing) to update
+            // the drawn state.
+            return;
+        }
+        final int count = mChildren.size();
+        for (int i = 0; i < count; i++) {
+            final WindowState w = mChildren.get(i);
+            w.onStartFreezingScreen();
         }
     }
 
@@ -6186,6 +6226,21 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         ensureActivityConfiguration(0 /* globalChanges */, false /* preserveWindow */);
     }
 
+    @Override
+    void onCancelFixedRotationTransform(int originalDisplayRotation) {
+        if (this != mDisplayContent.getLastOrientationSource()
+                || getRequestedConfigurationOrientation() != ORIENTATION_UNDEFINED) {
+            // Only need to handle the activity that should be rotated with display.
+            return;
+        }
+
+        // Perform rotation animation according to the rotation of this activity.
+        startFreezingScreen(originalDisplayRotation);
+        // This activity may relaunch or perform configuration change so once it has reported drawn,
+        // the screen can be unfrozen.
+        ensureActivityConfiguration(0 /* globalChanges */, !PRESERVE_WINDOWS);
+    }
+
     void setRequestedOrientation(int requestedOrientation) {
         setOrientation(requestedOrientation, mayFreezeScreenLocked());
         mAtmService.getTaskChangeNotificationController().notifyActivityRequestedOrientationChanged(
@@ -6640,17 +6695,6 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
             return mSizeCompatBounds;
         }
         return super.getBounds();
-    }
-
-    @Override
-    Rect getDisplayedBounds() {
-        if (task != null) {
-            final Rect overrideDisplayedBounds = task.getOverrideDisplayedBounds();
-            if (!overrideDisplayedBounds.isEmpty()) {
-                return overrideDisplayedBounds;
-            }
-        }
-        return getBounds();
     }
 
     @VisibleForTesting

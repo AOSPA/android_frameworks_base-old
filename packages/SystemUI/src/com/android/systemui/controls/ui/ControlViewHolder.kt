@@ -16,6 +16,9 @@
 
 package com.android.systemui.controls.ui
 
+import android.animation.Animator
+import android.animation.AnimatorListenerAdapter
+import android.animation.ValueAnimator
 import android.content.Context
 import android.graphics.drawable.ClipDrawable
 import android.graphics.drawable.GradientDrawable
@@ -28,15 +31,16 @@ import android.service.controls.templates.StatelessTemplate
 import android.service.controls.templates.TemperatureControlTemplate
 import android.service.controls.templates.ToggleRangeTemplate
 import android.service.controls.templates.ToggleTemplate
+import android.util.MathUtils
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageView
 import android.widget.TextView
-
+import com.android.internal.graphics.ColorUtils
+import com.android.systemui.Interpolators
+import com.android.systemui.R
 import com.android.systemui.controls.controller.ControlsController
 import com.android.systemui.util.concurrency.DelayableExecutor
-import com.android.systemui.R
-
 import kotlin.reflect.KClass
 
 /**
@@ -53,15 +57,22 @@ class ControlViewHolder(
 ) {
 
     companion object {
+        const val STATE_ANIMATION_DURATION = 700L
         private const val UPDATE_DELAY_IN_MILLIS = 3000L
         private const val ALPHA_ENABLED = (255.0 * 0.2).toInt()
-        private const val ALPHA_DISABLED = 255
+        private const val ALPHA_DISABLED = 0
         private val FORCE_PANEL_DEVICES = setOf(
             DeviceTypes.TYPE_THERMOSTAT,
             DeviceTypes.TYPE_CAMERA
         )
     }
 
+    private val toggleBackgroundIntensity: Float = layout.context.resources
+            .getFraction(R.fraction.controls_toggle_bg_intensity, 1, 1)
+    private val dimmedAlpha: Float = layout.context.resources
+            .getFraction(R.fraction.controls_dimmed_alpha, 1, 1)
+    private var stateAnimator: ValueAnimator? = null
+    private val baseLayer: GradientDrawable
     val icon: ImageView = layout.requireViewById(R.id.icon)
     val status: TextView = layout.requireViewById(R.id.status)
     val title: TextView = layout.requireViewById(R.id.title)
@@ -74,11 +85,18 @@ class ControlViewHolder(
     var lastAction: ControlAction? = null
     val deviceType: Int
         get() = cws.control?.let { it.getDeviceType() } ?: cws.ci.deviceType
+    var dimmed: Boolean = false
+        set(value) {
+            field = value
+            bindData(cws)
+        }
 
     init {
         val ld = layout.getBackground() as LayerDrawable
         ld.mutate()
         clipLayer = ld.findDrawableByLayerId(R.id.clip_layer) as ClipDrawable
+        clipLayer.alpha = ALPHA_DISABLED
+        baseLayer = ld.findDrawableByLayerId(R.id.background) as GradientDrawable
         // needed for marquee to start
         status.setSelected(true)
     }
@@ -160,30 +178,63 @@ class ControlViewHolder(
         }
     }
 
-    internal fun applyRenderInfo(enabled: Boolean, offset: Int = 0) {
+    internal fun applyRenderInfo(enabled: Boolean, offset: Int = 0, animated: Boolean = true) {
         setEnabled(enabled)
 
         val ri = RenderInfo.lookup(context, cws.componentName, deviceType, enabled, offset)
 
-        val fg = context.getResources().getColorStateList(ri.foreground, context.getTheme())
-        val (bg, alpha) = if (enabled) {
-            Pair(ri.enabledBackground, ALPHA_ENABLED)
+        val fg = context.resources.getColorStateList(ri.foreground, context.theme)
+        val bg = context.resources.getColor(R.color.control_default_background, context.theme)
+        val dimAlpha = if (dimmed) dimmedAlpha else 1f
+        var (clip, newAlpha) = if (enabled) {
+            listOf(ri.enabledBackground, ALPHA_ENABLED)
         } else {
-            Pair(R.color.control_default_background, ALPHA_DISABLED)
+            listOf(R.color.control_default_background, ALPHA_DISABLED)
         }
 
         status.setTextColor(fg)
-
         icon.setImageDrawable(ri.icon)
 
         // do not color app icons
         if (deviceType != DeviceTypes.TYPE_ROUTINE) {
-            icon.setImageTintList(fg)
+            icon.imageTintList = fg
         }
 
         (clipLayer.getDrawable() as GradientDrawable).apply {
-            setColor(context.getResources().getColor(bg, context.getTheme()))
-            setAlpha(alpha)
+            val newClipColor = context.resources.getColor(clip, context.theme)
+            val newBaseColor = if (behavior is ToggleRangeBehavior) {
+                ColorUtils.blendARGB(bg, newClipColor, toggleBackgroundIntensity)
+            } else {
+                bg
+            }
+            stateAnimator?.cancel()
+            if (animated) {
+                val oldColor = color?.defaultColor ?: newClipColor
+                val oldBaseColor = baseLayer.color?.defaultColor ?: newBaseColor
+                val oldAlpha = layout.alpha
+                stateAnimator = ValueAnimator.ofInt(clipLayer.alpha, newAlpha).apply {
+                    addUpdateListener {
+                        alpha = it.animatedValue as Int
+                        setColor(ColorUtils.blendARGB(oldColor, newClipColor, it.animatedFraction))
+                        baseLayer.setColor(ColorUtils.blendARGB(oldBaseColor,
+                                newBaseColor, it.animatedFraction))
+                        layout.alpha = MathUtils.lerp(oldAlpha, dimAlpha, it.animatedFraction)
+                    }
+                    addListener(object : AnimatorListenerAdapter() {
+                        override fun onAnimationEnd(animation: Animator?) {
+                            stateAnimator = null
+                        }
+                    })
+                    duration = STATE_ANIMATION_DURATION
+                    interpolator = Interpolators.CONTROL_STATE
+                    start()
+                }
+            } else {
+                alpha = newAlpha
+                setColor(newClipColor)
+                baseLayer.setColor(newBaseColor)
+                layout.alpha = dimAlpha
+            }
         }
     }
 

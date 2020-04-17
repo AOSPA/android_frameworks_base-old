@@ -185,6 +185,9 @@ public class AudioService extends IAudioService.Stub
 
     private static final String TAG = "AS.AudioService";
 
+    private final AudioSystemAdapter mAudioSystem;
+    private final SystemServerAdapter mSystemServer;
+
     /** Debug audio mode */
     protected static final boolean DEBUG_MODE = false;
 
@@ -576,6 +579,8 @@ public class AudioService extends IAudioService.Stub
     private boolean mMicMuteFromSwitch;
     private boolean mMicMuteFromApi;
     private boolean mMicMuteFromRestrictions;
+    // caches the value returned by AudioSystem.isMicrophoneMuted()
+    private boolean mMicMuteFromSystemCached;
 
     @GuardedBy("mSettingsLock")
     private int mAssistantUid;
@@ -650,9 +655,18 @@ public class AudioService extends IAudioService.Stub
 
     /** @hide */
     public AudioService(Context context) {
+        this(context, AudioSystemAdapter.getDefaultAdapter(),
+                SystemServerAdapter.getDefaultAdapter(context));
+    }
+
+    public AudioService(Context context, AudioSystemAdapter audioSystem,
+            SystemServerAdapter systemServer) {
         mContext = context;
         mContentResolver = context.getContentResolver();
         mAppOps = (AppOpsManager)context.getSystemService(Context.APP_OPS_SERVICE);
+
+        mAudioSystem = audioSystem;
+        mSystemServer = systemServer;
 
         mPlatformType = AudioSystem.getPlatformType(context);
 
@@ -843,11 +857,13 @@ public class AudioService extends IAudioService.Stub
 
         context.registerReceiverAsUser(mReceiver, UserHandle.ALL, intentFilter, null, null);
 
-        LocalServices.addService(AudioManagerInternal.class, new AudioServiceInternal());
+        if (mSystemServer.isPrivileged()) {
+            LocalServices.addService(AudioManagerInternal.class, new AudioServiceInternal());
 
-        mUserManagerInternal.addUserRestrictionsListener(mUserRestrictionsListener);
+            mUserManagerInternal.addUserRestrictionsListener(mUserRestrictionsListener);
 
-        mRecordMonitor.initMonitor();
+            mRecordMonitor.initMonitor();
+        }
 
         final float[] preScale = new float[3];
         preScale[0] = mContext.getResources().getFraction(
@@ -936,6 +952,7 @@ public class AudioService extends IAudioService.Stub
 
         onIndicateSystemReady();
 
+        mMicMuteFromSystemCached = mAudioSystem.isMicrophoneMuted();
         setMicMuteFromSwitchInput();
     }
 
@@ -1129,6 +1146,7 @@ public class AudioService extends IAudioService.Stub
         sendMsg(mAudioHandler, MSG_DISPATCH_AUDIO_SERVER_STATE,
                 SENDMSG_QUEUE, 1, 0, null, 0);
 
+        setMicrophoneMuteNoCallerCheck(getCurrentUserId()); // will also update the mic mute cache
         setMicMuteFromSwitchInput();
     }
 
@@ -1635,12 +1653,15 @@ public class AudioService extends IAudioService.Stub
         }
 
         if (currentImeUid != mCurrentImeUid || forceUpdate) {
-            AudioSystem.setCurrentImeUid(currentImeUid);
+            mAudioSystem.setCurrentImeUid(currentImeUid);
             mCurrentImeUid = currentImeUid;
         }
     }
 
     private void readPersistedSettings() {
+        if (!mSystemServer.isPrivileged()) {
+            return;
+        }
         final ContentResolver cr = mContentResolver;
 
         int ringerModeFromSettings =
@@ -1711,6 +1732,9 @@ public class AudioService extends IAudioService.Stub
     }
 
     private void readUserRestrictions() {
+        if (!mSystemServer.isPrivileged()) {
+            return;
+        }
         final int currentUser = getCurrentUserId();
 
         // Check the current user restriction.
@@ -2801,6 +2825,9 @@ public class AudioService extends IAudioService.Stub
     }
 
     private void sendBroadcastToAll(Intent intent) {
+        if (!mSystemServer.isPrivileged()) {
+            return;
+        }
         intent.addFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY_BEFORE_BOOT);
         intent.addFlags(Intent.FLAG_RECEIVER_FOREGROUND);
         final long ident = Binder.clearCallingIdentity();
@@ -3174,21 +3201,41 @@ public class AudioService extends IAudioService.Stub
         }
     }
 
+    /**
+     * Returns the microphone mute state as seen from the native audio system
+     * @return true if microphone is reported as muted by primary HAL
+     */
     public boolean isMicrophoneMuted() {
+        return mMicMuteFromSystemCached;
+    }
+
+    private boolean isMicrophoneSupposedToBeMuted() {
         return mMicMuteFromSwitch || mMicMuteFromRestrictions || mMicMuteFromApi;
     }
 
     private void setMicrophoneMuteNoCallerCheck(int userId) {
-        final boolean muted = isMicrophoneMuted();
+        final boolean muted = isMicrophoneSupposedToBeMuted();
         if (DEBUG_VOL) {
             Log.d(TAG, String.format("Mic mute %b, user=%d", muted, userId));
         }
         // only mute for the current user
         if (getCurrentUserId() == userId || userId == android.os.Process.SYSTEM_UID) {
-            final boolean currentMute = AudioSystem.isMicrophoneMuted();
+            final boolean currentMute = mAudioSystem.isMicrophoneMuted();
             final long identity = Binder.clearCallingIdentity();
-            AudioSystem.muteMicrophone(muted);
+            final int ret = mAudioSystem.muteMicrophone(muted);
+
+            // update cache with the real state independently from what was set
+            mMicMuteFromSystemCached = mAudioSystem.isMicrophoneMuted();
+            if (ret != AudioSystem.AUDIO_STATUS_OK) {
+                Log.e(TAG, "Error changing mic mute state to " + muted + " current:"
+                        + mMicMuteFromSystemCached);
+            }
             try {
+                // send the intent even if there was a failure to change the actual mute state:
+                // the AudioManager.setMicrophoneMute API doesn't have a return value to
+                // indicate if the call failed to successfully change the mute state, and receiving
+                // the intent may be the only time an application can resynchronize its mic mute
+                // state with the actual system mic mute state
                 if (muted != currentMute) {
                     sendMsg(mAudioHandler, MSG_BROADCAST_MICROPHONE_MUTE,
                                 SENDMSG_NOOP, 0, 0, null, 0);
@@ -4536,6 +4583,9 @@ public class AudioService extends IAudioService.Stub
     }
 
     private void broadcastRingerMode(String action, int ringerMode) {
+        if (!mSystemServer.isPrivileged()) {
+            return;
+        }
         // Send sticky broadcast
         Intent broadcast = new Intent(action);
         broadcast.putExtra(AudioManager.EXTRA_RINGER_MODE, ringerMode);
@@ -4545,6 +4595,9 @@ public class AudioService extends IAudioService.Stub
     }
 
     private void broadcastVibrateSetting(int vibrateType) {
+        if (!mSystemServer.isPrivileged()) {
+            return;
+        }
         // Send broadcast
         if (mActivityManagerInternal.isSystemReady()) {
             Intent broadcast = new Intent(AudioManager.VIBRATE_SETTING_CHANGED_ACTION);
@@ -5297,6 +5350,9 @@ public class AudioService extends IAudioService.Stub
         }
 
         public int observeDevicesForStream_syncVSS(boolean checkOthers) {
+            if (!mSystemServer.isPrivileged()) {
+                return AudioSystem.DEVICE_NONE;
+            }
             final int devices = AudioSystem.getDevicesForStream(mStreamType);
             if (devices == mObservedDevices) {
                 return devices;
@@ -6037,10 +6093,7 @@ public class AudioService extends IAudioService.Stub
                     break;
 
                 case MSG_BROADCAST_MICROPHONE_MUTE:
-                    mContext.sendBroadcastAsUser(
-                            new Intent(AudioManager.ACTION_MICROPHONE_MUTE_CHANGED)
-                                    .setFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY),
-                                    UserHandle.ALL);
+                    mSystemServer.sendMicrophoneMuteChangedIntent();
                     break;
             }
         }
@@ -7038,6 +7091,10 @@ public class AudioService extends IAudioService.Stub
         pw.print("  mHdmiTvClient="); pw.println(mHdmiTvClient);
         pw.print("  mHdmiSystemAudioSupported="); pw.println(mHdmiSystemAudioSupported);
         pw.print("  mIsCallScreeningModeSupported="); pw.println(mIsCallScreeningModeSupported);
+        pw.print("  mic mute FromSwitch=" + mMicMuteFromSwitch
+                        + " FromRestrictions=" + mMicMuteFromRestrictions
+                        + " FromApi=" + mMicMuteFromApi
+                        + " from system=" + mMicMuteFromSystemCached);
 
         dumpAudioPolicies(pw);
         mDynPolicyLogger.dump(pw);
@@ -8479,6 +8536,23 @@ public class AudioService extends IAudioService.Stub
         int[] pidsArray = pidsSet.stream().mapToInt(Integer::intValue).toArray();
         AudioSystem.setAudioHalPids(pidsArray);
     }
+
+    //======================
+    // Multi Audio Focus
+    //======================
+    public void setMultiAudioFocusEnabled(boolean enabled) {
+        enforceModifyAudioRoutingPermission();
+        if (mMediaFocusControl != null) {
+            boolean mafEnabled = mMediaFocusControl.getMultiAudioFocusEnabled();
+            if (mafEnabled != enabled) {
+                mMediaFocusControl.updateMultiAudioFocus(enabled);
+                if (!enabled) {
+                    mDeviceBroker.postBroadcastBecomingNoisy();
+                }
+            }
+        }
+    }
+
 
     //======================
     // misc

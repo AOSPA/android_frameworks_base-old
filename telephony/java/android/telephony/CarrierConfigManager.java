@@ -505,6 +505,15 @@ public class CarrierConfigManager {
     public static final String KEY_CARRIER_VT_AVAILABLE_BOOL = "carrier_vt_available_bool";
 
     /**
+     * Flag specifying whether to show an alert dialog for 5G disable when the user disables VoLTE.
+     * By default this value is {@code false}.
+     *
+     * @hide
+     */
+    public static final String KEY_VOLTE_5G_LIMITED_ALERT_DIALOG_BOOL =
+            "volte_5g_limited_alert_dialog_bool";
+
+    /**
      * Flag specifying whether the carrier wants to notify the user when a VT call has been handed
      * over from WIFI to LTE.
      * <p>
@@ -2564,6 +2573,16 @@ public class CarrierConfigManager {
             "parameters_use_for_5g_nr_signal_bar_int";
 
     /**
+     * There are two signal strengths, NR and LTE signal strength, during NR (non-standalone).
+     * Boolean indicating whether to use LTE signal strength as primary during NR (non-standalone).
+     * By default this value is true.
+     *
+     * @hide
+     */
+    public static final String KEY_SIGNAL_STRENGTH_NR_NSA_USE_LTE_AS_PRIMARY_BOOL =
+            "signal_strength_nr_nsa_use_lte_as_primary_bool";
+
+    /**
      * String array of default bandwidth values per network type.
      * The entries should be of form "network_name:downstream,upstream", with values in Kbps.
      * @hide
@@ -3107,6 +3126,16 @@ public class CarrierConfigManager {
      * @hide
      */
     public static final String KEY_UNMETERED_NR_NSA_SUB6_BOOL = "unmetered_nr_nsa_sub6_bool";
+
+    /**
+     * Whether NR (non-standalone) should be unmetered when the device is roaming.
+     * If false, then the values for {@link #KEY_UNMETERED_NR_NSA_BOOL},
+     * {@link #KEY_UNMETERED_NR_NSA_MMWAVE_BOOL}, {@link #KEY_UNMETERED_NR_NSA_SUB6_BOOL},
+     * and unmetered {@link SubscriptionPlan} will be ignored.
+     * @hide
+     */
+    public static final String KEY_UNMETERED_NR_NSA_WHEN_ROAMING_BOOL =
+            "unmetered_nr_nsa_when_roaming_bool";
 
     /**
      * Whether NR (standalone) should be unmetered for all frequencies.
@@ -3746,6 +3775,7 @@ public class CarrierConfigManager {
         sDefaults.putBoolean(KEY_CARRIER_SETTINGS_ENABLE_BOOL, false);
         sDefaults.putBoolean(KEY_CARRIER_VOLTE_AVAILABLE_BOOL, false);
         sDefaults.putBoolean(KEY_CARRIER_VT_AVAILABLE_BOOL, false);
+        sDefaults.putBoolean(KEY_VOLTE_5G_LIMITED_ALERT_DIALOG_BOOL, false);
         sDefaults.putBoolean(KEY_NOTIFY_HANDOVER_VIDEO_FROM_WIFI_TO_LTE_BOOL, false);
         sDefaults.putBoolean(KEY_ALLOW_MERGING_RTT_CALLS_BOOL, false);
         sDefaults.putBoolean(KEY_NOTIFY_HANDOVER_VIDEO_FROM_LTE_TO_WIFI_BOOL, false);
@@ -4152,6 +4182,7 @@ public class CarrierConfigManager {
                 });
         sDefaults.putInt(KEY_PARAMETERS_USE_FOR_5G_NR_SIGNAL_BAR_INT,
                 CellSignalStrengthNr.USE_SSRSRP);
+        sDefaults.putBoolean(KEY_SIGNAL_STRENGTH_NR_NSA_USE_LTE_AS_PRIMARY_BOOL, true);
         sDefaults.putStringArray(KEY_BANDWIDTH_STRING_ARRAY, new String[]{
                 "GPRS:24,24", "EDGE:70,18", "UMTS:115,115", "CDMA-IS95A:14,14", "CDMA-IS95B:14,14",
                 "1xRTT:30,30", "EvDo-rev.0:750,48", "EvDo-rev.A:950,550", "HSDPA:4300,620",
@@ -4180,6 +4211,7 @@ public class CarrierConfigManager {
         sDefaults.putBoolean(KEY_UNMETERED_NR_NSA_BOOL, false);
         sDefaults.putBoolean(KEY_UNMETERED_NR_NSA_MMWAVE_BOOL, false);
         sDefaults.putBoolean(KEY_UNMETERED_NR_NSA_SUB6_BOOL, false);
+        sDefaults.putBoolean(KEY_UNMETERED_NR_NSA_WHEN_ROAMING_BOOL, false);
         sDefaults.putBoolean(KEY_UNMETERED_NR_SA_BOOL, false);
         sDefaults.putBoolean(KEY_UNMETERED_NR_SA_MMWAVE_BOOL, false);
         sDefaults.putBoolean(KEY_UNMETERED_NR_SA_SUB6_BOOL, false);

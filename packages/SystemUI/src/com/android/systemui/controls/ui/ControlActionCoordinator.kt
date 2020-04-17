@@ -24,12 +24,12 @@ import android.service.controls.actions.BooleanAction
 import android.service.controls.actions.CommandAction
 import android.util.Log
 import android.view.HapticFeedbackConstants
-
 import com.android.systemui.R
+import com.android.systemui.controls.controller.ControlsController
 
 object ControlActionCoordinator {
-    public const val MIN_LEVEL = 0
-    public const val MAX_LEVEL = 10000
+    const val MIN_LEVEL = 0
+    const val MAX_LEVEL = 10000
 
     private var dialog: Dialog? = null
 
@@ -40,9 +40,6 @@ object ControlActionCoordinator {
 
     fun toggle(cvh: ControlViewHolder, templateId: String, isChecked: Boolean) {
         cvh.action(BooleanAction(templateId, !isChecked))
-
-        val nextLevel = if (isChecked) MIN_LEVEL else MAX_LEVEL
-        cvh.clipLayer.setLevel(nextLevel)
     }
 
     fun touch(cvh: ControlViewHolder, templateId: String, control: Control) {
@@ -79,5 +76,9 @@ object ControlActionCoordinator {
             it.setOnDismissListener { _ -> dialog = null }
             it.show()
         }
+    }
+
+    fun setFocusedElement(cvh: ControlViewHolder?, controlsController: ControlsController) {
+        controlsController.onFocusChanged(cvh?.cws)
     }
 }
