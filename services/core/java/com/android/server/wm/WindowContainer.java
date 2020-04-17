@@ -737,6 +737,10 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         return parent != null ? parent.getDisplayArea() : null;
     }
 
+    boolean isAttached() {
+        return getDisplayArea() != null;
+    }
+
     void setWaitingForDrawnIfResizingChanged() {
         for (int i = mChildren.size() - 1; i >= 0; --i) {
             final WindowContainer wc = mChildren.get(i);
@@ -2076,8 +2080,7 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
      * @see #getAnimationAdapter
      */
     boolean applyAnimation(WindowManager.LayoutParams lp, int transit, boolean enter,
-            boolean isVoiceInteraction,
-            @Nullable OnAnimationFinishedCallback animationFinishedCallback) {
+            boolean isVoiceInteraction, @Nullable OnAnimationFinishedCallback finishedCallback) {
         if (mWmService.mDisableTransitionAnimation) {
             ProtoLog.v(WM_DEBUG_APP_TRANSITIONS_ANIM,
                     "applyAnimation: transition animation is disabled or skipped. "
@@ -2092,22 +2095,7 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         try {
             Trace.traceBegin(TRACE_TAG_WINDOW_MANAGER, "WC#applyAnimation");
             if (okToAnimate()) {
-                final Pair<AnimationAdapter, AnimationAdapter> adapters = getAnimationAdapter(lp,
-                        transit, enter, isVoiceInteraction);
-                AnimationAdapter adapter = adapters.first;
-                AnimationAdapter thumbnailAdapter = adapters.second;
-                if (adapter != null) {
-                    startAnimation(getPendingTransaction(), adapter, !isVisible(),
-                            ANIMATION_TYPE_APP_TRANSITION, animationFinishedCallback);
-                    if (adapter.getShowWallpaper()) {
-                        getDisplayContent().pendingLayoutChanges |= FINISH_LAYOUT_REDO_WALLPAPER;
-                    }
-                    if (thumbnailAdapter != null) {
-                        mSurfaceFreezer.mSnapshot.startAnimation(getPendingTransaction(),
-                                thumbnailAdapter, ANIMATION_TYPE_APP_TRANSITION,
-                                (type, anim) -> { });
-                    }
-                }
+                applyAnimationUnchecked(lp, enter, transit, isVoiceInteraction, finishedCallback);
             } else {
                 cancelAnimation();
             }
@@ -2201,12 +2189,37 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         return resultAdapters;
     }
 
+    protected void applyAnimationUnchecked(WindowManager.LayoutParams lp, boolean enter,
+            int transit, boolean isVoiceInteraction,
+            @Nullable OnAnimationFinishedCallback finishedCallback) {
+        final Pair<AnimationAdapter, AnimationAdapter> adapters = getAnimationAdapter(lp,
+                transit, enter, isVoiceInteraction);
+        AnimationAdapter adapter = adapters.first;
+        AnimationAdapter thumbnailAdapter = adapters.second;
+        if (adapter != null) {
+            startAnimation(getPendingTransaction(), adapter, !isVisible(),
+                    ANIMATION_TYPE_APP_TRANSITION, finishedCallback);
+            if (adapter.getShowWallpaper()) {
+                getDisplayContent().pendingLayoutChanges |= FINISH_LAYOUT_REDO_WALLPAPER;
+            }
+            if (thumbnailAdapter != null) {
+                mSurfaceFreezer.mSnapshot.startAnimation(getPendingTransaction(),
+                        thumbnailAdapter, ANIMATION_TYPE_APP_TRANSITION, (type, anim) -> { });
+            }
+        }
+    }
+
     final SurfaceAnimationRunner getSurfaceAnimationRunner() {
         return mWmService.mSurfaceAnimationRunner;
     }
 
     private Animation loadAnimation(WindowManager.LayoutParams lp, int transit, boolean enter,
                                     boolean isVoiceInteraction) {
+        if (isOrganized()) {
+            // Defer to the task organizer to run animations
+            return null;
+        }
+
         final DisplayContent displayContent = getDisplayContent();
         final DisplayInfo displayInfo = displayContent.getDisplayInfo();
         final int width = displayInfo.appWidth;
@@ -2576,5 +2589,9 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         mBLASTSyncEngine.setReady(localId);
 
         return willSync;
+    }
+
+    boolean useBLASTSync() {
+        return mUsingBLASTSyncTransaction;
     }
 }

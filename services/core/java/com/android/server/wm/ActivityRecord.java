@@ -1304,6 +1304,19 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         if (newTask != null && isState(RESUMED)) {
             newTask.setResumedActivity(this, "onParentChanged");
         }
+
+        if (stack != null && stack.topRunningActivity() == this) {
+            // carry over the PictureInPictureParams to the parent stack without calling
+            // TaskOrganizerController#dispatchTaskInfoChanged.
+            // this is to ensure the stack holding up-to-dated pinned stack information
+            // when activity is re-parented to enter pip mode, see also
+            // RootWindowContainer#moveActivityToPinnedStack
+            stack.mPictureInPictureParams.copyOnlySet(pictureInPictureArgs);
+            // make ensure the TaskOrganizer still works after re-parenting
+            if (firstWindowDrawn) {
+                stack.setHasBeenVisible(true);
+            }
+        }
     }
 
     private void updateColorTransform() {
@@ -5228,6 +5241,12 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         updateReportedVisibilityLocked();
     }
 
+    void onStartingWindowDrawn() {
+        if (task != null) {
+            task.setHasBeenVisible(true);
+        }
+    }
+
     /** Called when the windows associated app window container are drawn. */
     void onWindowsDrawn(boolean drawn, long timestampNs) {
         mDrawn = drawn;
@@ -5604,6 +5623,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
             _taskDescription.setIconFilename(iconFilePath);
         }
         taskDescription = _taskDescription;
+        getTask().updateTaskDescription();
     }
 
     void setVoiceSessionLocked(IVoiceInteractionSession session) {
@@ -6511,10 +6531,17 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         final Rect containingBounds = mTmpBounds;
         mCompatDisplayInsets.getContainerBounds(containingAppBounds, containingBounds, rotation,
                 orientation, orientationRequested, canChangeOrientation);
-        resolvedBounds.set(containingAppBounds);
+        resolvedBounds.set(containingBounds);
         // The size of floating task is fixed (only swap), so the aspect ratio is already correct.
         if (!mCompatDisplayInsets.mIsFloating) {
             applyAspectRatio(resolvedBounds, containingAppBounds, containingBounds);
+        }
+        // If the bounds are restricted by fixed aspect ratio, the resolved bounds should be put in
+        // the container app bounds. Otherwise the entire container bounds are available.
+        final boolean fillContainer = resolvedBounds.equals(containingBounds);
+        if (!fillContainer) {
+            // The horizontal position should not cover insets.
+            resolvedBounds.left = containingAppBounds.left;
         }
 
         // Use resolvedBounds to compute other override configurations such as appBounds. The bounds
@@ -6584,7 +6611,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         final int offsetX = getHorizontalCenterOffset(
                 (int) viewportW, (int) (contentW * mSizeCompatScale));
         // Above coordinates are in "@" space, now place "*" and "#" to screen space.
-        final int screenPosX = parentAppBounds.left + offsetX;
+        final int screenPosX = (fillContainer ? parentBounds.left : parentAppBounds.left) + offsetX;
         final int screenPosY = parentBounds.top;
         if (screenPosX != 0 || screenPosY != 0) {
             if (mSizeCompatBounds != null) {
@@ -7382,7 +7409,8 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         }
         final ActivityStack stack = getRootTask();
         return stack != null &&
-                stack.checkKeyguardVisibility(this, true /* shouldBeVisible */, true /* isTop */);
+                stack.checkKeyguardVisibility(this, true /* shouldBeVisible */,
+                        stack.topRunningActivity() == this /* isTop */);
     }
 
     void setTurnScreenOn(boolean turnScreenOn) {
@@ -7681,8 +7709,6 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
                 // Ensure the app bounds won't overlap with insets.
                 Task.intersectWithInsetsIfFits(outAppBounds, outBounds, mNonDecorInsets[rotation]);
             }
-            // The horizontal position is centered and it should not cover insets.
-            outBounds.left = outAppBounds.left;
         }
     }
 

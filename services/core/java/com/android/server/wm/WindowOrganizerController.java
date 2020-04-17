@@ -129,6 +129,10 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
                         final Map.Entry<IBinder, WindowContainerTransaction.Change> entry =
                                 entries.next();
                         final WindowContainer wc = WindowContainer.fromBinder(entry.getKey());
+                        if (!wc.isAttached()) {
+                            Slog.e(TAG, "Attempt to operate on detached container: " + wc);
+                            continue;
+                        }
                         int containerEffect = applyWindowContainerChange(wc, entry.getValue());
                         effects |= containerEffect;
 
@@ -146,6 +150,10 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
                     for (int i = 0, n = hops.size(); i < n; ++i) {
                         final WindowContainerTransaction.HierarchyOp hop = hops.get(i);
                         final WindowContainer wc = WindowContainer.fromBinder(hop.getContainer());
+                        if (!wc.isAttached()) {
+                            Slog.e(TAG, "Attempt to operate on detached container: " + wc);
+                            continue;
+                        }
                         effects |= sanitizeAndApplyHierarchyOp(wc, hop);
                     }
                     if ((effects & TRANSACT_EFFECTS_LIFECYCLE) != 0) {
@@ -156,7 +164,7 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
                         final PooledConsumer f = PooledLambda.obtainConsumer(
                                 ActivityRecord::ensureActivityConfiguration,
                                 PooledLambda.__(ActivityRecord.class), 0,
-                                false /* preserveWindow */);
+                                true /* preserveWindow */);
                         try {
                             for (int i = haveConfigChanges.size() - 1; i >= 0; --i) {
                                 haveConfigChanges.valueAt(i).forAllActivities(f);

@@ -380,10 +380,17 @@ public class PipTouchHandler {
         }
 
         // Re-calculate the expanded bounds
-        mNormalBounds = normalBounds;
+        mNormalBounds.set(normalBounds);
         Rect normalMovementBounds = new Rect();
         mSnapAlgorithm.getMovementBounds(mNormalBounds, insetBounds, normalMovementBounds,
                 bottomOffset);
+
+        if (mMovementBounds.isEmpty()) {
+            // mMovementBounds is not initialized yet and a clean movement bounds without
+            // bottom offset shall be used later in this function.
+            mSnapAlgorithm.getMovementBounds(curBounds, insetBounds, mMovementBounds,
+                    0 /* bottomOffset */);
+        }
 
         // Calculate the expanded size
         float aspectRatio = (float) normalBounds.width() / normalBounds.height();
@@ -430,8 +437,8 @@ public class PipTouchHandler {
 
         // Update the movement bounds after doing the calculations based on the old movement bounds
         // above
-        mNormalMovementBounds = normalMovementBounds;
-        mExpandedMovementBounds = expandedMovementBounds;
+        mNormalMovementBounds.set(normalMovementBounds);
+        mExpandedMovementBounds.set(expandedMovementBounds);
         mDisplayRotation = displayRotation;
         mInsetBounds.set(insetBounds);
         updateMovementBounds();
@@ -510,7 +517,7 @@ public class PipTouchHandler {
         mHandler.removeCallbacks(mShowTargetAction);
 
         if (mTargetViewContainer.isAttachedToWindow()) {
-            mWindowManager.removeView(mTargetViewContainer);
+            mWindowManager.removeViewImmediate(mTargetViewContainer);
         }
     }
 
@@ -592,8 +599,14 @@ public class PipTouchHandler {
                 break;
             }
             case MotionEvent.ACTION_HOVER_ENTER:
-                mMenuController.showMenu(MENU_STATE_FULL, mMotionHelper.getBounds(),
-                        mMovementBounds, false /* allowMenuTimeout */, false /* willResizeMenu */);
+                // If Touch Exploration is enabled, some a11y services (e.g. Talkback) is probably
+                // on and changing MotionEvents into HoverEvents.
+                // Let's not enable menu show/hide for a11y services.
+                if (!mAccessibilityManager.isTouchExplorationEnabled()) {
+                    mMenuController.showMenu(MENU_STATE_FULL, mMotionHelper.getBounds(),
+                            mMovementBounds, false /* allowMenuTimeout */,
+                            false /* willResizeMenu */);
+                }
             case MotionEvent.ACTION_HOVER_MOVE: {
                 if (!shouldDeliverToMenu && !mSendingHoverAccessibilityEvents) {
                     sendAccessibilityHoverEvent(AccessibilityEvent.TYPE_VIEW_HOVER_ENTER);
@@ -602,7 +615,12 @@ public class PipTouchHandler {
                 break;
             }
             case MotionEvent.ACTION_HOVER_EXIT: {
-                mMenuController.hideMenu();
+                // If Touch Exploration is enabled, some a11y services (e.g. Talkback) is probably
+                // on and changing MotionEvents into HoverEvents.
+                // Let's not enable menu show/hide for a11y services.
+                if (!mAccessibilityManager.isTouchExplorationEnabled()) {
+                    mMenuController.hideMenu();
+                }
                 if (!shouldDeliverToMenu && mSendingHoverAccessibilityEvents) {
                     sendAccessibilityHoverEvent(AccessibilityEvent.TYPE_VIEW_HOVER_EXIT);
                     mSendingHoverAccessibilityEvents = false;

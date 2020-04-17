@@ -19,7 +19,9 @@ import static android.view.ViewRootImpl.NEW_INSETS_MODE_FULL;
 import static android.view.ViewRootImpl.sNewInsetsMode;
 import static android.view.WindowInsets.Type.ime;
 import static android.view.WindowInsets.Type.systemBars;
+
 import static com.android.systemui.DejankUtils.whitelistIpcs;
+
 import static java.lang.Integer.max;
 
 import android.app.Activity;
@@ -28,7 +30,6 @@ import android.app.admin.DevicePolicyManager;
 import android.content.Context;
 import android.content.Intent;
 import android.content.res.ColorStateList;
-import android.graphics.Rect;
 import android.metrics.LogMaker;
 import android.os.Handler;
 import android.os.Looper;
@@ -115,7 +116,8 @@ public class KeyguardSecurityContainer extends FrameLayout implements KeyguardSe
 
     // Used to notify the container when something interesting happens.
     public interface SecurityCallback {
-        public boolean dismiss(boolean authenticated, int targetUserId);
+        public boolean dismiss(boolean authenticated, int targetUserId,
+                boolean bypassSecondaryLockScreen);
         public void userActivity();
         public void onSecurityModeChanged(SecurityMode securityMode, boolean needsInput);
 
@@ -504,9 +506,12 @@ public class KeyguardSecurityContainer extends FrameLayout implements KeyguardSe
      * @param authenticated true if the user entered the correct authentication
      * @param targetUserId a user that needs to be the foreground user at the finish (if called)
      *     completion.
+     * @param bypassSecondaryLockScreen true if the user is allowed to bypass the secondary
+     *     secondary lock screen requirement, if any.
      * @return true if keyguard is done
      */
-    boolean showNextSecurityScreenOrFinish(boolean authenticated, int targetUserId) {
+    boolean showNextSecurityScreenOrFinish(boolean authenticated, int targetUserId,
+            boolean bypassSecondaryLockScreen) {
         if (DEBUG) Log.d(TAG, "showNextSecurityScreenOrFinish(" + authenticated + ")");
         boolean finish = false;
         boolean strongAuth = false;
@@ -555,7 +560,7 @@ public class KeyguardSecurityContainer extends FrameLayout implements KeyguardSe
             }
         }
         // Check for device admin specified additional security measures.
-        if (finish) {
+        if (finish && !bypassSecondaryLockScreen) {
             Intent secondaryLockscreenIntent =
                     mUpdateMonitor.getSecondaryLockscreenRequirement(targetUserId);
             if (secondaryLockscreenIntent != null) {
@@ -636,8 +641,15 @@ public class KeyguardSecurityContainer extends FrameLayout implements KeyguardSe
             mUpdateMonitor.cancelFaceAuth();
         }
 
+        @Override
         public void dismiss(boolean authenticated, int targetId) {
-            mSecurityCallback.dismiss(authenticated, targetId);
+            dismiss(authenticated, targetId, /* bypassSecondaryLockScreen */ false);
+        }
+
+        @Override
+        public void dismiss(boolean authenticated, int targetId,
+                boolean bypassSecondaryLockScreen) {
+            mSecurityCallback.dismiss(authenticated, targetId, bypassSecondaryLockScreen);
         }
 
         public boolean isVerifyUnlockOnly() {
@@ -688,6 +700,9 @@ public class KeyguardSecurityContainer extends FrameLayout implements KeyguardSe
         public boolean isVerifyUnlockOnly() { return false; }
         @Override
         public void dismiss(boolean securityVerified, int targetUserId) { }
+        @Override
+        public void dismiss(boolean authenticated, int targetId,
+                boolean bypassSecondaryLockScreen) { }
         @Override
         public void onUserInput() { }
         @Override

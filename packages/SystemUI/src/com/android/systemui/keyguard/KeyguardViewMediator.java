@@ -97,7 +97,6 @@ import com.android.systemui.statusbar.phone.BiometricUnlockController;
 import com.android.systemui.statusbar.phone.KeyguardBypassController;
 import com.android.systemui.statusbar.phone.NavigationModeController;
 import com.android.systemui.statusbar.phone.NotificationPanelViewController;
-import com.android.systemui.statusbar.phone.NotificationShadeWindowController;
 import com.android.systemui.statusbar.phone.StatusBar;
 import com.android.systemui.util.DeviceConfigProxy;
 import com.android.systemui.util.InjectionInflationController;
@@ -217,7 +216,6 @@ public class KeyguardViewMediator extends SystemUI implements Dumpable {
     private AlarmManager mAlarmManager;
     private AudioManager mAudioManager;
     private StatusBarManager mStatusBarManager;
-    private final NotificationShadeWindowController mNotificationShadeWindowController;
     private final Executor mUiBgExecutor;
 
     private boolean mSystemReady;
@@ -629,7 +627,7 @@ public class KeyguardViewMediator extends SystemUI implements Dumpable {
         @Override
         public void keyguardGone() {
             Trace.beginSection("KeyguardViewMediator.mViewMediatorCallback#keyguardGone");
-            mNotificationShadeWindowController.setKeyguardGoingAway(false);
+            mKeyguardViewControllerLazy.get().setKeyguardGoingAwayState(false);
             mKeyguardDisplayManager.hide();
             Trace.endSection();
         }
@@ -718,7 +716,6 @@ public class KeyguardViewMediator extends SystemUI implements Dumpable {
             FalsingManager falsingManager,
             LockPatternUtils lockPatternUtils,
             BroadcastDispatcher broadcastDispatcher,
-            NotificationShadeWindowController notificationShadeWindowController,
             Lazy<KeyguardViewController> statusBarKeyguardViewManagerLazy,
             DismissCallbackRegistry dismissCallbackRegistry,
             KeyguardUpdateMonitor keyguardUpdateMonitor, DumpManager dumpManager,
@@ -730,7 +727,6 @@ public class KeyguardViewMediator extends SystemUI implements Dumpable {
         mFalsingManager = falsingManager;
         mLockPatternUtils = lockPatternUtils;
         mBroadcastDispatcher = broadcastDispatcher;
-        mNotificationShadeWindowController = notificationShadeWindowController;
         mKeyguardViewControllerLazy = statusBarKeyguardViewManagerLazy;
         mDismissCallbackRegistry = dismissCallbackRegistry;
         mUiBgExecutor = uiBgExecutor;
@@ -878,7 +874,8 @@ public class KeyguardViewMediator extends SystemUI implements Dumpable {
             mGoingToSleep = true;
 
             // Reset keyguard going away state so we can start listening for fingerprint. We
-            // explicitly DO NOT want to call mStatusBarWindowController.setKeyguardGoingAway(false)
+            // explicitly DO NOT want to call
+            // mKeyguardViewControllerLazy.get().setKeyguardGoingAwayState(false)
             // here, since that will mess with the device lock state.
             mUpdateMonitor.setKeyguardGoingAway(false);
 
@@ -1863,7 +1860,7 @@ public class KeyguardViewMediator extends SystemUI implements Dumpable {
             adjustStatusBarLocked();
             userActivity();
             mUpdateMonitor.setKeyguardGoingAway(false);
-            mNotificationShadeWindowController.setKeyguardGoingAway(false);
+            mKeyguardViewControllerLazy.get().setKeyguardGoingAwayState(false);
             mShowKeyguardWakeLock.release();
         }
         mKeyguardDisplayManager.show();
@@ -1903,7 +1900,7 @@ public class KeyguardViewMediator extends SystemUI implements Dumpable {
             }
 
             mUpdateMonitor.setKeyguardGoingAway(true);
-            mNotificationShadeWindowController.setKeyguardGoingAway(true);
+            mKeyguardViewControllerLazy.get().setKeyguardGoingAwayState(true);
 
             // Don't actually hide the Keyguard at the moment, wait for window
             // manager until it tells us it's safe to do so with
