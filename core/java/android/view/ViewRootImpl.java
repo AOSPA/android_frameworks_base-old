@@ -111,6 +111,7 @@ import android.os.RemoteException;
 import android.os.SystemClock;
 import android.os.SystemProperties;
 import android.os.Trace;
+import android.os.UserHandle;
 import android.sysprop.DisplayProperties;
 import android.util.AndroidRuntimeException;
 import android.util.DisplayMetrics;
@@ -894,6 +895,14 @@ public final class ViewRootImpl implements ViewParent,
      * We have one child
      */
     public void setView(View view, WindowManager.LayoutParams attrs, View panelParentView) {
+        setView(view, attrs, panelParentView, UserHandle.myUserId());
+    }
+
+    /**
+     * We have one child
+     */
+    public void setView(View view, WindowManager.LayoutParams attrs, View panelParentView,
+            int userId) {
         synchronized (this) {
             if (mView == null) {
                 mView = view;
@@ -1002,8 +1011,8 @@ public final class ViewRootImpl implements ViewParent,
                     mAttachInfo.mRecomputeGlobalAttributes = true;
                     collectViewAttributes();
                     adjustLayoutParamsForCompatibility(mWindowAttributes);
-                    res = mWindowSession.addToDisplay(mWindow, mSeq, mWindowAttributes,
-                            getHostVisibility(), mDisplay.getDisplayId(), mTmpFrame,
+                    res = mWindowSession.addToDisplayAsUser(mWindow, mSeq, mWindowAttributes,
+                            getHostVisibility(), mDisplay.getDisplayId(), userId, mTmpFrame,
                             mAttachInfo.mContentInsets, mAttachInfo.mStableInsets,
                             mAttachInfo.mDisplayCutout, inputChannel,
                             mTempInsets, mTempControls);
@@ -1076,6 +1085,9 @@ public final class ViewRootImpl implements ViewParent,
                             throw new WindowManager.InvalidDisplayException("Unable to add window "
                                     + mWindow + " -- the specified window type "
                                     + mWindowAttributes.type + " is not valid");
+                        case WindowManagerGlobal.ADD_INVALID_USER:
+                            throw new WindowManager.BadTokenException("Unable to add Window "
+                                    + mWindow + " -- requested userId is not valid");
                     }
                     throw new RuntimeException(
                             "Unable to add window -- unknown error code " + res);
@@ -3018,6 +3030,10 @@ public final class ViewRootImpl implements ViewParent,
         if ((relayoutResult & WindowManagerGlobal.RELAYOUT_RES_FIRST_TIME) != 0) {
             reportNextDraw();
         }
+        if ((relayoutResult & WindowManagerGlobal.RELAYOUT_RES_BLAST_SYNC) != 0) {
+            reportNextDraw();
+            setUseBLASTSyncTransaction();
+        }
 
         boolean cancelDraw = mAttachInfo.mTreeObserver.dispatchOnPreDraw() || !isViewVisible;
 
@@ -3726,7 +3742,7 @@ public final class ViewRootImpl implements ViewParent,
             if (needFrameCompleteCallback) {
                 final Handler handler = mAttachInfo.mHandler;
                 mAttachInfo.mThreadedRenderer.setFrameCompleteCallback((long frameNr) -> {
-                        finishBLASTSync();
+                        finishBLASTSync(!reportNextDraw);
                         handler.postAtFrontOfQueue(() -> {
                             if (reportNextDraw) {
                                 // TODO: Use the frame number
@@ -3760,7 +3776,7 @@ public final class ViewRootImpl implements ViewParent,
             if (usingAsyncReport && !canUseAsync) {
                 mAttachInfo.mThreadedRenderer.setFrameCompleteCallback(null);
                 usingAsyncReport = false;
-                finishBLASTSync();
+                finishBLASTSync(true /* apply */);
             }
         } finally {
             mIsDrawing = false;
@@ -9583,10 +9599,15 @@ public final class ViewRootImpl implements ViewParent,
         mNextDrawUseBLASTSyncTransaction = true;
     }
 
-    private void finishBLASTSync() {
+    private void finishBLASTSync(boolean apply) {
         if (mNextReportConsumeBLAST) {
             mNextReportConsumeBLAST = false;
-            mRtBLASTSyncTransaction.apply();
+
+            if (apply) {
+                mRtBLASTSyncTransaction.apply();
+            } else {
+                mSurfaceChangedTransaction.merge(mRtBLASTSyncTransaction);
+            }
         }
     }
 

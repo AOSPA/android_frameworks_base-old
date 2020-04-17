@@ -365,6 +365,8 @@ class ControlsControllerImpl @Inject constructor (
         componentName: ComponentName,
         callback: Consumer<Boolean>
     ) {
+        if (seedingInProgress) return
+
         Log.i(TAG, "Beginning request to seed favorites for: $componentName")
         if (!confirmAvailability()) {
             if (userChanging) {
@@ -495,6 +497,13 @@ class ControlsControllerImpl @Inject constructor (
         }
     }
 
+    override fun resetFavorites() {
+        executor.execute {
+            Favorites.clear()
+            persistenceWrapper.storeFavorites(Favorites.getAllStructures())
+        }
+    }
+
     override fun refreshStatus(componentName: ComponentName, control: Control) {
         if (!confirmAvailability()) {
             Log.d(TAG, "Controls not available")
@@ -534,6 +543,15 @@ class ControlsControllerImpl @Inject constructor (
 
     override fun getFavoritesForComponent(componentName: ComponentName): List<StructureInfo> =
         Favorites.getStructuresForComponent(componentName)
+
+    override fun getFavoritesForStructure(
+        componentName: ComponentName,
+        structureName: CharSequence
+    ): List<ControlInfo> {
+        return Favorites.getControlsForStructure(
+                StructureInfo(componentName, structureName, emptyList())
+        )
+    }
 
     override fun dump(fd: FileDescriptor, pw: PrintWriter, args: Array<out String>) {
         pw.println("ControlsController state:")

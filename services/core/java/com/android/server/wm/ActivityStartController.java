@@ -19,6 +19,7 @@ package com.android.server.wm;
 import static android.app.ActivityManager.START_SUCCESS;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_HOME;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN;
+import static android.app.WindowConfiguration.WINDOWING_MODE_UNDEFINED;
 import static android.content.Intent.FLAG_ACTIVITY_NEW_TASK;
 import static android.os.FactoryTest.FACTORY_TEST_LOW_LEVEL;
 
@@ -171,7 +172,8 @@ public class ActivityStartController {
         mLastStarter.postStartActivityProcessing(r, result, targetStack);
     }
 
-    void startHomeActivity(Intent intent, ActivityInfo aInfo, String reason, int displayId) {
+    void startHomeActivity(Intent intent, ActivityInfo aInfo, String reason,
+            TaskDisplayArea taskDisplayArea) {
         final ActivityOptions options = ActivityOptions.makeBasic();
         options.setLaunchWindowingMode(WINDOWING_MODE_FULLSCREEN);
         if (!ActivityRecord.isResolverActivity(aInfo.name)) {
@@ -180,19 +182,20 @@ public class ActivityStartController {
             // foreground instead of bring home stack to front.
             options.setLaunchActivityType(ACTIVITY_TYPE_HOME);
         }
+        final int displayId = taskDisplayArea.getDisplayId();
         options.setLaunchDisplayId(displayId);
+        // TODO(b/152116619): Enable after complete switch to WindowContainerToken
+        //options.setLaunchWindowContainerToken(taskDisplayArea.getWindowContainerToken());
 
-        final DisplayContent display =
-                mService.mRootWindowContainer.getDisplayContent(displayId);
         // The home activity will be started later, defer resuming to avoid unneccerary operations
         // (e.g. start home recursively) when creating home stack.
         mSupervisor.beginDeferResume();
         final ActivityStack homeStack;
         try {
-            // TODO(multi-display-area): Support starting home in a task display area
-            // Make sure home stack exist on display.
-            homeStack = display.getDefaultTaskDisplayArea().getOrCreateStack(
-                    WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_HOME, ON_TOP);
+            // Make sure home stack exists on display area.
+            // TODO(b/153624902): Replace with TaskDisplayArea#getOrCreateRootHomeTask()
+            homeStack = taskDisplayArea.getOrCreateStack(WINDOWING_MODE_UNDEFINED,
+                    ACTIVITY_TYPE_HOME, ON_TOP);
         } finally {
             mSupervisor.endDeferResume();
         }

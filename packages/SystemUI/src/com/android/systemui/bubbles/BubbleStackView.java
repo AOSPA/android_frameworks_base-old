@@ -83,6 +83,7 @@ import com.android.systemui.bubbles.animation.StackAnimationController;
 import com.android.systemui.model.SysUiState;
 import com.android.systemui.shared.system.QuickStepContract;
 import com.android.systemui.shared.system.SysUiStatsLog;
+import com.android.systemui.statusbar.phone.NotificationShadeWindowController;
 import com.android.systemui.util.DismissCircleView;
 import com.android.systemui.util.FloatingContentCoordinator;
 import com.android.systemui.util.RelativeTouchListener;
@@ -330,6 +331,8 @@ public class BubbleStackView extends FrameLayout {
     @NonNull
     private final SurfaceSynchronizer mSurfaceSynchronizer;
 
+    private final NotificationShadeWindowController mNotificationShadeWindowController;
+
     /**
      * The currently magnetized object, which is being dragged and will be attracted to the magnetic
      * dismiss target.
@@ -439,8 +442,8 @@ public class BubbleStackView extends FrameLayout {
                     // that means overflow was previously expanded. Set the selected bubble
                     // internally without going through BubbleData (which would ignore it since it's
                     // already selected).
+                    mBubbleData.setShowingOverflow(true);
                     setSelectedBubble(clickedBubble);
-
                 }
             } else {
                 // Otherwise, we either tapped the stack (which means we're collapsed
@@ -626,13 +629,15 @@ public class BubbleStackView extends FrameLayout {
     public BubbleStackView(Context context, BubbleData data,
             @Nullable SurfaceSynchronizer synchronizer,
             FloatingContentCoordinator floatingContentCoordinator,
-            SysUiState sysUiState) {
+            SysUiState sysUiState,
+            NotificationShadeWindowController notificationShadeWindowController) {
         super(context);
 
         mBubbleData = data;
         mInflater = LayoutInflater.from(context);
 
         mSysUiState = sysUiState;
+        mNotificationShadeWindowController = notificationShadeWindowController;
 
         Resources res = getResources();
         mMaxBubbles = res.getInteger(R.integer.bubbles_max_rendered);
@@ -1227,8 +1232,12 @@ public class BubbleStackView extends FrameLayout {
         if (mExpandedBubble != null && mExpandedBubble.equals(bubbleToSelect)) {
             return;
         }
+        if (bubbleToSelect == null || bubbleToSelect.getKey() != BubbleOverflow.KEY) {
+            mBubbleData.setShowingOverflow(false);
+        }
         final BubbleViewProvider previouslySelected = mExpandedBubble;
         mExpandedBubble = bubbleToSelect;
+        updatePointerPosition();
 
         if (mIsExpanded) {
             // Make the container of the expanded view transparent before removing the expanded view
@@ -1238,7 +1247,6 @@ public class BubbleStackView extends FrameLayout {
             mSurfaceSynchronizer.syncSurfaceAndRun(() -> {
                 previouslySelected.setContentVisibility(false);
                 updateExpandedBubble();
-                updatePointerPosition();
                 requestUpdate();
 
                 logBubbleEvent(previouslySelected,
@@ -1344,7 +1352,8 @@ public class BubbleStackView extends FrameLayout {
         if (show
                 && mShouldShowManageEducation
                 && mManageEducationView.getVisibility() != VISIBLE
-                && mIsExpanded) {
+                && mIsExpanded
+                && mExpandedBubble.getExpandedView() != null) {
             mManageEducationView.setAlpha(0);
             mManageEducationView.setVisibility(VISIBLE);
             mManageEducationView.post(() -> {
@@ -1557,7 +1566,11 @@ public class BubbleStackView extends FrameLayout {
      */
     @Override
     public void subtractObscuredTouchableRegion(Region touchableRegion, View view) {
-
+        // If the notification shade is expanded, we shouldn't let the ActivityView steal any touch
+        // events from any location.
+        if (mNotificationShadeWindowController.getPanelExpanded()) {
+            touchableRegion.setEmpty();
+        }
     }
 
     /**
@@ -1900,7 +1913,8 @@ public class BubbleStackView extends FrameLayout {
             Log.d(TAG, "updateExpandedBubble()");
         }
         mExpandedViewContainer.removeAllViews();
-        if (mIsExpanded && mExpandedBubble != null) {
+        if (mIsExpanded && mExpandedBubble != null
+                && mExpandedBubble.getExpandedView() != null) {
             BubbleExpandedView bev = mExpandedBubble.getExpandedView();
             mExpandedViewContainer.addView(bev);
             bev.populateExpandedView();
@@ -1920,7 +1934,7 @@ public class BubbleStackView extends FrameLayout {
             if (!mExpandedViewYAnim.isRunning()) {
                 // We're not animating so set the value
                 mExpandedViewContainer.setTranslationY(y);
-                if (mExpandedBubble != null) {
+                if (mExpandedBubble != null && mExpandedBubble.getExpandedView() != null) {
                     mExpandedBubble.getExpandedView().updateView();
                 }
             } else {
@@ -1958,7 +1972,7 @@ public class BubbleStackView extends FrameLayout {
     }
 
     private void updatePointerPosition() {
-        if (mExpandedBubble == null) {
+        if (mExpandedBubble == null || mExpandedBubble.getExpandedView() == null) {
             return;
         }
         int index = getBubbleIndex(mExpandedBubble);
@@ -2040,7 +2054,7 @@ public class BubbleStackView extends FrameLayout {
      * a back key down/up event pair is forwarded to the bubble Activity.
      */
     boolean performBackPressIfNeeded() {
-        if (!isExpanded() || mExpandedBubble == null) {
+        if (!isExpanded() || mExpandedBubble == null || mExpandedBubble.getExpandedView() == null) {
             return false;
         }
         return mExpandedBubble.getExpandedView().performBackPressIfNeeded();

@@ -16,7 +16,6 @@
 
 package android.window;
 
-import static android.app.WindowConfiguration.WINDOWING_MODE_MULTI_WINDOW;
 import static android.hardware.display.DisplayManager.VIRTUAL_DISPLAY_FLAG_DESTROY_CONTENT_ON_REMOVAL;
 import static android.hardware.display.DisplayManager.VIRTUAL_DISPLAY_FLAG_OWN_CONTENT_ONLY;
 import static android.hardware.display.DisplayManager.VIRTUAL_DISPLAY_FLAG_PUBLIC;
@@ -68,6 +67,7 @@ public class VirtualDisplayTaskEmbedder extends TaskEmbedder {
     private VirtualDisplay mVirtualDisplay;
     private Insets mForwardedInsets;
     private DisplayMetrics mTmpDisplayMetrics;
+    private TaskStackListener mTaskStackListener;
 
     /**
      * Constructs a new TaskEmbedder.
@@ -81,11 +81,6 @@ public class VirtualDisplayTaskEmbedder extends TaskEmbedder {
             boolean singleTaskInstance) {
         super(context, host);
         mSingleTaskInstance = singleTaskInstance;
-    }
-
-    @Override
-    public TaskStackListener createTaskStackListener() {
-        return new TaskStackListenerImpl();
     }
 
     /**
@@ -125,6 +120,9 @@ public class VirtualDisplayTaskEmbedder extends TaskEmbedder {
                         .setDisplayToSingleTaskInstance(displayId);
             }
             setForwardedInsets(mForwardedInsets);
+
+            mTaskStackListener = new TaskStackListenerImpl();
+            mActivityTaskManager.registerTaskStackListener(mTaskStackListener);
         } catch (RemoteException e) {
             e.rethrowAsRuntimeException();
         }
@@ -142,6 +140,15 @@ public class VirtualDisplayTaskEmbedder extends TaskEmbedder {
 
         // Clear tap-exclude region (if any) for this window.
         clearTapExcludeRegion();
+
+        if (mTaskStackListener != null) {
+            try {
+                mActivityTaskManager.unregisterTaskStackListener(mTaskStackListener);
+            } catch (RemoteException e) {
+                Log.e(TAG, "Failed to unregister task stack listener", e);
+            }
+            mTaskStackListener = null;
+        }
 
         if (isInitialized()) {
             mVirtualDisplay.release();
@@ -247,7 +254,6 @@ public class VirtualDisplayTaskEmbedder extends TaskEmbedder {
     protected ActivityOptions prepareActivityOptions(ActivityOptions options) {
         options = super.prepareActivityOptions(options);
         options.setLaunchDisplayId(getDisplayId());
-        options.setLaunchWindowingMode(WINDOWING_MODE_MULTI_WINDOW);
         return options;
     }
 
