@@ -714,7 +714,7 @@ public abstract class BiometricServiceBase extends SystemService
      * Callback handlers from the daemon. The caller must put this on a handler.
      */
 
-    protected void handleAcquired(long deviceId, int acquiredInfo, int vendorCode) {
+    public void handleAcquired(long deviceId, int acquiredInfo, int vendorCode) {
         ClientMonitor client = mCurrentClient;
         if (client != null && client.onAcquired(acquiredInfo, vendorCode)) {
             removeClient(client);
@@ -726,7 +726,7 @@ public abstract class BiometricServiceBase extends SystemService
         }
     }
 
-    protected void handleAuthenticated(BiometricAuthenticator.Identifier identifier,
+    public void handleAuthenticated(BiometricAuthenticator.Identifier identifier,
             ArrayList<Byte> token) {
         ClientMonitor client = mCurrentClient;
         final boolean authenticated = identifier.getBiometricId() != 0;
@@ -743,7 +743,7 @@ public abstract class BiometricServiceBase extends SystemService
         }
     }
 
-    protected void handleEnrollResult(BiometricAuthenticator.Identifier identifier,
+    public void handleEnrollResult(BiometricAuthenticator.Identifier identifier,
             int remaining) {
         ClientMonitor client = mCurrentClient;
         if (client != null && client.onEnrollResult(identifier, remaining)) {
@@ -756,7 +756,7 @@ public abstract class BiometricServiceBase extends SystemService
         }
     }
 
-    protected void handleError(long deviceId, int error, int vendorCode) {
+    public void handleError(long deviceId, int error, int vendorCode) {
         final ClientMonitor client = mCurrentClient;
 
         if (DEBUG) Slog.v(getTag(), "handleError(client="
@@ -782,7 +782,7 @@ public abstract class BiometricServiceBase extends SystemService
         }
     }
 
-    protected void handleRemoved(BiometricAuthenticator.Identifier identifier,
+    public void handleRemoved(BiometricAuthenticator.Identifier identifier,
             final int remaining) {
         if (DEBUG) Slog.w(getTag(), "Removed: fid=" + identifier.getBiometricId()
                 + ", dev=" + identifier.getDeviceId()
@@ -808,7 +808,7 @@ public abstract class BiometricServiceBase extends SystemService
         }
     }
 
-    protected void handleEnumerate(BiometricAuthenticator.Identifier identifier, int remaining) {
+    public void handleEnumerate(BiometricAuthenticator.Identifier identifier, int remaining) {
         ClientMonitor client = mCurrentClient;
         if (client != null) {
             client.onEnumerationResult(identifier, remaining);
@@ -1186,7 +1186,7 @@ public abstract class BiometricServiceBase extends SystemService
     /**
      * Populates existing authenticator ids. To be used only during the start of the service.
      */
-    protected void loadAuthenticatorIds() {
+    public void loadAuthenticatorIds() {
         // This operation can be expensive, so keep track of the elapsed time. Might need to move to
         // background if it takes too long.
         long t = System.currentTimeMillis();
@@ -1265,7 +1265,7 @@ public abstract class BiometricServiceBase extends SystemService
      * This method should be called upon connection to the daemon, and when user switches.
      * @param userId
      */
-    protected void doTemplateCleanupForUser(int userId) {
+    public void doTemplateCleanupForUser(int userId) {
         if (mCleanupUnusedFingerprints) {
             enumerateUser(userId);
         }
@@ -1329,7 +1329,7 @@ public abstract class BiometricServiceBase extends SystemService
         doTemplateCleanupForUser(userId);
     }
 
-    protected void notifyLockoutResetMonitors() {
+    public void notifyLockoutResetMonitors() {
         for (int i = 0; i < mLockoutMonitors.size(); i++) {
             mLockoutMonitors.get(i).sendLockoutReset();
         }
