@@ -60,6 +60,7 @@ import android.util.Slog;
 import com.android.internal.R;
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.logging.MetricsLogger;
+import com.android.internal.os.BackgroundThread;
 import com.android.internal.util.DumpUtils;
 import com.android.server.SystemServerInitThreadPool;
 import com.android.server.biometrics.AuthenticationClient;
@@ -226,11 +227,14 @@ public class FaceService extends BiometricServiceBase {
 
         @Override
         public boolean shouldFrameworkHandleLockout() {
-            return false;
+            return mSenseManager.isEnabled();
         }
 
         @Override
         public boolean wasUserDetected() {
+            if (mSenseManager.isEnabled()) {
+                return mLastAcquire != FaceManager.FACE_ACQUIRED_NOT_DETECTED;
+            }
             return mLastAcquire != FaceManager.FACE_ACQUIRED_NOT_DETECTED
                     && mLastAcquire != FaceManager.FACE_ACQUIRED_SENSOR_DIRTY;
         }
@@ -380,12 +384,13 @@ public class FaceService extends BiometricServiceBase {
                 final IFaceServiceReceiver receiver, final String opPackageName,
                 final int[] disabledFeatures) {
             checkPermission(MANAGE_BIOMETRIC);
-            updateActiveGroup(userId, opPackageName);
 
-            mHandler.post(() -> {
-                mNotificationManager.cancelAsUser(NOTIFICATION_TAG, NOTIFICATION_ID,
-                        UserHandle.CURRENT);
-            });
+            if (!mSenseManager.isEnabled()) {
+                mHandler.post(() -> {
+                    mNotificationManager.cancelAsUser(NOTIFICATION_TAG, NOTIFICATION_ID,
+                            UserHandle.CURRENT);
+                });
+            }
 
             final boolean restricted = isRestricted();
             final EnrollClientImpl client = new EnrollClientImpl(getContext(), mDaemonWrapper,
@@ -557,6 +562,10 @@ public class FaceService extends BiometricServiceBase {
                     Binder.getCallingUid(), Binder.getCallingPid(),
                     UserHandle.getCallingUserId())) {
                 return false;
+            }
+
+            if (mSenseManager.isEnabled()) {
+                return mSenseManager.isDetected();
             }
 
             final long token = Binder.clearCallingIdentity();
@@ -845,8 +854,9 @@ public class FaceService extends BiometricServiceBase {
     private UsageStats mUsageStats;
     private boolean mRevokeChallengePending = false;
     // One of the AuthenticationClient constants
-    private int mCurrentUserLockoutMode;
+    protected int mCurrentUserLockoutMode;
 
+    private ParanoidSenseManager mSenseManager;
     private NotificationManager mNotificationManager;
 
     private int[] mBiometricPromptIgnoreList;
@@ -916,6 +926,7 @@ public class FaceService extends BiometricServiceBase {
                         mDaemon = null;
                         mHalDeviceId = 0;
                         mCurrentUserId = UserHandle.USER_NULL;
+                        mSenseManager.setCurrentUserId(mCurrentUserId);
                     }
                 }
             });
@@ -985,6 +996,9 @@ public class FaceService extends BiometricServiceBase {
     private final DaemonWrapper mDaemonWrapper = new DaemonWrapper() {
         @Override
         public int authenticate(long operationId, int groupId) throws RemoteException {
+            if (mSenseManager.isEnabled()) {
+                return mSenseManager.authenticate(operationId);
+            }
             IBiometricsFace daemon = getFaceDaemon();
             if (daemon == null) {
                 Slog.w(TAG, "authenticate(): no face HAL!");
@@ -995,6 +1009,9 @@ public class FaceService extends BiometricServiceBase {
 
         @Override
         public int cancel() throws RemoteException {
+            if (mSenseManager.isEnabled()) {
+                return mSenseManager.cancel();
+            }
             IBiometricsFace daemon = getFaceDaemon();
             if (daemon == null) {
                 Slog.w(TAG, "cancel(): no face HAL!");
@@ -1005,6 +1022,9 @@ public class FaceService extends BiometricServiceBase {
 
         @Override
         public int remove(int groupId, int biometricId) throws RemoteException {
+            if (mSenseManager.isEnabled()) {
+                return mSenseManager.remove(biometricId);
+            }
             IBiometricsFace daemon = getFaceDaemon();
             if (daemon == null) {
                 Slog.w(TAG, "remove(): no face HAL!");
@@ -1015,6 +1035,9 @@ public class FaceService extends BiometricServiceBase {
 
         @Override
         public int enumerate() throws RemoteException {
+            if (mSenseManager.isEnabled()) {
+                return mSenseManager.enumerate();
+            }
             IBiometricsFace daemon = getFaceDaemon();
             if (daemon == null) {
                 Slog.w(TAG, "enumerate(): no face HAL!");
@@ -1026,6 +1049,16 @@ public class FaceService extends BiometricServiceBase {
         @Override
         public int enroll(byte[] cryptoToken, int groupId, int timeout,
                 ArrayList<Integer> disabledFeatures) throws RemoteException {
+            if (mSenseManager.isEnabled()) {
+                int[] dfs = new int[0];
+                if (disabledFeatures != null && disabledFeatures.size() > 0) {
+                    dfs = new int[disabledFeatures.size()];
+                    for (int i = 0; i < disabledFeatures.size(); i++) {
+                        dfs[i] = disabledFeatures.get(i).intValue();
+                    }
+                }
+                return mSenseManager.enroll(cryptoToken, timeout, dfs);
+            }
             IBiometricsFace daemon = getFaceDaemon();
             if (daemon == null) {
                 Slog.w(TAG, "enroll(): no face HAL!");
@@ -1040,6 +1073,10 @@ public class FaceService extends BiometricServiceBase {
 
         @Override
         public void resetLockout(byte[] cryptoToken) throws RemoteException {
+            if (mSenseManager.isEnabled()) {
+                mSenseManager.resetLockout(cryptoToken);
+                return;
+            }
             IBiometricsFace daemon = getFaceDaemon();
             if (daemon == null) {
                 Slog.w(TAG, "resetLockout(): no face HAL!");
@@ -1077,6 +1114,8 @@ public class FaceService extends BiometricServiceBase {
                 .getIntArray(R.array.config_face_acquire_enroll_ignorelist);
         mEnrollIgnoreListVendor = getContext().getResources()
                 .getIntArray(R.array.config_face_acquire_vendor_enroll_ignorelist);
+
+        mSenseManager = new ParanoidSenseManager(getContext(), this, mHandler);
     }
 
     @Override
@@ -1092,6 +1131,11 @@ public class FaceService extends BiometricServiceBase {
     public void onStart() {
         super.onStart();
         publishBinderService(Context.FACE_SERVICE, new FaceServiceWrapper());
+        if (mSenseManager.isEnabled()) {
+            mSenseManager.setServiceHandler(BackgroundThread.getHandler());
+            mHalDeviceId = ParanoidSenseManager.SENSE_ID;
+            return;
+        }
         // Get the face daemon on FaceService's on thread so SystemServerInitThreadPool isn't
         // blocked
         SystemServerInitThreadPool.submit(() -> mHandler.post(this::getFaceDaemon),
@@ -1136,10 +1180,26 @@ public class FaceService extends BiometricServiceBase {
         mDaemon = null;
 
         mCurrentUserId = UserHandle.USER_NULL; // Force updateActiveGroup() to re-evaluate
+        mSenseManager.setCurrentUserId(mCurrentUserId);
     }
 
     @Override
     protected void updateActiveGroup(int userId, String clientPackage) {
+        if (mSenseManager.isEnabled()) {
+            mCurrentUserId = userId;
+            mSenseManager.setCurrentUserId(mCurrentUserId);
+            if (mSenseManager.getService(mCurrentUserId) != null) {
+                Map map = mAuthenticatorIds;
+                Integer valueOf = Integer.valueOf(mCurrentUserId);
+                long authId = 0;
+                if (hasEnrolledBiometrics(mCurrentUserId)) {
+                    authId = (long) mSenseManager.getAuthenticatorId();
+                }
+                map.put(valueOf, Long.valueOf(authId));
+            }
+            return;
+        }
+
         IBiometricsFace daemon = getFaceDaemon();
 
         if (daemon != null) {
@@ -1164,6 +1224,7 @@ public class FaceService extends BiometricServiceBase {
 
                     daemon.setActiveUser(userId, faceDir.getAbsolutePath());
                     mCurrentUserId = userId;
+                    mSenseManager.setCurrentUserId(mCurrentUserId);
                     mAuthenticatorIds.put(userId,
                             hasEnrolledBiometrics(userId) ? daemon.getAuthenticatorId().value : 0L);
                 }
@@ -1190,7 +1251,16 @@ public class FaceService extends BiometricServiceBase {
 
     @Override
     protected void handleUserSwitching(int userId) {
-        super.handleUserSwitching(userId);
+        if (mSenseManager.isEnabled()) {
+            updateActiveGroup(userId, null);
+            if (mSenseManager.getService(userId) != null) {
+                doTemplateCleanupForUser(userId);
+            } else {
+                mSenseManager.callForBind(userId);
+            }
+        } else {
+            super.handleUserSwitching(userId);
+        }
         // Will be updated when we get the callback from HAL
         mCurrentUserLockoutMode = AuthenticationClient.LOCKOUT_NONE;
     }
@@ -1279,6 +1349,9 @@ public class FaceService extends BiometricServiceBase {
     }
 
     private long startGenerateChallenge(IBinder token) {
+        if (mSenseManager.isEnabled()) {
+            return mSenseManager.generateChallenge(CHALLENGE_TIMEOUT_SEC);
+        }
         IBiometricsFace daemon = getFaceDaemon();
         if (daemon == null) {
             Slog.w(TAG, "startGenerateChallenge: no face HAL!");
@@ -1293,6 +1366,9 @@ public class FaceService extends BiometricServiceBase {
     }
 
     private int startRevokeChallenge(IBinder token) {
+        if (mSenseManager.isEnabled()) {
+            return mSenseManager.revokeChallenge();
+        }
         IBiometricsFace daemon = getFaceDaemon();
         if (daemon == null) {
             Slog.w(TAG, "startRevokeChallenge: no face HAL!");
@@ -1370,6 +1446,9 @@ public class FaceService extends BiometricServiceBase {
                 || SystemProperties.getBoolean("persist.face.disable_debug_data", false)) {
             return;
         }
+
+        // Turn off face if Paranoid FaceSense is enabled.
+        if (mSenseManager.isEnabled()) return;
 
         // The debug method takes two file descriptors. The first is for text
         // output, which we will drop.  The second is for binary data, which
