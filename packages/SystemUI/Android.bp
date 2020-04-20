@@ -126,6 +126,7 @@ android_library {
         "lottie",
         "bcsmartspace-google",
         "LowLightDreamLib",
+        "vendor.aospa.powershare-V1.0-java",
     ],
     manifest: "AndroidManifest.xml",
     defaults: [
@@ -241,6 +242,7 @@ android_library {
         "jsr330",
         "WindowManager-Shell",
         "LowLightDreamLib",
+        "vendor.aospa.powershare-V1.0-java",
     ],
     libs: [
         "android.test.runner",
