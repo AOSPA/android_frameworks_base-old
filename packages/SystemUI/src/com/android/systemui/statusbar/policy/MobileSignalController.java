@@ -957,7 +957,11 @@ public class MobileSignalController extends SignalController<
         if (overrideNetworkType == TelephonyDisplayInfo.OVERRIDE_NETWORK_TYPE_NONE
                 || overrideNetworkType == TelephonyDisplayInfo.OVERRIDE_NETWORK_TYPE_NR_NSA_MMWAVE
                 || overrideNetworkType == TelephonyDisplayInfo.OVERRIDE_NETWORK_TYPE_NR_NSA ){
-            iconKey = toIconKey(mTelephonyDisplayInfo.getNetworkType());
+            int networkType = mTelephonyDisplayInfo.getNetworkType();
+            if (networkType == TelephonyManager.NETWORK_TYPE_UNKNOWN) {
+                networkType = getVoiceNetworkType();
+            }
+            iconKey = toIconKey(networkType);
         } else{
             iconKey = toDisplayIconKey(overrideNetworkType);
         }
