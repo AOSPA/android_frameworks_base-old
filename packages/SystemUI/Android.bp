@@ -70,7 +70,8 @@ android_library {
         "SystemUI-proto",
         "dagger2-2.19",
         "jsr330",
-        "vendor.aospa.biometrics.fingerprint.inscreen-V1.0-java"
+        "vendor.aospa.biometrics.fingerprint.inscreen-V1.0-java",
+        "vendor.aospa.powershare-V1.0-java",
     ],
     manifest: "AndroidManifest.xml",
     defaults: [
@@ -154,7 +155,8 @@ android_library {
         "truth-prebuilt",
         "dagger2-2.19",
         "jsr330",
-        "vendor.aospa.biometrics.fingerprint.inscreen-V1.0-java"
+        "vendor.aospa.biometrics.fingerprint.inscreen-V1.0-java",
+        "vendor.aospa.powershare-V1.0-java",
     ],
     libs: [
         "android.test.runner",
