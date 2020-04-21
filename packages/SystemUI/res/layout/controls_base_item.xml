@@ -24,6 +24,7 @@
     android:clickable="false"
     android:focusable="true"
     android:screenReaderFocusable="true"
+    android:stateListAnimator="@anim/control_state_list_animator"
     android:layout_marginLeft="@dimen/control_base_item_margin"
     android:layout_marginRight="@dimen/control_base_item_margin"
     android:background="@drawable/control_background">
@@ -100,7 +101,6 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="bottom|end"
-        android:button="@drawable/controls_btn_star"
         android:background="@android:color/transparent"
         android:clickable="false"
         android:selectable="false"
