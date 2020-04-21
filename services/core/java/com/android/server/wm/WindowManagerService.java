@@ -29,6 +29,7 @@ import static android.app.ActivityManagerInternal.ALLOW_NON_FULL;
 import static android.app.ActivityTaskManager.SPLIT_SCREEN_CREATE_MODE_TOP_OR_LEFT;
 import static android.app.AppOpsManager.OP_SYSTEM_ALERT_WINDOW;
 import static android.app.StatusBarManager.DISABLE_MASK;
+import static android.app.WindowConfiguration.ROTATION_UNDEFINED;
 import static android.app.admin.DevicePolicyManager.ACTION_DEVICE_POLICY_MANAGER_STATE_CHANGED;
 import static android.content.pm.PackageManager.FEATURE_FREEFORM_WINDOW_MANAGEMENT;
 import static android.content.pm.PackageManager.FEATURE_PC;
@@ -1700,15 +1701,14 @@ public class WindowManagerService extends IWindowManager.Stub
             }
             displayContent.getInputMonitor().updateInputWindowsLw(false /*force*/);
 
-            getInsetsSourceControls(win, outActiveControls);
-
             ProtoLog.v(WM_DEBUG_ADD_REMOVE, "addWindow: New client %s"
                     + ": window=%s Callers=%s", client.asBinder(), win, Debug.getCallers(5));
-
 
             if (win.isVisibleOrAdding() && displayContent.updateOrientation()) {
                 displayContent.sendNewConfiguration();
             }
+
+            getInsetsSourceControls(win, outActiveControls);
         }
 
         Binder.restoreCallingIdentity(origId);
@@ -2404,7 +2404,6 @@ public class WindowManagerService extends IWindowManager.Stub
             outCutout.set(win.getWmDisplayCutout().getDisplayCutout());
             outBackdropFrame.set(win.getBackdropFrame(win.getFrameLw()));
             outInsetsState.set(win.getInsetsState(), win.isClientLocal());
-            getInsetsSourceControls(win, outActiveControls);
             if (DEBUG) {
                 Slog.v(TAG_WM, "Relayout given client " + client.asBinder()
                         + ", requestedWidth=" + requestedWidth
@@ -2435,6 +2434,7 @@ public class WindowManagerService extends IWindowManager.Stub
                 outSurfaceSize.set(winAnimator.mSurfaceController.getWidth(),
                                          winAnimator.mSurfaceController.getHeight());
             }
+            getInsetsSourceControls(win, outActiveControls);
         }
 
         Binder.restoreCallingIdentity(origId);
@@ -2449,8 +2449,17 @@ public class WindowManagerService extends IWindowManager.Stub
             if (controls != null) {
                 final int length = Math.min(controls.length, outControls.length);
                 for (int i = 0; i < length; i++) {
-                    outControls[i] = win.isClientLocal()
-                            ? new InsetsSourceControl(controls[i]) : controls[i];
+                    final InsetsSourceControl control = controls[i];
+
+                    // Check if we are sending invalid leashes.
+                    final SurfaceControl leash = control != null ? control.getLeash() : null;
+                    if (leash != null && !leash.isValid()) {
+                        Slog.wtf(TAG, leash + " is not valid before sending to " + win,
+                                leash.getReleaseStack());
+                    }
+
+                    outControls[i] = win.isClientLocal() && control != null
+                            ? new InsetsSourceControl(control) : control;
                 }
             }
         }
@@ -2792,18 +2801,6 @@ public class WindowManagerService extends IWindowManager.Stub
         return mRecentsAnimationController;
     }
 
-    /**
-     * @return Whether the next recents animation can continue to start. Called from
-     *         {@link RecentsAnimation#startRecentsActivity}.
-     */
-    boolean canStartRecentsAnimation() {
-        // TODO(multi-display): currently only default display support recent activity
-        if (getDefaultDisplayContentLocked().mAppTransition.isTransitionSet()) {
-            return false;
-        }
-        return true;
-    }
-
     void cancelRecentsAnimation(
             @RecentsAnimationController.ReorderMode int reorderMode, String reason) {
         if (mRecentsAnimationController != null) {
@@ -2945,7 +2942,7 @@ public class WindowManagerService extends IWindowManager.Stub
                 mClientFreezingScreen = true;
                 final long origId = Binder.clearCallingIdentity();
                 try {
-                    startFreezingDisplayLocked(exitAnim, enterAnim);
+                    startFreezingDisplay(exitAnim, enterAnim);
                     mH.removeMessages(H.CLIENT_FREEZE_TIMEOUT);
                     mH.sendEmptyMessageDelayed(H.CLIENT_FREEZE_TIMEOUT, 5000);
                 } finally {
@@ -5499,13 +5496,17 @@ public class WindowManagerService extends IWindowManager.Stub
         return changed;
     }
 
-    void startFreezingDisplayLocked(int exitAnim, int enterAnim) {
-        startFreezingDisplayLocked(exitAnim, enterAnim,
-                getDefaultDisplayContentLocked());
+    void startFreezingDisplay(int exitAnim, int enterAnim) {
+        startFreezingDisplay(exitAnim, enterAnim, getDefaultDisplayContentLocked());
     }
 
-    void startFreezingDisplayLocked(int exitAnim, int enterAnim,
-            DisplayContent displayContent) {
+    void startFreezingDisplay(int exitAnim, int enterAnim, DisplayContent displayContent) {
+        startFreezingDisplay(exitAnim, enterAnim, displayContent,
+                ROTATION_UNDEFINED /* overrideOriginalRotation */);
+    }
+
+    void startFreezingDisplay(int exitAnim, int enterAnim, DisplayContent displayContent,
+            int overrideOriginalRotation) {
         if (mDisplayFrozen || displayContent.getDisplayRotation().isRotatingSeamlessly()) {
             return;
         }
@@ -5555,14 +5556,12 @@ public class WindowManagerService extends IWindowManager.Stub
             screenRotationAnimation.kill();
         }
 
-        // Check whether the current screen contains any secure content.
-        boolean isSecure = displayContent.hasSecureWindowOnScreen();
-
         displayContent.updateDisplayInfo();
-        screenRotationAnimation = new ScreenRotationAnimation(mContext, displayContent,
-                displayContent.getDisplayRotation().isFixedToUserRotation(), isSecure,
-                this);
-        displayContent.setRotationAnimation(screenRotationAnimation);
+        final int originalRotation = overrideOriginalRotation != ROTATION_UNDEFINED
+                ? overrideOriginalRotation
+                : displayContent.getDisplayInfo().rotation;
+        displayContent.setRotationAnimation(new ScreenRotationAnimation(displayContent,
+                originalRotation));
     }
 
     void stopFreezingDisplayLocked() {
@@ -6133,9 +6132,14 @@ public class WindowManagerService extends IWindowManager.Stub
         mRoot.forAllDisplays(dc -> {
             final int displayId = dc.getDisplayId();
             final WindowState inputMethodTarget = dc.mInputMethodTarget;
+            final WindowState inputMethodInputTarget = dc.mInputMethodInputTarget;
             if (inputMethodTarget != null) {
                 pw.print("  mInputMethodTarget in display# "); pw.print(displayId);
                 pw.print(' '); pw.println(inputMethodTarget);
+            }
+            if (inputMethodInputTarget != null) {
+                pw.print("  mInputMethodInputTarget in display# "); pw.print(displayId);
+                pw.print(' '); pw.println(inputMethodInputTarget);
             }
             if (mAccessibilityController != null) {
                 final Region magnificationRegion = new Region();
@@ -7388,7 +7392,7 @@ public class WindowManagerService extends IWindowManager.Stub
             synchronized (mGlobalLock) {
                 final WindowState imeTarget = mWindowMap.get(imeTargetWindowToken);
                 if (imeTarget != null) {
-                    imeTarget.getDisplayContent().updateImeControlTarget(imeTarget);
+                    imeTarget.getDisplayContent().setInputMethodInputTarget(imeTarget);
                 }
             }
         }
