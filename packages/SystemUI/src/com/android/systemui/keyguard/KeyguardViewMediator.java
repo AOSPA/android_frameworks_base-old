@@ -294,6 +294,7 @@ public class KeyguardViewMediator extends SystemUI implements Dumpable {
      * Index is the slotId - in case of multiple SIM cards.
      */
     private final SparseIntArray mLastSimStates = new SparseIntArray();
+    private static SparseIntArray mUnlockTrackSimStates = new SparseIntArray();
 
     private boolean mDeviceInteractive;
     private boolean mGoingToSleep;
@@ -472,6 +473,17 @@ public class KeyguardViewMediator extends SystemUI implements Dumpable {
                 simWasLocked = (lastState == TelephonyManager.SIM_STATE_PIN_REQUIRED
                         || lastState == TelephonyManager.SIM_STATE_PUK_REQUIRED);
                 mLastSimStates.append(slotId, simState);
+
+                if(simState == TelephonyManager.SIM_STATE_READY){
+                    mUnlockTrackSimStates.put(slotId, simState);
+                }
+                int currentState = mUnlockTrackSimStates.get(slotId);
+                if(currentState == TelephonyManager.SIM_STATE_READY){
+                    if(simState != TelephonyManager.SIM_STATE_PIN_REQUIRED
+                            && simState != TelephonyManager.SIM_STATE_PUK_REQUIRED){
+                        mUnlockTrackSimStates.put(slotId, simState);
+                    }
+                }
             }
 
             switch (simState) {
@@ -1275,6 +1287,9 @@ public class KeyguardViewMediator extends SystemUI implements Dumpable {
         Trace.endSection();
     }
 
+    public static int getUnlockTrackSimState(int slotId) {
+        return mUnlockTrackSimStates.get(slotId);
+    }
     public boolean isHiding() {
         return mHiding;
     }
