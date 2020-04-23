@@ -142,11 +142,11 @@ public class WifiSignalController extends
 
 
     private void updateIconGroup() {
-	if (mCurrentState.wifiGenerationVersion == 4) {
+	if (mCurrentState.wifiStandard == 4) {
             mCurrentState.iconGroup = mWifi4IconGroup;
-        } else if (mCurrentState.wifiGenerationVersion == 5) {
+        } else if (mCurrentState.wifiStandard == 5) {
             mCurrentState.iconGroup = mCurrentState.isReady ? mWifi6IconGroup : mWifi5IconGroup;
-        } else if (mCurrentState.wifiGenerationVersion == 6) {
+        } else if (mCurrentState.wifiStandard == 6) {
             mCurrentState.iconGroup = mWifi6IconGroup;
         } else {
             mCurrentState.iconGroup = mDefaultWifiIconGroup;
@@ -164,9 +164,9 @@ public class WifiSignalController extends
         mCurrentState.rssi = mWifiTracker.rssi;
         mCurrentState.level = mWifiTracker.level;
         mCurrentState.statusLabel = mWifiTracker.statusLabel;
-        mCurrentState.wifiGenerationVersion = mWifiTracker.wifiGeneration;
+        mCurrentState.wifiStandard = mWifiTracker.wifiStandard;
         mCurrentState.isReady = (mWifiTracker.vhtMax8SpatialStreamsSupport
-                                    && mWifiTracker.twtSupport);
+                                    && mWifiTracker.he8ssCapableAp);
         updateIconGroup();
         notifyListenersIfNecessary();
     }
@@ -199,7 +199,7 @@ public class WifiSignalController extends
         String ssid;
         boolean isTransient;
         String statusLabel;
-        int wifiGenerationVersion;
+        int wifiStandard;
         boolean isReady;
 
         @Override
@@ -207,7 +207,7 @@ public class WifiSignalController extends
             super.copyFrom(s);
             WifiState state = (WifiState) s;
             ssid = state.ssid;
-            wifiGenerationVersion = state.wifiGenerationVersion;
+            wifiStandard = state.wifiStandard;
             isReady = state.isReady;
             isTransient = state.isTransient;
             statusLabel = state.statusLabel;
@@ -217,7 +217,7 @@ public class WifiSignalController extends
         protected void toString(StringBuilder builder) {
             super.toString(builder);
             builder.append(",ssid=").append(ssid)
-                .append(",wifiGenerationVersion=").append(wifiGenerationVersion)
+                .append(",wifiStandard=").append(wifiStandard)
                 .append(",isReady=").append(isReady)
                 .append(",isTransient=").append(isTransient)
                 .append(",statusLabel=").append(statusLabel);
@@ -230,7 +230,7 @@ public class WifiSignalController extends
             }
             WifiState other = (WifiState) o;
             return Objects.equals(other.ssid, ssid)
-                    && other.wifiGenerationVersion == wifiGenerationVersion
+                    && other.wifiStandard == wifiStandard
                     && other.isReady == isReady
                     && other.isTransient == isTransient
                     && TextUtils.equals(other.statusLabel, statusLabel);

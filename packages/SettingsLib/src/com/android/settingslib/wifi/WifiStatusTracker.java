@@ -104,9 +104,9 @@ public class WifiStatusTracker {
     public int rssi;
     public int level;
     public String statusLabel;
-    public int wifiGeneration;
+    public int wifiStandard;
     public boolean vhtMax8SpatialStreamsSupport;
-    public boolean twtSupport;
+    public boolean he8ssCapableAp;
 
     public WifiStatusTracker(Context context, WifiManager wifiManager,
             NetworkScoreManager networkScoreManager, ConnectivityManager connectivityManager,
@@ -160,9 +160,9 @@ public class WifiStatusTracker {
                     }
                     updateRssi(mWifiInfo.getRssi());
                     maybeRequestNetworkScore();
-                    wifiGeneration = mWifiInfo.getWifiGeneration();
+                    wifiStandard = mWifiInfo.getWifiStandard();
                     vhtMax8SpatialStreamsSupport = mWifiInfo.isVhtMax8SpatialStreamsSupported();
-                    twtSupport = mWifiInfo.isTwtSupported();
+                    he8ssCapableAp = mWifiInfo.isHe8ssCapableAp();
                 }
             }
             updateStatusLabel();

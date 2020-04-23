@@ -29,6 +29,7 @@ import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.content.res.Resources;
 import android.media.AudioManager;
+import android.net.wifi.ScanResult;
 import android.net.wifi.WifiManager;
 import android.os.Handler;
 import android.os.RemoteException;
@@ -145,7 +146,6 @@ public class PhoneStatusBarPolicy
 
     private BluetoothController mBluetooth;
     private AlarmManager.AlarmClockInfo mNextAlarm;
-    private WifiManager mWifiManager;
 
     @Inject
     public PhoneStatusBarPolicy(StatusBarIconController iconController,
@@ -221,7 +221,6 @@ public class PhoneStatusBarPolicy
         filter.addAction(Intent.ACTION_MANAGED_PROFILE_AVAILABLE);
         filter.addAction(Intent.ACTION_MANAGED_PROFILE_UNAVAILABLE);
         filter.addAction(Intent.ACTION_MANAGED_PROFILE_REMOVED);
-        filter.addAction(Intent.ACTION_BOOT_COMPLETED);
         mBroadcastDispatcher.registerReceiverWithHandler(mIntentReceiver, filter, mHandler);
         Observer<Integer> observer = ringer -> mHandler.post(this::updateVolumeZen);
 
@@ -516,7 +515,11 @@ public class PhoneStatusBarPolicy
     private final HotspotController.Callback mHotspotCallback = new HotspotController.Callback() {
         @Override
         public void onHotspotChanged(boolean enabled, int numDevices) {
-            updateHotspotIcon();
+            mIconController.setIconVisibility(mSlotHotspot, enabled);
+        }
+        @Override
+        public void onHotspotChanged(boolean enabled, int numDevices, int standard) {
+            updateHotspotIcon(standard);
             mIconController.setIconVisibility(mSlotHotspot, enabled);
         }
     };
@@ -644,9 +647,6 @@ public class PhoneStatusBarPolicy
                 case AudioManager.ACTION_HEADSET_PLUG:
                     updateHeadsetPlug(intent);
                     break;
-                case Intent.ACTION_BOOT_COMPLETED:
-                    handleBootCompleted();
-                    break;
             }
         }
     };
@@ -701,33 +701,19 @@ public class PhoneStatusBarPolicy
         mHandler.post(() -> mIconController.setIconVisibility(mSlotScreenRecord, false));
     }
 
-    private void updateHotspotIcon() {
-        int generation;
-        if (mWifiManager != null) {
-            generation = mWifiManager.getSoftApWifiGeneration();
-        } else {
-            generation = WifiManager.WIFI_GENERATION_DEFAULT; // boot not completed yet
-        }
-        if (generation == WifiManager.WIFI_GENERATION_6) {
+    private void updateHotspotIcon(int standard) {
+        if (standard == ScanResult.WIFI_STANDARD_11AX) {
             mIconController.setIcon(mSlotHotspot, R.drawable.stat_sys_wifi_6_hotspot,
                 mResources.getString(R.string.accessibility_status_bar_hotspot));
-        } else if (generation == WifiManager.WIFI_GENERATION_5) {
+        } else if (standard == ScanResult.WIFI_STANDARD_11AC) {
             mIconController.setIcon(mSlotHotspot, R.drawable.stat_sys_wifi_5_hotspot,
                 mResources.getString(R.string.accessibility_status_bar_hotspot));
-        } else if (generation == WifiManager.WIFI_GENERATION_4) {
+        } else if (standard == ScanResult.WIFI_STANDARD_11N) {
             mIconController.setIcon(mSlotHotspot, R.drawable.stat_sys_wifi_4_hotspot,
                 mResources.getString(R.string.accessibility_status_bar_hotspot));
         } else {
             mIconController.setIcon(mSlotHotspot, R.drawable.stat_sys_hotspot,
                 mResources.getString(R.string.accessibility_status_bar_hotspot));
         }
-    }
-
-    private void handleBootCompleted() {
-        // TODO(b/150786696): provide WifiManager via injection
-        //mWifiManager = (WifiManager) mContext.getSystemService(Context.WIFI_SERVICE);
-        // hotspot
-        updateHotspotIcon();
-        mIconController.setIconVisibility(mSlotHotspot, mHotspot.isHotspotEnabled());
     }
 }
