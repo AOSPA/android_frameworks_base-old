@@ -23,7 +23,6 @@ import android.app.ActivityManager;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
-import android.app.PendingIntent;
 import android.content.ActivityNotFoundException;
 import android.content.BroadcastReceiver;
 import android.content.ComponentName;
@@ -36,6 +35,7 @@ import android.content.pm.UserInfo;
 import android.content.res.Resources;
 import android.database.ContentObserver;
 import android.debug.AdbManager;
+import android.debug.AdbNotifications;
 import android.debug.AdbProtoEnums;
 import android.debug.AdbTransportType;
 import android.debug.PairDevice;
@@ -69,7 +69,6 @@ import android.util.Xml;
 import com.android.internal.R;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.messages.nano.SystemMessageProto.SystemMessage;
-import com.android.internal.notification.SystemNotificationChannels;
 import com.android.internal.util.FastXmlSerializer;
 import com.android.internal.util.FrameworkStatsLog;
 import com.android.internal.util.XmlUtils;
@@ -178,7 +177,15 @@ public class AdbDebuggingManager {
         private String mPairingCode;
         private String mGuid;
         private String mServiceName;
-        private final String mServiceType = "_adb_secure_pairing._tcp.";
+        // From RFC6763 (https://tools.ietf.org/html/rfc6763#section-7.2),
+        // The rules for Service Names [RFC6335] state that they may be no more
+        // than fifteen characters long (not counting the mandatory underscore),
+        // consisting of only letters, digits, and hyphens, must begin and end
+        // with a letter or digit, must not contain consecutive hyphens, and
+        // must contain at least one letter.
+        @VisibleForTesting
+        static final String SERVICE_PROTOCOL = "adb-tls-pairing";
+        private final String mServiceType = String.format("_%s._tcp.", SERVICE_PROTOCOL);
         private int mPort;
 
         private native int native_pairing_start(String guid, String password);
@@ -760,40 +767,13 @@ public class AdbDebuggingManager {
         // Show when at least one device is connected.
         public void showAdbConnectedNotification(boolean show) {
             final int id = SystemMessage.NOTE_ADB_WIFI_ACTIVE;
-            final int titleRes = com.android.internal.R.string.adbwifi_active_notification_title;
             if (show == mAdbNotificationShown) {
                 return;
             }
             setupNotifications();
             if (!mAdbNotificationShown) {
-                Resources r = mContext.getResources();
-                CharSequence title = r.getText(titleRes);
-                CharSequence message = r.getText(
-                        com.android.internal.R.string.adbwifi_active_notification_message);
-
-                Intent intent = new Intent(Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS);
-                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK
-                        | Intent.FLAG_ACTIVITY_CLEAR_TASK);
-                PendingIntent pi = PendingIntent.getActivityAsUser(mContext, 0,
-                        intent, 0, null, UserHandle.CURRENT);
-
-                Notification notification =
-                        new Notification.Builder(mContext, SystemNotificationChannels.DEVELOPER)
-                                .setSmallIcon(com.android.internal.R.drawable.stat_sys_adb)
-                                .setWhen(0)
-                                .setOngoing(true)
-                                .setTicker(title)
-                                .setDefaults(0)  // please be quiet
-                                .setColor(mContext.getColor(
-                                        com.android.internal.R.color
-                                                .system_notification_accent_color))
-                                .setContentTitle(title)
-                                .setContentText(message)
-                                .setContentIntent(pi)
-                                .setVisibility(Notification.VISIBILITY_PUBLIC)
-                                .extend(new Notification.TvExtender()
-                                        .setChannelId(ADB_NOTIFICATION_CHANNEL_ID_TV))
-                                .build();
+                Notification notification = AdbNotifications.createNotification(mContext,
+                        AdbTransportType.WIFI);
                 mAdbNotificationShown = true;
                 mNotificationManager.notifyAsUser(null, id, notification,
                         UserHandle.ALL);

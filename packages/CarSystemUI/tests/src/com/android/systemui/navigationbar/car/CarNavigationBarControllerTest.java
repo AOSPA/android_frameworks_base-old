@@ -31,7 +31,7 @@ import androidx.test.filters.SmallTest;
 
 import com.android.systemui.R;
 import com.android.systemui.SysuiTestCase;
-import com.android.systemui.navigationbar.car.hvac.HvacController;
+import com.android.systemui.car.hvac.HvacController;
 import com.android.systemui.plugins.DarkIconDispatcher;
 import com.android.systemui.statusbar.phone.StatusBarIconController;
 
@@ -84,6 +84,40 @@ public class CarNavigationBarControllerTest extends SysuiTestCase {
         mCarNavigationBar.removeAllFromHvac();
 
         verify(mHvacController).removeAllComponents();
+    }
+
+    @Test
+    public void testGetTopWindow_topDisabled_returnsNull() {
+        mTestableResources.addOverride(R.bool.config_enableTopNavigationBar, false);
+        mCarNavigationBar = new CarNavigationBarController(mContext, mNavigationBarViewFactory,
+                mButtonSelectionStateController, () -> mHvacController);
+
+        ViewGroup window = mCarNavigationBar.getTopWindow();
+
+        assertThat(window).isNull();
+    }
+
+    @Test
+    public void testGetTopWindow_topEnabled_returnsWindow() {
+        mTestableResources.addOverride(R.bool.config_enableTopNavigationBar, true);
+        mCarNavigationBar = new CarNavigationBarController(mContext, mNavigationBarViewFactory,
+                mButtonSelectionStateController, () -> mHvacController);
+
+        ViewGroup window = mCarNavigationBar.getTopWindow();
+
+        assertThat(window).isNotNull();
+    }
+
+    @Test
+    public void testGetTopWindow_topEnabled_calledTwice_returnsSameWindow() {
+        mTestableResources.addOverride(R.bool.config_enableTopNavigationBar, true);
+        mCarNavigationBar = new CarNavigationBarController(mContext, mNavigationBarViewFactory,
+                mButtonSelectionStateController, () -> mHvacController);
+
+        ViewGroup window1 = mCarNavigationBar.getTopWindow();
+        ViewGroup window2 = mCarNavigationBar.getTopWindow();
+
+        assertThat(window1).isEqualTo(window2);
     }
 
     @Test

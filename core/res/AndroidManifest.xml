@@ -553,6 +553,7 @@
     <protected-broadcast android:name="com.android.settings.wifi.action.NETWORK_REQUEST" />
 
     <protected-broadcast android:name="NotificationManagerService.TIMEOUT" />
+    <protected-broadcast android:name="NotificationHistoryDatabase.CLEANUP" />
     <protected-broadcast android:name="ScheduleConditionProvider.EVALUATE" />
     <protected-broadcast android:name="EventConditionProvider.EVALUATE" />
     <protected-broadcast android:name="SnoozeHelper.EVALUATE" />
@@ -1142,12 +1143,13 @@
          grants your app this permission. If you don't need this permission, be sure your <a
          href="{@docRoot}guide/topics/manifest/uses-sdk-element.html#target">{@code
          targetSdkVersion}</a> is 4 or higher.
-         <p>Protection level: normal
+         <p>Protection level: dangerous
     -->
     <permission android:name="android.permission.READ_PHONE_STATE"
+        android:permissionGroup="android.permission-group.UNDEFINED"
         android:label="@string/permlab_readPhoneState"
         android:description="@string/permdesc_readPhoneState"
-        android:protectionLevel="normal" />
+        android:protectionLevel="dangerous" />
 
     <!-- Allows read access to the device's phone number(s). This is a subset of the capabilities
          granted by {@link #READ_PHONE_STATE} but is exposed to instant applications.

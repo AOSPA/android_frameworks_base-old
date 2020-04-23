@@ -2192,7 +2192,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
 
     boolean isInStackLocked() {
         final ActivityStack stack = getRootTask();
-        return stack != null && stack.isInStackLocked(this) != null;
+        return stack != null && stack.isInTask(this) != null;
     }
 
     boolean isPersistable() {
@@ -2552,23 +2552,12 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
 
             pauseKeyDispatchingLocked();
 
-            // We are finishing the top focused activity and its stack has nothing to be focused so
-            // the next focusable stack should be focused.
-            if (mayAdjustTop
-                    && (stack.topRunningActivity() == null || !stack.isTopActivityFocusable())) {
-                if (shouldAdjustGlobalFocus) {
-                    // Move the entire hierarchy to top with updating global top resumed activity
-                    // and focused application if needed.
-                    stack.adjustFocusToNextFocusableStack("finish-top");
-                } else {
-                    // Only move the next stack to top in its task container.
-                    final TaskDisplayArea taskDisplayArea = stack.getDisplayArea();
-                    next = taskDisplayArea.topRunningActivity();
-                    if (next != null) {
-                        taskDisplayArea.positionStackAtTop(next.getRootTask(),
-                                false /* includingParents */, "finish-display-top");
-                    }
-                }
+            // We are finishing the top focused activity and its task has nothing to be focused so
+            // the next focusable task should be focused.
+            if (mayAdjustTop && ((ActivityStack) task).topRunningActivity(true /* focusableOnly */)
+                    == null) {
+                task.adjustFocusToNextFocusableTask("finish-top", false /* allowFocusSelf */,
+                        shouldAdjustGlobalFocus);
             }
 
             finishActivityResults(resultCode, resultData);
@@ -3157,7 +3146,6 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         commitVisibility(false /* visible */, true /* performLayout */);
 
         getDisplayContent().mOpeningApps.remove(this);
-        getDisplayContent().mChangingContainers.remove(this);
         getDisplayContent().mUnknownAppVisibilityController.appRemovedOrHidden(this);
         mWmService.mTaskSnapshotController.onAppRemoved(this);
         mStackSupervisor.getActivityMetricsLogger().notifyActivityRemoved(this);
@@ -3778,7 +3766,8 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
                         pendingOptions.getPackageName(),
                         pendingOptions.getCustomEnterResId(),
                         pendingOptions.getCustomExitResId(),
-                        pendingOptions.getOnAnimationStartListener());
+                        pendingOptions.getAnimationStartedListener(),
+                        pendingOptions.getAnimationFinishedListener());
                 break;
             case ANIM_CLIP_REVEAL:
                 displayContent.mAppTransition.overridePendingAppTransitionClipReveal(
@@ -3808,7 +3797,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
                 final GraphicBuffer buffer = pendingOptions.getThumbnail();
                 displayContent.mAppTransition.overridePendingAppTransitionThumb(buffer,
                         pendingOptions.getStartX(), pendingOptions.getStartY(),
-                        pendingOptions.getOnAnimationStartListener(),
+                        pendingOptions.getAnimationStartedListener(),
                         scaleUp);
                 if (intent.getSourceBounds() == null && buffer != null) {
                     intent.setSourceBounds(new Rect(pendingOptions.getStartX(),
@@ -3824,19 +3813,19 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
                         pendingOptions.getSpecsFuture();
                 if (specsFuture != null) {
                     displayContent.mAppTransition.overridePendingAppTransitionMultiThumbFuture(
-                            specsFuture, pendingOptions.getOnAnimationStartListener(),
+                            specsFuture, pendingOptions.getAnimationStartedListener(),
                             animationType == ANIM_THUMBNAIL_ASPECT_SCALE_UP);
                 } else if (animationType == ANIM_THUMBNAIL_ASPECT_SCALE_DOWN
                         && specs != null) {
                     displayContent.mAppTransition.overridePendingAppTransitionMultiThumb(
-                            specs, pendingOptions.getOnAnimationStartListener(),
+                            specs, pendingOptions.getAnimationStartedListener(),
                             pendingOptions.getAnimationFinishedListener(), false);
                 } else {
                     displayContent.mAppTransition.overridePendingAppTransitionAspectScaledThumb(
                             pendingOptions.getThumbnail(),
                             pendingOptions.getStartX(), pendingOptions.getStartY(),
                             pendingOptions.getWidth(), pendingOptions.getHeight(),
-                            pendingOptions.getOnAnimationStartListener(),
+                            pendingOptions.getAnimationStartedListener(),
                             (animationType == ANIM_THUMBNAIL_ASPECT_SCALE_UP));
                     if (intent.getSourceBounds() == null) {
                         intent.setSourceBounds(new Rect(pendingOptions.getStartX(),
@@ -4731,7 +4720,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
      */
     private boolean shouldBeResumed(ActivityRecord activeActivity) {
         return shouldMakeActive(activeActivity) && isFocusable()
-                && getRootTask().getVisibility(activeActivity) == STACK_VISIBILITY_VISIBLE
+                && getTask().getVisibility(activeActivity) == STACK_VISIBILITY_VISIBLE
                 && canResumeByCompat();
     }
 
@@ -5605,7 +5594,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
 
     static ActivityRecord isInStackLocked(IBinder token) {
         final ActivityRecord r = ActivityRecord.forTokenLocked(token);
-        return (r != null) ? r.getRootTask().isInStackLocked(r) : null;
+        return (r != null) ? r.getRootTask().isInTask(r) : null;
     }
 
     static ActivityStack getStackLocked(IBinder token) {
@@ -6167,19 +6156,8 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
 
     @Override
     void cancelAnimation() {
-        cancelAnimationOnly();
-        clearThumbnail();
-        mSurfaceFreezer.unfreeze(getPendingTransaction());
-    }
-
-    /**
-     * This only cancels the animation. It doesn't do other teardown like cleaning-up thumbnail
-     * or interim leashes.
-     * <p>
-     * Used when canceling in preparation for starting a new animation.
-     */
-    void cancelAnimationOnly() {
         super.cancelAnimation();
+        clearThumbnail();
     }
 
     @VisibleForTesting

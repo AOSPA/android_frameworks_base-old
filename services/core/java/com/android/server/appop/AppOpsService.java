@@ -5308,6 +5308,12 @@ public class AppOpsService extends IAppOpsService.Stub {
                     pw.print("    pendingCapability=");
                     pw.println(uidState.pendingCapability);
                 }
+                pw.print("    appWidgetVisible=");
+                pw.println(uidState.appWidgetVisible);
+                if (uidState.appWidgetVisible != uidState.pendingAppWidgetVisible) {
+                    pw.print("    pendingAppWidgetVisible=");
+                    pw.println(uidState.pendingAppWidgetVisible);
+                }
                 if (uidState.pendingStateCommitTime != 0) {
                     pw.print("    pendingStateCommitTime=");
                     TimeUtils.formatDuration(uidState.pendingStateCommitTime, nowElapsed, pw);
@@ -5744,7 +5750,7 @@ public class AppOpsService extends IAppOpsService.Stub {
      */
     private void switchPackageIfBootTimeOrRarelyUsedLocked(@NonNull String packageName) {
         if (mSampledPackage == null) {
-            if (ThreadLocalRandom.current().nextFloat() < 0.1f) {
+            if (ThreadLocalRandom.current().nextFloat() < 0.5f) {
                 mSamplingStrategy = SAMPLING_STRATEGY_BOOT_TIME_SAMPLING;
                 resampleAppOpForPackageLocked(packageName);
             }

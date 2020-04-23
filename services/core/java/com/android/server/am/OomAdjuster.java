@@ -803,8 +803,8 @@ public final class OomAdjuster {
             if (mEnableBServicePropagation && app.serviceb
                     && (app.curAdj == ProcessList.SERVICE_B_ADJ)) {
                 numBServices++;
-                for (int s = app.services.size() - 1; s >= 0; s--) {
-                    ServiceRecord sr = app.services.valueAt(s);
+                for (int s = app.numberOfRunningServices() - 1; s >= 0; s--) {
+                    ServiceRecord sr = app.getRunningServiceAt(s);
                     if (DEBUG_OOM_ADJ) Slog.d(TAG,"app.processName = " + app.processName
                             + " serviceb = " + app.serviceb + " s = " + s + " sr.lastActivity = "
                             + sr.lastActivity + " packageName = " + sr.packageName
@@ -885,7 +885,8 @@ public final class OomAdjuster {
                         break;
                 }
 
-                if (app.isolated && app.services.size() <= 0 && app.isolatedEntryPoint == null) {
+                if (app.isolated && app.numberOfRunningServices() <= 0
+                        && app.isolatedEntryPoint == null) {
                     // If this is an isolated process, there are no services
                     // running in it, and it's not a special process with a
                     // custom entry point, then the process is no longer
@@ -1503,12 +1504,12 @@ public final class OomAdjuster {
         }
 
         int capabilityFromFGS = 0; // capability from foreground service.
-        for (int is = app.services.size() - 1;
+        for (int is = app.numberOfRunningServices() - 1;
                 is >= 0 && (adj > ProcessList.FOREGROUND_APP_ADJ
                         || schedGroup == ProcessList.SCHED_GROUP_BACKGROUND
                         || procState > PROCESS_STATE_TOP);
                 is--) {
-            ServiceRecord s = app.services.valueAt(is);
+            ServiceRecord s = app.getRunningServiceAt(is);
             if (s.startRequested) {
                 app.hasStartedServices = true;
                 if (procState > PROCESS_STATE_SERVICE) {

@@ -66,6 +66,7 @@ import com.android.server.policy.WindowManagerPolicy;
 import com.android.server.wm.WindowManagerInternal.MagnificationCallbacks;
 import com.android.server.wm.WindowManagerInternal.WindowsForAccessibilityCallback;
 
+import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -341,6 +342,16 @@ final class AccessibilityController {
         windowState.getTransformationMatrix(sTempFloats, outMatrix);
     }
 
+    void dump(PrintWriter pw, String prefix) {
+        for (int i = 0; i < mDisplayMagnifiers.size(); i++) {
+            final DisplayMagnifier displayMagnifier = mDisplayMagnifiers.valueAt(i);
+            if (displayMagnifier != null) {
+                displayMagnifier.dump(pw, prefix
+                        + "Magnification display# " + mDisplayMagnifiers.keyAt(i));
+            }
+        }
+    }
+
     /**
      * This class encapsulates the functionality related to display magnification.
      */
@@ -551,6 +562,10 @@ final class AccessibilityController {
             mMagnifedViewport.drawWindowIfNeededLocked(t);
         }
 
+        void dump(PrintWriter pw, String prefix) {
+            mMagnifedViewport.dump(pw, prefix);
+        }
+
         private final class MagnifiedViewport {
 
             private final SparseArray<WindowState> mTempWindowStates =
@@ -726,8 +741,7 @@ final class AccessibilityController {
                     } else {
                         final Region dirtyRegion = mTempRegion3;
                         dirtyRegion.set(mMagnificationRegion);
-                        dirtyRegion.op(mOldMagnificationRegion, Region.Op.UNION);
-                        dirtyRegion.op(nonMagnifiedBounds, Region.Op.INTERSECT);
+                        dirtyRegion.op(mOldMagnificationRegion, Region.Op.XOR);
                         dirtyRegion.getBounds(dirtyRect);
                         mWindow.invalidate(dirtyRect);
                     }
@@ -819,6 +833,10 @@ final class AccessibilityController {
                         outWindows.put(mTempLayer, w);
                     }
                 }, false /* traverseTopToBottom */ );
+            }
+
+            void dump(PrintWriter pw, String prefix) {
+                mWindow.dump(pw, prefix);
             }
 
             private final class ViewportWindow {
@@ -984,6 +1002,14 @@ final class AccessibilityController {
                 public void releaseSurface() {
                     mService.mTransactionFactory.get().remove(mSurfaceControl).apply();
                     mSurface.release();
+                }
+
+                void dump(PrintWriter pw, String prefix) {
+                    pw.println(prefix
+                            + " mBounds= " + mBounds
+                            + " mDirtyRect= " + mDirtyRect
+                            + " mWidth= " + mSurfaceControl.getWidth()
+                            + " mHeight= " + mSurfaceControl.getHeight());
                 }
 
                 private final class AnimationController extends Handler {
@@ -1244,6 +1270,16 @@ final class AccessibilityController {
                     if (unaccountedSpace.isEmpty() && focusedWindowAdded) {
                         break;
                     }
+                }
+
+                for (int i = dc.mShellRoots.size() - 1; i >= 0; --i) {
+                    final WindowInfo info = dc.mShellRoots.valueAt(i).getWindowInfo();
+                    if (info == null) {
+                        continue;
+                    }
+                    info.layer = addedWindows.size();
+                    windows.add(info);
+                    addedWindows.add(info.token);
                 }
 
                 // Remove child/parent references to windows that were not added.

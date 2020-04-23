@@ -5969,6 +5969,9 @@ public class ConnectivityServiceTest {
         final LinkAddress myIpv6 = new LinkAddress("2001:db8:1::1/64");
         final String kNat64PrefixString = "2001:db8:64:64:64:64::";
         final IpPrefix kNat64Prefix = new IpPrefix(InetAddress.getByName(kNat64PrefixString), 96);
+        final String kOtherNat64PrefixString = "64:ff9b::";
+        final IpPrefix kOtherNat64Prefix = new IpPrefix(
+                InetAddress.getByName(kOtherNat64PrefixString), 96);
         final RouteInfo defaultRoute = new RouteInfo((IpPrefix) null, myIpv6.getAddress(),
                                                      MOBILE_IFNAME);
         final RouteInfo ipv6Subnet = new RouteInfo(myIpv6, null, MOBILE_IFNAME);
@@ -6082,6 +6085,24 @@ public class ConnectivityServiceTest {
         }
         reset(mMockNetd);
 
+        // Change the NAT64 prefix without first removing it.
+        // Expect clatd to be stopped and started with the new prefix.
+        mService.mNetdEventCallback.onNat64PrefixEvent(cellNetId, true /* added */,
+                kOtherNat64PrefixString, 96);
+        networkCallback.expectLinkPropertiesThat(mCellNetworkAgent,
+                (lp) -> lp.getStackedLinks().size() == 0);
+        verify(mMockNetd, times(1)).clatdStop(MOBILE_IFNAME);
+        assertRoutesRemoved(cellNetId, stackedDefault);
+
+        verify(mMockNetd, times(1)).clatdStart(MOBILE_IFNAME, kOtherNat64Prefix.toString());
+        networkCallback.expectLinkPropertiesThat(mCellNetworkAgent,
+                (lp) -> lp.getNat64Prefix().equals(kOtherNat64Prefix));
+        clat.interfaceLinkStateChanged(CLAT_PREFIX + MOBILE_IFNAME, true);
+        networkCallback.expectLinkPropertiesThat(mCellNetworkAgent,
+                (lp) -> lp.getStackedLinks().size() == 1);
+        assertRoutesAdded(cellNetId, stackedDefault);
+        reset(mMockNetd);
+
         // Add ipv4 address, expect that clatd and prefix discovery are stopped and stacked
         // linkproperties are cleaned up.
         cellLp.addLinkAddress(myIpv4);
@@ -6096,7 +6117,7 @@ public class ConnectivityServiceTest {
         networkCallback.expectCallback(CallbackEntry.LINK_PROPERTIES_CHANGED, mCellNetworkAgent);
         LinkProperties actualLpAfterIpv4 = mCm.getLinkProperties(mCellNetworkAgent.getNetwork());
         LinkProperties expected = new LinkProperties(cellLp);
-        expected.setNat64Prefix(kNat64Prefix);
+        expected.setNat64Prefix(kOtherNat64Prefix);
         assertEquals(expected, actualLpAfterIpv4);
         assertEquals(0, actualLpAfterIpv4.getStackedLinks().size());
         assertRoutesRemoved(cellNetId, stackedDefault);
@@ -6115,7 +6136,7 @@ public class ConnectivityServiceTest {
 
         // Stopping prefix discovery causes netd to tell us that the NAT64 prefix is gone.
         mService.mNetdEventCallback.onNat64PrefixEvent(cellNetId, false /* added */,
-                kNat64PrefixString, 96);
+                kOtherNat64PrefixString, 96);
         networkCallback.expectLinkPropertiesThat(mCellNetworkAgent,
                 (lp) -> lp.getNat64Prefix() == null);
 
@@ -6156,6 +6177,111 @@ public class ConnectivityServiceTest {
         networkCallback.expectCallback(CallbackEntry.LOST, mCellNetworkAgent);
         networkCallback.assertNoCallback();
         mCm.unregisterNetworkCallback(networkCallback);
+    }
+
+    private void expectNat64PrefixChange(TestableNetworkCallback callback,
+            TestNetworkAgentWrapper agent, IpPrefix prefix) {
+        callback.expectLinkPropertiesThat(agent, x -> Objects.equals(x.getNat64Prefix(), prefix));
+    }
+
+    @Test
+    public void testNat64PrefixMultipleSources() throws Exception {
+        final String iface = "wlan0";
+        final String pref64FromRaStr = "64:ff9b::";
+        final String pref64FromDnsStr = "2001:db8:64::";
+        final IpPrefix pref64FromRa = new IpPrefix(InetAddress.getByName(pref64FromRaStr), 96);
+        final IpPrefix pref64FromDns = new IpPrefix(InetAddress.getByName(pref64FromDnsStr), 96);
+        final IpPrefix newPref64FromRa = new IpPrefix("2001:db8:64:64:64:64::/96");
+
+        final NetworkRequest request = new NetworkRequest.Builder()
+                .addCapability(NET_CAPABILITY_INTERNET)
+                .build();
+        final TestNetworkCallback callback = new TestNetworkCallback();
+        mCm.registerNetworkCallback(request, callback);
+
+        final LinkProperties baseLp = new LinkProperties();
+        baseLp.setInterfaceName(iface);
+        baseLp.addLinkAddress(new LinkAddress("2001:db8:1::1/64"));
+        baseLp.addDnsServer(InetAddress.getByName("2001:4860:4860::6464"));
+
+        reset(mMockNetd, mMockDnsResolver);
+        InOrder inOrder = inOrder(mMockNetd, mMockDnsResolver);
+
+        // If a network already has a NAT64 prefix on connect, clatd is started immediately and
+        // prefix discovery is never started.
+        LinkProperties lp = new LinkProperties(baseLp);
+        lp.setNat64Prefix(pref64FromRa);
+        mCellNetworkAgent = new TestNetworkAgentWrapper(TRANSPORT_WIFI, lp);
+        mCellNetworkAgent.connect(false);
+        final Network network = mCellNetworkAgent.getNetwork();
+        int netId = network.getNetId();
+        callback.expectAvailableCallbacksUnvalidated(mCellNetworkAgent);
+        inOrder.verify(mMockNetd).clatdStart(iface, pref64FromRa.toString());
+        inOrder.verify(mMockDnsResolver, never()).startPrefix64Discovery(netId);
+        callback.assertNoCallback();
+        assertEquals(pref64FromRa, mCm.getLinkProperties(network).getNat64Prefix());
+
+        // If the RA prefix is withdrawn, clatd is stopped and prefix discovery is started.
+        lp.setNat64Prefix(null);
+        mCellNetworkAgent.sendLinkProperties(lp);
+        expectNat64PrefixChange(callback, mCellNetworkAgent, null);
+        inOrder.verify(mMockNetd).clatdStop(iface);
+        inOrder.verify(mMockDnsResolver).startPrefix64Discovery(netId);
+
+        // If the RA prefix appears while DNS discovery is in progress, discovery is stopped and
+        // clatd is started with the prefix from the RA.
+        lp.setNat64Prefix(pref64FromRa);
+        mCellNetworkAgent.sendLinkProperties(lp);
+        expectNat64PrefixChange(callback, mCellNetworkAgent, pref64FromRa);
+        inOrder.verify(mMockNetd).clatdStart(iface, pref64FromRa.toString());
+        inOrder.verify(mMockDnsResolver).stopPrefix64Discovery(netId);
+
+        // Withdraw the RA prefix so we can test the case where an RA prefix appears after DNS
+        // discovery has succeeded.
+        lp.setNat64Prefix(null);
+        mCellNetworkAgent.sendLinkProperties(lp);
+        expectNat64PrefixChange(callback, mCellNetworkAgent, null);
+        inOrder.verify(mMockNetd).clatdStop(iface);
+        inOrder.verify(mMockDnsResolver).startPrefix64Discovery(netId);
+
+        mService.mNetdEventCallback.onNat64PrefixEvent(netId, true /* added */,
+                pref64FromDnsStr, 96);
+        expectNat64PrefixChange(callback, mCellNetworkAgent, pref64FromDns);
+        inOrder.verify(mMockNetd).clatdStart(iface, pref64FromDns.toString());
+
+        // If the RA prefix reappears, clatd is restarted and prefix discovery is stopped.
+        lp.setNat64Prefix(pref64FromRa);
+        mCellNetworkAgent.sendLinkProperties(lp);
+        expectNat64PrefixChange(callback, mCellNetworkAgent, pref64FromRa);
+        inOrder.verify(mMockNetd).clatdStop(iface);
+        inOrder.verify(mMockDnsResolver).stopPrefix64Discovery(netId);
+        inOrder.verify(mMockNetd).clatdStart(iface, pref64FromRa.toString());
+        inOrder.verify(mMockDnsResolver, never()).startPrefix64Discovery(netId);
+
+        // If the RA prefix changes, clatd is restarted and prefix discovery is not started.
+        lp.setNat64Prefix(newPref64FromRa);
+        mCellNetworkAgent.sendLinkProperties(lp);
+        expectNat64PrefixChange(callback, mCellNetworkAgent, newPref64FromRa);
+        inOrder.verify(mMockNetd).clatdStop(iface);
+        inOrder.verify(mMockNetd).clatdStart(iface, newPref64FromRa.toString());
+        inOrder.verify(mMockDnsResolver, never()).stopPrefix64Discovery(netId);
+        inOrder.verify(mMockDnsResolver, never()).startPrefix64Discovery(netId);
+
+        // If the RA prefix changes to the same value, nothing happens.
+        lp.setNat64Prefix(newPref64FromRa);
+        mCellNetworkAgent.sendLinkProperties(lp);
+        callback.assertNoCallback();
+        assertEquals(newPref64FromRa, mCm.getLinkProperties(network).getNat64Prefix());
+        inOrder.verify(mMockNetd, never()).clatdStop(iface);
+        inOrder.verify(mMockNetd, never()).clatdStart(eq(iface), anyString());
+        inOrder.verify(mMockDnsResolver, never()).stopPrefix64Discovery(netId);
+        inOrder.verify(mMockDnsResolver, never()).startPrefix64Discovery(netId);
+
+        // The transition between no prefix and DNS prefix is tested in testStackedLinkProperties.
+
+        callback.assertNoCallback();
+        mCellNetworkAgent.disconnect();
+        mCm.unregisterNetworkCallback(callback);
     }
 
     @Test

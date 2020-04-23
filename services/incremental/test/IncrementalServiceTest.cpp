@@ -25,6 +25,7 @@
 #include <future>
 
 #include "IncrementalService.h"
+#include "IncrementalServiceValidation.h"
 #include "Metadata.pb.h"
 #include "ServiceWrappers.h"
 
@@ -106,11 +107,12 @@ private:
 class MockDataLoader : public IDataLoader {
 public:
     MockDataLoader() {
-        ON_CALL(*this, create(_, _, _, _)).WillByDefault(Return((binder::Status::ok())));
-        ON_CALL(*this, start(_)).WillByDefault(Return((binder::Status::ok())));
-        ON_CALL(*this, stop(_)).WillByDefault(Return((binder::Status::ok())));
-        ON_CALL(*this, destroy(_)).WillByDefault(Return((binder::Status::ok())));
-        ON_CALL(*this, prepareImage(_, _, _)).WillByDefault(Return((binder::Status::ok())));
+        ON_CALL(*this, create(_, _, _, _)).WillByDefault(Invoke(this, &MockDataLoader::createOk));
+        ON_CALL(*this, start(_)).WillByDefault(Invoke(this, &MockDataLoader::startOk));
+        ON_CALL(*this, stop(_)).WillByDefault(Invoke(this, &MockDataLoader::stopOk));
+        ON_CALL(*this, destroy(_)).WillByDefault(Invoke(this, &MockDataLoader::destroyOk));
+        ON_CALL(*this, prepareImage(_, _, _))
+                .WillByDefault(Invoke(this, &MockDataLoader::prepareImageOk));
     }
     IBinder* onAsBinder() override { return nullptr; }
     MOCK_METHOD4(create,
@@ -123,6 +125,57 @@ public:
     MOCK_METHOD3(prepareImage,
                  binder::Status(int32_t id, const std::vector<InstallationFileParcel>& addedFiles,
                                 const std::vector<std::string>& removedFiles));
+
+    void initializeCreateOkNoStatus() {
+        ON_CALL(*this, create(_, _, _, _))
+                .WillByDefault(Invoke(this, &MockDataLoader::createOkNoStatus));
+    }
+
+    binder::Status createOk(int32_t id, const content::pm::DataLoaderParamsParcel&,
+                            const content::pm::FileSystemControlParcel&,
+                            const sp<content::pm::IDataLoaderStatusListener>& listener) {
+        mListener = listener;
+        if (mListener) {
+            mListener->onStatusChanged(id, IDataLoaderStatusListener::DATA_LOADER_CREATED);
+        }
+        return binder::Status::ok();
+    }
+    binder::Status createOkNoStatus(int32_t id, const content::pm::DataLoaderParamsParcel&,
+                                    const content::pm::FileSystemControlParcel&,
+                                    const sp<content::pm::IDataLoaderStatusListener>& listener) {
+        mListener = listener;
+        return binder::Status::ok();
+    }
+    binder::Status startOk(int32_t id) {
+        if (mListener) {
+            mListener->onStatusChanged(id, IDataLoaderStatusListener::DATA_LOADER_STARTED);
+        }
+        return binder::Status::ok();
+    }
+    binder::Status stopOk(int32_t id) {
+        if (mListener) {
+            mListener->onStatusChanged(id, IDataLoaderStatusListener::DATA_LOADER_STOPPED);
+        }
+        return binder::Status::ok();
+    }
+    binder::Status destroyOk(int32_t id) {
+        if (mListener) {
+            mListener->onStatusChanged(id, IDataLoaderStatusListener::DATA_LOADER_DESTROYED);
+        }
+        mListener = nullptr;
+        return binder::Status::ok();
+    }
+    binder::Status prepareImageOk(int32_t id,
+                                  const ::std::vector<content::pm::InstallationFileParcel>&,
+                                  const ::std::vector<::std::string>&) {
+        if (mListener) {
+            mListener->onStatusChanged(id, IDataLoaderStatusListener::DATA_LOADER_IMAGE_READY);
+        }
+        return binder::Status::ok();
+    }
+
+private:
+    sp<IDataLoaderStatusListener> mListener;
 };
 
 class MockDataLoaderManager : public DataLoaderManagerWrapper {
@@ -210,6 +263,8 @@ private:
 
 class MockIncFs : public IncFsWrapper {
 public:
+    MOCK_CONST_METHOD1(listExistingMounts, void(const ExistingMountCallback& cb));
+    MOCK_CONST_METHOD1(openMount, Control(std::string_view path));
     MOCK_CONST_METHOD3(createControl, Control(IncFsFd cmd, IncFsFd pendingReads, IncFsFd logs));
     MOCK_CONST_METHOD5(makeFile,
                        ErrorCode(const Control& control, std::string_view path, int mode, FileId id,
@@ -222,10 +277,13 @@ public:
                        ErrorCode(const Control& control, std::string_view from, std::string_view to));
     MOCK_CONST_METHOD2(unlink, ErrorCode(const Control& control, std::string_view path));
     MOCK_CONST_METHOD2(openForSpecialOps, base::unique_fd(const Control& control, FileId id));
-    MOCK_CONST_METHOD1(writeBlocks, ErrorCode(Span<const DataBlock> blocks));
+    MOCK_CONST_METHOD1(writeBlocks, ErrorCode(std::span<const DataBlock> blocks));
+
+    MockIncFs() { ON_CALL(*this, listExistingMounts(_)).WillByDefault(Return()); }
 
     void makeFileFails() { ON_CALL(*this, makeFile(_, _, _, _, _)).WillByDefault(Return(-1)); }
     void makeFileSuccess() { ON_CALL(*this, makeFile(_, _, _, _, _)).WillByDefault(Return(0)); }
+
     RawMetadata getMountInfoMetadata(const Control& control, std::string_view path) {
         metadata::Mount m;
         m.mutable_storage()->set_id(100);
@@ -434,7 +492,7 @@ TEST_F(IncrementalServiceTest, testCreateStoragePrepareDataLoaderFails) {
     mVold->bindMountSuccess();
     mDataLoaderManager->initializeDataLoaderFails();
     EXPECT_CALL(*mDataLoaderManager, initializeDataLoader(_, _, _, _, _)).Times(1);
-    EXPECT_CALL(*mDataLoaderManager, destroyDataLoader(_)).Times(1);
+    EXPECT_CALL(*mDataLoaderManager, destroyDataLoader(_)).Times(0);
     EXPECT_CALL(*mDataLoader, create(_, _, _, _)).Times(0);
     EXPECT_CALL(*mDataLoader, start(_)).Times(0);
     EXPECT_CALL(*mDataLoader, destroy(_)).Times(0);
@@ -462,7 +520,6 @@ TEST_F(IncrementalServiceTest, testDeleteStorageSuccess) {
             mIncrementalService->createStorage(tempDir.path, std::move(mDataLoaderParcel), {},
                                                IncrementalService::CreateOptions::CreateNew);
     ASSERT_GE(storageId, 0);
-    mDataLoaderManager->setDataLoaderStatusCreated();
     mIncrementalService->deleteStorage(storageId);
 }
 
@@ -483,7 +540,6 @@ TEST_F(IncrementalServiceTest, testDataLoaderDestroyed) {
             mIncrementalService->createStorage(tempDir.path, std::move(mDataLoaderParcel), {},
                                                IncrementalService::CreateOptions::CreateNew);
     ASSERT_GE(storageId, 0);
-    mDataLoaderManager->setDataLoaderStatusCreated();
     // Simulated crash/other connection breakage.
     mDataLoaderManager->setDataLoaderStatusDestroyed();
 }
@@ -492,6 +548,7 @@ TEST_F(IncrementalServiceTest, testStartDataLoaderCreate) {
     mVold->mountIncFsSuccess();
     mIncFs->makeFileSuccess();
     mVold->bindMountSuccess();
+    mDataLoader->initializeCreateOkNoStatus();
     mDataLoaderManager->initializeDataLoaderSuccess();
     mDataLoaderManager->getDataLoaderSuccess();
     EXPECT_CALL(*mDataLoaderManager, initializeDataLoader(_, _, _, _, _)).Times(1);
@@ -514,11 +571,12 @@ TEST_F(IncrementalServiceTest, testStartDataLoaderPendingStart) {
     mVold->mountIncFsSuccess();
     mIncFs->makeFileSuccess();
     mVold->bindMountSuccess();
+    mDataLoader->initializeCreateOkNoStatus();
     mDataLoaderManager->initializeDataLoaderSuccess();
     mDataLoaderManager->getDataLoaderSuccess();
-    EXPECT_CALL(*mDataLoaderManager, initializeDataLoader(_, _, _, _, _)).Times(1);
+    EXPECT_CALL(*mDataLoaderManager, initializeDataLoader(_, _, _, _, _)).Times(2);
     EXPECT_CALL(*mDataLoaderManager, destroyDataLoader(_)).Times(1);
-    EXPECT_CALL(*mDataLoader, create(_, _, _, _)).Times(1);
+    EXPECT_CALL(*mDataLoader, create(_, _, _, _)).Times(2);
     EXPECT_CALL(*mDataLoader, start(_)).Times(1);
     EXPECT_CALL(*mDataLoader, destroy(_)).Times(1);
     EXPECT_CALL(*mVold, unmountIncFs(_)).Times(2);
@@ -640,14 +698,14 @@ TEST_F(IncrementalServiceTest, testMakeDirectory) {
                                                IncrementalService::CreateOptions::CreateNew);
     std::string dir_path("test");
 
-    std::string tempPath(tempDir.path);
-    std::replace(tempPath.begin(), tempPath.end(), '/', '_');
-    std::string mount_dir = std::string(mRootDir.path) + "/MT_" + tempPath.substr(1);
-    std::string normalized_dir_path = mount_dir + "/mount/st_1_0/" + dir_path;
-
     // Expecting incfs to call makeDir on a path like:
-    // /data/local/tmp/TemporaryDir-06yixG/data_local_tmp_TemporaryDir-xwdFhT/mount/st_1_0/test
-    EXPECT_CALL(*mIncFs, makeDir(_, std::string_view(normalized_dir_path), _));
+    // <root>/*/mount/<storage>/test
+    EXPECT_CALL(*mIncFs,
+                makeDir(_, Truly([&](std::string_view arg) {
+                            return arg.starts_with(mRootDir.path) &&
+                                    arg.ends_with("/mount/st_1_0/" + dir_path);
+                        }),
+                        _));
     auto res = mIncrementalService->makeDir(storageId, dir_path, 0555);
     ASSERT_EQ(res, 0);
 }
@@ -665,29 +723,32 @@ TEST_F(IncrementalServiceTest, testMakeDirectories) {
     auto first = "first"sv;
     auto second = "second"sv;
     auto third = "third"sv;
-
-    std::string tempPath(tempDir.path);
-    std::replace(tempPath.begin(), tempPath.end(), '/', '_');
-    std::string mount_dir = std::string(mRootDir.path) + "/MT_" + tempPath.substr(1);
-
-    InSequence seq;
     auto parent_path = std::string(first) + "/" + std::string(second);
     auto dir_path = parent_path + "/" + std::string(third);
 
-    std::string normalized_first_path = mount_dir + "/mount/st_1_0/" + std::string(first);
-    std::string normalized_parent_path = mount_dir + "/mount/st_1_0/" + parent_path;
-    std::string normalized_dir_path = mount_dir + "/mount/st_1_0/" + dir_path;
+    auto checkArgFor = [&](std::string_view expected, std::string_view arg) {
+        return arg.starts_with(mRootDir.path) && arg.ends_with("/mount/st_1_0/"s += expected);
+    };
 
-    EXPECT_CALL(*mIncFs, makeDir(_, std::string_view(normalized_dir_path), _))
-            .WillOnce(Return(-ENOENT));
-    EXPECT_CALL(*mIncFs, makeDir(_, std::string_view(normalized_parent_path), _))
-            .WillOnce(Return(-ENOENT));
-    EXPECT_CALL(*mIncFs, makeDir(_, std::string_view(normalized_first_path), _))
-            .WillOnce(Return(0));
-    EXPECT_CALL(*mIncFs, makeDir(_, std::string_view(normalized_parent_path), _))
-            .WillOnce(Return(0));
-    EXPECT_CALL(*mIncFs, makeDir(_, std::string_view(normalized_dir_path), _)).WillOnce(Return(0));
-    auto res = mIncrementalService->makeDirs(storageId, normalized_dir_path, 0555);
+    {
+        InSequence seq;
+        EXPECT_CALL(*mIncFs,
+                    makeDir(_, Truly([&](auto arg) { return checkArgFor(dir_path, arg); }), _))
+                .WillOnce(Return(-ENOENT));
+        EXPECT_CALL(*mIncFs,
+                    makeDir(_, Truly([&](auto arg) { return checkArgFor(parent_path, arg); }), _))
+                .WillOnce(Return(-ENOENT));
+        EXPECT_CALL(*mIncFs,
+                    makeDir(_, Truly([&](auto arg) { return checkArgFor(first, arg); }), _))
+                .WillOnce(Return(0));
+        EXPECT_CALL(*mIncFs,
+                    makeDir(_, Truly([&](auto arg) { return checkArgFor(parent_path, arg); }), _))
+                .WillOnce(Return(0));
+        EXPECT_CALL(*mIncFs,
+                    makeDir(_, Truly([&](auto arg) { return checkArgFor(dir_path, arg); }), _))
+                .WillOnce(Return(0));
+    }
+    auto res = mIncrementalService->makeDirs(storageId, dir_path, 0555);
     ASSERT_EQ(res, 0);
 }
 } // namespace android::os::incremental

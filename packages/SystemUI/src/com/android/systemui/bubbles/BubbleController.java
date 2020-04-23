@@ -605,6 +605,9 @@ public class BubbleController implements ConfigurationController.ConfigurationLi
             if (mExpandListener != null) {
                 mStackView.setExpandListener(mExpandListener);
             }
+
+            mStackView.setUnbubbleConversationCallback(notificationEntry ->
+                    onUserChangedBubble(notificationEntry, false /* shouldBubble */));
         }
     }
 
@@ -1075,7 +1078,7 @@ public class BubbleController implements ConfigurationController.ConfigurationLi
 
     private void handleSummaryDismissalInterception(NotificationEntry summary) {
         // current children in the row:
-        final List<NotificationEntry> children = summary.getChildren();
+        final List<NotificationEntry> children = summary.getAttachedNotifChildren();
         if (children != null) {
             for (int i = 0; i < children.size(); i++) {
                 NotificationEntry child = children.get(i);
