@@ -2900,6 +2900,7 @@ public final class ActiveServices {
             return;
         }
         try {
+            /* TODO(b/154865060) - re-enable SERVICE_RESCHEDULE
             if(SERVICE_RESCHEDULE) {
                 boolean shouldDelay = false;
                 ActivityRecord top_rc = null;
@@ -2927,8 +2928,9 @@ public final class ActiveServices {
                     scheduleServiceRestartLocked(r, true);
                 }
             } else {
+            */
                 bringUpServiceLocked(r, r.intent.getIntent().getFlags(), r.createdFromFg, true, false);
-            }
+            //}
         } catch (TransactionTooLargeException e) {
             // Ignore, it's been logged and nothing upstack cares.
         }
