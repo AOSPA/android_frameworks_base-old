@@ -193,6 +193,7 @@ final class TaskDisplayArea extends DisplayArea<ActivityStack> {
         return count > 0 ? getChildAt(count - 1) : null;
     }
 
+    // TODO: Figure-out a way to remove since it might be a source of confusion.
     int getIndexOf(ActivityStack stack) {
         return mChildren.indexOf(stack);
     }
@@ -275,16 +276,14 @@ final class TaskDisplayArea extends DisplayArea<ActivityStack> {
 
     @Override
     void addChild(ActivityStack stack, int position) {
+        if (DEBUG_STACK) Slog.d(TAG_WM, "Set stack=" + stack + " on taskDisplayArea=" + this);
         addStackReferenceIfNeeded(stack);
         position = findPositionForStack(position, stack, true /* adding */);
 
         super.addChild(stack, position);
         mAtmService.updateSleepIfNeededLocked();
 
-        // The reparenting case is handled in WindowContainer.
-        if (!stack.mReparenting) {
-            mDisplayContent.setLayoutNeeded();
-        }
+        positionStackAt(stack, position);
     }
 
     @Override
@@ -646,12 +645,6 @@ final class TaskDisplayArea extends DisplayArea<ActivityStack> {
         }
     }
 
-    void addStack(ActivityStack stack, int position) {
-        if (DEBUG_STACK) Slog.d(TAG_WM, "Set stack=" + stack + " on taskDisplayArea=" + this);
-        addChild(stack, position);
-        positionStackAt(stack, position);
-    }
-
     void onStackRemoved(ActivityStack stack) {
         if (ActivityTaskManagerDebugConfig.DEBUG_STACK) {
             Slog.v(TAG_STACK, "removeStack: detaching " + stack + " from displayId="
@@ -699,7 +692,7 @@ final class TaskDisplayArea extends DisplayArea<ActivityStack> {
         //       the position internally, also update the logic here
         final ActivityStack prevFocusedStack = updateLastFocusedStackReason != null
                 ? getFocusedStack() : null;
-        final boolean wasContained = getIndexOf(stack) >= 0;
+        final boolean wasContained = mChildren.contains(stack);
         if (mDisplayContent.mSingleTaskInstance && getStackCount() == 1 && !wasContained) {
             throw new IllegalStateException(
                     "positionStackAt: Can only have one task on display=" + this);
@@ -795,7 +788,7 @@ final class TaskDisplayArea extends DisplayArea<ActivityStack> {
                 }
             } else if (stack.getDisplayArea() != this || !stack.isRootTask()) {
                 if (stack.getParent() == null) {
-                    addStack(stack, position);
+                    addChild(stack, position);
                 } else {
                     stack.reparent(this, onTop);
                 }
@@ -951,7 +944,7 @@ final class TaskDisplayArea extends DisplayArea<ActivityStack> {
                 positionStackAtTop((ActivityStack) launchRootTask, false /* includingParents */);
             }
         } else {
-            addStack(stack, onTop ? POSITION_TOP : POSITION_BOTTOM);
+            addChild(stack, onTop ? POSITION_TOP : POSITION_BOTTOM);
             stack.setWindowingMode(windowingMode, true /* creating */);
         }
         return stack;

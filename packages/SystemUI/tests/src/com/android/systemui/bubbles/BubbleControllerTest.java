@@ -85,6 +85,7 @@ import com.android.systemui.statusbar.phone.KeyguardBypassController;
 import com.android.systemui.statusbar.phone.LockscreenLockIconController;
 import com.android.systemui.statusbar.phone.NotificationGroupManager;
 import com.android.systemui.statusbar.phone.NotificationShadeWindowController;
+import com.android.systemui.statusbar.phone.NotificationShadeWindowView;
 import com.android.systemui.statusbar.phone.ShadeController;
 import com.android.systemui.statusbar.policy.BatteryController;
 import com.android.systemui.statusbar.policy.ConfigurationController;
@@ -183,6 +184,8 @@ public class BubbleControllerTest extends SysuiTestCase {
     private DumpManager mDumpManager;
     @Mock
     private LockscreenLockIconController mLockIconController;
+    @Mock
+    private NotificationShadeWindowView mNotificationShadeWindowView;
 
     private SuperStatusBarViewFactory mSuperStatusBarViewFactory;
     private BubbleData mBubbleData;
@@ -219,8 +222,7 @@ public class BubbleControllerTest extends SysuiTestCase {
                 mWindowManager, mActivityManager, mDozeParameters, mStatusBarStateController,
                 mConfigurationController, mKeyguardBypassController, mColorExtractor,
                 mDumpManager);
-        mNotificationShadeWindowController.setNotificationShadeView(
-                mSuperStatusBarViewFactory.getNotificationShadeWindowView());
+        mNotificationShadeWindowController.setNotificationShadeView(mNotificationShadeWindowView);
         mNotificationShadeWindowController.attach();
 
         // Need notifications for bubbles
@@ -930,7 +932,7 @@ public class BubbleControllerTest extends SysuiTestCase {
         mBubbleController.handleDismissalInterception(groupSummary.getEntry());
 
         // THEN only the NON-bubble children are dismissed
-        List<ExpandableNotificationRow> childrenRows = groupSummary.getNotificationChildren();
+        List<ExpandableNotificationRow> childrenRows = groupSummary.getAttachedChildren();
         verify(mNotificationEntryManager, times(1)).performRemoveNotification(
                 childrenRows.get(0).getEntry().getSbn(), REASON_GROUP_SUMMARY_CANCELED);
         verify(mNotificationEntryManager, times(1)).performRemoveNotification(

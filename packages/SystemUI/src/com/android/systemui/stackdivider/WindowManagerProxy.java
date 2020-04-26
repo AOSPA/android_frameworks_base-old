@@ -174,18 +174,19 @@ public class WindowManagerProxy {
         if (rootTasks.isEmpty()) {
             return false;
         }
-        tiles.mHomeAndRecentsSurfaces.clear();
         for (int i = rootTasks.size() - 1; i >= 0; --i) {
             final ActivityManager.RunningTaskInfo rootTask = rootTasks.get(i);
-            if (isHomeOrRecentTask(rootTask)) {
-                tiles.mHomeAndRecentsSurfaces.add(rootTask.token.getLeash());
-            }
+            // Only move resizeable task to split secondary. WM will just ignore this anyways...
+            if (!rootTask.isResizable()) continue;
+            // Only move fullscreen tasks to split secondary.
             if (rootTask.configuration.windowConfiguration.getWindowingMode()
                     != WINDOWING_MODE_FULLSCREEN) {
                 continue;
             }
             wct.reparent(rootTask.token, tiles.mSecondary.token, true /* onTop */);
         }
+        // Move the secondary split-forward.
+        wct.reorder(tiles.mSecondary.token, true /* onTop */);
         boolean isHomeResizable = applyHomeTasksMinimized(layout, null /* parent */, wct);
         WindowOrganizer.applyTransaction(wct);
         return isHomeResizable;
@@ -206,7 +207,6 @@ public class WindowManagerProxy {
         // Set launch root first so that any task created after getChildContainers and
         // before reparent (pretty unlikely) are put into fullscreen.
         TaskOrganizer.setLaunchRoot(Display.DEFAULT_DISPLAY, null);
-        tiles.mHomeAndRecentsSurfaces.clear();
         // TODO(task-org): Once task-org is more complete, consider using Appeared/Vanished
         //                 plus specific APIs to clean this up.
         List<ActivityManager.RunningTaskInfo> primaryChildren =

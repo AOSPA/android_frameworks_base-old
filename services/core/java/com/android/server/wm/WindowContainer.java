@@ -526,6 +526,11 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
      */
     @CallSuper
     void removeImmediately() {
+        final DisplayContent dc = getDisplayContent();
+        if (dc != null) {
+            mSurfaceFreezer.unfreeze(getPendingTransaction());
+            dc.mChangingContainers.remove(this);
+        }
         while (!mChildren.isEmpty()) {
             final E child = mChildren.peekLast();
             child.removeImmediately();
@@ -662,9 +667,11 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
                 //       position that takes into account the removed child (if the index of the
                 //       child < position, then the position should be adjusted). We should consider
                 //       doing this adjustment here and remove any adjustments in the callers.
-                mChildren.remove(child);
-                mChildren.add(position, child);
-                onChildPositionChanged(child);
+                if (mChildren.indexOf(child) != position) {
+                    mChildren.remove(child);
+                    mChildren.add(position, child);
+                    onChildPositionChanged(child);
+                }
         }
     }
 
@@ -716,6 +723,10 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
      * @param dc The display this container is on after changes.
      */
     void onDisplayChanged(DisplayContent dc) {
+        if (mDisplayContent != null && mDisplayContent.mChangingContainers.remove(this)) {
+            // Cancel any change transition queued-up for this container on the old display.
+            mSurfaceFreezer.unfreeze(getPendingTransaction());
+        }
         mDisplayContent = dc;
         if (dc != null && dc != this) {
             dc.getPendingTransaction().merge(mPendingTransaction);
@@ -2031,6 +2042,7 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
 
     void cancelAnimation() {
         mSurfaceAnimator.cancelAnimation();
+        mSurfaceFreezer.unfreeze(getPendingTransaction());
     }
 
     @Override

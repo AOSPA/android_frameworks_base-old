@@ -3532,7 +3532,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
             mClient.insetsControlChanged(getInsetsState(),
                     stateController.getControlsForDispatch(this));
         } catch (RemoteException e) {
-            Slog.w(TAG, "Failed to deliver inset state change", e);
+            Slog.w(TAG, "Failed to deliver inset state change to w=" + this, e);
         }
     }
 
@@ -5289,7 +5289,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         // to account for it. If we actually have shadows we will
         // then un-inset ourselves by the surfaceInsets.
         if (stack != null) {
-            final int outset = stack.getStackOutset();
+            final int outset = stack.getTaskOutset();
             outPoint.offset(outset, outset);
         }
 

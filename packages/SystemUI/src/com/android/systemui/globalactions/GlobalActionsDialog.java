@@ -16,6 +16,8 @@ package com.android.systemui.globalactions;
 
 import static android.view.ViewGroup.LayoutParams.MATCH_PARENT;
 import static android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS;
+import static android.view.WindowManager.ScreenshotSource.SCREENSHOT_GLOBAL_ACTIONS;
+import static android.view.WindowManager.TAKE_SCREENSHOT_FULLSCREEN;
 
 import static com.android.internal.widget.LockPatternUtils.StrongAuthTracker.SOME_AUTH_REQUIRED_AFTER_USER_REQUEST;
 import static com.android.internal.widget.LockPatternUtils.StrongAuthTracker.STRONG_AUTH_NOT_REQUIRED;
@@ -78,6 +80,7 @@ import android.widget.BaseAdapter;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.ImageView.ScaleType;
+import android.widget.LinearLayout;
 import android.widget.ListPopupWindow;
 import android.widget.ListView;
 import android.widget.TextView;
@@ -109,6 +112,7 @@ import com.android.systemui.broadcast.BroadcastDispatcher;
 import com.android.systemui.colorextraction.SysuiColorExtractor;
 import com.android.systemui.controls.ControlsServiceInfo;
 import com.android.systemui.controls.controller.ControlsController;
+import com.android.systemui.controls.management.ControlsAnimations;
 import com.android.systemui.controls.management.ControlsListingController;
 import com.android.systemui.controls.ui.ControlsUiController;
 import com.android.systemui.dagger.qualifiers.Background;
@@ -125,7 +129,6 @@ import com.android.systemui.statusbar.policy.KeyguardStateController;
 import com.android.systemui.util.EmergencyDialerConstants;
 import com.android.systemui.util.RingerModeTracker;
 import com.android.systemui.util.leak.RotationUtils;
-import com.android.systemui.volume.SystemUIInterpolators.LogAccelerateInterpolator;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -195,9 +198,9 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
     private final LifecycleRegistry mLifecycle = new LifecycleRegistry(this);
 
     @VisibleForTesting
-    protected ArrayList<Action> mItems;
+    protected final ArrayList<Action> mItems = new ArrayList<>();
     @VisibleForTesting
-    protected ArrayList<Action> mOverflowItems;
+    protected final ArrayList<Action> mOverflowItems = new ArrayList<>();
 
     private ActionsDialog mDialog;
 
@@ -453,19 +456,12 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
         prepareDialog();
         seedFavorites();
 
-        // If we only have 1 item and it's a simple press action, just do this action.
-        if (mAdapter.getCount() == 1
-                && mAdapter.getItem(0) instanceof SinglePressAction
-                && !(mAdapter.getItem(0) instanceof LongPressAction)) {
-            ((SinglePressAction) mAdapter.getItem(0)).onPress();
-        } else {
-            WindowManager.LayoutParams attrs = mDialog.getWindow().getAttributes();
-            attrs.setTitle("ActionsDialog");
-            attrs.layoutInDisplayCutoutMode = LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS;
-            mDialog.getWindow().setAttributes(attrs);
-            mDialog.show();
-            mWindowManagerFuncs.onGlobalActionsShown();
-        }
+        WindowManager.LayoutParams attrs = mDialog.getWindow().getAttributes();
+        attrs.setTitle("ActionsDialog");
+        attrs.layoutInDisplayCutoutMode = LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS;
+        mDialog.getWindow().setAttributes(attrs);
+        mDialog.show();
+        mWindowManagerFuncs.onGlobalActionsShown();
     }
 
     @VisibleForTesting
@@ -485,7 +481,8 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
      */
     @VisibleForTesting
     protected int getMaxShownPowerItems() {
-        if (shouldShowControls()) {
+        // TODO: Overflow disabled on keyguard while we solve for touch blocking issues.
+        if (shouldUseControlsLayout() && !mKeyguardShowing) {
             return mResources.getInteger(com.android.systemui.R.integer.power_menu_max_columns);
         } else {
             return Integer.MAX_VALUE;
@@ -497,10 +494,10 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
      * whether controls are enabled and whether the max number of shown items has been reached.
      */
     private void addActionItem(Action action) {
-        if (mItems != null && shouldShowAction(action)) {
+        if (shouldShowAction(action)) {
             if (mItems.size() < getMaxShownPowerItems()) {
                 mItems.add(action);
-            } else if (mOverflowItems != null) {
+            } else {
                 mOverflowItems.add(action);
             }
         }
@@ -522,8 +519,8 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
         mAirplaneModeOn = new AirplaneModeAction();
         onAirplaneModeChanged();
 
-        mItems = new ArrayList<Action>();
-        mOverflowItems = new ArrayList<Action>();
+        mItems.clear();
+        mOverflowItems.clear();
         String[] defaultActions = getDefaultActions();
 
         // make sure emergency affordance action is first, if needed
@@ -588,6 +585,11 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
         }
     }
 
+    private void onRotate() {
+        // re-allocate actions between main and overflow lists
+        this.createActionItems();
+    }
+
     /**
      * Create the global actions dialog.
      *
@@ -599,11 +601,12 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
         mAdapter = new MyAdapter();
         mOverflowAdapter = new MyOverflowAdapter();
 
-        mDepthController.setShowingHomeControls(shouldShowControls());
+        mDepthController.setShowingHomeControls(shouldUseControlsLayout());
         ActionsDialog dialog = new ActionsDialog(mContext, mAdapter, mOverflowAdapter,
                 getWalletPanelViewController(), mDepthController, mSysuiColorExtractor,
                 mStatusBarService, mNotificationShadeWindowController,
-                shouldShowControls() ? mControlsUiController : null, mBlurUtils);
+                shouldShowControls() ? mControlsUiController : null, mBlurUtils,
+                shouldUseControlsLayout(), this::onRotate);
         dialog.setCanceledOnTouchOutside(false); // Handled by the custom class.
         dialog.setKeyguardShowing(mKeyguardShowing);
 
@@ -704,7 +707,7 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
 
         @Override
         public boolean shouldBeSeparated() {
-            return !shouldShowControls();
+            return !shouldUseControlsLayout();
         }
 
         @Override
@@ -712,7 +715,7 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
                 Context context, View convertView, ViewGroup parent, LayoutInflater inflater) {
             View v = super.create(context, convertView, parent, inflater);
             int textColor;
-            if (shouldShowControls()) {
+            if (shouldUseControlsLayout()) {
                 v.setBackgroundTintList(ColorStateList.valueOf(v.getResources().getColor(
                         com.android.systemui.R.color.global_actions_emergency_background)));
                 textColor = v.getResources().getColor(
@@ -829,7 +832,8 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
             mHandler.postDelayed(new Runnable() {
                 @Override
                 public void run() {
-                    mScreenshotHelper.takeScreenshot(1, true, true, mHandler, null);
+                    mScreenshotHelper.takeScreenshot(TAKE_SCREENSHOT_FULLSCREEN, true, true,
+                            SCREENSHOT_GLOBAL_ACTIONS, mHandler, null);
                     mMetricsLogger.action(MetricsEvent.ACTION_SCREENSHOT_POWER_MENU);
                     mUiEventLogger.log(GlobalActionsEvent.GA_SCREENSHOT_PRESS);
                 }
@@ -1152,7 +1156,7 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
     }
 
     private int getActionLayoutId() {
-        if (shouldShowControls()) {
+        if (shouldUseControlsLayout()) {
             return com.android.systemui.R.layout.global_actions_grid_item_v2;
         }
         return com.android.systemui.R.layout.global_actions_grid_item;
@@ -1275,12 +1279,12 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
     public class MyOverflowAdapter extends BaseAdapter {
         @Override
         public int getCount() {
-            return mOverflowItems != null ? mOverflowItems.size() : 0;
+            return mOverflowItems.size();
         }
 
         @Override
         public Action getItem(int position) {
-            return mOverflowItems != null ? mOverflowItems.get(position) : null;
+            return mOverflowItems.get(position);
         }
 
         @Override
@@ -1815,7 +1819,7 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
                 case MESSAGE_DISMISS:
                     if (mDialog != null) {
                         if (SYSTEM_DIALOG_REASON_DREAM.equals(msg.obj)) {
-                            mDialog.dismissImmediately();
+                            mDialog.completeDismiss();
                         } else {
                             mDialog.dismiss();
                         }
@@ -1888,17 +1892,21 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
         private final NotificationShadeWindowController mNotificationShadeWindowController;
         private final NotificationShadeDepthController mDepthController;
         private final BlurUtils mBlurUtils;
+        private final boolean mUseControlsLayout;
         private ListPopupWindow mOverflowPopup;
+        private final Runnable mOnRotateCallback;
 
         private ControlsUiController mControlsUiController;
         private ViewGroup mControlsView;
+        private ViewGroup mContainer;
 
         ActionsDialog(Context context, MyAdapter adapter, MyOverflowAdapter overflowAdapter,
                 GlobalActionsPanelPlugin.PanelViewController plugin,
                 NotificationShadeDepthController depthController,
                 SysuiColorExtractor sysuiColorExtractor, IStatusBarService statusBarService,
                 NotificationShadeWindowController notificationShadeWindowController,
-                ControlsUiController controlsUiController, BlurUtils blurUtils) {
+                ControlsUiController controlsUiController, BlurUtils blurUtils,
+                boolean useControlsLayout, Runnable onRotateCallback) {
             super(context, com.android.systemui.R.style.Theme_SystemUI_Dialog_GlobalActions);
             mContext = context;
             mAdapter = adapter;
@@ -1909,6 +1917,8 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
             mNotificationShadeWindowController = notificationShadeWindowController;
             mControlsUiController = controlsUiController;
             mBlurUtils = blurUtils;
+            mUseControlsLayout = useControlsLayout;
+            mOnRotateCallback = onRotateCallback;
 
             // Window initialization
             Window window = getWindow();
@@ -2041,6 +2051,11 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
             });
             mGlobalActionsLayout.setRotationListener(this::onRotate);
             mGlobalActionsLayout.setAdapter(mAdapter);
+            mContainer = findViewById(com.android.systemui.R.id.global_actions_container);
+            // Some legacy dialog layouts don't have the outer container
+            if (mContainer == null) {
+                mContainer = mGlobalActionsLayout;
+            }
 
             mOverflowPopup = createPowerOverflowPopup();
 
@@ -2049,8 +2064,17 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
             if (overflowButton != null) {
                 if (mOverflowAdapter.getCount() > 0) {
                     overflowButton.setOnClickListener((view) -> showPowerOverflowMenu());
+                    LinearLayout.LayoutParams params =
+                            (LinearLayout.LayoutParams) mGlobalActionsLayout.getLayoutParams();
+                    params.setMarginEnd(0);
+                    mGlobalActionsLayout.setLayoutParams(params);
                 } else {
                     overflowButton.setVisibility(View.GONE);
+                    LinearLayout.LayoutParams params =
+                            (LinearLayout.LayoutParams) mGlobalActionsLayout.getLayoutParams();
+                    params.setMarginEnd(mContext.getResources().getDimensionPixelSize(
+                            com.android.systemui.R.dimen.global_actions_side_margin));
+                    mGlobalActionsLayout.setLayoutParams(params);
                 }
             }
 
@@ -2068,7 +2092,7 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
             }
             if (mBackgroundDrawable == null) {
                 mBackgroundDrawable = new ScrimDrawable();
-                if (mControlsUiController != null) {
+                if (mUseControlsLayout) {
                     mScrimAlpha = 1.0f;
                 } else {
                     mScrimAlpha = mBlurUtils.supportsBlursOnWindows()
@@ -2088,7 +2112,7 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
         }
 
         private int getGlobalActionsLayoutId(Context context) {
-            if (mControlsUiController != null) {
+            if (mUseControlsLayout) {
                 return com.android.systemui.R.layout.global_actions_grid_v2;
             }
 
@@ -2133,9 +2157,9 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
             if (!(mBackgroundDrawable instanceof ScrimDrawable)) {
                 return;
             }
-            boolean hasControls = mControlsUiController != null;
             ((ScrimDrawable) mBackgroundDrawable).setColor(
-                    !hasControls && colors.supportsDarkText() ? Color.WHITE : Color.BLACK, animate);
+                    !mUseControlsLayout && colors.supportsDarkText()
+                            ? Color.WHITE : Color.BLACK, animate);
             View decorView = getWindow().getDecorView();
             if (colors.supportsDarkText()) {
                 decorView.setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR |
@@ -2158,10 +2182,10 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
             mHadTopUi = mNotificationShadeWindowController.getForceHasTopUi();
             mNotificationShadeWindowController.setForceHasTopUi(true);
             mBackgroundDrawable.setAlpha(0);
-            mGlobalActionsLayout.setTranslationX(mGlobalActionsLayout.getAnimationOffsetX());
-            mGlobalActionsLayout.setTranslationY(mGlobalActionsLayout.getAnimationOffsetY());
-            mGlobalActionsLayout.setAlpha(0);
-            mGlobalActionsLayout.animate()
+            mContainer.setTranslationX(mGlobalActionsLayout.getAnimationOffsetX());
+            mContainer.setTranslationY(mGlobalActionsLayout.getAnimationOffsetY());
+            mContainer.setAlpha(0);
+            mContainer.animate()
                     .alpha(1)
                     .translationX(0)
                     .translationY(0)
@@ -2177,7 +2201,7 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
                     .start();
             ViewGroup root = (ViewGroup) mGlobalActionsLayout.getRootView();
             root.setOnApplyWindowInsetsListener((v, windowInsets) -> {
-                if (mControlsUiController != null) {
+                if (mUseControlsLayout) {
                     root.setPadding(windowInsets.getStableInsetLeft(),
                             windowInsets.getStableInsetTop(),
                             windowInsets.getStableInsetRight(),
@@ -2186,48 +2210,55 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
                 return WindowInsets.CONSUMED;
             });
             if (mControlsUiController != null) {
-                mControlsUiController.show(mControlsView);
+                mControlsUiController.show(mControlsView, this::dismissForControlsActivity);
             }
         }
 
         @Override
         public void dismiss() {
+            dismissWithAnimation(() -> {
+                mContainer.setTranslationX(0);
+                mContainer.setTranslationY(0);
+                mContainer.setAlpha(1);
+                mContainer.animate()
+                        .alpha(0)
+                        .translationX(mGlobalActionsLayout.getAnimationOffsetX())
+                        .translationY(mGlobalActionsLayout.getAnimationOffsetY())
+                        .setDuration(450)
+                        .withEndAction(this::completeDismiss)
+                        .setInterpolator(Interpolators.FAST_OUT_SLOW_IN)
+                        .setUpdateListener(animation -> {
+                            float animatedValue = 1f - animation.getAnimatedFraction();
+                            int alpha = (int) (animatedValue * mScrimAlpha * 255);
+                            mBackgroundDrawable.setAlpha(alpha);
+                            mDepthController.updateGlobalDialogVisibility(animatedValue,
+                                    mGlobalActionsLayout);
+                        })
+                        .start();
+            });
+        }
+
+        private void dismissForControlsActivity() {
+            dismissWithAnimation(() -> {
+                ViewGroup root = (ViewGroup) mGlobalActionsLayout.getParent();
+                ControlsAnimations.exitAnimation(root, this::completeDismiss).start();
+            });
+        }
+
+        void dismissWithAnimation(Runnable animation) {
             if (!mShowing) {
                 return;
             }
             mShowing = false;
-            if (mControlsUiController != null) mControlsUiController.hide();
-            mGlobalActionsLayout.setTranslationX(0);
-            mGlobalActionsLayout.setTranslationY(0);
-            mGlobalActionsLayout.setAlpha(1);
-            mGlobalActionsLayout.animate()
-                    .alpha(0)
-                    .translationX(mGlobalActionsLayout.getAnimationOffsetX())
-                    .translationY(mGlobalActionsLayout.getAnimationOffsetY())
-                    .setDuration(550)
-                    .withEndAction(this::completeDismiss)
-                    .setInterpolator(new LogAccelerateInterpolator())
-                    .setUpdateListener(animation -> {
-                        float animatedValue = 1f - animation.getAnimatedFraction();
-                        int alpha = (int) (animatedValue * mScrimAlpha * 255);
-                        mBackgroundDrawable.setAlpha(alpha);
-                        mDepthController.updateGlobalDialogVisibility(animatedValue,
-                                mGlobalActionsLayout);
-                    })
-                    .start();
-            dismissPanel();
-            resetOrientation();
-        }
-
-        void dismissImmediately() {
-            mShowing = false;
-            if (mControlsUiController != null) mControlsUiController.hide();
-            dismissPanel();
-            resetOrientation();
-            completeDismiss();
+            animation.run();
         }
 
         private void completeDismiss() {
+            mShowing = false;
+            resetOrientation();
+            dismissPanel();
+            dismissOverflow();
+            if (mControlsUiController != null) mControlsUiController.hide();
             mNotificationShadeWindowController.setForceHasTopUi(mHadTopUi);
             mDepthController.updateGlobalDialogVisibility(0, null /* view */);
             super.dismiss();
@@ -2236,6 +2267,12 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
         private void dismissPanel() {
             if (mPanelController != null) {
                 mPanelController.onDismissed();
+            }
+        }
+
+        private void dismissOverflow() {
+            if (mOverflowPopup != null) {
+                mOverflowPopup.dismiss();
             }
         }
 
@@ -2281,10 +2318,14 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
         public void refreshDialog() {
             initializeLayout();
             mGlobalActionsLayout.updateList();
+            if (mControlsUiController != null) {
+                mControlsUiController.show(mControlsView, this::dismissForControlsActivity);
+            }
         }
 
         public void onRotate(int from, int to) {
             if (mShowing) {
+                mOnRotateCallback.run();
                 refreshDialog();
             }
         }
@@ -2316,5 +2357,10 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
         return mKeyguardStateController.isUnlocked()
                 && mControlsUiController.getAvailable()
                 && !mControlsServiceInfos.isEmpty();
+    }
+    // TODO: Remove legacy layout XML and classes.
+    protected boolean shouldUseControlsLayout() {
+        // always use new controls layout
+        return true;
     }
 }

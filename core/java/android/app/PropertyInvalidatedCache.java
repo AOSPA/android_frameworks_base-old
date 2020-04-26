@@ -17,11 +17,17 @@
 package android.app;
 
 import android.annotation.NonNull;
+import android.os.Handler;
+import android.os.Looper;
+import android.os.Message;
+import android.os.SystemClock;
 import android.os.SystemProperties;
 import android.util.Log;
 
 import com.android.internal.annotations.GuardedBy;
+import com.android.internal.annotations.VisibleForTesting;
 
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -154,6 +160,13 @@ import java.util.concurrent.atomic.AtomicLong;
  * this local case, there's no IPC, so use of the cache is (depending on exact
  * circumstance) unnecessary.
  *
+ * For security, there is a whitelist of processes that are allowed to invalidate a cache.
+ * The whitelist includes normal runtime processes but does not include test processes.
+ * Test processes must call {@code PropertyInvalidatedCache.disableForTestMode()} to disable
+ * all cache activity in that process.
+ *
+ * Caching can be disabled completely by initializing {@code sEnabled} to false and rebuilding.
+ *
  * @param <Query> The class used to index cache entries: must be hashable and comparable
  * @param <Result> The class holding cache entries; use a boxed primitive if possible
  *
@@ -165,8 +178,24 @@ public abstract class PropertyInvalidatedCache<Query, Result> {
 
     private static final String TAG = "PropertyInvalidatedCache";
     private static final boolean DEBUG = false;
-    private static final boolean ENABLE = true;
     private static final boolean VERIFY = false;
+
+    /**
+     * If sEnabled is false then all cache operations are stubbed out.  Set
+     * it to false inside test processes.
+     */
+    private static boolean sEnabled = true;
+
+    private static final Object sCorkLock = new Object();
+
+    /**
+     * A map of cache keys that we've "corked". (The values are counts.)  When a cache key is
+     * corked, we skip the cache invalidate when the cache key is in the unset state --- that
+     * is, when a cache key is corked, an invalidation does not enable the cache if somebody
+     * else hasn't disabled it.
+     */
+    @GuardedBy("sCorkLock")
+    private static final HashMap<String, Integer> sCorks = new HashMap<>();
 
     private final Object mLock = new Object();
 
@@ -284,7 +313,7 @@ public abstract class PropertyInvalidatedCache<Query, Result> {
      * Return whether the cache is disabled in this process.
      */
     public final boolean isDisabledLocal() {
-        return mDisabled;
+        return mDisabled || !sEnabled;
     }
 
     /**
@@ -292,7 +321,7 @@ public abstract class PropertyInvalidatedCache<Query, Result> {
      */
     public Result query(Query query) {
         // Let access to mDisabled race: it's atomic anyway.
-        long currentNonce = (ENABLE && !mDisabled) ? getCurrentNonce() : NONCE_DISABLED;
+        long currentNonce = (!isDisabledLocal()) ? getCurrentNonce() : NONCE_DISABLED;
         for (;;) {
             if (currentNonce == NONCE_DISABLED || currentNonce == NONCE_UNSET) {
                 if (DEBUG) {
@@ -403,6 +432,9 @@ public abstract class PropertyInvalidatedCache<Query, Result> {
      * @param name Name of the cache-key property to invalidate
      */
     public static void disableSystemWide(@NonNull String name) {
+        if (!sEnabled) {
+            return;
+        }
         SystemProperties.set(name, Long.toString(NONCE_DISABLED));
     }
 
@@ -421,6 +453,33 @@ public abstract class PropertyInvalidatedCache<Query, Result> {
      * @param name Name of the cache-key property to invalidate
      */
     public static void invalidateCache(@NonNull String name) {
+        if (!sEnabled) {
+            if (DEBUG) {
+                Log.w(TAG, String.format(
+                    "cache invalidate %s suppressed", name));
+            }
+            return;
+        }
+
+        // Take the cork lock so invalidateCache() racing against corkInvalidations() doesn't
+        // clobber a cork-written NONCE_UNSET with a cache key we compute before the cork.
+        // The property service is single-threaded anyway, so we don't lose any concurrency by
+        // taking the cork lock around cache invalidations.  If we see contention on this lock,
+        // we're invalidating too often.
+        synchronized (sCorkLock) {
+            Integer numberCorks = sCorks.get(name);
+            if (numberCorks != null && numberCorks > 0) {
+                if (DEBUG) {
+                    Log.d(TAG, "ignoring invalidation due to cork: " + name);
+                }
+                return;
+            }
+            invalidateCacheLocked(name);
+        }
+    }
+
+    @GuardedBy("sCorkLock")
+    private static void invalidateCacheLocked(@NonNull String name) {
         // There's no race here: we don't require that values strictly increase, but instead
         // only that each is unique in a single runtime-restart session.
         final long nonce = SystemProperties.getLong(name, NONCE_UNSET);
@@ -430,6 +489,7 @@ public abstract class PropertyInvalidatedCache<Query, Result> {
             }
             return;
         }
+
         long newValue;
         do {
             newValue = NoPreloadHolder.next();
@@ -443,6 +503,175 @@ public abstract class PropertyInvalidatedCache<Query, Result> {
                             newValueString));
         }
         SystemProperties.set(name, newValueString);
+    }
+
+    /**
+     * Temporarily put the cache in the uninitialized state and prevent invalidations from
+     * moving it out of that state: useful in cases where we want to avoid the overhead of a
+     * large number of cache invalidations in a short time.  While the cache is corked, clients
+     * bypass the cache and talk to backing services directly.  This property makes corking
+     * correctness-preserving even if corked outside the lock that controls access to the
+     * cache's backing service.
+     *
+     * corkInvalidations() and uncorkInvalidations() must be called in pairs.
+     *
+     * @param name Name of the cache-key property to cork
+     */
+    public static void corkInvalidations(@NonNull String name) {
+        synchronized (sCorkLock) {
+            int numberCorks = sCorks.getOrDefault(name, 0);
+            if (DEBUG) {
+                Log.d(TAG, String.format("corking %s: numberCorks=%s", name, numberCorks));
+            }
+
+            // If we're the first ones to cork this cache, set the cache to the unset state so
+            // existing caches talk directly to their services while we've corked updates.
+            // Make sure we don't clobber a disabled cache value.
+
+            // TODO(dancol): we can skip this property write and leave the cache enabled if the
+            // caller promises not to make observable changes to the cache backing state before
+            // uncorking the cache, e.g., by holding a read lock across the cork-uncork pair.
+            // Implement this more dangerous mode of operation if necessary.
+            if (numberCorks == 0) {
+                final long nonce = SystemProperties.getLong(name, NONCE_UNSET);
+                if (nonce != NONCE_UNSET && nonce != NONCE_DISABLED) {
+                    SystemProperties.set(name, Long.toString(NONCE_UNSET));
+                }
+            }
+            sCorks.put(name, numberCorks + 1);
+            if (DEBUG) {
+                Log.d(TAG, "corked: " + name);
+            }
+        }
+    }
+
+    /**
+     * Undo the effect of a cork, allowing cache invalidations to proceed normally.
+     * Removing the last cork on a cache name invalidates the cache by side effect,
+     * transitioning it to normal operation (unless explicitly disabled system-wide).
+     *
+     * @param name Name of the cache-key property to uncork
+     */
+    public static void uncorkInvalidations(@NonNull String name) {
+        synchronized (sCorkLock) {
+            int numberCorks = sCorks.getOrDefault(name, 0);
+            if (DEBUG) {
+                Log.d(TAG, String.format("uncorking %s: numberCorks=%s", name, numberCorks));
+            }
+
+            if (numberCorks < 1) {
+                throw new AssertionError("cork underflow: " + name);
+            }
+            if (numberCorks == 1) {
+                sCorks.remove(name);
+                invalidateCacheLocked(name);
+                if (DEBUG) {
+                    Log.d(TAG, "uncorked: " + name);
+                }
+            } else {
+                sCorks.put(name, numberCorks - 1);
+            }
+        }
+    }
+
+    /**
+     * Time-based automatic corking helper. This class allows providers of cached data to
+     * amortize the cost of cache invalidations by corking the cache immediately after a
+     * modification (instructing clients to bypass the cache temporarily) and automatically
+     * uncork after some period of time has elapsed.
+     *
+     * It's better to use explicit cork and uncork pairs that tighly surround big batches of
+     * invalidations, but it's not always practical to tell where these invalidation batches
+     * might occur. AutoCorker's time-based corking is a decent alternative.
+     */
+    public static final class AutoCorker {
+        public static final int DEFAULT_AUTO_CORK_DELAY_MS = 2000;
+
+        private final String mPropertyName;
+        private final int mAutoCorkDelayMs;
+        private final Object mLock = new Object();
+        @GuardedBy("mLock")
+        private long mUncorkDeadlineMs = -1;  // SystemClock.uptimeMillis()
+        @GuardedBy("mLock")
+        private Handler mHandler;
+
+        public AutoCorker(@NonNull String propertyName) {
+            this(propertyName, DEFAULT_AUTO_CORK_DELAY_MS);
+        }
+
+        public AutoCorker(@NonNull String propertyName, int autoCorkDelayMs) {
+            mPropertyName = propertyName;
+            mAutoCorkDelayMs = autoCorkDelayMs;
+            // We can't initialize mHandler here: when we're created, the main loop might not
+            // be set up yet! Wait until we have a main loop to initialize our
+            // corking callback.
+        }
+
+        public void autoCork() {
+            if (Looper.getMainLooper() == null) {
+                // We're not ready to auto-cork yet, so just invalidate the cache immediately.
+                if (DEBUG) {
+                    Log.w(TAG, "invalidating instead of autocorking early in init: "
+                            + mPropertyName);
+                }
+                PropertyInvalidatedCache.invalidateCache(mPropertyName);
+                return;
+            }
+            synchronized (mLock) {
+                boolean alreadyQueued = mUncorkDeadlineMs >= 0;
+                if (DEBUG) {
+                    Log.w(TAG, String.format(
+                                    "autoCork mUncorkDeadlineMs=%s", mUncorkDeadlineMs));
+                }
+                mUncorkDeadlineMs = SystemClock.uptimeMillis() + mAutoCorkDelayMs;
+                if (!alreadyQueued) {
+                    getHandlerLocked().sendEmptyMessageAtTime(0, mUncorkDeadlineMs);
+                    PropertyInvalidatedCache.corkInvalidations(mPropertyName);
+                }
+            }
+        }
+
+        private void handleMessage(Message msg) {
+            synchronized (mLock) {
+                if (DEBUG) {
+                    Log.w(TAG, String.format(
+                                    "handleMsesage mUncorkDeadlineMs=%s", mUncorkDeadlineMs));
+                }
+
+                if (mUncorkDeadlineMs < 0) {
+                    return;  // ???
+                }
+                long nowMs = SystemClock.uptimeMillis();
+                if (mUncorkDeadlineMs > nowMs) {
+                    mUncorkDeadlineMs = nowMs + mAutoCorkDelayMs;
+                    if (DEBUG) {
+                        Log.w(TAG, String.format(
+                                        "scheduling uncork at %s",
+                                        mUncorkDeadlineMs));
+                    }
+                    getHandlerLocked().sendEmptyMessageAtTime(0, mUncorkDeadlineMs);
+                    return;
+                }
+                if (DEBUG) {
+                    Log.w(TAG, "automatic uncorking " + mPropertyName);
+                }
+                mUncorkDeadlineMs = -1;
+                PropertyInvalidatedCache.uncorkInvalidations(mPropertyName);
+            }
+        }
+
+        @GuardedBy("mLock")
+        private Handler getHandlerLocked() {
+            if (mHandler == null) {
+                mHandler = new Handler(Looper.getMainLooper()) {
+                        @Override
+                        public void handleMessage(Message msg) {
+                            AutoCorker.this.handleMessage(msg);
+                        }
+                    };
+            }
+            return mHandler;
+        }
     }
 
     protected Result maybeCheckConsistency(Query query, Result proposedResult) {
@@ -470,5 +699,15 @@ public abstract class PropertyInvalidatedCache<Query, Result> {
      */
     public String queryToString(Query query) {
         return Objects.toString(query);
+    }
+
+    /**
+     * Disable all caches in the local process.  Once disabled it is not
+     * possible to re-enable caching in the current process.
+     */
+    @VisibleForTesting(visibility = VisibleForTesting.Visibility.PACKAGE)
+    public static void disableForTestMode() {
+        Log.d(TAG, "disabling all caches in the process");
+        sEnabled = false;
     }
 }

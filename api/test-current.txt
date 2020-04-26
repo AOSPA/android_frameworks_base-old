@@ -107,6 +107,7 @@ package android.app {
   }
 
   public class ActivityOptions {
+    method @NonNull public static android.app.ActivityOptions makeCustomAnimation(@NonNull android.content.Context, int, int, @Nullable android.os.Handler, @Nullable android.app.ActivityOptions.OnAnimationStartedListener, @Nullable android.app.ActivityOptions.OnAnimationFinishedListener);
     method public static void setExitTransitionTimeout(long);
     method public void setLaunchActivityType(int);
     method public void setLaunchTaskId(int);
@@ -115,8 +116,17 @@ package android.app {
     method public void setTaskOverlay(boolean, boolean);
   }
 
+  public static interface ActivityOptions.OnAnimationFinishedListener {
+    method public void onAnimationFinished();
+  }
+
+  public static interface ActivityOptions.OnAnimationStartedListener {
+    method public void onAnimationStarted();
+  }
+
   public class ActivityTaskManager {
     method @RequiresPermission(android.Manifest.permission.MANAGE_ACTIVITY_STACKS) public void clearLaunchParamsForPackages(java.util.List<java.lang.String>);
+    method public static boolean currentUiModeSupportsErrorDialogs(@NonNull android.content.Context);
     method @RequiresPermission(android.Manifest.permission.MANAGE_ACTIVITY_STACKS) public String listAllStacks();
     method @RequiresPermission(android.Manifest.permission.MANAGE_ACTIVITY_STACKS) public void moveTaskToStack(int, int, boolean);
     method @RequiresPermission(android.Manifest.permission.MANAGE_ACTIVITY_STACKS) public boolean moveTopActivityToPinnedStack(int, android.graphics.Rect);
@@ -142,6 +152,7 @@ package android.app {
     ctor public ActivityView(android.content.Context, android.util.AttributeSet);
     ctor public ActivityView(android.content.Context, android.util.AttributeSet, int);
     ctor public ActivityView(android.content.Context, android.util.AttributeSet, int, boolean);
+    ctor public ActivityView(@NonNull android.content.Context, @NonNull android.util.AttributeSet, int, boolean, boolean);
     method public int getVirtualDisplayId();
     method public void onLayout(boolean, int, int, int, int);
     method public void onLocationChanged();
@@ -492,6 +503,11 @@ package android.app {
     method public boolean isRecentsDisabled();
     method public boolean isSearchDisabled();
     method public boolean isStatusBarExpansionDisabled();
+  }
+
+  public class TaskInfo {
+    method @NonNull public android.content.res.Configuration getConfiguration();
+    method @NonNull public android.window.WindowContainerToken getToken();
   }
 
   public class TimePickerDialog extends android.app.AlertDialog implements android.content.DialogInterface.OnClickListener android.widget.TimePicker.OnTimeChangedListener {
@@ -1307,6 +1323,34 @@ package android.hardware.lights {
     method @NonNull public android.hardware.lights.LightsRequest build();
     method @NonNull public android.hardware.lights.LightsRequest.Builder clearLight(@NonNull android.hardware.lights.Light);
     method @NonNull public android.hardware.lights.LightsRequest.Builder setLight(@NonNull android.hardware.lights.Light, @NonNull android.hardware.lights.LightState);
+  }
+
+}
+
+package android.hardware.soundtrigger {
+
+  public class KeyphraseEnrollmentInfo {
+    ctor public KeyphraseEnrollmentInfo(@NonNull android.content.pm.PackageManager);
+    method @Nullable public android.hardware.soundtrigger.KeyphraseMetadata getKeyphraseMetadata(@NonNull String, @NonNull java.util.Locale);
+    method @Nullable public android.content.Intent getManageKeyphraseIntent(int, @NonNull String, @NonNull java.util.Locale);
+    method @NonNull public String getParseError();
+    method @NonNull public java.util.Collection<android.hardware.soundtrigger.KeyphraseMetadata> listKeyphraseMetadata();
+    field public static final int MANAGE_ACTION_ENROLL = 0; // 0x0
+    field public static final int MANAGE_ACTION_RE_ENROLL = 1; // 0x1
+    field public static final int MANAGE_ACTION_UN_ENROLL = 2; // 0x2
+  }
+
+  public final class KeyphraseMetadata implements android.os.Parcelable {
+    ctor public KeyphraseMetadata(int, @NonNull String, @NonNull java.util.Set<java.util.Locale>, int);
+    method public int describeContents();
+    method public int getId();
+    method @NonNull public String getKeyphrase();
+    method public int getRecognitionModeFlags();
+    method @NonNull public java.util.Set<java.util.Locale> getSupportedLocales();
+    method public boolean supportsLocale(@Nullable java.util.Locale);
+    method public boolean supportsPhrase(@Nullable String);
+    method public void writeToParcel(@NonNull android.os.Parcel, int);
+    field @NonNull public static final android.os.Parcelable.Creator<android.hardware.soundtrigger.KeyphraseMetadata> CREATOR;
   }
 
 }
@@ -2264,7 +2308,11 @@ package android.os {
 
   public class Environment {
     method public static java.io.File buildPath(java.io.File, java.lang.String...);
+    method @NonNull public static java.io.File getOdmDirectory();
+    method @NonNull public static java.io.File getOemDirectory();
     method @NonNull public static java.io.File getProductDirectory();
+    method @NonNull public static java.io.File getSystemExtDirectory();
+    method @NonNull public static java.io.File getVendorDirectory();
   }
 
   public final class FileUtils {

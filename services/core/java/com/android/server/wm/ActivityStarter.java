@@ -169,7 +169,6 @@ class ActivityStarter {
 
     // The task display area to launch the activity onto, barring any strong reason to do otherwise.
     private TaskDisplayArea mPreferredTaskDisplayArea;
-    // The windowing mode to apply to the root task, if possible
     private int mPreferredWindowingMode;
 
     private Task mInTask;
@@ -1570,9 +1569,6 @@ class ActivityStarter {
         if (!mAvoidMoveToFront && mDoResume) {
             mTargetStack.getStack().moveToFront("reuseOrNewTask", targetTask);
             if (mOptions != null) {
-                if (mPreferredWindowingMode != WINDOWING_MODE_UNDEFINED) {
-                    mTargetStack.setWindowingMode(mPreferredWindowingMode);
-                }
                 if (mOptions.getTaskAlwaysOnTop()) {
                     mTargetStack.setAlwaysOnTop(true);
                 }

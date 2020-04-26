@@ -378,6 +378,7 @@ public final class NotificationEntry extends ListEntry {
     /**
      * Returns the data needed for a bubble for this notification, if it exists.
      */
+    @Nullable
     public Notification.BubbleMetadata getBubbleMetadata() {
         return mBubbleMetadata;
     }
@@ -385,7 +386,7 @@ public final class NotificationEntry extends ListEntry {
     /**
      * Sets bubble metadata for this notification.
      */
-    public void setBubbleMetadata(Notification.BubbleMetadata metadata) {
+    public void setBubbleMetadata(@Nullable Notification.BubbleMetadata metadata) {
         mBubbleMetadata = metadata;
     }
 
@@ -434,13 +435,18 @@ public final class NotificationEntry extends ListEntry {
         mRowController = controller;
     }
 
-    @Nullable
-    public List<NotificationEntry> getChildren() {
+    /**
+     * Get the children that are actually attached to this notification's row.
+     *
+     * TODO: Seems like most callers here should probably be using
+     * {@link com.android.systemui.statusbar.phone.NotificationGroupManager#getChildren}
+     */
+    public @Nullable List<NotificationEntry> getAttachedNotifChildren() {
         if (row == null) {
             return null;
         }
 
-        List<ExpandableNotificationRow> rowChildren = row.getNotificationChildren();
+        List<ExpandableNotificationRow> rowChildren = row.getAttachedChildren();
         if (rowChildren == null) {
             return null;
         }
@@ -748,7 +754,7 @@ public final class NotificationEntry extends ListEntry {
             return false;
         }
 
-        List<NotificationEntry> children = getChildren();
+        List<NotificationEntry> children = getAttachedNotifChildren();
         if (children != null && children.size() > 0) {
             for (int i = 0; i < children.size(); i++) {
                 NotificationEntry child =  children.get(i);

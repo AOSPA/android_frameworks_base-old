@@ -29,7 +29,6 @@ import android.widget.LinearLayout;
 
 import com.android.systemui.R;
 import com.android.systemui.media.MediaControlPanel;
-import com.android.systemui.statusbar.NotificationMediaManager;
 
 import java.util.concurrent.Executor;
 
@@ -47,13 +46,12 @@ public class QuickQSMediaPlayer extends MediaControlPanel {
      * Initialize mini media player for QQS
      * @param context
      * @param parent
-     * @param manager
      * @param foregroundExecutor
      * @param backgroundExecutor
      */
-    public QuickQSMediaPlayer(Context context, ViewGroup parent, NotificationMediaManager manager,
-            Executor foregroundExecutor, Executor backgroundExecutor) {
-        super(context, parent, manager, null, R.layout.qqs_media_panel, QQS_ACTION_IDS,
+    public QuickQSMediaPlayer(Context context, ViewGroup parent, Executor foregroundExecutor,
+            Executor backgroundExecutor) {
+        super(context, parent, null, R.layout.qqs_media_panel, QQS_ACTION_IDS,
                 foregroundExecutor, backgroundExecutor);
     }
 
@@ -61,6 +59,7 @@ public class QuickQSMediaPlayer extends MediaControlPanel {
      * Update media panel view for the given media session
      * @param token token for this media session
      * @param icon app notification icon
+     * @param largeIcon notification's largeIcon, used as a fallback for album art
      * @param iconColor foreground color (for text, icons)
      * @param bgColor background color
      * @param actionsContainer a LinearLayout containing the media action buttons
@@ -69,8 +68,9 @@ public class QuickQSMediaPlayer extends MediaControlPanel {
      * @param contentIntent Intent to send when user taps on the view
      * @param key original notification's key
      */
-    public void setMediaSession(MediaSession.Token token, Icon icon, int iconColor, int bgColor,
-            View actionsContainer, int[] actionsToShow, PendingIntent contentIntent, String key) {
+    public void setMediaSession(MediaSession.Token token, Drawable icon, Icon largeIcon,
+            int iconColor, int bgColor, View actionsContainer, int[] actionsToShow,
+            PendingIntent contentIntent, String key) {
         // Only update if this is a different session and currently playing
         String oldPackage = "";
         if (getController() != null) {
@@ -85,7 +85,7 @@ public class QuickQSMediaPlayer extends MediaControlPanel {
             return;
         }
 
-        super.setMediaSession(token, icon, iconColor, bgColor, contentIntent, null, key);
+        super.setMediaSession(token, icon, largeIcon, iconColor, bgColor, contentIntent, null, key);
 
         LinearLayout parentActionsLayout = (LinearLayout) actionsContainer;
         int i = 0;
