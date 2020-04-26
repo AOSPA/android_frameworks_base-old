@@ -29,7 +29,6 @@ import android.app.Application;
 import android.app.PendingIntent;
 import android.app.RemoteInput;
 import android.appwidget.AppWidgetHostView;
-import android.appwidget.AppWidgetManager;
 import android.compat.annotation.UnsupportedAppUsage;
 import android.content.Context;
 import android.content.ContextWrapper;
@@ -1214,7 +1213,7 @@ public class RemoteViews implements Parcelable, Filter {
 
         BitmapReflectionAction(Parcel in) {
             viewId = in.readInt();
-            methodName = in.readString();
+            methodName = in.readString8();
             bitmapId = in.readInt();
             bitmap = mBitmapCache.getBitmapForId(bitmapId);
         }
@@ -1222,7 +1221,7 @@ public class RemoteViews implements Parcelable, Filter {
         @Override
         public void writeToParcel(Parcel dest, int flags) {
             dest.writeInt(viewId);
-            dest.writeString(methodName);
+            dest.writeString8(methodName);
             dest.writeInt(bitmapId);
         }
 
@@ -1283,7 +1282,7 @@ public class RemoteViews implements Parcelable, Filter {
 
         ReflectionAction(Parcel in) {
             this.viewId = in.readInt();
-            this.methodName = in.readString();
+            this.methodName = in.readString8();
             this.type = in.readInt();
             //noinspection ConstantIfStatement
             if (false) {
@@ -1319,7 +1318,7 @@ public class RemoteViews implements Parcelable, Filter {
                     this.value = (char)in.readInt();
                     break;
                 case STRING:
-                    this.value = in.readString();
+                    this.value = in.readString8();
                     break;
                 case CHAR_SEQUENCE:
                     this.value = TextUtils.CHAR_SEQUENCE_CREATOR.createFromParcel(in);
@@ -1348,7 +1347,7 @@ public class RemoteViews implements Parcelable, Filter {
 
         public void writeToParcel(Parcel out, int flags) {
             out.writeInt(this.viewId);
-            out.writeString(this.methodName);
+            out.writeString8(this.methodName);
             out.writeInt(this.type);
             //noinspection ConstantIfStatement
             if (false) {
@@ -1384,7 +1383,7 @@ public class RemoteViews implements Parcelable, Filter {
                     out.writeInt((int)((Character)this.value).charValue());
                     break;
                 case STRING:
-                    out.writeString((String)this.value);
+                    out.writeString8((String)this.value);
                     break;
                 case CHAR_SEQUENCE:
                     TextUtils.writeToParcel((CharSequence)this.value, out, flags);
@@ -4131,18 +4130,8 @@ public class RemoteViews implements Parcelable, Filter {
             // The NEW_TASK flags are applied through the activity options and not as a part of
             // the call to startIntentSender() to ensure that they are consistently applied to
             // both mutable and immutable PendingIntents.
-            final IntentSender intentSender = pendingIntent.getIntentSender();
-            final int uid = intentSender.getCreatorUid();
-            final String packageName = intentSender.getCreatorPackage();
-            if (uid != -1 && packageName != null) {
-                final AppWidgetManager appWidgetManager =
-                        context.getSystemService(AppWidgetManager.class);
-                if (appWidgetManager != null) {
-                    appWidgetManager.noteAppWidgetTapped(uid, packageName);
-                }
-            }
             context.startIntentSender(
-                    intentSender, options.first,
+                    pendingIntent.getIntentSender(), options.first,
                     0, 0, 0, options.second.toBundle());
         } catch (IntentSender.SendIntentException e) {
             Log.e(LOG_TAG, "Cannot send pending intent: ", e);

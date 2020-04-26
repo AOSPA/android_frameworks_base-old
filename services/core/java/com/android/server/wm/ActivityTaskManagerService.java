@@ -2003,7 +2003,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
             if (self.isState(
                     ActivityStack.ActivityState.RESUMED, ActivityStack.ActivityState.PAUSING)) {
                 self.getDisplay().mDisplayContent.mAppTransition.overridePendingAppTransition(
-                        packageName, enterAnim, exitAnim, null);
+                        packageName, enterAnim, exitAnim, null, null);
             }
 
             Binder.restoreCallingIdentity(origId);
@@ -4065,7 +4065,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         return r != null
                 && r.getRootTask() != null
                 && r.inPinnedWindowingMode()
-                && r.getRootTask().isInStackLocked(r) != null;
+                && r.getRootTask().isInTask(r) != null;
     }
 
     @Override
@@ -5400,14 +5400,11 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         final boolean inputMethodExists = !(config.keyboard == Configuration.KEYBOARD_NOKEYS
                 && config.touchscreen == Configuration.TOUCHSCREEN_NOTOUCH
                 && config.navigation == Configuration.NAVIGATION_NONAV);
-        int modeType = config.uiMode & Configuration.UI_MODE_TYPE_MASK;
-        final boolean uiModeSupportsDialogs = (modeType != Configuration.UI_MODE_TYPE_CAR
-                && !(modeType == Configuration.UI_MODE_TYPE_WATCH && Build.IS_USER)
-                && modeType != Configuration.UI_MODE_TYPE_TELEVISION
-                && modeType != Configuration.UI_MODE_TYPE_VR_HEADSET);
         final boolean hideDialogsSet = Settings.Global.getInt(mContext.getContentResolver(),
                 HIDE_ERROR_DIALOGS, 0) != 0;
-        mShowDialogs = inputMethodExists && uiModeSupportsDialogs && !hideDialogsSet;
+        mShowDialogs = inputMethodExists
+                && ActivityTaskManager.currentUiModeSupportsErrorDialogs(mContext)
+                && !hideDialogsSet;
     }
 
     private void updateFontScaleIfNeeded(@UserIdInt int userId) {
@@ -6607,7 +6604,6 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
                     }
                     return;
                 }
-                process.mIsImeProcess = true;
                 process.registerDisplayConfigurationListener(displayContent);
             }
         }

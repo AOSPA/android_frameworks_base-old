@@ -62,6 +62,8 @@ import static android.view.WindowManager.LayoutParams.TYPE_TOAST;
 import static android.view.WindowManager.LayoutParams.TYPE_VOICE_INTERACTION;
 import static android.view.WindowManager.LayoutParams.TYPE_WALLPAPER;
 import static android.view.WindowManager.LayoutParams.isSystemAlertWindowType;
+import static android.view.WindowManager.ScreenshotSource.SCREENSHOT_KEY_CHORD;
+import static android.view.WindowManager.ScreenshotSource.SCREENSHOT_KEY_OTHER;
 import static android.view.WindowManager.TAKE_SCREENSHOT_FULLSCREEN;
 import static android.view.WindowManager.TAKE_SCREENSHOT_SELECTED_REGION;
 import static android.view.WindowManagerGlobal.ADD_OKAY;
@@ -1337,6 +1339,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 mScreenshotChordVolumeDownKeyConsumed = true;
                 cancelPendingPowerKeyAction();
                 mScreenshotRunnable.setScreenshotType(TAKE_SCREENSHOT_FULLSCREEN);
+                mScreenshotRunnable.setScreenshotSource(SCREENSHOT_KEY_CHORD);
                 mHandler.postDelayed(mScreenshotRunnable, getScreenshotChordLongPressDelay());
             }
         }
@@ -1420,14 +1423,19 @@ public class PhoneWindowManager implements WindowManagerPolicy {
 
     private class ScreenshotRunnable implements Runnable {
         private int mScreenshotType = TAKE_SCREENSHOT_FULLSCREEN;
+        private int mScreenshotSource = SCREENSHOT_KEY_OTHER;
 
         public void setScreenshotType(int screenshotType) {
             mScreenshotType = screenshotType;
         }
 
+        public void setScreenshotSource(int screenshotSource) {
+            mScreenshotSource = screenshotSource;
+        }
+
         @Override
         public void run() {
-            mDefaultDisplayPolicy.takeScreenshot(mScreenshotType);
+            mDefaultDisplayPolicy.takeScreenshot(mScreenshotType, mScreenshotSource);
         }
     }
 
@@ -2702,6 +2710,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 int type = event.isShiftPressed() ? TAKE_SCREENSHOT_SELECTED_REGION
                         : TAKE_SCREENSHOT_FULLSCREEN;
                 mScreenshotRunnable.setScreenshotType(type);
+                mScreenshotRunnable.setScreenshotSource(SCREENSHOT_KEY_OTHER);
                 mHandler.post(mScreenshotRunnable);
                 return -1;
             }
@@ -2718,6 +2727,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         } else if (keyCode == KeyEvent.KEYCODE_SYSRQ) {
             if (down && repeatCount == 0) {
                 mScreenshotRunnable.setScreenshotType(TAKE_SCREENSHOT_FULLSCREEN);
+                mScreenshotRunnable.setScreenshotSource(SCREENSHOT_KEY_OTHER);
                 mHandler.post(mScreenshotRunnable);
             }
             return -1;
