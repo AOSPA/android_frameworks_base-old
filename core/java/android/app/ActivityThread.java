@@ -2236,7 +2236,9 @@ public final class ActivityThread extends ClientTransactionHandler {
             LoadedApk packageInfo = ref != null ? ref.get() : null;
             if (ai != null && packageInfo != null) {
                 if (!isLoadedApkResourceDirsUpToDate(packageInfo, ai)) {
-                    packageInfo.updateApplicationInfo(ai, null);
+                    List<String> oldPaths = new ArrayList<>();
+                    LoadedApk.makePaths(this, ai, oldPaths);
+                    packageInfo.updateApplicationInfo(ai, oldPaths);
                 }
 
                 if (packageInfo.isSecurityViolation()
@@ -2324,7 +2326,9 @@ public final class ActivityThread extends ClientTransactionHandler {
 
             if (packageInfo != null) {
                 if (!isLoadedApkResourceDirsUpToDate(packageInfo, aInfo)) {
-                    packageInfo.updateApplicationInfo(aInfo, null);
+                    List<String> oldPaths = new ArrayList<>();
+                    LoadedApk.makePaths(this, aInfo, oldPaths);
+                    packageInfo.updateApplicationInfo(aInfo, oldPaths);
                 }
 
                 return packageInfo;
@@ -4974,8 +4978,10 @@ public final class ActivityThread extends ClientTransactionHandler {
     ActivityClientRecord performDestroyActivity(IBinder token, boolean finishing,
             int configChanges, boolean getNonConfigInstance, String reason) {
         ActivityClientRecord r = mActivities.get(token);
+        Class<? extends Activity> activityClass = null;
         if (localLOGV) Slog.v(TAG, "Performing finish of " + r);
         if (r != null) {
+            activityClass = r.activity.getClass();
             r.activity.mConfigChangeFlags |= configChanges;
             if (finishing) {
                 r.activity.mFinished = true;
@@ -5028,6 +5034,7 @@ public final class ActivityThread extends ClientTransactionHandler {
         synchronized (mResourcesManager) {
             mActivities.remove(token);
         }
+        StrictMode.decrementExpectedActivityCount(activityClass);
         return r;
     }
 
@@ -5047,7 +5054,6 @@ public final class ActivityThread extends ClientTransactionHandler {
         ActivityClientRecord r = performDestroyActivity(token, finishing,
                 configChanges, getNonConfigInstance, reason);
         if (r != null) {
-            Class<? extends Activity> activityClass = r.activity.getClass();
             cleanUpPendingRemoveWindows(r, finishing);
             WindowManager wm = r.activity.getWindowManager();
             View v = r.activity.mDecor;
@@ -5072,14 +5078,14 @@ public final class ActivityThread extends ClientTransactionHandler {
                 }
                 if (wtoken != null && r.mPendingRemoveWindow == null) {
                     WindowManagerGlobal.getInstance().closeAll(wtoken,
-                            activityClass.getName(), "Activity");
+                            r.activity.getClass().getName(), "Activity");
                 } else if (r.mPendingRemoveWindow != null) {
                     // We're preserving only one window, others should be closed so app views
                     // will be detached before the final tear down. It should be done now because
                     // some components (e.g. WebView) rely on detach callbacks to perform receiver
                     // unregister and other cleanup.
                     WindowManagerGlobal.getInstance().closeAllExceptView(token, v,
-                            activityClass.getName(), "Activity");
+                            r.activity.getClass().getName(), "Activity");
                 }
                 r.activity.mDecor = null;
             }
@@ -5091,23 +5097,18 @@ public final class ActivityThread extends ClientTransactionHandler {
                 // about leaking windows, because that is a bug, so if they are
                 // using this recreate facility then they get to live with leaks.
                 WindowManagerGlobal.getInstance().closeAll(token,
-                        activityClass.getName(), "Activity");
+                        r.activity.getClass().getName(), "Activity");
             }
 
             // Mocked out contexts won't be participating in the normal
             // process lifecycle, but if we're running with a proper
             // ApplicationContext we need to have it tear down things
             // cleanly.
-            final ContextImpl impl = ContextImpl.getImpl(r.activity);
-            if (impl != null) {
-                impl.scheduleFinalCleanup(activityClass.getName(), "Activity");
+            Context c = r.activity.getBaseContext();
+            if (c instanceof ContextImpl) {
+                ((ContextImpl) c).scheduleFinalCleanup(
+                        r.activity.getClass().getName(), "Activity");
             }
-
-            r.activity = null;
-            r.window = null;
-            r.hideForNow = false;
-            r.nextIdle = null;
-            StrictMode.decrementExpectedActivityCount(activityClass);
         }
         if (finishing) {
             try {
@@ -5337,6 +5338,10 @@ public final class ActivityThread extends ClientTransactionHandler {
 
         handleDestroyActivity(r.token, false, configChanges, true, reason);
 
+        r.activity = null;
+        r.window = null;
+        r.hideForNow = false;
+        r.nextIdle = null;
         // Merge any pending results and pending intents; don't just replace them
         if (pendingResults != null) {
             if (r.pendingResults == null) {

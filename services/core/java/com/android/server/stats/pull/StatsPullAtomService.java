@@ -98,6 +98,7 @@ import android.os.connectivity.WifiActivityEnergyInfo;
 import android.os.storage.DiskInfo;
 import android.os.storage.StorageManager;
 import android.os.storage.VolumeInfo;
+import android.provider.DeviceConfig;
 import android.provider.Settings;
 import android.stats.storage.StorageEnums;
 import android.telephony.ModemActivityInfo;
@@ -204,6 +205,9 @@ public class StatsPullAtomService extends SystemService {
     private static final int CPU_TIME_PER_THREAD_FREQ_MAX_NUM_FREQUENCIES = 8;
     private static final int OP_FLAGS_PULLED = OP_FLAG_SELF | OP_FLAG_TRUSTED_PROXY;
     private static final String COMMON_PERMISSION_PREFIX = "android.permission.";
+    private static final String APP_OPS_TARGET_COLLECTION_SIZE = "app_ops_target_collection_size";
+    private static final String DANGEROUS_PERMISSION_STATE_SAMPLE_RATE =
+            "dangerous_permission_state_sample_rate";
 
     private final Object mNetworkStatsLock = new Object();
     @GuardedBy("mNetworkStatsLock")
@@ -2581,6 +2585,8 @@ public class StatsPullAtomService extends SystemService {
 
     int pullDangerousPermissionState(int atomTag, List<StatsEvent> pulledData) {
         final long token = Binder.clearCallingIdentity();
+        float samplingRate = DeviceConfig.getFloat(DeviceConfig.NAMESPACE_PERMISSIONS,
+                DANGEROUS_PERMISSION_STATE_SAMPLE_RATE, 0.02f);
         Set<Integer> reportedUids = new HashSet<>();
         try {
             PackageManager pm = mContext.getPackageManager();
@@ -2609,7 +2615,7 @@ public class StatsPullAtomService extends SystemService {
                     reportedUids.add(pkg.applicationInfo.uid);
 
                     if (atomTag == FrameworkStatsLog.DANGEROUS_PERMISSION_STATE_SAMPLED
-                            && ThreadLocalRandom.current().nextFloat() > 0.01f) {
+                            && ThreadLocalRandom.current().nextFloat() > samplingRate) {
                         continue;
                     }
 
@@ -2913,7 +2919,10 @@ public class StatsPullAtomService extends SystemService {
             HistoricalOps histOps = ops.get(EXTERNAL_STATS_SYNC_TIMEOUT_MILLIS,
                     TimeUnit.MILLISECONDS);
             if (mAppOpsSamplingRate == 0) {
-                mAppOpsSamplingRate = constrain((5000 * 100) / estimateAppOpsSize(), 1, 100);
+                int appOpsTargetCollectionSize = DeviceConfig.getInt(
+                        DeviceConfig.NAMESPACE_PERMISSIONS, APP_OPS_TARGET_COLLECTION_SIZE, 5000);
+                mAppOpsSamplingRate = constrain(
+                        (appOpsTargetCollectionSize * 100) / estimateAppOpsSize(), 1, 100);
             }
             processHistoricalOps(histOps, atomTag, pulledData);
         } catch (Throwable t) {
