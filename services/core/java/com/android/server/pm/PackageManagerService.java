@@ -2379,7 +2379,7 @@ public class PackageManagerService extends IPackageManager.Stub
         for (String packageName : packages) {
             PackageSetting setting = mSettings.mPackages.get(packageName);
             if (setting != null
-                    && shouldFilterApplicationLocked(setting, callingUid, callingUserId)) {
+                    && !shouldFilterApplicationLocked(setting, callingUid, callingUserId)) {
                 notifyInstallObserver(packageName);
             }
         }
@@ -11236,8 +11236,16 @@ public class PackageManagerService extends IPackageManager.Stub
         boolean needToDeriveAbi = (scanFlags & SCAN_FIRST_BOOT_OR_UPGRADE) != 0;
         if (!needToDeriveAbi) {
             if (pkgSetting != null) {
-                primaryCpuAbiFromSettings = pkgSetting.primaryCpuAbiString;
-                secondaryCpuAbiFromSettings = pkgSetting.secondaryCpuAbiString;
+                // TODO(b/154610922): if it is not first boot or upgrade, we should directly use
+                // API info from existing package setting. However, stub packages currently do not
+                // preserve ABI info, thus the special condition check here. Remove the special
+                // check after we fix the stub generation.
+                if (pkgSetting.pkg != null && pkgSetting.pkg.isStub()) {
+                    needToDeriveAbi = true;
+                } else {
+                    primaryCpuAbiFromSettings = pkgSetting.primaryCpuAbiString;
+                    secondaryCpuAbiFromSettings = pkgSetting.secondaryCpuAbiString;
+                }
             } else {
                 // Re-scanning a system package after uninstalling updates; need to derive ABI
                 needToDeriveAbi = true;
@@ -20907,8 +20915,11 @@ public class PackageManagerService extends IPackageManager.Stub
         final int[] instantUserIds = isInstantApp ? new int[] { userId } : EMPTY_INT_ARRAY;
         final SparseArray<int[]> broadcastWhitelist;
         synchronized (mLock) {
-            broadcastWhitelist = isInstantApp ? null : mAppsFilter.getVisibilityWhitelist(
-                    getPackageSettingInternal(packageName, Process.SYSTEM_UID),
+            PackageSetting setting = getPackageSettingInternal(packageName, Process.SYSTEM_UID);
+            if (setting == null) {
+                return;
+            }
+            broadcastWhitelist = isInstantApp ? null : mAppsFilter.getVisibilityWhitelist(setting,
                     userIds, mSettings.mPackages);
         }
         sendPackageBroadcast(Intent.ACTION_PACKAGE_CHANGED,  packageName, extras, flags, null, null,
@@ -21077,11 +21088,15 @@ public class PackageManagerService extends IPackageManager.Stub
                 false /* requireFullPermission */, false /* checkShell */, "get enabled");
         // reader
         synchronized (mLock) {
-            if (shouldFilterApplicationLocked(
-                    mSettings.getPackageLPr(packageName), callingUid, userId)) {
-                return COMPONENT_ENABLED_STATE_DISABLED;
+            try {
+                if (shouldFilterApplicationLocked(
+                        mSettings.getPackageLPr(packageName), callingUid, userId)) {
+                    throw new PackageManager.NameNotFoundException(packageName);
+                }
+                return mSettings.getApplicationEnabledSettingLPr(packageName, userId);
+            } catch (PackageManager.NameNotFoundException e) {
+                throw new IllegalArgumentException("Unknown package: " + packageName);
             }
-            return mSettings.getApplicationEnabledSettingLPr(packageName, userId);
         }
     }
 
@@ -21093,12 +21108,16 @@ public class PackageManagerService extends IPackageManager.Stub
         mPermissionManager.enforceCrossUserPermission(callingUid, userId,
                 false /*requireFullPermission*/, false /*checkShell*/, "getComponentEnabled");
         synchronized (mLock) {
-            if (shouldFilterApplicationLocked(
-                    mSettings.getPackageLPr(component.getPackageName()), callingUid,
-                    component, TYPE_UNKNOWN, userId)) {
-                return COMPONENT_ENABLED_STATE_DISABLED;
+            try {
+                if (shouldFilterApplicationLocked(
+                        mSettings.getPackageLPr(component.getPackageName()), callingUid,
+                        component, TYPE_UNKNOWN, userId)) {
+                    throw new PackageManager.NameNotFoundException(component.getPackageName());
+                }
+                return mSettings.getComponentEnabledSettingLPr(component, userId);
+            } catch (PackageManager.NameNotFoundException e) {
+                throw new IllegalArgumentException("Unknown component: " + component);
             }
-            return mSettings.getComponentEnabledSettingLPr(component, userId);
         }
     }
 

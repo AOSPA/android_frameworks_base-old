@@ -212,6 +212,7 @@ auto IncrementalService::IncFsMount::makeStorage(StorageId id) -> StorageMap::it
 template <class Func>
 static auto makeCleanup(Func&& f) {
     auto deleter = [f = std::move(f)](auto) { f(); };
+    // &f is a dangling pointer here, but we actually never use it as deleter moves it in.
     return std::unique_ptr<Func, decltype(deleter)>(&f, std::move(deleter));
 }
 
@@ -719,7 +720,7 @@ int IncrementalService::bind(StorageId storage, std::string_view source, std::st
         LOG(ERROR) << "no storage";
         return -EINVAL;
     }
-    std::string normSource = normalizePathToStorageLocked(ifs, storageInfo, source);
+    std::string normSource = normalizePathToStorageLocked(*ifs, storageInfo, source);
     if (normSource.empty()) {
         LOG(ERROR) << "invalid source path";
         return -EINVAL;
@@ -760,7 +761,10 @@ int IncrementalService::unbind(StorageId storage, std::string_view target) {
     std::unique_lock l2(ifs->lock);
     if (ifs->bindPoints.size() <= 1) {
         ifs->bindPoints.clear();
-        deleteStorageLocked(*ifs, std::move(l2));
+        std::thread([this, ifs, l2 = std::move(l2)]() mutable {
+            mJni->initializeForCurrentThread();
+            deleteStorageLocked(*ifs, std::move(l2));
+        }).detach();
     } else {
         const std::string savedFile = std::move(bindIt->second.savedFilename);
         ifs->bindPoints.erase(bindIt);
@@ -769,11 +773,12 @@ int IncrementalService::unbind(StorageId storage, std::string_view target) {
             mIncFs->unlink(ifs->control, path::join(ifs->root, constants().mount, savedFile));
         }
     }
+
     return 0;
 }
 
 std::string IncrementalService::normalizePathToStorageLocked(
-        const IfsMountPtr& incfs, IncFsMount::StorageMap::iterator storageIt,
+        const IncFsMount& incfs, IncFsMount::StorageMap::const_iterator storageIt,
         std::string_view path) const {
     if (!path::isAbsolute(path)) {
         return path::normalize(path::join(storageIt->second.name, path));
@@ -783,19 +788,18 @@ std::string IncrementalService::normalizePathToStorageLocked(
         return normPath;
     }
     // not that easy: need to find if any of the bind points match
-    const auto bindIt = findParentPath(incfs->bindPoints, normPath);
-    if (bindIt == incfs->bindPoints.end()) {
+    const auto bindIt = findParentPath(incfs.bindPoints, normPath);
+    if (bindIt == incfs.bindPoints.end()) {
         return {};
     }
     return path::join(bindIt->second.sourceDir, path::relativize(bindIt->first, normPath));
 }
 
-std::string IncrementalService::normalizePathToStorage(const IncrementalService::IfsMountPtr& ifs,
-                                                       StorageId storage,
+std::string IncrementalService::normalizePathToStorage(const IncFsMount& ifs, StorageId storage,
                                                        std::string_view path) const {
-    std::unique_lock l(ifs->lock);
-    const auto storageInfo = ifs->storages.find(storage);
-    if (storageInfo == ifs->storages.end()) {
+    std::unique_lock l(ifs.lock);
+    const auto storageInfo = ifs.storages.find(storage);
+    if (storageInfo == ifs.storages.end()) {
         return {};
     }
     return normalizePathToStorageLocked(ifs, storageInfo, path);
@@ -804,7 +808,7 @@ std::string IncrementalService::normalizePathToStorage(const IncrementalService:
 int IncrementalService::makeFile(StorageId storage, std::string_view path, int mode, FileId id,
                                  incfs::NewFileParams params) {
     if (auto ifs = getIfs(storage)) {
-        std::string normPath = normalizePathToStorage(ifs, storage, path);
+        std::string normPath = normalizePathToStorage(*ifs, storage, path);
         if (normPath.empty()) {
             LOG(ERROR) << "Internal error: storageId " << storage
                        << " failed to normalize: " << path;
@@ -822,7 +826,7 @@ int IncrementalService::makeFile(StorageId storage, std::string_view path, int m
 
 int IncrementalService::makeDir(StorageId storageId, std::string_view path, int mode) {
     if (auto ifs = getIfs(storageId)) {
-        std::string normPath = normalizePathToStorage(ifs, storageId, path);
+        std::string normPath = normalizePathToStorage(*ifs, storageId, path);
         if (normPath.empty()) {
             return -EINVAL;
         }
@@ -836,21 +840,16 @@ int IncrementalService::makeDirs(StorageId storageId, std::string_view path, int
     if (!ifs) {
         return -EINVAL;
     }
+    return makeDirs(*ifs, storageId, path, mode);
+}
+
+int IncrementalService::makeDirs(const IncFsMount& ifs, StorageId storageId, std::string_view path,
+                                 int mode) {
     std::string normPath = normalizePathToStorage(ifs, storageId, path);
     if (normPath.empty()) {
         return -EINVAL;
     }
-    auto err = mIncFs->makeDir(ifs->control, normPath, mode);
-    if (err == -EEXIST) {
-        return 0;
-    }
-    if (err != -ENOENT) {
-        return err;
-    }
-    if (auto err = makeDirs(storageId, path::dirname(normPath), mode)) {
-        return err;
-    }
-    return mIncFs->makeDir(ifs->control, normPath, mode);
+    return mIncFs->makeDirs(ifs.control, normPath, mode);
 }
 
 int IncrementalService::link(StorageId sourceStorageId, std::string_view oldPath,
@@ -864,8 +863,8 @@ int IncrementalService::link(StorageId sourceStorageId, std::string_view oldPath
         return -EINVAL;
     }
     l.unlock();
-    std::string normOldPath = normalizePathToStorage(ifsSrc, sourceStorageId, oldPath);
-    std::string normNewPath = normalizePathToStorage(ifsSrc, destStorageId, newPath);
+    std::string normOldPath = normalizePathToStorage(*ifsSrc, sourceStorageId, oldPath);
+    std::string normNewPath = normalizePathToStorage(*ifsSrc, destStorageId, newPath);
     if (normOldPath.empty() || normNewPath.empty()) {
         LOG(ERROR) << "Invalid paths in link(): " << normOldPath << " | " << normNewPath;
         return -EINVAL;
@@ -875,7 +874,7 @@ int IncrementalService::link(StorageId sourceStorageId, std::string_view oldPath
 
 int IncrementalService::unlink(StorageId storage, std::string_view path) {
     if (auto ifs = getIfs(storage)) {
-        std::string normOldPath = normalizePathToStorage(ifs, storage, path);
+        std::string normOldPath = normalizePathToStorage(*ifs, storage, path);
         return mIncFs->unlink(ifs->control, normOldPath);
     }
     return -EINVAL;
@@ -960,7 +959,7 @@ RawMetadata IncrementalService::getMetadata(StorageId storage, std::string_view 
     if (!ifs) {
         return {};
     }
-    const auto normPath = normalizePathToStorage(ifs, storage, path);
+    const auto normPath = normalizePathToStorage(*ifs, storage, path);
     if (normPath.empty()) {
         return {};
     }
@@ -1363,7 +1362,7 @@ bool IncrementalService::configureNativeBinaries(StorageId storage, std::string_
     }
 
     // First prepare target directories if they don't exist yet
-    if (auto res = makeDirs(storage, libDirRelativePath, 0755)) {
+    if (auto res = makeDirs(*ifs, storage, libDirRelativePath, 0755)) {
         LOG(ERROR) << "Failed to prepare target lib directory " << libDirRelativePath
                    << " errno: " << res;
         return false;
@@ -1400,8 +1399,8 @@ bool IncrementalService::configureNativeBinaries(StorageId storage, std::string_
         auto startFileTs = Clock::now();
 
         const auto libName = path::basename(fileName);
-        const auto targetLibPath = path::join(libDirRelativePath, libName);
-        const auto targetLibPathAbsolute = normalizePathToStorage(ifs, storage, targetLibPath);
+        auto targetLibPath = path::join(libDirRelativePath, libName);
+        const auto targetLibPathAbsolute = normalizePathToStorage(*ifs, storage, targetLibPath);
         // If the extract file already exists, skip
         if (access(targetLibPathAbsolute.c_str(), F_OK) == 0) {
             if (perfLoggingEnabled()) {
@@ -1681,6 +1680,20 @@ void IncrementalService::DataLoaderStub::cleanupResources() {
     mId = kInvalidStorageId;
 }
 
+sp<content::pm::IDataLoader> IncrementalService::DataLoaderStub::getDataLoader() {
+    sp<IDataLoader> dataloader;
+    auto status = mService.mDataLoaderManager->getDataLoader(mId, &dataloader);
+    if (!status.isOk()) {
+        LOG(ERROR) << "Failed to get dataloader: " << status.toString8();
+        return {};
+    }
+    if (!dataloader) {
+        LOG(ERROR) << "DataLoader is null: " << status.toString8();
+        return {};
+    }
+    return dataloader;
+}
+
 bool IncrementalService::DataLoaderStub::requestCreate() {
     return setTargetStatus(IDataLoaderStatusListener::DATA_LOADER_CREATED);
 }
@@ -1714,29 +1727,35 @@ bool IncrementalService::DataLoaderStub::waitForStatus(int status, Clock::durati
                                        [this, status] { return mCurrentStatus == status; });
 }
 
+bool IncrementalService::DataLoaderStub::bind() {
+    bool result = false;
+    auto status = mService.mDataLoaderManager->bindToDataLoader(mId, mParams, this, &result);
+    if (!status.isOk() || !result) {
+        LOG(ERROR) << "Failed to bind a data loader for mount " << mId;
+        return false;
+    }
+    return true;
+}
+
 bool IncrementalService::DataLoaderStub::create() {
-    bool created = false;
-    auto status = mService.mDataLoaderManager->initializeDataLoader(mId, mParams, mControl, this,
-                                                                    &created);
-    if (!status.isOk() || !created) {
-        LOG(ERROR) << "Failed to create a data loader for mount " << mId;
+    auto dataloader = getDataLoader();
+    if (!dataloader) {
+        return false;
+    }
+    auto status = dataloader->create(mId, mParams, mControl, this);
+    if (!status.isOk()) {
+        LOG(ERROR) << "Failed to start DataLoader: " << status.toString8();
         return false;
     }
     return true;
 }
 
 bool IncrementalService::DataLoaderStub::start() {
-    sp<IDataLoader> dataloader;
-    auto status = mService.mDataLoaderManager->getDataLoader(mId, &dataloader);
-    if (!status.isOk()) {
-        LOG(ERROR) << "Failed to get dataloader: " << status.toString8();
-        return false;
-    }
+    auto dataloader = getDataLoader();
     if (!dataloader) {
-        LOG(ERROR) << "DataLoader is null: " << status.toString8();
         return false;
     }
-    status = dataloader->start(mId);
+    auto status = dataloader->start(mId);
     if (!status.isOk()) {
         LOG(ERROR) << "Failed to start DataLoader: " << status.toString8();
         return false;
@@ -1745,8 +1764,7 @@ bool IncrementalService::DataLoaderStub::start() {
 }
 
 bool IncrementalService::DataLoaderStub::destroy() {
-    mService.mDataLoaderManager->destroyDataLoader(mId);
-    return true;
+    return mService.mDataLoaderManager->unbindFromDataLoader(mId).isOk();
 }
 
 bool IncrementalService::DataLoaderStub::fsmStep() {
@@ -1781,6 +1799,8 @@ bool IncrementalService::DataLoaderStub::fsmStep() {
         case IDataLoaderStatusListener::DATA_LOADER_CREATED:
             switch (currentStatus) {
                 case IDataLoaderStatusListener::DATA_LOADER_DESTROYED:
+                    return bind();
+                case IDataLoaderStatusListener::DATA_LOADER_BOUND:
                     return create();
             }
             break;
@@ -1808,8 +1828,8 @@ binder::Status IncrementalService::DataLoaderStub::onStatusChanged(MountId mount
         if (mCurrentStatus == newStatus) {
             return binder::Status::ok();
         }
-        mCurrentStatus = newStatus;
         oldStatus = mCurrentStatus;
+        mCurrentStatus = newStatus;
         targetStatus = mTargetStatus;
     }
 

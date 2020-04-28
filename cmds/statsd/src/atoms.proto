@@ -46,6 +46,7 @@ import "frameworks/base/core/proto/android/stats/dnsresolver/dns_resolver.proto"
 import "frameworks/base/core/proto/android/stats/devicepolicy/device_policy.proto";
 import "frameworks/base/core/proto/android/stats/devicepolicy/device_policy_enums.proto";
 import "frameworks/base/core/proto/android/stats/docsui/docsui_enums.proto";
+import "frameworks/base/core/proto/android/stats/accessibility/accessibility_enums.proto";
 import "frameworks/base/core/proto/android/stats/enums.proto";
 import "frameworks/base/core/proto/android/stats/intelligence/enums.proto";
 import "frameworks/base/core/proto/android/stats/launcher/launcher.proto";
@@ -423,6 +424,9 @@ message Atom {
         PackageInstallerV2Reported package_installer_v2_reported = 263 [(module) = "framework"];
         UserLifecycleJourneyReported user_lifecycle_journey_reported = 264 [(module) = "framework"];
         UserLifecycleEventOccurred user_lifecycle_event_occurred = 265 [(module) = "framework"];
+        AccessibilityShortcutReported accessibility_shortcut_reported =
+            266 [(module) = "framework"];
+        AccessibilityServiceReported accessibility_service_reported = 267 [(module) = "framework"];
         SdkExtensionStatus sdk_extension_status = 354;
 
         // StatsdStats tracks platform atoms with ids upto 500.
@@ -664,7 +668,8 @@ message ActivityManagerSleepStateChanged {
         ASLEEP = 1;
         AWAKE = 2;
     }
-    optional State state = 1 [(state_field_option).exclusive_state = true];
+    optional State state = 1
+            [(state_field_option).exclusive_state = true, (state_field_option).nested = false];
 }
 
 /**
@@ -1181,7 +1186,8 @@ message BatterySaverModeStateChanged {
         OFF = 0;
         ON = 1;
     }
-    optional State state = 1;
+    optional State state = 1
+            [(state_field_option).exclusive_state = true, (state_field_option).nested = false];
 }
 
 /**
@@ -1191,7 +1197,8 @@ message BatterySaverModeStateChanged {
  *   frameworks/base/core/java/com/android/internal/os/BatteryStatsImpl.java
  */
 message DeviceIdleModeStateChanged {
-    optional android.server.DeviceIdleModeEnum state = 1;
+    optional android.server.DeviceIdleModeEnum state = 1
+            [(state_field_option).exclusive_state = true, (state_field_option).nested = false];
 }
 
 
@@ -1202,7 +1209,8 @@ message DeviceIdleModeStateChanged {
  *   frameworks/base/core/java/com/android/internal/os/BatteryStatsImpl.java
  */
 message DeviceIdlingModeStateChanged {
-    optional android.server.DeviceIdleModeEnum state = 1;
+    optional android.server.DeviceIdleModeEnum state = 1
+            [(state_field_option).exclusive_state = true, (state_field_option).nested = false];
 }
 
 /**
@@ -1246,7 +1254,8 @@ message ChargingStateChanged {
  */
 message PluggedStateChanged {
     // Whether the device is plugged in, from frameworks/base/core/proto/android/os/enums.proto.
-    optional android.os.BatteryPluggedStateEnum state = 1;
+    optional android.os.BatteryPluggedStateEnum state = 1
+            [(state_field_option).exclusive_state = true, (state_field_option).nested = false];
 }
 
 /**
@@ -2710,8 +2719,9 @@ message UsbConnectorStateChanged {
         STATE_DISCONNECTED = 0;
         STATE_CONNECTED = 1;
     }
-    optional State state = 1;
-    optional string id = 2;
+    optional State state = 1
+            [(state_field_option).exclusive_state = true, (state_field_option).nested = false];
+    optional string id = 2 [(state_field_option).primary_field = true];
     // Last active session in ms.
     // 0 when the port is in connected state.
     optional int64 last_connect_duration_millis = 3;
@@ -3594,11 +3604,8 @@ message OverlayStateChanged {
         ENTERED = 1;
         EXITED = 2;
     }
-    optional State state = 4 [
-        (state_field_option).exclusive_state = true,
-        (state_field_option).nested = false,
-        (state_field_option).default_state_value = 2
-    ];
+    optional State state = 4
+            [(state_field_option).exclusive_state = true, (state_field_option).nested = false];
 }
 
 /**
@@ -8996,7 +9003,7 @@ message AppFreezeChanged {
  * Each pull creates multiple atoms, one for each call. The sequence is randomized when pulled.
  *
  * Pulled from:
- *   frameworks/opt/telephony/src/java/com/android/internal/telephony/metrics/PersistPullers.java
+ *   frameworks/opt/telephony/src/java/com/android/internal/telephony/metrics/MetricsCollector.java
  */
 message VoiceCallSession {
     // Bearer (IMS or CS) when the call started.
@@ -9060,9 +9067,7 @@ message VoiceCallSession {
     // See https://source.android.com/devices/tech/config/carrierid.
     optional int32 carrier_id = 18;
 
-    // Whether an SRVCC has been completed successfully.
-    // SRVCC (CS fallback) should be recorded in the IMS call since there will be no more SRVCC
-    // events once the call is switched to CS.
+    // Whether an SRVCC has been completed successfully for this call.
     optional bool srvcc_completed = 19;
 
     // Number of SRVCC failures.
@@ -9071,7 +9076,8 @@ message VoiceCallSession {
     // Number of SRVCC cancellations.
     optional int64 srvcc_cancellation_count = 21;
 
-    // Whether the Real-Time Text (RTT) was ever used in the call.
+    // Whether the Real-Time Text (RTT) was ever used in the call (rather than whether RTT was
+    // enabled in the dialer's settings).
     optional bool rtt_enabled = 22;
 
     // Whether this was an emergency call.
@@ -9088,7 +9094,7 @@ message VoiceCallSession {
  * time. The atom will be skipped if not enough data is available.
  *
  * Pulled from:
- *   frameworks/opt/telephony/src/java/com/android/internal/telephony/metrics/PersistPullers.java
+ *   frameworks/opt/telephony/src/java/com/android/internal/telephony/metrics/MetricsCollector.java
  */
 message VoiceCallRatUsage {
     // Carrier ID (https://source.android.com/devices/tech/config/carrierid).
@@ -9109,7 +9115,7 @@ message VoiceCallRatUsage {
  * Pulls the number of active SIM slots and SIMs/eSIM profiles.
  *
  * Pulled from:
- *   frameworks/opt/telephony/src/java/com/android/internal/telephony/metrics/NonPersistPullers.java
+ *   frameworks/opt/telephony/src/java/com/android/internal/telephony/metrics/MetricsCollector.java
  */
 message SimSlotState {
     // Number of active SIM slots (both physical and eSIM profiles) in the device.
@@ -9130,7 +9136,7 @@ message SimSlotState {
  * This atom reports the capabilities of the device, rather than the network it has access to.
  *
  * Pulled from:
- *   frameworks/opt/telephony/src/java/com/android/internal/telephony/metrics/NonPersistPullers.java
+ *   frameworks/opt/telephony/src/java/com/android/internal/telephony/metrics/MetricsCollector.java
  */
 message SupportedRadioAccessFamily {
     // A bitmask of supported radio technologies.
@@ -9440,4 +9446,39 @@ message UserLifecycleEventOccurred {
         FINISH = 2;
     }
     optional State state = 4; // Represents the state of an event (beginning/ending)
+}
+
+/**
+ * Logs when accessibility shortcut clicked.
+ *
+ * Logged from:
+ *   frameworks/base/services/accessibility/java/com/android/server/accessibility/AccessibilityManagerService.java
+ */
+message AccessibilityShortcutReported {
+    // The accessibility feature(including installed a11y service, framework a11y feature,
+    // and installed a11y activity) package name that is assigned to the accessibility shortcut.
+    optional string package_name = 1;
+
+    // The definition of the accessibility shortcut.
+    // From frameworks/base/core/proto/android/stats/accessibility/accessibility_enums.proto.
+    optional android.stats.accessibility.ShortcutType shortcut_type = 2;
+
+    // The definition of the service status.
+    // From frameworks/base/core/proto/android/stats/accessibility/accessibility_enums.proto.
+    optional android.stats.accessibility.ServiceStatus service_status = 3;
+}
+
+/**
+ * Logs when accessibility service status changed.
+ *
+ * Logged from:
+ *   frameworks/base/services/accessibility/java/com/android/server/accessibility/AccessibilityManagerService.java
+ */
+message AccessibilityServiceReported {
+    // The accessibility service package name.
+    optional string package_name = 1;
+
+    // The definition of the service status.
+    // From frameworks/base/core/proto/android/stats/accessibility/accessibility_enums.proto.
+    optional android.stats.accessibility.ServiceStatus service_status = 2;
 }
