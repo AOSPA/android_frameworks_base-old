@@ -13125,6 +13125,7 @@ public class TelephonyManager {
             if (sISub != null) {
                 sISub.asBinder().unlinkToDeath(sServiceDeath, 0);
                 sISub = null;
+                SubscriptionManager.clearCaches();
             }
             if (sISms != null) {
                 sISms.asBinder().unlinkToDeath(sServiceDeath, 0);

@@ -3577,17 +3577,22 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
         drawnWindowTypes.put(TYPE_NOTIFICATION_SHADE, true);
 
         final WindowState visibleNotDrawnWindow = getWindow(w -> {
-            if (w.mViewVisibility == View.VISIBLE && !w.mObscured && !w.isDrawnLw()) {
+            boolean isVisible = w.mViewVisibility == View.VISIBLE && !w.mObscured;
+            boolean hasDrawn = w.isDrawnLw() && w.hasDrawnLw();
+            if (isVisible && !hasDrawn) {
                 return true;
             }
-            if (w.isDrawnLw()) {
-                final int type = w.mAttrs.type;
-                if (type == TYPE_BOOT_PROGRESS || type == TYPE_BASE_APPLICATION
-                        || type == TYPE_WALLPAPER) {
-                    drawnWindowTypes.put(type, true);
-                } else if (type == TYPE_NOTIFICATION_SHADE) {
-                    drawnWindowTypes.put(TYPE_NOTIFICATION_SHADE,
-                            mWmService.mPolicy.isKeyguardDrawnLw());
+            if (hasDrawn) {
+                switch (w.mAttrs.type) {
+                    case TYPE_BOOT_PROGRESS:
+                    case TYPE_BASE_APPLICATION:
+                    case TYPE_WALLPAPER:
+                        drawnWindowTypes.put(w.mAttrs.type, true);
+                        break;
+                    case TYPE_NOTIFICATION_SHADE:
+                        drawnWindowTypes.put(TYPE_NOTIFICATION_SHADE,
+                                mWmService.mPolicy.isKeyguardDrawnLw());
+                        break;
                 }
             }
             return false;
@@ -5533,5 +5538,35 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
                 Slog.w(TAG, "Failed to deliver showInsets", e);
             }
         }
+    }
+
+    /**
+     * Returns the number of window tokens without surface on this display. A {@link WindowToken}
+     * won't have its {@link SurfaceControl} until a window is added to a {@link WindowToken}.
+     * The purpose of this method is to accumulate non-window containing {@link WindowToken}s and
+     * limit the usage if the count exceeds a number.
+     *
+     * @param callingUid app calling uid
+     * @return the number of window tokens without surface on this display
+     * @see WindowToken#addWindow(WindowState)
+     */
+    int getWindowTokensWithoutSurfaceCount(int callingUid) {
+        List<WindowToken> tokens = new ArrayList<>(mTokenMap.values());
+        int count = 0;
+        for (int i = tokens.size() - 1; i >= 0; i--) {
+            final WindowToken token = tokens.get(i);
+            if (callingUid != token.getOwnerUid()) {
+                continue;
+            }
+            // Skip if token is an Activity
+            if (token.asActivityRecord() != null) {
+                continue;
+            }
+            if (token.mSurfaceControl != null) {
+                continue;
+            }
+            count++;
+        }
+        return count;
     }
 }

@@ -1194,12 +1194,15 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
 
         final boolean inPictureInPictureMode = inPinnedWindowingMode() && targetStackBounds != null;
         if (inPictureInPictureMode != mLastReportedPictureInPictureMode || forceUpdate) {
-            // Picture-in-picture mode changes also trigger a multi-window mode change as well, so
-            // update that here in order. Set the last reported MW state to the same as the PiP
-            // state since we haven't yet actually resized the task (these callbacks need to
-            // preceed the configuration change from the resiez.
+            // Picture-in-picture mode change normal triggers also multi-window mode change
+            // except transitions between pip and split screen mode, so update that here in order.
+            // Set the last reported MW state to the same as the PiP state since we haven't yet
+            // actually resized the task (these callbacks need to proceed the configuration change
+            // from the resize).
             // TODO(110009072): Once we move these callbacks to the client, remove all logic related
             // to forcing the update of the picture-in-picture mode as a part of the PiP animation.
+            final boolean shouldScheduleMultiWindowModeChange =
+                    mLastReportedMultiWindowMode != inMultiWindowMode();
             mLastReportedPictureInPictureMode = inPictureInPictureMode;
             mLastReportedMultiWindowMode = inPictureInPictureMode;
             final Configuration newConfig = new Configuration();
@@ -1210,7 +1213,9 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
                 task.computeConfigResourceOverrides(newConfig, task.getParent().getConfiguration());
             }
             schedulePictureInPictureModeChanged(newConfig);
-            scheduleMultiWindowModeChanged(newConfig);
+            if (shouldScheduleMultiWindowModeChange) {
+                scheduleMultiWindowModeChanged(newConfig);
+            }
         }
     }
 
@@ -1420,11 +1425,10 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
     }
 
     /**
-     * @return {@code true} if there is a letterbox and any part of that letterbox overlaps with
-     * the given {@code rect}.
+     * @see Letterbox#notIntersectsOrFullyContains(Rect)
      */
-    boolean isLetterboxOverlappingWith(Rect rect) {
-        return mLetterbox != null && mLetterbox.isOverlappingWith(rect);
+    boolean letterboxNotIntersectsOrFullyContains(Rect rect) {
+        return mLetterbox == null || mLetterbox.notIntersectsOrFullyContains(rect);
     }
 
     static class Token extends IApplicationToken.Stub {
@@ -2681,7 +2685,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         if (isState(PAUSED)
                 && mStackSupervisor.getKeyguardController().isKeyguardLocked()
                 && getStack().topActivityOccludesKeyguard()) {
-            getStack().ensureActivitiesVisible(null /* starting */, 0 /* configChanges */,
+            getDisplay().ensureActivitiesVisible(null /* starting */, 0 /* configChanges */,
                     false /* preserveWindows */, false /* notifyClients */);
         }
 
