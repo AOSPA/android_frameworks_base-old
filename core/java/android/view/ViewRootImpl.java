@@ -327,6 +327,8 @@ public final class ViewRootImpl implements ViewParent,
     private boolean mForceNextConfigUpdate;
 
     private boolean mUseBLASTAdapter;
+    private boolean mForceDisableBLAST;
+    private boolean mEnableTripleBuffering;
 
     /**
      * Signals that compatibility booleans have been initialized according to
@@ -785,7 +787,6 @@ public final class ViewRootImpl implements ViewParent,
 
         loadSystemProperties();
         mImeFocusController = new ImeFocusController(this);
-        mUseBLASTAdapter = WindowManagerGlobal.useBLAST();
     }
 
     public static void addFirstDrawHandler(Runnable callback) {
@@ -926,10 +927,9 @@ public final class ViewRootImpl implements ViewParent,
                 if (mWindowAttributes.packageName == null) {
                     mWindowAttributes.packageName = mBasePackageName;
                 }
-                if (mUseBLASTAdapter) {
-                    mWindowAttributes.privateFlags |=
+                mWindowAttributes.privateFlags |=
                         WindowManager.LayoutParams.PRIVATE_FLAG_USE_BLAST;
-                }
+
                 attrs = mWindowAttributes;
                 setTag();
 
@@ -1101,6 +1101,13 @@ public final class ViewRootImpl implements ViewParent,
                     }
                     throw new RuntimeException(
                             "Unable to add window -- unknown error code " + res);
+                }
+
+                if ((res & WindowManagerGlobal.ADD_FLAG_USE_BLAST) != 0) {
+                    mUseBLASTAdapter = true;
+                }
+                if ((res & WindowManagerGlobal.ADD_FLAG_USE_TRIPLE_BUFFERING) != 0) {
+                    mEnableTripleBuffering = true;
                 }
 
                 if (view instanceof RootViewSurfaceTaker) {
@@ -1415,10 +1422,8 @@ public final class ViewRootImpl implements ViewParent,
             }
             mWindowAttributes.privateFlags |= compatibleWindowFlag;
 
-            if (mUseBLASTAdapter) {
-                mWindowAttributes.privateFlags |=
+            mWindowAttributes.privateFlags |=
                     WindowManager.LayoutParams.PRIVATE_FLAG_USE_BLAST;
-            }
 
             if (mWindowAttributes.preservePreviousSurfaceInsets) {
                 // Restore old surface insets.
@@ -1785,7 +1790,7 @@ public final class ViewRootImpl implements ViewParent,
         Surface ret = null;
         if (mBlastBufferQueue == null) {
             mBlastBufferQueue = new BLASTBufferQueue(
-                mBlastSurfaceControl, width, height);
+                mBlastSurfaceControl, width, height, mEnableTripleBuffering);
             // We only return the Surface the first time, as otherwise
             // it hasn't changed and there is no need to update.
             ret = mBlastBufferQueue.getSurface();
@@ -7400,7 +7405,7 @@ public final class ViewRootImpl implements ViewParent,
                 mPendingDisplayCutout, mPendingMergedConfiguration, mSurfaceControl, mTempInsets,
                 mTempControls, mSurfaceSize, mBlastSurfaceControl);
         if (mSurfaceControl.isValid()) {
-            if (!mUseBLASTAdapter) {
+            if (!useBLAST()) {
                 mSurface.copyFrom(mSurfaceControl);
             } else {
                 final Surface blastSurface = getOrCreateBLASTSurface(mSurfaceSize.x,
@@ -9767,7 +9772,7 @@ public final class ViewRootImpl implements ViewParent,
      * @hide
      */
     public SurfaceControl getRenderSurfaceControl() {
-        if (mUseBLASTAdapter) {
+        if (useBLAST()) {
             return mBlastSurfaceControl;
         } else {
             return mSurfaceControl;
@@ -9784,11 +9789,11 @@ public final class ViewRootImpl implements ViewParent,
      * flag. Needs to be called before addView.
      */
     void forceDisableBLAST() {
-        mUseBLASTAdapter = false;
+        mForceDisableBLAST = true;
     }
 
     boolean useBLAST() {
-        return mUseBLASTAdapter;
+        return mUseBLASTAdapter && !mForceDisableBLAST;
     }
 
     /**

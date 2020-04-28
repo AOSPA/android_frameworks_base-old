@@ -1719,9 +1719,9 @@ public class KeyguardViewMediator extends SystemUI implements Dumpable {
             resetKeyguardDonePendingLocked();
         }
 
-        mUpdateMonitor.clearBiometricRecognized();
 
         if (mGoingToSleep) {
+            mUpdateMonitor.clearBiometricRecognized();
             Log.i(TAG, "Device is going to sleep, aborting keyguardDone");
             return;
         }
@@ -1742,6 +1742,7 @@ public class KeyguardViewMediator extends SystemUI implements Dumpable {
         }
 
         handleHide();
+        mUpdateMonitor.clearBiometricRecognized();
         Trace.endSection();
     }
 
