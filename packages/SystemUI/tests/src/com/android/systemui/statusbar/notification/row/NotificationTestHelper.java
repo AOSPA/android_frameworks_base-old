@@ -34,9 +34,11 @@ import android.app.NotificationChannel;
 import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.LauncherApps;
 import android.graphics.drawable.Icon;
 import android.os.UserHandle;
 import android.service.notification.StatusBarNotification;
+import android.testing.TestableLooper;
 import android.text.TextUtils;
 import android.view.LayoutInflater;
 import android.widget.RemoteViews;
@@ -49,10 +51,14 @@ import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.statusbar.NotificationMediaManager;
 import com.android.systemui.statusbar.NotificationRemoteInputManager;
 import com.android.systemui.statusbar.SmartReplyController;
+import com.android.systemui.statusbar.notification.ConversationNotificationProcessor;
 import com.android.systemui.statusbar.notification.collection.NotificationEntry;
 import com.android.systemui.statusbar.notification.collection.NotificationEntryBuilder;
 import com.android.systemui.statusbar.notification.collection.notifcollection.CommonNotifCollection;
 import com.android.systemui.statusbar.notification.collection.notifcollection.NotifCollectionListener;
+import com.android.systemui.statusbar.notification.icon.IconBuilder;
+import com.android.systemui.statusbar.notification.icon.IconManager;
+import com.android.systemui.statusbar.notification.people.PeopleNotificationIdentifier;
 import com.android.systemui.statusbar.notification.row.ExpandableNotificationRow.ExpansionLogger;
 import com.android.systemui.statusbar.notification.row.ExpandableNotificationRow.OnExpandClickListener;
 import com.android.systemui.statusbar.notification.row.NotificationRowContentBinder.InflationFlag;
@@ -67,6 +73,7 @@ import com.android.systemui.tests.R;
 import org.mockito.ArgumentCaptor;
 
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -86,6 +93,7 @@ public class NotificationTestHelper {
     private static final String APP_NAME = "appName";
 
     private final Context mContext;
+    private final TestableLooper mTestLooper;
     private int mId;
     private final NotificationGroupManager mGroupManager;
     private ExpandableNotificationRow mRow;
@@ -93,10 +101,16 @@ public class NotificationTestHelper {
     private final NotifBindPipeline mBindPipeline;
     private final NotifCollectionListener mBindPipelineEntryListener;
     private final RowContentBindStage mBindStage;
+    private final IconManager mIconManager;
     private StatusBarStateController mStatusBarStateController;
+    private final PeopleNotificationIdentifier mPeopleNotificationIdentifier;
 
-    public NotificationTestHelper(Context context, TestableDependency dependency) {
+    public NotificationTestHelper(
+            Context context,
+            TestableDependency dependency,
+            TestableLooper testLooper) {
         mContext = context;
+        mTestLooper = testLooper;
         dependency.injectMockDependency(NotificationMediaManager.class);
         dependency.injectMockDependency(BubbleController.class);
         dependency.injectMockDependency(NotificationShadeWindowController.class);
@@ -106,12 +120,18 @@ public class NotificationTestHelper {
                 mock(KeyguardBypassController.class), mock(NotificationGroupManager.class),
                 mock(ConfigurationControllerImpl.class));
         mGroupManager.setHeadsUpManager(mHeadsUpManager);
+        mIconManager = new IconManager(
+                mock(CommonNotifCollection.class),
+                mock(LauncherApps.class),
+                new IconBuilder(mContext));
 
         NotificationContentInflater contentBinder = new NotificationContentInflater(
                 mock(NotifRemoteViewCache.class),
                 mock(NotificationRemoteInputManager.class),
                 () -> mock(SmartReplyConstants.class),
-                () -> mock(SmartReplyController.class));
+                () -> mock(SmartReplyController.class),
+                mock(ConversationNotificationProcessor.class),
+                mock(Executor.class));
         contentBinder.setInflateSynchronously(true);
         mBindStage = new RowContentBindStage(contentBinder,
                 mock(NotifInflationErrorManager.class),
@@ -119,13 +139,17 @@ public class NotificationTestHelper {
 
         CommonNotifCollection collection = mock(CommonNotifCollection.class);
 
-        mBindPipeline = new NotifBindPipeline(collection, mock(NotifBindPipelineLogger.class));
+        mBindPipeline = new NotifBindPipeline(
+                collection,
+                mock(NotifBindPipelineLogger.class),
+                mTestLooper.getLooper());
         mBindPipeline.setStage(mBindStage);
 
         ArgumentCaptor<NotifCollectionListener> collectionListenerCaptor =
                 ArgumentCaptor.forClass(NotifCollectionListener.class);
         verify(collection).addCollectionListener(collectionListenerCaptor.capture());
         mBindPipelineEntryListener = collectionListenerCaptor.getValue();
+        mPeopleNotificationIdentifier = mock(PeopleNotificationIdentifier.class);
     }
 
     /**
@@ -362,7 +386,7 @@ public class NotificationTestHelper {
                         notification.getChannelId(),
                         notification.getChannelId(),
                         importance);
-        channel.setBlockableSystem(true);
+        channel.setBlockable(true);
 
         NotificationEntry entry = new NotificationEntryBuilder()
                 .setPkg(pkg)
@@ -377,7 +401,7 @@ public class NotificationTestHelper {
                 .build();
 
         entry.setRow(row);
-        entry.createIcons(mContext, entry.getSbn());
+        mIconManager.createIcons(entry);
         row.setEntry(entry);
 
         mBindPipelineEntryListener.onEntryInit(entry);
@@ -395,10 +419,11 @@ public class NotificationTestHelper {
                 mock(NotificationMediaManager.class),
                 mock(ExpandableNotificationRow.OnAppOpsClickListener.class),
                 mock(FalsingManager.class),
-                mStatusBarStateController);
+                mStatusBarStateController,
+                mPeopleNotificationIdentifier);
         row.setAboveShelfChangedListener(aboveShelf -> { });
         mBindStage.getStageParams(entry).requireContentViews(extraInflationFlags);
-        inflateAndWait(entry, mBindStage);
+        inflateAndWait(entry);
 
         // This would be done as part of onAsyncInflationFinished, but we skip large amounts of
         // the callback chain, so we need to make up for not adding it to the group manager
@@ -407,10 +432,10 @@ public class NotificationTestHelper {
         return row;
     }
 
-    private static void inflateAndWait(NotificationEntry entry, RowContentBindStage stage)
-            throws Exception {
+    private void inflateAndWait(NotificationEntry entry) throws Exception {
         CountDownLatch countDownLatch = new CountDownLatch(1);
-        stage.requestRebind(entry, en -> countDownLatch.countDown());
+        mBindStage.requestRebind(entry, en -> countDownLatch.countDown());
+        mTestLooper.processAllMessages();
         assertTrue(countDownLatch.await(500, TimeUnit.MILLISECONDS));
     }
 
@@ -418,8 +443,7 @@ public class NotificationTestHelper {
         Intent target = new Intent(mContext, BubblesTestActivity.class);
         PendingIntent bubbleIntent = PendingIntent.getActivity(mContext, 0, target, 0);
 
-        return new BubbleMetadata.Builder()
-                .createIntentBubble(bubbleIntent,
+        return new BubbleMetadata.Builder(bubbleIntent,
                         Icon.createWithResource(mContext, R.drawable.android))
                 .setDeleteIntent(deleteIntent)
                 .setDesiredHeight(314)

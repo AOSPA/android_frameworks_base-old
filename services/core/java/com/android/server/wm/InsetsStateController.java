@@ -16,6 +16,7 @@
 
 package com.android.server.wm;
 
+import static android.app.WindowConfiguration.WINDOWING_MODE_MULTI_WINDOW;
 import static android.app.WindowConfiguration.WINDOWING_MODE_UNDEFINED;
 import static android.view.InsetsState.ITYPE_CAPTION_BAR;
 import static android.view.InsetsState.ITYPE_IME;
@@ -87,7 +88,8 @@ class InsetsStateController {
         final InsetsSourceProvider provider = target.getControllableInsetProvider();
         final @InternalInsetsType int type = provider != null
                 ? provider.getSource().getType() : ITYPE_INVALID;
-        return getInsetsForTypeAndWindowingMode(type, target.getWindowingMode());
+        return getInsetsForDispatchInner(type, target.getWindowingMode(), target.isAlwaysOnTop(),
+                isAboveIme(target));
     }
 
     InsetsState getInsetsForWindowMetrics(@NonNull WindowManager.LayoutParams attrs) {
@@ -95,11 +97,24 @@ class InsetsStateController {
         final WindowToken token = mDisplayContent.getWindowToken(attrs.token);
         final @WindowingMode int windowingMode = token != null
                 ? token.getWindowingMode() : WINDOWING_MODE_UNDEFINED;
-        return getInsetsForTypeAndWindowingMode(type, windowingMode);
+        final boolean alwaysOnTop = token != null && token.isAlwaysOnTop();
+        return getInsetsForDispatchInner(type, windowingMode, alwaysOnTop, isAboveIme(token));
+    }
+
+    private boolean isAboveIme(WindowContainer target) {
+        final WindowState imeWindow = mDisplayContent.mInputMethodWindow;
+        if (target == null || imeWindow == null) {
+            return false;
+        }
+        if (target instanceof WindowState) {
+            final WindowState win = (WindowState) target;
+            return win.needsRelativeLayeringToIme() || !win.mBehindIme;
+        }
+        return false;
     }
 
     private static @InternalInsetsType int getInsetsTypeForWindowType(int type) {
-        switch(type) {
+        switch (type) {
             case TYPE_STATUS_BAR:
                 return ITYPE_STATUS_BAR;
             case TYPE_NAVIGATION_BAR:
@@ -112,8 +127,8 @@ class InsetsStateController {
     }
 
     /** @see #getInsetsForDispatch */
-    private InsetsState getInsetsForTypeAndWindowingMode(@InternalInsetsType int type,
-            @WindowingMode int windowingMode) {
+    private InsetsState getInsetsForDispatchInner(@InternalInsetsType int type,
+            @WindowingMode int windowingMode, boolean isAlwaysOnTop, boolean aboveIme) {
         InsetsState state = mState;
 
         if (type != ITYPE_INVALID) {
@@ -147,10 +162,16 @@ class InsetsStateController {
             }
         }
 
-        if (WindowConfiguration.isFloating(windowingMode)) {
+        if (WindowConfiguration.isFloating(windowingMode)
+                || (windowingMode == WINDOWING_MODE_MULTI_WINDOW && isAlwaysOnTop)) {
             state = new InsetsState(state);
             state.removeSource(ITYPE_STATUS_BAR);
             state.removeSource(ITYPE_NAVIGATION_BAR);
+        }
+
+        if (aboveIme) {
+            state = new InsetsState(state);
+            state.removeSource(ITYPE_IME);
         }
 
         return state;
@@ -206,10 +227,19 @@ class InsetsStateController {
         for (int i = mProviders.size() - 1; i >= 0; i--) {
             mProviders.valueAt(i).onPostLayout();
         }
+        final ArrayList<WindowState> winInsetsChanged = mDisplayContent.mWinInsetsChanged;
         if (!mLastState.equals(mState)) {
             mLastState.set(mState, true /* copySources */);
             notifyInsetsChanged();
+        } else {
+            // The global insets state has not changed but there might be windows whose conditions
+            // (e.g., z-order) have changed. They can affect the insets states that we dispatch to
+            // the clients.
+            for (int i = winInsetsChanged.size() - 1; i >= 0; i--) {
+                winInsetsChanged.get(i).notifyInsetsChanged();
+            }
         }
+        winInsetsChanged.clear();
     }
 
     void onInsetsModified(InsetsControlTarget windowState, InsetsState state) {

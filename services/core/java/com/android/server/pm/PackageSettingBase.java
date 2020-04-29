@@ -21,9 +21,13 @@ import static android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DISABLED
 import static android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_ENABLED;
 
 import android.annotation.NonNull;
+import android.annotation.Nullable;
+import android.annotation.UserIdInt;
+import android.content.ComponentName;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.IntentFilterVerificationInfo;
 import android.content.pm.PackageManager;
+import android.content.pm.PackageManager.UninstallReason;
 import android.content.pm.PackageParser;
 import android.content.pm.PackageUserState;
 import android.content.pm.Signature;
@@ -315,6 +319,14 @@ public abstract class PackageSettingBase extends SettingBase {
         modifyUserState(userId).installReason = installReason;
     }
 
+    int getUninstallReason(int userId) {
+        return readUserState(userId).uninstallReason;
+    }
+
+    void setUninstallReason(@UninstallReason int uninstallReason, int userId) {
+        modifyUserState(userId).uninstallReason = uninstallReason;
+    }
+
     void setOverlayPaths(List<String> overlayPaths, int userId) {
         modifyUserState(userId).setOverlayPaths(overlayPaths == null ? null :
             overlayPaths.toArray(new String[overlayPaths.size()]));
@@ -471,7 +483,7 @@ public abstract class PackageSettingBase extends SettingBase {
             ArrayMap<String, PackageUserState.SuspendParams> suspendParams, boolean instantApp,
             boolean virtualPreload, String lastDisableAppCaller,
             ArraySet<String> enabledComponents, ArraySet<String> disabledComponents,
-            int domainVerifState, int linkGeneration, int installReason,
+            int domainVerifState, int linkGeneration, int installReason, int uninstallReason,
             String harmfulAppWarning) {
         PackageUserState state = modifyUserState(userId);
         state.ceDataInode = ceDataInode;
@@ -489,6 +501,7 @@ public abstract class PackageSettingBase extends SettingBase {
         state.domainVerificationStatus = domainVerifState;
         state.appLinkGeneration = linkGeneration;
         state.installReason = installReason;
+        state.uninstallReason = uninstallReason;
         state.instantApp = instantApp;
         state.virtualPreload = virtualPreload;
         state.harmfulAppWarning = harmfulAppWarning;
@@ -502,7 +515,7 @@ public abstract class PackageSettingBase extends SettingBase {
                 otherState.virtualPreload, otherState.lastDisableAppCaller,
                 otherState.enabledComponents, otherState.disabledComponents,
                 otherState.domainVerificationStatus, otherState.appLinkGeneration,
-                otherState.installReason, otherState.harmfulAppWarning);
+                otherState.installReason, otherState.uninstallReason, otherState.harmfulAppWarning);
     }
 
     ArraySet<String> getEnabledComponents(int userId) {
@@ -685,6 +698,26 @@ public abstract class PackageSettingBase extends SettingBase {
     String getHarmfulAppWarning(int userId) {
         PackageUserState userState = readUserState(userId);
         return userState.harmfulAppWarning;
+    }
+
+    /**
+     * @see PackageUserState#overrideLabelAndIcon(ComponentName, String, Integer)
+     *
+     * @param userId the specific user to change the label/icon for
+     */
+    @VisibleForTesting(visibility = VisibleForTesting.Visibility.PACKAGE)
+    public boolean overrideNonLocalizedLabelAndIcon(@NonNull ComponentName component,
+            @Nullable String label, @Nullable Integer icon, @UserIdInt int userId) {
+        return modifyUserState(userId).overrideLabelAndIcon(component, label, icon);
+    }
+
+    /**
+     * @see PackageUserState#resetOverrideComponentLabelIcon()
+     *
+     * @param userId the specific user to reset
+     */
+    public void resetOverrideComponentLabelIcon(@UserIdInt int userId) {
+        modifyUserState(userId).resetOverrideComponentLabelIcon();
     }
 
     protected PackageSettingBase updateFrom(PackageSettingBase other) {

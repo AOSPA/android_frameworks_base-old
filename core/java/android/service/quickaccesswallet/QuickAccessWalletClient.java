@@ -16,11 +16,16 @@
 
 package android.service.quickaccesswallet;
 
+import android.annotation.CallbackExecutor;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.TestApi;
 import android.content.Context;
 import android.content.Intent;
+import android.graphics.drawable.Drawable;
+
+import java.io.Closeable;
+import java.util.concurrent.Executor;
 
 /**
  * Facilitates accessing cards from the {@link QuickAccessWalletService}.
@@ -28,7 +33,7 @@ import android.content.Intent;
  * @hide
  */
 @TestApi
-public interface QuickAccessWalletClient {
+public interface QuickAccessWalletClient extends Closeable {
 
     /**
      * Create a client for accessing wallet cards from the {@link QuickAccessWalletService}. If the
@@ -92,6 +97,14 @@ public interface QuickAccessWalletClient {
             @NonNull OnWalletCardsRetrievedCallback callback);
 
     /**
+     * Get wallet cards from the {@link QuickAccessWalletService}.
+     */
+    void getWalletCards(
+            @NonNull @CallbackExecutor Executor executor,
+            @NonNull GetWalletCardsRequest request,
+            @NonNull OnWalletCardsRetrievedCallback callback);
+
+    /**
      * Callback for getWalletCards
      */
     interface OnWalletCardsRetrievedCallback {
@@ -111,12 +124,19 @@ public interface QuickAccessWalletClient {
     void notifyWalletDismissed();
 
     /**
-     * Unregister event listener.
+     * Register an event listener.
      */
     void addWalletServiceEventListener(@NonNull WalletServiceEventListener listener);
 
     /**
-     * Unregister event listener
+     * Register an event listener.
+     */
+    void addWalletServiceEventListener(
+            @NonNull @CallbackExecutor Executor executor,
+            @NonNull WalletServiceEventListener listener);
+
+    /**
+     * Unregister an event listener
      */
     void removeWalletServiceEventListener(@NonNull WalletServiceEventListener listener);
 
@@ -146,4 +166,42 @@ public interface QuickAccessWalletClient {
      */
     @Nullable
     Intent createWalletSettingsIntent();
+
+    /**
+     * Returns the logo associated with the {@link QuickAccessWalletService}. This is specified by
+     * {@code android:logo} manifest entry. If the logo is not specified, the app icon will be
+     * returned instead ({@code android:icon}).
+     *
+     * @hide
+     */
+    @Nullable
+    Drawable getLogo();
+
+    /**
+     * Returns the service label specified by {@code android:label} in the service manifest entry.
+     *
+     * @hide
+     */
+    @Nullable
+    CharSequence getServiceLabel();
+
+    /**
+     * Returns the text specified by the {@link android:shortcutShortLabel} in the service manifest
+     * entry. If the shortcutShortLabel isn't specified, the service label ({@code android:label})
+     * will be returned instead.
+     *
+     * @hide
+     */
+    @Nullable
+    CharSequence getShortcutShortLabel();
+
+    /**
+     * Returns the text specified by the {@link android:shortcutLongLabel} in the service manifest
+     * entry. If the shortcutShortLabel isn't specified, the service label ({@code android:label})
+     * will be returned instead.
+     *
+     * @hide
+     */
+    @Nullable
+    CharSequence getShortcutLongLabel();
 }

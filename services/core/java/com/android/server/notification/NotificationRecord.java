@@ -187,6 +187,7 @@ public final class NotificationRecord {
     private boolean mSuggestionsGeneratedByAssistant;
     private boolean mEditChoicesBeforeSending;
     private boolean mHasSeenSmartReplies;
+    private boolean mFlagBubbleRemoved;
     private boolean mPostSilently;
     /**
      * Whether this notification (and its channels) should be considered user locked. Used in
@@ -1201,6 +1202,19 @@ public final class NotificationRecord {
         return stats.hasBeenVisiblyExpanded();
     }
 
+    /**
+     * When the bubble state on a notif changes due to user action (e.g. dismiss a bubble) then
+     * this value is set until an update or bubble change event due to user action (e.g. create
+     * bubble from sysui)
+     **/
+    public boolean isFlagBubbleRemoved() {
+        return mFlagBubbleRemoved;
+    }
+
+    public void setFlagBubbleRemoved(boolean flagBubbleRemoved) {
+        mFlagBubbleRemoved = flagBubbleRemoved;
+    }
+
     public void setSystemGeneratedSmartActions(
             ArrayList<Notification.Action> systemGeneratedSmartActions) {
         mSystemGeneratedSmartActions = systemGeneratedSmartActions;
@@ -1369,9 +1383,8 @@ public final class NotificationRecord {
                 || !Notification.MessagingStyle.class.equals(notification.getNotificationStyle())) {
             return false;
         }
-        if (mShortcutInfo == null
-                && !FeatureFlagUtils.isEnabled(
-                        mContext, FeatureFlagUtils.NOTIF_CONVO_BYPASS_SHORTCUT_REQ)) {
+        if (mShortcutInfo == null && Settings.Global.getInt(mContext.getContentResolver(),
+                Settings.Global.REQUIRE_SHORTCUTS_FOR_CONVERSATIONS, 0) == 1) {
             return false;
         }
         if (mIsNotConversationOverride) {

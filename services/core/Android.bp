@@ -91,16 +91,16 @@ java_library_static {
     ],
 
     libs: [
-        "services-stubs",
         "services.net",
         "android.hardware.light-V2.0-java",
         "android.hardware.power-java",
         "android.hardware.power-V1.0-java",
         "android.hardware.tv.cec-V1.0-java",
         "android.hardware.vibrator-java",
+        "android.net.ipsec.ike.stubs.module_libs_api",
         "app-compat-annotations",
         "framework-tethering-stubs-module_libs_api",
-        "ike-stubs",
+        "service-permission-stubs",
     ],
 
     required: [
@@ -118,7 +118,7 @@ java_library_static {
         "android.hardware.health-V2.1-java",
         "android.hardware.light-java",
         "android.hardware.weaver-V1.0-java",
-        "android.hardware.biometrics.face-V1.1-java",
+        "android.hardware.biometrics.face-V1.0-java",
         "android.hardware.biometrics.fingerprint-V2.2-java",
         "android.hardware.oemlock-V1.0-java",
         "android.hardware.configstore-V1.0-java",
@@ -126,15 +126,11 @@ java_library_static {
         "android.hardware.rebootescrow-java",
         "android.hardware.soundtrigger-V2.3-java",
         "android.hidl.manager-V1.2-java",
+        "capture_state_listener-aidl-java",
         "dnsresolver_aidl_interface-V2-java",
         "netd_event_listener_interface-java",
-        "ike-stubs",
         "overlayable_policy_aidl-java",
         "vendor.qti.hardware.servicetracker-V1.0-java",
-    ],
-
-    plugins: [
-        "compat-changeid-annotation-processor",
     ],
 }
 
@@ -156,6 +152,10 @@ java_library {
     static_libs: ["services.core.priorityboosted"],
 }
 
+java_library_host {
+    name: "core_cts_test_resources",
+    srcs: ["java/com/android/server/notification/SmallHash.java"]
+}
 
 prebuilt_etc {
     name: "gps_debug.conf",

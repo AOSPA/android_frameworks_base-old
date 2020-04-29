@@ -17,12 +17,10 @@
 package android.media.tv.tuner.frontend;
 
 import android.annotation.IntDef;
+import android.annotation.IntRange;
 import android.annotation.NonNull;
-import android.annotation.RequiresPermission;
 import android.annotation.SystemApi;
-import android.content.Context;
 import android.hardware.tv.tuner.V1_0.Constants;
-import android.media.tv.tuner.TunerUtils;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -194,13 +192,9 @@ public class AnalogFrontendSettings extends FrontendSettings {
 
     /**
      * Creates a builder for {@link AnalogFrontendSettings}.
-     *
-     * @param context the context of the caller.
      */
-    @RequiresPermission(android.Manifest.permission.ACCESS_TV_TUNER)
     @NonNull
-    public static Builder builder(@NonNull Context context) {
-        TunerUtils.checkTunerPermission(context);
+    public static Builder builder() {
         return new Builder();
     }
 
@@ -213,14 +207,29 @@ public class AnalogFrontendSettings extends FrontendSettings {
     /**
      * Builder for {@link AnalogFrontendSettings}.
      */
-    public static class Builder extends FrontendSettings.Builder<Builder> {
-        private int mSignalType;
-        private int mSifStandard;
+    public static class Builder {
+        private int mFrequency = 0;
+        private int mSignalType = SIGNAL_TYPE_UNDEFINED;
+        private int mSifStandard = SIF_UNDEFINED;
 
         private Builder() {}
 
         /**
+         * Sets frequency in Hz.
+         *
+         * <p>Default value is 0.
+         */
+        @NonNull
+        @IntRange(from = 1)
+        public Builder setFrequency(int frequency) {
+            mFrequency = frequency;
+            return this;
+        }
+
+        /**
          * Sets analog signal type.
+         *
+         * <p>Default value is {@link #SIGNAL_TYPE_UNDEFINED}.
          */
         @NonNull
         public Builder setSignalType(@SignalType int signalType) {
@@ -230,6 +239,8 @@ public class AnalogFrontendSettings extends FrontendSettings {
 
         /**
          * Sets Standard Interchange Format (SIF).
+         *
+         * <p>Default value is {@link #SIF_UNDEFINED}.
          */
         @NonNull
         public Builder setSifStandard(@SifStandard int sifStandard) {
@@ -243,11 +254,6 @@ public class AnalogFrontendSettings extends FrontendSettings {
         @NonNull
         public AnalogFrontendSettings build() {
             return new AnalogFrontendSettings(mFrequency, mSignalType, mSifStandard);
-        }
-
-        @Override
-        Builder self() {
-            return this;
         }
     }
 }

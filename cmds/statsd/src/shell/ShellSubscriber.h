@@ -16,15 +16,17 @@
 
 #pragma once
 
-#include "logd/LogEvent.h"
-
 #include <android/util/ProtoOutputStream.h>
+#include <private/android_filesystem_config.h>
+
 #include <condition_variable>
 #include <mutex>
 #include <thread>
+
 #include "external/StatsPullerManager.h"
 #include "frameworks/base/cmds/statsd/src/shell/shell_config.pb.h"
 #include "frameworks/base/cmds/statsd/src/statsd_config.pb.h"
+#include "logd/LogEvent.h"
 #include "packages/UidMap.h"
 
 namespace android {
@@ -60,32 +62,48 @@ public:
     ShellSubscriber(sp<UidMap> uidMap, sp<StatsPullerManager> pullerMgr)
         : mUidMap(uidMap), mPullerMgr(pullerMgr){};
 
-    /**
-     * Start a new subscription.
-     */
     void startNewSubscription(int inFd, int outFd, int timeoutSec);
 
     void onLogEvent(const LogEvent& event);
 
 private:
     struct PullInfo {
-        PullInfo(const SimpleAtomMatcher& matcher, int64_t interval)
-            : mPullerMatcher(matcher), mInterval(interval), mPrevPullElapsedRealtimeMs(0) {
+        PullInfo(const SimpleAtomMatcher& matcher, int64_t interval,
+                 const std::vector<std::string>& packages, const std::vector<int32_t>& uids)
+            : mPullerMatcher(matcher),
+              mInterval(interval),
+              mPrevPullElapsedRealtimeMs(0),
+              mPullPackages(packages),
+              mPullUids(uids) {
         }
         SimpleAtomMatcher mPullerMatcher;
         int64_t mInterval;
         int64_t mPrevPullElapsedRealtimeMs;
+        std::vector<std::string> mPullPackages;
+        std::vector<int32_t> mPullUids;
     };
-    bool readConfig();
 
-    void updateConfig(const ShellSubscription& config);
+    struct SubscriptionInfo {
+        SubscriptionInfo(const int& inputFd, const int& outputFd)
+            : mInputFd(inputFd), mOutputFd(outputFd), mClientAlive(true) {
+        }
 
-    void startPull(int64_t token, int64_t intervalMillis);
+        int mInputFd;
+        int mOutputFd;
+        std::vector<SimpleAtomMatcher> mPushedMatchers;
+        std::vector<PullInfo> mPulledInfo;
+        int mPullIntervalMin;
+        bool mClientAlive;
+    };
 
-    void cleanUpLocked();
+    int claimToken();
 
-    void writeToOutputLocked(const vector<std::shared_ptr<LogEvent>>& data,
-                             const SimpleAtomMatcher& matcher);
+    bool readConfig(std::shared_ptr<SubscriptionInfo> subscriptionInfo);
+
+    void startPull(int64_t myToken);
+
+    bool writePulledAtomsLocked(const vector<std::shared_ptr<LogEvent>>& data,
+                                const SimpleAtomMatcher& matcher);
 
     sp<UidMap> mUidMap;
 
@@ -95,19 +113,13 @@ private:
 
     mutable std::mutex mMutex;
 
-    std::condition_variable mShellDied;  // semaphore for waiting until shell exits.
+    std::condition_variable mSubscriptionShouldEnd;
 
-    int mInput = -1;  // The input file descriptor
+    std::shared_ptr<SubscriptionInfo> mSubscriptionInfo = nullptr;
 
-    int mOutput = -1;  // The output file descriptor
+    int mToken = 0;
 
-    std::vector<SimpleAtomMatcher> mPushedMatchers;
-
-    std::vector<PullInfo> mPulledInfo;
-
-    int64_t mSubscriberId = 0; // A unique id to identify a subscriber.
-
-    int64_t mPullToken = 0;  // A unique token to identify a puller thread.
+    const int32_t DEFAULT_PULL_UID = AID_SYSTEM;
 };
 
 }  // namespace statsd

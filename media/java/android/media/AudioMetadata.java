@@ -41,130 +41,49 @@ public final class AudioMetadata {
     private static final String TAG = "AudioMetadata";
 
     /**
-     * Key interface for the map.
+     * Key interface for the {@code AudioMetadata} map.
      *
-     * The presence of this {@code Key} interface on an object allows
-     * it to be used to reference metadata in the Audio Framework.
+     * <p>The presence of this {@code Key} interface on an object allows
+     * it to reference metadata in the Audio Framework.</p>
+     *
+     * <p>Vendors are allowed to implement this {@code Key} interface for their debugging or
+     * private application use. To avoid name conflicts, vendor key names should be qualified by
+     * the vendor company name followed by a dot; for example, "vendorCompany.someVolume".</p>
      *
      * @param <T> type of value associated with {@code Key}.
      */
-    // Conceivably metadata keys exposing multiple interfaces
-    // could be eligible to work in multiple framework domains.
+    /*
+     * Internal details:
+     * Conceivably metadata keys exposing multiple interfaces
+     * could be eligible to work in multiple framework domains.
+     */
     public interface Key<T> {
         /**
-         * Returns the internal name of the key.
+         * Returns the internal name of the key.  The name should be unique in the
+         * {@code AudioMetadata} namespace.  Vendors should prefix their keys with
+         * the company name followed by a dot.
          */
         @NonNull
         String getName();
 
         /**
-         * Returns the class type of the associated value.
+         * Returns the class type {@code T} of the associated value.  Valid class types for
+         * {@link android.os.Build.VERSION_CODES#R} are
+         * {@code Integer.class}, {@code Long.class}, {@code Float.class}, {@code Double.class},
+         * {@code String.class}.
          */
         @NonNull
         Class<T> getValueClass();
 
         // TODO: consider adding bool isValid(@NonNull T value)
-
-        /**
-         * Do not allow non-framework apps to create their own keys
-         * by implementing this interface; keep a method hidden.
-         *
-         * @hide
-         */
-        boolean isFromFramework();
     }
 
     /**
-     * A read only {@code Map} interface of {@link Key} value pairs.
-     *
-     * Using a {@link Key} interface, look up the corresponding value.
-     */
-    public interface ReadMap {
-        /**
-         * Returns true if the key exists in the map.
-         *
-         * @param key interface for requesting the value.
-         * @param <T> type of value.
-         * @return true if key exists in the Map.
-         */
-        <T> boolean containsKey(@NonNull Key<T> key);
-
-        /**
-         * Returns a copy of the map.
-         *
-         * This is intended for safe conversion between a {@link ReadMap}
-         * interface and a {@link Map} interface.
-         * Currently only simple objects are used for key values which
-         * means a shallow copy is sufficient.
-         *
-         * @return a Map copied from the existing map.
-         */
-        @NonNull
-        Map dup(); // lint checker doesn't like clone().
-
-        /**
-         * Returns the value associated with the key.
-         *
-         * @param key interface for requesting the value.
-         * @param <T> type of value.
-         * @return returns the value of associated with key or null if it doesn't exist.
-         */
-        @Nullable
-        <T> T get(@NonNull Key<T> key);
-
-        /**
-         * Returns a {@code Set} of keys associated with the map.
-         * @hide
-         */
-        @NonNull
-        Set<Key<?>> keySet();
-
-        /**
-         * Returns the number of elements in the map.
-         */
-        int size();
-    }
-
-    /**
-     * A writeable {@link Map} interface of {@link Key} value pairs.
-     * This interface is not guaranteed to be thread-safe
-     * unless the supplier for the {@code Map} states it as thread safe.
-     */
-    // TODO: Create a wrapper like java.util.Collections.synchronizedMap?
-    public interface Map extends ReadMap {
-        /**
-         * Removes the value associated with the key.
-         * @param key interface for storing the value.
-         * @param <T> type of value.
-         * @return the value of the key, null if it doesn't exist.
-         */
-        @Nullable
-        <T> T remove(@NonNull Key<T> key);
-
-        /**
-         * Sets a value for the key.
-         *
-         * @param key interface for storing the value.
-         * @param <T> type of value.
-         * @param value a non-null value of type T.
-         * @return the previous value associated with key or null if it doesn't exist.
-         */
-        // See automatic Kotlin overloading for Java interoperability.
-        // https://kotlinlang.org/docs/reference/java-interop.html#operators
-        // See also Kotlin set for overloaded operator indexing.
-        // https://kotlinlang.org/docs/reference/operator-overloading.html#indexed
-        // Also the Kotlin mutable-list set.
-        // https://kotlinlang.org/api/latest/jvm/stdlib/kotlin.collections/-mutable-list/set.html
-        @Nullable
-        <T> T set(@NonNull Key<T> key, @NonNull T value);
-    }
-
-    /**
-     * Creates a {@link Map} suitable for adding keys.
-     * @return an empty {@link Map} instance.
+     * Creates a {@link AudioMetadataMap} suitable for adding keys.
+     * @return an empty {@link AudioMetadataMap} instance.
      */
     @NonNull
-    public static Map createMap() {
+    public static AudioMetadataMap createMap() {
         return new BaseMap();
     }
 
@@ -301,12 +220,6 @@ public final class AudioMetadata {
                 return mType;
             }
 
-            // hidden interface method to prevent user class implements the of Key interface.
-            @Override
-            public boolean isFromFramework() {
-                return true;
-            }
-
             /**
              * Return true if the name and the type of two objects are the same.
              */
@@ -341,7 +254,7 @@ public final class AudioMetadata {
      * It is possible to require the keys to be of a certain class
      * before allowing a set or get operation.
      */
-    public static class BaseMap implements Map {
+    public static class BaseMap implements AudioMetadataMap {
         @Override
         public <T> boolean containsKey(@NonNull Key<T> key) {
             Pair<Key<?>, Object> valuePair = mHashMap.get(pairFromKey(key));
@@ -350,7 +263,7 @@ public final class AudioMetadata {
 
         @Override
         @NonNull
-        public Map dup() {
+        public AudioMetadataMap dup() {
             BaseMap map = new BaseMap();
             map.mHashMap.putAll(this.mHashMap);
             return map;

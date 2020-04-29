@@ -94,7 +94,7 @@ open class BroadcastDispatcher @Inject constructor (
     @Deprecated(message = "Replacing Handler for Executor in SystemUI",
             replaceWith = ReplaceWith("registerReceiver(receiver, filter, executor, user)"))
     @JvmOverloads
-    fun registerReceiverWithHandler(
+    open fun registerReceiverWithHandler(
         receiver: BroadcastReceiver,
         filter: IntentFilter,
         handler: Handler,
@@ -118,7 +118,7 @@ open class BroadcastDispatcher @Inject constructor (
      *                                  categories or the filter has no actions.
      */
     @JvmOverloads
-    fun registerReceiver(
+    open fun registerReceiver(
         receiver: BroadcastReceiver,
         filter: IntentFilter,
         executor: Executor? = context.mainExecutor,
@@ -149,7 +149,7 @@ open class BroadcastDispatcher @Inject constructor (
      *
      * @param receiver The receiver to unregister. It will be unregistered for all users.
      */
-    fun unregisterReceiver(receiver: BroadcastReceiver) {
+    open fun unregisterReceiver(receiver: BroadcastReceiver) {
         handler.obtainMessage(MSG_REMOVE_RECEIVER, receiver).sendToTarget()
     }
 
@@ -159,14 +159,14 @@ open class BroadcastDispatcher @Inject constructor (
      * @param receiver The receiver to unregister. It will be unregistered for all users.
      * @param user The user associated to the registered [receiver]. It can be [UserHandle.ALL].
      */
-    fun unregisterReceiverForUser(receiver: BroadcastReceiver, user: UserHandle) {
+    open fun unregisterReceiverForUser(receiver: BroadcastReceiver, user: UserHandle) {
         handler.obtainMessage(MSG_REMOVE_RECEIVER_FOR_USER, user.identifier, 0, receiver)
                 .sendToTarget()
     }
 
     @VisibleForTesting
     protected open fun createUBRForUser(userId: Int) =
-            UserBroadcastDispatcher(context, userId, mainHandler, bgLooper)
+            UserBroadcastDispatcher(context, userId, bgLooper)
 
     override fun dump(fd: FileDescriptor, pw: PrintWriter, args: Array<out String>) {
         pw.println("Broadcast dispatcher:")

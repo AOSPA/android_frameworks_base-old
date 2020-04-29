@@ -45,11 +45,11 @@ import android.annotation.IntRange;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.UserIdInt;
-import android.app.blob.AccessorInfo;
 import android.app.blob.BlobHandle;
 import android.app.blob.BlobInfo;
 import android.app.blob.IBlobStoreManager;
 import android.app.blob.IBlobStoreSession;
+import android.app.blob.LeaseInfo;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
@@ -62,7 +62,9 @@ import android.content.res.Resources;
 import android.os.Binder;
 import android.os.Handler;
 import android.os.HandlerThread;
+import android.os.LimitExceededException;
 import android.os.ParcelFileDescriptor;
+import android.os.ParcelableException;
 import android.os.Process;
 import android.os.RemoteCallback;
 import android.os.SystemClock;
@@ -394,12 +396,12 @@ public class BlobStoreManagerService extends SystemService {
                 throw new IllegalArgumentException(
                         "Lease expiry cannot be later than blobs expiry time");
             }
-            if (getTotalUsageBytesLocked(callingUid, callingPackage)
-                    + blobMetadata.getSize() > BlobStoreConfig.getAppDataBytesLimit()) {
-                throw new IllegalStateException("Total amount of data with an active lease"
+            if (blobMetadata.getSize()
+                    > getRemainingLeaseQuotaBytesInternal(callingUid, callingPackage)) {
+                throw new LimitExceededException("Total amount of data with an active lease"
                         + " is exceeding the max limit");
             }
-            blobMetadata.addLeasee(callingPackage, callingUid,
+            blobMetadata.addOrReplaceLeasee(callingPackage, callingUid,
                     descriptionResId, description, leaseExpiryTimeMillis);
             if (LOGV) {
                 Slog.v(TAG, "Acquired lease on " + blobHandle
@@ -424,8 +426,9 @@ public class BlobStoreManagerService extends SystemService {
     private void releaseLeaseInternal(BlobHandle blobHandle, int callingUid,
             String callingPackage) {
         synchronized (mBlobsLock) {
-            final BlobMetadata blobMetadata = getUserBlobsLocked(UserHandle.getUserId(callingUid))
-                    .get(blobHandle);
+            final ArrayMap<BlobHandle, BlobMetadata> userBlobs =
+                    getUserBlobsLocked(UserHandle.getUserId(callingUid));
+            final BlobMetadata blobMetadata = userBlobs.get(blobHandle);
             if (blobMetadata == null || !blobMetadata.isAccessAllowedForCaller(
                     callingPackage, callingUid)) {
                 throw new SecurityException("Caller not allowed to access " + blobHandle
@@ -436,7 +439,19 @@ public class BlobStoreManagerService extends SystemService {
                 Slog.v(TAG, "Released lease on " + blobHandle
                         + "; callingUid=" + callingUid + ", callingPackage=" + callingPackage);
             }
+            if (blobMetadata.shouldBeDeleted(true /* respectLeaseWaitTime */)) {
+                deleteBlobLocked(blobMetadata);
+                userBlobs.remove(blobHandle);
+            }
             writeBlobsInfoAsync();
+        }
+    }
+
+    private long getRemainingLeaseQuotaBytesInternal(int callingUid, String callingPackage) {
+        synchronized (mBlobsLock) {
+            final long remainingQuota = BlobStoreConfig.getAppDataBytesLimit()
+                    - getTotalUsageBytesLocked(callingUid, callingPackage);
+            return remainingQuota > 0 ? remainingQuota : 0;
         }
     }
 
@@ -454,17 +469,17 @@ public class BlobStoreManagerService extends SystemService {
                 return packageResources;
             };
             getUserBlobsLocked(userId).forEach((blobHandle, blobMetadata) -> {
-                final ArrayList<AccessorInfo> accessorInfos = new ArrayList<>();
+                final ArrayList<LeaseInfo> leaseInfos = new ArrayList<>();
                 blobMetadata.forEachLeasee(leasee -> {
                     final int descriptionResId = leasee.descriptionResEntryName == null
                             ? Resources.ID_NULL
                             : getDescriptionResourceId(resourcesGetter.apply(leasee.packageName),
                                     leasee.descriptionResEntryName, leasee.packageName);
-                    accessorInfos.add(new AccessorInfo(leasee.packageName, leasee.expiryTimeMillis,
+                    leaseInfos.add(new LeaseInfo(leasee.packageName, leasee.expiryTimeMillis,
                             descriptionResId, leasee.description));
                 });
                 blobInfos.add(new BlobInfo(blobMetadata.getBlobId(),
-                        blobHandle.getExpiryTimeMillis(), blobHandle.getLabel(), accessorInfos));
+                        blobHandle.getExpiryTimeMillis(), blobHandle.getLabel(), leaseInfos));
             });
         }
         return blobInfos;
@@ -479,6 +494,31 @@ public class BlobStoreManagerService extends SystemService {
                 return blobMetadata.getBlobId() == blobId;
             });
             writeBlobsInfoAsync();
+        }
+    }
+
+    private List<BlobHandle> getLeasedBlobsInternal(int callingUid,
+            @NonNull String callingPackage) {
+        final ArrayList<BlobHandle> leasedBlobs = new ArrayList<>();
+        forEachBlobInUser(blobMetadata -> {
+            if (blobMetadata.isALeasee(callingPackage, callingUid)) {
+                leasedBlobs.add(blobMetadata.getBlobHandle());
+            }
+        }, UserHandle.getUserId(callingUid));
+        return leasedBlobs;
+    }
+
+    private LeaseInfo getLeaseInfoInternal(BlobHandle blobHandle,
+            int callingUid, @NonNull String callingPackage) {
+        synchronized (mBlobsLock) {
+            final BlobMetadata blobMetadata = getUserBlobsLocked(UserHandle.getUserId(callingUid))
+                    .get(blobHandle);
+            if (blobMetadata == null || !blobMetadata.isAccessAllowedForCaller(
+                    callingPackage, callingUid)) {
+                throw new SecurityException("Caller not allowed to access " + blobHandle
+                        + "; callingUid=" + callingUid + ", callingPackage=" + callingPackage);
+            }
+            return blobMetadata.getLeaseInfo(callingPackage, callingUid);
         }
     }
 
@@ -533,12 +573,16 @@ public class BlobStoreManagerService extends SystemService {
                     final Committer newCommitter = new Committer(session.getOwnerPackageName(),
                             session.getOwnerUid(), session.getBlobAccessMode());
                     final Committer existingCommitter = blob.getExistingCommitter(newCommitter);
-                    blob.addCommitter(newCommitter);
+                    blob.addOrReplaceCommitter(newCommitter);
                     try {
                         writeBlobsInfoLocked();
                         session.sendCommitCallbackResult(COMMIT_RESULT_SUCCESS);
                     } catch (Exception e) {
-                        blob.addCommitter(existingCommitter);
+                        if (existingCommitter == null) {
+                            blob.removeCommitter(newCommitter);
+                        } else {
+                            blob.addOrReplaceCommitter(existingCommitter);
+                        }
                         session.sendCommitCallbackResult(COMMIT_RESULT_ERROR);
                     }
                     getUserSessionsLocked(UserHandle.getUserId(session.getOwnerUid()))
@@ -838,12 +882,15 @@ public class BlobStoreManagerService extends SystemService {
                     getUserBlobsLocked(UserHandle.getUserId(uid));
             userBlobs.entrySet().removeIf(entry -> {
                 final BlobMetadata blobMetadata = entry.getValue();
-                blobMetadata.removeCommitter(packageName, uid);
+                final boolean isACommitter = blobMetadata.isACommitter(packageName, uid);
+                if (isACommitter) {
+                    blobMetadata.removeCommitter(packageName, uid);
+                }
                 blobMetadata.removeLeasee(packageName, uid);
-                // Delete the blob if it doesn't have any active leases.
-                if (!blobMetadata.hasLeases()) {
-                    blobMetadata.getBlobFile().delete();
-                    mActiveBlobIds.remove(blobMetadata.getBlobId());
+                // Regardless of when the blob is committed, we need to delete
+                // it if it was from the deleted package to ensure we delete all traces of it.
+                if (blobMetadata.shouldBeDeleted(isACommitter /* respectLeaseWaitTime */)) {
+                    deleteBlobLocked(blobMetadata);
                     return true;
                 }
                 return false;
@@ -874,8 +921,7 @@ public class BlobStoreManagerService extends SystemService {
             if (userBlobs != null) {
                 for (int i = 0, count = userBlobs.size(); i < count; ++i) {
                     final BlobMetadata blobMetadata = userBlobs.valueAt(i);
-                    blobMetadata.getBlobFile().delete();
-                    mActiveBlobIds.remove(blobMetadata.getBlobId());
+                    deleteBlobLocked(blobMetadata);
                 }
             }
             if (LOGV) {
@@ -913,27 +959,14 @@ public class BlobStoreManagerService extends SystemService {
         for (int i = 0, userCount = mBlobsMap.size(); i < userCount; ++i) {
             final ArrayMap<BlobHandle, BlobMetadata> userBlobs = mBlobsMap.valueAt(i);
             userBlobs.entrySet().removeIf(entry -> {
-                final BlobHandle blobHandle = entry.getKey();
                 final BlobMetadata blobMetadata = entry.getValue();
-                boolean shouldRemove = false;
 
-                // Cleanup expired data blobs.
-                if (blobHandle.isExpired()) {
-                    shouldRemove = true;
-                }
-
-                // Cleanup blobs with no active leases.
-                // TODO: Exclude blobs which were just committed.
-                if (!blobMetadata.hasLeases()) {
-                    shouldRemove = true;
-                }
-
-                if (shouldRemove) {
-                    blobMetadata.getBlobFile().delete();
-                    mActiveBlobIds.remove(blobMetadata.getBlobId());
+                if (blobMetadata.shouldBeDeleted(true /* respectLeaseWaitTime */)) {
+                    deleteBlobLocked(blobMetadata);
                     deletedBlobIds.add(blobMetadata.getBlobId());
+                    return true;
                 }
-                return shouldRemove;
+                return false;
             });
         }
         writeBlobsInfoAsync();
@@ -970,6 +1003,12 @@ public class BlobStoreManagerService extends SystemService {
         writeBlobSessionsAsync();
     }
 
+    @GuardedBy("mBlobsLock")
+    private void deleteBlobLocked(BlobMetadata blobMetadata) {
+        blobMetadata.getBlobFile().delete();
+        mActiveBlobIds.remove(blobMetadata.getBlobId());
+    }
+
     void runClearAllSessions(@UserIdInt int userId) {
         synchronized (mBlobsLock) {
             if (userId == UserHandle.USER_ALL) {
@@ -999,9 +1038,8 @@ public class BlobStoreManagerService extends SystemService {
             if (blobMetadata == null) {
                 return;
             }
-            blobMetadata.getBlobFile().delete();
+            deleteBlobLocked(blobMetadata);
             userBlobs.remove(blobHandle);
-            mActiveBlobIds.remove(blobMetadata.getBlobId());
             writeBlobsInfoAsync();
         }
     }
@@ -1267,11 +1305,19 @@ public class BlobStoreManagerService extends SystemService {
             final int callingUid = Binder.getCallingUid();
             verifyCallingPackage(callingUid, packageName);
 
+            if (Process.isIsolated(callingUid) || mPackageManagerInternal.isInstantApp(
+                    packageName, UserHandle.getUserId(callingUid))) {
+                throw new SecurityException("Caller not allowed to open blob; "
+                        + "callingUid=" + callingUid + ", callingPackage=" + packageName);
+            }
+
             try {
                 acquireLeaseInternal(blobHandle, descriptionResId, description,
                         leaseExpiryTimeMillis, callingUid, packageName);
             } catch (Resources.NotFoundException e) {
                 throw new IllegalArgumentException(e);
+            } catch (LimitExceededException e) {
+                throw new ParcelableException(e);
             }
         }
 
@@ -1284,7 +1330,21 @@ public class BlobStoreManagerService extends SystemService {
             final int callingUid = Binder.getCallingUid();
             verifyCallingPackage(callingUid, packageName);
 
+            if (Process.isIsolated(callingUid) || mPackageManagerInternal.isInstantApp(
+                    packageName, UserHandle.getUserId(callingUid))) {
+                throw new SecurityException("Caller not allowed to open blob; "
+                        + "callingUid=" + callingUid + ", callingPackage=" + packageName);
+            }
+
             releaseLeaseInternal(blobHandle, callingUid, packageName);
+        }
+
+        @Override
+        public long getRemainingLeaseQuotaBytes(@NonNull String packageName) {
+            final int callingUid = Binder.getCallingUid();
+            verifyCallingPackage(callingUid, packageName);
+
+            return getRemainingLeaseQuotaBytesInternal(callingUid, packageName);
         }
 
         @Override
@@ -1293,8 +1353,15 @@ public class BlobStoreManagerService extends SystemService {
 
             mContext.enforceCallingOrSelfPermission(android.Manifest.permission.DUMP,
                     "Caller is not allowed to call this; caller=" + Binder.getCallingUid());
-            mHandler.post(PooledLambda.obtainRunnable(remoteCallback::sendResult, null)
-                    .recycleOnUse());
+            // We post messages back and forth between mHandler thread and mBackgroundHandler
+            // thread while committing a blob. We need to replicate the same pattern here to
+            // ensure pending messages have been handled.
+            mHandler.post(() -> {
+                mBackgroundHandler.post(() -> {
+                    mHandler.post(PooledLambda.obtainRunnable(remoteCallback::sendResult, null)
+                            .recycleOnUse());
+                });
+            });
         }
 
         @Override
@@ -1317,6 +1384,36 @@ public class BlobStoreManagerService extends SystemService {
             }
 
             deleteBlobInternal(blobId, callingUid);
+        }
+
+        @Override
+        @NonNull
+        public List<BlobHandle> getLeasedBlobs(@NonNull String packageName) {
+            Objects.requireNonNull(packageName, "packageName must not be null");
+
+            final int callingUid = Binder.getCallingUid();
+            verifyCallingPackage(callingUid, packageName);
+
+            return getLeasedBlobsInternal(callingUid, packageName);
+        }
+
+        @Override
+        @Nullable
+        public LeaseInfo getLeaseInfo(@NonNull BlobHandle blobHandle, @NonNull String packageName) {
+            Objects.requireNonNull(blobHandle, "blobHandle must not be null");
+            blobHandle.assertIsValid();
+            Objects.requireNonNull(packageName, "packageName must not be null");
+
+            final int callingUid = Binder.getCallingUid();
+            verifyCallingPackage(callingUid, packageName);
+
+            if (Process.isIsolated(callingUid) || mPackageManagerInternal.isInstantApp(
+                    packageName, UserHandle.getUserId(callingUid))) {
+                throw new SecurityException("Caller not allowed to open blob; "
+                        + "callingUid=" + callingUid + ", callingPackage=" + packageName);
+            }
+
+            return getLeaseInfoInternal(blobHandle, callingUid, packageName);
         }
 
         @Override

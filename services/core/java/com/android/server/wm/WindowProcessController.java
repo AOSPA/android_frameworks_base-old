@@ -751,6 +751,16 @@ public class WindowProcessController extends ConfigurationContainer<Configuratio
         return false;
     }
 
+    boolean hasResumedActivity() {
+        for (int i = mActivities.size() - 1; i >= 0; --i) {
+            final ActivityRecord activity = mActivities.get(i);
+            if (activity.isState(RESUMED)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
 
     void updateIntentForHeavyWeightActivity(Intent intent) {
         if (mActivities.isEmpty()) {
@@ -1058,7 +1068,7 @@ public class WindowProcessController extends ConfigurationContainer<Configuratio
     }
 
     private void registerActivityConfigurationListener(ActivityRecord activityRecord) {
-        if (activityRecord == null) {
+        if (activityRecord == null || activityRecord.containsListener(this)) {
             return;
         }
         // A process can only register to one activityRecord to listen to the override configuration
@@ -1093,7 +1103,7 @@ public class WindowProcessController extends ConfigurationContainer<Configuratio
 
         for (int i = mActivities.size() - 1; i >= 0; i--) {
             final ActivityRecord activityRecord = mActivities.get(i);
-            if (!activityRecord.finishing && !activityRecord.containsListener(this)) {
+            if (!activityRecord.finishing) {
                 // Eligible activity is found, update listener.
                 registerActivityConfigurationListener(activityRecord);
                 return;

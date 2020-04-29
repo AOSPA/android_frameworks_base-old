@@ -20,6 +20,7 @@ import static android.app.NotificationChannel.PLACEHOLDER_CONVERSATION_ID;
 import static android.app.NotificationManager.IMPORTANCE_NONE;
 import static android.app.NotificationManager.IMPORTANCE_UNSPECIFIED;
 
+import static com.android.internal.util.FrameworkStatsLog.ANNOTATION_ID_IS_UID;
 import static com.android.internal.util.FrameworkStatsLog.PACKAGE_NOTIFICATION_CHANNEL_GROUP_PREFERENCES;
 import static com.android.internal.util.FrameworkStatsLog.PACKAGE_NOTIFICATION_CHANNEL_PREFERENCES;
 import static com.android.internal.util.FrameworkStatsLog.PACKAGE_NOTIFICATION_PREFERENCES;
@@ -46,7 +47,6 @@ import android.service.notification.RankingHelperProto;
 import android.text.TextUtils;
 import android.util.ArrayMap;
 import android.util.ArraySet;
-import android.util.FeatureFlagUtils;
 import android.util.Pair;
 import android.util.Slog;
 import android.util.SparseBooleanArray;
@@ -180,8 +180,8 @@ public class PreferencesHelper implements RankingConfig {
         updateBadgingEnabled();
         updateBubblesEnabled();
         syncChannelsBypassingDnd(mContext.getUserId());
-        mAllowInvalidShortcuts = FeatureFlagUtils.isEnabled(mContext,
-                FeatureFlagUtils.NOTIF_CONVO_BYPASS_SHORTCUT_REQ);
+        mAllowInvalidShortcuts = Settings.Global.getInt(mContext.getContentResolver(),
+                Settings.Global.REQUIRE_SHORTCUTS_FOR_CONVERSATIONS, 0) == 0;
     }
 
     public void readXml(XmlPullParser parser, boolean forRestore, int userId)
@@ -725,8 +725,8 @@ public class PreferencesHelper implements RankingConfig {
                     existing.setDescription(channel.getDescription());
                     needsPolicyFileChange = true;
                 }
-                if (channel.isBlockableSystem() != existing.isBlockableSystem()) {
-                    existing.setBlockableSystem(channel.isBlockableSystem());
+                if (channel.isBlockable() != existing.isBlockable()) {
+                    existing.setBlockable(channel.isBlockable());
                     needsPolicyFileChange = true;
                 }
                 if (channel.getGroup() != null && existing.getGroup() == null) {
@@ -1798,6 +1798,7 @@ public class PreferencesHelper implements RankingConfig {
                         .setAtomId(PACKAGE_NOTIFICATION_PREFERENCES);
                 final PackagePreferences r = mPackagePreferences.valueAt(i);
                 event.writeInt(r.uid);
+                event.addBooleanAnnotation(ANNOTATION_ID_IS_UID, true);
                 event.writeInt(r.importance);
                 event.writeInt(r.visibility);
                 event.writeInt(r.lockedAppFields);
@@ -1825,6 +1826,7 @@ public class PreferencesHelper implements RankingConfig {
                     StatsEvent.Builder event = StatsEvent.newBuilder()
                             .setAtomId(PACKAGE_NOTIFICATION_CHANNEL_PREFERENCES);
                     event.writeInt(r.uid);
+                    event.addBooleanAnnotation(ANNOTATION_ID_IS_UID, true);
                     event.writeString(channel.getId());
                     event.writeString(channel.getName().toString());
                     event.writeString(channel.getDescription());
@@ -1856,6 +1858,7 @@ public class PreferencesHelper implements RankingConfig {
                     StatsEvent.Builder event = StatsEvent.newBuilder()
                             .setAtomId(PACKAGE_NOTIFICATION_CHANNEL_GROUP_PREFERENCES);
                     event.writeInt(r.uid);
+                    event.addBooleanAnnotation(ANNOTATION_ID_IS_UID, true);
                     event.writeString(groupChannel.getId());
                     event.writeString(groupChannel.getName().toString());
                     event.writeString(groupChannel.getDescription());

@@ -24,6 +24,7 @@ import android.annotation.TestApi;
 import android.app.Service;
 import android.app.slice.Slice;
 import android.content.Intent;
+import android.content.IntentSender;
 import android.graphics.PixelFormat;
 import android.os.Bundle;
 import android.os.Handler;
@@ -60,6 +61,8 @@ public abstract class InlineSuggestionRenderService extends Service {
 
     private final Handler mHandler = new Handler(Looper.getMainLooper(), null, true);
 
+    private IInlineSuggestionUiCallback mCallback;
+
     private void handleRenderSuggestion(IInlineSuggestionUiCallback callback,
             InlinePresentation presentation, int width, int height, IBinder hostInputToken,
             int displayId) {
@@ -84,6 +87,7 @@ public abstract class InlineSuggestionRenderService extends Service {
                 }
                 return;
             }
+            mCallback = callback;
 
             final InlineSuggestionRoot suggestionRoot = new InlineSuggestionRoot(this, callback);
             suggestionRoot.addView(suggestionView);
@@ -94,13 +98,28 @@ public abstract class InlineSuggestionRenderService extends Service {
 
             final SurfaceControlViewHost host = new SurfaceControlViewHost(this, getDisplay(),
                     hostInputToken);
-            host.addView(suggestionRoot, lp);
+            host.setView(suggestionRoot, lp);
             suggestionRoot.setOnClickListener((v) -> {
                 try {
-                    callback.onAutofill();
+                    if (suggestionView.hasOnClickListeners()) {
+                        suggestionView.callOnClick();
+                    }
+                    callback.onClick();
                 } catch (RemoteException e) {
-                    Log.w(TAG, "RemoteException calling onAutofill()");
+                    Log.w(TAG, "RemoteException calling onClick()");
                 }
+            });
+
+            suggestionRoot.setOnLongClickListener((v) -> {
+                try {
+                    if (suggestionView.hasOnLongClickListeners()) {
+                        suggestionView.performLongClick();
+                    }
+                    callback.onLongClick();
+                } catch (RemoteException e) {
+                    Log.w(TAG, "RemoteException calling onLongClick()");
+                }
+                return true;
             });
 
             sendResult(callback, host.getSurfacePackage());
@@ -140,11 +159,26 @@ public abstract class InlineSuggestionRenderService extends Service {
     }
 
     /**
-     *  Returns the metadata about the renderer. Returns {@code null} if no metadata is provided.
+     * Starts the {@link IntentSender} from the client app.
+     *
+     * @param intentSender the {@link IntentSender} to start the attribution UI from the client app.
      */
-    @Nullable
+    public final void startIntentSender(@NonNull IntentSender intentSender) {
+        if (mCallback == null) return;
+        try {
+            mCallback.onStartIntentSender(intentSender);
+        } catch (RemoteException e) {
+            e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     *  Returns the metadata about the renderer. Returns {@code Bundle.Empty} if no metadata is
+     *  provided.
+     */
+    @NonNull
     public Bundle onGetInlineSuggestionsRendererInfo() {
-        return null;
+        return Bundle.EMPTY;
     }
 
     /**

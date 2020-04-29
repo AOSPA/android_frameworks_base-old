@@ -33,12 +33,14 @@ import android.content.res.Resources;
 import android.net.ConnectivityManager;
 import android.net.Network;
 import android.net.NetworkCapabilities;
+import android.net.NetworkScoreManager;
 import android.net.wifi.WifiManager;
 import android.os.AsyncTask;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.PersistableBundle;
+import android.os.SystemProperties;
 import android.provider.Settings;
 import android.telephony.CarrierConfigManager;
 import android.telephony.CellSignalStrength;
@@ -177,10 +179,13 @@ public class NetworkControllerImpl extends BroadcastReceiver
     @Inject
     public NetworkControllerImpl(Context context, @Background Looper bgLooper,
             DeviceProvisionedController deviceProvisionedController,
-            BroadcastDispatcher broadcastDispatcher) {
-        this(context, (ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE),
-                (TelephonyManager) context.getSystemService(Context.TELEPHONY_SERVICE),
-                (WifiManager) context.getSystemService(Context.WIFI_SERVICE),
+            BroadcastDispatcher broadcastDispatcher, ConnectivityManager connectivityManager,
+            TelephonyManager telephonyManager, WifiManager wifiManager,
+            NetworkScoreManager networkScoreManager) {
+        this(context, connectivityManager,
+                telephonyManager,
+                wifiManager,
+                networkScoreManager,
                 SubscriptionManager.from(context), Config.readConfig(context), bgLooper,
                 new CallbackHandler(),
                 new AccessPointControllerImpl(context),
@@ -194,6 +199,7 @@ public class NetworkControllerImpl extends BroadcastReceiver
     @VisibleForTesting
     NetworkControllerImpl(Context context, ConnectivityManager connectivityManager,
             TelephonyManager telephonyManager, WifiManager wifiManager,
+            NetworkScoreManager networkScoreManager,
             SubscriptionManager subManager, Config config, Looper bgLooper,
             CallbackHandler callbackHandler,
             AccessPointControllerImpl accessPointController,
@@ -233,7 +239,7 @@ public class NetworkControllerImpl extends BroadcastReceiver
             }
         });
         mWifiSignalController = new WifiSignalController(mContext, mHasMobileDataFeature,
-                mCallbackHandler, this, mWifiManager);
+                mCallbackHandler, this, mWifiManager, mConnectivityManager, networkScoreManager);
 
         mEthernetSignalController = new EthernetSignalController(mContext, mCallbackHandler, this);
 
@@ -1176,6 +1182,7 @@ public class NetworkControllerImpl extends BroadcastReceiver
         boolean hideNoInternetState = false;
         boolean showVolteIcon = false;
         boolean alwaysShowNetworkTypeIcon = false;
+        boolean enableRatIconEnhancement = false;
 
         static Config readConfig(Context context) {
             Config config = new Config();
@@ -1212,6 +1219,9 @@ public class NetworkControllerImpl extends BroadcastReceiver
                 config.hideLtePlus = b.getBoolean(
                         CarrierConfigManager.KEY_HIDE_LTE_PLUS_DATA_ICON_BOOL);
             }
+
+            config.enableRatIconEnhancement =
+                    SystemProperties.getBoolean("persist.sysui.rat_icon_enhancement", false);
             return config;
         }
     }

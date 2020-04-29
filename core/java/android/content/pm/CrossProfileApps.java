@@ -96,7 +96,7 @@ public class CrossProfileApps {
             mService.startActivityAsUser(
                     mContext.getIApplicationThread(),
                     mContext.getPackageName(),
-                    mContext.getFeatureId(),
+                    mContext.getAttributionTag(),
                     component,
                     targetUser.getIdentifier(),
                     true);
@@ -162,7 +162,7 @@ public class CrossProfileApps {
             mService.startActivityAsUserByIntent(
                     mContext.getIApplicationThread(),
                     mContext.getPackageName(),
-                    mContext.getFeatureId(),
+                    mContext.getAttributionTag(),
                     intent,
                     targetUser.getIdentifier(),
                     callingActivity != null ? callingActivity.getActivityToken() : null,
@@ -190,7 +190,7 @@ public class CrossProfileApps {
     public void startActivity(@NonNull ComponentName component, @NonNull UserHandle targetUser) {
         try {
             mService.startActivityAsUser(mContext.getIApplicationThread(),
-                    mContext.getPackageName(), mContext.getFeatureId(), component,
+                    mContext.getPackageName(), mContext.getAttributionTag(), component,
                     targetUser.getIdentifier(), false);
         } catch (RemoteException ex) {
             throw ex.rethrowFromSystemServer();
@@ -268,15 +268,17 @@ public class CrossProfileApps {
     }
 
     /**
-     * Returns whether the calling package can request user consent to interact across profiles.
+     * Returns whether the calling package can request to navigate the user to
+     * the relevant settings page to request user consent to interact across profiles.
      *
-     * <p>If {@code true}, user consent can be obtained via {@link
+     * <p>If {@code true}, the navigation intent can be obtained via {@link
      * #createRequestInteractAcrossProfilesIntent()}. The package can then listen to {@link
      * #ACTION_CAN_INTERACT_ACROSS_PROFILES_CHANGED} broadcasts.
      *
      * <p>Specifically, returns whether the following are all true:
      * <ul>
-     * <li>{@link #getTargetUserProfiles()} returns a non-empty list for the calling user.</li>
+     * <li>{@code UserManager#getEnabledProfileIds(int)} ()} returns at least one other profile for
+     * the calling user.</li>
      * <li>The calling app has requested</li>
      * {@code android.Manifest.permission.INTERACT_ACROSS_PROFILES} in its manifest.
      * <li>The calling package has either been whitelisted by default by the OEM or has been
@@ -284,6 +286,10 @@ public class CrossProfileApps {
      * {@link android.app.admin.DevicePolicyManager#setCrossProfilePackages(ComponentName, Set)}.
      * </li>
      * </ul>
+     *
+     * <p>Note that in order for the user to be able to grant the consent, the requesting package
+     * must be whitelisted by the admin or the OEM and installed in the other profile. If this is
+     * not the case the user will be shown a message explaining why they can't grant the consent.
      *
      * <p>Note that user consent could already be granted if given a return value of {@code true}.
      * The package's current ability to interact across profiles can be checked with {@link
@@ -334,7 +340,7 @@ public class CrossProfileApps {
      * Returns an {@link Intent} to open the settings page that allows the user to decide whether
      * the calling app can interact across profiles.
      *
-     * <p>Returns {@code null} if {@link #canRequestInteractAcrossProfiles()} is {@code false}.
+     * <p>The method {@link #canRequestInteractAcrossProfiles()} must be returning {@code true}.
      *
      * <p>Note that the user may already have given consent and the app may already be able to
      * interact across profiles, even if {@link #canRequestInteractAcrossProfiles()} is {@code
@@ -345,11 +351,12 @@ public class CrossProfileApps {
      * the app can interact across profiles
      *
      * @throws SecurityException if {@code mContext.getPackageName()} does not belong to the
-     * calling UID.
+     * calling UID, or {@link #canRequestInteractAcrossProfiles()} is {@code false}.
      */
-    public @Nullable Intent createRequestInteractAcrossProfilesIntent() {
+    public @NonNull Intent createRequestInteractAcrossProfilesIntent() {
         if (!canRequestInteractAcrossProfiles()) {
-            return null;
+            throw new SecurityException(
+                    "The calling package can not request to interact across profiles.");
         }
         final Intent settingsIntent = new Intent();
         settingsIntent.setAction(Settings.ACTION_MANAGE_CROSS_PROFILE_ACCESS);
@@ -421,6 +428,26 @@ public class CrossProfileApps {
     }
 
     /**
+     * Returns {@code true} if the given package has requested
+     * {@link android.Manifest.permission#INTERACT_ACROSS_PROFILES} and the user has at least one
+     * other profile in the same profile group.
+     *
+     * <p>This differs from {@link #canConfigureInteractAcrossProfiles(String)} since it will
+     * not return {@code false} if the app is not whitelisted or not installed in the other profile.
+     *
+     * <p>Note that platform-signed apps that are automatically granted the permission and are not
+     * whitelisted by the OEM will not be included in this list.
+     *
+     * @hide
+     */
+    public boolean canUserAttemptToConfigureInteractAcrossProfiles(String packageName) {
+        try {
+            return mService.canUserAttemptToConfigureInteractAcrossProfiles(packageName);
+        } catch (RemoteException ex) {
+            throw ex.rethrowFromSystemServer();
+        }
+    }
+    /**
      * For each of the packages defined in {@code previousCrossProfilePackages} but not included in
      * {@code newCrossProfilePackages}, resets the app-op for {@link android.Manifest.permission
      * #INTERACT_ACROSS_PROFILES} back to its default value if it can no longer be configured by
@@ -458,6 +485,34 @@ public class CrossProfileApps {
         }
         try {
             mService.resetInteractAcrossProfilesAppOps(unsetCrossProfilePackages);
+        } catch (RemoteException ex) {
+            throw ex.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Clears the app-op for {@link android.Manifest.permission#INTERACT_ACROSS_PROFILES} back to
+     * its default value for every package on the device.
+     *
+     * <p>This method can be used to ensure that app-op state is not left around on existing users
+     * for previously-configured profiles.
+     *
+     * <p>If the caller does not have the {@link android.Manifest.permission
+     * #CONFIGURE_INTERACT_ACROSS_PROFILES} permission, then they must have the permissions that
+     * would have been required to call {@link android.app.AppOpsManager#setMode(int, int, String,
+     * int)}, which includes {@link android.Manifest.permission#MANAGE_APP_OPS_MODES}.
+     *
+     * <p>Also requires either {@link android.Manifest.permission#INTERACT_ACROSS_USERS} or {@link
+     * android.Manifest.permission#INTERACT_ACROSS_USERS_FULL}.
+     *
+     * @hide
+     */
+    @RequiresPermission(
+            allOf={android.Manifest.permission.CONFIGURE_INTERACT_ACROSS_PROFILES,
+                    android.Manifest.permission.INTERACT_ACROSS_USERS})
+    public void clearInteractAcrossProfilesAppOps() {
+        try {
+            mService.clearInteractAcrossProfilesAppOps();
         } catch (RemoteException ex) {
             throw ex.rethrowFromSystemServer();
         }

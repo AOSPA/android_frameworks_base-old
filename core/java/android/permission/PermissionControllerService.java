@@ -58,6 +58,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executor;
 import java.util.function.Consumer;
 import java.util.function.IntConsumer;
 
@@ -214,16 +215,32 @@ public abstract class PermissionControllerService extends Service {
     @BinderThread
     public abstract void onGrantOrUpgradeDefaultRuntimePermissions(@NonNull Runnable callback);
 
+
     /**
      * Called by system to update the
      * {@link PackageManager}{@code .FLAG_PERMISSION_USER_SENSITIVE_WHEN_*} flags for permissions.
      * <p>
-     * This is typically when creating a new user or upgrading either system or
-     * permission controller package.
+     *
+     * If uid is -1, updates the permission flags for all packages.
+     *
+     * Typically called by the system when a new app is installed or updated or when creating a
+     * new user or upgrading either system or permission controller package.
+     *
+     * The callback will be executed by the provided Executor.
      */
     @BinderThread
-    public void onUpdateUserSensitivePermissionFlags() {
+    public void onUpdateUserSensitivePermissionFlags(int uid, @NonNull Executor executor,
+            @NonNull Runnable callback) {
         throw new AbstractMethodError("Must be overridden in implementing class");
+    }
+
+    /**
+     * Runs {@link #onUpdateUserSensitivePermissionFlags(int, Executor, Runnable)} with the main
+     * executor.
+     */
+    @BinderThread
+    public void onUpdateUserSensitivePermissionFlags(int uid, @NonNull Runnable callback) {
+        onUpdateUserSensitivePermissionFlags(uid, getMainExecutor(), callback);
     }
 
     /**
@@ -459,11 +476,14 @@ public abstract class PermissionControllerService extends Service {
             }
 
             @Override
-            public void updateUserSensitive(AndroidFuture callback) {
+            public void updateUserSensitiveForApp(int uid, @NonNull AndroidFuture callback) {
                 Preconditions.checkNotNull(callback, "callback cannot be null");
 
-                onUpdateUserSensitivePermissionFlags();
-                callback.complete(null);
+                try {
+                    onUpdateUserSensitivePermissionFlags(uid, () -> callback.complete(null));
+                } catch (Exception e) {
+                    callback.completeExceptionally(e);
+                }
             }
 
             @Override

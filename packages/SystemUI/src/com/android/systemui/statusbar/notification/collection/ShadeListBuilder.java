@@ -58,6 +58,7 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 import javax.inject.Inject;
 import javax.inject.Singleton;
@@ -273,8 +274,6 @@ public class ShadeListBuilder implements Dumpable {
      * if we detect that behavior, we should crash instantly.
      */
     private void buildList() {
-        mLogger.logStartBuildList(mIterationCount);
-
         mPipelineState.requireIsBefore(STATE_BUILD_STARTED);
         mPipelineState.setState(STATE_BUILD_STARTED);
 
@@ -316,20 +315,23 @@ public class ShadeListBuilder implements Dumpable {
 
         // Step 7: Lock in our group structure and log anything that's changed since the last run
         mPipelineState.incrementTo(STATE_FINALIZING);
-        logParentingChanges();
+        logChanges();
         freeEmptyGroups();
 
-        // Step 6: Dispatch the new list, first to any listeners and then to the view layer
-        if (mIterationCount % 10 == 0) {
-            mLogger.logFinalList(mNotifList);
-        }
+        // Step 8: Dispatch the new list, first to any listeners and then to the view layer
         dispatchOnBeforeRenderList(mReadOnlyNotifList);
         if (mOnRenderListListener != null) {
             mOnRenderListListener.onRenderList(mReadOnlyNotifList);
         }
 
-        // Step 7: We're done!
-        mLogger.logEndBuildList(mIterationCount);
+        // Step 9: We're done!
+        mLogger.logEndBuildList(
+                mIterationCount,
+                mReadOnlyNotifList.size(),
+                countChildren(mReadOnlyNotifList));
+        if (mIterationCount % 10 == 0) {
+            mLogger.logFinalList(mNotifList);
+        }
         mPipelineState.setState(STATE_IDLE);
         mIterationCount++;
     }
@@ -353,15 +355,13 @@ public class ShadeListBuilder implements Dumpable {
 
     private void resetNotifs() {
         for (GroupEntry group : mGroups.values()) {
-            group.setPreviousParent(group.getParent());
-            group.setParent(null);
+            group.beginNewAttachState();
             group.clearChildren();
             group.setSummary(null);
         }
 
         for (NotificationEntry entry : mAllEntries) {
-            entry.setPreviousParent(entry.getParent());
-            entry.setParent(null);
+            entry.beginNewAttachState();
 
             if (entry.mFirstAddedIteration == -1) {
                 entry.mFirstAddedIteration = mIterationCount;
@@ -371,8 +371,10 @@ public class ShadeListBuilder implements Dumpable {
         mNotifList.clear();
     }
 
-    private void filterNotifs(Collection<? extends ListEntry> entries,
-            List<ListEntry> out, List<NotifFilter> filters) {
+    private void filterNotifs(
+            Collection<? extends ListEntry> entries,
+            List<ListEntry> out,
+            List<NotifFilter> filters) {
         final long now = mSystemClock.uptimeMillis();
         for (ListEntry entry : entries)  {
             if (entry instanceof GroupEntry) {
@@ -433,6 +435,7 @@ public class ShadeListBuilder implements Dumpable {
                         group.setSummary(entry);
                     } else {
                         mLogger.logDuplicateSummary(
+                                mIterationCount,
                                 group.getKey(),
                                 existingSummary.getKey(),
                                 entry.getKey());
@@ -454,7 +457,7 @@ public class ShadeListBuilder implements Dumpable {
 
                 final String topLevelKey = entry.getKey();
                 if (mGroups.containsKey(topLevelKey)) {
-                    mLogger.logDuplicateTopLevelKey(topLevelKey);
+                    mLogger.logDuplicateTopLevelKey(mIterationCount, topLevelKey);
                 } else {
                     entry.setParent(ROOT_ENTRY);
                     out.add(entry);
@@ -585,9 +588,10 @@ public class ShadeListBuilder implements Dumpable {
      * filtered out during any of the filtering steps.
      */
     private void annulAddition(ListEntry entry) {
-        entry.setSection(-1);
-        entry.mNotifSection = null;
         entry.setParent(null);
+        entry.getAttachState().setSectionIndex(-1);
+        entry.getAttachState().setSection(null);
+        entry.getAttachState().setPromoter(null);
         if (entry.mFirstAddedIteration == mIterationCount) {
             entry.mFirstAddedIteration = -1;
         }
@@ -600,8 +604,8 @@ public class ShadeListBuilder implements Dumpable {
             if (entry instanceof GroupEntry) {
                 GroupEntry parent = (GroupEntry) entry;
                 for (NotificationEntry child : parent.getChildren()) {
-                    child.mNotifSection = sectionWithIndex.first;
-                    child.setSection(sectionWithIndex.second);
+                    child.getAttachState().setSection(sectionWithIndex.first);
+                    child.getAttachState().setSectionIndex(sectionWithIndex.second);
                 }
                 parent.sortChildren(sChildComparator);
             }
@@ -615,25 +619,52 @@ public class ShadeListBuilder implements Dumpable {
         mGroups.values().removeIf(ge -> ge.getSummary() == null && ge.getChildren().isEmpty());
     }
 
-    private void logParentingChanges() {
+    private void logChanges() {
         for (NotificationEntry entry : mAllEntries) {
-            if (entry.getParent() != entry.getPreviousParent()) {
-                mLogger.logParentChanged(
-                        entry.getKey(),
-                        entry.getPreviousParent() == null
-                                ? null : entry.getPreviousParent().getKey(),
-                        entry.getParent() == null
-                                ? null : entry.getParent().getKey());
-            }
+            logAttachStateChanges(entry);
         }
         for (GroupEntry group : mGroups.values()) {
-            if (group.getParent() != group.getPreviousParent()) {
-                mLogger.logParentChanged(
-                        group.getKey(),
-                        group.getPreviousParent() == null
-                                ? null : group.getPreviousParent().getKey(),
-                        group.getParent() == null
-                                ? null : group.getParent().getKey());
+            logAttachStateChanges(group);
+        }
+    }
+
+    private void logAttachStateChanges(ListEntry entry) {
+
+        final ListAttachState curr = entry.getAttachState();
+        final ListAttachState prev = entry.getPreviousAttachState();
+
+        if (!Objects.equals(curr, prev)) {
+            mLogger.logEntryAttachStateChanged(
+                    mIterationCount,
+                    entry.getKey(),
+                    prev.getParent(),
+                    curr.getParent());
+
+            if (curr.getParent() != prev.getParent()) {
+                mLogger.logParentChanged(mIterationCount, prev.getParent(), curr.getParent());
+            }
+
+            if (curr.getExcludingFilter() != prev.getExcludingFilter()) {
+                mLogger.logFilterChanged(
+                        mIterationCount, prev.getExcludingFilter(), curr.getExcludingFilter());
+            }
+
+            // When something gets detached, its promoter and section are always set to null, so
+            // don't bother logging those changes.
+            final boolean wasDetached = curr.getParent() == null && prev.getParent() != null;
+
+            if (!wasDetached && curr.getPromoter() != prev.getPromoter()) {
+                mLogger.logPromoterChanged(
+                        mIterationCount, prev.getPromoter(), curr.getPromoter());
+            }
+
+            if (!wasDetached && curr.getSection() != prev.getSection()) {
+                mLogger.logSectionChanged(
+                        mIterationCount,
+                        prev.getSection(),
+                        prev.getSectionIndex(),
+                        curr.getSection(),
+                        curr.getSectionIndex());
             }
         }
     }
@@ -680,20 +711,8 @@ public class ShadeListBuilder implements Dumpable {
     };
 
     private boolean applyFilters(NotificationEntry entry, long now, List<NotifFilter> filters) {
-        NotifFilter filter = findRejectingFilter(entry, now, filters);
-
-        if (filter != entry.mExcludingFilter) {
-            mLogger.logFilterChanged(
-                    entry.getKey(),
-                    entry.mExcludingFilter != null ? entry.mExcludingFilter.getName() : null,
-                    filter != null ? filter.getName() : null);
-
-            // Note that groups and summaries can also be filtered out later if they're part of a
-            // malformed group. We currently don't have a great way to track that beyond parenting
-            // change logs. Consider adding something similar to mExcludingFilter for them.
-            entry.mExcludingFilter = filter;
-        }
-
+        final NotifFilter filter = findRejectingFilter(entry, now, filters);
+        entry.getAttachState().setExcludingFilter(filter);
         return filter != null;
     }
 
@@ -712,15 +731,7 @@ public class ShadeListBuilder implements Dumpable {
 
     private boolean applyTopLevelPromoters(NotificationEntry entry) {
         NotifPromoter promoter = findPromoter(entry);
-
-        if (promoter != entry.mNotifPromoter) {
-            mLogger.logPromoterChanged(
-                    entry.getKey(),
-                    entry.mNotifPromoter != null ? entry.mNotifPromoter.getName() : null,
-                    promoter != null ? promoter.getName() : null);
-            entry.mNotifPromoter = promoter;
-        }
-
+        entry.getAttachState().setPromoter(promoter);
         return promoter != null;
     }
 
@@ -739,17 +750,8 @@ public class ShadeListBuilder implements Dumpable {
         final NotifSection section = sectionWithIndex.first;
         final Integer sectionIndex = sectionWithIndex.second;
 
-        if (section != entry.mNotifSection) {
-            mLogger.logSectionChanged(
-                    entry.getKey(),
-                    entry.mNotifSection != null ? entry.mNotifSection.getName() : null,
-                    entry.getSection(),
-                    section.getName(),
-                    sectionIndex);
-
-            entry.mNotifSection = section;
-            entry.setSection(sectionIndex);
-        }
+        entry.getAttachState().setSection(section);
+        entry.getAttachState().setSectionIndex(sectionIndex);
 
         return sectionWithIndex;
     }
@@ -769,6 +771,17 @@ public class ShadeListBuilder implements Dumpable {
         if (mPipelineState.is(STATE_IDLE)) {
             buildList();
         }
+    }
+
+    private static int countChildren(List<ListEntry> entries) {
+        int count = 0;
+        for (int i = 0; i < entries.size(); i++) {
+            final ListEntry entry = entries.get(i);
+            if (entry instanceof GroupEntry) {
+                count += ((GroupEntry) entry).getChildren().size();
+            }
+        }
+        return count;
     }
 
     private void dispatchOnBeforeTransformGroups(List<ListEntry> entries) {
@@ -816,7 +829,7 @@ public class ShadeListBuilder implements Dumpable {
          * @param entries A read-only view into the current notif list. Note that this list is
          *                backed by the live list and will change in response to new pipeline runs.
          */
-        void onRenderList(List<ListEntry> entries);
+        void onRenderList(@NonNull List<ListEntry> entries);
     }
 
     private static final NotifSection sDefaultSection =

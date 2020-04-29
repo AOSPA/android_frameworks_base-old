@@ -117,7 +117,7 @@
 
     <!-- Tiles native to System UI. Order should match "quick_settings_tiles_default" -->
     <string name="quick_settings_tiles_stock" translatable="false">
-        wifi,cell,battery,dnd,flashlight,rotation,bt,airplane,location,hotspot,inversion,saver,dark,work,cast,night,screenrecord
+        wifi,cell,battery,dnd,flashlight,rotation,bt,airplane,location,hotspot,inversion,saver,dark,work,cast,night,screenrecord,reverse
     </string>
 
     <!-- The tiles to display in QuickSettings -->
@@ -174,9 +174,6 @@
     <!-- Defines the implementation of the velocity tracker to be used for the panel expansion. Can
          be 'platform' or 'noisy' (i.e. for noisy touch screens). -->
     <string name="velocity_tracker_impl" translatable="false">platform</string>
-
-    <!-- Set to true to enable the user switcher on the keyguard. -->
-    <bool name="config_keyguardUserSwitcher">false</bool>
 
     <!-- Doze: does this device support STATE_DOZE?  -->
     <bool name="doze_display_state_supported">false</bool>
@@ -472,11 +469,17 @@
     <!-- On debuggable builds, alert the user if SystemUI PSS goes over this number (in kb) -->
     <integer name="watch_heap_limit">256000</integer>
 
+    <!-- Animation duration for resizing of PIP when entering/exiting. -->
+    <integer name="config_pipResizeAnimationDuration">425</integer>
+
     <!-- Allow dragging the PIP to a location to close it -->
     <bool name="config_pipEnableDismissDragToEdge">true</bool>
 
     <!-- Allow PIP to resize to a slightly bigger state upon touch/showing the menu -->
     <bool name="config_pipEnableResizeForMenu">true</bool>
+
+    <!-- Allow PIP to enable round corner, see also R.dimen.pip_corner_radius -->
+    <bool name="config_pipEnableRoundCorner">false</bool>
 
     <!-- SystemUI Plugins that can be loaded on user builds. -->
     <string-array name="config_pluginWhitelist" translatable="false">
@@ -527,4 +530,19 @@
     <!--  Flag to turn on the rendering of the above path or not  -->
     <bool name="config_enableDisplayCutoutProtection">false</bool>
 
+    <!-- Respect drawable/rounded.xml intrinsic size for multiple radius corner path customization -->
+    <bool name="config_roundedCornerMultipleRadius">false</bool>
+
+    <!-- Controls can query a preferred application for limited number of suggested controls.
+         This config value should contain the package name of that preferred application.
+    -->
+    <string translatable="false" name="config_controlsPreferredPackage"></string>
+
+    <!-- Max number of columns for quick controls area -->
+    <integer name="controls_max_columns">2</integer>
+    <!-- If the dp width of the available space is <= this value, potentially adjust the number
+         of columns-->
+    <integer name="controls_max_columns_adjust_below_width_dp">320</integer>
+    <!-- If the config font scale is >= this value, potentially adjust the number of columns-->
+    <item name="controls_max_columns_adjust_above_font_scale" translatable="false" format="float" type="dimen">1.25</item>
 </resources>

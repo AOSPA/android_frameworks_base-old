@@ -21,6 +21,9 @@ import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSET;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
 import static android.view.WindowManager.TRANSIT_KEYGUARD_UNOCCLUDE;
 import static android.view.WindowManagerPolicyConstants.APPLICATION_LAYER;
+import static android.window.DisplayAreaOrganizer.FEATURE_ROOT;
+import static android.window.DisplayAreaOrganizer.FEATURE_UNDEFINED;
+import static android.window.DisplayAreaOrganizer.FEATURE_WINDOW_TOKENS;
 
 import static com.android.internal.util.Preconditions.checkState;
 import static com.android.server.wm.DisplayAreaProto.NAME;
@@ -30,11 +33,13 @@ import static com.android.server.wm.WindowContainerChildProto.DISPLAY_AREA;
 
 import android.graphics.Rect;
 import android.util.proto.ProtoOutputStream;
+import android.window.IDisplayAreaOrganizer;
 
 import com.android.server.policy.WindowManagerPolicy;
 import com.android.server.protolog.common.ProtoLog;
 
 import java.util.Comparator;
+import java.util.function.Consumer;
 import java.util.function.Predicate;
 
 /**
@@ -49,7 +54,6 @@ import java.util.function.Predicate;
  * - BELOW_TASKS: Can only contain BELOW_TASK DisplayAreas and WindowTokens that go below tasks.
  * - ABOVE_TASKS: Can only contain ABOVE_TASK DisplayAreas and WindowTokens that go above tasks.
  * - ANY: Can contain any kind of DisplayArea, and any kind of WindowToken or the Task container.
- *        Cannot have a sibling that is of type ANY.
  *
  * @param <T> type of the children of the DisplayArea.
  */
@@ -57,13 +61,24 @@ public class DisplayArea<T extends WindowContainer> extends WindowContainer<T> {
 
     protected final Type mType;
     private final String mName;
+    final int mFeatureId;
+    private final DisplayAreaOrganizerController mOrganizerController;
+    IDisplayAreaOrganizer mOrganizer;
 
     DisplayArea(WindowManagerService wms, Type type, String name) {
+        this(wms, type, name, FEATURE_UNDEFINED);
+    }
+
+    DisplayArea(WindowManagerService wms, Type type, String name, int featureId) {
         super(wms);
         // TODO(display-area): move this up to ConfigurationContainer
         mOrientation = SCREEN_ORIENTATION_UNSET;
         mType = type;
         mName = name;
+        mFeatureId = featureId;
+        mRemoteToken = new RemoteToken(this);
+        mOrganizerController =
+                wms.mAtmService.mWindowOrganizerController.mDisplayAreaOrganizerController;
     }
 
     @Override
@@ -116,6 +131,33 @@ public class DisplayArea<T extends WindowContainer> extends WindowContainer<T> {
         return DISPLAY_AREA;
     }
 
+    void forAllDisplayAreas(Consumer<DisplayArea> callback) {
+        super.forAllDisplayAreas(callback);
+        callback.accept(this);
+    }
+
+    void setOrganizer(IDisplayAreaOrganizer organizer) {
+        if (mOrganizer == organizer) return;
+        sendDisplayAreaVanished();
+        mOrganizer = organizer;
+        sendDisplayAreaAppeared();
+    }
+
+    void sendDisplayAreaAppeared() {
+        if (mOrganizer == null) return;
+        mOrganizerController.onDisplayAreaAppeared(mOrganizer, this);
+    }
+
+    void sendDisplayAreaVanished() {
+        if (mOrganizer == null) return;
+        mOrganizerController.onDisplayAreaVanished(mOrganizer, this);
+    }
+
+    @Override
+    boolean isOrganized() {
+        return mOrganizer != null;
+    }
+
     /**
      * DisplayArea that contains WindowTokens, and orders them according to their type.
      */
@@ -152,7 +194,7 @@ public class DisplayArea<T extends WindowContainer> extends WindowContainer<T> {
         };
 
         Tokens(WindowManagerService wms, Type type, String name) {
-            super(wms, type, name);
+            super(wms, type, name, FEATURE_WINDOW_TOKENS);
         }
 
         void addChild(WindowToken token) {
@@ -183,6 +225,11 @@ public class DisplayArea<T extends WindowContainer> extends WindowContainer<T> {
         }
     }
 
+    @Override
+    DisplayArea getDisplayArea() {
+        return this;
+    }
+
     /**
      * Top-most DisplayArea under DisplayContent.
      */
@@ -191,7 +238,7 @@ public class DisplayArea<T extends WindowContainer> extends WindowContainer<T> {
         private final Rect mTmpDimBoundsRect = new Rect();
 
         Root(WindowManagerService wms) {
-            super(wms, Type.ANY, "DisplayArea.Root");
+            super(wms, Type.ANY, "DisplayArea.Root", FEATURE_ROOT);
         }
 
         @Override
@@ -204,6 +251,12 @@ public class DisplayArea<T extends WindowContainer> extends WindowContainer<T> {
             mDimmer.resetDimStates();
             super.prepareSurfaces();
             getBounds(mTmpDimBoundsRect);
+
+            // If SystemUI is dragging for recents, we want to reset the dim state so any dim layer
+            // on the display level fades out.
+            if (forAllTasks(task -> !task.canAffectSystemUiFlags())) {
+                mDimmer.resetDimStates();
+            }
 
             if (mDimmer.updateDims(getPendingTransaction(), mTmpDimBoundsRect)) {
                 scheduleAnimation();
@@ -220,7 +273,6 @@ public class DisplayArea<T extends WindowContainer> extends WindowContainer<T> {
         ANY;
 
         static void checkSiblings(Type bottom, Type top) {
-            checkState(!(bottom == ANY && top == ANY), "ANY cannot be a sibling of ANY");
             checkState(!(bottom != BELOW_TASKS && top == BELOW_TASKS),
                     bottom + " must be above BELOW_TASKS");
             checkState(!(bottom == ABOVE_TASKS && top != ABOVE_TASKS),

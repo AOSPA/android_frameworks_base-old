@@ -21,76 +21,93 @@
     android:layout_weight="1"
     android:layout_height="@dimen/control_height"
     android:padding="@dimen/control_padding"
-    android:clickable="true"
+    android:clickable="false"
     android:focusable="true"
+    android:screenReaderFocusable="true"
     android:layout_marginLeft="@dimen/control_base_item_margin"
     android:layout_marginRight="@dimen/control_base_item_margin"
     android:background="@drawable/control_background">
 
     <ImageView
         android:id="@+id/icon"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
+        android:layout_width="@dimen/control_icon_size"
+        android:layout_height="@dimen/control_icon_size"
         android:paddingTop="@dimen/control_padding_adjustment"
+        android:clickable="false"
+        android:focusable="false"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
 
     <TextView
         android:id="@+id/status"
-        android:layout_width="wrap_content"
+        android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:textAppearance="@style/TextAppearance.Control.Status"
         android:paddingTop="@dimen/control_padding_adjustment"
         android:paddingStart="@dimen/control_status_padding"
+        android:clickable="true"
+        android:focusable="false"
+        android:singleLine="true"
+        android:ellipsize="marquee"
+        android:marqueeRepeatLimit = "marquee_forever"
+        app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintBottom_toBottomOf="@+id/icon"
         app:layout_constraintStart_toEndOf="@+id/icon" />
 
     <TextView
-        android:id="@+id/status_extra"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:textAppearance="@style/TextAppearance.Control.Status"
-        android:paddingTop="@dimen/control_padding_adjustment"
-        android:paddingStart="@dimen/control_status_padding"
-        app:layout_constraintBottom_toBottomOf="@+id/icon"
-        app:layout_constraintStart_toEndOf="@+id/status" />
-
-    <TextView
         android:id="@+id/title"
-        android:layout_width="wrap_content"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:textAppearance="@style/TextAppearance.Control.Title"
         android:paddingLeft="@dimen/control_padding_adjustment"
         android:paddingRight="@dimen/control_padding_adjustment"
-        app:layout_constraintBottom_toTopOf="@+id/subtitle"
-        app:layout_constraintStart_toStartOf="parent" />
+        android:clickable="false"
+        android:focusable="false"
+        android:maxLines="1"
+        android:ellipsize="end"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintBottom_toTopOf="@id/barrier"/>
+
+    <androidx.constraintlayout.widget.Barrier
+        android:id="@+id/barrier"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        app:barrierDirection="top"
+        app:constraint_referenced_ids="subtitle,favorite" />
 
     <TextView
         android:id="@+id/subtitle"
-        android:layout_width="wrap_content"
+        android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:textAppearance="@style/TextAppearance.Control.Subtitle"
         android:paddingLeft="@dimen/control_padding_adjustment"
         android:paddingRight="@dimen/control_padding_adjustment"
         android:paddingBottom="@dimen/control_padding_adjustment"
+        android:clickable="false"
+        android:focusable="false"
+        android:maxLines="1"
+        android:ellipsize="end"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toStartOf="@id/favorite"
         app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintStart_toStartOf="parent"/>
+    />
 
-    <FrameLayout
-        android:id="@+id/favorite_container"
+    <CheckBox
+        android:id="@+id/favorite"
         android:visibility="gone"
-        android:layout_width="48dp"
-        android:layout_height="48dp"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|end"
+        android:button="@drawable/controls_btn_star"
+        android:background="@android:color/transparent"
+        android:clickable="false"
+        android:selectable="false"
+        android:importantForAccessibility="no"
+        android:layout_marginTop="4dp"
+        android:layout_marginStart="4dp"
+        app:layout_constraintStart_toEndOf="@id/subtitle"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintBottom_toBottomOf="parent">
-
-        <CheckBox
-            android:id="@+id/favorite"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="bottom|end"
-            android:button="@drawable/controls_btn_star"/>
-    </FrameLayout>
-
+        app:layout_constraintBottom_toBottomOf="parent"/>
 
 </androidx.constraintlayout.widget.ConstraintLayout>

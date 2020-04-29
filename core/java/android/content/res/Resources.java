@@ -40,6 +40,7 @@ import android.annotation.StringRes;
 import android.annotation.StyleRes;
 import android.annotation.StyleableRes;
 import android.annotation.XmlRes;
+import android.app.Application;
 import android.compat.annotation.UnsupportedAppUsage;
 import android.content.pm.ActivityInfo;
 import android.content.pm.ActivityInfo.Config;
@@ -58,14 +59,17 @@ import android.util.Log;
 import android.util.LongSparseArray;
 import android.util.Pools.SynchronizedPool;
 import android.util.TypedValue;
+import android.view.Display;
 import android.view.DisplayAdjustments;
 import android.view.ViewDebug;
 import android.view.ViewHierarchyEncoder;
+import android.view.WindowManager;
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.util.ArrayUtils;
 import com.android.internal.util.GrowingArrayUtils;
+import com.android.internal.util.Preconditions;
 import com.android.internal.util.XmlUtils;
 
 import org.xmlpull.v1.XmlPullParser;
@@ -99,6 +103,12 @@ import java.util.List;
  * resources&mdash;enables you to optimize your application for a variety of device configurations
  * (such as for different languages and screen sizes). This is an important aspect of developing
  * Android applications that are compatible on different types of devices.</p>
+ *
+ * <p>After {@link Build.VERSION_CODES#R}, {@link Resources} must be obtained by
+ * {@link android.app.Activity} or {@link android.content.Context} created with
+ * {@link android.content.Context#createWindowContext(int, Bundle)}.
+ * {@link Application#getResources()} may report wrong values in multi-window or on secondary
+ * displays.
  *
  * <p>For more information about using resources, see the documentation about <a
  * href="{@docRoot}guide/topics/resources/index.html">Application Resources</a>.</p>
@@ -244,7 +254,36 @@ public class Resources {
          * @param resources the instance being updated
          * @param newLoaders the new set of loaders for the instance
          */
-        void onLoadersChanged(Resources resources, List<ResourcesLoader> newLoaders);
+        void onLoadersChanged(@NonNull Resources resources,
+                @NonNull List<ResourcesLoader> newLoaders);
+    }
+
+    /**
+     * Handler that propagates updates of the {@link Resources} instance to the underlying
+     * {@link AssetManager} when the Resources is not registered with a
+     * {@link android.app.ResourcesManager}.
+     * @hide
+     */
+    public class AssetManagerUpdateHandler implements UpdateCallbacks{
+
+        @Override
+        public void onLoadersChanged(@NonNull Resources resources,
+                @NonNull List<ResourcesLoader> newLoaders) {
+            Preconditions.checkArgument(Resources.this == resources);
+            final ResourcesImpl impl = mResourcesImpl;
+            impl.clearAllCaches();
+            impl.getAssets().setLoaders(newLoaders);
+        }
+
+        @Override
+        public void onLoaderUpdated(@NonNull ResourcesLoader loader) {
+            final ResourcesImpl impl = mResourcesImpl;
+            final AssetManager assets = impl.getAssets();
+            if (assets.getLoaders().contains(loader)) {
+                impl.clearAllCaches();
+                assets.setLoaders(assets.getLoaders());
+            }
+        }
     }
 
     /**
@@ -1994,10 +2033,20 @@ public class Resources {
     }
 
     /**
-     * Return the current display metrics that are in effect for this resource 
-     * object.  The returned object should be treated as read-only.
-     * 
-     * @return The resource's current display metrics. 
+     * Return the current display metrics that are in effect for this resource
+     * object. The returned object should be treated as read-only.
+     *
+     * <p>Note that the reported value may be different than the window this application is
+     * interested in.</p>
+     *
+     * <p>Best practices are to obtain metrics from {@link WindowManager#getCurrentWindowMetrics()}
+     * for window bounds, {@link Display#getRealMetrics(DisplayMetrics)} for display bounds and
+     * obtain density from {@link Configuration#densityDpi}. The value obtained from this API may be
+     * wrong if the {@link Resources} is from the context which is different than the window is
+     * attached such as {@link Application#getResources()}.
+     * <p/>
+     *
+     * @return The resource's current display metrics.
      */
     public DisplayMetrics getDisplayMetrics() {
         return mResourcesImpl.getDisplayMetrics();
@@ -2367,8 +2416,9 @@ public class Resources {
 
     private void checkCallbacksRegistered() {
         if (mCallbacks == null) {
-            throw new IllegalArgumentException("Cannot modify resource loaders of Resources"
-                    + " instances created outside of ResourcesManager");
+            // Fallback to updating the underlying AssetManager if the Resources is not associated
+            // with a ResourcesManager.
+            mCallbacks = new AssetManagerUpdateHandler();
         }
     }
 
@@ -2387,6 +2437,9 @@ public class Resources {
     /**
      * Adds a loader to the list of loaders. If the loader is already present in the list, the list
      * will not be modified.
+     *
+     * <p>This should only be called from the UI thread to avoid lock contention when propagating
+     * loader changes.
      *
      * @param loaders the loaders to add
      */
@@ -2419,6 +2472,9 @@ public class Resources {
      * Removes loaders from the list of loaders. If the loader is not present in the list, the list
      * will not be modified.
      *
+     * <p>This should only be called from the UI thread to avoid lock contention when propagating
+     * loader changes.
+     *
      * @param loaders the loaders to remove
      */
     public void removeLoaders(@NonNull ResourcesLoader... loaders) {
@@ -2448,6 +2504,9 @@ public class Resources {
 
     /**
      * Removes all {@link ResourcesLoader ResourcesLoader(s)}.
+     *
+     * <p>This should only be called from the UI thread to avoid lock contention when propagating
+     * loader changes.
      * @hide
      */
     @VisibleForTesting

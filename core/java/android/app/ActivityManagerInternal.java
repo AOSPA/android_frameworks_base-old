@@ -34,6 +34,7 @@ import android.os.TransactionTooLargeException;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Activity manager local system service interface.
@@ -122,6 +123,12 @@ public abstract class ActivityManagerInternal {
      * (-1).
      */
     public abstract int getUidProcessState(int uid);
+
+    /**
+     * Get a map of pid and package name that process of that pid Android/data and Android/obb
+     * directory is not mounted to lowerfs.
+     */
+    public abstract Map<Integer, String> getProcessesWithPendingBindMounts(int userId);
 
     /**
      * @return {@code true} if system is ready, {@code false} otherwise.
@@ -241,7 +248,8 @@ public abstract class ActivityManagerInternal {
 
     /**
      * Returns whether the given user requires credential entry at this time. This is used to
-     * intercept activity launches for work apps when the Work Challenge is present.
+     * intercept activity launches for locked work apps due to work challenge being triggered or
+     * when the profile user is yet to be unlocked.
      */
     public abstract boolean shouldConfirmCredentials(@UserIdInt int userId);
 
@@ -386,6 +394,30 @@ public abstract class ActivityManagerInternal {
      */
     // TODO: remove this toast after feature development is done
     public abstract void showWhileInUseDebugToast(int uid, int op, int mode);
+
+
+    /** Is this a device owner app? */
+    public abstract boolean isDeviceOwner(int uid);
+
+    /**
+     * Called by DevicePolicyManagerService to set the uid of the device owner.
+     */
+    public abstract void setDeviceOwnerUid(int uid);
+
+    /**
+     * Sends a broadcast, assuming the caller to be the system and allowing the inclusion of an
+     * approved whitelist of app Ids >= {@link android.os.Process#FIRST_APPLICATION_UID} that the
+     * broadcast my be sent to; any app Ids < {@link android.os.Process#FIRST_APPLICATION_UID} are
+     * automatically whitelisted.
+     *
+     * @see com.android.server.am.ActivityManagerService#broadcastIntentWithFeature(
+     *      IApplicationThread, String, Intent, String, IIntentReceiver, int, String, Bundle,
+     *      String[], int, Bundle, boolean, boolean, int)
+     */
+    public abstract int broadcastIntent(Intent intent,
+            IIntentReceiver resultTo,
+            String[] requiredPermissions, boolean serialized,
+            int userId, int[] appIdWhitelist);
 
     // Starts a process as empty.
     public abstract int startActivityAsUserEmpty(Bundle options);

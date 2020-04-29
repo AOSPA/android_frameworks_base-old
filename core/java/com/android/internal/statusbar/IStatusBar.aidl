@@ -136,7 +136,8 @@ oneway interface IStatusBar
 
     // Used to show the authentication dialog (Biometrics, Device Credential)
     void showAuthenticationDialog(in Bundle bundle, IBiometricServiceReceiverInternal receiver,
-            int biometricModality, boolean requireConfirmation, int userId, String opPackageName);
+            int biometricModality, boolean requireConfirmation, int userId, String opPackageName,
+            long operationId);
     // Used to notify the authentication dialog that a biometric has been authenticated
     void onBiometricAuthenticated();
     // Used to set a temporary message, e.g. fingerprint not recognized, finger moved too fast, etc
@@ -203,8 +204,8 @@ oneway interface IStatusBar
     /**
      * Displays a text toast.
      */
-    void showToast(String packageName, IBinder token, CharSequence text, IBinder windowToken,
-            int duration, @nullable ITransientNotificationCallback callback);
+    void showToast(int uid, String packageName, IBinder token, CharSequence text,
+            IBinder windowToken, int duration, @nullable ITransientNotificationCallback callback);
 
     /**
      * Cancels toast with token {@code token} in {@code packageName}.

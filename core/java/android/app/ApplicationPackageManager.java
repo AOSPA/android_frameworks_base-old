@@ -840,6 +840,27 @@ public class ApplicationPackageManager extends PackageManager {
     }
 
     @Override
+    public boolean setAutoRevokeWhitelisted(
+            @NonNull String packageName, boolean whitelisted) {
+        try {
+            final int userId = getUserId();
+            return mPermissionManager.setAutoRevokeWhitelisted(packageName, whitelisted, userId);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    @Override
+    public boolean isAutoRevokeWhitelisted(@NonNull String packageName) {
+        try {
+            final int userId = getUserId();
+            return mPermissionManager.isAutoRevokeWhitelisted(packageName, userId);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    @Override
     public boolean removeWhitelistedRestrictedPermission(@NonNull String packageName,
             @NonNull String permName, @PermissionWhitelistFlags int flags) {
         try {
@@ -1589,7 +1610,10 @@ public class ApplicationPackageManager extends PackageManager {
 
     @Override
     public Drawable getUserBadgeForDensityNoBackground(UserHandle user, int density) {
-        Drawable badge = getProfileIconForDensity(user,
+        if (!hasUserBadge(user.getIdentifier())) {
+            return null;
+        }
+        Drawable badge = getDrawableForDensity(
                 getUserManager().getUserBadgeNoBackgroundResId(user.getIdentifier()), density);
         if (badge != null) {
             badge.setTint(getUserBadgeColor(user));
@@ -3276,15 +3300,6 @@ public class ApplicationPackageManager extends PackageManager {
     }
 
     @Override
-    public String[] getTelephonyPackageNames() {
-        try {
-            return mPM.getTelephonyPackageNames();
-        } catch (RemoteException e) {
-            throw e.rethrowAsRuntimeException();
-        }
-    }
-
-    @Override
     public String getSystemCaptionsServicePackageName() {
         try {
             return mPM.getSystemCaptionsServicePackageName();
@@ -3337,31 +3352,29 @@ public class ApplicationPackageManager extends PackageManager {
         }
     }
 
-    public void setMimeGroup(String mimeGroup, Set<String> mimeTypes) {
+    @Override
+    public boolean isAutoRevokeWhitelisted() {
         try {
-            mPM.setMimeGroup(mContext.getPackageName(), mimeGroup,
-                    new ArrayList<String>(mimeTypes));
+            return mPM.isAutoRevokeWhitelisted(mContext.getPackageName());
         } catch (RemoteException e) {
             throw e.rethrowAsRuntimeException();
         }
     }
 
     @Override
-    public void clearMimeGroup(String mimeGroup) {
+    public void setMimeGroup(String mimeGroup, Set<String> mimeTypes) {
         try {
-            mPM.clearMimeGroup(mContext.getPackageName(), mimeGroup);
+            mPM.setMimeGroup(mContext.getPackageName(), mimeGroup, new ArrayList<>(mimeTypes));
         } catch (RemoteException e) {
             throw e.rethrowAsRuntimeException();
         }
     }
 
+    @NonNull
     @Override
     public Set<String> getMimeGroup(String group) {
         try {
             List<String> mimeGroup = mPM.getMimeGroup(mContext.getPackageName(), group);
-            if (mimeGroup == null) {
-                return null;
-            }
             return new ArraySet<>(mimeGroup);
         } catch (RemoteException e) {
             throw e.rethrowAsRuntimeException();

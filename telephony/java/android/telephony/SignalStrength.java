@@ -18,7 +18,6 @@ package android.telephony;
 
 import android.annotation.ElapsedRealtimeLong;
 import android.annotation.NonNull;
-import android.annotation.SystemApi;
 import android.compat.annotation.UnsupportedAppUsage;
 import android.os.Build;
 import android.os.Bundle;
@@ -189,12 +188,12 @@ public class SignalStrength implements Parcelable {
     private CellSignalStrength getPrimary() {
         // This behavior is intended to replicate the legacy behavior of getLevel() by prioritizing
         // newer faster RATs for default/for display purposes.
+        if (mNr.isValid()) return mNr;
         if (mLte.isValid()) return mLte;
         if (mCdma.isValid()) return mCdma;
         if (mTdscdma.isValid()) return mTdscdma;
         if (mWcdma.isValid()) return mWcdma;
         if (mGsm.isValid()) return mGsm;
-        if (mNr.isValid()) return mNr;
         return mLte;
     }
 
@@ -284,7 +283,6 @@ public class SignalStrength implements Parcelable {
      *
      * @hide
      */
-    @SystemApi
     public SignalStrength(@NonNull SignalStrength s) {
         copyFrom(s);
     }

@@ -249,27 +249,39 @@
     <style name="TextAppearance.DeviceManagementDialog.Title" parent="@android:style/TextAppearance.DeviceDefault.DialogWindowTitle"/>
 
     <style name="TextAppearance.AuthCredential">
+        <item name="android:accessibilityLiveRegion">polite</item>
         <item name="android:gravity">center_horizontal</item>
-        <item name="android:fontFamily">google-sans</item>
         <item name="android:textAlignment">gravity</item>
         <item name="android:layout_gravity">top</item>
         <item name="android:textColor">?android:attr/textColorPrimary</item>
     </style>
 
     <style name="TextAppearance.AuthCredential.Title">
-        <item name="android:layout_marginBottom">2dp</item>
-        <item name="android:layout_marginLeft">24dp</item>
-        <item name="android:layout_marginRight">24dp</item>
-        <item name="android:layout_marginTop">16dp</item>
+        <item name="android:fontFamily">google-sans</item>
+        <item name="android:paddingTop">16dp</item>
+        <item name="android:paddingHorizontal">24dp</item>
         <item name="android:textSize">24sp</item>
     </style>
 
-    <style name="TextAppearance.AuthCredential.Description">
-        <item name="android:layout_marginBottom">12dp</item>
-        <item name="android:layout_marginStart">40dp</item>
-        <item name="android:layout_marginEnd">40dp</item>
-        <item name="android:layout_marginTop">3dp</item>
+    <style name="TextAppearance.AuthCredential.Subtitle">
+        <item name="android:fontFamily">google-sans</item>
+        <item name="android:paddingTop">8dp</item>
+        <item name="android:paddingHorizontal">24dp</item>
         <item name="android:textSize">16sp</item>
+    </style>
+
+    <style name="TextAppearance.AuthCredential.Description">
+        <item name="android:fontFamily">google-sans</item>
+        <item name="android:paddingTop">8dp</item>
+        <item name="android:paddingHorizontal">24dp</item>
+        <item name="android:textSize">14sp</item>
+    </style>
+
+    <style name="TextAppearance.AuthCredential.Error">
+        <item name="android:paddingTop">12dp</item>
+        <item name="android:paddingHorizontal">24dp</item>
+        <item name="android:textSize">14sp</item>
+        <item name="android:textColor">?android:attr/colorError</item>
     </style>
 
     <style name="TextAppearance.AuthCredential.PasswordEntry" parent="@android:style/TextAppearance.DeviceDefault">
@@ -303,6 +315,9 @@
     <style name="Animation.NavigationBarFadeIn">
         <item name="android:windowEnterAnimation">@anim/navbar_fade_in</item>
         <item name="android:windowExitAnimation">@null</item>
+    </style>
+
+    <style name="Animation.ShutdownUi" parent="@android:style/Animation.Toast">
     </style>
 
     <!-- Standard animations for hiding and showing the status bar. -->
@@ -659,6 +674,13 @@
 
     <style name="Control" />
 
+    <style name="Control.MenuItem">
+        <item name="android:fontFamily">@*android:string/config_bodyFontFamilyMedium</item>
+        <item name="android:textSize">@dimen/control_text_size</item>
+        <item name="android:textColor">@color/control_primary_text</item>
+        <item name="android:singleLine">true</item>
+    </style>
+
     <style name="Control.Spinner">
         <item name="android:textSize">@dimen/control_header_text_size</item>
         <item name="android:fontFamily">@*android:string/config_headlineFontFamilyMedium</item>
@@ -677,7 +699,7 @@
 
     <style name="TextAppearance.Control.Status">
         <item name="android:fontFamily">@*android:string/config_headlineFontFamilyMedium</item>
-        <item name="android:textSize">@dimen/control_text_size</item>
+        <item name="android:textSize">@dimen/control_status_normal</item>
         <item name="android:textColor">@color/control_primary_text</item>
     </style>
 
@@ -696,7 +718,21 @@
         <item name="android:overlapAnchor">true</item>
 
         <!-- used to override dark/light theming -->
-        <item name="*android:colorPopupBackground">@color/control_list_popup_background</item>
+        <item name="*android:colorPopupBackground">@color/GM2_grey_900</item>
+    </style>
+
+    <style name="TextAppearance.ControlSetup">
+        <item name="android:fontFamily">@*android:string/config_headlineFontFamily</item>
+        <item name="android:textColor">@color/control_primary_text</item>
+        <item name="android:singleLine">true</item>
+    </style>
+
+    <style name="TextAppearance.ControlSetup.Title">
+        <item name="android:textSize">25sp</item>
+    </style>
+
+    <style name="TextAppearance.ControlSetup.Subtitle">
+        <item name="android:textSize">16sp</item>
     </style>
 
     <style name="Theme.ControlsRequestDialog" parent="@style/Theme.SystemUI.MediaProjectionAlertDialog"/>

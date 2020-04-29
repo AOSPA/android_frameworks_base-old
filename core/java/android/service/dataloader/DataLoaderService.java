@@ -29,7 +29,6 @@ import android.content.pm.IDataLoader;
 import android.content.pm.IDataLoaderStatusListener;
 import android.content.pm.InstallationFile;
 import android.content.pm.InstallationFileParcel;
-import android.content.pm.NamedParcelFileDescriptor;
 import android.os.IBinder;
 import android.os.ParcelFileDescriptor;
 import android.util.ExceptionUtils;
@@ -102,21 +101,18 @@ public abstract class DataLoaderService extends Service {
     }
 
     private class DataLoaderBinderService extends IDataLoader.Stub {
-        private int mId;
-
         @Override
         public void create(int id, @NonNull DataLoaderParamsParcel params,
                 @NonNull FileSystemControlParcel control,
                 @NonNull IDataLoaderStatusListener listener)
                 throws RuntimeException {
-            mId = id;
             try {
                 if (!nativeCreateDataLoader(id, control, params, listener)) {
-                    Slog.e(TAG, "Failed to create native loader for " + mId);
+                    Slog.e(TAG, "Failed to create native loader for " + id);
                 }
             } catch (Exception ex) {
-                Slog.e(TAG, "Failed to create native loader for " + mId, ex);
-                destroy();
+                Slog.e(TAG, "Failed to create native loader for " + id, ex);
+                destroy(id);
                 throw new RuntimeException(ex);
             } finally {
                 // Closing FDs.
@@ -136,44 +132,35 @@ public abstract class DataLoaderService extends Service {
                         }
                     }
                 }
-                if (params.dynamicArgs != null) {
-                    NamedParcelFileDescriptor[] fds = params.dynamicArgs;
-                    for (NamedParcelFileDescriptor nfd : fds) {
-                        try {
-                            nfd.fd.close();
-                        } catch (IOException e) {
-                            Slog.e(TAG, "Failed to close DynamicArgs parcel file descriptor " + e);
-                        }
-                    }
-                }
             }
         }
 
         @Override
-        public void start() {
-            if (!nativeStartDataLoader(mId)) {
-                Slog.e(TAG, "Failed to start loader: " + mId);
+        public void start(int id) {
+            if (!nativeStartDataLoader(id)) {
+                Slog.e(TAG, "Failed to start loader: " + id);
             }
         }
 
         @Override
-        public void stop() {
-            if (!nativeStopDataLoader(mId)) {
-                Slog.w(TAG, "Failed to stop loader: " + mId);
+        public void stop(int id) {
+            if (!nativeStopDataLoader(id)) {
+                Slog.w(TAG, "Failed to stop loader: " + id);
             }
         }
 
         @Override
-        public void destroy() {
-            if (!nativeDestroyDataLoader(mId)) {
-                Slog.w(TAG, "Failed to destroy loader: " + mId);
+        public void destroy(int id) {
+            if (!nativeDestroyDataLoader(id)) {
+                Slog.w(TAG, "Failed to destroy loader: " + id);
             }
         }
 
         @Override
-        public void prepareImage(InstallationFileParcel[] addedFiles, String[] removedFiles) {
-            if (!nativePrepareImage(mId, addedFiles, removedFiles)) {
-                Slog.w(TAG, "Failed to prepare image for data loader: " + mId);
+        public void prepareImage(int id, InstallationFileParcel[] addedFiles,
+                String[] removedFiles) {
+            if (!nativePrepareImage(id, addedFiles, removedFiles)) {
+                Slog.w(TAG, "Failed to prepare image for data loader: " + id);
             }
         }
     }

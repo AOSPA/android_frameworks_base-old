@@ -51,11 +51,13 @@ public class AuthCredentialPasswordView extends AuthCredentialView
         super.onFinishInflate();
         mPasswordField = findViewById(R.id.lockPassword);
         mPasswordField.setOnEditorActionListener(this);
+        // TODO: De-dupe the logic with AuthContainerView
         mPasswordField.setOnKeyListener((v, keyCode, event) -> {
             if (keyCode != KeyEvent.KEYCODE_BACK) {
                 return false;
             }
             if (event.getAction() == KeyEvent.ACTION_UP) {
+                mContainerView.sendEarlyUserCanceled();
                 mContainerView.animateAway(AuthDialogCallback.DISMISSED_USER_CANCELED);
             }
             return true;
@@ -103,14 +105,16 @@ public class AuthCredentialPasswordView extends AuthCredentialView
                 return;
             }
 
-            mPendingLockCheck = LockPatternChecker.checkCredential(mLockPatternUtils,
-                    password, mEffectiveUserId, this::onCredentialChecked);
+            mPendingLockCheck = LockPatternChecker.verifyCredential(mLockPatternUtils,
+                    password, mOperationId, mEffectiveUserId, this::onCredentialVerified);
         }
     }
 
     @Override
-    protected void onCredentialChecked(boolean matched, int timeoutMs) {
-        super.onCredentialChecked(matched, timeoutMs);
+    protected void onCredentialVerified(byte[] attestation, int timeoutMs) {
+        super.onCredentialVerified(attestation, timeoutMs);
+
+        final boolean matched = attestation != null;
 
         if (matched) {
             mImm.hideSoftInputFromWindow(getWindowToken(), 0 /* flags */);

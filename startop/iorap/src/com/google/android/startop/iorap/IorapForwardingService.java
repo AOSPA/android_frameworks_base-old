@@ -34,18 +34,21 @@ import android.os.Parcel;
 import android.os.RemoteException;
 import android.os.ServiceManager;
 import android.os.SystemProperties;
+import android.util.ArraySet;
 import android.util.Log;
 
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.server.IoThread;
 import com.android.server.LocalServices;
 import com.android.server.SystemService;
+import com.android.server.pm.BackgroundDexOptService;
 import com.android.server.wm.ActivityMetricsLaunchObserver;
 import com.android.server.wm.ActivityMetricsLaunchObserver.ActivityRecordProto;
 import com.android.server.wm.ActivityMetricsLaunchObserver.Temperature;
 import com.android.server.wm.ActivityMetricsLaunchObserverRegistry;
 import com.android.server.wm.ActivityTaskManagerInternal;
 
+import java.util.ArrayList;
 import java.util.concurrent.TimeUnit;
 import java.util.HashMap;
 
@@ -279,11 +282,14 @@ public class IorapForwardingService extends SystemService {
             (IIorap remote) -> remote.setTaskListener(new RemoteTaskListener()) );
         registerInProcessListenersLocked();
 
+        Log.i(TAG, "Connected to iorapd native service.");
+
         return true;
     }
 
     private final AppLaunchObserver mAppLaunchObserver = new AppLaunchObserver();
     private final EventSequenceValidator mEventSequenceValidator = new EventSequenceValidator();
+    private final DexOptPackagesUpdated mDexOptPackagesUpdated = new DexOptPackagesUpdated();
     private boolean mRegisteredListeners = false;
 
     private void registerInProcessListenersLocked() {
@@ -306,7 +312,20 @@ public class IorapForwardingService extends SystemService {
         launchObserverRegistry.registerLaunchObserver(mAppLaunchObserver);
         launchObserverRegistry.registerLaunchObserver(mEventSequenceValidator);
 
+        BackgroundDexOptService.addPackagesUpdatedListener(mDexOptPackagesUpdated);
+
+
         mRegisteredListeners = true;
+    }
+
+    private class DexOptPackagesUpdated implements BackgroundDexOptService.PackagesUpdatedListener {
+        @Override
+        public void onPackagesUpdated(ArraySet<String> updatedPackages) {
+            String[] updated = updatedPackages.toArray(new String[0]);
+            for (String packageName : updated) {
+                Log.d(TAG, "onPackagesUpdated: " + packageName);
+            }
+        }
     }
 
     private class AppLaunchObserver implements ActivityMetricsLaunchObserver {

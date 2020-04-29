@@ -83,9 +83,9 @@ class PeopleNotificationIdentifierImpl @Inject constructor(
 
     private val Ranking.personTypeInfo
         get() = when {
+            !isConversation -> TYPE_NON_PERSON
             channel?.isImportantConversation == true -> TYPE_IMPORTANT_PERSON
-            isConversation -> TYPE_PERSON
-            else -> TYPE_NON_PERSON
+            else -> TYPE_PERSON
         }
 
     private fun extractPersonTypeInfo(sbn: StatusBarNotification) =
@@ -96,7 +96,7 @@ class PeopleNotificationIdentifierImpl @Inject constructor(
             return TYPE_NON_PERSON
         }
 
-        val childTypes = groupManager.getLogicalChildren(statusBarNotification)
+        val childTypes = groupManager.getChildren(statusBarNotification)
                 ?.asSequence()
                 ?.map { getPeopleNotificationType(it.sbn, it.ranking) }
                 ?: return TYPE_NON_PERSON

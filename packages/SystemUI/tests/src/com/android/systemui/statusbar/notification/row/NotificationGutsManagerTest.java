@@ -48,7 +48,9 @@ import android.app.INotificationManager;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.content.Intent;
+import android.content.pm.LauncherApps;
 import android.content.pm.PackageManager;
+import android.content.pm.ShortcutManager;
 import android.os.Binder;
 import android.os.Handler;
 import android.provider.Settings;
@@ -70,6 +72,7 @@ import com.android.systemui.statusbar.notification.NotificationActivityStarter;
 import com.android.systemui.statusbar.notification.VisualStabilityManager;
 import com.android.systemui.statusbar.notification.collection.NotificationEntry;
 import com.android.systemui.statusbar.notification.collection.provider.HighPriorityProvider;
+import com.android.systemui.statusbar.notification.people.PeopleNotificationIdentifier;
 import com.android.systemui.statusbar.notification.row.NotificationGutsManager.OnSettingsClickListener;
 import com.android.systemui.statusbar.notification.stack.NotificationStackScrollLayout;
 import com.android.systemui.statusbar.phone.StatusBar;
@@ -113,6 +116,10 @@ public class NotificationGutsManagerTest extends SysuiTestCase {
     @Mock private StatusBar mStatusBar;
     @Mock private AccessibilityManager mAccessibilityManager;
     @Mock private HighPriorityProvider mHighPriorityProvider;
+    @Mock private INotificationManager mINotificationManager;
+    @Mock private LauncherApps mLauncherApps;
+    @Mock private ShortcutManager mShortcutManager;
+    @Mock private PeopleNotificationIdentifier mPeopleNotificationIdentifier;
 
     @Before
     public void setUp() {
@@ -124,11 +131,12 @@ public class NotificationGutsManagerTest extends SysuiTestCase {
         mDependency.injectTestDependency(VisualStabilityManager.class, mVisualStabilityManager);
         mDependency.injectMockDependency(NotificationLockscreenUserManager.class);
         mHandler = Handler.createAsync(mTestableLooper.getLooper());
-        mHelper = new NotificationTestHelper(mContext, mDependency);
+        mHelper = new NotificationTestHelper(mContext, mDependency, TestableLooper.get(this));
         when(mAccessibilityManager.isTouchExplorationEnabled()).thenReturn(false);
 
         mGutsManager = new NotificationGutsManager(mContext, mVisualStabilityManager,
-                () -> mStatusBar, mHandler, mAccessibilityManager, mHighPriorityProvider);
+                () -> mStatusBar, mHandler, mAccessibilityManager, mHighPriorityProvider,
+                mINotificationManager, mLauncherApps, mShortcutManager);
         mGutsManager.setUpWithPresenter(mPresenter, mStackScroller,
                 mCheckSaveListener, mOnSettingsClickListener);
         mGutsManager.setNotificationActivityStarter(mNotificationActivityStarter);
@@ -459,7 +467,8 @@ public class NotificationGutsManagerTest extends SysuiTestCase {
     }
 
     private NotificationMenuRowPlugin.MenuItem createTestMenuItem(ExpandableNotificationRow row) {
-        NotificationMenuRowPlugin menuRow = new NotificationMenuRow(mContext);
+        NotificationMenuRowPlugin menuRow =
+                new NotificationMenuRow(mContext, mPeopleNotificationIdentifier);
         menuRow.createMenu(row, row.getEntry().getSbn());
 
         NotificationMenuRowPlugin.MenuItem menuItem = menuRow.getLongpressMenuItem(mContext);

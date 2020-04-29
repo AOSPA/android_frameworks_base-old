@@ -120,12 +120,22 @@ public class ResolverListController {
             boolean shouldGetActivityMetadata,
             List<Intent> intents,
             UserHandle userHandle) {
+        int baseFlags = PackageManager.MATCH_DEFAULT_ONLY
+                | PackageManager.MATCH_DIRECT_BOOT_AWARE
+                | PackageManager.MATCH_DIRECT_BOOT_UNAWARE
+                | (shouldGetResolvedFilter ? PackageManager.GET_RESOLVED_FILTER : 0)
+                | (shouldGetActivityMetadata ? PackageManager.GET_META_DATA : 0);
+        return getResolversForIntentAsUserInternal(intents, userHandle, baseFlags);
+    }
+
+    private List<ResolverActivity.ResolvedComponentInfo> getResolversForIntentAsUserInternal(
+            List<Intent> intents,
+            UserHandle userHandle,
+            int baseFlags) {
         List<ResolverActivity.ResolvedComponentInfo> resolvedComponents = null;
         for (int i = 0, N = intents.size(); i < N; i++) {
             final Intent intent = intents.get(i);
-            int flags = PackageManager.MATCH_DEFAULT_ONLY
-                    | (shouldGetResolvedFilter ? PackageManager.GET_RESOLVED_FILTER : 0)
-                    | (shouldGetActivityMetadata ? PackageManager.GET_META_DATA : 0);
+            int flags = baseFlags;
             if (intent.isWebIntent()
                         || (intent.getFlags() & Intent.FLAG_ACTIVITY_MATCH_EXTERNAL) != 0) {
                 flags |= PackageManager.MATCH_INSTANT;
@@ -365,6 +375,14 @@ public class ResolverListController {
     @VisibleForTesting
     public float getScore(DisplayResolveInfo target) {
         return mResolverComparator.getScore(target.getResolvedComponentName());
+    }
+
+    /**
+     * Returns the list of top K component names which have highest
+     * {@link #getScore(DisplayResolveInfo)}
+     */
+    public List<ComponentName> getTopComponentNames(int topK) {
+        return mResolverComparator.getTopComponentNames(topK);
     }
 
     public void updateModel(ComponentName componentName) {

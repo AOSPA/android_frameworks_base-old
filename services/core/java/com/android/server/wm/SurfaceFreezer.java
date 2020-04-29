@@ -75,7 +75,8 @@ class SurfaceFreezer {
 
         mLeash = SurfaceAnimator.createAnimationLeash(mAnimatable, mAnimatable.getSurfaceControl(),
                 t, ANIMATION_TYPE_SCREEN_ROTATION, startBounds.width(), startBounds.height(),
-                startBounds.left, startBounds.top, false /* hidden */);
+                startBounds.left, startBounds.top, false /* hidden */,
+                mWmService.mTransactionFactory);
         mAnimatable.onAnimationLeashCreated(t, mLeash);
 
         SurfaceControl freezeTarget = mAnimatable.getFreezeSnapshotTarget();
@@ -103,7 +104,7 @@ class SurfaceFreezer {
      */
     void unfreeze(SurfaceControl.Transaction t) {
         if (mSnapshot != null) {
-            mSnapshot.destroy(t);
+            mSnapshot.cancelAnimation(t, false /* restarting */);
         }
         if (mLeash == null) {
             return;
@@ -212,7 +213,7 @@ class SurfaceFreezer {
          * @param t The transaction to use for all cancelling surface operations.
          * @param restarting Whether we are restarting the animation.
          */
-        private void cancelAnimation(SurfaceControl.Transaction t, boolean restarting) {
+        void cancelAnimation(SurfaceControl.Transaction t, boolean restarting) {
             final SurfaceControl leash = mSurfaceControl;
             final AnimationAdapter animation = mAnimation;
             final SurfaceAnimator.OnAnimationFinishedCallback animationFinishedCallback =
@@ -229,7 +230,6 @@ class SurfaceFreezer {
                 }
             }
             if (!restarting) {
-                // TODO: do we need to destroy?
                 destroy(t);
             }
         }

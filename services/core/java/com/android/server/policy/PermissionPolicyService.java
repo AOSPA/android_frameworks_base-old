@@ -30,8 +30,10 @@ import android.annotation.Nullable;
 import android.annotation.UserIdInt;
 import android.app.AppOpsManager;
 import android.app.AppOpsManagerInternal;
+import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
@@ -46,6 +48,7 @@ import android.os.ServiceManager;
 import android.os.UserHandle;
 import android.os.UserManagerInternal;
 import android.permission.PermissionControllerManager;
+import android.provider.Settings;
 import android.provider.Telephony;
 import android.telecom.TelecomManager;
 import android.util.ArrayMap;
@@ -69,7 +72,9 @@ import com.android.server.pm.permission.PermissionManagerServiceInternal;
 import com.android.server.policy.PermissionPolicyInternal.OnInitializedCallback;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ExecutionException;
 
 /**
@@ -173,6 +178,62 @@ public final class PermissionPolicyService extends SystemService {
         } catch (RemoteException doesNotHappen) {
             Slog.wtf(LOG_TAG, "Cannot set up app-ops listener");
         }
+
+        IntentFilter intentFilter = new IntentFilter();
+        intentFilter.addAction(Intent.ACTION_PACKAGE_ADDED);
+        intentFilter.addAction(Intent.ACTION_PACKAGE_CHANGED);
+        intentFilter.addDataScheme("package");
+
+        getContext().registerReceiverAsUser(new BroadcastReceiver() {
+            final List<Integer> mUserSetupUids = new ArrayList<>(200);
+            final Map<UserHandle, PermissionControllerManager> mPermControllerManagers =
+                    new HashMap<>();
+
+            @Override
+            public void onReceive(Context context, Intent intent) {
+                boolean hasSetupRun = true;
+                try {
+                    hasSetupRun = Settings.Secure.getInt(getContext().getContentResolver(),
+                            Settings.Secure.USER_SETUP_COMPLETE) != 0;
+                } catch (Settings.SettingNotFoundException e) {
+                    // Ignore error, assume setup has run
+                }
+                int uid = intent.getIntExtra(Intent.EXTRA_UID, -1);
+                // If there is no valid package for the given UID, return immediately
+                if (packageManagerInternal.getPackage(uid) == null) {
+                    return;
+                }
+
+                if (hasSetupRun) {
+                    if (!mUserSetupUids.isEmpty()) {
+                        synchronized (mUserSetupUids) {
+                            for (int i = mUserSetupUids.size() - 1; i >= 0; i--) {
+                                updateUid(mUserSetupUids.get(i));
+                            }
+                            mUserSetupUids.clear();
+                        }
+                    }
+                    updateUid(uid);
+                } else {
+                    synchronized (mUserSetupUids) {
+                        if (!mUserSetupUids.contains(uid)) {
+                            mUserSetupUids.add(uid);
+                        }
+                    }
+                }
+            }
+
+            private void updateUid(int uid) {
+                UserHandle user = UserHandle.getUserHandleForUid(uid);
+                PermissionControllerManager manager = mPermControllerManagers.get(user);
+                if (manager == null) {
+                    manager = new PermissionControllerManager(
+                            getUserContext(getContext(), user), FgThread.getHandler());
+                    mPermControllerManagers.put(user, manager);
+                }
+                manager.updateUserSensitiveForApp(uid);
+            }
+        }, UserHandle.ALL, intentFilter, null, null);
     }
 
     /**
@@ -182,7 +243,6 @@ public final class PermissionPolicyService extends SystemService {
      * {@link AppOpsManager#sOpToSwitch share an op} to control the access.
      *
      * @param permission The permission
-     *
      * @return The op that controls the access of the permission
      */
     private static int getSwitchOp(@NonNull String permission) {

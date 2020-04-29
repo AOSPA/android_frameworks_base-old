@@ -36,6 +36,7 @@ import static com.android.server.wm.IdentifierProto.USER_ID;
 import static com.android.server.wm.ProtoLogGroup.WM_DEBUG_APP_TRANSITIONS;
 import static com.android.server.wm.ProtoLogGroup.WM_DEBUG_APP_TRANSITIONS_ANIM;
 import static com.android.server.wm.ProtoLogGroup.WM_DEBUG_ORIENTATION;
+import static com.android.server.wm.SurfaceAnimator.ANIMATION_TYPE_ALL;
 import static com.android.server.wm.SurfaceAnimator.ANIMATION_TYPE_APP_TRANSITION;
 import static com.android.server.wm.WindowContainer.AnimationFlags.CHILDREN;
 import static com.android.server.wm.WindowContainer.AnimationFlags.PARENTS;
@@ -68,7 +69,6 @@ import android.util.Pools;
 import android.util.Slog;
 import android.util.proto.ProtoOutputStream;
 import android.view.DisplayInfo;
-import android.view.IWindowContainer;
 import android.view.MagnificationSpec;
 import android.view.RemoteAnimationDefinition;
 import android.view.RemoteAnimationTarget;
@@ -77,6 +77,8 @@ import android.view.SurfaceControl.Builder;
 import android.view.SurfaceSession;
 import android.view.WindowManager;
 import android.view.animation.Animation;
+import android.window.IWindowContainerToken;
+import android.window.WindowContainerToken;
 
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.util.ToBooleanFunction;
@@ -378,10 +380,7 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         if (mSurfaceControl == null) {
             // If we don't yet have a surface, but we now have a parent, we should
             // build a surface.
-            setSurfaceControl(makeSurface().build());
-            getPendingTransaction().show(mSurfaceControl);
-            onSurfaceShown(getPendingTransaction());
-            updateSurfacePosition();
+            createSurfaceControl(false /*force*/);
         } else {
             // If we have a surface but a new parent, we just need to perform a reparent. Go through
             // surface animator such that hierarchy is preserved when animating, i.e.
@@ -397,6 +396,13 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         // Either way we need to ask the parent to assign us a Z-order.
         mParent.assignChildLayers();
         scheduleAnimation();
+    }
+
+    void createSurfaceControl(boolean force) {
+        setSurfaceControl(makeSurface().build());
+        getPendingTransaction().show(mSurfaceControl);
+        onSurfaceShown(getPendingTransaction());
+        updateSurfacePosition();
     }
 
     /**
@@ -724,6 +730,13 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         return mDisplayContent;
     }
 
+    /** Get the first node of type {@link DisplayArea} above or at this node. */
+    @Nullable
+    DisplayArea getDisplayArea() {
+        WindowContainer parent = getParent();
+        return parent != null ? parent.getDisplayArea() : null;
+    }
+
     void setWaitingForDrawnIfResizingChanged() {
         for (int i = mChildren.size() - 1; i >= 0; --i) {
             final WindowContainer wc = mChildren.get(i);
@@ -778,7 +791,7 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
      * By default this predicate only checks if this container itself is actually running an
      * animation, but you can extend the check target over its relatives, or relax the condition
      * so that this can return {@code true} if an animation starts soon by giving a combination
-     * of {@link #AnimationFlags}.
+     * of {@link AnimationFlags}.
      *
      * Note that you can give a combination of bitmask flags to specify targets and condition for
      * checking animating status.
@@ -788,12 +801,18 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
      *
      * Note that TRANSITION propagates to parents and children as well.
      *
-     * {@see AnimationFlags#TRANSITION}
-     * {@see AnimationFlags#PARENTS}
-     * {@see AnimationFlags#CHILDREN}
+     * @param flags The combination of bitmask flags to specify targets and condition for
+     *              checking animating status.
+     * @param typesToCheck The combination of bitmask {@link AnimationType} to compare when
+     *                     determining if animating.
+     *
+     * @see AnimationFlags#TRANSITION
+     * @see AnimationFlags#PARENTS
+     * @see AnimationFlags#CHILDREN
      */
-    boolean isAnimating(int flags) {
-        if (mSurfaceAnimator.isAnimating()) {
+    boolean isAnimating(int flags, int typesToCheck) {
+        int animationType = mSurfaceAnimator.getAnimationType();
+        if (mSurfaceAnimator.isAnimating() && (animationType & typesToCheck) > 0) {
             return true;
         }
         if ((flags & TRANSITION) != 0 && isWaitingForTransitionStart()) {
@@ -801,19 +820,39 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         }
         if ((flags & PARENTS) != 0) {
             final WindowContainer parent = getParent();
-            if (parent != null && parent.isAnimating(flags & ~CHILDREN)) {
+            if (parent != null && parent.isAnimating(flags & ~CHILDREN, typesToCheck)) {
                 return true;
             }
         }
         if ((flags & CHILDREN) != 0) {
             for (int i = 0; i < mChildren.size(); ++i) {
                 final WindowContainer wc = mChildren.get(i);
-                if (wc.isAnimating(flags & ~PARENTS)) {
+                if (wc.isAnimating(flags & ~PARENTS, typesToCheck)) {
                     return true;
                 }
             }
         }
         return false;
+    }
+
+    /**
+     * Similar to {@link #isAnimating(int, int)} except provide a bitmask of
+     * {@link AnimationType} to exclude, rather than include
+     * @param flags The combination of bitmask flags to specify targets and condition for
+     *              checking animating status.
+     * @param typesToExclude The combination of bitmask {@link AnimationType} to exclude when
+     *                     checking if animating.
+     */
+    boolean isAnimatingExcluding(int flags, int typesToExclude) {
+        return isAnimating(flags, ANIMATION_TYPE_ALL & ~typesToExclude);
+    }
+
+    /**
+     * @see #isAnimating(int, int)
+     * TODO (b/152333373): Migrate calls to use isAnimating with specified animation type
+     */
+    boolean isAnimating(int flags) {
+        return isAnimating(flags, ANIMATION_TYPE_ALL);
     }
 
     /**
@@ -1608,6 +1647,12 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         return null;
     }
 
+    void forAllDisplayAreas(Consumer<DisplayArea> callback) {
+        for (int i = mChildren.size() - 1; i >= 0; --i) {
+            mChildren.get(i).forAllDisplayAreas(callback);
+        }
+    }
+
     /**
      * Returns 1, 0, or -1 depending on if this container is greater than, equal to, or lesser than
      * the input container in terms of z-order.
@@ -2250,6 +2295,10 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
     public void onAnimationLeashCreated(Transaction t, SurfaceControl leash) {
         mLastLayer = -1;
         reassignLayer(t);
+
+        // Leash is now responsible for position, so set our position to 0.
+        t.setPosition(mSurfaceControl, 0, 0);
+        mLastSurfacePosition.set(0, 0);
     }
 
     @Override
@@ -2257,6 +2306,7 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         mLastLayer = -1;
         mSurfaceFreezer.unfreeze(t);
         reassignLayer(t);
+        updateSurfacePosition(t);
     }
 
     /**
@@ -2320,8 +2370,15 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         }
     }
 
-    void updateSurfacePosition() {
-        if (mSurfaceControl == null) {
+    final void updateSurfacePosition() {
+        updateSurfacePosition(getPendingTransaction());
+    }
+
+    void updateSurfacePosition(Transaction t) {
+        // Avoid fighting with the organizer over Surface position.
+        if (isOrganized()) return;
+
+        if (mSurfaceControl == null || mSurfaceAnimator.hasLeash()) {
             return;
         }
 
@@ -2330,7 +2387,7 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
             return;
         }
 
-        getPendingTransaction().setPosition(mSurfaceControl, mTmpPos.x, mTmpPos.y);
+        t.setPosition(mSurfaceControl, mTmpPos.x, mTmpPos.y);
         mLastSurfacePosition.set(mTmpPos.x, mTmpPos.y);
     }
 
@@ -2370,6 +2427,13 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
     }
 
     void getRelativeDisplayedPosition(Point outPos) {
+        // In addition to updateSurfacePosition, we keep other code that sets
+        // position from fighting with the organizer
+        if (isOrganized()) {
+            outPos.set(0, 0);
+            return;
+        }
+
         final Rect dispBounds = getDisplayedBounds();
         outPos.set(dispBounds.left, dispBounds.top);
         final WindowContainer parent = getParent();
@@ -2410,16 +2474,22 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         return null;
     }
 
-    RemoteToken getRemoteToken() {
-        return mRemoteToken;
+    /**
+     * @return {@code true} if window container is manage by a
+     *          {@link android.window.WindowOrganizer}
+     */
+    boolean isOrganized() {
+        return false;
     }
 
     static WindowContainer fromBinder(IBinder binder) {
         return RemoteToken.fromBinder(binder).getContainer();
     }
 
-    static class RemoteToken extends IWindowContainer.Stub {
+    static class RemoteToken extends IWindowContainerToken.Stub {
+
         final WeakReference<WindowContainer> mWeakRef;
+        private WindowContainerToken mWindowContainerToken;
 
         RemoteToken(WindowContainer container) {
             mWeakRef = new WeakReference<>(container);
@@ -2435,7 +2505,19 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
 
         @Override
         public SurfaceControl getLeash() {
-            throw new RuntimeException("Not implemented");
+            final WindowContainer wc = getContainer();
+            if (wc == null) return null;
+            // We need to copy the SurfaceControl instead of returning the original
+            // because the Parcel FLAGS PARCELABLE_WRITE_RETURN_VALUE cause SurfaceControls
+            // to release themselves.
+            return new SurfaceControl(wc.getSurfaceControl());
+        }
+
+        WindowContainerToken toWindowContainerToken() {
+            if (mWindowContainerToken == null) {
+                mWindowContainerToken = new WindowContainerToken(this);
+            }
+            return mWindowContainerToken;
         }
 
         @Override
@@ -2451,34 +2533,46 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
     }
 
     @Override
-    public void transactionReady(int mSyncId, SurfaceControl.Transaction mergedTransaction) {
+    public void onTransactionReady(int mSyncId, SurfaceControl.Transaction mergedTransaction) {
         mergedTransaction.merge(mBLASTSyncTransaction);
         mUsingBLASTSyncTransaction = false;
 
-        mWaitingListener.transactionReady(mWaitingSyncId, mergedTransaction);
+        mWaitingListener.onTransactionReady(mWaitingSyncId, mergedTransaction);
 
         mWaitingListener = null;
         mWaitingSyncId = -1;
     }
 
-    boolean prepareForSync(BLASTSyncEngine.TransactionReadyListener waitingListener,
-            int waitingId) {
+    /**
+     * Returns true if any of the children elected to participate in the Sync
+     */
+    boolean addChildrenToSyncSet(int localId) {
         boolean willSync = false;
-        if (!isVisible()) {
-            return willSync;
-        }
-        mUsingBLASTSyncTransaction = true;
 
-        int localId = mBLASTSyncEngine.startSyncSet(this);
         for (int i = 0; i < mChildren.size(); i++) {
             final WindowContainer child = mChildren.get(i);
-            willSync = mBLASTSyncEngine.addToSyncSet(localId, child) | willSync;
+            willSync |= mBLASTSyncEngine.addToSyncSet(localId, child);
         }
+        return willSync;
+    }
+
+    boolean prepareForSync(BLASTSyncEngine.TransactionReadyListener waitingListener,
+            int waitingId) {
+        boolean willSync = true;
+
+        // If we are invisible, no need to sync, likewise if we are already engaged in a sync,
+        // we can't support overlapping syncs on a single container yet.
+        if (!isVisible() || mWaitingListener != null) {
+            return false;
+        }
+        mUsingBLASTSyncTransaction = true;
 
         // Make sure to set these before we call setReady in case the sync was a no-op
         mWaitingSyncId = waitingId;
         mWaitingListener = waitingListener;
 
+        int localId = mBLASTSyncEngine.startSyncSet(this);
+        willSync |= addChildrenToSyncSet(localId);
         mBLASTSyncEngine.setReady(localId);
 
         return willSync;

@@ -19,6 +19,10 @@ package com.android.server.pm.permission;
 import static android.Manifest.permission.ADJUST_RUNTIME_PERMISSIONS_POLICY;
 import static android.Manifest.permission.READ_EXTERNAL_STORAGE;
 import static android.Manifest.permission.WRITE_EXTERNAL_STORAGE;
+import static android.app.AppOpsManager.MODE_ALLOWED;
+import static android.app.AppOpsManager.MODE_IGNORED;
+import static android.content.pm.ApplicationInfo.AUTO_REVOKE_DISALLOWED;
+import static android.content.pm.ApplicationInfo.AUTO_REVOKE_DISCOURAGED;
 import static android.content.pm.PackageManager.FLAGS_PERMISSION_RESTRICTION_ANY_EXEMPT;
 import static android.content.pm.PackageManager.FLAG_PERMISSION_APPLY_RESTRICTION;
 import static android.content.pm.PackageManager.FLAG_PERMISSION_GRANTED_BY_DEFAULT;
@@ -38,6 +42,7 @@ import static android.os.Trace.TRACE_TAG_PACKAGE_MANAGER;
 import static android.permission.PermissionManager.KILL_APP_REASON_GIDS_CHANGED;
 import static android.permission.PermissionManager.KILL_APP_REASON_PERMISSIONS_REVOKED;
 
+import static com.android.server.pm.ApexManager.MATCH_ACTIVE_PACKAGE;
 import static com.android.server.pm.PackageManagerService.DEBUG_INSTALL;
 import static com.android.server.pm.PackageManagerService.DEBUG_PACKAGE_SCANNING;
 import static com.android.server.pm.PackageManagerService.DEBUG_PERMISSIONS;
@@ -53,9 +58,11 @@ import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.UserIdInt;
 import android.app.ActivityManager;
+import android.app.AppOpsManager;
 import android.app.ApplicationPackageManager;
 import android.app.IActivityManager;
 import android.app.admin.DeviceAdminInfo;
+import android.app.admin.DevicePolicyManager;
 import android.app.admin.DevicePolicyManagerInternal;
 import android.compat.annotation.ChangeId;
 import android.compat.annotation.EnabledAfter;
@@ -110,6 +117,7 @@ import android.util.SparseArray;
 import android.util.SparseBooleanArray;
 
 import com.android.internal.annotations.GuardedBy;
+import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.compat.IPlatformCompat;
 import com.android.internal.logging.MetricsLogger;
 import com.android.internal.logging.nano.MetricsProto.MetricsEvent;
@@ -123,6 +131,7 @@ import com.android.server.LocalServices;
 import com.android.server.ServiceThread;
 import com.android.server.SystemConfig;
 import com.android.server.Watchdog;
+import com.android.server.pm.ApexManager;
 import com.android.server.pm.PackageManagerServiceUtils;
 import com.android.server.pm.PackageSetting;
 import com.android.server.pm.SharedUserSetting;
@@ -217,6 +226,9 @@ public class PermissionManagerService extends IPermissionManager.Stub {
     /** Default permission policy to provide proper behaviour out-of-the-box */
     private final DefaultPermissionGrantPolicy mDefaultPermissionGrantPolicy;
 
+    /** App ops manager */
+    private final AppOpsManager mAppOpsManager;
+
     /**
      * Built-in permissions. Read from system configuration files. Mapping is from
      * UID to permission name.
@@ -236,6 +248,9 @@ public class PermissionManagerService extends IPermissionManager.Stub {
     /** Internal storage for permissions and related settings */
     @GuardedBy("mLock")
     private final PermissionSettings mSettings;
+
+    /** Injector that can be used to facilitate testing. */
+    private final Injector mInjector;
 
     @GuardedBy("mLock")
     private ArraySet<String> mPrivappPermissionsViolations;
@@ -346,16 +361,24 @@ public class PermissionManagerService extends IPermissionManager.Stub {
 
     PermissionManagerService(Context context,
             @NonNull Object externalLock) {
+        this(context, externalLock, new Injector(context));
+    }
+
+    @VisibleForTesting
+    PermissionManagerService(Context context, @NonNull Object externalLock,
+            @NonNull Injector injector) {
+        mInjector = injector;
         // The package info cache is the cache for package and permission information.
-        PackageManager.invalidatePackageInfoCache();
-        PermissionManager.disablePermissionCache();
-        PermissionManager.disablePackageNamePermissionCache();
+        mInjector.invalidatePackageInfoCache();
+        mInjector.disablePermissionCache();
+        mInjector.disablePackageNamePermissionCache();
 
         mContext = context;
         mLock = externalLock;
         mPackageManagerInt = LocalServices.getService(PackageManagerInternal.class);
         mUserManagerInt = LocalServices.getService(UserManagerInternal.class);
         mSettings = new PermissionSettings(mLock);
+        mAppOpsManager = context.getSystemService(AppOpsManager.class);
 
         mHandlerThread = new ServiceThread(TAG,
                 Process.THREAD_PRIORITY_BACKGROUND, true /*allowIo*/);
@@ -945,6 +968,59 @@ public class PermissionManagerService extends IPermissionManager.Stub {
     }
 
     @Override
+    public int checkDeviceIdentifierAccess(@Nullable String packageName, @Nullable String message,
+            @Nullable String callingFeatureId, int pid, int uid) {
+        // If the check is being requested by an app then only allow the app to query its own
+        // access status.
+        int callingUid = mInjector.getCallingUid();
+        int callingPid = mInjector.getCallingPid();
+        if (UserHandle.getAppId(callingUid) >= Process.FIRST_APPLICATION_UID && (callingUid != uid
+                || callingPid != pid)) {
+            String response = String.format(
+                    "Calling uid %d, pid %d cannot check device identifier access for package %s "
+                            + "(uid=%d, pid=%d)",
+                    callingUid, callingPid, packageName, uid, pid);
+            Log.w(TAG, response);
+            throw new SecurityException(response);
+        }
+        // Allow system and root access to the device identifiers.
+        final int appId = UserHandle.getAppId(uid);
+        if (appId == Process.SYSTEM_UID || appId == Process.ROOT_UID) {
+            return PackageManager.PERMISSION_GRANTED;
+        }
+        // Allow access to packages that have the READ_PRIVILEGED_PHONE_STATE permission.
+        if (mInjector.checkPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE, pid,
+                uid) == PackageManager.PERMISSION_GRANTED) {
+            return PackageManager.PERMISSION_GRANTED;
+        }
+        // If the calling package is not null then perform the appop and device / profile owner
+        // check.
+        if (packageName != null) {
+            // Allow access to a package that has been granted the READ_DEVICE_IDENTIFIERS appop.
+            long token = mInjector.clearCallingIdentity();
+            AppOpsManager appOpsManager = (AppOpsManager) mInjector.getSystemService(
+                    Context.APP_OPS_SERVICE);
+            try {
+                if (appOpsManager.noteOpNoThrow(AppOpsManager.OPSTR_READ_DEVICE_IDENTIFIERS, uid,
+                        packageName, callingFeatureId, message) == AppOpsManager.MODE_ALLOWED) {
+                    return PackageManager.PERMISSION_GRANTED;
+                }
+            } finally {
+                mInjector.restoreCallingIdentity(token);
+            }
+            // Check if the calling packages meets the device / profile owner requirements for
+            // identifier access.
+            DevicePolicyManager devicePolicyManager =
+                    (DevicePolicyManager) mInjector.getSystemService(Context.DEVICE_POLICY_SERVICE);
+            if (devicePolicyManager != null && devicePolicyManager.hasDeviceIdentifierAccess(
+                    packageName, pid, uid)) {
+                return PackageManager.PERMISSION_GRANTED;
+            }
+        }
+        return PackageManager.PERMISSION_DENIED;
+    }
+
+    @Override
     public void addOnPermissionsChangeListener(IOnPermissionsChangeListener listener) {
         mContext.enforceCallingOrSelfPermission(
                 Manifest.permission.OBSERVE_GRANT_REVOKE_PERMISSIONS,
@@ -1196,6 +1272,77 @@ public class PermissionManagerService extends IPermissionManager.Stub {
         }
 
         return true;
+    }
+
+    @Override
+    public boolean setAutoRevokeWhitelisted(
+            @NonNull String packageName, boolean whitelisted, int userId) {
+        Objects.requireNonNull(packageName);
+
+        final AndroidPackage pkg = mPackageManagerInt.getPackage(packageName);
+        final int callingUid = Binder.getCallingUid();
+
+        if (!checkAutoRevokeAccess(pkg, callingUid)) {
+            return false;
+        }
+
+        if (mAppOpsManager
+                .checkOpNoThrow(AppOpsManager.OP_AUTO_REVOKE_MANAGED_BY_INSTALLER,
+                        callingUid, packageName)
+                != MODE_ALLOWED) {
+            // Whitelist user set - don't override
+            return false;
+        }
+
+        final long identity = Binder.clearCallingIdentity();
+        try {
+            mAppOpsManager.setMode(AppOpsManager.OP_AUTO_REVOKE_PERMISSIONS_IF_UNUSED,
+                    callingUid, packageName,
+                    whitelisted ? MODE_IGNORED : MODE_ALLOWED);
+        } finally {
+            Binder.restoreCallingIdentity(identity);
+        }
+        return true;
+    }
+
+    private boolean checkAutoRevokeAccess(AndroidPackage pkg, int callingUid) {
+        if (pkg == null) {
+            return false;
+        }
+
+        final boolean isCallerPrivileged = mContext.checkCallingOrSelfPermission(
+                Manifest.permission.WHITELIST_AUTO_REVOKE_PERMISSIONS)
+                == PackageManager.PERMISSION_GRANTED;
+        final boolean isCallerInstallerOnRecord =
+                mPackageManagerInt.isCallerInstallerOfRecord(pkg, callingUid);
+
+        if (!isCallerPrivileged && !isCallerInstallerOnRecord) {
+            throw new SecurityException("Caller must either hold "
+                    + Manifest.permission.WHITELIST_AUTO_REVOKE_PERMISSIONS
+                    + " or be the installer on record");
+        }
+        return true;
+    }
+
+    @Override
+    public boolean isAutoRevokeWhitelisted(@NonNull String packageName, int userId) {
+        Objects.requireNonNull(packageName);
+
+        final AndroidPackage pkg = mPackageManagerInt.getPackage(packageName);
+        final int callingUid = Binder.getCallingUid();
+
+        if (!checkAutoRevokeAccess(pkg, callingUid)) {
+            return false;
+        }
+
+        final long identity = Binder.clearCallingIdentity();
+        try {
+            return mAppOpsManager.checkOpNoThrow(
+                    AppOpsManager.OP_AUTO_REVOKE_PERMISSIONS_IF_UNUSED, callingUid, packageName)
+                    == MODE_IGNORED;
+        } finally {
+            Binder.restoreCallingIdentity(identity);
+        }
     }
 
     @Override
@@ -2350,10 +2497,24 @@ public class PermissionManagerService extends IPermissionManager.Stub {
         synchronized (mLock) {
             ArraySet<String> newImplicitPermissions = new ArraySet<>();
 
+            // TODO ntmyren: Remove once propagated to droidfood
+            int flagMask = PackageManager.FLAG_PERMISSION_USER_SENSITIVE_WHEN_GRANTED
+                    | PackageManager.FLAG_PERMISSION_USER_SENSITIVE_WHEN_DENIED;
+            int user = UserHandle.getUserId(pkg.getUid());
+
             final int N = pkg.getRequestedPermissions().size();
             for (int i = 0; i < N; i++) {
                 final String permName = pkg.getRequestedPermissions().get(i);
                 final BasePermission bp = mSettings.getPermissionLocked(permName);
+
+                // TODO ntmyren: Remove once propagated to droidfood
+                if (bp != null && !bp.isRuntime()) {
+                    PermissionState permState = permissionsState.getInstallPermissionState(bp.name);
+                    if (permState == null || (permState.getFlags() & flagMask) != 0) {
+                        permissionsState.updatePermissionFlags(bp, user, flagMask, 0);
+                    }
+                }
+
                 final boolean appSupportsRuntimePermissions =
                         pkg.getTargetSdkVersion() >= Build.VERSION_CODES.M;
                 String upgradedActivityRecognitionPermission = null;
@@ -3093,6 +3254,30 @@ public class PermissionManagerService extends IPermissionManager.Stub {
         }
     }
 
+    @Override
+    public List<String> getAutoRevokeExemptionRequestedPackages(int userId) {
+        return getPackagesWithAutoRevokePolicy(AUTO_REVOKE_DISCOURAGED, userId);
+    }
+
+    @Override
+    public List<String> getAutoRevokeExemptionGrantedPackages(int userId) {
+        return getPackagesWithAutoRevokePolicy(AUTO_REVOKE_DISALLOWED, userId);
+    }
+
+    @NonNull
+    private List<String> getPackagesWithAutoRevokePolicy(int autoRevokePolicy, int userId) {
+        mContext.enforceCallingPermission(Manifest.permission.ADJUST_RUNTIME_PERMISSIONS_POLICY,
+                "Must hold " + Manifest.permission.ADJUST_RUNTIME_PERMISSIONS_POLICY);
+
+        List<String> result = new ArrayList<>();
+        mPackageManagerInt.forEachInstalledPackage(pkg -> {
+            if (pkg.getAutoRevokePermissions() == autoRevokePolicy) {
+                result.add(pkg.getPackageName());
+            }
+        }, userId);
+        return result;
+    }
+
     private boolean isNewPlatformPermissionForPackage(String perm, AndroidPackage pkg) {
         boolean allowed = false;
         final int NP = PackageParser.NEW_PERMISSIONS.length;
@@ -3148,39 +3333,51 @@ public class PermissionManagerService extends IPermissionManager.Stub {
         if (!privappPermissionsDisable && privilegedPermission && pkg.isPrivileged()
                 && !platformPackage && platformPermission) {
             if (!hasPrivappWhitelistEntry(perm, pkg)) {
-                // Only report violations for apps on system image
-                if (!mSystemReady && !pkgSetting.getPkgState().isUpdatedSystemApp()) {
-                    // it's only a reportable violation if the permission isn't explicitly denied
-                    ArraySet<String> deniedPermissions = null;
-                    if (pkg.isVendor()) {
-                        deniedPermissions = SystemConfig.getInstance()
-                                .getVendorPrivAppDenyPermissions(pkg.getPackageName());
-                    } else if (pkg.isProduct()) {
-                        deniedPermissions = SystemConfig.getInstance()
-                                .getProductPrivAppDenyPermissions(pkg.getPackageName());
-                    } else if (pkg.isSystemExt()) {
-                        deniedPermissions = SystemConfig.getInstance()
-                                .getSystemExtPrivAppDenyPermissions(pkg.getPackageName());
-                    } else {
-                        deniedPermissions = SystemConfig.getInstance()
-                                .getPrivAppDenyPermissions(pkg.getPackageName());
-                    }
-                    final boolean permissionViolation =
-                            deniedPermissions == null || !deniedPermissions.contains(perm);
-                    if (permissionViolation) {
-                        Slog.w(TAG, "Privileged permission " + perm + " for package "
-                                + pkg.getPackageName() + " (" + pkg.getCodePath()
-                                + ") not in privapp-permissions whitelist");
+                // Only enforce whitelist this on boot
+                if (!mSystemReady
+                        // Updated system apps do not need to be whitelisted
+                        && !pkgSetting.getPkgState().isUpdatedSystemApp()) {
+                    ApexManager apexMgr = ApexManager.getInstance();
+                    String apexContainingPkg = apexMgr.getActiveApexPackageNameContainingPackage(
+                            pkg);
 
-                        if (RoSystemProperties.CONTROL_PRIVAPP_PERMISSIONS_ENFORCE) {
-                            if (mPrivappPermissionsViolations == null) {
-                                mPrivappPermissionsViolations = new ArraySet<>();
-                            }
-                            mPrivappPermissionsViolations.add(
-                                    pkg.getPackageName() + " (" + pkg.getCodePath() + "): " + perm);
+                    // Apps that are in updated apexs' do not need to be whitelisted
+                    if (apexContainingPkg == null || apexMgr.isFactory(
+                            apexMgr.getPackageInfo(apexContainingPkg, MATCH_ACTIVE_PACKAGE))) {
+                        // it's only a reportable violation if the permission isn't explicitly
+                        // denied
+                        ArraySet<String> deniedPermissions = null;
+                        if (pkg.isVendor()) {
+                            deniedPermissions = SystemConfig.getInstance()
+                                    .getVendorPrivAppDenyPermissions(pkg.getPackageName());
+                        } else if (pkg.isProduct()) {
+                            deniedPermissions = SystemConfig.getInstance()
+                                    .getProductPrivAppDenyPermissions(pkg.getPackageName());
+                        } else if (pkg.isSystemExt()) {
+                            deniedPermissions = SystemConfig.getInstance()
+                                    .getSystemExtPrivAppDenyPermissions(pkg.getPackageName());
+                        } else {
+                            deniedPermissions = SystemConfig.getInstance()
+                                    .getPrivAppDenyPermissions(pkg.getPackageName());
                         }
-                    } else {
-                        return false;
+                        final boolean permissionViolation =
+                                deniedPermissions == null || !deniedPermissions.contains(perm);
+                        if (permissionViolation) {
+                            Slog.w(TAG, "Privileged permission " + perm + " for package "
+                                    + pkg.getPackageName() + " (" + pkg.getCodePath()
+                                    + ") not in privapp-permissions whitelist");
+
+                            if (RoSystemProperties.CONTROL_PRIVAPP_PERMISSIONS_ENFORCE) {
+                                if (mPrivappPermissionsViolations == null) {
+                                    mPrivappPermissionsViolations = new ArraySet<>();
+                                }
+                                mPrivappPermissionsViolations.add(
+                                        pkg.getPackageName() + " (" + pkg.getCodePath() + "): "
+                                                + perm);
+                            }
+                        } else {
+                            return false;
+                        }
                     }
                 }
                 if (RoSystemProperties.CONTROL_PRIVAPP_PERMISSIONS_ENFORCE) {
@@ -3354,13 +3551,6 @@ public class PermissionManagerService extends IPermissionManager.Stub {
                             PackageManagerInternal.PACKAGE_APP_PREDICTOR, UserHandle.USER_SYSTEM),
                     pkg.getPackageName())) {
                 // Special permissions for the system app predictor.
-                allowed = true;
-            }
-            if (!allowed && bp.isTelephony()
-                    && ArrayUtils.contains(mPackageManagerInt.getKnownPackageNames(
-                        PackageManagerInternal.PACKAGE_TELEPHONY, UserHandle.USER_SYSTEM),
-                    pkg.getPackageName())) {
-                // Special permissions for the system telephony apps.
                 allowed = true;
             }
             if (!allowed && bp.isCompanion()
@@ -4347,6 +4537,12 @@ public class PermissionManagerService extends IPermissionManager.Stub {
                     packageName, permissions, flags, userId);
         }
         @Override
+        public void setAutoRevokeWhitelisted(
+                @NonNull String packageName, boolean whitelisted, int userId) {
+            PermissionManagerService.this.setAutoRevokeWhitelisted(
+                    packageName, whitelisted, userId);
+        }
+        @Override
         public void updatePermissions(@NonNull String packageName, @Nullable AndroidPackage pkg) {
             PermissionManagerService.this
                     .updatePermissions(packageName, pkg, mDefaultPermissionCallback);
@@ -4688,6 +4884,96 @@ public class PermissionManagerService extends IPermissionManager.Stub {
             } finally {
                 mPermissionListeners.finishBroadcast();
             }
+        }
+    }
+
+    /**
+     * Allows injection of services and method responses to facilitate testing.
+     *
+     * <p>Test classes can create a mock of this class and pass it to the PermissionManagerService
+     * constructor to control behavior of services and external methods during execution.
+     * @hide
+     */
+    @VisibleForTesting
+    public static class Injector {
+        private final Context mContext;
+
+        /**
+         * Public constructor that accepts a {@code context} within which to operate.
+         */
+        public Injector(@NonNull Context context) {
+            mContext = context;
+        }
+
+        /**
+         * Returns the UID of the calling package.
+         */
+        public int getCallingUid() {
+            return Binder.getCallingUid();
+        }
+
+        /**
+         * Returns the process ID of the calling package.
+         */
+        public int getCallingPid() {
+            return Binder.getCallingPid();
+        }
+
+        /**
+         * Invalidates the package info cache.
+         */
+        public void invalidatePackageInfoCache() {
+            PackageManager.invalidatePackageInfoCache();
+        }
+
+        /**
+         * Disables the permission cache.
+         */
+        public void disablePermissionCache() {
+            PermissionManager.disablePermissionCache();
+        }
+
+        /**
+         * Disables the package name permission cache.
+         */
+        public void disablePackageNamePermissionCache() {
+            PermissionManager.disablePackageNamePermissionCache();
+        }
+
+        /**
+         * Checks if the package running under the specified {@code pid} and {@code uid} has been
+         * granted the provided {@code permission}.
+         *
+         * @return {@link PackageManager#PERMISSION_GRANTED} if the package has been granted the
+         * permission, {@link PackageManager#PERMISSION_DENIED} otherwise
+         */
+        public int checkPermission(@NonNull String permission, int pid, int uid) {
+            return mContext.checkPermission(permission, pid, uid);
+        }
+
+        /**
+         * Clears the calling identity to allow subsequent calls to be treated as coming from this
+         * package.
+         *
+         * @return a token that can be used to restore the calling identity
+         */
+        public long clearCallingIdentity() {
+            return Binder.clearCallingIdentity();
+        }
+
+        /**
+         * Restores the calling identity to that of the calling package based on the provided
+         * {@code token}.
+         */
+        public void restoreCallingIdentity(long token) {
+            Binder.restoreCallingIdentity(token);
+        }
+
+        /**
+         * Returns the system service with the provided {@code name}.
+         */
+        public Object getSystemService(@NonNull String name) {
+            return mContext.getSystemService(name);
         }
     }
 }

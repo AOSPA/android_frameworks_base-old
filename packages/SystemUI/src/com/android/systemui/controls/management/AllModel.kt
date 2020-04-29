@@ -51,6 +51,7 @@ class AllModel(
                 ControlInfo.Builder().apply {
                     controlId = it.controlId
                     controlTitle = it.title
+                    controlSubtitle = it.subtitle
                     deviceType = it.deviceType
                 }
             }
@@ -64,10 +65,17 @@ class AllModel(
     override val elements: List<ElementWrapper> = createWrappers(controls)
 
     override fun changeFavoriteStatus(controlId: String, favorite: Boolean) {
+        val toChange = elements.firstOrNull {
+            it is ControlWrapper && it.controlStatus.control.controlId == controlId
+        } as ControlWrapper?
+        if (favorite == toChange?.controlStatus?.favorite) return
         if (favorite) {
             favoriteIds.add(controlId)
         } else {
             favoriteIds.remove(controlId)
+        }
+        toChange?.let {
+            it.controlStatus.favorite = favorite
         }
     }
 

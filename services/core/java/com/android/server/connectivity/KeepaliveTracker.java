@@ -221,9 +221,9 @@ public class KeepaliveTracker {
                     + " network=" + mNai.network
                     + " startedState=" + startedStateString(mStartedState)
                     + " "
-                    + IpUtils.addressAndPortToString(mPacket.srcAddress, mPacket.srcPort)
+                    + IpUtils.addressAndPortToString(mPacket.getSrcAddress(), mPacket.getSrcPort())
                     + "->"
-                    + IpUtils.addressAndPortToString(mPacket.dstAddress, mPacket.dstPort)
+                    + IpUtils.addressAndPortToString(mPacket.getDstAddress(), mPacket.getDstPort())
                     + " interval=" + mInterval
                     + " uid=" + mUid + " pid=" + mPid + " privileged=" + mPrivileged
                     + " packetData=" + HexDump.toHexString(mPacket.getPacket())
@@ -251,7 +251,7 @@ public class KeepaliveTracker {
         private int checkSourceAddress() {
             // Check that we have the source address.
             for (InetAddress address : mNai.linkProperties.getAddresses()) {
-                if (address.equals(mPacket.srcAddress)) {
+                if (address.equals(mPacket.getSrcAddress())) {
                     return SUCCESS;
                 }
             }
@@ -620,7 +620,7 @@ public class KeepaliveTracker {
             packet = NattKeepalivePacketData.nattKeepalivePacket(
                     srcAddress, srcPort, dstAddress, NATT_PORT);
         } catch (InvalidPacketException e) {
-            notifyErrorCallback(cb, e.error);
+            notifyErrorCallback(cb, e.getError());
             return;
         }
         KeepaliveInfo ki = null;
@@ -663,7 +663,7 @@ public class KeepaliveTracker {
             notifyErrorCallback(cb, e.error);
             return;
         } catch (InvalidPacketException e) {
-            notifyErrorCallback(cb, e.error);
+            notifyErrorCallback(cb, e.getError());
             return;
         }
         KeepaliveInfo ki = null;

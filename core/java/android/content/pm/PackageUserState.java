@@ -27,18 +27,24 @@ import static android.content.pm.PackageManager.MATCH_DISABLED_COMPONENTS;
 import static android.content.pm.PackageManager.MATCH_DISABLED_UNTIL_USED_COMPONENTS;
 import static android.content.pm.PackageManager.MATCH_SYSTEM_ONLY;
 
+import android.annotation.NonNull;
+import android.annotation.Nullable;
 import android.compat.annotation.UnsupportedAppUsage;
+import android.content.ComponentName;
 import android.content.pm.parsing.component.ParsedMainComponent;
 import android.os.BaseBundle;
 import android.os.Debug;
 import android.os.PersistableBundle;
+import android.text.TextUtils;
 import android.util.ArrayMap;
 import android.util.ArraySet;
 import android.util.DebugUtils;
+import android.util.Pair;
 import android.util.Slog;
 
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.util.ArrayUtils;
+import com.android.internal.util.CollectionUtils;
 
 import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserException;
@@ -74,6 +80,7 @@ public class PackageUserState {
     public int appLinkGeneration;
     public int categoryHint = ApplicationInfo.CATEGORY_UNDEFINED;
     public int installReason;
+    public @PackageManager.UninstallReason int uninstallReason;
     public String harmfulAppWarning;
 
     public ArraySet<String> disabledComponents;
@@ -82,6 +89,9 @@ public class PackageUserState {
     private String[] overlayPaths;
     private ArrayMap<String, String[]> sharedLibraryOverlayPaths; // Lib name to overlay paths
     private String[] cachedOverlayPaths;
+
+    @Nullable
+    private ArrayMap<ComponentName, Pair<String, Integer>> componentLabelIconOverrideMap;
 
     @UnsupportedAppUsage
     public PackageUserState() {
@@ -92,6 +102,7 @@ public class PackageUserState {
         domainVerificationStatus =
                 PackageManager.INTENT_FILTER_DOMAIN_VERIFICATION_STATUS_UNDEFINED;
         installReason = PackageManager.INSTALL_REASON_UNKNOWN;
+        uninstallReason = PackageManager.UNINSTALL_REASON_UNKNOWN;
     }
 
     @VisibleForTesting
@@ -112,6 +123,7 @@ public class PackageUserState {
         appLinkGeneration = o.appLinkGeneration;
         categoryHint = o.categoryHint;
         installReason = o.installReason;
+        uninstallReason = o.uninstallReason;
         disabledComponents = ArrayUtils.cloneOrNull(o.disabledComponents);
         enabledComponents = ArrayUtils.cloneOrNull(o.enabledComponents);
         overlayPaths =
@@ -120,6 +132,9 @@ public class PackageUserState {
             sharedLibraryOverlayPaths = new ArrayMap<>(o.sharedLibraryOverlayPaths);
         }
         harmfulAppWarning = o.harmfulAppWarning;
+        if (o.componentLabelIconOverrideMap != null) {
+            this.componentLabelIconOverrideMap = new ArrayMap<>(o.componentLabelIconOverrideMap);
+        }
     }
 
     public String[] getOverlayPaths() {
@@ -141,6 +156,65 @@ public class PackageUserState {
         }
         sharedLibraryOverlayPaths.put(library, paths);
         cachedOverlayPaths = null;
+    }
+
+    /**
+     * Overrides the non-localized label and icon of a component.
+     *
+     * @return true if the label or icon was changed.
+     */
+    @VisibleForTesting(visibility = VisibleForTesting.Visibility.PACKAGE)
+    public boolean overrideLabelAndIcon(@NonNull ComponentName component,
+            @Nullable String nonLocalizedLabel, @Nullable Integer icon) {
+        String existingLabel = null;
+        Integer existingIcon = null;
+
+        if (componentLabelIconOverrideMap != null) {
+            Pair<String, Integer> pair = componentLabelIconOverrideMap.get(component);
+            if (pair != null) {
+                existingLabel = pair.first;
+                existingIcon = pair.second;
+            }
+        }
+
+        boolean changed = !TextUtils.equals(existingLabel, nonLocalizedLabel)
+                || !Objects.equals(existingIcon, icon);
+
+        if (changed) {
+            if (nonLocalizedLabel == null && icon == null) {
+                componentLabelIconOverrideMap.remove(component);
+                if (componentLabelIconOverrideMap.isEmpty()) {
+                    componentLabelIconOverrideMap = null;
+                }
+            } else {
+                if (componentLabelIconOverrideMap == null) {
+                    componentLabelIconOverrideMap = new ArrayMap<>(1);
+                }
+
+                componentLabelIconOverrideMap.put(component, Pair.create(nonLocalizedLabel, icon));
+            }
+        }
+
+        return changed;
+    }
+
+    /**
+     * Clears all values previously set by {@link #overrideLabelAndIcon(ComponentName,
+     * String, Integer)}.
+     *
+     * This is done when the package is updated as the components and resource IDs may have changed.
+     */
+    public void resetOverrideComponentLabelIcon() {
+        componentLabelIconOverrideMap = null;
+    }
+
+    @Nullable
+    public Pair<String, Integer> getOverrideLabelIconForComponent(ComponentName componentName) {
+        if (ArrayUtils.isEmpty(componentLabelIconOverrideMap)) {
+            return null;
+        }
+
+        return componentLabelIconOverrideMap.get(componentName);
     }
 
     /**
@@ -353,6 +427,9 @@ public class PackageUserState {
         if (installReason != oldState.installReason) {
             return false;
         }
+        if (uninstallReason != oldState.uninstallReason) {
+            return false;
+        }
         if ((disabledComponents == null && oldState.disabledComponents != null)
                 || (disabledComponents != null && oldState.disabledComponents == null)) {
             return false;
@@ -407,6 +484,7 @@ public class PackageUserState {
         hashCode = 31 * hashCode + appLinkGeneration;
         hashCode = 31 * hashCode + categoryHint;
         hashCode = 31 * hashCode + installReason;
+        hashCode = 31 * hashCode + uninstallReason;
         hashCode = 31 * hashCode + Objects.hashCode(disabledComponents);
         hashCode = 31 * hashCode + Objects.hashCode(enabledComponents);
         hashCode = 31 * hashCode + Objects.hashCode(harmfulAppWarning);

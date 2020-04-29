@@ -24,6 +24,7 @@ import static android.util.apk.ApkSigningBlockUtils.getSignatureAlgorithmContent
 import static android.util.apk.ApkSigningBlockUtils.getSignatureAlgorithmJcaKeyAlgorithm;
 import static android.util.apk.ApkSigningBlockUtils.getSignatureAlgorithmJcaSignatureAlgorithm;
 import static android.util.apk.ApkSigningBlockUtils.isSupportedSignatureAlgorithm;
+import static android.util.apk.ApkSigningBlockUtils.pickBestDigestForV4;
 import static android.util.apk.ApkSigningBlockUtils.readLengthPrefixedByteArray;
 
 import android.os.Build;
@@ -210,6 +211,8 @@ public class ApkSignatureSchemeV3Verifier {
             result.verityRootHash = ApkSigningBlockUtils.parseVerityDigestAndVerifySourceLength(
                     verityDigest, apk.length(), signatureInfo);
         }
+
+        result.digest = pickBestDigestForV4(contentDigests);
 
         return result;
     }
@@ -568,6 +571,7 @@ public class ApkSignatureSchemeV3Verifier {
         public final VerifiedProofOfRotation por;
 
         public byte[] verityRootHash;
+        public byte[] digest;
 
         public VerifiedSigner(X509Certificate[] certs, VerifiedProofOfRotation por) {
             this.certs = certs;

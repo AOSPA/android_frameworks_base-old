@@ -1913,6 +1913,9 @@
     <!-- The name of the package that will hold the system gallery role. -->
     <string name="config_systemGallery" translatable="false">com.android.gallery</string>
 
+    <!-- The name of the package that will be allowed to change its components' label/icon. -->
+    <string name="config_overrideComponentUiPackage" translatable="false"></string>
+
     <!-- Enable/disable default bluetooth profiles:
         HSP_AG, ObexObjectPush, Audio, NAP -->
     <bool name="config_bluetooth_default_profiles">true</bool>
@@ -2409,8 +2412,7 @@
           - to henceforth disable feature and try to undo its previous effects: 0
         Note: This list must be kept current with PACKAGE_WHITELIST_MODE_PROP in
         frameworks/base/services/core/java/com/android/server/pm/UserSystemPackageInstaller.java -->
-    <integer name="config_userTypePackageWhitelistMode">29</integer> <!-- 1+4+8+16 -->
-    <!-- TODO(b/143200798): Change to value 13, i.e. 1+4+8, when b/143200798 is resolved. -->
+    <integer name="config_userTypePackageWhitelistMode">13</integer> <!-- 1+4+8 -->
 
     <!-- Whether UI for multi user should be shown -->
     <bool name="config_enableMultiUserUI">false</bool>
@@ -2782,6 +2784,10 @@
     <string name="config_systemUIServiceComponent" translatable="false"
             >com.android.systemui/com.android.systemui.SystemUIService</string>
 
+    <!-- Package handling Quick controls -->
+    <string name="config_controlsPackage" translatable="false"
+            >com.android.systemui</string>
+
     <!-- Keyguard component -->
     <string name="config_keyguardComponent" translatable="false"
             >com.android.systemui/com.android.systemui.keyguard.KeyguardService</string>
@@ -2983,6 +2989,10 @@
 
     <!-- Whether to use voip audio mode for ims call -->
     <bool name="config_use_voip_mode_for_ims">false</bool>
+
+    <!-- Boolean indicating USSD over IMS is allowed.
+     If it is not supported due to modem limitations, USSD send over the CS pipe instead.-->
+    <bool name="config_allow_ussd_over_ims">false</bool>
 
     <!-- String array containing numbers that shouldn't be logged. Country-specific. -->
     <string-array name="unloggable_phone_numbers" />
@@ -3342,6 +3352,10 @@
          This should only be set when the device has gestural navigation enabled by default. -->
     <bool name="config_showGesturalNavigationHints">false</bool>
 
+    <!-- Controls the free snap mode for the docked stack divider. In this mode, the divider can be
+         snapped to any position between the first target and the last target. -->
+    <bool name="config_dockedStackDividerFreeSnapMode">false</bool>
+
     <!-- Default insets [LEFT/RIGHTxTOP/BOTTOM] from the screen edge for picture-in-picture windows.
          These values are in DPs and will be converted to pixel sizes internally. -->
     <string translatable="false" name="config_defaultPictureInPictureScreenEdgeInsets">16x16</string>
@@ -3642,15 +3656,6 @@
          Example: "com.android.wellbeing"
      -->
     <string name="config_defaultWellbeingPackage" translatable="false"></string>
-
-    <!-- The package name for the system telephony apps.
-         This package must be trusted, as it will be granted with permissions with special telephony
-         protection level. Note, framework by default support multiple telephony apps, each package
-         name is separated by comma.
-         Example: "com.android.phone,com.android.stk,com.android.providers.telephony"
-         (Note: shell is included for testing purposes)
-     -->
-    <string name="config_telephonyPackages" translatable="false">"com.android.phone,com.android.stk,com.android.providers.telephony,com.android.ons"</string>
 
     <!-- The component name for the default system attention service.
          This service must be trusted, as it can be activated without explicit consent of the user.
@@ -4439,7 +4444,17 @@
     <string name="config_customSessionPolicyProvider"></string>
 
     <!-- The max scale for the wallpaper when it's zoomed in -->
-    <item name="config_wallpaperMaxScale" format="float" type="dimen">1</item>
+    <item name="config_wallpaperMaxScale" format="float" type="dimen">1.10</item>
+
+    <!-- Package name that will receive an explicit manifest broadcast for
+         android.os.action.POWER_SAVE_MODE_CHANGED. -->
+    <string name="config_powerSaveModeChangedListenerPackage" translatable="false"></string>
+
+    <!-- Set to true to enable the user switcher on the keyguard. -->
+    <bool name="config_keyguardUserSwitcher">false</bool>
+
+    <!-- Set to true to make assistant show in front of the dream/screensaver. -->
+    <bool name="config_assistantOnTopOfDream">false</bool>
 
     <!-- pdp data retry for cause 29, 33 and 55-->
     <bool name="config_pdp_retry_for_29_33_55_enabled">false</bool>

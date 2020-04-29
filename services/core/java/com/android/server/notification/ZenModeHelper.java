@@ -141,6 +141,7 @@ public class ZenModeHelper {
         updateDefaultAutomaticRuleNames();
         mConfig = mDefaultConfig.copy();
         mConfigs.put(UserHandle.USER_SYSTEM, mConfig);
+        mConsolidatedPolicy = mConfig.toNotificationPolicy();
 
         mSettingsObserver = new SettingsObserver(mHandler);
         mSettingsObserver.observe();
@@ -821,9 +822,6 @@ public class ZenModeHelper {
      * @return a copy of the zen mode consolidated policy
      */
     public Policy getConsolidatedNotificationPolicy() {
-        if (mConsolidatedPolicy == null) {
-            return null;
-        }
         return mConsolidatedPolicy.copy();
     }
 
@@ -1280,13 +1278,16 @@ public class ZenModeHelper {
                     (1 << AudioSystem.STREAM_SYSTEM);
 
             if (mZenMode == Global.ZEN_MODE_NO_INTERRUPTIONS) {
-                // alarm and music streams affected by ringer mode (cannot be adjusted) when in
+                // alarm and music and streams affected by ringer mode (cannot be adjusted) when in
                 // total silence
                 streams |= (1 << AudioSystem.STREAM_ALARM) |
-                        (1 << AudioSystem.STREAM_MUSIC);
+                        (1 << AudioSystem.STREAM_MUSIC) |
+                        (1 << AudioSystem.STREAM_ASSISTANT);
             } else {
                 streams &= ~((1 << AudioSystem.STREAM_ALARM) |
-                        (1 << AudioSystem.STREAM_MUSIC));
+                        (1 << AudioSystem.STREAM_MUSIC) |
+                        (1 << AudioSystem.STREAM_ASSISTANT)
+                );
             }
             return streams;
         }

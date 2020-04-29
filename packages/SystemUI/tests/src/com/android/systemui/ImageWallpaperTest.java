@@ -134,7 +134,7 @@ public class ImageWallpaperTest extends SysuiTestCase {
         return new ImageWallpaperRenderer(mMockContext, engine) {
             @Override
             public void startProcessingImage() {
-                loadBitmap();
+                // No - Op
             }
         };
     }
@@ -160,7 +160,7 @@ public class ImageWallpaperTest extends SysuiTestCase {
                 LOW_BMP_HEIGHT /* bmpHeight */,
                 LOW_BMP_WIDTH /* surfaceWidth */,
                 LOW_BMP_HEIGHT /* surfaceHeight */,
-                true /* assertion */);
+                false /* assertion */);
     }
 
     @Test
@@ -172,7 +172,7 @@ public class ImageWallpaperTest extends SysuiTestCase {
                 INVALID_BMP_HEIGHT /* bmpHeight */,
                 ImageWallpaper.GLEngine.MIN_SURFACE_WIDTH /* surfaceWidth */,
                 ImageWallpaper.GLEngine.MIN_SURFACE_HEIGHT /* surfaceHeight */,
-                true /* assertion */);
+                false /* assertion */);
     }
 
     private void verifySurfaceSizeAndAssertTransition(int bmpWidth, int bmpHeight,

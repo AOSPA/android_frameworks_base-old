@@ -28,6 +28,10 @@ import static android.app.usage.UsageStatsManager.REASON_MAIN_FORCED_BY_USER;
 import static android.app.usage.UsageStatsManager.REASON_MAIN_PREDICTED;
 import static android.app.usage.UsageStatsManager.REASON_MAIN_TIMEOUT;
 import static android.app.usage.UsageStatsManager.REASON_MAIN_USAGE;
+import static android.app.usage.UsageStatsManager.REASON_SUB_FORCED_SYSTEM_FLAG_ABUSE;
+import static android.app.usage.UsageStatsManager.REASON_SUB_FORCED_SYSTEM_FLAG_BACKGROUND_RESOURCE_USAGE;
+import static android.app.usage.UsageStatsManager.REASON_SUB_FORCED_SYSTEM_FLAG_BUGGY;
+import static android.app.usage.UsageStatsManager.REASON_SUB_FORCED_SYSTEM_FLAG_UNDEFINED;
 import static android.app.usage.UsageStatsManager.REASON_SUB_USAGE_EXEMPTED_SYNC_SCHEDULED_NON_DOZE;
 import static android.app.usage.UsageStatsManager.REASON_SUB_USAGE_MOVE_TO_FOREGROUND;
 import static android.app.usage.UsageStatsManager.REASON_SUB_USAGE_SYNC_ADAPTER;
@@ -434,6 +438,11 @@ public class AppStandbyControllerTests {
                 true);
     }
 
+    private int getStandbyBucketReason(String packageName) {
+        return mController.getAppStandbyBucketReason(packageName, USER_ID,
+                mInjector.mElapsedRealtime);
+    }
+
     private void assertBucket(int bucket) {
         assertEquals(bucket, getStandbyBucket(mController, PACKAGE_1));
     }
@@ -810,7 +819,7 @@ public class AppStandbyControllerTests {
     }
 
     @Test
-    public void testPredictionRaiseFromRestrictedTimeout() {
+    public void testPredictionRaiseFromRestrictedTimeout_highBucket() {
         reportEvent(mController, USER_INTERACTION, mInjector.mElapsedRealtime, PACKAGE_1);
 
         // Way past all timeouts. App times out into RESTRICTED bucket.
@@ -823,6 +832,24 @@ public class AppStandbyControllerTests {
         mInjector.mElapsedRealtime += RESTRICTED_THRESHOLD;
         mController.setAppStandbyBucket(PACKAGE_1, USER_ID, STANDBY_BUCKET_ACTIVE,
                 REASON_MAIN_PREDICTED);
+        assertBucket(STANDBY_BUCKET_ACTIVE);
+    }
+
+    @Test
+    public void testPredictionRaiseFromRestrictedTimeout_lowBucket() {
+        reportEvent(mController, USER_INTERACTION, mInjector.mElapsedRealtime, PACKAGE_1);
+
+        // Way past all timeouts. App times out into RESTRICTED bucket.
+        mInjector.mElapsedRealtime += RESTRICTED_THRESHOLD * 4;
+        mController.checkIdleStates(USER_ID);
+        assertBucket(STANDBY_BUCKET_RESTRICTED);
+
+        // Prediction into a low bucket means no expectation of the app being used, so we shouldn't
+        // elevate the app from RESTRICTED.
+        mInjector.mElapsedRealtime += RESTRICTED_THRESHOLD;
+        mController.setAppStandbyBucket(PACKAGE_1, USER_ID, STANDBY_BUCKET_RARE,
+                REASON_MAIN_PREDICTED);
+        assertBucket(STANDBY_BUCKET_RESTRICTED);
     }
 
     @Test
@@ -987,6 +1014,79 @@ public class AppStandbyControllerTests {
     }
 
     @Test
+    public void testSystemForcedFlags_NotAddedForUserForce() throws Exception {
+        final int expectedReason = REASON_MAIN_FORCED_BY_USER;
+        mController.setAppStandbyBucket(PACKAGE_1, USER_ID, STANDBY_BUCKET_RESTRICTED,
+                REASON_MAIN_FORCED_BY_USER);
+        assertEquals(STANDBY_BUCKET_RESTRICTED, getStandbyBucket(mController, PACKAGE_1));
+        assertEquals(expectedReason, getStandbyBucketReason(PACKAGE_1));
+
+        mController.setAppStandbyBucket(PACKAGE_1, USER_ID, STANDBY_BUCKET_RESTRICTED,
+                REASON_MAIN_FORCED_BY_SYSTEM | REASON_SUB_FORCED_SYSTEM_FLAG_ABUSE);
+        assertEquals(STANDBY_BUCKET_RESTRICTED, getStandbyBucket(mController, PACKAGE_1));
+        assertEquals(expectedReason, getStandbyBucketReason(PACKAGE_1));
+    }
+
+    @Test
+    public void testSystemForcedFlags_AddedForSystemForce() throws Exception {
+        mController.setAppStandbyBucket(PACKAGE_1, USER_ID, STANDBY_BUCKET_ACTIVE,
+                REASON_MAIN_DEFAULT);
+        mInjector.mElapsedRealtime += 4 * RESTRICTED_THRESHOLD;
+
+        mController.setAppStandbyBucket(PACKAGE_1, USER_ID, STANDBY_BUCKET_RESTRICTED,
+                REASON_MAIN_FORCED_BY_SYSTEM
+                        | REASON_SUB_FORCED_SYSTEM_FLAG_BACKGROUND_RESOURCE_USAGE);
+        assertEquals(STANDBY_BUCKET_RESTRICTED, getStandbyBucket(mController, PACKAGE_1));
+        assertEquals(REASON_MAIN_FORCED_BY_SYSTEM
+                        | REASON_SUB_FORCED_SYSTEM_FLAG_BACKGROUND_RESOURCE_USAGE,
+                getStandbyBucketReason(PACKAGE_1));
+
+        mController.restrictApp(PACKAGE_1, USER_ID, REASON_SUB_FORCED_SYSTEM_FLAG_ABUSE);
+        assertEquals(STANDBY_BUCKET_RESTRICTED, getStandbyBucket(mController, PACKAGE_1));
+        // Flags should be combined
+        assertEquals(REASON_MAIN_FORCED_BY_SYSTEM
+                | REASON_SUB_FORCED_SYSTEM_FLAG_BACKGROUND_RESOURCE_USAGE
+                | REASON_SUB_FORCED_SYSTEM_FLAG_ABUSE, getStandbyBucketReason(PACKAGE_1));
+    }
+
+    @Test
+    public void testSystemForcedFlags_SystemForceChangesBuckets() throws Exception {
+        mController.setAppStandbyBucket(PACKAGE_1, USER_ID, STANDBY_BUCKET_ACTIVE,
+                REASON_MAIN_DEFAULT);
+        mInjector.mElapsedRealtime += 4 * RESTRICTED_THRESHOLD;
+
+        mController.setAppStandbyBucket(PACKAGE_1, USER_ID, STANDBY_BUCKET_FREQUENT,
+                REASON_MAIN_FORCED_BY_SYSTEM
+                        | REASON_SUB_FORCED_SYSTEM_FLAG_BACKGROUND_RESOURCE_USAGE);
+        assertEquals(STANDBY_BUCKET_FREQUENT, getStandbyBucket(mController, PACKAGE_1));
+        assertEquals(REASON_MAIN_FORCED_BY_SYSTEM
+                        | REASON_SUB_FORCED_SYSTEM_FLAG_BACKGROUND_RESOURCE_USAGE,
+                getStandbyBucketReason(PACKAGE_1));
+
+        mController.setAppStandbyBucket(PACKAGE_1, USER_ID, STANDBY_BUCKET_FREQUENT,
+                REASON_MAIN_FORCED_BY_SYSTEM | REASON_SUB_FORCED_SYSTEM_FLAG_ABUSE);
+        assertEquals(STANDBY_BUCKET_FREQUENT, getStandbyBucket(mController, PACKAGE_1));
+        // Flags should be combined
+        assertEquals(REASON_MAIN_FORCED_BY_SYSTEM
+                        | REASON_SUB_FORCED_SYSTEM_FLAG_BACKGROUND_RESOURCE_USAGE
+                        | REASON_SUB_FORCED_SYSTEM_FLAG_ABUSE,
+                getStandbyBucketReason(PACKAGE_1));
+
+        mController.setAppStandbyBucket(PACKAGE_1, USER_ID, STANDBY_BUCKET_RARE,
+                REASON_MAIN_FORCED_BY_SYSTEM | REASON_SUB_FORCED_SYSTEM_FLAG_BUGGY);
+        assertEquals(STANDBY_BUCKET_RARE, getStandbyBucket(mController, PACKAGE_1));
+        // Flags should be combined
+        assertEquals(REASON_MAIN_FORCED_BY_SYSTEM | REASON_SUB_FORCED_SYSTEM_FLAG_BUGGY,
+                getStandbyBucketReason(PACKAGE_1));
+
+        mController.restrictApp(PACKAGE_1, USER_ID, REASON_SUB_FORCED_SYSTEM_FLAG_UNDEFINED);
+        assertEquals(STANDBY_BUCKET_RESTRICTED, getStandbyBucket(mController, PACKAGE_1));
+        // Flags should not be combined since the bucket changed.
+        assertEquals(REASON_MAIN_FORCED_BY_SYSTEM | REASON_SUB_FORCED_SYSTEM_FLAG_UNDEFINED,
+                getStandbyBucketReason(PACKAGE_1));
+    }
+
+    @Test
     public void testAddActiveDeviceAdmin() {
         assertActiveAdmins(USER_ID, (String[]) null);
         assertActiveAdmins(USER_ID2, (String[]) null);
@@ -1106,6 +1206,81 @@ public class AppStandbyControllerTests {
         mStateChangedLatch.await(100, TimeUnit.MILLISECONDS);
         assertEquals("Exempted sync scheduled while not in doze should set bucket to active",
                 STANDBY_BUCKET_ACTIVE, getStandbyBucket(mController, PACKAGE_1));
+    }
+
+    @Test
+    public void testAppUpdateOnRestrictedBucketStatus() {
+        // Updates shouldn't change bucket if the app timed out.
+        // Way past all timeouts. App times out into RESTRICTED bucket.
+        reportEvent(mController, USER_INTERACTION, mInjector.mElapsedRealtime, PACKAGE_1);
+        mInjector.mElapsedRealtime += RESTRICTED_THRESHOLD * 4;
+        mController.checkIdleStates(USER_ID);
+        assertBucket(STANDBY_BUCKET_RESTRICTED);
+
+        mController.maybeUnrestrictBuggyApp(PACKAGE_1, USER_ID);
+        assertBucket(STANDBY_BUCKET_RESTRICTED);
+        mController.maybeUnrestrictBuggyApp(PACKAGE_1, USER_ID2);
+        assertBucket(STANDBY_BUCKET_RESTRICTED);
+        mController.maybeUnrestrictBuggyApp("com.random.package", USER_ID);
+        assertBucket(STANDBY_BUCKET_RESTRICTED);
+
+        // Updates shouldn't change bucket if the app was forced by the system for a non-buggy
+        // reason.
+        reportEvent(mController, USER_INTERACTION, mInjector.mElapsedRealtime, PACKAGE_1);
+        mInjector.mElapsedRealtime += RESTRICTED_THRESHOLD * 4;
+        mController.setAppStandbyBucket(PACKAGE_1, USER_ID, STANDBY_BUCKET_RESTRICTED,
+                REASON_MAIN_FORCED_BY_SYSTEM
+                        | REASON_SUB_FORCED_SYSTEM_FLAG_BACKGROUND_RESOURCE_USAGE);
+
+        mController.maybeUnrestrictBuggyApp(PACKAGE_1, USER_ID);
+        assertBucket(STANDBY_BUCKET_RESTRICTED);
+        mController.maybeUnrestrictBuggyApp(PACKAGE_1, USER_ID2);
+        assertBucket(STANDBY_BUCKET_RESTRICTED);
+        mController.maybeUnrestrictBuggyApp("com.random.package", USER_ID);
+        assertBucket(STANDBY_BUCKET_RESTRICTED);
+
+        // Updates should change bucket if the app was forced by the system for a buggy reason.
+        reportEvent(mController, USER_INTERACTION, mInjector.mElapsedRealtime, PACKAGE_1);
+        mInjector.mElapsedRealtime += RESTRICTED_THRESHOLD * 4;
+        mController.setAppStandbyBucket(PACKAGE_1, USER_ID, STANDBY_BUCKET_RESTRICTED,
+                REASON_MAIN_FORCED_BY_SYSTEM | REASON_SUB_FORCED_SYSTEM_FLAG_BUGGY);
+
+        mController.maybeUnrestrictBuggyApp(PACKAGE_1, USER_ID2);
+        assertBucket(STANDBY_BUCKET_RESTRICTED);
+        mController.maybeUnrestrictBuggyApp("com.random.package", USER_ID);
+        assertBucket(STANDBY_BUCKET_RESTRICTED);
+        mController.maybeUnrestrictBuggyApp(PACKAGE_1, USER_ID);
+        assertNotEquals(STANDBY_BUCKET_RESTRICTED, getStandbyBucket(mController, PACKAGE_1));
+
+        // Updates shouldn't change bucket if the app was forced by the system for more than just
+        // a buggy reason.
+        reportEvent(mController, USER_INTERACTION, mInjector.mElapsedRealtime, PACKAGE_1);
+        mInjector.mElapsedRealtime += RESTRICTED_THRESHOLD * 4;
+        mController.setAppStandbyBucket(PACKAGE_1, USER_ID, STANDBY_BUCKET_RESTRICTED,
+                REASON_MAIN_FORCED_BY_SYSTEM | REASON_SUB_FORCED_SYSTEM_FLAG_ABUSE
+                        | REASON_SUB_FORCED_SYSTEM_FLAG_BUGGY);
+
+        mController.maybeUnrestrictBuggyApp(PACKAGE_1, USER_ID);
+        assertBucket(STANDBY_BUCKET_RESTRICTED);
+        assertEquals(REASON_MAIN_FORCED_BY_SYSTEM | REASON_SUB_FORCED_SYSTEM_FLAG_ABUSE,
+                getStandbyBucketReason(PACKAGE_1));
+        mController.maybeUnrestrictBuggyApp(PACKAGE_1, USER_ID2);
+        assertBucket(STANDBY_BUCKET_RESTRICTED);
+        mController.maybeUnrestrictBuggyApp("com.random.package", USER_ID);
+        assertBucket(STANDBY_BUCKET_RESTRICTED);
+
+        // Updates shouldn't change bucket if the app was forced by the user.
+        reportEvent(mController, USER_INTERACTION, mInjector.mElapsedRealtime, PACKAGE_1);
+        mInjector.mElapsedRealtime += RESTRICTED_THRESHOLD * 4;
+        mController.setAppStandbyBucket(PACKAGE_1, USER_ID, STANDBY_BUCKET_RESTRICTED,
+                REASON_MAIN_FORCED_BY_USER);
+
+        mController.maybeUnrestrictBuggyApp(PACKAGE_1, USER_ID);
+        assertBucket(STANDBY_BUCKET_RESTRICTED);
+        mController.maybeUnrestrictBuggyApp(PACKAGE_1, USER_ID2);
+        assertBucket(STANDBY_BUCKET_RESTRICTED);
+        mController.maybeUnrestrictBuggyApp("com.random.package", USER_ID);
+        assertBucket(STANDBY_BUCKET_RESTRICTED);
     }
 
     private String getAdminAppsStr(int userId) {

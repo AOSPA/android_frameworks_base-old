@@ -26,6 +26,8 @@ import android.os.Parcel;
 import android.os.Parcelable;
 import android.view.accessibility.IAccessibilityEmbeddedConnection;
 
+import java.util.Objects;
+
 /**
  * Utility class for adding a View hierarchy to a {@link SurfaceControl}. The View hierarchy
  * will render in to a root SurfaceControl, and receive input based on the SurfaceControl's
@@ -50,7 +52,7 @@ public class SurfaceControlViewHost {
      * a SurfaceView by calling {@link SurfaceView#setChildSurfacePackage}.
      */
     public static final class SurfacePackage implements Parcelable {
-        private final SurfaceControl mSurfaceControl;
+        private SurfaceControl mSurfaceControl;
         private final IAccessibilityEmbeddedConnection mAccessibilityEmbeddedConnection;
 
         SurfacePackage(SurfaceControl sc, IAccessibilityEmbeddedConnection connection) {
@@ -95,6 +97,19 @@ public class SurfaceControlViewHost {
             out.writeStrongBinder(mAccessibilityEmbeddedConnection.asBinder());
         }
 
+        /**
+         * Release the {@link SurfaceControl} associated with this package.
+         * It's not necessary to call this if you pass the package to
+         * {@link SurfaceView#setChildSurfacePackage} as {@link SurfaceView} will
+         * take ownership in that case.
+         */
+        public void release() {
+            if (mSurfaceControl != null) {
+                mSurfaceControl.release();
+             }
+             mSurfaceControl = null;
+        }
+
         public static final @NonNull Creator<SurfacePackage> CREATOR
              = new Creator<SurfacePackage>() {
                      public SurfacePackage createFromParcel(Parcel in) {
@@ -109,8 +124,14 @@ public class SurfaceControlViewHost {
     /** @hide */
     public SurfaceControlViewHost(@NonNull Context c, @NonNull Display d,
             @NonNull WindowlessWindowManager wwm) {
+        this(c, d, wwm, false /* useSfChoreographer */);
+    }
+
+    /** @hide */
+    public SurfaceControlViewHost(@NonNull Context c, @NonNull Display d,
+            @NonNull WindowlessWindowManager wwm, boolean useSfChoreographer) {
         mWm = wwm;
-        mViewRoot = new ViewRootImpl(c, d, mWm);
+        mViewRoot = new ViewRootImpl(c, d, mWm, useSfChoreographer);
         mViewRoot.forceDisableBLAST();
         mAccessibilityEmbeddedConnection = mViewRoot.getAccessibilityEmbeddedConnection();
     }
@@ -159,7 +180,8 @@ public class SurfaceControlViewHost {
      * @hide
      */
     @TestApi
-    public void addView(@NonNull View view, WindowManager.LayoutParams attrs) {
+    public void setView(@NonNull View view, @NonNull WindowManager.LayoutParams attrs) {
+        Objects.requireNonNull(view);
         mViewRoot.setView(view, attrs, null);
     }
 
@@ -172,11 +194,19 @@ public class SurfaceControlViewHost {
      * @param width The width to layout the View within, in pixels.
      * @param height The height to layout the View within, in pixels.
      */
-    public void addView(@NonNull View view, int width, int height) {
+    public void setView(@NonNull View view, int width, int height) {
         final WindowManager.LayoutParams lp =
                 new WindowManager.LayoutParams(width, height,
                         WindowManager.LayoutParams.TYPE_APPLICATION, 0, PixelFormat.TRANSPARENT);
-        addView(view, lp);
+        lp.flags |= WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED;
+        setView(view, lp);
+    }
+
+    /**
+     * @return The view passed to setView, or null if none has been passed.
+     */
+    public @Nullable View getView() {
+        return mViewRoot.getView();
     }
 
     /**
@@ -210,7 +240,7 @@ public class SurfaceControlViewHost {
      * and render the object unusable.
      */
     public void release() {
-        mViewRoot.dispatchDetachedFromWindow();
+        mViewRoot.die(false /* immediate */);
         mSurfaceControl.release();
     }
 

@@ -136,7 +136,7 @@ package android.net.wifi {
     field public boolean truncated;
   }
 
-  public class ScanResult implements android.os.Parcelable {
+  public final class ScanResult implements android.os.Parcelable {
     field public boolean untrusted;
   }
 
@@ -179,6 +179,11 @@ package android.telecom {
 }
 
 package android.telephony {
+
+  public final class PreciseDataConnectionState implements android.os.Parcelable {
+    method @Deprecated @Nullable public android.net.LinkProperties getDataConnectionLinkProperties();
+    method @Deprecated public int getDataConnectionNetworkType();
+  }
 
   public class TelephonyManager {
     method @Deprecated @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE) public void answerRingingCall();

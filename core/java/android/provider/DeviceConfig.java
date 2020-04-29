@@ -266,6 +266,13 @@ public final class DeviceConfig {
     public static final String NAMESPACE_SCHEDULER = "scheduler";
 
     /**
+     * Namespace for settings statistics features.
+     *
+     * @hide
+     */
+    public static final String NAMESPACE_SETTINGS_STATS = "settings_stats";
+
+    /**
      * Namespace for storage-related features.
      *
      * @deprecated Replace storage namespace with storage_native_boot.
@@ -398,6 +405,13 @@ public final class DeviceConfig {
      */
     public static final String NAMESPACE_CONNECTIVITY_THERMAL_POWER_MANAGER =
             "connectivity_thermal_power_manager";
+
+    /**
+     * Namespace for configuration related features.
+     *
+     * @hide
+     */
+    public static final String NAMESPACE_CONFIGURATION = "configuration";
 
     private static final Object sLock = new Object();
     @GuardedBy("sLock")

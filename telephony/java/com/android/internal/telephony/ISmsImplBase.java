@@ -45,39 +45,26 @@ public class ISmsImplBase extends ISms.Stub {
     }
 
     @Override
-    public void sendDataForSubscriber(int subId, String callingPkg, String destAddr,
-            String scAddr, int destPort, byte[] data, PendingIntent sentIntent,
-            PendingIntent deliveryIntent) {
-        throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public void sendDataForSubscriberWithSelfPermissions(int subId, String callingPkg,
+    public void sendDataForSubscriber(int subId, String callingPkg, String callingAttributionTag,
             String destAddr, String scAddr, int destPort, byte[] data, PendingIntent sentIntent,
             PendingIntent deliveryIntent) {
         throw new UnsupportedOperationException();
     }
 
     @Override
-    public void sendTextForSubscriber(int subId, String callingPkg, String destAddr,
-            String scAddr, String text, PendingIntent sentIntent,
+    public void sendTextForSubscriber(int subId, String callingPkg, String callingAttributionTag,
+            String destAddr, String scAddr, String text, PendingIntent sentIntent,
             PendingIntent deliveryIntent, boolean persistMessageForNonDefaultSmsApp,
             long messageId) {
         throw new UnsupportedOperationException();
     }
 
     @Override
-    public void sendTextForSubscriberWithSelfPermissions(int subId, String callingPkg,
-            String destAddr, String scAddr, String text, PendingIntent sentIntent,
-            PendingIntent deliveryIntent, boolean persistMessage) {
-        throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public void sendTextForSubscriberWithOptions(int subId, String callingPkg, String destAddr,
-            String scAddr, String text, PendingIntent sentIntent,
-            PendingIntent deliveryIntent, boolean persistMessageForNonDefaultSmsApp,
-            int priority, boolean expectMore, int validityPeriod) {
+    public void sendTextForSubscriberWithOptions(int subId, String callingPkg,
+            String callingAttributionTag, String destAddr, String scAddr, String text,
+            PendingIntent sentIntent, PendingIntent deliveryIntent,
+            boolean persistMessageForNonDefaultSmsApp, int priority, boolean expectMore,
+            int validityPeriod) {
         throw new UnsupportedOperationException();
     }
 
@@ -89,7 +76,7 @@ public class ISmsImplBase extends ISms.Stub {
 
     @Override
     public void sendMultipartTextForSubscriber(int subId, String callingPkg,
-            String destinationAddress, String scAddress,
+            String callingAttributionTag, String destinationAddress, String scAddress,
             List<String> parts, List<PendingIntent> sentIntents,
             List<PendingIntent> deliveryIntents, boolean persistMessageForNonDefaultSmsApp,
             long messageId) {
@@ -98,7 +85,7 @@ public class ISmsImplBase extends ISms.Stub {
 
     @Override
     public void sendMultipartTextForSubscriberWithOptions(int subId, String callingPkg,
-            String destinationAddress, String scAddress,
+            String callingAttributionTag, String destinationAddress, String scAddress,
             List<String> parts, List<PendingIntent> sentIntents,
             List<PendingIntent> deliveryIntents, boolean persistMessageForNonDefaultSmsApp,
             int priority, boolean expectMore, int validityPeriod) {
@@ -175,14 +162,15 @@ public class ISmsImplBase extends ISms.Stub {
     }
 
     @Override
-    public void sendStoredText(int subId, String callingPkg, Uri messageUri, String scAddress,
-            PendingIntent sentIntent, PendingIntent deliveryIntent) {
+    public void sendStoredText(int subId, String callingPkg, String callingAttributionTag,
+            Uri messageUri, String scAddress, PendingIntent sentIntent,
+            PendingIntent deliveryIntent) {
         throw new UnsupportedOperationException();
     }
 
     @Override
-    public void sendStoredMultipartText(int subId, String callingPkg, Uri messageUri,
-            String scAddress, List<PendingIntent> sentIntents,
+    public void sendStoredMultipartText(int subId, String callingPkg, String callingAttributionTag,
+            Uri messageUri, String scAddress, List<PendingIntent> sentIntents,
             List<PendingIntent> deliveryIntents) {
         throw new UnsupportedOperationException();
     }

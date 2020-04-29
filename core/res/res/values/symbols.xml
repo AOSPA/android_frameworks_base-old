@@ -365,6 +365,7 @@
   <java-symbol type="bool" name="config_hasRecents" />
   <java-symbol type="string" name="config_recentsComponentName" />
   <java-symbol type="string" name="config_systemUIServiceComponent" />
+  <java-symbol type="string" name="config_controlsPackage" />
   <java-symbol type="string" name="config_screenRecorderComponent" />
   <java-symbol type="string" name="config_somnambulatorComponent" />
   <java-symbol type="string" name="config_screenshotServiceComponent" />
@@ -551,28 +552,6 @@
   <java-symbol type="string" name="replace" />
   <java-symbol type="string" name="undo" />
   <java-symbol type="string" name="redo" />
-  <java-symbol type="string" name="email" />
-  <java-symbol type="string" name="email_desc" />
-  <java-symbol type="string" name="dial" />
-  <java-symbol type="string" name="dial_desc" />
-  <java-symbol type="string" name="map" />
-  <java-symbol type="string" name="map_desc" />
-  <java-symbol type="string" name="browse" />
-  <java-symbol type="string" name="browse_desc" />
-  <java-symbol type="string" name="sms" />
-  <java-symbol type="string" name="sms_desc" />
-  <java-symbol type="string" name="add_contact" />
-  <java-symbol type="string" name="add_contact_desc" />
-  <java-symbol type="string" name="view_calendar" />
-  <java-symbol type="string" name="view_calendar_desc" />
-  <java-symbol type="string" name="add_calendar_event" />
-  <java-symbol type="string" name="add_calendar_event_desc" />
-  <java-symbol type="string" name="view_flight" />
-  <java-symbol type="string" name="view_flight_desc" />
-  <java-symbol type="string" name="translate" />
-  <java-symbol type="string" name="translate_desc" />
-  <java-symbol type="string" name="define" />
-  <java-symbol type="string" name="define_desc" />
   <java-symbol type="string" name="textSelectionCABTitle" />
   <java-symbol type="string" name="BaMmi" />
   <java-symbol type="string" name="CLIRDefaultOffNextCallOff" />
@@ -1217,8 +1196,9 @@
   <java-symbol type="string" name="network_logging_notification_text" />
   <java-symbol type="string" name="location_changed_notification_title" />
   <java-symbol type="string" name="location_changed_notification_text" />
-  <java-symbol type="string" name="personal_apps_suspended_notification_title" />
-  <java-symbol type="string" name="personal_apps_suspended_notification_text" />
+  <java-symbol type="string" name="personal_apps_suspended_title" />
+  <java-symbol type="string" name="personal_apps_suspended_tomorrow_title" />
+  <java-symbol type="string" name="personal_apps_suspended_text" />
   <java-symbol type="string" name="factory_reset_warning" />
   <java-symbol type="string" name="factory_reset_message" />
   <java-symbol type="string" name="lockscreen_transport_play_description" />
@@ -1245,7 +1225,7 @@
   <java-symbol type="array" name="preloaded_color_state_lists" />
   <java-symbol type="array" name="preloaded_drawables" />
   <java-symbol type="array" name="preloaded_freeform_multi_window_drawables" />
-  <java-symbol type="array" name="simColors" />
+  <java-symbol type="array" name="sim_colors" />
   <java-symbol type="array" name="special_locale_codes" />
   <java-symbol type="array" name="special_locale_names" />
   <java-symbol type="array" name="supported_locales" />
@@ -1703,6 +1683,7 @@
   <java-symbol type="bool" name="config_perDisplayFocusEnabled" />
   <java-symbol type="bool" name="config_showNavigationBar" />
   <java-symbol type="bool" name="config_supportAutoRotation" />
+  <java-symbol type="bool" name="config_dockedStackDividerFreeSnapMode" />
   <java-symbol type="dimen" name="docked_stack_divider_thickness" />
   <java-symbol type="dimen" name="docked_stack_divider_insets" />
   <java-symbol type="dimen" name="docked_stack_minimize_thickness" />
@@ -2571,6 +2552,7 @@
   <java-symbol type="bool" name="config_device_wfc_ims_available" />
   <java-symbol type="bool" name="config_carrier_wfc_ims_available" />
   <java-symbol type="bool" name="config_use_voip_mode_for_ims" />
+  <java-symbol type="bool" name="config_allow_ussd_over_ims" />
   <java-symbol type="attr" name="touchscreenBlocksFocus" />
   <java-symbol type="layout" name="resolver_list_with_default" />
   <java-symbol type="string" name="activity_resolver_set_always" />
@@ -3436,7 +3418,6 @@
   <java-symbol type="string" name="config_defaultAutofillService" />
   <java-symbol type="string" name="config_defaultTextClassifierPackage" />
   <java-symbol type="string" name="config_defaultWellbeingPackage" />
-  <java-symbol type="string" name="config_telephonyPackages" />
   <java-symbol type="string" name="config_defaultContentCaptureService" />
   <java-symbol type="string" name="config_defaultAugmentedAutofillService" />
   <java-symbol type="string" name="config_defaultAppPredictionService" />
@@ -3633,6 +3614,7 @@
   <java-symbol type="bool" name="config_batterySaverStickyBehaviourDisabled" />
   <java-symbol type="integer" name="config_dynamicPowerSavingsDefaultDisableThreshold" />
   <java-symbol type="string" name="config_batterySaverScheduleProvider" />
+  <java-symbol type="string" name="config_powerSaveModeChangedListenerPackage" />
 
   <!-- For car devices -->
   <java-symbol type="string" name="car_loading_profile" />
@@ -3905,9 +3887,52 @@
   <java-symbol type="array" name="config_defaultImperceptibleKillingExemptionPkgs" />
   <java-symbol type="array" name="config_defaultImperceptibleKillingExemptionProcStates" />
 
+  <java-symbol type="string" name="conversation_single_line_name_display" />
+  <java-symbol type="string" name="conversation_title_fallback_one_to_one" />
+  <java-symbol type="string" name="conversation_title_fallback_group_chat" />
+  <java-symbol type="id" name="conversation_icon" />
+  <java-symbol type="id" name="conversation_icon_badge" />
+  <java-symbol type="id" name="conversation_icon_badge_ring" />
+  <java-symbol type="id" name="conversation_icon_badge_bg" />
+  <java-symbol type="id" name="expand_button_container" />
+  <java-symbol type="id" name="expand_button_inner_container" />
+  <java-symbol type="id" name="messaging_group_content_container" />
+  <java-symbol type="id" name="expand_button_and_content_container" />
+  <java-symbol type="id" name="conversation_header" />
+  <java-symbol type="id" name="conversation_face_pile_bottom_background" />
+  <java-symbol type="id" name="conversation_face_pile_bottom" />
+  <java-symbol type="id" name="conversation_face_pile_top" />
+  <java-symbol type="id" name="conversation_face_pile" />
+  <java-symbol type="id" name="conversation_text" />
+  <java-symbol type="id" name="message_icon_container" />
+  <java-symbol type="id" name="conversation_image_message_container" />
+  <java-symbol type="id" name="conversation_icon_container" />
+  <java-symbol type="dimen" name="conversation_expand_button_top_margin_expanded" />
+  <java-symbol type="dimen" name="messaging_group_singleline_sender_padding_end" />
+  <java-symbol type="dimen" name="conversation_badge_side_margin" />
+  <java-symbol type="dimen" name="conversation_avatar_size" />
+  <java-symbol type="dimen" name="conversation_avatar_size_group_expanded" />
+  <java-symbol type="dimen" name="conversation_face_pile_avatar_size" />
+  <java-symbol type="dimen" name="conversation_face_pile_avatar_size_group_expanded" />
+  <java-symbol type="dimen" name="conversation_face_pile_protection_width" />
+  <java-symbol type="dimen" name="conversation_face_pile_protection_width_expanded" />
+  <java-symbol type="dimen" name="conversation_badge_side_margin_group_expanded" />
+  <java-symbol type="dimen" name="conversation_badge_side_margin_group_expanded_face_pile" />
+  <java-symbol type="dimen" name="conversation_content_start" />
+  <java-symbol type="dimen" name="expanded_group_conversation_message_padding_without_app_name" />
+  <java-symbol type="dimen" name="messaging_layout_margin_end" />
+  <java-symbol type="dimen" name="conversation_header_expanded_padding_end" />
+  <java-symbol type="dimen" name="conversation_icon_container_top_padding" />
+  <java-symbol type="dimen" name="conversation_icon_container_top_padding_small_avatar" />
+  <java-symbol type="dimen" name="conversation_icon_container_top_padding_no_app_name" />
+  <java-symbol type="layout" name="notification_template_material_conversation" />
+  <java-symbol type="dimen" name="button_padding_horizontal_material" />
+  <java-symbol type="dimen" name="button_inset_horizontal_material" />
+  <java-symbol type="layout" name="conversation_face_pile_layout" />
+  <java-symbol type="id" name="conversation_unread_count" />
+  <java-symbol type="string" name="unread_convo_overflow" />
+
   <!-- Intent resolver and share sheet -->
-  <java-symbol type="color" name="resolver_tabs_active_color" />
-  <java-symbol type="color" name="resolver_tabs_inactive_color" />
   <java-symbol type="string" name="resolver_personal_tab" />
   <java-symbol type="string" name="resolver_personal_tab_accessibility" />
   <java-symbol type="string" name="resolver_work_tab" />
@@ -3921,15 +3946,18 @@
   <java-symbol type="id" name="resolver_empty_state_progress" />
   <java-symbol type="id" name="resolver_tab_divider" />
   <java-symbol type="string" name="resolver_cant_share_with_work_apps" />
+  <java-symbol type="string" name="resolver_cant_share_with_work_apps_explanation" />
   <java-symbol type="string" name="resolver_cant_share_with_personal_apps" />
-  <java-symbol type="string" name="resolver_cant_share_cross_profile_explanation" />
+  <java-symbol type="string" name="resolver_cant_share_with_personal_apps_explanation" />
   <java-symbol type="string" name="resolver_cant_access_work_apps" />
   <java-symbol type="string" name="resolver_cant_access_work_apps_explanation" />
   <java-symbol type="string" name="resolver_cant_access_personal_apps" />
   <java-symbol type="string" name="resolver_cant_access_personal_apps_explanation" />
-  <java-symbol type="string" name="resolver_turn_on_work_apps_view" />
-  <java-symbol type="string" name="resolver_turn_on_work_apps_share" />
-  <java-symbol type="string" name="resolver_no_apps_available" />
+  <java-symbol type="string" name="resolver_turn_on_work_apps" />
+  <java-symbol type="string" name="resolver_no_work_apps_available_share" />
+  <java-symbol type="string" name="resolver_no_work_apps_available_resolve" />
+  <java-symbol type="string" name="resolver_no_personal_apps_available_share" />
+  <java-symbol type="string" name="resolver_no_personal_apps_available_resolve" />
   <java-symbol type="string" name="resolver_switch_on_work" />
   <java-symbol type="drawable" name="ic_work_apps_off" />
   <java-symbol type="drawable" name="ic_sharing_disabled" />
@@ -3937,7 +3965,8 @@
   <java-symbol type="dimen" name="resolver_empty_state_height" />
   <java-symbol type="dimen" name="resolver_empty_state_height_with_tabs" />
   <java-symbol type="dimen" name="resolver_max_collapsed_height_with_tabs" />
-  <java-symbol type="bool" name="sharesheet_show_content_preview" />
+  <java-symbol type="bool" name="resolver_landscape_phone" />
+  <java-symbol type="dimen" name="resolver_tab_text_size" />
 
   <!-- Toast message for background started foreground service while-in-use permission restriction feature -->
   <java-symbol type="string" name="allow_while_in_use_permission_in_fgs" />
@@ -3957,6 +3986,14 @@
   <java-symbol type="string" name="config_customSessionPolicyProvider" />
   <!-- The max scale for the wallpaper when it's zoomed in -->
   <java-symbol type="dimen" name="config_wallpaperMaxScale"/>
+
+  <!-- Set to true to enable the user switcher on the keyguard. -->
+  <java-symbol type="bool" name="config_keyguardUserSwitcher" />
+
+  <!-- Set to true to make assistant show in front of the dream/screensaver. -->
+  <java-symbol type="bool" name="config_assistantOnTopOfDream"/>
+
+  <java-symbol type="string" name="config_overrideComponentUiPackage" />
 
   <!-- For Pdn throttle feature -->
   <java-symbol type="bool" name="config_pdp_retry_for_29_33_55_enabled" />

@@ -1066,14 +1066,15 @@ class WindowStateAnimator {
 
 
         if (!w.mSeamlesslyRotated) {
+            // Wallpaper is already updated above when calling setWallpaperPositionAndScale so
+            // we only need to consider the non-wallpaper case here.
             if (!mIsWallpaper) {
                 applyCrop(clipRect, recoveringMemory);
-                mSurfaceController.setMatrixInTransaction(mDsDx * w.mHScale * mExtraHScale,
+                mSurfaceController.setMatrixInTransaction(
+                        mDsDx * w.mHScale * mExtraHScale,
                         mDtDx * w.mVScale * mExtraVScale,
                         mDtDy * w.mHScale * mExtraHScale,
                         mDsDy * w.mVScale * mExtraVScale, recoveringMemory);
-            } else {
-                setWallpaperPositionAndScale(mXOffset, mYOffset, mWallpaperScale, recoveringMemory);
             }
         }
 
@@ -1152,13 +1153,20 @@ class WindowStateAnimator {
                             mSurfaceController, mShownAlpha, mDsDx, w.mHScale, mDtDx, w.mVScale,
                             mDtDy, w.mHScale, mDsDy, w.mVScale, w);
 
-            boolean prepared =
-                mSurfaceController.prepareToShowInTransaction(mShownAlpha,
+            boolean prepared = true;
+
+            if (mIsWallpaper) {
+                setWallpaperPositionAndScale(
+                        mXOffset, mYOffset, mWallpaperScale, recoveringMemory);
+            } else {
+                prepared =
+                    mSurfaceController.prepareToShowInTransaction(mShownAlpha,
                         mDsDx * w.mHScale * mExtraHScale,
                         mDtDx * w.mVScale * mExtraVScale,
                         mDtDy * w.mHScale * mExtraHScale,
                         mDsDy * w.mVScale * mExtraVScale,
                         recoveringMemory);
+            }
 
             if (prepared && mDrawState == HAS_DRAWN) {
                 if (mLastHidden) {
@@ -1381,7 +1389,8 @@ class WindowStateAnimator {
             return true;
         }
 
-        if (isEntrance && mWin.mAttrs.type == TYPE_INPUT_METHOD) {
+        final boolean isImeWindow = mWin.mAttrs.type == TYPE_INPUT_METHOD;
+        if (isEntrance && isImeWindow) {
             mWin.getDisplayContent().adjustForImeIfNeeded();
             mWin.setDisplayLayoutNeeded();
             mService.mWindowPlacerLocked.requestTraversal();
@@ -1435,11 +1444,11 @@ class WindowStateAnimator {
                 Trace.traceEnd(Trace.TRACE_TAG_WINDOW_MANAGER);
                 mAnimationIsEntrance = isEntrance;
             }
-        } else {
+        } else if (!isImeWindow) {
             mWin.cancelAnimation();
         }
 
-        if (!isEntrance && mWin.mAttrs.type == TYPE_INPUT_METHOD) {
+        if (!isEntrance && isImeWindow) {
             mWin.getDisplayContent().adjustForImeIfNeeded();
         }
 

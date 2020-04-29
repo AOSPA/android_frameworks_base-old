@@ -56,7 +56,6 @@ cc_defaults {
         "src/condition/condition_util.cpp",
         "src/condition/ConditionWizard.cpp",
         "src/condition/SimpleConditionTracker.cpp",
-        "src/condition/StateConditionTracker.cpp",
         "src/config/ConfigKey.cpp",
         "src/config/ConfigListener.cpp",
         "src/config/ConfigManager.cpp",
@@ -78,6 +77,7 @@ cc_defaults {
         "src/matchers/EventMatcherWizard.cpp",
         "src/matchers/matcher_util.cpp",
         "src/matchers/SimpleLogMatchingTracker.cpp",
+        "src/metadata_util.cpp",
         "src/metrics/CountMetricProducer.cpp",
         "src/metrics/duration_helper/MaxDurationTracker.cpp",
         "src/metrics/duration_helper/OringDurationTracker.cpp",
@@ -97,6 +97,7 @@ cc_defaults {
         "src/stats_log_util.cpp",
         "src/statscompanion_util.cpp",
         "src/statsd_config.proto",
+        "src/statsd_metadata.proto",
         "src/StatsLogProcessor.cpp",
         "src/StatsService.cpp",
         "src/storage/StorageManager.cpp",
@@ -112,17 +113,18 @@ cc_defaults {
     static_libs: [
         "libbase",
         "libcutils",
+        "libgtest_prod",
         "libprotoutil",
         "libstatsmetadata",
         "libstatslog_statsd",
         "libsysutils",
         "libutils",
+        "statsd-aidl-ndk_platform",
     ],
     shared_libs: [
         "libbinder_ndk",
         "libincident",
         "liblog",
-        "statsd-aidl-ndk_platform",
     ],
 }
 
@@ -189,6 +191,34 @@ genrule {
     ],
 }
 
+genrule {
+    name: "statslog_statsdtest.h",
+    tools: ["stats-log-api-gen"],
+    cmd: "$(location stats-log-api-gen) --header $(genDir)/statslog_statsdtest.h --module statsdtest --namespace android,os,statsd,util",
+    out: [
+        "statslog_statsdtest.h",
+    ],
+}
+
+genrule {
+    name: "statslog_statsdtest.cpp",
+    tools: ["stats-log-api-gen"],
+    cmd: "$(location stats-log-api-gen) --cpp $(genDir)/statslog_statsdtest.cpp --module statsdtest --namespace android,os,statsd,util --importHeader statslog_statsdtest.h",
+    out: [
+        "statslog_statsdtest.cpp",
+    ],
+}
+
+cc_library_static {
+    name: "libstatslog_statsdtest",
+    generated_sources: ["statslog_statsdtest.cpp"],
+    generated_headers: ["statslog_statsdtest.h"],
+    export_generated_headers: ["statslog_statsdtest.h"],
+    shared_libs: [
+        "libstatssocket",
+    ]
+}
+
 cc_library_static {
     name: "libstatslog_statsd",
     generated_sources: ["statslog_statsd.cpp"],
@@ -239,10 +269,11 @@ cc_binary {
 
     proto: {
         type: "lite",
+        static: true,
     },
+    stl: "libc++_static",
 
     shared_libs: [
-        "libgtest_prod",
         "libstatssocket",
     ],
 
@@ -285,7 +316,6 @@ cc_test {
         "tests/condition/CombinationConditionTracker_test.cpp",
         "tests/condition/ConditionTimer_test.cpp",
         "tests/condition/SimpleConditionTracker_test.cpp",
-        "tests/condition/StateConditionTracker_test.cpp",
         "tests/ConfigManager_test.cpp",
         "tests/e2e/Alarm_e2e_test.cpp",
         "tests/e2e/Anomaly_count_e2e_test.cpp",
@@ -304,12 +334,15 @@ cc_test {
         "tests/external/puller_util_test.cpp",
         "tests/external/StatsCallbackPuller_test.cpp",
         "tests/external/StatsPuller_test.cpp",
+        "tests/external/StatsPullerManager_test.cpp",
         "tests/FieldValue_test.cpp",
         "tests/guardrail/StatsdStats_test.cpp",
+        "tests/HashableDimensionKey_test.cpp",
         "tests/indexed_priority_queue_test.cpp",
         "tests/log_event/LogEventQueue_test.cpp",
         "tests/LogEntryMatcher_test.cpp",
         "tests/LogEvent_test.cpp",
+        "tests/metadata_util_test.cpp",
         "tests/metrics/CountMetricProducer_test.cpp",
         "tests/metrics/DurationMetricProducer_test.cpp",
         "tests/metrics/EventMetricProducer_test.cpp",
@@ -331,7 +364,7 @@ cc_test {
     static_libs: [
         "libgmock",
         "libplatformprotos",
-        "libstatslog", //TODO(b/150976524): remove this when the tests no longer hardcode atoms.
+        "libstatslog_statsdtest",
         "libstatssocket_private",
     ],
 
@@ -350,55 +383,55 @@ cc_test {
 // statsd micro benchmark
 //#############################
 
-//cc_benchmark {
-//    name: "statsd_benchmark",
-//    defaults: ["statsd_defaults"],
-//
-//    srcs: [
-//        // atom_field_options.proto needs field_options.proto, but that is
-//        // not included in libprotobuf-cpp-lite, so compile it here.
-//        ":libprotobuf-internal-protos",
-//
-//        "benchmark/duration_metric_benchmark.cpp",
-//        "benchmark/filter_value_benchmark.cpp",
-//        "benchmark/get_dimensions_for_condition_benchmark.cpp",
-//        "benchmark/hello_world_benchmark.cpp",
-//        "benchmark/log_event_benchmark.cpp",
-//        "benchmark/main.cpp",
-//        "benchmark/metric_util.cpp",
-//        "benchmark/stats_write_benchmark.cpp",
-//        "src/atom_field_options.proto",
-//        "src/atoms.proto",
-//        "src/stats_log.proto",
-//    ],
-//
-//    proto: {
-//        type: "lite",
-//        include_dirs: ["external/protobuf/src"],
-//    },
-//
-//    cflags: [
-//        "-Wall",
-//        "-Werror",
-//        "-Wno-unused-parameter",
-//        "-Wno-unused-variable",
-//        "-Wno-unused-function",
-//
-//        // Bug: http://b/29823425 Disable -Wvarargs for Clang update to r271374
-//        "-Wno-varargs",
-//    ],
-//
-//    static_libs: [
-//        "libplatformprotos",
-//    ],
-//
-//    shared_libs: [
-//        "libgtest_prod",
-//        "libprotobuf-cpp-lite",
-//        "libstatslog",
-//        "libstatssocket",
-//    ],
-//}
+cc_benchmark {
+    name: "statsd_benchmark",
+    defaults: ["statsd_defaults"],
+
+    srcs: [
+        // atom_field_options.proto needs field_options.proto, but that is
+        // not included in libprotobuf-cpp-lite, so compile it here.
+        ":libprotobuf-internal-protos",
+
+        "benchmark/duration_metric_benchmark.cpp",
+        "benchmark/filter_value_benchmark.cpp",
+        "benchmark/get_dimensions_for_condition_benchmark.cpp",
+        "benchmark/hello_world_benchmark.cpp",
+        "benchmark/log_event_benchmark.cpp",
+        "benchmark/main.cpp",
+        "benchmark/metric_util.cpp",
+        "benchmark/stats_write_benchmark.cpp",
+        "src/atom_field_options.proto",
+        "src/atoms.proto",
+        "src/stats_log.proto",
+    ],
+
+    proto: {
+        type: "lite",
+        include_dirs: ["external/protobuf/src"],
+    },
+
+    cflags: [
+        "-Wall",
+        "-Werror",
+        "-Wno-unused-parameter",
+        "-Wno-unused-variable",
+        "-Wno-unused-function",
+
+        // Bug: http://b/29823425 Disable -Wvarargs for Clang update to r271374
+        "-Wno-varargs",
+    ],
+
+    static_libs: [
+        "libplatformprotos",
+        "libstatssocket_private",
+    ],
+
+    shared_libs: [
+        "libgtest_prod",
+        "libprotobuf-cpp-lite",
+        "libstatslog",
+    ],
+}
 
 // ====  java proto device library (for test only)  ==============================
 java_library {

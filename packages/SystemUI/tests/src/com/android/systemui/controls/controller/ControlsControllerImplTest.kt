@@ -31,6 +31,7 @@ import android.service.controls.actions.ControlAction
 import android.testing.AndroidTestingRunner
 import androidx.test.filters.SmallTest
 import com.android.systemui.SysuiTestCase
+import com.android.systemui.backup.BackupHelper
 import com.android.systemui.broadcast.BroadcastDispatcher
 import com.android.systemui.controls.ControlStatus
 import com.android.systemui.controls.ControlsServiceInfo
@@ -39,6 +40,7 @@ import com.android.systemui.controls.ui.ControlsUiController
 import com.android.systemui.dump.DumpManager
 import com.android.systemui.util.concurrency.FakeExecutor
 import com.android.systemui.util.time.FakeSystemClock
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
@@ -57,6 +59,7 @@ import org.mockito.Mockito.mock
 import org.mockito.Mockito.never
 import org.mockito.Mockito.reset
 import org.mockito.Mockito.verify
+import org.mockito.Mockito.verifyNoMoreInteractions
 import org.mockito.MockitoAnnotations
 import java.util.Optional
 import java.util.function.Consumer
@@ -74,12 +77,18 @@ class ControlsControllerImplTest : SysuiTestCase() {
     @Mock
     private lateinit var persistenceWrapper: ControlsFavoritePersistenceWrapper
     @Mock
+    private lateinit var auxiliaryPersistenceWrapper: AuxiliaryPersistenceWrapper
+    @Mock
     private lateinit var broadcastDispatcher: BroadcastDispatcher
     @Mock
     private lateinit var listingController: ControlsListingController
 
     @Captor
     private lateinit var structureInfoCaptor: ArgumentCaptor<StructureInfo>
+
+    @Captor
+    private lateinit var booleanConsumer: ArgumentCaptor<Consumer<Boolean>>
+
     @Captor
     private lateinit var controlLoadCallbackCaptor:
             ArgumentCaptor<ControlsBindingController.LoadCallback>
@@ -100,20 +109,22 @@ class ControlsControllerImplTest : SysuiTestCase() {
         private val TEST_COMPONENT = ComponentName("test.pkg", "test.class")
         private const val TEST_CONTROL_ID = "control1"
         private const val TEST_CONTROL_TITLE = "Test"
+        private const val TEST_CONTROL_SUBTITLE = "TestSub"
         private const val TEST_DEVICE_TYPE = DeviceTypes.TYPE_AC_HEATER
         private const val TEST_STRUCTURE = ""
         private val TEST_CONTROL_INFO = ControlInfo(TEST_CONTROL_ID,
-                TEST_CONTROL_TITLE, TEST_DEVICE_TYPE)
+                TEST_CONTROL_TITLE, TEST_CONTROL_SUBTITLE, TEST_DEVICE_TYPE)
         private val TEST_STRUCTURE_INFO = StructureInfo(TEST_COMPONENT,
                 TEST_STRUCTURE, listOf(TEST_CONTROL_INFO))
 
         private val TEST_COMPONENT_2 = ComponentName("test.pkg", "test.class.2")
         private const val TEST_CONTROL_ID_2 = "control2"
         private const val TEST_CONTROL_TITLE_2 = "Test 2"
+        private const val TEST_CONTROL_SUBTITLE_2 = "TestSub 2"
         private const val TEST_DEVICE_TYPE_2 = DeviceTypes.TYPE_CAMERA
         private const val TEST_STRUCTURE_2 = "My House"
         private val TEST_CONTROL_INFO_2 = ControlInfo(TEST_CONTROL_ID_2,
-                TEST_CONTROL_TITLE_2, TEST_DEVICE_TYPE_2)
+                TEST_CONTROL_TITLE_2, TEST_CONTROL_SUBTITLE_2, TEST_DEVICE_TYPE_2)
         private val TEST_STRUCTURE_INFO_2 = StructureInfo(TEST_COMPONENT_2,
                 TEST_STRUCTURE_2, listOf(TEST_CONTROL_INFO_2))
     }
@@ -148,6 +159,8 @@ class ControlsControllerImplTest : SysuiTestCase() {
                 Optional.of(persistenceWrapper),
                 mock(DumpManager::class.java)
         )
+        controller.auxiliaryPersistenceWrapper = auxiliaryPersistenceWrapper
+
         assertTrue(controller.available)
         verify(broadcastDispatcher).registerReceiver(
                 capture(broadcastReceiverCaptor), any(), any(), eq(UserHandle.ALL))
@@ -155,9 +168,27 @@ class ControlsControllerImplTest : SysuiTestCase() {
         verify(listingController).addCallback(capture(listingCallbackCaptor))
     }
 
-    private fun builderFromInfo(controlInfo: ControlInfo): Control.StatelessBuilder {
+    @After
+    fun tearDown() {
+        controller.destroy()
+    }
+
+    private fun statelessBuilderFromInfo(
+        controlInfo: ControlInfo,
+        structure: CharSequence = ""
+    ): Control.StatelessBuilder {
         return Control.StatelessBuilder(controlInfo.controlId, pendingIntent)
                 .setDeviceType(controlInfo.deviceType).setTitle(controlInfo.controlTitle)
+                .setSubtitle(controlInfo.controlSubtitle).setStructure(structure)
+    }
+
+    private fun statefulBuilderFromInfo(
+        controlInfo: ControlInfo,
+        structure: CharSequence = ""
+    ): Control.StatefulBuilder {
+        return Control.StatefulBuilder(controlInfo.controlId, pendingIntent)
+                .setDeviceType(controlInfo.deviceType).setTitle(controlInfo.controlTitle)
+                .setSubtitle(controlInfo.controlSubtitle).setStructure(structure)
     }
 
     @Test
@@ -226,7 +257,7 @@ class ControlsControllerImplTest : SysuiTestCase() {
     @Test
     fun testLoadForComponent_noFavorites() {
         var loaded = false
-        val control = builderFromInfo(TEST_CONTROL_INFO).build()
+        val control = statelessBuilderFromInfo(TEST_CONTROL_INFO).build()
 
         controller.loadForComponent(TEST_COMPONENT, Consumer { data ->
             val controls = data.allControls
@@ -253,8 +284,8 @@ class ControlsControllerImplTest : SysuiTestCase() {
     @Test
     fun testLoadForComponent_favorites() {
         var loaded = false
-        val control = builderFromInfo(TEST_CONTROL_INFO).build()
-        val control2 = builderFromInfo(TEST_CONTROL_INFO_2).build()
+        val control = statelessBuilderFromInfo(TEST_CONTROL_INFO).build()
+        val control2 = statelessBuilderFromInfo(TEST_CONTROL_INFO_2).build()
         controller.replaceFavoritesForStructure(TEST_STRUCTURE_INFO)
         controller.replaceFavoritesForStructure(TEST_STRUCTURE_INFO_2)
         delayableExecutor.runAllReady()
@@ -297,6 +328,7 @@ class ControlsControllerImplTest : SysuiTestCase() {
             assertEquals(1, controls.size)
             val controlStatus = controls[0]
             assertEquals(TEST_CONTROL_ID, controlStatus.control.controlId)
+            assertEquals(TEST_STRUCTURE_INFO.structure, controlStatus.control.structure)
             assertTrue(controlStatus.favorite)
             assertTrue(controlStatus.removed)
 
@@ -327,6 +359,7 @@ class ControlsControllerImplTest : SysuiTestCase() {
             assertEquals(1, controls.size)
             val controlStatus = controls[0]
             assertEquals(TEST_CONTROL_ID, controlStatus.control.controlId)
+            assertEquals(TEST_STRUCTURE_INFO.structure, controlStatus.control.structure)
             assertTrue(controlStatus.favorite)
             assertFalse(controlStatus.removed)
 
@@ -433,7 +466,7 @@ class ControlsControllerImplTest : SysuiTestCase() {
         delayableExecutor.runAllReady()
 
         val newControlInfo = TEST_CONTROL_INFO.copy(controlTitle = TEST_CONTROL_TITLE_2)
-        val control = builderFromInfo(newControlInfo).build()
+        val control = statelessBuilderFromInfo(newControlInfo).build()
 
         controller.loadForComponent(TEST_COMPONENT, Consumer {})
 
@@ -449,11 +482,11 @@ class ControlsControllerImplTest : SysuiTestCase() {
     }
 
     @Test
-    fun testFavoriteInformationModifiedOnRefresh() {
+    fun testFavoriteInformationModifiedOnRefreshWithOkStatus() {
         controller.replaceFavoritesForStructure(TEST_STRUCTURE_INFO)
 
         val newControlInfo = TEST_CONTROL_INFO.copy(controlTitle = TEST_CONTROL_TITLE_2)
-        val control = builderFromInfo(newControlInfo).build()
+        val control = statefulBuilderFromInfo(newControlInfo).setStatus(Control.STATUS_OK).build()
 
         controller.refreshStatus(TEST_COMPONENT, control)
 
@@ -462,6 +495,23 @@ class ControlsControllerImplTest : SysuiTestCase() {
         val favorites = controller.getFavorites().flatMap { it.controls }
         assertEquals(1, favorites.size)
         assertEquals(newControlInfo, favorites[0])
+    }
+
+    @Test
+    fun testFavoriteInformationNotModifiedOnRefreshWithNonOkStatus() {
+        controller.replaceFavoritesForStructure(TEST_STRUCTURE_INFO)
+
+        val newControlInfo = TEST_CONTROL_INFO.copy(controlTitle = TEST_CONTROL_TITLE_2)
+        val control = statefulBuilderFromInfo(newControlInfo).setStatus(Control.STATUS_ERROR)
+            .build()
+
+        controller.refreshStatus(TEST_COMPONENT, control)
+
+        delayableExecutor.runAllReady()
+
+        val favorites = controller.getFavorites().flatMap { it.controls }
+        assertEquals(1, favorites.size)
+        assertEquals(TEST_CONTROL_INFO, favorites[0])
     }
 
     @Test
@@ -479,8 +529,9 @@ class ControlsControllerImplTest : SysuiTestCase() {
 
         broadcastReceiverCaptor.value.onReceive(mContext, intent)
 
-        verify(persistenceWrapper).changeFile(any())
+        verify(persistenceWrapper).changeFileAndBackupManager(any(), any())
         verify(persistenceWrapper).readFavorites()
+        verify(auxiliaryPersistenceWrapper).changeFile(any())
         verify(bindingController).changeUser(UserHandle.of(otherUser))
         verify(listingController).changeUser(UserHandle.of(otherUser))
         assertTrue(controller.getFavorites().isEmpty())
@@ -577,7 +628,7 @@ class ControlsControllerImplTest : SysuiTestCase() {
 
     @Test
     fun testGetFavoritesForComponent_multipleInOrder() {
-        val controlInfo = ControlInfo("id", "title", 0)
+        val controlInfo = ControlInfo("id", "title", "subtitle", 0)
 
         controller.replaceFavoritesForStructure(
             StructureInfo(
@@ -635,7 +686,7 @@ class ControlsControllerImplTest : SysuiTestCase() {
 
     @Test
     fun testReplaceFavoritesForStructure_oldFavoritesRemoved() {
-        val controlInfo = ControlInfo("id", "title", 0)
+        val controlInfo = ControlInfo("id", "title", "subtitle", 0)
         assertNotEquals(TEST_CONTROL_INFO, controlInfo)
 
         val newComponent = ComponentName("test.pkg", "test.class.3")
@@ -661,7 +712,7 @@ class ControlsControllerImplTest : SysuiTestCase() {
 
     @Test
     fun testReplaceFavoritesForStructure_favoritesInOrder() {
-        val controlInfo = ControlInfo("id", "title", 0)
+        val controlInfo = ControlInfo("id", "title", "subtitle", 0)
 
         val listOrder1 = listOf(TEST_CONTROL_INFO, controlInfo)
         val structure1 = StructureInfo(TEST_COMPONENT, "Home", listOrder1)
@@ -730,6 +781,41 @@ class ControlsControllerImplTest : SysuiTestCase() {
     }
 
     @Test
+    fun testExistingPackage_removedFromCache() {
+        `when`(auxiliaryPersistenceWrapper.favorites).thenReturn(
+            listOf(TEST_STRUCTURE_INFO, TEST_STRUCTURE_INFO_2))
+
+        controller.replaceFavoritesForStructure(TEST_STRUCTURE_INFO)
+        delayableExecutor.runAllReady()
+
+        val serviceInfo = mock(ServiceInfo::class.java)
+        `when`(serviceInfo.componentName).thenReturn(TEST_COMPONENT)
+        val info = ControlsServiceInfo(mContext, serviceInfo)
+
+        listingCallbackCaptor.value.onServicesUpdated(listOf(info))
+        delayableExecutor.runAllReady()
+
+        verify(auxiliaryPersistenceWrapper).getCachedFavoritesAndRemoveFor(TEST_COMPONENT)
+    }
+
+    @Test
+    fun testAddedPackage_requestedFromCache() {
+        `when`(auxiliaryPersistenceWrapper.favorites).thenReturn(
+            listOf(TEST_STRUCTURE_INFO, TEST_STRUCTURE_INFO_2))
+
+        val serviceInfo = mock(ServiceInfo::class.java)
+        `when`(serviceInfo.componentName).thenReturn(TEST_COMPONENT)
+        val info = ControlsServiceInfo(mContext, serviceInfo)
+
+        listingCallbackCaptor.value.onServicesUpdated(listOf(info))
+        delayableExecutor.runAllReady()
+
+        verify(auxiliaryPersistenceWrapper).getCachedFavoritesAndRemoveFor(TEST_COMPONENT)
+        verify(auxiliaryPersistenceWrapper, never())
+                .getCachedFavoritesAndRemoveFor(TEST_COMPONENT_2)
+    }
+
+    @Test
     fun testListingCallbackNotListeningWhileReadingFavorites() {
         val intent = Intent(Intent.ACTION_USER_SWITCHED).apply {
             putExtra(Intent.EXTRA_USER_HANDLE, otherUser)
@@ -745,5 +831,109 @@ class ControlsControllerImplTest : SysuiTestCase() {
         inOrder.verify(listingController).removeCallback(listingCallbackCaptor.value)
         inOrder.verify(persistenceWrapper).readFavorites()
         inOrder.verify(listingController).addCallback(listingCallbackCaptor.value)
+    }
+
+    @Test
+    fun testSeedFavoritesForComponent() {
+        var succeeded = false
+        val control = statelessBuilderFromInfo(TEST_CONTROL_INFO, TEST_STRUCTURE_INFO.structure)
+            .build()
+
+        controller.seedFavoritesForComponent(TEST_COMPONENT, Consumer { accepted ->
+            succeeded = accepted
+        })
+
+        verify(bindingController).bindAndLoadSuggested(eq(TEST_COMPONENT),
+                capture(controlLoadCallbackCaptor))
+
+        controlLoadCallbackCaptor.value.accept(listOf(control))
+
+        delayableExecutor.runAllReady()
+
+        assertEquals(listOf(TEST_STRUCTURE_INFO),
+            controller.getFavoritesForComponent(TEST_COMPONENT))
+        assertTrue(succeeded)
+    }
+
+    @Test
+    fun testSeedFavoritesForComponent_error() {
+        var succeeded = false
+
+        controller.seedFavoritesForComponent(TEST_COMPONENT, Consumer { accepted ->
+            succeeded = accepted
+        })
+
+        verify(bindingController).bindAndLoadSuggested(eq(TEST_COMPONENT),
+                capture(controlLoadCallbackCaptor))
+
+        controlLoadCallbackCaptor.value.error("Error loading")
+
+        delayableExecutor.runAllReady()
+
+        assertEquals(listOf<StructureInfo>(), controller.getFavoritesForComponent(TEST_COMPONENT))
+        assertFalse(succeeded)
+    }
+
+    @Test
+    fun testSeedFavoritesForComponent_inProgressCallback() {
+        var succeeded = false
+        var seeded = false
+        val control = statelessBuilderFromInfo(TEST_CONTROL_INFO, TEST_STRUCTURE_INFO.structure)
+            .build()
+
+        controller.seedFavoritesForComponent(TEST_COMPONENT, Consumer { accepted ->
+            succeeded = accepted
+        })
+
+        verify(bindingController).bindAndLoadSuggested(eq(TEST_COMPONENT),
+                capture(controlLoadCallbackCaptor))
+
+        controller.addSeedingFavoritesCallback(Consumer { accepted ->
+            seeded = accepted
+        })
+        controlLoadCallbackCaptor.value.accept(listOf(control))
+
+        delayableExecutor.runAllReady()
+
+        assertEquals(listOf(TEST_STRUCTURE_INFO),
+            controller.getFavoritesForComponent(TEST_COMPONENT))
+        assertTrue(succeeded)
+        assertTrue(seeded)
+    }
+
+    @Test
+    fun testRestoreReceiver_loadsAuxiliaryData() {
+        val receiver = controller.restoreFinishedReceiver
+
+        val structure1 = mock(StructureInfo::class.java)
+        val structure2 = mock(StructureInfo::class.java)
+        val listOfStructureInfo = listOf(structure1, structure2)
+        `when`(auxiliaryPersistenceWrapper.favorites).thenReturn(listOfStructureInfo)
+
+        val intent = Intent(BackupHelper.ACTION_RESTORE_FINISHED)
+        intent.putExtra(Intent.EXTRA_USER_ID, context.userId)
+        receiver.onReceive(context, intent)
+        delayableExecutor.runAllReady()
+
+        val inOrder = inOrder(auxiliaryPersistenceWrapper, persistenceWrapper)
+        inOrder.verify(auxiliaryPersistenceWrapper).initialize()
+        inOrder.verify(auxiliaryPersistenceWrapper).favorites
+        inOrder.verify(persistenceWrapper).storeFavorites(listOfStructureInfo)
+        inOrder.verify(persistenceWrapper).readFavorites()
+    }
+
+    @Test
+    fun testRestoreReceiver_noActionOnWrongUser() {
+        val receiver = controller.restoreFinishedReceiver
+
+        reset(persistenceWrapper)
+        reset(auxiliaryPersistenceWrapper)
+        val intent = Intent(BackupHelper.ACTION_RESTORE_FINISHED)
+        intent.putExtra(Intent.EXTRA_USER_ID, context.userId + 1)
+        receiver.onReceive(context, intent)
+        delayableExecutor.runAllReady()
+
+        verifyNoMoreInteractions(persistenceWrapper)
+        verifyNoMoreInteractions(auxiliaryPersistenceWrapper)
     }
 }

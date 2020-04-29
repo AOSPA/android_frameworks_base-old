@@ -18,6 +18,7 @@ package android.service.quickaccesswallet;
 
 import static android.service.quickaccesswallet.QuickAccessWalletService.SERVICE_INTERFACE;
 
+import android.annotation.CallbackExecutor;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.app.ActivityManager;
@@ -25,6 +26,7 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
+import android.graphics.drawable.Drawable;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
@@ -36,16 +38,19 @@ import android.util.Log;
 
 import com.android.internal.widget.LockPatternUtils;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.Map;
 import java.util.Queue;
 import java.util.UUID;
+import java.util.concurrent.Executor;
 
 /**
  * Implements {@link QuickAccessWalletClient}. The client connects, performs requests, waits for
- * responses, and disconnects automatically after a short period of time. The client may
+ * responses, and disconnects automatically one minute after the last call is performed.
+ *
  * @hide
  */
 public class QuickAccessWalletClientImpl implements QuickAccessWalletClient, ServiceConnection {
@@ -78,15 +83,14 @@ public class QuickAccessWalletClientImpl implements QuickAccessWalletClient, Ser
 
     @Override
     public boolean isWalletServiceAvailable() {
-        boolean available = mServiceInfo != null;
-        Log.i(TAG, "isWalletServiceAvailable: " + available);
-        return available;
+        return mServiceInfo != null;
     }
 
     @Override
     public boolean isWalletFeatureAvailable() {
         int currentUser = ActivityManager.getCurrentUser();
-        return checkUserSetupComplete()
+        return currentUser == UserHandle.USER_SYSTEM
+                && checkUserSetupComplete()
                 && checkSecureSetting(Settings.Secure.GLOBAL_ACTIONS_PANEL_ENABLED)
                 && !new LockPatternUtils(mContext).isUserInLockdown(currentUser);
     }
@@ -101,23 +105,29 @@ public class QuickAccessWalletClientImpl implements QuickAccessWalletClient, Ser
     public void getWalletCards(
             @NonNull GetWalletCardsRequest request,
             @NonNull OnWalletCardsRetrievedCallback callback) {
+        getWalletCards(mContext.getMainExecutor(), request, callback);
+    }
 
-        Log.i(TAG, "getWalletCards");
-
+    @Override
+    public void getWalletCards(
+            @NonNull @CallbackExecutor Executor executor,
+            @NonNull GetWalletCardsRequest request,
+            @NonNull OnWalletCardsRetrievedCallback callback) {
         if (!isWalletServiceAvailable()) {
-            callback.onWalletCardRetrievalError(new GetWalletCardsError(null, null));
+            executor.execute(
+                    () -> callback.onWalletCardRetrievalError(new GetWalletCardsError(null, null)));
             return;
         }
 
         BaseCallbacks serviceCallback = new BaseCallbacks() {
             @Override
             public void onGetWalletCardsSuccess(GetWalletCardsResponse response) {
-                mHandler.post(() -> callback.onWalletCardsRetrieved(response));
+                executor.execute(() -> callback.onWalletCardsRetrieved(response));
             }
 
             @Override
             public void onGetWalletCardsFailure(GetWalletCardsError error) {
-                mHandler.post(() -> callback.onWalletCardRetrievalError(error));
+                executor.execute(() -> callback.onWalletCardRetrievalError(error));
             }
         };
 
@@ -132,11 +142,11 @@ public class QuickAccessWalletClientImpl implements QuickAccessWalletClient, Ser
                 serviceCallback.onGetWalletCardsFailure(new GetWalletCardsError(null, null));
             }
         });
+
     }
 
     @Override
     public void selectWalletCard(@NonNull SelectWalletCardRequest request) {
-        Log.i(TAG, "selectWalletCard");
         if (!isWalletServiceAvailable()) {
             return;
         }
@@ -153,7 +163,6 @@ public class QuickAccessWalletClientImpl implements QuickAccessWalletClient, Ser
         if (!isWalletServiceAvailable()) {
             return;
         }
-        Log.i(TAG, "notifyWalletDismissed");
         executeApiCall(new ApiCaller("onWalletDismissed") {
             @Override
             public void performApiCall(IQuickAccessWalletService service) throws RemoteException {
@@ -164,15 +173,20 @@ public class QuickAccessWalletClientImpl implements QuickAccessWalletClient, Ser
 
     @Override
     public void addWalletServiceEventListener(WalletServiceEventListener listener) {
+        addWalletServiceEventListener(mContext.getMainExecutor(), listener);
+    }
+
+    @Override
+    public void addWalletServiceEventListener(
+            @NonNull @CallbackExecutor Executor executor,
+            @NonNull WalletServiceEventListener listener) {
         if (!isWalletServiceAvailable()) {
             return;
         }
-        Log.i(TAG, "registerWalletServiceEventListener");
         BaseCallbacks callback = new BaseCallbacks() {
             @Override
             public void onWalletServiceEvent(WalletServiceEvent event) {
-                Log.i(TAG, "onWalletServiceEvent");
-                mHandler.post(() -> listener.onWalletServiceEvent(event));
+                executor.execute(() -> listener.onWalletServiceEvent(event));
             }
         };
 
@@ -193,7 +207,6 @@ public class QuickAccessWalletClientImpl implements QuickAccessWalletClient, Ser
         if (!isWalletServiceAvailable()) {
             return;
         }
-        Log.i(TAG, "unregisterWalletServiceEventListener");
         executeApiCall(new ApiCaller("unregisterListener") {
             @Override
             public void performApiCall(IQuickAccessWalletService service) throws RemoteException {
@@ -209,8 +222,12 @@ public class QuickAccessWalletClientImpl implements QuickAccessWalletClient, Ser
     }
 
     @Override
+    public void close() throws IOException {
+        disconnect();
+    }
+
+    @Override
     public void disconnect() {
-        Log.i(TAG, "disconnect");
         mHandler.post(() -> disconnectInternal(true));
     }
 
@@ -240,19 +257,39 @@ public class QuickAccessWalletClientImpl implements QuickAccessWalletClient, Ser
                                 mServiceInfo.getSettingsActivity()));
     }
 
+    @Override
+    @Nullable
+    public Drawable getLogo() {
+        return mServiceInfo == null ? null : mServiceInfo.getWalletLogo(mContext);
+    }
+
+    @Override
+    @Nullable
+    public CharSequence getServiceLabel() {
+        return mServiceInfo == null ? null : mServiceInfo.getServiceLabel(mContext);
+    }
+
+    @Override
+    @Nullable
+    public CharSequence getShortcutShortLabel() {
+        return mServiceInfo == null ? null : mServiceInfo.getShortcutShortLabel(mContext);
+    }
+
+    @Override
+    public CharSequence getShortcutLongLabel() {
+        return mServiceInfo == null ? null : mServiceInfo.getShortcutLongLabel(mContext);
+    }
+
     private void connect() {
-        Log.i(TAG, "connect");
         mHandler.post(this::connectInternal);
     }
 
     private void connectInternal() {
-        Log.i(TAG, "connectInternal");
         if (mServiceInfo == null) {
             Log.w(TAG, "Wallet service unavailable");
             return;
         }
         if (mIsConnected) {
-            Log.w(TAG, "already connected");
             return;
         }
         mIsConnected = true;
@@ -264,23 +301,14 @@ public class QuickAccessWalletClientImpl implements QuickAccessWalletClient, Ser
     }
 
     private void onConnectedInternal(IQuickAccessWalletService service) {
-        Log.i(TAG, "onConnectedInternal");
         if (!mIsConnected) {
             Log.w(TAG, "onConnectInternal but connection closed");
             mService = null;
             return;
         }
         mService = service;
-        Log.i(TAG, "onConnectedInternal success: request queue size " + mRequestQueue.size());
         for (ApiCaller apiCaller : new ArrayList<>(mRequestQueue)) {
-            try {
-                apiCaller.performApiCall(mService);
-            } catch (RemoteException e) {
-                Log.e(TAG, "onConnectedInternal error", e);
-                apiCaller.onApiError();
-                disconnect();
-                break;
-            }
+            performApiCallInternal(apiCaller, mService);
             mRequestQueue.remove(apiCaller);
         }
     }
@@ -290,7 +318,6 @@ public class QuickAccessWalletClientImpl implements QuickAccessWalletClient, Ser
      * posting a new delayed message.
      */
     private void resetServiceConnectionTimeout() {
-        Log.i(TAG, "resetServiceConnectionTimeout");
         mHandler.removeMessages(MSG_TIMEOUT_SERVICE);
         mHandler.postDelayed(
                 () -> disconnectInternal(true),
@@ -299,13 +326,11 @@ public class QuickAccessWalletClientImpl implements QuickAccessWalletClient, Ser
     }
 
     private void disconnectInternal(boolean clearEventListeners) {
-        Log.i(TAG, "disconnectInternal: " + clearEventListeners);
         if (!mIsConnected) {
             Log.w(TAG, "already disconnected");
             return;
         }
         if (clearEventListeners && !mEventListeners.isEmpty()) {
-            Log.i(TAG, "disconnectInternal: clear event listeners");
             for (WalletServiceEventListener listener : mEventListeners.keySet()) {
                 removeWalletServiceEventListener(listener);
             }
@@ -320,26 +345,30 @@ public class QuickAccessWalletClientImpl implements QuickAccessWalletClient, Ser
     }
 
     private void executeApiCall(ApiCaller apiCaller) {
-        Log.i(TAG, "execute: " + apiCaller.mDesc);
         mHandler.post(() -> executeInternal(apiCaller));
     }
 
-    private void executeInternal(ApiCaller apiCall) {
-        Log.i(TAG, "executeInternal: " + apiCall.mDesc);
+    private void executeInternal(ApiCaller apiCaller) {
         if (mIsConnected && mService != null) {
-            try {
-                apiCall.performApiCall(mService);
-                Log.i(TAG, "executeInternal success: " + apiCall.mDesc);
-                resetServiceConnectionTimeout();
-            } catch (RemoteException e) {
-                Log.w(TAG, "executeInternal error: " + apiCall.mDesc, e);
-                apiCall.onApiError();
-                disconnect();
-            }
+            performApiCallInternal(apiCaller, mService);
         } else {
-            Log.i(TAG, "executeInternal: queued" + apiCall.mDesc);
-            mRequestQueue.add(apiCall);
+            mRequestQueue.add(apiCaller);
             connect();
+        }
+    }
+
+    private void performApiCallInternal(ApiCaller apiCaller, IQuickAccessWalletService service) {
+        if (service == null) {
+            apiCaller.onApiError();
+            return;
+        }
+        try {
+            apiCaller.performApiCall(service);
+            resetServiceConnectionTimeout();
+        } catch (RemoteException e) {
+            Log.w(TAG, "executeInternal error: " + apiCaller.mDesc, e);
+            apiCaller.onApiError();
+            disconnect();
         }
     }
 
@@ -350,7 +379,8 @@ public class QuickAccessWalletClientImpl implements QuickAccessWalletClient, Ser
             this.mDesc = desc;
         }
 
-        abstract void performApiCall(IQuickAccessWalletService service) throws RemoteException;
+        abstract void performApiCall(IQuickAccessWalletService service)
+                throws RemoteException;
 
         void onApiError() {
             Log.w(TAG, "api error: " + mDesc);
@@ -359,7 +389,6 @@ public class QuickAccessWalletClientImpl implements QuickAccessWalletClient, Ser
 
     @Override // ServiceConnection
     public void onServiceConnected(ComponentName name, IBinder binder) {
-        Log.i(TAG, "onServiceConnected: " + name);
         IQuickAccessWalletService service = IQuickAccessWalletService.Stub.asInterface(binder);
         mHandler.post(() -> onConnectedInternal(service));
     }
@@ -367,19 +396,16 @@ public class QuickAccessWalletClientImpl implements QuickAccessWalletClient, Ser
     @Override // ServiceConnection
     public void onServiceDisconnected(ComponentName name) {
         // Do not disconnect, as we may later be re-connected
-        Log.w(TAG, "onServiceDisconnected");
     }
 
     @Override // ServiceConnection
     public void onBindingDied(ComponentName name) {
         // This is a recoverable error but the client will need to reconnect.
-        Log.w(TAG, "onBindingDied");
         disconnect();
     }
 
     @Override // ServiceConnection
     public void onNullBinding(ComponentName name) {
-        Log.w(TAG, "onNullBinding");
         disconnect();
     }
 

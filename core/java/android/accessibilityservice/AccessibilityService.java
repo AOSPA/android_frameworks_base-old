@@ -33,7 +33,6 @@ import android.graphics.ColorSpace;
 import android.graphics.ParcelableColorSpace;
 import android.graphics.Region;
 import android.hardware.HardwareBuffer;
-import android.os.Binder;
 import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
@@ -48,7 +47,6 @@ import android.util.Slog;
 import android.util.SparseArray;
 import android.view.Display;
 import android.view.KeyEvent;
-import android.view.SurfaceControl;
 import android.view.SurfaceView;
 import android.view.WindowManager;
 import android.view.WindowManagerImpl;
@@ -576,12 +574,56 @@ public abstract class AccessibilityService extends Service {
     public static final int SHOW_MODE_HARD_KEYBOARD_OVERRIDDEN = 0x40000000;
 
     /**
+     * Annotations for error codes of taking screenshot.
+     * @hide
+     */
+    @Retention(RetentionPolicy.SOURCE)
+    @IntDef(prefix = { "TAKE_SCREENSHOT_" }, value = {
+            ERROR_TAKE_SCREENSHOT_INTERNAL_ERROR,
+            ERROR_TAKE_SCREENSHOT_NO_ACCESSIBILITY_ACCESS,
+            ERROR_TAKE_SCREENSHOT_INTERVAL_TIME_SHORT,
+            ERROR_TAKE_SCREENSHOT_INVALID_DISPLAY
+    })
+    public @interface ScreenshotErrorCode {}
+
+    /**
+     * The status of taking screenshot is success.
+     * @hide
+     */
+    public static final int TAKE_SCREENSHOT_SUCCESS = 0;
+
+    /**
+     * The status of taking screenshot is failure and the reason is internal error.
+     */
+    public static final int ERROR_TAKE_SCREENSHOT_INTERNAL_ERROR = 1;
+
+    /**
+     * The status of taking screenshot is failure and the reason is no accessibility access.
+     */
+    public static final int ERROR_TAKE_SCREENSHOT_NO_ACCESSIBILITY_ACCESS = 2;
+
+    /**
+     * The status of taking screenshot is failure and the reason is that too little time has
+     * elapsed since the last screenshot.
+     */
+    public static final int ERROR_TAKE_SCREENSHOT_INTERVAL_TIME_SHORT = 3;
+
+    /**
+     * The status of taking screenshot is failure and the reason is invalid display Id.
+     */
+    public static final int ERROR_TAKE_SCREENSHOT_INVALID_DISPLAY = 4;
+
+    /**
      * The interval time of calling
      * {@link AccessibilityService#takeScreenshot(int, Executor, Consumer)} API.
      * @hide
      */
     @TestApi
     public static final int ACCESSIBILITY_TAKE_SCREENSHOT_REQUEST_INTERVAL_TIMES_MS = 1000;
+
+    /** @hide */
+    public static final String KEY_ACCESSIBILITY_SCREENSHOT_STATUS =
+            "screenshot_status";
 
     /** @hide */
     public static final String KEY_ACCESSIBILITY_SCREENSHOT_HARDWAREBUFFER =
@@ -1777,6 +1819,13 @@ public abstract class AccessibilityService extends Service {
 
     /**
      * Returns a list of system actions available in the system right now.
+     * <p>
+     * System actions that correspond to the global action constants will have matching action IDs.
+     * For example, an with id {@link #GLOBAL_ACTION_BACK} will perform the back action.
+     * </p>
+     * <p>
+     * These actions should be called by {@link #performGlobalAction}.
+     * </p>
      *
      * @return A list of available system actions.
      */
@@ -1938,44 +1987,40 @@ public abstract class AccessibilityService extends Service {
      * to declare the capability to take screenshot by setting the
      * {@link android.R.styleable#AccessibilityService_canTakeScreenshot}
      * property in its meta-data. For details refer to {@link #SERVICE_META_DATA}.
-     * This API only will support {@link Display#DEFAULT_DISPLAY} until {@link SurfaceControl}
-     * supports non-default displays.
      * </p>
      *
      * @param displayId The logic display id, must be {@link Display#DEFAULT_DISPLAY} for
      *                  default display.
      * @param executor Executor on which to run the callback.
-     * @param callback The callback invoked when the taking screenshot is done.
-     *
-     * @return {@code true} if the taking screenshot accepted, {@code false} if too little time
-     * has elapsed since the last screenshot, invalid display or internal errors.
-     * @throws IllegalArgumentException if displayId is not {@link Display#DEFAULT_DISPLAY}.
+     * @param callback The callback invoked when taking screenshot has succeeded or failed.
+     *                 See {@link TakeScreenshotCallback} for details.
      */
-    public boolean takeScreenshot(int displayId, @NonNull @CallbackExecutor Executor executor,
-            @NonNull Consumer<ScreenshotResult> callback) {
+    public void takeScreenshot(int displayId, @NonNull @CallbackExecutor Executor executor,
+            @NonNull TakeScreenshotCallback callback) {
         Preconditions.checkNotNull(executor, "executor cannot be null");
         Preconditions.checkNotNull(callback, "callback cannot be null");
-
-        if (displayId != Display.DEFAULT_DISPLAY) {
-            throw new IllegalArgumentException("DisplayId isn't the default display");
-        }
-
         final IAccessibilityServiceConnection connection =
                 AccessibilityInteractionClient.getInstance().getConnection(
                         mConnectionId);
         if (connection == null) {
-            return false;
+            sendScreenshotFailure(ERROR_TAKE_SCREENSHOT_INTERNAL_ERROR, executor, callback);
+            return;
         }
         try {
-            return connection.takeScreenshot(displayId, new RemoteCallback((result) -> {
+            connection.takeScreenshot(displayId, new RemoteCallback((result) -> {
+                final int status = result.getInt(KEY_ACCESSIBILITY_SCREENSHOT_STATUS);
+                if (status != TAKE_SCREENSHOT_SUCCESS) {
+                    sendScreenshotFailure(status, executor, callback);
+                    return;
+                }
                 final HardwareBuffer hardwareBuffer =
                         result.getParcelable(KEY_ACCESSIBILITY_SCREENSHOT_HARDWAREBUFFER);
                 final ParcelableColorSpace colorSpace =
                         result.getParcelable(KEY_ACCESSIBILITY_SCREENSHOT_COLORSPACE);
-                ScreenshotResult screenshot = new ScreenshotResult(hardwareBuffer,
+                final ScreenshotResult screenshot = new ScreenshotResult(hardwareBuffer,
                         colorSpace.getColorSpace(),
                         result.getLong(KEY_ACCESSIBILITY_SCREENSHOT_TIMESTAMP));
-                sendScreenshotResult(executor, callback, screenshot);
+                sendScreenshotSuccess(screenshot, executor, callback);
             }));
         } catch (RemoteException re) {
             throw new RuntimeException(re);
@@ -2374,15 +2419,32 @@ public abstract class AccessibilityService extends Service {
         }
     }
 
-    private void sendScreenshotResult(Executor executor, Consumer<ScreenshotResult> callback,
-            ScreenshotResult screenshot) {
-        final ScreenshotResult result = screenshot;
-        final long identity = Binder.clearCallingIdentity();
-        try {
-            executor.execute(() -> callback.accept(result));
-        } finally {
-            Binder.restoreCallingIdentity(identity);
-        }
+    private void sendScreenshotSuccess(ScreenshotResult screenshot, Executor executor,
+            TakeScreenshotCallback callback) {
+        executor.execute(() -> callback.onSuccess(screenshot));
+    }
+
+    private void sendScreenshotFailure(@ScreenshotErrorCode int errorCode, Executor executor,
+            TakeScreenshotCallback callback) {
+        executor.execute(() -> callback.onFailure(errorCode));
+    }
+
+    /**
+     * Interface used to report status of taking screenshot.
+     */
+    public interface TakeScreenshotCallback {
+        /** Called when taking screenshot has completed successfully.
+         *
+         * @param screenshot The content of screenshot.
+         */
+        void onSuccess(@NonNull ScreenshotResult screenshot);
+
+        /** Called when taking screenshot has failed. {@code errorCode} will identify the
+         * reason of failure.
+         *
+         * @param errorCode The error code of this operation.
+         */
+        void onFailure(@ScreenshotErrorCode int errorCode);
     }
 
     /**

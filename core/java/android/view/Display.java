@@ -57,8 +57,8 @@ import java.util.List;
  * <li>The application display area specifies the part of the display that may contain
  * an application window, excluding the system decorations.  The application display area may
  * be smaller than the real display area because the system subtracts the space needed
- * for decor elements such as the status bar.  Use {@link WindowMetrics#getSize()} to query the
- * application window size.</li>
+ * for decor elements such as the status bar.  Use {@link WindowMetrics#getBounds()} to query the
+ * application window bounds.</li>
  * <li>The real display area specifies the part of the display that contains content
  * including the system decorations.  Even so, the real display area may be smaller than the
  * physical size of the display if the window manager is emulating a smaller display
@@ -253,12 +253,14 @@ public final class Display {
      * @hide
      */
     @UnsupportedAppUsage
+    @TestApi
     public static final int TYPE_UNKNOWN = 0;
 
     /**
      * Display type: Physical display connected through an internal port.
      * @hide
      */
+    @TestApi
     public static final int TYPE_INTERNAL = 1;
 
     /**
@@ -266,6 +268,7 @@ public final class Display {
      * @hide
      */
     @UnsupportedAppUsage
+    @TestApi
     public static final int TYPE_EXTERNAL = 2;
 
     /**
@@ -273,12 +276,14 @@ public final class Display {
      * @hide
      */
     @UnsupportedAppUsage
+    @TestApi
     public static final int TYPE_WIFI = 3;
 
     /**
      * Display type: Overlay display.
      * @hide
      */
+    @TestApi
     public static final int TYPE_OVERLAY = 4;
 
     /**
@@ -286,6 +291,7 @@ public final class Display {
      * @hide
      */
     @UnsupportedAppUsage
+    @TestApi
     public static final int TYPE_VIRTUAL = 5;
 
     /**
@@ -569,6 +575,7 @@ public final class Display {
      * @hide
      */
     @UnsupportedAppUsage
+    @TestApi
     public int getType() {
         return mType;
     }
@@ -673,7 +680,7 @@ public final class Display {
      *
      * @param outSize A {@link Point} object to receive the size information.
      * @deprecated Use {@link WindowManager#getCurrentWindowMetrics()} to obtain an instance of
-     * {@link WindowMetrics} and use {@link WindowMetrics#getSize()} instead.
+     * {@link WindowMetrics} and use {@link WindowMetrics#getBounds()} instead.
      */
     @Deprecated
     public void getSize(Point outSize) {
@@ -689,7 +696,7 @@ public final class Display {
      * Gets the size of the display as a rectangle, in pixels.
      *
      * @param outSize A {@link Rect} object to receive the size information.
-     * @deprecated Use {@link WindowMetrics#getSize()} to get the dimensions of the application
+     * @deprecated Use {@link WindowMetrics#getBounds()} to get the dimensions of the application
      * window area.
      */
     @Deprecated
@@ -755,7 +762,7 @@ public final class Display {
     }
 
     /**
-     * @deprecated Use {@link WindowMetrics#getSize()} instead.
+     * @deprecated Use {@link WindowMetrics#getBounds#width()} instead.
      */
     @Deprecated
     public int getWidth() {
@@ -766,7 +773,7 @@ public final class Display {
     }
 
     /**
-     * @deprecated Use {@link WindowMetrics#getSize()} instead.
+     * @deprecated Use {@link WindowMetrics#getBounds()#height()} instead.
      */
     @Deprecated
     public int getHeight() {
@@ -1105,7 +1112,7 @@ public final class Display {
      * </p>
      *
      * @param outMetrics A {@link DisplayMetrics} object to receive the metrics.
-     * @deprecated Use {@link WindowMetrics#getSize()} to get the dimensions of the application
+     * @deprecated Use {@link WindowMetrics#getBounds()} to get the dimensions of the application
      * window area, and {@link Configuration#densityDpi} to get the current density.
      */
     @Deprecated
@@ -1304,6 +1311,15 @@ public final class Display {
      */
     public static boolean isDozeState(int state) {
         return state == STATE_DOZE || state == STATE_DOZE_SUSPEND;
+    }
+
+    /**
+     * Returns true if the display is in active state such as {@link #STATE_ON}
+     * or {@link #STATE_VR}.
+     * @hide
+     */
+    public static boolean isActiveState(int state) {
+        return state == STATE_ON || state == STATE_VR;
     }
 
     /**

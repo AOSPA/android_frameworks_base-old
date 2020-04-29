@@ -16,6 +16,7 @@
 
 package com.android.systemui.statusbar.notification.row;
 
+import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.app.Notification;
 import android.app.PendingIntent;
@@ -159,7 +160,7 @@ public class NotificationContentView extends FrameLayout {
     private int mContentHeightAtAnimationStart = UNDEFINED;
     private boolean mFocusOnVisibilityChange;
     private boolean mHeadsUpAnimatingAway;
-    private boolean mIconsVisible;
+    private boolean mShelfIconVisible;
     private int mClipBottomAmount;
     private boolean mIsLowPriority;
     private boolean mIsContentExpandable;
@@ -385,6 +386,7 @@ public class NotificationContentView extends FrameLayout {
      */
     public void setContractedChild(@Nullable View child) {
         if (mContractedChild != null) {
+            mOnContentViewInactiveListeners.remove(mContractedChild);
             mContractedChild.animate().cancel();
             removeView(mContractedChild);
         }
@@ -432,6 +434,7 @@ public class NotificationContentView extends FrameLayout {
                     ((ViewGroup)mExpandedRemoteInput.getParent()).removeView(mExpandedRemoteInput);
                 }
             }
+            mOnContentViewInactiveListeners.remove(mExpandedChild);
             mExpandedChild.animate().cancel();
             removeView(mExpandedChild);
             mExpandedRemoteInput = null;
@@ -470,6 +473,7 @@ public class NotificationContentView extends FrameLayout {
                     ((ViewGroup)mHeadsUpRemoteInput.getParent()).removeView(mHeadsUpRemoteInput);
                 }
             }
+            mOnContentViewInactiveListeners.remove(mHeadsUpChild);
             mHeadsUpChild.animate().cancel();
             removeView(mHeadsUpChild);
             mHeadsUpRemoteInput = null;
@@ -985,6 +989,14 @@ public class NotificationContentView extends FrameLayout {
         }
     }
 
+    public @NonNull View[] getAllViews() {
+        return new View[] {
+                mContractedChild,
+                mHeadsUpChild,
+                mExpandedChild,
+                mSingleLineView };
+    }
+
     public NotificationViewWrapper getVisibleWrapper(int visibleType) {
         switch (visibleType) {
             case VISIBLE_TYPE_EXPANDED:
@@ -1108,7 +1120,6 @@ public class NotificationContentView extends FrameLayout {
 
     public void onNotificationUpdated(NotificationEntry entry) {
         mStatusBarNotification = entry.getSbn();
-        mOnContentViewInactiveListeners.clear();
         mBeforeN = entry.targetSdk < Build.VERSION_CODES.N;
         updateAllSingleLineViews();
         ExpandableNotificationRow row = entry.getRow();
@@ -1468,35 +1479,28 @@ public class NotificationContentView extends FrameLayout {
     }
 
     public void showAppOpsIcons(ArraySet<Integer> activeOps) {
-        if (mContractedChild != null && mContractedWrapper.getNotificationHeader() != null) {
-            mContractedWrapper.getNotificationHeader().showAppOpsIcons(activeOps);
+        if (mContractedChild != null) {
+            mContractedWrapper.showAppOpsIcons(activeOps);
         }
-        if (mExpandedChild != null && mExpandedWrapper.getNotificationHeader() != null) {
-            mExpandedWrapper.getNotificationHeader().showAppOpsIcons(activeOps);
+        if (mExpandedChild != null) {
+            mExpandedWrapper.showAppOpsIcons(activeOps);
         }
-        if (mHeadsUpChild != null && mHeadsUpWrapper.getNotificationHeader() != null) {
-            mHeadsUpWrapper.getNotificationHeader().showAppOpsIcons(activeOps);
+        if (mHeadsUpChild != null) {
+            mHeadsUpWrapper.showAppOpsIcons(activeOps);
         }
     }
 
     /** Sets whether the notification being displayed audibly alerted the user. */
     public void setRecentlyAudiblyAlerted(boolean audiblyAlerted) {
-        if (mContractedChild != null && mContractedWrapper.getNotificationHeader() != null) {
-            mContractedWrapper.getNotificationHeader().setRecentlyAudiblyAlerted(audiblyAlerted);
-        }
-        if (mExpandedChild != null && mExpandedWrapper.getNotificationHeader() != null) {
-            mExpandedWrapper.getNotificationHeader().setRecentlyAudiblyAlerted(audiblyAlerted);
-        }
-        if (mHeadsUpChild != null && mHeadsUpWrapper.getNotificationHeader() != null) {
-            mHeadsUpWrapper.getNotificationHeader().setRecentlyAudiblyAlerted(audiblyAlerted);
-        }
-    }
-
-    public NotificationHeaderView getContractedNotificationHeader() {
         if (mContractedChild != null) {
-            return mContractedWrapper.getNotificationHeader();
+            mContractedWrapper.setRecentlyAudiblyAlerted(audiblyAlerted);
         }
-        return null;
+        if (mExpandedChild != null) {
+            mExpandedWrapper.setRecentlyAudiblyAlerted(audiblyAlerted);
+        }
+        if (mHeadsUpChild != null) {
+            mHeadsUpWrapper.setRecentlyAudiblyAlerted(audiblyAlerted);
+        }
     }
 
     public NotificationHeaderView getVisibleNotificationHeader() {
@@ -1589,29 +1593,20 @@ public class NotificationContentView extends FrameLayout {
         mFocusOnVisibilityChange = true;
     }
 
-    public void setIconsVisible(boolean iconsVisible) {
-        mIconsVisible = iconsVisible;
+    public void setShelfIconVisible(boolean iconsVisible) {
+        mShelfIconVisible = iconsVisible;
         updateIconVisibilities();
     }
 
     private void updateIconVisibilities() {
         if (mContractedWrapper != null) {
-            NotificationHeaderView header = mContractedWrapper.getNotificationHeader();
-            if (header != null) {
-                header.getIcon().setForceHidden(!mIconsVisible);
-            }
+            mContractedWrapper.setShelfIconVisible(mShelfIconVisible);
         }
         if (mHeadsUpWrapper != null) {
-            NotificationHeaderView header = mHeadsUpWrapper.getNotificationHeader();
-            if (header != null) {
-                header.getIcon().setForceHidden(!mIconsVisible);
-            }
+            mHeadsUpWrapper.setShelfIconVisible(mShelfIconVisible);
         }
         if (mExpandedWrapper != null) {
-            NotificationHeaderView header = mExpandedWrapper.getNotificationHeader();
-            if (header != null) {
-                header.getIcon().setForceHidden(!mIconsVisible);
-            }
+            mExpandedWrapper.setShelfIconVisible(mShelfIconVisible);
         }
     }
 
@@ -1639,7 +1634,7 @@ public class NotificationContentView extends FrameLayout {
      * @param visibleType visible type corresponding to the content view to listen
      * @param listener runnable to run once when the content view becomes inactive
      */
-    public void performWhenContentInactive(int visibleType, Runnable listener) {
+    void performWhenContentInactive(int visibleType, Runnable listener) {
         View view = getViewForVisibleType(visibleType);
         // View is already inactive
         if (view == null || isContentViewInactive(visibleType)) {
@@ -1647,6 +1642,22 @@ public class NotificationContentView extends FrameLayout {
             return;
         }
         mOnContentViewInactiveListeners.put(view, listener);
+    }
+
+    /**
+     * Remove content inactive listeners for a given content view . See
+     * {@link #performWhenContentInactive}.
+     *
+     * @param visibleType visible type corresponding to the content type
+     */
+    void removeContentInactiveRunnable(int visibleType) {
+        View view = getViewForVisibleType(visibleType);
+        // View is already inactive
+        if (view == null) {
+            return;
+        }
+
+        mOnContentViewInactiveListeners.remove(view);
     }
 
     /**
@@ -1841,5 +1852,24 @@ public class NotificationContentView extends FrameLayout {
 
     public RemoteInputView getExpandedRemoteInput() {
         return mExpandedRemoteInput;
+    }
+
+    /**
+     * @return get the transformation target of the shelf, which usually is the icon
+     */
+    public View getShelfTransformationTarget() {
+        NotificationViewWrapper visibleWrapper = getVisibleWrapper(mVisibleType);
+        if (visibleWrapper != null) {
+            return visibleWrapper.getShelfTransformationTarget();
+        }
+        return null;
+    }
+
+    public int getOriginalIconColor() {
+        NotificationViewWrapper visibleWrapper = getVisibleWrapper(mVisibleType);
+        if (visibleWrapper != null) {
+            return visibleWrapper.getOriginalIconColor();
+        }
+        return Notification.COLOR_INVALID;
     }
 }

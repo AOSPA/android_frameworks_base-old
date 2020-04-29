@@ -40,8 +40,10 @@ public interface InsetsAnimationControlCallbacks {
 
     /**
      * Schedule the apply by posting the animation callback.
+     *
+     * @param runner The runner that requested applying insets
      */
-    void scheduleApplyChangeInsets();
+    void scheduleApplyChangeInsets(InsetsAnimationControlRunner runner);
 
     /**
      * Finish the final steps after the animation.
@@ -56,4 +58,10 @@ public interface InsetsAnimationControlCallbacks {
      *               apply.
      */
     void applySurfaceParams(SyncRtSurfaceTransactionApplier.SurfaceParams... params);
+
+    /**
+     * Post a message to release the Surface, guaranteed to happen after all
+     * previous calls to applySurfaceParams.
+     */
+    void releaseSurfaceControlFromRt(SurfaceControl sc);
 }

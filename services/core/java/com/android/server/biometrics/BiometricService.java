@@ -24,6 +24,7 @@ import static android.hardware.biometrics.BiometricAuthenticator.TYPE_NONE;
 import static android.hardware.biometrics.BiometricManager.Authenticators;
 
 import android.annotation.IntDef;
+import android.annotation.Nullable;
 import android.app.ActivityManager;
 import android.app.IActivityManager;
 import android.app.UserSwitchObserver;
@@ -111,6 +112,7 @@ public class BiometricService extends SystemService {
     private static final int MSG_CANCEL_AUTHENTICATION = 10;
     private static final int MSG_ON_AUTHENTICATION_TIMED_OUT = 11;
     private static final int MSG_ON_DEVICE_CREDENTIAL_PRESSED = 12;
+    private static final int MSG_ON_SYSTEM_EVENT = 13;
 
     /**
      * Authentication either just called and we have not transitioned to the CALLED state, or
@@ -265,7 +267,8 @@ public class BiometricService extends SystemService {
                     SomeArgs args = (SomeArgs) msg.obj;
                     handleAuthenticationSucceeded(
                             (boolean) args.arg1 /* requireConfirmation */,
-                            (byte[]) args.arg2 /* token */);
+                            (byte[]) args.arg2 /* token */,
+                            (boolean) args.arg3 /* isStrongBiometric */);
                     args.recycle();
                     break;
                 }
@@ -296,7 +299,7 @@ public class BiometricService extends SystemService {
                 }
 
                 case MSG_ON_DISMISSED: {
-                    handleOnDismissed(msg.arg1);
+                    handleOnDismissed(msg.arg1, (byte[]) msg.obj);
                     break;
                 }
 
@@ -355,6 +358,11 @@ public class BiometricService extends SystemService {
 
                 case MSG_ON_DEVICE_CREDENTIAL_PRESSED: {
                     handleOnDeviceCredentialPressed();
+                    break;
+                }
+
+                case MSG_ON_SYSTEM_EVENT: {
+                    handleOnSystemEvent((int) msg.obj);
                     break;
                 }
 
@@ -567,10 +575,12 @@ public class BiometricService extends SystemService {
     final IBiometricServiceReceiverInternal mInternalReceiver =
             new IBiometricServiceReceiverInternal.Stub() {
         @Override
-        public void onAuthenticationSucceeded(boolean requireConfirmation, byte[] token) {
+        public void onAuthenticationSucceeded(boolean requireConfirmation, byte[] token,
+                boolean isStrongBiometric) {
             SomeArgs args = SomeArgs.obtain();
             args.arg1 = requireConfirmation;
             args.arg2 = token;
+            args.arg3 = isStrongBiometric;
             mHandler.obtainMessage(MSG_ON_AUTHENTICATION_SUCCEEDED, args).sendToTarget();
         }
 
@@ -611,8 +621,12 @@ public class BiometricService extends SystemService {
         }
 
         @Override
-        public void onDialogDismissed(int reason) throws RemoteException {
-            mHandler.obtainMessage(MSG_ON_DISMISSED, reason, 0 /* arg2 */).sendToTarget();
+        public void onDialogDismissed(int reason, @Nullable byte[] credentialAttestation)
+                throws RemoteException {
+            mHandler.obtainMessage(MSG_ON_DISMISSED,
+                    reason,
+                    0 /* arg2 */,
+                    credentialAttestation /* obj */).sendToTarget();
         }
 
         @Override
@@ -623,6 +637,11 @@ public class BiometricService extends SystemService {
         @Override
         public void onDeviceCredentialPressed() {
             mHandler.sendEmptyMessage(MSG_ON_DEVICE_CREDENTIAL_PRESSED);
+        }
+
+        @Override
+        public void onSystemEvent(int event) {
+            mHandler.obtainMessage(MSG_ON_SYSTEM_EVENT, event).sendToTarget();
         }
     };
 
@@ -756,8 +775,13 @@ public class BiometricService extends SystemService {
                         + " config_biometric_sensors?");
             }
 
+            // Note that we allow BIOMETRIC_CONVENIENCE to register because BiometricService
+            // also does / will do other things such as keep track of lock screen timeout, etc.
+            // Just because a biometric is registered does not mean it can participate in
+            // the android.hardware.biometrics APIs.
             if (strength != Authenticators.BIOMETRIC_STRONG
-                    && strength != Authenticators.BIOMETRIC_WEAK) {
+                    && strength != Authenticators.BIOMETRIC_WEAK
+                    && strength != Authenticators.BIOMETRIC_CONVENIENCE) {
                 throw new IllegalStateException("Unsupported strength");
             }
 
@@ -1184,8 +1208,10 @@ public class BiometricService extends SystemService {
                         BiometricConstants.BIOMETRIC_ERROR_NO_DEVICE_CREDENTIAL);
             }
         } else {
+            // This should not be possible via the public API surface and is here mainly for
+            // "correctness". An exception should have been thrown before getting here.
             Slog.e(TAG, "No authenticators requested");
-            return new Pair<>(TYPE_NONE, BiometricConstants.BIOMETRIC_ERROR_HW_UNAVAILABLE);
+            return new Pair<>(TYPE_NONE, BiometricConstants.BIOMETRIC_ERROR_HW_NOT_PRESENT);
         }
     }
 
@@ -1281,7 +1307,8 @@ public class BiometricService extends SystemService {
         return modality;
     }
 
-    private void handleAuthenticationSucceeded(boolean requireConfirmation, byte[] token) {
+    private void handleAuthenticationSucceeded(boolean requireConfirmation, byte[] token,
+            boolean isStrongBiometric) {
         try {
             // Should never happen, log this to catch bad HAL behavior (e.g. auth succeeded
             // after user dismissed/canceled dialog).
@@ -1290,9 +1317,16 @@ public class BiometricService extends SystemService {
                 return;
             }
 
-            // Store the auth token and submit it to keystore after the dialog is confirmed /
-            // animating away.
-            mCurrentAuthSession.mTokenEscrow = token;
+            if (isStrongBiometric) {
+                // Store the auth token and submit it to keystore after the dialog is confirmed /
+                // animating away.
+                mCurrentAuthSession.mTokenEscrow = token;
+            } else {
+                if (token != null) {
+                    Slog.w(TAG, "Dropping authToken for non-strong biometric");
+                }
+            }
+
             if (!requireConfirmation) {
                 mCurrentAuthSession.mState = STATE_AUTHENTICATED_PENDING_SYSUI;
             } else {
@@ -1422,7 +1456,8 @@ public class BiometricService extends SystemService {
                                 0 /* biometricModality */,
                                 false /* requireConfirmation */,
                                 mCurrentAuthSession.mUserId,
-                                mCurrentAuthSession.mOpPackageName);
+                                mCurrentAuthSession.mOpPackageName,
+                                mCurrentAuthSession.mSessionId);
                     } else {
                         mPendingAuthSession.mClientReceiver.onError(modality, error, vendorCode);
                         mPendingAuthSession = null;
@@ -1458,7 +1493,7 @@ public class BiometricService extends SystemService {
         }
     }
 
-    private void handleOnDismissed(int reason) {
+    private void handleOnDismissed(int reason, @Nullable byte[] credentialAttestation) {
         if (mCurrentAuthSession == null) {
             Slog.e(TAG, "onDismissed: " + reason + ", auth session null");
             return;
@@ -1469,6 +1504,7 @@ public class BiometricService extends SystemService {
         try {
             switch (reason) {
                 case BiometricPrompt.DISMISSED_REASON_CREDENTIAL_CONFIRMED:
+                    mKeyStore.addAuthToken(credentialAttestation);
                 case BiometricPrompt.DISMISSED_REASON_BIOMETRIC_CONFIRMED:
                 case BiometricPrompt.DISMISSED_REASON_BIOMETRIC_CONFIRM_NOT_REQUIRED:
                     if (mCurrentAuthSession.mTokenEscrow != null) {
@@ -1554,6 +1590,27 @@ public class BiometricService extends SystemService {
         mCurrentAuthSession.mState = STATE_SHOWING_DEVICE_CREDENTIAL;
     }
 
+    private void handleOnSystemEvent(int event) {
+        final boolean shouldReceive = mCurrentAuthSession.mBundle
+                .getBoolean(BiometricPrompt.KEY_RECEIVE_SYSTEM_EVENTS, false);
+        Slog.d(TAG, "onSystemEvent: " + event + ", shouldReceive: " + shouldReceive);
+
+        if (mCurrentAuthSession == null) {
+            Slog.e(TAG, "Auth session null");
+            return;
+        }
+
+        if (!shouldReceive) {
+            return;
+        }
+
+        try {
+            mCurrentAuthSession.mClientReceiver.onSystemEvent(event);
+        } catch (RemoteException e) {
+            Slog.e(TAG, "RemoteException", e);
+        }
+    }
+
     /**
      * Invoked when each service has notified that its client is ready to be started. When
      * all biometrics are ready, this invokes the SystemUI dialog through StatusBar.
@@ -1616,7 +1673,8 @@ public class BiometricService extends SystemService {
                 try {
                     mStatusBarService.showAuthenticationDialog(mCurrentAuthSession.mBundle,
                             mInternalReceiver, modality, requireConfirmation, userId,
-                            mCurrentAuthSession.mOpPackageName);
+                            mCurrentAuthSession.mOpPackageName,
+                            mCurrentAuthSession.mSessionId);
                 } catch (RemoteException e) {
                     Slog.e(TAG, "Remote exception", e);
                 }
@@ -1701,7 +1759,8 @@ public class BiometricService extends SystemService {
                         0 /* biometricModality */,
                         false /* requireConfirmation */,
                         mCurrentAuthSession.mUserId,
-                        mCurrentAuthSession.mOpPackageName);
+                        mCurrentAuthSession.mOpPackageName,
+                        sessionId);
             } else {
                 mPendingAuthSession.mState = STATE_AUTH_CALLED;
                 for (AuthenticatorWrapper authenticator : mAuthenticators) {

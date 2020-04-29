@@ -26,6 +26,7 @@ import android.util.ArrayMap;
 import android.util.ArraySet;
 import android.util.proto.ProtoOutputStream;
 
+import com.android.internal.annotations.VisibleForTesting;
 import com.android.server.pm.parsing.pkg.AndroidPackage;
 import com.android.server.pm.permission.PermissionsState;
 import com.android.server.pm.pkg.PackageStateUnserialized;
@@ -43,6 +44,7 @@ import java.util.Set;
 public class PackageSetting extends PackageSettingBase {
     int appId;
 
+    @Nullable
     public AndroidPackage pkg;
     /**
      * WARNING. The object reference is important. We perform integer equality and NOT
@@ -68,7 +70,8 @@ public class PackageSetting extends PackageSettingBase {
     @NonNull
     private PackageStateUnserialized pkgState = new PackageStateUnserialized();
 
-    PackageSetting(String name, String realName, File codePath, File resourcePath,
+    @VisibleForTesting(visibility = VisibleForTesting.Visibility.PACKAGE)
+    public PackageSetting(String name, String realName, File codePath, File resourcePath,
             String legacyNativeLibraryPathString, String primaryCpuAbiString,
             String secondaryCpuAbiString, String cpuAbiOverrideString,
             long pVersionCode, int pkgFlags, int privateFlags,
@@ -241,7 +244,8 @@ public class PackageSetting extends PackageSettingBase {
     public boolean setMimeGroup(String mimeGroup, List<String> mimeTypes) {
         ArraySet<String> oldMimeTypes = getMimeGroupInternal(mimeGroup);
         if (oldMimeTypes == null) {
-            return false;
+            throw new IllegalArgumentException("Unknown MIME group " + mimeGroup
+                    + " for package " + name);
         }
 
         ArraySet<String> newMimeTypes = new ArraySet<>(mimeTypes);
@@ -250,21 +254,11 @@ public class PackageSetting extends PackageSettingBase {
         return hasChanges;
     }
 
-    public boolean clearMimeGroup(String mimeGroup) {
-        ArraySet<String> mimeTypes = getMimeGroupInternal(mimeGroup);
-
-        if (mimeTypes == null || mimeTypes.isEmpty()) {
-            return false;
-        }
-
-        mimeTypes.clear();
-        return true;
-    }
-
     public List<String> getMimeGroup(String mimeGroup) {
         ArraySet<String> mimeTypes = getMimeGroupInternal(mimeGroup);
         if (mimeTypes == null) {
-            return null;
+            throw new IllegalArgumentException("Unknown MIME group " + mimeGroup
+                    + " for package " + name);
         }
         return new ArrayList<>(mimeTypes);
     }

@@ -125,7 +125,6 @@ public final class DefaultPermissionGrantPolicy {
 
 
     static {
-        PHONE_PERMISSIONS.add(Manifest.permission.READ_PHONE_STATE);
         PHONE_PERMISSIONS.add(Manifest.permission.CALL_PHONE);
         PHONE_PERMISSIONS.add(Manifest.permission.READ_CALL_LOG);
         PHONE_PERMISSIONS.add(Manifest.permission.WRITE_CALL_LOG);
@@ -883,7 +882,7 @@ public final class DefaultPermissionGrantPolicy {
 
     public void grantDefaultPermissionsToDefaultBrowser(String packageName, int userId) {
         Log.i(TAG, "Granting permissions to default browser for user:" + userId);
-        grantPermissionsToSystemPackage(packageName, userId, ALWAYS_LOCATION_PERMISSIONS);
+        grantPermissionsToSystemPackage(packageName, userId, FOREGROUND_LOCATION_PERMISSIONS);
     }
 
     private String getDefaultSystemHandlerActivityPackage(String intentAction, int userId) {

@@ -20,7 +20,6 @@ import static android.content.pm.PackageManager.PERMISSION_GRANTED;
 import android.Manifest;
 import android.annotation.Nullable;
 import android.app.AppOpsManager;
-import android.app.admin.DevicePolicyManager;
 import android.content.Context;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
@@ -28,6 +27,7 @@ import android.os.Binder;
 import android.os.Build;
 import android.os.Process;
 import android.os.UserHandle;
+import android.permission.PermissionManager;
 import android.telephony.SubscriptionManager;
 import android.telephony.TelephonyManager;
 import android.util.Log;
@@ -303,14 +303,10 @@ public final class TelephonyPermissions {
             String message, boolean allowCarrierPrivilegeOnAnySub) {
         int uid = Binder.getCallingUid();
         int pid = Binder.getCallingPid();
-        // Allow system and root access to the device identifiers.
-        final int appId = UserHandle.getAppId(uid);
-        if (appId == Process.SYSTEM_UID || appId == Process.ROOT_UID) {
-            return true;
-        }
-        // Allow access to packages that have the READ_PRIVILEGED_PHONE_STATE permission.
-        if (context.checkPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE, pid,
-                uid) == PackageManager.PERMISSION_GRANTED) {
+        PermissionManager permissionManager = (PermissionManager) context.getSystemService(
+                Context.PERMISSION_SERVICE);
+        if (permissionManager.checkDeviceIdentifierAccess(callingPackage, message, callingFeatureId,
+                pid, uid) == PackageManager.PERMISSION_GRANTED) {
             return true;
         }
 
@@ -323,30 +319,6 @@ public final class TelephonyPermissions {
             return true;
         }
 
-        // if the calling package is not null then perform the DevicePolicyManager device /
-        // profile owner and Appop checks.
-        if (callingPackage != null) {
-            // Allow access to an app that has been granted the READ_DEVICE_IDENTIFIERS app op.
-            long token = Binder.clearCallingIdentity();
-            AppOpsManager appOpsManager = (AppOpsManager) context.getSystemService(
-                    Context.APP_OPS_SERVICE);
-            try {
-                if (appOpsManager.noteOpNoThrow(AppOpsManager.OPSTR_READ_DEVICE_IDENTIFIERS, uid,
-                        callingPackage, callingFeatureId, null) == AppOpsManager.MODE_ALLOWED) {
-                    return true;
-                }
-            } finally {
-                Binder.restoreCallingIdentity(token);
-            }
-            // Allow access to a device / profile owner app.
-            DevicePolicyManager devicePolicyManager =
-                    (DevicePolicyManager) context.getSystemService(
-                            Context.DEVICE_POLICY_SERVICE);
-            if (devicePolicyManager != null && devicePolicyManager.hasDeviceIdentifierAccess(
-                    callingPackage, pid, uid)) {
-                return true;
-            }
-        }
         return reportAccessDeniedToReadIdentifiers(context, subId, pid, uid, callingPackage,
                 message);
     }
@@ -389,7 +361,8 @@ public final class TelephonyPermissions {
             TelephonyCommonStatsLog.write(TelephonyCommonStatsLog.DEVICE_IDENTIFIER_ACCESS_DENIED,
                     callingPackage, message, /* isPreinstalled= */ false, false);
         }
-        Log.w(LOG_TAG, "reportAccessDeniedToReadIdentifiers:" + callingPackage + ":" + message);
+        Log.w(LOG_TAG, "reportAccessDeniedToReadIdentifiers:" + callingPackage + ":" + message + ":"
+                + subId);
         // if the target SDK is pre-Q then check if the calling package would have previously
         // had access to device identifiers.
         if (callingPackageInfo != null && (
@@ -437,8 +410,9 @@ public final class TelephonyPermissions {
     /**
      * Returns whether the caller can read phone numbers.
      *
-     * <p>Besides apps with the ability to read phone state per {@link #checkReadPhoneState}, the
-     * default SMS app and apps with READ_SMS or READ_PHONE_NUMBERS can also read phone numbers.
+     * <p>Besides apps with the ability to read phone state per {@link #checkReadPhoneState}
+     * (only prior to R), the default SMS app and apps with READ_SMS or READ_PHONE_NUMBERS
+     * can also read phone numbers.
      */
     public static boolean checkCallingOrSelfReadPhoneNumber(
             Context context, int subId, String callingPackage, @Nullable String callingFeatureId,
@@ -451,8 +425,9 @@ public final class TelephonyPermissions {
     /**
      * Returns whether the caller can read phone numbers.
      *
-     * <p>Besides apps with the ability to read phone state per {@link #checkReadPhoneState}, the
-     * default SMS app and apps with READ_SMS or READ_PHONE_NUMBERS can also read phone numbers.
+     * <p>Besides apps with the ability to read phone state per {@link #checkReadPhoneState}
+     * (only prior to R), the default SMS app and apps with READ_SMS or READ_PHONE_NUMBERS
+     * can also read phone numbers.
      */
     @VisibleForTesting
     public static boolean checkReadPhoneNumber(
@@ -468,13 +443,40 @@ public final class TelephonyPermissions {
         // NOTE(b/73308711): If an app has one of the following AppOps bits explicitly revoked, they
         // will be denied access, even if they have another permission and AppOps bit if needed.
 
-        // First, check if we can read the phone state.
+        // First, check if the SDK version is below R
+        boolean preR = false;
         try {
-            return checkReadPhoneState(
-                    context, subId, pid, uid, callingPackage, callingFeatureId,
-                    message);
-        } catch (SecurityException readPhoneStateSecurityException) {
+            ApplicationInfo info = context.getPackageManager().getApplicationInfoAsUser(
+                    callingPackage, 0, UserHandle.getUserHandleForUid(Binder.getCallingUid()));
+            preR = info.targetSdkVersion <= Build.VERSION_CODES.Q;
+        } catch (PackageManager.NameNotFoundException nameNotFoundException) {
         }
+        if (preR) {
+            // SDK < R allows READ_PHONE_STATE, READ_PRIVILEGED_PHONE_STATE, or carrier privilege
+            try {
+                return checkReadPhoneState(
+                        context, subId, pid, uid, callingPackage, callingFeatureId, message);
+            } catch (SecurityException readPhoneStateException) {
+            }
+        } else {
+            // SDK >= R allows READ_PRIVILEGED_PHONE_STATE or carrier privilege
+            try {
+                context.enforcePermission(
+                        android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE, pid, uid, message);
+                // Skip checking for runtime permission since caller has privileged permission
+                return true;
+            } catch (SecurityException readPrivilegedPhoneStateException) {
+                if (SubscriptionManager.isValidSubscriptionId(subId)) {
+                    try {
+                        enforceCarrierPrivilege(context, subId, uid, message);
+                        // Skip checking for runtime permission since caller has carrier privilege
+                        return true;
+                    } catch (SecurityException carrierPrivilegeException) {
+                    }
+                }
+            }
+        }
+
         // Can be read with READ_SMS too.
         try {
             context.enforcePermission(android.Manifest.permission.READ_SMS, pid, uid, message);
@@ -611,7 +613,7 @@ public final class TelephonyPermissions {
     private static boolean checkCarrierPrivilegeForAnySubId(Context context, int uid) {
         SubscriptionManager sm = (SubscriptionManager) context.getSystemService(
                 Context.TELEPHONY_SUBSCRIPTION_SERVICE);
-        int[] activeSubIds = sm.getActiveAndHiddenSubscriptionIdList();
+        int[] activeSubIds = sm.getCompleteActiveSubscriptionIdList();
         for (int activeSubId : activeSubIds) {
             if (getCarrierPrivilegeStatus(context, activeSubId, uid)
                     == TelephonyManager.CARRIER_PRIVILEGE_STATUS_HAS_ACCESS) {

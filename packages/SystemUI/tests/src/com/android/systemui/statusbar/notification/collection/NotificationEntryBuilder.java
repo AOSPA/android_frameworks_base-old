@@ -48,7 +48,7 @@ public class NotificationEntryBuilder {
 
     /* ListEntry properties */
     private GroupEntry mParent;
-    private int mSection;
+    private int mSection = -1;
 
     public NotificationEntry build() {
         StatusBarNotification sbn = mSbn != null ? mSbn : mSbnBuilder.build();
@@ -57,7 +57,7 @@ public class NotificationEntryBuilder {
 
         /* ListEntry properties */
         entry.setParent(mParent);
-        entry.setSection(mSection);
+        entry.getAttachState().setSectionIndex(mSection);
         return entry;
     }
 

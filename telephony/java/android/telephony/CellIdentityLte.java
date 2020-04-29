@@ -76,6 +76,7 @@ public final class CellIdentityLte extends CellIdentity {
         mBandwidth = CellInfo.UNAVAILABLE;
         mAdditionalPlmns = new ArraySet<>();
         mCsgInfo = null;
+        mGlobalCellId = null;
     }
 
     /**
@@ -130,6 +131,7 @@ public final class CellIdentityLte extends CellIdentity {
             }
         }
         mCsgInfo = csgInfo;
+        updateGlobalCellId();
     }
 
     /** @hide */
@@ -150,9 +152,7 @@ public final class CellIdentityLte extends CellIdentity {
         this(cid.base.base.ci, cid.base.base.pci, cid.base.base.tac, cid.base.base.earfcn,
                 cid.bands.stream().mapToInt(Integer::intValue).toArray(), cid.base.bandwidth,
                 cid.base.base.mcc, cid.base.base.mnc, cid.base.operatorNames.alphaLong,
-                cid.base.operatorNames.alphaShort, cid.additionalPlmns,
-                cid.optionalCsgInfo.csgInfo() != null
-                        ? new ClosedSubscriberGroupInfo(cid.optionalCsgInfo.csgInfo()) : null);
+                cid.base.operatorNames.alphaShort, cid.additionalPlmns, null);
     }
 
     private CellIdentityLte(@NonNull CellIdentityLte cid) {
@@ -170,6 +170,18 @@ public final class CellIdentityLte extends CellIdentity {
 
     @NonNull CellIdentityLte copy() {
         return new CellIdentityLte(this);
+    }
+
+    /** @hide */
+    @Override
+    protected void updateGlobalCellId() {
+        mGlobalCellId = null;
+        String plmn = getPlmn();
+        if (plmn == null) return;
+
+        if (mCi == CellInfo.UNAVAILABLE) return;
+
+        mGlobalCellId = plmn + String.format("%07x", mCi);
     }
 
     /**

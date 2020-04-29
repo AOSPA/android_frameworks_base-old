@@ -17,12 +17,10 @@
 package android.media.tv.tuner.frontend;
 
 import android.annotation.IntDef;
+import android.annotation.IntRange;
 import android.annotation.NonNull;
-import android.annotation.RequiresPermission;
 import android.annotation.SystemApi;
-import android.content.Context;
 import android.hardware.tv.tuner.V1_0.Constants;
-import android.media.tv.tuner.TunerUtils;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -78,27 +76,38 @@ public class AtscFrontendSettings extends FrontendSettings {
 
     /**
      * Creates a builder for {@link AtscFrontendSettings}.
-     *
-     * @param context the context of the caller.
      */
-    @RequiresPermission(android.Manifest.permission.ACCESS_TV_TUNER)
     @NonNull
-    public static Builder builder(@NonNull Context context) {
-        TunerUtils.checkTunerPermission(context);
+    public static Builder builder() {
         return new Builder();
     }
 
     /**
      * Builder for {@link AtscFrontendSettings}.
      */
-    public static class Builder extends FrontendSettings.Builder<Builder> {
-        private int mModulation;
+    public static class Builder {
+        private int mFrequency = 0;
+        private int mModulation = MODULATION_UNDEFINED;
 
         private Builder() {
         }
 
         /**
+         * Sets frequency in Hz.
+         *
+         * <p>Default value is 0.
+         */
+        @NonNull
+        @IntRange(from = 1)
+        public Builder setFrequency(int frequency) {
+            mFrequency = frequency;
+            return this;
+        }
+
+        /**
          * Sets Modulation.
+         *
+         * <p>Default value is {@link #MODULATION_UNDEFINED}.
          */
         @NonNull
         public Builder setModulation(@Modulation int modulation) {
@@ -112,11 +121,6 @@ public class AtscFrontendSettings extends FrontendSettings {
         @NonNull
         public AtscFrontendSettings build() {
             return new AtscFrontendSettings(mFrequency, mModulation);
-        }
-
-        @Override
-        Builder self() {
-            return this;
         }
     }
 

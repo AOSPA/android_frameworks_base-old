@@ -18,11 +18,8 @@ package android.media.tv.tuner.filter;
 
 import android.annotation.NonNull;
 import android.annotation.Nullable;
-import android.annotation.RequiresPermission;
 import android.annotation.Size;
 import android.annotation.SystemApi;
-import android.content.Context;
-import android.media.tv.tuner.TunerUtils;
 
 /**
  * Filter configuration for a IP filter.
@@ -92,13 +89,9 @@ public final class IpFilterConfiguration extends FilterConfiguration {
 
     /**
      * Creates a builder for {@link IpFilterConfiguration}.
-     *
-     * @param context the context of the caller.
      */
-    @RequiresPermission(android.Manifest.permission.ACCESS_TV_TUNER)
     @NonNull
-    public static Builder builder(@NonNull Context context) {
-        TunerUtils.checkTunerPermission(context);
+    public static Builder builder() {
         return new Builder();
     }
 
@@ -106,11 +99,11 @@ public final class IpFilterConfiguration extends FilterConfiguration {
      * Builder for {@link IpFilterConfiguration}.
      */
     public static final class Builder {
-        private byte[] mSrcIpAddress;
-        private byte[] mDstIpAddress;
-        private int mSrcPort;
-        private int mDstPort;
-        private boolean mPassthrough;
+        private byte[] mSrcIpAddress = {0, 0, 0, 0};
+        private byte[] mDstIpAddress = {0, 0, 0, 0};;
+        private int mSrcPort = 0;
+        private int mDstPort = 0;
+        private boolean mPassthrough = false;
         private Settings mSettings;
 
         private Builder() {
@@ -118,6 +111,8 @@ public final class IpFilterConfiguration extends FilterConfiguration {
 
         /**
          * Sets source IP address.
+         *
+         * <p>Default value is 0.0.0.0, an invalid IP address.
          */
         @NonNull
         public Builder setSrcIpAddress(@NonNull byte[] srcIpAddress) {
@@ -126,6 +121,8 @@ public final class IpFilterConfiguration extends FilterConfiguration {
         }
         /**
          * Sets destination IP address.
+         *
+         * <p>Default value is 0.0.0.0, an invalid IP address.
          */
         @NonNull
         public Builder setDstIpAddress(@NonNull byte[] dstIpAddress) {
@@ -134,6 +131,8 @@ public final class IpFilterConfiguration extends FilterConfiguration {
         }
         /**
          * Sets source port.
+         *
+         * <p>Default value is 0.
          */
         @NonNull
         public Builder setSrcPort(int srcPort) {
@@ -142,6 +141,8 @@ public final class IpFilterConfiguration extends FilterConfiguration {
         }
         /**
          * Sets destination port.
+         *
+         * <p>Default value is 0.
          */
         @NonNull
         public Builder setDstPort(int dstPort) {
@@ -150,6 +151,8 @@ public final class IpFilterConfiguration extends FilterConfiguration {
         }
         /**
          * Sets passthrough.
+         *
+         * <p>Default value is {@code false}.
          */
         @NonNull
         public Builder setPassthrough(boolean passthrough) {

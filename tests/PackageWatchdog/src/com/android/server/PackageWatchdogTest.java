@@ -1063,6 +1063,88 @@ public class PackageWatchdogTest {
         assertThat(bootObserver2.mitigatedBootLoop()).isFalse();
     }
 
+    /**
+     * Ensure that passing a null list of failed packages does not cause any mitigation logic to
+     * execute.
+     */
+    @Test
+    public void testNullFailedPackagesList() {
+        PackageWatchdog watchdog = createWatchdog();
+        TestObserver observer1 = new TestObserver(OBSERVER_NAME_1);
+        watchdog.startObservingHealth(observer1, List.of(APP_A), LONG_DURATION);
+
+        raiseFatalFailureAndDispatch(watchdog, null, PackageWatchdog.FAILURE_REASON_APP_CRASH);
+        assertThat(observer1.mMitigatedPackages).isEmpty();
+    }
+
+    /**
+     * Test to verify that Package Watchdog syncs health check requests with the controller
+     * correctly, and that the requests are only synced when the set of observed packages
+     * changes.
+     */
+    @Test
+    public void testSyncHealthCheckRequests() {
+        TestController testController = spy(TestController.class);
+        testController.setSupportedPackages(List.of(APP_A, APP_B, APP_C));
+        PackageWatchdog watchdog = createWatchdog(testController, true);
+
+        TestObserver testObserver1 = new TestObserver(OBSERVER_NAME_1);
+        watchdog.registerHealthObserver(testObserver1);
+        watchdog.startObservingHealth(testObserver1, List.of(APP_A), LONG_DURATION);
+        mTestLooper.dispatchAll();
+
+        TestObserver testObserver2 = new TestObserver(OBSERVER_NAME_2);
+        watchdog.registerHealthObserver(testObserver2);
+        watchdog.startObservingHealth(testObserver2, List.of(APP_B), LONG_DURATION);
+        mTestLooper.dispatchAll();
+
+        TestObserver testObserver3 = new TestObserver(OBSERVER_NAME_3);
+        watchdog.registerHealthObserver(testObserver3);
+        watchdog.startObservingHealth(testObserver3, List.of(APP_C), LONG_DURATION);
+        mTestLooper.dispatchAll();
+
+        watchdog.unregisterHealthObserver(testObserver1);
+        mTestLooper.dispatchAll();
+
+        watchdog.unregisterHealthObserver(testObserver2);
+        mTestLooper.dispatchAll();
+
+        watchdog.unregisterHealthObserver(testObserver3);
+        mTestLooper.dispatchAll();
+
+        List<Set> expectedSyncRequests = List.of(
+                Set.of(APP_A),
+                Set.of(APP_A, APP_B),
+                Set.of(APP_A, APP_B, APP_C),
+                Set.of(APP_B, APP_C),
+                Set.of(APP_C),
+                Set.of()
+        );
+        assertThat(testController.getSyncRequests()).isEqualTo(expectedSyncRequests);
+    }
+
+    /**
+     * Ensure that the failure history of a package is preserved when making duplicate calls to
+     * observe the package.
+     */
+    @Test
+    public void testFailureHistoryIsPreserved() {
+        PackageWatchdog watchdog = createWatchdog();
+        TestObserver observer = new TestObserver(OBSERVER_NAME_1);
+        watchdog.startObservingHealth(observer, List.of(APP_A), SHORT_DURATION);
+        for (int i = 0; i < PackageWatchdog.DEFAULT_TRIGGER_FAILURE_COUNT - 1; i++) {
+            watchdog.onPackageFailure(List.of(new VersionedPackage(APP_A, VERSION_CODE)),
+                    PackageWatchdog.FAILURE_REASON_UNKNOWN);
+        }
+        mTestLooper.dispatchAll();
+        assertThat(observer.mMitigatedPackages).isEmpty();
+        watchdog.startObservingHealth(observer, List.of(APP_A), LONG_DURATION);
+        watchdog.onPackageFailure(List.of(new VersionedPackage(APP_A, VERSION_CODE)),
+                PackageWatchdog.FAILURE_REASON_UNKNOWN);
+        mTestLooper.dispatchAll();
+        assertThat(observer.mMitigatedPackages).isEqualTo(List.of(APP_A));
+    }
+
     private void adoptShellPermissions(String... permissions) {
         InstrumentationRegistry
                 .getInstrumentation()
@@ -1219,6 +1301,7 @@ public class PackageWatchdogTest {
         private Consumer<String> mPassedConsumer;
         private Consumer<List<PackageConfig>> mSupportedConsumer;
         private Runnable mNotifySyncRunnable;
+        private List<Set> mSyncRequests = new ArrayList<>();
 
         @Override
         public void setEnabled(boolean enabled) {
@@ -1238,6 +1321,7 @@ public class PackageWatchdogTest {
 
         @Override
         public void syncRequests(Set<String> packages) {
+            mSyncRequests.add(packages);
             mRequestedPackages.clear();
             if (mIsEnabled) {
                 packages.retainAll(mSupportedPackages);
@@ -1267,6 +1351,10 @@ public class PackageWatchdogTest {
             } else {
                 return Collections.emptyList();
             }
+        }
+
+        public List<Set> getSyncRequests() {
+            return mSyncRequests;
         }
     }
 

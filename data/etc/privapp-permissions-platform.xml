@@ -27,6 +27,10 @@ applications that come with the platform
         <permission name="android.permission.INTERACT_ACROSS_USERS" />
     </privapp-permissions>
 
+    <privapp-permissions package="com.android.angle">
+        <permission name="android.permission.WRITE_SECURE_SETTINGS"/>
+    </privapp-permissions>
+
     <privapp-permissions package="com.android.apps.tag">
         <permission name="android.permission.WRITE_SECURE_SETTINGS"/>
     </privapp-permissions>
@@ -34,11 +38,6 @@ applications that come with the platform
     <privapp-permissions package="com.android.backupconfirm">
         <permission name="android.permission.BACKUP"/>
         <permission name="android.permission.CRYPT_KEEPER"/>
-    </privapp-permissions>
-
-    <privapp-permissions package="com.android.captiveportallogin">
-        <permission name="android.permission.CONNECTIVITY_USE_RESTRICTED_NETWORKS"/>
-        <permission name="android.permission.NETWORK_BYPASS_PRIVATE_DNS"/>
     </privapp-permissions>
 
     <privapp-permissions package="com.android.cellbroadcastreceiver">
@@ -60,6 +59,10 @@ applications that come with the platform
         <permission name="android.permission.MOUNT_UNMOUNT_FILESYSTEMS"/>
         <permission name="android.permission.WRITE_MEDIA_STORAGE"/>
         <permission name="android.permission.MANAGE_EXTERNAL_STORAGE"/>
+    </privapp-permissions>
+
+    <privapp-permissions package="com.android.launcher3">
+        <permission name="android.permission.WRITE_SECURE_SETTINGS"/>
     </privapp-permissions>
 
     <privapp-permissions package="com.android.location.fused">
@@ -134,6 +137,7 @@ applications that come with the platform
         <permission name="android.permission.READ_PRIVILEGED_PHONE_STATE" />
         <permission name="android.permission.SUBSTITUTE_NOTIFICATION_APP_NAME" />
         <permission name="android.permission.PACKAGE_USAGE_STATS" />
+        <permission name="android.permission.CHANGE_COMPONENT_ENABLED_STATE" />
     </privapp-permissions>
 
     <privapp-permissions package="com.android.phone">
@@ -256,6 +260,7 @@ applications that come with the platform
     </privapp-permissions>
 
     <privapp-permissions package="com.android.networkstack.tethering">
+        <permission name="android.permission.BLUETOOTH_PRIVILEGED" />
         <permission name="android.permission.MANAGE_USB"/>
         <permission name="android.permission.MODIFY_PHONE_STATE"/>
         <permission name="android.permission.READ_NETWORK_USAGE_HISTORY"/>
@@ -357,6 +362,7 @@ applications that come with the platform
         <permission name="android.permission.SUSPEND_APPS" />
         <permission name="android.permission.UPDATE_APP_OPS_STATS"/>
         <permission name="android.permission.USE_RESERVED_DISK"/>
+        <permission name="android.permission.WIFI_UPDATE_USABILITY_STATS_SCORE"/>
         <permission name="android.permission.WRITE_MEDIA_STORAGE"/>
         <permission name="android.permission.MANAGE_EXTERNAL_STORAGE"/>
         <permission name="android.permission.WRITE_SECURE_SETTINGS"/>
@@ -396,6 +402,12 @@ applications that come with the platform
         <permission name="android.permission.COMPANION_APPROVE_WIFI_CONNECTIONS" />
         <!-- Permission required for testing registering pull atom callbacks. -->
         <permission name="android.permission.REGISTER_STATS_PULL_ATOM"/>
+        <!-- Permission required for testing system audio effect APIs. -->
+        <permission name="android.permission.MODIFY_DEFAULT_AUDIO_EFFECTS"/>
+        <!-- Permissions required for CTS test - TunerTest -->
+        <permission name="android.permission.ACCESS_TV_DESCRAMBLER" />
+        <permission name="android.permission.ACCESS_TV_TUNER" />
+        <permission name="android.permission.TUNER_RESOURCE_ACCESS" />
     </privapp-permissions>
 
     <privapp-permissions package="com.android.statementservice">

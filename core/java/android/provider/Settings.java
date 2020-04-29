@@ -2624,7 +2624,7 @@ public final class Settings {
                     arg.putBoolean(CALL_METHOD_OVERRIDEABLE_BY_RESTORE_KEY, true);
                 }
                 IContentProvider cp = mProviderHolder.getProvider(cr);
-                cp.call(cr.getPackageName(), cr.getFeatureId(),
+                cp.call(cr.getPackageName(), cr.getAttributionTag(),
                         mProviderHolder.mUri.getAuthority(), mCallSetCommand, name, arg);
             } catch (RemoteException e) {
                 Log.w(TAG, "Can't set key " + name + " in " + mUri, e);
@@ -2644,7 +2644,7 @@ public final class Settings {
                 args.putString(CALL_METHOD_PREFIX_KEY, prefix);
                 args.putSerializable(CALL_METHOD_FLAGS_KEY, keyValues);
                 IContentProvider cp = mProviderHolder.getProvider(cr);
-                Bundle bundle = cp.call(cr.getPackageName(), cr.getFeatureId(),
+                Bundle bundle = cp.call(cr.getPackageName(), cr.getAttributionTag(),
                         mProviderHolder.mUri.getAuthority(),
                         mCallSetAllCommand, null, args);
                 return bundle.getBoolean(KEY_CONFIG_SET_RETURN);
@@ -2719,14 +2719,14 @@ public final class Settings {
                     if (Settings.isInSystemServer() && Binder.getCallingUid() != Process.myUid()) {
                         final long token = Binder.clearCallingIdentity();
                         try {
-                            b = cp.call(cr.getPackageName(), cr.getFeatureId(),
+                            b = cp.call(cr.getPackageName(), cr.getAttributionTag(),
                                     mProviderHolder.mUri.getAuthority(), mCallGetCommand, name,
                                     args);
                         } finally {
                             Binder.restoreCallingIdentity(token);
                         }
                     } else {
-                        b = cp.call(cr.getPackageName(), cr.getFeatureId(),
+                        b = cp.call(cr.getPackageName(), cr.getAttributionTag(),
                                 mProviderHolder.mUri.getAuthority(), mCallGetCommand, name, args);
                     }
                     if (b != null) {
@@ -2796,13 +2796,13 @@ public final class Settings {
                 if (Settings.isInSystemServer() && Binder.getCallingUid() != Process.myUid()) {
                     final long token = Binder.clearCallingIdentity();
                     try {
-                        c = cp.query(cr.getPackageName(), cr.getFeatureId(), mUri,
+                        c = cp.query(cr.getPackageName(), cr.getAttributionTag(), mUri,
                                 SELECT_VALUE_PROJECTION, queryArgs, null);
                     } finally {
                         Binder.restoreCallingIdentity(token);
                     }
                 } else {
-                    c = cp.query(cr.getPackageName(), cr.getFeatureId(), mUri,
+                    c = cp.query(cr.getPackageName(), cr.getAttributionTag(), mUri,
                             SELECT_VALUE_PROJECTION, queryArgs, null);
                 }
                 if (c == null) {
@@ -2895,7 +2895,7 @@ public final class Settings {
                 }
 
                 // Fetch all flags for the namespace at once for caching purposes
-                Bundle b = cp.call(cr.getPackageName(), cr.getFeatureId(),
+                Bundle b = cp.call(cr.getPackageName(), cr.getAttributionTag(),
                         mProviderHolder.mUri.getAuthority(), mCallListCommand, null, args);
                 if (b == null) {
                     // Invalid response, return an empty map
@@ -5544,7 +5544,7 @@ public final class Settings {
                 }
                 arg.putInt(CALL_METHOD_RESET_MODE_KEY, mode);
                 IContentProvider cp = sProviderHolder.getProvider(resolver);
-                cp.call(resolver.getPackageName(), resolver.getFeatureId(),
+                cp.call(resolver.getPackageName(), resolver.getAttributionTag(),
                         sProviderHolder.mUri.getAuthority(), CALL_METHOD_RESET_SECURE, null, arg);
             } catch (RemoteException e) {
                 Log.w(TAG, "Can't reset do defaults for " + CONTENT_URI, e);
@@ -6094,10 +6094,7 @@ public final class Settings {
          * device is removed from this mode.
          * <p>
          * Type: int (0 for false, 1 for true)
-         *
-         * @hide
          */
-        @SystemApi
         public static final String SECURE_FRP_MODE = "secure_frp_mode";
 
         /**
@@ -6579,13 +6576,6 @@ public final class Settings {
          * Setting specifying if the accessibility shortcut is enabled.
          * @hide
          */
-        public static final String ACCESSIBILITY_SHORTCUT_ENABLED =
-                "accessibility_shortcut_enabled";
-
-        /**
-         * Setting specifying if the accessibility shortcut is enabled.
-         * @hide
-         */
         public static final String ACCESSIBILITY_SHORTCUT_ON_LOCK_SCREEN =
                 "accessibility_shortcut_on_lock_screen";
 
@@ -6611,11 +6601,9 @@ public final class Settings {
                 "accessibility_shortcut_target_service";
 
         /**
-         * Setting specifying the accessibility services, accessibility shortcut targets,
-         * or features to be toggled via the accessibility button in the navigation bar.
-         *
-         * <p> This is a colon-separated string list which contains the flattened
-         * {@link ComponentName} and the class name of a system class implementing a supported
+         * Setting specifying the accessibility service or feature to be toggled via the
+         * accessibility button in the navigation bar. This is either a flattened
+         * {@link ComponentName} or the class name of a system class implementing a supported
          * accessibility feature.
          * @hide
          */
@@ -6624,15 +6612,14 @@ public final class Settings {
 
         /**
          * Setting specifying the accessibility services, accessibility shortcut targets,
-         * or features to be toggled via the long press accessibility button in the navigation bar.
+         * or features to be toggled via the accessibility button in the navigation bar.
          *
          * <p> This is a colon-separated string list which contains the flattened
          * {@link ComponentName} and the class name of a system class implementing a supported
          * accessibility feature.
          * @hide
          */
-        public static final String ACCESSIBILITY_BUTTON_LONG_PRESS_TARGETS =
-                "accessibility_button_long_press_targets";
+        public static final String ACCESSIBILITY_BUTTON_TARGETS = "accessibility_button_targets";
 
         /**
          * The system class name of magnification controller which is a target to be toggled via
@@ -6797,8 +6784,8 @@ public final class Settings {
          * zoom in the display content and is targeted to low vision users. The current
          * magnification scale is controlled by {@link #ACCESSIBILITY_DISPLAY_MAGNIFICATION_SCALE}.
          *
-         * @deprecated Use {@link #ACCESSIBILITY_BUTTON_TARGET_COMPONENT} instead.
-         * {@link #ACCESSIBILITY_BUTTON_TARGET_COMPONENT} holds the magnification system class name
+         * @deprecated Use {@link #ACCESSIBILITY_BUTTON_TARGETS} instead.
+         * {@link #ACCESSIBILITY_BUTTON_TARGETS} holds the magnification system class name
          * when navigation bar magnification is enabled.
          * @hide
          */
@@ -8073,8 +8060,11 @@ public final class Settings {
         @RequiresPermission(Manifest.permission.WRITE_SECURE_SETTINGS)
         public static final String SYNC_PARENT_SOUNDS = "sync_parent_sounds";
 
-        /** @hide */
+        /**
+         * @hide
+         */
         @UnsupportedAppUsage
+        @TestApi
         public static final String IMMERSIVE_MODE_CONFIRMATIONS = "immersive_mode_confirmations";
 
         /**
@@ -8512,7 +8502,6 @@ public final class Settings {
          *
          * @hide
          */
-        @SystemApi
         public static final String CARRIER_APPS_HANDLED = "carrier_apps_handled";
 
         /**
@@ -8592,6 +8581,16 @@ public final class Settings {
          * @hide
          */
         public static final String QS_TILES = "sysui_qs_tiles";
+
+        /**
+         * Whether this user has enabled Quick controls.
+         *
+         * 0 indicates disabled and 1 indicates enabled. A non existent value should be treated as
+         * enabled.
+         *
+         * @hide
+         */
+        public static final String CONTROLS_ENABLED = "controls_enabled";
 
         /**
          * Specifies whether the web action API is enabled.
@@ -9662,14 +9661,6 @@ public final class Settings {
                 "location_ignore_settings_package_whitelist";
 
         /**
-         * Maximum staleness allowed for last location when returned to clients with only foreground
-         * location permissions.
-         * @hide
-         */
-        public static final String LOCATION_LAST_LOCATION_MAX_AGE_MILLIS =
-                "location_last_location_max_age_millis";
-
-        /**
         * Whether TV will switch to MHL port when a mobile device is plugged in.
         * (0 = false, 1 = true)
         * @hide
@@ -9734,6 +9725,8 @@ public final class Settings {
        public static final String NETSTATS_SAMPLE_ENABLED = "netstats_sample_enabled";
        /** {@hide} */
        public static final String NETSTATS_AUGMENT_ENABLED = "netstats_augment_enabled";
+       /** {@hide} */
+       public static final String NETSTATS_COMBINE_SUBTYPE_ENABLED = "netstats_combine_subtype_enabled";
 
        /** {@hide} */
        public static final String NETSTATS_DEV_BUCKET_DURATION = "netstats_dev_bucket_duration";
@@ -10349,6 +10342,15 @@ public final class Settings {
         @Deprecated
         @SystemApi
         public static final String WIFI_WAKEUP_ENABLED = "wifi_wakeup_enabled";
+
+        /**
+         * Value to specify if wifi settings migration is complete or not.
+         * Note: This should only be used from within {@link android.net.wifi.WifiMigration} class.
+         *
+         * Type: int (0 for false, 1 for true)
+         * @hide
+         */
+        public static final String WIFI_MIGRATION_COMPLETED = "wifi_migration_completed";
 
         /**
          * Value to specify whether network quality scores and badging should be shown in the UI.
@@ -12782,12 +12784,12 @@ public final class Settings {
          * <p>
          * Type: int (0 for false, 1 for true)
          * @hide
-         * @deprecated Use {@link android.provider.Telephony.SimInfo#ENHANCED_4G_MODE_ENABLED}
-         * instead.
+         * @deprecated Use
+         * {@link android.provider.Telephony.SimInfo#COLUMN_ENHANCED_4G_MODE_ENABLED} instead.
          */
         @Deprecated
         public static final String ENHANCED_4G_MODE_ENABLED =
-                Telephony.SimInfo.ENHANCED_4G_MODE_ENABLED;
+                Telephony.SimInfo.COLUMN_ENHANCED_4G_MODE_ENABLED;
 
         /**
          * Whether VT (Video Telephony over IMS) is enabled
@@ -12795,10 +12797,10 @@ public final class Settings {
          * Type: int (0 for false, 1 for true)
          *
          * @hide
-         * @deprecated Use {@link android.provider.Telephony.SimInfo#VT_IMS_ENABLED} instead.
+         * @deprecated Use {@link android.provider.Telephony.SimInfo#COLUMN_VT_IMS_ENABLED} instead.
          */
         @Deprecated
-        public static final String VT_IMS_ENABLED = Telephony.SimInfo.VT_IMS_ENABLED;
+        public static final String VT_IMS_ENABLED = Telephony.SimInfo.COLUMN_VT_IMS_ENABLED;
 
         /**
          * Whether WFC is enabled
@@ -12806,10 +12808,11 @@ public final class Settings {
          * Type: int (0 for false, 1 for true)
          *
          * @hide
-         * @deprecated Use {@link android.provider.Telephony.SimInfo#WFC_IMS_ENABLED} instead.
+         * @deprecated Use
+         * {@link android.provider.Telephony.SimInfo#COLUMN_WFC_IMS_ENABLED} instead.
          */
         @Deprecated
-        public static final String WFC_IMS_ENABLED = Telephony.SimInfo.WFC_IMS_ENABLED;
+        public static final String WFC_IMS_ENABLED = Telephony.SimInfo.COLUMN_WFC_IMS_ENABLED;
 
         /**
          * WFC mode on home/non-roaming network.
@@ -12817,10 +12820,10 @@ public final class Settings {
          * Type: int - 2=Wi-Fi preferred, 1=Cellular preferred, 0=Wi-Fi only
          *
          * @hide
-         * @deprecated Use {@link android.provider.Telephony.SimInfo#WFC_IMS_MODE} instead.
+         * @deprecated Use {@link android.provider.Telephony.SimInfo#COLUMN_WFC_IMS_MODE} instead.
          */
         @Deprecated
-        public static final String WFC_IMS_MODE = Telephony.SimInfo.WFC_IMS_MODE;
+        public static final String WFC_IMS_MODE = Telephony.SimInfo.COLUMN_WFC_IMS_MODE;
 
         /**
          * WFC mode on roaming network.
@@ -12828,11 +12831,12 @@ public final class Settings {
          * Type: int - see {@link #WFC_IMS_MODE} for values
          *
          * @hide
-         * @deprecated Use {@link android.provider.Telephony.SimInfo#WFC_IMS_ROAMING_MODE}
+         * @deprecated Use {@link android.provider.Telephony.SimInfo#COLUMN_WFC_IMS_ROAMING_MODE}
          * instead.
          */
         @Deprecated
-        public static final String WFC_IMS_ROAMING_MODE = Telephony.SimInfo.WFC_IMS_ROAMING_MODE;
+        public static final String WFC_IMS_ROAMING_MODE =
+                Telephony.SimInfo.COLUMN_WFC_IMS_ROAMING_MODE;
 
         /**
          * Whether WFC roaming is enabled
@@ -12840,12 +12844,12 @@ public final class Settings {
          * Type: int (0 for false, 1 for true)
          *
          * @hide
-         * @deprecated Use {@link android.provider.Telephony.SimInfo#WFC_IMS_ROAMING_ENABLED}
+         * @deprecated Use {@link android.provider.Telephony.SimInfo#COLUMN_WFC_IMS_ROAMING_ENABLED}
          * instead
          */
         @Deprecated
         public static final String WFC_IMS_ROAMING_ENABLED =
-                Telephony.SimInfo.WFC_IMS_ROAMING_ENABLED;
+                Telephony.SimInfo.COLUMN_WFC_IMS_ROAMING_ENABLED;
 
         /**
          * Whether user can enable/disable LTE as a preferred network. A carrier might control
@@ -13077,6 +13081,18 @@ public final class Settings {
          */
         public static final String CHAINED_BATTERY_ATTRIBUTION_ENABLED =
                 "chained_battery_attribution_enabled";
+
+        /**
+         * Toggle to enable/disable the incremental ADB installation by default.
+         * If not set, default adb installations are incremental; set to zero to use full ones.
+         * Note: only ADB uses it, no usages in the Framework code.
+         * <p>
+         * Type: int (0 to disable, 1 to enable)
+         *
+         * @hide
+         */
+        public static final String ENABLE_ADB_INCREMENTAL_INSTALL_DEFAULT =
+                "enable_adb_incremental_install_default";
 
         /**
          * The packages whitelisted to be run in autofill compatibility mode. The list
@@ -13409,7 +13425,7 @@ public final class Settings {
                 }
                 arg.putInt(CALL_METHOD_RESET_MODE_KEY, mode);
                 IContentProvider cp = sProviderHolder.getProvider(resolver);
-                cp.call(resolver.getPackageName(), resolver.getFeatureId(),
+                cp.call(resolver.getPackageName(), resolver.getAttributionTag(),
                         sProviderHolder.mUri.getAuthority(), CALL_METHOD_RESET_GLOBAL, null, arg);
             } catch (RemoteException e) {
                 Log.w(TAG, "Can't reset do defaults for " + CONTENT_URI, e);
@@ -13762,6 +13778,16 @@ public final class Settings {
          */
         public static final String SHOW_NOTIFICATION_CHANNEL_WARNINGS =
                 "show_notification_channel_warnings";
+
+        /**
+         * When enabled, requires all notifications in the conversation section to be backed
+         * by a long-lived sharing shortcut
+         *
+         * The value 1 - require a shortcut, 0 - do not require a shortcut
+         * @hide
+         */
+        public static final String REQUIRE_SHORTCUTS_FOR_CONVERSATIONS =
+                "require_shortcuts_for_conversations";
 
         /**
          * Whether cell is enabled/disabled
@@ -14187,6 +14213,23 @@ public final class Settings {
                 "appop_history_parameters";
 
         /**
+         * Auto revoke parameters. These parameters are represented by
+         * a comma-delimited key-value list.
+         *
+         * <pre>
+         *     enabledForPreRApps    (bolean)
+         *     unusedThresholdMs     (long)
+         *     checkFrequencyMs      (long)
+         * </pre>
+         *
+         * Ex: "enabledForPreRApps=false,unusedThresholdMs=7776000000,checkFrequencyMs=1296000000"
+         *
+         * @hide
+         */
+        public static final String AUTO_REVOKE_PARAMETERS =
+                "auto_revoke_parameters";
+
+        /**
          * Delay for sending ACTION_CHARGING after device is plugged in.
          * This is used as an override for constants defined in BatteryStatsImpl for
          * ease of experimentation.
@@ -14217,19 +14260,6 @@ public final class Settings {
          */
         public static final String POWER_BUTTON_SUPPRESSION_DELAY_AFTER_GESTURE_WAKE =
                 "power_button_suppression_delay_after_gesture_wake";
-
-        /**
-         * An integer indicating whether the device is in Common Criteria mode. When enabled,
-         * certain device functionalities are tuned to meet the higher security level required
-         * by Common Criteria certification. Examples include:
-         *   Bluetooth long term key material is additionally integrity-protected with AES-GCM.
-         *   WiFi configuration store is additionally integrity-protected with AES-GCM.
-         * A value of 0 means Common Criteria mode is not enabled (default), a value of non-zero
-         * means Common Criteria mode is enabled.
-         * @hide
-         */
-        @SystemApi
-        public static final String COMMON_CRITERIA_MODE = "common_criteria_mode";
 
         /**
          * The usage amount of advanced battery. The value is 0~100.
@@ -14384,7 +14414,7 @@ public final class Settings {
                     arg.putString(Settings.CALL_METHOD_PREFIX_KEY, createPrefix(namespace));
                 }
                 IContentProvider cp = sProviderHolder.getProvider(resolver);
-                cp.call(resolver.getPackageName(), resolver.getFeatureId(),
+                cp.call(resolver.getPackageName(), resolver.getAttributionTag(),
                         sProviderHolder.mUri.getAuthority(), CALL_METHOD_RESET_CONFIG, null, arg);
             } catch (RemoteException e) {
                 Log.w(TAG, "Can't reset to defaults for " + DeviceConfig.CONTENT_URI, e);
@@ -14413,7 +14443,7 @@ public final class Settings {
                 arg.putInt(CALL_METHOD_USER_KEY, userHandle);
                 arg.putParcelable(CALL_METHOD_MONITOR_CALLBACK_KEY, callback);
                 IContentProvider cp = sProviderHolder.getProvider(resolver);
-                cp.call(resolver.getPackageName(), resolver.getFeatureId(),
+                cp.call(resolver.getPackageName(), resolver.getAttributionTag(),
                         sProviderHolder.mUri.getAuthority(),
                         CALL_METHOD_REGISTER_MONITOR_CALLBACK_CONFIG, null, arg);
             } catch (RemoteException e) {

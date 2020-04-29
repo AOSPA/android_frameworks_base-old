@@ -22,6 +22,7 @@ import android.annotation.Nullable;
 import android.content.Context;
 import android.graphics.PixelFormat;
 import android.hardware.biometrics.BiometricAuthenticator;
+import android.hardware.biometrics.BiometricConstants;
 import android.os.Binder;
 import android.os.Bundle;
 import android.os.Handler;
@@ -99,6 +100,8 @@ public class AuthContainerView extends LinearLayout
 
     // Non-null only if the dialog is in the act of dismissing and has not sent the reason yet.
     @Nullable @AuthDialogCallback.DismissedReason Integer mPendingCallbackReason;
+    // HAT received from LockSettingsService when credential is verified.
+    @Nullable byte[] mCredentialAttestation;
 
     static class Config {
         Context mContext;
@@ -109,6 +112,7 @@ public class AuthContainerView extends LinearLayout
         String mOpPackageName;
         int mModalityMask;
         boolean mSkipIntro;
+        long mOperationId;
     }
 
     public static class Builder {
@@ -146,6 +150,11 @@ public class AuthContainerView extends LinearLayout
 
         public Builder setSkipIntro(boolean skip) {
             mConfig.mSkipIntro = skip;
+            return this;
+        }
+
+        public Builder setOperationId(long operationId) {
+            mConfig.mOperationId = operationId;
             return this;
         }
 
@@ -199,6 +208,7 @@ public class AuthContainerView extends LinearLayout
                     animateAway(AuthDialogCallback.DISMISSED_BIOMETRIC_AUTHENTICATED);
                     break;
                 case AuthBiometricView.Callback.ACTION_USER_CANCELED:
+                    sendEarlyUserCanceled();
                     animateAway(AuthDialogCallback.DISMISSED_USER_CANCELED);
                     break;
                 case AuthBiometricView.Callback.ACTION_BUTTON_NEGATIVE:
@@ -224,7 +234,8 @@ public class AuthContainerView extends LinearLayout
 
     final class CredentialCallback implements AuthCredentialView.Callback {
         @Override
-        public void onCredentialMatched() {
+        public void onCredentialMatched(byte[] attestation) {
+            mCredentialAttestation = attestation;
             animateAway(AuthDialogCallback.DISMISSED_CREDENTIAL_AUTHENTICATED);
         }
     }
@@ -277,11 +288,13 @@ public class AuthContainerView extends LinearLayout
 
         addView(mFrameLayout);
 
+        // TODO: De-dupe the logic with AuthCredentialPasswordView
         setOnKeyListener((v, keyCode, event) -> {
             if (keyCode != KeyEvent.KEYCODE_BACK) {
                 return false;
             }
             if (event.getAction() == KeyEvent.ACTION_UP) {
+                sendEarlyUserCanceled();
                 animateAway(AuthDialogCallback.DISMISSED_USER_CANCELED);
             }
             return true;
@@ -289,6 +302,11 @@ public class AuthContainerView extends LinearLayout
 
         setFocusableInTouchMode(true);
         requestFocus();
+    }
+
+    void sendEarlyUserCanceled() {
+        mConfig.mCallback.onSystemEvent(
+                BiometricConstants.BIOMETRIC_SYSTEM_EVENT_EARLY_USER_CANCEL);
     }
 
     @Override
@@ -341,6 +359,7 @@ public class AuthContainerView extends LinearLayout
 
         mCredentialView.setContainerView(this);
         mCredentialView.setUserId(mConfig.mUserId);
+        mCredentialView.setOperationId(mConfig.mOperationId);
         mCredentialView.setEffectiveUserId(mEffectiveUserId);
         mCredentialView.setCredentialType(credentialType);
         mCredentialView.setCallback(mCredentialCallback);
@@ -558,7 +577,7 @@ public class AuthContainerView extends LinearLayout
     private void sendPendingCallbackIfNotNull() {
         Log.d(TAG, "pendingCallback: " + mPendingCallbackReason);
         if (mPendingCallbackReason != null) {
-            mConfig.mCallback.onDismissed(mPendingCallbackReason);
+            mConfig.mCallback.onDismissed(mPendingCallbackReason, mCredentialAttestation);
             mPendingCallbackReason = null;
         }
     }

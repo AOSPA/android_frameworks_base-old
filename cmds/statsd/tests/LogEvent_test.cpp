@@ -13,12 +13,13 @@
 // limitations under the License.
 
 #include "src/logd/LogEvent.h"
+
 #include <gtest/gtest.h>
-#include <log/log_event_list.h>
+
 #include "frameworks/base/cmds/statsd/src/atoms.pb.h"
 #include "frameworks/base/core/proto/android/stats/launcher/launcher.pb.h"
-#include <stats_event.h>
-
+#include "log/log_event_list.h"
+#include "stats_event.h"
 
 #ifdef __ANDROID__
 
@@ -31,6 +32,8 @@ using std::vector;
 using util::ProtoOutputStream;
 using util::ProtoReader;
 
+namespace {
+
 Field getField(int32_t tag, const vector<int32_t>& pos, int32_t depth, const vector<bool>& last) {
     Field f(tag, (int32_t*)pos.data(), depth);
 
@@ -41,6 +44,38 @@ Field getField(int32_t tag, const vector<int32_t>& pos, int32_t depth, const vec
 
     return f;
 }
+
+void createIntWithBoolAnnotationLogEvent(LogEvent* logEvent, uint8_t annotationId,
+                                         bool annotationValue) {
+    AStatsEvent* statsEvent = AStatsEvent_obtain();
+    AStatsEvent_setAtomId(statsEvent, /*atomId=*/100);
+    AStatsEvent_writeInt32(statsEvent, 10);
+    AStatsEvent_addBoolAnnotation(statsEvent, annotationId, annotationValue);
+    AStatsEvent_build(statsEvent);
+
+    size_t size;
+    uint8_t* buf = AStatsEvent_getBuffer(statsEvent, &size);
+    EXPECT_TRUE(logEvent->parseBuffer(buf, size));
+
+    AStatsEvent_release(statsEvent);
+}
+
+void createIntWithIntAnnotationLogEvent(LogEvent* logEvent, uint8_t annotationId,
+                                        int annotationValue) {
+    AStatsEvent* statsEvent = AStatsEvent_obtain();
+    AStatsEvent_setAtomId(statsEvent, /*atomId=*/100);
+    AStatsEvent_writeInt32(statsEvent, 10);
+    AStatsEvent_addInt32Annotation(statsEvent, annotationId, annotationValue);
+    AStatsEvent_build(statsEvent);
+
+    size_t size;
+    uint8_t* buf = AStatsEvent_getBuffer(statsEvent, &size);
+    EXPECT_TRUE(logEvent->parseBuffer(buf, size));
+
+    AStatsEvent_release(statsEvent);
+}
+
+}  // anonymous namespace
 
 TEST(LogEventTest, TestPrimitiveParsing) {
     AStatsEvent* event = AStatsEvent_obtain();
@@ -85,12 +120,11 @@ TEST(LogEventTest, TestPrimitiveParsing) {
     const FieldValue& boolItem = values[3];
     expectedField = getField(100, {4, 1, 1}, 0, {true, false, false});
     EXPECT_EQ(expectedField, boolItem.mField);
-    EXPECT_EQ(Type::INT, boolItem.mValue.getType()); // FieldValue does not support boolean type
+    EXPECT_EQ(Type::INT, boolItem.mValue.getType());  // FieldValue does not support boolean type
     EXPECT_EQ(1, boolItem.mValue.int_value);
 
     AStatsEvent_release(event);
 }
-
 
 TEST(LogEventTest, TestStringAndByteArrayParsing) {
     AStatsEvent* event = AStatsEvent_obtain();
@@ -103,7 +137,7 @@ TEST(LogEventTest, TestStringAndByteArrayParsing) {
     size_t size;
     uint8_t* buf = AStatsEvent_getBuffer(event, &size);
 
-    LogEvent logEvent(/*uid=*/ 1000, /*pid=*/ 1001);
+    LogEvent logEvent(/*uid=*/1000, /*pid=*/1001);
     EXPECT_TRUE(logEvent.parseBuffer(buf, size));
 
     EXPECT_EQ(100, logEvent.GetTagId());
@@ -139,7 +173,7 @@ TEST(LogEventTest, TestEmptyString) {
     size_t size;
     uint8_t* buf = AStatsEvent_getBuffer(event, &size);
 
-    LogEvent logEvent(/*uid=*/ 1000, /*pid=*/ 1001);
+    LogEvent logEvent(/*uid=*/1000, /*pid=*/1001);
     EXPECT_TRUE(logEvent.parseBuffer(buf, size));
 
     EXPECT_EQ(100, logEvent.GetTagId());
@@ -168,7 +202,7 @@ TEST(LogEventTest, TestByteArrayWithNullCharacter) {
     size_t size;
     uint8_t* buf = AStatsEvent_getBuffer(event, &size);
 
-    LogEvent logEvent(/*uid=*/ 1000, /*pid=*/ 1001);
+    LogEvent logEvent(/*uid=*/1000, /*pid=*/1001);
     EXPECT_TRUE(logEvent.parseBuffer(buf, size));
 
     EXPECT_EQ(100, logEvent.GetTagId());
@@ -204,7 +238,7 @@ TEST(LogEventTest, TestAttributionChain) {
     size_t size;
     uint8_t* buf = AStatsEvent_getBuffer(event, &size);
 
-    LogEvent logEvent(/*uid=*/ 1000, /*pid=*/ 1001);
+    LogEvent logEvent(/*uid=*/1000, /*pid=*/1001);
     EXPECT_TRUE(logEvent.parseBuffer(buf, size));
 
     EXPECT_EQ(100, logEvent.GetTagId());
@@ -212,7 +246,7 @@ TEST(LogEventTest, TestAttributionChain) {
     EXPECT_EQ(1001, logEvent.GetPid());
 
     const vector<FieldValue>& values = logEvent.getValues();
-    EXPECT_EQ(4, values.size()); // 2 per attribution node
+    EXPECT_EQ(4, values.size());  // 2 per attribution node
 
     // Check first attribution node
     const FieldValue& uid1Item = values[0];
@@ -241,6 +275,84 @@ TEST(LogEventTest, TestAttributionChain) {
     EXPECT_EQ(tag2, tag2Item.mValue.str_value);
 
     AStatsEvent_release(event);
+}
+
+TEST(LogEventTest, TestAnnotationIdIsUid) {
+    LogEvent event(/*uid=*/0, /*pid=*/0);
+    createIntWithBoolAnnotationLogEvent(&event, ANNOTATION_ID_IS_UID, true);
+
+    const vector<FieldValue>& values = event.getValues();
+    EXPECT_EQ(values.size(), 1);
+    EXPECT_EQ(event.getUidFieldIndex(), 0);
+}
+
+TEST(LogEventTest, TestAnnotationIdStateNested) {
+    LogEvent event(/*uid=*/0, /*pid=*/0);
+    createIntWithBoolAnnotationLogEvent(&event, ANNOTATION_ID_STATE_NESTED, true);
+
+    const vector<FieldValue>& values = event.getValues();
+    EXPECT_EQ(values.size(), 1);
+    EXPECT_TRUE(values[0].mAnnotations.isNested());
+}
+
+TEST(LogEventTest, TestPrimaryFieldAnnotation) {
+    LogEvent event(/*uid=*/0, /*pid=*/0);
+    createIntWithBoolAnnotationLogEvent(&event, ANNOTATION_ID_PRIMARY_FIELD, true);
+
+    const vector<FieldValue>& values = event.getValues();
+    EXPECT_EQ(values.size(), 1);
+    EXPECT_TRUE(values[0].mAnnotations.isPrimaryField());
+}
+
+TEST(LogEventTest, TestExclusiveStateAnnotation) {
+    LogEvent event(/*uid=*/0, /*pid=*/0);
+    createIntWithBoolAnnotationLogEvent(&event, ANNOTATION_ID_EXCLUSIVE_STATE, true);
+
+    const vector<FieldValue>& values = event.getValues();
+    EXPECT_EQ(values.size(), 1);
+    EXPECT_TRUE(values[0].mAnnotations.isExclusiveState());
+}
+
+TEST(LogEventTest, TestPrimaryFieldFirstUidAnnotation) {
+    // Event has 10 ints and then an attribution chain
+    int numInts = 10;
+    int firstUidInChainIndex = numInts;
+    string tag1 = "tag1";
+    string tag2 = "tag2";
+    uint32_t uids[] = {1001, 1002};
+    const char* tags[] = {tag1.c_str(), tag2.c_str()};
+
+    // Construct AStatsEvent
+    AStatsEvent* statsEvent = AStatsEvent_obtain();
+    AStatsEvent_setAtomId(statsEvent, 100);
+    for (int i = 0; i < numInts; i++) {
+        AStatsEvent_writeInt32(statsEvent, 10);
+    }
+    AStatsEvent_writeAttributionChain(statsEvent, uids, tags, 2);
+    AStatsEvent_addBoolAnnotation(statsEvent, ANNOTATION_ID_PRIMARY_FIELD_FIRST_UID, true);
+    AStatsEvent_build(statsEvent);
+
+    // Construct LogEvent
+    size_t size;
+    uint8_t* buf = AStatsEvent_getBuffer(statsEvent, &size);
+    LogEvent logEvent(/*uid=*/0, /*pid=*/0);
+    EXPECT_TRUE(logEvent.parseBuffer(buf, size));
+    AStatsEvent_release(statsEvent);
+
+    // Check annotation
+    const vector<FieldValue>& values = logEvent.getValues();
+    EXPECT_EQ(values.size(), numInts + 4);
+    EXPECT_TRUE(values[firstUidInChainIndex].mAnnotations.isPrimaryField());
+}
+
+TEST(LogEventTest, TestResetStateAnnotation) {
+    int32_t resetState = 10;
+    LogEvent event(/*uid=*/0, /*pid=*/0);
+    createIntWithIntAnnotationLogEvent(&event, ANNOTATION_ID_TRIGGER_STATE_RESET, resetState);
+
+    const vector<FieldValue>& values = event.getValues();
+    EXPECT_EQ(values.size(), 1);
+    EXPECT_EQ(values[0].mAnnotations.getResetState(), resetState);
 }
 
 }  // namespace statsd

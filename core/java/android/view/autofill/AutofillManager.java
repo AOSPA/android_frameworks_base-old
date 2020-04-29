@@ -41,7 +41,9 @@ import android.graphics.Rect;
 import android.metrics.LogMaker;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
 import android.os.IBinder;
+import android.os.Looper;
 import android.os.Parcelable;
 import android.os.RemoteException;
 import android.os.SystemClock;
@@ -63,6 +65,7 @@ import android.view.accessibility.AccessibilityManager;
 import android.view.accessibility.AccessibilityNodeInfo;
 import android.view.accessibility.AccessibilityNodeProvider;
 import android.view.accessibility.AccessibilityWindowInfo;
+import android.view.inputmethod.InputMethodManager;
 import android.widget.EditText;
 import android.widget.TextView;
 
@@ -1236,21 +1239,22 @@ public final class AutofillManager {
             // If the session is gone some fields might still be highlighted, hence we have to
             // remove the isAutofilled property even if no sessions are active.
             if (mLastAutofilledData == null) {
-                view.setAutofilled(false);
+                view.setAutofilled(false, false);
             } else {
                 id = view.getAutofillId();
                 if (mLastAutofilledData.containsKey(id)) {
                     value = view.getAutofillValue();
                     valueWasRead = true;
+                    final boolean hideHighlight = mLastAutofilledData.keySet().size() == 1;
 
                     if (Objects.equals(mLastAutofilledData.get(id), value)) {
-                        view.setAutofilled(true);
+                        view.setAutofilled(true, hideHighlight);
                     } else {
-                        view.setAutofilled(false);
+                        view.setAutofilled(false, false);
                         mLastAutofilledData.remove(id);
                     }
                 } else {
-                    view.setAutofilled(false);
+                    view.setAutofilled(false, false);
                 }
             }
 
@@ -2166,7 +2170,8 @@ public final class AutofillManager {
      * @param view The view that is to be autofilled
      * @param targetValue The value we want to fill into view
      */
-    private void setAutofilledIfValuesIs(@NonNull View view, @Nullable AutofillValue targetValue) {
+    private void setAutofilledIfValuesIs(@NonNull View view, @Nullable AutofillValue targetValue,
+            boolean hideHighlight) {
         AutofillValue currentValue = view.getAutofillValue();
         if (Objects.equals(currentValue, targetValue)) {
             synchronized (mLock) {
@@ -2175,11 +2180,12 @@ public final class AutofillManager {
                 }
                 mLastAutofilledData.put(view.getAutofillId(), targetValue);
             }
-            view.setAutofilled(true);
+            view.setAutofilled(true, hideHighlight);
         }
     }
 
-    private void autofill(int sessionId, List<AutofillId> ids, List<AutofillValue> values) {
+    private void autofill(int sessionId, List<AutofillId> ids, List<AutofillValue> values,
+            boolean hideHighlight) {
         synchronized (mLock) {
             if (sessionId != mSessionId) {
                 return;
@@ -2238,7 +2244,7 @@ public final class AutofillManager {
                     // synchronously.
                     // If autofill happens async, the view is set to autofilled in
                     // notifyValueChanged.
-                    setAutofilledIfValuesIs(view, value);
+                    setAutofilledIfValuesIs(view, value, hideHighlight);
 
                     numApplied++;
                 }
@@ -2439,6 +2445,44 @@ public final class AutofillManager {
                 Log.w(TAG, "Could not send AugmentedAutofillClient back: " + e);
             }
         }
+    }
+
+    private void requestShowSoftInput(@NonNull AutofillId id) {
+        if (sVerbose) Log.v(TAG, "requestShowSoftInput(" + id + ")");
+        final AutofillClient client = getClient();
+        if (client == null) {
+            return;
+        }
+        final View view = client.autofillClientFindViewByAutofillIdTraversal(id);
+        if (view == null) {
+            if (sVerbose) Log.v(TAG, "View is not found");
+            return;
+        }
+        final Handler handler = view.getHandler();
+        if (handler == null) {
+            if (sVerbose) Log.v(TAG, "Ignoring requestShowSoftInput due to no handler in view");
+            return;
+        }
+        if (handler.getLooper() != Looper.myLooper()) {
+            // The view is running on a different thread than our own, so we need to reschedule
+            // our work for over there.
+            if (sVerbose) Log.v(TAG, "Scheduling showSoftInput() on the view UI thread");
+            handler.post(() -> requestShowSoftInputInViewThread(view));
+        } else {
+            requestShowSoftInputInViewThread(view);
+        }
+    }
+
+    // This method must be called from within the View thread.
+    private static void requestShowSoftInputInViewThread(@NonNull View view) {
+        if (!view.isFocused()) {
+            Log.w(TAG, "Ignoring requestShowSoftInput() due to non-focused view");
+            return;
+        }
+        final InputMethodManager inputMethodManager = view.getContext().getSystemService(
+                InputMethodManager.class);
+        boolean ret = inputMethodManager.showSoftInput(view, /*flags=*/ 0);
+        if (sVerbose) Log.v(TAG, " InputMethodManager.showSoftInput returns " + ret);
     }
 
     /** @hide */
@@ -3256,10 +3300,11 @@ public final class AutofillManager {
         }
 
         @Override
-        public void autofill(int sessionId, List<AutofillId> ids, List<AutofillValue> values) {
+        public void autofill(int sessionId, List<AutofillId> ids, List<AutofillValue> values,
+                boolean hideHighlight) {
             final AutofillManager afm = mAfm.get();
             if (afm != null) {
-                afm.post(() -> afm.autofill(sessionId, ids, values));
+                afm.post(() -> afm.autofill(sessionId, ids, values, hideHighlight));
             }
         }
 
@@ -3364,6 +3409,14 @@ public final class AutofillManager {
                 afm.post(() -> afm.getAugmentedAutofillClient(result));
             }
         }
+
+        @Override
+        public void requestShowSoftInput(@NonNull AutofillId id) {
+            final AutofillManager afm = mAfm.get();
+            if (afm != null) {
+                afm.post(() -> afm.requestShowSoftInput(id));
+            }
+        }
     }
 
     private static final class AugmentedAutofillManagerClient
@@ -3397,10 +3450,11 @@ public final class AutofillManager {
         }
 
         @Override
-        public void autofill(int sessionId, List<AutofillId> ids, List<AutofillValue> values) {
+        public void autofill(int sessionId, List<AutofillId> ids, List<AutofillValue> values,
+                boolean hideHighlight) {
             final AutofillManager afm = mAfm.get();
             if (afm != null) {
-                afm.post(() -> afm.autofill(sessionId, ids, values));
+                afm.post(() -> afm.autofill(sessionId, ids, values, hideHighlight));
             }
         }
 

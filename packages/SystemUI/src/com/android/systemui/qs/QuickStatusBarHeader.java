@@ -344,7 +344,7 @@ public class QuickStatusBarHeader extends RelativeLayout implements
         if (mQsDisabled) {
             lp.height = resources.getDimensionPixelSize(
                     com.android.internal.R.dimen.quick_qs_offset_height);
-        } else if (useQsMediaPlayer(mContext) && mHeaderQsPanel.hasMediaPlayerSession()) {
+        } else if (useQsMediaPlayer(mContext) && mHeaderQsPanel.hasMediaPlayer()) {
             lp.height = Math.max(getMinimumHeight(),
                     resources.getDimensionPixelSize(
                             com.android.internal.R.dimen.quick_qs_total_height_with_media));
@@ -436,6 +436,10 @@ public class QuickStatusBarHeader extends RelativeLayout implements
 
     @Override
     public WindowInsets onApplyWindowInsets(WindowInsets insets) {
+        // Handle padding of QuickStatusBarHeader
+        setPadding(mRoundedCornerPadding, getPaddingTop(), mRoundedCornerPadding,
+                getPaddingBottom());
+
         // Handle padding of SystemIconsView
         DisplayCutout cutout = insets.getDisplayCutout();
         Pair<Integer, Integer> cornerCutoutPadding = StatusBarWindowView.cornerCutoutMargins(
@@ -450,8 +454,11 @@ public class QuickStatusBarHeader extends RelativeLayout implements
         int statusBarPaddingRight = isLayoutRtl()
                 ? getResources().getDimensionPixelSize(R.dimen.status_bar_padding_start)
                 : getResources().getDimensionPixelSize(R.dimen.status_bar_padding_end);
-        mSystemIconsView.setPadding(padding.first + statusBarPaddingLeft, waterfallTopInset,
-                padding.second + statusBarPaddingRight, 0);
+        mSystemIconsView.setPadding(
+                Math.max(padding.first + statusBarPaddingLeft - mRoundedCornerPadding, 0),
+                waterfallTopInset,
+                Math.max(padding.second + statusBarPaddingRight - mRoundedCornerPadding, 0),
+                0);
 
         return super.onApplyWindowInsets(insets);
     }

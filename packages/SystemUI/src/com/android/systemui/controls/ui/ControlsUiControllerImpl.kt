@@ -21,14 +21,17 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
+import android.content.res.Configuration
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.LayerDrawable
 import android.service.controls.Control
 import android.service.controls.actions.ControlAction
+import android.util.TypedValue
 import android.util.Log
 import android.view.ContextThemeWrapper
 import android.view.LayoutInflater
 import android.view.View
+import android.view.View.MeasureSpec
 import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.AdapterView
@@ -42,6 +45,7 @@ import com.android.systemui.controls.ControlsServiceInfo
 import com.android.systemui.controls.controller.ControlInfo
 import com.android.systemui.controls.controller.ControlsController
 import com.android.systemui.controls.controller.StructureInfo
+import com.android.systemui.controls.management.ControlsFavoritingActivity
 import com.android.systemui.controls.management.ControlsListingController
 import com.android.systemui.controls.management.ControlsProviderSelectorActivity
 import com.android.systemui.dagger.qualifiers.Background
@@ -52,6 +56,7 @@ import com.android.systemui.R
 import dagger.Lazy
 
 import java.text.Collator
+import java.util.function.Consumer
 
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -88,19 +93,7 @@ class ControlsUiControllerImpl @Inject constructor (
     private lateinit var lastItems: List<SelectionItem>
     private var popup: ListPopupWindow? = null
     private var activeDialog: Dialog? = null
-    private val addControlsItem: SelectionItem
-
-    init {
-        val addDrawable = context.getDrawable(R.drawable.ic_add).apply {
-            setTint(context.resources.getColor(R.color.control_secondary_text, null))
-        }
-        addControlsItem = SelectionItem(
-            context.resources.getString(R.string.controls_providers_title),
-            "",
-            addDrawable,
-            EMPTY_COMPONENT
-        )
-    }
+    private var hidden = true
 
     override val available: Boolean
         get() = controlsController.get().available
@@ -134,11 +127,15 @@ class ControlsUiControllerImpl @Inject constructor (
     override fun show(parent: ViewGroup) {
         Log.d(ControlsUiController.TAG, "show()")
         this.parent = parent
+        hidden = false
 
         allStructures = controlsController.get().getFavorites()
         selectedStructure = loadPreference(allStructures)
 
-        if (selectedStructure.controls.isEmpty() && allStructures.size <= 1) {
+        val cb = Consumer<Boolean> { _ -> reload(parent) }
+        if (controlsController.get().addSeedingFavoritesCallback(cb)) {
+            listingCallback = createCallback(::showSeedingView)
+        } else if (selectedStructure.controls.isEmpty() && allStructures.size <= 1) {
             // only show initial view if there are really no favorites across any structure
             listingCallback = createCallback(::showInitialSetupView)
         } else {
@@ -154,6 +151,20 @@ class ControlsUiControllerImpl @Inject constructor (
         controlsListingController.get().addCallback(listingCallback)
     }
 
+    private fun reload(parent: ViewGroup) {
+        if (hidden) return
+        show(parent)
+    }
+
+    private fun showSeedingView(items: List<SelectionItem>) {
+        parent.removeAllViews()
+
+        val inflater = LayoutInflater.from(context)
+        inflater.inflate(R.layout.controls_no_favorites, parent, true)
+        val subtitle = parent.requireViewById<TextView>(R.id.controls_subtitle)
+        subtitle.setText(context.resources.getString(R.string.controls_seeding_in_progress))
+    }
+
     private fun showInitialSetupView(items: List<SelectionItem>) {
         parent.removeAllViews()
 
@@ -161,7 +172,10 @@ class ControlsUiControllerImpl @Inject constructor (
         inflater.inflate(R.layout.controls_no_favorites, parent, true)
 
         val viewGroup = parent.requireViewById(R.id.controls_no_favorites_group) as ViewGroup
-        viewGroup.setOnClickListener(launchSelectorActivityListener(context))
+        viewGroup.setOnClickListener { v: View -> startProviderSelectorActivity(v.context) }
+
+        val subtitle = parent.requireViewById<TextView>(R.id.controls_subtitle)
+        subtitle.setText(context.resources.getString(R.string.quick_controls_subtitle))
 
         val iconRowGroup = parent.requireViewById(R.id.controls_icon_row) as ViewGroup
         items.forEach {
@@ -172,16 +186,28 @@ class ControlsUiControllerImpl @Inject constructor (
         }
     }
 
-    private fun launchSelectorActivityListener(context: Context): (View) -> Unit {
-        return { _ ->
-            val closeDialog = Intent(Intent.ACTION_CLOSE_SYSTEM_DIALOGS)
-            context.sendBroadcast(closeDialog)
-
-            val i = Intent()
-            i.setComponent(ComponentName(context, ControlsProviderSelectorActivity::class.java))
-            i.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK)
-            context.startActivity(i)
+    private fun startFavoritingActivity(context: Context, si: StructureInfo) {
+        val i = Intent(context, ControlsFavoritingActivity::class.java).apply {
+            putExtra(ControlsFavoritingActivity.EXTRA_APP,
+                controlsListingController.get().getAppLabel(si.componentName))
+            putExtra(ControlsFavoritingActivity.EXTRA_STRUCTURE, si.structure)
+            putExtra(Intent.EXTRA_COMPONENT_NAME, si.componentName)
+            addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK)
         }
+        startActivity(context, i)
+    }
+
+    private fun startProviderSelectorActivity(context: Context) {
+        val i = Intent(context, ControlsProviderSelectorActivity::class.java).apply {
+            addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        startActivity(context, i)
+    }
+
+    private fun startActivity(context: Context, intent: Intent) {
+        val closeDialog = Intent(Intent.ACTION_CLOSE_SYSTEM_DIALOGS)
+        context.sendBroadcast(closeDialog)
+        context.startActivity(intent)
     }
 
     private fun showControlsView(items: List<SelectionItem>) {
@@ -190,6 +216,63 @@ class ControlsUiControllerImpl @Inject constructor (
 
         createListView()
         createDropDown(items)
+        createMenu()
+    }
+
+    private fun createPopup(): ListPopupWindow {
+        return ListPopupWindow(
+            ContextThemeWrapper(context, R.style.Control_ListPopupWindow)).apply {
+            setWindowLayoutType(WindowManager.LayoutParams.TYPE_VOLUME_OVERLAY)
+            setModal(true)
+        }
+    }
+
+    private fun createMenu() {
+        val items = arrayOf(
+            context.resources.getString(R.string.controls_menu_add)
+        )
+        var adapter = ArrayAdapter<String>(context, R.layout.controls_more_item, items)
+
+        val anchor = parent.requireViewById<ImageView>(R.id.controls_more)
+        anchor.setOnClickListener(object : View.OnClickListener {
+            override fun onClick(v: View) {
+                popup = createPopup().apply {
+                    setAnchorView(anchor)
+                    setAdapter(adapter)
+                    setOnItemClickListener(object : AdapterView.OnItemClickListener {
+                        override fun onItemClick(
+                            parent: AdapterView<*>,
+                            view: View,
+                            pos: Int,
+                            id: Long
+                        ) {
+                            when (pos) {
+                                // 0: Add Control
+                                0 -> startFavoritingActivity(view.context, selectedStructure)
+                                else -> Log.w(ControlsUiController.TAG,
+                                    "Unsupported index ($pos) on 'more' menu selection")
+                            }
+                            dismiss()
+                        }
+                    })
+                    // need to call show() first in order to construct the listView
+                    show()
+                    var width = 0
+                    getListView()?.apply {
+                        // width should be between [.5, .9] of screen
+                        val parentWidth = this@ControlsUiControllerImpl.parent.getWidth()
+                        val widthSpec = MeasureSpec.makeMeasureSpec(
+                            (parentWidth * 0.9).toInt(), MeasureSpec.AT_MOST)
+                        val child = adapter.getView(0, null, this)
+                        child.measure(widthSpec, MeasureSpec.UNSPECIFIED)
+                        width = Math.max(child.getMeasuredWidth(), (parentWidth * 0.5).toInt())
+                    }
+                    setWidth(width)
+                    setHorizontalOffset(-width + anchor.getWidth())
+                    show()
+                }
+            }
+        })
     }
 
     private fun createDropDown(items: List<SelectionItem>) {
@@ -204,7 +287,7 @@ class ControlsUiControllerImpl @Inject constructor (
         val selectionItem = findSelectionItem(selectedStructure, itemsWithStructure) ?: items[0]
 
         var adapter = ItemAdapter(context, R.layout.controls_spinner_item).apply {
-            addAll(itemsWithStructure + addControlsItem)
+            addAll(itemsWithStructure)
         }
 
         /*
@@ -212,7 +295,7 @@ class ControlsUiControllerImpl @Inject constructor (
          * for this dialog. Use a textView with the ListPopupWindow to achieve
          * a similar effect
          */
-        parent.requireViewById<TextView>(R.id.app_or_structure_spinner).apply {
+        val spinner = parent.requireViewById<TextView>(R.id.app_or_structure_spinner).apply {
             setText(selectionItem.getTitle())
             // override the default color on the dropdown drawable
             (getBackground() as LayerDrawable).getDrawable(1)
@@ -222,16 +305,18 @@ class ControlsUiControllerImpl @Inject constructor (
             setContentDescription(selectionItem.getTitle())
             setImageDrawable(selectionItem.icon)
         }
+
+        if (itemsWithStructure.size == 1) {
+            spinner.setBackground(null)
+            return
+        }
+
         val anchor = parent.requireViewById<ViewGroup>(R.id.controls_header)
         anchor.setOnClickListener(object : View.OnClickListener {
             override fun onClick(v: View) {
-                popup = ListPopupWindow(
-                    ContextThemeWrapper(context, R.style.Control_ListPopupWindow))
-                popup?.apply {
-                    setWindowLayoutType(WindowManager.LayoutParams.TYPE_VOLUME_OVERLAY)
+                popup = createPopup().apply {
                     setAnchorView(anchor)
                     setAdapter(adapter)
-                    setModal(true)
                     setOnItemClickListener(object : AdapterView.OnItemClickListener {
                         override fun onItemClick(
                             parent: AdapterView<*>,
@@ -262,10 +347,12 @@ class ControlsUiControllerImpl @Inject constructor (
         val inflater = LayoutInflater.from(context)
         inflater.inflate(R.layout.controls_with_favorites, parent, true)
 
+        val maxColumns = findMaxColumns()
+
         val listView = parent.requireViewById(R.id.global_actions_controls_list) as ViewGroup
         var lastRow: ViewGroup = createRow(inflater, listView)
         selectedStructure.controls.forEach {
-            if (lastRow.getChildCount() == 2) {
+            if (lastRow.getChildCount() == maxColumns) {
                 lastRow = createRow(inflater, listView)
             }
             val baseLayout = inflater.inflate(
@@ -282,10 +369,38 @@ class ControlsUiControllerImpl @Inject constructor (
             controlViewsById.put(key, cvh)
         }
 
-        // add spacer if necessary to keep control size consistent
-        if ((selectedStructure.controls.size % 2) == 1) {
+        // add spacers if necessary to keep control size consistent
+        var spacersToAdd = selectedStructure.controls.size % maxColumns
+        while (spacersToAdd > 0) {
             lastRow.addView(Space(context), LinearLayout.LayoutParams(0, 0, 1f))
+            spacersToAdd--
         }
+    }
+
+    /**
+     * For low-dp width screens that also employ an increased font scale, adjust the
+     * number of columns. This helps prevent text truncation on these devices.
+     */
+    private fun findMaxColumns(): Int {
+        val res = context.resources
+        var maxColumns = res.getInteger(R.integer.controls_max_columns)
+        val maxColumnsAdjustWidth =
+            res.getInteger(R.integer.controls_max_columns_adjust_below_width_dp)
+
+        val outValue = TypedValue()
+        res.getValue(R.dimen.controls_max_columns_adjust_above_font_scale, outValue, true)
+        val maxColumnsAdjustFontScale = outValue.getFloat()
+
+        val config = res.configuration
+        val isPortrait = config.orientation == Configuration.ORIENTATION_PORTRAIT
+        if (isPortrait &&
+            config.screenWidthDp != Configuration.SCREEN_WIDTH_DP_UNDEFINED &&
+            config.screenWidthDp <= maxColumnsAdjustWidth &&
+            config.fontScale >= maxColumnsAdjustFontScale) {
+            maxColumns--
+        }
+
+        return maxColumns
     }
 
     private fun loadPreference(structures: List<StructureInfo>): StructureInfo {
@@ -309,24 +424,21 @@ class ControlsUiControllerImpl @Inject constructor (
     }
 
     private fun switchAppOrStructure(item: SelectionItem) {
-        if (item == addControlsItem) {
-            launchSelectorActivityListener(context)(parent)
-        } else {
-            val newSelection = allStructures.first {
-                it.structure == item.structure && it.componentName == item.componentName
-            }
+        val newSelection = allStructures.first {
+            it.structure == item.structure && it.componentName == item.componentName
+        }
 
-            if (newSelection != selectedStructure) {
-                selectedStructure = newSelection
-                updatePreferences(selectedStructure)
-                controlsListingController.get().removeCallback(listingCallback)
-                show(parent)
-            }
+        if (newSelection != selectedStructure) {
+            selectedStructure = newSelection
+            updatePreferences(selectedStructure)
+            controlsListingController.get().removeCallback(listingCallback)
+            reload(parent)
         }
     }
 
     override fun hide() {
         Log.d(ControlsUiController.TAG, "hide()")
+        hidden = true
         popup?.dismiss()
         activeDialog?.dismiss()
 
@@ -362,7 +474,15 @@ class ControlsUiControllerImpl @Inject constructor (
             controlViewsById.get(key)?.let { cvh ->
                 when (response) {
                     ControlAction.RESPONSE_CHALLENGE_PIN -> {
-                        activeDialog = ChallengeDialogs.createPinDialog(cvh)
+                        activeDialog = ChallengeDialogs.createPinDialog(cvh, false)
+                        activeDialog?.show()
+                    }
+                    ControlAction.RESPONSE_CHALLENGE_PASSPHRASE -> {
+                        activeDialog = ChallengeDialogs.createPinDialog(cvh, true)
+                        activeDialog?.show()
+                    }
+                    ControlAction.RESPONSE_CHALLENGE_ACK -> {
+                        activeDialog = ChallengeDialogs.createConfirmationDialog(cvh)
                         activeDialog?.show()
                     }
                     else -> cvh.actionResponse(response)
@@ -406,7 +526,7 @@ private class ItemAdapter(
             setText(item.getTitle())
         }
         view.requireViewById<ImageView>(R.id.app_icon).apply {
-            setContentDescription(item.getTitle())
+            setContentDescription(item.appName)
             setImageDrawable(item.icon)
         }
         return view

@@ -40,6 +40,7 @@ using ::android::hardware::tv::tuner::V1_0::DataFormat;
 using ::android::hardware::tv::tuner::V1_0::DemuxAlpFilterSettings;
 using ::android::hardware::tv::tuner::V1_0::DemuxAlpFilterType;
 using ::android::hardware::tv::tuner::V1_0::DemuxAlpLengthType;
+using ::android::hardware::tv::tuner::V1_0::DemuxCapabilities;
 using ::android::hardware::tv::tuner::V1_0::DemuxFilterAvSettings;
 using ::android::hardware::tv::tuner::V1_0::DemuxFilterDownloadEvent;
 using ::android::hardware::tv::tuner::V1_0::DemuxFilterDownloadSettings;
@@ -123,7 +124,11 @@ using ::android::hardware::tv::tuner::V1_0::FrontendIsdbtGuardInterval;
 using ::android::hardware::tv::tuner::V1_0::FrontendIsdbtMode;
 using ::android::hardware::tv::tuner::V1_0::FrontendIsdbtModulation;
 using ::android::hardware::tv::tuner::V1_0::FrontendIsdbtSettings;
+using ::android::hardware::tv::tuner::V1_0::FrontendModulationStatus;
 using ::android::hardware::tv::tuner::V1_0::FrontendScanAtsc3PlpInfo;
+using ::android::hardware::tv::tuner::V1_0::FrontendStatus;
+using ::android::hardware::tv::tuner::V1_0::FrontendStatusAtsc3PlpInfo;
+using ::android::hardware::tv::tuner::V1_0::FrontendStatusType;
 using ::android::hardware::tv::tuner::V1_0::FrontendType;
 using ::android::hardware::tv::tuner::V1_0::ITuner;
 using ::android::hardware::tv::tuner::V1_0::LnbPosition;
@@ -150,6 +155,9 @@ struct fields_t {
     jmethodID onFilterEventID;
     jmethodID lnbInitID;
     jmethodID onLnbEventID;
+    jmethodID onLnbDiseqcMessageID;
+    jmethodID onDvrRecordStatusID;
+    jmethodID onDvrPlaybackStatusID;
     jmethodID descramblerInitID;
     jmethodID linearBlockInitID;
     jmethodID linearBlockSetInternalStateID;
@@ -163,19 +171,31 @@ static int IP_V6_LENGTH = 16;
 
 namespace android {
 /////////////// LnbCallback ///////////////////////
-LnbCallback::LnbCallback(jweak tunerObj, LnbId id) : mObject(tunerObj), mId(id) {}
+LnbCallback::LnbCallback(jobject lnbObj, LnbId id) : mId(id) {
+    JNIEnv *env = AndroidRuntime::getJNIEnv();
+    mLnb = env->NewWeakGlobalRef(lnbObj);
+}
 
 Return<void> LnbCallback::onEvent(LnbEventType lnbEventType) {
     ALOGD("LnbCallback::onEvent, type=%d", lnbEventType);
     JNIEnv *env = AndroidRuntime::getJNIEnv();
     env->CallVoidMethod(
-            mObject,
+            mLnb,
             gFields.onLnbEventID,
             (jint)lnbEventType);
     return Void();
 }
-Return<void> LnbCallback::onDiseqcMessage(const hidl_vec<uint8_t>& /*diseqcMessage*/) {
+Return<void> LnbCallback::onDiseqcMessage(const hidl_vec<uint8_t>& diseqcMessage) {
     ALOGD("LnbCallback::onDiseqcMessage");
+    JNIEnv *env = AndroidRuntime::getJNIEnv();
+    jbyteArray array = env->NewByteArray(diseqcMessage.size());
+    env->SetByteArrayRegion(
+            array, 0, diseqcMessage.size(), reinterpret_cast<jbyte*>(diseqcMessage[0]));
+
+    env->CallVoidMethod(
+            mLnb,
+            gFields.onLnbDiseqcMessageID,
+            array);
     return Void();
 }
 
@@ -197,13 +217,23 @@ sp<ILnb> Lnb::getILnb() {
 }
 
 /////////////// DvrCallback ///////////////////////
-Return<void> DvrCallback::onRecordStatus(RecordStatus /*status*/) {
+Return<void> DvrCallback::onRecordStatus(RecordStatus status) {
     ALOGD("DvrCallback::onRecordStatus");
+    JNIEnv *env = AndroidRuntime::getJNIEnv();
+    env->CallVoidMethod(
+            mDvr,
+            gFields.onDvrRecordStatusID,
+            (jint) status);
     return Void();
 }
 
-Return<void> DvrCallback::onPlaybackStatus(PlaybackStatus /*status*/) {
+Return<void> DvrCallback::onPlaybackStatus(PlaybackStatus status) {
     ALOGD("DvrCallback::onPlaybackStatus");
+    JNIEnv *env = AndroidRuntime::getJNIEnv();
+    env->CallVoidMethod(
+            mDvr,
+            gFields.onDvrPlaybackStatusID,
+            (jint) status);
     return Void();
 }
 
@@ -213,27 +243,40 @@ void DvrCallback::setDvr(const jobject dvr) {
     mDvr = env->NewWeakGlobalRef(dvr);
 }
 
-/////////////// Dvr ///////////////////////
-
-Dvr::Dvr(sp<IDvr> sp, jweak obj) : mDvrSp(sp), mDvrObj(obj), mDvrMQEventFlag(nullptr) {}
-
-Dvr::~Dvr() {
-    EventFlag::deleteEventFlag(&mDvrMQEventFlag);
+DvrCallback::~DvrCallback() {
+    JNIEnv *env = AndroidRuntime::getJNIEnv();
+    if (mDvr != NULL) {
+        env->DeleteWeakGlobalRef(mDvr);
+        mDvr = NULL;
+    }
 }
 
-int Dvr::close() {
+/////////////// Dvr ///////////////////////
+
+Dvr::Dvr(sp<IDvr> sp, jobject obj) : mDvrSp(sp), mDvrMQEventFlag(nullptr) {
+    JNIEnv *env = AndroidRuntime::getJNIEnv();
+    mDvrObj = env->NewWeakGlobalRef(obj);
+}
+
+Dvr::~Dvr() {
+    JNIEnv *env = AndroidRuntime::getJNIEnv();
+    env->DeleteWeakGlobalRef(mDvrObj);
+    mDvrObj = NULL;
+}
+
+jint Dvr::close() {
     Result r = mDvrSp->close();
     if (r == Result::SUCCESS) {
         EventFlag::deleteEventFlag(&mDvrMQEventFlag);
     }
-    return (int)r;
+    return (jint) r;
 }
 
 sp<IDvr> Dvr::getIDvr() {
     return mDvrSp;
 }
 
-DvrMQ& Dvr::getDvrMQ() {
+MQ& Dvr::getDvrMQ() {
     return *mDvrMQ;
 }
 
@@ -557,6 +600,14 @@ void FilterCallback::setFilter(const jobject filter) {
     mFilter = env->NewWeakGlobalRef(filter);
 }
 
+FilterCallback::~FilterCallback() {
+    JNIEnv *env = AndroidRuntime::getJNIEnv();
+    if (mFilter != NULL) {
+        env->DeleteWeakGlobalRef(mFilter);
+        mFilter = NULL;
+    }
+}
+
 /////////////// Filter ///////////////////////
 
 Filter::Filter(sp<IFilter> sp, jobject obj) : mFilterSp(sp) {
@@ -784,6 +835,7 @@ JTuner::JTuner(JNIEnv *env, jobject thiz)
 JTuner::~JTuner() {
     JNIEnv *env = AndroidRuntime::getJNIEnv();
 
+    env->DeleteWeakGlobalRef(mObject);
     env->DeleteGlobalRef(mClass);
     mTuner = NULL;
     mClass = NULL;
@@ -836,6 +888,10 @@ jobject JTuner::openFrontendById(int id) {
         return NULL;
     }
     mFe = fe;
+    mFeId = id;
+    if (mDemux != NULL) {
+        mDemux->setFrontendDataSource(mFeId);
+    }
     sp<FrontendCallback> feCb = new FrontendCallback(mObject, id);
     fe->setCallback(feCb);
 
@@ -1023,49 +1079,49 @@ jobject JTuner::getFrontendInfo(int id) {
             maxSymbolRate, acquireRange, exclusiveGroupId, statusCaps, jcaps);
 }
 
-jobject JTuner::getLnbIds() {
+jintArray JTuner::getLnbIds() {
     ALOGD("JTuner::getLnbIds()");
-    mTuner->getLnbIds([&](Result, const hidl_vec<FrontendId>& lnbIds) {
-        mLnbIds = lnbIds;
+    Result res;
+    hidl_vec<LnbId> lnbIds;
+    mTuner->getLnbIds([&](Result r, const hidl_vec<LnbId>& ids) {
+        lnbIds = ids;
+        res = r;
     });
-    if (mLnbIds.size() == 0) {
+    if (res != Result::SUCCESS || mLnbIds.size() == 0) {
         ALOGW("Lnb isn't available");
         return NULL;
     }
 
+    mLnbIds = lnbIds;
     JNIEnv *env = AndroidRuntime::getJNIEnv();
-    jclass arrayListClazz = env->FindClass("java/util/ArrayList");
-    jmethodID arrayListAdd = env->GetMethodID(arrayListClazz, "add", "(Ljava/lang/Object;)Z");
-    jobject obj = env->NewObject(arrayListClazz, env->GetMethodID(arrayListClazz, "<init>", "()V"));
 
-    jclass integerClazz = env->FindClass("java/lang/Integer");
-    jmethodID intInit = env->GetMethodID(integerClazz, "<init>", "(I)V");
+    jintArray ids = env->NewIntArray(mLnbIds.size());
+    env->SetIntArrayRegion(ids, 0, mLnbIds.size(), reinterpret_cast<jint*>(&mLnbIds[0]));
 
-    for (int i=0; i < mLnbIds.size(); i++) {
-       jobject idObj = env->NewObject(integerClazz, intInit, mLnbIds[i]);
-       env->CallBooleanMethod(obj, arrayListAdd, idObj);
-    }
-    return obj;
+    return ids;
 }
 
 jobject JTuner::openLnbById(int id) {
     sp<ILnb> iLnbSp;
-    mTuner->openLnbById(id, [&](Result, const sp<ILnb>& lnb) {
+    Result r;
+    mTuner->openLnbById(id, [&](Result res, const sp<ILnb>& lnb) {
+        r = res;
         iLnbSp = lnb;
     });
-    if (iLnbSp == nullptr) {
+    if (r != Result::SUCCESS || iLnbSp == nullptr) {
         ALOGE("Failed to open lnb");
         return NULL;
     }
     mLnb = iLnbSp;
-    sp<LnbCallback> lnbCb = new LnbCallback(mObject, id);
-    mLnb->setCallback(lnbCb);
 
     JNIEnv *env = AndroidRuntime::getJNIEnv();
     jobject lnbObj = env->NewObject(
             env->FindClass("android/media/tv/tuner/Lnb"),
             gFields.lnbInitID,
             (jint) id);
+
+    sp<LnbCallback> lnbCb = new LnbCallback(lnbObj, id);
+    mLnb->setCallback(lnbCb);
 
     sp<Lnb> lnbSp = new Lnb(iLnbSp, lnbObj);
     lnbSp->incStrong(lnbObj);
@@ -1090,13 +1146,14 @@ jobject JTuner::openLnbByName(jstring name) {
         return NULL;
     }
     mLnb = iLnbSp;
-    sp<LnbCallback> lnbCb = new LnbCallback(mObject, id);
-    mLnb->setCallback(lnbCb);
 
     jobject lnbObj = env->NewObject(
             env->FindClass("android/media/tv/tuner/Lnb"),
             gFields.lnbInitID,
             id);
+
+    sp<LnbCallback> lnbCb = new LnbCallback(lnbObj, id);
+    mLnb->setCallback(lnbCb);
 
     sp<Lnb> lnbSp = new Lnb(iLnbSp, lnbObj);
     lnbSp->incStrong(lnbObj);
@@ -1167,12 +1224,21 @@ Result JTuner::openDemux() {
         return Result::SUCCESS;
     }
     Result res;
+    uint32_t id;
+    sp<IDemux> demuxSp;
     mTuner->openDemux([&](Result r, uint32_t demuxId, const sp<IDemux>& demux) {
-        mDemux = demux;
-        mDemuxId = demuxId;
+        demuxSp = demux;
+        id = demuxId;
         res = r;
         ALOGD("open demux, id = %d", demuxId);
     });
+    if (res == Result::SUCCESS) {
+        mDemux = demuxSp;
+        mDemuxId = id;
+        if (mFe != NULL) {
+            mDemux->setFrontendDataSource(mFeId);
+        }
+    }
     return res;
 }
 
@@ -1382,6 +1448,290 @@ jobject JTuner::openDvr(DvrType type, jlong bufferSize) {
     return dvrObj;
 }
 
+jobject JTuner::getDemuxCaps() {
+    DemuxCapabilities caps;
+    Result res;
+    mTuner->getDemuxCaps([&](Result r, const DemuxCapabilities& demuxCaps) {
+        caps = demuxCaps;
+        res = r;
+    });
+    if (res != Result::SUCCESS) {
+        return NULL;
+    }
+    JNIEnv *env = AndroidRuntime::getJNIEnv();
+    jclass clazz = env->FindClass("android/media/tv/tuner/DemuxCapabilities");
+    jmethodID capsInit = env->GetMethodID(clazz, "<init>", "(IIIIIIIIIJI[IZ)V");
+
+    jint numDemux = caps.numDemux;
+    jint numRecord = caps.numRecord;
+    jint numPlayback = caps.numPlayback;
+    jint numTsFilter = caps.numTsFilter;
+    jint numSectionFilter = caps.numSectionFilter;
+    jint numAudioFilter = caps.numAudioFilter;
+    jint numVideoFilter = caps.numVideoFilter;
+    jint numPesFilter = caps.numPesFilter;
+    jint numPcrFilter = caps.numPcrFilter;
+    jlong numBytesInSectionFilter = caps.numBytesInSectionFilter;
+    jint filterCaps = static_cast<jint>(caps.filterCaps);
+    jboolean bTimeFilter = caps.bTimeFilter;
+
+    jintArray linkCaps = env->NewIntArray(caps.linkCaps.size());
+    env->SetIntArrayRegion(
+            linkCaps, 0, caps.linkCaps.size(), reinterpret_cast<jint*>(&caps.linkCaps[0]));
+
+    return env->NewObject(clazz, capsInit, numDemux, numRecord, numPlayback, numTsFilter,
+            numSectionFilter, numAudioFilter, numVideoFilter, numPesFilter, numPcrFilter,
+            numBytesInSectionFilter, filterCaps, linkCaps, bTimeFilter);
+}
+
+jobject JTuner::getFrontendStatus(jintArray types) {
+    if (mFe == NULL) {
+        return NULL;
+    }
+    JNIEnv *env = AndroidRuntime::getJNIEnv();
+    jsize size = env->GetArrayLength(types);
+    std::vector<FrontendStatusType> v(size);
+    env->GetIntArrayRegion(types, 0, size, reinterpret_cast<jint*>(&v[0]));
+
+    Result res;
+    hidl_vec<FrontendStatus> status;
+    mFe->getStatus(v,
+            [&](Result r, const hidl_vec<FrontendStatus>& s) {
+                res = r;
+                status = s;
+            });
+    if (res != Result::SUCCESS) {
+        return NULL;
+    }
+
+    jclass clazz = env->FindClass("android/media/tv/tuner/frontend/FrontendStatus");
+    jmethodID init = env->GetMethodID(clazz, "<init>", "()V");
+    jobject statusObj = env->NewObject(clazz, init);
+
+    jclass intClazz = env->FindClass("java/lang/Integer");
+    jmethodID initInt = env->GetMethodID(intClazz, "<init>", "(I)V");
+    jclass booleanClazz = env->FindClass("java/lang/Boolean");
+    jmethodID initBoolean = env->GetMethodID(booleanClazz, "<init>", "(Z)V");
+
+    for (auto s : status) {
+        switch(s.getDiscriminator()) {
+            case FrontendStatus::hidl_discriminator::isDemodLocked: {
+                jfieldID field = env->GetFieldID(clazz, "mIsDemodLocked", "Ljava/lang/Boolean;");
+                jobject newBooleanObj = env->NewObject(
+                        booleanClazz, initBoolean, static_cast<jboolean>(s.isDemodLocked()));
+                env->SetObjectField(statusObj, field, newBooleanObj);
+                break;
+            }
+            case FrontendStatus::hidl_discriminator::snr: {
+                jfieldID field = env->GetFieldID(clazz, "mSnr", "Ljava/lang/Integer;");
+                jobject newIntegerObj = env->NewObject(
+                        intClazz, initInt, static_cast<jint>(s.snr()));
+                env->SetObjectField(statusObj, field, newIntegerObj);
+                break;
+            }
+            case FrontendStatus::hidl_discriminator::ber: {
+                jfieldID field = env->GetFieldID(clazz, "mBer", "Ljava/lang/Integer;");
+                jobject newIntegerObj = env->NewObject(
+                        intClazz, initInt, static_cast<jint>(s.ber()));
+                env->SetObjectField(statusObj, field, newIntegerObj);
+                break;
+            }
+            case FrontendStatus::hidl_discriminator::per: {
+                jfieldID field = env->GetFieldID(clazz, "mPer", "Ljava/lang/Integer;");
+                jobject newIntegerObj = env->NewObject(
+                        intClazz, initInt, static_cast<jint>(s.per()));
+                env->SetObjectField(statusObj, field, newIntegerObj);
+                break;
+            }
+            case FrontendStatus::hidl_discriminator::preBer: {
+                jfieldID field = env->GetFieldID(clazz, "mPerBer", "Ljava/lang/Integer;");
+                jobject newIntegerObj = env->NewObject(
+                        intClazz, initInt, static_cast<jint>(s.preBer()));
+                env->SetObjectField(statusObj, field, newIntegerObj);
+                break;
+            }
+            case FrontendStatus::hidl_discriminator::signalQuality: {
+                jfieldID field = env->GetFieldID(clazz, "mSignalQuality", "Ljava/lang/Integer;");
+                jobject newIntegerObj = env->NewObject(
+                        intClazz, initInt, static_cast<jint>(s.signalQuality()));
+                env->SetObjectField(statusObj, field, newIntegerObj);
+                break;
+            }
+            case FrontendStatus::hidl_discriminator::signalStrength: {
+                jfieldID field = env->GetFieldID(clazz, "mSignalStrength", "Ljava/lang/Integer;");
+                jobject newIntegerObj = env->NewObject(
+                        intClazz, initInt, static_cast<jint>(s.signalStrength()));
+                env->SetObjectField(statusObj, field, newIntegerObj);
+                break;
+            }
+            case FrontendStatus::hidl_discriminator::symbolRate: {
+                jfieldID field = env->GetFieldID(clazz, "mSymbolRate", "Ljava/lang/Integer;");
+                jobject newIntegerObj = env->NewObject(
+                        intClazz, initInt, static_cast<jint>(s.symbolRate()));
+                env->SetObjectField(statusObj, field, newIntegerObj);
+                break;
+            }
+            case FrontendStatus::hidl_discriminator::innerFec: {
+                jfieldID field = env->GetFieldID(clazz, "mInnerFec", "Ljava/lang/Long;");
+                jclass longClazz = env->FindClass("java/lang/Long");
+                jmethodID initLong = env->GetMethodID(longClazz, "<init>", "(J)V");
+                jobject newLongObj = env->NewObject(
+                        longClazz, initLong, static_cast<jlong>(s.innerFec()));
+                env->SetObjectField(statusObj, field, newLongObj);
+                break;
+            }
+            case FrontendStatus::hidl_discriminator::modulation: {
+                jfieldID field = env->GetFieldID(clazz, "mModulation", "Ljava/lang/Integer;");
+                FrontendModulationStatus modulation = s.modulation();
+                jint intModulation;
+                bool valid = true;
+                switch(modulation.getDiscriminator()) {
+                    case FrontendModulationStatus::hidl_discriminator::dvbc: {
+                        intModulation = static_cast<jint>(modulation.dvbc());
+                        break;
+                    }
+                    case FrontendModulationStatus::hidl_discriminator::dvbs: {
+                        intModulation = static_cast<jint>(modulation.dvbs());
+                        break;
+                    }
+                    case FrontendModulationStatus::hidl_discriminator::isdbs: {
+                        intModulation = static_cast<jint>(modulation.isdbs());
+                        break;
+                    }
+                    case FrontendModulationStatus::hidl_discriminator::isdbs3: {
+                        intModulation = static_cast<jint>(modulation.isdbs3());
+                        break;
+                    }
+                    case FrontendModulationStatus::hidl_discriminator::isdbt: {
+                        intModulation = static_cast<jint>(modulation.isdbt());
+                        break;
+                    }
+                    default: {
+                        valid = false;
+                        break;
+                    }
+                }
+                if (valid) {
+                    jobject newIntegerObj = env->NewObject(intClazz, initInt, intModulation);
+                    env->SetObjectField(statusObj, field, newIntegerObj);
+                }
+                break;
+            }
+            case FrontendStatus::hidl_discriminator::inversion: {
+                jfieldID field = env->GetFieldID(clazz, "mInversion", "Ljava/lang/Integer;");
+                jobject newIntegerObj = env->NewObject(
+                        intClazz, initInt, static_cast<jint>(s.inversion()));
+                env->SetObjectField(statusObj, field, newIntegerObj);
+                break;
+            }
+            case FrontendStatus::hidl_discriminator::lnbVoltage: {
+                jfieldID field = env->GetFieldID(clazz, "mLnbVoltage", "Ljava/lang/Integer;");
+                jobject newIntegerObj = env->NewObject(
+                        intClazz, initInt, static_cast<jint>(s.lnbVoltage()));
+                env->SetObjectField(statusObj, field, newIntegerObj);
+                break;
+            }
+            case FrontendStatus::hidl_discriminator::plpId: {
+                jfieldID field = env->GetFieldID(clazz, "mPlpId", "Ljava/lang/Integer;");
+                jobject newIntegerObj = env->NewObject(
+                        intClazz, initInt, static_cast<jint>(s.plpId()));
+                env->SetObjectField(statusObj, field, newIntegerObj);
+                break;
+            }
+            case FrontendStatus::hidl_discriminator::isEWBS: {
+                jfieldID field = env->GetFieldID(clazz, "mIsEwbs", "Ljava/lang/Boolean;");
+                jobject newBooleanObj = env->NewObject(
+                        booleanClazz, initBoolean, static_cast<jboolean>(s.isEWBS()));
+                env->SetObjectField(statusObj, field, newBooleanObj);
+                break;
+            }
+            case FrontendStatus::hidl_discriminator::agc: {
+                jfieldID field = env->GetFieldID(clazz, "mAgc", "Ljava/lang/Integer;");
+                jobject newIntegerObj = env->NewObject(
+                        intClazz, initInt, static_cast<jint>(s.agc()));
+                env->SetObjectField(statusObj, field, newIntegerObj);
+                break;
+            }
+            case FrontendStatus::hidl_discriminator::isLnaOn: {
+                jfieldID field = env->GetFieldID(clazz, "mIsLnaOn", "Ljava/lang/Boolean;");
+                jobject newBooleanObj = env->NewObject(
+                        booleanClazz, initBoolean, static_cast<jboolean>(s.isLnaOn()));
+                env->SetObjectField(statusObj, field, newBooleanObj);
+                break;
+            }
+            case FrontendStatus::hidl_discriminator::isLayerError: {
+                jfieldID field = env->GetFieldID(clazz, "mIsLayerErrors", "[Z");
+                hidl_vec<bool> layerErr = s.isLayerError();
+
+                jbooleanArray valObj = env->NewBooleanArray(layerErr.size());
+
+                for (size_t i = 0; i < layerErr.size(); i++) {
+                    jboolean x = layerErr[i];
+                    env->SetBooleanArrayRegion(valObj, i, 1, &x);
+                }
+                env->SetObjectField(statusObj, field, valObj);
+                break;
+            }
+            case FrontendStatus::hidl_discriminator::mer: {
+                jfieldID field = env->GetFieldID(clazz, "mMer", "Ljava/lang/Integer;");
+                jobject newIntegerObj = env->NewObject(
+                        intClazz, initInt, static_cast<jint>(s.mer()));
+                env->SetObjectField(statusObj, field, newIntegerObj);
+                break;
+            }
+            case FrontendStatus::hidl_discriminator::freqOffset: {
+                jfieldID field = env->GetFieldID(clazz, "mFreqOffset", "Ljava/lang/Integer;");
+                jobject newIntegerObj = env->NewObject(
+                        intClazz, initInt, static_cast<jint>(s.freqOffset()));
+                env->SetObjectField(statusObj, field, newIntegerObj);
+                break;
+            }
+            case FrontendStatus::hidl_discriminator::hierarchy: {
+                jfieldID field = env->GetFieldID(clazz, "mHierarchy", "Ljava/lang/Integer;");
+                jobject newIntegerObj = env->NewObject(
+                        intClazz, initInt, static_cast<jint>(s.hierarchy()));
+                env->SetObjectField(statusObj, field, newIntegerObj);
+                break;
+            }
+            case FrontendStatus::hidl_discriminator::isRfLocked: {
+                jfieldID field = env->GetFieldID(clazz, "mIsRfLocked", "Ljava/lang/Boolean;");
+                jobject newBooleanObj = env->NewObject(
+                        booleanClazz, initBoolean, static_cast<jboolean>(s.isRfLocked()));
+                env->SetObjectField(statusObj, field, newBooleanObj);
+                break;
+            }
+            case FrontendStatus::hidl_discriminator::plpInfo: {
+                jfieldID field = env->GetFieldID(clazz, "mPlpInfo",
+                        "[Landroid/media/tv/tuner/frontend/FrontendStatus$Atsc3PlpTuningInfo;");
+                jclass plpClazz = env->FindClass(
+                        "android/media/tv/tuner/frontend/FrontendStatus$Atsc3PlpTuningInfo");
+                jmethodID initPlp = env->GetMethodID(plpClazz, "<init>", "(IZI)V");
+
+                hidl_vec<FrontendStatusAtsc3PlpInfo> plpInfos = s.plpInfo();
+
+                jobjectArray valObj = env->NewObjectArray(plpInfos.size(), plpClazz, NULL);
+                for (int i = 0; i < plpInfos.size(); i++) {
+                    auto info = plpInfos[i];
+                    jint plpId = (jint) info.plpId;
+                    jboolean isLocked = (jboolean) info.isLocked;
+                    jint uec = (jint) info.uec;
+
+                    jobject plpObj = env->NewObject(plpClazz, initPlp, plpId, isLocked, uec);
+                    env->SetObjectArrayElement(valObj, i, plpObj);
+                }
+
+                env->SetObjectField(statusObj, field, valObj);
+                break;
+            }
+            default: {
+                break;
+            }
+        }
+    }
+
+    return statusObj;
+}
+
 }  // namespace android
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1408,6 +1758,10 @@ static sp<JTuner> getTuner(JNIEnv *env, jobject thiz) {
 
 static sp<IDescrambler> getDescrambler(JNIEnv *env, jobject descrambler) {
     return (IDescrambler *)env->GetLongField(descrambler, gFields.descramblerContext);
+}
+
+static uint32_t getResourceIdFromHandle(jint handle) {
+    return (handle & 0x00ff0000) >> 16;
 }
 
 static DemuxPid getDemuxPid(int pidType, int pid) {
@@ -1915,8 +2269,6 @@ static void android_media_tv_Tuner_native_init(JNIEnv *env) {
 
     gFields.onFrontendEventID = env->GetMethodID(clazz, "onFrontendEvent", "(I)V");
 
-    gFields.onLnbEventID = env->GetMethodID(clazz, "onLnbEvent", "(I)V");
-
     jclass frontendClazz = env->FindClass("android/media/tv/tuner/Tuner$Frontend");
     gFields.frontendInitID =
             env->GetMethodID(frontendClazz, "<init>", "(Landroid/media/tv/tuner/Tuner;I)V");
@@ -1924,6 +2276,8 @@ static void android_media_tv_Tuner_native_init(JNIEnv *env) {
     jclass lnbClazz = env->FindClass("android/media/tv/tuner/Lnb");
     gFields.lnbContext = env->GetFieldID(lnbClazz, "mNativeContext", "J");
     gFields.lnbInitID = env->GetMethodID(lnbClazz, "<init>", "(I)V");
+    gFields.onLnbEventID = env->GetMethodID(lnbClazz, "onEvent", "(I)V");
+    gFields.onLnbDiseqcMessageID = env->GetMethodID(lnbClazz, "onDiseqcMessage", "([B)V");
 
     jclass filterClazz = env->FindClass("android/media/tv/tuner/filter/Filter");
     gFields.filterContext = env->GetFieldID(filterClazz, "mNativeContext", "J");
@@ -1947,10 +2301,14 @@ static void android_media_tv_Tuner_native_init(JNIEnv *env) {
     jclass dvrRecorderClazz = env->FindClass("android/media/tv/tuner/dvr/DvrRecorder");
     gFields.dvrRecorderContext = env->GetFieldID(dvrRecorderClazz, "mNativeContext", "J");
     gFields.dvrRecorderInitID = env->GetMethodID(dvrRecorderClazz, "<init>", "()V");
+    gFields.onDvrRecordStatusID =
+            env->GetMethodID(dvrRecorderClazz, "onRecordStatusChanged", "(I)V");
 
     jclass dvrPlaybackClazz = env->FindClass("android/media/tv/tuner/dvr/DvrPlayback");
     gFields.dvrPlaybackContext = env->GetFieldID(dvrPlaybackClazz, "mNativeContext", "J");
     gFields.dvrPlaybackInitID = env->GetMethodID(dvrPlaybackClazz, "<init>", "()V");
+    gFields.onDvrPlaybackStatusID =
+            env->GetMethodID(dvrRecorderClazz, "onPlaybackStatusChanged", "(I)V");
 
     jclass linearBlockClazz = env->FindClass("android/media/MediaCodec$LinearBlock");
     gFields.linearBlockInitID = env->GetMethodID(linearBlockClazz, "<init>", "()V");
@@ -1968,8 +2326,10 @@ static jobject android_media_tv_Tuner_get_frontend_ids(JNIEnv *env, jobject thiz
     return tuner->getFrontendIds();
 }
 
-static jobject android_media_tv_Tuner_open_frontend_by_id(JNIEnv *env, jobject thiz, jint id) {
+static jobject android_media_tv_Tuner_open_frontend_by_handle(
+        JNIEnv *env, jobject thiz, jint handle) {
     sp<JTuner> tuner = getTuner(env, thiz);
+    uint32_t id = getResourceIdFromHandle(handle);
     return tuner->openFrontendById(id);
 }
 
@@ -2005,8 +2365,10 @@ static int android_media_tv_Tuner_set_lna(JNIEnv *env, jobject thiz, jboolean en
     return tuner->setLna(enable);
 }
 
-static jobject android_media_tv_Tuner_get_frontend_status(JNIEnv, jobject, jintArray) {
-    return NULL;
+static jobject android_media_tv_Tuner_get_frontend_status(
+        JNIEnv* env, jobject thiz, jintArray types) {
+    sp<JTuner> tuner = getTuner(env, thiz);
+    return tuner->getFrontendStatus(types);
 }
 
 static jobject android_media_tv_Tuner_get_av_sync_hw_id(
@@ -2040,13 +2402,14 @@ static jobject android_media_tv_Tuner_get_frontend_info(JNIEnv *env, jobject thi
     return tuner->getFrontendInfo(id);
 }
 
-static jobject android_media_tv_Tuner_get_lnb_ids(JNIEnv *env, jobject thiz) {
+static jintArray android_media_tv_Tuner_get_lnb_ids(JNIEnv *env, jobject thiz) {
     sp<JTuner> tuner = getTuner(env, thiz);
     return tuner->getLnbIds();
 }
 
-static jobject android_media_tv_Tuner_open_lnb_by_id(JNIEnv *env, jobject thiz, jint id) {
+static jobject android_media_tv_Tuner_open_lnb_by_handle(JNIEnv *env, jobject thiz, jint handle) {
     sp<JTuner> tuner = getTuner(env, thiz);
+    uint32_t id = getResourceIdFromHandle(handle);
     return tuner->openLnbById(id);
 }
 
@@ -2441,11 +2804,12 @@ static DemuxFilterSettings getFilterConfiguration(
     return filterSettings;
 }
 
-static int copyData(JNIEnv *env, sp<Filter> filter, jbyteArray buffer, jint offset, int size) {
-    ALOGD("copyData, size=%d, offset=%d", size, offset);
+static jint copyData(JNIEnv *env, std::unique_ptr<MQ>& mq, EventFlag* flag, jbyteArray buffer,
+        jlong offset, jlong size) {
+    ALOGD("copyData, size=%ld, offset=%ld", (long) size, (long) offset);
 
-    int available = filter->mFilterMQ->availableToRead();
-    ALOGD("copyData, available=%d", available);
+    jlong available = mq->availableToRead();
+    ALOGD("copyData, available=%ld", (long) available);
     size = std::min(size, available);
 
     jboolean isCopy;
@@ -2456,9 +2820,9 @@ static int copyData(JNIEnv *env, sp<Filter> filter, jbyteArray buffer, jint offs
         return 0;
     }
 
-    if (filter->mFilterMQ->read(reinterpret_cast<unsigned char*>(dst) + offset, size)) {
+    if (mq->read(reinterpret_cast<unsigned char*>(dst) + offset, size)) {
         env->ReleaseByteArrayElements(buffer, dst, 0);
-        filter->mFilterMQEventFlag->wake(static_cast<uint32_t>(DemuxQueueNotifyBits::DATA_CONSUMED));
+        flag->wake(static_cast<uint32_t>(DemuxQueueNotifyBits::DATA_CONSUMED));
     } else {
         ALOGD("Failed to read FMQ");
         env->ReleaseByteArrayElements(buffer, dst, 0);
@@ -2467,7 +2831,7 @@ static int copyData(JNIEnv *env, sp<Filter> filter, jbyteArray buffer, jint offs
     return size;
 }
 
-static int android_media_tv_Tuner_configure_filter(
+static jint android_media_tv_Tuner_configure_filter(
         JNIEnv *env, jobject filter, int type, int subtype, jobject settings) {
     ALOGD("configure filter type=%d, subtype=%d", type, subtype);
     sp<Filter> filterSp = getFilter(env, filter);
@@ -2478,9 +2842,14 @@ static int android_media_tv_Tuner_configure_filter(
     }
     DemuxFilterSettings filterSettings = getFilterConfiguration(env, type, subtype, settings);
     Result res = iFilterSp->configure(filterSettings);
+
+    if (res != Result::SUCCESS) {
+        return (jint) res;
+    }
+
     MQDescriptorSync<uint8_t> filterMQDesc;
-    if (res == Result::SUCCESS && filterSp->mFilterMQ == NULL) {
-        Result getQueueDescResult = Result::UNKNOWN_ERROR;
+    Result getQueueDescResult = Result::UNKNOWN_ERROR;
+    if (filterSp->mFilterMQ == NULL) {
         iFilterSp->getQueueDesc(
                 [&](Result r, const MQDescriptorSync<uint8_t>& desc) {
                     filterMQDesc = desc;
@@ -2488,64 +2857,102 @@ static int android_media_tv_Tuner_configure_filter(
                     ALOGD("getFilterQueueDesc");
                 });
         if (getQueueDescResult == Result::SUCCESS) {
-            filterSp->mFilterMQ = std::make_unique<FilterMQ>(filterMQDesc, true);
+            filterSp->mFilterMQ = std::make_unique<MQ>(filterMQDesc, true);
             EventFlag::createEventFlag(
                     filterSp->mFilterMQ->getEventFlagWord(), &(filterSp->mFilterMQEventFlag));
         }
     }
-    return (int)res;
+    return (jint) getQueueDescResult;
 }
 
-static int android_media_tv_Tuner_get_filter_id(JNIEnv*, jobject) {
-    return 0;
+static jint android_media_tv_Tuner_get_filter_id(JNIEnv* env, jobject filter) {
+    sp<IFilter> iFilterSp = getFilter(env, filter)->getIFilter();
+    if (iFilterSp == NULL) {
+        ALOGD("Failed to get filter ID: filter not found");
+        return (int) Result::INVALID_STATE;
+    }
+    Result res;
+    uint32_t id;
+    iFilterSp->getId(
+            [&](Result r, uint32_t filterId) {
+                res = r;
+                id = filterId;
+            });
+    if (res != Result::SUCCESS) {
+        return (jint) Constant::INVALID_FILTER_ID;
+    }
+    return (jint) id;
 }
 
-static int android_media_tv_Tuner_set_filter_data_source(JNIEnv*, jobject, jobject) {
-    return 0;
+static jint android_media_tv_Tuner_set_filter_data_source(
+        JNIEnv* env, jobject filter, jobject srcFilter) {
+    sp<IFilter> iFilterSp = getFilter(env, filter)->getIFilter();
+    if (iFilterSp == NULL) {
+        ALOGD("Failed to set filter data source: filter not found");
+        return (jint) Result::INVALID_STATE;
+    }
+    Result r;
+    if (srcFilter == NULL) {
+        r = iFilterSp->setDataSource(NULL);
+    } else {
+        sp<IFilter> srcSp = getFilter(env, srcFilter)->getIFilter();
+        if (iFilterSp == NULL) {
+            ALOGD("Failed to set filter data source: src filter not found");
+            return (jint) Result::INVALID_STATE;
+        }
+        r = iFilterSp->setDataSource(srcSp);
+    }
+    return (jint) r;
 }
 
-static int android_media_tv_Tuner_start_filter(JNIEnv *env, jobject filter) {
-    sp<IFilter> filterSp = getFilter(env, filter)->getIFilter();
-    if (filterSp == NULL) {
+static jint android_media_tv_Tuner_start_filter(JNIEnv *env, jobject filter) {
+    sp<IFilter> iFilterSp = getFilter(env, filter)->getIFilter();
+    if (iFilterSp == NULL) {
         ALOGD("Failed to start filter: filter not found");
-        return false;
+        return (jint) Result::INVALID_STATE;
     }
-    Result r = filterSp->start();
-    return (int) r;
+    Result r = iFilterSp->start();
+    return (jint) r;
 }
 
-static int android_media_tv_Tuner_stop_filter(JNIEnv *env, jobject filter) {
-    sp<IFilter> filterSp = getFilter(env, filter)->getIFilter();
-    if (filterSp == NULL) {
+static jint android_media_tv_Tuner_stop_filter(JNIEnv *env, jobject filter) {
+    sp<IFilter> iFilterSp = getFilter(env, filter)->getIFilter();
+    if (iFilterSp == NULL) {
         ALOGD("Failed to stop filter: filter not found");
-        return false;
+        return (jint) Result::INVALID_STATE;
     }
-    Result r = filterSp->stop();
-    return (int) r;
+    Result r = iFilterSp->stop();
+    return (jint) r;
 }
 
-static int android_media_tv_Tuner_flush_filter(JNIEnv *env, jobject filter) {
-    sp<IFilter> filterSp = getFilter(env, filter)->getIFilter();
-    if (filterSp == NULL) {
+static jint android_media_tv_Tuner_flush_filter(JNIEnv *env, jobject filter) {
+    sp<IFilter> iFilterSp = getFilter(env, filter)->getIFilter();
+    if (iFilterSp == NULL) {
         ALOGD("Failed to flush filter: filter not found");
-        return false;
+        return (jint) Result::INVALID_STATE;
     }
-    Result r = filterSp->flush();
-    return (int) r;
+    Result r = iFilterSp->flush();
+    return (jint) r;
 }
 
-static int android_media_tv_Tuner_read_filter_fmq(
+static jint android_media_tv_Tuner_read_filter_fmq(
         JNIEnv *env, jobject filter, jbyteArray buffer, jlong offset, jlong size) {
     sp<Filter> filterSp = getFilter(env, filter);
     if (filterSp == NULL) {
         ALOGD("Failed to read filter FMQ: filter not found");
-        return 0;
+        return (jint) Result::INVALID_STATE;
     }
-    return copyData(env, filterSp, buffer, offset, size);
+    return copyData(env, filterSp->mFilterMQ, filterSp->mFilterMQEventFlag, buffer, offset, size);
 }
 
-static int android_media_tv_Tuner_close_filter(JNIEnv*, jobject) {
-    return 0;
+static jint android_media_tv_Tuner_close_filter(JNIEnv *env, jobject filter) {
+    sp<IFilter> iFilterSp = getFilter(env, filter)->getIFilter();
+    if (iFilterSp == NULL) {
+        ALOGD("Failed to close filter: filter not found");
+        return (jint) Result::INVALID_STATE;
+    }
+    Result r = iFilterSp->close();
+    return (jint) r;
 }
 
 static sp<TimeFilter> getTimeFilter(JNIEnv *env, jobject filter) {
@@ -2642,7 +3049,7 @@ static int android_media_tv_Tuner_time_filter_close(JNIEnv *env, jobject filter)
     return (int) r;
 }
 
-static jobject android_media_tv_Tuner_open_descrambler(JNIEnv *env, jobject thiz) {
+static jobject android_media_tv_Tuner_open_descrambler(JNIEnv *env, jobject thiz, jint) {
     sp<JTuner> tuner = getTuner(env, thiz);
     return tuner->openDescrambler();
 }
@@ -2653,8 +3060,8 @@ static int android_media_tv_Tuner_add_pid(
     if (descramblerSp == NULL) {
         return false;
     }
-    sp<IFilter> filterSp = getFilter(env, filter)->getIFilter();
-    Result result = descramblerSp->addPid(getDemuxPid((int)pidType, (int)pid), filterSp);
+    sp<IFilter> iFilterSp = getFilter(env, filter)->getIFilter();
+    Result result = descramblerSp->addPid(getDemuxPid((int)pidType, (int)pid), iFilterSp);
     return (int)result;
 }
 
@@ -2664,8 +3071,8 @@ static int android_media_tv_Tuner_remove_pid(
     if (descramblerSp == NULL) {
         return false;
     }
-    sp<IFilter> filterSp = getFilter(env, filter)->getIFilter();
-    Result result = descramblerSp->removePid(getDemuxPid((int)pidType, (int)pid), filterSp);
+    sp<IFilter> iFilterSp = getFilter(env, filter)->getIFilter();
+    Result result = descramblerSp->removePid(getDemuxPid((int)pidType, (int)pid), iFilterSp);
     return (int)result;
 }
 
@@ -2689,90 +3096,108 @@ static jobject android_media_tv_Tuner_open_dvr_playback(
     return tuner->openDvr(DvrType::PLAYBACK, bufferSize);
 }
 
-static jobject android_media_tv_Tuner_get_demux_caps(JNIEnv*, jobject) {
-    return NULL;
+static jobject android_media_tv_Tuner_get_demux_caps(JNIEnv* env, jobject thiz) {
+    sp<JTuner> tuner = getTuner(env, thiz);
+    return tuner->getDemuxCaps();
 }
 
-static int android_media_tv_Tuner_attach_filter(JNIEnv *env, jobject dvr, jobject filter) {
-    sp<IDvr> dvrSp = getDvr(env, dvr)->getIDvr();
-    sp<IFilter> filterSp = getFilter(env, filter)->getIFilter();
-    if (dvrSp == NULL || filterSp == NULL) {
-        return false;
-    }
-    Result result = dvrSp->attachFilter(filterSp);
-    return (int) result;
-}
-
-static int android_media_tv_Tuner_detach_filter(JNIEnv *env, jobject dvr, jobject filter) {
-    sp<IDvr> dvrSp = getDvr(env, dvr)->getIDvr();
-    sp<IFilter> filterSp = getFilter(env, filter)->getIFilter();
-    if (dvrSp == NULL || filterSp == NULL) {
-        return false;
-    }
-    Result result = dvrSp->detachFilter(filterSp);
-    return (int) result;
-}
-
-static int android_media_tv_Tuner_configure_dvr(JNIEnv *env, jobject dvr, jobject settings) {
+static jint android_media_tv_Tuner_attach_filter(JNIEnv *env, jobject dvr, jobject filter) {
     sp<Dvr> dvrSp = getDvr(env, dvr);
+    if (dvrSp == NULL) {
+        return (jint) Result::NOT_INITIALIZED;
+    }
+    sp<Filter> filterSp = getFilter(env, filter);
+    if (filterSp == NULL) {
+        return (jint) Result::INVALID_ARGUMENT;
+    }
     sp<IDvr> iDvrSp = dvrSp->getIDvr();
+    sp<IFilter> iFilterSp = filterSp->getIFilter();
+    Result result = iDvrSp->attachFilter(iFilterSp);
+    return (jint) result;
+}
+
+static jint android_media_tv_Tuner_detach_filter(JNIEnv *env, jobject dvr, jobject filter) {
+    sp<Dvr> dvrSp = getDvr(env, dvr);
+    if (dvrSp == NULL) {
+        return (jint) Result::NOT_INITIALIZED;
+    }
+    sp<Filter> filterSp = getFilter(env, filter);
+    if (filterSp == NULL) {
+        return (jint) Result::INVALID_ARGUMENT;
+    }
+    sp<IDvr> iDvrSp = dvrSp->getIDvr();
+    sp<IFilter> iFilterSp = filterSp->getIFilter();
+    Result result = iDvrSp->detachFilter(iFilterSp);
+    return (jint) result;
+}
+
+static jint android_media_tv_Tuner_configure_dvr(JNIEnv *env, jobject dvr, jobject settings) {
+    sp<Dvr> dvrSp = getDvr(env, dvr);
     if (dvrSp == NULL) {
         ALOGD("Failed to configure dvr: dvr not found");
-        return (int)Result::INVALID_STATE;
+        return (int)Result::NOT_INITIALIZED;
     }
+    sp<IDvr> iDvrSp = dvrSp->getIDvr();
     Result result = iDvrSp->configure(getDvrSettings(env, settings));
-    MQDescriptorSync<uint8_t> dvrMQDesc;
-    if (result == Result::SUCCESS) {
-        Result getQueueDescResult = Result::UNKNOWN_ERROR;
-        iDvrSp->getQueueDesc(
-                [&](Result r, const MQDescriptorSync<uint8_t>& desc) {
-                    dvrMQDesc = desc;
-                    getQueueDescResult = r;
-                    ALOGD("getDvrQueueDesc");
-                });
-        if (getQueueDescResult == Result::SUCCESS) {
-            dvrSp->mDvrMQ = std::make_unique<DvrMQ>(dvrMQDesc, true);
-            EventFlag::createEventFlag(
-                    dvrSp->mDvrMQ->getEventFlagWord(), &(dvrSp->mDvrMQEventFlag));
-        }
+    if (result != Result::SUCCESS) {
+        return (jint) result;
     }
-    return (int)result;
+    MQDescriptorSync<uint8_t> dvrMQDesc;
+    Result getQueueDescResult = Result::UNKNOWN_ERROR;
+    iDvrSp->getQueueDesc(
+            [&](Result r, const MQDescriptorSync<uint8_t>& desc) {
+                dvrMQDesc = desc;
+                getQueueDescResult = r;
+                ALOGD("getDvrQueueDesc");
+            });
+    if (getQueueDescResult == Result::SUCCESS) {
+        dvrSp->mDvrMQ = std::make_unique<MQ>(dvrMQDesc, true);
+        EventFlag::createEventFlag(
+                dvrSp->mDvrMQ->getEventFlagWord(), &(dvrSp->mDvrMQEventFlag));
+    }
+    return (jint) getQueueDescResult;
 }
 
-static int android_media_tv_Tuner_start_dvr(JNIEnv *env, jobject dvr) {
-
-    sp<IDvr> dvrSp = getDvr(env, dvr)->getIDvr();
+static jint android_media_tv_Tuner_start_dvr(JNIEnv *env, jobject dvr) {
+    sp<Dvr> dvrSp = getDvr(env, dvr);
     if (dvrSp == NULL) {
         ALOGD("Failed to start dvr: dvr not found");
-        return false;
+        return (jint) Result::NOT_INITIALIZED;
     }
-
-    Result result = dvrSp->start();
-    return (int) result;
+    sp<IDvr> iDvrSp = dvrSp->getIDvr();
+    Result result = iDvrSp->start();
+    return (jint) result;
 }
 
-static int android_media_tv_Tuner_stop_dvr(JNIEnv *env, jobject dvr) {
-    sp<IDvr> dvrSp = getDvr(env, dvr)->getIDvr();
+static jint android_media_tv_Tuner_stop_dvr(JNIEnv *env, jobject dvr) {
+    sp<Dvr> dvrSp = getDvr(env, dvr);
     if (dvrSp == NULL) {
         ALOGD("Failed to stop dvr: dvr not found");
-        return false;
+        return (jint) Result::NOT_INITIALIZED;
     }
-    Result result = dvrSp->stop();
-    return (int) result;
+    sp<IDvr> iDvrSp = dvrSp->getIDvr();
+    Result result = iDvrSp->stop();
+    return (jint) result;
 }
 
-static int android_media_tv_Tuner_flush_dvr(JNIEnv *env, jobject dvr) {
-    sp<IDvr> dvrSp = getDvr(env, dvr)->getIDvr();
+static jint android_media_tv_Tuner_flush_dvr(JNIEnv *env, jobject dvr) {
+    sp<Dvr> dvrSp = getDvr(env, dvr);
     if (dvrSp == NULL) {
         ALOGD("Failed to flush dvr: dvr not found");
-        return false;
+        return (jint) Result::NOT_INITIALIZED;
     }
-    Result result = dvrSp->flush();
-    return (int) result;
+    sp<IDvr> iDvrSp = dvrSp->getIDvr();
+    Result result = iDvrSp->flush();
+    return (jint) result;
 }
 
-static int android_media_tv_Tuner_close_dvr(JNIEnv*, jobject) {
-    return 0;
+static jint android_media_tv_Tuner_close_dvr(JNIEnv* env, jobject dvr) {
+    sp<Dvr> dvrSp = getDvr(env, dvr);
+    if (dvrSp == NULL) {
+        ALOGD("Failed to close dvr: dvr not found");
+        return (jint) Result::NOT_INITIALIZED;
+    }
+    return dvrSp->close();
 }
 
 static sp<Lnb> getLnb(JNIEnv *env, jobject lnb) {
@@ -2806,8 +3231,14 @@ static int android_media_tv_Tuner_lnb_send_diseqc_msg(JNIEnv* env, jobject lnb, 
     return (jint) r;
 }
 
-static int android_media_tv_Tuner_close_lnb(JNIEnv*, jobject) {
-    return 0;
+static int android_media_tv_Tuner_close_lnb(JNIEnv* env, jobject lnb) {
+    sp<Lnb> lnbSp = getLnb(env, lnb);
+    Result r = lnbSp->getILnb()->close();
+    if (r == Result::SUCCESS) {
+        lnbSp->decStrong(lnb);
+        env->SetLongField(lnb, gFields.lnbContext, 0);
+    }
+    return (jint) r;
 }
 
 static void android_media_tv_Tuner_dvr_set_fd(JNIEnv *env, jobject dvr, jobject jfd) {
@@ -2828,7 +3259,7 @@ static jlong android_media_tv_Tuner_read_dvr(JNIEnv *env, jobject dvr, jlong siz
     long available = dvrSp->mDvrMQ->availableToWrite();
     long write = std::min((long) size, available);
 
-    DvrMQ::MemTransaction tx;
+    MQ::MemTransaction tx;
     long ret = 0;
     if (dvrSp->mDvrMQ->beginWrite(write, &tx)) {
         auto first = tx.getFirstRegion();
@@ -2859,10 +3290,36 @@ static jlong android_media_tv_Tuner_read_dvr(JNIEnv *env, jobject dvr, jlong siz
 }
 
 static jlong android_media_tv_Tuner_read_dvr_from_array(
-        JNIEnv /* *env */, jobject /* dvr */, jbyteArray /* bytes */, jlong /* offset */,
-        jlong /* size */) {
-    //TODO: impl
-    return 0;
+        JNIEnv* env, jobject dvr, jbyteArray buffer, jlong offset, jlong size) {
+    sp<Dvr> dvrSp = getDvr(env, dvr);
+    if (dvrSp == NULL) {
+        ALOGW("Failed to read dvr: dvr not found");
+        return 0;
+    }
+    if (dvrSp->mDvrMQ == NULL) {
+        ALOGW("Failed to read dvr: dvr not configured");
+        return 0;
+    }
+
+    jlong available = dvrSp->mDvrMQ->availableToWrite();
+    size = std::min(size, available);
+
+    jboolean isCopy;
+    jbyte *src = env->GetByteArrayElements(buffer, &isCopy);
+    if (src == nullptr) {
+        ALOGD("Failed to GetByteArrayElements");
+        return 0;
+    }
+
+    if (dvrSp->mDvrMQ->write(reinterpret_cast<unsigned char*>(src) + offset, size)) {
+        env->ReleaseByteArrayElements(buffer, src, 0);
+        dvrSp->mDvrMQEventFlag->wake(static_cast<uint32_t>(DemuxQueueNotifyBits::DATA_CONSUMED));
+    } else {
+        ALOGD("Failed to write FMQ");
+        env->ReleaseByteArrayElements(buffer, src, 0);
+        return 0;
+    }
+    return size;
 }
 
 static jlong android_media_tv_Tuner_write_dvr(JNIEnv *env, jobject dvr, jlong size) {
@@ -2877,13 +3334,13 @@ static jlong android_media_tv_Tuner_write_dvr(JNIEnv *env, jobject dvr, jlong si
         return 0;
     }
 
-    DvrMQ& dvrMq = dvrSp->getDvrMQ();
+    MQ& dvrMq = dvrSp->getDvrMQ();
 
     long available = dvrMq.availableToRead();
     long toRead = std::min((long) size, available);
 
     long ret = 0;
-    DvrMQ::MemTransaction tx;
+    MQ::MemTransaction tx;
     if (dvrMq.beginRead(toRead, &tx)) {
         auto first = tx.getFirstRegion();
         auto data = first.getAddress();
@@ -2913,10 +3370,17 @@ static jlong android_media_tv_Tuner_write_dvr(JNIEnv *env, jobject dvr, jlong si
 }
 
 static jlong android_media_tv_Tuner_write_dvr_to_array(
-        JNIEnv /* *env */, jobject /* dvr */, jbyteArray /* bytes */, jlong /* offset */,
-        jlong /* size */) {
-    //TODO: impl
-    return 0;
+        JNIEnv *env, jobject dvr, jbyteArray buffer, jlong offset, jlong size) {
+    sp<Dvr> dvrSp = getDvr(env, dvr);
+    if (dvrSp == NULL) {
+        ALOGW("Failed to write dvr: dvr not found");
+        return 0;
+    }
+    if (dvrSp->mDvrMQ == NULL) {
+        ALOGW("Failed to write dvr: dvr not configured");
+        return 0;
+    }
+    return copyData(env, dvrSp->mDvrMQ, dvrSp->mDvrMQEventFlag, buffer, offset, size);
 }
 
 static const JNINativeMethod gTunerMethods[] = {
@@ -2924,8 +3388,8 @@ static const JNINativeMethod gTunerMethods[] = {
     { "nativeSetup", "()V", (void *)android_media_tv_Tuner_native_setup },
     { "nativeGetFrontendIds", "()Ljava/util/List;",
             (void *)android_media_tv_Tuner_get_frontend_ids },
-    { "nativeOpenFrontendById", "(I)Landroid/media/tv/tuner/Tuner$Frontend;",
-            (void *)android_media_tv_Tuner_open_frontend_by_id },
+    { "nativeOpenFrontendByHandle", "(I)Landroid/media/tv/tuner/Tuner$Frontend;",
+            (void *)android_media_tv_Tuner_open_frontend_by_handle },
     { "nativeTune", "(ILandroid/media/tv/tuner/frontend/FrontendSettings;)I",
             (void *)android_media_tv_Tuner_tune },
     { "nativeStopTune", "()I", (void *)android_media_tv_Tuner_stop_tune },
@@ -2948,13 +3412,12 @@ static const JNINativeMethod gTunerMethods[] = {
             (void *)android_media_tv_Tuner_open_filter },
     { "nativeOpenTimeFilter", "()Landroid/media/tv/tuner/filter/TimeFilter;",
             (void *)android_media_tv_Tuner_open_time_filter },
-    { "nativeGetLnbIds", "()Ljava/util/List;",
-            (void *)android_media_tv_Tuner_get_lnb_ids },
-    { "nativeOpenLnbById", "(I)Landroid/media/tv/tuner/Lnb;",
-            (void *)android_media_tv_Tuner_open_lnb_by_id },
+    { "nativeGetLnbIds", "()[I", (void *)android_media_tv_Tuner_get_lnb_ids },
+    { "nativeOpenLnbByHandle", "(I)Landroid/media/tv/tuner/Lnb;",
+            (void *)android_media_tv_Tuner_open_lnb_by_handle },
     { "nativeOpenLnbByName", "(Ljava/lang/String;)Landroid/media/tv/tuner/Lnb;",
             (void *)android_media_tv_Tuner_open_lnb_by_name },
-    { "nativeOpenDescrambler", "()Landroid/media/tv/tuner/Descrambler;",
+    { "nativeOpenDescramblerByHandle", "(I)Landroid/media/tv/tuner/Descrambler;",
             (void *)android_media_tv_Tuner_open_descrambler },
     { "nativeOpenDvrRecorder", "(J)Landroid/media/tv/tuner/dvr/DvrRecorder;",
             (void *)android_media_tv_Tuner_open_dvr_recorder },

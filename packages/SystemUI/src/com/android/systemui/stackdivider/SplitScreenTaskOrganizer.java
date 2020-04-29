@@ -24,17 +24,18 @@ import static android.app.WindowConfiguration.WINDOWING_MODE_SPLIT_SCREEN_SECOND
 import static android.view.Display.DEFAULT_DISPLAY;
 
 import android.app.ActivityManager.RunningTaskInfo;
-import android.app.ITaskOrganizerController;
 import android.app.WindowConfiguration;
+import android.graphics.Rect;
 import android.os.RemoteException;
 import android.util.Log;
 import android.view.Display;
-import android.view.ITaskOrganizer;
-import android.view.IWindowContainer;
 import android.view.SurfaceControl;
 import android.view.SurfaceSession;
+import android.window.TaskOrganizer;
 
-class SplitScreenTaskOrganizer extends ITaskOrganizer.Stub {
+import java.util.ArrayList;
+
+class SplitScreenTaskOrganizer extends TaskOrganizer {
     private static final String TAG = "SplitScreenTaskOrganizer";
     private static final boolean DEBUG = Divider.DEBUG;
 
@@ -44,22 +45,31 @@ class SplitScreenTaskOrganizer extends ITaskOrganizer.Stub {
     SurfaceControl mSecondarySurface;
     SurfaceControl mPrimaryDim;
     SurfaceControl mSecondaryDim;
+    ArrayList<SurfaceControl> mHomeAndRecentsSurfaces = new ArrayList<>();
+    Rect mHomeBounds = new Rect();
     final Divider mDivider;
+    private boolean mSplitScreenSupported = false;
 
     SplitScreenTaskOrganizer(Divider divider) {
         mDivider = divider;
     }
 
-    void init(ITaskOrganizerController organizerController, SurfaceSession session)
-            throws RemoteException {
-        organizerController.registerTaskOrganizer(this, WINDOWING_MODE_SPLIT_SCREEN_PRIMARY);
-        organizerController.registerTaskOrganizer(this, WINDOWING_MODE_SPLIT_SCREEN_SECONDARY);
-        mPrimary = organizerController.createRootTask(Display.DEFAULT_DISPLAY,
-                WindowConfiguration.WINDOWING_MODE_SPLIT_SCREEN_PRIMARY);
-        mSecondary = organizerController.createRootTask(Display.DEFAULT_DISPLAY,
-                WindowConfiguration.WINDOWING_MODE_SPLIT_SCREEN_SECONDARY);
-        mPrimarySurface = mPrimary.token.getLeash();
-        mSecondarySurface = mSecondary.token.getLeash();
+    void init(SurfaceSession session) throws RemoteException {
+        registerOrganizer(WINDOWING_MODE_SPLIT_SCREEN_PRIMARY);
+        registerOrganizer(WINDOWING_MODE_SPLIT_SCREEN_SECONDARY);
+        try {
+            mPrimary = TaskOrganizer.createRootTask(Display.DEFAULT_DISPLAY,
+                    WindowConfiguration.WINDOWING_MODE_SPLIT_SCREEN_PRIMARY);
+            mSecondary = TaskOrganizer.createRootTask(Display.DEFAULT_DISPLAY,
+                    WindowConfiguration.WINDOWING_MODE_SPLIT_SCREEN_SECONDARY);
+            mPrimarySurface = mPrimary.token.getLeash();
+            mSecondarySurface = mSecondary.token.getLeash();
+        } catch (Exception e) {
+            // teardown to prevent callbacks
+            unregisterOrganizer();
+            throw e;
+        }
+        mSplitScreenSupported = true;
 
         // Initialize dim surfaces:
         mPrimaryDim = new SurfaceControl.Builder(session).setParent(mPrimarySurface)
@@ -75,24 +85,16 @@ class SplitScreenTaskOrganizer extends ITaskOrganizer.Stub {
         releaseTransaction(t);
     }
 
+    boolean isSplitScreenSupported() {
+        return mSplitScreenSupported;
+    }
+
     SurfaceControl.Transaction getTransaction() {
         return mDivider.mTransactionPool.acquire();
     }
 
     void releaseTransaction(SurfaceControl.Transaction t) {
         mDivider.mTransactionPool.release(t);
-    }
-
-    @Override
-    public void taskAppeared(RunningTaskInfo taskInfo) {
-    }
-
-    @Override
-    public void taskVanished(RunningTaskInfo taskInfo) {
-    }
-
-    @Override
-    public void transactionReady(int id, SurfaceControl.Transaction t) {
     }
 
     @Override
@@ -103,11 +105,17 @@ class SplitScreenTaskOrganizer extends ITaskOrganizer.Stub {
         mDivider.getHandler().post(() -> handleTaskInfoChanged(taskInfo));
     }
 
+    @Override
+    public void onBackPressedOnTaskRoot(RunningTaskInfo taskInfo) {
+    }
+
     /**
      * This is effectively a finite state machine which moves between the various split-screen
      * presentations based on the contents of the split regions.
      */
     private void handleTaskInfoChanged(RunningTaskInfo info) {
+        final boolean secondaryWasHomeOrRecents = mSecondary.topActivityType == ACTIVITY_TYPE_HOME
+                || mSecondary.topActivityType == ACTIVITY_TYPE_RECENTS;
         final boolean primaryWasEmpty = mPrimary.topActivityType == ACTIVITY_TYPE_UNDEFINED;
         final boolean secondaryWasEmpty = mSecondary.topActivityType == ACTIVITY_TYPE_UNDEFINED;
         if (info.token.asBinder() == mPrimary.token.asBinder()) {
@@ -117,8 +125,15 @@ class SplitScreenTaskOrganizer extends ITaskOrganizer.Stub {
         }
         final boolean primaryIsEmpty = mPrimary.topActivityType == ACTIVITY_TYPE_UNDEFINED;
         final boolean secondaryIsEmpty = mSecondary.topActivityType == ACTIVITY_TYPE_UNDEFINED;
+        final boolean secondaryIsHomeOrRecents = mSecondary.topActivityType == ACTIVITY_TYPE_HOME
+                || mSecondary.topActivityType == ACTIVITY_TYPE_RECENTS;
         if (DEBUG) {
             Log.d(TAG, "onTaskInfoChanged " + mPrimary + "  " + mSecondary);
+        }
+        if (primaryIsEmpty == primaryWasEmpty && secondaryWasEmpty == secondaryIsEmpty
+                && secondaryWasHomeOrRecents == secondaryIsHomeOrRecents) {
+            // No relevant changes
+            return;
         }
         if (primaryIsEmpty || secondaryIsEmpty) {
             // At-least one of the splits is empty which means we are currently transitioning
@@ -146,8 +161,7 @@ class SplitScreenTaskOrganizer extends ITaskOrganizer.Stub {
                 }
                 mDivider.startEnterSplit();
             }
-        } else if (mSecondary.topActivityType == ACTIVITY_TYPE_HOME
-                || mSecondary.topActivityType == ACTIVITY_TYPE_RECENTS) {
+        } else if (secondaryIsHomeOrRecents) {
             // Both splits are populated but the secondary split has a home/recents stack on top,
             // so enter minimized mode.
             mDivider.ensureMinimizedSplit();

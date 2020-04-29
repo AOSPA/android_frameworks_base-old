@@ -75,12 +75,6 @@ static struct typedvalue_offsets_t {
   jfieldID mDensity;
 } gTypedValueOffsets;
 
-static struct assetfiledescriptor_offsets_t {
-  jfieldID mFd;
-  jfieldID mStartOffset;
-  jfieldID mLength;
-} gAssetFileDescriptorOffsets;
-
 // This is also used by asset_manager.cpp.
 assetmanager_offsets_t gAssetManagerOffsets;
 
@@ -220,12 +214,8 @@ static jint CopyValue(JNIEnv* env, ApkAssetsCookie cookie, const Res_value& valu
 
 // ----------------------------------------------------------------------------
 
-static std::unique_ptr<DynamicLibManager> sDynamicLibManager =
-    std::make_unique<DynamicLibManager>();
-
 // Let the opaque type AAssetManager refer to a guarded AssetManager2 instance.
 struct GuardedAssetManager : public ::AAssetManager {
-  GuardedAssetManager() : guarded_assetmanager(sDynamicLibManager.get()) {}
   Guarded<AssetManager2> guarded_assetmanager;
 };
 
@@ -1595,12 +1585,6 @@ int register_android_content_AssetManager(JNIEnv* env) {
   gTypedValueOffsets.mChangingConfigurations =
       GetFieldIDOrDie(env, typedValue, "changingConfigurations", "I");
   gTypedValueOffsets.mDensity = GetFieldIDOrDie(env, typedValue, "density", "I");
-
-  jclass assetFd = FindClassOrDie(env, "android/content/res/AssetFileDescriptor");
-  gAssetFileDescriptorOffsets.mFd =
-      GetFieldIDOrDie(env, assetFd, "mFd", "Landroid/os/ParcelFileDescriptor;");
-  gAssetFileDescriptorOffsets.mStartOffset = GetFieldIDOrDie(env, assetFd, "mStartOffset", "J");
-  gAssetFileDescriptorOffsets.mLength = GetFieldIDOrDie(env, assetFd, "mLength", "J");
 
   jclass assetManager = FindClassOrDie(env, "android/content/res/AssetManager");
   gAssetManagerOffsets.mObject = GetFieldIDOrDie(env, assetManager, "mObject", "J");

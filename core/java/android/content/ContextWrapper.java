@@ -164,8 +164,8 @@ public class ContextWrapper extends Context {
 
     /** @hide */
     @Override
-    public @Nullable String getFeatureId() {
-        return mBase.getFeatureId();
+    public @Nullable String getAttributionTag() {
+        return mBase.getAttributionTag();
     }
 
     @Override
@@ -984,8 +984,8 @@ public class ContextWrapper extends Context {
     }
 
     @Override
-    public @NonNull Context createFeatureContext(@Nullable String featureId) {
-        return mBase.createFeatureContext(featureId);
+    public @NonNull Context createAttributionContext(@Nullable String attributionTag) {
+        return mBase.createAttributionContext(attributionTag);
     }
 
     @Override
@@ -1144,5 +1144,13 @@ public class ContextWrapper extends Context {
         if (mBase != null) {
             mBase.setContentCaptureOptions(options);
         }
+    }
+
+    /**
+     * @hide
+     */
+    @Override
+    public boolean isUiContext() {
+        return mBase.isUiContext();
     }
 }

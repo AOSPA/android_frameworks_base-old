@@ -89,6 +89,7 @@ import android.view.accessibility.AccessibilityNodeInfo;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 
@@ -780,8 +781,6 @@ public interface WindowManager extends ViewManager {
                         to = "BOOT_PROGRESS"),
                 @ViewDebug.IntToString(from = TYPE_INPUT_CONSUMER,
                         to = "INPUT_CONSUMER"),
-                @ViewDebug.IntToString(from = TYPE_DREAM,
-                        to = "DREAM"),
                 @ViewDebug.IntToString(from = TYPE_NAVIGATION_BAR_PANEL,
                         to = "NAVIGATION_BAR_PANEL"),
                 @ViewDebug.IntToString(from = TYPE_DISPLAY_OVERLAY,
@@ -1104,13 +1103,6 @@ public interface WindowManager extends ViewManager {
         public static final int TYPE_INPUT_CONSUMER = FIRST_SYSTEM_WINDOW+22;
 
         /**
-         * Window type: Dreams (screen saver) window, just above keyguard.
-         * In multiuser systems shows only on the owning user's window.
-         * @hide
-         */
-        public static final int TYPE_DREAM = FIRST_SYSTEM_WINDOW+23;
-
-        /**
          * Window type: Navigation bar panel (when navigation bar is distinct from status bar)
          * In multiuser systems shows on all users' windows.
          * @hide
@@ -1179,8 +1171,9 @@ public interface WindowManager extends ViewManager {
         public static final int TYPE_QS_DIALOG = FIRST_SYSTEM_WINDOW+35;
 
         /**
-         * Window type: shares similar characteristics with {@link #TYPE_DREAM}. The layer is
+         * Window type: shows directly above the keyguard. The layer is
          * reserved for screenshot region selection. These windows must not take input focus.
+         * In multiuser systems shows only on the owning user's window.
          * @hide
          */
         public static final int TYPE_SCREENSHOT = FIRST_SYSTEM_WINDOW + 36;
@@ -2896,6 +2889,18 @@ public interface WindowManager extends ViewManager {
         private boolean mFitInsetsIgnoringVisibility = false;
 
         /**
+         * {@link InsetsState.InternalInsetsType}s to be applied to the window
+         * If {@link #type} has the predefined insets (like {@link #TYPE_STATUS_BAR} or
+         * {@link #TYPE_NAVIGATION_BAR}), this field will be ignored.
+         *
+         * <p>Note: provide only one inset corresponding to the window type (like
+         * {@link InsetsState.InternalInsetsType#ITYPE_STATUS_BAR} or
+         * {@link InsetsState.InternalInsetsType#ITYPE_NAVIGATION_BAR})</p>
+         * @hide
+         */
+        public @InsetsState.InternalInsetsType int[] providesInsetsTypes;
+
+        /**
          * Specifies types of insets that this window should avoid overlapping during layout.
          *
          * @param types which types of insets that this window should avoid. The initial value of
@@ -3116,6 +3121,12 @@ public interface WindowManager extends ViewManager {
             out.writeInt(mFitInsetsSides);
             out.writeBoolean(mFitInsetsIgnoringVisibility);
             out.writeBoolean(preferMinimalPostProcessing);
+            if (providesInsetsTypes != null) {
+                out.writeInt(providesInsetsTypes.length);
+                out.writeIntArray(providesInsetsTypes);
+            } else {
+                out.writeInt(0);
+            }
         }
 
         public static final @android.annotation.NonNull Parcelable.Creator<LayoutParams> CREATOR
@@ -3177,6 +3188,11 @@ public interface WindowManager extends ViewManager {
             mFitInsetsSides = in.readInt();
             mFitInsetsIgnoringVisibility = in.readBoolean();
             preferMinimalPostProcessing = in.readBoolean();
+            int insetsTypesLength = in.readInt();
+            if (insetsTypesLength > 0) {
+                providesInsetsTypes = new int[insetsTypesLength];
+                in.readIntArray(providesInsetsTypes);
+            }
         }
 
         @SuppressWarnings({"PointlessBitwiseExpression"})
@@ -3437,6 +3453,11 @@ public interface WindowManager extends ViewManager {
                 changes |= LAYOUT_CHANGED;
             }
 
+            if (!Arrays.equals(providesInsetsTypes, o.providesInsetsTypes)) {
+                providesInsetsTypes = o.providesInsetsTypes;
+                changes |= LAYOUT_CHANGED;
+            }
+
             return changes;
         }
 
@@ -3608,6 +3629,14 @@ public interface WindowManager extends ViewManager {
             if (mFitInsetsIgnoringVisibility) {
                 sb.append(System.lineSeparator());
                 sb.append(prefix).append("  fitIgnoreVis");
+            }
+            if (providesInsetsTypes != null) {
+                sb.append(System.lineSeparator());
+                sb.append(prefix).append("  insetsTypes=");
+                for (int i = 0; i < providesInsetsTypes.length; ++i) {
+                    if (i > 0) sb.append(' ');
+                    sb.append(InsetsState.typeToString(providesInsetsTypes[i]));
+                }
             }
 
             sb.append('}');

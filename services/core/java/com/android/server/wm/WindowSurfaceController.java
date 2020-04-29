@@ -126,7 +126,8 @@ class WindowSurfaceController {
         if (useBLAST) {
             mBLASTSurfaceControl = win.makeSurface()
                 .setParent(mSurfaceControl)
-                .setName("BLAST Adapter Layer")
+                .setName(name + "(BLAST)")
+                .setHidden(false)
                 .setBLASTLayer()
                 .build();
         }

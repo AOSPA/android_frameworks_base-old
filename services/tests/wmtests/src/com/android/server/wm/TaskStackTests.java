@@ -33,6 +33,8 @@ import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.clearInvocations;
 
 import android.app.WindowConfiguration;
@@ -144,7 +146,7 @@ public class TaskStackTests extends WindowTestsBase {
 
         // Stack removal is deferred if one of its child is animating.
         doReturn(true).when(stack).hasWindowsAlive();
-        doReturn(true).when(task).isAnimating(TRANSITION | CHILDREN);
+        doReturn(true).when(task).isAnimating(eq(TRANSITION | CHILDREN), anyInt());
 
         stack.removeIfPossible();
         // For the case of deferred removal the task controller will still be connected to the its
@@ -171,7 +173,7 @@ public class TaskStackTests extends WindowTestsBase {
 
         // Reparent
         clearInvocations(task1); // reset the number of onDisplayChanged for task.
-        stack1.reparent(dc, true /* onTop */);
+        stack1.reparent(dc.getDefaultTaskDisplayArea(), true /* onTop */);
         assertEquals(dc, stack1.getDisplayContent());
         final int stack1PositionInParent = stack1.getParent().mChildren.indexOf(stack1);
         final int stack2PositionInParent = stack1.getParent().mChildren.indexOf(stack2);

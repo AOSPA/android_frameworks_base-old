@@ -19,6 +19,7 @@ package com.android.server.display;
 import android.graphics.Rect;
 import android.hardware.display.DisplayViewport;
 import android.os.IBinder;
+import android.view.Display;
 import android.view.DisplayAddress;
 import android.view.Surface;
 import android.view.SurfaceControl;
@@ -36,6 +37,7 @@ abstract class DisplayDevice {
     private final DisplayAdapter mDisplayAdapter;
     private final IBinder mDisplayToken;
     private final String mUniqueId;
+    private DisplayDeviceConfig mDisplayDeviceConfig;
 
     // The display device does not manage these properties itself, they are set by
     // the display manager service.  The display device shouldn't really be looking at these.
@@ -67,6 +69,16 @@ abstract class DisplayDevice {
         return mDisplayAdapter;
     }
 
+    /*
+     * Gets the DisplayDeviceConfig for this DisplayDevice.
+     * Returns null for this device but is overridden in LocalDisplayDevice.
+     *
+     * @return The DisplayDeviceConfig.
+     */
+    public DisplayDeviceConfig getDisplayDeviceConfig() {
+        return mDisplayDeviceConfig;
+    }
+
     /**
      * Gets the Surface Flinger display token for this display.
      *
@@ -75,6 +87,13 @@ abstract class DisplayDevice {
      */
     public final IBinder getDisplayTokenLocked() {
         return mDisplayToken;
+    }
+
+    /**
+     * Gets the id of the display to mirror.
+     */
+    public int getDisplayIdToMirrorLocked() {
+        return Display.DEFAULT_DISPLAY;
     }
 
     /**

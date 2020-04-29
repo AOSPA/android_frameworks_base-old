@@ -233,6 +233,10 @@
     <!-- Notification text displayed when we fail to take a screenshot. [CHAR LIMIT=100] -->
     <string name="screenshot_failed_to_capture_text">Taking screenshots isn\'t allowed by the app or
         your organization</string>
+    <!-- Content description indicating that tapping a button will dismiss the screenshots UI [CHAR LIMIT=NONE] -->
+    <string name="screenshot_dismiss_ui_description">Dismiss screenshot</string>
+    <!-- Content description indicating that tapping will open an app to view/edit the screenshot. [CHAR LIMIT=NONE] -->
+    <string name="screenshot_preview_description">Open screenshot</string>
 
     <!-- Notification title displayed for screen recording [CHAR LIMIT=50]-->
     <string name="screenrecord_name">Screen Recorder</string>
@@ -370,6 +374,39 @@
     <string name="biometric_dialog_wrong_password">Wrong password</string>
     <!-- Error string shown when the user enters too many incorrect attempts [CHAR LIMIT=120]-->
     <string name="biometric_dialog_credential_too_many_attempts">Too many incorrect attempts.\nTry again in <xliff:g id="number">%d</xliff:g> seconds.</string>
+
+    <!-- Error string shown when the user enters an incorrect PIN/pattern/password and it counts towards the max attempts before the data on the device is wiped. [CHAR LIMIT=NONE]-->
+    <string name="biometric_dialog_credential_attempts_before_wipe">Try again. Attempt <xliff:g id="attempts" example="1">%1$d</xliff:g> of <xliff:g id="max_attempts" example="3">%2$d</xliff:g>.</string>
+
+    <!-- Title of a dialog shown when the user only has one attempt left to provide the correct PIN/pattern/password before the device, one of its users, or a work profile is wiped. [CHAR LIMIT=NONE] -->
+    <string name="biometric_dialog_last_attempt_before_wipe_dialog_title">Your data will be deleted</string>
+    <!-- Content of a dialog shown when the user only has one attempt left to provide the correct lock pattern before the device is wiped. [CHAR LIMIT=NONE] -->
+    <string name="biometric_dialog_last_pattern_attempt_before_wipe_device">If you enter an incorrect pattern on the next attempt, this device\u2019s data will be deleted.</string>
+    <!-- Content of a dialog shown when the user only has one attempt left to provide the correct PIN before the device is wiped. [CHAR LIMIT=NONE] -->
+    <string name="biometric_dialog_last_pin_attempt_before_wipe_device">If you enter an incorrect PIN on the next attempt, this device\u2019s data will be deleted.</string>
+    <!-- Content of a dialog shown when the user only has one attempt left to provide the correct password before the device is wiped. [CHAR LIMIT=NONE] -->
+    <string name="biometric_dialog_last_password_attempt_before_wipe_device">If you enter an incorrect password on the next attempt, this device\u2019s data will be deleted.</string>
+    <!-- Content of a dialog shown when the user only has one attempt left to provide the correct lock pattern before the user is removed. [CHAR LIMIT=NONE] -->
+    <string name="biometric_dialog_last_pattern_attempt_before_wipe_user">If you enter an incorrect pattern on the next attempt, this user will be deleted.</string>
+    <!-- Content of a dialog shown when the user only has one attempt left to provide the correct PIN before the user is removed. [CHAR LIMIT=NONE] -->
+    <string name="biometric_dialog_last_pin_attempt_before_wipe_user">If you enter an incorrect PIN on the next attempt, this user will be deleted.</string>
+    <!-- Content of a dialog shown when the user only has one attempt left to provide the correct password before the user is removed. [CHAR LIMIT=NONE] -->
+    <string name="biometric_dialog_last_password_attempt_before_wipe_user">If you enter an incorrect password on the next attempt, this user will be deleted.</string>
+    <!-- Content of a dialog shown when the user only has one attempt left to provide the correct pattern before the work profile is removed. [CHAR LIMIT=NONE] -->
+    <string name="biometric_dialog_last_pattern_attempt_before_wipe_profile">If you enter an incorrect pattern on the next attempt, your work profile and its data will be deleted.</string>
+    <!-- Content of a dialog shown when the user only has one attempt left to provide the correct PIN before the work profile is removed. [CHAR LIMIT=NONE] -->
+    <string name="biometric_dialog_last_pin_attempt_before_wipe_profile">If you enter an incorrect PIN on the next attempt, your work profile and its data will be deleted.</string>
+    <!-- Content of a dialog shown when the user only has one attempt left to provide the correct password before the work profile is removed. [CHAR LIMIT=NONE] -->
+    <string name="biometric_dialog_last_password_attempt_before_wipe_profile">If you enter an incorrect password on the next attempt, your work profile and its data will be deleted.</string>
+
+    <!-- Content of a dialog shown when the user has failed to provide the device lock too many times and the device is wiped. [CHAR LIMIT=NONE] -->
+    <string name="biometric_dialog_failed_attempts_now_wiping_device">Too many incorrect attempts. This device\u2019s data will be deleted.</string>
+    <!-- Content of a dialog shown when the user has failed to provide the user lock too many times and the user is removed. [CHAR LIMIT=NONE] -->
+    <string name="biometric_dialog_failed_attempts_now_wiping_user">Too many incorrect attempts. This user will be deleted.</string>
+    <!-- Content of a dialog shown when the user has failed to provide the work lock too many times and the work profile is removed. [CHAR LIMIT=NONE] -->
+    <string name="biometric_dialog_failed_attempts_now_wiping_profile">Too many incorrect attempts. This work profile and its data will be deleted.</string>
+    <!-- Button label to dismiss the dialog telling the user the device, user, or work profile has been wiped. [CHAR LIMIT=40] -->
+    <string name="biometric_dialog_now_wiping_dialog_dismiss">Dismiss</string>
 
     <!-- Message shown when the system-provided fingerprint dialog is shown, asking for authentication -->
     <string name="fingerprint_dialog_touch_sensor">Touch the fingerprint sensor</string>
@@ -1114,15 +1151,6 @@
     <!-- Name for a freshly added user [CHAR LIMIT=30] -->
     <string name="user_new_user_name">New user</string>
 
-    <!-- Name for the guest user [CHAR LIMIT=35] -->
-    <string name="guest_nickname">Guest</string>
-
-    <!-- Label for adding a new guest in the user switcher [CHAR LIMIT=35] -->
-    <string name="guest_new_guest">Add guest</string>
-
-    <!-- Label for exiting and removing the  guest session in the user switcher [CHAR LIMIT=35] -->
-    <string name="guest_exit_guest">Remove guest</string>
-
     <!-- Title of the confirmation dialog when exiting guest session [CHAR LIMIT=NONE] -->
     <string name="guest_exit_guest_dialog_title">Remove guest?</string>
 
@@ -1804,11 +1832,23 @@
     <!-- [CHAR LIMIT=150] Notification Importance title: bubble level summary -->
     <string name="notification_channel_summary_bubble">Keeps your attention with a floating shortcut to this content.</string>
 
+    <!-- [CHAR LIMIT=150] Notification Importance title: important conversation level summary -->
+    <string name="notification_channel_summary_priority">Shows at top of conversation section and appears as a bubble.</string>
+
+    <!--[CHAR LIMIT=150] Conversation inline controls footer shown when all conversations from the app are allowed to show as bubbles -->
+    <string name="notification_conversation_channel_all_bubble">All conversations from <xliff:g id="app_name" example="YouTube">%1$s</xliff:g> bubble by default. Manage in <xliff:g id="app_name" example="Settings">%2$s</xliff:g>.</string>
+
+    <!--[CHAR LIMIT=30] Linkable text to Settings app -->
+    <string name="notification_conversation_channel_settings">Settings</string>
+
+    <!-- [CHAR LIMIT=150] Notification Importance title: important conversation level -->
+    <string name="notification_priority_title">Priority</string>
+
     <!-- [CHAR LIMIT=NONE] Empty overflow title -->
     <string name="bubble_overflow_empty_title">No recent bubbles</string>
 
     <!-- [CHAR LIMIT=NONE] Empty overflow subtitle -->
-    <string name="bubble_overflow_empty_subtitle">Recent bubbles and dismissed bubbles will appear here.</string>
+    <string name="bubble_overflow_empty_subtitle">Recent bubbles and dismissed bubbles will appear here</string>
 
     <!-- Notification: Control panel: Label that displays when the app's notifications cannot be blocked. -->
     <string name="notification_unblockable_desc">These notifications can\'t be modified.</string>
@@ -2556,23 +2596,11 @@
     <!-- Description of the restart button in the hint of size compatibility mode. [CHAR LIMIT=NONE] -->
     <string name="restart_button_description">Tap to restart this app and go full screen.</string>
 
-    <!-- Text used for content description of deep link button in the header of expanded bubble
-         view. [CHAR_LIMIT=NONE] -->
-    <string name="bubbles_deep_link_button_description">Open <xliff:g id="app_name" example="YouTube">%1$s</xliff:g></string>
     <!-- Text used for content description of settings button in the header of expanded bubble
          view. [CHAR_LIMIT=NONE] -->
     <string name="bubbles_settings_button_description">Settings for <xliff:g id="app_name" example="YouTube">%1$s</xliff:g> bubbles</string>
-    <!-- Text for asking the user whether bubbles (floating app content) should be enabled for an
-         app. [CHAR LIMIT=NONE] -->
-    <string name="bubbles_prompt">Allow bubbles from <xliff:g id="app_name" example="YouTube">%1$s</xliff:g>?</string>
     <!-- The text for the manage bubbles link. [CHAR LIMIT=NONE] -->
     <string name="manage_bubbles_text">Manage</string>
-    <!-- Text used for button allowing user to opt out of bubbles [CHAR LIMIT=20] -->
-    <string name="no_bubbles">Deny</string>
-    <!-- Text used for button allowing user to approve / enable bubbles [CHAR LIMIT=20] -->
-    <string name="yes_bubbles">Allow</string>
-    <!-- Text used for the button allowing users to postpone their decision to allow or deny bubbles [CHAR LIMIT=40] -->
-    <string name="ask_me_later_bubbles">Ask me later</string>
     <!-- Content description when a bubble is focused. [CHAR LIMIT=NONE] -->
     <string name="bubble_content_description_single"><xliff:g id="notification_title" example="some title">%1$s</xliff:g> from <xliff:g id="app_name" example="YouTube">%2$s</xliff:g></string>
     <!-- Content description when the stack of bubbles is focused. [CHAR LIMIT=NONE] -->
@@ -2589,12 +2617,18 @@
     <string name="bubble_accessibility_action_move_bottom_right">Move bottom right</string>
     <!-- Text used for the bubble dismiss area. Bubbles dragged to, or flung towards, this area will go away. [CHAR LIMIT=20] -->
     <string name="bubble_dismiss_text">Dismiss</string>
+    <!-- Button text to stop a conversation from bubbling [CHAR LIMIT=60]-->
+    <string name="bubbles_dont_bubble_conversation">Don\u2019t bubble conversation</string>
     <!-- Title text for the bubbles feature education cling shown when a bubble is on screen for the first time. [CHAR LIMIT=60]-->
-    <string name="bubbles_user_education_title">Keep chats up front</string>
+    <string name="bubbles_user_education_title">Chat using bubbles</string>
     <!-- Descriptive text for the bubble feature education cling shown when a bubble is on screen for the first time. [CHAR LIMIT=NONE] -->
-    <string name="bubbles_user_education_description">New chats from <xliff:g id="app_name" example="YouTube">%1$s</xliff:g> will appear as bubbles. Tap a bubble to open it. Drag to move it.\n\nTap the bubble</string>
-    <!-- Text for the bubble "manage" button feature education cling shown when a bubble is on screen for the first time. [CHAR LIMIT=80]-->
+    <string name="bubbles_user_education_description">New conversations appear as floating icons, or bubbles. Tap to open bubble. Drag to move it.</string>
+    <!-- Title text for the bubble "manage" button tool tip highlighting where users can go to control bubble settings. [CHAR LIMIT=60]-->
+    <string name="bubbles_user_education_manage_title">Control bubbles anytime</string>
+    <!-- Descriptive text for the bubble "manage" button tool tip highlighting where users can go to control bubble settings. [CHAR LIMIT=80]-->
     <string name="bubbles_user_education_manage">Tap Manage to turn off bubbles from this app</string>
+    <!-- Button text for dismissing the bubble "manage" button tool tip  [CHAR LIMIT=20]-->
+    <string name="bubbles_user_education_got_it">Got it</string>
 
     <!-- Notification content text when the system navigation mode changes as a result of changing the default launcher [CHAR LIMIT=NONE] -->
     <string name="notification_content_system_nav_changed">System navigation updated. To make changes, go to Settings.</string>
@@ -2613,14 +2647,19 @@
     <!-- Title for Magnification Controls Window [CHAR LIMIT=NONE] -->
     <string name="magnification_controls_title">Magnification Window Controls</string>
 
-    <!-- Quick Controls strings -->
-    <!-- Quick Controls view header [CHAR LIMIT=30] -->
-    <string name="quick_controls_title">Quick Controls</string>
+    <!-- Device Controls strings -->
+    <!-- Device Controls empty state, title [CHAR LIMIT=30] -->
+    <string name="quick_controls_title">Device controls</string>
+    <!-- Device Controls empty state, subtitle [CHAR LIMIT=100] -->
+    <string name="quick_controls_subtitle">Add controls for your connected devices</string>
 
-    <!-- Controls management providers screen title [CHAR LIMIT=30]-->
-    <string name="controls_providers_title">Add Controls</string>
-    <!-- Controls management providers screen subtitle [CHAR LIMIT=NONE] -->
-    <string name="controls_providers_subtitle">Choose an app from which to add controls</string>
+    <!-- Device Controls setup, title [CHAR LIMIT=50] -->
+    <string name="quick_controls_setup_title">Set up device controls</string>
+    <!-- Device Controls setup, subtitle [CHAR LIMIT=100] -->
+    <string name="quick_controls_setup_subtitle">Hold the Power button to access your controls</string>
+
+    <!-- Controls management providers screen title [CHAR LIMIT=60]-->
+    <string name="controls_providers_title">Choose app to add controls</string>
     <!-- Number of favorites for controls management screen [CHAR LIMIT=NONE]-->
     <plurals name="controls_number_of_favorites">
         <item quantity="one"><xliff:g id="number" example="1">%s</xliff:g> control added.</item>
@@ -2630,27 +2669,60 @@
     <!-- Controls management controls screen default title [CHAR LIMIT=30] -->
     <string name="controls_favorite_default_title">Controls</string>
     <!-- Controls management controls screen subtitle [CHAR LIMIT=NONE] -->
-    <string name="controls_favorite_subtitle">Choose controls for quick access</string>
+    <string name="controls_favorite_subtitle">Choose controls to access from the power menu</string>
+    <!-- Controls management controls screen, user direction for rearranging controls [CHAR LIMIT=NONE] -->
+    <string name="controls_favorite_rearrange">Hold and drag a control to move it</string>
 
     <!-- Controls management controls screen error on load message [CHAR LIMIT=60] -->
     <string name="controls_favorite_load_error">The list of all controls could not be loaded.</string>
     <!-- Controls management controls screen header for Other zone [CHAR LIMIT=60] -->
     <string name="controls_favorite_other_zone_header">Other</string>
 
-    <!-- Controls dialog title [CHAR LIMIT=30] -->
-    <string name="controls_dialog_title">Add to Quick Controls</string>
-    <!-- Controls dialog add to favorites [CHAR LIMIT=30] -->
+    <!-- Controls dialog title [CHAR LIMIT=40] -->
+    <string name="controls_dialog_title">Add to device controls</string>
+    <!-- Controls dialog add to favorites [CHAR LIMIT=40] -->
     <string name="controls_dialog_ok">Add to favorites</string>
     <!-- Controls dialog message [CHAR LIMIT=NONE] -->
     <string name="controls_dialog_message"><xliff:g id="app" example="System UI">%s</xliff:g> suggested this control to add to your favorites.</string>
+    <!-- Controls dialog confirmation [CHAR LIMIT=30] -->
+    <string name="controls_dialog_confirmation">Controls updated</string>
 
     <!-- Controls PIN entry dialog, switch to alphanumeric keyboard [CHAR LIMIT=100] -->
     <string name="controls_pin_use_alphanumeric">PIN contains letters or symbols</string>
     <!-- Controls PIN entry dialog, title [CHAR LIMIT=30] -->
-    <string name="controls_pin_verify">Verify device PIN</string>
+    <string name="controls_pin_verify">Verify <xliff:g id="device" example="Backdoor lock">%s</xliff:g></string>
+    <!-- Controls PIN entry dialog, waiting to verify [CHAR LIMIT=30] -->
+    <string name="controls_pin_verifying">Verifying\u2026</string>
     <!-- Controls PIN entry dialog, text hint [CHAR LIMIT=30] -->
     <string name="controls_pin_instructions">Enter PIN</string>
+    <!-- Controls PIN entry dialog, text hint, retry [CHAR LIMIT=30] -->
+    <string name="controls_pin_instructions_retry">Try another PIN</string>
+    <!-- Controls confirmation dialog, waiting to confirm [CHAR LIMIT=30] -->
+    <string name="controls_confirmation_confirming">Confirming\u2026</string>
+    <!-- Controls confirmation dialog, user prompt [CHAR LIMIT=NONE] -->
+    <string name="controls_confirmation_message">Confirm change for <xliff:g id="device" example="Backdoor lock">%s</xliff:g></string>
 
     <!-- Tooltip to show in management screen when there are multiple structures [CHAR_LIMIT=50] -->
-    <string name="controls_structure_tooltip">Swipe to see other structures</string>
+    <string name="controls_structure_tooltip">Swipe to see more</string>
+
+    <!-- Message to tell the user to wait while systemui attempts to load a set of
+         recommended controls [CHAR_LIMIT=60] -->
+    <string name="controls_seeding_in_progress">Loading recommendations</string>
+
+    <!-- Close the controls associated with a specific media session [CHAR_LIMIT=NONE] -->
+    <string name="controls_media_close_session">Close this media session</string>
+
+    <!-- Error message indicating that a control timed out while waiting for an update [CHAR_LIMIT=30] -->
+    <string name="controls_error_timeout">Inactive, check app</string>
+    <!-- Error message indicating that a control action failed [CHAR_LIMIT=30] -->
+    <string name="controls_error_failed">Error, try again</string>
+    <!-- Stateless control message informing the user that a routine has started [CHAR_LIMIT=30] -->
+    <string name="controls_in_progress">In progress</string>
+    <!-- Tooltip informing user where the recently added controls are [CHAR_LIMIT=100] -->
+    <string name="controls_added_tooltip">Hold Power button to see new controls</string>
+
+    <!-- Controls menu, add [CHAR_LIMIT=30] -->
+    <string name="controls_menu_add">Add controls</string>
+    <!-- Controls menu, edit [CHAR_LIMIT=30] -->
+    <string name="controls_menu_edit">Edit controls</string>
 </resources>

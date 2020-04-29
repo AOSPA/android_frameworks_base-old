@@ -2395,9 +2395,11 @@ public class DevicePolicyManager {
     public static final int MAX_PASSWORD_LENGTH = 16;
 
     /**
-     * Service Action: Service implemented by a device owner or profile owner to provide a
-     * secondary lockscreen.
+     * Service Action: Service implemented by a device owner or profile owner supervision app to
+     * provide a secondary lockscreen.
+     * @hide
      */
+    @SystemApi
     public static final String ACTION_BIND_SECONDARY_LOCKSCREEN_SERVICE =
             "android.app.action.BIND_SECONDARY_LOCKSCREEN_SERVICE";
 
@@ -2429,7 +2431,7 @@ public class DevicePolicyManager {
             PERSONAL_APPS_SUSPENDED_PROFILE_TIMEOUT
     })
     @Retention(RetentionPolicy.SOURCE)
-    public @interface PersonalAppSuspensionReason {}
+    public @interface PersonalAppsSuspensionReason {}
 
     /**
      * Return true if the given administrator component is currently active (enabled) in the system.
@@ -4424,11 +4426,13 @@ public class DevicePolicyManager {
      * the current factory reset protection (FRP) policy set previously by
      * {@link #setFactoryResetProtectionPolicy}.
      * <p>
-     * This method can also be called by the FRP management agent on device, in which case,
-     * it can pass {@code null} as the ComponentName.
+     * This method can also be called by the FRP management agent on device or with the permission
+     * {@link android.Manifest.permission#MASTER_CLEAR}, in which case, it can pass {@code null}
+     * as the ComponentName.
      *
      * @param admin Which {@link DeviceAdminReceiver} this request is associated with or
-     *              {@code null} if called by the FRP management agent on device.
+     *              {@code null} if called by the FRP management agent on device or with the
+     *              permission {@link android.Manifest.permission#MASTER_CLEAR}.
      * @return The current FRP policy object or {@code null} if no policy is set.
      * @throws SecurityException if {@code admin} is not a device owner, a profile owner of
      *                           an organization-owned device or the FRP management agent.
@@ -5215,6 +5219,10 @@ public class DevicePolicyManager {
      * <p>Because this method might take several seconds to complete, it should only be called from
      * a worker thread. This method returns {@code null} when called from the main thread.
      *
+     * <p>This method is not thread-safe, calling it from multiple threads at the same time will
+     * result in undefined behavior. If the calling thread is interrupted while the invocation is
+     * in-flight, it will eventually terminate and return {@code null}.
+     *
      * <p>Note: If the provided {@code alias} is of an existing alias, all former grants that apps
      * have been given to access the key and certificates associated with this alias will be
      * revoked.
@@ -5732,6 +5740,10 @@ public class DevicePolicyManager {
         throwIfParentInstance("isAlwaysOnVpnLockdownEnabled");
         if (mService != null) {
             try {
+                // Starting from Android R, the caller can pass the permission check in
+                // DevicePolicyManagerService if it holds android.permission.MAINLINE_NETWORK_STACK.
+                // Note that the android.permission.MAINLINE_NETWORK_STACK is a signature permission
+                // which is used by the NetworkStack mainline module.
                 return mService.isAlwaysOnVpnLockdownEnabled(admin);
             } catch (RemoteException e) {
                 throw e.rethrowFromSystemServer();
@@ -6001,7 +6013,7 @@ public class DevicePolicyManager {
      * @param admin Which {@link DeviceAdminReceiver} this request is associated with.
      * @param required Whether auto time is set required or not.
      * @throws SecurityException if {@code admin} is not a device owner.
-     * @deprecated From {@link android.os.Build.VERSION_CODES#R}. Use {@link #setAutoTime}
+     * @deprecated From {@link android.os.Build.VERSION_CODES#R}. Use {@link #setAutoTimeEnabled}
      * to turn auto time on or off and use {@link UserManager#DISALLOW_CONFIG_DATE_TIME}
      * to prevent the user from changing this setting.
      */
@@ -6019,7 +6031,7 @@ public class DevicePolicyManager {
 
     /**
      * @return true if auto time is required.
-     * @deprecated From {@link android.os.Build.VERSION_CODES#R}. Use {@link #getAutoTime}
+     * @deprecated From {@link android.os.Build.VERSION_CODES#R}. Use {@link #getAutoTimeEnabled}
      */
     @Deprecated
     public boolean getAutoTimeRequired() {
@@ -6049,10 +6061,10 @@ public class DevicePolicyManager {
      * @throws SecurityException if caller is not a device owner, a profile owner for the
      * primary user, or a profile owner of an organization-owned managed profile.
      */
-    public void setAutoTime(@NonNull ComponentName admin, boolean enabled) {
+    public void setAutoTimeEnabled(@NonNull ComponentName admin, boolean enabled) {
         if (mService != null) {
             try {
-                mService.setAutoTime(admin, enabled);
+                mService.setAutoTimeEnabled(admin, enabled);
             } catch (RemoteException e) {
                 throw e.rethrowFromSystemServer();
             }
@@ -6064,10 +6076,10 @@ public class DevicePolicyManager {
      * @throws SecurityException if caller is not a device owner, a profile owner for the
      * primary user, or a profile owner of an organization-owned managed profile.
      */
-    public boolean getAutoTime(@NonNull ComponentName admin) {
+    public boolean getAutoTimeEnabled(@NonNull ComponentName admin) {
         if (mService != null) {
             try {
-                return mService.getAutoTime(admin);
+                return mService.getAutoTimeEnabled(admin);
             } catch (RemoteException e) {
                 throw e.rethrowFromSystemServer();
             }
@@ -6090,11 +6102,11 @@ public class DevicePolicyManager {
      * @throws SecurityException if caller is not a device owner, a profile owner for the
      * primary user, or a profile owner of an organization-owned managed profile.
      */
-    public void setAutoTimeZone(@NonNull ComponentName admin, boolean enabled) {
+    public void setAutoTimeZoneEnabled(@NonNull ComponentName admin, boolean enabled) {
         throwIfParentInstance("setAutoTimeZone");
         if (mService != null) {
             try {
-                mService.setAutoTimeZone(admin, enabled);
+                mService.setAutoTimeZoneEnabled(admin, enabled);
             } catch (RemoteException e) {
                 throw e.rethrowFromSystemServer();
             }
@@ -6106,11 +6118,11 @@ public class DevicePolicyManager {
      * @throws SecurityException if caller is not a device owner, a profile owner for the
      * primary user, or a profile owner of an organization-owned managed profile.
      */
-    public boolean getAutoTimeZone(@NonNull ComponentName admin) {
+    public boolean getAutoTimeZoneEnabled(@NonNull ComponentName admin) {
         throwIfParentInstance("getAutoTimeZone");
         if (mService != null) {
             try {
-                return mService.getAutoTimeZone(admin);
+                return mService.getAutoTimeZoneEnabled(admin);
             } catch (RemoteException e) {
                 throw e.rethrowFromSystemServer();
             }
@@ -6824,6 +6836,10 @@ public class DevicePolicyManager {
      * package will no longer be suspended. The admin can block this by using
      * {@link #setUninstallBlocked}.
      *
+     * <p>Some apps cannot be suspended, such as device admins, the active launcher, the required
+     * package installer, the required package uninstaller, the required package verifier, the
+     * default dialer, and the permission controller.
+     *
      * @param admin The name of the admin component to check, or {@code null} if the caller is a
      *            package access delegate.
      * @param packageNames The package names to suspend or unsuspend.
@@ -6987,6 +7003,22 @@ public class DevicePolicyManager {
     }
 
     /**
+     * Returns the configured supervision app if it exists and is the device owner or policy owner.
+     * @hide
+     */
+    public @Nullable ComponentName getProfileOwnerOrDeviceOwnerSupervisionComponent(
+            @NonNull UserHandle user) {
+        if (mService != null) {
+            try {
+                return mService.getProfileOwnerOrDeviceOwnerSupervisionComponent(user);
+            } catch (RemoteException re) {
+                throw re.rethrowFromSystemServer();
+            }
+        }
+        return null;
+    }
+
+    /**
      * @hide
      * @return the human readable name of the organisation associated with this DPM or {@code null}
      *         if one is not set.
@@ -7059,7 +7091,6 @@ public class DevicePolicyManager {
      *
      * @hide
      */
-    @SystemApi
     public boolean hasDeviceIdentifierAccess(@NonNull String packageName, int pid, int uid) {
         throwIfParentInstance("hasDeviceIdentifierAccess");
         if (packageName == null) {
@@ -8624,11 +8655,16 @@ public class DevicePolicyManager {
      * <p>Relevant interactions on the secondary lockscreen should be communicated back to the
      * keyguard via {@link IKeyguardCallback}, such as when the screen is ready to be dismissed.
      *
+     * <p>This API, and associated APIs, can only be called by the default supervision app when it
+     * is set as the device owner or profile owner.
+     *
      * @param admin Which {@link DeviceAdminReceiver} this request is associated with.
      * @param enabled Whether or not the lockscreen needs to be shown.
      * @throws SecurityException if {@code admin} is not a device or profile owner.
      * @see #isSecondaryLockscreenEnabled
+     * @hide
      **/
+    @SystemApi
     public void setSecondaryLockscreenEnabled(@NonNull ComponentName admin, boolean enabled) {
         throwIfParentInstance("setSecondaryLockscreenEnabled");
         if (mService != null) {
@@ -8646,11 +8682,11 @@ public class DevicePolicyManager {
      * @hide
      */
     @SystemApi
-    public boolean isSecondaryLockscreenEnabled(int userId) {
+    public boolean isSecondaryLockscreenEnabled(@NonNull UserHandle userHandle) {
         throwIfParentInstance("isSecondaryLockscreenEnabled");
         if (mService != null) {
             try {
-                return mService.isSecondaryLockscreenEnabled(userId);
+                return mService.isSecondaryLockscreenEnabled(userHandle);
             } catch (RemoteException e) {
                 throw e.rethrowFromSystemServer();
             }
@@ -8804,10 +8840,11 @@ public class DevicePolicyManager {
      * <p>
      * The following settings used to be supported, but can be controlled in other ways:
      * <ul>
-     * <li>{@link android.provider.Settings.Global#AUTO_TIME} : Use {@link #setAutoTime} and
+     * <li>{@link android.provider.Settings.Global#AUTO_TIME} : Use {@link #setAutoTimeEnabled} and
      * {@link UserManager#DISALLOW_CONFIG_DATE_TIME} instead.</li>
-     * <li>{@link android.provider.Settings.Global#AUTO_TIME_ZONE} : Use {@link #setAutoTimeZone}
-     * and {@link UserManager#DISALLOW_CONFIG_DATE_TIME} instead.</li>
+     * <li>{@link android.provider.Settings.Global#AUTO_TIME_ZONE} : Use
+     * {@link #setAutoTimeZoneEnabled} and {@link UserManager#DISALLOW_CONFIG_DATE_TIME}
+     * instead.</li>
      * <li>{@link android.provider.Settings.Global#DATA_ROAMING} : Use
      * {@link UserManager#DISALLOW_DATA_ROAMING} instead.</li>
      * </ul>
@@ -9375,9 +9412,9 @@ public class DevicePolicyManager {
     }
 
     /**
-     * Called by device owner or profile owner of secondary users  that is affiliated with the
-     * device to disable the status bar. Disabling the status bar blocks notifications, quick
-     * settings and other screen overlays that allow escaping from a single use device.
+     * Called by device owner or profile owner of secondary users that is affiliated with the
+     * device to disable the status bar. Disabling the status bar blocks notifications and quick
+     * settings.
      * <p>
      * <strong>Note:</strong> This method has no effect for LockTask mode. The behavior of the
      * status bar in LockTask mode can be configured with
@@ -11483,7 +11520,11 @@ public class DevicePolicyManager {
 
     /**
      * Deprecated. Use {@code markProfileOwnerOnOrganizationOwnedDevice} instead.
-     * Throws UnsupportedOperationException when called.
+     * When called by an app targeting SDK level {@link android.os.Build.VERSION_CODES#Q} or
+     * below, will behave the same as {@link #markProfileOwnerOnOrganizationOwnedDevice}.
+     *
+     * When called by an app targeting SDK level {@link android.os.Build.VERSION_CODES#R}
+     * or above, will throw an UnsupportedOperationException when called.
      *
      * @deprecated Use {@link #markProfileOwnerOnOrganizationOwnedDevice} instead.
      *
@@ -11494,9 +11535,14 @@ public class DevicePolicyManager {
     @RequiresPermission(value = android.Manifest.permission.GRANT_PROFILE_OWNER_DEVICE_IDS_ACCESS,
             conditional = true)
     public void setProfileOwnerCanAccessDeviceIds(@NonNull ComponentName who) {
-        throw new UnsupportedOperationException(
-                "This method is deprecated. use markProfileOwnerOnOrganizationOwnedDevice instead"
-                        + ".");
+        ApplicationInfo ai = mContext.getApplicationInfo();
+        if (ai.targetSdkVersion > Build.VERSION_CODES.Q) {
+            throw new UnsupportedOperationException(
+                    "This method is deprecated. use markProfileOwnerOnOrganizationOwnedDevice"
+                    + " instead.");
+        } else {
+            markProfileOwnerOnOrganizationOwnedDevice(who);
+        }
     }
 
     /**
@@ -11847,18 +11893,19 @@ public class DevicePolicyManager {
     }
 
     /**
-     * Called by Device owner to set packages as protected. User will not be able to clear app
-     * data or force-stop protected packages.
+     * Called by Device owner to disable user control over apps. User will not be able to clear
+     * app data or force-stop packages.
      *
      * @param admin which {@link DeviceAdminReceiver} this request is associated with
-     * @param packages The package names to protect.
+     * @param packages The package names for the apps.
      * @throws SecurityException if {@code admin} is not a device owner.
      */
-    public void setProtectedPackages(@NonNull ComponentName admin, @NonNull List<String> packages) {
-        throwIfParentInstance("setProtectedPackages");
+    public void setUserControlDisabledPackages(@NonNull ComponentName admin,
+            @NonNull List<String> packages) {
+        throwIfParentInstance("setUserControlDisabledPackages");
         if (mService != null) {
             try {
-                mService.setProtectedPackages(admin, packages);
+                mService.setUserControlDisabledPackages(admin, packages);
             } catch (RemoteException re) {
                 throw re.rethrowFromSystemServer();
             }
@@ -11866,16 +11913,16 @@ public class DevicePolicyManager {
     }
 
     /**
-     * Returns the list of packages protected by the device owner.
+     * Returns the list of packages over which user control is disabled by the device owner.
      *
      * @param admin which {@link DeviceAdminReceiver} this request is associated with
      * @throws SecurityException if {@code admin} is not a device owner.
      */
-    public @NonNull List<String> getProtectedPackages(@NonNull ComponentName admin) {
-        throwIfParentInstance("getProtectedPackages");
+    public @NonNull List<String> getUserControlDisabledPackages(@NonNull ComponentName admin) {
+        throwIfParentInstance("getUserControlDisabledPackages");
         if (mService != null) {
             try {
-                return mService.getProtectedPackages(admin);
+                return mService.getUserControlDisabledPackages(admin);
             } catch (RemoteException re) {
                 throw re.rethrowFromSystemServer();
             }
@@ -11909,13 +11956,17 @@ public class DevicePolicyManager {
     }
 
     /**
-     * Called by device owner or profile owner of an organization-owned managed profile to return
-     * whether Common Criteria mode is currently enabled for the device.
+     * Returns whether Common Criteria mode is currently enabled. Device owner and profile owner of
+     * an organization-owned managed profile can query its own Common Criteria mode setting by
+     * calling this method with its admin {@link ComponentName}. Any caller can obtain the
+     * aggregated device-wide Common Criteria mode state by passing {@code null} as the
+     * {@code admin} argument.
      *
-     * @param admin which {@link DeviceAdminReceiver} this request is associated with.
+     * @param admin which {@link DeviceAdminReceiver} this request is associated with, or
+     *     {@code null} if the caller is not a device admin.
      * @return {@code true} if Common Criteria mode is enabled, {@code false} otherwise.
      */
-    public boolean isCommonCriteriaModeEnabled(@NonNull ComponentName admin) {
+    public boolean isCommonCriteriaModeEnabled(@Nullable ComponentName admin) {
         throwIfParentInstance("isCommonCriteriaModeEnabled");
         if (mService != null) {
             try {
@@ -11935,7 +11986,7 @@ public class DevicePolicyManager {
      *     {@link #PERSONAL_APPS_NOT_SUSPENDED} if apps are not suspended.
      * @see #setPersonalAppsSuspended
      */
-    public @PersonalAppSuspensionReason int getPersonalAppsSuspendedReasons(
+    public @PersonalAppsSuspensionReason int getPersonalAppsSuspendedReasons(
             @NonNull ComponentName admin) {
         throwIfParentInstance("getPersonalAppsSuspendedReasons");
         if (mService != null) {
@@ -11984,17 +12035,18 @@ public class DevicePolicyManager {
      * must handle this intent.
      *
      * @param admin Which {@link DeviceAdminReceiver} this request is associated with
-     * @param timeoutMs Maximum time the profile is allowed to be off in milliseconds or 0 if
-     *        not limited.
+     * @param timeoutMillis Maximum time the profile is allowed to be off in milliseconds or 0 if
+     *        not limited. The minimum non-zero value corresponds to 72 hours. If an admin sets a
+     *        smaller non-zero vaulue, 72 hours will be set instead.
      * @throws IllegalStateException if the profile owner doesn't have an activity that handles
      *        {@link #ACTION_CHECK_POLICY_COMPLIANCE}
      * @see #setPersonalAppsSuspended
      */
-    public void setManagedProfileMaximumTimeOff(@NonNull ComponentName admin, long timeoutMs) {
+    public void setManagedProfileMaximumTimeOff(@NonNull ComponentName admin, long timeoutMillis) {
         throwIfParentInstance("setManagedProfileMaximumTimeOff");
         if (mService != null) {
             try {
-                mService.setManagedProfileMaximumTimeOff(admin, timeoutMs);
+                mService.setManagedProfileMaximumTimeOff(admin, timeoutMillis);
             } catch (RemoteException re) {
                 throw re.rethrowFromSystemServer();
             }

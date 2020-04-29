@@ -103,4 +103,14 @@ public abstract class ShortcutServiceInternal {
      */
     public abstract List<ShortcutManager.ShareShortcutInfo> getShareTargets(
             @NonNull String callingPackage, @NonNull IntentFilter intentFilter, int userId);
+
+    /**
+     * Returns the icon Uri of the shortcut, and grants Uri read permission to the caller.
+     */
+    public abstract String getShortcutIconUri(int launcherUserId, @NonNull String launcherPackage,
+            @NonNull String packageName, @NonNull String shortcutId, int userId);
+
+    public abstract boolean isSharingShortcut(int callingUserId, @NonNull String callingPackage,
+            @NonNull String packageName, @NonNull String shortcutId, int userId,
+            @NonNull IntentFilter filter);
 }

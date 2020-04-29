@@ -180,7 +180,7 @@ public class ApkSignatureVerifier {
     /**
      * Verifies the provided APK using V4 schema.
      *
-     * @param verifyFull whether to verify all contents of this APK or just collect certificates.
+     * @param verifyFull whether to verify (V4 vs V3) or just collect certificates.
      * @return the certificates associated with each signer.
      * @throws SignatureNotFoundException if there are no V4 signatures in the APK
      * @throws PackageParserException     if there was a problem collecting certificates
@@ -190,29 +190,51 @@ public class ApkSignatureVerifier {
             throws SignatureNotFoundException, PackageParserException {
         Trace.traceBegin(TRACE_TAG_PACKAGE_MANAGER, verifyFull ? "verifyV4" : "certsOnlyV4");
         try {
-            Certificate[] certs = ApkSignatureSchemeV4Verifier.extractCertificates(apkPath);
-            Certificate[][] signerCerts = new Certificate[][]{certs};
+            ApkSignatureSchemeV4Verifier.VerifiedSigner vSigner =
+                    ApkSignatureSchemeV4Verifier.extractCertificates(apkPath);
+            Certificate[][] signerCerts = new Certificate[][]{vSigner.certs};
             Signature[] signerSigs = convertToSignatures(signerCerts);
 
             if (verifyFull) {
-                // v4 is an add-on and requires v2/v3 signature to validate against its certificates
-                final PackageParser.SigningDetails nonstreaming = verifyV3AndBelowSignatures(
-                        apkPath, minSignatureSchemeVersion, false);
-                if (nonstreaming.signatureSchemeVersion <= SignatureSchemeVersion.JAR) {
-                    throw new SecurityException(
-                            "V4 signing block can only be verified along with V2 and above.");
+                byte[] nonstreamingDigest = null;
+                Certificate[][] nonstreamingCerts = null;
+
+                try {
+                    // v4 is an add-on and requires v2 or v3 signature to validate against its
+                    // certificate and digest
+                    ApkSignatureSchemeV3Verifier.VerifiedSigner v3Signer =
+                            ApkSignatureSchemeV3Verifier.unsafeGetCertsWithoutVerification(apkPath);
+                    nonstreamingDigest = v3Signer.digest;
+                    nonstreamingCerts = new Certificate[][]{v3Signer.certs};
+                } catch (SignatureNotFoundException e) {
+                    try {
+                        ApkSignatureSchemeV2Verifier.VerifiedSigner v2Signer =
+                                ApkSignatureSchemeV2Verifier.verify(apkPath, false);
+                        nonstreamingDigest = v2Signer.digest;
+                        nonstreamingCerts = v2Signer.certs;
+                    } catch (SignatureNotFoundException ee) {
+                        throw new SecurityException(
+                                "V4 verification failed to collect V2/V3 certificates from : "
+                                        + apkPath, ee);
+                    }
                 }
-                if (nonstreaming.signatures.length == 0
-                        || nonstreaming.signatures.length != signerSigs.length) {
-                    throw new SecurityException("Invalid number of signatures in "
-                            + nonstreaming.signatureSchemeVersion);
+
+                Signature[] nonstreamingSigs = convertToSignatures(nonstreamingCerts);
+                if (nonstreamingSigs.length != signerSigs.length) {
+                    throw new SecurityException(
+                            "Invalid number of certificates: " + nonstreamingSigs.length);
                 }
 
                 for (int i = 0, size = signerSigs.length; i < size; ++i) {
-                    if (!nonstreaming.signatures[i].equals(signerSigs[i])) {
-                        throw new SecurityException("V4 signature certificate does not match "
-                                + nonstreaming.signatureSchemeVersion);
+                    if (!nonstreamingSigs[i].equals(signerSigs[i])) {
+                        throw new SecurityException(
+                                "V4 signature certificate does not match V2/V3");
                     }
+                }
+
+                if (!ArrayUtils.equals(vSigner.apkDigest, nonstreamingDigest,
+                        vSigner.apkDigest.length)) {
+                    throw new SecurityException("APK digest in V4 signature does not match V2/V3");
                 }
             }
 

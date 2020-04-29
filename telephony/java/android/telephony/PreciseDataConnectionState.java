@@ -95,7 +95,6 @@ public final class PreciseDataConnectionState implements Parcelable {
      *        if there is no valid APN setting for the specific type, then this will be null
      * @hide
      */
-    @SystemApi
     public PreciseDataConnectionState(@DataState int state,
                                       @NetworkType int networkType,
                                       @ApnType int apnTypes, @NonNull String apn,
@@ -172,6 +171,7 @@ public final class PreciseDataConnectionState implements Parcelable {
      *
      * @deprecated use {@link getNetworkType()}
      * @hide
+     * @removed Removed from the R preview SDK but was never part of the stable API surface.
      */
     @Deprecated
     @SystemApi
@@ -223,6 +223,7 @@ public final class PreciseDataConnectionState implements Parcelable {
      *
      * @deprecated use {@link #getLinkProperties()}
      * @hide
+     * @removed Removed from the R preview SDK but was never part of the stable API surface.
      */
     @Deprecated
     @SystemApi
@@ -266,7 +267,6 @@ public final class PreciseDataConnectionState implements Parcelable {
      *
      * @return the ApnSetting that was used to configure this data connection.
      */
-    // FIXME: This shouldn't be nullable; update once the ApnSetting is supplied correctly
     public @Nullable ApnSetting getApnSetting() {
         return mApnSetting;
     }

@@ -280,6 +280,28 @@ public final class AudioDeviceInfo {
         }
     }
 
+    /**
+     * @hide
+     * Throws IAE on an invalid output device type
+     * @param type
+     */
+    public static void enforceValidAudioDeviceTypeOut(int type) {
+        if (!isValidAudioDeviceTypeOut(type)) {
+            throw new IllegalArgumentException("Illegal output device type " + type);
+        }
+    }
+
+    /**
+     * @hide
+     * Throws IAE on an invalid input device type
+     * @param type
+     */
+    public static void enforceValidAudioDeviceTypeIn(int type) {
+        if (!isValidAudioDeviceTypeIn(type)) {
+            throw new IllegalArgumentException("Illegal input device type " + type);
+        }
+    }
+
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
@@ -425,14 +447,14 @@ public final class AudioDeviceInfo {
     /**
      * Returns an array of supported encapsulation modes for the device.
      *
-     * The array can include any of
-     * {@link AudioTrack#ENCAPSULATION_MODE_ELEMENTARY_STREAM},
-     * {@link AudioTrack#ENCAPSULATION_MODE_HANDLE}.
+     * The array can include any of the {@code AudioTrack} encapsulation modes,
+     * e.g. {@link AudioTrack#ENCAPSULATION_MODE_NONE},
+     * or {@link AudioTrack#ENCAPSULATION_MODE_ELEMENTARY_STREAM}.
      *
      * @return An array of supported encapsulation modes for the device.  This
      *     may be an empty array if no encapsulation modes are supported.
      */
-    public @NonNull int[] getEncapsulationModes() {
+    public @NonNull @AudioTrack.EncapsulationMode int[] getEncapsulationModes() {
         // Implement a getter in r-dev or r-tv-dev as needed.
         return new int[0];  // be careful of returning a copy of any internal data.
     }
@@ -451,7 +473,7 @@ public final class AudioDeviceInfo {
      * @return An array of supported encapsulation metadata types for the device.  This
      *     may be an empty array if no metadata types are supported.
      */
-    public @NonNull int[] getEncapsulationMetadataTypes() {
+    public @NonNull @AudioTrack.EncapsulationMetadataType int[] getEncapsulationMetadataTypes() {
         // Implement a getter in r-dev or r-tv-dev as needed.
         return new int[0];  // be careful of returning a copy of any internal data.
     }

@@ -17,14 +17,8 @@
 package android.content.pm;
 
 import android.annotation.NonNull;
-import android.annotation.Nullable;
 import android.annotation.SystemApi;
 import android.content.ComponentName;
-import android.os.ParcelFileDescriptor;
-
-import java.util.Arrays;
-import java.util.Map;
-import java.util.stream.Collectors;
 
 /**
  * This class represents the parameters used to configure a Data Loader.
@@ -46,7 +40,7 @@ public class DataLoaderParams {
      */
     public static final @NonNull DataLoaderParams forStreaming(@NonNull ComponentName componentName,
             @NonNull String arguments) {
-        return new DataLoaderParams(DataLoaderType.STREAMING, componentName, arguments, null);
+        return new DataLoaderParams(DataLoaderType.STREAMING, componentName, arguments);
     }
 
     /**
@@ -54,34 +48,20 @@ public class DataLoaderParams {
      *
      * @param componentName Data Loader component supporting Incremental installation.
      * @param arguments free form installation arguments
-     * @param namedFds TODO(b/146080380) remove
      */
     public static final @NonNull DataLoaderParams forIncremental(
-            @NonNull ComponentName componentName, @NonNull String arguments,
-            @Nullable Map<String, ParcelFileDescriptor> namedFds) {
-        return new DataLoaderParams(DataLoaderType.INCREMENTAL, componentName, arguments, namedFds);
+            @NonNull ComponentName componentName, @NonNull String arguments) {
+        return new DataLoaderParams(DataLoaderType.INCREMENTAL, componentName, arguments);
     }
 
     /** @hide */
     public DataLoaderParams(@NonNull @DataLoaderType int type, @NonNull ComponentName componentName,
-            @NonNull String arguments, @Nullable Map<String, ParcelFileDescriptor> namedFds) {
+            @NonNull String arguments) {
         DataLoaderParamsParcel data = new DataLoaderParamsParcel();
         data.type = type;
         data.packageName = componentName.getPackageName();
         data.className = componentName.getClassName();
         data.arguments = arguments;
-        if (namedFds == null || namedFds.isEmpty()) {
-            data.dynamicArgs = new NamedParcelFileDescriptor[0];
-        } else {
-            data.dynamicArgs = new NamedParcelFileDescriptor[namedFds.size()];
-            int i = 0;
-            for (Map.Entry<String, ParcelFileDescriptor> namedFd : namedFds.entrySet()) {
-                data.dynamicArgs[i] = new NamedParcelFileDescriptor();
-                data.dynamicArgs[i].name = namedFd.getKey();
-                data.dynamicArgs[i].fd = namedFd.getValue();
-                i += 1;
-            }
-        }
         mData = data;
     }
 
@@ -114,13 +94,5 @@ public class DataLoaderParams {
      */
     public final @NonNull String getArguments() {
         return mData.arguments;
-    }
-
-    /**
-     * @return data loader's dynamic arguments such as file descriptors TODO: remove
-     */
-    public final @NonNull Map<String, ParcelFileDescriptor> getDynamicArgs() {
-        return Arrays.stream(mData.dynamicArgs).collect(
-                Collectors.toMap(p -> p.name, p -> p.fd));
     }
 }

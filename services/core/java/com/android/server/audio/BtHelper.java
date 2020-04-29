@@ -60,6 +60,7 @@ public class BtHelper {
     }
 
     // List of clients having issued a SCO start request
+    @GuardedBy("BtHelper.this")
     private final @NonNull ArrayList<ScoClient> mScoClients = new ArrayList<ScoClient>();
 
     // BluetoothHeadset API to control SCO connection
@@ -493,9 +494,8 @@ public class BtHelper {
         // client is created.
         final long ident = Binder.clearCallingIdentity();
         try {
-            eventSource += " client count before=" + client.getCount();
             AudioService.sDeviceLogger.log(new AudioEventLogger.StringEvent(eventSource));
-            client.incCount(scoAudioMode);
+            client.requestScoState(BluetoothHeadset.STATE_AUDIO_CONNECTED, scoAudioMode);
         } catch (NullPointerException e) {
             Log.e(TAG, "Null ScoClient", e);
         }
@@ -512,9 +512,15 @@ public class BtHelper {
         // and this must be done on behalf of system server to make sure permissions are granted.
         final long ident = Binder.clearCallingIdentity();
         if (client != null) {
-            eventSource += " client count before=" + client.getCount();
             AudioService.sDeviceLogger.log(new AudioEventLogger.StringEvent(eventSource));
-            client.decCount();
+            client.requestScoState(BluetoothHeadset.STATE_AUDIO_DISCONNECTED,
+                    SCO_MODE_VIRTUAL_CALL);
+            // If a disconnection is pending, the client will be removed whne clearAllScoClients()
+            // is called form receiveBtEvent()
+            if (mScoAudioState != SCO_STATE_DEACTIVATE_REQ
+                    && mScoAudioState != SCO_STATE_DEACTIVATING) {
+                client.remove(false /*stop */, true /*unregister*/);
+            }
         }
         Binder.restoreCallingIdentity(ident);
     }
@@ -833,25 +839,33 @@ public class BtHelper {
     @GuardedBy("AudioDeviceBroker.mDeviceStateLock")
     /*package*/ synchronized void scoClientDied(Object obj) {
         final ScoClient client = (ScoClient) obj;
+        client.remove(true /*stop*/, false /*unregister*/);
         Log.w(TAG, "SCO client died");
-        int index = mScoClients.indexOf(client);
-        if (index < 0) {
-            Log.w(TAG, "unregistered SCO client died");
-        } else {
-            client.clearCount(true);
-            mScoClients.remove(client);
-        }
     }
 
     private class ScoClient implements IBinder.DeathRecipient {
         private IBinder mCb; // To be notified of client's death
         private int mCreatorPid;
-        private int mStartcount; // number of SCO connections started by this client
 
         ScoClient(IBinder cb) {
             mCb = cb;
             mCreatorPid = Binder.getCallingPid();
-            mStartcount = 0;
+        }
+
+        public void registerDeathRecipient() {
+            try {
+                mCb.linkToDeath(this, 0);
+            } catch (RemoteException e) {
+                Log.w(TAG, "ScoClient could not link to " + mCb + " binder death");
+            }
+        }
+
+        public void unregisterDeathRecipient() {
+            try {
+                mCb.unlinkToDeath(this, 0);
+            } catch (NoSuchElementException e) {
+                Log.w(TAG, "ScoClient could not not unregistered to binder");
+            }
         }
 
         @Override
@@ -861,106 +875,12 @@ public class BtHelper {
             mDeviceBroker.postScoClientDied(this);
         }
 
-        // @GuardedBy("AudioDeviceBroker.mSetModeLock")
-        // @GuardedBy("AudioDeviceBroker.mDeviceStateLock")
-        @GuardedBy("BtHelper.this")
-        void incCount(int scoAudioMode) {
-            Log.i(TAG, "In incCount(), mStartcount = " + mStartcount);
-            if (!requestScoState(BluetoothHeadset.STATE_AUDIO_CONNECTED, scoAudioMode)) {
-                Log.e(TAG, "Request sco connected with scoAudioMode("
-                        + scoAudioMode + ") failed");
-                return;
-            }
-            if (mStartcount == 0) {
-                try {
-                    mCb.linkToDeath(this, 0);
-                } catch (RemoteException e) {
-                    // client has already died!
-                    Log.w(TAG, "ScoClient incCount() could not link to "+mCb+" binder death");
-                }
-            }
-            //mStartCount should always be either 0 or 1 only if the startBluetoothSco
-            //is called by the same app multiple times by mistake. This will ensure that
-            //SCO gets disconnected when app calls stopBluetoothSco only once.
-            //Also, if SCO is already there, we just need to select the SCO devices by
-            //calling setBluetoothScoOn(true) in system context.
-            if (mStartcount == 1) {
-                Log.i(TAG, "mStartcount is 1, calling setBluetoothScoOn(true)"
-                            + "in system context");
-                mDeviceBroker.setBluetoothScoOn(true, "BtHelper.incCount");
-            } else if (mStartcount == 0) {
-                mStartcount++;
-                Log.i(TAG, "mStartcount is 0, incrementing by 1");
-            }
-        }
-
-        // @GuardedBy("AudioDeviceBroker.mSetModeLock")
-        // @GuardedBy("AudioDeviceBroker.mDeviceStateLock")
-        @GuardedBy("BtHelper.this")
-        void decCount() {
-            if (AudioService.DEBUG_SCO) {
-                Log.i(TAG, "In decCount(), mStartcount: " + mStartcount);
-            }
-            if (mStartcount == 0) {
-                Log.w(TAG, "ScoClient.decCount() already 0");
-            } else {
-                mStartcount--;
-                if (mStartcount == 0) {
-                    try {
-                        mCb.unlinkToDeath(this, 0);
-                    } catch (NoSuchElementException e) {
-                        Log.w(TAG, "decCount() going to 0 but not registered to binder");
-                    }
-                }
-                if (!requestScoState(BluetoothHeadset.STATE_AUDIO_DISCONNECTED, 0)) {
-                    Log.w(TAG, "Request sco disconnected with scoAudioMode(0) failed");
-                }
-            }
-        }
-
-        // @GuardedBy("AudioDeviceBroker.mSetModeLock")
-        // @GuardedBy("AudioDeviceBroker.mDeviceStateLock")
-        @GuardedBy("BtHelper.this")
-        void clearCount(boolean stopSco) {
-            if (AudioService.DEBUG_SCO) {
-                Log.i(TAG, "In clearCount(), stopSco: " + stopSco + ", mStartcount: "
-                            + mStartcount);
-            }
-            if (mStartcount != 0) {
-                try {
-                    mCb.unlinkToDeath(this, 0);
-                } catch (NoSuchElementException e) {
-                    Log.w(TAG, "clearCount() mStartcount: "
-                            + mStartcount + " != 0 but not registered to binder");
-                }
-            }
-            mStartcount = 0;
-            if (stopSco) {
-                boolean ScoState = requestScoState(BluetoothHeadset.STATE_AUDIO_DISCONNECTED, 0);
-            }
-        }
-
-        int getCount() {
-            return mStartcount;
-        }
-
         IBinder getBinder() {
             return mCb;
         }
 
         int getPid() {
             return mCreatorPid;
-        }
-
-        private int totalCount() {
-            int count = 0;
-            for (ScoClient mScoClient : mScoClients) {
-                count += mScoClient.getCount();
-            }
-            if (AudioService.DEBUG_SCO) {
-                Log.i(TAG, "In totalCount(), count: " + count);
-            }
-            return count;
         }
 
         // @GuardedBy("AudioDeviceBroker.mSetModeLock")
@@ -972,10 +892,9 @@ public class BtHelper {
                             + scoAudioMode);
             }
             checkScoAudioState();
-            int clientCount = totalCount();
-            if (clientCount != 0) {
+            if (mScoClients.size() != 1) {
                 Log.i(TAG, "requestScoState: state=" + state + ", scoAudioMode=" + scoAudioMode
-                        + ", clientCount=" + clientCount);
+                        + ", num SCO clients=" + mScoClients.size());
                 return true;
             }
             if (state == BluetoothHeadset.STATE_AUDIO_CONNECTED) {
@@ -1044,12 +963,14 @@ public class BtHelper {
                         mScoAudioState = SCO_STATE_ACTIVE_INTERNAL;
                         broadcastScoConnectionState(AudioManager.SCO_AUDIO_STATE_CONNECTED);
                         return false;
+                    case SCO_STATE_ACTIVE_INTERNAL:
+                        Log.w(TAG, "requestScoState: already in ACTIVE mode, simply return");
+                        break;
                     default:
                         Log.w(TAG, "requestScoState: failed to connect in state "
                                 + mScoAudioState + ", scoAudioMode=" + scoAudioMode);
                         broadcastScoConnectionState(AudioManager.SCO_AUDIO_STATE_DISCONNECTED);
                         return false;
-
                 }
             } else if (state == BluetoothHeadset.STATE_AUDIO_DISCONNECTED) {
                 switch (mScoAudioState) {
@@ -1094,6 +1015,18 @@ public class BtHelper {
                 }
             }
             return true;
+        }
+
+        @GuardedBy("BtHelper.this")
+        void remove(boolean stop, boolean unregister) {
+            if (unregister) {
+                unregisterDeathRecipient();
+            }
+            if (stop) {
+                requestScoState(BluetoothHeadset.STATE_AUDIO_DISCONNECTED,
+                        SCO_MODE_VIRTUAL_CALL);
+            }
+            mScoClients.remove(this);
         }
     }
 
@@ -1182,6 +1115,7 @@ public class BtHelper {
     }
 
 
+    @GuardedBy("BtHelper.this")
     private ScoClient getScoClient(IBinder cb, boolean create) {
         for (ScoClient existingClient : mScoClients) {
             if (existingClient.getBinder() == cb) {
@@ -1190,6 +1124,7 @@ public class BtHelper {
         }
         if (create) {
             ScoClient newClient = new ScoClient(cb);
+            newClient.registerDeathRecipient();
             mScoClients.add(newClient);
             return newClient;
         }
@@ -1200,18 +1135,16 @@ public class BtHelper {
     //@GuardedBy("AudioDeviceBroker.mDeviceStateLock")
     @GuardedBy("BtHelper.this")
     private void clearAllScoClients(int exceptPid, boolean stopSco) {
-        ScoClient savedClient = null;
+        final ArrayList<ScoClient> clients = new ArrayList<ScoClient>();
         for (ScoClient cl : mScoClients) {
             if (cl.getPid() != exceptPid) {
-                cl.clearCount(stopSco);
-            } else {
-                savedClient = cl;
+                clients.add(cl);
             }
         }
-        mScoClients.clear();
-        if (savedClient != null) {
-            mScoClients.add(savedClient);
+        for (ScoClient cl : clients) {
+            cl.remove(stopSco, true /*unregister*/);
         }
+
     }
 
     private boolean getBluetoothHeadset() {

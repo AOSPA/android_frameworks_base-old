@@ -4589,6 +4589,150 @@ public class AudioManager {
         }
     }
 
+    /**
+     * @hide
+     * Volume behavior for an audio device where a software attenuation is applied
+     * @see #setDeviceVolumeBehavior(int, String, int)
+     */
+    public static final int DEVICE_VOLUME_BEHAVIOR_VARIABLE = 0;
+    /**
+     * @hide
+     * Volume behavior for an audio device where the volume is always set to provide no attenuation
+     *     nor gain (e.g. unit gain).
+     * @see #setDeviceVolumeBehavior(int, String, int)
+     */
+    public static final int DEVICE_VOLUME_BEHAVIOR_FULL = 1;
+    /**
+     * @hide
+     * Volume behavior for an audio device where the volume is either set to muted, or to provide
+     *     no attenuation nor gain (e.g. unit gain).
+     * @see #setDeviceVolumeBehavior(int, String, int)
+     */
+    public static final int DEVICE_VOLUME_BEHAVIOR_FIXED = 2;
+    /**
+     * @hide
+     * Volume behavior for an audio device where no software attenuation is applied, and
+     *     the volume is kept synchronized between the host and the device itself through a
+     *     device-specific protocol such as BT AVRCP.
+     * @see #setDeviceVolumeBehavior(int, String, int)
+     */
+    public static final int DEVICE_VOLUME_BEHAVIOR_ABSOLUTE = 3;
+    /**
+     * @hide
+     * Volume behavior for an audio device where no software attenuation is applied, and
+     *     the volume is kept synchronized between the host and the device itself through a
+     *     device-specific protocol (such as for hearing aids), based on the audio mode (e.g.
+     *     normal vs in phone call).
+     * @see #setMode(int)
+     * @see #setDeviceVolumeBehavior(int, String, int)
+     */
+    public static final int DEVICE_VOLUME_BEHAVIOR_ABSOLUTE_MULTI_MODE = 4;
+
+    /** @hide */
+    @IntDef({
+            DEVICE_VOLUME_BEHAVIOR_VARIABLE,
+            DEVICE_VOLUME_BEHAVIOR_FULL,
+            DEVICE_VOLUME_BEHAVIOR_FIXED,
+            DEVICE_VOLUME_BEHAVIOR_ABSOLUTE,
+            DEVICE_VOLUME_BEHAVIOR_ABSOLUTE_MULTI_MODE,
+    })
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface DeviceVolumeBehavior {}
+
+    /**
+     * @hide
+     * Throws IAE on an invalid volume behavior value
+     * @param volumeBehavior behavior value to check
+     */
+    public static void enforceValidVolumeBehavior(int volumeBehavior) {
+        switch (volumeBehavior) {
+            case DEVICE_VOLUME_BEHAVIOR_VARIABLE:
+            case DEVICE_VOLUME_BEHAVIOR_FULL:
+            case DEVICE_VOLUME_BEHAVIOR_FIXED:
+            case DEVICE_VOLUME_BEHAVIOR_ABSOLUTE:
+            case DEVICE_VOLUME_BEHAVIOR_ABSOLUTE_MULTI_MODE:
+                return;
+            default:
+                throw new IllegalArgumentException("Illegal volume behavior " + volumeBehavior);
+        }
+    }
+
+    /**
+     * @hide
+     * Sets the volume behavior for an audio output device.
+     * @param deviceType the type of audio device to be affected. Currently only supports
+     *     {@link AudioDeviceInfo#TYPE_HDMI}, {@link AudioDeviceInfo#TYPE_HDMI_ARC},
+     *     {@link AudioDeviceInfo#TYPE_LINE_DIGITAL} and {@link AudioDeviceInfo#TYPE_AUX_LINE}
+     * @param deviceAddress the address of the device, if any
+     * @param deviceVolumeBehavior one of the device behaviors
+     */
+    @RequiresPermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING)
+    public void setDeviceVolumeBehavior(int deviceType, @Nullable String deviceAddress,
+            @DeviceVolumeBehavior int deviceVolumeBehavior) {
+        setDeviceVolumeBehavior(new AudioDeviceAttributes(AudioDeviceAttributes.ROLE_OUTPUT,
+                deviceType, deviceAddress), deviceVolumeBehavior);
+    }
+
+    /**
+     * @hide
+     * Sets the volume behavior for an audio output device.
+     * @param device the device to be affected. Currently only supports devices of type
+     *     {@link AudioDeviceInfo#TYPE_HDMI}, {@link AudioDeviceInfo#TYPE_HDMI_ARC},
+     *     {@link AudioDeviceInfo#TYPE_LINE_DIGITAL} and {@link AudioDeviceInfo#TYPE_AUX_LINE}
+     * @param deviceVolumeBehavior one of the device behaviors
+     */
+    @RequiresPermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING)
+    public void setDeviceVolumeBehavior(@NonNull AudioDeviceAttributes device,
+            @DeviceVolumeBehavior int deviceVolumeBehavior) {
+        // verify arguments (validity of device type is enforced in server)
+        Objects.requireNonNull(device);
+        enforceValidVolumeBehavior(deviceVolumeBehavior);
+        // communicate with service
+        final IAudioService service = getService();
+        try {
+            service.setDeviceVolumeBehavior(device, deviceVolumeBehavior,
+                    mApplicationContext.getOpPackageName());
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * @hide
+     * Returns the volume device behavior for the given device type and address
+     * @param deviceType an audio output device type, as defined in {@link AudioDeviceInfo}
+     * @param deviceAddress the address of the audio device, if any.
+     * @return the volume behavior for the device
+     */
+    @RequiresPermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING)
+    public @DeviceVolumeBehavior int getDeviceVolumeBehavior(int deviceType,
+            @Nullable String deviceAddress) {
+        // verify arguments
+        AudioDeviceInfo.enforceValidAudioDeviceTypeOut(deviceType);
+        return getDeviceVolumeBehavior(new AudioDeviceAttributes(AudioDeviceAttributes.ROLE_OUTPUT,
+                deviceType, deviceAddress));
+    }
+
+    /**
+     * @hide
+     * Returns the volume device behavior for the given audio device
+     * @param device the audio device
+     * @return the volume behavior for the device
+     */
+    @RequiresPermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING)
+    public @DeviceVolumeBehavior int getDeviceVolumeBehavior(@NonNull AudioDeviceAttributes device)
+    {
+        // verify arguments (validity of device type is enforced in server)
+        Objects.requireNonNull(device);
+        // communicate with service
+        final IAudioService service = getService();
+        try {
+            return service.getDeviceVolumeBehavior(device);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
      /**
      * Indicate wired accessory connection state change.
      * @param device type of device connected/disconnected (AudioManager.DEVICE_OUT_xxx)
@@ -4597,6 +4741,7 @@ public class AudioManager {
      * {@hide}
      */
     @UnsupportedAppUsage
+    @RequiresPermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING)
     public void setWiredDeviceConnectionState(int type, int state, String address, String name) {
         final IAudioService service = getService();
         try {
@@ -4818,7 +4963,7 @@ public class AudioManager {
      * opened on that device.
      *
      * @param device an instance of {@link AudioDeviceInfo} returned from {@link getDevices()}.
-     * @param delayMs delay in milliseconds desired.  This should be in range of {@code 0}
+     * @param delayMillis delay in milliseconds desired.  This should be in range of {@code 0}
      *     to the value returned by {@link #getMaxAdditionalOutputDeviceDelay()}.
      * @return true if successful, false if the device does not support output device delay
      *     or the delay is not in range of {@link #getMaxAdditionalOutputDeviceDelay()}.
@@ -4826,7 +4971,7 @@ public class AudioManager {
     @SystemApi
     @RequiresPermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING)
     public boolean setAdditionalOutputDeviceDelay(
-            @NonNull AudioDeviceInfo device, @IntRange(from = 0) int delayMs) {
+            @NonNull AudioDeviceInfo device, @IntRange(from = 0) long delayMillis) {
         Objects.requireNonNull(device);
         // Implement the setter in r-dev or r-tv-dev as needed.
         return false;
@@ -4842,7 +4987,7 @@ public class AudioManager {
      */
     @SystemApi
     @IntRange(from = 0)
-    public int getAdditionalOutputDeviceDelay(@NonNull AudioDeviceInfo device) {
+    public long getAdditionalOutputDeviceDelay(@NonNull AudioDeviceInfo device) {
         Objects.requireNonNull(device);
         // Implement the getter in r-dev or r-tv-dev as needed.
         return 0;
@@ -4860,7 +5005,7 @@ public class AudioManager {
      */
     @SystemApi
     @IntRange(from = 0)
-    public int getMaxAdditionalOutputDeviceDelay(@NonNull AudioDeviceInfo device) {
+    public long getMaxAdditionalOutputDeviceDelay(@NonNull AudioDeviceInfo device) {
         Objects.requireNonNull(device);
         // Implement the getter in r-dev or r-tv-dev as needed.
         return 0;
@@ -6031,6 +6176,20 @@ public class AudioManager {
     public static boolean hasHapticChannels(Uri uri) {
         try {
             return getService().hasHapticChannels(uri);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Set whether or not there is an active RTT call.
+     * This method should be called by Telecom service.
+     * @hide
+     * TODO: make this a @SystemApi
+     */
+    public static void setRttEnabled(boolean rttEnabled) {
+        try {
+            getService().setRttEnabled(rttEnabled);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }

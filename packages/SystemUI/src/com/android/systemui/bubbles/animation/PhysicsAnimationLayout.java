@@ -356,6 +356,9 @@ public class PhysicsAnimationLayout extends FrameLayout {
 
     /** Immediately re-orders the view to the given index. */
     public void reorderView(View view, int index) {
+        if (view == null) {
+            return;
+        }
         final int oldIndex = indexOfChild(view);
 
         super.removeView(view);
@@ -1113,10 +1116,5 @@ public class PhysicsAnimationLayout extends FrameLayout {
         private void setAssociatedController(PhysicsAnimationController controller) {
             mAssociatedController = controller;
         }
-    }
-
-    @Override
-    protected boolean canReceivePointerEvents() {
-        return false;
     }
 }

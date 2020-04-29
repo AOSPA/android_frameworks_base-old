@@ -47,6 +47,25 @@
           "include-filter": "com.google.android.security.gts.PackageVerifierTest"
         }
       ]
+    },
+    {
+      "name": "CtsAppSecurityHostTestCases",
+      "options": [
+        {
+          "include-filter": "android.appsecurity.cts.PrivilegedUpdateTests"
+        }
+      ]
+    },
+    {
+      "name": "FrameworksCoreTests",
+      "options": [
+        {
+          "include-filter": "android.content.pm.PackageManagerTests"
+        },
+        {
+            "exclude-annotation": "androidx.test.filters.Suppress"
+        }
+      ]
     }
   ],
   "postsubmit": [
@@ -57,6 +76,9 @@
             "include-filter": "android.permission.cts.PermissionUpdateListenerTest"
         }
       ]
+    },
+    {
+      "name": "CtsAppSecurityHostTestCases"
     },
     {
       "name": "FrameworksServicesTests",

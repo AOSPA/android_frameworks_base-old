@@ -66,7 +66,6 @@ public abstract class PackageManagerInternal {
     public static final int PACKAGE_CONFIGURATOR = 9;
     public static final int PACKAGE_INCIDENT_REPORT_APPROVER = 10;
     public static final int PACKAGE_APP_PREDICTOR = 11;
-    public static final int PACKAGE_TELEPHONY = 12;
     public static final int PACKAGE_WIFI = 13;
     public static final int PACKAGE_COMPANION = 14;
     public static final int PACKAGE_RETAIL_DEMO = 15;
@@ -124,7 +123,6 @@ public abstract class PackageManagerInternal {
         PACKAGE_CONFIGURATOR,
         PACKAGE_INCIDENT_REPORT_APPROVER,
         PACKAGE_APP_PREDICTOR,
-        PACKAGE_TELEPHONY,
         PACKAGE_WIFI,
         PACKAGE_COMPANION,
         PACKAGE_RETAIL_DEMO,
@@ -429,17 +427,6 @@ public abstract class PackageManagerInternal {
     public abstract String getNameForUid(int uid);
 
     /**
-     * Marks a package as installed (or not installed) for a given user.
-     *
-     * @param pkg the package whose installation is to be set
-     * @param userId the user for whom to set it
-     * @param installed the new installed state
-     * @return true if the installed state changed as a result
-     */
-    public abstract boolean setInstalled(AndroidPackage pkg,
-            @UserIdInt int userId, boolean installed);
-
-    /**
      * Request to perform the second phase of ephemeral resolution.
      * @param responseObj The response of the first phase of ephemeral resolution
      * @param origIntent The original intent that triggered ephemeral resolution
@@ -522,12 +509,6 @@ public abstract class PackageManagerInternal {
      * Return true if the given package is a persistent app process.
      */
     public abstract boolean isPackagePersistent(String packageName);
-
-    /**
-     * Returns whether or not the given package represents a legacy system application released
-     * prior to runtime permissions.
-     */
-    public abstract boolean isLegacySystemApp(AndroidPackage pkg);
 
     /**
      * Get all overlay packages for a user.
@@ -991,4 +972,9 @@ public abstract class PackageManagerInternal {
      * @param enabled true if visibility blocks should be logged
      */
     public abstract void setVisibilityLogging(String packageName, boolean enabled);
+
+    /**
+     * Returns if a package name is a valid system package.
+     */
+    public abstract boolean isSystemPackage(@NonNull String packageName);
 }

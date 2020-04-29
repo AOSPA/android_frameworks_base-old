@@ -47,6 +47,7 @@ import android.content.pm.UserInfo;
 import android.os.Looper;
 import android.os.UserHandle;
 import android.os.UserManager;
+import android.telephony.TelephonyManager;
 import android.test.suitebuilder.annotation.SmallTest;
 import android.testing.AndroidTestingRunner;
 import android.testing.TestableContext;
@@ -65,6 +66,7 @@ import com.android.server.lights.LightsManager;
 import com.android.server.notification.NotificationManagerService.NotificationAssistants;
 import com.android.server.notification.NotificationManagerService.NotificationListeners;
 import com.android.server.uri.UriGrantsManagerInternal;
+import com.android.server.wm.ActivityTaskManagerInternal;
 import com.android.server.wm.WindowManagerInternal;
 
 import org.junit.After;
@@ -147,11 +149,12 @@ public class RoleObserverTest extends UiServiceTestCase {
                     mock(SnoozeHelper.class), mock(NotificationUsageStats.class),
                     mock(AtomicFile.class), mock(ActivityManager.class),
                     mock(GroupHelper.class), mock(IActivityManager.class),
+                    mock(ActivityTaskManagerInternal.class),
                     mock(UsageStatsManagerInternal.class),
                     mock(DevicePolicyManagerInternal.class), mock(IUriGrantsManager.class),
                     mock(UriGrantsManagerInternal.class),
                     mock(AppOpsManager.class), mUm, mock(NotificationHistoryManager.class),
-                    mock(StatsManager.class));
+                    mock(StatsManager.class), mock(TelephonyManager.class));
         } catch (SecurityException e) {
             if (!e.getMessage().contains("Permission Denial: not allowed to send broadcast")) {
                 throw e;

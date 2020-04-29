@@ -52,6 +52,7 @@ import com.android.systemui.statusbar.notification.row.ExpandableView;
 import com.android.systemui.statusbar.notification.row.NotificationTestHelper;
 import com.android.systemui.statusbar.notification.stack.ForegroundServiceSectionController;
 import com.android.systemui.statusbar.notification.stack.NotificationListContainer;
+import com.android.systemui.statusbar.notification.stack.NotificationListItem;
 import com.android.systemui.statusbar.phone.KeyguardBypassController;
 import com.android.systemui.statusbar.phone.NotificationGroupManager;
 
@@ -97,8 +98,10 @@ public class NotificationViewHierarchyManagerTest extends SysuiTestCase {
                 mLockscreenUserManager);
         mDependency.injectTestDependency(NotificationGroupManager.class, mGroupManager);
         mDependency.injectTestDependency(VisualStabilityManager.class, mVisualStabilityManager);
+        when(mVisualStabilityManager.areGroupChangesAllowed()).thenReturn(true);
+        when(mVisualStabilityManager.isReorderingAllowed()).thenReturn(true);
 
-        mHelper = new NotificationTestHelper(mContext, mDependency);
+        mHelper = new NotificationTestHelper(mContext, mDependency, TestableLooper.get(this));
 
         mViewHierarchyManager = new NotificationViewHierarchyManager(mContext,
                 mHandler, mLockscreenUserManager, mGroupManager, mVisualStabilityManager,
@@ -285,7 +288,13 @@ public class NotificationViewHierarchyManagerTest extends SysuiTestCase {
         public void notifyGroupChildAdded(ExpandableView row) {}
 
         @Override
+        public void notifyGroupChildAdded(View v) {}
+
+        @Override
         public void notifyGroupChildRemoved(ExpandableView row, ViewGroup childrenContainer) {}
+
+        @Override
+        public void notifyGroupChildRemoved(View v, ViewGroup childrenContainer) {}
 
         @Override
         public void generateAddAnimation(ExpandableView child, boolean fromMoreCard) {}
@@ -313,9 +322,19 @@ public class NotificationViewHierarchyManagerTest extends SysuiTestCase {
         }
 
         @Override
+        public void removeListItem(NotificationListItem li) {
+            removeContainerView(li.getView());
+        }
+
+        @Override
         public void addContainerView(View v) {
             mLayout.addView(v);
             mRows.add(v);
+        }
+
+        @Override
+        public void addListItem(NotificationListItem li) {
+            addContainerView(li.getView());
         }
 
         @Override

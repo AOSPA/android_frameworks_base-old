@@ -543,8 +543,9 @@ public final class WifiNetworkSuggestion implements Parcelable {
             wifiConfiguration.priority = mPriority;
             wifiConfiguration.meteredOverride =
                     mIsMetered ? WifiConfiguration.METERED_OVERRIDE_METERED
-                            : WifiConfiguration.METERED_OVERRIDE_NONE;
+                            : WifiConfiguration.METERED_OVERRIDE_NOT_METERED;
             wifiConfiguration.carrierId = mCarrierId;
+            wifiConfiguration.trusted = !mIsNetworkUntrusted;
             return wifiConfiguration;
         }
 
@@ -576,6 +577,7 @@ public final class WifiNetworkSuggestion implements Parcelable {
                             : WifiConfiguration.METERED_OVERRIDE_NONE;
             wifiConfiguration.trusted = !mIsNetworkUntrusted;
             mPasspointConfiguration.setCarrierId(mCarrierId);
+            mPasspointConfiguration.setMeteredOverride(wifiConfiguration.meteredOverride);
             return wifiConfiguration;
         }
 
@@ -684,8 +686,7 @@ public final class WifiNetworkSuggestion implements Parcelable {
                     mIsAppInteractionRequired,
                     mIsUserInteractionRequired,
                     mIsSharedWithUser,
-                    mIsInitialAutojoinEnabled,
-                    mIsNetworkUntrusted);
+                    mIsInitialAutojoinEnabled);
         }
     }
 
@@ -728,13 +729,6 @@ public final class WifiNetworkSuggestion implements Parcelable {
      */
     public final boolean isInitialAutoJoinEnabled;
 
-    /**
-     * Whether this network will be brought up as untrusted (TRUSTED capability bit removed).
-     * @hide
-     */
-    public final boolean isNetworkUntrusted;
-
-
     /** @hide */
     public WifiNetworkSuggestion() {
         this.wifiConfiguration = new WifiConfiguration();
@@ -743,7 +737,6 @@ public final class WifiNetworkSuggestion implements Parcelable {
         this.isUserInteractionRequired = false;
         this.isUserAllowedToManuallyConnect = true;
         this.isInitialAutoJoinEnabled = true;
-        this.isNetworkUntrusted = false;
     }
 
     /** @hide */
@@ -752,8 +745,7 @@ public final class WifiNetworkSuggestion implements Parcelable {
                                  boolean isAppInteractionRequired,
                                  boolean isUserInteractionRequired,
                                  boolean isUserAllowedToManuallyConnect,
-                                 boolean isInitialAutoJoinEnabled,
-                                 boolean isNetworkUntrusted) {
+                                 boolean isInitialAutoJoinEnabled) {
         checkNotNull(networkConfiguration);
         this.wifiConfiguration = networkConfiguration;
         this.passpointConfiguration = passpointConfiguration;
@@ -762,7 +754,6 @@ public final class WifiNetworkSuggestion implements Parcelable {
         this.isUserInteractionRequired = isUserInteractionRequired;
         this.isUserAllowedToManuallyConnect = isUserAllowedToManuallyConnect;
         this.isInitialAutoJoinEnabled = isInitialAutoJoinEnabled;
-        this.isNetworkUntrusted = isNetworkUntrusted;
     }
 
     public static final @NonNull Creator<WifiNetworkSuggestion> CREATOR =
@@ -775,8 +766,7 @@ public final class WifiNetworkSuggestion implements Parcelable {
                             in.readBoolean(), // isAppInteractionRequired
                             in.readBoolean(), // isUserInteractionRequired
                             in.readBoolean(), // isSharedCredentialWithUser
-                            in.readBoolean(),  // isAutojoinEnabled
-                            in.readBoolean()
+                            in.readBoolean()  // isAutojoinEnabled
                     );
                 }
 
@@ -799,7 +789,6 @@ public final class WifiNetworkSuggestion implements Parcelable {
         dest.writeBoolean(isUserInteractionRequired);
         dest.writeBoolean(isUserAllowedToManuallyConnect);
         dest.writeBoolean(isInitialAutoJoinEnabled);
-        dest.writeBoolean(isNetworkUntrusted);
     }
 
     @Override
@@ -842,7 +831,7 @@ public final class WifiNetworkSuggestion implements Parcelable {
                 .append(", isUserInteractionRequired=").append(isUserInteractionRequired)
                 .append(", isCredentialSharedWithUser=").append(isUserAllowedToManuallyConnect)
                 .append(", isInitialAutoJoinEnabled=").append(isInitialAutoJoinEnabled)
-                .append(", isUnTrusted=").append(isNetworkUntrusted)
+                .append(", isUnTrusted=").append(!wifiConfiguration.trusted)
                 .append(" ]");
         return sb.toString();
     }
@@ -933,7 +922,7 @@ public final class WifiNetworkSuggestion implements Parcelable {
 
     /** @see Builder#setUntrusted(boolean)  */
     public boolean isUntrusted() {
-        return isNetworkUntrusted;
+        return !wifiConfiguration.trusted;
     }
 
     /**

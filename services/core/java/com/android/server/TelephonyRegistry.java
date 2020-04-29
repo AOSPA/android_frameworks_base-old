@@ -27,6 +27,7 @@ import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.app.ActivityManager;
 import android.app.AppOpsManager;
+import android.app.compat.CompatChanges;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
@@ -39,8 +40,10 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Message;
+import android.os.Process;
 import android.os.RemoteException;
 import android.os.UserHandle;
+import android.provider.DeviceConfig;
 import android.telephony.Annotation;
 import android.telephony.Annotation.ApnType;
 import android.telephony.Annotation.DataFailureCause;
@@ -61,7 +64,6 @@ import android.telephony.CellSignalStrengthTdscdma;
 import android.telephony.CellSignalStrengthWcdma;
 import android.telephony.DataFailCause;
 import android.telephony.DisconnectCause;
-import android.telephony.DisplayInfo;
 import android.telephony.LocationAccessPolicy;
 import android.telephony.PhoneCapability;
 import android.telephony.PhoneStateListener;
@@ -73,6 +75,7 @@ import android.telephony.ServiceState;
 import android.telephony.SignalStrength;
 import android.telephony.SubscriptionInfo;
 import android.telephony.SubscriptionManager;
+import android.telephony.TelephonyDisplayInfo;
 import android.telephony.TelephonyManager;
 import android.telephony.data.ApnSetting;
 import android.telephony.emergency.EmergencyNumber;
@@ -177,7 +180,37 @@ public class TelephonyRegistry extends ITelephonyRegistry.Stub {
         }
     }
 
+    /**
+     * Wrapper class to facilitate testing -- encapsulates bits of configuration that are
+     * normally fetched from static methods with many dependencies.
+     */
+    public static class ConfigurationProvider {
+        /**
+         * @return The per-pid registration limit for PhoneStateListeners, as set from DeviceConfig
+         * @noinspection ConstantConditions
+         */
+        public int getRegistrationLimit() {
+            return Binder.withCleanCallingIdentity(() ->
+                    DeviceConfig.getInt(DeviceConfig.NAMESPACE_TELEPHONY,
+                            PhoneStateListener.FLAG_PER_PID_REGISTRATION_LIMIT,
+                            PhoneStateListener.DEFAULT_PER_PID_REGISTRATION_LIMIT));
+        }
+
+        /**
+         * @param uid uid to check
+         * @return Whether enforcement of the per-pid registation limit for PhoneStateListeners is
+         *         enabled in PlatformCompat for the given uid.
+         * @noinspection ConstantConditions
+         */
+        public boolean isRegistrationLimitEnabledInPlatformCompat(int uid) {
+            return Binder.withCleanCallingIdentity(() -> CompatChanges.isChangeEnabled(
+                    PhoneStateListener.PHONE_STATE_LISTENER_LIMIT_CHANGE_ID, uid));
+        }
+    }
+
     private final Context mContext;
+
+    private ConfigurationProvider mConfigurationProvider;
 
     // access should be inside synchronized (mRecords) for these two fields
     private final ArrayList<IBinder> mRemoveList = new ArrayList<IBinder>();
@@ -205,7 +238,7 @@ public class TelephonyRegistry extends ITelephonyRegistry.Stub {
 
     private boolean[] mUserMobileDataState;
 
-    private DisplayInfo[] mDisplayInfos;
+    private TelephonyDisplayInfo[] mTelephonyDisplayInfos;
 
     private SignalStrength[] mSignalStrength;
 
@@ -446,7 +479,7 @@ public class TelephonyRegistry extends ITelephonyRegistry.Stub {
         mCallAttributes = copyOf(mCallAttributes, mNumPhones);
         mOutgoingCallEmergencyNumber = copyOf(mOutgoingCallEmergencyNumber, mNumPhones);
         mOutgoingSmsEmergencyNumber = copyOf(mOutgoingSmsEmergencyNumber, mNumPhones);
-        mDisplayInfos = copyOf(mDisplayInfos, mNumPhones);
+        mTelephonyDisplayInfos = copyOf(mTelephonyDisplayInfos, mNumPhones);
 
         // ds -> ss switch.
         if (mNumPhones < oldNumPhones) {
@@ -486,7 +519,7 @@ public class TelephonyRegistry extends ITelephonyRegistry.Stub {
             mBackgroundCallState[i] = PreciseCallState.PRECISE_CALL_STATE_IDLE;
             mPreciseDataConnectionStates.add(new HashMap<Integer, PreciseDataConnectionState>());
             mBarringInfo.add(i, new BarringInfo());
-            mDisplayInfos[i] = null;
+            mTelephonyDisplayInfos[i] = null;
         }
     }
 
@@ -506,10 +539,11 @@ public class TelephonyRegistry extends ITelephonyRegistry.Stub {
     // handler before they get to app code.
 
     @VisibleForTesting(visibility = VisibleForTesting.Visibility.PACKAGE)
-    public TelephonyRegistry(Context context) {
+    public TelephonyRegistry(Context context, ConfigurationProvider configurationProvider) {
         CellLocation  location = CellLocation.getEmpty();
 
         mContext = context;
+        mConfigurationProvider = configurationProvider;
         mBatteryStats = BatteryStatsService.getService();
 
         int numPhones = getTelephonyManager().getActiveModemCount();
@@ -545,7 +579,7 @@ public class TelephonyRegistry extends ITelephonyRegistry.Stub {
         mOutgoingCallEmergencyNumber = new EmergencyNumber[numPhones];
         mOutgoingSmsEmergencyNumber = new EmergencyNumber[numPhones];
         mBarringInfo = new ArrayList<>();
-        mDisplayInfos = new DisplayInfo[numPhones];
+        mTelephonyDisplayInfos = new TelephonyDisplayInfo[numPhones];
         for (int i = 0; i < numPhones; i++) {
             mCallState[i] =  TelephonyManager.CALL_STATE_IDLE;
             mDataActivity[i] = TelephonyManager.DATA_ACTIVITY_NONE;
@@ -574,7 +608,7 @@ public class TelephonyRegistry extends ITelephonyRegistry.Stub {
             mBackgroundCallState[i] = PreciseCallState.PRECISE_CALL_STATE_IDLE;
             mPreciseDataConnectionStates.add(new HashMap<Integer, PreciseDataConnectionState>());
             mBarringInfo.add(i, new BarringInfo());
-            mDisplayInfos[i] = null;
+            mTelephonyDisplayInfos[i] = null;
         }
 
         mAppOps = mContext.getSystemService(AppOpsManager.class);
@@ -605,7 +639,7 @@ public class TelephonyRegistry extends ITelephonyRegistry.Stub {
         synchronized (mRecords) {
             // register
             IBinder b = callback.asBinder();
-            Record r = add(b);
+            Record r = add(b, Binder.getCallingUid(), Binder.getCallingPid(), false);
 
             if (r == null) {
                 return;
@@ -659,7 +693,7 @@ public class TelephonyRegistry extends ITelephonyRegistry.Stub {
         synchronized (mRecords) {
             // register
             IBinder b = callback.asBinder();
-            Record r = add(b);
+            Record r = add(b, Binder.getCallingUid(), Binder.getCallingPid(), false);
 
             if (r == null) {
                 return;
@@ -789,7 +823,11 @@ public class TelephonyRegistry extends ITelephonyRegistry.Stub {
             synchronized (mRecords) {
                 // register
                 IBinder b = callback.asBinder();
-                Record r = add(b);
+                boolean doesLimitApply =
+                        Binder.getCallingUid() != Process.SYSTEM_UID
+                        && Binder.getCallingUid() != Process.PHONE_UID
+                        && Binder.getCallingUid() != Process.myUid();
+                Record r = add(b, Binder.getCallingUid(), Binder.getCallingPid(), doesLimitApply);
 
                 if (r == null) {
                     return;
@@ -987,8 +1025,8 @@ public class TelephonyRegistry extends ITelephonyRegistry.Stub {
                     }
                     if ((events & PhoneStateListener.LISTEN_DISPLAY_INFO_CHANGED) != 0) {
                         try {
-                            if (mDisplayInfos[phoneId] != null) {
-                                r.callback.onDisplayInfoChanged(mDisplayInfos[phoneId]);
+                            if (mTelephonyDisplayInfos[phoneId] != null) {
+                                r.callback.onDisplayInfoChanged(mTelephonyDisplayInfos[phoneId]);
                             }
                         } catch (RemoteException ex) {
                             remove(r.binder);
@@ -1084,18 +1122,44 @@ public class TelephonyRegistry extends ITelephonyRegistry.Stub {
         return record.canReadCallLog() ? mCallIncomingNumber[phoneId] : "";
     }
 
-    private Record add(IBinder binder) {
+    private Record add(IBinder binder, int callingUid, int callingPid, boolean doesLimitApply) {
         Record r;
 
         synchronized (mRecords) {
             final int N = mRecords.size();
+            // While iterating through the records, keep track of how many we have from this pid.
+            int numRecordsForPid = 0;
             for (int i = 0; i < N; i++) {
                 r = mRecords.get(i);
                 if (binder == r.binder) {
                     // Already existed.
                     return r;
                 }
+                if (r.callerPid == callingPid) {
+                    numRecordsForPid++;
+                }
             }
+            // If we've exceeded the limit for registrations, log an error and quit.
+            int registrationLimit = mConfigurationProvider.getRegistrationLimit();
+
+            if (doesLimitApply
+                    && registrationLimit >= 1
+                    && numRecordsForPid >= registrationLimit) {
+                String errorMsg = "Pid " + callingPid + " has exceeded the number of permissible"
+                        + "registered listeners. Ignoring request to add.";
+                loge(errorMsg);
+                if (mConfigurationProvider
+                        .isRegistrationLimitEnabledInPlatformCompat(callingUid)) {
+                    throw new IllegalStateException(errorMsg);
+                }
+            } else if (doesLimitApply && numRecordsForPid
+                    >= PhoneStateListener.DEFAULT_PER_PID_REGISTRATION_LIMIT / 2) {
+                // Log the warning independently of the dynamically set limit -- apps shouldn't be
+                // doing this regardless of whether we're throwing them an exception for it.
+                Rlog.w(TAG, "Pid " + callingPid + " has exceeded half the number of permissible"
+                        + "registered listeners. Now at " + numRecordsForPid);
+            }
+
             r = new Record();
             r.binder = binder;
             r.deathRecipient = new TelephonyRegistryDeathRecipient(binder);
@@ -1393,7 +1457,7 @@ public class TelephonyRegistry extends ITelephonyRegistry.Stub {
     public void notifyCarrierNetworkChange(boolean active) {
         // only CarrierService with carrier privilege rule should have the permission
         int[] subIds = Arrays.stream(SubscriptionManager.from(mContext)
-                    .getActiveAndHiddenSubscriptionIdList())
+                    .getCompleteActiveSubscriptionIdList())
                     .filter(i -> TelephonyPermissions.checkCarrierPrivilegeForSubId(mContext,
                             i)).toArray();
         if (ArrayUtils.isEmpty(subIds)) {
@@ -1522,28 +1586,28 @@ public class TelephonyRegistry extends ITelephonyRegistry.Stub {
      *
      * @param phoneId Phone id
      * @param subId Subscription id
-     * @param displayInfo Display network info
+     * @param telephonyDisplayInfo Display network info
      *
-     * @see PhoneStateListener#onDisplayInfoChanged(DisplayInfo)
+     * @see PhoneStateListener#onDisplayInfoChanged(TelephonyDisplayInfo)
      */
     public void notifyDisplayInfoChanged(int phoneId, int subId,
-                                         @NonNull DisplayInfo displayInfo) {
+                                         @NonNull TelephonyDisplayInfo telephonyDisplayInfo) {
         if (!checkNotifyPermission("notifyDisplayInfoChanged()")) {
             return;
         }
         if (VDBG) {
             log("notifyDisplayInfoChanged: PhoneId=" + phoneId
-                    + " subId=" + subId + " displayInfo=" + displayInfo);
+                    + " subId=" + subId + " telephonyDisplayInfo=" + telephonyDisplayInfo);
         }
         synchronized (mRecords) {
             if (validatePhoneId(phoneId)) {
-                mDisplayInfos[phoneId] = displayInfo;
+                mTelephonyDisplayInfos[phoneId] = telephonyDisplayInfo;
                 for (Record r : mRecords) {
                     if (r.matchPhoneStateListenerEvent(
                             PhoneStateListener.LISTEN_DISPLAY_INFO_CHANGED)
                             && idMatch(r.subId, subId, phoneId)) {
                         try {
-                            r.callback.onDisplayInfoChanged(displayInfo);
+                            r.callback.onDisplayInfoChanged(telephonyDisplayInfo);
                         } catch (RemoteException ex) {
                             mRemoveList.add(r.binder);
                         }
@@ -2787,10 +2851,10 @@ public class TelephonyRegistry extends ITelephonyRegistry.Stub {
             try {
                 if (VDBG) {
                     log("checkPossibleMissNotify: onDisplayInfoChanged phoneId="
-                            + phoneId + " dpi=" + mDisplayInfos[phoneId]);
+                            + phoneId + " dpi=" + mTelephonyDisplayInfos[phoneId]);
                 }
-                if (mDisplayInfos[phoneId] != null) {
-                    r.callback.onDisplayInfoChanged(mDisplayInfos[phoneId]);
+                if (mTelephonyDisplayInfos[phoneId] != null) {
+                    r.callback.onDisplayInfoChanged(mTelephonyDisplayInfos[phoneId]);
                 }
             } catch (RemoteException ex) {
                 mRemoveList.add(r.binder);

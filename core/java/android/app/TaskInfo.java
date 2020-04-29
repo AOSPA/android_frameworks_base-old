@@ -23,11 +23,12 @@ import android.annotation.Nullable;
 import android.compat.annotation.UnsupportedAppUsage;
 import android.content.ComponentName;
 import android.content.Intent;
+import android.content.pm.ActivityInfo;
 import android.content.res.Configuration;
 import android.os.Parcel;
 import android.os.RemoteException;
 import android.util.Log;
-import android.view.IWindowContainer;
+import android.window.WindowContainerToken;
 
 /**
  * Stores information about a particular Task.
@@ -146,7 +147,7 @@ public class TaskInfo {
      * @hide
      */
     @NonNull
-    public IWindowContainer token;
+    public WindowContainerToken token;
 
     /**
      * The PictureInPictureParams for the Task, if set.
@@ -160,6 +161,13 @@ public class TaskInfo {
      * @hide
      */
     public @WindowConfiguration.ActivityType int topActivityType;
+
+    /**
+     * The {@link ActivityInfo} of the top activity in this task.
+     * @hide
+     */
+    @Nullable
+    public ActivityInfo topActivityInfo;
 
     TaskInfo() {
         // Do nothing
@@ -214,11 +222,14 @@ public class TaskInfo {
         supportsSplitScreenMultiWindow = source.readBoolean();
         resizeMode = source.readInt();
         configuration.readFromParcel(source);
-        token = IWindowContainer.Stub.asInterface(source.readStrongBinder());
+        token = WindowContainerToken.CREATOR.createFromParcel(source);
         topActivityType = source.readInt();
         pictureInPictureParams = source.readInt() != 0
-            ? PictureInPictureParams.CREATOR.createFromParcel(source)
-            : null;
+                ? PictureInPictureParams.CREATOR.createFromParcel(source)
+                : null;
+        topActivityInfo = source.readInt() != 0
+                ? ActivityInfo.CREATOR.createFromParcel(source)
+                : null;
     }
 
     /**
@@ -254,13 +265,19 @@ public class TaskInfo {
         dest.writeBoolean(supportsSplitScreenMultiWindow);
         dest.writeInt(resizeMode);
         configuration.writeToParcel(dest, flags);
-        dest.writeStrongInterface(token);
+        token.writeToParcel(dest, flags);
         dest.writeInt(topActivityType);
         if (pictureInPictureParams == null) {
             dest.writeInt(0);
         } else {
             dest.writeInt(1);
             pictureInPictureParams.writeToParcel(dest, flags);
+        }
+        if (topActivityInfo == null) {
+            dest.writeInt(0);
+        } else {
+            dest.writeInt(1);
+            topActivityInfo.writeToParcel(dest, flags);
         }
     }
 
@@ -278,6 +295,7 @@ public class TaskInfo {
                 + " resizeMode=" + resizeMode
                 + " token=" + token
                 + " topActivityType=" + topActivityType
-                + " pictureInPictureParams=" + pictureInPictureParams;
+                + " pictureInPictureParams=" + pictureInPictureParams
+                + " topActivityInfo=" + topActivityInfo;
     }
 }

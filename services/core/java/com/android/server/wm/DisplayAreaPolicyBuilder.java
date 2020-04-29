@@ -54,7 +54,7 @@ import java.util.Map;
  *      - DisplayArea.Root
  *        - Magnification
  *          - DisplayArea.Tokens (Wallpapers are attached here)
- *          - TaskContainers
+ *          - TaskDisplayArea
  *          - DisplayArea.Tokens (windows above Tasks up to IME are attached here)
  *          - ImeContainers
  *          - DisplayArea.Tokens (windows above IME up to TYPE_ACCESSIBILITY_OVERLAY attached here)
@@ -73,16 +73,36 @@ class DisplayAreaPolicyBuilder {
      */
     static class Feature {
         private final String mName;
+        private final int mId;
         private final boolean[] mWindowLayers;
 
-        private Feature(String name, boolean[] windowLayers) {
+        private Feature(String name, int id, boolean[] windowLayers) {
             mName = name;
+            mId = id;
             mWindowLayers = windowLayers;
+        }
+
+        /**
+         * Returns the id of the feature.
+         *
+         * Must be unique among the features added to a {@link DisplayAreaPolicyBuilder}.
+         *
+         * @see android.window.DisplayAreaOrganizer#FEATURE_SYSTEM_FIRST
+         * @see android.window.DisplayAreaOrganizer#FEATURE_VENDOR_FIRST
+         */
+        public int getId() {
+            return mId;
+        }
+
+        @Override
+        public String toString() {
+            return "Feature(\"" + mName + "\", " + mId + '}';
         }
 
         static class Builder {
             private final WindowManagerPolicy mPolicy;
             private final String mName;
+            private final int mId;
             private final boolean[] mLayers;
 
             /**
@@ -96,10 +116,12 @@ class DisplayAreaPolicyBuilder {
              * The builder starts out with the feature not applying to any types.
              *
              * @param name the name of the feature.
+             * @param id of the feature. {@see Feature#getId}
              */
-            Builder(WindowManagerPolicy policy, String name) {
+            Builder(WindowManagerPolicy policy, String name, int id) {
                 mPolicy = policy;
                 mName = name;
+                mId = id;
                 mLayers = new boolean[mPolicy.getMaxWindowLayer()];
             }
 
@@ -147,7 +169,7 @@ class DisplayAreaPolicyBuilder {
             }
 
             Feature build() {
-                return new Feature(mName, mLayers.clone());
+                return new Feature(mName, mId, mLayers.clone());
             }
 
             private void set(int type, boolean value) {
@@ -179,8 +201,8 @@ class DisplayAreaPolicyBuilder {
 
         Result(WindowManagerService wmService, DisplayContent content, DisplayArea.Root root,
                 DisplayArea<? extends WindowContainer> imeContainer,
-                DisplayArea<? extends ActivityStack> taskStacks, ArrayList<Feature> features) {
-            super(wmService, content, root, imeContainer, taskStacks);
+                List<TaskDisplayArea> taskDisplayAreas, ArrayList<Feature> features) {
+            super(wmService, content, root, imeContainer, taskDisplayAreas);
             mFeatures = features;
             mAreas = new HashMap<>(features.size());
             for (int i = 0; i < mFeatures.size(); i++) {
@@ -245,7 +267,7 @@ class DisplayAreaPolicyBuilder {
                     areaForLayer[layer].mChildren.add(leafArea);
                     leafType = type;
                     if (leafType == LEAF_TYPE_TASK_CONTAINERS) {
-                        leafArea.mExisting = mTaskContainers;
+                        addTaskDisplayAreasToLayer(areaForLayer[layer], layer);
                     } else if (leafType == LEAF_TYPE_IME_CONTAINERS) {
                         leafArea.mExisting = mImeContainer;
                     }
@@ -254,6 +276,17 @@ class DisplayAreaPolicyBuilder {
             }
             root.computeMaxLayer();
             root.instantiateChildren(mRoot, mAreaForLayer, 0, mAreas);
+        }
+
+        /** Adds all task display areas to the specified layer */
+        private void addTaskDisplayAreasToLayer(PendingArea parentPendingArea, int layer) {
+            final int count = mTaskDisplayAreas.size();
+            for (int i = 0; i < count; i++) {
+                PendingArea leafArea = new PendingArea(null, layer, parentPendingArea);
+                leafArea.mExisting = mTaskDisplayAreas.get(i);
+                leafArea.mMaxLayer = layer;
+                parentPendingArea.mChildren.add(leafArea);
+            }
         }
 
         @Override
@@ -295,12 +328,16 @@ class DisplayAreaPolicyBuilder {
         return this;
     }
 
+    protected List<Feature> getFeatures() {
+        return mFeatures;
+    }
+
     Result build(WindowManagerService wmService,
             DisplayContent content, DisplayArea.Root root,
             DisplayArea<? extends WindowContainer> imeContainer,
-            DisplayArea<? extends ActivityStack> taskContainers) {
+            List<TaskDisplayArea> taskDisplayAreas) {
 
-        return new Result(wmService, content, root, imeContainer, taskContainers, new ArrayList<>(
+        return new Result(wmService, content, root, imeContainer, taskDisplayAreas, new ArrayList<>(
                 mFeatures));
     }
 
@@ -364,7 +401,7 @@ class DisplayAreaPolicyBuilder {
                 return leaf;
             } else {
                 return new DisplayArea(parent.mWmService, type, mFeature.mName + ":"
-                        + mMinLayer + ":" + mMaxLayer);
+                        + mMinLayer + ":" + mMaxLayer, mFeature.mId);
             }
         }
     }

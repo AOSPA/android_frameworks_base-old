@@ -56,7 +56,7 @@ import android.util.SparseArray;
 import android.view.IDisplayWindowRotationCallback;
 import android.view.IWindowManager;
 import android.view.Surface;
-import android.view.WindowContainerTransaction;
+import android.window.WindowContainerTransaction;
 
 import com.android.internal.R;
 import com.android.internal.annotations.VisibleForTesting;
@@ -545,11 +545,8 @@ public class DisplayRotation {
             prepareNormalRotationAnimation();
         }
 
-        // TODO(b/147469351): Remove the restriction.
-        if (mDisplayContent.mFixedRotationLaunchingApp == null) {
-            // Give a remote handler (system ui) some time to reposition things.
-            startRemoteRotation(oldRotation, mRotation);
-        }
+        // Give a remote handler (system ui) some time to reposition things.
+        startRemoteRotation(oldRotation, mRotation);
 
         return true;
     }
@@ -592,8 +589,7 @@ public class DisplayRotation {
             try {
                 mDisplayContent.sendNewConfiguration();
                 if (t != null) {
-                    mService.mAtmService.mTaskOrganizerController.applyContainerTransaction(t,
-                            null /* organizer */);
+                    mService.mAtmService.mWindowOrganizerController.applyTransaction(t);
                 }
             } finally {
                 mService.mAtmService.continueWindowLayout();
@@ -659,7 +655,8 @@ public class DisplayRotation {
 
         // In the presence of the PINNED stack or System Alert windows we unfortunately can not
         // seamlessly rotate.
-        if (mDisplayContent.hasPinnedTask() || mDisplayContent.hasAlertWindowSurfaces()) {
+        if (mDisplayContent.getDefaultTaskDisplayArea().hasPinnedTask()
+                || mDisplayContent.hasAlertWindowSurfaces()) {
             return false;
         }
 

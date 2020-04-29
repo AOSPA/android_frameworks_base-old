@@ -19,16 +19,13 @@ package com.android.test.taskembed;
 import static android.app.WindowConfiguration.WINDOWING_MODE_PINNED;
 
 import android.app.ActivityManager;
-import android.app.ActivityTaskManager;
 import android.app.Service;
 import android.content.Intent;
 import android.graphics.Rect;
 import android.os.IBinder;
-import android.view.ITaskOrganizer;
-import android.view.IWindowContainer;
-import android.view.SurfaceControl;
 import android.view.ViewGroup;
-import android.view.WindowContainerTransaction;
+import android.window.TaskOrganizer;
+import android.window.WindowContainerTransaction;
 import android.view.WindowManager;
 import android.widget.FrameLayout;
 
@@ -38,22 +35,13 @@ public class TaskOrganizerPipTest extends Service {
 
     TaskView mTaskView;
 
-    class Organizer extends ITaskOrganizer.Stub {
-        public void taskAppeared(ActivityManager.RunningTaskInfo ti) {
+    class Organizer extends TaskOrganizer {
+        public void onTaskAppeared(ActivityManager.RunningTaskInfo ti) {
             mTaskView.reparentTask(ti.token);
 
             final WindowContainerTransaction wct = new WindowContainerTransaction();
             wct.scheduleFinishEnterPip(ti.token, new Rect(0, 0, PIP_WIDTH, PIP_HEIGHT));
-            try {
-                ActivityTaskManager.getTaskOrganizerController().applyContainerTransaction(wct, null);
-            } catch (Exception e) {
-            }
-        }
-        public void taskVanished(ActivityManager.RunningTaskInfo ti) {
-        }
-        public void transactionReady(int id, SurfaceControl.Transaction t) {
-        }
-        public void onTaskInfoChanged(ActivityManager.RunningTaskInfo info) {
+            applyTransaction(wct);
         }
     }
 
@@ -68,12 +56,7 @@ public class TaskOrganizerPipTest extends Service {
     public void onCreate() {
         super.onCreate();
 
-        try {
-            ActivityTaskManager.getTaskOrganizerController().registerTaskOrganizer(mOrganizer,
-                    WINDOWING_MODE_PINNED);
-
-        } catch (Exception e) {
-        }
+        mOrganizer.registerOrganizer(WINDOWING_MODE_PINNED);
 
         final WindowManager.LayoutParams wlp = new WindowManager.LayoutParams();
         wlp.setTitle("TaskOrganizerPipTest");

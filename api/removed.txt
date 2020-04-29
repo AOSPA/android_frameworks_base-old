@@ -1,4 +1,12 @@
 // Signature format: 2.0
+package android {
+
+  public static final class R.attr {
+    field public static final int featureId = 16844301; // 0x101060d
+  }
+
+}
+
 package android.app {
 
   public class ActivityManager {
@@ -10,6 +18,16 @@ package android.app {
     method public static Class<? extends android.app.Notification.Style> getNotificationStyleClass(String);
     method @Deprecated public long getTimeout();
     method @Deprecated public void setLatestEventInfo(android.content.Context, CharSequence, CharSequence, android.app.PendingIntent);
+  }
+
+  public static final class Notification.BubbleMetadata implements android.os.Parcelable {
+    method @Deprecated @Nullable public android.graphics.drawable.Icon getBubbleIcon();
+    method @Deprecated @Nullable public android.app.PendingIntent getBubbleIntent();
+  }
+
+  public static final class Notification.BubbleMetadata.Builder {
+    method @Deprecated @NonNull public android.app.Notification.BubbleMetadata.Builder createIntentBubble(@NonNull android.app.PendingIntent, @NonNull android.graphics.drawable.Icon);
+    method @Deprecated @NonNull public android.app.Notification.BubbleMetadata.Builder createShortcutBubble(@NonNull String);
   }
 
   public static class Notification.Builder {
@@ -69,11 +87,17 @@ package android.app.usage {
 
 package android.content {
 
+  public abstract class ContentProvider implements android.content.ComponentCallbacks2 {
+    method @Deprecated @Nullable public final String getCallingFeatureId();
+  }
+
   public abstract class ContentResolver {
     method @Deprecated public void notifyChange(@NonNull Iterable<android.net.Uri>, @Nullable android.database.ContentObserver, int);
   }
 
   public abstract class Context {
+    method @Deprecated @NonNull public android.content.Context createFeatureContext(@Nullable String);
+    method @Deprecated @Nullable public String getFeatureId();
     method public abstract android.content.SharedPreferences getSharedPreferences(java.io.File, int);
     method public abstract java.io.File getSharedPreferencesPath(String);
   }

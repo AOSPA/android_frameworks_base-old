@@ -54,6 +54,8 @@ interface IPermissionManager {
 
     int checkUidPermission(String permName, int uid);
 
+    int checkDeviceIdentifierAccess(String packageName, String callingFeatureId, String message, int pid, int uid);
+
     void addOnPermissionsChangeListener(in IOnPermissionsChangeListener listener);
 
     void removeOnPermissionsChangeListener(in IOnPermissionsChangeListener listener);
@@ -106,4 +108,12 @@ interface IPermissionManager {
             int importanceToResetTimer, int importanceToKeepSessionAlive);
 
     void stopOneTimePermissionSession(String packageName, int userId);
+
+    List<String> getAutoRevokeExemptionRequestedPackages(int userId);
+
+    List<String> getAutoRevokeExemptionGrantedPackages(int userId);
+
+    boolean setAutoRevokeWhitelisted(String packageName, boolean whitelisted, int userId);
+
+    boolean isAutoRevokeWhitelisted(String packageName, int userId);
 }

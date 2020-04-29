@@ -190,11 +190,13 @@ interface IStatsd {
                                          long timeoutMillis,in int[] additiveFields,
                                          IPullAtomCallback pullerCallback);
 
-   /**
-    * Registers a puller callback function that, when invoked, pulls the data
-    * for the specified atom tag.
-    */
-    oneway void registerNativePullAtomCallback(int atomTag, long coolDownNs, long timeoutNs,
+    /**
+     * Registers a puller callback function that, when invoked, pulls the data
+     * for the specified atom tag.
+     *
+     * Enforces the REGISTER_STATS_PULL_ATOM permission.
+     */
+    oneway void registerNativePullAtomCallback(int atomTag, long coolDownMillis, long timeoutMillis,
                            in int[] additiveFields, IPullAtomCallback pullerCallback);
 
     /**
@@ -203,7 +205,9 @@ interface IStatsd {
     oneway void unregisterPullAtomCallback(int uid, int atomTag);
 
     /**
-     * Unregisters any pullAtomCallback for the given atom.
+     * Unregisters any pullAtomCallback for the given atom + caller.
+     *
+     * Enforces the REGISTER_STATS_PULL_ATOM permission.
      */
     oneway void unregisterNativePullAtomCallback(int atomTag);
 

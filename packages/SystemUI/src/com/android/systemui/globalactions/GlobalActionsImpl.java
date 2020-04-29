@@ -49,8 +49,6 @@ import dagger.Lazy;
 
 public class GlobalActionsImpl implements GlobalActions, CommandQueue.Callbacks {
 
-    private static final float SHUTDOWN_SCRIM_ALPHA = 0.95f;
-
     private final Context mContext;
     private final Lazy<GlobalActionsDialog> mGlobalActionsDialogLazy;
     private final KeyguardStateController mKeyguardStateController;
@@ -100,8 +98,21 @@ public class GlobalActionsImpl implements GlobalActions, CommandQueue.Callbacks 
     public void showShutdownUi(boolean isReboot, String reason) {
         ScrimDrawable background = new ScrimDrawable();
 
-        Dialog d = new Dialog(mContext,
+        final Dialog d = new Dialog(mContext,
                 com.android.systemui.R.style.Theme_SystemUI_Dialog_GlobalActions);
+
+        d.setOnShowListener(dialog -> {
+            if (mBlurUtils.supportsBlursOnWindows()) {
+                background.setAlpha((int) (ScrimController.BLUR_SCRIM_ALPHA * 255));
+                mBlurUtils.applyBlur(d.getWindow().getDecorView().getViewRootImpl(),
+                        mBlurUtils.blurRadiusOfRatio(1));
+            } else {
+                float backgroundAlpha = mContext.getResources().getFloat(
+                        com.android.systemui.R.dimen.shutdown_scrim_behind_alpha);
+                background.setAlpha((int) (backgroundAlpha * 255));
+            }
+        });
+
         // Window initialization
         Window window = d.getWindow();
         window.requestFeature(Window.FEATURE_NO_TITLE);
@@ -124,7 +135,7 @@ public class GlobalActionsImpl implements GlobalActions, CommandQueue.Callbacks 
                         | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH
                         | WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED);
         window.setBackgroundDrawable(background);
-        window.setWindowAnimations(R.style.Animation_Toast);
+        window.setWindowAnimations(com.android.systemui.R.style.Animation_ShutdownUi);
 
         d.setContentView(R.layout.shutdown_dialog);
         d.setCancelable(false);
@@ -146,14 +157,6 @@ public class GlobalActionsImpl implements GlobalActions, CommandQueue.Callbacks 
         if (rebootReasonMessage != null) {
             reasonView.setVisibility(View.VISIBLE);
             reasonView.setText(rebootReasonMessage);
-        }
-
-        if (mBlurUtils.supportsBlursOnWindows()) {
-            background.setAlpha((int) (ScrimController.BUSY_SCRIM_ALPHA * 255));
-            mBlurUtils.applyBlur(d.getWindow().getDecorView().getViewRootImpl(),
-                        mBlurUtils.blurRadiusOfRatio(1));
-        } else {
-            background.setAlpha((int) (SHUTDOWN_SCRIM_ALPHA * 255));
         }
 
         d.show();

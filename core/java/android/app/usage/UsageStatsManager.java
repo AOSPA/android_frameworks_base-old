@@ -204,6 +204,16 @@ public final class UsageStatsManager {
     /** @hide */
     public static final int REASON_SUB_MASK = 0x00FF;
     /**
+     * The reason for using the default main reason is unknown or undefined.
+     * @hide
+     */
+    public static final int REASON_SUB_DEFAULT_UNDEFINED = 0x0000;
+    /**
+     * The app was updated.
+     * @hide
+     */
+    public static final int REASON_SUB_DEFAULT_APP_UPDATE = 0x0001;
+    /**
      * The app was interacted with in some way by the system.
      * @hide
      */
@@ -288,25 +298,25 @@ public final class UsageStatsManager {
      */
     public static final int REASON_SUB_PREDICTED_RESTORED       = 0x0001;
     /**
-     * The reason for restricting the app is unknown or undefined.
+     * The reason the system forced the app into the bucket is unknown or undefined.
      * @hide
      */
-    public static final int REASON_SUB_RESTRICT_UNDEFINED = 0x0000;
+    public static final int REASON_SUB_FORCED_SYSTEM_FLAG_UNDEFINED = 0;
     /**
      * The app was unnecessarily using system resources (battery, memory, etc) in the background.
      * @hide
      */
-    public static final int REASON_SUB_RESTRICT_BACKGROUND_RESOURCE_USAGE = 0x0001;
+    public static final int REASON_SUB_FORCED_SYSTEM_FLAG_BACKGROUND_RESOURCE_USAGE = 1 << 0;
     /**
      * The app was deemed to be intentionally abusive.
      * @hide
      */
-    public static final int REASON_SUB_RESTRICT_ABUSE = 0x0002;
+    public static final int REASON_SUB_FORCED_SYSTEM_FLAG_ABUSE = 1 << 1;
     /**
      * The app was displaying buggy behavior.
      * @hide
      */
-    public static final int REASON_SUB_RESTRICT_BUGGY = 0x0003;
+    public static final int REASON_SUB_FORCED_SYSTEM_FLAG_BUGGY = 1 << 2;
 
 
     /** @hide */
@@ -321,6 +331,17 @@ public final class UsageStatsManager {
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface StandbyBuckets {}
+
+    /** @hide */
+    @IntDef(flag = true, prefix = {"REASON_SUB_FORCED_SYSTEM_FLAG_FLAG_"}, value = {
+            REASON_SUB_FORCED_SYSTEM_FLAG_UNDEFINED,
+            REASON_SUB_FORCED_SYSTEM_FLAG_BACKGROUND_RESOURCE_USAGE,
+            REASON_SUB_FORCED_SYSTEM_FLAG_ABUSE,
+            REASON_SUB_FORCED_SYSTEM_FLAG_BUGGY,
+    })
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface SystemForcedReasons {
+    }
 
     /**
      * Observer id of the registered observer for the group of packages that reached the usage
@@ -1053,26 +1074,24 @@ public final class UsageStatsManager {
 
     /** @hide */
     public static String reasonToString(int standbyReason) {
+        final int subReason = standbyReason & REASON_SUB_MASK;
         StringBuilder sb = new StringBuilder();
         switch (standbyReason & REASON_MAIN_MASK) {
             case REASON_MAIN_DEFAULT:
                 sb.append("d");
+                switch (subReason) {
+                    case REASON_SUB_DEFAULT_UNDEFINED:
+                        // Historically, undefined didn't have a string, so don't add anything here.
+                        break;
+                    case REASON_SUB_DEFAULT_APP_UPDATE:
+                        sb.append("-au");
+                        break;
+                }
                 break;
             case REASON_MAIN_FORCED_BY_SYSTEM:
                 sb.append("s");
-                switch (standbyReason & REASON_SUB_MASK) {
-                    case REASON_SUB_RESTRICT_ABUSE:
-                        sb.append("-ra");
-                        break;
-                    case REASON_SUB_RESTRICT_BACKGROUND_RESOURCE_USAGE:
-                        sb.append("-rbru");
-                        break;
-                    case REASON_SUB_RESTRICT_BUGGY:
-                        sb.append("-rb");
-                        break;
-                    case REASON_SUB_RESTRICT_UNDEFINED:
-                        sb.append("-r");
-                        break;
+                if (subReason > 0) {
+                    sb.append("-").append(Integer.toBinaryString(subReason));
                 }
                 break;
             case REASON_MAIN_FORCED_BY_USER:
@@ -1080,7 +1099,7 @@ public final class UsageStatsManager {
                 break;
             case REASON_MAIN_PREDICTED:
                 sb.append("p");
-                switch (standbyReason & REASON_SUB_MASK) {
+                switch (subReason) {
                     case REASON_SUB_PREDICTED_RESTORED:
                         sb.append("-r");
                         break;
@@ -1091,7 +1110,7 @@ public final class UsageStatsManager {
                 break;
             case REASON_MAIN_USAGE:
                 sb.append("u");
-                switch (standbyReason & REASON_SUB_MASK) {
+                switch (subReason) {
                     case REASON_SUB_USAGE_SYSTEM_INTERACTION:
                         sb.append("-si");
                         break;

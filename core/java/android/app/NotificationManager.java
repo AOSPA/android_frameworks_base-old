@@ -29,6 +29,7 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ParceledListSlice;
+import android.content.pm.ShortcutInfo;
 import android.graphics.drawable.Icon;
 import android.net.Uri;
 import android.os.Build;
@@ -841,7 +842,8 @@ public class NotificationManager {
     }
 
     /**
-     * Returns the notification channel settings for a given channel and conversation id.
+     * Returns the notification channel settings for a given channel and
+     * {@link ShortcutInfo#getId() conversation id}.
      *
      * <p>The channel must belong to your package, or to a package you are an approved notification
      * delegate for (see {@link #canNotifyAsPackage(String)}), or it will not be returned. To query
@@ -1015,14 +1017,15 @@ public class NotificationManager {
     }
 
     /**
+     * Returns the currently applied notification policy.
+     *
      * <p>
-     *  Gets the currently applied notification policy. If {@link #getCurrentInterruptionFilter}
-     * is equal to {@link #INTERRUPTION_FILTER_ALL}, then the consolidated notification policy
-     * will match the default notification policy returned by {@link #getNotificationPolicy}.
+     * If {@link #getCurrentInterruptionFilter} is equal to {@link #INTERRUPTION_FILTER_ALL},
+     * then the consolidated notification policy will match the default notification policy
+     * returned by {@link #getNotificationPolicy}.
      * </p>
      */
-    @Nullable
-    public NotificationManager.Policy getConsolidatedNotificationPolicy() {
+    public @NonNull NotificationManager.Policy getConsolidatedNotificationPolicy() {
         INotificationManager service = getService();
         try {
             return service.getConsolidatedNotificationPolicy();

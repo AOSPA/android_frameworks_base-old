@@ -46,6 +46,7 @@ import android.widget.ImageView;
 
 import com.android.internal.config.sysui.SystemUiDeviceConfigFlags;
 import com.android.internal.statusbar.NotificationVisibility;
+import com.android.keyguard.KeyguardMediaPlayer;
 import com.android.systemui.Dependency;
 import com.android.systemui.Dumpable;
 import com.android.systemui.Interpolators;
@@ -65,11 +66,13 @@ import com.android.systemui.statusbar.phone.ScrimState;
 import com.android.systemui.statusbar.phone.StatusBar;
 import com.android.systemui.statusbar.policy.KeyguardStateController;
 import com.android.systemui.util.DeviceConfigProxy;
+import com.android.systemui.util.Utils;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
 import java.lang.ref.WeakReference;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -110,6 +113,7 @@ public class NotificationMediaManager implements Dumpable {
     private ScrimController mScrimController;
     @Nullable
     private LockscreenWallpaper mLockscreenWallpaper;
+    private final KeyguardMediaPlayer mMediaPlayer;
 
     private final Executor mMainExecutor;
 
@@ -183,11 +187,13 @@ public class NotificationMediaManager implements Dumpable {
             NotificationEntryManager notificationEntryManager,
             MediaArtworkProcessor mediaArtworkProcessor,
             KeyguardBypassController keyguardBypassController,
+            KeyguardMediaPlayer keyguardMediaPlayer,
             @Main Executor mainExecutor,
             DeviceConfigProxy deviceConfig) {
         mContext = context;
         mMediaArtworkProcessor = mediaArtworkProcessor;
         mKeyguardBypassController = keyguardBypassController;
+        mMediaPlayer = keyguardMediaPlayer;
         mMediaListeners = new ArrayList<>();
         // TODO: use MediaSessionManager.SessionListener to hook us up to future updates
         // in session state
@@ -262,11 +268,11 @@ public class NotificationMediaManager implements Dumpable {
         synchronized (mEntryManager) {
             NotificationEntry entry = mEntryManager
                     .getActiveNotificationUnfiltered(mMediaNotificationKey);
-            if (entry == null || entry.expandedIcon == null) {
+            if (entry == null || entry.getIcons().getShelfIcon() == null) {
                 return null;
             }
 
-            return entry.expandedIcon.getSourceIcon();
+            return entry.getIcons().getShelfIcon().getSourceIcon();
         }
     }
 
@@ -284,8 +290,7 @@ public class NotificationMediaManager implements Dumpable {
         boolean metaDataChanged = false;
 
         synchronized (mEntryManager) {
-            Set<NotificationEntry> allNotifications =
-                    mEntryManager.getPendingAndActiveNotifications();
+            Collection<NotificationEntry> allNotifications = mEntryManager.getAllNotifs();
 
             // Promote the media notification with a controller in 'playing' state, if any.
             NotificationEntry mediaNotification = null;
@@ -468,6 +473,7 @@ public class NotificationMediaManager implements Dumpable {
             && mBiometricUnlockController.isWakeAndUnlock();
         if (mKeyguardStateController.isLaunchTransitionFadingAway() || wakeAndUnlock) {
             mBackdrop.setVisibility(View.INVISIBLE);
+            mMediaPlayer.clearControls();
             Trace.endSection();
             return;
         }
@@ -490,6 +496,14 @@ public class NotificationMediaManager implements Dumpable {
             }
         }
 
+        NotificationEntry entry = mEntryManager
+                .getActiveNotificationUnfiltered(mMediaNotificationKey);
+        if (entry != null) {
+            mMediaPlayer.updateControls(entry, getMediaIcon(), mediaMetadata);
+        } else {
+            mMediaPlayer.clearControls();
+        }
+
         // Process artwork on a background thread and send the resulting bitmap to
         // finishUpdateMediaMetaData.
         if (metaDataChanged) {
@@ -498,7 +512,7 @@ public class NotificationMediaManager implements Dumpable {
             }
             mProcessArtworkTasks.clear();
         }
-        if (artworkBitmap != null) {
+        if (artworkBitmap != null && !Utils.useQsMediaPlayer(mContext)) {
             mProcessArtworkTasks.add(new ProcessArtworkTask(this, metaDataChanged,
                     allowEnterAnimation).execute(artworkBitmap));
         } else {
@@ -612,6 +626,7 @@ public class NotificationMediaManager implements Dumpable {
                     // We are unlocking directly - no animation!
                     mBackdrop.setVisibility(View.GONE);
                     mBackdropBack.setImageDrawable(null);
+                    mMediaPlayer.clearControls();
                     if (windowController != null) {
                         windowController.setBackdropShowing(false);
                     }
@@ -628,6 +643,7 @@ public class NotificationMediaManager implements Dumpable {
                                 mBackdrop.setVisibility(View.GONE);
                                 mBackdropFront.animate().cancel();
                                 mBackdropBack.setImageDrawable(null);
+                                mMediaPlayer.clearControls();
                                 mMainExecutor.execute(mHideBackdropFront);
                             });
                     if (mKeyguardStateController.isKeyguardFadingAway()) {

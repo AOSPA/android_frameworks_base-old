@@ -28,6 +28,7 @@ import android.app.AppGlobals;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentSender;
 import android.content.pm.PackageManager;
 import android.content.pm.ServiceInfo;
 import android.os.Bundle;
@@ -37,7 +38,6 @@ import android.os.ICancellationSignal;
 import android.os.RemoteException;
 import android.os.SystemClock;
 import android.service.autofill.Dataset;
-import android.service.autofill.InlineAction;
 import android.service.autofill.augmented.AugmentedAutofillService;
 import android.service.autofill.augmented.IAugmentedAutofillService;
 import android.service.autofill.augmented.IFillCallback;
@@ -57,6 +57,7 @@ import com.android.internal.logging.nano.MetricsProto.MetricsEvent;
 import com.android.internal.os.IResultReceiver;
 import com.android.server.autofill.ui.InlineSuggestionFactory;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.TimeUnit;
@@ -166,12 +167,12 @@ final class RemoteAugmentedAutofillService
                             focusedId, focusedValue, requestTime, inlineSuggestionsRequest,
                             new IFillCallback.Stub() {
                                 @Override
-                                public void onSuccess(@Nullable List<Dataset> inlineSuggestionsData,
-                                        @Nullable List<InlineAction> inlineActions) {
+                                public void onSuccess(
+                                        @Nullable List<Dataset> inlineSuggestionsData) {
                                     mCallbacks.resetLastResponse();
                                     maybeRequestShowInlineSuggestions(sessionId,
                                             inlineSuggestionsRequest, inlineSuggestionsData,
-                                            inlineActions, focusedId, inlineSuggestionsCallback,
+                                            focusedId, inlineSuggestionsCallback,
                                             client, onErrorCallback, remoteRenderService);
                                     requestAutofill.complete(null);
                                 }
@@ -236,8 +237,7 @@ final class RemoteAugmentedAutofillService
 
     private void maybeRequestShowInlineSuggestions(int sessionId,
             @Nullable InlineSuggestionsRequest request,
-            @Nullable List<Dataset> inlineSuggestionsData,
-            @Nullable List<InlineAction> inlineActions, @NonNull AutofillId focusedId,
+            @Nullable List<Dataset> inlineSuggestionsData, @NonNull AutofillId focusedId,
             @Nullable Function<InlineSuggestionsResponse, Boolean> inlineSuggestionsCallback,
             @NonNull IAutoFillManagerClient client, @NonNull Runnable onErrorCallback,
             @Nullable RemoteInlineSuggestionRenderService remoteRenderService) {
@@ -250,15 +250,32 @@ final class RemoteAugmentedAutofillService
 
         final InlineSuggestionsResponse inlineSuggestionsResponse =
                 InlineSuggestionFactory.createAugmentedInlineSuggestionsResponse(
-                        request, inlineSuggestionsData, inlineActions, focusedId,
-                        dataset -> {
-                            mCallbacks.logAugmentedAutofillSelected(sessionId,
-                                    dataset.getId());
-                            try {
-                                client.autofill(sessionId, dataset.getFieldIds(),
-                                        dataset.getFieldValues());
-                            } catch (RemoteException e) {
-                                Slog.w(TAG, "Encounter exception autofilling the values");
+                        request, inlineSuggestionsData, focusedId,
+                        new InlineSuggestionFactory.InlineSuggestionUiCallback() {
+                            @Override
+                            public void autofill(Dataset dataset) {
+                                mCallbacks.logAugmentedAutofillSelected(sessionId,
+                                        dataset.getId());
+                                try {
+                                    final ArrayList<AutofillId> fieldIds = dataset.getFieldIds();
+                                    final int size = fieldIds.size();
+                                    final boolean hideHighlight = size == 1
+                                            && fieldIds.get(0).equals(focusedId);
+                                    client.autofill(sessionId, fieldIds, dataset.getFieldValues(),
+                                            hideHighlight);
+                                } catch (RemoteException e) {
+                                    Slog.w(TAG, "Encounter exception autofilling the values");
+                                }
+                            }
+
+                            @Override
+                            public void startIntentSender(IntentSender intentSender,
+                                    Intent intent) {
+                                try {
+                                    client.startIntentSender(intentSender, intent);
+                                } catch (RemoteException e) {
+                                    Slog.w(TAG, "RemoteException starting intent sender");
+                                }
                             }
                         }, onErrorCallback, remoteRenderService);
 

@@ -29,6 +29,7 @@ import android.app.Application;
 import android.app.PendingIntent;
 import android.app.RemoteInput;
 import android.appwidget.AppWidgetHostView;
+import android.appwidget.AppWidgetManager;
 import android.compat.annotation.UnsupportedAppUsage;
 import android.content.Context;
 import android.content.ContextWrapper;
@@ -2818,7 +2819,7 @@ public class RemoteViews implements Parcelable, Filter {
 
     /**
      * When using collections (eg. {@link ListView}, {@link StackView} etc.) in widgets, it is very
-     * costly to set PendingIntents on the individual items, and is hence not permitted. Instead
+     * costly to set PendingIntents on the individual items, and is hence not recommended. Instead
      * this method should be used to set a single PendingIntent template on the collection, and
      * individual items can differentiate their on-click behavior using
      * {@link RemoteViews#setOnClickFillInIntent(int, Intent)}.
@@ -2834,7 +2835,7 @@ public class RemoteViews implements Parcelable, Filter {
 
     /**
      * When using collections (eg. {@link ListView}, {@link StackView} etc.) in widgets, it is very
-     * costly to set PendingIntents on the individual items, and is hence not permitted. Instead
+     * costly to set PendingIntents on the individual items, and is hence not recommended. Instead
      * a single PendingIntent template can be set on the collection, see {@link
      * RemoteViews#setPendingIntentTemplate(int, PendingIntent)}, and the individual on-click
      * action of a given item can be distinguished by setting a fillInIntent on that item. The
@@ -3960,7 +3961,7 @@ public class RemoteViews implements Parcelable, Filter {
 
         /**
          * When using collections (eg. {@link ListView}, {@link StackView} etc.) in widgets, it is
-         * very costly to set PendingIntents on the individual items, and is hence not permitted.
+         * very costly to set PendingIntents on the individual items, and is hence not recommended.
          * Instead a single PendingIntent template can be set on the collection, see {@link
          * RemoteViews#setPendingIntentTemplate(int, PendingIntent)}, and the individual on-click
          * action of a given item can be distinguished by setting a fillInIntent on that item. The
@@ -4130,8 +4131,18 @@ public class RemoteViews implements Parcelable, Filter {
             // The NEW_TASK flags are applied through the activity options and not as a part of
             // the call to startIntentSender() to ensure that they are consistently applied to
             // both mutable and immutable PendingIntents.
+            final IntentSender intentSender = pendingIntent.getIntentSender();
+            final int uid = intentSender.getCreatorUid();
+            final String packageName = intentSender.getCreatorPackage();
+            if (uid != -1 && packageName != null) {
+                final AppWidgetManager appWidgetManager =
+                        context.getSystemService(AppWidgetManager.class);
+                if (appWidgetManager != null) {
+                    appWidgetManager.noteAppWidgetTapped(uid, packageName);
+                }
+            }
             context.startIntentSender(
-                    pendingIntent.getIntentSender(), options.first,
+                    intentSender, options.first,
                     0, 0, 0, options.second.toBundle());
         } catch (IntentSender.SendIntentException e) {
             Log.e(LOG_TAG, "Cannot send pending intent: ", e);

@@ -33,6 +33,7 @@ apex_defaults {
     prebuilts: ["com.android.os.statsd.init.rc"],
     name: "com.android.os.statsd-defaults",
     updatable: true,
+    min_sdk_version: "R",
     key: "com.android.os.statsd.key",
     certificate: ":com.android.os.statsd.certificate",
 }
@@ -66,7 +67,6 @@ cc_library_shared {
         "liblog",  // Has a stable abi - should not be copied into apex.
         "libstatssocket",
     ],
-    //TODO: is libc++_static correct?
     stl: "libc++_static",
     cflags: [
         "-Wall",

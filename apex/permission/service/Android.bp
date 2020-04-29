@@ -17,6 +17,7 @@ filegroup {
     srcs: [
         "java/**/*.java",
     ],
+    path: "java",
 }
 
 java_library {
@@ -34,4 +35,18 @@ java_library {
         "test_com.android.permission",
     ],
     installable: true,
+}
+
+droidstubs {
+    name: "service-permission-stubs-srcs",
+    srcs: [ ":service-permission-sources" ],
+    defaults: ["service-module-stubs-srcs-defaults"],
+    visibility: ["//visibility:private"]
+}
+
+java_library {
+    name: "service-permission-stubs",
+    srcs: [":service-permission-stubs-srcs"],
+    defaults: ["service-module-stubs-defaults"],
+    visibility: ["//frameworks/base/services/core"]
 }

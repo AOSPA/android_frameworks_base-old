@@ -73,8 +73,8 @@ import android.util.ArrayMap;
 import android.util.DisplayMetrics;
 import android.util.Singleton;
 import android.util.Size;
-import android.view.IWindowContainer;
 import android.view.Surface;
+import android.window.WindowContainerToken;
 
 import com.android.internal.app.LocalePicker;
 import com.android.internal.app.procstats.ProcessStats;
@@ -1315,7 +1315,8 @@ public class ActivityManager {
 
         /**
          * @return The in-memory or loaded icon that represents the current state of this task.
-         * @deprecated This call is no longer supported.
+         * @deprecated This call is no longer supported. The caller should keep track of any icons
+         *             it sets for the task descriptions internally.
          */
         @Deprecated
         public Bitmap getIcon() {
@@ -2758,7 +2759,7 @@ public class ActivityManager {
         // Index of the stack in the display's stack list, can be used for comparison of stack order
         @UnsupportedAppUsage
         public int position;
-        public IWindowContainer stackToken;
+        public WindowContainerToken stackToken;
         /**
          * The full configuration the stack is currently running in.
          * @hide
@@ -2792,7 +2793,7 @@ public class ActivityManager {
             dest.writeInt(userId);
             dest.writeInt(visible ? 1 : 0);
             dest.writeInt(position);
-            dest.writeStrongInterface(stackToken);
+            stackToken.writeToParcel(dest, 0);
             if (topActivity != null) {
                 dest.writeInt(1);
                 topActivity.writeToParcel(dest, 0);
@@ -2824,7 +2825,7 @@ public class ActivityManager {
             userId = source.readInt();
             visible = source.readInt() > 0;
             position = source.readInt();
-            stackToken = IWindowContainer.Stub.asInterface(source.readStrongBinder());
+            stackToken = WindowContainerToken.CREATOR.createFromParcel(source);
             if (source.readInt() > 0) {
                 topActivity = ComponentName.readFromParcel(source);
             }
@@ -3627,11 +3628,41 @@ public class ActivityManager {
         }
     }
 
-    /*
+    /**
+     * Set custom state data for this process. It will be included in the record of
+     * {@link ApplicationExitInfo} on the death of the current calling process; the new process
+     * of the app can retrieve this state data by calling
+     * {@link android.app.ApplicationExitInfo#getProcessStateSummary()
+     * ApplicationExitInfo.getProcessStateSummary()} on the record returned by
+     * {@link #getHistoricalProcessExitReasons}.
+     *
+     * <p> This would be useful for the calling app to save its stateful data: if it's
+     * killed later for any reason, the new process of the app can know what the
+     * previous process of the app was doing. For instance, you could use this to encode
+     * the current level in a game, or a set of features/experiments that were enabled. Later you
+     * could analyze under what circumstances the app tends to crash or use too much memory.
+     * However, it's not suggested to rely on this to restore the applications previous UI state
+     * or so, it's only meant for analyzing application healthy status.</p>
+     *
+     * <p> System might decide to throttle the calls to this API; so call this API in a reasonable
+     * manner, excessive calls to this API could result a {@link java.lang.RuntimeException}.
+     * </p>
+     *
+     * @param state The state data
+     */
+    public void setProcessStateSummary(@Nullable byte[] state) {
+        try {
+            getService().setProcessStateSummary(state);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
      * @return Whether or not the low memory kill will be reported in
      * {@link #getHistoricalProcessExitReasons}.
      *
-     * @see {@link ApplicationExitInfo#REASON_LOW_MEMORY}
+     * @see ApplicationExitInfo#REASON_LOW_MEMORY
      */
     public static boolean isLowMemoryKillReportSupported() {
         return SystemProperties.getBoolean("persist.sys.lmk.reportkills", false);
@@ -4242,7 +4273,6 @@ public class ActivityManager {
      *         {@code false} otherwise.
      * @hide
      */
-    @SystemApi
     @RequiresPermission(android.Manifest.permission.CHANGE_CONFIGURATION)
     public boolean updateMccMncConfiguration(@NonNull String mcc, @NonNull String mnc) {
         if (mcc == null || mnc == null) {
@@ -4627,7 +4657,6 @@ public class ActivityManager {
      * @return Returns the boolean result.
      * @hide
      */
-    @SystemApi
     @RequiresPermission(anyOf = {
             android.Manifest.permission.MANAGE_USERS,
             android.Manifest.permission.CREATE_USERS
@@ -4793,9 +4822,9 @@ public class ActivityManager {
 
     /**
      * Register with {@link HomeVisibilityObserver} with ActivityManager.
+     * TODO: b/144351078 expose as SystemApi
      * @hide
      */
-    @SystemApi
     public void registerHomeVisibilityObserver(@NonNull HomeVisibilityObserver observer) {
         Preconditions.checkNotNull(observer);
         try {
@@ -4810,9 +4839,9 @@ public class ActivityManager {
 
     /**
      * Unregister with {@link HomeVisibilityObserver} with ActivityManager.
+     * TODO: b/144351078 expose as SystemApi
      * @hide
      */
-    @SystemApi
     public void unregisterHomeVisibilityObserver(@NonNull HomeVisibilityObserver observer) {
         Preconditions.checkNotNull(observer);
         try {

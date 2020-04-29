@@ -25,7 +25,8 @@
 #include "src/hash.h"
 #include "src/logd/LogEvent.h"
 #include "src/stats_log_util.h"
-#include "statslog.h"
+#include "stats_event.h"
+#include "statslog_statsdtest.h"
 
 namespace android {
 namespace os {
@@ -38,8 +39,8 @@ using android::util::ProtoReader;
 using google::protobuf::RepeatedPtrField;
 using Status = ::ndk::ScopedAStatus;
 
-const int SCREEN_STATE_ATOM_ID = android::util::SCREEN_STATE_CHANGED;
-const int UID_PROCESS_STATE_ATOM_ID = android::util::UID_PROCESS_STATE_CHANGED;
+const int SCREEN_STATE_ATOM_ID = util::SCREEN_STATE_CHANGED;
+const int UID_PROCESS_STATE_ATOM_ID = util::UID_PROCESS_STATE_CHANGED;
 
 // Converts a ProtoOutputStream to a StatsLogReport proto.
 StatsLogReport outputStreamToProto(ProtoOutputStream* proto);
@@ -67,6 +68,12 @@ AtomMatcher CreateBatterySaverModeStartAtomMatcher();
 
 // Create AtomMatcher proto for stopping battery save mode.
 AtomMatcher CreateBatterySaverModeStopAtomMatcher();
+
+// Create AtomMatcher proto for battery state none mode.
+AtomMatcher CreateBatteryStateNoneMatcher();
+
+// Create AtomMatcher proto for battery state usb mode.
+AtomMatcher CreateBatteryStateUsbMatcher();
 
 // Create AtomMatcher proto for process state changed.
 AtomMatcher CreateUidProcessStateChangedAtomMatcher();
@@ -109,6 +116,9 @@ Predicate CreateScheduledJobPredicate();
 
 // Create Predicate proto for battery saver mode.
 Predicate CreateBatterySaverModePredicate();
+
+// Create Predicate proto for device unplogged mode.
+Predicate CreateDeviceUnpluggedPredicate();
 
 // Create Predicate proto for holding wakelock.
 Predicate CreateHoldingWakelockPredicate();
@@ -164,6 +174,53 @@ FieldMatcher CreateAttributionUidAndTagDimensions(const int atomId,
 FieldMatcher CreateAttributionUidDimensions(const int atomId,
                                             const std::vector<Position>& positions);
 
+FieldMatcher CreateAttributionUidAndOtherDimensions(const int atomId,
+                                                    const std::vector<Position>& positions,
+                                                    const std::vector<int>& fields);
+
+// START: get primary key functions
+// These functions take in atom field information and create FieldValues which are stored in the
+// given HashableDimensionKey.
+void getUidProcessKey(int uid, HashableDimensionKey* key);
+
+void getOverlayKey(int uid, string packageName, HashableDimensionKey* key);
+
+void getPartialWakelockKey(int uid, const std::string& tag, HashableDimensionKey* key);
+
+void getPartialWakelockKey(int uid, HashableDimensionKey* key);
+// END: get primary key functions
+
+void writeAttribution(AStatsEvent* statsEvent, const vector<int>& attributionUids,
+                      const vector<string>& attributionTags);
+
+// Builds statsEvent to get buffer that is parsed into logEvent then releases statsEvent.
+void parseStatsEventToLogEvent(AStatsEvent* statsEvent, LogEvent* logEvent);
+
+shared_ptr<LogEvent> CreateTwoValueLogEvent(int atomId, int64_t eventTimeNs, int32_t value1,
+                                            int32_t value2);
+
+void CreateTwoValueLogEvent(LogEvent* logEvent, int atomId, int64_t eventTimeNs, int32_t value1,
+                            int32_t value2);
+
+shared_ptr<LogEvent> CreateThreeValueLogEvent(int atomId, int64_t eventTimeNs, int32_t value1,
+                                              int32_t value2, int32_t value3);
+
+void CreateThreeValueLogEvent(LogEvent* logEvent, int atomId, int64_t eventTimeNs, int32_t value1,
+                              int32_t value2, int32_t value3);
+
+// The repeated value log event helpers create a log event with two int fields, both
+// set to the same value. This is useful for testing metrics that are only interested
+// in the value of the second field but still need the first field to be populated.
+std::shared_ptr<LogEvent> CreateRepeatedValueLogEvent(int atomId, int64_t eventTimeNs,
+                                                      int32_t value);
+
+void CreateRepeatedValueLogEvent(LogEvent* logEvent, int atomId, int64_t eventTimeNs,
+                                 int32_t value);
+
+std::shared_ptr<LogEvent> CreateNoValuesLogEvent(int atomId, int64_t eventTimeNs);
+
+void CreateNoValuesLogEvent(LogEvent* logEvent, int atomId, int64_t eventTimeNs);
+
 // Create log event for screen state changed.
 std::unique_ptr<LogEvent> CreateScreenStateChangedEvent(
         uint64_t timestampNs, const android::view::DisplayStateEnum state);
@@ -172,19 +229,24 @@ std::unique_ptr<LogEvent> CreateScreenStateChangedEvent(
 std::unique_ptr<LogEvent> CreateScreenBrightnessChangedEvent(uint64_t timestampNs, int level);
 
 // Create log event when scheduled job starts.
-std::unique_ptr<LogEvent> CreateStartScheduledJobEvent(
-    const std::vector<AttributionNodeInternal>& attributions,
-    const string& name, uint64_t timestampNs);
+std::unique_ptr<LogEvent> CreateStartScheduledJobEvent(uint64_t timestampNs,
+                                                       const vector<int>& attributionUids,
+                                                       const vector<string>& attributionTags,
+                                                       const string& jobName);
 
 // Create log event when scheduled job finishes.
-std::unique_ptr<LogEvent> CreateFinishScheduledJobEvent(
-    const std::vector<AttributionNodeInternal>& attributions,
-    const string& name, uint64_t timestampNs);
+std::unique_ptr<LogEvent> CreateFinishScheduledJobEvent(uint64_t timestampNs,
+                                                        const vector<int>& attributionUids,
+                                                        const vector<string>& attributionTags,
+                                                        const string& jobName);
 
 // Create log event when battery saver starts.
 std::unique_ptr<LogEvent> CreateBatterySaverOnEvent(uint64_t timestampNs);
 // Create log event when battery saver stops.
 std::unique_ptr<LogEvent> CreateBatterySaverOffEvent(uint64_t timestampNs);
+
+// Create log event when battery state changes.
+std::unique_ptr<LogEvent> CreateBatteryStateChangedEvent(const uint64_t timestampNs, const BatteryPluggedStateEnum state);
 
 // Create log event for app moving to background.
 std::unique_ptr<LogEvent> CreateMoveToBackgroundEvent(uint64_t timestampNs, const int uid);
@@ -224,8 +286,17 @@ std::unique_ptr<LogEvent> CreateIsolatedUidChangedEvent(uint64_t timestampNs, in
 std::unique_ptr<LogEvent> CreateUidProcessStateChangedEvent(
         uint64_t timestampNs, int uid, const android::app::ProcessStateEnum state);
 
-// Helper function to create an AttributionNodeInternal proto.
-AttributionNodeInternal CreateAttribution(const int& uid, const string& tag);
+std::unique_ptr<LogEvent> CreateBleScanStateChangedEvent(uint64_t timestampNs,
+                                                         const vector<int>& attributionUids,
+                                                         const vector<string>& attributionTags,
+                                                         const BleScanStateChanged::State state,
+                                                         const bool filtered, const bool firstMatch,
+                                                         const bool opportunistic);
+
+std::unique_ptr<LogEvent> CreateOverlayStateChangedEvent(int64_t timestampNs, const int32_t uid,
+                                                         const string& packageName,
+                                                         const bool usingAlertWindow,
+                                                         const OverlayStateChanged::State state);
 
 // Create a statsd log event processor upon the start time in seconds, config and key.
 sp<StatsLogProcessor> CreateStatsLogProcessor(const int64_t timeBaseNs, const int64_t currentTimeNs,
@@ -238,6 +309,8 @@ void sortLogEventsByTimestamp(std::vector<std::unique_ptr<LogEvent>> *events);
 
 int64_t StringToId(const string& str);
 
+void ValidateWakelockAttributionUidAndTagDimension(const DimensionsValue& value, const int atomId,
+                                                   const int uid, const string& tag);
 void ValidateUidDimension(const DimensionsValue& value, int node_idx, int atomId, int uid);
 void ValidateAttributionUidDimension(const DimensionsValue& value, int atomId, int uid);
 void ValidateAttributionUidAndTagDimension(

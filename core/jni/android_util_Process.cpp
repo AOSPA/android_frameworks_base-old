@@ -358,6 +358,22 @@ void android_os_Process_setProcessFrozen(
     }
 }
 
+void android_os_Process_enableFreezer(
+        JNIEnv *env, jobject clazz, jboolean enable)
+{
+    bool success = true;
+
+    if (enable) {
+        success = SetTaskProfiles(0, {"FreezerFrozen"}, true);
+    } else {
+        success = SetTaskProfiles(0, {"FreezerThawed"}, true);
+    }
+
+    if (!success) {
+        jniThrowException(env, "java/lang/RuntimeException", "Unknown error");
+    }
+}
+
 void android_os_Process_setCgroupProcsProcessGroup(JNIEnv* env, jobject clazz, int uid, int pid, jint grp)
 {
     int fd;
@@ -774,7 +790,7 @@ static jlong android_os_Process_getTotalMemory(JNIEnv* env, jobject clazz)
         return -1;
     }
 
-    return si.totalram;
+    return static_cast<jlong>(si.totalram) * si.mem_unit;
 }
 
 /*
@@ -1408,7 +1424,7 @@ static inline int sys_pidfd_open(pid_t pid, unsigned int flags) {
     return syscall(__NR_pidfd_open, pid, flags);
 }
 
-static jboolean android_os_Process_nativePidFdOpen(JNIEnv* env, jobject, jint pid, jint flags) {
+static jint android_os_Process_nativePidFdOpen(JNIEnv* env, jobject, jint pid, jint flags) {
     int fd = sys_pidfd_open(pid, flags);
     if (fd < 0) {
         throwErrnoException(env, "nativePidFdOpen", errno);
@@ -1439,6 +1455,7 @@ static const JNINativeMethod methods[] = {
         {"sendSignal", "(II)V", (void*)android_os_Process_sendSignal},
         {"sendSignalQuiet", "(II)V", (void*)android_os_Process_sendSignalQuiet},
         {"setProcessFrozen", "(IIZ)V", (void*)android_os_Process_setProcessFrozen},
+        {"enableFreezer", "(Z)V", (void*)android_os_Process_enableFreezer},
         {"getFreeMemory", "()J", (void*)android_os_Process_getFreeMemory},
         {"getTotalMemory", "()J", (void*)android_os_Process_getTotalMemory},
         {"readProcLines", "(Ljava/lang/String;[Ljava/lang/String;[J)V",

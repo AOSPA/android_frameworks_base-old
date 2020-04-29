@@ -17,6 +17,7 @@
 package android.media.tv.tunerresourcemanager;
 
 import android.annotation.CallbackExecutor;
+import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.RequiresFeature;
@@ -27,6 +28,8 @@ import android.os.Binder;
 import android.os.RemoteException;
 import android.util.Log;
 
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
 import java.util.concurrent.Executor;
 
 /**
@@ -60,12 +63,25 @@ public class TunerResourceManager {
     private static final String TAG = "TunerResourceManager";
     private static final boolean DEBUG = Log.isLoggable(TAG, Log.DEBUG);
 
-    public static final int INVALID_FRONTEND_ID = -1;
-    public static final int INVALID_CAS_SESSION_RESOURCE_ID = -1;
-    public static final int INVALID_LNB_ID = -1;
-    public static final int INVALID_TV_INPUT_DEVICE_ID = -1;
-    public static final int INVALID_TV_INPUT_PORT_ID = -1;
     public static final int INVALID_RESOURCE_HANDLE = -1;
+    /**
+     * Tuner resource type to help generate resource handle
+     */
+    @IntDef({
+        TUNER_RESOURCE_TYPE_FRONTEND,
+        TUNER_RESOURCE_TYPE_DEMUX,
+        TUNER_RESOURCE_TYPE_DESCRAMBLER,
+        TUNER_RESOURCE_TYPE_LNB,
+        TUNER_RESOURCE_TYPE_CAS_SESSION,
+     })
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface TunerResourceType {}
+
+    public static final int TUNER_RESOURCE_TYPE_FRONTEND = 0;
+    public static final int TUNER_RESOURCE_TYPE_DEMUX = 1;
+    public static final int TUNER_RESOURCE_TYPE_DESCRAMBLER = 2;
+    public static final int TUNER_RESOURCE_TYPE_LNB = 3;
+    public static final int TUNER_RESOURCE_TYPE_CAS_SESSION = 4;
 
     private final ITunerResourceManager mService;
     private final int mUserId;
@@ -374,7 +390,7 @@ public class TunerResourceManager {
      * <li>If no Lnb system can be granted, the API would return false.
      * <ul>
      *
-     * <p><strong>Note:</strong> {@link #setLnbInfos(int[])} must be called before this request.
+     * <p><strong>Note:</strong> {@link #setLnbInfoList(int[])} must be called before this request.
      *
      * @param request {@link TunerLnbRequest} information of the current request.
      * @param lnbId a one-element array to return the granted Lnb id.
@@ -463,7 +479,7 @@ public class TunerResourceManager {
      *
      * <p>Client must call this whenever it releases an Lnb.
      *
-     * <p><strong>Note:</strong> {@link #setLnbInfos(int[])} must be called before this release.
+     * <p><strong>Note:</strong> {@link #setLnbInfoList(int[])} must be called before this release.
      *
      * @param lnbId the id of the released Tuner Lnb.
      */

@@ -343,6 +343,14 @@ public abstract class VibrationEffect implements Parcelable {
     @TestApi
     @Nullable
     public static VibrationEffect get(Uri uri, Context context) {
+        String[] uris = context.getResources().getStringArray(
+                com.android.internal.R.array.config_ringtoneEffectUris);
+
+        // Skip doing any IPC if we don't have any effects configured.
+        if (uris.length == 0) {
+            return null;
+        }
+
         final ContentResolver cr = context.getContentResolver();
         Uri uncanonicalUri = cr.uncanonicalize(uri);
         if (uncanonicalUri == null) {
@@ -351,8 +359,7 @@ public abstract class VibrationEffect implements Parcelable {
             // place.
             uncanonicalUri = uri;
         }
-        String[] uris = context.getResources().getStringArray(
-                com.android.internal.R.array.config_ringtoneEffectUris);
+
         for (int i = 0; i < uris.length && i < RINGTONES.length; i++) {
             if (uris[i] == null) {
                 continue;
@@ -954,7 +961,7 @@ public abstract class VibrationEffect implements Parcelable {
      *
      * @see VibrationEffect#startComposition()
      */
-    public static class Composition {
+    public static final class Composition {
         /** @hide */
         @IntDef(prefix = { "PRIMITIVE_" }, value = {
                 PRIMITIVE_CLICK,
@@ -963,7 +970,7 @@ public abstract class VibrationEffect implements Parcelable {
                 PRIMITIVE_QUICK_RISE,
                 PRIMITIVE_SLOW_RISE,
                 PRIMITIVE_QUICK_FALL,
-                PRIMITIVE_LIGHT_TICK,
+                PRIMITIVE_TICK,
         })
         @Retention(RetentionPolicy.SOURCE)
         public @interface Primitive {}
@@ -981,10 +988,14 @@ public abstract class VibrationEffect implements Parcelable {
          * A haptic effect that simulates downwards movement with gravity. Often
          * followed by extra energy of hitting and reverberation to augment
          * physicality.
+         *
+         * @hide Not confident enough to expose publicly yet
          */
         public static final int PRIMITIVE_THUD = 2;
         /**
          * A haptic effect that simulates spinning momentum.
+         *
+         * @hide Not confident enough to expose publicly yet
          */
         public static final int PRIMITIVE_SPIN = 3;
         /**
@@ -1003,10 +1014,13 @@ public abstract class VibrationEffect implements Parcelable {
          * This very short effect should produce a light crisp sensation intended
          * to be used repetitively for dynamic feedback.
          */
-        public static final int PRIMITIVE_LIGHT_TICK = 7;
+        // Internally this maps to the HAL constant CompositePrimitive::LIGHT_TICK
+        public static final int PRIMITIVE_TICK = 7;
 
 
         private ArrayList<PrimitiveEffect> mEffects = new ArrayList<>();
+
+        Composition() { }
 
         /**
          * Add a haptic primitive to the end of the current composition.
@@ -1018,7 +1032,7 @@ public abstract class VibrationEffect implements Parcelable {
          *
          * @return The {@link Composition} object to enable adding multiple primitives in one chain.
          */
-        @Nullable
+        @NonNull
         public Composition addPrimitive(@Primitive int primitiveId) {
             addPrimitive(primitiveId, /*scale*/ 1.0f, /*delay*/ 0);
             return this;
@@ -1034,7 +1048,7 @@ public abstract class VibrationEffect implements Parcelable {
          *
          * @return The {@link Composition} object to enable adding multiple primitives in one chain.
          */
-        @Nullable
+        @NonNull
         public Composition addPrimitive(@Primitive int primitiveId,
                 @FloatRange(from = 0f, to = 1f) float scale) {
             addPrimitive(primitiveId, scale, /*delay*/ 0);
@@ -1046,11 +1060,11 @@ public abstract class VibrationEffect implements Parcelable {
          *
          * @param primitiveId The primitive to add
          * @param scale The scale to apply to the intensity of the primitive.
-         * @param delay The amount of time, in milliseconds, to wait before playing the prior
+         * @param delay The amount of time, in milliseconds, to wait between playing the prior
          *              primitive and this one
          * @return The {@link Composition} object to enable adding multiple primitives in one chain.
          */
-        @Nullable
+        @NonNull
         public Composition addPrimitive(@Primitive int primitiveId,
                 @FloatRange(from = 0f, to = 1f) float scale, @IntRange(from = 0) int delay) {
             mEffects.add(new PrimitiveEffect(checkPrimitive(primitiveId), scale, delay));
@@ -1081,7 +1095,7 @@ public abstract class VibrationEffect implements Parcelable {
          *
          */
         static int checkPrimitive(int primitiveId) {
-            Preconditions.checkArgumentInRange(primitiveId, PRIMITIVE_NOOP, PRIMITIVE_LIGHT_TICK,
+            Preconditions.checkArgumentInRange(primitiveId, PRIMITIVE_NOOP, PRIMITIVE_TICK,
                     "primitiveId");
             return primitiveId;
         }
@@ -1108,8 +1122,8 @@ public abstract class VibrationEffect implements Parcelable {
                     return "PRIMITIVE_SLOW_RISE";
                 case PRIMITIVE_QUICK_FALL:
                     return "PRIMITIVE_QUICK_FALL";
-                case PRIMITIVE_LIGHT_TICK:
-                    return "PRIMITIVE_LIGHT_TICK";
+                case PRIMITIVE_TICK:
+                    return "PRIMITIVE_TICK";
 
                 default:
                     return Integer.toString(id);

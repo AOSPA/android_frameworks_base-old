@@ -52,6 +52,14 @@ public class CarrierConfigManager {
     public static final String EXTRA_SLOT_INDEX = "android.telephony.extra.SLOT_INDEX";
 
     /**
+     * Extra included in {@link #ACTION_CARRIER_CONFIG_CHANGED} to indicate whether this is a
+     * rebroadcast on unlock. Defaults to {@code false} if not specified.
+     * @hide
+     */
+    public static final String EXTRA_REBROADCAST_ON_UNLOCK =
+            "android.telephony.extra.REBROADCAST_ON_UNLOCK";
+
+    /**
      * Optional extra included in {@link #ACTION_CARRIER_CONFIG_CHANGED} to indicate the
      * subscription index that the broadcast is for, if a valid one is available.
      */
@@ -1159,6 +1167,21 @@ public class CarrierConfigManager {
             "support_ims_conference_event_package_bool";
 
     /**
+     * Determines whether processing of conference event package data received on a device other
+     * than the conference host is supported.
+     * <p>
+     * When a device A merges calls B and C into a conference it is considered the conference host
+     * and B and C are considered the conference peers.
+     * <p>
+     * When {@code true}, the conference peer will display the conference state if it receives
+     * conference event package data from the network.  When {@code false}, the conference peer will
+     * ignore conference event package data received from the network.
+     * @hide
+     */
+    public static final String KEY_SUPPORT_IMS_CONFERENCE_EVENT_PACKAGE_ON_PEER_BOOL =
+            "support_ims_conference_event_package_on_peer_bool";
+
+    /**
      * Determines whether High Definition audio property is displayed in the dialer UI.
      * If {@code false}, remove the HD audio property from the connection so that HD audio related
      * UI is not displayed. If {@code true}, keep HD audio property as it is configured.
@@ -1173,6 +1196,25 @@ public class CarrierConfigManager {
      */
     public static final String KEY_SUPPORT_IMS_CONFERENCE_CALL_BOOL =
             "support_ims_conference_call_bool";
+
+    /**
+     * Determines whether the device will locally disconnect an IMS conference when the participant
+     * count drops to zero.  When {@code true}, it is assumed the carrier does NOT disconnect a
+     * conference when the participant count drops to zero and that the device must do this by
+     * disconnecting the conference locally.  When {@code false}, it is assumed that the carrier
+     * is responsible for disconnecting the conference when there are no longer any participants
+     * present.
+     * <p>
+     * Note: both {@link #KEY_SUPPORT_IMS_CONFERENCE_CALL_BOOL} and
+     * {@link #KEY_SUPPORT_IMS_CONFERENCE_EVENT_PACKAGE_BOOL} must be true for this configuration to
+     * have any effect.
+     * <p>
+     * Defaults to {@code false}, meaning the carrier network is responsible for disconnecting an
+     * empty IMS conference.
+     * @hide
+     */
+    public static final String KEY_LOCAL_DISCONNECT_EMPTY_IMS_CONFERENCE_BOOL =
+            "local_disconnect_empty_ims_conference_bool";
 
     /**
      * Determines whether video conference calls are supported by a carrier.  When {@code true},
@@ -1196,6 +1238,15 @@ public class CarrierConfigManager {
      * carrier supports 4G LTE or not.
      */
     public static final String KEY_HIDE_ENHANCED_4G_LTE_BOOL = "hide_enhanced_4g_lte_bool";
+
+    /**
+     * Determines whether the Enabled 5G toggle will be shown in the settings. When this
+     * option is {@code true}, the toggle will be hidden regardless of whether the device and
+     * carrier supports 5G or not.
+     *
+     * @hide
+     */
+    public static final String KEY_HIDE_ENABLED_5G_BOOL = "hide_enabled_5g_bool";
 
     /**
      * Sets the default state for the "Enhanced 4G LTE" or "Advanced Calling" mode toggle set by the
@@ -3033,7 +3084,7 @@ public class CarrierConfigManager {
      * Controls time in milliseconds until DcTracker reevaluates 5G connection state.
      * @hide
      */
-    public static final String KEY_5G_WATCHDOG_TIME_MS_LONG = "5g_watchdog_time_long";
+    public static final String KEY_5G_WATCHDOG_TIME_MS_LONG = "5g_watchdog_time_ms_long";
 
     /**
      * Whether NR (non-standalone) should be unmetered for all frequencies.
@@ -3633,6 +3684,14 @@ public class CarrierConfigManager {
     public static final String KEY_CARRIER_SUPPORTS_MULTIANCHOR_CONFERENCE =
             "carrier_supports_multianchor_conference";
 
+    /**
+     * Determines the default RTT mode.
+     *
+     * @hide
+     */
+    public static final String KEY_DEFAULT_RTT_MODE_INT =
+            "default_rtt_mode_int";
+
     /** The default value for every variable. */
     private final static PersistableBundle sDefaults;
 
@@ -3809,14 +3868,17 @@ public class CarrierConfigManager {
         sDefaults.putBoolean(KEY_SUPPORT_ADD_CONFERENCE_PARTICIPANTS_BOOL, false);
         sDefaults.putBoolean(KEY_SUPPORT_CONFERENCE_CALL_BOOL, true);
         sDefaults.putBoolean(KEY_SUPPORT_IMS_CONFERENCE_CALL_BOOL, true);
+        sDefaults.putBoolean(KEY_LOCAL_DISCONNECT_EMPTY_IMS_CONFERENCE_BOOL, false);
         sDefaults.putBoolean(KEY_SUPPORT_MANAGE_IMS_CONFERENCE_CALL_BOOL, true);
         sDefaults.putBoolean(KEY_SUPPORT_IMS_CONFERENCE_EVENT_PACKAGE_BOOL, true);
+        sDefaults.putBoolean(KEY_SUPPORT_IMS_CONFERENCE_EVENT_PACKAGE_ON_PEER_BOOL, true);
         sDefaults.putBoolean(KEY_SUPPORT_VIDEO_CONFERENCE_CALL_BOOL, false);
         sDefaults.putBoolean(KEY_IS_IMS_CONFERENCE_SIZE_ENFORCED_BOOL, false);
         sDefaults.putInt(KEY_IMS_CONFERENCE_SIZE_LIMIT_INT, 5);
         sDefaults.putBoolean(KEY_DISPLAY_HD_AUDIO_PROPERTY_BOOL, true);
         sDefaults.putBoolean(KEY_EDITABLE_ENHANCED_4G_LTE_BOOL, true);
         sDefaults.putBoolean(KEY_HIDE_ENHANCED_4G_LTE_BOOL, false);
+        sDefaults.putBoolean(KEY_HIDE_ENABLED_5G_BOOL, true);
         sDefaults.putBoolean(KEY_ENHANCED_4G_LTE_ON_BY_DEFAULT_BOOL, true);
         sDefaults.putBoolean(KEY_HIDE_IMS_APN_BOOL, false);
         sDefaults.putBoolean(KEY_HIDE_PREFERRED_NETWORK_TYPE_BOOL, false);
@@ -4151,6 +4213,7 @@ public class CarrierConfigManager {
                 new String[0]);
         sDefaults.putStringArray(KEY_MISSED_INCOMING_CALL_SMS_PATTERN_STRING_ARRAY, new String[0]);
         sDefaults.putBoolean(KEY_CARRIER_SUPPORTS_MULTIANCHOR_CONFERENCE, false);
+        sDefaults.putInt(KEY_DEFAULT_RTT_MODE_INT, 0);
     }
 
     /**
@@ -4202,7 +4265,7 @@ public class CarrierConfigManager {
                 return null;
             }
             return loader.getConfigForSubIdWithFeature(subId, mContext.getOpPackageName(),
-                    mContext.getFeatureId());
+                    mContext.getAttributionTag());
         } catch (RemoteException ex) {
             Rlog.e(TAG, "Error getting config for subId " + subId + ": "
                     + ex.toString());

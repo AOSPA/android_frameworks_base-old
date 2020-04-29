@@ -18,6 +18,7 @@ package android.app.blob;
 import android.app.blob.BlobHandle;
 import android.app.blob.BlobInfo;
 import android.app.blob.IBlobStoreSession;
+import android.app.blob.LeaseInfo;
 import android.os.RemoteCallback;
 
 /** {@hide} */
@@ -30,9 +31,13 @@ interface IBlobStoreManager {
     void acquireLease(in BlobHandle handle, int descriptionResId, in CharSequence description,
             long leaseTimeoutMillis, in String packageName);
     void releaseLease(in BlobHandle handle, in String packageName);
+    long getRemainingLeaseQuotaBytes(String packageName);
 
     void waitForIdle(in RemoteCallback callback);
 
     List<BlobInfo> queryBlobsForUser(int userId);
     void deleteBlob(long blobId);
+
+    List<BlobHandle> getLeasedBlobs(in String packageName);
+    LeaseInfo getLeaseInfo(in BlobHandle blobHandle, in String packageName);
 }

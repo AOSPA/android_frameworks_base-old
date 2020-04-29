@@ -29,7 +29,6 @@ import android.app.IProcessObserver;
 import android.app.IRequestFinishCallback;
 import android.app.IServiceConnection;
 import android.app.IStopUserCallback;
-import android.app.ITaskOrganizerController;
 import android.app.ITaskStackListener;
 import android.app.IUiAutomationConnection;
 import android.app.IUidObserver;
@@ -69,9 +68,9 @@ import android.os.StrictMode;
 import android.os.WorkSource;
 import android.service.voice.IVoiceInteractionSession;
 import android.view.IRecentsAnimationRunner;
-import android.view.ITaskOrganizer;
 import android.view.RemoteAnimationDefinition;
 import android.view.RemoteAnimationAdapter;
+import android.window.IWindowOrganizerController;
 import com.android.internal.app.IVoiceInteractor;
 import com.android.internal.os.IResultReceiver;
 import com.android.internal.policy.IKeyguardDismissCallback;
@@ -156,8 +155,8 @@ interface IActivityTaskManager {
     boolean removeTask(int taskId);
     void removeAllVisibleRecentTasks();
     List<ActivityManager.RunningTaskInfo> getTasks(int maxNum);
-    List<ActivityManager.RunningTaskInfo> getFilteredTasks(int maxNum, int ignoreActivityType,
-            int ignoreWindowingMode);
+    List<ActivityManager.RunningTaskInfo> getFilteredTasks(int maxNum,
+            boolean filterOnlyVisibleRecents);
     boolean shouldUpRecreateTask(in IBinder token, in String destAffinity);
     boolean navigateUpTo(in IBinder token, in Intent target, int resultCode,
             in Intent resultData);
@@ -299,15 +298,7 @@ interface IActivityTaskManager {
     void reportSizeConfigurations(in IBinder token, in int[] horizontalSizeConfiguration,
             in int[] verticalSizeConfigurations, in int[] smallestWidthConfigurations);
 
-    /**
-     * Dismisses PiP
-     * @param animate True if the dismissal should be animated.
-     * @param animationDuration The duration of the resize animation in milliseconds or -1 if the
-     *                          default animation duration should be used.
-     */
-    void dismissPip(boolean animate, int animationDuration);
     void suppressResizeConfigChanges(boolean suppress);
-    void moveTasksToFullscreenStack(int fromStackId, boolean onTop);
     boolean moveTopActivityToPinnedStack(int stackId, in Rect bounds);
     boolean isInMultiWindowMode(in IBinder token);
     boolean isInPictureInPictureMode(in IBinder token);
@@ -340,10 +331,8 @@ interface IActivityTaskManager {
             in Rect tempDockedTaskInsetBounds,
             in Rect tempOtherTaskBounds, in Rect tempOtherTaskInsetBounds);
 
-    /**
-     * Returns an interface enabling the management of task organizers.
-     */
-    ITaskOrganizerController getTaskOrganizerController();
+    /** Returns an interface enabling the management of window organizers. */
+    IWindowOrganizerController getWindowOrganizerController();
 
     /**
      * Sets whether we are currently in an interactive split screen resize operation where we

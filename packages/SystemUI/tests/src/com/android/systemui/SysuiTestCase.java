@@ -15,6 +15,7 @@
  */
 package com.android.systemui;
 
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.when;
 
@@ -31,7 +32,11 @@ import android.util.Log;
 import androidx.test.InstrumentationRegistry;
 
 import com.android.keyguard.KeyguardUpdateMonitor;
+import com.android.settingslib.bluetooth.LocalBluetoothManager;
+import com.android.systemui.broadcast.BroadcastDispatcher;
+import com.android.systemui.broadcast.FakeBroadcastDispatcher;
 import com.android.systemui.classifier.FalsingManagerFake;
+import com.android.systemui.dump.DumpManager;
 import com.android.systemui.plugins.FalsingManager;
 
 import org.junit.After;
@@ -59,11 +64,14 @@ public abstract class SysuiTestCase {
             new DexmakerShareClassLoaderRule();
     public TestableDependency mDependency;
     private Instrumentation mRealInstrumentation;
+    private FakeBroadcastDispatcher mFakeBroadcastDispatcher;
 
     @Before
     public void SysuiSetup() throws Exception {
         SystemUIFactory.createFromConfig(mContext);
         mDependency = new TestableDependency(mContext);
+        mFakeBroadcastDispatcher = new FakeBroadcastDispatcher(mContext, mock(Handler.class),
+                mock(Looper.class), mock(DumpManager.class));
 
         mRealInstrumentation = InstrumentationRegistry.getInstrumentation();
         Instrumentation inst = spy(mRealInstrumentation);
@@ -76,10 +84,19 @@ public abstract class SysuiTestCase {
                     "SysUI Tests should use SysuiTestCase#getContext or SysuiTestCase#mContext");
         });
         InstrumentationRegistry.registerInstance(inst, InstrumentationRegistry.getArguments());
+        // Many tests end up creating a BroadcastDispatcher. Instead, give them a fake that will
+        // record receivers registered. They are not actually leaked as they are kept just as a weak
+        // reference and are never sent to the Context. This will also prevent a real
+        // BroadcastDispatcher from actually registering receivers.
+        mDependency.injectTestDependency(BroadcastDispatcher.class, mFakeBroadcastDispatcher);
         // A lot of tests get the FalsingManager, often via several layers of indirection.
         // None of them actually need it.
         mDependency.injectTestDependency(FalsingManager.class, new FalsingManagerFake());
         mDependency.injectMockDependency(KeyguardUpdateMonitor.class);
+
+        // A lot of tests get the LocalBluetoothManager, often via several layers of indirection.
+        // None of them actually need it.
+        mDependency.injectMockDependency(LocalBluetoothManager.class);
     }
 
     @After
@@ -91,6 +108,8 @@ public abstract class SysuiTestCase {
         }
         disallowTestableLooperAsMainThread();
         SystemUIFactory.cleanup();
+        mContext.cleanUpReceivers(this.getClass().getSimpleName());
+        mFakeBroadcastDispatcher.cleanUpReceivers(this.getClass().getSimpleName());
     }
 
     /**

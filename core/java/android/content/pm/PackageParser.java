@@ -55,7 +55,6 @@ import android.compat.annotation.UnsupportedAppUsage;
 import android.content.ComponentName;
 import android.content.Intent;
 import android.content.IntentFilter;
-import android.content.pm.parsing.ParsingPackageUtils;
 import android.content.pm.permission.SplitPermissionInfoParcelable;
 import android.content.pm.split.DefaultSplitAssetLoader;
 import android.content.pm.split.SplitAssetDependencyLoader;
@@ -190,7 +189,7 @@ public class PackageParser {
     public static final String TAG_OVERLAY = "overlay";
     public static final String TAG_PACKAGE = "package";
     public static final String TAG_PACKAGE_VERIFIER = "package-verifier";
-    public static final String TAG_FEATURE = "feature";
+    public static final String TAG_ATTRIBUTION = "attribution";
     public static final String TAG_PERMISSION = "permission";
     public static final String TAG_PERMISSION_GROUP = "permission-group";
     public static final String TAG_PERMISSION_TREE = "permission-tree";
@@ -209,6 +208,8 @@ public class PackageParser {
     public static final String TAG_USES_SPLIT = "uses-split";
 
     public static final String METADATA_MAX_ASPECT_RATIO = "android.max_aspect";
+    public static final String METADATA_ACTIVITY_WINDOW_LAYOUT_AFFINITY =
+            "android.activity_window_layout_affinity";
 
     /**
      * Bit mask of all the valid bits that can be set in recreateOnConfigChanges.
@@ -1442,7 +1443,7 @@ public class PackageParser {
         try {
             try {
                 apkAssets = fd != null
-                        ? ApkAssets.loadFromFd(fd, debugPathName, false, false)
+                        ? ApkAssets.loadFromFd(fd, debugPathName, 0 /* flags */, null /* assets */)
                         : ApkAssets.loadFromPath(apkPath);
             } catch (IOException e) {
                 throw new PackageParserException(INSTALL_PARSE_FAILED_NOT_APK,
@@ -1836,6 +1837,12 @@ public class PackageParser {
 
         pkg.coreApp = parser.getAttributeBooleanValue(null, "coreApp", false);
 
+        final boolean isolatedSplits = sa.getBoolean(
+                com.android.internal.R.styleable.AndroidManifest_isolatedSplits, false);
+        if (isolatedSplits) {
+            pkg.applicationInfo.privateFlags |= ApplicationInfo.PRIVATE_FLAG_ISOLATED_SPLIT_LOADING;
+        }
+
         pkg.mCompileSdkVersion = sa.getInteger(
                 com.android.internal.R.styleable.AndroidManifest_compileSdkVersion, 0);
         pkg.applicationInfo.compileSdkVersion = pkg.mCompileSdkVersion;
@@ -1909,10 +1916,6 @@ public class PackageParser {
         /* Set the global "on SD card" flag */
         if ((flags & PARSE_EXTERNAL_STORAGE) != 0) {
             pkg.applicationInfo.flags |= ApplicationInfo.FLAG_EXTERNAL_STORAGE;
-        }
-
-        if (sa.getBoolean(com.android.internal.R.styleable.AndroidManifest_isolatedSplits, false)) {
-            pkg.applicationInfo.privateFlags |= ApplicationInfo.PRIVATE_FLAG_ISOLATED_SPLIT_LOADING;
         }
 
         // Resource boolean are -1, so 1 means we don't know the value.
@@ -4560,6 +4563,8 @@ public class PackageParser {
             }
         }
 
+        resolveWindowLayout(a);
+
         if (!setExported) {
             a.info.exported = a.intents.size() > 0;
         }
@@ -4724,6 +4729,35 @@ public class PackageParser {
         sw.recycle();
         a.info.windowLayout = new ActivityInfo.WindowLayout(width, widthFraction,
                 height, heightFraction, gravity, minWidth, minHeight);
+    }
+
+    /**
+     * Resolves values in {@link ActivityInfo.WindowLayout}.
+     *
+     * <p>{@link ActivityInfo.WindowLayout#windowLayoutAffinity} has a fallback metadata used in
+     * Android R and some variants of pre-R.
+     */
+    private void resolveWindowLayout(Activity activity) {
+        // There isn't a metadata for us to fall back. Whatever is in layout is correct.
+        if (activity.metaData == null
+                || !activity.metaData.containsKey(METADATA_ACTIVITY_WINDOW_LAYOUT_AFFINITY)) {
+            return;
+        }
+
+        final ActivityInfo aInfo = activity.info;
+        // Layout already specifies a value. We should just use that one.
+        if (aInfo.windowLayout != null && aInfo.windowLayout.windowLayoutAffinity != null) {
+            return;
+        }
+
+        String windowLayoutAffinity = activity.metaData.getString(
+                METADATA_ACTIVITY_WINDOW_LAYOUT_AFFINITY);
+        if (aInfo.windowLayout == null) {
+            aInfo.windowLayout = new ActivityInfo.WindowLayout(-1 /* width */,
+                    -1 /* widthFraction */, -1 /* height */, -1 /* heightFraction */,
+                    Gravity.NO_GRAVITY, -1 /* minWidth */, -1 /* minHeight */);
+        }
+        aInfo.windowLayout.windowLayoutAffinity = windowLayoutAffinity;
     }
 
     private Activity parseActivityAlias(Package owner, Resources res,

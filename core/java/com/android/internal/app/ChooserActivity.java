@@ -124,6 +124,7 @@ import com.android.internal.config.sysui.SystemUiDeviceConfigFlags;
 import com.android.internal.content.PackageMonitor;
 import com.android.internal.logging.MetricsLogger;
 import com.android.internal.logging.nano.MetricsProto.MetricsEvent;
+import com.android.internal.util.FrameworkStatsLog;
 import com.android.internal.widget.GridLayoutManager;
 import com.android.internal.widget.RecyclerView;
 import com.android.internal.widget.ResolverDrawerLayout;
@@ -178,7 +179,7 @@ public class ChooserActivity extends ResolverActivity implements
     private static final boolean USE_PREDICTION_MANAGER_FOR_SHARE_ACTIVITIES = true;
     // TODO(b/123088566) Share these in a better way.
     private static final String APP_PREDICTION_SHARE_UI_SURFACE = "share";
-    public static final String LAUNCH_LOCATON_DIRECT_SHARE = "direct_share";
+    public static final String LAUNCH_LOCATION_DIRECT_SHARE = "direct_share";
     private static final int APP_PREDICTION_SHARE_TARGET_QUERY_PACKAGE_LIMIT = 20;
     public static final String APP_PREDICTION_INTENT_FILTER_KEY = "intent_filter";
 
@@ -193,6 +194,14 @@ public class ChooserActivity extends ResolverActivity implements
     public static final int TARGET_TYPE_CHOOSER_TARGET = 1;
     public static final int TARGET_TYPE_SHORTCUTS_FROM_SHORTCUT_MANAGER = 2;
     public static final int TARGET_TYPE_SHORTCUTS_FROM_PREDICTION_SERVICE = 3;
+
+    public static final int SELECTION_TYPE_SERVICE = 1;
+    public static final int SELECTION_TYPE_APP = 2;
+    public static final int SELECTION_TYPE_STANDARD = 3;
+    public static final int SELECTION_TYPE_COPY = 4;
+
+    // statsd logger wrapper
+    protected ChooserActivityLogger mChooserActivityLogger;
 
     private static final boolean USE_CHOOSER_TARGET_SERVICE_FOR_DIRECT_TARGETS = true;
 
@@ -222,6 +231,11 @@ public class ChooserActivity extends ResolverActivity implements
     private int mMaxHashSaltDays = DeviceConfig.getInt(DeviceConfig.NAMESPACE_SYSTEMUI,
             SystemUiDeviceConfigFlags.HASH_SALT_MAX_DAYS,
             DEFAULT_SALT_EXPIRATION_DAYS);
+
+    private boolean mAppendDirectShareEnabled = DeviceConfig.getBoolean(
+            DeviceConfig.NAMESPACE_SYSTEMUI,
+            SystemUiDeviceConfigFlags.APPEND_DIRECT_SHARE_ENABLED,
+            true);
 
     private Bundle mReplacementExtras;
     private IntentSender mChosenComponentSender;
@@ -265,9 +279,9 @@ public class ChooserActivity extends ResolverActivity implements
 
     // Starting at 1 since 0 is considered "undefined" for some of the database transformations
     // of tron logs.
-    private static final int CONTENT_PREVIEW_IMAGE = 1;
-    private static final int CONTENT_PREVIEW_FILE = 2;
-    private static final int CONTENT_PREVIEW_TEXT = 3;
+    protected static final int CONTENT_PREVIEW_IMAGE = 1;
+    protected static final int CONTENT_PREVIEW_FILE = 2;
+    protected static final int CONTENT_PREVIEW_TEXT = 3;
     protected MetricsLogger mMetricsLogger;
 
     private ContentPreviewCoordinator mPreviewCoord;
@@ -409,6 +423,11 @@ public class ChooserActivity extends ResolverActivity implements
         private static final int WATCHDOG_TIMEOUT_MAX_MILLIS = 10000;
         private static final int WATCHDOG_TIMEOUT_MIN_MILLIS = 3000;
 
+        private static final int DEFAULT_DIRECT_SHARE_TIMEOUT_MILLIS = 1500;
+        private int mDirectShareTimeout = DeviceConfig.getInt(DeviceConfig.NAMESPACE_SYSTEMUI,
+                SystemUiDeviceConfigFlags.SHARE_SHEET_DIRECT_SHARE_TIMEOUT,
+                DEFAULT_DIRECT_SHARE_TIMEOUT_MILLIS);
+
         private boolean mMinTimeoutPassed = false;
 
         private void removeAllMessages() {
@@ -427,15 +446,14 @@ public class ChooserActivity extends ResolverActivity implements
 
             if (DEBUG) {
                 Log.d(TAG, "queryTargets setting watchdog timer for "
-                        + WATCHDOG_TIMEOUT_MIN_MILLIS + "-"
+                        + mDirectShareTimeout + "-"
                         + WATCHDOG_TIMEOUT_MAX_MILLIS + "ms");
             }
 
             sendEmptyMessageDelayed(CHOOSER_TARGET_SERVICE_WATCHDOG_MIN_TIMEOUT,
                     WATCHDOG_TIMEOUT_MIN_MILLIS);
             sendEmptyMessageDelayed(CHOOSER_TARGET_SERVICE_WATCHDOG_MAX_TIMEOUT,
-                    WATCHDOG_TIMEOUT_MAX_MILLIS);
-
+                    mAppendDirectShareEnabled ? mDirectShareTimeout : WATCHDOG_TIMEOUT_MAX_MILLIS);
         }
 
         private void maybeStopServiceRequestTimer() {
@@ -463,6 +481,7 @@ public class ChooserActivity extends ResolverActivity implements
                     final ServiceResultInfo sri = (ServiceResultInfo) msg.obj;
                     if (!mServiceConnections.contains(sri.connection)) {
                         Log.w(TAG, "ChooserTargetServiceConnection " + sri.connection
+                                + sri.originalTarget.getResolveInfo().activityInfo.packageName
                                 + " returned after being removed from active connections."
                                 + " Have you considered returning results faster?");
                         break;
@@ -474,7 +493,7 @@ public class ChooserActivity extends ResolverActivity implements
                         if (adapterForUserHandle != null) {
                             adapterForUserHandle.addServiceResults(sri.originalTarget,
                                     sri.resultTargets, TARGET_TYPE_CHOOSER_TARGET,
-                                    /* directShareShortcutInfoCache */ null);
+                                    /* directShareShortcutInfoCache */ null, mServiceConnections);
                         }
                     }
                     unbindService(sri.connection);
@@ -489,6 +508,10 @@ public class ChooserActivity extends ResolverActivity implements
                     break;
 
                 case CHOOSER_TARGET_SERVICE_WATCHDOG_MAX_TIMEOUT:
+                    mMinTimeoutPassed = true;
+                    if (!mServiceConnections.isEmpty()) {
+                        getChooserActivityLogger().logSharesheetDirectLoadTimeout();
+                    }
                     unbindRemainingServices();
                     maybeStopServiceRequestTimer();
                     break;
@@ -513,7 +536,7 @@ public class ChooserActivity extends ResolverActivity implements
                         if (adapterForUserHandle != null) {
                             adapterForUserHandle.addServiceResults(
                                     resultInfo.originalTarget, resultInfo.resultTargets, msg.arg1,
-                                    mDirectShareShortcutInfoCache);
+                                    mDirectShareShortcutInfoCache, mServiceConnections);
                         }
                     }
                     break;
@@ -522,6 +545,7 @@ public class ChooserActivity extends ResolverActivity implements
                     logDirectShareTargetReceived(
                             MetricsEvent.ACTION_DIRECT_SHARE_TARGETS_LOADED_SHORTCUT_MANAGER);
                     sendVoiceChoicesIfNeeded();
+                    getChooserActivityLogger().logSharesheetDirectLoadComplete();
                     break;
 
                 default:
@@ -533,6 +557,7 @@ public class ChooserActivity extends ResolverActivity implements
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         final long intentReceivedTime = System.currentTimeMillis();
+        getChooserActivityLogger().logSharesheetTriggered();
         // This is the only place this value is being set. Effectively final.
         mIsAppPredictorComponentAvailable = isAppPredictionServiceAvailable();
 
@@ -696,6 +721,8 @@ public class ChooserActivity extends ResolverActivity implements
                                 incrementNumSheetExpansions();
                                 mWrittenOnce = true;
                             }
+                            getChooserActivityLogger()
+                                    .logSharesheetExpansionChanged(isCollapsed);
                         }
                     });
         }
@@ -704,6 +731,16 @@ public class ChooserActivity extends ResolverActivity implements
             Log.d(TAG, "System Time Cost is " + systemCost);
         }
 
+        getChooserActivityLogger().logShareStarted(
+                FrameworkStatsLog.SHARESHEET_STARTED,
+                getReferrerPackageName(),
+                target.getType(),
+                initialIntents == null ? 0 : initialIntents.length,
+                mCallerChooserTargets == null ? 0 : mCallerChooserTargets.length,
+                isWorkProfile(),
+                findPreferredContentPreview(getTargetIntent(), getContentResolver()),
+                target.getAction()
+        );
         mDirectShareShortcutInfoCache = new HashMap<>();
     }
 
@@ -958,6 +995,10 @@ public class ChooserActivity extends ResolverActivity implements
             LogMaker targetLogMaker = new LogMaker(
                     MetricsEvent.ACTION_ACTIVITY_CHOOSER_PICKED_SYSTEM_TARGET).setSubtype(1);
             getMetricsLogger().write(targetLogMaker);
+            getChooserActivityLogger().logShareTargetSelected(
+                    SELECTION_TYPE_COPY,
+                    "",
+                    -1);
 
             finish();
         }
@@ -1481,7 +1522,7 @@ public class ChooserActivity extends ResolverActivity implements
                     /* origTarget */ null,
                     Lists.newArrayList(mCallerChooserTargets),
                     TARGET_TYPE_DEFAULT,
-                    /* directShareShortcutInfoCache */ null);
+                    /* directShareShortcutInfoCache */ null, mServiceConnections);
         }
     }
 
@@ -1525,10 +1566,12 @@ public class ChooserActivity extends ResolverActivity implements
                 labels.add(innerInfo.getResolveInfo().loadLabel(getPackageManager()));
             }
             f = new ResolverTargetActionsDialogFragment(mti.getDisplayLabel(), name,
-                    mti.getTargets(), labels);
+                    mti.getTargets(), labels,
+                    mChooserMultiProfilePagerAdapter.getCurrentUserHandle());
         } else {
             f = new ResolverTargetActionsDialogFragment(
-                    ti.getResolveInfo().loadLabel(getPackageManager()), name, pinned);
+                    ti.getResolveInfo().loadLabel(getPackageManager()), name, pinned,
+                    mChooserMultiProfilePagerAdapter.getCurrentUserHandle());
         }
 
         f.show(getFragmentManager(), TARGET_DETAILS_FRAGMENT_TAG);
@@ -1631,18 +1674,33 @@ public class ChooserActivity extends ResolverActivity implements
                     if (mCallerChooserTargets != null) {
                         numCallerProvided = mCallerChooserTargets.length;
                     }
+                    getChooserActivityLogger().logShareTargetSelected(
+                            SELECTION_TYPE_SERVICE,
+                            targetInfo.getResolveInfo().activityInfo.processName,
+                            value
+                    );
                     break;
                 case ChooserListAdapter.TARGET_CALLER:
                 case ChooserListAdapter.TARGET_STANDARD:
                     cat = MetricsEvent.ACTION_ACTIVITY_CHOOSER_PICKED_APP_TARGET;
                     value -= currentListAdapter.getSelectableServiceTargetCount();
                     numCallerProvided = currentListAdapter.getCallerTargetCount();
+                    getChooserActivityLogger().logShareTargetSelected(
+                            SELECTION_TYPE_APP,
+                            targetInfo.getResolveInfo().activityInfo.processName,
+                            value
+                    );
                     break;
                 case ChooserListAdapter.TARGET_STANDARD_AZ:
                     // A-Z targets are unranked standard targets; we use -1 to mark that they
                     // are from the alphabetical pool.
                     value = -1;
                     cat = MetricsEvent.ACTION_ACTIVITY_CHOOSER_PICKED_STANDARD_TARGET;
+                    getChooserActivityLogger().logShareTargetSelected(
+                            SELECTION_TYPE_STANDARD,
+                            targetInfo.getResolveInfo().activityInfo.processName,
+                            value
+                    );
                     break;
             }
 
@@ -2118,7 +2176,7 @@ public class ChooserActivity extends ResolverActivity implements
         if (appTarget != null) {
             directShareAppPredictor.notifyAppTargetEvent(
                     new AppTargetEvent.Builder(appTarget, AppTargetEvent.ACTION_LAUNCH)
-                        .setLaunchLocation(LAUNCH_LOCATON_DIRECT_SHARE)
+                        .setLaunchLocation(LAUNCH_LOCATION_DIRECT_SHARE)
                         .build());
         }
     }
@@ -2129,7 +2187,7 @@ public class ChooserActivity extends ResolverActivity implements
             return null;
         }
 
-        if (getPersonalProfileUserHandle() == userHandle) {
+        if (getPersonalProfileUserHandle().equals(userHandle)) {
             if (mPersonalAppPredictor != null) {
                 return mPersonalAppPredictor;
             }
@@ -2155,7 +2213,7 @@ public class ChooserActivity extends ResolverActivity implements
                         .getSystemService(AppPredictionManager.class);
         AppPredictor appPredictionSession = appPredictionManager.createAppPredictionSession(
                 appPredictionContext);
-        if (getPersonalProfileUserHandle() == userHandle) {
+        if (getPersonalProfileUserHandle().equals(userHandle)) {
             mPersonalAppPredictor = appPredictionSession;
         } else {
             mWorkAppPredictor = appPredictionSession;
@@ -2275,6 +2333,13 @@ public class ChooserActivity extends ResolverActivity implements
             mMetricsLogger = new MetricsLogger();
         }
         return mMetricsLogger;
+    }
+
+    protected ChooserActivityLogger getChooserActivityLogger() {
+        if (mChooserActivityLogger == null) {
+            mChooserActivityLogger = new ChooserActivityLoggerImpl();
+        }
+        return mChooserActivityLogger;
     }
 
     public class ChooserListController extends ResolverListController {
@@ -2405,13 +2470,20 @@ public class ChooserActivity extends ResolverActivity implements
         if (isLayoutUpdated
                 || mLastNumberOfChildren != recyclerView.getChildCount()) {
             mCurrAvailableWidth = availableWidth;
-            if (isLayoutUpdated
-                    && mChooserMultiProfilePagerAdapter.getCurrentUserHandle() != getUser()) {
-                // This fixes b/150936654 - empty work tab in share sheet when swiping
-                mChooserMultiProfilePagerAdapter.getActiveAdapterView()
-                        .setAdapter(mChooserMultiProfilePagerAdapter.getCurrentRootAdapter());
+            if (isLayoutUpdated) {
+                // It is very important we call setAdapter from here. Otherwise in some cases
+                // the resolver list doesn't get populated, such as b/150922090, b/150918223
+                // and b/150936654
+                recyclerView.setAdapter(gridAdapter);
+                ((GridLayoutManager) recyclerView.getLayoutManager()).setSpanCount(
+                        gridAdapter.getMaxTargetsPerRow());
+            }
+
+            if (mChooserMultiProfilePagerAdapter.getCurrentUserHandle() != getUser()) {
                 return;
-            } else if (mChooserMultiProfilePagerAdapter.getCurrentUserHandle() != getUser()) {
+            }
+
+            if (mLastNumberOfChildren == recyclerView.getChildCount()) {
                 return;
             }
 
@@ -2555,7 +2627,7 @@ public class ChooserActivity extends ResolverActivity implements
 
         ChooserListAdapter chooserListAdapter = (ChooserListAdapter) listAdapter;
         if (chooserListAdapter.getUserHandle()
-                == mChooserMultiProfilePagerAdapter.getCurrentUserHandle()) {
+                .equals(mChooserMultiProfilePagerAdapter.getCurrentUserHandle())) {
             mChooserMultiProfilePagerAdapter.getActiveAdapterView()
                     .setAdapter(mChooserMultiProfilePagerAdapter.getCurrentRootAdapter());
             mChooserMultiProfilePagerAdapter
@@ -2581,6 +2653,7 @@ public class ChooserActivity extends ResolverActivity implements
 
         // don't support direct share on low ram devices
         if (ActivityManager.isLowRamDeviceStatic()) {
+            getChooserActivityLogger().logSharesheetAppLoadComplete();
             return;
         }
 
@@ -2599,6 +2672,8 @@ public class ChooserActivity extends ResolverActivity implements
 
             queryTargetServices(chooserListAdapter);
         }
+
+        getChooserActivityLogger().logSharesheetAppLoadComplete();
     }
 
     private void setupScrollListener() {
@@ -2654,7 +2729,7 @@ public class ChooserActivity extends ResolverActivity implements
      */
     private boolean shouldShowStickyContentPreview() {
         return shouldShowStickyContentPreviewNoOrientationCheck()
-                && getResources().getBoolean(R.bool.sharesheet_show_content_preview);
+                && !getResources().getBoolean(R.bool.resolver_landscape_phone);
     }
 
     private boolean shouldShowStickyContentPreviewNoOrientationCheck() {
@@ -3584,6 +3659,10 @@ public class ChooserActivity extends ResolverActivity implements
                     ? mOriginalTarget.getResolveInfo().activityInfo.toString()
                     : "<connection destroyed>") + "}";
         }
+
+        public ComponentName getComponentName() {
+            return mOriginalTarget.getResolveInfo().activityInfo.getComponentName();
+        }
     }
 
     static class ServiceResultInfo {
@@ -3752,5 +3831,10 @@ public class ChooserActivity extends ResolverActivity implements
 
             canvas.drawRoundRect(x, y, width, height, mRadius, mRadius, mRoundRectPaint);
         }
+    }
+
+    @Override
+    protected void maybeLogProfileChange() {
+        getChooserActivityLogger().logShareheetProfileChanged();
     }
 }

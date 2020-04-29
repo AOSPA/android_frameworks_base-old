@@ -50,6 +50,7 @@ import android.os.Binder;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.HandlerThread;
+import android.os.RemoteException;
 import android.os.UserHandle;
 import android.provider.Settings;
 import android.util.Slog;
@@ -69,8 +70,11 @@ import com.android.server.pm.parsing.pkg.ParsedPackage;
 
 import java.io.ByteArrayInputStream;
 import java.io.File;
+import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.cert.CertificateEncodingException;
@@ -85,6 +89,9 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
+import java.util.function.Supplier;
 
 /** Implementation of {@link AppIntegrityManagerService}. */
 public class AppIntegrityManagerServiceImpl extends IAppIntegrityManager.Stub {
@@ -119,6 +126,7 @@ public class AppIntegrityManagerServiceImpl extends IAppIntegrityManager.Stub {
     private final Context mContext;
     private final Handler mHandler;
     private final PackageManagerInternal mPackageManagerInternal;
+    private final Supplier<PackageParser2> mParserSupplier;
     private final RuleEvaluationEngine mEvaluationEngine;
     private final IntegrityFileManager mIntegrityFileManager;
 
@@ -130,6 +138,7 @@ public class AppIntegrityManagerServiceImpl extends IAppIntegrityManager.Stub {
         return new AppIntegrityManagerServiceImpl(
                 context,
                 LocalServices.getService(PackageManagerInternal.class),
+                PackageParser2::forParsingFileWithDefaults,
                 RuleEvaluationEngine.getRuleEvaluationEngine(),
                 IntegrityFileManager.getInstance(),
                 handlerThread.getThreadHandler());
@@ -139,11 +148,13 @@ public class AppIntegrityManagerServiceImpl extends IAppIntegrityManager.Stub {
     AppIntegrityManagerServiceImpl(
             Context context,
             PackageManagerInternal packageManagerInternal,
+            Supplier<PackageParser2> parserSupplier,
             RuleEvaluationEngine evaluationEngine,
             IntegrityFileManager integrityFileManager,
             Handler handler) {
         mContext = context;
         mPackageManagerInternal = packageManagerInternal;
+        mParserSupplier = parserSupplier;
         mEvaluationEngine = evaluationEngine;
         mIntegrityFileManager = integrityFileManager;
         mHandler = handler;
@@ -237,6 +248,11 @@ public class AppIntegrityManagerServiceImpl extends IAppIntegrityManager.Stub {
             Slog.e(TAG, "Error getting current rules", e);
         }
         return new ParceledListSlice<>(rules);
+    }
+
+    @Override
+    public List<String> getWhitelistedRuleProviders() throws RemoteException {
+        return getAllowedRuleProviders();
     }
 
     private void handleIntegrityVerification(Intent intent) {
@@ -467,8 +483,23 @@ public class AppIntegrityManagerServiceImpl extends IAppIntegrityManager.Stub {
         if (installationPath == null) {
             throw new IllegalArgumentException("Installation path is null, package not found");
         }
-        SourceStampVerificationResult sourceStampVerificationResult =
-                SourceStampVerifier.verify(installationPath.getAbsolutePath());
+
+        SourceStampVerificationResult sourceStampVerificationResult;
+        if (installationPath.isDirectory()) {
+            try (Stream<Path> filesList = Files.list(installationPath.toPath())) {
+                List<String> apkFiles =
+                        filesList
+                                .map(path -> path.toAbsolutePath().toString())
+                                .collect(Collectors.toList());
+                sourceStampVerificationResult = SourceStampVerifier.verify(apkFiles);
+            } catch (IOException e) {
+                throw new IllegalArgumentException("Could not read APK directory");
+            }
+        } else {
+            sourceStampVerificationResult =
+                    SourceStampVerifier.verify(installationPath.getAbsolutePath());
+        }
+
         appInstallMetadata.setIsStampPresent(sourceStampVerificationResult.isPresent());
         appInstallMetadata.setIsStampVerified(sourceStampVerificationResult.isVerified());
         // A verified stamp is set to be trusted.
@@ -536,8 +567,7 @@ public class AppIntegrityManagerServiceImpl extends IAppIntegrityManager.Stub {
             throw new IllegalArgumentException("Installation path is null, package not found");
         }
 
-        PackageParser2 parser = new PackageParser2(null, false, null, null, null);
-        try {
+        try (PackageParser2 parser = mParserSupplier.get()) {
             ParsedPackage pkg = parser.parsePackage(installationPath, 0, false);
             int flags = PackageManager.GET_SIGNING_CERTIFICATES | PackageManager.GET_META_DATA;
             pkg.setSigningDetails(ParsingPackageUtils.collectCertificates(pkg, false));

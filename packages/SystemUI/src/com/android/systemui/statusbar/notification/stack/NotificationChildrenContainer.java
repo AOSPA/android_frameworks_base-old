@@ -22,6 +22,7 @@ import android.content.res.Configuration;
 import android.content.res.Resources;
 import android.graphics.drawable.ColorDrawable;
 import android.service.notification.StatusBarNotification;
+import android.util.ArraySet;
 import android.util.AttributeSet;
 import android.view.LayoutInflater;
 import android.view.NotificationHeaderView;
@@ -412,7 +413,7 @@ public class NotificationChildrenContainer extends ViewGroup {
      * @param callback
      * @return whether the list order has changed
      */
-    public boolean applyChildOrder(List<ExpandableNotificationRow> childOrder,
+    public boolean applyChildOrder(List<? extends NotificationListItem> childOrder,
             VisualStabilityManager visualStabilityManager,
             VisualStabilityManager.Callback callback) {
         if (childOrder == null) {
@@ -421,7 +422,7 @@ public class NotificationChildrenContainer extends ViewGroup {
         boolean result = false;
         for (int i = 0; i < mChildren.size() && i < childOrder.size(); i++) {
             ExpandableNotificationRow child = mChildren.get(i);
-            ExpandableNotificationRow desiredChild = childOrder.get(i);
+            ExpandableNotificationRow desiredChild = (ExpandableNotificationRow) childOrder.get(i);
             if (child != desiredChild) {
                 if (visualStabilityManager.canReorderNotification(desiredChild)) {
                     mChildren.remove(desiredChild);
@@ -1187,18 +1188,18 @@ public class NotificationChildrenContainer extends ViewGroup {
         return 0;
     }
 
-    public void setIconsVisible(boolean iconsVisible) {
+    public void setShelfIconVisible(boolean iconVisible) {
         if (mNotificationHeaderWrapper != null) {
             NotificationHeaderView header = mNotificationHeaderWrapper.getNotificationHeader();
             if (header != null) {
-                header.getIcon().setForceHidden(!iconsVisible);
+                header.getIcon().setForceHidden(iconVisible);
             }
         }
         if (mNotificationHeaderWrapperLowPriority != null) {
             NotificationHeaderView header
                     = mNotificationHeaderWrapperLowPriority.getNotificationHeader();
             if (header != null) {
-                header.getIcon().setForceHidden(!iconsVisible);
+                header.getIcon().setForceHidden(iconVisible);
             }
         }
     }
@@ -1264,5 +1265,28 @@ public class NotificationChildrenContainer extends ViewGroup {
     public void setHeaderVisibleAmount(float headerVisibleAmount) {
         mHeaderVisibleAmount = headerVisibleAmount;
         mCurrentHeaderTranslation = (int) ((1.0f - headerVisibleAmount) * mTranslationForHeader);
+    }
+
+    /**
+     * Show a set of app opp icons in the layout.
+     *
+     * @param appOps which app ops to show
+     */
+    public void showAppOpsIcons(ArraySet<Integer> appOps) {
+        if (mNotificationHeaderWrapper != null) {
+            mNotificationHeaderWrapper.showAppOpsIcons(appOps);
+        }
+        if (mNotificationHeaderWrapperLowPriority != null) {
+            mNotificationHeaderWrapperLowPriority.showAppOpsIcons(appOps);
+        }
+    }
+
+    public void setRecentlyAudiblyAlerted(boolean audiblyAlertedRecently) {
+        if (mNotificationHeaderWrapper != null) {
+            mNotificationHeaderWrapper.setRecentlyAudiblyAlerted(audiblyAlertedRecently);
+        }
+        if (mNotificationHeaderWrapperLowPriority != null) {
+            mNotificationHeaderWrapperLowPriority.setRecentlyAudiblyAlerted(audiblyAlertedRecently);
+        }
     }
 }

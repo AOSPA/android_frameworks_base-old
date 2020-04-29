@@ -1446,7 +1446,7 @@ public class WifiManager {
         try {
             ParceledListSlice<WifiConfiguration> parceledList =
                     mService.getConfiguredNetworks(mContext.getOpPackageName(),
-                            mContext.getFeatureId());
+                            mContext.getAttributionTag());
             if (parceledList == null) {
                 return Collections.emptyList();
             }
@@ -1463,7 +1463,7 @@ public class WifiManager {
         try {
             ParceledListSlice<WifiConfiguration> parceledList =
                     mService.getPrivilegedConfiguredNetworks(mContext.getOpPackageName(),
-                            mContext.getFeatureId());
+                            mContext.getAttributionTag());
             if (parceledList == null) {
                 return Collections.emptyList();
             }
@@ -2044,19 +2044,27 @@ public class WifiManager {
      * <li> If user reset network settings, all added suggestions will be discarded. Apps can use
      * {@link #getNetworkSuggestions()} to check if their suggestions are in the device.</li>
      * <li> In-place modification of existing suggestions are allowed.
-     * If the provided suggestions {@link WifiNetworkSuggestion#equals(Object)} any previously
-     * provided suggestions by the app. Previous suggestions will be updated</li>
+     * <li>If the provided suggestions includes any previously provided suggestions by the app,
+     * previous suggestions will be updated.</li>
+     * <li>If one of the provided suggestions marks a previously unmetered suggestion as metered and
+     * the device is currently connected to that suggested network, then the device will disconnect
+     * from that network. The system will immediately re-evaluate all the network candidates
+     * and possibly reconnect back to the same suggestion. This disconnect is to make sure that any
+     * traffic flowing over unmetered networks isn't accidentally continued over a metered network.
+     * </li>
+     * </li>
      *
      * @param networkSuggestions List of network suggestions provided by the app.
      * @return Status code for the operation. One of the STATUS_NETWORK_SUGGESTIONS_ values.
      * @throws {@link SecurityException} if the caller is missing required permissions.
+     * @see WifiNetworkSuggestion#equals(Object)
      */
     @RequiresPermission(android.Manifest.permission.CHANGE_WIFI_STATE)
     public @NetworkSuggestionsStatusCode int addNetworkSuggestions(
             @NonNull List<WifiNetworkSuggestion> networkSuggestions) {
         try {
             return mService.addNetworkSuggestions(
-                    networkSuggestions, mContext.getOpPackageName(), mContext.getFeatureId());
+                    networkSuggestions, mContext.getOpPackageName(), mContext.getAttributionTag());
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -2838,8 +2846,8 @@ public class WifiManager {
     public boolean startScan(WorkSource workSource) {
         try {
             String packageName = mContext.getOpPackageName();
-            String featureId = mContext.getFeatureId();
-            return mService.startScan(packageName, featureId);
+            String attributionTag = mContext.getAttributionTag();
+            return mService.startScan(packageName, attributionTag);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -2871,7 +2879,7 @@ public class WifiManager {
     public WifiInfo getConnectionInfo() {
         try {
             return mService.getConnectionInfo(mContext.getOpPackageName(),
-                    mContext.getFeatureId());
+                    mContext.getAttributionTag());
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -2886,7 +2894,7 @@ public class WifiManager {
     public List<ScanResult> getScanResults() {
         try {
             return mService.getScanResults(mContext.getOpPackageName(),
-                    mContext.getFeatureId());
+                    mContext.getAttributionTag());
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -2917,7 +2925,7 @@ public class WifiManager {
         try {
             return mService.getMatchingScanResults(
                     networkSuggestionsToMatch, scanResults,
-                    mContext.getOpPackageName(), mContext.getFeatureId());
+                    mContext.getOpPackageName(), mContext.getAttributionTag());
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -3063,28 +3071,6 @@ public class WifiManager {
      */
     public boolean isWifiEnabled() {
         return getWifiState() == WIFI_STATE_ENABLED;
-    }
-
-    /**
-     * Return TX packet counter, for CTS test of WiFi watchdog.
-     * @param listener is the interface to receive result
-     *
-     * @hide for CTS test only
-     */
-    // TODO(b/144036594): add @TestApi
-    public void getTxPacketCount(@NonNull TxPacketCountListener listener) {
-        if (listener == null) throw new IllegalArgumentException("listener cannot be null");
-        Binder binder = new Binder();
-        TxPacketCountListenerProxy listenerProxy =
-                new TxPacketCountListenerProxy(mLooper, listener);
-        try {
-            mService.getTxPacketCount(mContext.getOpPackageName(), binder, listenerProxy,
-                    listener.hashCode());
-        } catch (RemoteException e) {
-            listenerProxy.onFailure(ERROR);
-        } catch (SecurityException e) {
-            listenerProxy.onFailure(NOT_AUTHORIZED);
-        }
     }
 
     /**
@@ -3356,7 +3342,7 @@ public class WifiManager {
                     new LocalOnlyHotspotCallbackProxy(this, executor, callback);
             try {
                 String packageName = mContext.getOpPackageName();
-                String featureId = mContext.getFeatureId();
+                String featureId = mContext.getAttributionTag();
                 int returnCode = mService.startLocalOnlyHotspot(proxy, packageName, featureId,
                         config);
                 if (returnCode != LocalOnlyHotspotCallback.REQUEST_REGISTERED) {
@@ -3739,56 +3725,6 @@ public class WifiManager {
         public abstract void onFailed(int reason);
     }
 
-    /** Interface for callback invocation on a TX packet count poll action {@hide} */
-    public interface TxPacketCountListener {
-        /**
-         * The operation succeeded
-         * @param count TX packet counter
-         */
-        public void onSuccess(int count);
-        /**
-         * The operation failed
-         * @param reason The reason for failure could be one of
-         * {@link #ERROR}, {@link #IN_PROGRESS} or {@link #BUSY}
-         */
-        public void onFailure(int reason);
-    }
-
-    /**
-     * Callback proxy for TxPacketCountListener objects.
-     *
-     * @hide
-     */
-    private class TxPacketCountListenerProxy extends ITxPacketCountListener.Stub {
-        private final Handler mHandler;
-        private final TxPacketCountListener mCallback;
-
-        TxPacketCountListenerProxy(Looper looper, TxPacketCountListener callback) {
-            mHandler = new Handler(looper);
-            mCallback = callback;
-        }
-
-        @Override
-        public void onSuccess(int count) {
-            if (mVerboseLoggingEnabled) {
-                Log.v(TAG, "TxPacketCounterProxy: onSuccess: count=" + count);
-            }
-            mHandler.post(() -> {
-                mCallback.onSuccess(count);
-            });
-        }
-
-        @Override
-        public void onFailure(int reason) {
-            if (mVerboseLoggingEnabled) {
-                Log.v(TAG, "TxPacketCounterProxy: onFailure: reason=" + reason);
-            }
-            mHandler.post(() -> {
-                mCallback.onFailure(reason);
-            });
-        }
-    }
-
     /**
      * Base class for soft AP callback. Should be extended by applications and set when calling
      * {@link WifiManager#registerSoftApCallback(Executor, SoftApCallback)}.
@@ -3858,7 +3794,8 @@ public class WifiManager {
          * @param Macaddr Mac Address of connected Stations to soft AP
          * @param numClients number of connected clients
          */
-        public abstract void onStaConnected(@NonNull String Macaddr, int numClients);
+        default void onStaConnected(@NonNull String Macaddr, int numClients) {
+        }
 
         /**
          * Called when Stations disconnected to soft AP.
@@ -3866,7 +3803,8 @@ public class WifiManager {
          * @param Macaddr Mac Address of Disconnected Stations to soft AP
          * @param numClients number of connected clients
          */
-        public abstract void onStaDisconnected(@NonNull String Macaddr, int numClients);
+        default void onStaDisconnected(@NonNull String Macaddr, int numClients) {
+        }
     }
 
     /**
@@ -4415,6 +4353,10 @@ public class WifiManager {
      *
      * This function is used instead of a enableNetwork() and reconnect()
      *
+     * <li> This API will cause reconnect if the credentials of the current active
+     * connection has been changed.</li>
+     * <li> This API will cause reconnect if the current active connection is marked metered.</li>
+     *
      * @param networkId the ID of the network as returned by {@link #addNetwork} or {@link
      *        getConfiguredNetworks}.
      * @param listener for callbacks on success or failure. Can be null.
@@ -4443,8 +4385,9 @@ public class WifiManager {
      *
      * For an existing network, it accomplishes the task of updateNetwork()
      *
-     * This API will cause reconnect if the crecdentials of the current active
-     * connection has been changed.
+     * <li> This API will cause reconnect if the credentials of the current active
+     * connection has been changed.</li>
+     * <li> This API will cause disconnect if the current active connection is marked metered.</li>
      *
      * @param config the set of variables that describe the configuration,
      *            contained in a {@link WifiConfiguration} object.
@@ -6268,7 +6211,7 @@ public class WifiManager {
         try {
             mService.registerSuggestionConnectionStatusListener(new Binder(),
                     new SuggestionConnectionStatusListenerProxy(executor, listener),
-                    listener.hashCode(), mContext.getOpPackageName(), mContext.getFeatureId());
+                    listener.hashCode(), mContext.getOpPackageName(), mContext.getAttributionTag());
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }

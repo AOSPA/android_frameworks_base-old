@@ -62,8 +62,7 @@ using ::android::hardware::tv::tuner::V1_0::PlaybackStatus;
 using ::android::hardware::tv::tuner::V1_0::RecordStatus;
 using ::android::hardware::tv::tuner::V1_0::Result;
 
-using FilterMQ = MessageQueue<uint8_t, kSynchronizedReadWrite>;
-using DvrMQ = MessageQueue<uint8_t, kSynchronizedReadWrite>;
+using MQ = MessageQueue<uint8_t, kSynchronizedReadWrite>;
 
 namespace android {
 
@@ -71,7 +70,7 @@ struct LnbCallback : public ILnbCallback {
     LnbCallback(jweak tunerObj, LnbId id);
     virtual Return<void> onEvent(LnbEventType lnbEventType);
     virtual Return<void> onDiseqcMessage(const hidl_vec<uint8_t>& diseqcMessage);
-    jweak mObject;
+    jweak mLnb;
     LnbId mId;
 };
 
@@ -84,6 +83,7 @@ struct Lnb : public RefBase {
 };
 
 struct DvrCallback : public IDvrCallback {
+    ~DvrCallback();
     virtual Return<void> onRecordStatus(RecordStatus status);
     virtual Return<void> onPlaybackStatus(PlaybackStatus status);
 
@@ -95,18 +95,19 @@ private:
 struct Dvr : public RefBase {
     Dvr(sp<IDvr> sp, jweak obj);
     ~Dvr();
-    int close();
-    DvrMQ& getDvrMQ();
+    jint close();
+    MQ& getDvrMQ();
     sp<IDvr> getIDvr();
     sp<IDvr> mDvrSp;
     jweak mDvrObj;
-    std::unique_ptr<DvrMQ> mDvrMQ;
+    std::unique_ptr<MQ> mDvrMQ;
     EventFlag* mDvrMQEventFlag;
     std::string mFilePath;
     int mFd;
 };
 
 struct FilterCallback : public IFilterCallback {
+    ~FilterCallback();
     virtual Return<void> onFilterEvent(const DemuxFilterEvent& filterEvent);
     virtual Return<void> onFilterStatus(const DemuxFilterStatus status);
 
@@ -149,7 +150,7 @@ struct Filter : public RefBase {
     int close();
     sp<IFilter> getIFilter();
     sp<IFilter> mFilterSp;
-    std::unique_ptr<FilterMQ> mFilterMQ;
+    std::unique_ptr<MQ> mFilterMQ;
     EventFlag* mFilterMQEventFlag;
     jweak mFilterObj;
 };
@@ -178,13 +179,15 @@ struct JTuner : public RefBase {
     int stopScan();
     int setLnb(int id);
     int setLna(bool enable);
-    jobject getLnbIds();
+    jintArray getLnbIds();
     jobject openLnbById(int id);
     jobject openLnbByName(jstring name);
     jobject openFilter(DemuxFilterType type, int bufferSize);
     jobject openTimeFilter();
     jobject openDescrambler();
     jobject openDvr(DvrType type, jlong bufferSize);
+    jobject getDemuxCaps();
+    jobject getFrontendStatus(jintArray types);
 
 protected:
     Result openDemux();
@@ -196,6 +199,7 @@ private:
     static sp<ITuner> mTuner;
     hidl_vec<FrontendId> mFeIds;
     sp<IFrontend> mFe;
+    int mFeId;
     hidl_vec<LnbId> mLnbIds;
     sp<ILnb> mLnb;
     sp<IDemux> mDemux;

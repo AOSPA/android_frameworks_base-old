@@ -63,6 +63,7 @@ import com.android.server.LocalServices;
 import com.android.server.PackageWatchdog;
 import com.android.server.SystemConfig;
 import com.android.server.Watchdog;
+import com.android.server.pm.ApexManager;
 import com.android.server.pm.Installer;
 
 import java.io.File;
@@ -136,6 +137,7 @@ class RollbackManagerServiceImpl extends IRollbackManager.Stub {
     private final Installer mInstaller;
     private final RollbackPackageHealthObserver mPackageHealthObserver;
     private final AppDataRollbackHelper mAppDataRollbackHelper;
+    private final Runnable mRunExpiration = this::runExpiration;
 
     // The # of milli-seconds to sleep for each received ACTION_PACKAGE_ENABLE_ROLLBACK.
     // Used by #blockRollbackManager to test timeout in enabling rollbacks.
@@ -485,12 +487,28 @@ class RollbackManagerServiceImpl extends IRollbackManager.Stub {
             }
 
             latch.countDown();
+
+            destroyCeSnapshotsForExpiredRollbacks(userId);
         });
 
         try {
             latch.await();
         } catch (InterruptedException ie) {
             throw new IllegalStateException("RollbackManagerHandlerThread interrupted");
+        }
+    }
+
+    @WorkerThread
+    private void destroyCeSnapshotsForExpiredRollbacks(int userId) {
+        int[] rollbackIds = new int[mRollbacks.size()];
+        for (int i = 0; i < rollbackIds.length; i++) {
+            rollbackIds[i] = mRollbacks.get(i).info.getRollbackId();
+        }
+        ApexManager.getInstance().destroyCeSnapshotsNotSpecified(userId, rollbackIds);
+        try {
+            mInstaller.destroyCeSnapshotsNotSpecified(userId, rollbackIds);
+        } catch (Installer.InstallerException ie) {
+            Slog.e(TAG, "Failed to delete snapshots for user: " + userId, ie);
         }
     }
 
@@ -503,6 +521,8 @@ class RollbackManagerServiceImpl extends IRollbackManager.Stub {
         if (mRollbackLifetimeDurationInMillis < 0) {
             mRollbackLifetimeDurationInMillis = DEFAULT_ROLLBACK_LIFETIME_DURATION_MILLIS;
         }
+        Slog.d(TAG, "mRollbackLifetimeDurationInMillis=" + mRollbackLifetimeDurationInMillis);
+        runExpiration();
     }
 
     @AnyThread
@@ -631,6 +651,8 @@ class RollbackManagerServiceImpl extends IRollbackManager.Stub {
     // Schedules future expiration as appropriate.
     @WorkerThread
     private void runExpiration() {
+        getHandler().removeCallbacks(mRunExpiration);
+
         Instant now = Instant.now();
         Instant oldest = null;
         synchronized (mLock) {
@@ -644,9 +666,7 @@ class RollbackManagerServiceImpl extends IRollbackManager.Stub {
                 if (!now.isBefore(
                         rollbackTimestamp
                                 .plusMillis(mRollbackLifetimeDurationInMillis))) {
-                    if (LOCAL_LOGV) {
-                        Slog.v(TAG, "runExpiration id=" + rollback.info.getRollbackId());
-                    }
+                    Slog.i(TAG, "runExpiration id=" + rollback.info.getRollbackId());
                     iter.remove();
                     rollback.delete(mAppDataRollbackHelper);
                 } else if (oldest == null || oldest.isAfter(rollbackTimestamp)) {
@@ -656,18 +676,10 @@ class RollbackManagerServiceImpl extends IRollbackManager.Stub {
         }
 
         if (oldest != null) {
-            scheduleExpiration(now.until(oldest.plusMillis(mRollbackLifetimeDurationInMillis),
-                        ChronoUnit.MILLIS));
+            long delay = now.until(
+                    oldest.plusMillis(mRollbackLifetimeDurationInMillis), ChronoUnit.MILLIS);
+            getHandler().postDelayed(mRunExpiration, delay);
         }
-    }
-
-    /**
-     * Schedules an expiration check to be run after the given duration in
-     * milliseconds has gone by.
-     */
-    @AnyThread
-    private void scheduleExpiration(long duration) {
-        getHandler().postDelayed(() -> runExpiration(), duration);
     }
 
     @AnyThread
@@ -1158,9 +1170,7 @@ class RollbackManagerServiceImpl extends IRollbackManager.Stub {
     @WorkerThread
     @GuardedBy("rollback.getLock")
     private void makeRollbackAvailable(Rollback rollback) {
-        if (LOCAL_LOGV) {
-            Slog.v(TAG, "makeRollbackAvailable id=" + rollback.info.getRollbackId());
-        }
+        Slog.i(TAG, "makeRollbackAvailable id=" + rollback.info.getRollbackId());
         rollback.makeAvailable();
 
         // TODO(zezeozue): Provide API to explicitly start observing instead
@@ -1170,7 +1180,7 @@ class RollbackManagerServiceImpl extends IRollbackManager.Stub {
         // prepare to rollback if packages crashes too frequently.
         mPackageHealthObserver.startObservingHealth(rollback.getPackageNames(),
                 mRollbackLifetimeDurationInMillis);
-        scheduleExpiration(mRollbackLifetimeDurationInMillis);
+        runExpiration();
     }
 
     /*

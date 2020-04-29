@@ -31,7 +31,6 @@ import static android.view.WindowManager.LayoutParams.TYPE_BOOT_PROGRESS;
 import static android.view.WindowManager.LayoutParams.TYPE_DISPLAY_OVERLAY;
 import static android.view.WindowManager.LayoutParams.TYPE_DOCK_DIVIDER;
 import static android.view.WindowManager.LayoutParams.TYPE_DRAG;
-import static android.view.WindowManager.LayoutParams.TYPE_DREAM;
 import static android.view.WindowManager.LayoutParams.TYPE_INPUT_CONSUMER;
 import static android.view.WindowManager.LayoutParams.TYPE_INPUT_METHOD;
 import static android.view.WindowManager.LayoutParams.TYPE_INPUT_METHOD_DIALOG;
@@ -543,12 +542,6 @@ public interface WindowManagerPolicy extends WindowManagerPolicyConstants {
         void unregisterPointerEventListener(PointerEventListener listener, int displayId);
 
         /**
-         * Retrieves the {@param outBounds} from the stack matching the {@param windowingMode} and
-         * {@param activityType}.
-         */
-        void getStackBounds(int windowingMode, int activityType, Rect outBounds);
-
-        /**
          * @return The currently active input method window.
          */
         WindowState getInputMethodWindowLw();
@@ -806,9 +799,6 @@ public interface WindowManagerPolicy extends WindowManagerPolicyConstants {
                 return  canAddInternalSystemWindow ? 13 : 10;
             case TYPE_APPLICATION_OVERLAY:
                 return  12;
-            case TYPE_DREAM:
-                // used for Dreams (screensavers with TYPE_DREAM windows)
-                return  14;
             case TYPE_INPUT_METHOD:
                 // on-screen keyboards and other such input method user interfaces go here.
                 return  15;

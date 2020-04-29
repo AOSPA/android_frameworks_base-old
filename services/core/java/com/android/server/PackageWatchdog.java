@@ -161,6 +161,9 @@ public class PackageWatchdog {
     private final Runnable mSaveToFile = this::saveToFile;
     private final SystemClock mSystemClock;
     private final BootThreshold mBootThreshold;
+    // The set of packages that have been synced with the ExplicitHealthCheckController
+    @GuardedBy("mLock")
+    private Set<String> mRequestedHealthCheckPackages = new ArraySet<>();
     @GuardedBy("mLock")
     private boolean mIsPackagesReady;
     // Flag to control whether explicit health checks are supported or not
@@ -174,6 +177,9 @@ public class PackageWatchdog {
     // 0 if no prune is scheduled.
     @GuardedBy("mLock")
     private long mUptimeAtLastStateSync;
+    // If true, sync explicit health check packages with the ExplicitHealthCheckController.
+    @GuardedBy("mLock")
+    private boolean mSyncRequired = false;
 
     @FunctionalInterface
     @VisibleForTesting
@@ -249,6 +255,7 @@ public class PackageWatchdog {
      */
     public void registerHealthObserver(PackageHealthObserver observer) {
         synchronized (mLock) {
+            mSyncRequired = true;
             ObserverInternal internalObserver = mAllObservers.get(observer.getName());
             if (internalObserver != null) {
                 internalObserver.registeredObserver = observer;
@@ -308,28 +315,31 @@ public class PackageWatchdog {
         // causing any elapsed time to be deducted from all existing packages before we add new
         // packages. This maintains the invariant that the elapsed time for ALL (new and existing)
         // packages is the same.
-        syncState("observing new packages");
+        mLongTaskHandler.post(() -> {
+            syncState("observing new packages");
 
-        synchronized (mLock) {
-            ObserverInternal oldObserver = mAllObservers.get(observer.getName());
-            if (oldObserver == null) {
-                Slog.d(TAG, observer.getName() + " started monitoring health "
-                        + "of packages " + packageNames);
-                mAllObservers.put(observer.getName(),
-                        new ObserverInternal(observer.getName(), packages));
-            } else {
-                Slog.d(TAG, observer.getName() + " added the following "
-                        + "packages to monitor " + packageNames);
-                oldObserver.updatePackagesLocked(packages);
+            synchronized (mLock) {
+                ObserverInternal oldObserver = mAllObservers.get(observer.getName());
+                if (oldObserver == null) {
+                    Slog.d(TAG, observer.getName() + " started monitoring health "
+                            + "of packages " + packageNames);
+                    mAllObservers.put(observer.getName(),
+                            new ObserverInternal(observer.getName(), packages));
+                } else {
+                    Slog.d(TAG, observer.getName() + " added the following "
+                            + "packages to monitor " + packageNames);
+                    oldObserver.updatePackagesLocked(packages);
+                }
             }
-        }
 
-        // Register observer in case not already registered
-        registerHealthObserver(observer);
+            // Register observer in case not already registered
+            registerHealthObserver(observer);
 
-        // Sync after we add the new packages to the observers. We may have received packges
-        // requiring an earlier schedule than we are currently scheduled for.
-        syncState("updated observers");
+            // Sync after we add the new packages to the observers. We may have received packges
+            // requiring an earlier schedule than we are currently scheduled for.
+            syncState("updated observers");
+        });
+
     }
 
     /**
@@ -354,6 +364,10 @@ public class PackageWatchdog {
      */
     public void onPackageFailure(List<VersionedPackage> packages,
             @FailureReasons int failureReason) {
+        if (packages == null) {
+            Slog.w(TAG, "Could not resolve a list of failing packages");
+            return;
+        }
         mLongTaskHandler.post(() -> {
             synchronized (mLock) {
                 if (mAllObservers.isEmpty()) {
@@ -624,17 +638,23 @@ public class PackageWatchdog {
      * @see #syncRequestsAsync
      */
     private void syncRequests() {
-        Set<String> packages = null;
+        boolean syncRequired = false;
         synchronized (mLock) {
             if (mIsPackagesReady) {
-                packages = getPackagesPendingHealthChecksLocked();
+                Set<String> packages = getPackagesPendingHealthChecksLocked();
+                if (!packages.equals(mRequestedHealthCheckPackages) || mSyncRequired) {
+                    syncRequired = true;
+                    mRequestedHealthCheckPackages = packages;
+                }
             } // else, we will sync requests when packages become ready
         }
 
         // Call outside lock to avoid holding lock when calling into the controller.
-        if (packages != null) {
-            Slog.i(TAG, "Syncing health check requests for packages: " + packages);
-            mHealthCheckController.syncRequests(packages);
+        if (syncRequired) {
+            Slog.i(TAG, "Syncing health check requests for packages: "
+                    + mRequestedHealthCheckPackages);
+            mHealthCheckController.syncRequests(mRequestedHealthCheckPackages);
+            mSyncRequired = false;
         }
     }
 
@@ -1045,7 +1065,12 @@ public class PackageWatchdog {
         public void updatePackagesLocked(List<MonitoredPackage> packages) {
             for (int pIndex = 0; pIndex < packages.size(); pIndex++) {
                 MonitoredPackage p = packages.get(pIndex);
-                this.packages.put(p.getName(), p);
+                MonitoredPackage existingPackage = this.packages.get(p.getName());
+                if (existingPackage != null) {
+                    existingPackage.updateHealthCheckDuration(p.mDurationMs);
+                } else {
+                    this.packages.put(p.getName(), p);
+                }
             }
         }
 
@@ -1312,6 +1337,12 @@ public class PackageWatchdog {
                 mHealthCheckDurationMs -= elapsedMs;
             }
             return updateHealthCheckStateLocked();
+        }
+
+        /** Explicitly update the monitoring duration of the package. */
+        @GuardedBy("mLock")
+        public void updateHealthCheckDuration(long newDurationMs) {
+            mDurationMs = newDurationMs;
         }
 
         /**

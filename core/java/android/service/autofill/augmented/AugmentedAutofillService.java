@@ -40,7 +40,6 @@ import android.os.RemoteException;
 import android.os.SystemClock;
 import android.service.autofill.Dataset;
 import android.service.autofill.FillEventHistory;
-import android.service.autofill.InlineAction;
 import android.service.autofill.augmented.PresentationParams.SystemPopupPresentationParams;
 import android.util.Log;
 import android.util.Pair;
@@ -488,7 +487,8 @@ public abstract class AugmentedAutofillService extends Service {
                 ids.add(pair.first);
                 values.add(pair.second);
             }
-            mClient.autofill(mSessionId, ids, values);
+            final boolean hideHighlight = size == 1 && ids.get(0).equals(mFocusedId);
+            mClient.autofill(mSessionId, ids, values, hideHighlight);
         }
 
         public void setFillWindow(@NonNull FillWindow fillWindow) {
@@ -558,10 +558,9 @@ public abstract class AugmentedAutofillService extends Service {
             }
         }
 
-        void reportResult(@Nullable List<Dataset> inlineSuggestionsData,
-                @Nullable List<InlineAction> inlineActions) {
+        void reportResult(@Nullable List<Dataset> inlineSuggestionsData) {
             try {
-                mCallback.onSuccess(inlineSuggestionsData, inlineActions);
+                mCallback.onSuccess(inlineSuggestionsData);
             } catch (RemoteException e) {
                 Log.e(TAG, "Error calling back with the inline suggestions data: " + e);
             }

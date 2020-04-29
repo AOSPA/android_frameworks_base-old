@@ -382,11 +382,11 @@ public class WifiNetworkSpecifierTest {
     /**
      * Validate NetworkSpecifier matching.
      * a) Create a network specifier for WPA_PSK network
-     * b) Ensure that the specifier matches {@code null} and {@link MatchAllNetworkSpecifier}
+     * b) Ensure that the specifier does not match {@code null} and {@link MatchAllNetworkSpecifier}
      * specifiers.
      */
     @Test
-    public void testWifiNetworkSpecifierSatisfiesNullAndAllMatch() {
+    public void testWifiNetworkSpecifierDoesNotSatisfyNullAndAllMatch() {
         WifiConfiguration wifiConfiguration = new WifiConfiguration();
         wifiConfiguration.allowedKeyManagement.set(WifiConfiguration.KeyMgmt.WPA_PSK);
         wifiConfiguration.preSharedKey = TEST_PRESHARED_KEY;
@@ -396,8 +396,8 @@ public class WifiNetworkSpecifierTest {
                                 MacAddress.fromString(TEST_BSSID_OUI_MASK)),
                         wifiConfiguration);
 
-        assertTrue(specifier.satisfiedBy(null));
-        assertTrue(specifier.satisfiedBy(new MatchAllNetworkSpecifier()));
+        assertFalse(specifier.canBeSatisfiedBy(null));
+        assertFalse(specifier.canBeSatisfiedBy(new MatchAllNetworkSpecifier()));
     }
 
     /**
@@ -424,7 +424,7 @@ public class WifiNetworkSpecifierTest {
                                 MacAddress.fromString(TEST_BSSID_OUI_MASK)),
                         wifiConfiguration);
 
-        assertTrue(specifier2.satisfiedBy(specifier1));
+        assertTrue(specifier2.canBeSatisfiedBy(specifier1));
     }
 
     /**
@@ -453,7 +453,7 @@ public class WifiNetworkSpecifierTest {
                                 MacAddress.fromString(TEST_BSSID_OUI_MASK)),
                         wifiConfiguration2);
 
-        assertFalse(specifier2.satisfiedBy(specifier1));
+        assertFalse(specifier2.canBeSatisfiedBy(specifier1));
     }
 
     /**
@@ -480,7 +480,7 @@ public class WifiNetworkSpecifierTest {
                                 MacAddress.fromString(TEST_BSSID_OUI_MASK)),
                         wifiConfiguration);
 
-        assertFalse(specifier2.satisfiedBy(specifier1));
+        assertFalse(specifier2.canBeSatisfiedBy(specifier1));
     }
 
     /**
@@ -507,6 +507,6 @@ public class WifiNetworkSpecifierTest {
                                 WifiManager.ALL_ZEROS_MAC_ADDRESS),
                         wifiConfiguration);
 
-        assertFalse(specifier2.satisfiedBy(specifier1));
+        assertFalse(specifier2.canBeSatisfiedBy(specifier1));
     }
 }

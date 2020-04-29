@@ -182,6 +182,8 @@ public class UserManagerService extends IUserManager.Stub {
     private static final String TAG_USER = "user";
     private static final String TAG_RESTRICTIONS = "restrictions";
     private static final String TAG_DEVICE_POLICY_RESTRICTIONS = "device_policy_restrictions";
+    private static final String TAG_DEVICE_POLICY_LOCAL_RESTRICTIONS =
+            "device_policy_local_restrictions";
     private static final String TAG_DEVICE_POLICY_GLOBAL_RESTRICTIONS =
             "device_policy_global_restrictions";
     /** Legacy name for device owner id tag. */
@@ -329,7 +331,7 @@ public class UserManagerService extends IUserManager.Stub {
      * {@link #updateUserRestrictionsInternalLR}.
      */
     @GuardedBy("mRestrictionsLock")
-    private final SparseArray<Bundle> mBaseUserRestrictions = new SparseArray<>();
+    private final RestrictionsSet mBaseUserRestrictions = new RestrictionsSet();
 
     /**
      * Cached user restrictions that are in effect -- i.e. {@link #mBaseUserRestrictions} combined
@@ -344,7 +346,7 @@ public class UserManagerService extends IUserManager.Stub {
      * {@link #updateUserRestrictionsInternalLR}.
      */
     @GuardedBy("mRestrictionsLock")
-    private final SparseArray<Bundle> mCachedEffectiveUserRestrictions = new SparseArray<>();
+    private final RestrictionsSet mCachedEffectiveUserRestrictions = new RestrictionsSet();
 
     /**
      * User restrictions that have already been applied in
@@ -353,7 +355,7 @@ public class UserManagerService extends IUserManager.Stub {
      * {@link #updateUserRestrictionsInternalLR(Bundle, int)} call.
      */
     @GuardedBy("mRestrictionsLock")
-    private final SparseArray<Bundle> mAppliedUserRestrictions = new SparseArray<>();
+    private final RestrictionsSet mAppliedUserRestrictions = new RestrictionsSet();
 
     /**
      * User restrictions set by {@link com.android.server.devicepolicy.DevicePolicyManagerService}
@@ -362,7 +364,7 @@ public class UserManagerService extends IUserManager.Stub {
      * The key is the user id of the user whom the restriction originated from.
      */
     @GuardedBy("mRestrictionsLock")
-    private final SparseArray<Bundle> mDevicePolicyGlobalUserRestrictions = new SparseArray<>();
+    private final RestrictionsSet mDevicePolicyGlobalUserRestrictions = new RestrictionsSet();
 
     /**
      * Id of the user that set global restrictions.
@@ -372,11 +374,15 @@ public class UserManagerService extends IUserManager.Stub {
 
     /**
      * User restrictions set by {@link com.android.server.devicepolicy.DevicePolicyManagerService}
-     * for each user. Only non-empty restriction bundles are stored.
-     * The key is the user id of the user whom the restriction originated from.
+     * for each user.
+     * The key is the user id of the user whom the restrictions are targeting.
+     * The key inside the restrictionsSet is the user id of the user whom the restriction
+     * originated from.
+     * targetUserId -> originatingUserId -> restrictionBundle
      */
     @GuardedBy("mRestrictionsLock")
-    private final SparseArray<Bundle> mDevicePolicyLocalUserRestrictions = new SparseArray<>();
+    private final SparseArray<RestrictionsSet> mDevicePolicyLocalUserRestrictions =
+            new SparseArray<>();
 
     @GuardedBy("mGuestRestrictions")
     private final Bundle mGuestRestrictions = new Bundle();
@@ -455,11 +461,13 @@ public class UserManagerService extends IUserManager.Stub {
 
         @Override
         public void onFinished(int id, Bundle extras) {
-            try {
-                mContext.startIntentSender(mTarget, null, 0, 0, 0);
-            } catch (IntentSender.SendIntentException e) {
-                Slog.e(LOG_TAG, "Failed to start the target in the callback", e);
-            }
+            mHandler.post(() -> {
+                try {
+                    mContext.startIntentSender(mTarget, null, 0, 0, 0);
+                } catch (IntentSender.SendIntentException e) {
+                    Slog.e(LOG_TAG, "Failed to start the target in the callback", e);
+                }
+            });
         }
     }
 
@@ -1300,14 +1308,15 @@ public class UserManagerService extends IUserManager.Stub {
 
     @Override
     public boolean hasBadge(@UserIdInt int userId) {
-        checkManageOrInteractPermIfCallerInOtherProfileGroup(userId, "hasBadge");
+        checkManageOrInteractPermissionIfCallerInOtherProfileGroup(userId, "hasBadge");
         final UserTypeDetails userTypeDetails = getUserTypeDetailsNoChecks(userId);
         return userTypeDetails != null && userTypeDetails.hasBadge();
     }
 
     @Override
     public @StringRes int getUserBadgeLabelResId(@UserIdInt int userId) {
-        checkManageOrInteractPermIfCallerInOtherProfileGroup(userId, "getUserBadgeLabelResId");
+        checkManageOrInteractPermissionIfCallerInOtherProfileGroup(userId,
+                "getUserBadgeLabelResId");
         final UserInfo userInfo = getUserInfoNoChecks(userId);
         final UserTypeDetails userTypeDetails = getUserTypeDetails(userInfo);
         if (userInfo == null || userTypeDetails == null || !userTypeDetails.hasBadge()) {
@@ -1320,7 +1329,8 @@ public class UserManagerService extends IUserManager.Stub {
 
     @Override
     public @ColorRes int getUserBadgeColorResId(@UserIdInt int userId) {
-        checkManageOrInteractPermIfCallerInOtherProfileGroup(userId, "getUserBadgeColorResId");
+        checkManageOrInteractPermissionIfCallerInOtherProfileGroup(userId,
+                "getUserBadgeColorResId");
         final UserInfo userInfo = getUserInfoNoChecks(userId);
         final UserTypeDetails userTypeDetails = getUserTypeDetails(userInfo);
         if (userInfo == null || userTypeDetails == null || !userTypeDetails.hasBadge()) {
@@ -1333,7 +1343,7 @@ public class UserManagerService extends IUserManager.Stub {
 
     @Override
     public @DrawableRes int getUserIconBadgeResId(@UserIdInt int userId) {
-        checkManageOrInteractPermIfCallerInOtherProfileGroup(userId, "getUserIconBadgeResId");
+        checkManageOrInteractPermissionIfCallerInOtherProfileGroup(userId, "getUserIconBadgeResId");
         final UserTypeDetails userTypeDetails = getUserTypeDetailsNoChecks(userId);
         if (userTypeDetails == null || !userTypeDetails.hasBadge()) {
             Slog.e(LOG_TAG, "Requested icon badge for non-badged user " + userId);
@@ -1344,7 +1354,7 @@ public class UserManagerService extends IUserManager.Stub {
 
     @Override
     public @DrawableRes int getUserBadgeResId(@UserIdInt int userId) {
-        checkManageOrInteractPermIfCallerInOtherProfileGroup(userId, "getUserBadgeResId");
+        checkManageOrInteractPermissionIfCallerInOtherProfileGroup(userId, "getUserBadgeResId");
         final UserTypeDetails userTypeDetails = getUserTypeDetailsNoChecks(userId);
         if (userTypeDetails == null || !userTypeDetails.hasBadge()) {
             Slog.e(LOG_TAG, "Requested badge for non-badged user " + userId);
@@ -1355,7 +1365,7 @@ public class UserManagerService extends IUserManager.Stub {
 
     @Override
     public @DrawableRes int getUserBadgeNoBackgroundResId(@UserIdInt int userId) {
-        checkManageOrInteractPermIfCallerInOtherProfileGroup(userId,
+        checkManageOrInteractPermissionIfCallerInOtherProfileGroup(userId,
                 "getUserBadgeNoBackgroundResId");
         final UserTypeDetails userTypeDetails = getUserTypeDetailsNoChecks(userId);
         if (userTypeDetails == null || !userTypeDetails.hasBadge()) {
@@ -1367,7 +1377,7 @@ public class UserManagerService extends IUserManager.Stub {
 
     @Override
     public boolean isProfile(@UserIdInt int userId) {
-        checkManageOrInteractPermIfCallerInOtherProfileGroup(userId, "isProfile");
+        checkManageOrInteractPermissionIfCallerInOtherProfileGroup(userId, "isProfile");
         synchronized (mUsersLock) {
             UserInfo userInfo = getUserInfoLU(userId);
             return userInfo != null && userInfo.isProfile();
@@ -1376,7 +1386,7 @@ public class UserManagerService extends IUserManager.Stub {
 
     @Override
     public boolean isManagedProfile(@UserIdInt int userId) {
-        checkManageOrInteractPermIfCallerInOtherProfileGroup(userId, "isManagedProfile");
+        checkManageOrInteractPermissionIfCallerInOtherProfileGroup(userId, "isManagedProfile");
         synchronized (mUsersLock) {
             UserInfo userInfo = getUserInfoLU(userId);
             return userInfo != null && userInfo.isManagedProfile();
@@ -1385,19 +1395,20 @@ public class UserManagerService extends IUserManager.Stub {
 
     @Override
     public boolean isUserUnlockingOrUnlocked(@UserIdInt int userId) {
-        checkManageOrInteractPermIfCallerInOtherProfileGroup(userId, "isUserUnlockingOrUnlocked");
+        checkManageOrInteractPermissionIfCallerInOtherProfileGroup(userId,
+                "isUserUnlockingOrUnlocked");
         return mLocalService.isUserUnlockingOrUnlocked(userId);
     }
 
     @Override
     public boolean isUserUnlocked(@UserIdInt int userId) {
-        checkManageOrInteractPermIfCallerInOtherProfileGroup(userId, "isUserUnlocked");
+        checkManageOrInteractPermissionIfCallerInOtherProfileGroup(userId, "isUserUnlocked");
         return mLocalService.isUserUnlocked(userId);
     }
 
     @Override
     public boolean isUserRunning(@UserIdInt int userId) {
-        checkManageOrInteractPermIfCallerInOtherProfileGroup(userId, "isUserRunning");
+        checkManageOrInteractPermissionIfCallerInOtherProfileGroup(userId, "isUserRunning");
         return mLocalService.isUserRunning(userId);
     }
 
@@ -1437,7 +1448,7 @@ public class UserManagerService extends IUserManager.Stub {
         }
     }
 
-    private void checkManageOrInteractPermIfCallerInOtherProfileGroup(@UserIdInt int userId,
+    private void checkManageOrInteractPermissionIfCallerInOtherProfileGroup(@UserIdInt int userId,
             String name) {
         final int callingUserId = UserHandle.getCallingUserId();
         if (callingUserId == userId || isSameProfileGroupNoChecks(callingUserId, userId) ||
@@ -1466,11 +1477,7 @@ public class UserManagerService extends IUserManager.Stub {
 
     @Override
     public boolean isPreCreated(@UserIdInt int userId) {
-        final int callingUserId = UserHandle.getCallingUserId();
-        if (callingUserId != userId && !hasManageUsersPermission()) {
-            throw new SecurityException("You need MANAGE_USERS permission to query if u=" + userId
-                    + " is pre-created");
-        }
+        checkManageOrInteractPermissionIfCallerInOtherProfileGroup(userId, "isPreCreated");
         synchronized (mUsersLock) {
             UserInfo userInfo = getUserInfoLU(userId);
             return userInfo != null && userInfo.preCreated;
@@ -1713,24 +1720,20 @@ public class UserManagerService extends IUserManager.Stub {
      * See {@link UserManagerInternal#setDevicePolicyUserRestrictions}
      */
     private void setDevicePolicyUserRestrictionsInner(@UserIdInt int originatingUserId,
-            @Nullable Bundle restrictions,
-            @UserManagerInternal.OwnerType int restrictionOwnerType) {
-        final Bundle global = new Bundle();
-        final Bundle local = new Bundle();
-
-        // Sort restrictions into local and global ensuring they don't overlap.
-        UserRestrictionsUtils.sortToGlobalAndLocal(restrictions, restrictionOwnerType, global,
-                local);
-
+            @NonNull Bundle global, @NonNull RestrictionsSet local,
+            boolean isDeviceOwner) {
         boolean globalChanged, localChanged;
+        List<Integer> updatedLocalTargetUserIds;
         synchronized (mRestrictionsLock) {
             // Update global and local restrictions if they were changed.
-            globalChanged = updateRestrictionsIfNeededLR(
-                    originatingUserId, global, mDevicePolicyGlobalUserRestrictions);
-            localChanged = updateRestrictionsIfNeededLR(
-                    originatingUserId, local, mDevicePolicyLocalUserRestrictions);
+            globalChanged = mDevicePolicyGlobalUserRestrictions
+                    .updateRestrictions(originatingUserId, global);
+            updatedLocalTargetUserIds = getUpdatedTargetUserIdsFromLocalRestrictions(
+                    originatingUserId, local);
+            localChanged = updateLocalRestrictionsForTargetUsersLR(originatingUserId, local,
+                    updatedLocalTargetUserIds);
 
-            if (restrictionOwnerType == UserManagerInternal.OWNER_TYPE_DEVICE_OWNER) {
+            if (isDeviceOwner) {
                 // Remember the global restriction owner userId to be able to make a distinction
                 // in getUserRestrictionSource on who set local policies.
                 mDeviceOwnerUserId = originatingUserId;
@@ -1753,8 +1756,20 @@ public class UserManagerService extends IUserManager.Stub {
         }
         // Don't call them within the mRestrictionsLock.
         synchronized (mPackagesLock) {
-            if (localChanged || globalChanged) {
-                writeUserLP(getUserDataNoChecks(originatingUserId));
+            if (globalChanged || localChanged) {
+                if (updatedLocalTargetUserIds.size() == 1
+                        && updatedLocalTargetUserIds.contains(originatingUserId)) {
+                    writeUserLP(getUserDataNoChecks(originatingUserId));
+                } else {
+                    if (globalChanged) {
+                        writeUserLP(getUserDataNoChecks(originatingUserId));
+                    }
+                    if (localChanged) {
+                        for (int targetUserId : updatedLocalTargetUserIds) {
+                            writeAllTargetUsersLP(targetUserId);
+                        }
+                    }
+                }
             }
         }
 
@@ -1762,44 +1777,88 @@ public class UserManagerService extends IUserManager.Stub {
             if (globalChanged) {
                 applyUserRestrictionsForAllUsersLR();
             } else if (localChanged) {
-                applyUserRestrictionsLR(originatingUserId);
+                for (int targetUserId : updatedLocalTargetUserIds) {
+                    applyUserRestrictionsLR(targetUserId);
+                }
             }
         }
     }
 
     /**
-     * Updates restriction bundle for a given user in a given restriction array. If new bundle is
-     * empty, record is removed from the array.
-     * @return whether restrictions bundle is different from the old one.
+     * @return the list of updated target user ids in device policy local restrictions for a
+     * given originating user id.
      */
-    private boolean updateRestrictionsIfNeededLR(@UserIdInt int userId,
-            @Nullable Bundle restrictions, SparseArray<Bundle> restrictionsArray) {
-        final boolean changed =
-                !UserRestrictionsUtils.areEqual(restrictionsArray.get(userId), restrictions);
-        if (changed) {
-            if (!UserRestrictionsUtils.isEmpty(restrictions)) {
-                restrictionsArray.put(userId, restrictions);
-            } else {
-                restrictionsArray.delete(userId);
+    private List<Integer> getUpdatedTargetUserIdsFromLocalRestrictions(int originatingUserId,
+            @NonNull RestrictionsSet local) {
+        List<Integer> targetUserIds = new ArrayList<>();
+        // Update all the target user ids from the local restrictions set
+        for (int i = 0; i < local.size(); i++) {
+            targetUserIds.add(local.keyAt(i));
+        }
+        // Update the target user id from device policy local restrictions if the local
+        // restrictions set does not contain the target user id.
+        for (int i = 0; i < mDevicePolicyLocalUserRestrictions.size(); i++) {
+            int targetUserId = mDevicePolicyLocalUserRestrictions.keyAt(i);
+            RestrictionsSet restrictionsSet = mDevicePolicyLocalUserRestrictions.valueAt(i);
+            if (!local.containsKey(targetUserId)
+                    && restrictionsSet.containsKey(originatingUserId)) {
+                targetUserIds.add(targetUserId);
+            }
+        }
+        return targetUserIds;
+    }
+
+    /**
+     * Update restrictions for all target users in the restriction set. If a target user does not
+     * exist in device policy local restrictions, remove the restrictions bundle for that target
+     * user originating from the specified originating user.
+     */
+    private boolean updateLocalRestrictionsForTargetUsersLR(int originatingUserId,
+            RestrictionsSet local, List<Integer> updatedTargetUserIds) {
+        boolean changed = false;
+        for (int targetUserId : updatedTargetUserIds) {
+            Bundle restrictions = local.getRestrictions(targetUserId);
+            if (restrictions == null) {
+                restrictions = new Bundle();
+            }
+            if (getDevicePolicyLocalRestrictionsForTargetUserLR(targetUserId)
+                    .updateRestrictions(originatingUserId, restrictions)) {
+                changed = true;
             }
         }
         return changed;
     }
 
+    /**
+     * A new restriction set is created if a restriction set does not already exist for a given
+     * target user.
+     *
+     * @return restrictions set for a given target user.
+     */
+    private @NonNull RestrictionsSet getDevicePolicyLocalRestrictionsForTargetUserLR(
+            int targetUserId) {
+        RestrictionsSet result = mDevicePolicyLocalUserRestrictions.get(targetUserId);
+        if (result == null) {
+            result = new RestrictionsSet();
+            mDevicePolicyLocalUserRestrictions.put(targetUserId, result);
+        }
+        return result;
+    }
+
     @GuardedBy("mRestrictionsLock")
     private Bundle computeEffectiveUserRestrictionsLR(@UserIdInt int userId) {
         final Bundle baseRestrictions =
-                UserRestrictionsUtils.nonNull(mBaseUserRestrictions.get(userId));
-        final Bundle global = UserRestrictionsUtils.mergeAll(mDevicePolicyGlobalUserRestrictions);
-        final Bundle local = mDevicePolicyLocalUserRestrictions.get(userId);
+                UserRestrictionsUtils.nonNull(mBaseUserRestrictions.getRestrictions(userId));
+        final Bundle global = mDevicePolicyGlobalUserRestrictions.mergeAll();
+        final RestrictionsSet local = getDevicePolicyLocalRestrictionsForTargetUserLR(userId);
 
-        if (UserRestrictionsUtils.isEmpty(global) && UserRestrictionsUtils.isEmpty(local)) {
+        if (UserRestrictionsUtils.isEmpty(global) && local.isEmpty()) {
             // Common case first.
             return baseRestrictions;
         }
         final Bundle effective = UserRestrictionsUtils.clone(baseRestrictions);
         UserRestrictionsUtils.merge(effective, global);
-        UserRestrictionsUtils.merge(effective, local);
+        UserRestrictionsUtils.merge(effective, local.mergeAll());
 
         return effective;
     }
@@ -1814,10 +1873,10 @@ public class UserManagerService extends IUserManager.Stub {
 
     private Bundle getEffectiveUserRestrictions(@UserIdInt int userId) {
         synchronized (mRestrictionsLock) {
-            Bundle restrictions = mCachedEffectiveUserRestrictions.get(userId);
+            Bundle restrictions = mCachedEffectiveUserRestrictions.getRestrictions(userId);
             if (restrictions == null) {
                 restrictions = computeEffectiveUserRestrictionsLR(userId);
-                mCachedEffectiveUserRestrictions.put(userId, restrictions);
+                mCachedEffectiveUserRestrictions.updateRestrictions(userId, restrictions);
             }
             return restrictions;
         }
@@ -1826,7 +1885,7 @@ public class UserManagerService extends IUserManager.Stub {
     /** @return a specific user restriction that's in effect currently. */
     @Override
     public boolean hasUserRestriction(String restrictionKey, @UserIdInt int userId) {
-        checkManageOrInteractPermIfCallerInOtherProfileGroup(userId, "hasUserRestriction");
+        checkManageOrInteractPermissionIfCallerInOtherProfileGroup(userId, "hasUserRestriction");
         return mLocalService.hasUserRestriction(restrictionKey, userId);
     }
 
@@ -1920,29 +1979,15 @@ public class UserManagerService extends IUserManager.Stub {
         }
 
         synchronized (mRestrictionsLock) {
-            // Check if it is set by profile owner.
-            Bundle profileOwnerRestrictions = mDevicePolicyLocalUserRestrictions.get(userId);
-            if (UserRestrictionsUtils.contains(profileOwnerRestrictions, restrictionKey)) {
-                result.add(getEnforcingUserLocked(userId));
-            }
+            // Check if it is set as a local restriction.
+            result.addAll(getDevicePolicyLocalRestrictionsForTargetUserLR(userId).getEnforcingUsers(
+                    restrictionKey, mDeviceOwnerUserId));
 
-            // Iterate over all users who enforce global restrictions.
-            for (int i = mDevicePolicyGlobalUserRestrictions.size() - 1; i >= 0; i--) {
-                Bundle globalRestrictions = mDevicePolicyGlobalUserRestrictions.valueAt(i);
-                int profileUserId = mDevicePolicyGlobalUserRestrictions.keyAt(i);
-                if (UserRestrictionsUtils.contains(globalRestrictions, restrictionKey)) {
-                    result.add(getEnforcingUserLocked(profileUserId));
-                }
-            }
+            // Check if it is set as a global restriction.
+            result.addAll(mDevicePolicyGlobalUserRestrictions.getEnforcingUsers(restrictionKey,
+                    mDeviceOwnerUserId));
         }
         return result;
-    }
-
-    @GuardedBy("mRestrictionsLock")
-    private EnforcingUser getEnforcingUserLocked(@UserIdInt int userId) {
-        int source = mDeviceOwnerUserId == userId ? UserManager.RESTRICTION_SOURCE_DEVICE_OWNER
-                : UserManager.RESTRICTION_SOURCE_PROFILE_OWNER;
-        return new EnforcingUser(userId, source);
     }
 
     /**
@@ -1951,7 +1996,7 @@ public class UserManagerService extends IUserManager.Stub {
      */
     @Override
     public Bundle getUserRestrictions(@UserIdInt int userId) {
-        checkManageOrInteractPermIfCallerInOtherProfileGroup(userId, "getUserRestrictions");
+        checkManageOrInteractPermissionIfCallerInOtherProfileGroup(userId, "getUserRestrictions");
         return UserRestrictionsUtils.clone(getEffectiveUserRestrictions(userId));
     }
 
@@ -1962,7 +2007,7 @@ public class UserManagerService extends IUserManager.Stub {
             return false;
         }
         synchronized (mRestrictionsLock) {
-            Bundle bundle = mBaseUserRestrictions.get(userId);
+            Bundle bundle = mBaseUserRestrictions.getRestrictions(userId);
             return (bundle != null && bundle.getBoolean(restrictionKey, false));
         }
     }
@@ -1977,7 +2022,7 @@ public class UserManagerService extends IUserManager.Stub {
             // Note we can't modify Bundles stored in mBaseUserRestrictions directly, so create
             // a copy.
             final Bundle newRestrictions = UserRestrictionsUtils.clone(
-                    mBaseUserRestrictions.get(userId));
+                    mBaseUserRestrictions.getRestrictions(userId));
             newRestrictions.putBoolean(key, value);
 
             updateUserRestrictionsInternalLR(newRestrictions, userId);
@@ -1996,25 +2041,25 @@ public class UserManagerService extends IUserManager.Stub {
     private void updateUserRestrictionsInternalLR(
             @Nullable Bundle newBaseRestrictions, @UserIdInt int userId) {
         final Bundle prevAppliedRestrictions = UserRestrictionsUtils.nonNull(
-                mAppliedUserRestrictions.get(userId));
+                mAppliedUserRestrictions.getRestrictions(userId));
 
         // Update base restrictions.
         if (newBaseRestrictions != null) {
             // If newBaseRestrictions == the current one, it's probably a bug.
-            final Bundle prevBaseRestrictions = mBaseUserRestrictions.get(userId);
+            final Bundle prevBaseRestrictions = mBaseUserRestrictions.getRestrictions(userId);
 
             Preconditions.checkState(prevBaseRestrictions != newBaseRestrictions);
-            Preconditions.checkState(mCachedEffectiveUserRestrictions.get(userId)
+            Preconditions.checkState(mCachedEffectiveUserRestrictions.getRestrictions(userId)
                     != newBaseRestrictions);
 
-            if (updateRestrictionsIfNeededLR(userId, newBaseRestrictions, mBaseUserRestrictions)) {
+            if (mBaseUserRestrictions.updateRestrictions(userId, newBaseRestrictions)) {
                 scheduleWriteUser(getUserDataNoChecks(userId));
             }
         }
 
         final Bundle effective = computeEffectiveUserRestrictionsLR(userId);
 
-        mCachedEffectiveUserRestrictions.put(userId, effective);
+        mCachedEffectiveUserRestrictions.updateRestrictions(userId, effective);
 
         // Apply the new restrictions.
         if (DBG) {
@@ -2037,7 +2082,7 @@ public class UserManagerService extends IUserManager.Stub {
 
         propagateUserRestrictionsLR(userId, effective, prevAppliedRestrictions);
 
-        mAppliedUserRestrictions.put(userId, new Bundle(effective));
+        mAppliedUserRestrictions.updateRestrictions(userId, new Bundle(effective));
     }
 
     private void propagateUserRestrictionsLR(final int userId,
@@ -2089,7 +2134,7 @@ public class UserManagerService extends IUserManager.Stub {
             debug("applyUserRestrictionsForAllUsersLR");
         }
         // First, invalidate all cached values.
-        mCachedEffectiveUserRestrictions.clear();
+        mCachedEffectiveUserRestrictions.removeAllRestrictions();
 
         // We don't want to call into ActivityManagerService while taking a lock, so we'll call
         // it on a handler.
@@ -2565,7 +2610,7 @@ public class UserManagerService extends IUserManager.Stub {
             synchronized (mRestrictionsLock) {
                 if (!UserRestrictionsUtils.isEmpty(oldGlobalUserRestrictions)
                         && mDeviceOwnerUserId != UserHandle.USER_NULL) {
-                    mDevicePolicyGlobalUserRestrictions.put(
+                    mDevicePolicyGlobalUserRestrictions.updateRestrictions(
                             mDeviceOwnerUserId, oldGlobalUserRestrictions);
                 }
                 // ENSURE_VERIFY_APPS is now enforced globally even if put by profile owner, so move
@@ -2690,7 +2735,8 @@ public class UserManagerService extends IUserManager.Stub {
 
         if (!restrictions.isEmpty()) {
             synchronized (mRestrictionsLock) {
-                mBaseUserRestrictions.append(UserHandle.USER_SYSTEM, restrictions);
+                mBaseUserRestrictions.updateRestrictions(UserHandle.USER_SYSTEM,
+                        restrictions);
             }
         }
 
@@ -2714,6 +2760,16 @@ public class UserManagerService extends IUserManager.Stub {
         if (!mHandler.hasMessages(WRITE_USER_MSG, userData)) {
             Message msg = mHandler.obtainMessage(WRITE_USER_MSG, userData);
             mHandler.sendMessageDelayed(msg, WRITE_USER_DELAY);
+        }
+    }
+
+    private void writeAllTargetUsersLP(int originatingUserId) {
+        for (int i = 0; i < mDevicePolicyLocalUserRestrictions.size(); i++) {
+            int targetUserId = mDevicePolicyLocalUserRestrictions.keyAt(i);
+            RestrictionsSet restrictionsSet = mDevicePolicyLocalUserRestrictions.valueAt(i);
+            if (restrictionsSet.containsKey(originatingUserId)) {
+                writeUserLP(getUserDataNoChecks(targetUserId));
+            }
         }
     }
 
@@ -2801,12 +2857,11 @@ public class UserManagerService extends IUserManager.Stub {
         }
         synchronized (mRestrictionsLock) {
             UserRestrictionsUtils.writeRestrictions(serializer,
-                    mBaseUserRestrictions.get(userInfo.id), TAG_RESTRICTIONS);
+                    mBaseUserRestrictions.getRestrictions(userInfo.id), TAG_RESTRICTIONS);
+            getDevicePolicyLocalRestrictionsForTargetUserLR(userInfo.id).writeRestrictions(
+                    serializer, TAG_DEVICE_POLICY_LOCAL_RESTRICTIONS);
             UserRestrictionsUtils.writeRestrictions(serializer,
-                    mDevicePolicyLocalUserRestrictions.get(userInfo.id),
-                    TAG_DEVICE_POLICY_RESTRICTIONS);
-            UserRestrictionsUtils.writeRestrictions(serializer,
-                    mDevicePolicyGlobalUserRestrictions.get(userInfo.id),
+                    mDevicePolicyGlobalUserRestrictions.getRestrictions(userInfo.id),
                     TAG_DEVICE_POLICY_GLOBAL_RESTRICTIONS);
         }
 
@@ -2936,7 +2991,8 @@ public class UserManagerService extends IUserManager.Stub {
         String seedAccountType = null;
         PersistableBundle seedAccountOptions = null;
         Bundle baseRestrictions = null;
-        Bundle localRestrictions = null;
+        Bundle legacyLocalRestrictions = null;
+        RestrictionsSet localRestrictions = null;
         Bundle globalRestrictions = null;
 
         XmlPullParser parser = Xml.newPullParser();
@@ -3006,7 +3062,10 @@ public class UserManagerService extends IUserManager.Stub {
                 } else if (TAG_RESTRICTIONS.equals(tag)) {
                     baseRestrictions = UserRestrictionsUtils.readRestrictions(parser);
                 } else if (TAG_DEVICE_POLICY_RESTRICTIONS.equals(tag)) {
-                    localRestrictions = UserRestrictionsUtils.readRestrictions(parser);
+                    legacyLocalRestrictions = UserRestrictionsUtils.readRestrictions(parser);
+                } else if (TAG_DEVICE_POLICY_LOCAL_RESTRICTIONS.equals(tag)) {
+                    localRestrictions = RestrictionsSet.readRestrictions(parser,
+                            TAG_DEVICE_POLICY_LOCAL_RESTRICTIONS);
                 } else if (TAG_DEVICE_POLICY_GLOBAL_RESTRICTIONS.equals(tag)) {
                     globalRestrictions = UserRestrictionsUtils.readRestrictions(parser);
                 } else if (TAG_ACCOUNT.equals(tag)) {
@@ -3051,13 +3110,20 @@ public class UserManagerService extends IUserManager.Stub {
 
         synchronized (mRestrictionsLock) {
             if (baseRestrictions != null) {
-                mBaseUserRestrictions.put(id, baseRestrictions);
+                mBaseUserRestrictions.updateRestrictions(id, baseRestrictions);
             }
             if (localRestrictions != null) {
                 mDevicePolicyLocalUserRestrictions.put(id, localRestrictions);
+                if (legacyLocalRestrictions != null) {
+                    Slog.wtf(LOG_TAG, "Seeing both legacy and current local restrictions in xml");
+                }
+            } else if (legacyLocalRestrictions != null) {
+                mDevicePolicyLocalUserRestrictions.put(id,
+                        new RestrictionsSet(id, legacyLocalRestrictions));
             }
             if (globalRestrictions != null) {
-                mDevicePolicyGlobalUserRestrictions.put(id, globalRestrictions);
+                mDevicePolicyGlobalUserRestrictions.updateRestrictions(id,
+                        globalRestrictions);
             }
         }
         return userData;
@@ -3351,10 +3417,10 @@ public class UserManagerService extends IUserManager.Stub {
                     StorageManager.FLAG_STORAGE_DE | StorageManager.FLAG_STORAGE_CE);
             t.traceEnd();
 
-            final Set<String> installablePackages =
+            final Set<String> userTypeInstallablePackages =
                     mSystemPackageInstaller.getInstallablePackagesForUserType(userType);
             t.traceBegin("PM.createNewUser");
-            mPm.createNewUser(userId, installablePackages, disallowedPackages);
+            mPm.createNewUser(userId, userTypeInstallablePackages, disallowedPackages);
             t.traceEnd();
 
             userInfo.partial = false;
@@ -3373,7 +3439,7 @@ public class UserManagerService extends IUserManager.Stub {
                 userTypeDetails.addDefaultRestrictionsTo(restrictions);
             }
             synchronized (mRestrictionsLock) {
-                mBaseUserRestrictions.append(userId, restrictions);
+                mBaseUserRestrictions.updateRestrictions(userId, restrictions);
             }
 
             t.traceBegin("PM.onNewUserCreated-" + userId);
@@ -3475,8 +3541,10 @@ public class UserManagerService extends IUserManager.Stub {
     }
 
     /** Install/uninstall system packages for all users based on their user-type, as applicable. */
-    boolean installWhitelistedSystemPackages(boolean isFirstBoot, boolean isUpgrade) {
-        return mSystemPackageInstaller.installWhitelistedSystemPackages(isFirstBoot, isUpgrade);
+    boolean installWhitelistedSystemPackages(boolean isFirstBoot, boolean isUpgrade,
+            @Nullable ArraySet<String> existingPackages) {
+        return mSystemPackageInstaller.installWhitelistedSystemPackages(
+                isFirstBoot, isUpgrade, existingPackages);
     }
 
     private long getCreationTime() {
@@ -3844,9 +3912,17 @@ public class UserManagerService extends IUserManager.Stub {
             mBaseUserRestrictions.remove(userId);
             mAppliedUserRestrictions.remove(userId);
             mCachedEffectiveUserRestrictions.remove(userId);
-            mDevicePolicyLocalUserRestrictions.remove(userId);
-            if (mDevicePolicyGlobalUserRestrictions.get(userId) != null) {
-                mDevicePolicyGlobalUserRestrictions.remove(userId);
+            // Remove local restrictions affecting user
+            mDevicePolicyLocalUserRestrictions.delete(userId);
+            // Remove local restrictions set by user
+            boolean changed = false;
+            for (int i = 0; i < mDevicePolicyLocalUserRestrictions.size(); i++) {
+                int targetUserId = mDevicePolicyLocalUserRestrictions.keyAt(i);
+                changed |= getDevicePolicyLocalRestrictionsForTargetUserLR(targetUserId)
+                        .remove(userId);
+            }
+            changed |= mDevicePolicyGlobalUserRestrictions.remove(userId);
+            if (changed) {
                 applyUserRestrictionsForAllUsersLR();
             }
         }
@@ -4539,16 +4615,18 @@ public class UserManagerService extends IUserManager.Stub {
                     pw.println("    Restrictions:");
                     synchronized (mRestrictionsLock) {
                         UserRestrictionsUtils.dumpRestrictions(
-                                pw, "      ", mBaseUserRestrictions.get(userInfo.id));
+                                pw, "      ", mBaseUserRestrictions.getRestrictions(userInfo.id));
                         pw.println("    Device policy global restrictions:");
                         UserRestrictionsUtils.dumpRestrictions(
-                                pw, "      ", mDevicePolicyGlobalUserRestrictions.get(userInfo.id));
+                                pw, "      ",
+                                mDevicePolicyGlobalUserRestrictions.getRestrictions(userInfo.id));
                         pw.println("    Device policy local restrictions:");
-                        UserRestrictionsUtils.dumpRestrictions(
-                                pw, "      ", mDevicePolicyLocalUserRestrictions.get(userInfo.id));
+                        getDevicePolicyLocalRestrictionsForTargetUserLR(
+                                userInfo.id).dumpRestrictions(pw, "      ");
                         pw.println("    Effective restrictions:");
                         UserRestrictionsUtils.dumpRestrictions(
-                                pw, "      ", mCachedEffectiveUserRestrictions.get(userInfo.id));
+                                pw, "      ",
+                                mCachedEffectiveUserRestrictions.getRestrictions(userInfo.id));
                     }
 
                     if (userData.account != null) {
@@ -4655,16 +4733,16 @@ public class UserManagerService extends IUserManager.Stub {
     private class LocalService extends UserManagerInternal {
         @Override
         public void setDevicePolicyUserRestrictions(@UserIdInt int originatingUserId,
-                @Nullable Bundle restrictions,
-                @OwnerType int restrictionOwnerType) {
+                @NonNull Bundle global, @NonNull RestrictionsSet local,
+                boolean isDeviceOwner) {
             UserManagerService.this.setDevicePolicyUserRestrictionsInner(originatingUserId,
-                    restrictions, restrictionOwnerType);
+                    global, local, isDeviceOwner);
         }
 
         @Override
         public Bundle getBaseUserRestrictions(@UserIdInt int userId) {
             synchronized (mRestrictionsLock) {
-                return mBaseUserRestrictions.get(userId);
+                return mBaseUserRestrictions.getRestrictions(userId);
             }
         }
 
@@ -4672,8 +4750,8 @@ public class UserManagerService extends IUserManager.Stub {
         public void setBaseUserRestrictionsByDpmsForMigration(
                 @UserIdInt int userId, Bundle baseRestrictions) {
             synchronized (mRestrictionsLock) {
-                if (updateRestrictionsIfNeededLR(
-                        userId, new Bundle(baseRestrictions), mBaseUserRestrictions)) {
+                if (mBaseUserRestrictions.updateRestrictions(userId,
+                        new Bundle(baseRestrictions))) {
                     invalidateEffectiveUserRestrictionsLR(userId);
                 }
             }

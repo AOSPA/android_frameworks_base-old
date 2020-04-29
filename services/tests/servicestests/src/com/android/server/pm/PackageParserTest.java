@@ -17,11 +17,15 @@ package com.android.server.pm;
 
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
+import static java.nio.file.StandardCopyOption.REPLACE_EXISTING;
+
 import android.annotation.NonNull;
+import android.content.Context;
 import android.content.pm.ActivityInfo;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.ConfigurationInfo;
@@ -30,7 +34,6 @@ import android.content.pm.FeatureInfo;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageParser;
 import android.content.pm.PackageUserState;
-import android.content.pm.ProviderInfo;
 import android.content.pm.ServiceInfo;
 import android.content.pm.Signature;
 import android.content.pm.parsing.ParsingPackage;
@@ -46,9 +49,9 @@ import android.os.Bundle;
 import android.os.Parcel;
 import android.platform.test.annotations.Presubmit;
 import android.util.ArraySet;
-import android.util.DisplayMetrics;
 
 import androidx.annotation.Nullable;
+import androidx.test.InstrumentationRegistry;
 import androidx.test.filters.MediumTest;
 import androidx.test.filters.SmallTest;
 import androidx.test.runner.AndroidJUnit4;
@@ -57,6 +60,7 @@ import com.android.internal.util.ArrayUtils;
 import com.android.server.pm.parsing.PackageCacher;
 import com.android.server.pm.parsing.PackageInfoUtils;
 import com.android.server.pm.parsing.PackageParser2;
+import com.android.server.pm.parsing.TestPackageParser2;
 import com.android.server.pm.parsing.pkg.AndroidPackage;
 import com.android.server.pm.parsing.pkg.PackageImpl;
 import com.android.server.pm.parsing.pkg.ParsedPackage;
@@ -69,9 +73,11 @@ import org.junit.runner.RunWith;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.lang.reflect.Array;
 import java.lang.reflect.Field;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
@@ -90,6 +96,9 @@ public class PackageParserTest {
 
     private File mTmpDir;
     private static final File FRAMEWORK = new File("/system/framework/framework-res.apk");
+    private static final String TEST_APP1_APK = "PackageParserTestApp1.apk";
+    private static final String TEST_APP2_APK = "PackageParserTestApp2.apk";
+    private static final String TEST_APP3_APK = "PackageParserTestApp3.apk";
 
     @Before
     public void setUp() throws IOException {
@@ -99,7 +108,7 @@ public class PackageParserTest {
 
     @Test
     public void testParse_noCache() throws Exception {
-        CachePackageNameParser pp = new CachePackageNameParser(null, false, null, null, null);
+        CachePackageNameParser pp = new CachePackageNameParser(null);
         ParsedPackage pkg = pp.parsePackage(FRAMEWORK, 0 /* parseFlags */,
                 false /* useCaches */);
         assertNotNull(pkg);
@@ -116,7 +125,7 @@ public class PackageParserTest {
 
     @Test
     public void testParse_withCache() throws Exception {
-        CachePackageNameParser pp = new CachePackageNameParser(null, false, null, null, null);
+        CachePackageNameParser pp = new CachePackageNameParser(null);
 
         pp.setCacheDir(mTmpDir);
         // The first parse will write this package to the cache.
@@ -135,7 +144,7 @@ public class PackageParserTest {
 
         // We haven't set a cache directory here : the parse should still succeed,
         // just not using the cached results.
-        pp = new CachePackageNameParser(null, false, null, null, null);
+        pp = new CachePackageNameParser(null);
         pkg = pp.parsePackage(FRAMEWORK, 0 /* parseFlags */, true /* useCaches */);
         assertEquals("android", pkg.getPackageName());
 
@@ -145,17 +154,29 @@ public class PackageParserTest {
 
     @Test
     public void test_serializePackage() throws Exception {
-        PackageParser2 pp = new PackageParser2(null, false, null, mTmpDir, null);
-        ParsedPackage pkg = pp.parsePackage(FRAMEWORK, 0 /* parseFlags */,
-                true /* useCaches */);
+        try (PackageParser2 pp = new PackageParser2(null, false, null, mTmpDir,
+                new PackageParser2.Callback() {
+                    @Override
+                    public boolean isChangeEnabled(long changeId, @NonNull ApplicationInfo appInfo) {
+                        return true;
+                    }
 
-        Parcel p = Parcel.obtain();
-        pkg.writeToParcel(p, 0 /* flags */);
+                    @Override
+                    public boolean hasFeature(String feature) {
+                        return false;
+                    }
+                })) {
+            ParsedPackage pkg = pp.parsePackage(FRAMEWORK, 0 /* parseFlags */,
+                    true /* useCaches */);
 
-        p.setDataPosition(0);
-        ParsedPackage deserialized = new PackageImpl(p);
+            Parcel p = Parcel.obtain();
+            pkg.writeToParcel(p, 0 /* flags */);
 
-        assertPackagesEqual(pkg, deserialized);
+            p.setDataPosition(0);
+            ParsedPackage deserialized = new PackageImpl(p);
+
+            assertPackagesEqual(pkg, deserialized);
+        }
     }
 
     @Test
@@ -209,16 +230,75 @@ public class PackageParserTest {
         assertSame(deserialized.getSharedUserId(), deserialized2.getSharedUserId());
     }
 
+    private File extractFile(String filename) throws Exception {
+        final Context context = InstrumentationRegistry.getTargetContext();
+        final File tmpFile = File.createTempFile(filename, ".apk");
+        try (InputStream inputStream = context.getAssets().openNonAsset(filename)) {
+            Files.copy(inputStream, tmpFile.toPath(), REPLACE_EXISTING);
+        }
+        return tmpFile;
+    }
+
+    /**
+     * Tests AndroidManifest.xml with no android:isolatedSplits attribute.
+     */
+    @Test
+    public void testParseIsolatedSplitsDefault() throws Exception {
+        final File testFile = extractFile(TEST_APP1_APK);
+        try {
+            final ParsedPackage pkg = new TestPackageParser2().parsePackage(testFile, 0, false);
+            assertFalse("isolatedSplits", pkg.isIsolatedSplitLoading());
+        } finally {
+            testFile.delete();
+        }
+    }
+
+    /**
+     * Tests AndroidManifest.xml with an android:isolatedSplits attribute set to a constant.
+     */
+    @Test
+    public void testParseIsolatedSplitsConstant() throws Exception {
+        final File testFile = extractFile(TEST_APP2_APK);
+        try {
+            final ParsedPackage pkg = new TestPackageParser2().parsePackage(testFile, 0, false);
+            assertTrue("isolatedSplits", pkg.isIsolatedSplitLoading());
+        } finally {
+            testFile.delete();
+        }
+    }
+
+    /**
+     * Tests AndroidManifest.xml with an android:isolatedSplits attribute set to a resource.
+     */
+    @Test
+    public void testParseIsolatedSplitsResource() throws Exception {
+        final File testFile = extractFile(TEST_APP3_APK);
+        try {
+            final ParsedPackage pkg = new TestPackageParser2().parsePackage(testFile, 0, false);
+            assertTrue("isolatedSplits", pkg.isIsolatedSplitLoading());
+        } finally {
+            testFile.delete();
+        }
+    }
+
     /**
      * A trivial subclass of package parser that only caches the package name, and throws away
      * all other information.
      */
     public static class CachePackageNameParser extends PackageParser2 {
 
-        CachePackageNameParser(String[] separateProcesses, boolean onlyCoreApps,
-                DisplayMetrics displayMetrics, @Nullable File cacheDir,
-                PackageParser2.Callback callback) {
-            super(separateProcesses, onlyCoreApps, displayMetrics, cacheDir, callback);
+        CachePackageNameParser(@Nullable File cacheDir) {
+            super(null, false, null, null, new Callback() {
+                @Override
+                public boolean isChangeEnabled(long changeId, @NonNull ApplicationInfo appInfo) {
+                    return true;
+                }
+
+                @Override
+                public boolean hasFeature(String feature) {
+                    return false;
+                }
+            });
             if (cacheDir != null) {
                 setCacheDir(cacheDir);
             }

@@ -28,6 +28,7 @@ import static com.google.common.truth.Truth.assertThat;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
@@ -66,8 +67,11 @@ import android.provider.Settings;
 import androidx.test.InstrumentationRegistry;
 
 import com.android.internal.R;
+import com.android.server.compat.PlatformCompat;
 import com.android.server.integrity.engine.RuleEvaluationEngine;
 import com.android.server.integrity.model.IntegrityCheckResult;
+import com.android.server.pm.parsing.PackageParser2;
+import com.android.server.pm.parsing.TestPackageParser2;
 import com.android.server.testutils.TestUtils;
 
 import org.junit.After;
@@ -87,6 +91,7 @@ import java.nio.file.Files;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Supplier;
 
 /** Unit test for {@link com.android.server.integrity.AppIntegrityManagerServiceImpl} */
 @RunWith(JUnit4.class)
@@ -130,11 +135,14 @@ public class AppIntegrityManagerServiceImplTest {
     @org.junit.Rule public MockitoRule mMockitoRule = MockitoJUnit.rule();
 
     @Mock PackageManagerInternal mPackageManagerInternal;
+    @Mock PlatformCompat mPlatformCompat;
     @Mock Context mMockContext;
     @Mock Resources mMockResources;
     @Mock RuleEvaluationEngine mRuleEvaluationEngine;
     @Mock IntegrityFileManager mIntegrityFileManager;
     @Mock Handler mHandler;
+
+    private Supplier<PackageParser2> mParserSupplier = TestPackageParser2::new;
 
     private final Context mRealContext = InstrumentationRegistry.getTargetContext();
 
@@ -167,6 +175,7 @@ public class AppIntegrityManagerServiceImplTest {
                 new AppIntegrityManagerServiceImpl(
                         mMockContext,
                         mPackageManagerInternal,
+                        mParserSupplier,
                         mRuleEvaluationEngine,
                         mIntegrityFileManager,
                         mHandler);
@@ -321,6 +330,11 @@ public class AppIntegrityManagerServiceImplTest {
         // we cannot check installer cert because it seems to be device specific.
         assertEquals(VERSION_CODE, appInstallMetadata.getVersionCode());
         assertFalse(appInstallMetadata.isPreInstalled());
+        // Asserting source stamp not present.
+        assertFalse(appInstallMetadata.isStampPresent());
+        assertFalse(appInstallMetadata.isStampVerified());
+        assertFalse(appInstallMetadata.isStampTrusted());
+        assertNull(appInstallMetadata.getStampCertificateHash());
         // These are hardcoded in the test apk android manifest
         Map<String, String> allowedInstallers =
                 appInstallMetadata.getAllowedInstallersAndCertificates();
@@ -472,6 +486,13 @@ public class AppIntegrityManagerServiceImplTest {
         when(mIntegrityFileManager.readRules(any())).thenReturn(Arrays.asList(rule));
 
         assertThat(mService.getCurrentRules().getList()).containsExactly(rule);
+    }
+
+    @Test
+    public void getWhitelistedRuleProviders() throws Exception {
+        whitelistUsAsRuleProvider();
+
+        assertThat(mService.getWhitelistedRuleProviders()).containsExactly(TEST_FRAMEWORK_PACKAGE);
     }
 
     private void whitelistUsAsRuleProvider() {

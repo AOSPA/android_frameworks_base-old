@@ -26,6 +26,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.pm.IPackageManager;
 import android.content.pm.ResolveInfo;
+import android.os.AsyncTask;
 import android.os.UserHandle;
 import android.os.UserManager;
 import android.stats.devicepolicy.DevicePolicyEnums;
@@ -54,6 +55,7 @@ public abstract class AbstractMultiProfilePagerAdapter extends PagerAdapter {
     private static final String TAG = "AbstractMultiProfilePagerAdapter";
     static final int PROFILE_PERSONAL = 0;
     static final int PROFILE_WORK = 1;
+
     @IntDef({PROFILE_PERSONAL, PROFILE_WORK})
     @interface Profile {}
 
@@ -90,7 +92,9 @@ public abstract class AbstractMultiProfilePagerAdapter extends PagerAdapter {
 
             @Override
             public void requestQuietModeEnabled(boolean enabled, UserHandle workProfileUserHandle) {
-                userManager.requestQuietModeEnabled(enabled, workProfileUserHandle);
+                AsyncTask.THREAD_POOL_EXECUTOR.execute(() -> {
+                    userManager.requestQuietModeEnabled(enabled, workProfileUserHandle);
+                });
                 mIsWaitingToEnableWorkProfile = true;
             }
         };
@@ -110,6 +114,10 @@ public abstract class AbstractMultiProfilePagerAdapter extends PagerAdapter {
     @VisibleForTesting
     public void setInjector(Injector injector) {
         mInjector = injector;
+    }
+
+    protected boolean isQuietModeEnabled(UserHandle workProfileUserHandle) {
+        return mInjector.isQuietModeEnabled(workProfileUserHandle);
     }
 
     void setOnProfileSelectedListener(OnProfileSelectedListener listener) {
@@ -284,7 +292,7 @@ public abstract class AbstractMultiProfilePagerAdapter extends PagerAdapter {
     }
 
     private int userHandleToPageIndex(UserHandle userHandle) {
-        if (userHandle == getPersonalListAdapter().mResolverListController.getUserHandle()) {
+        if (userHandle.equals(getPersonalListAdapter().mResolverListController.getUserHandle())) {
             return PROFILE_PERSONAL;
         } else {
             return PROFILE_WORK;
@@ -293,25 +301,11 @@ public abstract class AbstractMultiProfilePagerAdapter extends PagerAdapter {
 
     private boolean rebuildTab(ResolverListAdapter activeListAdapter, boolean doPostProcessing) {
         UserHandle listUserHandle = activeListAdapter.getUserHandle();
-        if (listUserHandle == mWorkProfileUserHandle
-                && mInjector.isQuietModeEnabled(mWorkProfileUserHandle)) {
-            DevicePolicyEventLogger
-                    .createEvent(DevicePolicyEnums.RESOLVER_EMPTY_STATE_WORK_APPS_DISABLED)
-                    .setStrings(getMetricsCategory())
-                    .write();
-            showWorkProfileOffEmptyState(activeListAdapter,
-                    v -> {
-                        ProfileDescriptor descriptor = getItem(
-                                userHandleToPageIndex(activeListAdapter.getUserHandle()));
-                        showSpinner(descriptor.getEmptyStateView());
-                        mInjector.requestQuietModeEnabled(false, mWorkProfileUserHandle);
-                    });
-            return false;
-        }
+
         if (UserHandle.myUserId() != listUserHandle.getIdentifier()) {
             if (!mInjector.hasCrossProfileIntents(activeListAdapter.getIntents(),
                     UserHandle.myUserId(), listUserHandle.getIdentifier())) {
-                if (listUserHandle == mPersonalProfileUserHandle) {
+                if (listUserHandle.equals(mPersonalProfileUserHandle)) {
                     DevicePolicyEventLogger.createEvent(
                                 DevicePolicyEnums.RESOLVER_EMPTY_STATE_NO_SHARING_TO_PERSONAL)
                             .setStrings(getMetricsCategory())
@@ -336,23 +330,76 @@ public abstract class AbstractMultiProfilePagerAdapter extends PagerAdapter {
     protected abstract void showNoPersonalToWorkIntentsEmptyState(
             ResolverListAdapter activeListAdapter);
 
+    protected abstract void showNoPersonalAppsAvailableEmptyState(
+            ResolverListAdapter activeListAdapter);
+
+    protected abstract void showNoWorkAppsAvailableEmptyState(
+            ResolverListAdapter activeListAdapter);
+
     protected abstract void showNoWorkToPersonalIntentsEmptyState(
             ResolverListAdapter activeListAdapter);
 
-    void showEmptyState(ResolverListAdapter listAdapter) {
+    /**
+     * The empty state screens are shown according to their priority:
+     * <ol>
+     * <li>(highest priority) cross-profile disabled by policy (handled in
+     * {@link #rebuildTab(ResolverListAdapter, boolean)})</li>
+     * <li>no apps available</li>
+     * <li>(least priority) work is off</li>
+     * </ol>
+     *
+     * The intention is to prevent the user from having to turn
+     * the work profile on if there will not be any apps resolved
+     * anyway.
+     */
+    void showEmptyResolverListEmptyState(ResolverListAdapter listAdapter) {
+        if (maybeShowWorkProfileOffEmptyState(listAdapter)) {
+            return;
+        }
+        maybeShowNoAppsAvailableEmptyState(listAdapter);
+    }
+
+    /**
+     * Returns {@code true} if the work profile off empty state screen is shown.
+     */
+    private boolean maybeShowWorkProfileOffEmptyState(ResolverListAdapter listAdapter) {
         UserHandle listUserHandle = listAdapter.getUserHandle();
-        if (UserHandle.myUserId() == listUserHandle.getIdentifier()
-                || !hasAppsInOtherProfile(listAdapter)) {
-            if (mWorkProfileUserHandle != null) {
-                DevicePolicyEventLogger.createEvent(
-                        DevicePolicyEnums.RESOLVER_EMPTY_STATE_NO_APPS_RESOLVED)
-                        .setStrings(getMetricsCategory())
-                        .write();
+        if (!listUserHandle.equals(mWorkProfileUserHandle)
+                || !mInjector.isQuietModeEnabled(mWorkProfileUserHandle)
+                || listAdapter.getCount() == 0) {
+            return false;
+        }
+        DevicePolicyEventLogger
+                .createEvent(DevicePolicyEnums.RESOLVER_EMPTY_STATE_WORK_APPS_DISABLED)
+                .setStrings(getMetricsCategory())
+                .write();
+        showWorkProfileOffEmptyState(listAdapter,
+                v -> {
+                    ProfileDescriptor descriptor = getItem(
+                            userHandleToPageIndex(listAdapter.getUserHandle()));
+                    showSpinner(descriptor.getEmptyStateView());
+                    mInjector.requestQuietModeEnabled(false, mWorkProfileUserHandle);
+                });
+        return true;
+    }
+
+    private void maybeShowNoAppsAvailableEmptyState(ResolverListAdapter listAdapter) {
+        UserHandle listUserHandle = listAdapter.getUserHandle();
+        if (mWorkProfileUserHandle != null
+                && (UserHandle.myUserId() == listUserHandle.getIdentifier()
+                        || !hasAppsInOtherProfile(listAdapter))) {
+            DevicePolicyEventLogger.createEvent(
+                    DevicePolicyEnums.RESOLVER_EMPTY_STATE_NO_APPS_RESOLVED)
+                    .setStrings(getMetricsCategory())
+                    .setBoolean(/*isPersonalProfile*/ listUserHandle == mPersonalProfileUserHandle)
+                    .write();
+            if (listUserHandle == mPersonalProfileUserHandle) {
+                showNoPersonalAppsAvailableEmptyState(listAdapter);
+            } else {
+                showNoWorkAppsAvailableEmptyState(listAdapter);
             }
-            showEmptyState(listAdapter,
-                    R.drawable.ic_no_apps,
-                    R.string.resolver_no_apps_available,
-                    /* subtitleRes */ 0);
+        } else if (mWorkProfileUserHandle == null) {
+            showConsumerUserNoAppsAvailableEmptyState(listAdapter);
         }
     }
 
@@ -368,11 +415,8 @@ public abstract class AbstractMultiProfilePagerAdapter extends PagerAdapter {
                 userHandleToPageIndex(activeListAdapter.getUserHandle()));
         descriptor.rootView.findViewById(R.id.resolver_list).setVisibility(View.GONE);
         View emptyStateView = descriptor.getEmptyStateView();
-        resetViewVisibilities(emptyStateView);
+        resetViewVisibilitiesForWorkProfileEmptyState(emptyStateView);
         emptyStateView.setVisibility(View.VISIBLE);
-
-        ImageView icon = emptyStateView.findViewById(R.id.resolver_empty_state_icon);
-        icon.setImageResource(iconRes);
 
         TextView title = emptyStateView.findViewById(R.id.resolver_empty_state_title);
         title.setText(titleRes);
@@ -385,9 +429,28 @@ public abstract class AbstractMultiProfilePagerAdapter extends PagerAdapter {
             subtitle.setVisibility(View.GONE);
         }
 
+        ImageView icon = emptyStateView.findViewById(R.id.resolver_empty_state_icon);
         Button button = emptyStateView.findViewById(R.id.resolver_empty_state_button);
-        button.setVisibility(buttonOnClick != null ? View.VISIBLE : View.GONE);
-        button.setOnClickListener(buttonOnClick);
+        if (!getContext().getResources().getBoolean(R.bool.resolver_landscape_phone)) {
+            icon.setVisibility(View.VISIBLE);
+            icon.setImageResource(iconRes);
+            button.setVisibility(buttonOnClick != null ? View.VISIBLE : View.GONE);
+            button.setOnClickListener(buttonOnClick);
+        } else {
+            icon.setVisibility(View.GONE);
+            button.setVisibility(View.GONE);
+        }
+
+        activeListAdapter.markTabLoaded();
+    }
+
+    private void showConsumerUserNoAppsAvailableEmptyState(ResolverListAdapter activeListAdapter) {
+        ProfileDescriptor descriptor = getItem(
+                userHandleToPageIndex(activeListAdapter.getUserHandle()));
+        descriptor.rootView.findViewById(R.id.resolver_list).setVisibility(View.GONE);
+        View emptyStateView = descriptor.getEmptyStateView();
+        resetViewVisibilitiesForConsumerUserEmptyState(emptyStateView);
+        emptyStateView.setVisibility(View.VISIBLE);
 
         activeListAdapter.markTabLoaded();
     }
@@ -395,18 +458,27 @@ public abstract class AbstractMultiProfilePagerAdapter extends PagerAdapter {
     private void showSpinner(View emptyStateView) {
         emptyStateView.findViewById(R.id.resolver_empty_state_icon).setVisibility(View.INVISIBLE);
         emptyStateView.findViewById(R.id.resolver_empty_state_title).setVisibility(View.INVISIBLE);
-        emptyStateView.findViewById(R.id.resolver_empty_state_subtitle)
-                .setVisibility(View.INVISIBLE);
         emptyStateView.findViewById(R.id.resolver_empty_state_button).setVisibility(View.INVISIBLE);
         emptyStateView.findViewById(R.id.resolver_empty_state_progress).setVisibility(View.VISIBLE);
+        emptyStateView.findViewById(R.id.empty).setVisibility(View.GONE);
     }
 
-    private void resetViewVisibilities(View emptyStateView) {
+    private void resetViewVisibilitiesForWorkProfileEmptyState(View emptyStateView) {
         emptyStateView.findViewById(R.id.resolver_empty_state_icon).setVisibility(View.VISIBLE);
         emptyStateView.findViewById(R.id.resolver_empty_state_title).setVisibility(View.VISIBLE);
         emptyStateView.findViewById(R.id.resolver_empty_state_subtitle).setVisibility(View.VISIBLE);
         emptyStateView.findViewById(R.id.resolver_empty_state_button).setVisibility(View.INVISIBLE);
         emptyStateView.findViewById(R.id.resolver_empty_state_progress).setVisibility(View.GONE);
+        emptyStateView.findViewById(R.id.empty).setVisibility(View.GONE);
+    }
+
+    private void resetViewVisibilitiesForConsumerUserEmptyState(View emptyStateView) {
+        emptyStateView.findViewById(R.id.resolver_empty_state_icon).setVisibility(View.GONE);
+        emptyStateView.findViewById(R.id.resolver_empty_state_title).setVisibility(View.GONE);
+        emptyStateView.findViewById(R.id.resolver_empty_state_subtitle).setVisibility(View.GONE);
+        emptyStateView.findViewById(R.id.resolver_empty_state_button).setVisibility(View.GONE);
+        emptyStateView.findViewById(R.id.resolver_empty_state_progress).setVisibility(View.GONE);
+        emptyStateView.findViewById(R.id.empty).setVisibility(View.VISIBLE);
     }
 
     protected void showListView(ResolverListAdapter activeListAdapter) {
@@ -442,6 +514,13 @@ public abstract class AbstractMultiProfilePagerAdapter extends PagerAdapter {
             }
         }
         return false;
+    }
+
+    boolean shouldShowEmptyStateScreen(ResolverListAdapter listAdapter) {
+        int count = listAdapter.getUnfilteredCount();
+        return (count == 0 && listAdapter.getPlaceholderCount() == 0)
+                || (listAdapter.getUserHandle().equals(mWorkProfileUserHandle)
+                    && isQuietModeEnabled(mWorkProfileUserHandle));
     }
 
     protected class ProfileDescriptor {

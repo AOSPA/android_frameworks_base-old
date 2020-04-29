@@ -3004,6 +3004,7 @@
       <public name="animatedImageDrawable"/>
       <public name="htmlDescription"/>
       <public name="preferMinimalPostProcessing"/>
+      <!-- @removed -->
       <public name="featureId" />
       <public name="supportsInlineSuggestions" />
       <public name="crossProfile" />
@@ -3013,9 +3014,12 @@
       <!-- @hide @SystemApi -->
       <public name="minExtensionVersion" />
       <public name="allowNativeHeapPointerTagging" />
+      <!-- @hide no longer used, kept to preserve padding -->
+      <public name="allowAutoRevokePermissionsExemption"/>
+      <public name="autoRevokePermissions" />
       <public name="preserveLegacyExternalStorage" />
       <public name="mimeGroup" />
-      <public name="enableGwpAsan" />
+      <public name="gwpAsanMode" />
     </public-group>
 
     <public-group type="drawable" first-id="0x010800b5">
@@ -3041,8 +3045,6 @@
       <public name="config_defaultCallScreening" />
       <!-- @hide @SystemApi @TestApi -->
       <public name="config_systemGallery" />
-      <!-- @hide @SystemApi -->
-      <public name="low_memory" />
     </public-group>
 
     <public-group type="bool" first-id="0x01110005">
@@ -3065,17 +3067,6 @@
       <public name="accessibilitySystemActionLockScreen" />
       <public name="accessibilitySystemActionTakeScreenshot" />
       <public name="accessibilityActionImeEnter" />
-    </public-group>
-
-    <public-group type="array" first-id="0x01070006">
-      <!-- @hide @SystemApi -->
-      <public name="simColors" />
-      <!-- @hide @SystemApi -->
-      <public name="config_restrictedPreinstalledCarrierApps" />
-      <!-- @hide @SystemApi -->
-      <public name="config_sms_enabled_single_shift_tables" />
-      <!-- @hide @SystemApi -->
-      <public name="config_sms_enabled_locking_shift_tables" />
     </public-group>
 
     <public-group type="string" first-id="0x0104002c">

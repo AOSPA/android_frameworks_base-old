@@ -44,7 +44,8 @@ oneway interface IAutoFillManagerClient {
     /**
       * Autofills the activity with the contents of a dataset.
       */
-    void autofill(int sessionId, in List<AutofillId> ids, in List<AutofillValue> values);
+    void autofill(int sessionId, in List<AutofillId> ids, in List<AutofillValue> values,
+            boolean hideHighlight);
 
     /**
       * Authenticates a fill response or a data set.
@@ -116,4 +117,9 @@ oneway interface IAutoFillManagerClient {
     * Notifies disables autofill for the app or activity.
     */
    void notifyDisableAutofill(long disableDuration, in ComponentName componentName);
+
+   /**
+    * Requests to show the soft input method if the focus is on the given id.
+    */
+   void requestShowSoftInput(in AutofillId id);
 }

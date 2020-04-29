@@ -18,6 +18,7 @@ package com.android.systemui.qs;
 
 import static com.android.systemui.util.InjectionInflationController.VIEW_CONTEXT;
 
+import android.annotation.Nullable;
 import android.content.Context;
 import android.content.res.Configuration;
 import android.graphics.Rect;
@@ -26,10 +27,12 @@ import android.view.Gravity;
 import android.view.View;
 import android.widget.LinearLayout;
 
+import com.android.settingslib.bluetooth.LocalBluetoothManager;
 import com.android.systemui.Dependency;
 import com.android.systemui.R;
 import com.android.systemui.broadcast.BroadcastDispatcher;
 import com.android.systemui.dagger.qualifiers.Background;
+import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.dump.DumpManager;
 import com.android.systemui.plugins.qs.QSTile;
 import com.android.systemui.plugins.qs.QSTile.SignalState;
@@ -40,6 +43,7 @@ import com.android.systemui.statusbar.NotificationMediaManager;
 import com.android.systemui.tuner.TunerService;
 import com.android.systemui.tuner.TunerService.Tunable;
 import com.android.systemui.util.Utils;
+import com.android.systemui.util.concurrency.DelayableExecutor;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -62,7 +66,10 @@ public class QuickQSPanel extends QSPanel {
     private int mMaxTiles;
     protected QSPanel mFullPanel;
     private QuickQSMediaPlayer mMediaPlayer;
+    /** Whether or not the QS media player feature is enabled. */
     private boolean mUsingMediaPlayer;
+    /** Whether or not the QuickQSPanel currently contains a media player. */
+    private boolean mHasMediaPlayer;
     private LinearLayout mHorizontalLinearLayout;
 
     // Only used with media
@@ -77,10 +84,12 @@ public class QuickQSPanel extends QSPanel {
             BroadcastDispatcher broadcastDispatcher,
             QSLogger qsLogger,
             NotificationMediaManager notificationMediaManager,
-            @Background Executor backgroundExecutor
+            @Main Executor foregroundExecutor,
+            @Background DelayableExecutor backgroundExecutor,
+            @Nullable LocalBluetoothManager localBluetoothManager
     ) {
         super(context, attrs, dumpManager, broadcastDispatcher, qsLogger, notificationMediaManager,
-                backgroundExecutor);
+                foregroundExecutor, backgroundExecutor, localBluetoothManager);
         if (mFooter != null) {
             removeView(mFooter.getView());
         }
@@ -100,7 +109,7 @@ public class QuickQSPanel extends QSPanel {
 
             int marginSize = (int) mContext.getResources().getDimension(R.dimen.qqs_media_spacing);
             mMediaPlayer = new QuickQSMediaPlayer(mContext, mHorizontalLinearLayout,
-                    notificationMediaManager, backgroundExecutor);
+                    notificationMediaManager, foregroundExecutor, backgroundExecutor);
             LayoutParams lp2 = new LayoutParams(0, LayoutParams.MATCH_PARENT, 1);
             lp2.setMarginEnd(marginSize);
             lp2.setMarginStart(0);
@@ -155,8 +164,6 @@ public class QuickQSPanel extends QSPanel {
         Dependency.get(TunerService.class).removeTunable(mNumTiles);
     }
 
-
-
     @Override
     protected String getDumpableTag() {
         return TAG;
@@ -181,8 +188,8 @@ public class QuickQSPanel extends QSPanel {
 
     boolean switchTileLayout() {
         if (!mUsingMediaPlayer) return false;
-        if (mMediaPlayer.hasMediaSession()
-                && mHorizontalLinearLayout.getVisibility() == View.GONE) {
+        mHasMediaPlayer = mMediaPlayer.hasMediaSession();
+        if (mHasMediaPlayer && mHorizontalLinearLayout.getVisibility() == View.GONE) {
             mHorizontalLinearLayout.setVisibility(View.VISIBLE);
             ((View) mRegularTileLayout).setVisibility(View.GONE);
             mTileLayout.setListening(false);
@@ -194,8 +201,7 @@ public class QuickQSPanel extends QSPanel {
             if (mHost != null) setTiles(mHost.getTiles());
             mTileLayout.setListening(mListening);
             return true;
-        } else if (!mMediaPlayer.hasMediaSession()
-                && mHorizontalLinearLayout.getVisibility() == View.VISIBLE) {
+        } else if (!mHasMediaPlayer && mHorizontalLinearLayout.getVisibility() == View.VISIBLE) {
             mHorizontalLinearLayout.setVisibility(View.GONE);
             ((View) mRegularTileLayout).setVisibility(View.VISIBLE);
             mTileLayout.setListening(false);
@@ -211,8 +217,9 @@ public class QuickQSPanel extends QSPanel {
         return false;
     }
 
-    public boolean hasMediaPlayerSession() {
-        return mMediaPlayer.hasMediaSession();
+    /** Returns true if this panel currently contains a media player. */
+    public boolean hasMediaPlayer() {
+        return mHasMediaPlayer;
     }
 
     @Override

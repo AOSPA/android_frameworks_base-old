@@ -17,13 +17,12 @@
 package android.media.tv.tuner.frontend;
 
 import android.annotation.IntDef;
+import android.annotation.IntRange;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
-import android.annotation.RequiresPermission;
 import android.annotation.SystemApi;
-import android.content.Context;
 import android.hardware.tv.tuner.V1_0.Constants;
-import android.media.tv.tuner.TunerUtils;
+import android.media.tv.tuner.Tuner;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -290,34 +289,45 @@ public class DvbsFrontendSettings extends FrontendSettings {
 
     /**
      * Creates a builder for {@link DvbsFrontendSettings}.
-     *
-     * @param context the context of the caller.
      */
-    @RequiresPermission(android.Manifest.permission.ACCESS_TV_TUNER)
     @NonNull
-    public static Builder builder(@NonNull Context context) {
-        TunerUtils.checkTunerPermission(context);
+    public static Builder builder() {
         return new Builder();
     }
 
     /**
      * Builder for {@link DvbsFrontendSettings}.
      */
-    public static class Builder extends FrontendSettings.Builder<Builder> {
-        private int mModulation;
-        private DvbsCodeRate mCodeRate;
-        private int mSymbolRate;
-        private int mRolloff;
-        private int mPilot;
-        private int mInputStreamId;
-        private int mStandard;
-        private int mVcmMode;
+    public static class Builder {
+        private int mFrequency = 0;
+        private int mModulation = MODULATION_UNDEFINED;
+        private DvbsCodeRate mCodeRate = null;
+        private int mSymbolRate = 0;
+        private int mRolloff = ROLLOFF_UNDEFINED;
+        private int mPilot = PILOT_UNDEFINED;
+        private int mInputStreamId = Tuner.INVALID_STREAM_ID;
+        private int mStandard = STANDARD_AUTO;
+        private int mVcmMode = VCM_MODE_UNDEFINED;
 
         private Builder() {
         }
 
         /**
+         * Sets frequency in Hz.
+         *
+         * <p>Default value is 0.
+         */
+        @NonNull
+        @IntRange(from = 1)
+        public Builder setFrequency(int frequency) {
+            mFrequency = frequency;
+            return this;
+        }
+
+        /**
          * Sets Modulation.
+         *
+         * <p>Default value is {@link #MODULATION_UNDEFINED}.
          */
         @NonNull
         public Builder setModulation(@Modulation int modulation) {
@@ -326,6 +336,8 @@ public class DvbsFrontendSettings extends FrontendSettings {
         }
         /**
          * Sets Code rate.
+         *
+         * <p>Default value is {@code null}.
          */
         @NonNull
         public Builder setCodeRate(@Nullable DvbsCodeRate codeRate) {
@@ -334,6 +346,8 @@ public class DvbsFrontendSettings extends FrontendSettings {
         }
         /**
          * Sets Symbol Rate.
+         *
+         * <p>Default value is 0.
          */
         @NonNull
         public Builder setSymbolRate(int symbolRate) {
@@ -342,6 +356,8 @@ public class DvbsFrontendSettings extends FrontendSettings {
         }
         /**
          * Sets Rolloff.
+         *
+         * <p>Default value is {@link #ROLLOFF_UNDEFINED}.
          */
         @NonNull
         public Builder setRolloff(@Rolloff int rolloff) {
@@ -350,6 +366,8 @@ public class DvbsFrontendSettings extends FrontendSettings {
         }
         /**
          * Sets Pilot mode.
+         *
+         * <p>Default value is {@link #PILOT_UNDEFINED}.
          */
         @NonNull
         public Builder setPilot(@Pilot int pilot) {
@@ -358,6 +376,8 @@ public class DvbsFrontendSettings extends FrontendSettings {
         }
         /**
          * Sets Input Stream ID.
+         *
+         * <p>Default value is {@link Tuner#INVALID_STREAM_ID}.
          */
         @NonNull
         public Builder setInputStreamId(int inputStreamId) {
@@ -366,6 +386,8 @@ public class DvbsFrontendSettings extends FrontendSettings {
         }
         /**
          * Sets Standard.
+         *
+         * <p>Default value is {@link #STANDARD_AUTO}.
          */
         @NonNull
         public Builder setStandard(@Standard int standard) {
@@ -374,6 +396,8 @@ public class DvbsFrontendSettings extends FrontendSettings {
         }
         /**
          * Sets VCM mode.
+         *
+         * <p>Default value is {@link #VCM_MODE_UNDEFINED}.
          */
         @NonNull
         public Builder setVcmMode(@VcmMode int vcm) {
@@ -388,11 +412,6 @@ public class DvbsFrontendSettings extends FrontendSettings {
         public DvbsFrontendSettings build() {
             return new DvbsFrontendSettings(mFrequency, mModulation, mCodeRate, mSymbolRate,
                     mRolloff, mPilot, mInputStreamId, mStandard, mVcmMode);
-        }
-
-        @Override
-        Builder self() {
-            return this;
         }
     }
 

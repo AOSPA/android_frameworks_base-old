@@ -144,6 +144,10 @@ public final class ActiveServices {
 
     private static final boolean SHOW_DUNGEON_NOTIFICATION = false;
 
+    //TODO: remove this when development is done.
+    private static final int DEBUG_FGS_ALLOW_WHILE_IN_USE = 0;
+    private static final int DEBUG_FGS_ENFORCE_TYPE = 1;
+
     // How long we wait for a service to finish executing.
     static final int SERVICE_TIMEOUT = 20*1000;
 
@@ -1472,7 +1476,7 @@ public final class ActiveServices {
                                 active.mPackageName = r.packageName;
                                 active.mUid = r.appInfo.uid;
                                 active.mShownWhileScreenOn = mScreenOn;
-                                if (r.app != null) {
+                                if (r.app != null && r.app.uidRecord != null) {
                                     active.mAppOnTop = active.mShownWhileTop =
                                             r.app.uidRecord.getCurProcState()
                                                     <= ActivityManager.PROCESS_STATE_TOP;
@@ -1737,7 +1741,7 @@ public final class ActiveServices {
                     if (acceptances > 0 ||  rejections > 0) {
                         FrameworkStatsLog.write(
                                 FrameworkStatsLog.FOREGROUND_SERVICE_APP_OP_SESSION_ENDED,
-                                mProcessRecord.uid, opToEnum(op),
+                                mProcessRecord.uid, op,
                                 modeToEnum(mAppOpModes.get(op)),
                                 acceptances, rejections
                         );
@@ -1758,22 +1762,6 @@ public final class ActiveServices {
                 default: return FrameworkStatsLog
                         .FOREGROUND_SERVICE_APP_OP_SESSION_ENDED__APP_OP_MODE__MODE_UNKNOWN;
             }
-        }
-    }
-
-    /** Maps AppOp op value to atoms.proto enum. */
-    private static int opToEnum(int op) {
-        switch (op) {
-            case AppOpsManager.OP_COARSE_LOCATION: return FrameworkStatsLog
-                    .FOREGROUND_SERVICE_APP_OP_SESSION_ENDED__APP_OP_NAME__OP_COARSE_LOCATION;
-            case AppOpsManager.OP_FINE_LOCATION: return FrameworkStatsLog
-                    .FOREGROUND_SERVICE_APP_OP_SESSION_ENDED__APP_OP_NAME__OP_FINE_LOCATION;
-            case AppOpsManager.OP_CAMERA: return FrameworkStatsLog
-                    .FOREGROUND_SERVICE_APP_OP_SESSION_ENDED__APP_OP_NAME__OP_CAMERA;
-            case AppOpsManager.OP_RECORD_AUDIO: return FrameworkStatsLog
-                    .FOREGROUND_SERVICE_APP_OP_SESSION_ENDED__APP_OP_NAME__OP_RECORD_AUDIO;
-            default: return FrameworkStatsLog
-                    .FOREGROUND_SERVICE_APP_OP_SESSION_ENDED__APP_OP_NAME__OP_NONE;
         }
     }
 
@@ -4416,7 +4404,7 @@ public final class ActiveServices {
         }
 
         if (anrMessage != null) {
-            proc.appNotResponding(null, null, null, null, false, anrMessage);
+            mAm.mAnrHelper.appNotResponding(proc, anrMessage);
         }
     }
 
@@ -4441,7 +4429,7 @@ public final class ActiveServices {
         }
 
         if (app != null) {
-            app.appNotResponding(null, null, null, null, false,
+            mAm.mAnrHelper.appNotResponding(app,
                     "Context.startForegroundService() did not then call Service.startForeground(): "
                         + r);
         }
@@ -5101,6 +5089,12 @@ public final class ActiveServices {
             return true;
         }
 
+        // Is the calling UID a device owner app?
+        final boolean isDeviceOwner = mAm.mInternal.isDeviceOwner(callingUid);
+        if (isDeviceOwner) {
+            return true;
+        }
+
         r.mInfoDenyWhileInUsePermissionInFgs =
                 "Background FGS start while-in-use permission restriction [callingPackage: "
                 + callingPackage
@@ -5122,11 +5116,22 @@ public final class ActiveServices {
                 if (!r.isForeground) {
                     continue;
                 }
-                if (!r.mAllowWhileInUsePermissionInFgs
-                        && r.mInfoDenyWhileInUsePermissionInFgs != null) {
-                    final String msg = r.mInfoDenyWhileInUsePermissionInFgs
-                            + " affected while-in-use permission:"
-                            + AppOpsManager.opToPublicName(op);
+                if (mode == DEBUG_FGS_ALLOW_WHILE_IN_USE) {
+                    if (!r.mAllowWhileInUsePermissionInFgs
+                            && r.mInfoDenyWhileInUsePermissionInFgs != null) {
+                        final String msg = r.mInfoDenyWhileInUsePermissionInFgs
+                                + " affected while-in-use permission:"
+                                + AppOpsManager.opToPublicName(op);
+                        Slog.wtf(TAG, msg);
+                    }
+                } else if (mode == DEBUG_FGS_ENFORCE_TYPE) {
+                    final String msg =
+                            "FGS Missing foregroundServiceType in manifest file [callingPackage: "
+                            + r.mRecentCallingPackage
+                            + "; intent:" + r.intent.getIntent()
+                            + "] affected while-in-use permission:"
+                            + AppOpsManager.opToPublicName(op)
+                            + "; targetSdkVersion:" + r.appInfo.targetSdkVersion;
                     Slog.wtf(TAG, msg);
                 }
             }

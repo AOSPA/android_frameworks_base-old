@@ -65,6 +65,8 @@ public class PipResizeGestureHandler {
     private final PointF mDownPoint = new PointF();
     private final Point mMaxSize = new Point();
     private final Point mMinSize = new Point();
+    private final Rect mLastResizeBounds = new Rect();
+    private final Rect mLastDownBounds = new Rect();
     private final Rect mTmpBounds = new Rect();
     private final int mDelta;
 
@@ -97,14 +99,14 @@ public class PipResizeGestureHandler {
         mEnablePipResize = DeviceConfig.getBoolean(
                 DeviceConfig.NAMESPACE_SYSTEMUI,
                 PIP_USER_RESIZE,
-                /* defaultValue = */ false);
+                /* defaultValue = */ true);
         deviceConfig.addOnPropertiesChangedListener(DeviceConfig.NAMESPACE_SYSTEMUI, mMainExecutor,
                 new DeviceConfig.OnPropertiesChangedListener() {
                     @Override
                     public void onPropertiesChanged(DeviceConfig.Properties properties) {
                         if (properties.getKeyset().contains(PIP_USER_RESIZE)) {
                             mEnablePipResize = properties.getBoolean(
-                                    PIP_USER_RESIZE, /* defaultValue = */ false);
+                                    PIP_USER_RESIZE, /* defaultValue = */ true);
                         }
                     }
                 });
@@ -187,17 +189,14 @@ public class PipResizeGestureHandler {
     private void onMotionEvent(MotionEvent ev) {
         int action = ev.getActionMasked();
         if (action == MotionEvent.ACTION_DOWN) {
+            mLastResizeBounds.setEmpty();
             mAllowGesture = isWithinTouchRegion((int) ev.getX(), (int) ev.getY());
             if (mAllowGesture) {
                 mDownPoint.set(ev.getX(), ev.getY());
+                mLastDownBounds.set(mMotionHelper.getBounds());
             }
 
         } else if (mAllowGesture) {
-            final Rect currentPipBounds = mMotionHelper.getBounds();
-            Rect newSize = TaskResizingAlgorithm.resizeDrag(ev.getX(), ev.getY(), mDownPoint.x,
-                    mDownPoint.y, currentPipBounds, mCtrlType, mMinSize.x, mMinSize.y, mMaxSize,
-                    true, true);
-            mPipBoundsHandler.transformBoundsToAspectRatio(newSize);
             switch (action) {
                 case MotionEvent.ACTION_POINTER_DOWN:
                     // We do not support multi touch for resizing via drag
@@ -206,11 +205,18 @@ public class PipResizeGestureHandler {
                 case MotionEvent.ACTION_MOVE:
                     // Capture inputs
                     mInputMonitor.pilferPointers();
-                    //TODO: Actually do resize here.
+                    final Rect currentPipBounds = mMotionHelper.getBounds();
+                    mLastResizeBounds.set(TaskResizingAlgorithm.resizeDrag(ev.getX(), ev.getY(),
+                            mDownPoint.x, mDownPoint.y, currentPipBounds, mCtrlType, mMinSize.x,
+                            mMinSize.y, mMaxSize, true,
+                            mLastDownBounds.width() > mLastDownBounds.height()));
+                    mPipBoundsHandler.transformBoundsToAspectRatio(mLastResizeBounds);
+                    mPipTaskOrganizer.scheduleUserResizePip(mLastDownBounds, mLastResizeBounds,
+                            null);
                     break;
                 case MotionEvent.ACTION_UP:
                 case MotionEvent.ACTION_CANCEL:
-                    //TODO: Finish resize operation here.
+                    mPipTaskOrganizer.scheduleFinishResizePip(mLastResizeBounds);
                     mMotionHelper.synchronizePinnedStackBounds();
                     mCtrlType = CTRL_NONE;
                     mAllowGesture = false;
@@ -223,7 +229,7 @@ public class PipResizeGestureHandler {
         mMaxSize.set(maxX, maxY);
     }
 
-    void updateMiniSize(int minX, int minY) {
+    void updateMinSize(int minX, int minY) {
         mMinSize.set(minX, minY);
     }
 

@@ -155,6 +155,7 @@ interface IDevicePolicyManager {
     boolean setProfileOwner(in ComponentName who, String ownerName, int userHandle);
     ComponentName getProfileOwnerAsUser(int userHandle);
     ComponentName getProfileOwner(int userHandle);
+    ComponentName getProfileOwnerOrDeviceOwnerSupervisionComponent(in UserHandle userHandle);
     String getProfileOwnerName(int userHandle);
     void setProfileEnabled(in ComponentName who);
     void setProfileName(in ComponentName who, String profileName);
@@ -255,7 +256,7 @@ interface IDevicePolicyManager {
     String[] getAccountTypesWithManagementDisabledAsUser(int userId, in boolean parent);
 
     void setSecondaryLockscreenEnabled(in ComponentName who, boolean enabled);
-    boolean isSecondaryLockscreenEnabled(int userId);
+    boolean isSecondaryLockscreenEnabled(in UserHandle userHandle);
 
     void setLockTaskPackages(in ComponentName who, in String[] packages);
     String[] getLockTaskPackages(in ComponentName who);
@@ -308,11 +309,11 @@ interface IDevicePolicyManager {
     void setAutoTimeRequired(in ComponentName who, boolean required);
     boolean getAutoTimeRequired();
 
-    void setAutoTime(in ComponentName who, boolean enabled);
-    boolean getAutoTime(in ComponentName who);
+    void setAutoTimeEnabled(in ComponentName who, boolean enabled);
+    boolean getAutoTimeEnabled(in ComponentName who);
 
-    void setAutoTimeZone(in ComponentName who, boolean enabled);
-    boolean getAutoTimeZone(in ComponentName who);
+    void setAutoTimeZoneEnabled(in ComponentName who, boolean enabled);
+    boolean getAutoTimeZoneEnabled(in ComponentName who);
 
     void setForceEphemeralUsers(in ComponentName who, boolean forceEpehemeralUsers);
     boolean getForceEphemeralUsers(in ComponentName who);
@@ -467,9 +468,9 @@ interface IDevicePolicyManager {
 
     boolean setKeyGrantForApp(in ComponentName admin, String callerPackage, String alias, String packageName, boolean hasGrant);
 
-    void setProtectedPackages(in ComponentName admin, in List<String> packages);
+    void setUserControlDisabledPackages(in ComponentName admin, in List<String> packages);
 
-    List<String> getProtectedPackages(in ComponentName admin);
+    List<String> getUserControlDisabledPackages(in ComponentName admin);
 
     void setCommonCriteriaModeEnabled(in ComponentName admin, boolean enabled);
     boolean isCommonCriteriaModeEnabled(in ComponentName admin);

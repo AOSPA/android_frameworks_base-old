@@ -45,15 +45,18 @@ import java.util.concurrent.CopyOnWriteArrayList;
 public class LocalMediaManager implements BluetoothCallback {
     private static final Comparator<MediaDevice> COMPARATOR = Comparator.naturalOrder();
     private static final String TAG = "LocalMediaManager";
+    private static final int MAX_DISCONNECTED_DEVICE_NUM = 5;
 
     @Retention(RetentionPolicy.SOURCE)
     @IntDef({MediaDeviceState.STATE_CONNECTED,
             MediaDeviceState.STATE_CONNECTING,
-            MediaDeviceState.STATE_DISCONNECTED})
+            MediaDeviceState.STATE_DISCONNECTED,
+            MediaDeviceState.STATE_CONNECTING_FAILED})
     public @interface MediaDeviceState {
-        int STATE_CONNECTED = 1;
-        int STATE_CONNECTING = 2;
-        int STATE_DISCONNECTED = 3;
+        int STATE_CONNECTED = 0;
+        int STATE_CONNECTING = 1;
+        int STATE_DISCONNECTED = 2;
+        int STATE_CONNECTING_FAILED = 3;
     }
 
     private final Collection<DeviceCallback> mCallbacks = new CopyOnWriteArrayList<>();
@@ -64,11 +67,12 @@ public class LocalMediaManager implements BluetoothCallback {
     private LocalBluetoothManager mLocalBluetoothManager;
     private InfoMediaManager mInfoMediaManager;
     private String mPackageName;
+    private MediaDevice mOnTransferBluetoothDevice;
 
     @VisibleForTesting
-    List<MediaDevice> mMediaDevices = new ArrayList<>();
+    List<MediaDevice> mMediaDevices = new CopyOnWriteArrayList<>();
     @VisibleForTesting
-    List<MediaDevice> mDisconnectedMediaDevices = new ArrayList<>();
+    List<MediaDevice> mDisconnectedMediaDevices = new CopyOnWriteArrayList<>();
     @VisibleForTesting
     MediaDevice mPhoneDevice;
     @VisibleForTesting
@@ -93,6 +97,15 @@ public class LocalMediaManager implements BluetoothCallback {
         mCallbacks.remove(callback);
     }
 
+    /**
+     * Creates a LocalMediaManager with references to given managers.
+     *
+     * It will obtain a {@link LocalBluetoothManager} by calling
+     * {@link LocalBluetoothManager#getInstance} and create an {@link InfoMediaManager} passing
+     * that bluetooth manager.
+     *
+     * It will use {@link BluetoothAdapter#getDefaultAdapter()] for setting the bluetooth adapter.
+     */
     public LocalMediaManager(Context context, String packageName, Notification notification) {
         mContext = context;
         mPackageName = packageName;
@@ -108,14 +121,18 @@ public class LocalMediaManager implements BluetoothCallback {
                 new InfoMediaManager(context, packageName, notification, mLocalBluetoothManager);
     }
 
-    @VisibleForTesting
-    LocalMediaManager(Context context, LocalBluetoothManager localBluetoothManager,
+    /**
+     * Creates a LocalMediaManager with references to given managers.
+     *
+     * It will use {@link BluetoothAdapter#getDefaultAdapter()] for setting the bluetooth adapter.
+     */
+    public LocalMediaManager(Context context, LocalBluetoothManager localBluetoothManager,
             InfoMediaManager infoMediaManager, String packageName) {
         mContext = context;
         mLocalBluetoothManager = localBluetoothManager;
         mInfoMediaManager = infoMediaManager;
         mPackageName = packageName;
-
+        mBluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
     }
 
     /**
@@ -128,6 +145,8 @@ public class LocalMediaManager implements BluetoothCallback {
             final CachedBluetoothDevice cachedDevice =
                     ((BluetoothMediaDevice) device).getCachedDevice();
             if (!cachedDevice.isConnected() && !cachedDevice.isBusy()) {
+                mOnTransferBluetoothDevice = connectDevice;
+                device.setState(MediaDeviceState.STATE_CONNECTING);
                 cachedDevice.connect();
                 return;
             }
@@ -142,6 +161,7 @@ public class LocalMediaManager implements BluetoothCallback {
             mCurrentConnectedDevice.disconnect();
         }
 
+        device.setState(MediaDeviceState.STATE_CONNECTING);
         if (TextUtils.isEmpty(mPackageName)) {
             mInfoMediaManager.connectDeviceWithoutPackageName(device);
         } else {
@@ -189,6 +209,7 @@ public class LocalMediaManager implements BluetoothCallback {
     public void stopScan() {
         mInfoMediaManager.unregisterCallback(mMediaDeviceCallback);
         mInfoMediaManager.stopScan();
+        unRegisterDeviceAttributeChangeCallback();
     }
 
     /**
@@ -200,7 +221,7 @@ public class LocalMediaManager implements BluetoothCallback {
      */
     public MediaDevice getMediaDeviceById(List<MediaDevice> devices, String id) {
         for (MediaDevice mediaDevice : devices) {
-            if (mediaDevice.getId().equals(id)) {
+            if (TextUtils.equals(mediaDevice.getId(), id)) {
                 return mediaDevice;
             }
         }
@@ -216,7 +237,7 @@ public class LocalMediaManager implements BluetoothCallback {
      */
     public MediaDevice getMediaDeviceById(String id) {
         for (MediaDevice mediaDevice : mMediaDevices) {
-            if (mediaDevice.getId().equals(id)) {
+            if (TextUtils.equals(mediaDevice.getId(), id)) {
                 return mediaDevice;
             }
         }
@@ -372,33 +393,45 @@ public class LocalMediaManager implements BluetoothCallback {
             mCurrentConnectedDevice = infoMediaDevice != null
                     ? infoMediaDevice : updateCurrentConnectedDevice();
             dispatchDeviceListUpdate();
+            if (mOnTransferBluetoothDevice != null && mOnTransferBluetoothDevice.isConnected()) {
+                connectDevice(mOnTransferBluetoothDevice);
+                mOnTransferBluetoothDevice.setState(MediaDeviceState.STATE_CONNECTED);
+                mOnTransferBluetoothDevice = null;
+            }
         }
 
         private List<MediaDevice> buildDisconnectedBluetoothDevice() {
-            for (MediaDevice device : mDisconnectedMediaDevices) {
-                ((BluetoothMediaDevice) device).getCachedDevice()
-                        .unregisterCallback(mDeviceAttributeChangeCallback);
-            }
-            mDisconnectedMediaDevices.clear();
             final List<BluetoothDevice> bluetoothDevices =
                     mBluetoothAdapter.getMostRecentlyConnectedDevices();
             final CachedBluetoothDeviceManager cachedDeviceManager =
                     mLocalBluetoothManager.getCachedDeviceManager();
 
+            final List<CachedBluetoothDevice> cachedBluetoothDeviceList = new ArrayList<>();
+            int deviceCount = 0;
             for (BluetoothDevice device : bluetoothDevices) {
                 final CachedBluetoothDevice cachedDevice =
                         cachedDeviceManager.findDevice(device);
                 if (cachedDevice != null) {
                     if (cachedDevice.getBondState() == BluetoothDevice.BOND_BONDED
                             && !cachedDevice.isConnected()) {
-                        final MediaDevice mediaDevice = new BluetoothMediaDevice(mContext,
-                                cachedDevice,
-                                null, null, mPackageName);
-                        if (!mMediaDevices.contains(mediaDevice)) {
-                            cachedDevice.registerCallback(mDeviceAttributeChangeCallback);
-                            mDisconnectedMediaDevices.add(mediaDevice);
+                        deviceCount++;
+                        cachedBluetoothDeviceList.add(cachedDevice);
+                        if (deviceCount >= MAX_DISCONNECTED_DEVICE_NUM) {
+                            break;
                         }
                     }
+                }
+            }
+
+            unRegisterDeviceAttributeChangeCallback();
+            mDisconnectedMediaDevices.clear();
+            for (CachedBluetoothDevice cachedDevice : cachedBluetoothDeviceList) {
+                final MediaDevice mediaDevice = new BluetoothMediaDevice(mContext,
+                        cachedDevice,
+                        null, null, mPackageName);
+                if (!mMediaDevices.contains(mediaDevice)) {
+                    cachedDevice.registerCallback(mDeviceAttributeChangeCallback);
+                    mDisconnectedMediaDevices.add(mediaDevice);
                 }
             }
             return new ArrayList<>(mDisconnectedMediaDevices);
@@ -423,7 +456,9 @@ public class LocalMediaManager implements BluetoothCallback {
             MediaDevice connectDevice = getMediaDeviceById(mMediaDevices, id);
             connectDevice = connectDevice != null
                     ? connectDevice : updateCurrentConnectedDevice();
-
+            if (connectDevice != null) {
+                connectDevice.setState(MediaDeviceState.STATE_CONNECTED);
+            }
             if (connectDevice == mCurrentConnectedDevice) {
                 Log.d(TAG, "onConnectedDeviceChanged() this device all ready connected!");
                 return;
@@ -440,10 +475,21 @@ public class LocalMediaManager implements BluetoothCallback {
 
         @Override
         public void onRequestFailed(int reason) {
+            for (MediaDevice device : mMediaDevices) {
+                if (device.getState() == MediaDeviceState.STATE_CONNECTING) {
+                    device.setState(MediaDeviceState.STATE_CONNECTING_FAILED);
+                }
+            }
             dispatchOnRequestFailed(reason);
         }
     }
 
+    private void unRegisterDeviceAttributeChangeCallback() {
+        for (MediaDevice device : mDisconnectedMediaDevices) {
+            ((BluetoothMediaDevice) device).getCachedDevice()
+                    .unregisterCallback(mDeviceAttributeChangeCallback);
+        }
+    }
 
     /**
      * Callback for notifying device information updating
@@ -495,6 +541,14 @@ public class LocalMediaManager implements BluetoothCallback {
 
         @Override
         public void onDeviceAttributesChanged() {
+            if (mOnTransferBluetoothDevice != null
+                    && !((BluetoothMediaDevice) mOnTransferBluetoothDevice).getCachedDevice()
+                    .isBusy()
+                    && !mOnTransferBluetoothDevice.isConnected()) {
+                // Failed to connect
+                mOnTransferBluetoothDevice.setState(MediaDeviceState.STATE_DISCONNECTED);
+                mOnTransferBluetoothDevice = null;
+            }
             dispatchDeviceAttributesChanged();
         }
     }

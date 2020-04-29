@@ -17,12 +17,10 @@
 package android.media.tv.tuner.frontend;
 
 import android.annotation.IntDef;
+import android.annotation.IntRange;
 import android.annotation.NonNull;
-import android.annotation.RequiresPermission;
 import android.annotation.SystemApi;
-import android.content.Context;
 import android.hardware.tv.tuner.V1_0.Constants;
-import android.media.tv.tuner.TunerUtils;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -493,39 +491,50 @@ public class DvbtFrontendSettings extends FrontendSettings {
 
     /**
      * Creates a builder for {@link DvbtFrontendSettings}.
-     *
-     * @param context the context of the caller.
      */
-    @RequiresPermission(android.Manifest.permission.ACCESS_TV_TUNER)
     @NonNull
-    public static Builder builder(@NonNull Context context) {
-        TunerUtils.checkTunerPermission(context);
+    public static Builder builder() {
         return new Builder();
     }
 
     /**
      * Builder for {@link DvbtFrontendSettings}.
      */
-    public static class Builder extends FrontendSettings.Builder<Builder> {
-        private int mTransmissionMode;
-        private int mBandwidth;
-        private int mConstellation;
-        private int mHierarchy;
-        private int mHpCodeRate;
-        private int mLpCodeRate;
-        private int mGuardInterval;
-        private boolean mIsHighPriority;
-        private int mStandard;
-        private boolean mIsMiso;
-        private int mPlpMode;
-        private int mPlpId;
-        private int mPlpGroupId;
+    public static class Builder {
+        private int mFrequency = 0;
+        private int mTransmissionMode = TRANSMISSION_MODE_UNDEFINED;
+        private int mBandwidth = BANDWIDTH_UNDEFINED;
+        private int mConstellation = CONSTELLATION_UNDEFINED;
+        private int mHierarchy = HIERARCHY_UNDEFINED;
+        private int mHpCodeRate = CODERATE_UNDEFINED;
+        private int mLpCodeRate = CODERATE_UNDEFINED;
+        private int mGuardInterval = GUARD_INTERVAL_UNDEFINED;
+        private boolean mIsHighPriority = false;
+        private int mStandard = STANDARD_AUTO;
+        private boolean mIsMiso = false;
+        private int mPlpMode = PLP_MODE_UNDEFINED;
+        private int mPlpId = 0;
+        private int mPlpGroupId = 0;
 
         private Builder() {
         }
 
         /**
+         * Sets frequency in Hz.
+         *
+         * <p>Default value is 0.
+         */
+        @NonNull
+        @IntRange(from = 1)
+        public Builder setFrequency(int frequency) {
+            mFrequency = frequency;
+            return this;
+        }
+
+        /**
          * Sets Transmission Mode.
+         *
+         * <p>Default value is {@link #TRANSMISSION_MODE_UNDEFINED}.
          */
         @NonNull
         public Builder setTransmissionMode(@TransmissionMode int transmissionMode) {
@@ -534,6 +543,8 @@ public class DvbtFrontendSettings extends FrontendSettings {
         }
         /**
          * Sets Bandwidth.
+         *
+         * <p>Default value is {@link #BANDWIDTH_UNDEFINED}.
          */
         @NonNull
         public Builder setBandwidth(@Bandwidth int bandwidth) {
@@ -542,6 +553,8 @@ public class DvbtFrontendSettings extends FrontendSettings {
         }
         /**
          * Sets Constellation.
+         *
+         * <p>Default value is {@link #CONSTELLATION_UNDEFINED}.
          */
         @NonNull
         public Builder setConstellation(@Constellation int constellation) {
@@ -550,6 +563,8 @@ public class DvbtFrontendSettings extends FrontendSettings {
         }
         /**
          * Sets Hierarchy.
+         *
+         * <p>Default value is {@link #HIERARCHY_UNDEFINED}.
          */
         @NonNull
         public Builder setHierarchy(@Hierarchy int hierarchy) {
@@ -558,6 +573,8 @@ public class DvbtFrontendSettings extends FrontendSettings {
         }
         /**
          * Sets Code Rate for High Priority level.
+         *
+         * <p>Default value is {@link #CODERATE_UNDEFINED}.
          */
         @NonNull
         public Builder setHighPriorityCodeRate(@CodeRate int hpCodeRate) {
@@ -566,6 +583,8 @@ public class DvbtFrontendSettings extends FrontendSettings {
         }
         /**
          * Sets Code Rate for Low Priority level.
+         *
+         * <p>Default value is {@link #CODERATE_UNDEFINED}.
          */
         @NonNull
         public Builder setLowPriorityCodeRate(@CodeRate int lpCodeRate) {
@@ -574,6 +593,8 @@ public class DvbtFrontendSettings extends FrontendSettings {
         }
         /**
          * Sets Guard Interval.
+         *
+         * <p>Default value is {@link #GUARD_INTERVAL_UNDEFINED}.
          */
         @NonNull
         public Builder setGuardInterval(@GuardInterval int guardInterval) {
@@ -582,6 +603,8 @@ public class DvbtFrontendSettings extends FrontendSettings {
         }
         /**
          * Sets whether it's high priority.
+         *
+         * <p>Default value is {@code false}.
          */
         @NonNull
         public Builder setHighPriority(boolean isHighPriority) {
@@ -590,6 +613,8 @@ public class DvbtFrontendSettings extends FrontendSettings {
         }
         /**
          * Sets Standard.
+         *
+         * <p>Default value is {@link #STANDARD_AUTO}.
          */
         @NonNull
         public Builder setStandard(@Standard int standard) {
@@ -598,6 +623,8 @@ public class DvbtFrontendSettings extends FrontendSettings {
         }
         /**
          * Sets whether it's MISO.
+         *
+         * <p>Default value is {@code false}.
          */
         @NonNull
         public Builder setMiso(boolean isMiso) {
@@ -606,6 +633,8 @@ public class DvbtFrontendSettings extends FrontendSettings {
         }
         /**
          * Sets Physical Layer Pipe (PLP) Mode.
+         *
+         * <p>Default value is {@link #PLP_MODE_UNDEFINED}.
          */
         @NonNull
         public Builder setPlpMode(@PlpMode int plpMode) {
@@ -614,6 +643,8 @@ public class DvbtFrontendSettings extends FrontendSettings {
         }
         /**
          * Sets Physical Layer Pipe (PLP) ID.
+         *
+         * <p>Default value is 0.
          */
         @NonNull
         public Builder setPlpId(int plpId) {
@@ -622,6 +653,8 @@ public class DvbtFrontendSettings extends FrontendSettings {
         }
         /**
          * Sets Physical Layer Pipe (PLP) group ID.
+         *
+         * <p>Default value is 0.
          */
         @NonNull
         public Builder setPlpGroupId(int plpGroupId) {
@@ -637,11 +670,6 @@ public class DvbtFrontendSettings extends FrontendSettings {
             return new DvbtFrontendSettings(mFrequency, mTransmissionMode, mBandwidth,
                     mConstellation, mHierarchy, mHpCodeRate, mLpCodeRate, mGuardInterval,
                     mIsHighPriority, mStandard, mIsMiso, mPlpMode, mPlpId, mPlpGroupId);
-        }
-
-        @Override
-        Builder self() {
-            return this;
         }
     }
 

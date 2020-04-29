@@ -19,6 +19,7 @@ package android.app;
 import android.accounts.AccountManager;
 import android.accounts.IAccountManager;
 import android.annotation.NonNull;
+import android.annotation.Nullable;
 import android.annotation.SystemApi;
 import android.app.ContextImpl.ServiceInitializationState;
 import android.app.admin.DevicePolicyManager;
@@ -185,6 +186,7 @@ import android.telephony.TelephonyFrameworkInitializer;
 import android.telephony.TelephonyRegistryManager;
 import android.util.ArrayMap;
 import android.util.Log;
+import android.util.Slog;
 import android.view.ContextThemeWrapper;
 import android.view.LayoutInflater;
 import android.view.WindowManager;
@@ -221,12 +223,17 @@ import java.util.Objects;
 public final class SystemServiceRegistry {
     private static final String TAG = "SystemServiceRegistry";
 
+    /** @hide */
+    public static boolean sEnableServiceNotFoundWtf = false;
+
     // Service registry information.
     // This information is never changed once static initialization has completed.
     private static final Map<Class<?>, String> SYSTEM_SERVICE_NAMES =
             new ArrayMap<Class<?>, String>();
     private static final Map<String, ServiceFetcher<?>> SYSTEM_SERVICE_FETCHERS =
             new ArrayMap<String, ServiceFetcher<?>>();
+    private static final Map<String, String> SYSTEM_SERVICE_CLASS_NAMES = new ArrayMap<>();
+
     private static int sServiceCacheSize;
 
     private static volatile boolean sInitializing;
@@ -355,14 +362,6 @@ public final class SystemServiceRegistry {
                 return ServiceManager.getServiceOrThrow(Context.NETD_SERVICE);
             }
         });
-
-        registerService(Context.NETWORK_STACK_SERVICE, IBinder.class,
-                new StaticServiceFetcher<IBinder>() {
-                    @Override
-                    public IBinder createService() {
-                        return ServiceManager.getService(Context.NETWORK_STACK_SERVICE);
-                    }
-                });
 
         registerService(Context.TETHERING_SERVICE, TetheringManager.class,
                 new CachedServiceFetcher<TetheringManager>() {
@@ -1315,7 +1314,7 @@ public final class SystemServiceRegistry {
                             throws ServiceNotFoundException {
                         IBinder b = ServiceManager.getServiceOrThrow(
                                 Context.FILE_INTEGRITY_SERVICE);
-                        return new FileIntegrityManager(
+                        return new FileIntegrityManager(ctx.getOuterContext(),
                                 IFileIntegrityService.Stub.asInterface(b));
                     }});
         //CHECKSTYLE:ON IndentationCheck
@@ -1369,8 +1368,30 @@ public final class SystemServiceRegistry {
      * @hide
      */
     public static Object getSystemService(ContextImpl ctx, String name) {
-        ServiceFetcher<?> fetcher = SYSTEM_SERVICE_FETCHERS.get(name);
-        return fetcher != null ? fetcher.getService(ctx) : null;
+        if (name == null) {
+            return null;
+        }
+        final ServiceFetcher<?> fetcher = SYSTEM_SERVICE_FETCHERS.get(name);
+        if (fetcher == null) {
+            if (sEnableServiceNotFoundWtf) {
+                Slog.wtf(TAG, "Unknown manager requested: " + name);
+            }
+            return null;
+        }
+
+        final Object ret = fetcher.getService(ctx);
+        if (sEnableServiceNotFoundWtf && ret == null) {
+            // Some services do return null in certain situations, so don't do WTF for them.
+            switch (name) {
+                case Context.CONTENT_CAPTURE_MANAGER_SERVICE:
+                case Context.APP_PREDICTION_SERVICE:
+                case Context.INCREMENTAL_SERVICE:
+                    return null;
+            }
+            Slog.wtf(TAG, "Manager wrapper not available: " + name);
+            return null;
+        }
+        return ret;
     }
 
     /**
@@ -1378,7 +1399,15 @@ public final class SystemServiceRegistry {
      * @hide
      */
     public static String getSystemServiceName(Class<?> serviceClass) {
-        return SYSTEM_SERVICE_NAMES.get(serviceClass);
+        if (serviceClass == null) {
+            return null;
+        }
+        final String serviceName = SYSTEM_SERVICE_NAMES.get(serviceClass);
+        if (sEnableServiceNotFoundWtf && serviceName == null) {
+            // This should be a caller bug.
+            Slog.wtf(TAG, "Unknown manager requested: " + serviceClass.getCanonicalName());
+        }
+        return serviceName;
     }
 
     /**
@@ -1389,6 +1418,19 @@ public final class SystemServiceRegistry {
             @NonNull Class<T> serviceClass, @NonNull ServiceFetcher<T> serviceFetcher) {
         SYSTEM_SERVICE_NAMES.put(serviceClass, serviceName);
         SYSTEM_SERVICE_FETCHERS.put(serviceName, serviceFetcher);
+        SYSTEM_SERVICE_CLASS_NAMES.put(serviceName, serviceClass.getSimpleName());
+    }
+
+    /**
+     * Returns system service class name by system service name. This method is mostly an inverse of
+     * {@link #getSystemServiceName(Class)}
+     *
+     * @return system service class name. {@code null} if service name is invalid.
+     * @hide
+     */
+    @Nullable
+    public static String getSystemServiceClassName(@NonNull String name) {
+        return SYSTEM_SERVICE_CLASS_NAMES.get(name);
     }
 
     /**
@@ -1616,6 +1658,9 @@ public final class SystemServiceRegistry {
         public final T getService(ContextImpl ctx) {
             final Object[] cache = ctx.mServiceCache;
             final int[] gates = ctx.mServiceInitializationStateArray;
+            boolean interrupted = false;
+
+            T ret = null;
 
             for (;;) {
                 boolean doInitialize = false;
@@ -1623,7 +1668,8 @@ public final class SystemServiceRegistry {
                     // Return it if we already have a cached instance.
                     T service = (T) cache[mCacheIndex];
                     if (service != null || gates[mCacheIndex] == ContextImpl.STATE_NOT_FOUND) {
-                        return service;
+                        ret = service;
+                        break; // exit the for (;;)
                     }
 
                     // If we get here, there's no cached instance.
@@ -1666,22 +1712,33 @@ public final class SystemServiceRegistry {
                             cache.notifyAll();
                         }
                     }
-                    return service;
+                    ret = service;
+                    break; // exit the for (;;)
                 }
                 // The other threads will wait for the first thread to call notifyAll(),
                 // and go back to the top and retry.
                 synchronized (cache) {
+                    // Repeat until the state becomes STATE_READY or STATE_NOT_FOUND.
+                    // We can't respond to interrupts here; just like we can't in the "doInitialize"
+                    // path, so we remember the interrupt state here and re-interrupt later.
                     while (gates[mCacheIndex] < ContextImpl.STATE_READY) {
                         try {
+                            // Clear the interrupt state.
+                            interrupted |= Thread.interrupted();
                             cache.wait();
                         } catch (InterruptedException e) {
-                            Log.w(TAG, "getService() interrupted");
-                            Thread.currentThread().interrupt();
-                            return null;
+                            // This shouldn't normally happen, but if someone interrupts the
+                            // thread, it will.
+                            Slog.w(TAG, "getService() interrupted");
+                            interrupted = true;
                         }
                     }
                 }
             }
+            if (interrupted) {
+                Thread.currentThread().interrupt();
+            }
+            return ret;
         }
 
         public abstract T createService(ContextImpl ctx) throws ServiceNotFoundException;

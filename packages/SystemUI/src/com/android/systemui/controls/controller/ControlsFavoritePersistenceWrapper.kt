@@ -16,10 +16,12 @@
 
 package com.android.systemui.controls.controller
 
+import android.app.backup.BackupManager
 import android.content.ComponentName
 import android.util.AtomicFile
 import android.util.Log
 import android.util.Xml
+import com.android.systemui.backup.BackupHelper
 import libcore.io.IoUtils
 import org.xmlpull.v1.XmlPullParser
 import org.xmlpull.v1.XmlPullParserException
@@ -38,7 +40,8 @@ import java.util.concurrent.Executor
  */
 class ControlsFavoritePersistenceWrapper(
     private var file: File,
-    private val executor: Executor
+    private val executor: Executor,
+    private var backupManager: BackupManager? = null
 ) {
 
     companion object {
@@ -51,6 +54,7 @@ class ControlsFavoritePersistenceWrapper(
         private const val TAG_COMPONENT = "component"
         private const val TAG_ID = "id"
         private const val TAG_TITLE = "title"
+        private const val TAG_SUBTITLE = "subtitle"
         private const val TAG_TYPE = "type"
         private const val TAG_VERSION = "version"
 
@@ -59,12 +63,21 @@ class ControlsFavoritePersistenceWrapper(
     }
 
     /**
-     * Change the file location for storing/reading the favorites
+     * Change the file location for storing/reading the favorites and the [BackupManager]
      *
      * @param fileName new location
+     * @param newBackupManager new [BackupManager]. Pass null to not trigger backups.
      */
-    fun changeFile(fileName: File) {
+    fun changeFileAndBackupManager(fileName: File, newBackupManager: BackupManager?) {
         file = fileName
+        backupManager = newBackupManager
+    }
+
+    val fileExists: Boolean
+        get() = file.exists()
+
+    fun deleteFile() {
+        file.delete()
     }
 
     /**
@@ -76,48 +89,54 @@ class ControlsFavoritePersistenceWrapper(
         executor.execute {
             Log.d(TAG, "Saving data to file: $file")
             val atomicFile = AtomicFile(file)
-            val writer = try {
-                atomicFile.startWrite()
-            } catch (e: IOException) {
-                Log.e(TAG, "Failed to start write file", e)
-                return@execute
-            }
-            try {
-                Xml.newSerializer().apply {
-                    setOutput(writer, "utf-8")
-                    setFeature("http://xmlpull.org/v1/doc/features.html#indent-output", true)
-                    startDocument(null, true)
-                    startTag(null, TAG_VERSION)
-                    text("$VERSION")
-                    endTag(null, TAG_VERSION)
-
-                    startTag(null, TAG_STRUCTURES)
-                    structures.forEach { s ->
-                        startTag(null, TAG_STRUCTURE)
-                        attribute(null, TAG_COMPONENT, s.componentName.flattenToString())
-                        attribute(null, TAG_STRUCTURE, s.structure.toString())
-
-                        startTag(null, TAG_CONTROLS)
-                        s.controls.forEach { c ->
-                            startTag(null, TAG_CONTROL)
-                            attribute(null, TAG_ID, c.controlId)
-                            attribute(null, TAG_TITLE, c.controlTitle.toString())
-                            attribute(null, TAG_TYPE, c.deviceType.toString())
-                            endTag(null, TAG_CONTROL)
-                        }
-                        endTag(null, TAG_CONTROLS)
-                        endTag(null, TAG_STRUCTURE)
-                    }
-                    endTag(null, TAG_STRUCTURES)
-                    endDocument()
-                    atomicFile.finishWrite(writer)
+            val dataWritten = synchronized(BackupHelper.controlsDataLock) {
+                val writer = try {
+                    atomicFile.startWrite()
+                } catch (e: IOException) {
+                    Log.e(TAG, "Failed to start write file", e)
+                    return@execute
                 }
-            } catch (t: Throwable) {
-                Log.e(TAG, "Failed to write file, reverting to previous version")
-                atomicFile.failWrite(writer)
-            } finally {
-                IoUtils.closeQuietly(writer)
+                try {
+                    Xml.newSerializer().apply {
+                        setOutput(writer, "utf-8")
+                        setFeature("http://xmlpull.org/v1/doc/features.html#indent-output", true)
+                        startDocument(null, true)
+                        startTag(null, TAG_VERSION)
+                        text("$VERSION")
+                        endTag(null, TAG_VERSION)
+
+                        startTag(null, TAG_STRUCTURES)
+                        structures.forEach { s ->
+                            startTag(null, TAG_STRUCTURE)
+                            attribute(null, TAG_COMPONENT, s.componentName.flattenToString())
+                            attribute(null, TAG_STRUCTURE, s.structure.toString())
+
+                            startTag(null, TAG_CONTROLS)
+                            s.controls.forEach { c ->
+                                startTag(null, TAG_CONTROL)
+                                attribute(null, TAG_ID, c.controlId)
+                                attribute(null, TAG_TITLE, c.controlTitle.toString())
+                                attribute(null, TAG_SUBTITLE, c.controlSubtitle.toString())
+                                attribute(null, TAG_TYPE, c.deviceType.toString())
+                                endTag(null, TAG_CONTROL)
+                            }
+                            endTag(null, TAG_CONTROLS)
+                            endTag(null, TAG_STRUCTURE)
+                        }
+                        endTag(null, TAG_STRUCTURES)
+                        endDocument()
+                        atomicFile.finishWrite(writer)
+                    }
+                    true
+                } catch (t: Throwable) {
+                    Log.e(TAG, "Failed to write file, reverting to previous version")
+                    atomicFile.failWrite(writer)
+                    false
+                } finally {
+                    IoUtils.closeQuietly(writer)
+                }
             }
+            if (dataWritten) backupManager?.dataChanged()
         }
     }
 
@@ -140,9 +159,11 @@ class ControlsFavoritePersistenceWrapper(
         }
         try {
             Log.d(TAG, "Reading data from file: $file")
-            val parser = Xml.newPullParser()
-            parser.setInput(reader, null)
-            return parseXml(parser)
+            synchronized(BackupHelper.controlsDataLock) {
+                val parser = Xml.newPullParser()
+                parser.setInput(reader, null)
+                return parseXml(parser)
+            }
         } catch (e: XmlPullParserException) {
             throw IllegalStateException("Failed parsing favorites file: $file", e)
         } catch (e: IOException) {
@@ -168,9 +189,10 @@ class ControlsFavoritePersistenceWrapper(
             } else if (type == XmlPullParser.START_TAG && tagName == TAG_CONTROL) {
                 val id = parser.getAttributeValue(null, TAG_ID)
                 val title = parser.getAttributeValue(null, TAG_TITLE)
+                val subtitle = parser.getAttributeValue(null, TAG_SUBTITLE) ?: ""
                 val deviceType = parser.getAttributeValue(null, TAG_TYPE)?.toInt()
                 if (id != null && title != null && deviceType != null) {
-                    controls.add(ControlInfo(id, title, deviceType))
+                    controls.add(ControlInfo(id, title, subtitle, deviceType))
                 }
             } else if (type == XmlPullParser.END_TAG && tagName == TAG_STRUCTURE) {
                 infos.add(StructureInfo(lastComponent!!, lastStructure!!, controls.toList()))

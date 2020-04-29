@@ -30,6 +30,8 @@ import static com.android.internal.app.MatcherUtils.first;
 import static com.android.internal.app.ResolverDataProvider.createPackageManagerMockedInfo;
 import static com.android.internal.app.ResolverWrapperActivity.sOverrides;
 
+import static junit.framework.Assert.assertTrue;
+
 import static org.hamcrest.CoreMatchers.allOf;
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.CoreMatchers.not;
@@ -598,7 +600,7 @@ public class ResolverActivityTest {
         onView(withId(R.id.contentPanel))
                 .perform(swipeUp());
 
-        onView(withText(R.string.resolver_cant_share_with_work_apps))
+        onView(withText(R.string.resolver_cant_access_work_apps))
                 .check(matches(isDisplayed()));
     }
 
@@ -624,12 +626,12 @@ public class ResolverActivityTest {
         onView(withText(R.string.resolver_work_tab)).perform(click());
         waitForIdle();
 
-        onView(withText(R.string.resolver_turn_on_work_apps_view))
+        onView(withText(R.string.resolver_turn_on_work_apps))
                 .check(matches(isDisplayed()));
     }
 
     @Test
-    public void testWorkTab_noWorkTargets_emptyStateShown() {
+    public void testWorkTab_noWorkAppsAvailable_emptyStateShown() {
         // enable the work tab feature flag
         ResolverActivity.ENABLE_TABBED_VIEW = true;
         markWorkProfileUserAvailable();
@@ -648,8 +650,107 @@ public class ResolverActivityTest {
         onView(withText(R.string.resolver_work_tab)).perform(click());
         waitForIdle();
 
-        onView(withText(R.string.resolver_no_apps_available))
+        onView(withText(R.string.resolver_no_work_apps_available_resolve))
                 .check(matches(isDisplayed()));
+    }
+
+    @Test
+    public void testWorkTab_xProfileOff_noAppsAvailable_workOff_xProfileOffEmptyStateShown() {
+        // enable the work tab feature flag
+        ResolverActivity.ENABLE_TABBED_VIEW = true;
+        markWorkProfileUserAvailable();
+        List<ResolvedComponentInfo> personalResolvedComponentInfos =
+                createResolvedComponentsForTest(3);
+        List<ResolvedComponentInfo> workResolvedComponentInfos =
+                createResolvedComponentsForTest(0);
+        setupResolverControllers(personalResolvedComponentInfos, workResolvedComponentInfos);
+        Intent sendIntent = createSendImageIntent();
+        sendIntent.setType("TestType");
+        sOverrides.isQuietModeEnabled = true;
+        sOverrides.hasCrossProfileIntents = false;
+
+        mActivityRule.launchActivity(sendIntent);
+        waitForIdle();
+        onView(withId(R.id.contentPanel))
+                .perform(swipeUp());
+        onView(withText(R.string.resolver_work_tab)).perform(click());
+        waitForIdle();
+
+        onView(withText(R.string.resolver_cant_access_work_apps))
+                .check(matches(isDisplayed()));
+    }
+
+    @Test
+    public void testWorkTab_noAppsAvailable_workOff_noAppsAvailableEmptyStateShown() {
+        // enable the work tab feature flag
+        ResolverActivity.ENABLE_TABBED_VIEW = true;
+        markWorkProfileUserAvailable();
+        List<ResolvedComponentInfo> personalResolvedComponentInfos =
+                createResolvedComponentsForTest(3);
+        List<ResolvedComponentInfo> workResolvedComponentInfos =
+                createResolvedComponentsForTest(0);
+        setupResolverControllers(personalResolvedComponentInfos, workResolvedComponentInfos);
+        Intent sendIntent = createSendImageIntent();
+        sendIntent.setType("TestType");
+        sOverrides.isQuietModeEnabled = true;
+
+        mActivityRule.launchActivity(sendIntent);
+        waitForIdle();
+        onView(withId(R.id.contentPanel))
+                .perform(swipeUp());
+        onView(withText(R.string.resolver_work_tab)).perform(click());
+        waitForIdle();
+
+        onView(withText(R.string.resolver_no_work_apps_available_resolve))
+                .check(matches(isDisplayed()));
+    }
+
+    @Test
+    public void testAutolaunch_singleTarget_withWorkProfileAndTabbedViewOff_noAutolaunch() {
+        ResolverActivity.ENABLE_TABBED_VIEW = false;
+        List<ResolvedComponentInfo> personalResolvedComponentInfos =
+                createResolvedComponentsForTestWithOtherProfile(2, /* userId */ 10);
+        when(sOverrides.resolverListController.getResolversForIntent(Mockito.anyBoolean(),
+                Mockito.anyBoolean(),
+                Mockito.isA(List.class)))
+                .thenReturn(new ArrayList<>(personalResolvedComponentInfos));
+        Intent sendIntent = createSendImageIntent();
+        sendIntent.setType("TestType");
+        ResolveInfo[] chosen = new ResolveInfo[1];
+        sOverrides.onSafelyStartCallback = targetInfo -> {
+            chosen[0] = targetInfo.getResolveInfo();
+            return true;
+        };
+        waitForIdle();
+
+        mActivityRule.launchActivity(sendIntent);
+        waitForIdle();
+
+        assertTrue(chosen[0] == null);
+    }
+
+    @Test
+    public void testAutolaunch_singleTarget_noWorkProfile_autolaunch() {
+        ResolverActivity.ENABLE_TABBED_VIEW = false;
+        List<ResolvedComponentInfo> personalResolvedComponentInfos =
+                createResolvedComponentsForTest(1);
+        when(sOverrides.resolverListController.getResolversForIntent(Mockito.anyBoolean(),
+                Mockito.anyBoolean(),
+                Mockito.isA(List.class)))
+                .thenReturn(new ArrayList<>(personalResolvedComponentInfos));
+        Intent sendIntent = createSendImageIntent();
+        sendIntent.setType("TestType");
+        ResolveInfo[] chosen = new ResolveInfo[1];
+        sOverrides.onSafelyStartCallback = targetInfo -> {
+            chosen[0] = targetInfo.getResolveInfo();
+            return true;
+        };
+        waitForIdle();
+
+        mActivityRule.launchActivity(sendIntent);
+        waitForIdle();
+
+        assertThat(chosen[0], is(personalResolvedComponentInfos.get(0).getResolveInfoAt(0)));
     }
 
     private Intent createSendImageIntent() {

@@ -83,6 +83,7 @@ import android.os.storage.IStorageManager;
 import android.os.storage.StorageManager;
 import android.text.format.DateUtils;
 import android.util.ArraySet;
+import android.util.EventLog;
 import android.util.IntArray;
 import android.util.Pair;
 import android.util.Slog;
@@ -157,6 +158,9 @@ class UserController implements Handler.Callback {
     // USER_SWITCH_TIMEOUT_MS, an error is reported. Usually it indicates a problem in the observer
     // when it never calls back.
     private static final int USER_SWITCH_CALLBACKS_TIMEOUT_MS = 5 * 1000;
+
+    // TODO(b/149604218): STOPSHIP remove  this constant and the logcat
+    private static final boolean TESTS_NEED_LOGCAT = true;
 
     /**
      * Maximum number of users we allow to be running at a time, including system user.
@@ -382,8 +386,8 @@ class UserController implements Handler.Callback {
 
     private void finishUserBoot(UserState uss, IIntentReceiver resultTo) {
         final int userId = uss.mHandle.getIdentifier();
+        EventLog.writeEvent(EventLogTags.UC_FINISH_USER_BOOT, userId);
 
-        Slog.d(TAG, "Finishing user boot " + userId);
         synchronized (mLock) {
             // Bail if we ended up with a stale user
             if (mStartedUsers.get(userId) != uss) {
@@ -451,7 +455,7 @@ class UserController implements Handler.Callback {
      */
     private boolean finishUserUnlocking(final UserState uss) {
         final int userId = uss.mHandle.getIdentifier();
-        Slog.d(TAG, "UserController event: finishUserUnlocking(" + userId + ")");
+        EventLog.writeEvent(EventLogTags.UC_FINISH_USER_UNLOCKING, userId);
         // Only keep marching forward if user is actually unlocked
         if (!StorageManager.isUserKeyUnlocked(userId)) return false;
         synchronized (mLock) {
@@ -496,7 +500,7 @@ class UserController implements Handler.Callback {
      */
     void finishUserUnlocked(final UserState uss) {
         final int userId = uss.mHandle.getIdentifier();
-        Slog.d(TAG, "UserController event: finishUserUnlocked(" + userId + ")");
+        EventLog.writeEvent(EventLogTags.UC_FINISH_USER_UNLOCKED, userId);
         // Only keep marching forward if user is actually unlocked
         if (!StorageManager.isUserKeyUnlocked(userId)) return;
         synchronized (mLock) {
@@ -567,7 +571,7 @@ class UserController implements Handler.Callback {
 
     private void finishUserUnlockedCompleted(UserState uss) {
         final int userId = uss.mHandle.getIdentifier();
-        Slog.d(TAG, "UserController event: finishUserUnlockedCompleted(" + userId + ")");
+        EventLog.writeEvent(EventLogTags.UC_FINISH_USER_UNLOCKED_COMPLETED, userId);
         synchronized (mLock) {
             // Bail if we ended up with a stale user
             if (mStartedUsers.get(uss.mHandle.getIdentifier()) != uss) return;
@@ -830,7 +834,7 @@ class UserController implements Handler.Callback {
 
     void finishUserStopping(final int userId, final UserState uss,
             final boolean allowDelayedLocking) {
-        Slog.d(TAG, "UserController event: finishUserStopping(" + userId + ")");
+        EventLog.writeEvent(EventLogTags.UC_FINISH_USER_STOPPING, userId);
         // On to the next.
         final Intent shutdownIntent = new Intent(Intent.ACTION_SHUTDOWN);
         // This is the result receiver for the final shutdown broadcast.
@@ -870,7 +874,7 @@ class UserController implements Handler.Callback {
 
     void finishUserStopped(UserState uss, boolean allowDelayedLocking) {
         final int userId = uss.mHandle.getIdentifier();
-        Slog.d(TAG, "UserController event: finishUserStopped(" + userId + ")");
+        EventLog.writeEvent(EventLogTags.UC_FINISH_USER_STOPPED, userId);
         final boolean stopped;
         boolean lockUser = true;
         final ArrayList<IStopUserCallback> stopCallbacks;
@@ -1147,7 +1151,7 @@ class UserController implements Handler.Callback {
 
     private boolean startUserInternal(@UserIdInt int userId, boolean foreground,
             @Nullable IProgressListener unlockListener, @NonNull TimingsTraceAndSlog t) {
-        Slog.i(TAG, "Starting userid:" + userId + " fg:" + foreground);
+        EventLog.writeEvent(EventLogTags.UC_START_USER_INTERNAL, userId);
 
         final int callingUid = Binder.getCallingUid();
         final int callingPid = Binder.getCallingPid();
@@ -1396,7 +1400,7 @@ class UserController implements Handler.Callback {
     boolean unlockUser(final @UserIdInt int userId, byte[] token, byte[] secret,
             IProgressListener listener) {
         checkCallingPermission(INTERACT_ACROSS_USERS_FULL, "unlockUser");
-        Slog.i(TAG, "unlocking user " + userId);
+        EventLog.writeEvent(EventLogTags.UC_UNLOCK_USER, userId);
         final long binderToken = Binder.clearCallingIdentity();
         try {
             return unlockUserCleared(userId, token, secret, listener);
@@ -1481,7 +1485,7 @@ class UserController implements Handler.Callback {
 
     boolean switchUser(final int targetUserId) {
         enforceShellRestriction(UserManager.DISALLOW_DEBUGGING_FEATURES, targetUserId);
-        Slog.i(TAG, "switching to user " + targetUserId);
+        EventLog.writeEvent(EventLogTags.UC_SWITCH_USER, targetUserId);
         int currentUserId = getCurrentUserId();
         UserInfo targetUserInfo = getUserInfo(targetUserId);
         if (targetUserId == currentUserId) {
@@ -1604,7 +1608,8 @@ class UserController implements Handler.Callback {
     }
 
     void dispatchUserSwitch(final UserState uss, final int oldUserId, final int newUserId) {
-        Slog.d(TAG, "Dispatch onUserSwitching oldUser #" + oldUserId + " newUser #" + newUserId);
+        EventLog.writeEvent(EventLogTags.UC_DISPATCH_USER_SWITCH, oldUserId, newUserId);
+
         final int observerCount = mUserSwitchObservers.beginBroadcast();
         if (observerCount > 0) {
             final ArraySet<String> curWaitingUserSwitchCallbacks = new ArraySet<>();
@@ -1666,14 +1671,17 @@ class UserController implements Handler.Callback {
     }
 
     void continueUserSwitch(UserState uss, int oldUserId, int newUserId) {
-        Slog.d(TAG, "Continue user switch oldUser #" + oldUserId + ", newUser #" + newUserId);
+        if (TESTS_NEED_LOGCAT) {
+            Slog.d(TAG, "Continue user switch oldUser #" + oldUserId + ", newUser #" + newUserId);
+        }
+        EventLog.writeEvent(EventLogTags.UC_CONTINUE_USER_SWITCH, oldUserId, newUserId);
+
         if (isUserSwitchUiEnabled()) {
             mInjector.getWindowManager().stopFreezingScreen();
         }
         uss.switching = false;
         mHandler.removeMessages(REPORT_USER_SWITCH_COMPLETE_MSG);
-        mHandler.sendMessage(mHandler.obtainMessage(REPORT_USER_SWITCH_COMPLETE_MSG,
-                newUserId, 0));
+        mHandler.sendMessage(mHandler.obtainMessage(REPORT_USER_SWITCH_COMPLETE_MSG, newUserId, 0));
         stopGuestOrEphemeralUserIfBackground(oldUserId);
         stopBackgroundUsersIfEnforced(oldUserId);
     }
@@ -2218,19 +2226,23 @@ class UserController implements Handler.Callback {
 
     /**
      * Returns whether the given user requires credential entry at this time. This is used to
-     * intercept activity launches for work apps when the Work Challenge is present.
+     * intercept activity launches for locked work apps due to work challenge being triggered
+     * or when the profile user is yet to be unlocked.
      */
     protected boolean shouldConfirmCredentials(@UserIdInt int userId) {
-        synchronized (mLock) {
-            if (mStartedUsers.get(userId) == null) {
-                return false;
-            }
-        }
-        if (!mLockPatternUtils.isSeparateProfileChallengeEnabled(userId)) {
+        if (getStartedUserState(userId) == null) {
             return false;
         }
-        final KeyguardManager km = mInjector.getKeyguardManager();
-        return km.isDeviceLocked(userId) && km.isDeviceSecure(userId);
+        if (!getUserInfo(userId).isManagedProfile()) {
+            return false;
+        }
+        if (mLockPatternUtils.isSeparateProfileChallengeEnabled(userId)) {
+            final KeyguardManager km = mInjector.getKeyguardManager();
+            return km.isDeviceLocked(userId) && km.isDeviceSecure(userId);
+        } else {
+            // For unified challenge, need to confirm credential if user is RUNNING_LOCKED.
+            return isUserRunning(userId, ActivityManager.FLAG_AND_LOCKED);
+        }
     }
 
     boolean isLockScreenDisabled(@UserIdInt int userId) {

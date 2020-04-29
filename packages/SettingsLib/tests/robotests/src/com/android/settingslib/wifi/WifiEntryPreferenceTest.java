@@ -21,7 +21,13 @@ import static org.mockito.Mockito.when;
 
 import android.content.Context;
 import android.graphics.drawable.Drawable;
+import android.view.LayoutInflater;
+import android.view.View;
+import android.widget.LinearLayout;
 
+import androidx.preference.PreferenceViewHolder;
+
+import com.android.settingslib.R;
 import com.android.wifitrackerlib.WifiEntry;
 
 import org.junit.Before;
@@ -58,7 +64,7 @@ public class WifiEntryPreferenceTest {
 
     private static final String MOCK_TITLE = "title";
     private static final String MOCK_SUMMARY = "summary";
-
+    private static final String FAKE_URI_STRING = "fakeuri";
 
     @Before
     public void setUp() {
@@ -146,5 +152,51 @@ public class WifiEntryPreferenceTest {
 
         assertThat(iconList).containsExactly(mMockDrawable0, mMockDrawable1,
                 mMockDrawable2, mMockDrawable3, mMockDrawable4, null);
+    }
+
+    @Test
+    public void notNull_whenGetHelpUriString_shouldSetImageButtonVisible() {
+        when(mMockWifiEntry.getHelpUriString()).thenReturn(FAKE_URI_STRING);
+        final WifiEntryPreference pref =
+                new WifiEntryPreference(mContext, mMockWifiEntry, mMockIconInjector);
+        final LayoutInflater inflater = LayoutInflater.from(mContext);
+        final View view = inflater.inflate(pref.getLayoutResource(), new LinearLayout(mContext),
+                false);
+        final PreferenceViewHolder holder = PreferenceViewHolder.createInstanceForTests(view);
+
+        pref.onBindViewHolder(holder);
+
+        assertThat(view.findViewById(R.id.icon_button).getVisibility()).isEqualTo(View.VISIBLE);
+    }
+
+    @Test
+    public void helpButton_whenGetHelpUriStringNotNull_shouldSetCorrectContentDescription() {
+        when(mMockWifiEntry.getHelpUriString()).thenReturn(FAKE_URI_STRING);
+        final WifiEntryPreference pref =
+                new WifiEntryPreference(mContext, mMockWifiEntry, mMockIconInjector);
+        final LayoutInflater inflater = LayoutInflater.from(mContext);
+        final View view = inflater.inflate(pref.getLayoutResource(), new LinearLayout(mContext),
+                false);
+        final PreferenceViewHolder holder = PreferenceViewHolder.createInstanceForTests(view);
+
+        pref.onBindViewHolder(holder);
+
+        assertThat(view.findViewById(R.id.icon_button).getContentDescription()).isEqualTo(
+                mContext.getString(R.string.help_label));
+    }
+
+    @Test
+    public void subscriptionEntry_shouldSetImageButtonGone() {
+        when(mMockWifiEntry.isSubscription()).thenReturn(true);
+        final WifiEntryPreference pref =
+                new WifiEntryPreference(mContext, mMockWifiEntry, mMockIconInjector);
+        final LayoutInflater inflater = LayoutInflater.from(mContext);
+        final View view = inflater.inflate(pref.getLayoutResource(), new LinearLayout(mContext),
+                false);
+        final PreferenceViewHolder holder = PreferenceViewHolder.createInstanceForTests(view);
+
+        pref.onBindViewHolder(holder);
+
+        assertThat(view.findViewById(R.id.icon_button).getVisibility()).isEqualTo(View.GONE);
     }
 }

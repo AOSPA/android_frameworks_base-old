@@ -238,7 +238,7 @@ public final class MediaRoute2Info implements Parcelable {
      * Refer to the class documentation for details about live audio routes.
      * </p>
      */
-    public static final String FEATURE_LIVE_AUDIO = "android.media.intent.category.LIVE_AUDIO";
+    public static final String FEATURE_LIVE_AUDIO = "android.media.route.feature.LIVE_AUDIO";
 
     /**
      * Media feature: Live video.
@@ -259,13 +259,15 @@ public final class MediaRoute2Info implements Parcelable {
      *
      * @see android.app.Presentation
      */
-    public static final String FEATURE_LIVE_VIDEO = "android.media.intent.category.LIVE_VIDEO";
+    public static final String FEATURE_LIVE_VIDEO = "android.media.route.feature.LIVE_VIDEO";
 
     /**
      * Media feature: Remote playback.
      * <p>
      * A route that supports remote playback routing will allow an application to send
      * requests to play content remotely to supported destinations.
+     * A route may only support {@link #FEATURE_REMOTE_AUDIO_PLAYBACK audio playback} or
+     * {@link #FEATURE_REMOTE_VIDEO_PLAYBACK video playback}.
      * </p><p>
      * Remote playback routes destinations operate independently of the local device.
      * When a remote playback route is selected, the application can control the content
@@ -274,9 +276,35 @@ public final class MediaRoute2Info implements Parcelable {
      * </p><p>
      * Refer to the class documentation for details about remote playback routes.
      * </p>
+     * @see #FEATURE_REMOTE_AUDIO_PLAYBACK
+     * @see #FEATURE_REMOTE_VIDEO_PLAYBACK
      */
     public static final String FEATURE_REMOTE_PLAYBACK =
-            "android.media.intent.category.REMOTE_PLAYBACK";
+            "android.media.route.feature.REMOTE_PLAYBACK";
+
+    /**
+     * Media feature: Remote audio playback.
+     * <p>
+     * A route that supports remote audio playback routing will allow an application to send
+     * requests to play audio content remotely to supported destinations.
+     *
+     * @see #FEATURE_REMOTE_PLAYBACK
+     * @see #FEATURE_REMOTE_VIDEO_PLAYBACK
+     */
+    public static final String FEATURE_REMOTE_AUDIO_PLAYBACK =
+            "android.media.route.feature.REMOTE_AUDIO_PLAYBACK";
+
+    /**
+     * Media feature: Remote video playback.
+     * <p>
+     * A route that supports remote video playback routing will allow an application to send
+     * requests to play video content remotely to supported destinations.
+     *
+     * @see #FEATURE_REMOTE_PLAYBACK
+     * @see #FEATURE_REMOTE_AUDIO_PLAYBACK
+     */
+    public static final String FEATURE_REMOTE_VIDEO_PLAYBACK =
+            "android.media.route.feature.REMOTE_VIDEO_PLAYBACK";
 
     final String mId;
     final CharSequence mName;
@@ -635,8 +663,8 @@ public final class MediaRoute2Info implements Parcelable {
         }
 
         /**
-         * Constructor for builder to create {@link MediaRoute2Info} with
-         * existing {@link MediaRoute2Info} instance.
+         * Constructor for builder to create {@link MediaRoute2Info} with existing
+         * {@link MediaRoute2Info} instance.
          *
          * @param routeInfo the existing instance to copy data from.
          */
@@ -644,6 +672,38 @@ public final class MediaRoute2Info implements Parcelable {
             Objects.requireNonNull(routeInfo, "routeInfo must not be null");
 
             mId = routeInfo.mId;
+            mName = routeInfo.mName;
+            mFeatures = new ArrayList<>(routeInfo.mFeatures);
+            mType = routeInfo.mType;
+            mIsSystem = routeInfo.mIsSystem;
+            mIconUri = routeInfo.mIconUri;
+            mDescription = routeInfo.mDescription;
+            mConnectionState = routeInfo.mConnectionState;
+            mClientPackageName = routeInfo.mClientPackageName;
+            mVolumeHandling = routeInfo.mVolumeHandling;
+            mVolumeMax = routeInfo.mVolumeMax;
+            mVolume = routeInfo.mVolume;
+            if (routeInfo.mExtras != null) {
+                mExtras = new Bundle(routeInfo.mExtras);
+            }
+            mProviderId = routeInfo.mProviderId;
+        }
+
+        /**
+         * Constructor for builder to create {@link MediaRoute2Info} with existing
+         * {@link MediaRoute2Info} instance and replace ID with the given {@code id}.
+         *
+         * @param id The ID of the new route. Must not be empty.
+         * @param routeInfo the existing instance to copy data from.
+         * @hide
+         */
+        public Builder(@NonNull String id, @NonNull MediaRoute2Info routeInfo) {
+            if (TextUtils.isEmpty(id)) {
+                throw new IllegalArgumentException("id must not be empty");
+            }
+            Objects.requireNonNull(routeInfo, "routeInfo must not be null");
+
+            mId = id;
             mName = routeInfo.mName;
             mFeatures = new ArrayList<>(routeInfo.mFeatures);
             mType = routeInfo.mType;

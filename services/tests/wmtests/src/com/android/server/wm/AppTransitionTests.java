@@ -28,7 +28,6 @@ import static android.view.WindowManager.TRANSIT_KEYGUARD_UNOCCLUDE;
 
 import static androidx.test.platform.app.InstrumentationRegistry.getInstrumentation;
 
-import static com.android.dx.mockito.inline.extended.ExtendedMockito.anyBoolean;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.doNothing;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.doReturn;
 
@@ -38,7 +37,6 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 
-import android.graphics.Rect;
 import android.os.IBinder;
 import android.os.RemoteException;
 import android.platform.test.annotations.Presubmit;
@@ -70,12 +68,11 @@ public class AppTransitionTests extends WindowTestsBase {
 
     @Before
     public void setUp() throws Exception {
-        doNothing().when(mWm.mRoot).performSurfacePlacement(anyBoolean());
+        doNothing().when(mWm.mRoot).performSurfacePlacement();
         mDc = mWm.getDefaultDisplayContentLocked();
     }
 
     @Test
-    @FlakyTest(bugId = 131005232)
     public void testKeyguardOverride() {
         mWm.prepareAppTransition(TRANSIT_ACTIVITY_OPEN, false /* alwaysKeepCurrent */);
         mWm.prepareAppTransition(TRANSIT_KEYGUARD_GOING_AWAY, false /* alwaysKeepCurrent */);
@@ -83,7 +80,6 @@ public class AppTransitionTests extends WindowTestsBase {
     }
 
     @Test
-    @FlakyTest(bugId = 131005232)
     public void testKeyguardKeep() {
         mWm.prepareAppTransition(TRANSIT_KEYGUARD_GOING_AWAY, false /* alwaysKeepCurrent */);
         mWm.prepareAppTransition(TRANSIT_ACTIVITY_OPEN, false /* alwaysKeepCurrent */);
@@ -91,7 +87,6 @@ public class AppTransitionTests extends WindowTestsBase {
     }
 
     @Test
-    @FlakyTest(bugId = 131005232)
     public void testForceOverride() {
         mWm.prepareAppTransition(TRANSIT_KEYGUARD_UNOCCLUDE, false /* alwaysKeepCurrent */);
         mDc.prepareAppTransition(TRANSIT_ACTIVITY_OPEN,
@@ -107,7 +102,6 @@ public class AppTransitionTests extends WindowTestsBase {
     }
 
     @Test
-    @FlakyTest(bugId = 131005232)
     public void testKeepKeyguard_withCrashing() {
         mWm.prepareAppTransition(TRANSIT_KEYGUARD_GOING_AWAY, false /* alwaysKeepCurrent */);
         mWm.prepareAppTransition(TRANSIT_CRASHING_ACTIVITY_CLOSE, false /* alwaysKeepCurrent */);
@@ -115,7 +109,6 @@ public class AppTransitionTests extends WindowTestsBase {
     }
 
     @Test
-    @FlakyTest(bugId = 131005232)
     public void testAppTransitionStateForMultiDisplay() {
         // Create 2 displays & presume both display the state is ON for ready to display & animate.
         final DisplayContent dc1 = createNewDisplay(Display.STATE_ON);
@@ -176,7 +169,7 @@ public class AppTransitionTests extends WindowTestsBase {
         assertTrue(dc1.mOpeningApps.size() > 0);
 
         // Move stack to another display.
-        stack1.reparent(dc2, true);
+        stack1.reparent(dc2.getDefaultTaskDisplayArea(), true);
 
         // Verify if token are cleared from both pending transition list in former display.
         assertFalse(dc1.mOpeningApps.contains(activity1));
@@ -184,7 +177,6 @@ public class AppTransitionTests extends WindowTestsBase {
     }
 
     @Test
-    @FlakyTest(bugId = 131005232)
     public void testLoadAnimationSafely() {
         DisplayContent dc = createNewDisplay(Display.STATE_ON);
         assertNull(dc.mAppTransition.loadAnimationSafely(

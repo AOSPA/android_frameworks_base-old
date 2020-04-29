@@ -21,7 +21,6 @@ import static com.android.internal.util.Preconditions.checkNotNull;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.net.MacAddress;
-import android.net.MatchAllNetworkSpecifier;
 import android.net.NetworkRequest;
 import android.net.NetworkSpecifier;
 import android.os.Parcel;
@@ -552,14 +551,7 @@ public final class WifiNetworkSpecifier extends NetworkSpecifier implements Parc
 
     /** @hide */
     @Override
-    public boolean satisfiedBy(NetworkSpecifier other) {
-        if (this == other) {
-            return true;
-        }
-        // Any generic requests should be satisifed by a specific wifi network.
-        if (other == null || other instanceof MatchAllNetworkSpecifier) {
-            return true;
-        }
+    public boolean canBeSatisfiedBy(NetworkSpecifier other) {
         if (other instanceof WifiNetworkAgentSpecifier) {
             return ((WifiNetworkAgentSpecifier) other).satisfiesNetworkSpecifier(this);
         }

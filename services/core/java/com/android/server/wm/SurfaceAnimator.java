@@ -36,6 +36,7 @@ import com.android.internal.annotations.VisibleForTesting;
 import java.io.PrintWriter;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
+import java.util.function.Supplier;
 
 /**
  * A class that can run animations on objects that have a set of child surfaces. We do this by
@@ -145,7 +146,7 @@ class SurfaceAnimator {
         if (mLeash == null) {
             mLeash = createAnimationLeash(mAnimatable, surface, t, type,
                     mAnimatable.getSurfaceWidth(), mAnimatable.getSurfaceHeight(), 0 /* x */,
-                    0 /* y */, hidden);
+                    0 /* y */, hidden, mService.mTransactionFactory);
             mAnimatable.onAnimationLeashCreated(t, mLeash);
         }
         mAnimatable.onLeashAnimationStarting(t, mLeash);
@@ -199,6 +200,11 @@ class SurfaceAnimator {
      */
     boolean isAnimating() {
         return mAnimation != null;
+    }
+
+    @AnimationType
+    int getAnimationType() {
+        return mAnimationType;
     }
 
     /**
@@ -374,13 +380,23 @@ class SurfaceAnimator {
 
     static SurfaceControl createAnimationLeash(Animatable animatable, SurfaceControl surface,
             Transaction t, @AnimationType int type, int width, int height, int x, int y,
-            boolean hidden) {
+            boolean hidden, Supplier<Transaction> transactionFactory) {
         if (DEBUG_ANIM) Slog.i(TAG, "Reparenting to leash");
         final SurfaceControl.Builder builder = animatable.makeAnimationLeash()
                 .setParent(animatable.getAnimationLeashParent())
-                .setHidden(hidden)
-                .setName(surface + " - animation-leash");
+                .setName(surface + " - animation-leash")
+                .setColorLayer();
         final SurfaceControl leash = builder.build();
+        if (!hidden) {
+            // TODO(b/151665759) Defer reparent calls
+            // We want the leash to be visible immediately but we want to set the effects on
+            // the layer. Since the transaction used in this function may be deferred, we apply
+            // another transaction immediately with the correct visibility and effects.
+            // If this doesn't work, you will can see the 2/3 button nav bar flicker during
+            // seamless rotation.
+            transactionFactory.get().unsetColor(leash).show(leash).apply();
+        }
+        t.unsetColor(leash);
         t.setWindowCrop(leash, width, height);
         t.setPosition(leash, x, y);
         t.show(leash);
@@ -442,32 +458,38 @@ class SurfaceAnimator {
      * Animation for screen rotation.
      * @hide
      */
-    static final int ANIMATION_TYPE_SCREEN_ROTATION = 2;
+    static final int ANIMATION_TYPE_SCREEN_ROTATION = 1 << 1;
 
     /**
      * Animation for dimming.
      * @hide
      */
-    static final int ANIMATION_TYPE_DIMMER = 3;
+    static final int ANIMATION_TYPE_DIMMER = 1 << 2;
 
     /**
      * Animation for recent apps.
      * @hide
      */
-    static final int ANIMATION_TYPE_RECENTS = 4;
+    static final int ANIMATION_TYPE_RECENTS = 1 << 3;
 
     /**
      * Animation for a {@link WindowState} without animating the activity.
      * @hide
      */
-    static final int ANIMATION_TYPE_WINDOW_ANIMATION = 5;
+    static final int ANIMATION_TYPE_WINDOW_ANIMATION = 1 << 4;
 
     /**
      * Animation to control insets. This is actually not an animation, but is used to give the
      * client a leash over the system window causing insets.
      * @hide
      */
-    static final int ANIMATION_TYPE_INSETS_CONTROL = 6;
+    static final int ANIMATION_TYPE_INSETS_CONTROL = 1 << 5;
+
+    /**
+     * Bitmask to include all animation types. This is NOT an {@link AnimationType}
+     * @hide
+     */
+    static final int ANIMATION_TYPE_ALL = -1;
 
     /**
      * The type of the animation.

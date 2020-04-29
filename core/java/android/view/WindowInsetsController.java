@@ -22,6 +22,7 @@ import android.annotation.Nullable;
 import android.graphics.Insets;
 import android.inputmethodservice.InputMethodService;
 import android.os.CancellationSignal;
+import android.view.InsetsState.InternalInsetsType;
 import android.view.WindowInsets.Type;
 import android.view.WindowInsets.Type.InsetsType;
 import android.view.animation.Interpolator;
@@ -156,16 +157,17 @@ public interface WindowInsetsController {
      *                     calculate {@link WindowInsetsAnimation#getInterpolatedFraction()}.
      * @param listener The {@link WindowInsetsAnimationControlListener} that gets called when the
      *                 windows are ready to be controlled, among other callbacks.
-     * @return A cancellation signal that the caller can use to cancel the request to obtain
-     *         control, or once they have control, to cancel the control.
+     * @param cancellationSignal A cancellation signal that the caller can use to cancel the
+     *                           request to obtain control, or once they have control, to cancel the
+     *                           control.
      * @see WindowInsetsAnimation#getFraction()
      * @see WindowInsetsAnimation#getInterpolatedFraction()
      * @see WindowInsetsAnimation#getInterpolator()
      * @see WindowInsetsAnimation#getDurationMillis()
      */
-    @NonNull
-    CancellationSignal controlWindowInsetsAnimation(@InsetsType int types, long durationMillis,
+    void controlWindowInsetsAnimation(@InsetsType int types, long durationMillis,
             @Nullable Interpolator interpolator,
+            @Nullable CancellationSignal cancellationSignal,
             @NonNull WindowInsetsAnimationControlListener listener);
 
     /**
@@ -195,6 +197,15 @@ public interface WindowInsetsController {
     @Appearance int getSystemBarsAppearance();
 
     /**
+     * Notify the caption insets height change. The information will be used on the client side to,
+     * make sure the InsetsState has the correct caption insets.
+     *
+     * @param height the height of caption bar insets.
+     * @hide
+     */
+    void setCaptionInsetsHeight(int height);
+
+    /**
      * Controls the behavior of system bars.
      *
      * @param behavior Determines how the bars behave when being hidden by the application.
@@ -214,6 +225,13 @@ public interface WindowInsetsController {
      * @hide
      */
     InsetsState getState();
+
+    /**
+     * @return Whether the specified insets source is currently requested to be visible by the
+     *         application.
+     * @hide
+     */
+    boolean isRequestedVisible(@InternalInsetsType int type);
 
     /**
      * Adds a {@link OnControllableInsetsChangedListener} to the window insets controller.

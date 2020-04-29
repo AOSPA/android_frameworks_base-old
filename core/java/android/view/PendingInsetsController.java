@@ -16,6 +16,8 @@
 
 package android.view;
 
+import android.annotation.NonNull;
+import android.annotation.Nullable;
 import android.os.CancellationSignal;
 import android.view.WindowInsets.Type.InsetsType;
 import android.view.animation.Interpolator;
@@ -40,6 +42,7 @@ public class PendingInsetsController implements WindowInsetsController {
     private InsetsController mReplayedInsetsController;
     private ArrayList<OnControllableInsetsChangedListener> mControllableInsetsChangedListeners
             = new ArrayList<>();
+    private int mCaptionInsetsHeight = 0;
 
     @Override
     public void show(int types) {
@@ -56,21 +59,6 @@ public class PendingInsetsController implements WindowInsetsController {
             mReplayedInsetsController.hide(types);
         } else {
             mRequests.add(new HideRequest(types));
-        }
-    }
-
-    @Override
-    public CancellationSignal controlWindowInsetsAnimation(int types, long durationMillis,
-            Interpolator interpolator,
-            WindowInsetsAnimationControlListener listener) {
-        if (mReplayedInsetsController != null) {
-            return mReplayedInsetsController.controlWindowInsetsAnimation(types, durationMillis,
-                    interpolator, listener);
-        } else {
-            listener.onCancelled();
-            CancellationSignal cancellationSignal = new CancellationSignal();
-            cancellationSignal.cancel();
-            return cancellationSignal;
         }
     }
 
@@ -93,6 +81,11 @@ public class PendingInsetsController implements WindowInsetsController {
     }
 
     @Override
+    public void setCaptionInsetsHeight(int height) {
+        mCaptionInsetsHeight = height;
+    }
+
+    @Override
     public void setSystemBarsBehavior(int behavior) {
         if (mReplayedInsetsController != null) {
             mReplayedInsetsController.setSystemBarsBehavior(behavior);
@@ -112,6 +105,14 @@ public class PendingInsetsController implements WindowInsetsController {
     @Override
     public InsetsState getState() {
         return mDummyState;
+    }
+
+    @Override
+    public boolean isRequestedVisible(int type) {
+
+        // Method is only used once real insets controller is attached, so no need to traverse
+        // requests here.
+        return InsetsState.getDefaultVisibility(type);
     }
 
     @Override
@@ -147,6 +148,9 @@ public class PendingInsetsController implements WindowInsetsController {
         if (mAppearanceMask != 0) {
             controller.setSystemBarsAppearance(mAppearance, mAppearanceMask);
         }
+        if (mCaptionInsetsHeight != 0) {
+            controller.setCaptionInsetsHeight(mCaptionInsetsHeight);
+        }
         int size = mRequests.size();
         for (int i = 0; i < size; i++) {
             mRequests.get(i).replay(controller);
@@ -174,6 +178,19 @@ public class PendingInsetsController implements WindowInsetsController {
     @VisibleForTesting
     public void detach() {
         mReplayedInsetsController = null;
+    }
+
+    @Override
+    public void controlWindowInsetsAnimation(@InsetsType int types, long durationMillis,
+            @Nullable Interpolator interpolator,
+            CancellationSignal cancellationSignal,
+            @NonNull WindowInsetsAnimationControlListener listener) {
+        if (mReplayedInsetsController != null) {
+            mReplayedInsetsController.controlWindowInsetsAnimation(types, durationMillis,
+                    interpolator, cancellationSignal, listener);
+        } else {
+            listener.onCancelled(null);
+        }
     }
 
     private interface PendingRequest {

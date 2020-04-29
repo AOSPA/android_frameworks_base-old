@@ -109,7 +109,10 @@ public class BubbleDataTest extends SysuiTestCase {
 
     @Before
     public void setUp() throws Exception {
-        mNotificationTestHelper = new NotificationTestHelper(mContext, mDependency);
+        mNotificationTestHelper = new NotificationTestHelper(
+                mContext,
+                mDependency,
+                TestableLooper.get(this));
         MockitoAnnotations.initMocks(this);
 
         mEntryA1 = createBubbleEntry(1, "a1", "package.a");
@@ -268,13 +271,18 @@ public class BubbleDataTest extends SysuiTestCase {
         sendUpdatedEntryAtTime(mEntryB2, 5000);
         mBubbleData.setListener(mListener);
 
-        // Test
         sendUpdatedEntryAtTime(mEntryC1, 6000);
         verifyUpdateReceived();
-
-        // Verify
         assertBubbleRemoved(mBubbleA1, BubbleController.DISMISS_AGED);
-        assertThat(mBubbleData.getOverflowBubbles()).isEqualTo(ImmutableList.of(mBubbleA1));
+        assertOverflowChangedTo(ImmutableList.of(mBubbleA1));
+
+        Bubble bubbleA1 = mBubbleData.getOrCreateBubble(mEntryA1);
+        bubbleA1.markUpdatedAt(7000L);
+        mBubbleData.notificationEntryUpdated(bubbleA1, false /* suppressFlyout*/,
+                true /* showInShade */);
+        verifyUpdateReceived();
+        assertBubbleRemoved(mBubbleA2, BubbleController.DISMISS_AGED);
+        assertOverflowChangedTo(ImmutableList.of(mBubbleA2));
     }
 
     /**
@@ -594,13 +602,13 @@ public class BubbleDataTest extends SysuiTestCase {
         sendUpdatedEntryAtTime(mEntryA1, 1000);
         sendUpdatedEntryAtTime(mEntryA2, 2000);
         sendUpdatedEntryAtTime(mEntryB1, 3000); // [B1, A2, A1]
-        changeExpandedStateAtTime(true, 4000L);
+        changeExpandedStateAtTime(true, 4000L); // B1 marked updated at 4000L
         mBubbleData.setListener(mListener);
 
         // Test
         sendUpdatedEntryAtTime(mEntryC1, 4000);
         verifyUpdateReceived();
-        assertOrderChangedTo(mBubbleC1, mBubbleB1, mBubbleA2, mBubbleA1);
+        assertOrderChangedTo(mBubbleB1, mBubbleC1, mBubbleA2, mBubbleA1);
     }
 
     /**
@@ -784,8 +792,7 @@ public class BubbleDataTest extends SysuiTestCase {
      * When the stack transitions to the collapsed state, the selected bubble is brought to the top.
      * Bubbles within the same group should move up with it.
      * <p>
-     * When the stack transitions back to the expanded state, the previous ordering is restored, as
-     * long as no changes have been made (adds, removes or updates) while in the collapsed state.
+     * When the stack transitions back to the expanded state, this new order is kept as is.
      */
     @Test
     public void test_expansionChanges() {
@@ -808,20 +815,12 @@ public class BubbleDataTest extends SysuiTestCase {
         // stack is expanded. When next collapsed, sorting will be applied and saved, just prior
         // to moving the selected bubble to the top (first).
         //
-        // In this case, the expected re-expand state will be: [B1, B2, A2*, A1]
-        //
-        // That state is restored as long as no changes occur (add/remove/update) while in
-        // the collapsed state.
+        // In this case, the expected re-expand state will be: [A2, A1, B1, B2]
         //
         // collapse -> selected bubble (A2) moves first.
         changeExpandedStateAtTime(false, 8000L);
         verifyUpdateReceived();
         assertOrderChangedTo(mBubbleA2, mBubbleA1, mBubbleB1, mBubbleB2);
-
-        // expand -> "original" order/grouping restored
-        changeExpandedStateAtTime(true, 10000L);
-        verifyUpdateReceived();
-        assertOrderChangedTo(mBubbleB1, mBubbleB2, mBubbleA2, mBubbleA1);
     }
 
     /**
@@ -931,6 +930,11 @@ public class BubbleDataTest extends SysuiTestCase {
         assertThat(update.expanded).named("expanded").isEqualTo(expected);
     }
 
+    private void assertOverflowChangedTo(ImmutableList<Bubble> bubbles) {
+        BubbleData.Update update = mUpdateCaptor.getValue();
+        assertThat(update.overflowBubbles).isEqualTo(bubbles);
+    }
+
 
     private NotificationEntry createBubbleEntry(int userId, String notifKey, String packageName) {
         return createBubbleEntry(userId, notifKey, packageName, 1000);
@@ -956,8 +960,8 @@ public class BubbleDataTest extends SysuiTestCase {
     private NotificationEntry createBubbleEntry(int userId, String notifKey, String packageName,
             long postTime) {
         // BubbleMetadata
-        Notification.BubbleMetadata bubbleMetadata = new Notification.BubbleMetadata.Builder()
-                .createIntentBubble(mExpandIntent, Icon.createWithResource("", 0))
+        Notification.BubbleMetadata bubbleMetadata = new Notification.BubbleMetadata.Builder(
+                mExpandIntent, Icon.createWithResource("", 0))
                 .setDeleteIntent(mDeleteIntent)
                 .build();
         // Notification -> BubbleMetadata

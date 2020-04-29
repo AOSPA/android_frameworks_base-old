@@ -262,7 +262,8 @@ public class CommandQueue extends IStatusBar.Stub implements CallbackController<
 
         default void showAuthenticationDialog(Bundle bundle,
                 IBiometricServiceReceiverInternal receiver, int biometricModality,
-                boolean requireConfirmation, int userId, String opPackageName) { }
+                boolean requireConfirmation, int userId, String opPackageName,
+                long operationId) { }
         default void onBiometricAuthenticated() { }
         default void onBiometricHelp(String message) { }
         default void onBiometricError(int modality, int error, int vendorCode) { }
@@ -321,10 +322,10 @@ public class CommandQueue extends IStatusBar.Stub implements CallbackController<
         default void suppressAmbientDisplay(boolean suppress) { }
 
         /**
-         * @see IStatusBar#showToast(String, IBinder, CharSequence, IBinder, int,
+         * @see IStatusBar#showToast(int, String, IBinder, CharSequence, IBinder, int,
          * ITransientNotificationCallback)
          */
-        default void showToast(String packageName, IBinder token, CharSequence text,
+        default void showToast(int uid, String packageName, IBinder token, CharSequence text,
                 IBinder windowToken, int duration,
                 @Nullable ITransientNotificationCallback callback) { }
 
@@ -780,7 +781,8 @@ public class CommandQueue extends IStatusBar.Stub implements CallbackController<
 
     @Override
     public void showAuthenticationDialog(Bundle bundle, IBiometricServiceReceiverInternal receiver,
-            int biometricModality, boolean requireConfirmation, int userId, String opPackageName) {
+            int biometricModality, boolean requireConfirmation, int userId, String opPackageName,
+            long operationId) {
         synchronized (mLock) {
             SomeArgs args = SomeArgs.obtain();
             args.arg1 = bundle;
@@ -789,13 +791,14 @@ public class CommandQueue extends IStatusBar.Stub implements CallbackController<
             args.arg3 = requireConfirmation;
             args.argi2 = userId;
             args.arg4 = opPackageName;
+            args.arg5 = operationId;
             mHandler.obtainMessage(MSG_BIOMETRIC_SHOW, args)
                     .sendToTarget();
         }
     }
 
     @Override
-    public void showToast(String packageName, IBinder token, CharSequence text,
+    public void showToast(int uid, String packageName, IBinder token, CharSequence text,
             IBinder windowToken, int duration, @Nullable ITransientNotificationCallback callback) {
         synchronized (mLock) {
             SomeArgs args = SomeArgs.obtain();
@@ -804,7 +807,8 @@ public class CommandQueue extends IStatusBar.Stub implements CallbackController<
             args.arg3 = text;
             args.arg4 = windowToken;
             args.arg5 = callback;
-            args.argi1 = duration;
+            args.argi1 = uid;
+            args.argi2 = duration;
             mHandler.obtainMessage(MSG_SHOW_TOAST, args).sendToTarget();
         }
     }
@@ -1164,7 +1168,8 @@ public class CommandQueue extends IStatusBar.Stub implements CallbackController<
                                 someArgs.argi1 /* biometricModality */,
                                 (boolean) someArgs.arg3 /* requireConfirmation */,
                                 someArgs.argi2 /* userId */,
-                                (String) someArgs.arg4 /* opPackageName */);
+                                (String) someArgs.arg4 /* opPackageName */,
+                                (long) someArgs.arg5 /* operationId */);
                     }
                     someArgs.recycle();
                     break;
@@ -1272,9 +1277,10 @@ public class CommandQueue extends IStatusBar.Stub implements CallbackController<
                     IBinder windowToken = (IBinder) args.arg4;
                     ITransientNotificationCallback callback =
                             (ITransientNotificationCallback) args.arg5;
-                    int duration = args.argi1;
+                    int uid = args.argi1;
+                    int duration = args.argi2;
                     for (Callbacks callbacks : mCallbacks) {
-                        callbacks.showToast(packageName, token, text, windowToken, duration,
+                        callbacks.showToast(uid, packageName, token, text, windowToken, duration,
                                 callback);
                     }
                     break;

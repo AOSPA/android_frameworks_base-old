@@ -55,6 +55,7 @@ import com.android.server.om.OverlayReferenceMapper;
 import com.android.server.pm.parsing.pkg.AndroidPackage;
 
 import java.io.PrintWriter;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
@@ -481,6 +482,12 @@ public class AppsFilter {
                         mQueriesViaPackage.add(newPkgSetting.appId, existingSetting.appId);
                     }
                 }
+                // if either package instruments the other, mark both as visible to one another
+                if (pkgInstruments(newPkgSetting, existingSetting)
+                        || pkgInstruments(existingSetting, newPkgSetting)) {
+                    mQueriesViaPackage.add(newPkgSetting.appId, existingSetting.appId);
+                    mQueriesViaPackage.add(existingSetting.appId, newPkgSetting.appId);
+                }
             }
 
             int existingSize = existingSettings.size();
@@ -501,7 +508,65 @@ public class AppsFilter {
     private static boolean isSystemSigned(@NonNull PackageParser.SigningDetails sysSigningDetails,
             PackageSetting pkgSetting) {
         return pkgSetting.isSystem()
-            && pkgSetting.signatures.mSigningDetails.signaturesMatchExactly(sysSigningDetails);
+                && pkgSetting.signatures.mSigningDetails.signaturesMatchExactly(sysSigningDetails);
+    }
+
+    private static void sort(int[] uids, int nextUidIndex) {
+        Arrays.sort(uids, 0, nextUidIndex);
+    }
+
+    /**
+     * Fetches all app Ids that a given setting is currently visible to, per provided user. This
+     * only includes UIDs >= {@link Process#FIRST_APPLICATION_UID} as all other UIDs can already see
+     * all applications.
+     *
+     * If the setting is visible to all UIDs, null is returned. If an app is not visible to any
+     * applications, the int array will be empty.
+     *
+     * @param users the set of users that should be evaluated for this calculation
+     * @param existingSettings the set of all package settings that currently exist on device
+     * @return a SparseArray mapping userIds to a sorted int array of appIds that may view the
+     *         provided setting or null if the app is visible to all and no whitelist should be
+     *         applied.
+     */
+    @Nullable
+    public SparseArray<int[]> getVisibilityWhitelist(PackageSetting setting, int[] users,
+            ArrayMap<String, PackageSetting> existingSettings) {
+        if (mForceQueryable.contains(setting.appId)) {
+            return null;
+        }
+        // let's reserve max memory to limit the number of allocations
+        SparseArray<int[]> result = new SparseArray<>(users.length);
+        for (int u = 0; u < users.length; u++) {
+            final int userId = users[u];
+            int[] appIds = new int[existingSettings.size()];
+            int[] buffer = null;
+            int whitelistSize = 0;
+            for (int i = existingSettings.size() - 1; i >= 0; i--) {
+                final PackageSetting existingSetting = existingSettings.valueAt(i);
+                final int existingAppId = existingSetting.appId;
+                if (existingAppId < Process.FIRST_APPLICATION_UID) {
+                    continue;
+                }
+                final int loc = Arrays.binarySearch(appIds, 0, whitelistSize, existingAppId);
+                if (loc >= 0) {
+                    continue;
+                }
+                final int existingUid = UserHandle.getUid(userId, existingAppId);
+                if (!shouldFilterApplication(existingUid, existingSetting, setting, userId)) {
+                    if (buffer == null) {
+                        buffer = new int[appIds.length];
+                    }
+                    final int insert = ~loc;
+                    System.arraycopy(appIds, insert, buffer, 0, whitelistSize - insert);
+                    appIds[insert] = existingUid;
+                    System.arraycopy(buffer, 0, appIds, insert + 1, whitelistSize - insert);
+                    whitelistSize++;
+                }
+            }
+            result.put(userId, Arrays.copyOf(appIds, whitelistSize));
+        }
+        return result;
     }
 
     /**
@@ -609,7 +674,8 @@ public class AppsFilter {
             Trace.endSection();
 
             if (callingPkgSetting != null) {
-                if (!mFeatureConfig.packageIsEnabled(callingPkgSetting.pkg)) {
+                if (callingPkgSetting.pkg != null
+                        && !mFeatureConfig.packageIsEnabled(callingPkgSetting.pkg)) {
                     if (DEBUG_LOGGING) {
                         log(callingSetting, targetPkgSetting, "DISABLED");
                     }
@@ -617,7 +683,8 @@ public class AppsFilter {
                 }
             } else {
                 for (int i = callingSharedPkgSettings.size() - 1; i >= 0; i--) {
-                    if (!mFeatureConfig.packageIsEnabled(callingSharedPkgSettings.valueAt(i).pkg)) {
+                    final AndroidPackage pkg = callingSharedPkgSettings.valueAt(i).pkg;
+                    if (pkg != null && !mFeatureConfig.packageIsEnabled(pkg)) {
                         if (DEBUG_LOGGING) {
                             log(callingSetting, targetPkgSetting, "DISABLED");
                         }
@@ -715,19 +782,6 @@ public class AppsFilter {
                 Trace.endSection();
             }
 
-            if (callingPkgSetting != null) {
-                if (callingPkgInstruments(callingPkgSetting, targetPkgSetting, targetName)) {
-                    return false;
-                }
-            } else {
-                for (int i = callingSharedPkgSettings.size() - 1; i >= 0; i--) {
-                    if (callingPkgInstruments(callingSharedPkgSettings.valueAt(i),
-                            targetPkgSetting, targetName)) {
-                        return false;
-                    }
-                }
-            }
-
             try {
                 Trace.beginSection("mOverlayReferenceMapper");
                 if (callingSharedPkgSettings != null) {
@@ -762,16 +816,16 @@ public class AppsFilter {
         }
     }
 
-    private static boolean callingPkgInstruments(PackageSetting callingPkgSetting,
-            PackageSetting targetPkgSetting,
-            String targetName) {
+    /** Returns {@code true} if the source package instruments the target package. */
+    private static boolean pkgInstruments(PackageSetting source, PackageSetting target) {
         try {
-            Trace.traceBegin(TRACE_TAG_PACKAGE_MANAGER, "callingPkgInstruments");
-            final List<ParsedInstrumentation> inst = callingPkgSetting.pkg.getInstrumentations();
+            Trace.traceBegin(TRACE_TAG_PACKAGE_MANAGER, "pkgInstruments");
+            final String packageName = target.pkg.getPackageName();
+            final List<ParsedInstrumentation> inst = source.pkg.getInstrumentations();
             for (int i = ArrayUtils.size(inst) - 1; i >= 0; i--) {
-                if (Objects.equals(inst.get(i).getTargetPackage(), targetName)) {
+                if (Objects.equals(inst.get(i).getTargetPackage(), packageName)) {
                     if (DEBUG_LOGGING) {
-                        log(callingPkgSetting, targetPkgSetting, "instrumentation");
+                        log(source, target, "instrumentation");
                     }
                     return true;
                 }

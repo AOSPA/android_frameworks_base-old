@@ -2250,11 +2250,15 @@ public class Vpn {
                 final String interfaceName = mTunnelIface.getInterfaceName();
                 final int maxMtu = mProfile.getMaxMtu();
                 final List<LinkAddress> internalAddresses = childConfig.getInternalAddresses();
+                final List<String> dnsAddrStrings = new ArrayList<>();
 
                 final Collection<RouteInfo> newRoutes = VpnIkev2Utils.getRoutesFromTrafficSelectors(
                         childConfig.getOutboundTrafficSelectors());
                 for (final LinkAddress address : internalAddresses) {
                     mTunnelIface.addAddress(address.getAddress(), address.getPrefixLength());
+                }
+                for (InetAddress addr : childConfig.getInternalDnsServers()) {
+                    dnsAddrStrings.add(addr.getHostAddress());
                 }
 
                 final NetworkAgent networkAgent;
@@ -2271,7 +2275,9 @@ public class Vpn {
                     mConfig.routes.clear();
                     mConfig.routes.addAll(newRoutes);
 
-                    // TODO: Add DNS servers from negotiation
+                    if (mConfig.dnsServers == null) mConfig.dnsServers = new ArrayList<>();
+                    mConfig.dnsServers.clear();
+                    mConfig.dnsServers.addAll(dnsAddrStrings);
 
                     networkAgent = mNetworkAgent;
 
@@ -2565,7 +2571,7 @@ public class Vpn {
         public void exitIfOuterInterfaceIs(String interfaze) {
             if (interfaze.equals(mOuterInterface)) {
                 Log.i(TAG, "Legacy VPN is going down with " + interfaze);
-                exit();
+                exitVpnRunner();
             }
         }
 
@@ -2574,6 +2580,10 @@ public class Vpn {
         public void exitVpnRunner() {
             // We assume that everything is reset after stopping the daemons.
             interrupt();
+
+            // Always disconnect. This may be called again in cleanupVpnStateLocked() if
+            // exitVpnRunner() was called from exit(), but it will be a no-op.
+            agentDisconnect();
             try {
                 mContext.unregisterReceiver(mBroadcastReceiver);
             } catch (IllegalArgumentException e) {}
@@ -2807,7 +2817,7 @@ public class Vpn {
             } catch (Exception e) {
                 Log.i(TAG, "Aborting", e);
                 updateState(DetailedState.FAILED, e.getMessage());
-                exit();
+                exitVpnRunner();
             }
         }
 

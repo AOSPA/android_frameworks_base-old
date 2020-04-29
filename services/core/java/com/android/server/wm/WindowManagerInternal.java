@@ -569,12 +569,11 @@ public abstract class WindowManagerInternal {
             IBinder windowToken, int accessibilityWindowId);
 
     /**
-     * Transfers input focus from a given input token to that of the IME window.
      *
-     * @param sourceInputToken The source token.
-     * @param displayId The display hosting the IME window.
-     * @return Whether transfer was successful.
+     * Returns the window name associated to the given binder.
+     *
+     * @param binder The {@link IBinder} object
+     * @return The corresponding {@link WindowState#getName()}
      */
-    public abstract boolean transferTouchFocusToImeWindow(@NonNull IBinder sourceInputToken,
-            int displayId);
+    public abstract String getWindowName(@NonNull IBinder binder);
 }

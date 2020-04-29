@@ -22,6 +22,7 @@ import static android.content.pm.PackageManager.FEATURE_WATCH;
 import static android.content.pm.PackageManager.INSTALL_PARSE_FAILED_BAD_MANIFEST;
 import static android.content.pm.PackageManager.INSTALL_PARSE_FAILED_INCONSISTENT_CERTIFICATES;
 import static android.content.pm.PackageManager.INSTALL_PARSE_FAILED_NOT_APK;
+import static android.content.pm.PackageManager.INSTALL_PARSE_FAILED_ONLY_COREAPP_ALLOWED;
 import static android.content.pm.PackageManager.INSTALL_PARSE_FAILED_UNEXPECTED_EXCEPTION;
 import static android.os.Build.VERSION_CODES.DONUT;
 import static android.os.Build.VERSION_CODES.O;
@@ -40,7 +41,6 @@ import android.content.pm.ConfigurationInfo;
 import android.content.pm.FeatureGroupInfo;
 import android.content.pm.FeatureInfo;
 import android.content.pm.PackageInfo;
-import android.content.pm.PackageItemInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.PackageParser;
 import android.content.pm.PackageParser.PackageParserException;
@@ -49,8 +49,8 @@ import android.content.pm.Signature;
 import android.content.pm.parsing.component.ComponentParseUtils;
 import android.content.pm.parsing.component.ParsedActivity;
 import android.content.pm.parsing.component.ParsedActivityUtils;
-import android.content.pm.parsing.component.ParsedFeature;
-import android.content.pm.parsing.component.ParsedFeatureUtils;
+import android.content.pm.parsing.component.ParsedAttribution;
+import android.content.pm.parsing.component.ParsedAttributionUtils;
 import android.content.pm.parsing.component.ParsedInstrumentation;
 import android.content.pm.parsing.component.ParsedInstrumentationUtils;
 import android.content.pm.parsing.component.ParsedIntentInfo;
@@ -66,7 +66,9 @@ import android.content.pm.parsing.component.ParsedProviderUtils;
 import android.content.pm.parsing.component.ParsedService;
 import android.content.pm.parsing.component.ParsedServiceUtils;
 import android.content.pm.parsing.result.ParseInput;
+import android.content.pm.parsing.result.ParseInput.DeferredError;
 import android.content.pm.parsing.result.ParseResult;
+import android.content.pm.parsing.result.ParseTypeImpl;
 import android.content.pm.permission.SplitPermissionInfoParcelable;
 import android.content.pm.split.DefaultSplitAssetLoader;
 import android.content.pm.split.SplitAssetDependencyLoader;
@@ -127,6 +129,51 @@ public class ParsingPackageUtils {
 
     public static final String TAG = ParsingUtils.TAG;
 
+    /**
+     * For cases outside of PackageManagerService when an APK needs to be parsed as a one-off
+     * request, without caching the input object and without querying the internal system state
+     * for feature support.
+     */
+    @NonNull
+    public static ParseResult<ParsingPackage> parseDefaultOneTime(File file, int flags,
+            @NonNull ParseInput.Callback inputCallback, @NonNull Callback callback) {
+        if ((flags & (PackageManager.MATCH_DIRECT_BOOT_UNAWARE
+                | PackageManager.MATCH_DIRECT_BOOT_AWARE)) == 0) {
+            // Caller expressed no opinion about what encryption
+            // aware/unaware components they want to see, so match both
+            flags |= PackageManager.MATCH_DIRECT_BOOT_AWARE
+                    | PackageManager.MATCH_DIRECT_BOOT_UNAWARE;
+        }
+
+        ParseInput input = new ParseTypeImpl(inputCallback).reset();
+        ParseResult<ParsingPackage> result;
+
+
+        ParsingPackageUtils parser = new ParsingPackageUtils(false, null, null, callback);
+        try {
+            result = parser.parsePackage(input, file, flags);
+            if (result.isError()) {
+                return result;
+            }
+        } catch (PackageParser.PackageParserException e) {
+            return input.error(PackageManager.INSTALL_PARSE_FAILED_UNEXPECTED_EXCEPTION,
+                    "Error parsing package", e);
+        }
+
+        try {
+            ParsingPackage pkg = result.getResult();
+            if ((flags & PackageManager.GET_SIGNATURES) != 0
+                    || (flags & PackageManager.GET_SIGNING_CERTIFICATES) != 0) {
+                ParsingPackageUtils.collectCertificates(pkg, false /* skipVerify */);
+            }
+
+            return input.success(pkg);
+        } catch (PackageParser.PackageParserException e) {
+            return input.error(PackageManager.INSTALL_PARSE_FAILED_UNEXPECTED_EXCEPTION,
+                    "Error collecting package certificates", e);
+        }
+    }
+
     private boolean mOnlyCoreApps;
     private String[] mSeparateProcesses;
     private DisplayMetrics mDisplayMetrics;
@@ -183,7 +230,8 @@ public class ParsingPackageUtils {
         final PackageParser.PackageLite lite = ApkLiteParseUtils.parseClusterPackageLite(packageDir,
                 0);
         if (mOnlyCoreApps && !lite.coreApp) {
-            return input.error("Not a coreApp: " + packageDir);
+            return input.error(INSTALL_PARSE_FAILED_ONLY_COREAPP_ALLOWED,
+                    "Not a coreApp: " + packageDir);
         }
 
         // Build the split dependency tree.
@@ -245,7 +293,8 @@ public class ParsingPackageUtils {
         final PackageParser.PackageLite lite = ApkLiteParseUtils.parseMonolithicPackageLite(apkFile,
                 flags);
         if (mOnlyCoreApps && !lite.coreApp) {
-            return input.error("Not a coreApp: " + apkFile);
+            return input.error(INSTALL_PARSE_FAILED_ONLY_COREAPP_ALLOWED,
+                    "Not a coreApp: " + apkFile);
         }
 
         final SplitAssetLoader assetLoader = new DefaultSplitAssetLoader(lite, flags);
@@ -387,15 +436,14 @@ public class ParsingPackageUtils {
             return input.error(PackageManager.INSTALL_PARSE_FAILED_BAD_PACKAGE_NAME);
         }
 
-        TypedArray manifestArray = res.obtainAttributes(parser, R.styleable.AndroidManifest);
+        final TypedArray manifestArray = res.obtainAttributes(parser, R.styleable.AndroidManifest);
         try {
-            boolean isCoreApp = parser.getAttributeBooleanValue(null, "coreApp", false);
-
-            ParsingPackage pkg = mCallback.startParsingPackage(pkgName, apkPath, codePath,
-                    manifestArray, isCoreApp);
-
-            ParseResult<ParsingPackage> result = parseBaseApkTags(input, pkg, manifestArray,
-                    res, parser, flags);
+            final boolean isCoreApp =
+                    parser.getAttributeBooleanValue(null, "coreApp", false);
+            final ParsingPackage pkg = mCallback.startParsingPackage(
+                    pkgName, apkPath, codePath, manifestArray, isCoreApp);
+            final ParseResult<ParsingPackage> result =
+                    parseBaseApkTags(input, pkg, manifestArray, res, parser, flags);
             if (result.isError()) {
                 return result;
             }
@@ -458,10 +506,11 @@ public class ParsingPackageUtils {
         }
 
         if (!foundApp) {
-            return input.error(
-                    PackageManager.INSTALL_PARSE_FAILED_MANIFEST_EMPTY,
-                    "<manifest> does not contain an <application>"
-            );
+            ParseResult<?> deferResult = input.deferError(
+                    "<manifest> does not contain an <application>", DeferredError.MISSING_APP_TAG);
+            if (deferResult.isError()) {
+                return input.error(deferResult);
+            }
         }
 
         return input.success(pkg);
@@ -621,14 +670,12 @@ public class ParsingPackageUtils {
             return sharedUserResult;
         }
 
-        pkg.setInstallLocation(anInt(PackageParser.PARSE_DEFAULT_INSTALL_LOCATION,
+        pkg.setInstallLocation(anInteger(PackageParser.PARSE_DEFAULT_INSTALL_LOCATION,
                 R.styleable.AndroidManifest_installLocation, sa))
-                .setTargetSandboxVersion(anInt(PackageParser.PARSE_DEFAULT_TARGET_SANDBOX,
+                .setTargetSandboxVersion(anInteger(PackageParser.PARSE_DEFAULT_TARGET_SANDBOX,
                         R.styleable.AndroidManifest_targetSandboxVersion, sa))
                 /* Set the global "on SD card" flag */
-                .setExternalStorage((flags & PackageParser.PARSE_EXTERNAL_STORAGE) != 0)
-                .setIsolatedSplitLoading(
-                        bool(false, R.styleable.AndroidManifest_isolatedSplits, sa));
+                .setExternalStorage((flags & PackageParser.PARSE_EXTERNAL_STORAGE) != 0);
 
         boolean foundApp = false;
         final int depth = parser.getDepth();
@@ -667,13 +714,15 @@ public class ParsingPackageUtils {
         }
 
         if (!foundApp && ArrayUtils.size(pkg.getInstrumentations()) == 0) {
-            return input.error(
-                    PackageManager.INSTALL_PARSE_FAILED_MANIFEST_EMPTY,
-                    "<manifest> does not contain an <application> or <instrumentation>"
-            );
+            ParseResult<?> deferResult = input.deferError(
+                    "<manifest> does not contain an <application> or <instrumentation>",
+                    DeferredError.MISSING_APP_TAG);
+            if (deferResult.isError()) {
+                return input.error(deferResult);
+            }
         }
 
-        if (!ParsedFeature.isCombinationValid(pkg.getFeatures())) {
+        if (!ParsedAttribution.isCombinationValid(pkg.getAttributions())) {
             return input.error(
                     INSTALL_PARSE_FAILED_BAD_MANIFEST,
                     "Combination <feature> tags are not valid"
@@ -708,8 +757,9 @@ public class ParsingPackageUtils {
                 return parseOverlay(input, pkg, res, parser);
             case PackageParser.TAG_KEY_SETS:
                 return parseKeySets(input, pkg, res, parser);
-            case PackageParser.TAG_FEATURE:
-                return parseFeature(input, pkg, res, parser);
+            case "feature": // TODO moltmann: Remove
+            case PackageParser.TAG_ATTRIBUTION:
+                return parseAttribution(input, pkg, res, parser);
             case PackageParser.TAG_PERMISSION_GROUP:
                 return parsePermissionGroup(input, pkg, res, parser);
             case PackageParser.TAG_PERMISSION:
@@ -761,11 +811,9 @@ public class ParsingPackageUtils {
             return input.success(pkg);
         }
 
-        ParseResult nameResult = validateName(input, str, true, true);
-        if (nameResult.isError()) {
-            if ("android".equals(pkg.getPackageName())) {
-                nameResult.ignoreError();
-            } else {
+        if (!"android".equals(pkg.getPackageName())) {
+            ParseResult<?> nameResult = validateName(input, str, true, true);
+            if (nameResult.isError()) {
                 return input.error(PackageManager.INSTALL_PARSE_FAILED_BAD_SHARED_USER_ID,
                         "<manifest> specifies bad sharedUserId name \"" + str + "\": "
                                 + nameResult.getErrorMessage());
@@ -918,13 +966,15 @@ public class ParsingPackageUtils {
         return input.success(pkg);
     }
 
-    private static ParseResult<ParsingPackage> parseFeature(ParseInput input, ParsingPackage pkg,
-            Resources res, XmlResourceParser parser) throws IOException, XmlPullParserException {
-        ParseResult<ParsedFeature> result = ParsedFeatureUtils.parseFeature(res, parser, input);
+    private static ParseResult<ParsingPackage> parseAttribution(ParseInput input,
+            ParsingPackage pkg, Resources res, XmlResourceParser parser)
+            throws IOException, XmlPullParserException {
+        ParseResult<ParsedAttribution> result = ParsedAttributionUtils.parseAttribution(res,
+                parser, input);
         if (result.isError()) {
             return input.error(result);
         }
-        return input.success(pkg.addFeature(result.getResult()));
+        return input.success(pkg.addAttribution(result.getResult()));
     }
 
     private static ParseResult<ParsingPackage> parsePermissionGroup(ParseInput input,
@@ -1167,6 +1217,20 @@ public class ParsingPackageUtils {
                     targetCode = minCode;
                 }
 
+                ParseResult<Integer> targetSdkVersionResult = computeTargetSdkVersion(
+                        targetVers, targetCode, PackageParser.SDK_CODENAMES, input);
+                if (targetSdkVersionResult.isError()) {
+                    return input.error(targetSdkVersionResult);
+                }
+
+                int targetSdkVersion = targetSdkVersionResult.getResult();
+
+                ParseResult<?> deferResult =
+                        input.enableDeferredError(pkg.getPackageName(), targetSdkVersion);
+                if (deferResult.isError()) {
+                    return input.error(deferResult);
+                }
+
                 ParseResult<Integer> minSdkVersionResult = computeMinSdkVersion(minVers, minCode,
                         PackageParser.SDK_VERSION, PackageParser.SDK_CODENAMES, input);
                 if (minSdkVersionResult.isError()) {
@@ -1174,14 +1238,6 @@ public class ParsingPackageUtils {
                 }
 
                 int minSdkVersion = minSdkVersionResult.getResult();
-
-                ParseResult<Integer> targetSdkVersionResult = computeTargetSdkVersion(
-                        targetVers, targetCode, PackageParser.SDK_CODENAMES, input);
-                if (targetSdkVersionResult.isError()) {
-                    return input.error(targetSdkVersionResult);
-                }
-
-                int targetSdkVersion = minSdkVersionResult.getResult();
 
                 pkg.setMinSdkVersion(minSdkVersion)
                         .setTargetSdkVersion(targetSdkVersion);
@@ -1387,7 +1443,7 @@ public class ParsingPackageUtils {
 
                 Uri data = null;
                 String dataType = null;
-                String host = "";
+                String host = IntentFilter.WILDCARD;
                 final int numActions = intentInfo.countActions();
                 final int numSchemes = intentInfo.countDataSchemes();
                 final int numTypes = intentInfo.countDataTypes();
@@ -1418,10 +1474,23 @@ public class ParsingPackageUtils {
                     data = new Uri.Builder()
                             .scheme(intentInfo.getDataScheme(0))
                             .authority(host)
+                            .path(IntentFilter.WILDCARD_PATH)
                             .build();
                 }
                 if (numTypes == 1) {
                     dataType = intentInfo.getDataType(0);
+                    // The dataType may have had the '/' removed for the dynamic mimeType feature.
+                    // If we detect that case, we add the * back.
+                    if (!dataType.contains("/")) {
+                        dataType = dataType + "/*";
+                    }
+                    if (data == null) {
+                        data = new Uri.Builder()
+                                .scheme("content")
+                                .authority(IntentFilter.WILDCARD)
+                                .path(IntentFilter.WILDCARD_PATH)
+                                .build();
+                    }
                 }
                 intent.setDataAndType(data, dataType);
                 if (numActions == 1) {
@@ -1662,10 +1731,7 @@ public class ParsingPackageUtils {
                 return input.error("Invalid class loader name: " + classLoaderName);
             }
 
-            if (sa.hasValue(R.styleable.AndroidManifestApplication_enableGwpAsan)) {
-                pkg.setGwpAsanEnabled(
-                        sa.getBoolean(R.styleable.AndroidManifestApplication_enableGwpAsan, false));
-            }
+            pkg.setGwpAsanMode(sa.getInt(R.styleable.AndroidManifestApplication_gwpAsanMode, -1));
         } finally {
             sa.recycle();
         }
@@ -1754,9 +1820,15 @@ public class ParsingPackageUtils {
             // Add a hidden app detail activity to normal apps which forwards user to App Details
             // page.
             ParseResult<ParsedActivity> a = generateAppDetailsHiddenActivity(input, pkg);
-            // Backwards-compat, assume success
+            if (a.isError()) {
+                // Error should be impossible here, as the only failure case as of SDK R is a
+                // string validation error on a constant ":app_details" string passed in by the
+                // parsing code itself. For this reason, this is just a hard failure instead of
+                // deferred.
+                return input.error(a);
+            }
+
             pkg.addActivity(a.getResult());
-            a.ignoreError();
         }
 
         if (hasActivityOrder) {
@@ -1817,6 +1889,7 @@ public class ParsingPackageUtils {
                 .setUseEmbeddedDex(bool(false, R.styleable.AndroidManifestApplication_useEmbeddedDex, sa))
                 .setUsesNonSdkApi(bool(false, R.styleable.AndroidManifestApplication_usesNonSdkApi, sa))
                 .setVmSafeMode(bool(false, R.styleable.AndroidManifestApplication_vmSafeMode, sa))
+                .setAutoRevokePermissions(anInt(R.styleable.AndroidManifestApplication_autoRevokePermissions, sa))
                 // targetSdkVersion gated
                 .setAllowAudioPlaybackCapture(bool(targetSdk >= Build.VERSION_CODES.Q, R.styleable.AndroidManifestApplication_allowAudioPlaybackCapture, sa))
                 .setBaseHardwareAccelerated(bool(targetSdk >= Build.VERSION_CODES.ICE_CREAM_SANDWICH, R.styleable.AndroidManifestApplication_hardwareAccelerated, sa))
@@ -2112,17 +2185,13 @@ public class ParsingPackageUtils {
     private static ParseResult<ParsedActivity> generateAppDetailsHiddenActivity(ParseInput input,
             ParsingPackage pkg) {
         String packageName = pkg.getPackageName();
-        ParseResult<String> taskAffinityResult = ComponentParseUtils.buildTaskAffinityName(
+        ParseResult<String> result = ComponentParseUtils.buildTaskAffinityName(
                 packageName, packageName, ":app_details", input);
-
-        String taskAffinity;
-        if (taskAffinityResult.isSuccess()) {
-            taskAffinity = taskAffinityResult.getResult();
-        } else {
-            // Backwards-compat, do not fail
-            taskAffinity = null;
-            taskAffinityResult.ignoreError();
+        if (result.isError()) {
+            return input.error(result);
         }
+
+        String taskAffinity = result.getResult();
 
         // Build custom App Details activity info instead of parsing it from xml
         return input.success(ParsedActivity.makeAppDetailsActivity(packageName,
@@ -2645,6 +2714,10 @@ public class ParsingPackageUtils {
         return sa.getInt(attribute, defaultValue);
     }
 
+    private static int anInteger(int defaultValue, @StyleableRes int attribute, TypedArray sa) {
+        return sa.getInteger(attribute, defaultValue);
+    }
+
     private static int anInt(@StyleableRes int attribute, TypedArray sa) {
         return sa.getInt(attribute, 0);
     }
@@ -2674,7 +2747,8 @@ public class ParsingPackageUtils {
     public interface Callback {
         boolean hasFeature(String feature);
 
-        ParsingPackage startParsingPackage(String packageName, String baseCodePath, String codePath,
-                TypedArray manifestArray, boolean isCoreApp);
+        ParsingPackage startParsingPackage(@NonNull String packageName,
+                @NonNull String baseCodePath, @NonNull String codePath,
+                @NonNull TypedArray manifestArray, boolean isCoreApp);
     }
 }

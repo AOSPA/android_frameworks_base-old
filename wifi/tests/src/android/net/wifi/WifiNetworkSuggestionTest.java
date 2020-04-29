@@ -56,7 +56,7 @@ public class WifiNetworkSuggestionTest {
                 .get(WifiConfiguration.KeyMgmt.NONE));
         assertTrue(suggestion.isAppInteractionRequired);
         assertFalse(suggestion.isUserInteractionRequired);
-        assertEquals(WifiConfiguration.METERED_OVERRIDE_NONE,
+        assertEquals(WifiConfiguration.METERED_OVERRIDE_NOT_METERED,
                 suggestion.wifiConfiguration.meteredOverride);
         assertEquals(-1, suggestion.wifiConfiguration.priority);
         assertFalse(suggestion.isUserAllowedToManuallyConnect);
@@ -86,7 +86,7 @@ public class WifiNetworkSuggestionTest {
                 suggestion.wifiConfiguration.preSharedKey);
         assertTrue(suggestion.isAppInteractionRequired);
         assertFalse(suggestion.isUserInteractionRequired);
-        assertEquals(WifiConfiguration.METERED_OVERRIDE_NONE,
+        assertEquals(WifiConfiguration.METERED_OVERRIDE_NOT_METERED,
                 suggestion.wifiConfiguration.meteredOverride);
         assertEquals(0, suggestion.wifiConfiguration.priority);
         assertFalse(suggestion.isUserAllowedToManuallyConnect);
@@ -296,6 +296,8 @@ public class WifiNetworkSuggestionTest {
         assertEquals(TEST_FQDN, suggestion.wifiConfiguration.FQDN);
         assertTrue(suggestion.isAppInteractionRequired);
         assertEquals(suggestion.wifiConfiguration.meteredOverride,
+                WifiConfiguration.METERED_OVERRIDE_METERED);
+        assertEquals(suggestion.getPasspointConfig().getMeteredOverride(),
                 WifiConfiguration.METERED_OVERRIDE_METERED);
         assertTrue(suggestion.isUserAllowedToManuallyConnect);
     }
@@ -532,7 +534,7 @@ public class WifiNetworkSuggestionTest {
         configuration.BSSID = TEST_BSSID;
         configuration.allowedKeyManagement.set(WifiConfiguration.KeyMgmt.NONE);
         WifiNetworkSuggestion suggestion = new WifiNetworkSuggestion(
-                configuration, null, false, true, true, true, false);
+                configuration, null, false, true, true, true);
 
         Parcel parcelW = Parcel.obtain();
         suggestion.writeToParcel(parcelW, 0);
@@ -603,14 +605,14 @@ public class WifiNetworkSuggestionTest {
         configuration.BSSID = TEST_BSSID;
         configuration.allowedKeyManagement.set(WifiConfiguration.KeyMgmt.WPA_PSK);
         WifiNetworkSuggestion suggestion =
-                new WifiNetworkSuggestion(configuration, null, true, false, true, true, false);
+                new WifiNetworkSuggestion(configuration, null, true, false, true, true);
 
         WifiConfiguration configuration1 = new WifiConfiguration();
         configuration1.SSID = TEST_SSID;
         configuration1.BSSID = TEST_BSSID;
         configuration1.allowedKeyManagement.set(WifiConfiguration.KeyMgmt.WPA_PSK);
         WifiNetworkSuggestion suggestion1 =
-                new WifiNetworkSuggestion(configuration1, null, false, true, true, true, false);
+                new WifiNetworkSuggestion(configuration1, null, false, true, true, true);
 
         assertEquals(suggestion, suggestion1);
         assertEquals(suggestion.hashCode(), suggestion1.hashCode());
@@ -626,13 +628,13 @@ public class WifiNetworkSuggestionTest {
         configuration.SSID = TEST_SSID;
         configuration.allowedKeyManagement.set(WifiConfiguration.KeyMgmt.NONE);
         WifiNetworkSuggestion suggestion =
-                new WifiNetworkSuggestion(configuration, null, false, false, true, true, false);
+                new WifiNetworkSuggestion(configuration, null, false, false, true, true);
 
         WifiConfiguration configuration1 = new WifiConfiguration();
         configuration1.SSID = TEST_SSID_1;
         configuration.allowedKeyManagement.set(WifiConfiguration.KeyMgmt.NONE);
         WifiNetworkSuggestion suggestion1 =
-                new WifiNetworkSuggestion(configuration1, null, false, false, true, true, false);
+                new WifiNetworkSuggestion(configuration1, null, false, false, true, true);
 
         assertNotEquals(suggestion, suggestion1);
     }
@@ -648,13 +650,13 @@ public class WifiNetworkSuggestionTest {
         configuration.BSSID = TEST_BSSID;
         configuration.allowedKeyManagement.set(WifiConfiguration.KeyMgmt.NONE);
         WifiNetworkSuggestion suggestion =
-                new WifiNetworkSuggestion(configuration, null,  false, false, true, true, false);
+                new WifiNetworkSuggestion(configuration, null,  false, false, true, true);
 
         WifiConfiguration configuration1 = new WifiConfiguration();
         configuration1.SSID = TEST_SSID;
         configuration1.allowedKeyManagement.set(WifiConfiguration.KeyMgmt.NONE);
         WifiNetworkSuggestion suggestion1 =
-                new WifiNetworkSuggestion(configuration1, null, false, false, true, true, false);
+                new WifiNetworkSuggestion(configuration1, null, false, false, true, true);
 
         assertNotEquals(suggestion, suggestion1);
     }
@@ -669,13 +671,13 @@ public class WifiNetworkSuggestionTest {
         configuration.SSID = TEST_SSID;
         configuration.allowedKeyManagement.set(WifiConfiguration.KeyMgmt.NONE);
         WifiNetworkSuggestion suggestion =
-                new WifiNetworkSuggestion(configuration, null, false, false, true, true, false);
+                new WifiNetworkSuggestion(configuration, null, false, false, true, true);
 
         WifiConfiguration configuration1 = new WifiConfiguration();
         configuration1.SSID = TEST_SSID;
         configuration1.allowedKeyManagement.set(WifiConfiguration.KeyMgmt.WPA_PSK);
         WifiNetworkSuggestion suggestion1 =
-                new WifiNetworkSuggestion(configuration1, null, false, false, true, true, false);
+                new WifiNetworkSuggestion(configuration1, null, false, false, true, true);
 
         assertNotEquals(suggestion, suggestion1);
     }
@@ -770,7 +772,7 @@ public class WifiNetworkSuggestionTest {
                 .setWpa2Passphrase(TEST_PRESHARED_KEY)
                 .setUntrusted(true)
                 .build();
-        assertTrue(suggestion.isNetworkUntrusted);
+        assertTrue(suggestion.isUntrusted());
         assertFalse(suggestion.isUserAllowedToManuallyConnect);
     }
 
@@ -786,7 +788,7 @@ public class WifiNetworkSuggestionTest {
                 .setPasspointConfig(passpointConfiguration)
                 .setUntrusted(true)
                 .build();
-        assertTrue(suggestion.isNetworkUntrusted);
+        assertTrue(suggestion.isUntrusted());
         assertFalse(suggestion.isUserAllowedToManuallyConnect);
     }
 

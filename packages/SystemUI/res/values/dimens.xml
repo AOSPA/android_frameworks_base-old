@@ -124,9 +124,6 @@
     <!-- Increased height of a collapsed media notification in the status bar -->
     <dimen name="notification_min_height_media">160dp</dimen>
 
-    <!-- Increased height of a collapsed messaging notification in the status bar -->
-    <dimen name="notification_min_height_messaging">118dp</dimen>
-
     <!-- Height of a small notification in the status bar which was used before android N -->
     <dimen name="notification_min_height_legacy">64dp</dimen>
 
@@ -480,6 +477,7 @@
     <dimen name="qs_tile_height">106dp</dimen>
     <dimen name="qs_tile_layout_margin_side">6dp</dimen>
     <dimen name="qs_tile_margin_horizontal">18dp</dimen>
+    <dimen name="qs_tile_margin_horizontal_two_line">2dp</dimen>
     <dimen name="qs_tile_margin_vertical">24dp</dimen>
     <dimen name="qs_tile_margin_top_bottom">12dp</dimen>
     <dimen name="qs_tile_margin_top_bottom_negative">-12dp</dimen>
@@ -754,8 +752,10 @@
          quick settings header -->
     <dimen name="max_avatar_size">48dp</dimen>
 
-    <!-- Size of user icon + frame in the qs/keyguard user picker (incl. frame) -->
-    <dimen name="framed_avatar_size">54dp</dimen>
+    <!-- Size of user icon + frame in the qs user picker (incl. frame) -->
+    <dimen name="qs_framed_avatar_size">54dp</dimen>
+    <!-- Size of user icon + frame in the keyguard user picker (incl. frame) -->
+    <dimen name="kg_framed_avatar_size">54dp</dimen>
 
     <!-- Margin on the left side of the carrier text on Keyguard -->
     <dimen name="keyguard_carrier_text_margin">16dp</dimen>
@@ -955,7 +955,7 @@
     <dimen name="recents_quick_scrub_onboarding_margin_start">8dp</dimen>
 
     <!-- The height of the gradient indicating the dismiss edge when moving a PIP. -->
-    <dimen name="pip_dismiss_gradient_height">176dp</dimen>
+    <dimen name="floating_dismiss_gradient_height">176dp</dimen>
 
     <!-- The bottom margin of the PIP drag to dismiss info text shown when moving a PIP. -->
     <dimen name="pip_dismiss_text_bottom_margin">24dp</dimen>
@@ -1150,11 +1150,17 @@
     <!-- Default (and minimum) height of the expanded view shown when the bubble is expanded -->
     <dimen name="bubble_expanded_default_height">180dp</dimen>
     <!-- Default height of bubble overflow -->
-    <dimen name="bubble_overflow_height">380dp</dimen>
+    <dimen name="bubble_overflow_height">460dp</dimen>
     <!-- Bubble overflow padding when there are no bubbles  -->
     <dimen name="bubble_overflow_empty_state_padding">16dp</dimen>
-    <!-- Margin of overflow bubbles -->
-    <dimen name="bubble_overflow_margin">16dp</dimen>
+    <!-- Padding of container for overflow bubbles -->
+    <dimen name="bubble_overflow_padding">15dp</dimen>
+    <!-- Padding of label for bubble overflow view -->
+    <dimen name="bubble_overflow_text_padding">7dp</dimen>
+    <!-- Height of bubble overflow empty state illustration -->
+    <dimen name="bubble_empty_overflow_image_height">200dp</dimen>
+    <!-- Padding of bubble overflow empty state subtitle -->
+    <dimen name="bubble_empty_overflow_subtitle_padding">50dp</dimen>
     <!-- Height of the triangle that points to the expanded bubble -->
     <dimen name="bubble_pointer_height">4dp</dimen>
     <!-- Width of the triangle that points to the expanded bubble -->
@@ -1205,6 +1211,7 @@
     <!-- Size of media cards in the QSPanel carousel -->
     <dimen name="qs_media_width">350dp</dimen>
     <dimen name="qs_media_padding">8dp</dimen>
+    <dimen name="qs_media_panel_outer_padding">16dp</dimen>
     <dimen name="qs_media_corner_radius">10dp</dimen>
     <dimen name="qs_media_album_size">72dp</dimen>
     <dimen name="qs_seamless_icon_size">20dp</dimen>
@@ -1222,19 +1229,21 @@
     <dimen name="magnifier_up_down_controls_height">40dp</dimen>
 
     <!-- Home Controls -->
-    <dimen name="controls_header_side_margin">32dp</dimen>
+    <dimen name="controls_header_side_margin">4dp</dimen>
+    <dimen name="controls_header_menu_size">48dp</dimen>
     <dimen name="controls_header_app_icon_size">40dp</dimen>
     <dimen name="controls_list_side_margin">16dp</dimen>
     <dimen name="controls_top_margin">44dp</dimen>
     <dimen name="control_header_text_size">22sp</dimen>
     <dimen name="control_text_size">14sp</dimen>
+    <dimen name="control_icon_size">24dp</dimen>
     <dimen name="control_spacing">4dp</dimen>
     <dimen name="control_list_divider">1dp</dimen>
     <dimen name="control_corner_radius">12dp</dimen>
     <dimen name="control_height">106dp</dimen>
     <dimen name="control_padding">12dp</dimen>
     <dimen name="control_padding_adjustment">4dp</dimen>
-    <dimen name="control_status_normal">12sp</dimen>
+    <dimen name="control_status_normal">14sp</dimen>
     <dimen name="control_status_expanded">18sp</dimen>
     <dimen name="control_base_item_margin">2dp</dimen>
     <dimen name="control_status_padding">3dp</dimen>
@@ -1268,4 +1277,7 @@
     <dimen name="screenrecord_status_icon_radius">5dp</dimen>
 
     <dimen name="kg_user_switcher_text_size">16sp</dimen>
+
+    <!-- Opacity at which the background for the shutdown UI will be drawn. -->
+    <item name="shutdown_scrim_behind_alpha" format="float" type="dimen">0.95</item>
 </resources>

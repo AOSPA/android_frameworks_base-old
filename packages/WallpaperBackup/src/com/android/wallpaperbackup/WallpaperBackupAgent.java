@@ -36,10 +36,12 @@ import android.os.FileUtils;
 import android.os.ParcelFileDescriptor;
 import android.os.RemoteException;
 import android.os.UserHandle;
+import android.provider.Settings;
 import android.util.Slog;
 import android.util.Xml;
 
 import com.android.internal.annotations.VisibleForTesting;
+import com.android.internal.content.PackageMonitor;
 
 import libcore.io.IoUtils;
 
@@ -164,6 +166,9 @@ public class WallpaperBackupAgent extends BackupAgent {
                 }
                 if (DEBUG) Slog.v(TAG, "Storing wallpaper metadata");
                 backupFile(infoStage, data);
+            } else {
+                Slog.w(TAG, "Wallpaper metadata file doesn't exist: " +
+                        mWallpaperFile.getPath());
             }
             if (sysEligible && mWallpaperFile.exists()) {
                 if (sysChanged || !imageStage.exists()) {
@@ -173,6 +178,10 @@ public class WallpaperBackupAgent extends BackupAgent {
                 if (DEBUG) Slog.v(TAG, "Storing system wallpaper image");
                 backupFile(imageStage, data);
                 prefs.edit().putInt(SYSTEM_GENERATION, sysGeneration).apply();
+            } else {
+                Slog.w(TAG, "Not backing up wallpaper as one of conditions is not "
+                        + "met: sysEligible = " + sysEligible + " wallpaperFileExists = "
+                        + mWallpaperFile.exists());
             }
 
             // If there's no lock wallpaper, then we have nothing to add to the backup.
@@ -181,7 +190,7 @@ public class WallpaperBackupAgent extends BackupAgent {
                     if (DEBUG) Slog.v(TAG, "Removed lock wallpaper; deleting");
                     lockImageStage.delete();
                 }
-                if (DEBUG) Slog.v(TAG, "No lock paper set, add nothing to backup");
+                Slog.d(TAG, "No lockscreen wallpaper set, add nothing to backup");
                 prefs.edit().putInt(LOCK_GENERATION, lockGeneration).apply();
                 return;
             }
@@ -195,6 +204,12 @@ public class WallpaperBackupAgent extends BackupAgent {
                 if (DEBUG) Slog.v(TAG, "Storing lock wallpaper image");
                 backupFile(lockImageStage, data);
                 prefs.edit().putInt(LOCK_GENERATION, lockGeneration).apply();
+            } else {
+                Slog.w(TAG, "Not backing up lockscreen wallpaper as one of conditions is not "
+                        + "met: lockEligible = " + lockEligible + " hasLockWallpaper = "
+                        + hasLockWallpaper + " lockWallpaperFileExists = "
+                        + mLockWallpaperFile.exists() + " quotaExceeded (last time) = "
+                        + mQuotaExceeded);
             }
         } catch (Exception e) {
             Slog.e(TAG, "Unable to back up wallpaper", e);
@@ -216,9 +231,7 @@ public class WallpaperBackupAgent extends BackupAgent {
 
     @Override
     public void onQuotaExceeded(long backupDataBytes, long quotaBytes) {
-        if (DEBUG) {
-            Slog.i(TAG, "Quota exceeded (" + backupDataBytes + " vs " + quotaBytes + ')');
-        }
+        Slog.i(TAG, "Quota exceeded (" + backupDataBytes + " vs " + quotaBytes + ')');
         try (FileOutputStream f = new FileOutputStream(mQuotaFile)) {
             f.write(0);
         } catch (Exception e) {
@@ -230,9 +243,7 @@ public class WallpaperBackupAgent extends BackupAgent {
     // then post-process in onRestoreFinished() to apply the new wallpaper.
     @Override
     public void onRestoreFinished() {
-        if (DEBUG) {
-            Slog.v(TAG, "onRestoreFinished()");
-        }
+        Slog.v(TAG, "onRestoreFinished()");
         final File filesDir = getFilesDir();
         final File infoStage = new File(filesDir, INFO_STAGE);
         final File imageStage = new File (filesDir, IMAGE_STAGE);
@@ -252,30 +263,11 @@ public class WallpaperBackupAgent extends BackupAgent {
 
             // And reset to the wallpaper service we should be using
             ComponentName wpService = parseWallpaperComponent(infoStage, "wp");
-            if (servicePackageExists(wpService)) {
-                if (DEBUG) {
-                    Slog.i(TAG, "Using wallpaper service " + wpService);
-                }
-                mWm.setWallpaperComponent(wpService, UserHandle.USER_SYSTEM);
-                if (!lockImageStage.exists()) {
-                    // We have a live wallpaper and no static lock image,
-                    // allow live wallpaper to show "through" on lock screen.
-                    mWm.clear(FLAG_LOCK);
-                }
-            } else {
-                // If we've restored a live wallpaper, but the component doesn't exist,
-                // we should log it as an error so we can easily identify the problem
-                // in reports from users
-                if (wpService != null) {
-                    Slog.e(TAG, "Wallpaper service " + wpService + " isn't available.");
-                }
-            }
+            updateWallpaperComponent(wpService, !lockImageStage.exists());
         } catch (Exception e) {
             Slog.e(TAG, "Unable to restore wallpaper: " + e.getMessage());
         } finally {
-            if (DEBUG) {
-                Slog.v(TAG, "Restore finished; clearing backup bookkeeping");
-            }
+            Slog.v(TAG, "Restore finished; clearing backup bookkeeping");
             infoStage.delete();
             imageStage.delete();
             lockImageStage.delete();
@@ -288,6 +280,28 @@ public class WallpaperBackupAgent extends BackupAgent {
         }
     }
 
+    @VisibleForTesting
+    void updateWallpaperComponent(ComponentName wpService, boolean applyToLock) throws IOException {
+        if (servicePackageExists(wpService)) {
+            Slog.i(TAG, "Using wallpaper service " + wpService);
+            mWm.setWallpaperComponent(wpService, UserHandle.USER_SYSTEM);
+            if (applyToLock) {
+                // We have a live wallpaper and no static lock image,
+                // allow live wallpaper to show "through" on lock screen.
+                mWm.clear(FLAG_LOCK);
+            }
+        } else {
+            // If we've restored a live wallpaper, but the component doesn't exist,
+            // we should log it as an error so we can easily identify the problem
+            // in reports from users
+            if (wpService != null) {
+                applyComponentAtInstall(wpService, applyToLock);
+                Slog.w(TAG, "Wallpaper service " + wpService + " isn't available. "
+                        + " Will try to apply later");
+            }
+        }
+    }
+
     private void restoreFromStage(File stage, File info, String hintTag, int which)
             throws IOException {
         if (stage.exists()) {
@@ -295,14 +309,14 @@ public class WallpaperBackupAgent extends BackupAgent {
             // relies on a priori knowledge of the wallpaper info file schema.
             Rect cropHint = parseCropHint(info, hintTag);
             if (cropHint != null) {
-                Slog.i(TAG, "Got restored wallpaper; applying which=" + which);
-                if (DEBUG) {
-                    Slog.v(TAG, "Restored crop hint " + cropHint);
-                }
+                Slog.i(TAG, "Got restored wallpaper; applying which=" + which
+                        + "; cropHint = " + cropHint);
                 try (FileInputStream in = new FileInputStream(stage)) {
                     mWm.setStream(in, cropHint.isEmpty() ? null : cropHint, true, which);
                 } finally {} // auto-closes 'in'
             }
+        } else {
+            Slog.d(TAG, "Restore data doesn't exist for file " + stage.getPath());
         }
     }
 
@@ -367,7 +381,8 @@ public class WallpaperBackupAgent extends BackupAgent {
         return (value == null) ? defValue : Integer.parseInt(value);
     }
 
-    private boolean servicePackageExists(ComponentName comp) {
+    @VisibleForTesting
+    boolean servicePackageExists(ComponentName comp) {
         try {
             if (comp != null) {
                 final IPackageManager pm = AppGlobals.getPackageManager();
@@ -395,5 +410,54 @@ public class WallpaperBackupAgent extends BackupAgent {
     public void onRestore(BackupDataInput data, int appVersionCode, ParcelFileDescriptor newState)
             throws IOException {
         // Intentionally blank
+    }
+
+    private void applyComponentAtInstall(ComponentName componentName, boolean applyToLock) {
+        PackageMonitor packageMonitor = getWallpaperPackageMonitor(componentName, applyToLock);
+        packageMonitor.register(getBaseContext(), null, UserHandle.ALL, true);
+    }
+
+    @VisibleForTesting
+    PackageMonitor getWallpaperPackageMonitor(ComponentName componentName, boolean applyToLock) {
+        return new PackageMonitor() {
+            @Override
+            public void onPackageAdded(String packageName, int uid) {
+                if (!isDeviceInRestore()) {
+                    // We don't want to reapply the wallpaper outside a restore.
+                    unregister();
+                    return;
+                }
+
+                if (componentName.getPackageName().equals(packageName)) {
+                    Slog.d(TAG, "Applying component " + componentName);
+                    mWm.setWallpaperComponent(componentName);
+                    if (applyToLock) {
+                        try {
+                            mWm.clear(FLAG_LOCK);
+                        } catch (IOException e) {
+                            Slog.w(TAG, "Failed to apply live wallpaper to lock screen: " + e);
+                        }
+                    }
+                    // We're only expecting to restore the wallpaper component once.
+                    unregister();
+                }
+            }
+        };
+    }
+
+    @VisibleForTesting
+    boolean isDeviceInRestore() {
+        try {
+            boolean isInSetup = Settings.Secure.getInt(getBaseContext().getContentResolver(),
+                    Settings.Secure.USER_SETUP_COMPLETE) == 0;
+            boolean isInDeferredSetup = Settings.Secure.getInt(getBaseContext()
+                            .getContentResolver(),
+                    Settings.Secure.USER_SETUP_PERSONALIZATION_STATE) ==
+                    Settings.Secure.USER_SETUP_PERSONALIZATION_STARTED;
+            return isInSetup || isInDeferredSetup;
+        } catch (Settings.SettingNotFoundException e) {
+            Slog.w(TAG, "Failed to check if the user is in restore: " + e);
+            return false;
+        }
     }
 }

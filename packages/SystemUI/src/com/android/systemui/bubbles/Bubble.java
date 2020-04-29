@@ -76,7 +76,6 @@ class Bubble implements BubbleViewProvider {
     private BadgedImageView mIconView;
     private BubbleExpandedView mExpandedView;
 
-    private boolean mInflated;
     private BubbleViewInfoTask mInflationTask;
     private boolean mInflateSynchronously;
 
@@ -166,10 +165,16 @@ class Bubble implements BubbleViewProvider {
         return mExpandedView;
     }
 
-    void cleanupExpandedState() {
+    /**
+     * Call when the views should be removed, ensure this is called to clean up ActivityView
+     * content.
+     */
+    void cleanupViews() {
         if (mExpandedView != null) {
             mExpandedView.cleanUpExpandedState();
+            mExpandedView = null;
         }
+        mIconView = null;
     }
 
     /**
@@ -213,14 +218,21 @@ class Bubble implements BubbleViewProvider {
     }
 
     boolean isInflated() {
-        return mInflated;
+        return mIconView != null && mExpandedView != null;
+    }
+
+    void stopInflation() {
+        if (mInflationTask == null) {
+            return;
+        }
+        mInflationTask.cancel(true /* mayInterruptIfRunning */);
+        cleanupViews();
     }
 
     void setViewInfo(BubbleViewInfoTask.BubbleViewInfo info) {
         if (!isInflated()) {
             mIconView = info.imageView;
             mExpandedView = info.expandedView;
-            mInflated = true;
         }
 
         mShortcutInfo = info.shortcutInfo;
@@ -231,12 +243,12 @@ class Bubble implements BubbleViewProvider {
         mDotColor = info.dotColor;
         mDotPath = info.dotPath;
 
-        mExpandedView.update(this);
-        mIconView.update(this);
-    }
-
-    void setInflated(boolean inflated) {
-        mInflated = inflated;
+        if (mExpandedView != null) {
+            mExpandedView.update(/* bubble */ this);
+        }
+        if (mIconView != null) {
+            mIconView.setRenderedBubble(/* bubble */ this);
+        }
     }
 
     /**
@@ -290,7 +302,7 @@ class Bubble implements BubbleViewProvider {
     void markAsAccessedAt(long lastAccessedMillis) {
         mLastAccessed = lastAccessedMillis;
         setSuppressNotification(true);
-        setShowDot(false /* show */, true /* animate */);
+        setShowDot(false /* show */);
     }
 
     /**
@@ -330,12 +342,11 @@ class Bubble implements BubbleViewProvider {
     /**
      * Sets whether the bubble for this notification should show a dot indicating updated content.
      */
-    void setShowDot(boolean showDot, boolean animate) {
+    void setShowDot(boolean showDot) {
         mShowBubbleUpdateDot = showDot;
-        if (animate && mIconView != null) {
-            mIconView.animateDot();
-        } else if (mIconView != null) {
-            mIconView.invalidate();
+
+        if (mIconView != null) {
+            mIconView.updateDotVisibility(true /* animate */);
         }
     }
 
@@ -417,7 +428,7 @@ class Bubble implements BubbleViewProvider {
     PendingIntent getBubbleIntent() {
         Notification.BubbleMetadata data = mEntry.getBubbleMetadata();
         if (data != null) {
-            return data.getBubbleIntent();
+            return data.getIntent();
         }
         return null;
     }

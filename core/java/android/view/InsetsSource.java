@@ -16,8 +16,10 @@
 
 package android.view;
 
+import static android.view.InsetsState.ITYPE_CAPTION_BAR;
 import static android.view.InsetsState.ITYPE_IME;
 
+import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.graphics.Insets;
 import android.graphics.Rect;
@@ -114,8 +116,14 @@ public class InsetsSource implements Parcelable {
         if (!ignoreVisibility && !mVisible) {
             return Insets.NONE;
         }
-        if (!mTmpFrame.setIntersect(frame, relativeFrame)) {
+        if (!getIntersection(frame, relativeFrame, mTmpFrame)) {
             return Insets.NONE;
+        }
+        // During drag-move and drag-resizing, the caption insets position may not get updated
+        // before the app frame get updated. To layout the app content correctly during drag events,
+        // we always return the insets with the corresponding height covering the top.
+        if (getType() == ITYPE_CAPTION_BAR) {
+            return Insets.of(0, frame.height(), 0, 0);
         }
 
         // TODO: Currently, non-floating IME always intersects at bottom due to issues with cutout.
@@ -144,12 +152,33 @@ public class InsetsSource implements Parcelable {
         }
     }
 
+    /**
+     * Outputs the intersection of two rectangles. The shared edges will also be counted in the
+     * intersection.
+     *
+     * @param a The first rectangle being intersected with.
+     * @param b The second rectangle being intersected with.
+     * @param out The rectangle which represents the intersection.
+     * @return {@code true} if there is any intersection.
+     */
+    private static boolean getIntersection(@NonNull Rect a, @NonNull Rect b, @NonNull Rect out) {
+        if (a.left <= b.right && b.left <= a.right && a.top <= b.bottom && b.top <= a.bottom) {
+            out.left = Math.max(a.left, b.left);
+            out.top = Math.max(a.top, b.top);
+            out.right = Math.min(a.right, b.right);
+            out.bottom = Math.min(a.bottom, b.bottom);
+            return true;
+        }
+        out.setEmpty();
+        return false;
+    }
+
     public void dump(String prefix, PrintWriter pw) {
         pw.print(prefix);
         pw.print("InsetsSource type="); pw.print(InsetsState.typeToString(mType));
         pw.print(" frame="); pw.print(mFrame.toShortString());
         if (mVisibleFrame != null) {
-            pw.print(" visibleFrmae="); pw.print(mVisibleFrame.toShortString());
+            pw.print(" visibleFrame="); pw.print(mVisibleFrame.toShortString());
         }
         pw.print(" visible="); pw.print(mVisible);
         pw.println();

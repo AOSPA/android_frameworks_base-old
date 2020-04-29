@@ -233,6 +233,13 @@ public class UserRestrictionsUtils {
     );
 
     /**
+     * Special user restrictions that profile owner of an organization-owned managed profile can
+     * set on the parent profile instance to apply them on the personal profile.
+     */
+    private static final Set<String> PROFILE_OWNER_ORGANIZATION_OWNED_LOCAL_RESTRICTIONS =
+            Sets.newArraySet();
+
+    /**
      * User restrictions that default to {@code true} for managed profile owners.
      *
      * NB: {@link UserManager#DISALLOW_INSTALL_UNKNOWN_SOURCES} is also set by default but it is
@@ -395,22 +402,6 @@ public class UserRestrictionsUtils {
     }
 
     /**
-     * Merges a sparse array of restrictions bundles into one.
-     */
-    @Nullable
-    public static Bundle mergeAll(SparseArray<Bundle> restrictions) {
-        if (restrictions.size() == 0) {
-            return null;
-        } else {
-            final Bundle result = new Bundle();
-            for (int i = 0; i < restrictions.size(); i++) {
-                merge(result, restrictions.valueAt(i));
-            }
-            return result;
-        }
-    }
-
-    /**
      * @return true if a restriction is settable by device owner.
      */
     public static boolean canDeviceOwnerChange(String restriction) {
@@ -432,7 +423,8 @@ public class UserRestrictionsUtils {
      * @return true if a restriction is settable by profile owner of an organization owned device.
      */
     public static boolean canProfileOwnerOfOrganizationOwnedDeviceChange(String restriction) {
-        return PROFILE_OWNER_ORGANIZATION_OWNED_GLOBAL_RESTRICTIONS.contains(restriction);
+        return PROFILE_OWNER_ORGANIZATION_OWNED_GLOBAL_RESTRICTIONS.contains(restriction)
+                || PROFILE_OWNER_ORGANIZATION_OWNED_LOCAL_RESTRICTIONS.contains(restriction);
     }
 
     /**
@@ -443,31 +435,9 @@ public class UserRestrictionsUtils {
     }
 
     /**
-     * Takes restrictions that can be set by device owner, and sort them into what should be applied
-     * globally and what should be applied only on the current user.
-     */
-    public static void sortToGlobalAndLocal(@Nullable Bundle in,
-            @UserManagerInternal.OwnerType int restrictionOwnerType, @NonNull Bundle global,
-            @NonNull Bundle local) {
-        if (in == null || in.size() == 0) {
-            return;
-        }
-        for (String key : in.keySet()) {
-            if (!in.getBoolean(key)) {
-                continue;
-            }
-            if (isGlobal(restrictionOwnerType, key)) {
-                global.putBoolean(key, true);
-            } else {
-                local.putBoolean(key, true);
-            }
-        }
-    }
-
-    /**
      * Whether given user restriction should be enforced globally.
      */
-    private static boolean isGlobal(@UserManagerInternal.OwnerType int restrictionOwnerType,
+    public static boolean isGlobal(@UserManagerInternal.OwnerType int restrictionOwnerType,
             String key) {
         return ((restrictionOwnerType == UserManagerInternal.OWNER_TYPE_DEVICE_OWNER) && (
                 PRIMARY_USER_ONLY_RESTRICTIONS.contains(key) || GLOBAL_RESTRICTIONS.contains(key)))
@@ -476,6 +446,14 @@ public class UserRestrictionsUtils {
                 && PROFILE_OWNER_ORGANIZATION_OWNED_GLOBAL_RESTRICTIONS.contains(key))
                 || PROFILE_GLOBAL_RESTRICTIONS.contains(key)
                 || DEVICE_OWNER_ONLY_RESTRICTIONS.contains(key);
+    }
+
+    /**
+     * Whether given user restriction should be enforced locally.
+     */
+    public static boolean isLocal(@UserManagerInternal.OwnerType int restrictionOwnerType,
+            String key) {
+        return !isGlobal(restrictionOwnerType, key);
     }
 
     /**
@@ -864,27 +842,15 @@ public class UserRestrictionsUtils {
     }
 
     /**
-     * Moves a particular restriction from one array of bundles to another, e.g. for all users.
+     * Moves a particular restriction from one array of restrictions sets to a restriction set,
+     * e.g. for all users.
      */
-    public static void moveRestriction(String restrictionKey, SparseArray<Bundle> srcRestrictions,
-            SparseArray<Bundle> destRestrictions) {
-        for (int i = 0; i < srcRestrictions.size(); i++) {
-            final int key = srcRestrictions.keyAt(i);
-            final Bundle from = srcRestrictions.valueAt(i);
-            if (contains(from, restrictionKey)) {
-                from.remove(restrictionKey);
-                Bundle to = destRestrictions.get(key);
-                if (to == null) {
-                    to = new Bundle();
-                    destRestrictions.append(key, to);
-                }
-                to.putBoolean(restrictionKey, true);
-                // Don't keep empty bundles.
-                if (from.isEmpty()) {
-                    srcRestrictions.removeAt(i);
-                    i--;
-                }
-            }
+    public static void moveRestriction(String restrictionKey,
+            SparseArray<RestrictionsSet> sourceRestrictionsSets,
+            RestrictionsSet destRestrictionSet) {
+        for (int i = 0; i < sourceRestrictionsSets.size(); i++) {
+            final RestrictionsSet sourceRestrictionsSet = sourceRestrictionsSets.valueAt(i);
+            sourceRestrictionsSet.moveRestriction(destRestrictionSet, restrictionKey);
         }
     }
 

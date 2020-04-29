@@ -815,14 +815,23 @@ public abstract class Context {
     }
 
     /**
-     * <p>Features are used in complex apps to logically separate parts of the app. E.g. a
-     * blogging app might also have a instant messaging app built in.
+     * <p>Attribution can be used in complex apps to logically separate parts of the app. E.g. a
+     * blogging app might also have a instant messaging app built in. In this case two separate tags
+     * can for used each sub-feature.
      *
-     * @return the feature id this context is for or {@code null} if this is the default
-     * feature.
+     * @return the attribution tag this context is for or {@code null} if this is the default.
      */
-    public @Nullable String getFeatureId() {
+    public @Nullable String getAttributionTag() {
         return null;
+    }
+
+    // TODO moltmann: Remove
+    /**
+     * @removed
+     */
+    @Deprecated
+    public @Nullable String getFeatureId() {
+        return getAttributionTag();
     }
 
     /** Return the full application info for this context's package. */
@@ -3421,7 +3430,7 @@ public abstract class Context {
             TELEPHONY_SUBSCRIPTION_SERVICE,
             CARRIER_CONFIG_SERVICE,
             EUICC_SERVICE,
-            MMS_SERVICE,
+            //@hide: MMS_SERVICE,
             TELECOM_SERVICE,
             CLIPBOARD_SERVICE,
             INPUT_METHOD_SERVICE,
@@ -3975,15 +3984,13 @@ public abstract class Context {
      * @hide
      * @see NetworkStackClient
      */
-    @SystemApi
-    @TestApi
     public static final String NETWORK_STACK_SERVICE = "network_stack";
 
     /**
-     * Use with {@link android.os.ServiceManager.getService()} to retrieve a
-     * {@link ITetheringConnector} IBinder for communicating with the tethering service
+     * Use with {@link #getSystemService(String)} to retrieve a {@link android.net.TetheringManager}
+     * for managing tethering functions.
      * @hide
-     * @see TetheringClient
+     * @see android.net.TetheringManager
      */
     @SystemApi
     public static final String TETHERING_SERVICE = "tethering";
@@ -4058,8 +4065,6 @@ public abstract class Context {
      */
     public static final String NETWORK_STATS_SERVICE = "netstats";
     /** {@hide} */
-    @SystemApi
-    @SuppressLint("ServiceName")
     public static final String NETWORK_POLICY_SERVICE = "netpolicy";
     /** {@hide} */
     public static final String NETWORK_WATCHLIST_SERVICE = "network_watchlist";
@@ -4335,6 +4340,7 @@ public abstract class Context {
      *
      * @see #getSystemService(String)
      * @see android.telephony.MmsManager
+     * @hide
      */
     public static final String MMS_SERVICE = "mms";
 
@@ -5096,7 +5102,6 @@ public abstract class Context {
      * {@link TelephonyRegistryManager}.
      * @hide
      */
-    @SystemApi
     public static final String TELEPHONY_REGISTRY_SERVICE = "telephony_registry";
 
     /**
@@ -5783,7 +5788,7 @@ public abstract class Context {
      * {@link android.view.LayoutInflater inflating} views, such that they can be inflated with
      * proper {@link Resources}.
      *
-     * Below is a sample code to <b>add an application overlay window on the primary display:<b/>
+     * Below is a sample code to <b>add an application overlay window on the primary display:</b>
      * <pre class="prettyprint">
      * ...
      * final DisplayManager dm = anyContext.getSystemService(DisplayManager.class);
@@ -5826,17 +5831,27 @@ public abstract class Context {
     }
 
     /**
-     * Return a new Context object for the current Context but for a different feature in the app.
-     * Features can be used by complex apps to separate logical parts.
+     * Return a new Context object for the current Context but attribute to a different tag.
+     * In complex apps attribution tagging can be used to distinguish between separate logical
+     * parts.
      *
-     * @param featureId The feature id or {@code null} to create a context for the default feature.
+     * @param attributionTag The tag or {@code null} to create a context for the default.
      *
-     * @return A {@link Context} for the feature
+     * @return A {@link Context} that is tagged for the new attribution
      *
-     * @see #getFeatureId()
+     * @see #getAttributionTag()
      */
-    public @NonNull Context createFeatureContext(@Nullable String featureId) {
+    public @NonNull Context createAttributionContext(@Nullable String attributionTag) {
         throw new RuntimeException("Not implemented. Must override in a subclass.");
+    }
+
+    // TODO moltmann: remove
+    /**
+     * @removed
+     */
+    @Deprecated
+    public @NonNull Context createFeatureContext(@Nullable String featureId) {
+        return createAttributionContext(featureId);
     }
 
     /**
@@ -6087,5 +6102,14 @@ public abstract class Context {
             throw new IllegalArgumentException("Non-UI context used to display UI; "
                     + "get a UI context from ActivityThread#getSystemUiContext()");
         }
+    }
+
+    /**
+     * Indicates if this context is a visual context such as {@link android.app.Activity} or
+     * a context created from {@link #createWindowContext(int, Bundle)}.
+     * @hide
+     */
+    public boolean isUiContext() {
+        throw new RuntimeException("Not implemented. Must override in a subclass.");
     }
 }

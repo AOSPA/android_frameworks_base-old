@@ -19,11 +19,8 @@ package android.media.tv.tuner.filter;
 import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
-import android.annotation.RequiresPermission;
 import android.annotation.SystemApi;
-import android.content.Context;
 import android.hardware.tv.tuner.V1_0.Constants;
-import android.media.tv.tuner.TunerUtils;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -111,13 +108,9 @@ public final class AlpFilterConfiguration extends FilterConfiguration {
 
     /**
      * Creates a builder for {@link AlpFilterConfiguration}.
-     *
-     * @param context the context of the caller.
      */
-    @RequiresPermission(android.Manifest.permission.ACCESS_TV_TUNER)
     @NonNull
-    public static Builder builder(@NonNull Context context) {
-        TunerUtils.checkTunerPermission(context);
+    public static Builder builder() {
         return new Builder();
     }
 
@@ -125,8 +118,8 @@ public final class AlpFilterConfiguration extends FilterConfiguration {
      * Builder for {@link AlpFilterConfiguration}.
      */
     public static final class Builder {
-        private int mPacketType;
-        private int mLengthType;
+        private int mPacketType = PACKET_TYPE_IPV4;
+        private int mLengthType = LENGTH_TYPE_UNDEFINED;
         private Settings mSettings;
 
         private Builder() {
@@ -136,6 +129,7 @@ public final class AlpFilterConfiguration extends FilterConfiguration {
          * Sets packet type.
          *
          * <p>The meaning of each packet type value is shown in ATSC A/330:2019 table 5.2.
+         * <p>Default value is {@link #PACKET_TYPE_IPV4}.
          */
         @NonNull
         public Builder setPacketType(int packetType) {
@@ -144,6 +138,8 @@ public final class AlpFilterConfiguration extends FilterConfiguration {
         }
         /**
          * Sets length type.
+         *
+         * <p>Default value is {@link #LENGTH_TYPE_UNDEFINED}.
          */
         @NonNull
         public Builder setLengthType(@LengthType int lengthType) {

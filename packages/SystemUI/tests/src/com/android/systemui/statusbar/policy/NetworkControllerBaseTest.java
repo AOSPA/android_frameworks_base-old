@@ -39,19 +39,20 @@ import android.content.Intent;
 import android.net.ConnectivityManager;
 import android.net.Network;
 import android.net.NetworkCapabilities;
+import android.net.NetworkScoreManager;
 import android.net.wifi.WifiManager;
 import android.os.Handler;
 import android.provider.Settings;
 import android.provider.Settings.Global;
 import android.telephony.CdmaEriInformation;
 import android.telephony.CellSignalStrength;
-import android.telephony.DisplayInfo;
 import android.telephony.NetworkRegistrationInfo;
 import android.telephony.PhoneStateListener;
 import android.telephony.ServiceState;
 import android.telephony.SignalStrength;
 import android.telephony.SubscriptionInfo;
 import android.telephony.SubscriptionManager;
+import android.telephony.TelephonyDisplayInfo;
 import android.telephony.TelephonyManager;
 import android.testing.TestableLooper;
 import android.testing.TestableResources;
@@ -97,10 +98,11 @@ public class NetworkControllerBaseTest extends SysuiTestCase {
     protected PhoneStateListener mPhoneStateListener;
     protected SignalStrength mSignalStrength;
     protected ServiceState mServiceState;
-    protected DisplayInfo mDisplayInfo;
+    protected TelephonyDisplayInfo mTelephonyDisplayInfo;
     protected NetworkRegistrationInfo mFakeRegInfo;
     protected ConnectivityManager mMockCm;
     protected WifiManager mMockWm;
+    protected NetworkScoreManager mMockNsm;
     protected SubscriptionManager mMockSm;
     protected TelephonyManager mMockTm;
     protected BroadcastDispatcher mMockBd;
@@ -122,6 +124,10 @@ public class NetworkControllerBaseTest extends SysuiTestCase {
     public TestWatcher failWatcher = new TestWatcher() {
         @Override
         protected void failed(Throwable e, Description description) {
+            if (mNetworkController == null) {
+                Log.d(TAG, "mNetworkController = null!");
+                return;
+            }
             // Print out mNetworkController state if the test fails.
             StringWriter sw = new StringWriter();
             PrintWriter pw = new PrintWriter(sw);
@@ -144,6 +150,7 @@ public class NetworkControllerBaseTest extends SysuiTestCase {
         mMockSm = mock(SubscriptionManager.class);
         mMockCm = mock(ConnectivityManager.class);
         mMockBd = mock(BroadcastDispatcher.class);
+        mMockNsm = mock(NetworkScoreManager.class);
         mMockSubDefaults = mock(SubscriptionDefaults.class);
         mNetCapabilities = new NetworkCapabilities();
         when(mMockCm.isNetworkSupported(ConnectivityManager.TYPE_MOBILE)).thenReturn(true);
@@ -161,7 +168,7 @@ public class NetworkControllerBaseTest extends SysuiTestCase {
 
         mSignalStrength = mock(SignalStrength.class);
         mServiceState = mock(ServiceState.class);
-        mDisplayInfo = mock(DisplayInfo.class);
+        mTelephonyDisplayInfo = mock(TelephonyDisplayInfo.class);
 
         mFakeRegInfo = new NetworkRegistrationInfo.Builder()
                 .setTransportType(TRANSPORT_TYPE_WWAN)
@@ -170,8 +177,8 @@ public class NetworkControllerBaseTest extends SysuiTestCase {
                 .build();
         doReturn(mFakeRegInfo).when(mServiceState)
                 .getNetworkRegistrationInfo(DOMAIN_PS, TRANSPORT_TYPE_WWAN);
-        doReturn(TelephonyManager.NETWORK_TYPE_LTE).when(mDisplayInfo).getNetworkType();
-        doReturn(DisplayInfo.OVERRIDE_NETWORK_TYPE_NONE).when(mDisplayInfo)
+        doReturn(TelephonyManager.NETWORK_TYPE_LTE).when(mTelephonyDisplayInfo).getNetworkType();
+        doReturn(TelephonyDisplayInfo.OVERRIDE_NETWORK_TYPE_NONE).when(mTelephonyDisplayInfo)
                 .getOverrideNetworkType();
 
         mEriInformation = new CdmaEriInformation(CdmaEriInformation.ERI_OFF,
@@ -192,8 +199,8 @@ public class NetworkControllerBaseTest extends SysuiTestCase {
             return null;
         }).when(mMockProvisionController).addCallback(any());
 
-        mNetworkController = new NetworkControllerImpl(mContext, mMockCm, mMockTm, mMockWm, mMockSm,
-                mConfig, TestableLooper.get(this).getLooper(), mCallbackHandler,
+        mNetworkController = new NetworkControllerImpl(mContext, mMockCm, mMockTm, mMockWm,
+                mMockNsm, mMockSm, mConfig, TestableLooper.get(this).getLooper(), mCallbackHandler,
                 mock(AccessPointControllerImpl.class), mock(DataUsageController.class),
                 mMockSubDefaults, mMockProvisionController, mMockBd);
         setupNetworkController();
@@ -240,18 +247,17 @@ public class NetworkControllerBaseTest extends SysuiTestCase {
     }
 
     protected NetworkControllerImpl setUpNoMobileData() {
-      when(mMockCm.isNetworkSupported(ConnectivityManager.TYPE_MOBILE)).thenReturn(false);
-      NetworkControllerImpl networkControllerNoMobile
-              = new NetworkControllerImpl(mContext, mMockCm, mMockTm, mMockWm, mMockSm,
+        when(mMockCm.isNetworkSupported(ConnectivityManager.TYPE_MOBILE)).thenReturn(false);
+        NetworkControllerImpl networkControllerNoMobile =
+                new NetworkControllerImpl(mContext, mMockCm, mMockTm, mMockWm, mMockNsm, mMockSm,
                         mConfig, TestableLooper.get(this).getLooper(), mCallbackHandler,
                         mock(AccessPointControllerImpl.class),
                         mock(DataUsageController.class), mMockSubDefaults,
                         mock(DeviceProvisionedController.class), mMockBd);
 
-      setupNetworkController();
+        setupNetworkController();
 
-      return networkControllerNoMobile;
-
+        return networkControllerNoMobile;
     }
 
     // 2 Bars 3G GSM.
@@ -348,7 +354,7 @@ public class NetworkControllerBaseTest extends SysuiTestCase {
     protected void updateServiceState() {
         Log.d(TAG, "Sending Service State: " + mServiceState);
         mPhoneStateListener.onServiceStateChanged(mServiceState);
-        mPhoneStateListener.onDisplayInfoChanged(mDisplayInfo);
+        mPhoneStateListener.onDisplayInfoChanged(mTelephonyDisplayInfo);
     }
 
     public void updateCallState(int state) {
@@ -364,7 +370,7 @@ public class NetworkControllerBaseTest extends SysuiTestCase {
                 .build();
         when(mServiceState.getNetworkRegistrationInfo(DOMAIN_PS, TRANSPORT_TYPE_WWAN))
                 .thenReturn(fakeRegInfo);
-        when(mDisplayInfo.getNetworkType()).thenReturn(dataNetType);
+        when(mTelephonyDisplayInfo.getNetworkType()).thenReturn(dataNetType);
         mPhoneStateListener.onDataConnectionStateChanged(dataState, dataNetType);
     }
 

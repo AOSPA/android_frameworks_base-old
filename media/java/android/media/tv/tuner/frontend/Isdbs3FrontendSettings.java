@@ -17,12 +17,11 @@
 package android.media.tv.tuner.frontend;
 
 import android.annotation.IntDef;
+import android.annotation.IntRange;
 import android.annotation.NonNull;
-import android.annotation.RequiresPermission;
 import android.annotation.SystemApi;
-import android.content.Context;
 import android.hardware.tv.tuner.V1_0.Constants;
-import android.media.tv.tuner.TunerUtils;
+import android.media.tv.tuner.Tuner;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -211,32 +210,43 @@ public class Isdbs3FrontendSettings extends FrontendSettings {
 
     /**
      * Creates a builder for {@link Isdbs3FrontendSettings}.
-     *
-     * @param context the context of the caller.
      */
-    @RequiresPermission(android.Manifest.permission.ACCESS_TV_TUNER)
     @NonNull
-    public static Builder builder(@NonNull Context context) {
-        TunerUtils.checkTunerPermission(context);
+    public static Builder builder() {
         return new Builder();
     }
 
     /**
      * Builder for {@link Isdbs3FrontendSettings}.
      */
-    public static class Builder extends FrontendSettings.Builder<Builder> {
-        private int mStreamId;
-        private int mStreamIdType;
-        private int mModulation;
-        private int mCodeRate;
-        private int mSymbolRate;
-        private int mRolloff;
+    public static class Builder {
+        private int mFrequency = 0;
+        private int mStreamId = Tuner.INVALID_STREAM_ID;
+        private int mStreamIdType = IsdbsFrontendSettings.STREAM_ID_TYPE_ID;
+        private int mModulation = MODULATION_UNDEFINED;
+        private int mCodeRate = CODERATE_UNDEFINED;
+        private int mSymbolRate = 0;
+        private int mRolloff = ROLLOFF_UNDEFINED;
 
         private Builder() {
         }
 
         /**
+         * Sets frequency in Hz.
+         *
+         * <p>Default value is 0.
+         */
+        @NonNull
+        @IntRange(from = 1)
+        public Builder setFrequency(int frequency) {
+            mFrequency = frequency;
+            return this;
+        }
+
+        /**
          * Sets Stream ID.
+         *
+         * <p>Default value is {@link Tuner#INVALID_STREAM_ID}.
          */
         @NonNull
         public Builder setStreamId(int streamId) {
@@ -245,6 +255,8 @@ public class Isdbs3FrontendSettings extends FrontendSettings {
         }
         /**
          * Sets StreamIdType.
+         *
+         * <p>Default value is {@link IsdbsFrontendSettings#STREAM_ID_TYPE_ID}.
          */
         @NonNull
         public Builder setStreamIdType(@IsdbsFrontendSettings.StreamIdType int streamIdType) {
@@ -253,6 +265,8 @@ public class Isdbs3FrontendSettings extends FrontendSettings {
         }
         /**
          * Sets Modulation.
+         *
+         * <p>Default value is {@link #MODULATION_UNDEFINED}.
          */
         @NonNull
         public Builder setModulation(@Modulation int modulation) {
@@ -261,6 +275,8 @@ public class Isdbs3FrontendSettings extends FrontendSettings {
         }
         /**
          * Sets Code rate.
+         *
+         * <p>Default value is {@link #CODERATE_UNDEFINED}.
          */
         @NonNull
         public Builder setCodeRate(@CodeRate int codeRate) {
@@ -269,6 +285,8 @@ public class Isdbs3FrontendSettings extends FrontendSettings {
         }
         /**
          * Sets Symbol Rate in symbols per second.
+         *
+         * <p>Default value is 0.
          */
         @NonNull
         public Builder setSymbolRate(int symbolRate) {
@@ -277,6 +295,8 @@ public class Isdbs3FrontendSettings extends FrontendSettings {
         }
         /**
          * Sets Roll off type.
+         *
+         * <p>Default value is {@link #ROLLOFF_UNDEFINED}.
          */
         @NonNull
         public Builder setRolloff(@Rolloff int rolloff) {
@@ -291,11 +311,6 @@ public class Isdbs3FrontendSettings extends FrontendSettings {
         public Isdbs3FrontendSettings build() {
             return new Isdbs3FrontendSettings(mFrequency, mStreamId, mStreamIdType, mModulation,
                     mCodeRate, mSymbolRate, mRolloff);
-        }
-
-        @Override
-        Builder self() {
-            return this;
         }
     }
 

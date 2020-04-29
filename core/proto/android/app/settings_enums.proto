@@ -734,6 +734,16 @@ enum Action {
     // CATEGORY: SETTINGS
     // OS: R
     ACTION_SETTINGS_CHANGE_WIFI_HOTSPOT_PASSWORD = 1737;
+
+    // ACTION: Settings > Security > Toggle on Confirm Sim deletion
+    // CATEGORY: SETTINGS
+    // OS: R
+    ACTION_CONFIRM_SIM_DELETION_ON = 1738;
+
+    // ACTION: Settings > Security > Toggle off Confirm Sim deletion
+    // CATEGORY: SETTINGS
+    // OS: R
+    ACTION_CONFIRM_SIM_DELETION_OFF = 1739;
 }
 
 /**
@@ -2643,4 +2653,25 @@ enum PageId {
     // CATEGORY: SETTINGS
     // OS: R
     ADB_WIRELESS_DEVICE_DETAILS = 1836;
+
+    // Open: Settings > Sound > Do Not Disturb > People > Conversations
+    // OS: R
+    DND_CONVERSATIONS = 1837;
+
+    // Open: Settings > Sound > Do Not Disturb > People > Calls
+    // OS: R
+    DND_CALLS = 1838;
+
+    // Open: Settings > Sound > Do Not Disturb > People > Messages
+    // OS: R
+    DND_MESSAGES = 1839;
+
+    // Open: Settings > Sound > Do Not Disturb > Apps > <Choose App>
+    // OS: R
+    DND_APPS_BYPASSING = 1840;
+
+    // OPEN: Settings > Battery > Advanced battery option
+    // CATEGORY: SETTINGS
+    // OS: R
+    FUELGAUGE_ADVANCED_BATTERY_OPTION = 1842;
 }

@@ -158,7 +158,8 @@ public class AuthService extends SystemService {
                     || bundle.getCharSequence(
                             BiometricPrompt.KEY_DEVICE_CREDENTIAL_SUBTITLE) != null
                     || bundle.getCharSequence(
-                            BiometricPrompt.KEY_DEVICE_CREDENTIAL_DESCRIPTION) != null) {
+                            BiometricPrompt.KEY_DEVICE_CREDENTIAL_DESCRIPTION) != null
+                    || bundle.getBoolean(BiometricPrompt.KEY_RECEIVE_SYSTEM_EVENTS, false)) {
                 checkInternalPermission();
             }
 
@@ -202,8 +203,7 @@ public class AuthService extends SystemService {
 
             // Only allow internal clients to call canAuthenticate with a different userId.
             final int callingUserId = UserHandle.getCallingUserId();
-            Slog.d(TAG, "canAuthenticate, userId: " + userId + ", callingUserId: " + callingUserId
-                    + ", authenticators: " + authenticators);
+
             if (userId != callingUserId) {
                 checkInternalPermission();
             } else {
@@ -212,8 +212,14 @@ public class AuthService extends SystemService {
 
             final long identity = Binder.clearCallingIdentity();
             try {
-                return mBiometricService.canAuthenticate(
+                final int result = mBiometricService.canAuthenticate(
                         opPackageName, userId, callingUserId, authenticators);
+                Slog.d(TAG, "canAuthenticate"
+                        + ", userId: " + userId
+                        + ", callingUserId: " + callingUserId
+                        + ", authenticators: " + authenticators
+                        + ", result: " + result);
+                return result;
             } finally {
                 Binder.restoreCallingIdentity(identity);
             }

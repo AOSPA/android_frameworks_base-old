@@ -397,7 +397,6 @@ public class ServiceState implements Parcelable {
      * @return newly created ServiceState
      * @hide
      */
-    @SystemApi
     @NonNull
     public static ServiceState newFromBundle(@NonNull Bundle m) {
         ServiceState ret;
@@ -1316,7 +1315,6 @@ public class ServiceState implements Parcelable {
      * @hide
      *
      */
-    @SystemApi
     public void fillInNotifierBundle(@NonNull Bundle m) {
         m.putParcelable(EXTRA_SERVICE_STATE, this);
         // serviceState already consists of below entries.
@@ -1650,7 +1648,6 @@ public class ServiceState implements Parcelable {
      * @return Current data network type
      * @hide
      */
-    @SystemApi
     @TestApi
     public @NetworkType int getDataNetworkType() {
         final NetworkRegistrationInfo iwlanRegInfo = getNetworkRegistrationInfo(

@@ -62,7 +62,7 @@ final class InputMonitor {
     // When true, need to call updateInputWindowsLw().
     private boolean mUpdateInputWindowsNeeded = true;
     private boolean mUpdateInputWindowsPending;
-    private boolean mApplyImmediately;
+    private boolean mUpdateInputWindowsImmediately;
 
     // Currently focused input window handle.
     private InputWindowHandle mFocusedInputWindowHandle;
@@ -112,8 +112,9 @@ final class InputMonitor {
         @Override
         public void dispose() {
             synchronized (mService.mGlobalLock) {
-                disposeChannelsLw();
+                disposeChannelsLw(mInputMonitor.mInputTransaction);
                 mInputEventReceiver.dispose();
+                mInputMonitor.updateInputWindowsLw(true /* force */);
             }
         }
     }
@@ -195,8 +196,7 @@ final class InputMonitor {
 
     private boolean disposeInputConsumer(InputConsumerImpl consumer) {
         if (consumer != null) {
-            consumer.disposeChannelsLw();
-            consumer.hide(mInputTransaction);
+            consumer.disposeChannelsLw(mInputTransaction);
             return true;
         }
         return false;
@@ -301,7 +301,7 @@ final class InputMonitor {
          * we may have some issues with modal-windows, but I guess we can
          * cross that bridge when we come to implementing full-screen TaskOrg
          */
-        if (child.getTask() != null && child.getTask().isControlledByTaskOrganizer()) {
+        if (child.getTask() != null && child.getTask().isOrganized()) {
             inputWindowHandle.replaceTouchableRegionWithCrop(null /* Use this surfaces crop */);
         }
 
@@ -347,14 +347,20 @@ final class InputMonitor {
         }
     }
 
-    void updateInputWindowsImmediately() {
+    /**
+     * Immediately update the input transaction and merge into the passing Transaction that could be
+     * collected and applied later.
+     */
+    void updateInputWindowsImmediately(SurfaceControl.Transaction t) {
         mHandler.removeCallbacks(mUpdateInputWindows);
-        mApplyImmediately = true;
+        mUpdateInputWindowsImmediately = true;
         mUpdateInputWindows.run();
-        mApplyImmediately = false;
+        mUpdateInputWindowsImmediately = false;
+        t.merge(mInputTransaction);
     }
 
-    /* Called when the current input focus changes.
+    /**
+     * Called when the current input focus changes.
      * Layer assignment is assumed to be complete by the time this is called.
      */
     public void setInputFocusLw(WindowState newWindow, boolean updateInputWindows) {
@@ -465,10 +471,7 @@ final class InputMonitor {
             if (mAddWallpaperInputConsumerHandle) {
                 mWallpaperInputConsumer.show(mInputTransaction, 0);
             }
-
-            if (mApplyImmediately) {
-                mInputTransaction.apply();
-            } else {
+            if (!mUpdateInputWindowsImmediately) {
                 mDisplayContent.getPendingTransaction().merge(mInputTransaction);
                 mDisplayContent.scheduleAnimation();
             }
@@ -511,14 +514,13 @@ final class InputMonitor {
 
             if (w.inPinnedWindowingMode()) {
                 if (mAddPipInputConsumerHandle) {
-                    // Update the bounds of the Pip input consumer to match the window bounds.
-                    w.getBounds(mTmpRect);
-                    mPipInputConsumer.layout(mInputTransaction, mTmpRect);
 
-                    // The touchable region is relative to the surface top-left
-                    mTmpRect.offsetTo(0, 0);
-                    mPipInputConsumer.mWindowHandle.touchableRegion.set(mTmpRect);
-                    mPipInputConsumer.show(mInputTransaction, w);
+                    final Task rootTask = w.getTask().getRootTask();
+                    mPipInputConsumer.mWindowHandle.replaceTouchableRegionWithCrop(
+                            rootTask.getSurfaceControl());
+                    // We set the layer to z=MAX-1 so that it's always on top.
+                    mPipInputConsumer.reparent(mInputTransaction, rootTask);
+                    mPipInputConsumer.show(mInputTransaction, Integer.MAX_VALUE - 1);
                     mAddPipInputConsumerHandle = false;
                 }
             }

@@ -532,6 +532,11 @@ public class LockSettingsService extends ILockSettings.Stub {
             return Settings.Global.getInt(contentResolver, keyName, defaultValue);
         }
 
+        public int settingsSecureGetInt(ContentResolver contentResolver, String keyName,
+                int defaultValue, int userId) {
+            return Settings.Secure.getIntForUser(contentResolver, keyName, defaultValue, userId);
+        }
+
         public @NonNull ManagedProfilePasswordCache getManagedProfilePasswordCache() {
             try {
                 java.security.KeyStore ks = java.security.KeyStore.getInstance("AndroidKeyStore");
@@ -821,7 +826,7 @@ public class LockSettingsService extends ILockSettings.Stub {
 
     private void getAuthSecretHal() {
         try {
-            mAuthSecretService = IAuthSecret.getService();
+            mAuthSecretService = IAuthSecret.getService(/* retry */ true);
         } catch (NoSuchElementException e) {
             Slog.i(TAG, "Device doesn't implement AuthSecret HAL");
         } catch (RemoteException e) {
@@ -1009,6 +1014,18 @@ public class LockSettingsService extends ILockSettings.Stub {
             case DevicePolicyManager.PASSWORD_QUALITY_BIOMETRIC_WEAK:
             default:
                 return quality;
+        }
+    }
+
+    private void enforceFrpResolved() {
+        final ContentResolver cr = mContext.getContentResolver();
+        final boolean inSetupWizard = mInjector.settingsSecureGetInt(cr,
+                Settings.Secure.USER_SETUP_COMPLETE, 0, UserHandle.USER_SYSTEM) == 0;
+        final boolean secureFrp = mInjector.settingsSecureGetInt(cr,
+                Settings.Secure.SECURE_FRP_MODE, 0, UserHandle.USER_SYSTEM) == 1;
+        if (inSetupWizard && secureFrp) {
+            throw new SecurityException("Cannot change credential in SUW while factory reset"
+                    + " protection is not resolved yet");
         }
     }
 
@@ -1613,6 +1630,7 @@ public class LockSettingsService extends ILockSettings.Stub {
                     "This operation requires secure lock screen feature");
         }
         checkWritePermission(userId);
+        enforceFrpResolved();
 
         // When changing credential for profiles with unified challenge, some callers
         // will pass in empty credential while others will pass in the credential of
@@ -2197,6 +2215,13 @@ public class LockSettingsService extends ILockSettings.Stub {
         }
     }
 
+    private PasswordMetrics loadPasswordMetrics(AuthenticationToken auth, int userHandle) {
+        synchronized (mSpManager) {
+            return mSpManager.getPasswordMetrics(auth, getSyntheticPasswordHandleLocked(userHandle),
+                    userHandle);
+        }
+    }
+
     /**
      * Call after {@link #setUserPasswordMetrics} so metrics are updated before
      * reporting the password changed.
@@ -2647,7 +2672,8 @@ public class LockSettingsService extends ILockSettings.Stub {
         return auth;
     }
 
-    private long getSyntheticPasswordHandleLocked(int userId) {
+    @VisibleForTesting
+    long getSyntheticPasswordHandleLocked(int userId) {
         return getLong(SYNTHETIC_PASSWORD_HANDLE_KEY,
                 SyntheticPasswordManager.DEFAULT_HANDLE, userId);
     }
@@ -2742,13 +2768,8 @@ public class LockSettingsService extends ILockSettings.Stub {
                 resetLockouts.add(new PendingResetLockout(userId, response.getPayload()));
             }
 
-            // TODO: Move setUserPasswordMetrics() inside onCredentialVerified(): this will require
-            // LSS to store an encrypted version of the latest password metric for every user,
-            // because user credential is not known when onCredentialVerified() is called during
-            // a token-based unlock.
-            setUserPasswordMetrics(userCredential, userId);
             onCredentialVerified(authResult.authToken, challengeType, challenge, resetLockouts,
-                    userId);
+                    PasswordMetrics.computeForCredential(userCredential), userId);
         } else if (response.getResponseCode() == VerifyCredentialResponse.RESPONSE_RETRY) {
             if (response.getTimeout() > 0) {
                 requireStrongAuth(STRONG_AUTH_REQUIRED_AFTER_LOCKOUT, userId);
@@ -2760,7 +2781,16 @@ public class LockSettingsService extends ILockSettings.Stub {
 
     private void onCredentialVerified(AuthenticationToken authToken,
             @ChallengeType int challengeType, long challenge,
-            @Nullable ArrayList<PendingResetLockout> resetLockouts, int userId) {
+            @Nullable ArrayList<PendingResetLockout> resetLockouts, PasswordMetrics metrics,
+            int userId) {
+
+        if (metrics != null) {
+            synchronized (this) {
+                mUserPasswordMetrics.put(userId,  metrics);
+            }
+        } else {
+            Slog.wtf(TAG, "Null metrics after credential verification");
+        }
 
         unlockKeystore(authToken.deriveKeyStorePassword(), userId);
 
@@ -3154,7 +3184,9 @@ public class LockSettingsService extends ILockSettings.Stub {
         // TODO: Reset biometrics lockout here. Ideally that should be self-contained inside
         // onCredentialVerified(), which will require some refactoring on the current lockout
         // reset logic.
-        onCredentialVerified(authResult.authToken, CHALLENGE_NONE, 0, null, userId);
+
+        onCredentialVerified(authResult.authToken, CHALLENGE_NONE, 0, null,
+                loadPasswordMetrics(authResult.authToken, userId), userId);
         return true;
     }
 
@@ -3227,6 +3259,12 @@ public class LockSettingsService extends ILockSettings.Stub {
         pw.println("StrongAuth:");
         pw.increaseIndent();
         mStrongAuth.dump(pw);
+        pw.println();
+        pw.decreaseIndent();
+
+        pw.println("RebootEscrow:");
+        pw.increaseIndent();
+        mRebootEscrowManager.dump(pw);
         pw.println();
         pw.decreaseIndent();
     }
@@ -3444,7 +3482,8 @@ public class LockSettingsService extends ILockSettings.Stub {
             SyntheticPasswordManager.AuthenticationToken
                     authToken = new SyntheticPasswordManager.AuthenticationToken(spVersion);
             authToken.recreateDirectly(syntheticPassword);
-            onCredentialVerified(authToken, CHALLENGE_NONE, 0, null, userId);
+            onCredentialVerified(authToken, CHALLENGE_NONE, 0, null,
+                    loadPasswordMetrics(authToken, userId), userId);
         }
     }
 }

@@ -21,14 +21,19 @@ import static com.android.systemui.bubbles.BubbleDebugConfig.TAG_BUBBLES;
 import static com.android.systemui.bubbles.BubbleDebugConfig.TAG_WITH_CLASS_NAME;
 
 import android.app.Activity;
+import android.content.res.Configuration;
+import android.content.res.Resources;
 import android.content.res.TypedArray;
 import android.graphics.Color;
 import android.os.Bundle;
+import android.util.DisplayMetrics;
 import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
+import android.widget.TextView;
 
 import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
@@ -49,6 +54,7 @@ public class BubbleOverflowActivity extends Activity {
     private static final String TAG = TAG_WITH_CLASS_NAME ? "BubbleOverflowActivity" : TAG_BUBBLES;
 
     private LinearLayout mEmptyState;
+    private ImageView mEmptyStateImage;
     private BubbleController mBubbleController;
     private BubbleOverflowAdapter mAdapter;
     private RecyclerView mRecyclerView;
@@ -67,18 +73,57 @@ public class BubbleOverflowActivity extends Activity {
 
         mEmptyState = findViewById(R.id.bubble_overflow_empty_state);
         mRecyclerView = findViewById(R.id.bubble_overflow_recycler);
-        mRecyclerView.setLayoutManager(
-                new GridLayoutManager(getApplicationContext(),
-                        getResources().getInteger(R.integer.bubbles_overflow_columns)));
+        mEmptyStateImage = findViewById(R.id.bubble_overflow_empty_state_image);
 
-        int bubbleMargin = getResources().getDimensionPixelSize(R.dimen.bubble_overflow_margin);
+        Resources res = getResources();
+        final int columns = res.getInteger(R.integer.bubbles_overflow_columns);
+        mRecyclerView.setLayoutManager(
+                new GridLayoutManager(getApplicationContext(), columns));
+
+        DisplayMetrics displayMetrics = new DisplayMetrics();
+        getWindowManager().getDefaultDisplay().getMetrics(displayMetrics);
+        final int recyclerViewWidth = (displayMetrics.widthPixels
+                - res.getDimensionPixelSize(R.dimen.bubble_overflow_padding));
+        final int viewWidth = recyclerViewWidth / columns;
+
+        final int maxOverflowBubbles = res.getInteger(R.integer.bubbles_max_overflow);
+        final int rows = (int) Math.ceil((double) maxOverflowBubbles / columns);
+        final int recyclerViewHeight = res.getDimensionPixelSize(R.dimen.bubble_overflow_height)
+                - res.getDimensionPixelSize(R.dimen.bubble_overflow_padding);
+        final int viewHeight = recyclerViewHeight / rows;
+
         mAdapter = new BubbleOverflowAdapter(mOverflowBubbles,
-                mBubbleController::promoteBubbleFromOverflow, bubbleMargin);
+                mBubbleController::promoteBubbleFromOverflow, viewWidth, viewHeight);
         mRecyclerView.setAdapter(mAdapter);
         onDataChanged(mBubbleController.getOverflowBubbles());
         mBubbleController.setOverflowCallback(() -> {
             onDataChanged(mBubbleController.getOverflowBubbles());
         });
+        onThemeChanged();
+    }
+
+    /**
+     * Handle theme changes.
+     */
+    void onThemeChanged() {
+        final int mode =
+                getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK;
+        switch (mode) {
+            case Configuration.UI_MODE_NIGHT_NO:
+                if (DEBUG_OVERFLOW) {
+                    Log.d(TAG, "Set overflow UI to light mode");
+                }
+                mEmptyStateImage.setImageDrawable(
+                        getResources().getDrawable(R.drawable.ic_empty_bubble_overflow_light));
+                break;
+            case Configuration.UI_MODE_NIGHT_YES:
+                if (DEBUG_OVERFLOW) {
+                    Log.d(TAG, "Set overflow UI to dark mode");
+                }
+                mEmptyStateImage.setImageDrawable(
+                        getResources().getDrawable(R.drawable.ic_empty_bubble_overflow_dark));
+                break;
+        }
     }
 
     void setBackgroundColor() {
@@ -119,6 +164,7 @@ public class BubbleOverflowActivity extends Activity {
     @Override
     public void onResume() {
         super.onResume();
+        onThemeChanged();
     }
 
     @Override
@@ -139,39 +185,48 @@ public class BubbleOverflowActivity extends Activity {
 class BubbleOverflowAdapter extends RecyclerView.Adapter<BubbleOverflowAdapter.ViewHolder> {
     private Consumer<Bubble> mPromoteBubbleFromOverflow;
     private List<Bubble> mBubbles;
-    private int mBubbleMargin;
+    private int mWidth;
+    private int mHeight;
 
-    public BubbleOverflowAdapter(List<Bubble> list, Consumer<Bubble> promoteBubble,
-            int bubbleMargin) {
+    public BubbleOverflowAdapter(List<Bubble> list, Consumer<Bubble> promoteBubble, int width,
+            int height) {
         mBubbles = list;
         mPromoteBubbleFromOverflow = promoteBubble;
-        mBubbleMargin = bubbleMargin;
+        mWidth = width;
+        mHeight = height;
     }
 
     @Override
     public BubbleOverflowAdapter.ViewHolder onCreateViewHolder(ViewGroup parent,
             int viewType) {
-        BadgedImageView view = (BadgedImageView) LayoutInflater.from(parent.getContext())
-                .inflate(R.layout.bubble_view, parent, false);
+        LinearLayout overflowView = (LinearLayout) LayoutInflater.from(parent.getContext())
+                .inflate(R.layout.bubble_overflow_view, parent, false);
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-        );
-        params.setMargins(mBubbleMargin, mBubbleMargin, mBubbleMargin, mBubbleMargin);
-        view.setLayoutParams(params);
-        return new ViewHolder(view);
+                LinearLayout.LayoutParams.WRAP_CONTENT);
+        params.width = mWidth;
+        params.height = mHeight;
+        overflowView.setLayoutParams(params);
+        return new ViewHolder(overflowView);
     }
 
     @Override
     public void onBindViewHolder(ViewHolder vh, int index) {
-        Bubble bubble = mBubbles.get(index);
+        Bubble b = mBubbles.get(index);
 
-        vh.mBadgedImageView.update(bubble);
-        vh.mBadgedImageView.setOnClickListener(view -> {
-            mBubbles.remove(bubble);
+        vh.iconView.setRenderedBubble(b);
+        vh.iconView.setOnClickListener(view -> {
+            mBubbles.remove(b);
             notifyDataSetChanged();
-            mPromoteBubbleFromOverflow.accept(bubble);
+            mPromoteBubbleFromOverflow.accept(b);
         });
+
+        Bubble.FlyoutMessage message = b.getFlyoutMessage();
+        if (message != null && message.senderName != null) {
+            vh.textView.setText(message.senderName);
+        } else {
+            vh.textView.setText(b.getAppName());
+        }
     }
 
     @Override
@@ -180,11 +235,13 @@ class BubbleOverflowAdapter extends RecyclerView.Adapter<BubbleOverflowAdapter.V
     }
 
     public static class ViewHolder extends RecyclerView.ViewHolder {
-        public BadgedImageView mBadgedImageView;
+        public BadgedImageView iconView;
+        public TextView textView;
 
-        public ViewHolder(BadgedImageView v) {
+        public ViewHolder(LinearLayout v) {
             super(v);
-            mBadgedImageView = v;
+            iconView = v.findViewById(R.id.bubble_view);
+            textView = v.findViewById(R.id.bubble_view_name);
         }
     }
 }

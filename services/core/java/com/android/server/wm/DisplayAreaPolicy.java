@@ -16,10 +16,13 @@
 
 package com.android.server.wm;
 
+import static android.window.DisplayAreaOrganizer.FEATURE_DEFAULT_TASK_CONTAINER;
+
 import android.content.res.Resources;
 import android.text.TextUtils;
 
-import com.android.server.wm.DisplayContent.TaskContainers;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Policy that manages DisplayAreas.
@@ -39,9 +42,9 @@ public abstract class DisplayAreaPolicy {
     protected final DisplayArea<? extends WindowContainer> mImeContainer;
 
     /**
-     * The Tasks container. Tasks etc. are automatically added to this container.
+     * The task display areas. Tasks etc. are automatically added to these containers.
      */
-    protected final DisplayArea<? extends ActivityStack> mTaskContainers;
+    protected final List<TaskDisplayArea> mTaskDisplayAreas;
 
     /**
      * Construct a new {@link DisplayAreaPolicy}
@@ -50,19 +53,19 @@ public abstract class DisplayAreaPolicy {
      * @param content the display content for which the policy applies
      * @param root the root display area under which the policy operates
      * @param imeContainer the ime container that the policy must attach
-     * @param taskContainers the task container that the policy must attach
+     * @param taskDisplayAreas the task display areas that the policy must attach
      *
      * @see #attachDisplayAreas()
      */
     protected DisplayAreaPolicy(WindowManagerService wmService,
             DisplayContent content, DisplayArea.Root root,
             DisplayArea<? extends WindowContainer> imeContainer,
-            DisplayArea<? extends ActivityStack> taskContainers) {
+            List<TaskDisplayArea> taskDisplayAreas) {
         mWmService = wmService;
         mContent = content;
         mRoot = root;
         mImeContainer = imeContainer;
-        mTaskContainers = taskContainers;
+        mTaskDisplayAreas = taskDisplayAreas;
     }
 
     /**
@@ -82,15 +85,32 @@ public abstract class DisplayAreaPolicy {
      */
     public abstract void addWindow(WindowToken token);
 
+    /**
+     * @return the number of task display areas on the display.
+     */
+    public int getTaskDisplayAreaCount() {
+        return mTaskDisplayAreas.size();
+    }
+
+    /**
+     * @return the task display area at index.
+     */
+    public TaskDisplayArea getTaskDisplayAreaAt(int index) {
+        return mTaskDisplayAreas.get(index);
+    }
+
     /** Provider for platform-default display area policy. */
     static final class DefaultProvider implements DisplayAreaPolicy.Provider {
         @Override
         public DisplayAreaPolicy instantiate(WindowManagerService wmService,
                 DisplayContent content, DisplayArea.Root root,
-                DisplayArea<? extends WindowContainer> imeContainer,
-                TaskContainers taskContainers) {
+                DisplayArea<? extends WindowContainer> imeContainer) {
+            final TaskDisplayArea defaultTaskDisplayArea = new TaskDisplayArea(content, wmService,
+                    "DefaultTaskDisplayArea", FEATURE_DEFAULT_TASK_CONTAINER);
+            final List<TaskDisplayArea> tdaList = new ArrayList<>();
+            tdaList.add(defaultTaskDisplayArea);
             return new DisplayAreaPolicyBuilder()
-                    .build(wmService, content, root, imeContainer, taskContainers);
+                    .build(wmService, content, root, imeContainer, tdaList);
         }
     }
 
@@ -109,8 +129,7 @@ public abstract class DisplayAreaPolicy {
          */
         DisplayAreaPolicy instantiate(WindowManagerService wmService,
                 DisplayContent content, DisplayArea.Root root,
-                DisplayArea<? extends WindowContainer> imeContainer,
-                TaskContainers taskContainers);
+                DisplayArea<? extends WindowContainer> imeContainer);
 
         /**
          * Instantiate the device-specific {@link Provider}.

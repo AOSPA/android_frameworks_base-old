@@ -29,6 +29,7 @@ import android.service.notification.NotificationListenerService.Ranking;
 import android.service.notification.NotificationListenerService.RankingMap;
 import android.service.notification.StatusBarNotification;
 import android.util.ArrayMap;
+import android.util.ArraySet;
 import android.util.Log;
 
 import com.android.internal.annotations.VisibleForTesting;
@@ -56,9 +57,9 @@ import com.android.systemui.util.leak.LeakDetector;
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -104,6 +105,10 @@ public class NotificationEntryManager implements
      * (e.g. {@link NotificationListenerService#REASON_CANCEL})
      */
     public static final int UNDEFINED_DISMISS_REASON = 0;
+
+    private final Set<NotificationEntry> mAllNotifications = new ArraySet<>();
+    private final Set<NotificationEntry> mReadOnlyAllNotifications =
+            Collections.unmodifiableSet(mAllNotifications);
 
     /** Pending notifications are ones awaiting inflation */
     @VisibleForTesting
@@ -247,7 +252,7 @@ public class NotificationEntryManager implements
     }
 
     @Override
-    public void onReorderingAllowed() {
+    public void onChangeAllowed() {
         updateNotifications("reordering is now allowed");
     }
 
@@ -468,6 +473,8 @@ public class NotificationEntryManager implements
                     entry.removeRow();
                 }
 
+                mAllNotifications.remove(entry);
+
                 // Let's remove the children if this was a summary
                 handleGroupSummaryRemoved(key);
                 removeVisibleNotification(key);
@@ -532,7 +539,8 @@ public class NotificationEntryManager implements
         }
     }
 
-    private void addNotificationInternal(StatusBarNotification notification,
+    private void addNotificationInternal(
+            StatusBarNotification notification,
             RankingMap rankingMap) throws InflationException {
         String key = notification.getKey();
         if (DEBUG) {
@@ -548,6 +556,7 @@ public class NotificationEntryManager implements
                 notification,
                 ranking,
                 mFgsFeatureController.isForegroundServiceDismissalEnabled());
+        mAllNotifications.add(entry);
 
         mLeakDetector.trackInstance(entry);
 
@@ -570,6 +579,9 @@ public class NotificationEntryManager implements
         }
         for (NotifCollectionListener listener : mNotifCollectionListeners) {
             listener.onEntryAdded(entry);
+        }
+        for (NotifCollectionListener listener : mNotifCollectionListeners) {
+            listener.onRankingApplied();
         }
     }
 
@@ -627,6 +639,9 @@ public class NotificationEntryManager implements
         for (NotificationEntryListener listener : mNotificationEntryListeners) {
             listener.onPostEntryUpdated(entry);
         }
+        for (NotifCollectionListener listener : mNotifCollectionListeners) {
+            listener.onRankingApplied();
+        }
     }
 
     public void updateNotification(StatusBarNotification notification, RankingMap ranking) {
@@ -643,7 +658,7 @@ public class NotificationEntryManager implements
      */
     public void updateNotifications(String reason) {
         reapplyFilterAndSort(reason);
-        if (mPresenter != null) {
+        if (mPresenter != null && !mFeatureFlags.isNewNotifPipelineRenderingEnabled()) {
             mPresenter.updateNotificationViews();
         }
     }
@@ -685,6 +700,9 @@ public class NotificationEntryManager implements
         for (NotifCollectionListener listener : mNotifCollectionListeners) {
             listener.onRankingUpdate(rankingMap);
         }
+        for (NotifCollectionListener listener : mNotifCollectionListeners) {
+            listener.onRankingApplied();
+        }
     }
 
     private void updateRankingOfPendingNotifications(@Nullable RankingMap rankingMap) {
@@ -706,15 +724,6 @@ public class NotificationEntryManager implements
      */
     public Iterable<NotificationEntry> getPendingNotificationsIterator() {
         return mPendingNotifications.values();
-    }
-
-    /**
-     * @return all notifications we're currently aware of (both pending and active notifications)
-     */
-    public Set<NotificationEntry> getPendingAndActiveNotifications() {
-        Set<NotificationEntry> allNotifs = new HashSet<>(mPendingNotifications.values());
-        allNotifs.addAll(mSortedAndFiltered);
-        return allNotifs;
     }
 
     /**
@@ -800,6 +809,9 @@ public class NotificationEntryManager implements
      */
     public void updateRanking(RankingMap rankingMap, String reason) {
         updateRankingAndSort(rankingMap, reason);
+        for (NotifCollectionListener listener : mNotifCollectionListeners) {
+            listener.onRankingApplied();
+        }
     }
 
     /** Resorts / filters the current notification set with the current RankingMap */
@@ -842,7 +854,7 @@ public class NotificationEntryManager implements
 
     private void dumpEntry(PrintWriter pw, String indent, int i, NotificationEntry e) {
         pw.print(indent);
-        pw.println("  [" + i + "] key=" + e.getKey() + " icon=" + e.icon);
+        pw.println("  [" + i + "] key=" + e.getKey() + " icon=" + e.getIcons().getStatusBarIcon());
         StatusBarNotification n = e.getSbn();
         pw.print(indent);
         pw.println("      pkg=" + n.getPackageName() + " id=" + n.getId() + " importance="
@@ -859,6 +871,15 @@ public class NotificationEntryManager implements
      */
     public List<NotificationEntry> getVisibleNotifications() {
         return mReadOnlyNotifications;
+    }
+
+    /**
+     * Returns a collections containing ALL notifications we know about, including ones that are
+     * hidden or for other users. See {@link CommonNotifCollection#getAllNotifs()}.
+     */
+    @Override
+    public Collection<NotificationEntry> getAllNotifs() {
+        return mReadOnlyAllNotifications;
     }
 
     /** @return A count of the active notifications */

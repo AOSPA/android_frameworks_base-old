@@ -176,6 +176,7 @@ public class SurfaceView extends View implements ViewRootImpl.SurfaceChangedCall
     boolean mUseAlpha = false;
     float mSurfaceAlpha = 1f;
     boolean mClipSurfaceToBounds;
+    int mBackgroundColor = Color.BLACK;
 
     @UnsupportedAppUsage
     boolean mHaveFrame = false;
@@ -496,8 +497,17 @@ public class SurfaceView extends View implements ViewRootImpl.SurfaceChangedCall
 
         updateSurface();
         releaseSurfaces();
-        mHaveFrame = false;
 
+        // We don't release this as part of releaseSurfaces as
+        // that is also called on transient visibility changes. We can't
+        // recreate this Surface, so only release it when we are fully
+        // detached.
+        if (mSurfacePackage != null) {
+            mSurfacePackage.release();
+            mSurfacePackage = null;
+        }
+
+        mHaveFrame = false;
         super.onDetachedFromWindow();
     }
 
@@ -677,16 +687,107 @@ public class SurfaceView extends View implements ViewRootImpl.SurfaceChangedCall
      * SurfaceView is in will be visible on top of its surface.
      *
      * <p>Note that this must be set before the surface view's containing
-     * window is attached to the window manager.
+     * window is attached to the window manager. If you target {@link Build.VERSION_CODES#R}
+     * the Z ordering can be changed dynamically if the backing surface is
+     * created, otherwise it would be applied at surface construction time.
      *
      * <p>Calling this overrides any previous call to {@link #setZOrderMediaOverlay}.
+     *
+     * @param onTop Whether to show the surface on top of this view's window.
      */
     public void setZOrderOnTop(boolean onTop) {
+        // In R and above we allow dynamic layer changes.
+        final boolean allowDynamicChange = getContext().getApplicationInfo().targetSdkVersion
+                > Build.VERSION_CODES.Q;
+        setZOrderedOnTop(onTop, allowDynamicChange);
+    }
+
+    /**
+     * @return Whether the surface backing this view appears on top of its parent.
+     *
+     * @hide
+     */
+    public boolean isZOrderedOnTop() {
+        return mSubLayer > 0;
+    }
+
+    /**
+     * Controls whether the surface view's surface is placed on top of its
+     * window. Normally it is placed behind the window, to allow it to
+     * (for the most part) appear to composite with the views in the
+     * hierarchy. By setting this, you cause it to be placed above the
+     * window. This means that none of the contents of the window this
+     * SurfaceView is in will be visible on top of its surface.
+     *
+     * <p>Calling this overrides any previous call to {@link #setZOrderMediaOverlay}.
+     *
+     * @param onTop Whether to show the surface on top of this view's window.
+     * @param allowDynamicChange Whether this can happen after the surface is created.
+     * @return Whether the Z ordering changed.
+     *
+     * @hide
+     */
+    public boolean setZOrderedOnTop(boolean onTop, boolean allowDynamicChange) {
+        final int subLayer;
         if (onTop) {
-            mSubLayer = APPLICATION_PANEL_SUBLAYER;
+            subLayer = APPLICATION_PANEL_SUBLAYER;
         } else {
-            mSubLayer = APPLICATION_MEDIA_SUBLAYER;
+            subLayer = APPLICATION_MEDIA_SUBLAYER;
         }
+        if (mSubLayer == subLayer) {
+            return false;
+        }
+        mSubLayer = subLayer;
+
+        if (!allowDynamicChange) {
+            return false;
+        }
+        if (mSurfaceControl == null) {
+            return true;
+        }
+        final ViewRootImpl viewRoot = getViewRootImpl();
+        if (viewRoot == null) {
+            return true;
+        }
+        final Surface parent = viewRoot.mSurface;
+        if (parent == null || !parent.isValid()) {
+            return true;
+        }
+
+        /*
+         * Schedule a callback that reflects an alpha value onto the underlying surfaces.
+         * This gets called on a RenderThread worker thread, so members accessed here must
+         * be protected by a lock.
+         */
+        final boolean useBLAST = viewRoot.useBLAST();
+        viewRoot.registerRtFrameCallback(frame -> {
+            try {
+                final SurfaceControl.Transaction t = useBLAST
+                        ? viewRoot.getBLASTSyncTransaction()
+                        : new SurfaceControl.Transaction();
+                synchronized (mSurfaceControlLock) {
+                    if (!parent.isValid() || mSurfaceControl == null) {
+                        return;
+                    }
+                    updateRelativeZ(t);
+                    if (!useBLAST) {
+                        t.deferTransactionUntil(mSurfaceControl,
+                                viewRoot.getRenderSurfaceControl(), frame);
+                    }
+                }
+                // It's possible that mSurfaceControl is released in the UI thread before
+                // the transaction completes. If that happens, an exception is thrown, which
+                // must be caught immediately.
+                t.apply();
+             } catch (Exception e) {
+                Log.e(TAG, System.identityHashCode(this)
+                        + "setZOrderOnTop RT: Exception during surface transaction", e);
+            }
+        });
+
+        invalidate();
+
+        return true;
     }
 
     /**
@@ -728,6 +829,12 @@ public class SurfaceView extends View implements ViewRootImpl.SurfaceChangedCall
         }
     }
 
+    private Transaction updateBackgroundColor(Transaction t) {
+        final float[] colorComponents = new float[] { Color.red(mBackgroundColor) / 255.f,
+                Color.green(mBackgroundColor) / 255.f, Color.blue(mBackgroundColor) / 255.f };
+        t.setColor(mBackgroundControl, colorComponents);
+        return t;
+    }
 
     private void releaseSurfaces() {
         mSurfaceAlpha = 1f;
@@ -900,6 +1007,7 @@ public class SurfaceView extends View implements ViewRootImpl.SurfaceChangedCall
                     }
 
                     updateBackgroundVisibility(mTmpTransaction);
+                    updateBackgroundColor(mTmpTransaction);
                     if (mUseAlpha) {
                         mTmpTransaction.setAlpha(mSurfaceControl, alpha);
                         mSurfaceAlpha = alpha;
@@ -929,7 +1037,7 @@ public class SurfaceView extends View implements ViewRootImpl.SurfaceChangedCall
                             mTmpTransaction.setWindowCrop(mSurfaceControl, mSurfaceWidth,
                                     mSurfaceHeight);
                         }
-                    } else if ((layoutSizeChanged || positionChanged) &&
+                    } else if ((layoutSizeChanged || positionChanged || visibleChanged) &&
                             viewRoot.useBLAST()) {
                         viewRoot.setUseBLASTSyncTransaction();
                     }
@@ -1133,7 +1241,7 @@ public class SurfaceView extends View implements ViewRootImpl.SurfaceChangedCall
     private void applySurfaceTransforms(SurfaceControl surface, SurfaceControl.Transaction t,
             Rect position, long frameNumber) {
         final ViewRootImpl viewRoot = getViewRootImpl();
-        if (frameNumber > 0 && viewRoot != null && !viewRoot.useBLAST()) {
+        if (frameNumber > 0 && viewRoot != null && !viewRoot.isDrawingToBLASTTransaction()) {
             t.deferTransactionUntil(surface, viewRoot.getRenderSurfaceControl(),
                     frameNumber);
         }
@@ -1150,7 +1258,7 @@ public class SurfaceView extends View implements ViewRootImpl.SurfaceChangedCall
 
     private void setParentSpaceRectangle(Rect position, long frameNumber) {
         final ViewRootImpl viewRoot = getViewRootImpl();
-        final boolean useBLAST = viewRoot.useBLAST();
+        final boolean useBLAST = viewRoot.isDrawingToBLASTTransaction();
         final SurfaceControl.Transaction t = useBLAST ? viewRoot.getBLASTSyncTransaction() :
             mRtTransaction;
 
@@ -1211,7 +1319,7 @@ public class SurfaceView extends View implements ViewRootImpl.SurfaceChangedCall
         @Override
         public void positionLost(long frameNumber) {
             final ViewRootImpl viewRoot = getViewRootImpl();
-            boolean useBLAST = viewRoot != null && viewRoot.useBLAST();
+            boolean useBLAST = viewRoot != null && viewRoot.isDrawingToBLASTTransaction();
             if (DEBUG) {
                 Log.d(TAG, String.format("%d windowPositionLost, frameNr = %d",
                         System.identityHashCode(this), frameNumber));
@@ -1299,10 +1407,8 @@ public class SurfaceView extends View implements ViewRootImpl.SurfaceChangedCall
             return;
         }
 
-        final float[] colorComponents = new float[] { Color.red(bgColor) / 255.f,
-                Color.green(bgColor) / 255.f, Color.blue(bgColor) / 255.f };
-
-        mTmpTransaction.setColor(mBackgroundControl, colorComponents).apply();
+        mBackgroundColor = bgColor;
+        updateBackgroundColor(mTmpTransaction).apply();
     }
 
     @UnsupportedAppUsage
@@ -1546,7 +1652,9 @@ public class SurfaceView extends View implements ViewRootImpl.SurfaceChangedCall
      * Display the view-hierarchy embedded within a {@link SurfaceControlViewHost.SurfacePackage}
      * within this SurfaceView. If this SurfaceView is above it's host Surface (see
      * {@link #setZOrderOnTop} then the embedded Surface hierarchy will be able to receive
-     * input.
+     * input. This will take ownership of the SurfaceControl contained inside the SurfacePackage
+     * and free the caller of the obligation to call
+     * {@link SurfaceControlViewHost.SurfacePackage#release}.
      *
      * @param p The SurfacePackage to embed.
      */
@@ -1556,6 +1664,7 @@ public class SurfaceView extends View implements ViewRootImpl.SurfaceChangedCall
             mSurfacePackage.getSurfaceControl() : null;
         if (mSurfaceControl != null && lastSc != null) {
             mTmpTransaction.reparent(lastSc, null).apply();
+            mSurfacePackage.release();
         } else if (mSurfaceControl != null) {
             reparentSurfacePackage(mTmpTransaction, p);
             mTmpTransaction.apply();

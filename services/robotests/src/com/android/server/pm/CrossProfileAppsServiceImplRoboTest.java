@@ -17,6 +17,7 @@
 package com.android.server.pm;
 
 import static android.app.AppOpsManager.MODE_ALLOWED;
+import static android.app.AppOpsManager.MODE_DEFAULT;
 import static android.app.AppOpsManager.OP_INTERACT_ACROSS_PROFILES;
 import static android.content.Intent.FLAG_RECEIVER_FOREGROUND;
 import static android.content.Intent.FLAG_RECEIVER_INCLUDE_BACKGROUND;
@@ -104,6 +105,7 @@ public class CrossProfileAppsServiceImplRoboTest {
     private final CrossProfileAppsServiceImpl mCrossProfileAppsServiceImpl =
             new CrossProfileAppsServiceImpl(mContext, mInjector);
     private final Map<UserHandle, Set<Intent>> mSentUserBroadcasts = new HashMap<>();
+    private final Map<Integer, List<ApplicationInfo>> installedApplications = new HashMap<>();
 
     @Mock private PackageManagerInternal mPackageManagerInternal;
     @Mock private IPackageManager mIPackageManager;
@@ -112,10 +114,16 @@ public class CrossProfileAppsServiceImplRoboTest {
     @Before
     public void initializeMocks() throws Exception {
         MockitoAnnotations.initMocks(this);
+        initializeInstalledApplicationsMock();
         mockCrossProfileAppInstalledAndEnabledOnEachProfile();
         mockCrossProfileAppRequestsInteractAcrossProfiles();
         mockCrossProfileAppRegistersBroadcastReceiver();
         mockCrossProfileAppWhitelisted();
+    }
+
+    private void initializeInstalledApplicationsMock() {
+        when(mPackageManagerInternal.getInstalledApplications(anyInt(), anyInt(), eq(CALLING_UID)))
+                .thenAnswer(invocation -> installedApplications.get(invocation.getArgument(1)));
     }
 
     private void mockCrossProfileAppInstalledAndEnabledOnEachProfile() {
@@ -138,11 +146,14 @@ public class CrossProfileAppsServiceImplRoboTest {
         when(mPackageManagerInternal.getPackage(uid))
                 .thenReturn(((ParsedPackage) PackageImpl.forTesting(CROSS_PROFILE_APP_PACKAGE_NAME)
                         .hideAsParsed()).hideAsFinal());
+        installedApplications.putIfAbsent(userId, new ArrayList<>());
+        installedApplications.get(userId).add(packageInfo.applicationInfo);
     }
 
     private PackageInfo buildTestPackageInfo() {
         PackageInfo packageInfo = new PackageInfo();
         packageInfo.applicationInfo = new ApplicationInfo();
+        packageInfo.applicationInfo.packageName = CROSS_PROFILE_APP_PACKAGE_NAME;
         return packageInfo;
     }
 
@@ -188,6 +199,12 @@ public class CrossProfileAppsServiceImplRoboTest {
                 CROSS_PROFILE_APP_PACKAGE_NAME, PERSONAL_PROFILE_UID, PERSONAL_PROFILE_USER_ID);
         ShadowApplicationPackageManager.setPackageUidAsUser(
                 CROSS_PROFILE_APP_PACKAGE_NAME, WORK_PROFILE_UID, WORK_PROFILE_USER_ID);
+        when(mPackageManagerInternal.getPackageUidInternal(
+                CROSS_PROFILE_APP_PACKAGE_NAME, /* flags= */ 0, PERSONAL_PROFILE_USER_ID))
+                .thenReturn(PERSONAL_PROFILE_UID);
+        when(mPackageManagerInternal.getPackageUidInternal(
+                CROSS_PROFILE_APP_PACKAGE_NAME, /* flags= */ 0, WORK_PROFILE_USER_ID))
+                .thenReturn(WORK_PROFILE_UID);
     }
 
     @Before
@@ -419,6 +436,58 @@ public class CrossProfileAppsServiceImplRoboTest {
                 .isTrue();
     }
 
+    @Test
+    public void canUserAttemptToConfigureInteractAcrossProfiles_packageNotInstalledInProfile_returnsTrue() {
+        mockUninstallCrossProfileAppFromWorkProfile();
+        assertThat(mCrossProfileAppsServiceImpl
+                .canUserAttemptToConfigureInteractAcrossProfiles(CROSS_PROFILE_APP_PACKAGE_NAME))
+                .isTrue();
+    }
+
+    @Test
+    public void canUserAttemptToConfigureInteractAcrossProfiles_packageDoesNotRequestInteractAcrossProfiles_returnsFalse()
+            throws Exception {
+        mockCrossProfileAppDoesNotRequestInteractAcrossProfiles();
+        assertThat(mCrossProfileAppsServiceImpl
+                .canUserAttemptToConfigureInteractAcrossProfiles(CROSS_PROFILE_APP_PACKAGE_NAME))
+                .isFalse();
+    }
+
+    @Test
+    public void canUserAttemptToConfigureInteractAcrossProfiles_packageNotWhitelisted_returnsTrue() {
+        mockCrossProfileAppNotWhitelisted();
+        assertThat(mCrossProfileAppsServiceImpl
+                .canUserAttemptToConfigureInteractAcrossProfiles(CROSS_PROFILE_APP_PACKAGE_NAME))
+                .isTrue();
+    }
+
+    @Test
+    public void canUserAttemptToConfigureInteractAcrossProfiles_platformSignedAppWithAutomaticPermission_returnsFalse() {
+        mockCrossProfileAppNotWhitelistedByOem();
+        shadowOf(mContext).grantPermissions(
+                Process.myPid(),
+                PERSONAL_PROFILE_UID,
+                Manifest.permission.INTERACT_ACROSS_PROFILES);
+
+        assertThat(mCrossProfileAppsServiceImpl
+                .canUserAttemptToConfigureInteractAcrossProfiles(CROSS_PROFILE_APP_PACKAGE_NAME))
+                .isFalse();
+    }
+
+    @Test
+    public void canUserAttemptToConfigureInteractAcrossProfiles_returnsTrue() {
+        assertThat(mCrossProfileAppsServiceImpl
+                .canUserAttemptToConfigureInteractAcrossProfiles(CROSS_PROFILE_APP_PACKAGE_NAME))
+                .isTrue();
+    }
+
+    @Test
+    public void clearInteractAcrossProfilesAppOps() {
+        explicitlySetInteractAcrossProfilesAppOp(MODE_ALLOWED);
+        mCrossProfileAppsServiceImpl.clearInteractAcrossProfilesAppOps();
+        assertThat(getCrossProfileAppOp()).isEqualTo(MODE_DEFAULT);
+    }
+
     private void explicitlySetInteractAcrossProfilesAppOp(@Mode int mode) {
         explicitlySetInteractAcrossProfilesAppOp(PERSONAL_PROFILE_UID, mode);
     }
@@ -475,6 +544,11 @@ public class CrossProfileAppsServiceImplRoboTest {
 
     private void mockCrossProfileAppNotWhitelisted() {
         when(mDevicePolicyManagerInternal.getAllCrossProfilePackages())
+                .thenReturn(new ArrayList<>());
+    }
+
+    private void mockCrossProfileAppNotWhitelistedByOem() {
+        when(mDevicePolicyManagerInternal.getDefaultCrossProfilePackages())
                 .thenReturn(new ArrayList<>());
     }
 

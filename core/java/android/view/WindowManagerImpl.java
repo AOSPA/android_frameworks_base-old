@@ -35,7 +35,6 @@ import android.graphics.Region;
 import android.os.Bundle;
 import android.os.IBinder;
 import android.os.RemoteException;
-import android.util.Size;
 
 import com.android.internal.os.IResultReceiver;
 
@@ -222,7 +221,7 @@ public final class WindowManagerImpl implements WindowManager {
         final Context context = mParentWindow != null ? mParentWindow.getContext() : mContext;
         final Rect bounds = getCurrentBounds(context);
 
-        return new WindowMetrics(toSize(bounds), computeWindowInsets(bounds));
+        return new WindowMetrics(bounds, computeWindowInsets(bounds));
     }
 
     private static Rect getCurrentBounds(Context context) {
@@ -234,11 +233,7 @@ public final class WindowManagerImpl implements WindowManager {
     @Override
     public WindowMetrics getMaximumWindowMetrics() {
         final Rect maxBounds = getMaximumBounds();
-        return new WindowMetrics(toSize(maxBounds), computeWindowInsets(maxBounds));
-    }
-
-    private Size toSize(Rect frame) {
-        return new Size(frame.width(), frame.height());
+        return new WindowMetrics(maxBounds, computeWindowInsets(maxBounds));
     }
 
     private Rect getMaximumBounds() {
@@ -280,7 +275,7 @@ public final class WindowManagerImpl implements WindowManager {
             if (ViewRootImpl.sNewInsetsMode == NEW_INSETS_MODE_FULL) {
                 return insetsState.calculateInsets(bounds, null /* ignoringVisibilityState*/,
                         isScreenRound, alwaysConsumeSystemBars, displayCutout.get(),
-                        systemWindowInsets, stableInsets, SOFT_INPUT_ADJUST_NOTHING,
+                        SOFT_INPUT_ADJUST_NOTHING,
                         SYSTEM_UI_FLAG_VISIBLE, null /* typeSideMap */);
             } else {
                 return new WindowInsets.Builder()

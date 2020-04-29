@@ -21,9 +21,11 @@ import static android.app.ActivityManager.RECENT_IGNORE_UNAVAILABLE;
 import static android.app.ActivityManager.RECENT_WITH_EXCLUDED;
 import static android.app.ActivityTaskManager.INVALID_TASK_ID;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_ASSISTANT;
+import static android.app.WindowConfiguration.ACTIVITY_TYPE_DREAM;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_HOME;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_RECENTS;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_UNDEFINED;
+import static android.app.WindowConfiguration.WINDOWING_MODE_MULTI_WINDOW;
 import static android.app.WindowConfiguration.WINDOWING_MODE_PINNED;
 import static android.app.WindowConfiguration.WINDOWING_MODE_SPLIT_SCREEN_PRIMARY;
 import static android.app.WindowConfiguration.WINDOWING_MODE_UNDEFINED;
@@ -848,10 +850,9 @@ class RecentTasks {
     @VisibleForTesting
     Set<Integer> getProfileIds(int userId) {
         Set<Integer> userIds = new ArraySet<>();
-        final List<UserInfo> profiles = mService.getUserManager().getProfiles(userId,
-                false /* enabledOnly */);
-        for (int i = profiles.size() - 1; i >= 0; --i) {
-            userIds.add(profiles.get(i).id);
+        int[] profileIds = mService.getUserManager().getProfileIds(userId, false /* enabledOnly */);
+        for (int i = 0; i < profileIds.length; i++) {
+            userIds.add(Integer.valueOf(profileIds[i]));
         }
         return userIds;
     }
@@ -1312,6 +1313,7 @@ class RecentTasks {
         switch (task.getActivityType()) {
             case ACTIVITY_TYPE_HOME:
             case ACTIVITY_TYPE_RECENTS:
+            case ACTIVITY_TYPE_DREAM:
                 // Ignore certain activity types completely
                 return false;
             case ACTIVITY_TYPE_ASSISTANT:
@@ -1321,6 +1323,7 @@ class RecentTasks {
                         == FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS) {
                     return false;
                 }
+                break;
         }
 
         // Ignore certain windowing modes
@@ -1328,23 +1331,21 @@ class RecentTasks {
             case WINDOWING_MODE_PINNED:
                 return false;
             case WINDOWING_MODE_SPLIT_SCREEN_PRIMARY:
-                if (DEBUG_RECENTS_TRIM_TASKS) Slog.d(TAG, "\ttop=" + task.getStack().getTopMostTask());
+                if (DEBUG_RECENTS_TRIM_TASKS) {
+                    Slog.d(TAG, "\ttop=" + task.getStack().getTopMostTask());
+                }
                 final ActivityStack stack = task.getStack();
                 if (stack != null && stack.getTopMostTask() == task) {
                     // Only the non-top task of the primary split screen mode is visible
                     return false;
                 }
-        }
-
-        // Tasks managed by/associated with an ActivityView should be excluded from recents.
-        // singleTaskInstance is set on the VirtualDisplay managed by ActivityView
-        // TODO(b/126185105): Find a different signal to use besides isSingleTaskInstance
-        final ActivityStack stack = task.getStack();
-        if (stack != null) {
-            DisplayContent display = stack.getDisplay();
-            if (display != null && display.isSingleTaskInstance()) {
-                return false;
-            }
+                break;
+            case WINDOWING_MODE_MULTI_WINDOW:
+                // Ignore tasks that are always on top
+                if (task.isAlwaysOnTop()) {
+                    return false;
+                }
+                break;
         }
 
         // If we're in lock task mode, ignore the root task
@@ -1411,8 +1412,9 @@ class RecentTasks {
         }
 
         // Trim tasks that are in stacks that are behind the home stack
-        final DisplayContent display = stack.getDisplay();
-        return display.getIndexOf(stack) < display.getIndexOf(display.getRootHomeTask());
+        final TaskDisplayArea taskDisplayArea = stack.getDisplayArea();
+        return taskDisplayArea.getIndexOf(stack) < taskDisplayArea.getIndexOf(
+                taskDisplayArea.getRootHomeTask());
     }
 
     /** Remove the tasks that user may not be able to return. */

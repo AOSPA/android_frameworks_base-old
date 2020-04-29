@@ -46,6 +46,7 @@ filegroup {
         // TODO(b/146011398) package android.net.wifi is now split amongst 2 jars: framework.jar and
         // framework-wifi.jar. This is not a good idea, should move WifiNetworkScoreCache
         // to a separate package.
+        "java/android/net/wifi/SoftApConfToXmlMigrationUtil.java",
         "java/android/net/wifi/WifiNetworkScoreCache.java",
         "java/android/net/wifi/WifiMigration.java",
         "java/android/net/wifi/nl80211/*.java",
@@ -72,8 +73,7 @@ test_access_hidden_api_whitelist = [
 // classes before they are renamed.
 java_library {
     name: "framework-wifi-pre-jarjar",
-    // TODO(b/146757305): sdk_version should be "module_lib_current"
-    sdk_version: "core_current",
+    sdk_version: "module_current",
     static_libs: [
         "framework-wifi-util-lib",
         "android.hardware.wifi-V1.0-java-constants",
@@ -81,11 +81,6 @@ java_library {
     libs: [
         "framework-annotations-lib",
         "unsupportedappusage", // for android.compat.annotation.UnsupportedAppUsage
-        "unsupportedappusage-annotation", // for dalvik.annotation.compat.UnsupportedAppUsage
-        "framework-telephony-stubs",
-        // TODO(b/146757305): should be unnecessary once
-        // sdk_version="module_lib_current"
-        "android_system_stubs_current",
     ],
     srcs: [
         ":framework-wifi-updatable-sources",
@@ -98,21 +93,12 @@ java_library {
         "//frameworks/opt/net/wifi/service",
         "//frameworks/opt/net/wifi/tests/wifitests",
     ],
-
-    // TODO(b/146757305): should be unnecessary once
-    // sdk_version="module_lib_current"
-    aidl: {
-        include_dirs: [
-            "frameworks/base/core/java",
-        ],
-    },
 }
 
 // post-jarjar version of framework-wifi
 java_library {
     name: "framework-wifi",
-    // TODO(b/146757305): sdk_version should be "module_lib_current"
-    sdk_version: "core_current",
+    sdk_version: "module_current",
     static_libs: [
         "framework-wifi-pre-jarjar",
     ],
@@ -130,6 +116,11 @@ java_library {
         "com.android.wifi",
         "test_com.android.wifi",
     ],
+    permitted_packages: [
+        "android.hardware.wifi",
+        "android.net.wifi",
+        "android.x.net.wifi",
+    ],
 }
 
 stubs_defaults {
@@ -138,7 +129,10 @@ stubs_defaults {
         ":framework-wifi-updatable-sources",
         ":framework-wifi-util-lib-aidls",
     ],
-    libs: [ "framework-annotations-lib" ],
+    libs: [
+        "framework-annotations-lib",
+        "framework-wifi-util-lib",
+    ],
     sdk_version: "module_current",
 }
 
@@ -177,24 +171,21 @@ droidstubs {
 java_library {
     name: "framework-wifi-stubs-publicapi",
     srcs: [":framework-wifi-stubs-srcs-publicapi"],
-    sdk_version: "current",
-    installable: false,
+    defaults: ["framework-module-stubs-lib-defaults-publicapi"],
 }
 
 java_library {
     name: "framework-wifi-stubs-systemapi",
     srcs: [":framework-wifi-stubs-srcs-systemapi"],
-    sdk_version: "system_current",
     libs: ["framework-annotations-lib"],
-    installable: false,
+    defaults: ["framework-module-stubs-lib-defaults-systemapi"],
 }
 
 java_library {
     name: "framework-wifi-stubs-module_libs_api",
     srcs: [":framework-wifi-stubs-srcs-module_libs_api"],
-    sdk_version: "module_current",
     libs: ["framework-annotations-lib"],
-    installable: false,
+    defaults: ["framework-module-stubs-lib-defaults-module_libs_api"],
 }
 
 // defaults for tests that need to build against framework-wifi's @hide APIs

@@ -18,25 +18,26 @@ package com.android.test.taskembed;
 
 import android.app.ActivityTaskManager;
 import android.content.Context;
-import android.view.ITaskOrganizer;
-import android.view.IWindowContainer;
+import android.window.TaskOrganizer;
+import android.window.WindowContainerToken;
 import android.view.SurfaceControl;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
+import android.window.ITaskOrganizer;
 
 /**
  * Simple SurfaceView wrapper which registers a TaskOrganizer
  * after it's Surface is ready.
  */
 class TaskView extends SurfaceView implements SurfaceHolder.Callback {
-    final ITaskOrganizer mTaskOrganizer;
+    final TaskOrganizer mTaskOrganizer;
     final int mWindowingMode;
-    IWindowContainer mWc;
+    WindowContainerToken mWc;
 
     boolean mSurfaceCreated = false;
     boolean mNeedsReparent;
 
-    TaskView(Context c, ITaskOrganizer o, int windowingMode) {
+    TaskView(Context c, TaskOrganizer o, int windowingMode) {
         super(c);
         getHolder().addCallback(this);
         setZOrderOnTop(true);
@@ -62,7 +63,7 @@ class TaskView extends SurfaceView implements SurfaceHolder.Callback {
     public void surfaceDestroyed(SurfaceHolder holder) {
     }
 
-    void reparentTask(IWindowContainer wc) {
+    void reparentTask(WindowContainerToken wc) {
         mWc = wc;
         if (mSurfaceCreated == false) {
             mNeedsReparent = true;

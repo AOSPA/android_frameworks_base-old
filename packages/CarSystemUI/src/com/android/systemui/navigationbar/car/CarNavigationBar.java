@@ -150,7 +150,7 @@ public class CarNavigationBar extends SystemUI implements CommandQueue.Callbacks
             ex.rethrowFromSystemServer();
         }
 
-        mAutoHideController.addAutoHideUiElement(new AutoHideUiElement() {
+        mAutoHideController.setNavigationBar(new AutoHideUiElement() {
             @Override
             public void synchronizeState() {
                 // No op.
@@ -238,10 +238,12 @@ public class CarNavigationBar extends SystemUI implements CommandQueue.Callbacks
         }
 
         buildNavBarContent();
-        // If the UI was rebuilt (day/night change) while the keyguard was up we need to
-        // correctly respect that state.
+        // If the UI was rebuilt (day/night change or user change) while the keyguard was up we need
+        // to correctly respect that state.
         if (mKeyguardStateControllerLazy.get().isShowing()) {
             mCarNavigationBarController.showAllKeyguardButtons(isDeviceSetupForUser());
+        } else {
+            mCarNavigationBarController.hideAllKeyguardButtons(isDeviceSetupForUser());
         }
 
         // Upon restarting the Navigation Bar, CarFacetButtonController should immediately apply the

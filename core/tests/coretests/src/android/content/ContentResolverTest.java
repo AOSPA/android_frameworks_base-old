@@ -20,6 +20,7 @@ import static com.google.common.truth.Truth.assertThat;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -236,10 +237,28 @@ public class ContentResolverTest {
     }
 
     @Test
+    public void testGetType_providerException() {
+        String type =
+                mResolver.getType(Uri.parse("content://android.content.FakeProviderRemote/error"));
+        assertThat(type).isNull();
+    }
+
+    @Test
     public void testCanonicalize() {
         Uri canonical = mResolver.canonicalize(
                 Uri.parse("content://android.content.FakeProviderRemote/something"));
         assertThat(canonical).isEqualTo(
                 Uri.parse("content://android.content.FakeProviderRemote/canonical"));
+    }
+
+    @Test
+    public void testCanonicalize_providerException() {
+        try {
+            mResolver.canonicalize(
+                    Uri.parse("content://android.content.FakeProviderRemote/error"));
+            fail("Expected IllegalArgumentException");
+        } catch (IllegalArgumentException e) {
+            // Expected
+        }
     }
 }

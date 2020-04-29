@@ -75,7 +75,6 @@ import android.app.ActivityManager;
 import android.app.ApplicationExitInfo;
 import android.app.usage.UsageEvents;
 import android.compat.annotation.ChangeId;
-import android.compat.annotation.Disabled;
 import android.compat.annotation.EnabledAfter;
 import android.content.Context;
 import android.content.pm.ServiceInfo;
@@ -151,12 +150,17 @@ public final class OomAdjuster {
      * capabilities.
      */
     @ChangeId
-    //TODO: change to @EnabledAfter when enforcing the feature.
-    @Disabled
+    @EnabledAfter(targetSdkVersion=android.os.Build.VERSION_CODES.Q)
     static final long CAMERA_MICROPHONE_CAPABILITY_CHANGE_ID = 136219221L;
 
-    //TODO: remove this when development is done.
-    private static final int TEMP_PROCESS_CAPABILITY_FOREGROUND_LOCATION = 1 << 31;
+    // TODO: remove this when development is done.
+    // These are debug flags used between OomAdjuster and AppOpsService to detect and report absence
+    // of the real flags.
+    public static final int DEBUG_PROCESS_CAPABILITY_FOREGROUND_MICROPHONE_Q = 1 << 27;
+    public static final int DEBUG_PROCESS_CAPABILITY_FOREGROUND_CAMERA_Q = 1 << 28;
+    public static final int DEBUG_PROCESS_CAPABILITY_FOREGROUND_MICROPHONE = 1 << 29;
+    public static final int DEBUG_PROCESS_CAPABILITY_FOREGROUND_CAMERA = 1 << 30;
+    public static final int DEBUG_PROCESS_CAPABILITY_FOREGROUND_LOCATION = 1 << 31;
 
     /**
      * For some direct access we need to power manager.
@@ -238,7 +242,8 @@ public final class OomAdjuster {
         final ServiceThread adjusterThread =
                 new ServiceThread(TAG, TOP_APP_PRIORITY_BOOST, false /* allowIo */);
         adjusterThread.start();
-        Process.setThreadGroupAndCpuset(adjusterThread.getThreadId(), THREAD_GROUP_TOP_APP);
+        adjusterThread.getThreadHandler().post(() -> Process.setThreadGroupAndCpuset(
+                adjusterThread.getThreadId(), THREAD_GROUP_TOP_APP));
         return adjusterThread;
     }
 
@@ -1558,7 +1563,7 @@ public final class OomAdjuster {
                     //TODO: remove this block when development is done.
                     capabilityFromFGS |=
                             (fgsType & FOREGROUND_SERVICE_TYPE_LOCATION)
-                                    != 0 ? TEMP_PROCESS_CAPABILITY_FOREGROUND_LOCATION : 0;
+                                    != 0 ? DEBUG_PROCESS_CAPABILITY_FOREGROUND_LOCATION : 0;
                 }
                 if (s.mAllowWhileInUsePermissionInFgs) {
                     boolean enabled = false;
@@ -1570,13 +1575,23 @@ public final class OomAdjuster {
                     if (enabled) {
                         capabilityFromFGS |=
                                 (fgsType & FOREGROUND_SERVICE_TYPE_CAMERA)
-                                        != 0 ? PROCESS_CAPABILITY_FOREGROUND_CAMERA : 0;
+                                        != 0 ? PROCESS_CAPABILITY_FOREGROUND_CAMERA
+                                        : DEBUG_PROCESS_CAPABILITY_FOREGROUND_CAMERA;
                         capabilityFromFGS |=
                                 (fgsType & FOREGROUND_SERVICE_TYPE_MICROPHONE)
-                                        != 0 ? PROCESS_CAPABILITY_FOREGROUND_MICROPHONE : 0;
+                                        != 0 ? PROCESS_CAPABILITY_FOREGROUND_MICROPHONE
+                                        : DEBUG_PROCESS_CAPABILITY_FOREGROUND_MICROPHONE;
                     } else {
-                        capabilityFromFGS |= PROCESS_CAPABILITY_FOREGROUND_CAMERA
-                                | PROCESS_CAPABILITY_FOREGROUND_MICROPHONE;
+                        // Remove fgsType check and assign PROCESS_CAPABILITY_FOREGROUND_CAMERA
+                        // and MICROPHONE when finish debugging.
+                        capabilityFromFGS |=
+                                (fgsType & FOREGROUND_SERVICE_TYPE_CAMERA)
+                                        != 0 ? PROCESS_CAPABILITY_FOREGROUND_CAMERA
+                                        : DEBUG_PROCESS_CAPABILITY_FOREGROUND_CAMERA_Q;
+                        capabilityFromFGS |=
+                                (fgsType & FOREGROUND_SERVICE_TYPE_MICROPHONE)
+                                        != 0 ? PROCESS_CAPABILITY_FOREGROUND_MICROPHONE
+                                        : DEBUG_PROCESS_CAPABILITY_FOREGROUND_MICROPHONE_Q;
                     }
                 }
             }
@@ -2428,7 +2443,7 @@ public final class OomAdjuster {
                     "Changes in " + app + ": " + changes);
             ActivityManagerService.ProcessChangeItem item =
                     mService.enqueueProcessChangeItemLocked(app.pid, app.info.uid);
-            item.changes = changes;
+            item.changes |= changes;
             item.foregroundActivities = app.repForegroundActivities;
             item.capability = app.setCapability;
             if (DEBUG_PROCESS_OBSERVERS) Slog.i(TAG_PROCESS_OBSERVERS,

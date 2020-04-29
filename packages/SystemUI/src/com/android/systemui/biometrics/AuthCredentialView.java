@@ -16,8 +16,10 @@
 
 package com.android.systemui.biometrics;
 
-import android.annotation.NonNull;
+import android.app.AlertDialog;
+import android.app.admin.DevicePolicyManager;
 import android.content.Context;
+import android.content.pm.UserInfo;
 import android.graphics.drawable.Drawable;
 import android.hardware.biometrics.BiometricPrompt;
 import android.os.AsyncTask;
@@ -26,32 +28,49 @@ import android.os.CountDownTimer;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
+import android.os.UserManager;
 import android.text.TextUtils;
 import android.util.AttributeSet;
 import android.view.View;
+import android.view.WindowManager;
 import android.view.accessibility.AccessibilityManager;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
+import androidx.annotation.IntDef;
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.annotation.StringRes;
 
 import com.android.internal.widget.LockPatternUtils;
 import com.android.systemui.Interpolators;
 import com.android.systemui.R;
 
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+
 /**
  * Abstract base class for Pin, Pattern, or Password authentication, for
- * {@link BiometricPrompt.Builder#setDeviceCredentialAllowed(boolean)}
+ * {@link BiometricPrompt.Builder#setAllowedAuthenticators(int)}}
  */
 public abstract class AuthCredentialView extends LinearLayout {
-
     private static final String TAG = "BiometricPrompt/AuthCredentialView";
     private static final int ERROR_DURATION_MS = 3000;
 
-    private final AccessibilityManager mAccessibilityManager;
+    static final int USER_TYPE_PRIMARY = 1;
+    static final int USER_TYPE_MANAGED_PROFILE = 2;
+    static final int USER_TYPE_SECONDARY = 3;
+    @Retention(RetentionPolicy.SOURCE)
+    @IntDef({USER_TYPE_PRIMARY, USER_TYPE_MANAGED_PROFILE, USER_TYPE_SECONDARY})
+    private @interface UserType {}
 
     protected final Handler mHandler;
+    protected final LockPatternUtils mLockPatternUtils;
+
+    private final AccessibilityManager mAccessibilityManager;
+    private final UserManager mUserManager;
+    private final DevicePolicyManager mDevicePolicyManager;
 
     private Bundle mBiometricPromptBundle;
     private AuthPanelController mPanelController;
@@ -65,16 +84,16 @@ public abstract class AuthCredentialView extends LinearLayout {
     protected TextView mErrorView;
 
     protected @Utils.CredentialType int mCredentialType;
-    protected final LockPatternUtils mLockPatternUtils;
     protected AuthContainerView mContainerView;
     protected Callback mCallback;
     protected AsyncTask<?, ?, ?> mPendingLockCheck;
     protected int mUserId;
+    protected long mOperationId;
     protected int mEffectiveUserId;
     protected ErrorTimer mErrorTimer;
 
     interface Callback {
-        void onCredentialMatched();
+        void onCredentialMatched(byte[] attestation);
     }
 
     protected static class ErrorTimer extends CountDownTimer {
@@ -105,14 +124,18 @@ public abstract class AuthCredentialView extends LinearLayout {
 
         @Override
         public void onFinish() {
-            mErrorView.setText("");
+            if (mErrorView != null) {
+                mErrorView.setText("");
+            }
         }
     }
 
     protected final Runnable mClearErrorRunnable = new Runnable() {
         @Override
         public void run() {
-            mErrorView.setText("");
+            if (mErrorView != null) {
+                mErrorView.setText("");
+            }
         }
     };
 
@@ -122,12 +145,18 @@ public abstract class AuthCredentialView extends LinearLayout {
         mLockPatternUtils = new LockPatternUtils(mContext);
         mHandler = new Handler(Looper.getMainLooper());
         mAccessibilityManager = mContext.getSystemService(AccessibilityManager.class);
+        mUserManager = mContext.getSystemService(UserManager.class);
+        mDevicePolicyManager = mContext.getSystemService(DevicePolicyManager.class);
     }
 
     protected void showError(String error) {
-        mHandler.removeCallbacks(mClearErrorRunnable);
-        mErrorView.setText(error);
-        mHandler.postDelayed(mClearErrorRunnable, ERROR_DURATION_MS);
+        if (mHandler != null) {
+            mHandler.removeCallbacks(mClearErrorRunnable);
+            mHandler.postDelayed(mClearErrorRunnable, ERROR_DURATION_MS);
+        }
+        if (mErrorView != null) {
+            mErrorView.setText(error);
+        }
     }
 
     private void setTextOrHide(TextView view, CharSequence text) {
@@ -146,6 +175,10 @@ public abstract class AuthCredentialView extends LinearLayout {
 
     void setUserId(int userId) {
         mUserId = userId;
+    }
+
+    void setOperationId(long operationId) {
+        mOperationId = operationId;
     }
 
     void setEffectiveUserId(int effectiveUserId) {
@@ -181,9 +214,11 @@ public abstract class AuthCredentialView extends LinearLayout {
     protected void onAttachedToWindow() {
         super.onAttachedToWindow();
 
-        setText(mTitleView, getTitle(mBiometricPromptBundle));
+        final CharSequence title = getTitle(mBiometricPromptBundle);
+        setText(mTitleView, title);
         setTextOrHide(mSubtitleView, getSubtitle(mBiometricPromptBundle));
         setTextOrHide(mDescriptionView, getDescription(mBiometricPromptBundle));
+        announceForAccessibility(title);
 
         final boolean isManagedProfile = Utils.isManagedProfile(mContext, mEffectiveUserId);
         final Drawable image;
@@ -245,10 +280,13 @@ public abstract class AuthCredentialView extends LinearLayout {
 
     protected void onErrorTimeoutFinish() {}
 
-    protected void onCredentialChecked(boolean matched, int timeoutMs) {
+    protected void onCredentialVerified(byte[] attestation, int timeoutMs) {
+
+        final boolean matched = attestation != null;
+
         if (matched) {
             mClearErrorRunnable.run();
-            mCallback.onCredentialMatched();
+            mCallback.onCredentialMatched(attestation);
         } else {
             if (timeoutMs > 0) {
                 mHandler.removeCallbacks(mClearErrorRunnable);
@@ -266,23 +304,158 @@ public abstract class AuthCredentialView extends LinearLayout {
                 };
                 mErrorTimer.start();
             } else {
-                final int error;
-                switch (mCredentialType) {
-                    case Utils.CREDENTIAL_PIN:
-                        error = R.string.biometric_dialog_wrong_pin;
-                        break;
-                    case Utils.CREDENTIAL_PATTERN:
-                        error = R.string.biometric_dialog_wrong_pattern;
-                        break;
-                    case Utils.CREDENTIAL_PASSWORD:
-                        error = R.string.biometric_dialog_wrong_password;
-                        break;
-                    default:
-                        error = R.string.biometric_dialog_wrong_password;
-                        break;
+                final boolean didUpdateErrorText = reportFailedAttempt();
+                if (!didUpdateErrorText) {
+                    final @StringRes int errorRes;
+                    switch (mCredentialType) {
+                        case Utils.CREDENTIAL_PIN:
+                            errorRes = R.string.biometric_dialog_wrong_pin;
+                            break;
+                        case Utils.CREDENTIAL_PATTERN:
+                            errorRes = R.string.biometric_dialog_wrong_pattern;
+                            break;
+                        case Utils.CREDENTIAL_PASSWORD:
+                        default:
+                            errorRes = R.string.biometric_dialog_wrong_password;
+                            break;
+                    }
+                    showError(getResources().getString(errorRes));
                 }
-                showError(getResources().getString(error));
             }
+        }
+    }
+
+    private boolean reportFailedAttempt() {
+        boolean result = updateErrorMessage(
+                mLockPatternUtils.getCurrentFailedPasswordAttempts(mEffectiveUserId) + 1);
+        mLockPatternUtils.reportFailedPasswordAttempt(mEffectiveUserId);
+        return result;
+    }
+
+    private boolean updateErrorMessage(int numAttempts) {
+        // Don't show any message if there's no maximum number of attempts.
+        final int maxAttempts = mLockPatternUtils.getMaximumFailedPasswordsForWipe(
+                mEffectiveUserId);
+        if (maxAttempts <= 0 || numAttempts <= 0) {
+            return false;
+        }
+
+        // Update the on-screen error string.
+        if (mErrorView != null) {
+            final String message = getResources().getString(
+                    R.string.biometric_dialog_credential_attempts_before_wipe,
+                    numAttempts,
+                    maxAttempts);
+            showError(message);
+        }
+
+        // Only show dialog if <=1 attempts are left before wiping.
+        final int remainingAttempts = maxAttempts - numAttempts;
+        if (remainingAttempts == 1) {
+            showLastAttemptBeforeWipeDialog();
+        } else if (remainingAttempts <= 0) {
+            showNowWipingDialog();
+        }
+        return true;
+    }
+
+    private void showLastAttemptBeforeWipeDialog() {
+        final AlertDialog alertDialog = new AlertDialog.Builder(mContext)
+                .setTitle(R.string.biometric_dialog_last_attempt_before_wipe_dialog_title)
+                .setMessage(
+                        getLastAttemptBeforeWipeMessageRes(getUserTypeForWipe(), mCredentialType))
+                .setPositiveButton(android.R.string.ok, null)
+                .create();
+        alertDialog.getWindow().setType(WindowManager.LayoutParams.TYPE_STATUS_BAR_SUB_PANEL);
+        alertDialog.show();
+    }
+
+    private void showNowWipingDialog() {
+        final AlertDialog alertDialog = new AlertDialog.Builder(mContext)
+                .setMessage(getNowWipingMessageRes(getUserTypeForWipe()))
+                .setPositiveButton(R.string.biometric_dialog_now_wiping_dialog_dismiss, null)
+                .setOnDismissListener(
+                        dialog -> mContainerView.animateAway(AuthDialogCallback.DISMISSED_ERROR))
+                .create();
+        alertDialog.getWindow().setType(WindowManager.LayoutParams.TYPE_STATUS_BAR_SUB_PANEL);
+        alertDialog.show();
+    }
+
+    private @UserType int getUserTypeForWipe() {
+        final UserInfo userToBeWiped = mUserManager.getUserInfo(
+                mDevicePolicyManager.getProfileWithMinimumFailedPasswordsForWipe(mEffectiveUserId));
+        if (userToBeWiped == null || userToBeWiped.isPrimary()) {
+            return USER_TYPE_PRIMARY;
+        } else if (userToBeWiped.isManagedProfile()) {
+            return USER_TYPE_MANAGED_PROFILE;
+        } else {
+            return USER_TYPE_SECONDARY;
+        }
+    }
+
+    private static @StringRes int getLastAttemptBeforeWipeMessageRes(
+            @UserType int userType, @Utils.CredentialType int credentialType) {
+        switch (userType) {
+            case USER_TYPE_PRIMARY:
+                return getLastAttemptBeforeWipeDeviceMessageRes(credentialType);
+            case USER_TYPE_MANAGED_PROFILE:
+                return getLastAttemptBeforeWipeProfileMessageRes(credentialType);
+            case USER_TYPE_SECONDARY:
+                return getLastAttemptBeforeWipeUserMessageRes(credentialType);
+            default:
+                throw new IllegalArgumentException("Unrecognized user type:" + userType);
+        }
+    }
+
+    private static @StringRes int getLastAttemptBeforeWipeDeviceMessageRes(
+            @Utils.CredentialType int credentialType) {
+        switch (credentialType) {
+            case Utils.CREDENTIAL_PIN:
+                return R.string.biometric_dialog_last_pin_attempt_before_wipe_device;
+            case Utils.CREDENTIAL_PATTERN:
+                return R.string.biometric_dialog_last_pattern_attempt_before_wipe_device;
+            case Utils.CREDENTIAL_PASSWORD:
+            default:
+                return R.string.biometric_dialog_last_password_attempt_before_wipe_device;
+        }
+    }
+
+    private static @StringRes int getLastAttemptBeforeWipeProfileMessageRes(
+            @Utils.CredentialType int credentialType) {
+        switch (credentialType) {
+            case Utils.CREDENTIAL_PIN:
+                return R.string.biometric_dialog_last_pin_attempt_before_wipe_profile;
+            case Utils.CREDENTIAL_PATTERN:
+                return R.string.biometric_dialog_last_pattern_attempt_before_wipe_profile;
+            case Utils.CREDENTIAL_PASSWORD:
+            default:
+                return R.string.biometric_dialog_last_password_attempt_before_wipe_profile;
+        }
+    }
+
+    private static @StringRes int getLastAttemptBeforeWipeUserMessageRes(
+            @Utils.CredentialType int credentialType) {
+        switch (credentialType) {
+            case Utils.CREDENTIAL_PIN:
+                return R.string.biometric_dialog_last_pin_attempt_before_wipe_user;
+            case Utils.CREDENTIAL_PATTERN:
+                return R.string.biometric_dialog_last_pattern_attempt_before_wipe_user;
+            case Utils.CREDENTIAL_PASSWORD:
+            default:
+                return R.string.biometric_dialog_last_password_attempt_before_wipe_user;
+        }
+    }
+
+    private static @StringRes int getNowWipingMessageRes(@UserType int userType) {
+        switch (userType) {
+            case USER_TYPE_PRIMARY:
+                return R.string.biometric_dialog_failed_attempts_now_wiping_device;
+            case USER_TYPE_MANAGED_PROFILE:
+                return R.string.biometric_dialog_failed_attempts_now_wiping_profile;
+            case USER_TYPE_SECONDARY:
+                return R.string.biometric_dialog_failed_attempts_now_wiping_user;
+            default:
+                throw new IllegalArgumentException("Unrecognized user type:" + userType);
         }
     }
 

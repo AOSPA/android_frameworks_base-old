@@ -17,10 +17,11 @@
 package com.android.systemui.controls.ui
 
 import android.content.Context
-import android.graphics.BlendMode
 import android.graphics.drawable.ClipDrawable
+import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.LayerDrawable
 import android.service.controls.Control
+import android.service.controls.DeviceTypes
 import android.service.controls.actions.ControlAction
 import android.service.controls.templates.ControlTemplate
 import android.service.controls.templates.StatelessTemplate
@@ -39,6 +40,8 @@ import com.android.systemui.R
 import kotlin.reflect.KClass
 
 private const val UPDATE_DELAY_IN_MILLIS = 3000L
+private const val ALPHA_ENABLED = (255.0 * 0.2).toInt()
+private const val ALPHA_DISABLED = 255
 
 class ControlViewHolder(
     val layout: ViewGroup,
@@ -48,7 +51,6 @@ class ControlViewHolder(
 ) {
     val icon: ImageView = layout.requireViewById(R.id.icon)
     val status: TextView = layout.requireViewById(R.id.status)
-    val statusExtra: TextView = layout.requireViewById(R.id.status_extra)
     val title: TextView = layout.requireViewById(R.id.title)
     val subtitle: TextView = layout.requireViewById(R.id.subtitle)
     val context: Context = layout.getContext()
@@ -62,6 +64,8 @@ class ControlViewHolder(
         val ld = layout.getBackground() as LayerDrawable
         ld.mutate()
         clipLayer = ld.findDrawableByLayerId(R.id.clip_layer) as ClipDrawable
+        // needed for marquee to start
+        status.setSelected(true)
     }
 
     fun bindData(cws: ControlWithState) {
@@ -69,31 +73,38 @@ class ControlViewHolder(
 
         cancelUpdate?.run()
 
-        val (status, template) = cws.control?.let {
+        val (controlStatus, template) = cws.control?.let {
             title.setText(it.getTitle())
             subtitle.setText(it.getSubtitle())
             Pair(it.getStatus(), it.getControlTemplate())
         } ?: run {
             title.setText(cws.ci.controlTitle)
-            subtitle.setText("")
+            subtitle.setText(cws.ci.controlSubtitle)
             Pair(Control.STATUS_UNKNOWN, ControlTemplate.NO_TEMPLATE)
         }
 
         cws.control?.let {
+            layout.setClickable(true)
             layout.setOnLongClickListener(View.OnLongClickListener() {
                 ControlActionCoordinator.longPress(this@ControlViewHolder)
                 true
             })
         }
 
-        val clazz = findBehavior(status, template)
+        val clazz = findBehavior(controlStatus, template)
         if (behavior == null || behavior!!::class != clazz) {
             // Behavior changes can signal a change in template from the app or
             // first time setup
             behavior = clazz.java.newInstance()
             behavior?.initialize(this)
+
+            // let behaviors define their own, if necessary, and clear any existing ones
+            layout.setAccessibilityDelegate(null)
         }
+
         behavior?.bind(cws)
+
+        layout.setContentDescription("${title.text} ${subtitle.text} ${status.text}")
     }
 
     fun actionResponse(@ControlAction.ResponseResult response: Int) {
@@ -102,15 +113,12 @@ class ControlViewHolder(
 
     fun setTransientStatus(tempStatus: String) {
         val previousText = status.getText()
-        val previousTextExtra = statusExtra.getText()
 
         cancelUpdate = uiExecutor.executeDelayed({
                 status.setText(previousText)
-                statusExtra.setText(previousTextExtra)
             }, UPDATE_DELAY_IN_MILLIS)
 
         status.setText(tempStatus)
-        statusExtra.setText("")
     }
 
     fun action(action: ControlAction) {
@@ -136,16 +144,24 @@ class ControlViewHolder(
         val ri = RenderInfo.lookup(context, cws.componentName, deviceType, enabled, offset)
 
         val fg = context.getResources().getColorStateList(ri.foreground, context.getTheme())
-        val bg = context.getResources().getColorStateList(ri.background, context.getTheme())
+        val (bg, alpha) = if (enabled) {
+            Pair(ri.enabledBackground, ALPHA_ENABLED)
+        } else {
+            Pair(R.color.control_default_background, ALPHA_DISABLED)
+        }
+
         status.setTextColor(fg)
-        statusExtra.setTextColor(fg)
 
         icon.setImageDrawable(ri.icon)
-        icon.setImageTintList(fg)
 
-        clipLayer.getDrawable().apply {
-            setTintBlendMode(BlendMode.HUE)
-            setTintList(bg)
+        // do not color app icons
+        if (deviceType != DeviceTypes.TYPE_ROUTINE) {
+            icon.setImageTintList(fg)
+        }
+
+        (clipLayer.getDrawable() as GradientDrawable).apply {
+            setColor(context.getResources().getColor(bg, context.getTheme()))
+            setAlpha(alpha)
         }
     }
 

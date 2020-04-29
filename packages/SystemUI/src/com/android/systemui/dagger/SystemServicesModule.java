@@ -32,10 +32,13 @@ import android.content.Context;
 import android.content.pm.IPackageManager;
 import android.content.pm.LauncherApps;
 import android.content.pm.PackageManager;
+import android.content.pm.ShortcutManager;
 import android.content.res.Resources;
 import android.hardware.SensorPrivacyManager;
 import android.media.AudioManager;
 import android.net.ConnectivityManager;
+import android.net.NetworkScoreManager;
+import android.net.wifi.WifiManager;
 import android.os.BatteryStats;
 import android.os.Handler;
 import android.os.PowerManager;
@@ -139,6 +142,12 @@ public class SystemServicesModule {
                 ServiceManager.checkService(DreamService.DREAM_SERVICE));
     }
 
+    @Provides
+    @Singleton
+    static IPackageManager provideIPackageManager() {
+        return IPackageManager.Stub.asInterface(ServiceManager.getService("package"));
+    }
+
     @Singleton
     @Provides
     static IStatusBarService provideIStatusBarService() {
@@ -157,13 +166,6 @@ public class SystemServicesModule {
     @Provides
     static IWindowManager provideIWindowManager() {
         return WindowManagerGlobal.getWindowManagerService();
-    }
-
-    /** */
-    @Singleton
-    @Provides
-    public IPackageManager provideIPackageManager() {
-        return IPackageManager.Stub.asInterface(ServiceManager.getService("package"));
     }
 
     @Singleton
@@ -191,6 +193,12 @@ public class SystemServicesModule {
     static LocalBluetoothManager provideLocalBluetoothController(Context context,
             @Background Handler bgHandler) {
         return LocalBluetoothManager.create(context, bgHandler, UserHandle.ALL);
+    }
+
+    @Provides
+    @Singleton
+    static NetworkScoreManager provideNetworkScoreManager(Context context) {
+        return context.getSystemService(NetworkScoreManager.class);
     }
 
     @Singleton
@@ -230,6 +238,12 @@ public class SystemServicesModule {
         return context.getSystemService(SensorPrivacyManager.class);
     }
 
+    @Singleton
+    @Provides
+    static ShortcutManager provideShortcutManager(Context context) {
+        return context.getSystemService(ShortcutManager.class);
+    }
+
     @Provides
     @Singleton
     @Nullable
@@ -265,6 +279,12 @@ public class SystemServicesModule {
     @Provides
     static WallpaperManager provideWallpaperManager(Context context) {
         return (WallpaperManager) context.getSystemService(Context.WALLPAPER_SERVICE);
+    }
+
+    @Provides
+    @Singleton
+    static WifiManager provideWifiManager(Context context) {
+        return context.getSystemService(WifiManager.class);
     }
 
     @Singleton

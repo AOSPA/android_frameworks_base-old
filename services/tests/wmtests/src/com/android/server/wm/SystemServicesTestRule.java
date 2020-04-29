@@ -316,12 +316,16 @@ public class SystemServicesTestRule implements TestRule {
         // that the default display is in fullscreen mode.
         display.setDisplayWindowingMode(WINDOWING_MODE_FULLSCREEN);
         spyOn(display);
-        final ActivityStack homeStack = display.getStack(
+        final TaskDisplayArea taskDisplayArea = display.getDefaultTaskDisplayArea();
+        spyOn(taskDisplayArea);
+        final ActivityStack homeStack = taskDisplayArea.getStack(
                 WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_HOME);
         spyOn(homeStack);
     }
 
     private void tearDown() {
+        mWmService.mRoot.forAllDisplayPolicies(DisplayPolicy::release);
+
         // Unregister display listener from root to avoid issues with subsequent tests.
         mContext.getSystemService(DisplayManager.class)
                 .unregisterDisplayListener(mAtmService.mRootWindowContainer);

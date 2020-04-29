@@ -23,9 +23,6 @@ import android.os.Handler;
 import android.os.PowerManager;
 import android.util.DisplayMetrics;
 
-import com.android.car.notification.CarNotificationListener;
-import com.android.car.notification.CarUxRestrictionManagerWrapper;
-import com.android.car.notification.NotificationDataManager;
 import com.android.internal.logging.MetricsLogger;
 import com.android.keyguard.KeyguardUpdateMonitor;
 import com.android.keyguard.ViewMediatorCallback;
@@ -34,7 +31,6 @@ import com.android.systemui.assist.AssistManager;
 import com.android.systemui.broadcast.BroadcastDispatcher;
 import com.android.systemui.bubbles.BubbleController;
 import com.android.systemui.car.CarDeviceProvisionedController;
-import com.android.systemui.car.CarServiceProvider;
 import com.android.systemui.colorextraction.SysuiColorExtractor;
 import com.android.systemui.dagger.qualifiers.UiBackground;
 import com.android.systemui.keyguard.DismissCallbackRegistry;
@@ -50,12 +46,12 @@ import com.android.systemui.recents.ScreenPinningRequest;
 import com.android.systemui.shared.plugins.PluginManager;
 import com.android.systemui.stackdivider.Divider;
 import com.android.systemui.statusbar.CommandQueue;
-import com.android.systemui.statusbar.FlingAnimationUtils;
 import com.android.systemui.statusbar.KeyguardIndicationController;
 import com.android.systemui.statusbar.NavigationBarController;
 import com.android.systemui.statusbar.NotificationLockscreenUserManager;
 import com.android.systemui.statusbar.NotificationMediaManager;
 import com.android.systemui.statusbar.NotificationRemoteInputManager;
+import com.android.systemui.statusbar.NotificationShadeDepthController;
 import com.android.systemui.statusbar.NotificationViewHierarchyManager;
 import com.android.systemui.statusbar.PulseExpansionHandler;
 import com.android.systemui.statusbar.SuperStatusBarViewFactory;
@@ -205,13 +201,8 @@ public class CarStatusBarModule {
             KeyguardIndicationController keyguardIndicationController,
             DismissCallbackRegistry dismissCallbackRegistry,
             StatusBarTouchableRegionManager statusBarTouchableRegionManager,
-            CarServiceProvider carServiceProvider,
-            Lazy<PowerManagerHelper> powerManagerHelperLazy,
-            CarNavigationBarController carNavigationBarController,
-            FlingAnimationUtils.Builder flingAnimationUtilsBuilder,
-            NotificationDataManager notificationDataManager,
-            CarUxRestrictionManagerWrapper carUxRestrictionManagerWrapper,
-            CarNotificationListener carNotificationListener) {
+            Lazy<NotificationShadeDepthController> notificationShadeDepthControllerLazy,
+            CarNavigationBarController carNavigationBarController) {
         return new CarStatusBar(
                 context,
                 notificationsController,
@@ -289,12 +280,7 @@ public class CarStatusBarModule {
                 keyguardIndicationController,
                 dismissCallbackRegistry,
                 statusBarTouchableRegionManager,
-                carServiceProvider,
-                powerManagerHelperLazy,
-                carNavigationBarController,
-                flingAnimationUtilsBuilder,
-                notificationDataManager,
-                carUxRestrictionManagerWrapper,
-                carNotificationListener);
+                notificationShadeDepthControllerLazy,
+                carNavigationBarController);
     }
 }

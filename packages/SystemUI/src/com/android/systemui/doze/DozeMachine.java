@@ -16,6 +16,9 @@
 
 package com.android.systemui.doze;
 
+import static com.android.systemui.keyguard.WakefulnessLifecycle.WAKEFULNESS_AWAKE;
+import static com.android.systemui.keyguard.WakefulnessLifecycle.WAKEFULNESS_WAKING;
+
 import android.annotation.MainThread;
 import android.hardware.display.AmbientDisplayConfiguration;
 import android.os.Trace;
@@ -336,8 +339,8 @@ public class DozeMachine {
             return State.DOZE;
         }
         if ((mState == State.DOZE_AOD_PAUSED || mState == State.DOZE_AOD_PAUSING
-                || mState == State.DOZE_AOD || mState == State.DOZE)
-                && requestedState == State.DOZE_PULSE_DONE) {
+                || mState == State.DOZE_AOD || mState == State.DOZE
+                || mState == State.DOZE_AOD_DOCKED) && requestedState == State.DOZE_PULSE_DONE) {
             Log.i(TAG, "Dropping pulse done because current state is already done: " + mState);
             return mState;
         }
@@ -368,8 +371,8 @@ public class DozeMachine {
             case DOZE_PULSE_DONE:
                 final State nextState;
                 @Wakefulness int wakefulness = mWakefulnessLifecycle.getWakefulness();
-                if (wakefulness == WakefulnessLifecycle.WAKEFULNESS_AWAKE
-                        || wakefulness == WakefulnessLifecycle.WAKEFULNESS_WAKING) {
+                if (state != State.INITIALIZED && (wakefulness == WAKEFULNESS_AWAKE
+                        || wakefulness == WAKEFULNESS_WAKING)) {
                     nextState = State.FINISH;
                 } else if (mDockManager.isDocked()) {
                     nextState = mDockManager.isHidden() ? State.DOZE : State.DOZE_AOD_DOCKED;
