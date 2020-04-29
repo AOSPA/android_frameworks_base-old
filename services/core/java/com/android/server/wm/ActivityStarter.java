@@ -1388,7 +1388,8 @@ class ActivityStarter {
             final ActivityStack homeStack = targetTask.getDisplayArea().getRootHomeTask();
             final boolean homeTaskVisible = homeStack != null && homeStack.shouldBeVisible(null);
             mService.getTaskChangeNotificationController().notifyActivityRestartAttempt(
-                    targetTask.getTaskInfo(), homeTaskVisible, clearedTask);
+                    targetTask.getTaskInfo(), homeTaskVisible, clearedTask,
+                    targetTask.getTopNonFinishingActivity().isVisible());
         }
     }
 
