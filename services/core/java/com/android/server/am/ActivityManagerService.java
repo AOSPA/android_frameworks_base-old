@@ -5442,7 +5442,7 @@ public class ActivityManagerService extends IActivityManager.Stub
             return false;
         }
 
-        if (!didSomething) {
+        if (didSomething) {
             updateOomAdjLocked(app, OomAdjuster.OOM_ADJ_REASON_PROCESS_BEGIN);
             checkTime(startTime, "attachApplicationLocked: after updateOomAdjLocked");
         }
