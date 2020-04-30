@@ -6056,7 +6056,10 @@ public class NotificationManagerService extends SystemService {
         if (isInCall() || mScreenOn) {
             return false;
         }
-
+        // Check for phone missed calls
+        if (record.getChannel().getId().equals("phone_missed_call")) {
+            return true;
+        }
         return true;
     }
 
