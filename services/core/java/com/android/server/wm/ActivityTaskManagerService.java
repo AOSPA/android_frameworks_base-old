@@ -248,6 +248,7 @@ import com.android.internal.util.ArrayUtils;
 import com.android.internal.util.FastPrintWriter;
 import com.android.internal.util.Preconditions;
 import com.android.internal.util.function.pooled.PooledLambda;
+import com.android.server.AppLockService;
 import com.android.server.AttributeCache;
 import com.android.server.DeviceIdleController;
 import com.android.server.LocalServices;
@@ -341,6 +342,8 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
     public static final int RELAUNCH_REASON_FREE_RESIZE = 2;
 
     Context mContext;
+
+    AppLockService mAppLockService;
 
     /**
      * This Context is themable and meant for UI display (AlertDialogs, etc.). The theme can
@@ -705,6 +708,8 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
             mRecentTasks.onSystemReadyLocked();
             mStackSupervisor.onSystemReady();
         }
+
+        mAppLockService = LocalServices.getService(AppLockService.class);
     }
 
     public void onInitPowerManagement() {
@@ -4323,6 +4328,31 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         } finally {
             Binder.restoreCallingIdentity(ident);
         }
+    }
+
+    boolean isAppLocked(String packageName) {
+        if (mAppLockService == null) return false;
+        return mAppLockService.isAppLocked(packageName);
+    }
+
+    void updateAppLockConfig(String packageName, Configuration newConfig) {
+        if (mAppLockService == null) return;
+        mAppLockService.updateAppLockConfig(packageName, newConfig);
+    }
+
+    void showAppLockIfNeeded(String packageName, IBinder token) {
+        if (mAppLockService == null) return;
+        mAppLockService.showAppLockIfNeeded(packageName, token);
+    }
+
+    void blockAppViewIfLocked(String packageName) {
+        if (mAppLockService == null) return;
+        mAppLockService.blockAppViewIfLocked(packageName);
+    }
+
+    void setAppWindowsGone(String packageName, IBinder token) {
+        if (mAppLockService == null) return;
+        mAppLockService.setAppWindowsGone(packageName, token);
     }
 
     /**

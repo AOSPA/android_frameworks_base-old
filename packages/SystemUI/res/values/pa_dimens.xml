@@ -63,4 +63,6 @@
     <dimen name="screenrecord_dialog_padding">18dp</dimen>
     <dimen name="screenrecord_logo_size">24dp</dimen>
 
+    <!-- App lock -->
+    <dimen name="recents_thumbnail_padding">45.5dp</dimen>
 </resources>
