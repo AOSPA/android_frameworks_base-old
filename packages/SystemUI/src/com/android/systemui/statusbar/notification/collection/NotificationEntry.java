@@ -22,6 +22,7 @@ import static android.app.Notification.CATEGORY_EVENT;
 import static android.app.Notification.CATEGORY_MESSAGE;
 import static android.app.Notification.CATEGORY_REMINDER;
 import static android.app.Notification.FLAG_BUBBLE;
+import static android.app.NotificationManager.IMPORTANCE_LOW;
 import static android.app.NotificationManager.Policy.SUPPRESSED_EFFECT_AMBIENT;
 import static android.app.NotificationManager.Policy.SUPPRESSED_EFFECT_BADGE;
 import static android.app.NotificationManager.Policy.SUPPRESSED_EFFECT_FULL_SCREEN_INTENT;
@@ -173,8 +174,22 @@ public final class NotificationEntry {
     private boolean mAutoHeadsUp;
     private boolean mPulseSupressed;
 
+    private boolean mAppLocked = false;
+
     public NotificationEntry(StatusBarNotification n) {
         this(n, null);
+    }
+
+    public NotificationEntry(
+            StatusBarNotification n,
+            @Nullable NotificationListenerService.Ranking ranking,
+            boolean appLocked) {
+        this.key = n.getKey();
+        this.notification = n;
+        this.mAppLocked = appLocked;
+        if (ranking != null) {
+            populateFromRanking(ranking);
+        }
     }
 
     public NotificationEntry(
@@ -190,7 +205,7 @@ public final class NotificationEntry {
     public void populateFromRanking(@NonNull NotificationListenerService.Ranking ranking) {
         channel = ranking.getChannel();
         lastAudiblyAlertedMs = ranking.getLastAudiblyAlertedMillis();
-        importance = ranking.getImportance();
+        importance = (mAppLocked) ? IMPORTANCE_LOW : ranking.getImportance();
         ambient = ranking.isAmbient();
         snoozeCriteria = ranking.getSnoozeCriteria();
         userSentiment = ranking.getUserSentiment();
@@ -201,8 +216,12 @@ public final class NotificationEntry {
                 : ranking.getSmartReplies().toArray(new CharSequence[0]);
         suppressedVisualEffects = ranking.getSuppressedVisualEffects();
         suspended = ranking.isSuspended();
-        canBubble = ranking.canBubble();
+        canBubble = !mAppLocked && ranking.canBubble();
         isVisuallyInterruptive = ranking.visuallyInterruptive();
+    }
+
+    public void updateAfterAppOpen(@NonNull NotificationListenerService.Ranking ranking, boolean open) {
+        importance = (open) ? ranking.getImportance() : IMPORTANCE_LOW;
     }
 
     public void setInterruption() {
