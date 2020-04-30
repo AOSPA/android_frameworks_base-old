@@ -28,6 +28,7 @@ import static android.Manifest.permission.REMOVE_TASKS;
 import static android.Manifest.permission.START_TASKS_FROM_RECENTS;
 import static android.Manifest.permission.STOP_APP_SWITCHES;
 import static android.app.ActivityManager.LOCK_TASK_MODE_NONE;
+import static android.app.ActivityManager.START_SUCCESS;
 import static android.app.ActivityManagerInternal.ALLOW_FULL_ONLY;
 import static android.app.ActivityTaskManager.INVALID_TASK_ID;
 import static android.app.ActivityTaskManager.RESIZE_MODE_PRESERVE_WINDOW;
@@ -270,6 +271,7 @@ import com.android.server.pm.UserManagerService;
 import com.android.server.policy.PermissionPolicyInternal;
 import com.android.server.uri.UriGrantsManagerInternal;
 import com.android.server.vr.VrManagerInternal;
+//import com.android.server.wm.AppLockService;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -341,6 +343,8 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
     public static final int RELAUNCH_REASON_FREE_RESIZE = 2;
 
     Context mContext;
+
+    AppLockService mAppLockService;
 
     /**
      * This Context is themable and meant for UI display (AlertDialogs, etc.). The theme can
@@ -705,6 +709,9 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
             mRecentTasks.onSystemReadyLocked();
             mStackSupervisor.onSystemReady();
         }
+
+        mAppLockService = LocalServices.getService(AppLockService.class);
+        mAppLockService.setActivityTaskManagerService(this);
     }
 
     public void onInitPowerManagement() {
@@ -1009,6 +1016,14 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
     public final int startActivity(IApplicationThread caller, String callingPackage,
             Intent intent, String resolvedType, IBinder resultTo, String resultWho, int requestCode,
             int startFlags, ProfilerInfo profilerInfo, Bundle bOptions) {
+        final ComponentName cmp = intent.getComponent();
+        final String pkg = (cmp == null) ? null : cmp.getPackageName();
+        if (isAppLocked(pkg) && !isAppOpened(pkg) && mAppLockService.isGame(pkg)) {
+            Log.d("AppLock_atmService", "App is locked pkg:" + pkg + " intent:" + intent);
+            mAppLockService.setAppIntent(pkg, intent);
+            mAppLockService.launchBeforeActivity(pkg);
+            return START_SUCCESS;
+        }
         return startActivityAsUser(caller, callingPackage, intent, resolvedType, resultTo,
                 resultWho, requestCode, startFlags, profilerInfo, bOptions,
                 UserHandle.getCallingUserId());
@@ -4323,6 +4338,36 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         } finally {
             Binder.restoreCallingIdentity(ident);
         }
+    }
+
+    boolean isAppLocked(String packageName) {
+        if (mAppLockService == null) return false;
+        return mAppLockService.isAppLocked(packageName);
+    }
+
+    boolean isAppOpened(String packageName) {
+        if (mAppLockService == null) return false;
+        return mAppLockService.isAppOpen(packageName);
+    }
+
+    void updateAppLockConfig(String packageName, Configuration newConfig) {
+        if (mAppLockService == null) return;
+        mAppLockService.updateAppLockConfig(packageName, newConfig);
+    }
+
+    void showAppLockIfNeeded(String packageName, WindowState w) {
+        if (mAppLockService == null) return;
+        mAppLockService.showAppLockIfNeeded(packageName, w);
+    }
+
+    void updateAppVisibility(String packageName) {
+        if (mAppLockService == null) return;
+        mAppLockService.updateAppVisibility(packageName);
+    }
+
+    void onAppWindowRemoved(String packageName, WindowState w) {
+        if (mAppLockService == null) return;
+        mAppLockService.onAppWindowRemoved(packageName, w);
     }
 
     /**

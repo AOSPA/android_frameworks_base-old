@@ -461,6 +461,14 @@ public class LockPatternView extends View {
         invalidate();
     }
 
+    /**
+     * @param color the regular color
+     */
+    public void setRegularColor(int color) {
+        mRegularColor = color;
+        mPathPaint.setColor(mRegularColor);
+    }
+
     public void startCellStateAnimation(CellState cellState, float startAlpha, float endAlpha,
             float startTranslationY, float endTranslationY, float startScale, float endScale,
             long delay, long duration,

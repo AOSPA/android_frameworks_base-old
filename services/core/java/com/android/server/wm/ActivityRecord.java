@@ -115,6 +115,7 @@ import static com.android.server.wm.ActivityStack.LAUNCH_TICK_MSG;
 import static com.android.server.wm.ActivityStack.PAUSE_TIMEOUT_MSG;
 import static com.android.server.wm.ActivityStack.STACK_VISIBILITY_VISIBLE;
 import static com.android.server.wm.ActivityStack.STOP_TIMEOUT_MSG;
+import static com.android.server.wm.ActivityTaskManagerDebugConfig.DEBUG_APPLOCK;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.DEBUG_CONFIGURATION;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.DEBUG_FOCUS;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.DEBUG_SAVED_STATE;
@@ -122,6 +123,7 @@ import static com.android.server.wm.ActivityTaskManagerDebugConfig.DEBUG_STATES;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.DEBUG_SWITCH;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.DEBUG_TRANSITION;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.DEBUG_VISIBILITY;
+import static com.android.server.wm.ActivityTaskManagerDebugConfig.POSTFIX_APPLOCK;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.POSTFIX_CONFIGURATION;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.POSTFIX_FOCUS;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.POSTFIX_SAVED_STATE;
@@ -245,6 +247,7 @@ public final class ActivityRecord extends ConfigurationContainer {
     private static final String TAG_SWITCH = TAG + POSTFIX_SWITCH;
     private static final String TAG_VISIBILITY = TAG + POSTFIX_VISIBILITY;
     private static final String TAG_FOCUS = TAG + POSTFIX_FOCUS;
+    private static final String TAG_APPLOCK = TAG + POSTFIX_APPLOCK;
     // TODO(b/67864419): Remove once recents component is overridden
     private static final String LEGACY_RECENTS_PACKAGE_NAME = "com.android.systemui.recents";
 
@@ -280,6 +283,7 @@ public final class ActivityRecord extends ConfigurationContainer {
     final String processName; // process where this component wants to run
     final String taskAffinity; // as per ActivityInfo.taskAffinity
     final boolean stateNotNeeded; // As per ActivityInfo.flags
+    boolean isAppLocked;
     boolean fullscreen; // The activity is opaque and fills the entire space of this task.
     // TODO: See if it possible to combine this with the fullscreen field.
     final boolean hasWallpaper; // Has a wallpaper window as a background.
@@ -298,6 +302,7 @@ public final class ActivityRecord extends ConfigurationContainer {
     private int realTheme;          // actual theme resource we will use, never 0.
     private int windowFlags;        // custom window flags for preview window.
     public int perfActivityBoostHandler = -1; //perflock handler when activity is created.
+    private int mResizeMode = -1;
     private TaskRecord task;        // the task this is in.
     private long createTime = System.currentTimeMillis();
     long lastVisibleTime;         // last time this activity became visible
@@ -770,6 +775,7 @@ public final class ActivityRecord extends ConfigurationContainer {
 
         final boolean inPictureInPictureMode = inPinnedWindowingMode() && targetStackBounds != null;
         if (inPictureInPictureMode != mLastReportedPictureInPictureMode || forceUpdate) {
+            Log.v(TAG_APPLOCK, "updatePictureInPictureMode(): " + packageName + " inPictureInPictureMode:" + inPictureInPictureMode);
             // Picture-in-picture mode changes also trigger a multi-window mode change as well, so
             // update that here in order. Set the last reported MW state to the same as the PiP
             // state since we haven't yet actually resized the task (these callbacks need to
@@ -1033,6 +1039,7 @@ public final class ActivityRecord extends ConfigurationContainer {
 
         packageName = aInfo.applicationInfo.packageName;
         launchMode = aInfo.launchMode;
+        isAppLocked = mAtmService.isAppLocked(packageName);
 
         Entry ent = AttributeCache.instance().get(packageName,
                 realTheme, com.android.internal.R.styleable.Window, mUserId);
@@ -1276,6 +1283,16 @@ public final class ActivityRecord extends ConfigurationContainer {
         return sourceRecord != null && sourceRecord.isResolverOrDelegateActivity();
     }
 
+    boolean getIsAppLocked() {
+        isAppLocked = mAtmService.isAppLocked(packageName);
+        if (isAppLocked) {
+            info.resizeMode = RESIZE_MODE_UNRESIZEABLE;
+        } else {
+            info.resizeMode = mResizeMode;
+        }
+        return isAppLocked;
+    }
+
     /**
      * @return whether the given package name can launch an assist activity.
      */
@@ -1307,6 +1324,12 @@ public final class ActivityRecord extends ConfigurationContainer {
         } else if (options != null && options.getLaunchActivityType() == ACTIVITY_TYPE_ASSISTANT
                 && canLaunchAssistActivity(launchedFromPackage)) {
             activityType = ACTIVITY_TYPE_ASSISTANT;
+        }
+        if (mResizeMode == -1){
+            mResizeMode = info.resizeMode;
+        }
+        if (getIsAppLocked()) {
+            info.resizeMode = RESIZE_MODE_UNRESIZEABLE;
         }
         setActivityType(activityType);
     }
@@ -2378,6 +2401,7 @@ public final class ActivityRecord extends ConfigurationContainer {
                         + mAppWindowToken.isHidden() + " freezing="
                         + mAppWindowToken.isFreezingScreen());
             }
+            Slog.d(TAG_APPLOCK, "stopFreezingScreenLocked() pkg:" + packageName);
             mAppWindowToken.stopFreezingScreen(true, force);
         }
     }
@@ -2400,10 +2424,52 @@ public final class ActivityRecord extends ConfigurationContainer {
         return isGame;
     }
 
+    private boolean freeze;
+
+    public void freezeApp() {
+        freeze = true;
+        if (attachedToProcess()) {
+            Slog.d(TAG_APPLOCK, "freezeApp() pkg:" + packageName + " r=" + this);
+            try {
+                app.getThread().scheduleSleeping(appToken, true);
+                if (!mStackSupervisor.mGoingToSleepActivities.contains(this)) {
+                    mStackSupervisor.mGoingToSleepActivities.add(this);
+                }
+            } catch (RemoteException e) {
+                Slog.w(TAG, "Exception thrown when sleeping: " + intent.getComponent(), e);
+            }
+        }
+    }
+
+    public void unFreezeApp() {
+        freeze = false;
+        Slog.d(TAG_APPLOCK, "unFreezeApp() pkg:" + packageName + " r=" + this);
+        if (app == null) return;
+        try {
+            app.getThread().scheduleSleeping(appToken, false);
+            if (mStackSupervisor.mGoingToSleepActivities.contains(this)) {
+                mStackSupervisor.mGoingToSleepActivities.remove(this);
+            }
+        } catch (RemoteException e) {
+            Slog.w(TAG, "Exception thrown when sleeping: " + intent.getComponent(), e);
+        }
+    }
+
     /**
      * Called when the starting window for this container is drawn.
      */
     public void onStartingWindowDrawn(long timestamp) {
+        if (freeze && attachedToProcess()) {
+            Slog.d(TAG_APPLOCK, "onStartingWindowDrawn() freezeApp pkg:" + packageName + " r=" + this);
+            try {
+                app.getThread().scheduleSleeping(appToken, true);
+                if (!mStackSupervisor.mGoingToSleepActivities.contains(this)) {
+                    mStackSupervisor.mGoingToSleepActivities.add(this);
+                }
+            } catch (RemoteException e) {
+                Slog.w(TAG, "Exception thrown when sleeping: " + intent.getComponent(), e);
+            }
+        }
         synchronized (mAtmService.mGlobalLock) {
             mStackSupervisor.getActivityMetricsLogger().notifyStartingWindowDrawn(
                     getWindowingMode(), timestamp);
@@ -2417,6 +2483,8 @@ public final class ActivityRecord extends ConfigurationContainer {
             if (!drawn) {
                 return;
             }
+            if (DEBUG_APPLOCK) Log.v(TAG_APPLOCK, "onWindowsDrawn() app: " + packageName);
+            mAtmService.mAppLockService.onWindowsDrawn(packageName);
             final WindowingModeTransitionInfoSnapshot info = mStackSupervisor
                     .getActivityMetricsLogger().notifyWindowsDrawn(getWindowingMode(), timestamp);
             final int windowsDrawnDelayMs = info != null ? info.windowsDrawnDelayMs : INVALID_DELAY;
@@ -3030,6 +3098,8 @@ public final class ActivityRecord extends ConfigurationContainer {
         if (getMergedOverrideConfiguration().seq != getResolvedOverrideConfiguration().seq) {
             onMergedOverrideConfigurationChanged();
         }
+
+        mAtmService.updateAppLockConfig(packageName, newParentConfig);
 
         // TODO(b/80414790): Remove code below after unification.
         // Same as above it doesn't notify configuration listeners, and consequently AppWindowToken
