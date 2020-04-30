@@ -42,4 +42,9 @@
     <string name="popup_camera_dialog_message">Do you want to raise the front facing camera?</string>
     <string name="popup_camera_dialog_no">No</string>
     <string name="popup_camera_dialog_raise">Yes</string>
+
+    <!-- App lock -->
+    <string name="unlock_set_unlock_pattern_title">pattern</string>
+    <string name="unlock_set_unlock_password_title">password</string>
+    <string name="unlock_set_unlock_pin_title">PIN</string>
 </resources>
