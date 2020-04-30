@@ -19,8 +19,10 @@ import static android.service.notification.NotificationListenerService.REASON_CA
 import static android.service.notification.NotificationListenerService.REASON_ERROR;
 
 import android.annotation.Nullable;
+import android.app.AppLockManager;
 import android.app.Notification;
 import android.content.Context;
+import android.os.Bundle;
 import android.service.notification.NotificationListenerService;
 import android.service.notification.StatusBarNotification;
 import android.util.ArrayMap;
@@ -98,6 +100,9 @@ public class NotificationEntryManager implements
     private final List<NotificationEntryListener> mNotificationEntryListeners = new ArrayList<>();
     private NotificationRemoveInterceptor mRemoveInterceptor;
 
+    private AppLockManager mAppLockManager;
+    private Bundle mLockedNotificationBundle = new Bundle();
+
     @Override
     public void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
         pw.println("NotificationEntryManager state:");
@@ -124,6 +129,7 @@ public class NotificationEntryManager implements
     @Inject
     public NotificationEntryManager(Context context) {
         mNotificationData = new NotificationData();
+        mAppLockManager = (AppLockManager) context.getSystemService(Context.APPLOCK_SERVICE);
     }
 
     /** Adds a {@link NotificationEntryListener}. */
@@ -386,6 +392,24 @@ public class NotificationEntryManager implements
             Log.d(TAG, "addNotification key=" + key);
         }
 
+        String pkg = notification.getPackageName();
+        boolean isAppLocked = mAppLockManager.isAppLocked(pkg);
+        notification.setAppPackageLocked(isAppLocked);
+
+        if (isAppLocked) {
+            Notification n = notification.getNotification();
+            //Log.d("AppLockSysUI", "addNotificationInternal intent: " + n.contentIntent + "\n bundle: " + n.extras);
+            mLockedNotificationBundle.putCharSequence(Notification.EXTRA_TITLE, "App locked");
+            mLockedNotificationBundle.putBoolean(Notification.EXTRA_SHOW_WHEN, true);
+            //mLockedNotificationBundle.putString(Notification.EXTRA_TEMPLATE, "android.template=android.app.Notification$BigTextStyle");
+            mLockedNotificationBundle.putParcelable(Notification.EXTRA_BUILDER_APPLICATION_INFO,
+                    n.extras.getParcelable(Notification.EXTRA_BUILDER_APPLICATION_INFO));
+            n.extras.clear();
+            n.extras = mLockedNotificationBundle.deepCopy();
+
+            n.actions = null;
+        }
+
         mNotificationData.updateRanking(rankingMap);
         NotificationListenerService.Ranking ranking = new NotificationListenerService.Ranking();
         rankingMap.getRanking(key, ranking);
@@ -424,6 +448,26 @@ public class NotificationEntryManager implements
         NotificationEntry entry = mNotificationData.get(key);
         if (entry == null) {
             return;
+        }
+
+        String pkg = notification.getPackageName();
+        boolean isAppLocked = mAppLockManager.isAppLocked(pkg);
+        notification.setAppPackageLocked(isAppLocked);
+
+        Log.d("AppLockSysUI", "updateNotificationInternal pkg:" + pkg + " isAppLocked: " + isAppLocked);
+        if (isAppLocked) {
+            return;
+            /*Notification n = notification.getNotification();
+            //Log.d("AppLockSysUI", "addNotificationInternal intent: " + n.contentIntent + "\n bundle: " + n.extras);
+            mLockedNotificationBundle.putCharSequence(Notification.EXTRA_TITLE, "App locked");
+            mLockedNotificationBundle.putBoolean(Notification.EXTRA_SHOW_WHEN, true);
+            //mLockedNotificationBundle.putString(Notification.EXTRA_TEMPLATE, "android.template=android.app.Notification$BigTextStyle");
+            mLockedNotificationBundle.putParcelable(Notification.EXTRA_BUILDER_APPLICATION_INFO,
+                    n.extras.getParcelable(Notification.EXTRA_BUILDER_APPLICATION_INFO));
+            n.extras.clear();
+            n.extras = mLockedNotificationBundle.deepCopy();
+
+            n.actions = null;*/
         }
 
         // Notification is updated so it is essentially re-added and thus alive again.  Don't need

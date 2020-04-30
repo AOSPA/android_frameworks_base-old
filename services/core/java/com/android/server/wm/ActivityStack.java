@@ -2725,6 +2725,11 @@ public class ActivityStack extends ConfigurationContainer {
         next.sleeping = false;
         next.launching = true;
 
+        if (next.getIsAppLocked()) {
+            //Slog.v("AppLock_ActivityStack", "ActivityStack packageName=" + next.packageName + ", launching=true and locked:true");
+            mService.mAppLockService.setAppLaunching(next.packageName);
+        }
+
         if (DEBUG_SWITCH) Slog.v(TAG_SWITCH, "Resuming " + next);
 
         if (mActivityTrigger != null) {

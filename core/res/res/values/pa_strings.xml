@@ -42,4 +42,8 @@
     <string name="popup_camera_dialog_message">Do you want to raise the front facing camera?</string>
     <string name="popup_camera_dialog_no">No</string>
     <string name="popup_camera_dialog_raise">Yes</string>
+
+    <!-- App lock -->
+    <string name="remaining_attempts_pattern">You have <xliff:g id="number">%1$d</xliff:g> more attempts.</string>
+    <string name="lockscreen_pin_instructions">Type pin/password to unlock</string>
 </resources>
