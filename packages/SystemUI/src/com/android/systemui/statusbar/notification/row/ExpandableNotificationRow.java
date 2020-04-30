@@ -327,6 +327,9 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
     private SystemNotificationAsyncTask mSystemNotificationAsyncTask =
             new SystemNotificationAsyncTask();
 
+    private boolean mAppOpen;
+    private boolean mIsAppLocked;
+
     /**
      * Returns whether the given {@code statusBarNotification} is a system notification.
      * <b>Note</b>, this should be run in the background thread if possible as it makes multiple IPC
@@ -2318,7 +2321,7 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
             return mGuts.getIntrinsicHeight();
         } else if ((isChildInGroup() && !isGroupExpanded())) {
             return mPrivateLayout.getMinHeight();
-        } else if (mSensitive && mHideSensitiveForIntrinsicHeight) {
+        } else if (shouldShowPublic()) {
             return getMinHeight();
         } else if (mIsSummaryWithChildren) {
             return mChildrenContainer.getIntrinsicHeight();
@@ -2342,7 +2345,7 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
      *         except for legacy use cases.
      */
     public boolean canShowHeadsUp() {
-        if (mOnKeyguard && !isDozing() && !isBypassEnabled()) {
+        if (mOnKeyguard && !isDozing() && !isBypassEnabled() || (mIsAppLocked && !mAppOpen)) {
             return false;
         }
         return true;
@@ -2513,7 +2516,7 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
             return;
         }
         boolean oldShowingPublic = mShowingPublic;
-        mShowingPublic = mSensitive && hideSensitive;
+        mShowingPublic = (mSensitive && hideSensitive) || (mIsAppLocked && !mAppOpen);
         if (mShowingPublicInitialized && mShowingPublic == oldShowingPublic) {
             return;
         }
@@ -2574,6 +2577,25 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
         }
     }
 
+    public void onAppStateChanged(boolean open) {
+        if (mAppOpen != open) {
+            setHideSensitive(!open, !open, 0, 100);
+        }
+        mAppOpen = open;
+    }
+
+    public void setAppLocked(boolean locked) {
+        mIsAppLocked = locked;
+    }
+
+    public boolean isAppLocked() {
+        return mIsAppLocked;
+    }
+
+    public boolean isAppOpened() {
+        return mAppOpen;
+    }
+
     @Override
     public boolean mustStayOnScreen() {
         return mIsHeadsUp && mMustStayOnScreen;
@@ -2589,7 +2611,7 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
     }
 
     private boolean shouldShowPublic() {
-        return mSensitive && mHideSensitiveForIntrinsicHeight;
+        return (mSensitive && mHideSensitiveForIntrinsicHeight) || (mIsAppLocked && !mAppOpen);
     }
 
     public void makeActionsVisibile() {
