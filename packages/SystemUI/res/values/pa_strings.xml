@@ -61,4 +61,21 @@
     <string name="screenrecord_start">Start</string>
     <string name="screenrecord_start_label">Start Recording?</string>
     <string name="screenrecord_taps_label">Show touches on screen</string>
+<<<<<<< HEAD
+=======
+
+    <!-- Heads Up QS Tile -->
+    <string name="quick_settings_heads_up_label">Heads up</string>
+    <string name="accessibility_quick_settings_heads_up_off">Heads up off.</string>
+    <string name="accessibility_quick_settings_heads_up_on">Heads up on.</string>
+    <string name="accessibility_quick_settings_heads_up_changed_off">Heads up turned off.</string>
+    <string name="accessibility_quick_settings_heads_up_changed_on">Heads up turned on.</string>
+
+    <!-- App lock -->
+    <string name="applock_locked">&#160;is Locked.</string>
+    <string name="applock_fingerprint_face">, fingerprint or your face to unlock.</string>
+    <string name="applock_face">&#160;or your face to unlock.</string>
+    <string name="applock_fingerprint">&#160;or your fingerprint to unlock.</string>
+    <string name="applock_locked_notification">App is locked</string>
+>>>>>>> c643e7c5b7a... base: Introduce Applock [1/2]
 </resources>
