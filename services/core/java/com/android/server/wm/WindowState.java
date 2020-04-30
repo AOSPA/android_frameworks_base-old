@@ -237,7 +237,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
     final WindowManagerPolicy mPolicy;
     final Context mContext;
     final Session mSession;
-    final IWindow mClient;
+    public final IWindow mClient;
     final int mAppOp;
     // UserId and appId of the owner. Don't display windows of non-current user.
     final int mOwnerUid;

@@ -107,6 +107,7 @@ public class TaskViewThumbnail extends View {
 
     public TaskViewThumbnail(Context context, AttributeSet attrs, int defStyleAttr, int defStyleRes) {
         super(context, attrs, defStyleAttr, defStyleRes);
+
         mDrawPaint.setColorFilter(mLightingColorFilter);
         mDrawPaint.setFilterBitmap(true);
         mDrawPaint.setAntiAlias(true);
@@ -129,6 +130,7 @@ public class TaskViewThumbnail extends View {
 
         mTaskViewRect.set(0, 0, width, height);
         setLeftTopRightBottom(0, 0, width, height);
+
         updateThumbnailMatrix();
     }
 
@@ -348,6 +350,7 @@ public class TaskViewThumbnail extends View {
         mDisabledInSafeMode = disabledInSafeMode;
         mDisplayOrientation = displayOrientation;
         mDisplayRect.set(displayRect);
+
         if (t.colorBackground != 0) {
             mBgFillPaint.setColor(t.colorBackground);
         }
