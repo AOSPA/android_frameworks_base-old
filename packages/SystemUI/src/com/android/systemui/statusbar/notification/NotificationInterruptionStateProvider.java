@@ -165,6 +165,10 @@ public class NotificationInterruptionStateProvider {
      * @return true if the entry should bubble up, false otherwise
      */
     public boolean shouldBubbleUp(NotificationEntry entry) {
+        if (entry.rowExists() && entry.getRow().isAppLocked()) {
+            return false;
+        }
+
         final StatusBarNotification sbn = entry.notification;
 
         if (!canAlertCommon(entry)) {
@@ -209,6 +213,11 @@ public class NotificationInterruptionStateProvider {
      * @return true if the entry should heads up, false otherwise
      */
     public boolean shouldHeadsUp(NotificationEntry entry) {
+        if (entry.rowExists() && entry.getRow().isAppLocked()
+                && !entry.getRow().isAppOpened()) {
+            return false;
+        }
+
         if (mStatusBarStateController.isDozing()) {
             return shouldHeadsUpWhenDozing(entry);
         } else {
