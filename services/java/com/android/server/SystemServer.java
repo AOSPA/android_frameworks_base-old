@@ -79,6 +79,7 @@ import com.android.internal.os.BinderInternal;
 import com.android.internal.util.ConcurrentUtils;
 import com.android.internal.util.EmergencyAffordanceManager;
 import com.android.internal.widget.ILockSettings;
+import com.android.server.AppLockService;
 import com.android.server.am.ActivityManagerService;
 import com.android.server.appbinding.AppBindingService;
 import com.android.server.attention.AttentionManagerService;
@@ -1098,6 +1099,10 @@ public final class SystemServer {
 
             traceBeginAndSlog("ActivityTriggerService");
             mSystemServiceManager.startService(ActivityTriggerService.class);
+            traceEnd();
+
+            traceBeginAndSlog("StartAppLockService");
+            mSystemServiceManager.startService(AppLockService.class);
             traceEnd();
 
             traceBeginAndSlog("SignedConfigService");
