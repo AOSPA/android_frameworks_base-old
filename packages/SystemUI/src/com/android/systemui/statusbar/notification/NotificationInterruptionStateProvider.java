@@ -165,6 +165,10 @@ public class NotificationInterruptionStateProvider {
      * @return true if the entry should bubble up, false otherwise
      */
     public boolean shouldBubbleUp(NotificationEntry entry) {
+        if (entry.rowExists() && entry.getRow().isAppLocked()) {
+            return false;
+        }
+
         final StatusBarNotification sbn = entry.notification;
 
         if (!canAlertCommon(entry)) {
