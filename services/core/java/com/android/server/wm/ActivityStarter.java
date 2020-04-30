@@ -643,6 +643,13 @@ class ActivityStarter {
             }
         }
 
+        final String pkg = aInfo == null ? null : aInfo.applicationInfo.packageName;
+        if (mService.isAppLocked(pkg) && !mService.isAppOpened(pkg)) {
+            mService.mAppLockService.setAppIntent(pkg, intent);
+            mService.mAppLockService.launchBeforeActivity(pkg);
+            err = START_ABORTED;
+        }
+
         final int userId = aInfo != null && aInfo.applicationInfo != null
                 ? UserHandle.getUserId(aInfo.applicationInfo.uid) : 0;
 
