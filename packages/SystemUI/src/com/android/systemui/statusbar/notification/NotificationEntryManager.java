@@ -19,17 +19,22 @@ import static android.service.notification.NotificationListenerService.REASON_CA
 import static android.service.notification.NotificationListenerService.REASON_ERROR;
 
 import android.annotation.Nullable;
+import android.app.AppLockManager;
+import android.app.AppLockManager.AppLockCallback;
 import android.app.Notification;
 import android.content.Context;
+import android.os.Bundle;
 import android.service.notification.NotificationListenerService;
 import android.service.notification.StatusBarNotification;
 import android.util.ArrayMap;
+import android.util.ArraySet;
 import android.util.Log;
 
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.statusbar.NotificationVisibility;
 import com.android.systemui.Dependency;
 import com.android.systemui.Dumpable;
+import com.android.systemui.R;
 import com.android.systemui.statusbar.NotificationLifetimeExtender;
 import com.android.systemui.statusbar.NotificationPresenter;
 import com.android.systemui.statusbar.NotificationRemoteInputManager;
@@ -98,6 +103,41 @@ public class NotificationEntryManager implements
     private final List<NotificationEntryListener> mNotificationEntryListeners = new ArrayList<>();
     private NotificationRemoveInterceptor mRemoveInterceptor;
 
+    private AppLockManager mAppLockManager;
+    private Bundle mLockedNotificationBundle = new Bundle();
+
+    private final ArrayMap<String, ArraySet<StatusBarNotification>> mAppNotifications = new ArrayMap<>();
+    private final ArrayMap<String, NotificationListenerService.RankingMap> mAppNotifRankings = new ArrayMap<>();
+    private final ArraySet<String> mOpenedApplicationsIndex = new ArraySet<>();
+
+    private final AppLockCallback mAppLockCallback = new AppLockCallback() {
+        @Override
+        public void onAppStateChanged(String pkg, boolean open) {
+            if (open) {
+                mOpenedApplicationsIndex.add(pkg);
+            } else {
+                mOpenedApplicationsIndex.remove(pkg);
+            }
+            if (mAppNotifications.containsKey(pkg)) {
+                Dependency.get(Dependency.MAIN_HANDLER).post(() -> {
+                    final NotificationListenerService.RankingMap rankingMap = mAppNotifRankings.get(pkg);
+                    final ArraySet<StatusBarNotification> tmp = mAppNotifications.get(pkg);
+                    for (StatusBarNotification sbn : tmp) {
+                        updateNotification(sbn, rankingMap);
+                    }
+                });
+            } else if (!open) {
+                Dependency.get(Dependency.MAIN_HANDLER).post(() -> {
+                    ArrayList<NotificationEntry> arr = mNotificationData.getAllNotificationsForPackage(pkg);
+                    for (NotificationEntry notif : arr) {
+                        removeNotificationInternal(notif.notification.getKey(), null,
+                                null, true /* forceRemove */, false /* removedByUser */, 0);
+                    }
+                });
+            }
+        }
+    };
+
     @Override
     public void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
         pw.println("NotificationEntryManager state:");
@@ -124,6 +164,11 @@ public class NotificationEntryManager implements
     @Inject
     public NotificationEntryManager(Context context) {
         mNotificationData = new NotificationData();
+        mAppLockManager = (AppLockManager) context.getSystemService(Context.APPLOCK_SERVICE);
+        mAppLockManager.addAppLockCallback(mAppLockCallback);
+        mLockedNotificationBundle.putCharSequence(Notification.EXTRA_TITLE, context.getString(
+                R.string.applock_locked_notification));
+        mLockedNotificationBundle.putBoolean(Notification.EXTRA_SHOW_WHEN, true);
     }
 
     /** Adds a {@link NotificationEntryListener}. */
@@ -314,6 +359,29 @@ public class NotificationEntryManager implements
 
             if (!lifetimeExtended) {
                 // At this point, we are guaranteed the notification will be removed
+                final String pkg = entry.notification.getPackageName();
+                if (mAppLockManager.isAppLocked(pkg) && mAppNotifications.containsKey(pkg)) {
+                    final ArraySet<StatusBarNotification> tmp = mAppNotifications.get(pkg);
+                    int size = tmp.size();
+                    for (int i = 0; i < size; i++) {
+                        StatusBarNotification sbn = tmp.valueAt(i);
+                        if (sbn == null) {
+                            tmp.removeAt(i);
+                            size--;
+                            continue;
+                        }
+                        if (key.equals(sbn.getKey())) {
+                            tmp.removeAt(i);
+                            size--;
+                        }
+                    }
+                    if (tmp.size() == 0) {
+                        mAppNotifications.remove(pkg);
+                        mAppNotifRankings.remove(pkg);
+                    } else {
+                        mAppNotifications.put(pkg, tmp);
+                    }
+                }
 
                 // Ensure any managers keeping the lifetime extended stop managing the entry
                 cancelLifetimeExtension(entry);
@@ -386,11 +454,37 @@ public class NotificationEntryManager implements
             Log.d(TAG, "addNotification key=" + key);
         }
 
+        final String pkg = notification.getPackageName();
+        final boolean isAppLocked = mAppLockManager.isAppLocked(pkg);
+        if (isAppLocked) {
+            ArraySet<StatusBarNotification> tmp;
+            if (mAppNotifications.containsKey(pkg)) {
+                tmp = mAppNotifications.get(pkg);
+            } else {
+                tmp = new ArraySet<>();
+            }
+            tmp.add(notification.clone());
+            mAppNotifications.put(pkg, tmp);
+            mAppNotifRankings.put(pkg, rankingMap);
+            if (!mOpenedApplicationsIndex.contains(pkg)) {
+                Notification n = notification.getNotification();
+                mLockedNotificationBundle.putParcelable(Notification.EXTRA_BUILDER_APPLICATION_INFO,
+                        n.extras.getParcelable(Notification.EXTRA_BUILDER_APPLICATION_INFO));
+                n.extras.clear();
+                n.extras = mLockedNotificationBundle.deepCopy();
+                n.actions = null;
+            }
+        }
+
         mNotificationData.updateRanking(rankingMap);
         NotificationListenerService.Ranking ranking = new NotificationListenerService.Ranking();
         rankingMap.getRanking(key, ranking);
 
-        NotificationEntry entry = new NotificationEntry(notification, ranking);
+        NotificationEntry entry = new NotificationEntry(notification, ranking, isAppLocked);
+
+        if (isAppLocked) {
+            entry.updateAfterAppOpen(ranking, mOpenedApplicationsIndex.contains(pkg));
+        }
 
         Dependency.get(LeakDetector.class).trackInstance(entry);
         // Construct the expanded view.
@@ -424,6 +518,49 @@ public class NotificationEntryManager implements
         NotificationEntry entry = mNotificationData.get(key);
         if (entry == null) {
             return;
+        }
+
+        final String pkg = notification.getPackageName();
+        if (mAppLockManager.isAppLocked(pkg)) {
+            final boolean open = mOpenedApplicationsIndex.contains(pkg);
+            if (ranking != null) {
+                NotificationListenerService.Ranking rank = new NotificationListenerService.Ranking();
+                ranking.getRanking(key, rank);
+                entry.updateAfterAppOpen(rank, open);
+            }
+
+            // Update existing notifications
+            ArraySet<StatusBarNotification> tmp;
+            if (mAppNotifications.containsKey(pkg)) {
+                tmp = mAppNotifications.get(pkg);
+                if (tmp.contains(notification)) {
+                    tmp.remove(notification);
+                } else {
+                    int size = tmp.size();
+                    for (int i = 0; i < size; i++) {
+                        StatusBarNotification s = tmp.valueAt(i);
+                        if (s.getKey().equals(key)) {
+                            tmp.removeAt(i);
+                            break;
+                        }
+                    }
+                }
+            } else {
+                tmp = new ArraySet<>();
+            }
+            tmp.add(notification.clone());
+            mAppNotifications.put(pkg, tmp);
+            if (ranking != null || (ranking == null && !mAppNotifRankings.containsKey(pkg))) {
+                mAppNotifRankings.put(pkg, ranking);
+            }
+            if (!open) {
+                Notification n = notification.getNotification();
+                mLockedNotificationBundle.putParcelable(Notification.EXTRA_BUILDER_APPLICATION_INFO,
+                        n.extras.getParcelable(Notification.EXTRA_BUILDER_APPLICATION_INFO));
+                n.extras.clear();
+                n.extras = mLockedNotificationBundle.deepCopy();
+                n.actions = null;
+            }
         }
 
         // Notification is updated so it is essentially re-added and thus alive again.  Don't need
