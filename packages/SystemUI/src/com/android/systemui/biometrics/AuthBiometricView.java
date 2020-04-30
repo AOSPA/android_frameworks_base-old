@@ -16,6 +16,9 @@
 
 package com.android.systemui.biometrics;
 
+import static android.view.Gravity.CENTER;
+import static android.view.Gravity.START;
+
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
 import android.animation.AnimatorSet;
@@ -24,6 +27,9 @@ import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.content.Context;
+import android.content.pm.ApplicationInfo;
+import android.content.pm.PackageManager;
+import android.graphics.drawable.Drawable;
 import android.hardware.biometrics.BiometricPrompt;
 import android.os.Bundle;
 import android.os.Handler;
@@ -165,10 +171,12 @@ public abstract class AuthBiometricView extends LinearLayout {
     private int mEffectiveUserId;
     @AuthDialog.DialogSize int mSize = AuthDialog.SIZE_UNKNOWN;
 
+    private PackageManager mPackageManager;
     private TextView mTitleView;
     private TextView mSubtitleView;
     private TextView mDescriptionView;
     protected ImageView mIconView;
+    protected ImageView mAppIcon;
     @VisibleForTesting protected TextView mIndicatorView;
     @VisibleForTesting Button mNegativeButton;
     @VisibleForTesting Button mPositiveButton;
@@ -259,6 +267,7 @@ public abstract class AuthBiometricView extends LinearLayout {
             handleResetAfterHelp();
             Utils.notifyAccessibilityContentChanged(mAccessibilityManager, this);
         };
+        mPackageManager = context.getPackageManager();
     }
 
     public void setPanelController(AuthPanelController panelController) {
@@ -592,6 +601,16 @@ public abstract class AuthBiometricView extends LinearLayout {
         mPositiveButton = mInjector.getPositiveButton();
         mTryAgainButton = mInjector.getTryAgainButton();
 
+        mAppIcon = new ImageView(mContext);
+        final int iconDim = getResources().getDimensionPixelSize(
+                    R.dimen.applock_icon_dimension);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(iconDim, iconDim);
+        lp.gravity = CENTER;
+        lp.topMargin = -iconDim / 2;
+        mAppIcon.setLayoutParams(lp);
+        mAppIcon.setVisibility(View.GONE);
+        addView(mAppIcon, 0);
+
         mNegativeButton.setOnClickListener((view) -> {
             if (mState == STATE_PENDING_CONFIRMATION) {
                 mCallback.onAction(Callback.ACTION_USER_CANCELED);
@@ -636,8 +655,6 @@ public abstract class AuthBiometricView extends LinearLayout {
      */
     @VisibleForTesting
     void onAttachedToWindowInternal() {
-        setText(mTitleView, mBiometricPromptBundle.getString(BiometricPrompt.KEY_TITLE));
-
         final String negativeText;
         if (isDeviceCredentialAllowed()) {
 
@@ -667,8 +684,31 @@ public abstract class AuthBiometricView extends LinearLayout {
         setTextOrHide(mSubtitleView,
                 mBiometricPromptBundle.getString(BiometricPrompt.KEY_SUBTITLE));
 
-        setTextOrHide(mDescriptionView,
-                mBiometricPromptBundle.getString(BiometricPrompt.KEY_DESCRIPTION));
+        final CharSequence applockPackage = mBiometricPromptBundle.getCharSequence(BiometricPrompt.KEY_APPLOCK_PKG);
+        if (TextUtils.isEmpty(applockPackage)) {
+            setText(mTitleView, mBiometricPromptBundle.getString(BiometricPrompt.KEY_TITLE));
+            setTextOrHide(mDescriptionView,
+                    mBiometricPromptBundle.getString(BiometricPrompt.KEY_DESCRIPTION));
+        } else {
+            ApplicationInfo aInfo = null;
+            try {
+                aInfo = mPackageManager.getApplicationInfoAsUser(applockPackage.toString(), 0, mUserId);
+            } catch(PackageManager.NameNotFoundException e) {
+            }
+            Drawable icon = (aInfo == null) ? null : mPackageManager.getApplicationIcon(aInfo);
+            if (icon == null) {
+                mTitleView.setVisibility(View.VISIBLE);
+                setText(mTitleView, "Unlock " + mBiometricPromptBundle.getString(BiometricPrompt.KEY_TITLE));
+            } else {
+                mTitleView.setVisibility(View.GONE);
+                mAppIcon.setVisibility(View.VISIBLE);
+                mAppIcon.setImageDrawable(icon);
+            }
+            setTextOrHide(mDescriptionView, mBiometricPromptBundle.getString(BiometricPrompt.KEY_DESCRIPTION)
+                    + getResources().getString(R.string.applock_locked) + "\n"
+                    + negativeText + getResources().getString(getDescriptionTextId()));
+            mDescriptionView.setGravity(CENTER);
+        }
 
         if (mSavedState == null) {
             updateState(STATE_AUTHENTICATING_ANIMATING_IN);
@@ -679,6 +719,14 @@ public abstract class AuthBiometricView extends LinearLayout {
             // Restore positive button state
             mTryAgainButton.setVisibility(
                     mSavedState.getInt(AuthDialog.KEY_BIOMETRIC_TRY_AGAIN_VISIBILITY));
+        }
+    }
+
+    private int getDescriptionTextId() {
+        if (this instanceof AuthBiometricFaceView) {
+            return R.string.applock_face;
+        } else {
+            return R.string.applock_fingerprint;
         }
     }
 
@@ -711,6 +759,12 @@ public abstract class AuthBiometricView extends LinearLayout {
                         MeasureSpec.makeMeasureSpec(newWidth, MeasureSpec.EXACTLY),
                         MeasureSpec.makeMeasureSpec(child.getLayoutParams().height,
                                 MeasureSpec.EXACTLY));
+            } else if (child.equals(mAppIcon)) {
+                child.measure(
+                        MeasureSpec.makeMeasureSpec(child.getLayoutParams().width,
+                                MeasureSpec.EXACTLY),
+                        MeasureSpec.makeMeasureSpec(child.getLayoutParams().height,
+                                MeasureSpec.EXACTLY));
             } else {
                 child.measure(
                         MeasureSpec.makeMeasureSpec(newWidth, MeasureSpec.EXACTLY),
@@ -718,7 +772,7 @@ public abstract class AuthBiometricView extends LinearLayout {
             }
 
             if (child.getVisibility() != View.GONE) {
-                totalHeight += child.getMeasuredHeight();
+                totalHeight += (child.equals(mAppIcon)) ? child.getMeasuredHeight()/2 : child.getMeasuredHeight();
             }
         }
 

@@ -79,6 +79,7 @@ public interface NotificationsModule {
     @Singleton
     @Provides
     static NotificationEntryManager provideNotificationEntryManager(
+            Context context,
             NotificationEntryManagerLogger logger,
             NotificationGroupManager groupManager,
             NotificationRankingManager rankingManager,
@@ -90,6 +91,7 @@ public interface NotificationsModule {
             Lazy<BubbleController> bubbleController,
             ForegroundServiceDismissalFeatureController fgsFeatureController) {
         return new NotificationEntryManager(
+                context,
                 logger,
                 groupManager,
                 rankingManager,

@@ -23,8 +23,11 @@ import static com.android.systemui.statusbar.notification.row.NotificationRowCon
 
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.app.AppLockManager;
+import android.app.AppLockManager.AppLockCallback;
 import android.app.Notification;
 import android.os.SystemClock;
+import android.content.Context;
 import android.service.notification.NotificationListenerService;
 import android.service.notification.NotificationListenerService.Ranking;
 import android.service.notification.NotificationListenerService.RankingMap;
@@ -149,6 +152,25 @@ public class NotificationEntryManager implements
     private final List<NotificationEntryListener> mNotificationEntryListeners = new ArrayList<>();
     private final List<NotificationRemoveInterceptor> mRemoveInterceptors = new ArrayList<>();
 
+    private final AppLockManager mAppLockManager;
+    private final AppLockCallback mAppLockCallback = new AppLockCallback() {
+        @Override
+        public void onAppStateChanged(String pkg) {
+            for (NotificationEntry notif : mAllNotifications) {
+                updateAppLockNotification(pkg, notif);
+            }
+        }
+    };
+
+    private void updateAppLockNotification(String pkg, NotificationEntry notif) {
+        if (pkg.equals(notif.getSbn().getPackageName())) {
+            boolean appLocked = mAppLockManager.isAppLocked(pkg);
+            notif.setAppLocked(appLocked);
+            notif.onAppStateChanged(!mAppLockManager.getAppNotificationHide(pkg)
+                    || mAppLockManager.isAppOpen(pkg));
+        }
+    }
+
     @Override
     public void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
         pw.println("NotificationEntryManager state:");
@@ -196,6 +218,7 @@ public class NotificationEntryManager implements
      * Injected constructor. See {@link NotificationsModule}.
      */
     public NotificationEntryManager(
+            Context context,
             NotificationEntryManagerLogger logger,
             NotificationGroupManager groupManager,
             NotificationRankingManager rankingManager,
@@ -216,6 +239,8 @@ public class NotificationEntryManager implements
         mLeakDetector = leakDetector;
         mFgsFeatureController = fgsFeatureController;
         mBubbleControllerLazy = bubbleController;
+        mAppLockManager = (AppLockManager) context.getSystemService(Context.APPLOCK_SERVICE);
+        mAppLockManager.addAppLockCallback(mAppLockCallback);
     }
 
     /** Once called, the NEM will start processing notification events from system server. */
@@ -587,6 +612,8 @@ public class NotificationEntryManager implements
                 listener.onEntryInit(entry);
             }
         }
+
+        updateAppLockNotification(notification.getPackageName(), entry);
 
         for (NotifCollectionListener listener : mNotifCollectionListeners) {
             listener.onEntryBind(entry, notification);

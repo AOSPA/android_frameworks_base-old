@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    Copyright 2014-2020 Paranoid Android
+    Copyright 2021 Paranoid Android
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -43,5 +43,8 @@
 
     <!-- Margin on the left side of the heads up notification -->
     <dimen name="heads_up_status_bar_padding_start">0dp</dimen>
+
+    <!-- App Lock -->
+    <dimen name="applock_icon_dimension">54dp</dimen>
 
 </resources>
