@@ -349,8 +349,6 @@ package android.net.wifi {
 
   @Deprecated public static class WifiConfiguration.KeyMgmt {
     field @Deprecated public static final int DPP = 17; // 0x11
-    field @Deprecated public static final int FILS_SHA256 = 15; // 0xf
-    field @Deprecated public static final int FILS_SHA384 = 16; // 0x10
     field @Deprecated public static final int WAPI_CERT = 14; // 0xe
     field @Deprecated public static final int WAPI_PSK = 13; // 0xd
     field @Deprecated public static final int WPA2_PSK = 4; // 0x4
