@@ -2678,15 +2678,28 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
             return this;
         }
 
-        // Ensure activity visibilities and update lockscreen occluded/dismiss state when
-        // finishing the top activity that occluded keyguard. So that, the
-        // ActivityStack#mTopActivityOccludesKeyguard can be updated and the activity below won't
-        // be resumed.
-        if (isState(PAUSED)
-                && mStackSupervisor.getKeyguardController().isKeyguardLocked()
-                && getStack().topActivityOccludesKeyguard()) {
-            getDisplay().ensureActivitiesVisible(null /* starting */, 0 /* configChanges */,
-                    false /* preserveWindows */, false /* notifyClients */);
+        final boolean isCurrentVisible = mVisibleRequested || isState(PAUSED);
+        if (isCurrentVisible) {
+            final ActivityStack stack = getStack();
+            final ActivityRecord activity = stack.mResumedActivity;
+            boolean ensureVisibility = false;
+            if (activity != null && !activity.occludesParent()) {
+                // If the resume activity is not opaque, we need to make sure the visibilities of
+                // activities be updated, they may be seen by users.
+                ensureVisibility = true;
+            } else if (mStackSupervisor.getKeyguardController().isKeyguardLocked()
+                    && stack.topActivityOccludesKeyguard()) {
+                // Ensure activity visibilities and update lockscreen occluded/dismiss state when
+                // finishing the top activity that occluded keyguard. So that, the
+                // ActivityStack#mTopActivityOccludesKeyguard can be updated and the activity below
+                // won't be resumed.
+                ensureVisibility = true;
+            }
+
+            if (ensureVisibility) {
+                getDisplay().ensureActivitiesVisible(null /* starting */, 0 /* configChanges */,
+                        false /* preserveWindows */, true /* notifyClients */);
+            }
         }
 
         boolean activityRemoved = false;
@@ -2707,7 +2720,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         // than destroy immediately.
         final boolean isNextNotYetVisible = next != null
                 && (!next.nowVisible || !next.mVisibleRequested);
-        if ((mVisibleRequested || isState(PAUSED)) && isNextNotYetVisible) {
+        if (isCurrentVisible && isNextNotYetVisible) {
             // Add this activity to the list of stopping activities. It will be processed and
             // destroyed when the next activity reports idle.
             addToStopping(false /* scheduleIdle */, false /* idleDelayed */,
@@ -4616,7 +4629,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
             // the current contract for "auto-Pip" is that the app should enter it before onPause
             // returns. Just need to confirm this reasoning makes sense.
             final boolean deferHidingClient = canEnterPictureInPicture
-                    && !isState(STOPPING, STOPPED, PAUSED);
+                    && !isState(STARTED, STOPPING, STOPPED, PAUSED);
             setDeferHidingClient(deferHidingClient);
             setVisibility(false);
 
@@ -4627,9 +4640,16 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
                     // activity is hidden
                     supportsEnterPipOnTaskSwitch = false;
                     break;
-
-                case INITIALIZING:
                 case RESUMED:
+                    // If the app is capable of entering PIP, we should try pausing it now
+                    // so it can PIP correctly.
+                    if (deferHidingClient) {
+                        getRootTask().startPausingLocked(
+                                mStackSupervisor.mUserLeaving /* userLeaving */,
+                                false /* uiSleeping */, null /* resuming */);
+                        break;
+                    }
+                case INITIALIZING:
                 case PAUSING:
                 case PAUSED:
                 case STARTED:
