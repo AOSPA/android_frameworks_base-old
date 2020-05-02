@@ -25,7 +25,6 @@ import static android.provider.DeviceConfig.NAMESPACE_CONNECTIVITY;
 
 import android.content.Context;
 import android.content.res.Resources;
-import android.os.SystemProperties;
 import android.net.TetheringConfigurationParcel;
 import android.net.util.SharedLog;
 import android.provider.DeviceConfig;
@@ -110,7 +109,6 @@ public class TetheringConfiguration {
     public final String provisioningResponse;
 
     public final int activeDataSubId;
-    private static String fstInterfaceName = "bond0";
 
     private final int mOffloadPollInterval;
     // TODO: Add to TetheringConfigurationParcel if required.
@@ -127,11 +125,7 @@ public class TetheringConfiguration {
         // TODO: Evaluate deleting this altogether now that Wi-Fi always passes
         // us an interface name. Careful consideration needs to be given to
         // implications for Settings and for provisioning checks.
-        if (SystemProperties.getInt("persist.vendor.fst.softap.en", 0) == 1) {
-            tetherableWifiRegexs = new String[] { fstInterfaceName };
-        } else {
-            tetherableWifiRegexs = getResourceStringArray(res, R.array.config_tether_wifi_regexs);
-        }
+        tetherableWifiRegexs = getResourceStringArray(res, R.array.config_tether_wifi_regexs);
         tetherableWigigRegexs = getResourceStringArray(res, R.array.config_tether_wigig_regexs);
         tetherableWifiP2pRegexs = getResourceStringArray(
                 res, R.array.config_tether_wifi_p2p_regexs);
@@ -163,14 +157,6 @@ public class TetheringConfiguration {
                 DEFAULT_TETHER_OFFLOAD_POLL_INTERVAL_MS);
 
         configLog.log(toString());
-    }
-
-    public static void setFstInterfaceName(String name) {
-        fstInterfaceName = name;
-    }
-
-    public static String getFstInterfaceName() {
-        return fstInterfaceName;
     }
 
     /** Check whether input interface belong to usb.*/
