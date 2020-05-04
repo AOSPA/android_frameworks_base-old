@@ -99,6 +99,7 @@ import com.android.systemui.shared.system.TaskStackChangeListener;
 import com.android.systemui.statusbar.phone.KeyguardBypassController;
 import com.android.systemui.util.Assert;
 import com.android.systemui.util.RingerModeTracker;
+import com.android.systemui.keyguard.KeyguardViewMediator;
 
 import com.google.android.collect.Lists;
 
@@ -2806,6 +2807,28 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
             if (state == getSimState(id) && bestSlotId > slotId) {
                 resultId = id;
                 bestSlotId = slotId;
+            }
+        }
+        return resultId;
+    }
+
+
+    /**
+     * Find the Unlocked SubscriptionId for a SIM in the given state,
+     * @param state
+     * @return subid or {@link SubscriptionManager#INVALID_SUBSCRIPTION_ID} if none found
+     */
+    public int getUnlockedSubIdForState(int state) {
+        List<SubscriptionInfo> list = getSubscriptionInfo(false /* forceReload */);
+        int resultId = SubscriptionManager.INVALID_SUBSCRIPTION_ID;
+        for (int i = 0; i < list.size(); i++) {
+            final SubscriptionInfo info = list.get(i);
+            final int id = info.getSubscriptionId();
+            int slotId = SubscriptionManager.getSlotIndex(id);
+            if (state == getSimState(id) && (KeyguardViewMediator.getUnlockTrackSimState(slotId)
+                    != TelephonyManager.SIM_STATE_READY)) {
+                resultId = id;
+                break;
             }
         }
         return resultId;
