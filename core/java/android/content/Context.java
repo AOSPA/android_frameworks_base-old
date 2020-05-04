@@ -4702,6 +4702,16 @@ public abstract class Context {
     public static final String POCKET_SERVICE = "pocket";
 
     /**
+     * Use with {@link #getSystemService} to retrieve a
+     * {@link android.app.SecureAppsManager} for accessing and setting apps secured state.
+     *
+     * @hide
+     * @see #getSystemService
+     * @see android.app.SecureAppsManager
+     */
+    public static final String SECURE_APPS_SERVICE = "secure_apps";
+
+    /**
      * Determine whether the given permission is allowed for a particular
      * process and user ID running in the system.
      *
