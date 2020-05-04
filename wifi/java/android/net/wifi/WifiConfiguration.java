@@ -213,13 +213,11 @@ public class WifiConfiguration implements Parcelable {
         * IEEE 802.11ai FILS SK with SHA256
          * @hide
         */
-        @SystemApi
         public static final int FILS_SHA256 = 15;
         /**
          * IEEE 802.11ai FILS SK with SHA384:
          * @hide
          */
-        @SystemApi
         public static final int FILS_SHA384 = 16;
         /**
          * Device Provisioning Protocol
