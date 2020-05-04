@@ -28,6 +28,7 @@ import static android.Manifest.permission.REMOVE_TASKS;
 import static android.Manifest.permission.START_TASKS_FROM_RECENTS;
 import static android.Manifest.permission.STOP_APP_SWITCHES;
 import static android.app.ActivityManager.LOCK_TASK_MODE_NONE;
+import static android.app.ActivityManager.START_SUCCESS;
 import static android.app.ActivityManagerInternal.ALLOW_FULL_ONLY;
 import static android.app.ActivityTaskManager.INVALID_TASK_ID;
 import static android.app.ActivityTaskManager.RESIZE_MODE_PRESERVE_WINDOW;
@@ -268,6 +269,7 @@ import com.android.server.appop.AppOpsService;
 import com.android.server.firewall.IntentFirewall;
 import com.android.server.pm.UserManagerService;
 import com.android.server.policy.PermissionPolicyInternal;
+import com.android.server.secureapps.SecureAppsManagerService;
 import com.android.server.uri.UriGrantsManagerInternal;
 import com.android.server.vr.VrManagerInternal;
 
@@ -341,6 +343,8 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
     public static final int RELAUNCH_REASON_FREE_RESIZE = 2;
 
     Context mContext;
+
+    SecureAppsManagerService mSecureAppsService;
 
     /**
      * This Context is themable and meant for UI display (AlertDialogs, etc.). The theme can
@@ -705,6 +709,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
             mRecentTasks.onSystemReadyLocked();
             mStackSupervisor.onSystemReady();
         }
+        mSecureAppsService = LocalServices.getService(SecureAppsManagerService.class);
     }
 
     public void onInitPowerManagement() {
@@ -1009,6 +1014,14 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
     public final int startActivity(IApplicationThread caller, String callingPackage,
             Intent intent, String resolvedType, IBinder resultTo, String resultWho, int requestCode,
             int startFlags, ProfilerInfo profilerInfo, Bundle bOptions) {
+        final ComponentName cn = intent.getComponent();
+        final String pkg = (cn == null) ? null : cn.getPackageName();
+        if (isAppSecured(pkg) && !isAppOpened(pkg) && mSecureAppsService.isGame(pkg)) {
+            Log.d("Secureapps_atmService", "App is locked pkg:" + pkg + " intent:" + intent);
+            mSecureAppsService.setAppIntent(pkg, intent);
+            mSecureAppsService.launchBeforeActivity(pkg);
+            return START_SUCCESS;
+        }
         return startActivityAsUser(caller, callingPackage, intent, resolvedType, resultTo,
                 resultWho, requestCode, startFlags, profilerInfo, bOptions,
                 UserHandle.getCallingUserId());
@@ -4325,6 +4338,34 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         }
     }
 
+    boolean isAppSecured(String packageName) {
+        return mSecureAppsService != null && mSecureAppsService.isAppSecured(packageName);
+    }
+
+    boolean isAppOpened(String packageName) {
+        return mSecureAppsService != null && mSecureAppsService.isAppOpen(packageName);
+    }
+
+    void updateAppLockConfig(String packageName, Configuration newConfig) {
+        if (mSecureAppsService == null) return;
+        mSecureAppsService.updateAppLockConfig(packageName, newConfig);
+    }
+
+    void promptSecureIfNeeded(String packageName, WindowState w) {
+        if (mSecureAppsService == null) return;
+        mSecureAppsService.promptIfNeeded(packageName, w);
+    }
+
+    void updateAppVisibility(String packageName) {
+        if (mSecureAppsService == null) return;
+        mSecureAppsService.updateAppVisibility(packageName);
+    }
+
+    void onAppWindowRemoved(String packageName, WindowState w) {
+        if (mSecureAppsService == null) return;
+        mSecureAppsService.onAppWindowRemoved(packageName, w);
+    }
+
     /**
      * Check that we have the features required for VR-related API calls, and throw an exception if
      * not.
@@ -5119,6 +5160,10 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
 
     int getCurrentUserId() {
         return mAmInternal.getCurrentUserId();
+    }
+
+    SecureAppsManagerService getSecureAppsService() {
+        return mSecureAppsService;
     }
 
     private void enforceNotIsolatedCaller(String caller) {
