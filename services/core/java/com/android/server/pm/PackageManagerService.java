@@ -2075,8 +2075,18 @@ public class PackageManagerService extends IPackageManager.Stub
             int autoRevokePermissionsMode,
             boolean launchedForRestore, String installerPackage,
             IPackageInstallObserver2 installObserver, int dataLoaderType) {
-        final boolean succeeded = res.returnCode == PackageManager.INSTALL_SUCCEEDED;
+        boolean succeeded = res.returnCode == PackageManager.INSTALL_SUCCEEDED;
         final boolean update = res.removedInfo != null && res.removedInfo.removedPackage != null;
+        final String packageName = res.name;
+        final PackageSetting pkgSetting = succeeded ? getPackageSetting(packageName) : null;
+        if (succeeded && pkgSetting == null) {
+            Slog.e(TAG, packageName + " was removed before handlePackagePostInstall "
+                    + "could be executed");
+            res.returnCode = INSTALL_FAILED_PACKAGE_CHANGED;
+            res.returnMsg = "Package was removed before install could complete.";
+            notifyInstallObserver(res, installObserver);
+            return;
+        }
 
         if (succeeded) {
             // Send the removed broadcasts
@@ -2120,8 +2130,6 @@ public class PackageManagerService extends IPackageManager.Stub
                 mInstantAppRegistry.onPackageInstalledLPw(res.pkg, res.newUsers);
             }
 
-            final String packageName = res.pkg.getPackageName();
-
             // Determine the set of users who are adding this package for
             // the first time vs. those who are seeing an update.
             int[] firstUserIds = EMPTY_INT_ARRAY;
@@ -2129,7 +2137,7 @@ public class PackageManagerService extends IPackageManager.Stub
             int[] updateUserIds = EMPTY_INT_ARRAY;
             int[] instantUserIds = EMPTY_INT_ARRAY;
             final boolean allNewUsers = res.origUsers == null || res.origUsers.length == 0;
-            final PackageSetting ps = getPackageSetting(res.pkg.getPackageName());
+            final PackageSetting ps = pkgSetting;
             for (int newUser : res.newUsers) {
                 final boolean isInstantApp = ps.getInstantApp(newUser);
                 if (allNewUsers) {
@@ -2266,7 +2274,7 @@ public class PackageManagerService extends IPackageManager.Stub
                         if (packageExternalStorageType != StorageEnums.UNKNOWN) {
                             FrameworkStatsLog.write(
                                     FrameworkStatsLog.APP_INSTALL_ON_EXTERNAL_STORAGE_REPORTED,
-                                    packageExternalStorageType, res.pkg.getPackageName());
+                                    packageExternalStorageType, packageName);
                         }
                     }
                     if (DEBUG_INSTALL) {
@@ -2298,12 +2306,9 @@ public class PackageManagerService extends IPackageManager.Stub
                     if (packageIsBrowser(packageName, userId)) {
                         // If this browser is restored from user's backup, do not clear
                         // default-browser state for this user
-                        synchronized (mLock) {
-                            final PackageSetting pkgSetting = mSettings.mPackages.get(packageName);
-                            if (pkgSetting.getInstallReason(userId)
-                                    != PackageManager.INSTALL_REASON_DEVICE_RESTORE) {
-                                mPermissionManager.setDefaultBrowser(null, true, true, userId);
-                            }
+                        if (pkgSetting.getInstallReason(userId)
+                                != PackageManager.INSTALL_REASON_DEVICE_RESTORE) {
+                            mPermissionManager.setDefaultBrowser(null, true, true, userId);
                         }
                     }
 
