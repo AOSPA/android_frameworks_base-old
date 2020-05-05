@@ -2725,6 +2725,10 @@ public class ActivityStack extends ConfigurationContainer {
         next.sleeping = false;
         next.launching = true;
 
+        if (next.isAppSecured()) {
+            mService.getSecureAppsService().setAppLaunching(next.packageName);
+        }
+
         if (DEBUG_SWITCH) Slog.v(TAG_SWITCH, "Resuming " + next);
 
         if (mActivityTrigger != null) {
