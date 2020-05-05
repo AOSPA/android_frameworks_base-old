@@ -140,6 +140,7 @@ import com.android.server.power.ThermalManagerService;
 import com.android.server.restrictions.RestrictionsManagerService;
 import com.android.server.role.RoleManagerService;
 import com.android.server.rollback.RollbackManagerService;
+import com.android.server.secureapps.SecureAppsManagerService;
 import com.android.server.security.KeyAttestationApplicationIdProviderService;
 import com.android.server.security.KeyChainSystemService;
 import com.android.server.signedconfig.SignedConfigService;
@@ -1268,6 +1269,8 @@ public final class SystemServer {
 
             startContentCaptureService(context);
             startAttentionService(context);
+
+            startSecureAppsService(context);
 
             startSystemCaptionsManagerService(context);
 
@@ -2402,6 +2405,12 @@ public final class SystemServer {
 
         traceBeginAndSlog("StartAttentionManagerService");
         mSystemServiceManager.startService(AttentionManagerService.class);
+        traceEnd();
+    }
+
+    private void startSecureAppsService(@NonNull Context context) {
+        traceBeginAndSlog("StartSecureAppsService");
+        mSystemServiceManager.startService(SecureAppsManagerService.class);
         traceEnd();
     }
 

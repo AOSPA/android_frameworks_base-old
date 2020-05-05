@@ -416,6 +416,11 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
 
         boolean nowDrawn = numInteresting > 0 && numDrawn >= numInteresting;
         boolean nowVisible = numInteresting > 0 && numVisible >= numInteresting && !isHidden();
+
+        if (mActivityRecord.isAppSecured()) {
+            mActivityRecord.getAtmService().updateAppVisibility(mActivityRecord.packageName);
+        }
+
         if (!nowGone) {
             // If the app is not yet gone, then it can only become visible/drawn.
             if (!nowDrawn) {
@@ -1269,6 +1274,10 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
             gotReplacementWindow |= candidate.setReplacementWindowIfNeeded(w);
         }
 
+        if (mActivityRecord.isAppSecured() && w.mAttrs.type == TYPE_BASE_APPLICATION) {
+            mActivityRecord.getAtmService().promptSecureIfNeeded(mActivityRecord.packageName, w);
+        }
+
         // if we got a replacement window, reset the timeout to give drawing more time
         if (gotReplacementWindow) {
             mWmService.scheduleWindowReplacementTimeouts(this);
@@ -1283,6 +1292,9 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
             return;
         }
         super.removeChild(child);
+        if (mActivityRecord.isAppSecured() && child.mAttrs.type == TYPE_BASE_APPLICATION) {
+            mActivityRecord.getAtmService().onAppWindowRemoved(mActivityRecord.packageName, child);
+        }
         checkKeyguardFlagsChanged();
         updateLetterboxSurface(child);
     }
@@ -2459,7 +2471,7 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
      */
     boolean shouldUseAppThemeSnapshot() {
         return mDisablePreviewScreenshots || forAllWindows(w -> (w.mAttrs.flags & FLAG_SECURE) != 0,
-                true /* topToBottom */);
+                true /* topToBottom */) || mActivityRecord.isAppSecured();
     }
 
     SurfaceControl getAppAnimationLayer() {
