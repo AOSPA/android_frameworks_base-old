@@ -218,7 +218,7 @@ import java.util.List;
 import java.util.function.Predicate;
 
 /** A window in the window manager. */
-class WindowState extends WindowContainer<WindowState> implements WindowManagerPolicy.WindowState {
+public class WindowState extends WindowContainer<WindowState> implements WindowManagerPolicy.WindowState {
     static final String TAG = TAG_WITH_CLASS_NAME ? "WindowState" : TAG_WM;
 
     // The minimal size of a window within the usable area of the freeform stack.
@@ -237,7 +237,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
     final WindowManagerPolicy mPolicy;
     final Context mContext;
     final Session mSession;
-    final IWindow mClient;
+    public final IWindow mClient;
     final int mAppOp;
     // UserId and appId of the owner. Don't display windows of non-current user.
     final int mOwnerUid;
