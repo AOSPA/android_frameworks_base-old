@@ -20,7 +20,9 @@ import static android.service.notification.NotificationListenerService.REASON_ER
 
 import android.annotation.Nullable;
 import android.app.Notification;
+import android.app.SecureAppsManager;
 import android.content.Context;
+import android.os.Bundle;
 import android.service.notification.NotificationListenerService;
 import android.service.notification.StatusBarNotification;
 import android.util.ArrayMap;
@@ -98,6 +100,9 @@ public class NotificationEntryManager implements
     private final List<NotificationEntryListener> mNotificationEntryListeners = new ArrayList<>();
     private NotificationRemoveInterceptor mRemoveInterceptor;
 
+    private SecureAppsManager mSecureAppsManager;
+    private Bundle mLockedNotificationBundle = new Bundle();
+
     @Override
     public void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
         pw.println("NotificationEntryManager state:");
@@ -124,6 +129,7 @@ public class NotificationEntryManager implements
     @Inject
     public NotificationEntryManager(Context context) {
         mNotificationData = new NotificationData();
+        mSecureAppsManager = (SecureAppsManager) context.getSystemService(Context.SECURE_APPS_SERVICE);
     }
 
     /** Adds a {@link NotificationEntryListener}. */
@@ -386,6 +392,20 @@ public class NotificationEntryManager implements
             Log.d(TAG, "addNotification key=" + key);
         }
 
+        String pkg = notification.getPackageName();
+        boolean isAppSecured = mSecureAppsManager.isAppSecured(pkg);
+        notification.setAppPackageSecured(isAppSecured);
+        if (isAppSecured) {
+            Notification n = notification.getNotification();
+            mLockedNotificationBundle.putCharSequence(Notification.EXTRA_TITLE, "App secured");
+            mLockedNotificationBundle.putBoolean(Notification.EXTRA_SHOW_WHEN, true);
+            mLockedNotificationBundle.putParcelable(Notification.EXTRA_BUILDER_APPLICATION_INFO,
+                    n.extras.getParcelable(Notification.EXTRA_BUILDER_APPLICATION_INFO));
+            n.extras.clear();
+            n.extras = mLockedNotificationBundle.deepCopy();
+            n.actions = null;
+        }
+
         mNotificationData.updateRanking(rankingMap);
         NotificationListenerService.Ranking ranking = new NotificationListenerService.Ranking();
         rankingMap.getRanking(key, ranking);
@@ -423,6 +443,14 @@ public class NotificationEntryManager implements
         abortExistingInflation(key);
         NotificationEntry entry = mNotificationData.get(key);
         if (entry == null) {
+            return;
+        }
+
+        String pkg = notification.getPackageName();
+        boolean isAppSecured = mSecureAppsManager.isAppSecured(pkg);
+        notification.setAppPackageSecured(isAppSecured);
+        Log.d("AppLockSysUI", "updateNotificationInternal pkg:" + pkg + " isAppSecured: " + isAppSecured);
+        if (isAppSecured) {
             return;
         }
 
