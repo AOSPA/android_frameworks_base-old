@@ -970,6 +970,15 @@ final class SystemServiceRegistry {
                         return new PocketManager(ctx.getOuterContext(), service);
                     }});
 
+        registerService(Context.SECURE_APPS_SERVICE, SecureAppsManager.class,
+                new CachedServiceFetcher<SecureAppsManager>() {
+            @Override
+            public SecureAppsManager createService(ContextImpl ctx) throws ServiceNotFoundException {
+                IBinder b = ServiceManager.getServiceOrThrow(Context.SECURE_APPS_SERVICE);
+                ISecureAppsManagerService service = ISecureAppsManagerService.Stub.asInterface(b);
+                return new SecureAppsManager(service);
+            }});
+
         registerService(Context.TV_INPUT_SERVICE, TvInputManager.class,
                 new CachedServiceFetcher<TvInputManager>() {
             @Override

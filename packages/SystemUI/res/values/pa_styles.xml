@@ -21,4 +21,9 @@
         <item name="android:fontFamily">sans-serif-medium</item>
     </style>
 
+    <!-- App lock -->
+    <style name="Animation.AppLock">
+        <item name="windowExitAnimation">@anim/activity_translucent_close_exit</item>
+    </style>
+
 </resources>

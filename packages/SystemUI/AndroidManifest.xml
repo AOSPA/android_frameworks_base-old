@@ -644,6 +644,15 @@
             android:singleUser="true"
             android:permission="android.permission.BIND_DREAM_SERVICE" />
 
+        <service
+            android:name=".secureapps.SecureAppsService"
+            android:exported="true"
+            android:enabled="true">
+            <intent-filter>
+                <action android:name="secure_apps:remote"/>
+            </intent-filter>
+        </service>
+
         <receiver
             android:name=".tuner.TunerService$ClearReceiver"
             android:exported="false">

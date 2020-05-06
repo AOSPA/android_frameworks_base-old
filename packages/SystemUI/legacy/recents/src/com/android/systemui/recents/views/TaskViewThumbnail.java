@@ -16,6 +16,7 @@
 
 package com.android.systemui.recents.views;
 
+import android.app.SecureAppsManager;
 import android.content.Context;
 import android.content.res.Configuration;
 import android.content.res.Resources;
@@ -28,8 +29,10 @@ import android.graphics.ColorMatrixColorFilter;
 import android.graphics.LightingColorFilter;
 import android.graphics.Matrix;
 import android.graphics.Paint;
+import android.graphics.PorterDuff.Mode;
 import android.graphics.Rect;
 import android.graphics.Shader;
+import android.graphics.drawable.Drawable;
 import android.util.AttributeSet;
 import android.view.View;
 import android.view.ViewDebug;
@@ -93,6 +96,13 @@ public class TaskViewThumbnail extends View {
     @ViewDebug.ExportedProperty(category="recents")
     private boolean mDisabledInSafeMode;
 
+    private int mPadding;
+
+    private Bitmap mBackgroundBitmap;
+    private Drawable mAppLockDrawable;
+    private String mTaskPackageName;
+    private SecureAppsManager mSecureAppsManager;
+
     public TaskViewThumbnail(Context context) {
         this(context, null);
     }
@@ -107,6 +117,9 @@ public class TaskViewThumbnail extends View {
 
     public TaskViewThumbnail(Context context, AttributeSet attrs, int defStyleAttr, int defStyleRes) {
         super(context, attrs, defStyleAttr, defStyleRes);
+
+        mSecureAppsManager = (SecureAppsManager) context.getSystemService(Context.SECURE_APPS_SERVICE);
+
         mDrawPaint.setColorFilter(mLightingColorFilter);
         mDrawPaint.setFilterBitmap(true);
         mDrawPaint.setAntiAlias(true);
@@ -115,6 +128,7 @@ public class TaskViewThumbnail extends View {
         mBgFillPaint.setColor(Color.WHITE);
         mLockedPaint.setColor(Color.WHITE);
         mTitleBarHeight = res.getDimensionPixelSize(R.dimen.recents_grid_task_view_header_height);
+        mPadding = context.getResources().getDimensionPixelSize(R.dimen.recents_thumbnail_padding);
     }
 
     /**
@@ -129,6 +143,9 @@ public class TaskViewThumbnail extends View {
 
         mTaskViewRect.set(0, 0, width, height);
         setLeftTopRightBottom(0, 0, width, height);
+
+        mBackgroundBitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
+
         updateThumbnailMatrix();
     }
 
@@ -171,6 +188,13 @@ public class TaskViewThumbnail extends View {
             // Draw the thumbnail
             canvas.drawRoundRect(0, topOffset, thumbnailWidth, thumbnailHeight,
                     mCornerRadius, mCornerRadius, mDrawPaint);
+
+            if (mSecureAppsManager.isAppSecured(mTaskPackageName)) {
+                int w = viewWidth / 2;
+                int h = viewHeight / 2;
+                mAppLockDrawable.setBounds(w - mPadding, h - mPadding, w + mPadding, h + mPadding);
+                mAppLockDrawable.draw(canvas);
+            }
         } else {
             canvas.drawRoundRect(0, 0, viewWidth, viewHeight, mCornerRadius, mCornerRadius,
                     mBgFillPaint);
@@ -345,9 +369,19 @@ public class TaskViewThumbnail extends View {
      */
     void bindToTask(Task t, boolean disabledInSafeMode, int displayOrientation, Rect displayRect) {
         mTask = t;
+        mTaskPackageName = t.key.getComponent().getPackageName();
         mDisabledInSafeMode = disabledInSafeMode;
         mDisplayOrientation = displayOrientation;
         mDisplayRect.set(displayRect);
+
+        boolean lightDrawable = mTask.useLightOnPrimaryColor;
+        mAppLockDrawable = getResources().getDrawable(lightDrawable
+                ? R.drawable.recents_not_visible_light
+                : R.drawable.recents_not_visible_dark);
+        if (mBackgroundBitmap != null) {
+            mBackgroundBitmap.eraseColor(mTask.colorPrimary);
+        }
+
         if (t.colorBackground != 0) {
             mBgFillPaint.setColor(t.colorBackground);
         }
@@ -363,6 +397,9 @@ public class TaskViewThumbnail extends View {
      * changes.
      */
     void onTaskDataLoaded(ThumbnailData thumbnailData) {
+        if (mSecureAppsManager.isAppSecured(mTaskPackageName)) {
+            mTask.thumbnail = mBackgroundBitmap;
+        }
         setThumbnail(thumbnailData);
     }
 

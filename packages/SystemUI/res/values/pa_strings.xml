@@ -61,4 +61,8 @@
     <string name="screenrecord_start">Start</string>
     <string name="screenrecord_start_label">Start Recording?</string>
     <string name="screenrecord_taps_label">Show touches on screen</string>
+
+    <!-- App lock -->
+    <string name="remaining_attempts_pattern">You have <xliff:g id="number">%1$d</xliff:g> more attempts.</string>
+    <string name="lockscreen_pin_instructions">Type pin/password to unlock</string>
 </resources>

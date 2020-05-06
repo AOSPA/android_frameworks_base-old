@@ -66,6 +66,8 @@ public class StatusBarNotification implements Parcelable {
 
     private Context mContext; // used for inflation & icon expansion
 
+    private boolean mIsPackageSecured;
+
     /** @hide */
     public StatusBarNotification(String pkg, String opPkg, int id,
             String tag, int uid, int initialPid, Notification notification, UserHandle user,
@@ -85,6 +87,8 @@ public class StatusBarNotification implements Parcelable {
         this.overrideGroupKey = overrideGroupKey;
         this.key = key();
         this.groupKey = groupKey();
+
+        mIsPackageSecured = false;
     }
 
     /**
@@ -360,6 +364,24 @@ public class StatusBarNotification implements Parcelable {
             return overrideGroupKey;
         }
         return getNotification().getGroup();
+    }
+
+    /**
+     * Set if the Package is locked by Secure apps
+     *
+     * @hide
+     */
+    public void setAppPackageSecured(boolean isSecured) {
+        mIsPackageSecured = isSecured;
+    }
+
+    /**
+     * Get if package is locked by Secure apps
+     *
+     * @hide
+     */
+    public boolean isAppPackageSecured() {
+        return mIsPackageSecured;
     }
 
     /**
