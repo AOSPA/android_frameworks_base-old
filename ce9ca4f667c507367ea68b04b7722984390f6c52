@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "d06071b9_6a68c091",
+        "filename": "packages/SystemUI/src/com/android/systemui/volume/VolumeDialogImpl.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 106,
+      "author": {
+        "id": 1000012
+      },
+      "writtenOn": "2020-05-06T20:41:52Z",
+      "side": 0,
+      "message": "for ease of merging this later, I\u0027d recommend not removing the whitespace.  Otherwise, this will have unnecessary conflicts in R and beyond.",
+      "revId": "ce9ca4f667c507367ea68b04b7722984390f6c52",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    }
+  ]
+}
