@@ -30,9 +30,7 @@ import static android.view.View.GONE;
 import static android.view.View.VISIBLE;
 import static android.view.ViewGroup.LayoutParams.MATCH_PARENT;
 import static android.view.ViewGroup.LayoutParams.WRAP_CONTENT;
-
 import static com.android.systemui.volume.Events.DISMISS_REASON_SETTINGS_CLICKED;
-
 import android.animation.Animator;
 import android.animation.ObjectAnimator;
 import android.annotation.SuppressLint;
@@ -88,7 +86,6 @@ import android.widget.SeekBar;
 import android.widget.SeekBar.OnSeekBarChangeListener;
 import android.widget.TextView;
 import android.widget.Toast;
-
 import com.android.settingslib.Utils;
 import com.android.settingslib.media.LocalMediaManager;
 import com.android.settingslib.media.MediaDevice;
@@ -104,7 +101,6 @@ import com.android.systemui.statusbar.phone.ExpandableIndicator;
 import com.android.systemui.statusbar.policy.AccessibilityManagerWrapper;
 import com.android.systemui.statusbar.policy.ConfigurationController;
 import com.android.systemui.statusbar.policy.DeviceProvisionedController;
-
 import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.List;
@@ -201,8 +197,7 @@ public class VolumeDialogImpl implements VolumeDialog,
     private final List<MediaDevice> mMediaDevices = new ArrayList<>();
 
     public VolumeDialogImpl(Context context) {
-        mContext =
-                new ContextThemeWrapper(context, R.style.qs_theme);
+        mContext = new ContextThemeWrapper(context, R.style.qs_theme);
         mController = Dependency.get(VolumeDialogController.class);
         mKeyguard = (KeyguardManager) mContext.getSystemService(Context.KEYGUARD_SERVICE);
         mActivityManager = (ActivityManager) mContext.getSystemService(Context.ACTIVITY_SERVICE);
@@ -620,8 +615,6 @@ public class VolumeDialogImpl implements VolumeDialog,
                     ? Utils.getColorAccent(mContext)
                     : Utils.getColorAttr(mContext, android.R.attr.colorControlNormal);
                 mMediaButton.setImageTintList(tint);
-
-                provideTouchHapticH(VibrationEffect.get(VibrationEffect.EFFECT_TICK));
             });
             mExpandRows.setOnLongClickListener(v -> {
                 Events.writeEvent(mContext, Events.EVENT_SETTINGS_CLICK);
@@ -676,11 +669,9 @@ public class VolumeDialogImpl implements VolumeDialog,
                         animateViewIn(media.view, true, width, z);
                     }
 
-                    provideTouchHapticH(VibrationEffect.get(VibrationEffect.EFFECT_TICK));
                     mExpanded = true;
                 } else {
                     cleanExpandedRows();
-                    provideTouchHapticH(VibrationEffect.get(VibrationEffect.EFFECT_TICK));
                     mExpanded = false;
                 }
                 mExpandRows.setExpanded(mExpanded);
@@ -875,10 +866,7 @@ public class VolumeDialogImpl implements VolumeDialog,
                 row.device = device;
                 row.view = mDialog.getLayoutInflater().inflate(R.layout.volume_dialog_media_output,
                         mMediaOutputView, false);
-                row.view.setOnClickListener(v -> {
-                        provideTouchHapticH(VibrationEffect.get(VibrationEffect.EFFECT_CLICK));
-                        mLocalMediaManager.connectDevice(device);
-                });
+                row.view.setOnClickListener(v -> { mLocalMediaManager.connectDevice(device); });
                 row.name = row.view.findViewById(R.id.media_output_text);
                 row.summary = row.view.findViewById(R.id.media_output_summary);
                 row.selected = row.view.findViewById(R.id.media_output_selected);
@@ -1078,10 +1066,6 @@ public class VolumeDialogImpl implements VolumeDialog,
         if (effect != null) {
             mController.vibrate(effect);
         }
-    }
-
-    private void provideTouchHapticH(VibrationEffect effect) {
-        mController.vibrate(effect);
     }
 
     private void provideSliderHapticFeedbackH() {
