@@ -16,13 +16,18 @@
 
 package com.android.internal.policy;
 
+import static com.android.internal.config.sysui.SystemUiDeviceConfigFlags.BACK_GESTURE_EDGE_WIDTH;
+
 import android.content.ContentResolver;
 import android.content.Context;
 import android.content.res.Resources;
 import android.database.ContentObserver;
 import android.os.Handler;
 import android.os.UserHandle;
+import android.provider.DeviceConfig;
 import android.provider.Settings;
+import android.util.DisplayMetrics;
+import android.util.TypedValue;
 
 /**
  * @hide
@@ -30,13 +35,26 @@ import android.provider.Settings;
 public class GestureNavigationSettingsObserver extends ContentObserver {
     private Context mContext;
     private Runnable mOnChangeRunnable;
+    private Handler mMainHandler;
 
     public GestureNavigationSettingsObserver(Handler handler, Context context,
             Runnable onChangeRunnable) {
         super(handler);
+        mMainHandler = handler;
         mContext = context;
         mOnChangeRunnable = onChangeRunnable;
     }
+
+    private final DeviceConfig.OnPropertiesChangedListener mOnPropertiesChangedListener =
+            new DeviceConfig.OnPropertiesChangedListener() {
+        @Override
+        public void onPropertiesChanged(DeviceConfig.Properties properties) {
+            if (DeviceConfig.NAMESPACE_SYSTEMUI.equals(properties.getNamespace())
+                            && mOnChangeRunnable != null) {
+                mOnChangeRunnable.run();
+            }
+        }
+    };
 
     public void register() {
         ContentResolver r = mContext.getContentResolver();
@@ -49,10 +67,15 @@ public class GestureNavigationSettingsObserver extends ContentObserver {
         r.registerContentObserver(
                 Settings.Secure.getUriFor(Settings.Secure.USER_SETUP_COMPLETE),
                 false, this, UserHandle.USER_ALL);
+        DeviceConfig.addOnPropertiesChangedListener(
+                DeviceConfig.NAMESPACE_SYSTEMUI,
+                runnable -> mMainHandler.post(runnable),
+                mOnPropertiesChangedListener);
     }
 
     public void unregister() {
         mContext.getContentResolver().unregisterContentObserver(this);
+        DeviceConfig.removeOnPropertiesChangedListener(mOnPropertiesChangedListener);
     }
 
     @Override
@@ -77,8 +100,13 @@ public class GestureNavigationSettingsObserver extends ContentObserver {
     }
 
     private int getSensitivity(Resources userRes, String side) {
-        final int inset = userRes.getDimensionPixelSize(
-                com.android.internal.R.dimen.config_backGestureInset);
+        final DisplayMetrics dm = userRes.getDisplayMetrics();
+        final float defaultInset = userRes.getDimension(
+                com.android.internal.R.dimen.config_backGestureInset) / dm.density;
+        final float backGestureInset = DeviceConfig.getFloat(DeviceConfig.NAMESPACE_SYSTEMUI,
+                BACK_GESTURE_EDGE_WIDTH, defaultInset);
+        final float inset = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, backGestureInset,
+                dm);
         final float scale = Settings.Secure.getFloatForUser(
                 mContext.getContentResolver(), side, 1.0f, UserHandle.USER_CURRENT);
         return (int) (inset * scale);

@@ -2011,7 +2011,7 @@ public class LocationManager {
     @Deprecated
     @RequiresPermission(ACCESS_FINE_LOCATION)
     public boolean registerGnssStatusCallback(@NonNull GnssStatus.Callback callback) {
-        return registerGnssStatusCallback(Runnable::run, callback);
+        return registerGnssStatusCallback(callback, null);
     }
 
     /**

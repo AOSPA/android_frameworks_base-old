@@ -10613,12 +10613,14 @@ public class ActivityManagerService extends IActivityManager.Stub
             }
             mAtmInternal.dump(
                     DUMP_STARTER_CMD, fd, pw, args, opti, dumpAll, dumpClient, dumpPackage);
-            pw.println();
-            if (dumpAll) {
-                pw.println("-------------------------------------------------------------------------------");
+            if (dumpPackage == null) {
+                pw.println();
+                if (dumpAll) {
+                    pw.println("-------------------------------------------------------------------------------");
+                }
+                mAtmInternal.dump(
+                        DUMP_CONTAINERS_CMD, fd, pw, args, opti, dumpAll, dumpClient, dumpPackage);
             }
-            mAtmInternal.dump(
-                    DUMP_CONTAINERS_CMD, fd, pw, args, opti, dumpAll, dumpClient, dumpPackage);
             // Activities section is dumped as part of the Critical priority dump. Exclude the
             // section if priority is Normal.
             if (!dumpNormalPriority) {
@@ -10636,6 +10638,11 @@ public class ActivityManagerService extends IActivityManager.Stub
                 }
                 dumpAssociationsLocked(fd, pw, args, opti, dumpAll, dumpClient, dumpPackage);
             }
+            pw.println();
+            if (dumpAll) {
+                pw.println("-------------------------------------------------------------------------------");
+            }
+            mProcessList.mAppExitInfoTracker.dumpHistoryProcessExitInfo(pw, dumpPackage);
             if (dumpPackage == null) {
                 pw.println();
                 if (dumpAll) {
@@ -10651,17 +10658,6 @@ public class ActivityManagerService extends IActivityManager.Stub
             pw.println();
             if (dumpAll) {
                 pw.println("-------------------------------------------------------------------------------");
-            }
-            dumpLruLocked(pw, dumpPackage);
-            pw.println();
-            if (dumpAll) {
-                pw.println("-------------------------------------------------------------------------------");
-            }
-            mProcessList.mAppExitInfoTracker.dumpHistoryProcessExitInfo(pw, dumpPackage);
-            pw.println();
-            if (dumpAll) {
-                pw.println("-------------------------------------------------------------------"
-                        + "------------");
             }
             dumpProcessesLocked(fd, pw, args, opti, dumpAll, dumpPackage, dumpAppId);
             pw.println();
@@ -10866,7 +10862,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                 }
             } else if ("oom".equals(cmd) || "o".equals(cmd)) {
                 synchronized (this) {
-                    dumpOomLocked(fd, pw, args, opti, true);
+                    dumpOomLocked(fd, pw, false, args, opti, true, dumpPackage, true);
                 }
             } else if ("lmk".equals(cmd)) {
                 synchronized (this) {
@@ -10874,11 +10870,11 @@ public class ActivityManagerService extends IActivityManager.Stub
                 }
             } else if ("lru".equals(cmd)) {
                 synchronized (this) {
-                    dumpLruLocked(pw, null);
+                    dumpLruLocked(pw, dumpPackage, null);
                 }
             } else if ("permissions".equals(cmd) || "perm".equals(cmd)) {
                 synchronized (this) {
-                    dumpPermissionsLocked(fd, pw, args, opti, true, null);
+                    dumpPermissionsLocked(fd, pw, args, opti, true, dumpPackage);
                 }
             } else if ("provider".equals(cmd)) {
                 String[] newArgs;
@@ -10898,7 +10894,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                 }
             } else if ("providers".equals(cmd) || "prov".equals(cmd)) {
                 synchronized (this) {
-                    dumpProvidersLocked(fd, pw, args, opti, true, null);
+                    dumpProvidersLocked(fd, pw, args, opti, true, dumpPackage);
                 }
             } else if ("service".equals(cmd)) {
                 String[] newArgs;
@@ -11184,8 +11180,9 @@ public class ActivityManagerService extends IActivityManager.Stub
                 "  Counts of Binder Proxies held by SYSTEM");
     }
 
-    void dumpLruEntryLocked(PrintWriter pw, int index, ProcessRecord proc) {
-        pw.print("    #");
+    void dumpLruEntryLocked(PrintWriter pw, int index, ProcessRecord proc, String prefix) {
+        pw.print(prefix);
+        pw.print("#");
         pw.print(index);
         pw.print(": ");
         pw.print(ProcessList.makeOomAdjString(proc.setAdj, false));
@@ -11227,9 +11224,29 @@ public class ActivityManagerService extends IActivityManager.Stub
     }
 
     // TODO: Move to ProcessList?
-    void dumpLruLocked(PrintWriter pw, String dumpPackage) {
-        pw.println("ACTIVITY MANAGER LRU PROCESSES (dumpsys activity lru)");
+    boolean dumpLruLocked(PrintWriter pw, String dumpPackage, String prefix) {
         final int N = mProcessList.mLruProcesses.size();
+        final String innerPrefix;
+        if (prefix == null) {
+            pw.println("ACTIVITY MANAGER LRU PROCESSES (dumpsys activity lru)");
+            innerPrefix = "  ";
+        } else {
+            boolean haveAny = false;
+            for (int i = N - 1; i >= 0; i--) {
+                final ProcessRecord r = mProcessList.mLruProcesses.get(i);
+                if (dumpPackage != null && !r.pkgList.containsKey(dumpPackage)) {
+                    continue;
+                }
+                haveAny = true;
+                break;
+            }
+            if (!haveAny) {
+                return false;
+            }
+            pw.print(prefix);
+            pw.println("Raw LRU list (dumpsys activity lru):");
+            innerPrefix = prefix + "  ";
+        }
         int i;
         boolean first = true;
         for (i = N - 1; i >= mProcessList.mLruProcessActivityStart; i--) {
@@ -11238,10 +11255,11 @@ public class ActivityManagerService extends IActivityManager.Stub
                 continue;
             }
             if (first) {
-                pw.println("  Activities:");
+                pw.print(innerPrefix);
+                pw.println("Activities:");
                 first = false;
             }
-            dumpLruEntryLocked(pw, i, r);
+            dumpLruEntryLocked(pw, i, r, innerPrefix);
         }
         first = true;
         for (; i >= mProcessList.mLruProcessServiceStart; i--) {
@@ -11250,10 +11268,11 @@ public class ActivityManagerService extends IActivityManager.Stub
                 continue;
             }
             if (first) {
-                pw.println("  Services:");
+                pw.print(innerPrefix);
+                pw.println("Services:");
                 first = false;
             }
-            dumpLruEntryLocked(pw, i, r);
+            dumpLruEntryLocked(pw, i, r, innerPrefix);
         }
         first = true;
         for (; i >= 0; i--) {
@@ -11262,11 +11281,13 @@ public class ActivityManagerService extends IActivityManager.Stub
                 continue;
             }
             if (first) {
-                pw.println("  Other:");
+                pw.print(innerPrefix);
+                pw.println("Other:");
                 first = false;
             }
-            dumpLruEntryLocked(pw, i, r);
+            dumpLruEntryLocked(pw, i, r, innerPrefix);
         }
+        return true;
     }
 
     // TODO: Move to ProcessList?
@@ -11278,7 +11299,7 @@ public class ActivityManagerService extends IActivityManager.Stub
 
         pw.println("ACTIVITY MANAGER RUNNING PROCESSES (dumpsys activity processes)");
 
-        if (dumpAll) {
+        if (dumpAll || dumpPackage != null) {
             final int NP = mProcessList.mProcessNames.getMap().size();
             for (int ip=0; ip<NP; ip++) {
                 SparseArray<ProcessRecord> procs = mProcessList.mProcessNames.getMap().valueAt(ip);
@@ -11345,6 +11366,12 @@ public class ActivityManagerService extends IActivityManager.Stub
             }
         }
 
+        if (dumpOomLocked(fd, pw, needSep, args, opti, dumpAll, dumpPackage, false)) {
+            needSep = true;
+        }
+
+        needSep = dumpProcessesToGc(pw, needSep, dumpPackage);
+
         if (mProcessList.mActiveUids.size() > 0) {
             if (dumpUids(pw, dumpPackage, dumpAppId, mProcessList.mActiveUids,
                     "UID states:", needSep)) {
@@ -11359,6 +11386,13 @@ public class ActivityManagerService extends IActivityManager.Stub
                     needSep = true;
                 }
             }
+        }
+
+        if (needSep) {
+            pw.println();
+        }
+        if (dumpLruLocked(pw, dumpPackage, "  ")) {
+            needSep = true;
         }
 
         if (mProcessList.getLruSizeLocked() > 0) {
@@ -11464,8 +11498,6 @@ public class ActivityManagerService extends IActivityManager.Stub
             dumpProcessList(pw, this, mProcessesOnHold, "    ",
                     "OnHold Norm", "OnHold PERS", dumpPackage);
         }
-
-        needSep = dumpProcessesToGc(pw, needSep, dumpPackage);
 
         needSep = mAppErrors.dumpLocked(fd, pw, needSep, dumpPackage);
 
@@ -12009,10 +12041,8 @@ public class ActivityManagerService extends IActivityManager.Stub
         pw.println(")");
     }
 
-    boolean dumpOomLocked(FileDescriptor fd, PrintWriter pw, String[] args,
-            int opti, boolean dumpAll) {
-        boolean needSep = false;
-
+    boolean dumpOomLocked(FileDescriptor fd, PrintWriter pw, boolean needSep, String[] args,
+            int opti, boolean dumpAll, String dumpPackage, boolean inclGc) {
         if (mProcessList.getLruSizeLocked() > 0) {
             if (needSep) pw.println();
             needSep = true;
@@ -12043,11 +12073,11 @@ public class ActivityManagerService extends IActivityManager.Stub
                             - mProcessList.mLruProcessServiceStart);
                     pw.println("):");
             dumpProcessOomList(pw, this, mProcessList.mLruProcesses, "    ", "Proc", "PERS", true,
-                    null);
+                    dumpPackage);
             needSep = true;
         }
 
-        dumpProcessesToGc(pw, needSep, null);
+        dumpProcessesToGc(pw, needSep, dumpPackage);
 
         pw.println();
         mAtmInternal.dumpForOom(pw);
