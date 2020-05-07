@@ -1000,8 +1000,8 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
             if (!mEnableExternal && isAirplaneModeOn()) {
                 // Airplane mode is turned on while enabling BLE only mode, disable
                 // BLE now.
-                disableBleScanMode();
-                sendBrEdrDownCallback();
+                mEnable = false;
+                mBluetooth.onBrEdrDown();
                 return;
             }
             if (isBluetoothPersistedStateOnBluetooth() ||
