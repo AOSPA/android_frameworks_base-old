@@ -79,6 +79,12 @@ public class TetheringConfiguration {
     public static final String TETHER_ENABLE_LEGACY_DHCP_SERVER =
             "tether_enable_legacy_dhcp_server";
 
+    /**
+     * Default value that used to periodic polls tether offload stats from tethering offload HAL
+     * to make the data warnings work.
+     */
+    public static final int DEFAULT_TETHER_OFFLOAD_POLL_INTERVAL_MS = 5000;
+
     public final String[] tetherableUsbRegexs;
     public final String[] tetherableWifiRegexs;
     public final String[] tetherableWifiP2pRegexs;
@@ -97,6 +103,8 @@ public class TetheringConfiguration {
 
     public final int activeDataSubId;
     private static String fstInterfaceName = "bond0";
+
+    private final int mOffloadPollInterval;
 
     public TetheringConfiguration(Context ctx, SharedLog log, int id) {
         final SharedLog configLog = log.forSubComponent("config");
@@ -134,6 +142,10 @@ public class TetheringConfiguration {
         provisioningCheckPeriod = getResourceInteger(res,
                 R.integer.config_mobile_hotspot_provision_check_period,
                 0 /* No periodic re-check */);
+
+        mOffloadPollInterval = getResourceInteger(res,
+                R.integer.config_tether_offload_poll_interval,
+                DEFAULT_TETHER_OFFLOAD_POLL_INTERVAL_MS);
 
         configLog.log(toString());
     }
@@ -203,6 +215,9 @@ public class TetheringConfiguration {
         dumpStringArray(pw, "legacyDhcpRanges", legacyDhcpRanges);
         dumpStringArray(pw, "defaultIPv4DNS", defaultIPv4DNS);
 
+        pw.print("offloadPollInterval: ");
+        pw.println(mOffloadPollInterval);
+
         dumpStringArray(pw, "provisioningApp", provisioningApp);
         pw.print("provisioningAppNoUi: ");
         pw.println(provisioningAppNoUi);
@@ -222,6 +237,7 @@ public class TetheringConfiguration {
                 makeString(tetherableBluetoothRegexs)));
         sj.add(String.format("isDunRequired:%s", isDunRequired));
         sj.add(String.format("chooseUpstreamAutomatically:%s", chooseUpstreamAutomatically));
+        sj.add(String.format("offloadPollInterval:%d", mOffloadPollInterval));
         sj.add(String.format("preferredUpstreamIfaceTypes:%s",
                 toIntArray(preferredUpstreamIfaceTypes)));
         sj.add(String.format("provisioningApp:%s", makeString(provisioningApp)));
@@ -258,6 +274,10 @@ public class TetheringConfiguration {
         // TelephonyManager would uses the active data subscription, which should be the one used
         // by tethering.
         return (tm != null) ? tm.isTetheringApnRequired() : false;
+    }
+
+    public int getOffloadPollInterval() {
+        return mOffloadPollInterval;
     }
 
     private static Collection<Integer> getUpstreamIfaceTypes(Resources res, boolean dunRequired) {

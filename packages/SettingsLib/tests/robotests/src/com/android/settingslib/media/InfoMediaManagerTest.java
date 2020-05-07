@@ -136,7 +136,7 @@ public class InfoMediaManagerTest {
     }
 
     @Test
-    public void onControlCategoriesChanged_samePackageName_shouldAddMediaDevice() {
+    public void onPreferredFeaturesChanged_samePackageName_shouldAddMediaDevice() {
         final List<RoutingSessionInfo> routingSessionInfos = new ArrayList<>();
         final RoutingSessionInfo sessionInfo = mock(RoutingSessionInfo.class);
         routingSessionInfos.add(sessionInfo);
@@ -156,7 +156,7 @@ public class InfoMediaManagerTest {
         final MediaDevice mediaDevice = mInfoMediaManager.findMediaDevice(TEST_ID);
         assertThat(mediaDevice).isNull();
 
-        mInfoMediaManager.mMediaRouterCallback.onControlCategoriesChanged(TEST_PACKAGE_NAME, null);
+        mInfoMediaManager.mMediaRouterCallback.onPreferredFeaturesChanged(TEST_PACKAGE_NAME, null);
 
         final MediaDevice infoDevice = mInfoMediaManager.mMediaDevices.get(0);
         assertThat(infoDevice.getId()).isEqualTo(TEST_ID);
@@ -165,8 +165,8 @@ public class InfoMediaManagerTest {
     }
 
     @Test
-    public void onControlCategoriesChanged_differentPackageName_doNothing() {
-        mInfoMediaManager.mMediaRouterCallback.onControlCategoriesChanged("com.fake.play", null);
+    public void onPreferredFeaturesChanged_differentPackageName_doNothing() {
+        mInfoMediaManager.mMediaRouterCallback.onPreferredFeaturesChanged("com.fake.play", null);
 
         assertThat(mInfoMediaManager.mMediaDevices).hasSize(0);
     }
@@ -416,6 +416,11 @@ public class InfoMediaManagerTest {
     }
 
     @Test
+    public void adjustSessionVolume_routingSessionInfoIsNull_noCrash() {
+        mInfoMediaManager.adjustSessionVolume(null, 10);
+    }
+
+    @Test
     public void adjustSessionVolume_packageNameIsNull_noCrash() {
         mInfoMediaManager.mPackageName = null;
 
@@ -484,6 +489,14 @@ public class InfoMediaManagerTest {
         mShadowRouter2Manager.setRoutingSessions(routingSessionInfos);
 
         assertThat(mInfoMediaManager.getSessionVolume()).isEqualTo(-1);
+    }
+
+    @Test
+    public void getActiveMediaSession_returnActiveSession() {
+        final List<RoutingSessionInfo> infos = new ArrayList<>();
+        mShadowRouter2Manager.setActiveSessions(infos);
+
+        assertThat(mInfoMediaManager.getActiveMediaSession()).containsExactlyElementsIn(infos);
     }
 
     @Test

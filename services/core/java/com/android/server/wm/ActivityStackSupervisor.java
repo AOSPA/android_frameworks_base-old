@@ -45,7 +45,6 @@ import static android.os.Process.SYSTEM_UID;
 import static android.os.Trace.TRACE_TAG_WINDOW_MANAGER;
 import static android.view.Display.DEFAULT_DISPLAY;
 import static android.view.Display.TYPE_VIRTUAL;
-import static android.view.WindowManager.TRANSIT_DOCK_TASK_FROM_RECENTS;
 
 import static com.android.server.wm.ActivityStack.ActivityState.PAUSED;
 import static com.android.server.wm.ActivityStack.ActivityState.PAUSING;
@@ -344,11 +343,10 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
     PowerManager.WakeLock mGoingToSleepWakeLock;
 
     /**
-     * Temporary rect used during docked stack resize calculation so we don't need to create a new
-     * object each time.
+     * Used to keep {@link RootWindowContainer#ensureActivitiesVisible} from being entered
+     * recursively. And only update keyguard states once the nested updates are done.
      */
-    private final Rect tempRect = new Rect();
-    private final ActivityOptions mTmpOptions = ActivityOptions.makeBasic();
+    private int mVisibilityTransactionDepth;
 
     private ActivityMetricsLogger mActivityMetricsLogger;
 
@@ -803,6 +801,7 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
 
             r.launchCount++;
             r.lastLaunchTime = SystemClock.uptimeMillis();
+            proc.setLastActivityLaunchTime(r.lastLaunchTime);
 
             if (DEBUG_ALL) Slog.v(TAG, "Launching: " + r);
 
@@ -934,6 +933,7 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
             if (DEBUG_STATES) Slog.v(TAG_STATES,
                     "Moving to PAUSED: " + r + " (starting in paused state)");
             r.setState(PAUSED, "realStartActivityLocked");
+            mRootWindowContainer.executeAppTransitionForAllDisplay();
         }
         // Perform OOM scoring after the activity state is set, so the process can be updated with
         // the latest state.
@@ -1989,6 +1989,7 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
         pw.print(prefix);
         pw.println("mCurTaskIdForUser=" + mCurTaskIdForUser);
         pw.println(prefix + "mUserStackInFront=" + mRootWindowContainer.mUserStackInFront);
+        pw.println(prefix + "mVisibilityTransactionDepth=" + mVisibilityTransactionDepth);
         if (!mWaitingForActivityVisible.isEmpty()) {
             pw.println(prefix + "mWaitingForActivityVisible=");
             for (int i = 0; i < mWaitingForActivityVisible.size(); ++i) {
@@ -2377,6 +2378,24 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
                 "android.server.am:TURN_ON:" + reason);
     }
 
+    /** Starts a batch of visibility updates. */
+    void beginActivityVisibilityUpdate() {
+        mVisibilityTransactionDepth++;
+    }
+
+    /** Ends a batch of visibility updates. */
+    void endActivityVisibilityUpdate() {
+        mVisibilityTransactionDepth--;
+        if (mVisibilityTransactionDepth == 0) {
+            getKeyguardController().visibilitiesUpdated();
+        }
+    }
+
+    /** Returns {@code true} if the caller is on the path to update visibility. */
+    boolean inActivityVisibilityUpdate() {
+        return mVisibilityTransactionDepth > 0;
+    }
+
     /**
      * Begin deferring resume to avoid duplicate resumes in one pass.
      */
@@ -2559,8 +2578,6 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
                 // not run into issues where we still need to draw the task in recents but the
                 // docked stack is already created.
                 deferUpdateRecentsHomeStackBounds();
-                // TODO(multi-display): currently recents animation only support default display.
-                mWindowManager.prepareAppTransition(TRANSIT_DOCK_TASK_FROM_RECENTS, false);
                 // TODO(task-hierarchy): Remove when tiles are in hierarchy.
                 // Unset launching windowing mode to prevent creating split-screen-primary stack
                 // in RWC#anyTaskForId() below.

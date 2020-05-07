@@ -223,6 +223,7 @@ import android.content.pm.VersionedPackage;
 import android.content.pm.dex.ArtManager;
 import android.content.pm.dex.DexMetadataHelper;
 import android.content.pm.dex.IArtManager;
+import android.content.pm.parsing.ApkLiteParseUtils;
 import android.content.pm.parsing.ParsingPackageUtils;
 import android.content.pm.parsing.component.ParsedActivity;
 import android.content.pm.parsing.component.ParsedInstrumentation;
@@ -232,6 +233,8 @@ import android.content.pm.parsing.component.ParsedPermission;
 import android.content.pm.parsing.component.ParsedProcess;
 import android.content.pm.parsing.component.ParsedProvider;
 import android.content.pm.parsing.component.ParsedService;
+import android.content.pm.parsing.result.ParseResult;
+import android.content.pm.parsing.result.ParseTypeImpl;
 import android.content.res.Resources;
 import android.content.rollback.IRollbackManager;
 import android.database.ContentObserver;
@@ -2180,7 +2183,8 @@ public class PackageManagerService extends IPackageManager.Stub
                 int appId = UserHandle.getAppId(res.uid);
                 boolean isSystem = res.pkg.isSystem();
                 sendPackageAddedForNewUsers(packageName, isSystem || virtualPreload,
-                        virtualPreload /*startReceiver*/, appId, firstUserIds, firstInstantUserIds);
+                        virtualPreload /*startReceiver*/, appId, firstUserIds, firstInstantUserIds,
+                        dataLoaderType);
 
                 // Send added for users that don't see the package for the first time
                 Bundle extras = new Bundle(1);
@@ -4458,11 +4462,6 @@ public class PackageManagerService extends IPackageManager.Stub
         if (getInstantAppPackageName(callingUid) != null) {
             throw new SecurityException("Instant applications don't have access to this method");
         }
-        if (!mUserManager.exists(userId)) {
-            throw new SecurityException("User doesn't exist");
-        }
-        mPermissionManager.enforceCrossUserPermission(
-                callingUid, userId, false, false, "checkPackageStartable");
         final boolean userKeyUnlocked = StorageManager.isUserKeyUnlocked(userId);
         synchronized (mLock) {
             final PackageSetting ps = mSettings.mPackages.get(packageName);
@@ -5835,15 +5834,9 @@ public class PackageManagerService extends IPackageManager.Stub
 
     @Override
     public ChangedPackages getChangedPackages(int sequenceNumber, int userId) {
-        final int callingUid = Binder.getCallingUid();
-        if (getInstantAppPackageName(callingUid) != null) {
+        if (getInstantAppPackageName(Binder.getCallingUid()) != null) {
             return null;
         }
-        if (!mUserManager.exists(userId)) {
-            return null;
-        }
-        mPermissionManager.enforceCrossUserPermission(
-                callingUid, userId, false, false, "getChangedPackages");
         synchronized (mLock) {
             if (sequenceNumber >= mChangedPackagesSequenceNumber) {
                 return null;
@@ -8848,10 +8841,8 @@ public class PackageManagerService extends IPackageManager.Stub
 
     private ProviderInfo resolveContentProviderInternal(String name, int flags, int userId) {
         if (!mUserManager.exists(userId)) return null;
-        final int callingUid = Binder.getCallingUid();
-        mPermissionManager.enforceCrossUserPermission(
-                callingUid, userId, false, false, "resolveContentProvider");
         flags = updateFlagsForComponent(flags, userId);
+        final int callingUid = Binder.getCallingUid();
         final ProviderInfo providerInfo = mComponentResolver.queryProvider(name, flags, userId);
         if (providerInfo == null) {
             return null;
@@ -9102,7 +9093,7 @@ public class PackageManagerService extends IPackageManager.Stub
         try {
             Trace.traceBegin(TRACE_TAG_PACKAGE_MANAGER, "collectCertificates");
             parsedPackage.setSigningDetails(
-                    ParsingPackageUtils.collectCertificates(parsedPackage, skipVerify));
+                    ParsingPackageUtils.getSigningDetails(parsedPackage, skipVerify));
         } catch (PackageParserException e) {
             throw PackageManagerException.from(e);
         } finally {
@@ -12758,13 +12749,14 @@ public class PackageManagerService extends IPackageManager.Stub
     }
 
     private void sendPackageAddedForUser(String packageName, PackageSetting pkgSetting,
-            int userId) {
+            int userId, int dataLoaderType) {
         final boolean isSystem = isSystemApp(pkgSetting) || isUpdatedSystemApp(pkgSetting);
         final boolean isInstantApp = pkgSetting.getInstantApp(userId);
         final int[] userIds = isInstantApp ? EMPTY_INT_ARRAY : new int[] { userId };
         final int[] instantUserIds = isInstantApp ? new int[] { userId } : EMPTY_INT_ARRAY;
         sendPackageAddedForNewUsers(packageName, isSystem /*sendBootCompleted*/,
-                false /*startReceiver*/, pkgSetting.appId, userIds, instantUserIds);
+                false /*startReceiver*/, pkgSetting.appId, userIds, instantUserIds,
+                dataLoaderType);
 
         // Send a session commit broadcast
         final PackageInstaller.SessionInfo info = new PackageInstaller.SessionInfo();
@@ -12775,7 +12767,8 @@ public class PackageManagerService extends IPackageManager.Stub
 
     @Override
     public void sendPackageAddedForNewUsers(String packageName, boolean sendBootCompleted,
-            boolean includeStopped, @AppIdInt int appId, int[] userIds, int[] instantUserIds) {
+            boolean includeStopped, @AppIdInt int appId, int[] userIds, int[] instantUserIds,
+            int dataLoaderType) {
         if (ArrayUtils.isEmpty(userIds) && ArrayUtils.isEmpty(instantUserIds)) {
             return;
         }
@@ -12784,6 +12777,7 @@ public class PackageManagerService extends IPackageManager.Stub
         final int uid = UserHandle.getUid(
                 (ArrayUtils.isEmpty(userIds) ? instantUserIds[0] : userIds[0]), appId);
         extras.putInt(Intent.EXTRA_UID, uid);
+        extras.putInt(PackageInstaller.EXTRA_DATA_LOADER_TYPE, dataLoaderType);
 
         sendPackageBroadcast(Intent.ACTION_PACKAGE_ADDED,
                 packageName, extras, 0, null, null, userIds, instantUserIds,
@@ -12901,7 +12895,7 @@ public class PackageManagerService extends IPackageManager.Stub
                 }
             }
             if (sendAdded) {
-                sendPackageAddedForUser(packageName, pkgSetting, userId);
+                sendPackageAddedForUser(packageName, pkgSetting, userId, DataLoaderType.NONE);
                 return true;
             }
             if (sendRemoved) {
@@ -13134,7 +13128,7 @@ public class PackageManagerService extends IPackageManager.Stub
                         prepareAppDataAfterInstallLIF(pkgSetting.pkg);
                     }
                 }
-                sendPackageAddedForUser(packageName, pkgSetting, userId);
+                sendPackageAddedForUser(packageName, pkgSetting, userId, DataLoaderType.NONE);
                 synchronized (mLock) {
                     updateSequenceNumberLP(pkgSetting, new int[]{ userId });
                 }
@@ -15314,12 +15308,21 @@ public class PackageManagerService extends IPackageManager.Stub
                     && mIntegrityVerificationCompleted && mEnableRollbackCompleted) {
                 if ((installFlags & PackageManager.INSTALL_DRY_RUN) != 0) {
                     String packageName = "";
-                    try {
-                        PackageLite packageInfo =
-                                new PackageParser().parsePackageLite(origin.file, 0);
-                        packageName = packageInfo.packageName;
-                    } catch (PackageParserException e) {
-                        Slog.e(TAG, "Can't parse package at " + origin.file.getAbsolutePath(), e);
+                    ParseResult<PackageLite> result = ApkLiteParseUtils.parsePackageLite(
+                            new ParseTypeImpl(
+                                    (changeId, packageName1, targetSdkVersion) -> {
+                                        ApplicationInfo appInfo = new ApplicationInfo();
+                                        appInfo.packageName = packageName1;
+                                        appInfo.targetSdkVersion = targetSdkVersion;
+                                        return mPackageParserCallback.isChangeEnabled(changeId,
+                                                appInfo);
+                                    }).reset(),
+                            origin.file, 0);
+                    if (result.isError()) {
+                        Slog.e(TAG, "Can't parse package at " + origin.file.getAbsolutePath(),
+                                result.getException());
+                    } else {
+                        packageName = result.getResult().packageName;
                     }
                     try {
                         observer.onPackageInstalled(packageName, mRet, "Dry run", new Bundle());
@@ -17130,7 +17133,7 @@ public class PackageManagerService extends IPackageManager.Stub
                 parsedPackage.setSigningDetails(args.signingDetails);
             } else {
                 parsedPackage.setSigningDetails(
-                        ParsingPackageUtils.collectCertificates(parsedPackage, false /* skipVerify */));
+                        ParsingPackageUtils.getSigningDetails(parsedPackage, false /* skipVerify */));
             }
         } catch (PackageParserException e) {
             throw new PrepareFailure("Failed collect during installPackageLI", e);
@@ -18487,7 +18490,8 @@ public class PackageManagerService extends IPackageManager.Stub
                 PackageInstalledInfo installedInfo = appearedChildPackages.valueAt(i);
                 packageSender.sendPackageAddedForNewUsers(installedInfo.name,
                     true /*sendBootCompleted*/, false /*startReceiver*/,
-                    UserHandle.getAppId(installedInfo.uid), installedInfo.newUsers, null);
+                        UserHandle.getAppId(installedInfo.uid), installedInfo.newUsers, null,
+                        DataLoaderType.NONE);
             }
         }
 
@@ -25475,7 +25479,8 @@ interface PackageSender {
         final IIntentReceiver finishedReceiver, final int[] userIds, int[] instantUserIds,
         @Nullable SparseArray<int[]> broadcastWhitelist);
     void sendPackageAddedForNewUsers(String packageName, boolean sendBootCompleted,
-        boolean includeStopped, int appId, int[] userIds, int[] instantUserIds);
+            boolean includeStopped, int appId, int[] userIds, int[] instantUserIds,
+            int dataLoaderType);
     void notifyPackageAdded(String packageName, int uid);
     void notifyPackageChanged(String packageName, int uid);
     void notifyPackageRemoved(String packageName, int uid);

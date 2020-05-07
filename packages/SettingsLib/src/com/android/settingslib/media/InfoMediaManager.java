@@ -108,10 +108,8 @@ public class InfoMediaManager extends MediaManager {
         final List<RoutingSessionInfo> infos = mRouterManager.getActiveSessions();
         if (infos.size() > 0) {
             final RoutingSessionInfo info = infos.get(0);
-            final MediaRouter2Manager.RoutingController controller =
-                    mRouterManager.getControllerForSession(info);
+            mRouterManager.transfer(info, device.mRouteInfo);
 
-            controller.transferToRoute(device.mRouteInfo);
             isConnected = true;
         }
         return isConnected;
@@ -131,7 +129,7 @@ public class InfoMediaManager extends MediaManager {
 
         final RoutingSessionInfo info = getRoutingSessionInfo();
         if (info != null && info.getSelectableRoutes().contains(device.mRouteInfo.getId())) {
-            mRouterManager.getControllerForSession(info).selectRoute(device.mRouteInfo);
+            mRouterManager.selectRoute(info, device.mRouteInfo);
             return true;
         }
 
@@ -162,7 +160,7 @@ public class InfoMediaManager extends MediaManager {
 
         final RoutingSessionInfo info = getRoutingSessionInfo();
         if (info != null && info.getSelectedRoutes().contains(device.mRouteInfo.getId())) {
-            mRouterManager.getControllerForSession(info).deselectRoute(device.mRouteInfo);
+            mRouterManager.deselectRoute(info, device.mRouteInfo);
             return true;
         }
 
@@ -207,8 +205,7 @@ public class InfoMediaManager extends MediaManager {
 
         final RoutingSessionInfo info = getRoutingSessionInfo();
         if (info != null) {
-            for (MediaRoute2Info route : mRouterManager.getControllerForSession(info)
-                    .getSelectableRoutes()) {
+            for (MediaRoute2Info route : mRouterManager.getSelectableRoutes(info)) {
                 deviceList.add(new InfoMediaDevice(mContext, mRouterManager,
                         route, mPackageName));
             }
@@ -235,8 +232,7 @@ public class InfoMediaManager extends MediaManager {
 
         final RoutingSessionInfo info = getRoutingSessionInfo();
         if (info != null) {
-            for (MediaRoute2Info route : mRouterManager.getControllerForSession(info)
-                    .getSelectedRoutes()) {
+            for (MediaRoute2Info route : mRouterManager.getSelectedRoutes(info)) {
                 deviceList.add(new InfoMediaDevice(mContext, mRouterManager,
                         route, mPackageName));
             }
@@ -247,6 +243,15 @@ public class InfoMediaManager extends MediaManager {
                 + mPackageName);
 
         return deviceList;
+    }
+
+    void adjustSessionVolume(RoutingSessionInfo info, int volume) {
+        if (info == null) {
+            Log.w(TAG, "Unable to adjust session volume. RoutingSessionInfo is empty");
+            return;
+        }
+
+        mRouterManager.setSessionVolume(info, volume);
     }
 
     /**
@@ -352,6 +357,10 @@ public class InfoMediaManager extends MediaManager {
         }
     }
 
+    List<RoutingSessionInfo> getActiveMediaSession() {
+        return mRouterManager.getActiveSessions();
+    }
+
     private void buildAvailableRoutes() {
         for (MediaRoute2Info route : mRouterManager.getAvailableRoutes(mPackageName)) {
             if (DEBUG) {
@@ -421,7 +430,7 @@ public class InfoMediaManager extends MediaManager {
         }
 
         @Override
-        public void onControlCategoriesChanged(String packageName, List<String> controlCategories) {
+        public void onPreferredFeaturesChanged(String packageName, List<String> preferredFeatures) {
             if (TextUtils.equals(mPackageName, packageName)) {
                 refreshDevices();
             }

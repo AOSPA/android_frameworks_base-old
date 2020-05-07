@@ -1451,7 +1451,7 @@ public abstract class ContentResolver implements ContentInterface {
      * on these schemes.
      *
      * @param uri The desired URI.
-     * @return InputStream
+     * @return InputStream or {@code null} if the provider recently crashed.
      * @throws FileNotFoundException if the provided URI could not be opened.
      * @see #openAssetFileDescriptor(Uri, String)
      */
@@ -1486,6 +1486,9 @@ public abstract class ContentResolver implements ContentInterface {
     /**
      * Synonym for {@link #openOutputStream(Uri, String)
      * openOutputStream(uri, "w")}.
+     *
+     * @param uri The desired URI.
+     * @return an OutputStream or {@code null} if the provider recently crashed.
      * @throws FileNotFoundException if the provided URI could not be opened.
      */
     public final @Nullable OutputStream openOutputStream(@NonNull Uri uri)
@@ -1508,7 +1511,7 @@ public abstract class ContentResolver implements ContentInterface {
      *
      * @param uri The desired URI.
      * @param mode May be "w", "wa", "rw", or "rwt".
-     * @return OutputStream
+     * @return an OutputStream or {@code null} if the provider recently crashed.
      * @throws FileNotFoundException if the provided URI could not be opened.
      * @see #openAssetFileDescriptor(Uri, String)
      */
@@ -1565,8 +1568,9 @@ public abstract class ContentResolver implements ContentInterface {
      * @param uri The desired URI to open.
      * @param mode The file mode to use, as per {@link ContentProvider#openFile
      * ContentProvider.openFile}.
-     * @return Returns a new ParcelFileDescriptor pointing to the file.  You
-     * own this descriptor and are responsible for closing it when done.
+     * @return Returns a new ParcelFileDescriptor pointing to the file or {@code null} if the
+     * provider recently crashed. You own this descriptor and are responsible for closing it
+     * when done.
      * @throws FileNotFoundException Throws FileNotFoundException if no
      * file exists under the URI or the mode is invalid.
      * @see #openAssetFileDescriptor(Uri, String)
@@ -1610,8 +1614,9 @@ public abstract class ContentResolver implements ContentInterface {
      * @param cancellationSignal A signal to cancel the operation in progress,
      *         or null if none. If the operation is canceled, then
      *         {@link OperationCanceledException} will be thrown.
-     * @return Returns a new ParcelFileDescriptor pointing to the file.  You
-     * own this descriptor and are responsible for closing it when done.
+     * @return Returns a new ParcelFileDescriptor pointing to the file or {@code null} if the
+     * provider recently crashed. You own this descriptor and are responsible for closing it
+     * when done.
      * @throws FileNotFoundException Throws FileNotFoundException if no
      * file exists under the URI or the mode is invalid.
      * @see #openAssetFileDescriptor(Uri, String)
@@ -1700,8 +1705,9 @@ public abstract class ContentResolver implements ContentInterface {
      * @param uri The desired URI to open.
      * @param mode The file mode to use, as per {@link ContentProvider#openAssetFile
      * ContentProvider.openAssetFile}.
-     * @return Returns a new ParcelFileDescriptor pointing to the file.  You
-     * own this descriptor and are responsible for closing it when done.
+     * @return Returns a new ParcelFileDescriptor pointing to the file or {@code null} if the
+     * provider recently crashed. You own this descriptor and are responsible for closing it
+     * when done.
      * @throws FileNotFoundException Throws FileNotFoundException of no
      * file exists under the URI or the mode is invalid.
      */
@@ -1756,8 +1762,9 @@ public abstract class ContentResolver implements ContentInterface {
      * @param cancellationSignal A signal to cancel the operation in progress, or null if
      *            none. If the operation is canceled, then
      *            {@link OperationCanceledException} will be thrown.
-     * @return Returns a new ParcelFileDescriptor pointing to the file.  You
-     * own this descriptor and are responsible for closing it when done.
+     * @return Returns a new ParcelFileDescriptor pointing to the file or {@code null} if the
+     * provider recently crashed. You own this descriptor and are responsible for closing it
+     * when done.
      * @throws FileNotFoundException Throws FileNotFoundException of no
      * file exists under the URI or the mode is invalid.
      */
@@ -1904,9 +1911,9 @@ public abstract class ContentResolver implements ContentInterface {
      * it is returning.
      * @param opts Additional provider-dependent options.
      * @return Returns a new ParcelFileDescriptor from which you can read the
-     * data stream from the provider.  Note that this may be a pipe, meaning
-     * you can't seek in it.  The only seek you should do is if the
-     * AssetFileDescriptor contains an offset, to move to that offset before
+     * data stream from the provider or {@code null} if the provider recently crashed.
+     * Note that this may be a pipe, meaning you can't seek in it.  The only seek you
+     * should do is if the AssetFileDescriptor contains an offset, to move to that offset before
      * reading.  You own this descriptor and are responsible for closing it when done.
      * @throws FileNotFoundException Throws FileNotFoundException of no
      * data of the desired type exists under the URI.
@@ -1940,9 +1947,9 @@ public abstract class ContentResolver implements ContentInterface {
      *         or null if none. If the operation is canceled, then
      *         {@link OperationCanceledException} will be thrown.
      * @return Returns a new ParcelFileDescriptor from which you can read the
-     * data stream from the provider.  Note that this may be a pipe, meaning
-     * you can't seek in it.  The only seek you should do is if the
-     * AssetFileDescriptor contains an offset, to move to that offset before
+     * data stream from the provider or {@code null} if the provider recently crashed.
+     * Note that this may be a pipe, meaning you can't seek in it.  The only seek you
+     * should do is if the AssetFileDescriptor contains an offset, to move to that offset before
      * reading.  You own this descriptor and are responsible for closing it when done.
      * @throws FileNotFoundException Throws FileNotFoundException of no
      * data of the desired type exists under the URI.

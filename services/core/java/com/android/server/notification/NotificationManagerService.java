@@ -943,7 +943,8 @@ public class NotificationManagerService extends SystemService {
                         .addTaggedData(MetricsEvent.NOTIFICATION_LOCATION,
                                 nv.location.toMetricsEventEnum()));
                 mNotificationRecordLogger.log(
-                        NotificationRecordLogger.NotificationEvent.NOTIFICATION_ACTION_CLICKED, r);
+                        NotificationRecordLogger.NotificationEvent.fromAction(actionIndex,
+                                generatedByAssistant, action.isContextual()), r);
                 EventLogTags.writeNotificationActionClicked(key, actionIndex,
                         r.getLifespanMs(now), r.getFreshnessMs(now), r.getExposureMs(now),
                         nv.rank, nv.count);
@@ -8611,15 +8612,19 @@ public class NotificationManagerService extends SystemService {
                     com.android.internal.R.string.config_defaultAssistantAccessComponent)
                     .split(ManagedServices.ENABLED_SERVICES_SEPARATOR)));
             for (int i = 0; i < assistants.size(); i++) {
-                String cnString = assistants.valueAt(i);
-                if (TextUtils.isEmpty(cnString)) {
+                ComponentName assistantCn = ComponentName
+                        .unflattenFromString(assistants.valueAt(i));
+                String packageName = assistants.valueAt(i);
+                if (assistantCn != null) {
+                    packageName = assistantCn.getPackageName();
+                }
+                if (TextUtils.isEmpty(packageName)) {
                     continue;
                 }
-                ArraySet<ComponentName> approved = queryPackageForServices(cnString,
+                ArraySet<ComponentName> approved = queryPackageForServices(packageName,
                         MATCH_DIRECT_BOOT_AWARE | MATCH_DIRECT_BOOT_UNAWARE, USER_SYSTEM);
-                for (int k = 0; k < approved.size(); k++) {
-                    ComponentName cn = approved.valueAt(k);
-                    addDefaultComponentOrPackage(cn.flattenToString());
+                if (approved.contains(assistantCn)) {
+                    addDefaultComponentOrPackage(assistantCn.flattenToString());
                 }
             }
         }

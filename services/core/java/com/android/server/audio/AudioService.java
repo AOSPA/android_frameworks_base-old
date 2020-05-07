@@ -1220,6 +1220,8 @@ public class AudioService extends IAudioService.Stub
      */
     @NonNull
     public List<AudioProductStrategy> getAudioProductStrategies() {
+        // verify permissions
+        enforceModifyAudioRoutingPermission();
         return AudioProductStrategy.getAudioProductStrategies();
     }
 
@@ -1229,6 +1231,8 @@ public class AudioService extends IAudioService.Stub
      */
     @NonNull
     public List<AudioVolumeGroup> getAudioVolumeGroups() {
+        // verify permissions
+        enforceModifyAudioRoutingPermission();
         return AudioVolumeGroup.getAudioVolumeGroups();
     }
 
