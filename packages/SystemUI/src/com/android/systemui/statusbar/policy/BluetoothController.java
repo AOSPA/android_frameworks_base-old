@@ -31,8 +31,6 @@ public interface BluetoothController extends CallbackController<Callback>, Dumpa
 
     boolean isBluetoothConnected();
     boolean isBluetoothConnecting();
-    boolean isBluetoothAudioProfileOnly();
-    boolean isBluetoothAudioActive();
     String getConnectedDeviceName();
     void setBluetoothEnabled(boolean enabled);
     Collection<CachedBluetoothDevice> getDevices();
