@@ -241,7 +241,7 @@ public class KeyguardSimPukView extends KeyguardPinBasedInputView {
 
     private void handleSubInfoChangeIfNeeded() {
         KeyguardUpdateMonitor monitor = Dependency.get(KeyguardUpdateMonitor.class);
-        int subId = monitor.getNextSubIdForState(TelephonyManager.SIM_STATE_PUK_REQUIRED);
+        int subId = monitor.getUnlockedSubIdForState(TelephonyManager.SIM_STATE_PUK_REQUIRED);
         if (subId != mSubId && SubscriptionManager.isValidSubscriptionId(subId)) {
             mSubId = subId;
             mShowDefaultMessage = true;
