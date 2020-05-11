@@ -156,6 +156,7 @@ public class FaceDialogView extends BiometricDialogView {
             DialogViewCallback callback) {
         super(context, callback);
         mIconController = new IconController();
+        mBiometricIcon.setVisibility(View.VISIBLE);
     }
 
     private void updateSize(int newSize) {
