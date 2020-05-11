@@ -104,7 +104,6 @@ import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION;
 import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION_STARTING;
 import static android.view.WindowManager.LayoutParams.TYPE_BASE_APPLICATION;
 import static android.view.WindowManager.TRANSIT_ACTIVITY_CLOSE;
-import static android.view.WindowManager.TRANSIT_DOCK_TASK_FROM_RECENTS;
 import static android.view.WindowManager.TRANSIT_TASK_CLOSE;
 import static android.view.WindowManager.TRANSIT_TASK_OPEN_BEHIND;
 import static android.view.WindowManager.TRANSIT_UNSET;
@@ -1589,13 +1588,9 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         hasBeenLaunched = false;
         mStackSupervisor = supervisor;
 
-        // b/35954083: Limit task affinity to uid to avoid various issues associated with sharing
-        // affinity across uids.
-        final String uid = Integer.toString(info.applicationInfo.uid);
-        if (info.taskAffinity != null && !info.taskAffinity.startsWith(uid)) {
-            info.taskAffinity = uid + ":" + info.taskAffinity;
-        }
+        info.taskAffinity = getTaskAffinityWithUid(info.taskAffinity, info.applicationInfo.uid);
         taskAffinity = info.taskAffinity;
+        final String uid = Integer.toString(info.applicationInfo.uid);
         if (info.windowLayout != null && info.windowLayout.windowLayoutAffinity != null
                 && !info.windowLayout.windowLayoutAffinity.startsWith(uid)) {
             info.windowLayout.windowLayoutAffinity =
@@ -1654,6 +1649,22 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
 
         if (mPerf == null)
             mPerf = new BoostFramework();
+    }
+
+    /**
+     * Generate the task affinity with uid. For b/35954083, Limit task affinity to uid to avoid
+     * issues associated with sharing affinity across uids.
+     *
+     * @param affinity The affinity of the activity.
+     * @param uid The user-ID that has been assigned to this application.
+     * @return The task affinity with uid.
+     */
+    static String getTaskAffinityWithUid(String affinity, int uid) {
+        final String uidStr = Integer.toString(uid);
+        if (affinity != null && !affinity.startsWith(uidStr)) {
+            affinity = uidStr + ":" + affinity;
+        }
+        return affinity;
     }
 
     static int getLockTaskLaunchMode(ActivityInfo aInfo, @Nullable ActivityOptions options) {
@@ -1889,13 +1900,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
     private int getStartingWindowType(boolean newTask, boolean taskSwitch, boolean processRunning,
             boolean allowTaskSnapshot, boolean activityCreated, boolean fromRecents,
             ActivityManager.TaskSnapshot snapshot) {
-        if (getDisplayContent().mAppTransition.getAppTransition()
-                == TRANSIT_DOCK_TASK_FROM_RECENTS) {
-            // TODO(b/34099271): Remove this statement to add back the starting window and figure
-            // out why it causes flickering, the starting window appears over the thumbnail while
-            // the docked from recents transition occurs
-            return STARTING_WINDOW_TYPE_NONE;
-        } else if (newTask || !processRunning || (taskSwitch && !activityCreated)) {
+        if (newTask || !processRunning || (taskSwitch && !activityCreated)) {
             return STARTING_WINDOW_TYPE_SPLASH_SCREEN;
         } else if (taskSwitch && allowTaskSnapshot) {
             if (snapshotOrientationSameAsTask(snapshot) || (snapshot != null && fromRecents)) {
