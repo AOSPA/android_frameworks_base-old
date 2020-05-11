@@ -13104,7 +13104,12 @@ public class TelephonyManager {
                 service.userActivity();
             }
         } catch (RemoteException e) {
-            throw e.rethrowFromSystemServer();
+            // This is a temporary change awaiting a proper rework from Google (b/156203930).
+            // Just log the exception instead of rethrowing as a DeadSystemException, which causes
+            // framework reboot. Keeping the original code around since we do not know the actual
+            // motive of putting this here in the first place.
+            Log.e(TAG, "notifyUserActivity RemoteException", e);
+            // throw e.rethrowFromSystemServer();
         }
     }
 
