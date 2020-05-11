@@ -246,12 +246,6 @@ public class ActivityStack extends Task {
      */
     boolean mInResumeTopActivity = false;
 
-    private boolean mUpdateBoundsDeferred;
-    private boolean mUpdateBoundsDeferredCalled;
-    private boolean mUpdateDisplayedBoundsDeferredCalled;
-    private final Rect mDeferredBounds = new Rect();
-    private final Rect mDeferredDisplayedBounds = new Rect();
-
     int mCurrentUser;
 
     /** For comparison with DisplayContent bounds. */
@@ -854,58 +848,6 @@ public class ActivityStack extends Task {
         return getDisplayContent();
     }
 
-    /**
-     * Defers updating the bounds of the stack. If the stack was resized/repositioned while
-     * deferring, the bounds will update in {@link #continueUpdateBounds()}.
-     */
-    void deferUpdateBounds() {
-        if (!mUpdateBoundsDeferred) {
-            mUpdateBoundsDeferred = true;
-            mUpdateBoundsDeferredCalled = false;
-        }
-    }
-
-    /**
-     * Continues updating bounds after updates have been deferred. If there was a resize attempt
-     * between {@link #deferUpdateBounds()} and {@link #continueUpdateBounds()}, the stack will
-     * be resized to that bounds.
-     */
-    void continueUpdateBounds() {
-        if (mUpdateBoundsDeferred) {
-            mUpdateBoundsDeferred = false;
-            if (mUpdateBoundsDeferredCalled) {
-                setTaskBounds(mDeferredBounds);
-                setBounds(mDeferredBounds);
-            }
-        }
-    }
-
-    private boolean updateBoundsAllowed(Rect bounds) {
-        if (!mUpdateBoundsDeferred) {
-            return true;
-        }
-        if (bounds != null) {
-            mDeferredBounds.set(bounds);
-        } else {
-            mDeferredBounds.setEmpty();
-        }
-        mUpdateBoundsDeferredCalled = true;
-        return false;
-    }
-
-    private boolean updateDisplayedBoundsAllowed(Rect bounds) {
-        if (!mUpdateBoundsDeferred) {
-            return true;
-        }
-        if (bounds != null) {
-            mDeferredDisplayedBounds.set(bounds);
-        } else {
-            mDeferredDisplayedBounds.setEmpty();
-        }
-        mUpdateDisplayedBoundsDeferredCalled = true;
-        return false;
-    }
-
     /** @return true if the stack can only contain one task */
     boolean isSingleTaskInstance() {
         final DisplayContent display = getDisplay();
@@ -1351,6 +1293,8 @@ public class ActivityStack extends Task {
             prev.cpuTimeAtResume = 0; // reset it
         }
 
+        mRootWindowContainer.ensureActivitiesVisible(resuming, 0, !PRESERVE_WINDOWS);
+
         // Notify when the task stack has changed, but only if visibilities changed (not just
         // focus). Also if there is an active pinned stack - we always want to notify it about
         // task stack changes, because its positioning may depend on it.
@@ -1359,8 +1303,6 @@ public class ActivityStack extends Task {
             mAtmService.getTaskChangeNotificationController().notifyTaskStackChanged();
             mStackSupervisor.mAppVisibilitiesChangedSinceLastPause = false;
         }
-
-        mRootWindowContainer.ensureActivitiesVisible(resuming, 0, !PRESERVE_WINDOWS);
     }
 
     boolean isTopStackInDisplayArea() {
@@ -2737,10 +2679,6 @@ public class ActivityStack extends Task {
     // TODO: Can only be called from special methods in ActivityStackSupervisor.
     // Need to consolidate those calls points into this resize method so anyone can call directly.
     void resize(Rect displayedBounds, boolean preserveWindows, boolean deferResume) {
-        if (!updateBoundsAllowed(displayedBounds)) {
-            return;
-        }
-
         Trace.traceBegin(TRACE_TAG_WINDOW_MANAGER, "stack.resize_" + getRootTaskId());
         mAtmService.deferWindowLayout();
         try {
@@ -2780,10 +2718,6 @@ public class ActivityStack extends Task {
      * basically resizes both stack and task bounds to the same bounds.
      */
    private void setTaskBounds(Rect bounds) {
-        if (!updateBoundsAllowed(bounds)) {
-            return;
-        }
-
         final PooledConsumer c = PooledLambda.obtainConsumer(ActivityStack::setTaskBounds,
                 PooledLambda.__(Task.class), bounds);
         forAllLeafTasks(c, true /* traverseTopToBottom */);
