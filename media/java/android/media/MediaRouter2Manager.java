@@ -170,8 +170,7 @@ public final class MediaRouter2Manager {
     public MediaController getMediaControllerForRoutingSession(
             @NonNull RoutingSessionInfo sessionInfo) {
         for (MediaController controller : mMediaSessionManager.getActiveSessions(null)) {
-            String volumeControlId = controller.getPlaybackInfo().getVolumeControlId();
-            if (TextUtils.equals(sessionInfo.getId(), volumeControlId)) {
+            if (areSessionsMatched(controller, sessionInfo)) {
                 return controller;
             }
         }
@@ -206,6 +205,37 @@ public final class MediaRouter2Manager {
     }
 
     /**
+     * Gets available routes for the given routing session.
+     * The returned routes can be passed to
+     * {@link #transfer(RoutingSessionInfo, MediaRoute2Info)} for transferring the routing session.
+     *
+     * @param sessionInfo the routing session that would be transferred
+     */
+    @NonNull
+    public List<MediaRoute2Info> getAvailableRoutesForRoutingSession(
+            @NonNull RoutingSessionInfo sessionInfo) {
+        Objects.requireNonNull(sessionInfo, "sessionInfo must not be null");
+
+        List<MediaRoute2Info> routes = new ArrayList<>();
+
+        String packageName = sessionInfo.getClientPackageName();
+        List<String> preferredFeatures = mPreferredFeaturesMap.get(packageName);
+        if (preferredFeatures == null) {
+            preferredFeatures = Collections.emptyList();
+        }
+        synchronized (mRoutesLock) {
+            for (MediaRoute2Info route : mRoutes.values()) {
+                if (route.isSystemRoute() || route.hasAnyFeatures(preferredFeatures)
+                        || sessionInfo.getSelectedRoutes().contains(route.getId())
+                        || sessionInfo.getTransferableRoutes().contains(route.getId())) {
+                    routes.add(route);
+                }
+            }
+        }
+        return routes;
+    }
+
+    /**
      * Gets the system routing session associated with no specific application.
      */
     @NonNull
@@ -216,6 +246,33 @@ public final class MediaRouter2Manager {
             }
         }
         throw new IllegalStateException("No system routing session");
+    }
+
+    /**
+     * Gets the routing session of a media session.
+     * If the session is using {#link PlaybackInfo#PLAYBACK_TYPE_LOCAL local playback},
+     * the system routing session is returned.
+     * If the session is using {#link PlaybackInfo#PLAYBACK_TYPE_REMOTE remote playback},
+     * it returns the corresponding routing session or {@code null} if it's unavailable.
+     */
+    @Nullable
+    public RoutingSessionInfo getRoutingSessionForMediaController(MediaController mediaController) {
+        MediaController.PlaybackInfo playbackInfo = mediaController.getPlaybackInfo();
+        if (playbackInfo == null) {
+            return null;
+        }
+        if (playbackInfo.getPlaybackType() == MediaController.PlaybackInfo.PLAYBACK_TYPE_LOCAL) {
+            return new RoutingSessionInfo.Builder(getSystemRoutingSession())
+                    .setClientPackageName(mediaController.getPackageName())
+                    .build();
+        }
+        for (RoutingSessionInfo sessionInfo : getActiveSessions()) {
+            if (!sessionInfo.isSystemSession()
+                    && areSessionsMatched(mediaController, sessionInfo)) {
+                return sessionInfo;
+            }
+        }
+        return null;
     }
 
     /**
@@ -578,8 +635,11 @@ public final class MediaRouter2Manager {
     public List<MediaRoute2Info> getSelectedRoutes(@NonNull RoutingSessionInfo sessionInfo) {
         Objects.requireNonNull(sessionInfo, "sessionInfo must not be null");
 
-        List<String> routeIds = sessionInfo.getSelectedRoutes();
-        return getRoutesWithIds(routeIds);
+        synchronized (sLock) {
+            return sessionInfo.getSelectedRoutes().stream().map(mRoutes::get)
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toList());
+        }
     }
 
     /**
@@ -589,8 +649,15 @@ public final class MediaRouter2Manager {
     public List<MediaRoute2Info> getSelectableRoutes(@NonNull RoutingSessionInfo sessionInfo) {
         Objects.requireNonNull(sessionInfo, "sessionInfo must not be null");
 
-        List<String> routeIds = sessionInfo.getSelectableRoutes();
-        return getRoutesWithIds(routeIds);
+        List<String> selectedRouteIds = sessionInfo.getSelectedRoutes();
+
+        synchronized (sLock) {
+            return sessionInfo.getSelectableRoutes().stream()
+                    .filter(routeId -> !selectedRouteIds.contains(routeId))
+                    .map(mRoutes::get)
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toList());
+        }
     }
 
     /**
@@ -600,8 +667,15 @@ public final class MediaRouter2Manager {
     public List<MediaRoute2Info> getDeselectableRoutes(@NonNull RoutingSessionInfo sessionInfo) {
         Objects.requireNonNull(sessionInfo, "sessionInfo must not be null");
 
-        List<String> routeIds = sessionInfo.getDeselectableRoutes();
-        return getRoutesWithIds(routeIds);
+        List<String> selectedRouteIds = sessionInfo.getSelectedRoutes();
+
+        synchronized (sLock) {
+            return sessionInfo.getDeselectableRoutes().stream()
+                    .filter(routeId -> selectedRouteIds.contains(routeId))
+                    .map(mRoutes::get)
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toList());
+        }
     }
 
     /**
@@ -762,12 +836,25 @@ public final class MediaRouter2Manager {
         }
     }
 
-    private List<MediaRoute2Info> getRoutesWithIds(List<String> routeIds) {
-        synchronized (sLock) {
-            return routeIds.stream().map(mRoutes::get)
-                    .filter(Objects::nonNull)
-                    .collect(Collectors.toList());
+    private boolean areSessionsMatched(MediaController mediaController,
+            RoutingSessionInfo sessionInfo) {
+        MediaController.PlaybackInfo playbackInfo = mediaController.getPlaybackInfo();
+        if (playbackInfo == null) {
+            return false;
         }
+
+        String volumeControlId = playbackInfo.getVolumeControlId();
+        if (volumeControlId == null) {
+            return false;
+        }
+
+        if (TextUtils.equals(volumeControlId, sessionInfo.getId())) {
+            return true;
+        }
+        // Workaround for provider not being able to know the unique session ID.
+        return TextUtils.equals(volumeControlId, sessionInfo.getOriginalId())
+                && TextUtils.equals(mediaController.getPackageName(),
+                sessionInfo.getOwnerPackageName());
     }
 
     /**
