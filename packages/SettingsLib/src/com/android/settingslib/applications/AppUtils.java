@@ -26,6 +26,7 @@ import android.hardware.usb.IUsbManager;
 import android.os.RemoteException;
 import android.os.SystemProperties;
 import android.os.UserHandle;
+import android.os.UserManager;
 import android.util.Log;
 
 import com.android.settingslib.R;
@@ -129,7 +130,7 @@ public class AppUtils {
      */
     public static boolean isHiddenSystemModule(Context context, String packageName) {
         return ApplicationsState.getInstance((Application) context.getApplicationContext())
-            .isHiddenModule(packageName);
+                .isHiddenModule(packageName);
     }
 
     /**
@@ -140,4 +141,28 @@ public class AppUtils {
                 .isSystemModule(packageName);
     }
 
+    /**
+     * Returns a boolean indicating whether a given package is a mainline module.
+     */
+    public static boolean isMainlineModule(Context context, String packageName) {
+        final PackageManager pm = context.getPackageManager();
+        try {
+            return pm.getModuleInfo(packageName, 0 /* flags */) != null;
+        } catch (PackageManager.NameNotFoundException e) {
+            return false;
+        }
+    }
+
+    /**
+     * Returns a content description of an app name which distinguishes a personal app from a
+     * work app for accessibility purpose.
+     * If the app is in a work profile, then add a "work" prefix to the app name.
+     */
+    public static String getAppContentDescription(Context context, String packageName,
+            int userId) {
+        final CharSequence appLabel = getApplicationLabel(context.getPackageManager(), packageName);
+        return UserManager.get(context).isManagedProfile(userId)
+                ? context.getString(R.string.accessibility_work_profile_app_description, appLabel)
+                : appLabel.toString();
+    }
 }

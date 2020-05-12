@@ -361,6 +361,8 @@
   <java-symbol type="bool" name="config_disableUsbPermissionDialogs"/>
   <java-symbol type="dimen" name="config_highResTaskSnapshotScale" />
   <java-symbol type="dimen" name="config_lowResTaskSnapshotScale" />
+  <java-symbol type="dimen" name="config_qsTileStrokeWidthInactive" />
+  <java-symbol type="dimen" name="config_qsTileStrokeWidthActive" />
   <java-symbol type="bool" name="config_use16BitTaskSnapshotPixelFormat" />
   <java-symbol type="bool" name="config_hasRecents" />
   <java-symbol type="string" name="config_recentsComponentName" />
@@ -1462,6 +1464,9 @@
   <java-symbol type="color" name="profile_badge_1" />
   <java-symbol type="color" name="profile_badge_2" />
   <java-symbol type="color" name="profile_badge_3" />
+  <java-symbol type="color" name="profile_badge_1_dark" />
+  <java-symbol type="color" name="profile_badge_2_dark" />
+  <java-symbol type="color" name="profile_badge_3_dark" />
   <java-symbol type="color" name="instant_app_badge" />
 
   <java-symbol type="layout" name="action_bar_home" />

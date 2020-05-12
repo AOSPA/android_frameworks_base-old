@@ -122,6 +122,7 @@ final class UiModeManagerService extends SystemService {
     private boolean mVrHeadset;
     private boolean mComputedNightMode;
     private int mCarModeEnableFlags;
+    private boolean mSetupWizardComplete;
 
     // flag set by resource, whether to enable Car dock launch when starting car mode.
     private boolean mEnableCarDockLaunch = true;
@@ -161,6 +162,12 @@ final class UiModeManagerService extends SystemService {
     public UiModeManagerService(Context context) {
         super(context);
         mConfiguration.setToDefaults();
+    }
+
+    @VisibleForTesting
+    protected UiModeManagerService(Context context, boolean setupWizardComplete) {
+        this(context);
+        mSetupWizardComplete = setupWizardComplete;
     }
 
     private static Intent buildHomeIntent(String category) {
@@ -276,6 +283,25 @@ final class UiModeManagerService extends SystemService {
         }
     };
 
+    private final ContentObserver mSetupWizardObserver = new ContentObserver(mHandler) {
+        @Override
+        public void onChange(boolean selfChange, Uri uri) {
+            synchronized (mLock) {
+                // setup wizard is done now so we can unblock
+                if (setupWizardCompleteForCurrentUser() && !selfChange) {
+                    mSetupWizardComplete = true;
+                    getContext().getContentResolver()
+                            .unregisterContentObserver(mSetupWizardObserver);
+                    // update night mode
+                    Context context = getContext();
+                    updateNightModeFromSettingsLocked(context, context.getResources(),
+                            UserHandle.getCallingUserId());
+                    updateLocked(0, 0);
+                }
+            }
+        }
+    };
+
     private final ContentObserver mDarkThemeObserver = new ContentObserver(mHandler) {
         @Override
         public void onChange(boolean selfChange, Uri uri) {
@@ -290,6 +316,13 @@ final class UiModeManagerService extends SystemService {
             mode = MODE_NIGHT_YES;
         }
         SystemProperties.set(SYSTEM_PROPERTY_DEVICE_THEME, Integer.toString(mode));
+    }
+
+    @Override
+    public void onSwitchUser(int userHandle) {
+        super.onSwitchUser(userHandle);
+        getContext().getContentResolver().unregisterContentObserver(mSetupWizardObserver);
+        verifySetupWizardCompleted();
     }
 
     @Override
@@ -330,8 +363,13 @@ final class UiModeManagerService extends SystemService {
     @Override
     public void onStart() {
         final Context context = getContext();
+        // If setup isn't complete for this user listen for completion so we can unblock
+        // being able to send a night mode configuration change event
+        verifySetupWizardCompleted();
 
         final Resources res = context.getResources();
+        mNightMode = res.getInteger(
+                com.android.internal.R.integer.config_defaultNightMode);
         mDefaultUiModeType = res.getInteger(
                 com.android.internal.R.integer.config_defaultUiModeType);
         mCarModeKeepsScreenOn = (res.getInteger(
@@ -404,6 +442,20 @@ final class UiModeManagerService extends SystemService {
         return mConfiguration;
     }
 
+    // Records whether setup wizard has happened or not and adds an observer for this user if not.
+    private void verifySetupWizardCompleted() {
+        final Context context = getContext();
+        final int userId = UserHandle.getCallingUserId();
+        if (!setupWizardCompleteForCurrentUser()) {
+            mSetupWizardComplete = false;
+            context.getContentResolver().registerContentObserver(
+                    Secure.getUriFor(
+                            Secure.USER_SETUP_COMPLETE), false, mSetupWizardObserver, userId);
+        } else {
+            mSetupWizardComplete = true;
+        }
+    }
+
     private boolean setupWizardCompleteForCurrentUser() {
         return Secure.getIntForUser(getContext().getContentResolver(),
                 Secure.USER_SETUP_COMPLETE, 0, UserHandle.getCallingUserId()) == 1;
@@ -429,25 +481,33 @@ final class UiModeManagerService extends SystemService {
      * @return True if the new value is different from the old value. False otherwise.
      */
     private boolean updateNightModeFromSettingsLocked(Context context, Resources res, int userId) {
-        final int defaultNightMode = res.getInteger(
-                com.android.internal.R.integer.config_defaultNightMode);
         int oldNightMode = mNightMode;
-        mNightMode = Secure.getIntForUser(context.getContentResolver(),
-                Secure.UI_NIGHT_MODE, defaultNightMode, userId);
-        mOverrideNightModeOn = Secure.getIntForUser(context.getContentResolver(),
-                Secure.UI_NIGHT_MODE_OVERRIDE_ON, 0, userId) != 0;
-        mOverrideNightModeOff = Secure.getIntForUser(context.getContentResolver(),
-                Secure.UI_NIGHT_MODE_OVERRIDE_OFF, 0, userId) != 0;
-        mCustomAutoNightModeStartMilliseconds = LocalTime.ofNanoOfDay(
-                Secure.getLongForUser(context.getContentResolver(),
-                        Secure.DARK_THEME_CUSTOM_START_TIME,
-                        DEFAULT_CUSTOM_NIGHT_START_TIME.toNanoOfDay() / 1000L, userId) * 1000);
-        mCustomAutoNightModeEndMilliseconds = LocalTime.ofNanoOfDay(
-                Secure.getLongForUser(context.getContentResolver(),
-                        Secure.DARK_THEME_CUSTOM_END_TIME,
-                        DEFAULT_CUSTOM_NIGHT_END_TIME.toNanoOfDay() / 1000L, userId) * 1000);
+        if (mSetupWizardComplete) {
+            mNightMode = Secure.getIntForUser(context.getContentResolver(),
+                    Secure.UI_NIGHT_MODE, mNightMode, userId);
+            mOverrideNightModeOn = Secure.getIntForUser(context.getContentResolver(),
+                    Secure.UI_NIGHT_MODE_OVERRIDE_ON, 0, userId) != 0;
+            mOverrideNightModeOff = Secure.getIntForUser(context.getContentResolver(),
+                    Secure.UI_NIGHT_MODE_OVERRIDE_OFF, 0, userId) != 0;
+            mCustomAutoNightModeStartMilliseconds = LocalTime.ofNanoOfDay(
+                    Secure.getLongForUser(context.getContentResolver(),
+                            Secure.DARK_THEME_CUSTOM_START_TIME,
+                            DEFAULT_CUSTOM_NIGHT_START_TIME.toNanoOfDay() / 1000L, userId) * 1000);
+            mCustomAutoNightModeEndMilliseconds = LocalTime.ofNanoOfDay(
+                    Secure.getLongForUser(context.getContentResolver(),
+                            Secure.DARK_THEME_CUSTOM_END_TIME,
+                            DEFAULT_CUSTOM_NIGHT_END_TIME.toNanoOfDay() / 1000L, userId) * 1000);
+        }
 
         return oldNightMode != mNightMode;
+    }
+
+    private static long toMilliSeconds(LocalTime t) {
+        return t.toNanoOfDay() / 1000;
+    }
+
+    private static LocalTime fromMilliseconds(long t) {
+        return LocalTime.ofNanoOfDay(t * 1000);
     }
 
     private void registerScreenOffEventLocked() {
@@ -1385,8 +1445,11 @@ final class UiModeManagerService extends SystemService {
             pw.println("UiModeManager service (uimode) commands:");
             pw.println("  help");
             pw.println("    Print this help text.");
-            pw.println("  night [yes|no|auto]");
+            pw.println("  night [yes|no|auto|custom]");
             pw.println("    Set or read night mode.");
+            pw.println("  time [start|end] <ISO time>");
+            pw.println("    Set custom start/end schedule time"
+                    + " (night mode must be set to custom to apply).");
         }
 
         @Override
@@ -1399,6 +1462,8 @@ final class UiModeManagerService extends SystemService {
                 switch (cmd) {
                     case "night":
                         return handleNightMode();
+                    case "time":
+                        return handleCustomTime();
                     default:
                         return handleDefaultCommands(cmd);
                 }
@@ -1407,6 +1472,34 @@ final class UiModeManagerService extends SystemService {
                 err.println("Remote exception: " + e);
             }
             return -1;
+        }
+
+        private int handleCustomTime() throws RemoteException {
+            final String modeStr = getNextArg();
+            if (modeStr == null) {
+                printCustomTime();
+                return 0;
+            }
+            switch (modeStr) {
+                case "start":
+                    final String start = getNextArg();
+                    mInterface.setCustomNightModeStart(toMilliSeconds(LocalTime.parse(start)));
+                    return 0;
+                case "end":
+                    final String end = getNextArg();
+                    mInterface.setCustomNightModeEnd(toMilliSeconds(LocalTime.parse(end)));
+                    return 0;
+                default:
+                    getErrPrintWriter().println("command must be in [start|end]");
+                    return -1;
+            }
+        }
+
+        private void printCustomTime() throws RemoteException {
+            getOutPrintWriter().println("start " + fromMilliseconds(
+                    mInterface.getCustomNightModeStart()).toString());
+            getOutPrintWriter().println("end " + fromMilliseconds(
+                    mInterface.getCustomNightModeEnd()).toString());
         }
 
         private int handleNightMode() throws RemoteException {
@@ -1424,7 +1517,8 @@ final class UiModeManagerService extends SystemService {
                 return 0;
             } else {
                 err.println("Error: mode must be '" + NIGHT_MODE_STR_YES + "', '"
-                        + NIGHT_MODE_STR_NO + "', or '" + NIGHT_MODE_STR_AUTO + "'");
+                        + NIGHT_MODE_STR_NO + "', or '" + NIGHT_MODE_STR_AUTO
+                        +  "', or '" + NIGHT_MODE_STR_CUSTOM + "'");
                 return -1;
             }
         }
