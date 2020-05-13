@@ -356,8 +356,9 @@
     <protected-broadcast android:name="com.android.server.wifi.action.NetworkSuggestion.USER_ALLOWED_APP" />
     <protected-broadcast android:name="com.android.server.wifi.action.NetworkSuggestion.USER_DISALLOWED_APP" />
     <protected-broadcast android:name="com.android.server.wifi.action.NetworkSuggestion.USER_DISMISSED" />
-    <protected-broadcast android:name="com.android.server.wifi.action.NetworkSuggestion.USER_ALLOWED_CARRIER" />
-    <protected-broadcast android:name="com.android.server.wifi.action.NetworkSuggestion.USER_DISALLOWED_CARRIER" />
+    <protected-broadcast android:name="com.android.server.wifi.action.CarrierNetwork.USER_ALLOWED_CARRIER" />
+    <protected-broadcast android:name="com.android.server.wifi.action.CarrierNetwork.USER_DISALLOWED_CARRIER" />
+    <protected-broadcast android:name="com.android.server.wifi.action.CarrierNetwork.USER_DISMISSED" />
     <protected-broadcast android:name="com.android.server.wifi.ConnectToNetworkNotification.USER_DISMISSED_NOTIFICATION" />
     <protected-broadcast android:name="com.android.server.wifi.ConnectToNetworkNotification.CONNECT_TO_NETWORK" />
     <protected-broadcast android:name="com.android.server.wifi.ConnectToNetworkNotification.PICK_WIFI_NETWORK" />
@@ -414,7 +415,6 @@
     <protected-broadcast android:name="android.net.wifi.p2p.action.WIFI_P2P_PERSISTENT_GROUPS_CHANGED" />
     <protected-broadcast android:name="com.qualcomm.qti.net.wifi.DPP_EVENT" />
     <protected-broadcast android:name="android.net.wifi.COUNTRY_CODE_CHANGED" />
-    <protected-broadcast android:name="com.qualcomm.qti.net.wifi.WIFI_DISCONNECT_IN_PROGRESS" />
     <protected-broadcast android:name="android.net.conn.TETHER_STATE_CHANGED" />
     <protected-broadcast android:name="android.net.conn.INET_CONDITION_ACTION" />
     <protected-broadcast android:name="android.net.conn.NETWORK_CONDITIONS_MEASURED" />
@@ -553,6 +553,7 @@
     <protected-broadcast android:name="com.android.settings.wifi.action.NETWORK_REQUEST" />
 
     <protected-broadcast android:name="NotificationManagerService.TIMEOUT" />
+    <protected-broadcast android:name="NotificationHistoryDatabase.CLEANUP" />
     <protected-broadcast android:name="ScheduleConditionProvider.EVALUATE" />
     <protected-broadcast android:name="EventConditionProvider.EVALUATE" />
     <protected-broadcast android:name="SnoozeHelper.EVALUATE" />
@@ -1131,9 +1132,9 @@
         android:description="@string/permgroupdesc_phone"
         android:priority="500" />
 
-    <!-- Allows read only access to phone state, including the phone number of the device,
-         current cellular network information, the status of any ongoing calls, and a list of any
-         {@link android.telecom.PhoneAccount}s registered on the device.
+    <!-- Allows read only access to phone state, including the current cellular network information,
+         the status of any ongoing calls, and a list of any {@link android.telecom.PhoneAccount}s
+         registered on the device.
          <p class="note"><strong>Note:</strong> If <em>both</em> your <a
          href="{@docRoot}guide/topics/manifest/uses-sdk-element.html#min">{@code
          minSdkVersion}</a> and <a
@@ -1142,12 +1143,13 @@
          grants your app this permission. If you don't need this permission, be sure your <a
          href="{@docRoot}guide/topics/manifest/uses-sdk-element.html#target">{@code
          targetSdkVersion}</a> is 4 or higher.
-         <p>Protection level: normal
+         <p>Protection level: dangerous
     -->
     <permission android:name="android.permission.READ_PHONE_STATE"
+        android:permissionGroup="android.permission-group.UNDEFINED"
         android:label="@string/permlab_readPhoneState"
         android:description="@string/permdesc_readPhoneState"
-        android:protectionLevel="normal" />
+        android:protectionLevel="dangerous" />
 
     <!-- Allows read access to the device's phone number(s). This is a subset of the capabilities
          granted by {@link #READ_PHONE_STATE} but is exposed to instant applications.
@@ -3236,6 +3238,11 @@
     <permission android:name="android.permission.MODIFY_ACCESSIBILITY_DATA"
                 android:protectionLevel="signature" />
 
+    <!-- @hide Allows an application to perform accessibility operations (e.g. send events) on
+         behalf of another package. -->
+    <permission android:name="android.permission.ACT_AS_PACKAGE_FOR_ACCESSIBILITY"
+                android:protectionLevel="signature" />
+
     <!-- @hide Allows an application to change the accessibility volume. -->
     <permission android:name="android.permission.CHANGE_ACCESSIBILITY_VOLUME"
                 android:protectionLevel="signature" />
@@ -4160,7 +4167,10 @@
          set of pages referenced over time.
          <p>Declaring the permission implies intention to use the API and the user of the
          device can grant permission through the Settings application.
-         <p>Protection level: signature|privileged|appop -->
+         <p>Protection level: signature|privileged|appop
+         <p>A data loader has to be the one which provides data to install an app.
+         <p>A data loader has to have both permission:LOADER_USAGE_STATS AND
+         appop:LOADER_USAGE_STATS allowed to be able to access the read logs. -->
     <permission android:name="android.permission.LOADER_USAGE_STATS"
         android:protectionLevel="signature|privileged|appop" />
     <uses-permission android:name="android.permission.LOADER_USAGE_STATS" />
@@ -5094,9 +5104,24 @@
                 <category android:name="android.intent.category.VOICE" />
             </intent-filter>
         </activity>
-        <activity android:name="com.android.internal.app.AccessibilityButtonChooserActivity"
+        <activity android:name="com.android.internal.accessibility.dialog.AccessibilityShortcutChooserActivity"
                   android:exported="false"
                   android:theme="@style/Theme.DeviceDefault.Dialog.Alert.DayNight"
+                  android:finishOnCloseSystemDialogs="true"
+                  android:excludeFromRecents="true"
+                  android:documentLaunchMode="never"
+                  android:relinquishTaskIdentity="true"
+                  android:configChanges="screenSize|smallestScreenSize|screenLayout|orientation|keyboard|keyboardHidden"
+                  android:process=":ui"
+                  android:visibleToInstantApps="true">
+            <intent-filter>
+                <action android:name="com.android.internal.intent.action.CHOOSE_ACCESSIBILITY_BUTTON" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+        <activity android:name="com.android.internal.accessibility.dialog.AccessibilityButtonChooserActivity"
+                  android:exported="false"
+                  android:theme="@style/Theme.DeviceDefault.Resolver"
                   android:finishOnCloseSystemDialogs="true"
                   android:excludeFromRecents="true"
                   android:documentLaunchMode="never"
@@ -5491,6 +5516,13 @@
                 <action android:name="android.intent.action.LOAD_DATA" />
             </intent-filter>
         </service>
+
+        <provider
+            android:name="com.android.server.textclassifier.IconsContentProvider"
+            android:authorities="com.android.textclassifier.icons"
+            android:enabled="true"
+            android:exported="true">
+        </provider>
 
     </application>
 

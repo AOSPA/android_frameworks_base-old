@@ -18,9 +18,12 @@ package com.android.systemui.qs.tiles;
 
 import android.content.Intent;
 import android.service.quicksettings.Tile;
+import android.text.TextUtils;
 import android.util.Log;
+import android.widget.Switch;
 
 import com.android.systemui.R;
+import com.android.systemui.plugins.ActivityStarter;
 import com.android.systemui.plugins.qs.QSTile;
 import com.android.systemui.qs.QSHost;
 import com.android.systemui.qs.tileimpl.QSTileImpl;
@@ -35,14 +38,17 @@ public class ScreenRecordTile extends QSTileImpl<QSTile.BooleanState>
         implements RecordingController.RecordingStateChangeCallback {
     private static final String TAG = "ScreenRecordTile";
     private RecordingController mController;
+    private ActivityStarter mActivityStarter;
     private long mMillisUntilFinished = 0;
     private Callback mCallback = new Callback();
 
     @Inject
-    public ScreenRecordTile(QSHost host, RecordingController controller) {
+    public ScreenRecordTile(QSHost host, RecordingController controller,
+            ActivityStarter activityStarter) {
         super(host);
         mController = controller;
         mController.observe(this, mCallback);
+        mActivityStarter = activityStarter;
     }
 
     @Override
@@ -72,6 +78,7 @@ public class ScreenRecordTile extends QSTileImpl<QSTile.BooleanState>
 
         state.value = isRecording || isStarting;
         state.state = (isRecording || isStarting) ? Tile.STATE_ACTIVE : Tile.STATE_INACTIVE;
+        state.label = mContext.getString(R.string.quick_settings_screen_record_label);
 
         if (isRecording) {
             state.icon = ResourceIcon.get(R.drawable.ic_qs_screenrecord);
@@ -87,6 +94,10 @@ public class ScreenRecordTile extends QSTileImpl<QSTile.BooleanState>
             state.icon = ResourceIcon.get(R.drawable.ic_qs_screenrecord);
             state.secondaryLabel = mContext.getString(R.string.quick_settings_screen_record_start);
         }
+        state.contentDescription = TextUtils.isEmpty(state.secondaryLabel)
+                ? state.label
+                : TextUtils.concat(state.label, ", ", state.secondaryLabel);
+        state.expandedAccessibilityClassName = Switch.class.getName();
     }
 
     @Override
@@ -108,7 +119,8 @@ public class ScreenRecordTile extends QSTileImpl<QSTile.BooleanState>
         Log.d(TAG, "Starting countdown");
         // Close QS, otherwise the permission dialog appears beneath it
         getHost().collapsePanels();
-        mController.launchRecordPrompt();
+        Intent intent = mController.getPromptIntent();
+        mActivityStarter.postStartActivityDismissingKeyguard(intent, 0);
     }
 
     private void cancelCountdown() {

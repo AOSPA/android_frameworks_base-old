@@ -154,6 +154,13 @@ public class ResolverListAdapter extends BaseAdapter {
     }
 
     /**
+     * Returns the app share score of the given {@code componentName}.
+     */
+    public float getScore(ComponentName componentName) {
+        return mResolverListController.getScore(componentName);
+    }
+
+    /**
      * Returns the list of top K component names which have highest
      * {@link #getScore(DisplayResolveInfo)}
      */
@@ -165,8 +172,9 @@ public class ResolverListAdapter extends BaseAdapter {
         mResolverListController.updateModel(componentName);
     }
 
-    public void updateChooserCounts(String packageName, int userId, String action) {
-        mResolverListController.updateChooserCounts(packageName, userId, action);
+    public void updateChooserCounts(String packageName, String action) {
+        mResolverListController.updateChooserCounts(
+                packageName, getUserHandle().getIdentifier(), action);
     }
 
     List<ResolvedComponentInfo> getUnfilteredResolveList() {
@@ -255,6 +263,7 @@ public class ResolverListAdapter extends BaseAdapter {
             }
         }
 
+        setPlaceholderCount(0);
         int n;
         if ((currentResolveList != null) && ((n = currentResolveList.size()) > 0)) {
             // We only care about fixing the unfilteredList if the current resolve list and
@@ -273,7 +282,7 @@ public class ResolverListAdapter extends BaseAdapter {
                 }
                 setPlaceholderCount(placeholderCount);
                 createSortingTask(doPostProcessing).execute(currentResolveList);
-                postListReadyRunnable(doPostProcessing);
+                postListReadyRunnable(doPostProcessing, /* rebuildCompleted */ false);
                 return false;
             } else {
                 processSortedList(currentResolveList, doPostProcessing);
@@ -361,7 +370,7 @@ public class ResolverListAdapter extends BaseAdapter {
         }
 
         mResolverListCommunicator.sendVoiceChoicesIfNeeded();
-        postListReadyRunnable(doPostProcessing);
+        postListReadyRunnable(doPostProcessing, /* rebuildCompleted */ true);
         mIsTabLoaded = true;
     }
 
@@ -371,14 +380,15 @@ public class ResolverListAdapter extends BaseAdapter {
      * handler thread to update after the current task is finished.
      * @param doPostProcessing Whether to update the UI and load additional direct share targets
      *                         after the list has been rebuilt
+     * @param rebuildCompleted Whether the list has been completely rebuilt
      */
-    void postListReadyRunnable(boolean doPostProcessing) {
+    void postListReadyRunnable(boolean doPostProcessing, boolean rebuildCompleted) {
         if (mPostListReadyRunnable == null) {
             mPostListReadyRunnable = new Runnable() {
                 @Override
                 public void run() {
                     mResolverListCommunicator.onPostListReady(ResolverListAdapter.this,
-                            doPostProcessing);
+                            doPostProcessing, rebuildCompleted);
                     mPostListReadyRunnable = null;
                 }
             };
@@ -640,7 +650,8 @@ public class ResolverListAdapter extends BaseAdapter {
 
         Intent getReplacementIntent(ActivityInfo activityInfo, Intent defIntent);
 
-        void onPostListReady(ResolverListAdapter listAdapter, boolean updateUi);
+        void onPostListReady(ResolverListAdapter listAdapter, boolean updateUi,
+                boolean rebuildCompleted);
 
         void sendVoiceChoicesIfNeeded();
 

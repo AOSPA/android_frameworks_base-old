@@ -55,13 +55,13 @@ import static android.content.pm.ActivityInfo.LAUNCH_SINGLE_TOP;
 import static android.content.pm.PackageManager.PERMISSION_GRANTED;
 import static android.os.Process.INVALID_UID;
 import static android.view.Display.DEFAULT_DISPLAY;
-import static android.view.Display.INVALID_DISPLAY;
 
 import static com.android.server.wm.ActivityStack.ActivityState.RESUMED;
 import static com.android.server.wm.ActivityStackSupervisor.DEFER_RESUME;
 import static com.android.server.wm.ActivityStackSupervisor.ON_TOP;
 import static com.android.server.wm.ActivityStackSupervisor.PRESERVE_WINDOWS;
 import static com.android.server.wm.ActivityStackSupervisor.TAG_TASKS;
+import static com.android.server.wm.ActivityTaskManagerDebugConfig.DEBUG_ACTIVITY_STARTS;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.DEBUG_CONFIGURATION;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.DEBUG_PERMISSIONS_REVIEW;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.DEBUG_RESULTS;
@@ -110,6 +110,7 @@ import android.service.voice.IVoiceInteractionSession;
 import android.text.TextUtils;
 import android.util.BoostFramework;
 import android.util.ArraySet;
+import android.util.DebugUtils;
 import android.util.Pools.SynchronizedPool;
 import android.util.Slog;
 
@@ -168,9 +169,8 @@ class ActivityStarter {
     private int mStartFlags;
     private ActivityRecord mSourceRecord;
 
-    // The display to launch the activity onto, barring any strong reason to do otherwise.
-    private int mPreferredDisplayId;
-    // The windowing mode to apply to the root task, if possible
+    // The task display area to launch the activity onto, barring any strong reason to do otherwise.
+    private TaskDisplayArea mPreferredTaskDisplayArea;
     private int mPreferredWindowingMode;
 
     private Task mInTask;
@@ -542,7 +542,7 @@ class ActivityStarter {
         mDoResume = starter.mDoResume;
         mStartFlags = starter.mStartFlags;
         mSourceRecord = starter.mSourceRecord;
-        mPreferredDisplayId = starter.mPreferredDisplayId;
+        mPreferredTaskDisplayArea = starter.mPreferredTaskDisplayArea;
         mPreferredWindowingMode = starter.mPreferredWindowingMode;
 
         mInTask = starter.mInTask;
@@ -1129,7 +1129,7 @@ class ActivityStarter {
 
         // If we are starting an activity that is not from the same uid as the currently resumed
         // one, check whether app switches are allowed.
-        if (voiceSession == null && (stack.getResumedActivity() == null
+        if (voiceSession == null && stack != null && (stack.getResumedActivity() == null
                 || stack.getResumedActivity().info.applicationInfo.uid != realCallingUid)) {
             if (!mService.checkAppSwitchAllowedLocked(callingPid, callingUid,
                     realCallingPid, realCallingUid, "Activity start")) {
@@ -1201,6 +1201,9 @@ class ActivityStarter {
         final int callingAppId = UserHandle.getAppId(callingUid);
         if (callingUid == Process.ROOT_UID || callingAppId == Process.SYSTEM_UID
                 || callingAppId == Process.NFC_UID) {
+            if (DEBUG_ACTIVITY_STARTS) {
+                Slog.d(TAG, "Activity start allowed for important callingUid (" + callingUid + ")");
+            }
             return false;
         }
 
@@ -1214,6 +1217,11 @@ class ActivityStarter {
         final boolean isCallingUidPersistentSystemProcess =
                 callingUidProcState <= ActivityManager.PROCESS_STATE_PERSISTENT_UI;
         if (callingUidHasAnyVisibleWindow || isCallingUidPersistentSystemProcess) {
+            if (DEBUG_ACTIVITY_STARTS) {
+                Slog.d(TAG, "Activity start allowed: callingUidHasAnyVisibleWindow = " + callingUid
+                        + ", isCallingUidPersistentSystemProcess = "
+                        + isCallingUidPersistentSystemProcess);
+            }
             return false;
         }
         // take realCallingUid into consideration
@@ -1235,35 +1243,66 @@ class ActivityStarter {
         if (realCallingUid != callingUid) {
             // don't abort if the realCallingUid has a visible window
             if (realCallingUidHasAnyVisibleWindow) {
+                if (DEBUG_ACTIVITY_STARTS) {
+                    Slog.d(TAG, "Activity start allowed: realCallingUid (" + realCallingUid
+                            + ") has visible (non-toast) window");
+                }
                 return false;
             }
             // if the realCallingUid is a persistent system process, abort if the IntentSender
             // wasn't whitelisted to start an activity
             if (isRealCallingUidPersistentSystemProcess && allowBackgroundActivityStart) {
+                if (DEBUG_ACTIVITY_STARTS) {
+                    Slog.d(TAG, "Activity start allowed: realCallingUid (" + realCallingUid
+                            + ") is persistent system process AND intent sender whitelisted "
+                            + "(allowBackgroundActivityStart = true)");
+                }
                 return false;
             }
             // don't abort if the realCallingUid is an associated companion app
             if (mService.isAssociatedCompanionApp(UserHandle.getUserId(realCallingUid),
                     realCallingUid)) {
+                if (DEBUG_ACTIVITY_STARTS) {
+                    Slog.d(TAG, "Activity start allowed: realCallingUid (" + realCallingUid
+                            + ") is companion app");
+                }
                 return false;
             }
         }
         // don't abort if the callingUid has START_ACTIVITIES_FROM_BACKGROUND permission
         if (mService.checkPermission(START_ACTIVITIES_FROM_BACKGROUND, callingPid, callingUid)
                 == PERMISSION_GRANTED) {
+            if (DEBUG_ACTIVITY_STARTS) {
+                Slog.d(TAG,
+                        "Background activity start allowed: START_ACTIVITIES_FROM_BACKGROUND "
+                                + "permission granted for uid "
+                                + callingUid);
+            }
             return false;
         }
         // don't abort if the caller has the same uid as the recents component
         if (mSupervisor.mRecentTasks.isCallerRecents(callingUid)) {
+            if (DEBUG_ACTIVITY_STARTS) {
+                Slog.d(TAG, "Background activity start allowed: callingUid (" + callingUid
+                        + ") is recents");
+            }
             return false;
         }
         // don't abort if the callingUid is the device owner
         if (mService.isDeviceOwner(callingUid)) {
+            if (DEBUG_ACTIVITY_STARTS) {
+                Slog.d(TAG, "Background activity start allowed: callingUid (" + callingUid
+                        + ") is device owner");
+            }
             return false;
         }
         // don't abort if the callingUid has companion device
         final int callingUserId = UserHandle.getUserId(callingUid);
         if (mService.isAssociatedCompanionApp(callingUserId, callingUid)) {
+            if (DEBUG_ACTIVITY_STARTS) {
+                Slog.d(TAG, "Background activity start allowed: callingUid (" + callingUid
+                        + ") is companion app");
+            }
             return false;
         }
         // If we don't have callerApp at this point, no caller was provided to startActivity().
@@ -1279,6 +1318,10 @@ class ActivityStarter {
         if (callerApp != null) {
             // first check the original calling process
             if (callerApp.areBackgroundActivityStartsAllowed()) {
+                if (DEBUG_ACTIVITY_STARTS) {
+                    Slog.d(TAG, "Background activity start allowed: callerApp process (pid = "
+                            + callerApp.getPid() + ", uid = " + callerAppUid + ") is whitelisted");
+                }
                 return false;
             }
             // only if that one wasn't whitelisted, check the other ones
@@ -1288,6 +1331,11 @@ class ActivityStarter {
                 for (int i = uidProcesses.size() - 1; i >= 0; i--) {
                     final WindowProcessController proc = uidProcesses.valueAt(i);
                     if (proc != callerApp && proc.areBackgroundActivityStartsAllowed()) {
+                        if (DEBUG_ACTIVITY_STARTS) {
+                            Slog.d(TAG,
+                                    "Background activity start allowed: process " + proc.getPid()
+                                            + " from uid " + callerAppUid + " is whitelisted");
+                        }
                         return false;
                     }
                 }
@@ -1303,9 +1351,15 @@ class ActivityStarter {
         Slog.w(TAG, "Background activity start [callingPackage: " + callingPackage
                 + "; callingUid: " + callingUid
                 + "; isCallingUidForeground: " + isCallingUidForeground
+                + "; callingUidHasAnyVisibleWindow: " + callingUidHasAnyVisibleWindow
+                + "; callingUidProcState: " + DebugUtils.valueToString(ActivityManager.class,
+                "PROCESS_STATE_", callingUidProcState)
                 + "; isCallingUidPersistentSystemProcess: " + isCallingUidPersistentSystemProcess
                 + "; realCallingUid: " + realCallingUid
                 + "; isRealCallingUidForeground: " + isRealCallingUidForeground
+                + "; realCallingUidHasAnyVisibleWindow: " + realCallingUidHasAnyVisibleWindow
+                + "; realCallingUidProcState: " + DebugUtils.valueToString(ActivityManager.class,
+                "PROCESS_STATE_", realCallingUidProcState)
                 + "; isRealCallingUidPersistentSystemProcess: "
                 + isRealCallingUidPersistentSystemProcess
                 + "; originatingPendingIntent: " + originatingPendingIntent
@@ -1390,7 +1444,8 @@ class ActivityStarter {
             final ActivityStack homeStack = targetTask.getDisplayArea().getRootHomeTask();
             final boolean homeTaskVisible = homeStack != null && homeStack.shouldBeVisible(null);
             mService.getTaskChangeNotificationController().notifyActivityRestartAttempt(
-                    targetTask.getTaskInfo(), homeTaskVisible, clearedTask);
+                    targetTask.getTaskInfo(), homeTaskVisible, clearedTask,
+                    targetTask.getTopNonFinishingActivity().isVisible());
         }
     }
 
@@ -1571,9 +1626,6 @@ class ActivityStarter {
         if (!mAvoidMoveToFront && mDoResume) {
             mTargetStack.getStack().moveToFront("reuseOrNewTask", targetTask);
             if (mOptions != null) {
-                if (mPreferredWindowingMode != WINDOWING_MODE_UNDEFINED) {
-                    mTargetStack.setWindowingMode(mPreferredWindowingMode);
-                }
                 if (mOptions.getTaskAlwaysOnTop()) {
                     mTargetStack.setAlwaysOnTop(true);
                 }
@@ -1641,7 +1693,7 @@ class ActivityStarter {
         // Update the recent tasks list immediately when the activity starts
         mSupervisor.mRecentTasks.add(mStartActivity.getTask());
         mSupervisor.handleNonResizableTaskIfNeeded(mStartActivity.getTask(),
-                mPreferredWindowingMode, mPreferredDisplayId, mTargetStack);
+                mPreferredWindowingMode, mPreferredTaskDisplayArea, mTargetStack);
 
         return START_SUCCESS;
     }
@@ -1694,9 +1746,9 @@ class ActivityStarter {
 
         mSupervisor.getLaunchParamsController().calculate(targetTask, r.info.windowLayout, r,
                 sourceRecord, mOptions, PHASE_BOUNDS, mLaunchParams);
-        mPreferredDisplayId = mLaunchParams.hasPreferredDisplay()
-                ? mLaunchParams.mPreferredDisplayId
-                : DEFAULT_DISPLAY;
+        mPreferredTaskDisplayArea = mLaunchParams.hasPreferredTaskDisplayArea()
+                ? mLaunchParams.mPreferredTaskDisplayArea
+                : mRootWindowContainer.getDefaultTaskDisplayArea();
         mPreferredWindowingMode = mLaunchParams.mWindowingMode;
     }
 
@@ -1713,10 +1765,12 @@ class ActivityStarter {
         // Do not start home activity if it cannot be launched on preferred display. We are not
         // doing this in ActivityStackSupervisor#canPlaceEntityOnDisplay because it might
         // fallback to launch on other displays.
-        if (r.isActivityTypeHome() && !mRootWindowContainer.canStartHomeOnDisplay(r.info,
-                mPreferredDisplayId, true /* allowInstrumenting */)) {
-            Slog.w(TAG, "Cannot launch home on display " + mPreferredDisplayId);
-            return START_CANCELED;
+        if (r.isActivityTypeHome()) {
+            if (!mRootWindowContainer.canStartHomeOnDisplayArea(r.info, mPreferredTaskDisplayArea,
+                    true /* allowInstrumenting */)) {
+                Slog.w(TAG, "Cannot launch home on display area " + mPreferredTaskDisplayArea);
+                return START_CANCELED;
+            }
         }
 
         if (mRestrictedBgActivity && (newTask || !targetTask.isUidPresent(mCallingUid))
@@ -1851,10 +1905,10 @@ class ActivityStarter {
                 && top.attachedToProcess()
                 && ((mLaunchFlags & FLAG_ACTIVITY_SINGLE_TOP) != 0
                 || isLaunchModeOneOf(LAUNCH_SINGLE_TOP, LAUNCH_SINGLE_TASK))
-                // This allows home activity to automatically launch on secondary display when
-                // display added, if home was the top activity on default display, instead of
-                // sending new intent to the home activity on default display.
-                && (!top.isActivityTypeHome() || top.getDisplayId() == mPreferredDisplayId);
+                // This allows home activity to automatically launch on secondary task display area
+                // when it was added, if home was the top activity on default task display area,
+                // instead of sending new intent to the home activity on default display area.
+                && (!top.isActivityTypeHome() || top.getDisplayArea() == mPreferredTaskDisplayArea);
         if (!dontStart) {
             return START_SUCCESS;
         }
@@ -1876,7 +1930,7 @@ class ActivityStarter {
         // Don't use mStartActivity.task to show the toast. We're not starting a new activity but
         // reusing 'top'. Fields in mStartActivity may not be fully initialized.
         mSupervisor.handleNonResizableTaskIfNeeded(top.getTask(),
-                mLaunchParams.mWindowingMode, mPreferredDisplayId, topStack);
+                mLaunchParams.mWindowingMode, mPreferredTaskDisplayArea, topStack);
 
         return START_DELIVERED_TO_TOP;
     }
@@ -2020,7 +2074,7 @@ class ActivityStarter {
         mDoResume = false;
         mStartFlags = 0;
         mSourceRecord = null;
-        mPreferredDisplayId = INVALID_DISPLAY;
+        mPreferredTaskDisplayArea = null;
         mPreferredWindowingMode = WINDOWING_MODE_UNDEFINED;
 
         mInTask = null;
@@ -2070,9 +2124,9 @@ class ActivityStarter {
         // after we located a reusable task (which might be resided in another display).
         mSupervisor.getLaunchParamsController().calculate(inTask, r.info.windowLayout, r,
                 sourceRecord, options, PHASE_DISPLAY, mLaunchParams);
-        mPreferredDisplayId = mLaunchParams.hasPreferredDisplay()
-                ? mLaunchParams.mPreferredDisplayId
-                : DEFAULT_DISPLAY;
+        mPreferredTaskDisplayArea = mLaunchParams.hasPreferredTaskDisplayArea()
+                ? mLaunchParams.mPreferredTaskDisplayArea
+                : mRootWindowContainer.getDefaultTaskDisplayArea();
         mPreferredWindowingMode = mLaunchParams.mWindowingMode;
 
         mLaunchMode = r.launchMode;
@@ -2344,14 +2398,14 @@ class ActivityStarter {
             } else {
                 // Otherwise find the best task to put the activity in.
                 intentActivity =
-                        mRootWindowContainer.findTask(mStartActivity, mPreferredDisplayId);
+                        mRootWindowContainer.findTask(mStartActivity, mPreferredTaskDisplayArea);
             }
         }
 
         if (intentActivity != null
                 && (mStartActivity.isActivityTypeHome() || intentActivity.isActivityTypeHome())
-                && intentActivity.getDisplayId() != mPreferredDisplayId) {
-            // Do not reuse home activity on other displays.
+                && intentActivity.getDisplayArea() != mPreferredTaskDisplayArea) {
+            // Do not reuse home activity on other display areas.
             intentActivity = null;
         }
 
@@ -2373,7 +2427,7 @@ class ActivityStarter {
         // the same behavior as if a new instance was being started, which means not bringing it
         // to the front if the caller is not itself in the front.
         final boolean differentTopTask;
-        if (mPreferredDisplayId == mTargetStack.getDisplayId()) {
+        if (mTargetStack.getDisplayArea() == mPreferredTaskDisplayArea) {
             final ActivityStack focusStack = mTargetStack.getDisplay().getFocusedStack();
             final ActivityRecord curTop = (focusStack == null)
                     ? null : focusStack.topRunningNonDelayedActivityLocked(mNotTop);
@@ -2432,7 +2486,7 @@ class ActivityStarter {
         // be destroyed.
         mTargetStack = intentActivity.getRootTask();
         mSupervisor.handleNonResizableTaskIfNeeded(intentTask, WINDOWING_MODE_UNDEFINED,
-                DEFAULT_DISPLAY, mTargetStack);
+                mRootWindowContainer.getDefaultTaskDisplayArea(), mTargetStack);
     }
 
     private void resumeTargetStackIfNeeded() {

@@ -32,9 +32,9 @@ import android.media.soundtrigger_middleware.RecognitionEvent;
 import android.media.soundtrigger_middleware.RecognitionStatus;
 import android.media.soundtrigger_middleware.SoundModel;
 import android.media.soundtrigger_middleware.SoundTriggerModuleDescriptor;
+import android.media.soundtrigger_middleware.SoundTriggerModuleProperties;
 import android.media.soundtrigger_middleware.Status;
 import android.os.IBinder;
-import android.os.Process;
 import android.os.RemoteException;
 import android.os.ServiceSpecificException;
 import android.util.Log;
@@ -47,6 +47,7 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * This is a decorator of an {@link ISoundTriggerMiddlewareService}, which enforces permissions and
@@ -96,29 +97,38 @@ import java.util.Set;
  * {@link NullPointerException} or {@link
  * IllegalStateException}, respectively. All those exceptions are treated specially by Binder and
  * will get sent back to the client.<br>
- * Once this is done, any subsequent fault is considered a server fault. Only {@link
- * RecoverableException}s thrown by the implementation are special-cased: they would get sent back
- * to the caller as a {@link ServiceSpecificException}, which is the behavior of Binder. Any other
- * exception gets wrapped with a {@link InternalServerError}, which is specifically chosen as a type
- * that <b>does NOT</b> get forwarded by binder. Those exceptions would be handled by a high-level
- * exception handler on the server side, typically resulting in rebooting the server.
+ * Once this is done, any subsequent fault is considered either a recoverable (expected) or
+ * unexpected server fault. Those will be delivered to the client as a
+ * {@link ServiceSpecificException}. {@link RecoverableException}s thrown by the implementation are
+ * considered recoverable and will include a specific error code to indicate the problem. Any other
+ * exceptions will use the INTERNAL_ERROR code. They may also cause the module to become invalid
+ * asynchronously, and the client would be notified via the moduleDied() callback.
  *
  * {@hide}
  */
 public class SoundTriggerMiddlewareValidation implements ISoundTriggerMiddlewareInternal, Dumpable {
     private static final String TAG = "SoundTriggerMiddlewareValidation";
 
-    private enum ModuleState {
+    private enum ModuleStatus {
         ALIVE,
         DETACHED,
         DEAD
     };
 
-    private Boolean mCaptureState;
+    private class ModuleState {
+        final @NonNull SoundTriggerModuleProperties properties;
+        Set<ModuleService> sessions = new HashSet<>();
+
+        private ModuleState(@NonNull SoundTriggerModuleProperties properties) {
+            this.properties = properties;
+        }
+    }
+
+    private AtomicReference<Boolean> mCaptureState = new AtomicReference<>();
 
     private final @NonNull ISoundTriggerMiddlewareInternal mDelegate;
     private final @NonNull Context mContext;
-    private Map<Integer, Set<ModuleService>> mModules;
+    private Map<Integer, ModuleState> mModules;
 
     public SoundTriggerMiddlewareValidation(
             @NonNull ISoundTriggerMiddlewareInternal delegate, @NonNull Context context) {
@@ -149,14 +159,8 @@ public class SoundTriggerMiddlewareValidation implements ISoundTriggerMiddleware
                     e.getMessage());
         }
 
-        /* Throwing an exception is not enough in this case. When the HAL behaves unexpectedly, the
-           system service and the HAL must be reset and the client must be notified. Without a full
-           reset in this catastrophic case, the state of the HAL and the system service cannot be
-           guaranteed to the client.
-         */
-        Log.wtf(TAG, "Crashing system server due to unrecoverable exception", e);
-        Process.killProcess(Process.myPid());
-        throw new InternalServerError(e);
+        Log.wtf(TAG, "Unexpected exception", e);
+        throw new ServiceSpecificException(Status.INTERNAL_ERROR, e.getMessage());
     }
 
     @Override
@@ -174,7 +178,7 @@ public class SoundTriggerMiddlewareValidation implements ISoundTriggerMiddleware
                 SoundTriggerModuleDescriptor[] result = mDelegate.listModules();
                 mModules = new HashMap<>(result.length);
                 for (SoundTriggerModuleDescriptor desc : result) {
-                    mModules.put(desc.handle, new HashSet<>());
+                    mModules.put(desc.handle, new ModuleState(desc.properties));
                 }
                 return result;
             } catch (Exception e) {
@@ -227,10 +231,7 @@ public class SoundTriggerMiddlewareValidation implements ISoundTriggerMiddleware
         } catch (Exception e) {
             throw handleException(e);
         } finally {
-            // It is safe to lock here - local operation.
-            synchronized (this) {
-                mCaptureState = active;
-            }
+            mCaptureState.set(active);
         }
     }
 
@@ -270,8 +271,7 @@ public class SoundTriggerMiddlewareValidation implements ISoundTriggerMiddleware
                 throw new ServiceSpecificException(Status.TEMPORARY_PERMISSION_DENIED,
                         String.format("Caller must have the %s permission.", permission));
             default:
-                throw new InternalServerError(
-                        new RuntimeException("Unexpected perimission check result."));
+                throw new RuntimeException("Unexpected perimission check result.");
         }
     }
 
@@ -284,18 +284,22 @@ public class SoundTriggerMiddlewareValidation implements ISoundTriggerMiddleware
     @Override
     public void dump(PrintWriter pw) {
         synchronized (this) {
-            pw.printf("Capture state is %s\n", mCaptureState == null ? "uninitialized"
-                    : (mCaptureState ? "active" : "inactive"));
+            Boolean captureState = mCaptureState.get();
+            pw.printf("Capture state is %s\n\n", captureState == null ? "uninitialized"
+                    : (captureState ? "active" : "inactive"));
             if (mModules != null) {
                 for (int handle : mModules.keySet()) {
+                    final ModuleState module = mModules.get(handle);
                     pw.println("=========================================");
-                    pw.printf("Active sessions for module %d", handle);
-                    pw.println();
+                    pw.printf("Module %d\n%s\n", handle,
+                            ObjectPrinter.print(module.properties, true, 16));
                     pw.println("=========================================");
-                    for (ModuleService session : mModules.get(handle)) {
+                    for (ModuleService session : module.sessions) {
                         session.dump(pw);
                     }
                 }
+            } else {
+                pw.println("Modules have not yet been enumerated.");
             }
         }
         pw.println();
@@ -303,11 +307,18 @@ public class SoundTriggerMiddlewareValidation implements ISoundTriggerMiddleware
         if (mDelegate instanceof Dumpable) {
             ((Dumpable) mDelegate).dump(pw);
         }
-
     }
 
     /** State of a sound model. */
     static class ModelState {
+        ModelState(SoundModel model) {
+            this.description = ObjectPrinter.print(model, true, 16);
+        }
+
+        ModelState(PhraseSoundModel model) {
+            this.description = ObjectPrinter.print(model, true, 16);
+        }
+
         /** Activity state of a sound model. */
         enum Activity {
             /** Model is loaded, recognition is inactive. */
@@ -318,6 +329,9 @@ public class SoundTriggerMiddlewareValidation implements ISoundTriggerMiddleware
 
         /** Activity state. */
         Activity activityState = Activity.LOADED;
+
+        /** Human-readable description of the model. */
+        final String description;
 
         /**
          * A map of known parameter support. A missing key means we don't know yet whether the
@@ -381,7 +395,7 @@ public class SoundTriggerMiddlewareValidation implements ISoundTriggerMiddleware
         private ISoundTriggerModule mDelegate;
         private @NonNull Map<Integer, ModelState> mLoadedModels = new HashMap<>();
         private final int mHandle;
-        private ModuleState mState = ModuleState.ALIVE;
+        private ModuleStatus mState = ModuleStatus.ALIVE;
 
         ModuleService(int handle, @NonNull ISoundTriggerCallback callback) {
             mCallback = callback;
@@ -395,7 +409,7 @@ public class SoundTriggerMiddlewareValidation implements ISoundTriggerMiddleware
 
         void attach(@NonNull ISoundTriggerModule delegate) {
             mDelegate = delegate;
-            mModules.get(mHandle).add(this);
+            mModules.get(mHandle).sessions.add(this);
         }
 
         @Override
@@ -407,14 +421,14 @@ public class SoundTriggerMiddlewareValidation implements ISoundTriggerMiddleware
 
             synchronized (SoundTriggerMiddlewareValidation.this) {
                 // State validation.
-                if (mState == ModuleState.DETACHED) {
+                if (mState == ModuleStatus.DETACHED) {
                     throw new IllegalStateException("Module has been detached.");
                 }
 
                 // From here on, every exception isn't client's fault.
                 try {
                     int handle = mDelegate.loadModel(model);
-                    mLoadedModels.put(handle, new ModelState());
+                    mLoadedModels.put(handle, new ModelState(model));
                     return handle;
                 } catch (Exception e) {
                     throw handleException(e);
@@ -431,14 +445,14 @@ public class SoundTriggerMiddlewareValidation implements ISoundTriggerMiddleware
 
             synchronized (SoundTriggerMiddlewareValidation.this) {
                 // State validation.
-                if (mState == ModuleState.DETACHED) {
+                if (mState == ModuleStatus.DETACHED) {
                     throw new IllegalStateException("Module has been detached.");
                 }
 
                 // From here on, every exception isn't client's fault.
                 try {
                     int handle = mDelegate.loadPhraseModel(model);
-                    mLoadedModels.put(handle, new ModelState());
+                    mLoadedModels.put(handle, new ModelState(model));
                     return handle;
                 } catch (Exception e) {
                     throw handleException(e);
@@ -454,7 +468,7 @@ public class SoundTriggerMiddlewareValidation implements ISoundTriggerMiddleware
 
             synchronized (SoundTriggerMiddlewareValidation.this) {
                 // State validation.
-                if (mState == ModuleState.DETACHED) {
+                if (mState == ModuleStatus.DETACHED) {
                     throw new IllegalStateException("Module has been detached.");
                 }
                 ModelState modelState = mLoadedModels.get(
@@ -487,7 +501,7 @@ public class SoundTriggerMiddlewareValidation implements ISoundTriggerMiddleware
 
             synchronized (SoundTriggerMiddlewareValidation.this) {
                 // State validation.
-                if (mState == ModuleState.DETACHED) {
+                if (mState == ModuleStatus.DETACHED) {
                     throw new IllegalStateException("Module has been detached.");
                 }
                 ModelState modelState = mLoadedModels.get(
@@ -521,7 +535,7 @@ public class SoundTriggerMiddlewareValidation implements ISoundTriggerMiddleware
 
             synchronized (SoundTriggerMiddlewareValidation.this) {
                 // State validation.
-                if (mState == ModuleState.DETACHED) {
+                if (mState == ModuleStatus.DETACHED) {
                     throw new IllegalStateException("Module has been detached.");
                 }
                 ModelState modelState = mLoadedModels.get(
@@ -550,7 +564,7 @@ public class SoundTriggerMiddlewareValidation implements ISoundTriggerMiddleware
 
             synchronized (SoundTriggerMiddlewareValidation.this) {
                 // State validation.
-                if (mState == ModuleState.DETACHED) {
+                if (mState == ModuleStatus.DETACHED) {
                     throw new IllegalStateException("Module has been detached.");
                 }
                 ModelState modelState = mLoadedModels.get(
@@ -578,7 +592,7 @@ public class SoundTriggerMiddlewareValidation implements ISoundTriggerMiddleware
 
             synchronized (SoundTriggerMiddlewareValidation.this) {
                 // State validation.
-                if (mState == ModuleState.DETACHED) {
+                if (mState == ModuleStatus.DETACHED) {
                     throw new IllegalStateException("Module has been detached.");
                 }
                 ModelState modelState = mLoadedModels.get(
@@ -606,7 +620,7 @@ public class SoundTriggerMiddlewareValidation implements ISoundTriggerMiddleware
 
             synchronized (SoundTriggerMiddlewareValidation.this) {
                 // State validation.
-                if (mState == ModuleState.DETACHED) {
+                if (mState == ModuleStatus.DETACHED) {
                     throw new IllegalStateException("Module has been detached.");
                 }
                 ModelState modelState = mLoadedModels.get(
@@ -635,7 +649,7 @@ public class SoundTriggerMiddlewareValidation implements ISoundTriggerMiddleware
 
             synchronized (SoundTriggerMiddlewareValidation.this) {
                 // State validation.
-                if (mState == ModuleState.DETACHED) {
+                if (mState == ModuleStatus.DETACHED) {
                     throw new IllegalStateException("Module has been detached.");
                 }
                 ModelState modelState = mLoadedModels.get(
@@ -664,10 +678,10 @@ public class SoundTriggerMiddlewareValidation implements ISoundTriggerMiddleware
 
             synchronized (SoundTriggerMiddlewareValidation.this) {
                 // State validation.
-                if (mState == ModuleState.DETACHED) {
+                if (mState == ModuleStatus.DETACHED) {
                     throw new IllegalStateException("Module has already been detached.");
                 }
-                if (mState == ModuleState.ALIVE && !mLoadedModels.isEmpty()) {
+                if (mState == ModuleStatus.ALIVE && !mLoadedModels.isEmpty()) {
                     throw new IllegalStateException("Cannot detach while models are loaded.");
                 }
 
@@ -689,16 +703,16 @@ public class SoundTriggerMiddlewareValidation implements ISoundTriggerMiddleware
         private void detachInternal() {
             try {
                 mDelegate.detach();
-                mState = ModuleState.DETACHED;
+                mState = ModuleStatus.DETACHED;
                 mCallback.asBinder().unlinkToDeath(this, 0);
-                mModules.get(mHandle).remove(this);
+                mModules.get(mHandle).sessions.remove(this);
             } catch (RemoteException e) {
                 throw e.rethrowAsRuntimeException();
             }
         }
 
         void dump(PrintWriter pw) {
-            if (mState == ModuleState.ALIVE) {
+            if (mState == ModuleStatus.ALIVE) {
                 pw.printf("Loaded models for session %s (handle, active)", toString());
                 pw.println();
                 pw.println("-------------------------------");
@@ -706,6 +720,8 @@ public class SoundTriggerMiddlewareValidation implements ISoundTriggerMiddleware
                     pw.print(entry.getKey());
                     pw.print('\t');
                     pw.print(entry.getValue().activityState.name());
+                    pw.print('\t');
+                    pw.print(entry.getValue().description);
                     pw.println();
                 }
             } else {
@@ -768,7 +784,7 @@ public class SoundTriggerMiddlewareValidation implements ISoundTriggerMiddleware
         public void onModuleDied() {
             synchronized (SoundTriggerMiddlewareValidation.this) {
                 try {
-                    mState = ModuleState.DEAD;
+                    mState = ModuleStatus.DEAD;
                     mCallback.onModuleDied();
                 } catch (RemoteException e) {
                     // Dead client will be handled by binderDied() - no need to handle here.

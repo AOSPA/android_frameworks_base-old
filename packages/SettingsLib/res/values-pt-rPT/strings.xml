@@ -61,7 +61,7 @@
     <string name="speed_label_medium" msgid="9078405312828606976">"Média"</string>
     <string name="speed_label_fast" msgid="2677719134596044051">"Rápida"</string>
     <string name="speed_label_very_fast" msgid="8215718029533182439">"Muito rápida"</string>
-    <string name="wifi_passpoint_expired" msgid="6540867261754427561">"Expirado"</string>
+    <string name="wifi_passpoint_expired" msgid="6540867261754427561">"Expirada"</string>
     <string name="preference_summary_default_combination" msgid="2644094566845577901">"<xliff:g id="STATE">%1$s</xliff:g>/<xliff:g id="DESCRIPTION">%2$s</xliff:g>"</string>
     <string name="bluetooth_disconnected" msgid="7739366554710388701">"Desligado"</string>
     <string name="bluetooth_disconnecting" msgid="7638892134401574338">"A desligar..."</string>
@@ -212,7 +212,7 @@
     <string name="adb_wireless_settings" msgid="2295017847215680229">"Depuração sem fios"</string>
     <string name="adb_wireless_list_empty_off" msgid="1713707973837255490">"Para ver e utilizar dispositivos disponíveis, ative a depuração sem fios."</string>
     <string name="adb_pair_method_qrcode_title" msgid="6982904096137468634">"Sincronize o dispositivo com o código QR"</string>
-    <string name="adb_pair_method_qrcode_summary" msgid="3729901496856458634">"Sincronize novos dispositivos com o leitor de códigos QR."</string>
+    <string name="adb_pair_method_qrcode_summary" msgid="7130694277228970888">"Sincronize novos dispositivos com o leitor de códigos QR."</string>
     <string name="adb_pair_method_code_title" msgid="1122590300445142904">"Sincronize dispositivo com código de sincronização"</string>
     <string name="adb_pair_method_code_summary" msgid="6370414511333685185">"Sincronize novos dispositivos através do código de seis dígitos."</string>
     <string name="adb_paired_devices_title" msgid="5268997341526217362">"Dispositivos sincronizados"</string>
@@ -231,7 +231,7 @@
     <string name="adb_qrcode_pairing_device_failed_msg" msgid="6936292092592914132">"Falha ao sincronizar o dispositivo. O código QR estava incorreto ou o dispositivo não está ligado à mesma rede."</string>
     <string name="adb_wireless_ip_addr_preference_title" msgid="8335132107715311730">"Porta e endereço IP"</string>
     <string name="adb_wireless_qrcode_pairing_title" msgid="1906409667944674707">"Leia o código QR"</string>
-    <string name="adb_wireless_qrcode_pairing_description" msgid="8578868049289910131">"Sincronize o dispositivo através de Wi-Fi ao ler um código QR."</string>
+    <string name="adb_wireless_qrcode_pairing_description" msgid="6014121407143607851">"Sincronize o dispositivo através de Wi-Fi ao ler um código QR."</string>
     <string name="adb_wireless_no_network_msg" msgid="2365795244718494658">"Estabeleça ligação a uma rede Wi-Fi."</string>
     <string name="keywords_adb_wireless" msgid="6507505581882171240">"adb, depurar, programador"</string>
     <string name="bugreport_in_power" msgid="8664089072534638709">"Atalho para relatório de erro"</string>
@@ -242,7 +242,7 @@
     <string name="bt_hci_snoop_log_summary" msgid="6808538971394092284">"Capturar os pacotes Bluetooth (ative/desative o Bluetooth após alterar esta definição)"</string>
     <string name="oem_unlock_enable" msgid="5334869171871566731">"Desbloqueio de OEM"</string>
     <string name="oem_unlock_enable_summary" msgid="5857388174390953829">"Permitir o desbloqueio do carregador de arranque"</string>
-    <string name="confirm_enable_oem_unlock_title" msgid="8249318129774367535">"Pretende permitir o desbloqueio de OEM?"</string>
+    <string name="confirm_enable_oem_unlock_title" msgid="8249318129774367535">"Permitir o desbloqueio de OEM?"</string>
     <string name="confirm_enable_oem_unlock_text" msgid="854131050791011970">"AVISO: as funcionalidades de proteção do dispositivo não funcionam neste dispositivo enquanto esta definição estiver ativada."</string>
     <string name="mock_location_app" msgid="6269380172542248304">"Selecionar aplicação de localização fictícia"</string>
     <string name="mock_location_app_not_set" msgid="6972032787262831155">"Aplicação de localização fictícia não definida"</string>
@@ -251,6 +251,7 @@
     <string name="wifi_display_certification" msgid="1805579519992520381">"Certificação de display sem fios"</string>
     <string name="wifi_verbose_logging" msgid="1785910450009679371">"Ativar o registo verboso de Wi-Fi"</string>
     <string name="wifi_scan_throttling" msgid="2985624788509913617">"Controlo da procura de Wi‑Fi"</string>
+    <string name="wifi_enhanced_mac_randomization" msgid="5437378364995776979">"Seleção aleatória do MAC otimizado Wi-Fi"</string>
     <string name="mobile_data_always_on" msgid="8275958101875563572">"Dados móveis sempre ativos"</string>
     <string name="tethering_hardware_offload" msgid="4116053719006939161">"Aceleração de hardware para ligação (à Internet) via telemóvel"</string>
     <string name="bluetooth_show_devices_without_names" msgid="923584526471885819">"Mostrar dispositivos Bluetooth sem nomes"</string>
@@ -283,6 +284,8 @@
     <string name="wifi_display_certification_summary" msgid="8111151348106907513">"Mostrar opções da certificação de display sem fios"</string>
     <string name="wifi_verbose_logging_summary" msgid="4993823188807767892">"Aumentar o nível de reg. de Wi-Fi, mostrar por RSSI de SSID no Selec. de Wi-Fi"</string>
     <string name="wifi_scan_throttling_summary" msgid="2577105472017362814">"Reduz o consumo rápido da bateria e melhora o desempenho da rede"</string>
+    <!-- no translation found for wifi_enhanced_mac_randomization_summary (1210663439867489931) -->
+    <skip />
     <string name="wifi_metered_label" msgid="8737187690304098638">"Acesso limitado"</string>
     <string name="wifi_unmetered_label" msgid="6174142840934095093">"Acesso ilimitado"</string>
     <string name="select_logd_size_title" msgid="1604578195914595173">"Tamanhos da memória intermédia do registo"</string>
@@ -300,7 +303,7 @@
     <string name="tethering_hardware_offload_summary" msgid="7801345335142803029">"Se disponível, utilizar a aceleração de hardware para ligação (à Internet) via telemóvel"</string>
     <string name="adb_warning_title" msgid="7708653449506485728">"Permitir depuração USB?"</string>
     <string name="adb_warning_message" msgid="8145270656419669221">"A depuração USB é utilizada apenas para fins de programação. Utilize-a para copiar dados entre o computador e o aparelho, instalar aplicações no aparelho sem notificação e ler dados de registo."</string>
-    <string name="adbwifi_warning_title" msgid="727104571653031865">"Pretende permitir a depuração sem fios?"</string>
+    <string name="adbwifi_warning_title" msgid="727104571653031865">"Permitir a depuração sem fios?"</string>
     <string name="adbwifi_warning_message" msgid="8005936574322702388">"A depuração sem fios é utilizada apenas para fins de programação. Utilize-a para copiar dados entre o computador e o dispositivo, instalar apps no dispositivo sem notificação e ler dados de registo."</string>
     <string name="adb_keys_warning_message" msgid="2968555274488101220">"Revogar acesso à depuração USB de todos os computadores anteriormente autorizados?"</string>
     <string name="dev_settings_warning_title" msgid="8251234890169074553">"Permitir definições de programação?"</string>
@@ -432,10 +435,10 @@
     <string name="power_discharge_by_only" msgid="92545648425937000">"Deve durar até cerca da(s) <xliff:g id="TIME">%1$s</xliff:g>"</string>
     <string name="power_discharge_by_only_short" msgid="5883041507426914446">"Até à(s) <xliff:g id="TIME">%1$s</xliff:g>"</string>
     <string name="power_suggestion_battery_run_out" msgid="6332089307827787087">"Poderá ficar sem bateria à(s) <xliff:g id="TIME">%1$s</xliff:g>"</string>
-    <string name="power_remaining_less_than_duration_only" msgid="5802195288324091585">"Resta(m) menos de <xliff:g id="THRESHOLD">%1$s</xliff:g>."</string>
-    <string name="power_remaining_less_than_duration" msgid="1812668275239801236">"Resta(m) menos de <xliff:g id="THRESHOLD">%1$s</xliff:g> (<xliff:g id="LEVEL">%2$s</xliff:g>)."</string>
-    <string name="power_remaining_more_than_subtext" msgid="7919119719242734848">"Resta(m) mais de <xliff:g id="TIME_REMAINING">%1$s</xliff:g> (<xliff:g id="LEVEL">%2$s</xliff:g>)."</string>
-    <string name="power_remaining_only_more_than_subtext" msgid="3274496164769110480">"Resta(m) mais de <xliff:g id="TIME_REMAINING">%1$s</xliff:g>."</string>
+    <string name="power_remaining_less_than_duration_only" msgid="8956656616031395152">"Menos de <xliff:g id="THRESHOLD">%1$s</xliff:g> restante"</string>
+    <string name="power_remaining_less_than_duration" msgid="318215464914990578">"Menos de <xliff:g id="THRESHOLD">%1$s</xliff:g> restante (<xliff:g id="LEVEL">%2$s</xliff:g>)"</string>
+    <string name="power_remaining_more_than_subtext" msgid="446388082266121894">"Mais de <xliff:g id="TIME_REMAINING">%1$s</xliff:g> restante (<xliff:g id="LEVEL">%2$s</xliff:g>)"</string>
+    <string name="power_remaining_only_more_than_subtext" msgid="4873750633368888062">"Mais de <xliff:g id="TIME_REMAINING">%1$s</xliff:g> restante"</string>
     <string name="power_remaining_duration_only_shutdown_imminent" product="default" msgid="137330009791560774">"O telemóvel poderá ser encerrado em breve"</string>
     <string name="power_remaining_duration_only_shutdown_imminent" product="tablet" msgid="145489081521468132">"O tablet poderá ser encerrado em breve"</string>
     <string name="power_remaining_duration_only_shutdown_imminent" product="device" msgid="1070562682853942350">"O dispositivo poderá ser encerrado em breve"</string>
@@ -451,7 +454,7 @@
     <string name="battery_info_status_charging_slow" msgid="3190803837168962319">"Carregamento lento"</string>
     <string name="battery_info_status_discharging" msgid="6962689305413556485">"Não está a carregar"</string>
     <string name="battery_info_status_not_charging" msgid="8330015078868707899">"Ligada à corrente, não é possível carregar neste momento"</string>
-    <string name="battery_info_status_full" msgid="4443168946046847468">"Completo"</string>
+    <string name="battery_info_status_full" msgid="4443168946046847468">"Carregada"</string>
     <string name="disabled_by_admin_summary_text" msgid="5343911767402923057">"Controlado pelo gestor"</string>
     <string name="disabled" msgid="8017887509554714950">"Desativada"</string>
     <string name="external_source_trusted" msgid="1146522036773132905">"Autorizada"</string>
@@ -504,7 +507,7 @@
     <string name="alarm_template_far" msgid="6382760514842998629">"no(a) <xliff:g id="WHEN">%1$s</xliff:g>"</string>
     <string name="zen_mode_duration_settings_title" msgid="1553451650289651489">"Duração"</string>
     <string name="zen_mode_duration_always_prompt_title" msgid="3212996860498119555">"Perguntar sempre"</string>
-    <string name="zen_mode_forever" msgid="3339224497605461291">"Até ser desativado"</string>
+    <string name="zen_mode_forever" msgid="3339224497605461291">"Até desativar"</string>
     <string name="time_unit_just_now" msgid="3006134267292728099">"Agora mesmo"</string>
     <string name="media_transfer_this_device_name" msgid="2716555073132169240">"Altifalante do telemóvel"</string>
     <string name="profile_connect_timeout_subtext" msgid="4043408193005851761">"Problema ao ligar. Desligue e volte a ligar o dispositivo."</string>

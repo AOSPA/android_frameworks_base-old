@@ -21,6 +21,7 @@ import static android.Manifest.permission.MANAGE_ACTIVITY_STACKS;
 import android.os.Binder;
 import android.os.IBinder;
 import android.os.RemoteException;
+import android.view.SurfaceControl;
 import android.window.IDisplayAreaOrganizer;
 import android.window.IDisplayAreaOrganizerController;
 
@@ -92,9 +93,29 @@ public class DisplayAreaOrganizerController extends IDisplayAreaOrganizerControl
         }
     }
 
+    @Override
+    public void unregisterOrganizer(IDisplayAreaOrganizer organizer) {
+        enforceStackPermission("unregisterTaskOrganizer()");
+        final long origId = Binder.clearCallingIdentity();
+        try {
+            synchronized (mGlobalLock) {
+                mOrganizersByFeatureIds.entrySet().removeIf(
+                        entry -> entry.getValue().asBinder() == organizer.asBinder());
+
+                mService.mRootWindowContainer.forAllDisplayAreas((da) -> {
+                    if (da.mOrganizer != organizer) return;
+                    da.setOrganizer(null);
+                });
+            }
+        } finally {
+            Binder.restoreCallingIdentity(origId);
+        }
+    }
+
     void onDisplayAreaAppeared(IDisplayAreaOrganizer organizer, DisplayArea da) {
         try {
-            organizer.onDisplayAreaAppeared(da.mRemoteToken.toWindowContainerToken());
+            SurfaceControl outSurfaceControl = new SurfaceControl(da.getSurfaceControl());
+            organizer.onDisplayAreaAppeared(da.getDisplayAreaInfo(), outSurfaceControl);
         } catch (RemoteException e) {
             // Oh well...
         }
@@ -102,7 +123,15 @@ public class DisplayAreaOrganizerController extends IDisplayAreaOrganizerControl
 
     void onDisplayAreaVanished(IDisplayAreaOrganizer organizer, DisplayArea da) {
         try {
-            organizer.onDisplayAreaVanished(da.mRemoteToken.toWindowContainerToken());
+            organizer.onDisplayAreaVanished(da.getDisplayAreaInfo());
+        } catch (RemoteException e) {
+            // Oh well...
+        }
+    }
+
+    void onDisplayAreaInfoChanged(IDisplayAreaOrganizer organizer, DisplayArea da) {
+        try {
+            organizer.onDisplayAreaInfoChanged(da.getDisplayAreaInfo());
         } catch (RemoteException e) {
             // Oh well...
         }

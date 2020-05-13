@@ -219,6 +219,7 @@
     <!-- accessibility -->
     <uses-permission android:name="android.permission.MODIFY_ACCESSIBILITY_DATA" />
     <uses-permission android:name="android.permission.MANAGE_ACCESSIBILITY" />
+    <uses-permission android:name="android.permission.ACT_AS_PACKAGE_FOR_ACCESSIBILITY" />
 
     <!-- to control accessibility volume -->
     <uses-permission android:name="android.permission.CHANGE_ACCESSIBILITY_VOLUME" />
@@ -670,20 +671,33 @@
         </activity>
 
         <activity android:name=".controls.management.ControlsProviderSelectorActivity"
-                  android:label="Controls Providers"
+                  android:label="@string/controls_providers_title"
                   android:theme="@style/Theme.ControlsManagement"
                   android:showForAllUsers="true"
-                  android:clearTaskOnLaunch="true"
+                  android:finishOnTaskLaunch="true"
                   android:excludeFromRecents="true"
+                  android:launchMode="singleInstance"
+                  android:configChanges="screenSize|smallestScreenSize|screenLayout|orientation|keyboard|keyboardHidden"
+                  android:visibleToInstantApps="true">
+        </activity>
+
+        <activity android:name=".controls.management.ControlsEditingActivity"
+                  android:theme="@style/Theme.ControlsManagement"
+                  android:excludeFromRecents="true"
+                  android:noHistory="true"
+                  android:showForAllUsers="true"
+                  android:finishOnTaskLaunch="true"
                   android:configChanges="screenSize|smallestScreenSize|screenLayout|orientation|keyboard|keyboardHidden"
                   android:visibleToInstantApps="true">
         </activity>
 
         <activity android:name=".controls.management.ControlsFavoritingActivity"
+                  android:label="@string/controls_favorite_default_title"
                   android:theme="@style/Theme.ControlsManagement"
                   android:excludeFromRecents="true"
                   android:showForAllUsers="true"
                   android:finishOnTaskLaunch="true"
+                  android:launchMode="singleInstance"
                   android:configChanges="screenSize|smallestScreenSize|screenLayout|orientation|keyboard|keyboardHidden"
                   android:visibleToInstantApps="true">
         </activity>

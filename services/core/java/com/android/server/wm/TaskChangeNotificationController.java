@@ -60,6 +60,7 @@ class TaskChangeNotificationController {
     private static final int NOTIFY_SINGLE_TASK_DISPLAY_EMPTY = 25;
     private static final int NOTIFY_TASK_LIST_FROZEN_UNFROZEN_MSG = 26;
     private static final int NOTIFY_TASK_FOCUS_CHANGED_MSG = 27;
+    private static final int NOTIFY_TASK_REQUESTED_ORIENTATION_CHANGED_MSG = 28;
 
     // Delay in notifying task stack change listeners (in millis)
     private static final int NOTIFY_TASK_STACK_CHANGE_LISTENERS_DELAY = 100;
@@ -123,7 +124,7 @@ class TaskChangeNotificationController {
     private final TaskStackConsumer mNotifyActivityRestartAttempt = (l, m) -> {
         SomeArgs args = (SomeArgs) m.obj;
         l.onActivityRestartAttempt((RunningTaskInfo) args.arg1, args.argi1 != 0,
-                args.argi2 != 0);
+                args.argi2 != 0, args.argi3 != 0);
     };
 
     private final TaskStackConsumer mNotifyActivityForcedResizable = (l, m) -> {
@@ -176,6 +177,10 @@ class TaskChangeNotificationController {
 
     private final TaskStackConsumer mNotifyTaskFocusChanged = (l, m) -> {
         l.onTaskFocusChanged(m.arg1, m.arg2 != 0);
+    };
+
+    private final TaskStackConsumer mNotifyTaskRequestedOrientationChanged = (l, m) -> {
+        l.onTaskRequestedOrientationChanged(m.arg1, m.arg2);
     };
 
     @FunctionalInterface
@@ -268,6 +273,9 @@ class TaskChangeNotificationController {
                     break;
                 case NOTIFY_TASK_FOCUS_CHANGED_MSG:
                     forAllRemoteListeners(mNotifyTaskFocusChanged, msg);
+                    break;
+                case NOTIFY_TASK_REQUESTED_ORIENTATION_CHANGED_MSG:
+                    forAllRemoteListeners(mNotifyTaskRequestedOrientationChanged, msg);
                     break;
             }
             if (msg.obj instanceof SomeArgs) {
@@ -368,12 +376,13 @@ class TaskChangeNotificationController {
      * running, but the task is either brought to the front or a new Intent is delivered to it.
      */
     void notifyActivityRestartAttempt(RunningTaskInfo task, boolean homeTaskVisible,
-            boolean clearedTask) {
+            boolean clearedTask, boolean wasVisible) {
         mHandler.removeMessages(NOTIFY_ACTIVITY_RESTART_ATTEMPT_LISTENERS_MSG);
         final SomeArgs args = SomeArgs.obtain();
         args.arg1 = task;
         args.argi1 = homeTaskVisible ? 1 : 0;
         args.argi2 = clearedTask ? 1 : 0;
+        args.argi3 = wasVisible ? 1 : 0;
         final Message msg = mHandler.obtainMessage(NOTIFY_ACTIVITY_RESTART_ATTEMPT_LISTENERS_MSG,
                         args);
         forAllLocalListeners(mNotifyActivityRestartAttempt, msg);
@@ -555,6 +564,14 @@ class TaskChangeNotificationController {
         final Message msg = mHandler.obtainMessage(NOTIFY_TASK_FOCUS_CHANGED_MSG,
                 taskId, focused ? 1 : 0);
         forAllLocalListeners(mNotifyTaskFocusChanged, msg);
+        msg.sendToTarget();
+    }
+
+    /** @see android.app.ITaskStackListener#onTaskRequestedOrientationChanged(int, int) */
+    void notifyTaskRequestedOrientationChanged(int taskId, int requestedOrientation) {
+        final Message msg = mHandler.obtainMessage(NOTIFY_TASK_REQUESTED_ORIENTATION_CHANGED_MSG,
+                taskId, requestedOrientation);
+        forAllLocalListeners(mNotifyTaskRequestedOrientationChanged, msg);
         msg.sendToTarget();
     }
 }

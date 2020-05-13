@@ -30,7 +30,9 @@ import android.app.Service;
 import android.content.ComponentName;
 import android.content.Intent;
 import android.graphics.Rect;
+import android.os.BaseBundle;
 import android.os.Build;
+import android.os.Bundle;
 import android.os.CancellationSignal;
 import android.os.Handler;
 import android.os.IBinder;
@@ -131,6 +133,7 @@ public abstract class AugmentedAutofillService extends Service {
     public void onCreate() {
         super.onCreate();
         mHandler = new Handler(Looper.getMainLooper(), null, true);
+        BaseBundle.setShouldDefuse(true);
     }
 
     /** @hide */
@@ -558,9 +561,10 @@ public abstract class AugmentedAutofillService extends Service {
             }
         }
 
-        void reportResult(@Nullable List<Dataset> inlineSuggestionsData) {
+        void reportResult(@Nullable List<Dataset> inlineSuggestionsData,
+                @Nullable Bundle clientState) {
             try {
-                mCallback.onSuccess(inlineSuggestionsData);
+                mCallback.onSuccess(inlineSuggestionsData, clientState);
             } catch (RemoteException e) {
                 Log.e(TAG, "Error calling back with the inline suggestions data: " + e);
             }

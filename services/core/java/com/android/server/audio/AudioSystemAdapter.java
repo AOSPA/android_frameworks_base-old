@@ -19,7 +19,6 @@ package com.android.server.audio;
 import android.annotation.NonNull;
 import android.media.AudioDeviceAttributes;
 import android.media.AudioSystem;
-import android.util.Log;
 
 /**
  * Provides an adapter to access functionality of the android.media.AudioSystem class for device
@@ -36,14 +35,6 @@ public class AudioSystemAdapter {
      */
     static final @NonNull AudioSystemAdapter getDefaultAdapter() {
         return new AudioSystemAdapter();
-    }
-
-    /**
-     * Create an adapter for AudioSystem that always succeeds, and does nothing.
-     * @return a no-op AudioSystem adapter
-     */
-    static final @NonNull AudioSystemAdapter getAlwaysOkAdapter() {
-        return new AudioSystemOkAdapter();
     }
 
     /**
@@ -113,44 +104,39 @@ public class AudioSystemAdapter {
         return AudioSystem.setParameters(keyValuePairs);
     }
 
-    //--------------------------------------------------------------------
-    protected static class AudioSystemOkAdapter extends AudioSystemAdapter {
-        private static final String TAG = "ASA";
+    /**
+     * Same as {@link AudioSystem#isMicrophoneMuted()}}
+     * Checks whether the microphone mute is on or off.
+     * @return true if microphone is muted, false if it's not
+     */
+    public boolean isMicrophoneMuted() {
+        return AudioSystem.isMicrophoneMuted();
+    }
 
-        @Override
-        public int setDeviceConnectionState(int device, int state, String deviceAddress,
-                                            String deviceName, int codecFormat) {
-            Log.i(TAG, String.format("setDeviceConnectionState(0x%s, %s, %s, 0x%s",
-                    Integer.toHexString(device), state, deviceAddress, deviceName,
-                    Integer.toHexString(codecFormat)));
-            return AudioSystem.AUDIO_STATUS_OK;
-        }
+    /**
+     * Same as {@link AudioSystem#muteMicrophone(boolean)}
+     * Sets the microphone mute on or off.
+     *
+     * @param on set <var>true</var> to mute the microphone;
+     *           <var>false</var> to turn mute off
+     * @return command completion status see AUDIO_STATUS_OK, see AUDIO_STATUS_ERROR
+     */
+    public int muteMicrophone(boolean on) {
+        return AudioSystem.muteMicrophone(on);
+    }
 
-        @Override
-        public int getDeviceConnectionState(int device, String deviceAddress) {
-            return AudioSystem.AUDIO_STATUS_OK;
-        }
+    /**
+     * Same as {@link AudioSystem#setCurrentImeUid(int)}
+     * Communicate UID of current InputMethodService to audio policy service.
+     */
+    public int setCurrentImeUid(int uid) {
+        return AudioSystem.setCurrentImeUid(uid);
+    }
 
-        @Override
-        public int handleDeviceConfigChange(int device, String deviceAddress,
-                                                   String deviceName, int codecFormat) {
-            return AudioSystem.AUDIO_STATUS_OK;
-        }
-
-        @Override
-        public int setPreferredDeviceForStrategy(int strategy,
-                                                 @NonNull AudioDeviceAttributes device) {
-            return AudioSystem.AUDIO_STATUS_OK;
-        }
-
-        @Override
-        public int removePreferredDeviceForStrategy(int strategy) {
-            return AudioSystem.AUDIO_STATUS_OK;
-        }
-
-        @Override
-        public int setParameters(String keyValuePairs) {
-            return AudioSystem.AUDIO_STATUS_OK;
-        }
+    /**
+     * Same as {@link AudioSystem#isStreamActive(int, int)}
+     */
+    public boolean isStreamActive(int stream, int inPastMs) {
+        return AudioSystem.isStreamActive(stream, inPastMs);
     }
 }

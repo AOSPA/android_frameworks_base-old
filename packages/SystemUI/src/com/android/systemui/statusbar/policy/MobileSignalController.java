@@ -266,8 +266,13 @@ public class MobileSignalController extends SignalController<
                 TelephonyIcons.THREE_G);
         mNetworkToIconLookup.put(toIconKey(TelephonyManager.NETWORK_TYPE_EHRPD),
                 TelephonyIcons.THREE_G);
-        mNetworkToIconLookup.put(toIconKey(TelephonyManager.NETWORK_TYPE_UMTS),
+        if (mConfig.show4gFor3g) {
+            mNetworkToIconLookup.put(toIconKey(TelephonyManager.NETWORK_TYPE_UMTS),
+                TelephonyIcons.FOUR_G);
+        } else {
+            mNetworkToIconLookup.put(toIconKey(TelephonyManager.NETWORK_TYPE_UMTS),
                 TelephonyIcons.THREE_G);
+        }
         mNetworkToIconLookup.put(toIconKey(TelephonyManager.NETWORK_TYPE_TD_SCDMA),
                 TelephonyIcons.THREE_G);
         mNetworkToIconLookup.put(toIconKey(TelephonyManager.NETWORK_TYPE_NR),
@@ -957,7 +962,11 @@ public class MobileSignalController extends SignalController<
         if (overrideNetworkType == TelephonyDisplayInfo.OVERRIDE_NETWORK_TYPE_NONE
                 || overrideNetworkType == TelephonyDisplayInfo.OVERRIDE_NETWORK_TYPE_NR_NSA_MMWAVE
                 || overrideNetworkType == TelephonyDisplayInfo.OVERRIDE_NETWORK_TYPE_NR_NSA ){
-            iconKey = toIconKey(mTelephonyDisplayInfo.getNetworkType());
+            int networkType = mTelephonyDisplayInfo.getNetworkType();
+            if (networkType == TelephonyManager.NETWORK_TYPE_UNKNOWN) {
+                networkType = getVoiceNetworkType();
+            }
+            iconKey = toIconKey(networkType);
         } else{
             iconKey = toDisplayIconKey(overrideNetworkType);
         }

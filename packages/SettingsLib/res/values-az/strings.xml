@@ -206,13 +206,13 @@
     <string name="enable_adb" msgid="8072776357237289039">"USB debaq prosesi"</string>
     <string name="enable_adb_summary" msgid="3711526030096574316">"USB qoşulu olan zaman debaq rejimi"</string>
     <string name="clear_adb_keys" msgid="3010148733140369917">"USB debaq avtorizasiyasını ləğv edin"</string>
-    <string name="enable_adb_wireless" msgid="6973226350963971018">"Simsiz sazlama"</string>
+    <string name="enable_adb_wireless" msgid="6973226350963971018">"WiFi sazlaması"</string>
     <string name="enable_adb_wireless_summary" msgid="7344391423657093011">"Wi‑Fi qoşulduqda sazlama rejimi"</string>
     <string name="adb_wireless_error" msgid="721958772149779856">"Xəta"</string>
-    <string name="adb_wireless_settings" msgid="2295017847215680229">"Simsiz sazlama"</string>
-    <string name="adb_wireless_list_empty_off" msgid="1713707973837255490">"Əlçatan cihazları görmək və onlardan istifadə etmək üçün simsiz sazlamanı yandırın"</string>
+    <string name="adb_wireless_settings" msgid="2295017847215680229">"WiFi sazlaması"</string>
+    <string name="adb_wireless_list_empty_off" msgid="1713707973837255490">"Əlçatan cihazları görmək və onlardan istifadə etmək üçün WiFi sazlamasını yandırın"</string>
     <string name="adb_pair_method_qrcode_title" msgid="6982904096137468634">"QR kodu ilə cihazı cütləşdirin"</string>
-    <string name="adb_pair_method_qrcode_summary" msgid="3729901496856458634">"QR kod Skanerindən istifadə etməklə yeni cihazları cütləşdirin"</string>
+    <string name="adb_pair_method_qrcode_summary" msgid="7130694277228970888">"QR kod skanerindən istifadə etməklə yeni cihazları birləşdirin"</string>
     <string name="adb_pair_method_code_title" msgid="1122590300445142904">"Cütləşdirmə kodu ilə cihazı cütləşdirin"</string>
     <string name="adb_pair_method_code_summary" msgid="6370414511333685185">"Altı rəqəmli koddan istifadə etməklə yeni cihazları cütləşdirin"</string>
     <string name="adb_paired_devices_title" msgid="5268997341526217362">"Cütləşdirilmiş cihazlar"</string>
@@ -231,7 +231,7 @@
     <string name="adb_qrcode_pairing_device_failed_msg" msgid="6936292092592914132">"Cihazı cütləşdirmək alınmadı. Ya QR kodu yanlış idi, ya da cihaz eyni şəbəkəyə qoşulmayıb."</string>
     <string name="adb_wireless_ip_addr_preference_title" msgid="8335132107715311730">"IP ünvanı və Port"</string>
     <string name="adb_wireless_qrcode_pairing_title" msgid="1906409667944674707">"QR kodu skanlayın"</string>
-    <string name="adb_wireless_qrcode_pairing_description" msgid="8578868049289910131">"QR Kodu skanlamaqla cihazı Wi‑Fi vasitəsilə cütləşdirin"</string>
+    <string name="adb_wireless_qrcode_pairing_description" msgid="6014121407143607851">"QR kodu skanlamaqla cihazı Wi‑Fi vasitəsilə birləşdirin"</string>
     <string name="adb_wireless_no_network_msg" msgid="2365795244718494658">"Wi-Fi şəbəkəsinə qoşulun"</string>
     <string name="keywords_adb_wireless" msgid="6507505581882171240">"adb, debug, dev"</string>
     <string name="bugreport_in_power" msgid="8664089072534638709">"Baq raportu qısa yolu"</string>
@@ -251,6 +251,7 @@
     <string name="wifi_display_certification" msgid="1805579519992520381">"Simsiz displey sertifikatlaşması"</string>
     <string name="wifi_verbose_logging" msgid="1785910450009679371">"Wi‑Fi Çoxsözlü Girişə icazə verin"</string>
     <string name="wifi_scan_throttling" msgid="2985624788509913617">"Wi‑Fi skanlamasının tənzimlənməsi"</string>
+    <string name="wifi_enhanced_mac_randomization" msgid="5437378364995776979">"Wi‑Fi ilə qabaqcıl MAC randomizasiyası"</string>
     <string name="mobile_data_always_on" msgid="8275958101875563572">"Mobil data həmişə aktiv"</string>
     <string name="tethering_hardware_offload" msgid="4116053719006939161">"Birləşmə üçün avadanlıq akselerasiyası"</string>
     <string name="bluetooth_show_devices_without_names" msgid="923584526471885819">"Bluetooth cihazlarını adsız göstərin"</string>
@@ -283,6 +284,8 @@
     <string name="wifi_display_certification_summary" msgid="8111151348106907513">"Simsiz displey sertifikatlaşması üçün seçimləri göstərir"</string>
     <string name="wifi_verbose_logging_summary" msgid="4993823188807767892">"Wi‑Fi giriş səviyyəsini qaldırın, Wi‑Fi seçəndə hər SSID RSSI üzrə göstərin"</string>
     <string name="wifi_scan_throttling_summary" msgid="2577105472017362814">"Batareya istifadəsini azaldır &amp; şəbəkə performansını yaxşılaşdırır"</string>
+    <!-- no translation found for wifi_enhanced_mac_randomization_summary (1210663439867489931) -->
+    <skip />
     <string name="wifi_metered_label" msgid="8737187690304098638">"Ödənişli"</string>
     <string name="wifi_unmetered_label" msgid="6174142840934095093">"Limitsiz"</string>
     <string name="select_logd_size_title" msgid="1604578195914595173">"Logger bufer ölçüləri"</string>
@@ -300,8 +303,8 @@
     <string name="tethering_hardware_offload_summary" msgid="7801345335142803029">"Əlçatan oldarsa, birləşmə üçün avadanlıq akselerasiyasından istifadə edin"</string>
     <string name="adb_warning_title" msgid="7708653449506485728">"USB debaq funksiyasına icazə verilsin?"</string>
     <string name="adb_warning_message" msgid="8145270656419669221">"USB sazlanması yalnız inkişaf məqsədlidir. Kompüteriniz və cihazınız arasında datanı kopyalamaq üçün ondan istifadə edin, bildiriş olmadan tətbiqləri cihazınıza quraşdırın və qeydiyyat datasını oxuyun."</string>
-    <string name="adbwifi_warning_title" msgid="727104571653031865">"Simsiz sazlamaya icazə verilsin?"</string>
-    <string name="adbwifi_warning_message" msgid="8005936574322702388">"Simsiz sazlama yalnız inkişaf məqsədlidir. Ondan kompüteriniz və cihazınız arasında datanı kopyalamaq, cihazınızda bildiriş olmadan tətbiqləri quraşdırmaq və qeydiyyat datasını oxumaq üçün istifadə edin."</string>
+    <string name="adbwifi_warning_title" msgid="727104571653031865">"WiFi sazlamasına icazə verilsin?"</string>
+    <string name="adbwifi_warning_message" msgid="8005936574322702388">"WiFi sazlaması yalnız inkişaf məqsədlidir. Ondan kompüteriniz və cihazınız arasında datanı kopyalamaq, cihazınızda bildiriş olmadan tətbiqləri quraşdırmaq və qeydiyyat datasını oxumaq üçün istifadə edin."</string>
     <string name="adb_keys_warning_message" msgid="2968555274488101220">"Əvvəl icazə verdiyiniz kompüterlərdən USB debaq əməliyyatına giriş ləğv olunsun?"</string>
     <string name="dev_settings_warning_title" msgid="8251234890169074553">"İnkişaf ayarlarına icazə verilsin mi?"</string>
     <string name="dev_settings_warning_message" msgid="37741686486073668">"Bu parametrlər yalnız inkişafetdirici istifadə üçün nəzərdə tutulub. Onlar cihaz və tətbiqlərinizin sınması və ya pis işləməsinə səbəb ola bilər."</string>
@@ -432,10 +435,10 @@
     <string name="power_discharge_by_only" msgid="92545648425937000">"Təxminən <xliff:g id="TIME">%1$s</xliff:g> olana qədər davam edəcək"</string>
     <string name="power_discharge_by_only_short" msgid="5883041507426914446">"<xliff:g id="TIME">%1$s</xliff:g> olana qədər"</string>
     <string name="power_suggestion_battery_run_out" msgid="6332089307827787087">"Batareya <xliff:g id="TIME">%1$s</xliff:g> radələrinə qədər boşala bilər"</string>
-    <string name="power_remaining_less_than_duration_only" msgid="5802195288324091585">"Qalan vaxt <xliff:g id="THRESHOLD">%1$s</xliff:g> və daha azdır"</string>
-    <string name="power_remaining_less_than_duration" msgid="1812668275239801236">"Qalan vaxt <xliff:g id="THRESHOLD">%1$s</xliff:g> və daha azdır (<xliff:g id="LEVEL">%2$s</xliff:g>)"</string>
-    <string name="power_remaining_more_than_subtext" msgid="7919119719242734848">"Qalan vaxt <xliff:g id="TIME_REMAINING">%1$s</xliff:g> və daha çoxdur (<xliff:g id="LEVEL">%2$s</xliff:g>)"</string>
-    <string name="power_remaining_only_more_than_subtext" msgid="3274496164769110480">"Qalan vaxt <xliff:g id="TIME_REMAINING">%1$s</xliff:g> və daha çoxdur"</string>
+    <string name="power_remaining_less_than_duration_only" msgid="8956656616031395152">"Maksimum <xliff:g id="THRESHOLD">%1$s</xliff:g> qalıb"</string>
+    <string name="power_remaining_less_than_duration" msgid="318215464914990578">"Maksimum <xliff:g id="THRESHOLD">%1$s</xliff:g> qalıb (<xliff:g id="LEVEL">%2$s</xliff:g>)"</string>
+    <string name="power_remaining_more_than_subtext" msgid="446388082266121894">"Minimum <xliff:g id="TIME_REMAINING">%1$s</xliff:g> qalıb (<xliff:g id="LEVEL">%2$s</xliff:g>)"</string>
+    <string name="power_remaining_only_more_than_subtext" msgid="4873750633368888062">"Minimum <xliff:g id="TIME_REMAINING">%1$s</xliff:g> qalıb"</string>
     <string name="power_remaining_duration_only_shutdown_imminent" product="default" msgid="137330009791560774">"Telefon tezliklə sönə bilər"</string>
     <string name="power_remaining_duration_only_shutdown_imminent" product="tablet" msgid="145489081521468132">"Planşet tezliklə sönə bilər"</string>
     <string name="power_remaining_duration_only_shutdown_imminent" product="device" msgid="1070562682853942350">"Cihaz tezliklə sönə bilər"</string>

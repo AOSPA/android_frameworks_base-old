@@ -191,7 +191,6 @@ import android.os.RemoteCallbackList;
 import android.os.RemoteException;
 import android.os.SystemClock;
 import android.os.Trace;
-import android.os.UserHandle;
 import android.os.WorkSource;
 import android.provider.Settings;
 import android.text.TextUtils;
@@ -269,6 +268,12 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
     final int mAppOp;
     // UserId and appId of the owner. Don't display windows of non-current user.
     final int mOwnerUid;
+    /**
+     * Requested userId, if this is not equals with the userId from mOwnerUid, then this window is
+     * created for secondary user.
+     * Use this member instead of get userId from mOwnerUid while query for visibility.
+     */
+    final int mShowUserId;
     /** The owner has {@link android.Manifest.permission#INTERNAL_SYSTEM_WINDOW} */
     final boolean mOwnerCanAddInternalSystemWindow;
     final WindowId mWindowId;
@@ -806,8 +811,9 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
 
     WindowState(WindowManagerService service, Session s, IWindow c, WindowToken token,
             WindowState parentWindow, int appOp, int seq, WindowManager.LayoutParams a,
-            int viewVisibility, int ownerId, boolean ownerCanAddInternalSystemWindow) {
-        this(service, s, c, token, parentWindow, appOp, seq, a, viewVisibility, ownerId,
+            int viewVisibility, int ownerId, int showUserId,
+            boolean ownerCanAddInternalSystemWindow) {
+        this(service, s, c, token, parentWindow, appOp, seq, a, viewVisibility, ownerId, showUserId,
                 ownerCanAddInternalSystemWindow, new PowerManagerWrapper() {
                     @Override
                     public void wakeUp(long time, @WakeReason int reason, String details) {
@@ -823,8 +829,8 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
 
     WindowState(WindowManagerService service, Session s, IWindow c, WindowToken token,
             WindowState parentWindow, int appOp, int seq, WindowManager.LayoutParams a,
-            int viewVisibility, int ownerId, boolean ownerCanAddInternalSystemWindow,
-            PowerManagerWrapper powerManagerWrapper) {
+            int viewVisibility, int ownerId, int showUserId,
+            boolean ownerCanAddInternalSystemWindow, PowerManagerWrapper powerManagerWrapper) {
         super(service);
         mSession = s;
         mClient = c;
@@ -832,6 +838,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         mToken = token;
         mActivityRecord = mToken.asActivityRecord();
         mOwnerUid = ownerId;
+        mShowUserId = showUserId;
         mOwnerCanAddInternalSystemWindow = ownerCanAddInternalSystemWindow;
         mWindowId = new WindowId(this);
         mAttrs.copyFrom(a);
@@ -992,18 +999,6 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         frame.inset(left, top, right, bottom);
     }
 
-    @Override
-    public Rect getDisplayedBounds() {
-        final Task task = getTask();
-        if (task != null) {
-            Rect bounds = task.getOverrideDisplayedBounds();
-            if (!bounds.isEmpty()) {
-                return bounds;
-            }
-        }
-        return super.getDisplayedBounds();
-    }
-
     void computeFrame(DisplayFrames displayFrames) {
         getLayoutingWindowFrames().setDisplayCutout(displayFrames.mDisplayCutout);
         computeFrameLw();
@@ -1058,7 +1053,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
             layoutXDiff = 0;
             layoutYDiff = 0;
         } else {
-            windowFrames.mContainingFrame.set(getDisplayedBounds());
+            windowFrames.mContainingFrame.set(getBounds());
             if (mActivityRecord != null && !mActivityRecord.mFrozenBounds.isEmpty()) {
 
                 // If the bounds are frozen, we still want to translate the window freely and only
@@ -1216,7 +1211,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
             parentLeft = ((WindowState) parent).mWindowFrames.mFrame.left;
             parentTop = ((WindowState) parent).mWindowFrames.mFrame.top;
         } else if (parent != null) {
-            final Rect parentBounds = parent.getDisplayedBounds();
+            final Rect parentBounds = parent.getBounds();
             parentLeft = parentBounds.left;
             parentTop = parentBounds.top;
         }
@@ -1462,6 +1457,11 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
 
     @Override
     void onDisplayChanged(DisplayContent dc) {
+        if (dc != null && mDisplayContent != null && dc != mDisplayContent
+                && mDisplayContent.mInputMethodInputTarget == this) {
+            dc.setInputMethodInputTarget(mDisplayContent.mInputMethodInputTarget);
+            mDisplayContent.mInputMethodInputTarget = null;
+        }
         super.onDisplayChanged(dc);
         // Window was not laid out for this display yet, so make sure mLayoutSeq does not match.
         if (dc != null && mInputWindowHandle.displayId != dc.getDisplayId()) {
@@ -2114,6 +2114,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
     void removeIfPossible() {
         super.removeIfPossible();
         removeIfPossible(false /*keepVisibleDeadWindow*/);
+        finishDrawing(null);
     }
 
     private void removeIfPossible(boolean keepVisibleDeadWindow) {
@@ -2490,6 +2491,23 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
     }
 
     /**
+     * Expands the given rectangle by the region of window resize handle for freeform window.
+     * @param inOutRect The rectangle to update.
+     */
+    private void adjustRegionInFreefromWindowMode(Rect inOutRect) {
+        if (!inFreeformWindowingMode()) {
+            return;
+        }
+
+        // For freeform windows, we need the touch region to include the whole
+        // surface for the shadows.
+        final DisplayMetrics displayMetrics = getDisplayContent().getDisplayMetrics();
+        final int delta = WindowManagerService.dipToPixel(
+                RESIZE_HANDLE_WIDTH_IN_DP, displayMetrics);
+        inOutRect.inset(-delta, -delta);
+    }
+
+    /**
      * Updates the region for a window in an Activity that was a touch modal. This will limit
      * the outer touch to the activity stack region.
      * @param outRegion The region to update.
@@ -2512,14 +2530,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
                 getRootTask().getDimBounds(mTmpRect);
             }
         }
-        if (inFreeformWindowingMode()) {
-            // For freeform windows, we need the touch region to include the whole
-            // surface for the shadows.
-            final DisplayMetrics displayMetrics = getDisplayContent().getDisplayMetrics();
-            final int delta = WindowManagerService.dipToPixel(
-                    RESIZE_HANDLE_WIDTH_IN_DP, displayMetrics);
-            mTmpRect.inset(-delta, -delta);
-        }
+        adjustRegionInFreefromWindowMode(mTmpRect);
         outRegion.set(mTmpRect);
         cropRegionToStackBoundsIfNeeded(outRegion);
     }
@@ -3275,7 +3286,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         }
 
         return win.showForAllUsers()
-                || mWmService.isCurrentProfile(UserHandle.getUserId(win.mOwnerUid));
+                || mWmService.isCurrentProfile(win.mShowUserId);
     }
 
     private static void applyInsets(Region outRegion, Rect frame, Rect inset) {
@@ -3334,7 +3345,8 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         }
 
         final ActivityStack stack = task.getStack();
-        if (stack == null) {
+        if (stack == null || inFreeformWindowingMode()) {
+            handle.setTouchableRegionCrop(null);
             return;
         }
 
@@ -3353,6 +3365,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         }
 
         stack.getDimBounds(mTmpRect);
+        adjustRegionInFreefromWindowMode(mTmpRect);
         region.op(mTmpRect, Region.Op.INTERSECT);
     }
 
@@ -3454,7 +3467,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         final Rect visibleInsets = mWindowFrames.mLastVisibleInsets;
         final Rect stableInsets = mWindowFrames.mLastStableInsets;
         final MergedConfiguration mergedConfiguration = mLastReportedConfiguration;
-        final boolean reportDraw = mWinAnimator.mDrawState == DRAW_PENDING;
+        final boolean reportDraw = mWinAnimator.mDrawState == DRAW_PENDING || useBLASTSync();
         final boolean forceRelayout = reportOrientation || isDragResizeChanged();
         final int displayId = getDisplayId();
         final DisplayCutout displayCutout = getWmDisplayCutout().getDisplayCutout();
@@ -3532,7 +3545,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
             mClient.insetsControlChanged(getInsetsState(),
                     stateController.getControlsForDispatch(this));
         } catch (RemoteException e) {
-            Slog.w(TAG, "Failed to deliver inset state change", e);
+            Slog.w(TAG, "Failed to deliver inset state change to w=" + this, e);
         }
     }
 
@@ -3660,9 +3673,12 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         return mActivityRecord.getBounds().equals(mTmpRect);
     }
 
-    @Override
-    public boolean isLetterboxedOverlappingWith(Rect rect) {
-        return mActivityRecord != null && mActivityRecord.isLetterboxOverlappingWith(rect);
+    /**
+     * @see Letterbox#notIntersectsOrFullyContains(Rect)
+     */
+    boolean letterboxNotIntersectsOrFullyContains(Rect rect) {
+        return mActivityRecord == null
+                || mActivityRecord.letterboxNotIntersectsOrFullyContains(rect);
     }
 
     boolean isDragResizeChanged() {
@@ -3795,7 +3811,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
     public void writeIdentifierToProto(ProtoOutputStream proto, long fieldId) {
         final long token = proto.start(fieldId);
         proto.write(HASH_CODE, System.identityHashCode(this));
-        proto.write(USER_ID, UserHandle.getUserId(mOwnerUid));
+        proto.write(USER_ID, mShowUserId);
         final CharSequence title = getWindowTag();
         if (title != null) {
             proto.write(TITLE, title.toString());
@@ -3979,7 +3995,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
             mLastTitle = title;
             mWasExiting = mAnimatingExit;
             mStringNameCache = "Window{" + Integer.toHexString(System.identityHashCode(this))
-                    + " u" + UserHandle.getUserId(mOwnerUid)
+                    + " u" + mShowUserId
                     + " " + mLastTitle + (mAnimatingExit ? " EXITING}" : "}");
         }
         return mStringNameCache;
@@ -4274,9 +4290,12 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         logPerformShow("performShow on ");
 
         final int drawState = mWinAnimator.mDrawState;
-        if ((drawState == HAS_DRAWN || drawState == READY_TO_SHOW)
-                && mAttrs.type != TYPE_APPLICATION_STARTING && mActivityRecord != null) {
-            mActivityRecord.onFirstWindowDrawn(this, mWinAnimator);
+        if ((drawState == HAS_DRAWN || drawState == READY_TO_SHOW) && mActivityRecord != null) {
+            if (mAttrs.type != TYPE_APPLICATION_STARTING) {
+                mActivityRecord.onFirstWindowDrawn(this, mWinAnimator);
+            } else {
+                mActivityRecord.onStartingWindowDrawn();
+            }
         }
 
         if (mWinAnimator.mDrawState != READY_TO_SHOW || !isReadyForDisplay()) {
@@ -5235,16 +5254,6 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
     }
 
     @Override
-    public void onAnimationLeashCreated(Transaction t, SurfaceControl leash) {
-        super.onAnimationLeashCreated(t, leash);
-    }
-
-    @Override
-    public void onAnimationLeashLost(Transaction t) {
-        super.onAnimationLeashLost(t);
-    }
-
-    @Override
     @VisibleForTesting
     void updateSurfacePosition(Transaction t) {
         if (mSurfaceControl == null) {
@@ -5285,7 +5294,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
             outPoint.offset(-parent.mWindowFrames.mFrame.left + mTmpPoint.x,
                     -parent.mWindowFrames.mFrame.top + mTmpPoint.y);
         } else if (parentWindowContainer != null) {
-            final Rect parentBounds = parentWindowContainer.getDisplayedBounds();
+            final Rect parentBounds = parentWindowContainer.getBounds();
             outPoint.offset(-parentBounds.left, -parentBounds.top);
         }
 
@@ -5296,7 +5305,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         // to account for it. If we actually have shadows we will
         // then un-inset ourselves by the surfaceInsets.
         if (stack != null) {
-            final int outset = stack.getStackOutset();
+            final int outset = stack.getTaskOutset();
             outPoint.offset(outset, outset);
         }
 
@@ -5337,7 +5346,9 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
             // this promotion.
             final WindowState imeTarget = getDisplayContent().mInputMethodTarget;
             boolean inTokenWithAndAboveImeTarget = imeTarget != null && imeTarget != this
-                    && imeTarget.mToken == mToken && imeTarget.compareTo(this) <= 0;
+                    && imeTarget.mToken == mToken
+                    && getParent() != null
+                    && imeTarget.compareTo(this) <= 0;
             return inTokenWithAndAboveImeTarget;
         }
         return false;
@@ -5596,7 +5607,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
 
         @Override
         public void apply(Transaction t, SurfaceControl leash, long currentPlayTime) {
-            final float fraction = (float) currentPlayTime / getDuration();
+            final float fraction = getFraction(currentPlayTime);
             final float v = mInterpolator.getInterpolation(fraction);
             t.setPosition(leash, mFrom.x + (mTo.x - mFrom.x) * v,
                     mFrom.y + (mTo.y - mFrom.y) * v);

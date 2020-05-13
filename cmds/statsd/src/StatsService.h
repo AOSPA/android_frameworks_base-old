@@ -17,7 +17,14 @@
 #ifndef STATS_SERVICE_H
 #define STATS_SERVICE_H
 
+#include <aidl/android/os/BnStatsd.h>
+#include <aidl/android/os/IPendingIntentRef.h>
+#include <aidl/android/os/IPullAtomCallback.h>
 #include <gtest/gtest_prod.h>
+#include <utils/Looper.h>
+
+#include <mutex>
+
 #include "StatsLogProcessor.h"
 #include "anomaly/AlarmMonitor.h"
 #include "config/ConfigManager.h"
@@ -26,13 +33,7 @@
 #include "packages/UidMap.h"
 #include "shell/ShellSubscriber.h"
 #include "statscompanion_util.h"
-
-#include <aidl/android/os/BnStatsd.h>
-#include <aidl/android/os/IPendingIntentRef.h>
-#include <aidl/android/os/IPullAtomCallback.h>
-#include <utils/Looper.h>
-
-#include <mutex>
+#include "utils/MultiConditionTrigger.h"
 
 using namespace android;
 using namespace android::os;
@@ -64,6 +65,7 @@ public:
 
     virtual Status systemRunning();
     virtual Status statsCompanionReady();
+    virtual Status bootCompleted();
     virtual Status informAnomalyAlarmFired();
     virtual Status informPollAlarmFired();
     virtual Status informAlarmForSubscriberTriggeringFired();
@@ -160,9 +162,9 @@ public:
     virtual void sayHiToStatsCompanion();
 
     /**
-     * Binder call to get AppBreadcrumbReported atom.
+     * Binder call to notify statsd that all pullers from boot have been registered.
      */
-    virtual Status sendAppBreadcrumbAtom(int32_t label, int32_t state) override;
+    virtual Status allPullersFromBootRegistered();
 
     /**
      * Binder call to register a callback function for a pulled atom.
@@ -379,6 +381,11 @@ private:
     mutable mutex mShellSubscriberMutex;
     std::shared_ptr<LogEventQueue> mEventQueue;
 
+    MultiConditionTrigger mBootCompleteTrigger;
+    static const inline string kBootCompleteTag = "BOOT_COMPLETE";
+    static const inline string kUidMapReceivedTag = "UID_MAP";
+    static const inline string kAllPullersRegisteredTag = "PULLERS_REGISTERED";
+
     ScopedAIBinder_DeathRecipient mStatsCompanionServiceDeathRecipient;
 
     FRIEND_TEST(StatsLogProcessorTest, TestActivationsPersistAcrossSystemServerRestart);
@@ -387,11 +394,14 @@ private:
     FRIEND_TEST(StatsServiceTest, TestAddConfig_invalid);
     FRIEND_TEST(StatsServiceTest, TestGetUidFromArgs);
     FRIEND_TEST(PartialBucketE2eTest, TestCountMetricNoSplitOnNewApp);
+    FRIEND_TEST(PartialBucketE2eTest, TestCountMetricSplitOnBoot);
     FRIEND_TEST(PartialBucketE2eTest, TestCountMetricSplitOnUpgrade);
     FRIEND_TEST(PartialBucketE2eTest, TestCountMetricSplitOnRemoval);
     FRIEND_TEST(PartialBucketE2eTest, TestCountMetricWithoutSplit);
+    FRIEND_TEST(PartialBucketE2eTest, TestValueMetricOnBootWithoutMinPartialBucket);
     FRIEND_TEST(PartialBucketE2eTest, TestValueMetricWithoutMinPartialBucket);
     FRIEND_TEST(PartialBucketE2eTest, TestValueMetricWithMinPartialBucket);
+    FRIEND_TEST(PartialBucketE2eTest, TestGaugeMetricOnBootWithoutMinPartialBucket);
     FRIEND_TEST(PartialBucketE2eTest, TestGaugeMetricWithoutMinPartialBucket);
     FRIEND_TEST(PartialBucketE2eTest, TestGaugeMetricWithMinPartialBucket);
 };

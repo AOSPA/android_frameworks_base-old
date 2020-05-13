@@ -200,9 +200,9 @@
     <string name="factory_reset_warning" msgid="6858705527798047809">"ਤੁਹਾਡਾ ਡੀਵਾਈਸ ਮਿਟਾਇਆ ਜਾਏਗਾ"</string>
     <string name="factory_reset_message" msgid="2657049595153992213">"ਪ੍ਰਸ਼ਾਸਕ ਐਪ ਵਰਤੀ ਨਹੀਂ ਜਾ ਸਕਦੀ। ਹੁਣ ਤੁਹਾਡੇ ਡੀਵਾਈਸ ਦਾ ਡਾਟਾ ਮਿਟਾਇਆ ਜਾਵੇਗਾ।\n\nਜੇਕਰ ਤੁਹਾਡੇ ਕੋਲ ਕੋਈ ਸਵਾਲ ਹਨ, ਤਾਂ ਆਪਣੀ ਸੰਸਥਾ ਦੇ ਪ੍ਰਸ਼ਾਸਕ ਨੂੰ ਸੰਪਰਕ ਕਰੋ।"</string>
     <string name="printing_disabled_by" msgid="3517499806528864633">"<xliff:g id="OWNER_APP">%s</xliff:g> ਵੱਲੋਂ ਪ੍ਰਿੰਟ ਕਰਨਾ ਬੰਦ ਕੀਤਾ ਗਿਆ।"</string>
-    <string name="personal_apps_suspended_title" msgid="4543693107104417750">"ਆਪਣੀਆਂ ਨਿੱਜੀ ਐਪਾਂ ਅਣਬਲਾਕ ਕਰੋ"</string>
-    <string name="personal_apps_suspended_tomorrow_title" msgid="6414440257969874914">"ਐਪਾਂ ਕੱਲ੍ਹ ਬਲਾਕ ਹੋ ਜਾਣਗੀਆਂ"</string>
-    <string name="personal_apps_suspended_text" msgid="8954038765131038226">"ਤੁਹਾਡਾ ਆਈ.ਟੀ. ਪ੍ਰਸ਼ਾਸਕ ਤੁਹਾਡੀ ਕਾਰਜ ਪ੍ਰੋਫਾਈਲ ਨੂੰ <xliff:g id="DAYS">%1$d</xliff:g> ਦਿਨਾਂ ਤੋਂ ਵੱਧ ਸਮੇਂ ਤੱਕ ਦੀ ਇਜਾਜ਼ਤ ਨਹੀਂ ਦਿੰਦਾ"</string>
+    <string name="personal_apps_suspension_title" msgid="7561416677884286600">"ਆਪਣਾ ਕਾਰਜ ਪ੍ਰੋਫਾਈਲ ਚਾਲੂ ਕਰੋ"</string>
+    <string name="personal_apps_suspension_text" msgid="6115455688932935597">"ਜਦੋਂ ਤੱਕ ਤੁਸੀਂ ਆਪਣਾ ਕਾਰਜ ਪ੍ਰੋਫਾਈਲ ਚਾਲੂ ਨਹੀਂ ਕਰਦੇ ਤੁਹਾਡੀਆਂ ਨਿੱਜੀ ਐਪਾਂ ਬਲਾਕ ਰਹਿੰਦੀਆਂ ਹਨ"</string>
+    <string name="personal_apps_suspension_tomorrow_text" msgid="6322541302153673994">"ਕੱਲ੍ਹ ਨੂੰ ਤੁਹਾਡੀਆਂ ਨਿੱਜੀ ਐਪਾਂ ਬਲਾਕ ਕਰ ਦਿੱਤੀਆਂ ਜਾਣਗੀਆਂ"</string>
     <string name="personal_apps_suspended_turn_profile_on" msgid="4278188538997940785">"ਕਾਰਜ ਪ੍ਰੋਫਾਈਲ ਚਾਲੂ ਕਰੋ"</string>
     <string name="me" msgid="6207584824693813140">"ਮੈਂ"</string>
     <string name="power_dialog" product="tablet" msgid="8333207765671417261">"ਟੈਬਲੈੱਟ ਵਿਕਲਪ"</string>
@@ -290,7 +290,7 @@
     <string name="foreground_service_tap_for_details" msgid="9078123626015586751">"ਬੈਟਰੀ ਅਤੇ ਡਾਟਾ ਵਰਤੋਂ ਸਬੰਧੀ ਵੇਰਵਿਆਂ ਲਈ ਟੈਪ ਕਰੋ"</string>
     <string name="foreground_service_multiple_separator" msgid="5002287361849863168">"<xliff:g id="LEFT_SIDE">%1$s</xliff:g>, <xliff:g id="RIGHT_SIDE">%2$s</xliff:g>"</string>
     <string name="safeMode" msgid="8974401416068943888">"ਸੁਰੱਖਿਅਤ ਮੋਡ"</string>
-    <string name="android_system_label" msgid="5974767339591067210">"Android System"</string>
+    <string name="android_system_label" msgid="5974767339591067210">"Android ਸਿਸਟਮ"</string>
     <string name="user_owner_label" msgid="8628726904184471211">"ਨਿੱਜੀ ਪ੍ਰੋਫਾਈਲ ਵਰਤੋ"</string>
     <string name="managed_profile_label" msgid="7316778766973512382">"ਕਾਰਜ ਪ੍ਰੋਫਾਈਲ ਵਰਤੋ"</string>
     <string name="permgrouplab_contacts" msgid="4254143639307316920">"ਸੰਪਰਕ"</string>
@@ -545,7 +545,7 @@
     <string name="fingerprint_acquired_partial" msgid="8532380671091299342">"ਅਧੂਰਾ ਫਿੰਗਰਪ੍ਰਿਟ ਮਿਲਿਆ। ਕਿਰਪਾ ਕਰਕੇ ਦੁਬਾਰਾ ਕੋਸ਼ਿਸ਼ ਕਰੋ।"</string>
     <string name="fingerprint_acquired_insufficient" msgid="2545149524031515411">"ਫਿੰਗਰਪ੍ਰਿੰਟ ਦੀ ਪ੍ਰਕਿਰਿਆ ਨਹੀਂ ਕਰ ਸਕਿਆ। ਕਿਰਪਾ ਕਰਕੇ ਦੁਬਾਰਾ ਕੋਸ਼ਿਸ਼ ਕਰੋ।"</string>
     <string name="fingerprint_acquired_imager_dirty" msgid="4694800187151533990">"ਫਿੰਗਰਪ੍ਰਿੰਟ ਸੈਂਸਰ ਗੰਦਾ ਹੈ। ਕਿਰਪਾ ਕਰਕੇ ਇਸਨੂੰ ਸਾਫ਼ ਕਰੋ ਅਤੇ ਦੁਬਾਰਾ ਕੋਸ਼ਿਸ਼ ਕਰੋ।"</string>
-    <string name="fingerprint_acquired_too_fast" msgid="5151661932298844352">"ਉਂਗਲ ਨੂੰ ਬਹੁਤ ਤੇਜ਼ ਲੈ ਜਾਇਆ ਗਿਆ. ਕਿਰਪਾ ਕਰਕੇ ਦੁਬਾਰਾ ਕੋਸ਼ਿਸ਼ ਕਰੋ."</string>
+    <string name="fingerprint_acquired_too_fast" msgid="5151661932298844352">"ਉਂਗਲ ਨੂੰ ਬਹੁਤ ਤੇਜ਼ ਲੈ ਜਾਇਆ ਗਿਆ। ਕਿਰਪਾ ਕਰਕੇ ਦੁਬਾਰਾ ਕੋਸ਼ਿਸ਼ ਕਰੋ।"</string>
     <string name="fingerprint_acquired_too_slow" msgid="6683510291554497580">"ਉਂਗਲ ਕਾਫ਼ੀ ਹੌਲੀ ਮੂਵ ਹੋਈ। ਕਿਰਪਾ ਕਰਕੇ ਦੁਬਾਰਾ ਕੋਸ਼ਿਸ਼ ਕਰੋ।"</string>
   <string-array name="fingerprint_acquired_vendor">
   </string-array>
@@ -1183,7 +1183,7 @@
     <string name="unsupported_display_size_show" msgid="980129850974919375">"ਹਮੇਸ਼ਾ  ਦਿਖਾਓ"</string>
     <string name="unsupported_compile_sdk_message" msgid="7326293500707890537">"<xliff:g id="APP_NAME">%1$s</xliff:g> ਨੂੰ Android OS ਦਾ ਇੱਕ ਗੈਰ-ਅਨੁਕੂਲ ਵਰਜਨ ਬਣਾਇਆ ਗਿਆ ਸੀ ਅਤੇ ਅਣਕਿਆਸੇ ਤੌਰ \'ਤੇ ਵਿਹਾਰ ਕਰ ਸਕਦੀ ਹੈ। ਐਪ ਦਾ ਇੱਕ ਅੱਪਡੇਟ ਕੀਤਾ ਹੋਇਆ ਵਰਜਨ ਉਪਲਬਧ ਹੋ ਸਕਦਾ ਹੈ।"</string>
     <string name="unsupported_compile_sdk_show" msgid="1601210057960312248">"ਹਮੇਸਾਂ ਦਿਖਾਓ"</string>
-    <string name="unsupported_compile_sdk_check_update" msgid="1103639989147664456">"ਅੱਪਡੇਟ ਦੀ ਜਾਂਚ ਕਰੋ"</string>
+    <string name="unsupported_compile_sdk_check_update" msgid="1103639989147664456">"ਅੱਪਡੇਟ ਲਈ ਜਾਂਚ ਕਰੋ"</string>
     <string name="smv_application" msgid="3775183542777792638">"ਐਪ <xliff:g id="APPLICATION">%1$s</xliff:g> (ਪ੍ਰਕਿਰਿਆ <xliff:g id="PROCESS">%2$s</xliff:g>) ਨੇ ਆਪਣੀ ਖੁਦ-ਲਾਗੂ ਕੀਤੀ ਸਟ੍ਰਿਕਟਮੋਡ ਨੀਤੀ ਦੀ ਉਲੰਘਣਾ ਕੀਤੀ ਹੈ।"</string>
     <string name="smv_process" msgid="1398801497130695446">"ਪ੍ਰਕਿਰਿਆ <xliff:g id="PROCESS">%1$s</xliff:g> ਨੇ ਆਪਣੀ ਖੁਦ-ਲਾਗੂ ਕੀਤੀ ਸਟ੍ਰਿਕਟਮੋਡ ਨੀਤੀ ਦੀ ਉਲੰਘਣਾ ਕੀਤੀ ਹੈ।"</string>
     <string name="android_upgrading_title" product="default" msgid="7279077384220829683">"ਫ਼ੋਨ ਅੱਪਡੇਟ ਹੋ ਰਿਹਾ ਹੈ…"</string>
@@ -1457,6 +1457,9 @@
     <string name="gpsNotifMessage" msgid="7346649122793758032">"<xliff:g id="NAME">%1$s</xliff:g> (<xliff:g id="SERVICE">%2$s</xliff:g>) ਵੱਲੋਂ ਬੇਨਤੀ ਕੀਤੀ"</string>
     <string name="gpsVerifYes" msgid="3719843080744112940">"ਹਾਂ"</string>
     <string name="gpsVerifNo" msgid="1671201856091564741">"ਨਹੀਂ"</string>
+    <string name="gnss_nfw_notification_title" msgid="5004493772059563423">"ਸੰਕਟਕਾਲੀਨ ਟਿਕਾਣੇ ਤੱਕ ਪਹੁੰਚ ਕੀਤੀ ਗਈ"</string>
+    <string name="gnss_nfw_notification_message_oem" msgid="3683958907027107969">"ਹਾਲੀਆ ਸੰਕਟਕਾਲੀਨ ਸੈਸ਼ਨ ਵੇਲੇ ਤੁਹਾਡੇ ਡੀਵਾਈਸ ਨਿਰਮਾਤਾ ਨੇ ਤੁਹਾਡੇ ਟਿਕਾਣੇ ਤੱਕ ਪਹੁੰਚ ਕੀਤੀ"</string>
+    <string name="gnss_nfw_notification_message_carrier" msgid="815888995791562151">"ਹਾਲੀਆ ਸੰਕਟਕਾਲੀਨ ਸੈਸ਼ਨ ਵੇਲੇ ਤੁਹਾਡੇ ਕੈਰੀਅਰ ਨੇ ਤੁਹਾਡੇ ਟਿਕਾਣੇ ਤੱਕ ਪਹੁੰਚ ਕੀਤੀ"</string>
     <string name="sync_too_many_deletes" msgid="6999440774578705300">"ਵਧੀ ਸੀਮਾ ਮਿਟਾਓ"</string>
     <string name="sync_too_many_deletes_desc" msgid="7409327940303504440">"<xliff:g id="TYPE_OF_SYNC">%2$s</xliff:g>, ਖਾਤੇ <xliff:g id="ACCOUNT_NAME">%3$s</xliff:g> ਲਈ <xliff:g id="NUMBER_OF_DELETED_ITEMS">%1$d</xliff:g> ਆਈਟਮਾਂ ਮਿਟਾਈਆਂ ਗਈਆਂ ਹਨ। ਤੁਸੀਂ ਕੀ ਕਰਨਾ ਚਾਹੁੰਦੇ ਹੋ?"</string>
     <string name="sync_really_delete" msgid="5657871730315579051">"ਆਈਟਮਾਂ ਹਟਾਓ"</string>
@@ -1558,7 +1561,7 @@
     <string name="wireless_display_route_description" msgid="8297563323032966831">"ਵਾਇਰਲੈੱਸ ਡਿਸਪਲੇ"</string>
     <string name="media_route_button_content_description" msgid="2299223698196869956">"ਪ੍ਰਸਾਰਿਤ ਕਰੋ"</string>
     <string name="media_route_chooser_title" msgid="6646594924991269208">"ਡੀਵਾਈਸ ਨਾਲ ਕਨੈਕਟ ਕਰੋ"</string>
-    <string name="media_route_chooser_title_for_remote_display" msgid="3105906508794326446">"ਡੀਵਾਈਸ ਨਾਲ ਸਕ੍ਰੀਨ ਕਾਸਟ ਕਰੋ"</string>
+    <string name="media_route_chooser_title_for_remote_display" msgid="3105906508794326446">"ਡੀਵਾਈਸ \'ਤੇ ਸਕ੍ਰੀਨ ਕਾਸਟ ਕਰੋ"</string>
     <string name="media_route_chooser_searching" msgid="6119673534251329535">"ਡੀਵਾਈਸਾਂ ਦੀ ਖੋਜ ਹੋ ਰਹੀ ਹੈ…"</string>
     <string name="media_route_chooser_extended_settings" msgid="2506352159381327741">"ਸੈਟਿੰਗਾਂ"</string>
     <string name="media_route_controller_disconnect" msgid="7362617572732576959">"ਡਿਸਕਨੈਕਟ ਕਰੋ"</string>
@@ -1573,7 +1576,7 @@
     <string name="display_manager_overlay_display_title" msgid="1480158037150469170">"<xliff:g id="NAME">%1$s</xliff:g>: <xliff:g id="WIDTH">%2$d</xliff:g>x<xliff:g id="HEIGHT">%3$d</xliff:g>, <xliff:g id="DPI">%4$d</xliff:g> dpi"</string>
     <string name="display_manager_overlay_display_secure_suffix" msgid="2810034719482834679">", ਸੁਰੱਖਿਅਤ"</string>
     <string name="kg_forgot_pattern_button_text" msgid="406145459223122537">"ਪੈਟਰਨ ਭੁੱਲ ਗਏ"</string>
-    <string name="kg_wrong_pattern" msgid="1342812634464179931">"ਗ਼ਲਤ ਪੈਟਰਨ"</string>
+    <string name="kg_wrong_pattern" msgid="1342812634464179931">"ਗਲਤ ਪੈਟਰਨ"</string>
     <string name="kg_wrong_password" msgid="2384677900494439426">"ਗਲਤ ਪਾਸਵਰਡ"</string>
     <string name="kg_wrong_pin" msgid="3680925703673166482">"ਗਲਤ ਪਿੰਨ"</string>
     <plurals name="kg_too_many_failed_attempts_countdown" formatted="false" msgid="236717428673283568">
@@ -1628,6 +1631,8 @@
     <string name="accessibility_shortcut_single_service_warning" msgid="6363127705112844257">"ਕੁਝ ਸਕਿੰਟਾਂ ਲਈ ਦੋਵੇਂ ਅਵਾਜ਼ੀ ਕੁੰਜੀਆਂ ਨੂੰ ਦਬਾਈ ਰੱਖਣਾ <xliff:g id="SERVICE">%1$s</xliff:g>, ਇੱਕ ਪਹੁੰਚਯੋਗਤਾ ਵਿਸ਼ੇਸ਼ਤਾ ਨੂੰ ਚਾਲੂ ਕਰ ਦਿੰਦਾ ਹੈ। ਇਹ ਤੁਹਾਡੇ ਡੀਵਾਈਸ ਦੇ ਕੰਮ ਕਰਨ ਦੇ ਤਰੀਕੇ ਨੂੰ ਬਦਲ ਸਕਦਾ ਹੈ।\n\nਸੈਟਿੰਗਾਂ ਅਤੇ ਪਹੁੰਚਯੋਗਤਾ ਵਿੱਚ ਤੁਸੀਂ ਇਸ ਸ਼ਾਰਟਕੱਟ ਨੂੰ ਕਿਸੇ ਹੋਰ ਵਿਸ਼ੇਸ਼ਤਾ ਵਿੱਚ ਬਦਲ ਸਕਦੇ ਹੋ।"</string>
     <string name="accessibility_shortcut_on" msgid="5463618449556111344">"ਚਾਲੂ ਕਰੋ"</string>
     <string name="accessibility_shortcut_off" msgid="3651336255403648739">"ਚਾਲੂ ਨਾ ਕਰੋ"</string>
+    <string name="accessibility_shortcut_menu_item_status_on" msgid="6608392117189732543">"ਚਾਲੂ"</string>
+    <string name="accessibility_shortcut_menu_item_status_off" msgid="5531598275559472393">"ਬੰਦ"</string>
     <string name="accessibility_enable_service_title" msgid="3931558336268541484">"ਕੀ <xliff:g id="SERVICE">%1$s</xliff:g> ਨੂੰ ਤੁਹਾਡੇ ਡੀਵਾਈਸ ਦਾ ਪੂਰਾ ਕੰਟਰੋਲ ਦੇਣਾ ਹੈ?"</string>
     <string name="accessibility_enable_service_encryption_warning" msgid="8603532708618236909">"ਜੇਕਰ ਤੁਸੀਂ <xliff:g id="SERVICE">%1$s</xliff:g> ਚਾਲੂ ਕਰਦੇ ਹੋ, ਤਾਂ ਤੁਹਾਡਾ ਡੀਵਾਈਸ ਇਨਕ੍ਰਿਪਸ਼ਨ ਦਾ ਵਿਸਤਾਰ ਕਰਨ ਲਈ ਤੁਹਾਡੇ ਸਕ੍ਰੀਨ ਲਾਕ ਦੀ ਵਰਤੋਂ ਨਹੀਂ ਕਰੇਗਾ।"</string>
     <string name="accessibility_service_warning_description" msgid="291674995220940133">"ਪੂਰਾ ਕੰਟਰੋਲ ਉਹਨਾਂ ਐਪਾਂ ਲਈ ਢੁਕਵਾਂ ਹੈ ਜੋ ਪਹੁੰਚਯੋਗਤਾ ਸੰਬੰਧੀ ਲੋੜਾਂ ਵਿੱਚ ਤੁਹਾਡੀ ਮਦਦ ਕਰਦੀਆਂ ਹਨ, ਪਰ ਜ਼ਿਆਦਾਤਰ ਐਪਾਂ ਲਈ ਢੁਕਵਾਂ ਨਹੀਂ ਹੁੰਦਾ।"</string>
@@ -1789,8 +1794,10 @@
     <string name="package_updated_device_owner" msgid="7560272363805506941">"ਤੁਹਾਡੇ ਪ੍ਰਸ਼ਾਸਕ ਵੱਲੋਂ ਅੱਪਡੇਟ ਕੀਤਾ ਗਿਆ"</string>
     <string name="package_deleted_device_owner" msgid="2292335928930293023">"ਤੁਹਾਡੇ ਪ੍ਰਸ਼ਾਸਕ ਵੱਲੋਂ ਮਿਟਾਇਆ ਗਿਆ"</string>
     <string name="confirm_battery_saver" msgid="5247976246208245754">"ਠੀਕ ਹੈ"</string>
-    <string name="battery_saver_description_with_learn_more" msgid="1817385558636532621">"ਬੈਟਰੀ ਲਾਈਫ਼ ਵਧਾਉਣ ਲਈ, ਬੈਟਰੀ ਸੇਵਰ:\n ਗੂੜ੍ਹਾ ਥੀਮ ਚਾਲੂ ਕਰਦਾ ਹੈ\n ਬੈਕਗ੍ਰਾਊਂਡ ਸਰਗਰਮੀ, ਕੁਝ ਦ੍ਰਿਸ਼ ਪ੍ਰਭਾਵਾਂ, ਅਤੇ \"Hey Google\" ਵਰਗੀਆਂ ਹੋਰ ਵਿਸ਼ੇਸ਼ਤਾਵਾਂ ਨੂੰ ਬੰਦ ਕਰਦਾ ਹੈ ਜਾਂ ਉਹਨਾਂ \'ਤੇ ਪਾਬੰਦੀ ਲਗਾਉਂਦਾ ਹੈ\n\n"<annotation id="url">"ਹੋਰ ਜਾਣੋ"</annotation></string>
-    <string name="battery_saver_description" msgid="7618492104632328184">"ਬੈਟਰੀ ਲਾਈਫ਼ ਵਧਾਉਣ ਲਈ, ਬੈਟਰੀ ਸੇਵਰ:\n ਗੂੜ੍ਹਾ ਥੀਮ ਚਾਲੂ ਕਰਦਾ ਹੈ\n ਬੈਕਗ੍ਰਾਊਂਡ ਸਰਗਰਮੀ, ਕੁਝ ਦ੍ਰਿਸ਼ ਪ੍ਰਭਾਵਾਂ, ਅਤੇ \"Hey Google\" ਵਰਗੀਆਂ ਹੋਰ ਵਿਸ਼ੇਸ਼ਤਾਵਾਂ ਨੂੰ ਬੰਦ ਕਰਦਾ ਹੈ ਜਾਂ ਉਹਨਾਂ \'ਤੇ ਪਾਬੰਦੀ ਲਗਾਉਂਦਾ ਹੈ"</string>
+    <!-- no translation found for battery_saver_description_with_learn_more (5997766757551917769) -->
+    <skip />
+    <!-- no translation found for battery_saver_description (8587408568232177204) -->
+    <skip />
     <string name="data_saver_description" msgid="4995164271550590517">"ਡਾਟਾ ਵਰਤੋਂ ਘਟਾਉਣ ਵਿੱਚ ਮਦਦ ਲਈ, ਡਾਟਾ ਸੇਵਰ ਕੁਝ ਐਪਾਂ ਨੂੰ ਬੈਕਗ੍ਰਾਊਂਡ ਵਿੱਚ ਡਾਟਾ ਭੇਜਣ ਜਾਂ ਪ੍ਰਾਪਤ ਕਰਨ ਤੋਂ ਰੋਕਦਾ ਹੈ। ਤੁਹਾਡੇ ਵੱਲੋਂ ਵਰਤਮਾਨ ਤੌਰ \'ਤੇ ਵਰਤੀ ਜਾ ਰਹੀ ਐਪ ਡਾਟਾ \'ਤੇ ਪਹੁੰਚ ਕਰ ਸਕਦੀ ਹੈ, ਪਰ ਉਹ ਇੰਝ ਕਦੇ-ਕਦਾਈਂ ਕਰ ਸਕਦੀ ਹੈ। ਉਦਾਹਰਨ ਲਈ, ਇਸ ਦਾ ਮਤਲਬ ਇਹ ਹੋ ਸਕਦਾ ਹੈ ਕਿ ਚਿੱਤਰ ਤਦ ਤੱਕ ਨਹੀਂ ਪ੍ਰਦਰਸ਼ਿਤ ਕੀਤੇ ਜਾਂਦੇ, ਜਦੋਂ ਤੱਕ ਤੁਸੀਂ ਉਹਨਾਂ \'ਤੇ ਟੈਪ ਨਹੀਂ ਕਰਦੇ।"</string>
     <string name="data_saver_enable_title" msgid="7080620065745260137">"ਕੀ ਡਾਟਾ ਸੇਵਰ ਚਾਲੂ ਕਰਨਾ ਹੈ?"</string>
     <string name="data_saver_enable_button" msgid="4399405762586419726">"ਚਾਲੂ ਕਰੋ"</string>
@@ -1889,7 +1896,7 @@
     <string name="app_blocked_title" msgid="7353262160455028160">"ਐਪ ਉਪਲਬਧ ਨਹੀਂ ਹੈ"</string>
     <string name="app_blocked_message" msgid="542972921087873023">"<xliff:g id="APP_NAME">%1$s</xliff:g> ਐਪ ਇਸ ਵੇਲੇ ਉਪਲਬਧ ਨਹੀਂ ਹੈ।"</string>
     <string name="deprecated_target_sdk_message" msgid="5203207875657579953">"ਇਹ ਐਪ Android ਦੇ ਕਿਸੇ ਵਧੇਰੇ ਪੁਰਾਣੇ ਵਰਜਨ ਲਈ ਬਣਾਈ ਗਈ ਸੀ ਅਤੇ ਸ਼ਾਇਦ ਸਹੀ ਢੰਗ ਨਾਲ ਕੰਮ ਨਾ ਕਰੇ। ਅੱਪਡੇਟਾਂ ਲਈ ਜਾਂਚ ਕਰੋ ਜਾਂ ਵਿਕਾਸਕਾਰ ਨਾਲ ਸੰਪਰਕ ਕਰੋ।"</string>
-    <string name="deprecated_target_sdk_app_store" msgid="8456784048558808909">"ਅੱਪਡੇਟ ਦੀ ਜਾਂਚ ਕਰੋ"</string>
+    <string name="deprecated_target_sdk_app_store" msgid="8456784048558808909">"ਅੱਪਡੇਟ ਲਈ ਜਾਂਚ ਕਰੋ"</string>
     <string name="new_sms_notification_title" msgid="6528758221319927107">"ਤੁਹਾਨੂੰ ਨਵੇਂ ਸੁਨੇਹੇ ਪ੍ਰਾਪਤ ਹੋਏ ਹਨ"</string>
     <string name="new_sms_notification_content" msgid="3197949934153460639">"ਦੇਖਣ ਲਈ SMS ਐਪ ਖੋਲ੍ਹੋ"</string>
     <string name="profile_encrypted_title" msgid="9001208667521266472">"ਕੁਝ ਪ੍ਰਕਾਰਜਾਤਮਕਤਾ ਸੀਮਤ ਹੋ ਸਕਦੀ ਹੈ"</string>
@@ -2035,17 +2042,20 @@
     <string name="accessibility_system_action_notifications_label" msgid="6083767351772162010">"ਸੂਚਨਾਵਾਂ"</string>
     <string name="accessibility_system_action_quick_settings_label" msgid="4583900123506773783">"ਤਤਕਾਲ ਸੈਟਿੰਗਾਂ"</string>
     <string name="accessibility_system_action_power_dialog_label" msgid="8095341821683910781">"ਪਾਵਰ ਵਿੰਡੋ"</string>
-    <string name="accessibility_system_action_toggle_split_screen_label" msgid="6626177163849387748">"ਸਪਲਿਟ ਸਕ੍ਰੀਨ ਨੂੰ ਟੌਗਲ ਕਰੋ"</string>
     <string name="accessibility_system_action_lock_screen_label" msgid="5484190691945563838">"ਲਾਕ ਸਕ੍ਰੀਨ"</string>
     <string name="accessibility_system_action_screenshot_label" msgid="3581566515062741676">"ਸਕ੍ਰੀਨਸ਼ਾਟ"</string>
-    <string name="accessibility_system_action_accessibility_menu_label" msgid="8436484650391125184">"ਪਹੁੰਚਯੋਗਤਾ ਮੀਨੂ"</string>
+    <!-- no translation found for accessibility_system_action_accessibility_button_label (5941347017132886642) -->
+    <skip />
+    <!-- no translation found for accessibility_system_action_accessibility_button_chooser_label (6973618519666227981) -->
+    <skip />
     <string name="accessibility_freeform_caption" msgid="8377519323496290122">"<xliff:g id="APP_NAME">%1$s</xliff:g> ਦੀ ਸੁਰਖੀ ਪੱਟੀ।"</string>
     <string name="as_app_forced_to_restricted_bucket" msgid="8233871289353898964">"<xliff:g id="PACKAGE_NAME">%1$s</xliff:g> ਨੂੰ ਪ੍ਰਤਿਬੰਧਿਤ ਖਾਨੇ ਵਿੱਚ ਪਾਇਆ ਗਿਆ ਹੈ"</string>
     <string name="conversation_single_line_name_display" msgid="8958948312915255999">"<xliff:g id="SENDER_NAME">%1$s</xliff:g>:"</string>
+    <!-- no translation found for conversation_single_line_image_placeholder (6983271082911936900) -->
+    <skip />
     <string name="conversation_title_fallback_one_to_one" msgid="1980753619726908614">"ਗੱਲਬਾਤ"</string>
     <string name="conversation_title_fallback_group_chat" msgid="456073374993104303">"ਗੁਰੱਪ ਗੱਲਬਾਤ"</string>
-    <!-- no translation found for unread_convo_overflow (920517615597353833) -->
-    <skip />
+    <string name="unread_convo_overflow" msgid="920517615597353833">"<xliff:g id="MAX_UNREAD_COUNT">%1$d</xliff:g>+"</string>
     <string name="resolver_personal_tab" msgid="2051260504014442073">"ਨਿੱਜੀ"</string>
     <string name="resolver_work_tab" msgid="2690019516263167035">"ਕੰਮ"</string>
     <string name="resolver_personal_tab_accessibility" msgid="5739524949153091224">"ਵਿਅਕਤੀਗਤ ਦ੍ਰਿਸ਼"</string>

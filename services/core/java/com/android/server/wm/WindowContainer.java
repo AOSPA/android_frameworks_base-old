@@ -406,6 +406,40 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
     }
 
     /**
+     * Create a new SurfaceControl for this WindowContainer and migrate all properties to the new
+     * SurfaceControl. Properties include:
+     * 1. Children
+     * 2. Position
+     * 3. Z order
+     *
+     * Remove the old SurfaceControl since it's no longer needed.
+     *
+     * This is used to revoke control of the SurfaceControl from a client process that was
+     * previously organizing this WindowContainer.
+     */
+    void migrateToNewSurfaceControl() {
+        SurfaceControl.Transaction t = getPendingTransaction();
+        t.remove(mSurfaceControl);
+        // Clear the last position so the new SurfaceControl will get correct position
+        mLastSurfacePosition.set(0, 0);
+
+        createSurfaceControl(false /* force */);
+        if (mLastRelativeToLayer != null) {
+            t.setRelativeLayer(mSurfaceControl, mLastRelativeToLayer, mLastLayer);
+        } else {
+            t.setLayer(mSurfaceControl, mLastLayer);
+        }
+
+        for (int i = 0; i < mChildren.size(); i++)  {
+            SurfaceControl sc = mChildren.get(i).getSurfaceControl();
+            if (sc != null) {
+                t.reparent(sc, mSurfaceControl);
+            }
+        }
+        scheduleAnimation();
+    }
+
+    /**
      * Called when the surface is shown for the first time.
      */
     void onSurfaceShown(Transaction t) {
@@ -526,6 +560,11 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
      */
     @CallSuper
     void removeImmediately() {
+        final DisplayContent dc = getDisplayContent();
+        if (dc != null) {
+            mSurfaceFreezer.unfreeze(getPendingTransaction());
+            dc.mChangingContainers.remove(this);
+        }
         while (!mChildren.isEmpty()) {
             final E child = mChildren.peekLast();
             child.removeImmediately();
@@ -662,9 +701,11 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
                 //       position that takes into account the removed child (if the index of the
                 //       child < position, then the position should be adjusted). We should consider
                 //       doing this adjustment here and remove any adjustments in the callers.
-                mChildren.remove(child);
-                mChildren.add(position, child);
-                onChildPositionChanged(child);
+                if (mChildren.indexOf(child) != position) {
+                    mChildren.remove(child);
+                    mChildren.add(position, child);
+                    onChildPositionChanged(child);
+                }
         }
     }
 
@@ -716,6 +757,10 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
      * @param dc The display this container is on after changes.
      */
     void onDisplayChanged(DisplayContent dc) {
+        if (mDisplayContent != null && mDisplayContent.mChangingContainers.remove(this)) {
+            // Cancel any change transition queued-up for this container on the old display.
+            mSurfaceFreezer.unfreeze(getPendingTransaction());
+        }
         mDisplayContent = dc;
         if (dc != null && dc != this) {
             dc.getPendingTransaction().merge(mPendingTransaction);
@@ -735,6 +780,10 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
     DisplayArea getDisplayArea() {
         WindowContainer parent = getParent();
         return parent != null ? parent.getDisplayArea() : null;
+    }
+
+    boolean isAttached() {
+        return getDisplayArea() != null;
     }
 
     void setWaitingForDrawnIfResizingChanged() {
@@ -2027,6 +2076,7 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
 
     void cancelAnimation() {
         mSurfaceAnimator.cancelAnimation();
+        mSurfaceFreezer.unfreeze(getPendingTransaction());
     }
 
     @Override
@@ -2058,7 +2108,7 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
     // TODO: Remove this and use #getBounds() instead once we set an app transition animation
     // on TaskStack.
     Rect getAnimationBounds(int appStackClipMode) {
-        return getDisplayedBounds();
+        return getBounds();
     }
 
     /**
@@ -2076,8 +2126,7 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
      * @see #getAnimationAdapter
      */
     boolean applyAnimation(WindowManager.LayoutParams lp, int transit, boolean enter,
-            boolean isVoiceInteraction,
-            @Nullable OnAnimationFinishedCallback animationFinishedCallback) {
+            boolean isVoiceInteraction, @Nullable OnAnimationFinishedCallback finishedCallback) {
         if (mWmService.mDisableTransitionAnimation) {
             ProtoLog.v(WM_DEBUG_APP_TRANSITIONS_ANIM,
                     "applyAnimation: transition animation is disabled or skipped. "
@@ -2092,22 +2141,7 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         try {
             Trace.traceBegin(TRACE_TAG_WINDOW_MANAGER, "WC#applyAnimation");
             if (okToAnimate()) {
-                final Pair<AnimationAdapter, AnimationAdapter> adapters = getAnimationAdapter(lp,
-                        transit, enter, isVoiceInteraction);
-                AnimationAdapter adapter = adapters.first;
-                AnimationAdapter thumbnailAdapter = adapters.second;
-                if (adapter != null) {
-                    startAnimation(getPendingTransaction(), adapter, !isVisible(),
-                            ANIMATION_TYPE_APP_TRANSITION, animationFinishedCallback);
-                    if (adapter.getShowWallpaper()) {
-                        getDisplayContent().pendingLayoutChanges |= FINISH_LAYOUT_REDO_WALLPAPER;
-                    }
-                    if (thumbnailAdapter != null) {
-                        mSurfaceFreezer.mSnapshot.startAnimation(getPendingTransaction(),
-                                thumbnailAdapter, ANIMATION_TYPE_APP_TRANSITION,
-                                (type, anim) -> { });
-                    }
-                }
+                applyAnimationUnchecked(lp, enter, transit, isVoiceInteraction, finishedCallback);
             } else {
                 cancelAnimation();
             }
@@ -2136,7 +2170,7 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         // Separate position and size for use in animators.
         mTmpRect.set(getAnimationBounds(appStackClipMode));
         if (sHierarchicalAnimations) {
-            getRelativeDisplayedPosition(mTmpPoint);
+            getRelativePosition(mTmpPoint);
         } else {
             mTmpPoint.set(mTmpRect.left, mTmpRect.top);
         }
@@ -2191,7 +2225,8 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
                         getSurfaceAnimationRunner());
 
                 resultAdapters = new Pair<>(adapter, null);
-                mNeedsZBoost = a.getZAdjustment() == Animation.ZORDER_TOP;
+                mNeedsZBoost = a.getZAdjustment() == Animation.ZORDER_TOP
+                        || AppTransition.isClosingTransit(transit);
                 mTransit = transit;
                 mTransitFlags = getDisplayContent().mAppTransition.getTransitFlags();
             } else {
@@ -2201,12 +2236,37 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         return resultAdapters;
     }
 
+    protected void applyAnimationUnchecked(WindowManager.LayoutParams lp, boolean enter,
+            int transit, boolean isVoiceInteraction,
+            @Nullable OnAnimationFinishedCallback finishedCallback) {
+        final Pair<AnimationAdapter, AnimationAdapter> adapters = getAnimationAdapter(lp,
+                transit, enter, isVoiceInteraction);
+        AnimationAdapter adapter = adapters.first;
+        AnimationAdapter thumbnailAdapter = adapters.second;
+        if (adapter != null) {
+            startAnimation(getPendingTransaction(), adapter, !isVisible(),
+                    ANIMATION_TYPE_APP_TRANSITION, finishedCallback);
+            if (adapter.getShowWallpaper()) {
+                getDisplayContent().pendingLayoutChanges |= FINISH_LAYOUT_REDO_WALLPAPER;
+            }
+            if (thumbnailAdapter != null) {
+                mSurfaceFreezer.mSnapshot.startAnimation(getPendingTransaction(),
+                        thumbnailAdapter, ANIMATION_TYPE_APP_TRANSITION, (type, anim) -> { });
+            }
+        }
+    }
+
     final SurfaceAnimationRunner getSurfaceAnimationRunner() {
         return mWmService.mSurfaceAnimationRunner;
     }
 
     private Animation loadAnimation(WindowManager.LayoutParams lp, int transit, boolean enter,
                                     boolean isVoiceInteraction) {
+        if (isOrganized()) {
+            // Defer to the task organizer to run animations
+            return null;
+        }
+
         final DisplayContent displayContent = getDisplayContent();
         final DisplayInfo displayInfo = displayContent.getDisplayInfo();
         final int width = displayInfo.appWidth;
@@ -2291,14 +2351,18 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         }
     }
 
+    void resetSurfacePositionForAnimationLeash(Transaction t) {
+        t.setPosition(mSurfaceControl, 0, 0);
+        mLastSurfacePosition.set(0, 0);
+    }
+
     @Override
     public void onAnimationLeashCreated(Transaction t, SurfaceControl leash) {
         mLastLayer = -1;
         reassignLayer(t);
 
         // Leash is now responsible for position, so set our position to 0.
-        t.setPosition(mSurfaceControl, 0, 0);
-        mLastSurfacePosition.set(0, 0);
+        resetSurfacePositionForAnimationLeash(t);
     }
 
     @Override
@@ -2382,7 +2446,7 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
             return;
         }
 
-        getRelativeDisplayedPosition(mTmpPos);
+        getRelativePosition(mTmpPos);
         if (mTmpPos.equals(mLastSurfacePosition)) {
             return;
         }
@@ -2394,16 +2458,6 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
     @VisibleForTesting
     Point getLastSurfacePosition() {
         return mLastSurfacePosition;
-    }
-
-    /**
-     * Displayed bounds specify where to display this container at. It differs from bounds during
-     * certain operations (like animation or interactive dragging).
-     *
-     * @return the bounds to display this container at.
-     */
-    Rect getDisplayedBounds() {
-        return getBounds();
     }
 
     /**
@@ -2426,7 +2480,7 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         outSurfaceInsets.setEmpty();
     }
 
-    void getRelativeDisplayedPosition(Point outPos) {
+    void getRelativePosition(Point outPos) {
         // In addition to updateSurfacePosition, we keep other code that sets
         // position from fighting with the organizer
         if (isOrganized()) {
@@ -2434,11 +2488,11 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
             return;
         }
 
-        final Rect dispBounds = getDisplayedBounds();
+        final Rect dispBounds = getBounds();
         outPos.set(dispBounds.left, dispBounds.top);
         final WindowContainer parent = getParent();
         if (parent != null) {
-            final Rect parentBounds = parent.getDisplayedBounds();
+            final Rect parentBounds = parent.getBounds();
             outPos.offset(-parentBounds.left, -parentBounds.top);
         }
     }
@@ -2501,16 +2555,6 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
 
         static RemoteToken fromBinder(IBinder binder) {
             return (RemoteToken) binder;
-        }
-
-        @Override
-        public SurfaceControl getLeash() {
-            final WindowContainer wc = getContainer();
-            if (wc == null) return null;
-            // We need to copy the SurfaceControl instead of returning the original
-            // because the Parcel FLAGS PARCELABLE_WRITE_RETURN_VALUE cause SurfaceControls
-            // to release themselves.
-            return new SurfaceControl(wc.getSurfaceControl());
         }
 
         WindowContainerToken toWindowContainerToken() {
@@ -2576,5 +2620,9 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         mBLASTSyncEngine.setReady(localId);
 
         return willSync;
+    }
+
+    boolean useBLASTSync() {
+        return mUsingBLASTSyncTransaction;
     }
 }

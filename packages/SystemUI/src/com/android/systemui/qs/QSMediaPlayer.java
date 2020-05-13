@@ -18,11 +18,13 @@ package com.android.systemui.qs;
 
 import static com.android.systemui.util.SysuiLifecycle.viewAttachLifecycle;
 
-import android.app.Notification;
+import android.app.PendingIntent;
 import android.content.Context;
+import android.content.pm.PackageManager;
 import android.content.res.ColorStateList;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.Icon;
+import android.media.MediaDescription;
 import android.media.session.MediaController;
 import android.media.session.MediaSession;
 import android.util.Log;
@@ -34,12 +36,12 @@ import android.widget.LinearLayout;
 import android.widget.SeekBar;
 import android.widget.TextView;
 
-import com.android.settingslib.media.MediaDevice;
+import com.android.settingslib.media.LocalMediaManager;
 import com.android.systemui.R;
 import com.android.systemui.media.MediaControlPanel;
 import com.android.systemui.media.SeekBarObserver;
 import com.android.systemui.media.SeekBarViewModel;
-import com.android.systemui.statusbar.NotificationMediaManager;
+import com.android.systemui.plugins.ActivityStarter;
 import com.android.systemui.util.concurrency.DelayableExecutor;
 
 import java.util.concurrent.Executor;
@@ -61,23 +63,28 @@ public class QSMediaPlayer extends MediaControlPanel {
     };
 
     private final QSPanel mParent;
+    private final Executor mForegroundExecutor;
     private final DelayableExecutor mBackgroundExecutor;
     private final SeekBarViewModel mSeekBarViewModel;
     private final SeekBarObserver mSeekBarObserver;
+    private String mPackageName;
 
     /**
      * Initialize quick shade version of player
      * @param context
      * @param parent
-     * @param manager
+     * @param routeManager Provides information about device
      * @param foregroundExecutor
      * @param backgroundExecutor
+     * @param activityStarter
      */
-    public QSMediaPlayer(Context context, ViewGroup parent, NotificationMediaManager manager,
-            Executor foregroundExecutor, DelayableExecutor backgroundExecutor) {
-        super(context, parent, manager, R.layout.qs_media_panel, QS_ACTION_IDS, foregroundExecutor,
-                backgroundExecutor);
+    public QSMediaPlayer(Context context, ViewGroup parent, LocalMediaManager routeManager,
+            Executor foregroundExecutor, DelayableExecutor backgroundExecutor,
+            ActivityStarter activityStarter) {
+        super(context, parent, routeManager, R.layout.qs_media_panel, QS_ACTION_IDS,
+                foregroundExecutor, backgroundExecutor, activityStarter);
         mParent = (QSPanel) parent;
+        mForegroundExecutor = foregroundExecutor;
         mBackgroundExecutor = backgroundExecutor;
         mSeekBarViewModel = new SeekBarViewModel(backgroundExecutor);
         mSeekBarObserver = new SeekBarObserver(getView());
@@ -91,48 +98,103 @@ public class QSMediaPlayer extends MediaControlPanel {
     }
 
     /**
+     * Add a media panel view based on a media description. Used for resumption
+     * @param description
+     * @param iconColor
+     * @param bgColor
+     * @param contentIntent
+     * @param pkgName
+     */
+    public void setMediaSession(MediaSession.Token token, MediaDescription description,
+            int iconColor, int bgColor, PendingIntent contentIntent, String pkgName) {
+        mPackageName = pkgName;
+        PackageManager pm = getContext().getPackageManager();
+        Drawable icon = null;
+        CharSequence appName = pkgName.substring(pkgName.lastIndexOf("."));
+        try {
+            icon = pm.getApplicationIcon(pkgName);
+            appName = pm.getApplicationLabel(pm.getApplicationInfo(pkgName, 0));
+        } catch (PackageManager.NameNotFoundException e) {
+            Log.e(TAG, "Error getting package information", e);
+        }
+
+        // Set what we can normally
+        super.setMediaSession(token, icon, null, iconColor, bgColor, contentIntent,
+                appName.toString(), null);
+
+        // Then add info from MediaDescription
+        ImageView albumView = mMediaNotifView.findViewById(R.id.album_art);
+        if (albumView != null) {
+            // Resize art in a background thread
+            mBackgroundExecutor.execute(() -> processAlbumArt(description, albumView));
+        }
+
+        // Song name
+        TextView titleText = mMediaNotifView.findViewById(R.id.header_title);
+        CharSequence songName = description.getTitle();
+        titleText.setText(songName);
+        titleText.setTextColor(iconColor);
+
+        // Artist name (not in mini player)
+        TextView artistText = mMediaNotifView.findViewById(R.id.header_artist);
+        if (artistText != null) {
+            CharSequence artistName = description.getSubtitle();
+            artistText.setText(artistName);
+            artistText.setTextColor(iconColor);
+        }
+
+        initLongPressMenu(iconColor);
+
+        // Set buttons to resume state
+        resetButtons();
+    }
+
+    /**
      * Update media panel view for the given media session
      * @param token token for this media session
      * @param icon app notification icon
+     * @param largeIcon notification's largeIcon, used as a fallback for album art
      * @param iconColor foreground color (for text, icons)
      * @param bgColor background color
      * @param actionsContainer a LinearLayout containing the media action buttons
-     * @param notif reference to original notification
-     * @param device current playback device
+     * @param contentIntent Intent to send when user taps on player
+     * @param appName Application title
+     * @param key original notification's key
      */
-    public void setMediaSession(MediaSession.Token token, Icon icon, int iconColor,
-            int bgColor, View actionsContainer, Notification notif, MediaDevice device) {
+    public void setMediaSession(MediaSession.Token token, Drawable icon, Icon largeIcon,
+            int iconColor, int bgColor, View actionsContainer, PendingIntent contentIntent,
+            String appName, String key) {
 
-        String appName = Notification.Builder.recoverBuilder(getContext(), notif)
-                .loadHeaderAppName();
-        super.setMediaSession(token, icon, iconColor, bgColor, notif.contentIntent,
-                appName, device);
+        super.setMediaSession(token, icon, largeIcon, iconColor, bgColor, contentIntent, appName,
+                key);
 
         // Media controls
-        LinearLayout parentActionsLayout = (LinearLayout) actionsContainer;
-        int i = 0;
-        for (; i < parentActionsLayout.getChildCount() && i < QS_ACTION_IDS.length; i++) {
-            ImageButton thisBtn = mMediaNotifView.findViewById(QS_ACTION_IDS[i]);
-            ImageButton thatBtn = parentActionsLayout.findViewById(NOTIF_ACTION_IDS[i]);
-            if (thatBtn == null || thatBtn.getDrawable() == null
-                    || thatBtn.getVisibility() != View.VISIBLE) {
-                thisBtn.setVisibility(View.GONE);
-                continue;
+        if (actionsContainer != null) {
+            LinearLayout parentActionsLayout = (LinearLayout) actionsContainer;
+            int i = 0;
+            for (; i < parentActionsLayout.getChildCount() && i < QS_ACTION_IDS.length; i++) {
+                ImageButton thisBtn = mMediaNotifView.findViewById(QS_ACTION_IDS[i]);
+                ImageButton thatBtn = parentActionsLayout.findViewById(NOTIF_ACTION_IDS[i]);
+                if (thatBtn == null || thatBtn.getDrawable() == null
+                        || thatBtn.getVisibility() != View.VISIBLE) {
+                    thisBtn.setVisibility(View.GONE);
+                    continue;
+                }
+
+                Drawable thatIcon = thatBtn.getDrawable();
+                thisBtn.setImageDrawable(thatIcon.mutate());
+                thisBtn.setVisibility(View.VISIBLE);
+                thisBtn.setOnClickListener(v -> {
+                    Log.d(TAG, "clicking on other button");
+                    thatBtn.performClick();
+                });
             }
 
-            Drawable thatIcon = thatBtn.getDrawable();
-            thisBtn.setImageDrawable(thatIcon.mutate());
-            thisBtn.setVisibility(View.VISIBLE);
-            thisBtn.setOnClickListener(v -> {
-                Log.d(TAG, "clicking on other button");
-                thatBtn.performClick();
-            });
-        }
-
-        // Hide any unused buttons
-        for (; i < QS_ACTION_IDS.length; i++) {
-            ImageButton thisBtn = mMediaNotifView.findViewById(QS_ACTION_IDS[i]);
-            thisBtn.setVisibility(View.GONE);
+            // Hide any unused buttons
+            for (; i < QS_ACTION_IDS.length; i++) {
+                ImageButton thisBtn = mMediaNotifView.findViewById(QS_ACTION_IDS[i]);
+                thisBtn.setVisibility(View.GONE);
+            }
         }
 
         // Seek Bar
@@ -140,6 +202,10 @@ public class QSMediaPlayer extends MediaControlPanel {
         mBackgroundExecutor.execute(
                 () -> mSeekBarViewModel.updateController(controller, iconColor));
 
+        initLongPressMenu(iconColor);
+    }
+
+    private void initLongPressMenu(int iconColor) {
         // Set up long press menu
         View guts = mMediaNotifView.findViewById(R.id.media_guts);
         View options = mMediaNotifView.findViewById(R.id.qs_media_controls_options);
@@ -147,7 +213,7 @@ public class QSMediaPlayer extends MediaControlPanel {
 
         View clearView = options.findViewById(R.id.remove);
         clearView.setOnClickListener(b -> {
-            mParent.removeMediaPlayer(QSMediaPlayer.this);
+            removePlayer();
         });
         ImageView removeIcon = options.findViewById(R.id.remove_icon);
         removeIcon.setImageTintList(ColorStateList.valueOf(iconColor));
@@ -167,9 +233,9 @@ public class QSMediaPlayer extends MediaControlPanel {
     }
 
     @Override
-    public void clearControls() {
-        super.clearControls();
-
+    protected void resetButtons() {
+        super.resetButtons();
+        mSeekBarViewModel.clearController();
         View guts = mMediaNotifView.findViewById(R.id.media_guts);
         View options = mMediaNotifView.findViewById(R.id.qs_media_controls_options);
 
@@ -191,5 +257,20 @@ public class QSMediaPlayer extends MediaControlPanel {
      */
     public void setListening(boolean listening) {
         mSeekBarViewModel.setListening(listening);
+    }
+
+    @Override
+    public void removePlayer() {
+        Log.d(TAG, "removing player from parent: " + mParent);
+        // Ensure this happens on the main thread (could happen in QSMediaBrowser callback)
+        mForegroundExecutor.execute(() -> mParent.removeMediaPlayer(QSMediaPlayer.this));
+    }
+
+    @Override
+    public String getMediaPlayerPackage() {
+        if (getController() == null) {
+            return mPackageName;
+        }
+        return super.getMediaPlayerPackage();
     }
 }

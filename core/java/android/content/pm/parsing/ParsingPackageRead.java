@@ -41,6 +41,7 @@ import android.os.Parcelable;
 import android.util.ArraySet;
 import android.util.Pair;
 import android.util.SparseArray;
+import android.util.SparseIntArray;
 
 import com.android.internal.R;
 
@@ -609,6 +610,13 @@ public interface ParsingPackageRead extends Parcelable {
     String getManageSpaceActivityName();
 
     /**
+     * @see ApplicationInfo#minExtensionVersions
+     * @see R.styleable#AndroidManifestExtensionSdk
+     */
+    @Nullable
+    SparseIntArray getMinExtensionVersions();
+
+    /**
      * @see ApplicationInfo#minSdkVersion
      * @see R.styleable#AndroidManifestUsesSdk_minSdkVersion
      */
@@ -850,4 +858,9 @@ public interface ParsingPackageRead extends Parcelable {
 
     // TODO(b/135203078): Hide and enforce going through PackageInfoUtils
     ApplicationInfo toAppInfoWithoutState();
+
+    /**
+     * same as toAppInfoWithoutState except without flag computation.
+     */
+    ApplicationInfo toAppInfoWithoutStateWithoutFlags();
 }

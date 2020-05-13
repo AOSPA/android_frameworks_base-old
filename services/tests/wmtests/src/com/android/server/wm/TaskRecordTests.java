@@ -49,15 +49,11 @@ import static org.hamcrest.Matchers.sameInstance;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
-import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.same;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
 
 import android.app.ActivityManager;
 import android.app.TaskInfo;
@@ -70,17 +66,11 @@ import android.content.res.Configuration;
 import android.graphics.Rect;
 import android.os.IBinder;
 import android.platform.test.annotations.Presubmit;
-import android.service.voice.IVoiceInteractionSession;
 import android.util.DisplayMetrics;
 import android.util.Xml;
 import android.view.DisplayInfo;
 
-import androidx.test.filters.FlakyTest;
 import androidx.test.filters.MediumTest;
-
-import com.android.internal.app.IVoiceInteractor;
-import com.android.server.wm.Task.TaskFactory;
-import com.android.server.wm.utils.WmDisplayCutout;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -127,11 +117,6 @@ public class TaskRecordTests extends ActivityTestsBase {
         assertEquals(expected.mLastNonFullscreenBounds, actual.mLastNonFullscreenBounds);
     }
 
-    @Test
-    public void testDefaultTaskFactoryNotNull() throws Exception {
-        assertNotNull(Task.getTaskFactory());
-    }
-
     /** Ensure we have no chance to modify the original intent. */
     @Test
     public void testCopyBaseIntentForTaskInfo() {
@@ -141,23 +126,6 @@ public class TaskRecordTests extends ActivityTestsBase {
 
         // The intent of info should be a copy so assert that they are different instances.
         assertThat(info.baseIntent, not(sameInstance(task.getBaseIntent())));
-    }
-
-    @Test
-    public void testCreateTestRecordUsingCustomizedFactory() throws Exception {
-        TestTaskFactory factory = new TestTaskFactory();
-        Task.setTaskFactory(factory);
-
-        try {
-            assertFalse(factory.mCreated);
-
-            Task.create(mService, 0 /*taskId*/, 0 /*activityType*/,
-                    new ActivityInfo(), new Intent(), false /* createdByOrganizer */);
-
-            assertTrue(factory.mCreated);
-        } finally {
-            Task.setTaskFactory(null);
-        }
     }
 
     @Test
@@ -368,49 +336,65 @@ public class TaskRecordTests extends ActivityTestsBase {
 
     @Test
     public void testComputeConfigResourceOverrides() {
-        final Task task = new TaskBuilder(mSupervisor).build();
+        final Rect fullScreenBounds = new Rect(0, 0, 1080, 1920);
+        TestDisplayContent display = new TestDisplayContent.Builder(
+                mService, fullScreenBounds.width(), fullScreenBounds.height()).build();
+        final Task task = new TaskBuilder(mSupervisor).setDisplay(display).build();
         final Configuration inOutConfig = new Configuration();
         final Configuration parentConfig = new Configuration();
         final int longSide = 1200;
         final int shortSide = 600;
+        final Rect parentBounds = new Rect(0, 0, 250, 500);
+        final Rect parentAppBounds = new Rect(0, 0, 250, 480);
+        parentConfig.windowConfiguration.setBounds(parentBounds);
+        parentConfig.windowConfiguration.setAppBounds(parentAppBounds);
         parentConfig.densityDpi = 400;
-        parentConfig.screenHeightDp = 200; // 200 * 400 / 160 = 500px
-        parentConfig.screenWidthDp = 100; // 100 * 400 / 160 = 250px
+        parentConfig.screenHeightDp = (parentBounds.bottom * 160) / parentConfig.densityDpi; // 200
+        parentConfig.screenWidthDp = (parentBounds.right * 160) / parentConfig.densityDpi; // 100
         parentConfig.windowConfiguration.setRotation(ROTATION_0);
 
-        // Portrait bounds.
-        inOutConfig.windowConfiguration.getBounds().set(0, 0, shortSide, longSide);
-        // By default, the parent bounds should limit the existing input bounds.
+        // By default, the input bounds will fill parent.
         task.computeConfigResourceOverrides(inOutConfig, parentConfig);
 
         assertEquals(parentConfig.screenHeightDp, inOutConfig.screenHeightDp);
         assertEquals(parentConfig.screenWidthDp, inOutConfig.screenWidthDp);
+        assertEquals(parentAppBounds, inOutConfig.windowConfiguration.getAppBounds());
         assertEquals(Configuration.ORIENTATION_PORTRAIT, inOutConfig.orientation);
+
+        // If bounds are overridden, config properties should be made to match. Surface hierarchy
+        // will crop for policy.
+        inOutConfig.setToDefaults();
+        final Rect largerPortraitBounds = new Rect(0, 0, shortSide, longSide);
+        inOutConfig.windowConfiguration.setBounds(largerPortraitBounds);
+        task.computeConfigResourceOverrides(inOutConfig, parentConfig);
+        // The override bounds are beyond the parent, the out appBounds should not be intersected
+        // by parent appBounds.
+        assertEquals(largerPortraitBounds, inOutConfig.windowConfiguration.getAppBounds());
+        assertEquals(longSide, inOutConfig.screenHeightDp * parentConfig.densityDpi / 160);
+        assertEquals(shortSide, inOutConfig.screenWidthDp * parentConfig.densityDpi / 160);
 
         inOutConfig.setToDefaults();
         // Landscape bounds.
-        inOutConfig.windowConfiguration.getBounds().set(0, 0, longSide, shortSide);
+        final Rect largerLandscapeBounds = new Rect(0, 0, longSide, shortSide);
+        inOutConfig.windowConfiguration.setBounds(largerLandscapeBounds);
 
         // Setup the display with a top stable inset. The later assertion will ensure the inset is
         // excluded from screenHeightDp.
         final int statusBarHeight = 100;
-        final DisplayContent displayContent = task.mDisplayContent;
-        final DisplayPolicy policy = mock(DisplayPolicy.class);
+        final DisplayPolicy policy = display.getDisplayPolicy();
         doAnswer(invocationOnMock -> {
             final Rect insets = invocationOnMock.<Rect>getArgument(0);
             insets.top = statusBarHeight;
             return null;
         }).when(policy).convertNonDecorInsetsToStableInsets(any(), eq(ROTATION_0));
-        doReturn(policy).when(displayContent).getDisplayPolicy();
-        doReturn(mock(WmDisplayCutout.class)).when(displayContent)
-                .calculateDisplayCutoutForRotation(anyInt());
 
         // Without limiting to be inside the parent bounds, the out screen size should keep relative
         // to the input bounds.
         final ActivityRecord.CompatDisplayInsets compatIntsets =
-                new ActivityRecord.CompatDisplayInsets(displayContent, task);
+                new ActivityRecord.CompatDisplayInsets(display, task);
         task.computeConfigResourceOverrides(inOutConfig, parentConfig, compatIntsets);
 
+        assertEquals(largerLandscapeBounds, inOutConfig.windowConfiguration.getAppBounds());
         assertEquals((shortSide - statusBarHeight) * DENSITY_DEFAULT / parentConfig.densityDpi,
                 inOutConfig.screenHeightDp);
         assertEquals(longSide * DENSITY_DEFAULT / parentConfig.densityDpi,
@@ -437,6 +421,21 @@ public class TaskRecordTests extends ActivityTestsBase {
     }
 
     @Test
+    public void testFullScreenTaskNotAdjustedByMinimalSize() {
+        final Task fullscreenTask = new TaskBuilder(mSupervisor).build();
+        final Rect originalTaskBounds = new Rect(fullscreenTask.getBounds());
+        final ActivityInfo aInfo = new ActivityInfo();
+        aInfo.windowLayout = new ActivityInfo.WindowLayout(0 /* width */, 0 /* widthFraction */,
+                    0 /* height */, 0 /* heightFraction */, 0 /* gravity */,
+                    originalTaskBounds.width() * 2 /* minWidth */,
+                    originalTaskBounds.height() * 2 /* minHeight */);
+        fullscreenTask.setMinDimensions(aInfo);
+        fullscreenTask.onConfigurationChanged(fullscreenTask.getParent().getConfiguration());
+
+        assertEquals(originalTaskBounds, fullscreenTask.getBounds());
+    }
+
+    @Test
     public void testInsetDisregardedWhenFreeformOverlapsNavBar() {
         TaskDisplayArea taskDisplayArea = mService.mRootWindowContainer.getDefaultTaskDisplayArea();
         ActivityStack stack = taskDisplayArea.createStack(WINDOWING_MODE_FULLSCREEN,
@@ -454,7 +453,6 @@ public class TaskRecordTests extends ActivityTestsBase {
         parentConfig.screenWidthDp = 100; // 100 * 400 / 160 = 250px
         parentConfig.windowConfiguration.setRotation(ROTATION_0);
 
-        final float density = 2.5f; // densityDpi / DENSITY_DEFAULT_SCALE = 400 / 160.0f
         final int longSideDp = 480; // longSide / density = 1200 / 400 * 160
         final int shortSideDp = 240; // shortSide / density = 600 / 400 * 160
         final int screenLayout = parentConfig.screenLayout
@@ -463,31 +461,38 @@ public class TaskRecordTests extends ActivityTestsBase {
                 Configuration.reduceScreenLayout(screenLayout, longSideDp, shortSideDp);
 
         // Portrait bounds overlapping with navigation bar, without insets.
-        inOutConfig.windowConfiguration.getBounds().set(0,
+        final Rect freeformBounds = new Rect(0,
                 displayHeight - 10 - longSide,
                 shortSide,
                 displayHeight - 10);
+        inOutConfig.windowConfiguration.setBounds(freeformBounds);
         // Set to freeform mode to verify bug fix.
         inOutConfig.windowConfiguration.setWindowingMode(WINDOWING_MODE_FREEFORM);
 
         task.computeConfigResourceOverrides(inOutConfig, parentConfig);
 
-        assertEquals(parentConfig.screenWidthDp, inOutConfig.screenWidthDp);
-        assertEquals(parentConfig.screenHeightDp, inOutConfig.screenHeightDp);
+        // screenW/H should not be effected by parent since overridden and freeform
+        assertEquals(freeformBounds.width() * 160 / parentConfig.densityDpi,
+                inOutConfig.screenWidthDp);
+        assertEquals(freeformBounds.height() * 160 / parentConfig.densityDpi,
+                inOutConfig.screenHeightDp);
         assertEquals(reducedScreenLayout, inOutConfig.screenLayout);
 
         inOutConfig.setToDefaults();
         // Landscape bounds overlapping with navigtion bar, without insets.
-        inOutConfig.windowConfiguration.getBounds().set(0,
+        freeformBounds.set(0,
                 displayHeight - 10 - shortSide,
                 longSide,
                 displayHeight - 10);
+        inOutConfig.windowConfiguration.setBounds(freeformBounds);
         inOutConfig.windowConfiguration.setWindowingMode(WINDOWING_MODE_FREEFORM);
 
         task.computeConfigResourceOverrides(inOutConfig, parentConfig);
 
-        assertEquals(parentConfig.screenWidthDp, inOutConfig.screenWidthDp);
-        assertEquals(parentConfig.screenHeightDp, inOutConfig.screenHeightDp);
+        assertEquals(freeformBounds.width() * 160 / parentConfig.densityDpi,
+                inOutConfig.screenWidthDp);
+        assertEquals(freeformBounds.height() * 160 / parentConfig.densityDpi,
+                inOutConfig.screenHeightDp);
         assertEquals(reducedScreenLayout, inOutConfig.screenLayout);
     }
 
@@ -508,8 +513,9 @@ public class TaskRecordTests extends ActivityTestsBase {
         info.packageName = DEFAULT_COMPONENT_PACKAGE_NAME;
         info.targetActivity = targetClassName;
 
-        final Task task = Task.create(mService, 1 /* taskId */, info, intent,
-                null /* voiceSession */, null /* voiceInteractor */, null /*stack*/);
+        final Task task = new ActivityStack(mService, 1 /* taskId */, info, intent,
+                null /* voiceSession */, null /* voiceInteractor */, null /* taskDescriptor */,
+                null /*stack*/);
         assertEquals("The alias activity component should be saved in task intent.", aliasClassName,
                 task.intent.getComponent().getClassName());
 
@@ -1005,49 +1011,5 @@ public class TaskRecordTests extends ActivityTestsBase {
                 0, false, null, 0, 0, 0, 0, 0, null, null, 0, false, false, false, 0,
                 0, null /*ActivityInfo*/, null /*_voiceSession*/, null /*_voiceInteractor*/,
                 null /*stack*/);
-    }
-
-    private static class TestTaskFactory extends TaskFactory {
-        private boolean mCreated = false;
-
-        @Override
-        Task create(ActivityTaskManagerService service, int taskId, int activityType,
-                ActivityInfo info, Intent intent, boolean createdByOrganizer) {
-            mCreated = true;
-            return null;
-        }
-
-        @Override
-        Task create(ActivityTaskManagerService service, int taskId, ActivityInfo info,
-                Intent intent, IVoiceInteractionSession voiceSession,
-                IVoiceInteractor voiceInteractor, ActivityStack stack) {
-            mCreated = true;
-            return null;
-        }
-
-        @Override
-        Task create(ActivityTaskManagerService service, int taskId, Intent intent,
-                Intent affinityIntent, String affinity, String rootAffinity,
-                ComponentName realActivity,
-                ComponentName origActivity, boolean rootWasReset, boolean autoRemoveRecents,
-                boolean askedCompatMode, int userId, int effectiveUid, String lastDescription,
-                long lastTimeMoved,
-                boolean neverRelinquishIdentity,
-                ActivityManager.TaskDescription lastTaskDescription,
-                int taskAffiliation, int prevTaskId, int nextTaskId, int taskAffiliationColor,
-                int callingUid, String callingPackage, String callingFeatureId, int resizeMode,
-                boolean supportsPictureInPicture,
-                boolean realActivitySuspended, boolean userSetupComplete, int minWidth,
-                int minHeight, ActivityStack stack) {
-            mCreated = true;
-            return null;
-        }
-
-        @Override
-        Task restoreFromXml(XmlPullParser in, ActivityStackSupervisor stackSupervisor)
-                throws IOException, XmlPullParserException {
-            mCreated = true;
-            return null;
-        }
     }
 }

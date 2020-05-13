@@ -17,7 +17,6 @@
 #define DEBUG false  // STOPSHIP if true
 #include "Log.h"
 
-#include "atoms_info.h"
 #include "puller_util.h"
 
 namespace android {
@@ -49,10 +48,13 @@ using namespace std;
  */
 void mapAndMergeIsolatedUidsToHostUid(vector<shared_ptr<LogEvent>>& data, const sp<UidMap>& uidMap,
                                       int tagId, const vector<int>& additiveFieldsVec) {
-    if ((android::util::AtomsInfo::kAtomsWithAttributionChain.find(tagId) ==
-         android::util::AtomsInfo::kAtomsWithAttributionChain.end()) &&
-        (android::util::AtomsInfo::kAtomsWithUidField.find(tagId) ==
-         android::util::AtomsInfo::kAtomsWithUidField.end())) {
+    // Check the first LogEvent for attribution chain or a uid field as either all atoms with this
+    // tagId have them or none of them do.
+    std::pair<int, int> attrIndexRange;
+    const bool hasAttributionChain = data[0]->hasAttributionChain(&attrIndexRange);
+    bool hasUidField = (data[0]->getUidFieldIndex() != -1);
+
+    if (!hasAttributionChain && !hasUidField) {
         VLOG("No uid or attribution chain to merge, atom %d", tagId);
         return;
     }
@@ -63,31 +65,23 @@ void mapAndMergeIsolatedUidsToHostUid(vector<shared_ptr<LogEvent>>& data, const 
             ALOGE("Wrong atom. Expecting %d, got %d", tagId, event->GetTagId());
             return;
         }
-        if (android::util::AtomsInfo::kAtomsWithAttributionChain.find(tagId) !=
-            android::util::AtomsInfo::kAtomsWithAttributionChain.end()) {
-            for (auto& value : *(event->getMutableValues())) {
-                if (value.mField.getPosAtDepth(0) > kAttributionField) {
-                    break;
-                }
-                if (isAttributionUidField(value)) {
-                    const int hostUid = uidMap->getHostUidOrSelf(value.mValue.int_value);
-                    value.mValue.setInt(hostUid);
+        if (hasAttributionChain) {
+            vector<FieldValue>* const fieldValues = event->getMutableValues();
+            for (int i = attrIndexRange.first; i <= attrIndexRange.second; i++) {
+                FieldValue& fieldValue = fieldValues->at(i);
+                if (isAttributionUidField(fieldValue)) {
+                    const int hostUid = uidMap->getHostUidOrSelf(fieldValue.mValue.int_value);
+                    fieldValue.mValue.setInt(hostUid);
                 }
             }
         } else {
-            auto it = android::util::AtomsInfo::kAtomsWithUidField.find(tagId);
-            if (it != android::util::AtomsInfo::kAtomsWithUidField.end()) {
-                int uidField = it->second;  // uidField is the field number in proto,
-                // starting from 1
-                if (uidField > 0 && (int)event->getValues().size() >= uidField &&
-                    (event->getValues())[uidField - 1].mValue.getType() == INT) {
-                    Value& value = (*event->getMutableValues())[uidField - 1].mValue;
-                    const int hostUid = uidMap->getHostUidOrSelf(value.int_value);
-                    value.setInt(hostUid);
-                } else {
-                    ALOGE("Malformed log, uid not found. %s", event->ToString().c_str());
-                    return;
-                }
+            int uidFieldIndex = event->getUidFieldIndex();
+            if (uidFieldIndex != -1) {
+                Value& value = (*event->getMutableValues())[uidFieldIndex].mValue;
+                const int hostUid = uidMap->getHostUidOrSelf(value.int_value);
+                value.setInt(hostUid);
+            } else {
+                ALOGE("Malformed log, uid not found. %s", event->ToString().c_str());
             }
         }
     }

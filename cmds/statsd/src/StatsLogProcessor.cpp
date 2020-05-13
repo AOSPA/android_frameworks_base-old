@@ -25,7 +25,6 @@
 #include <frameworks/base/cmds/statsd/src/experiment_ids.pb.h>
 
 #include "android-base/stringprintf.h"
-#include "atoms_info.h"
 #include "external/StatsPullerManager.h"
 #include "guardrail/StatsdStats.h"
 #include "logd/LogEvent.h"
@@ -138,38 +137,22 @@ void StatsLogProcessor::onPeriodicAlarmFired(
     }
 }
 
-void updateUid(Value* value, int hostUid) {
-    int uid = value->int_value;
-    if (uid != hostUid) {
-        value->setInt(hostUid);
-    }
-}
-
 void StatsLogProcessor::mapIsolatedUidToHostUidIfNecessaryLocked(LogEvent* event) const {
-    if (android::util::AtomsInfo::kAtomsWithAttributionChain.find(event->GetTagId()) !=
-        android::util::AtomsInfo::kAtomsWithAttributionChain.end()) {
-        for (auto& value : *(event->getMutableValues())) {
-            if (value.mField.getPosAtDepth(0) > kAttributionField) {
-                break;
-            }
-            if (isAttributionUidField(value)) {
-                const int hostUid = mUidMap->getHostUidOrSelf(value.mValue.int_value);
-                updateUid(&value.mValue, hostUid);
+    if (std::pair<int, int> indexRange; event->hasAttributionChain(&indexRange)) {
+        vector<FieldValue>* const fieldValues = event->getMutableValues();
+        for (int i = indexRange.first; i <= indexRange.second; i++) {
+            FieldValue& fieldValue = fieldValues->at(i);
+            if (isAttributionUidField(fieldValue)) {
+                const int hostUid = mUidMap->getHostUidOrSelf(fieldValue.mValue.int_value);
+                fieldValue.mValue.setInt(hostUid);
             }
         }
     } else {
-        auto it = android::util::AtomsInfo::kAtomsWithUidField.find(event->GetTagId());
-        if (it != android::util::AtomsInfo::kAtomsWithUidField.end()) {
-            int uidField = it->second;  // uidField is the field number in proto,
-                                        // starting from 1
-            if (uidField > 0 && (int)event->getValues().size() >= uidField &&
-                (event->getValues())[uidField - 1].mValue.getType() == INT) {
-                Value& value = (*event->getMutableValues())[uidField - 1].mValue;
-                const int hostUid = mUidMap->getHostUidOrSelf(value.int_value);
-                updateUid(&value, hostUid);
-            } else {
-                ALOGE("Malformed log, uid not found. %s", event->ToString().c_str());
-            }
+        int uidFieldIndex = event->getUidFieldIndex();
+        if (uidFieldIndex != -1) {
+           Value& value = (*event->getMutableValues())[uidFieldIndex].mValue;
+           const int hostUid = mUidMap->getHostUidOrSelf(value.int_value);
+           value.setInt(hostUid);
         }
     }
 }
@@ -404,15 +387,24 @@ void StatsLogProcessor::OnLogEvent(LogEvent* event) {
 void StatsLogProcessor::OnLogEvent(LogEvent* event, int64_t elapsedRealtimeNs) {
     std::lock_guard<std::mutex> lock(mMetricsMutex);
 
+    // Tell StatsdStats about new event
+    const int64_t eventElapsedTimeNs = event->GetElapsedTimestampNs();
+    int atomId = event->GetTagId();
+    StatsdStats::getInstance().noteAtomLogged(atomId, eventElapsedTimeNs / NS_PER_SEC);
+    if (!event->isValid()) {
+        StatsdStats::getInstance().noteAtomError(atomId);
+        return;
+    }
+
     // Hard-coded logic to update train info on disk and fill in any information
     // this log event may be missing.
-    if (event->GetTagId() == android::os::statsd::util::BINARY_PUSH_STATE_CHANGED) {
+    if (atomId == android::os::statsd::util::BINARY_PUSH_STATE_CHANGED) {
         onBinaryPushStateChangedEventLocked(event);
     }
 
     // Hard-coded logic to update experiment ids on disk for certain rollback
     // types and fill the rollback atom with experiment ids
-    if (event->GetTagId() == android::os::statsd::util::WATCHDOG_ROLLBACK_OCCURRED) {
+    if (atomId == android::os::statsd::util::WATCHDOG_ROLLBACK_OCCURRED) {
         onWatchdogRollbackOccurredLocked(event);
     }
 
@@ -421,16 +413,11 @@ void StatsLogProcessor::OnLogEvent(LogEvent* event, int64_t elapsedRealtimeNs) {
         ALOGI("%s", event->ToString().c_str());
     }
 #endif
-    const int64_t eventElapsedTimeNs = event->GetElapsedTimestampNs();
-
     resetIfConfigTtlExpiredLocked(eventElapsedTimeNs);
-
-    StatsdStats::getInstance().noteAtomLogged(
-        event->GetTagId(), event->GetElapsedTimestampNs() / NS_PER_SEC);
 
     // Hard-coded logic to update the isolated uid's in the uid-map.
     // The field numbers need to be currently updated by hand with atoms.proto
-    if (event->GetTagId() == android::os::statsd::util::ISOLATED_UID_CHANGED) {
+    if (atomId == android::os::statsd::util::ISOLATED_UID_CHANGED) {
         onIsolatedUidChangedEventLocked(*event);
     }
 
@@ -447,7 +434,7 @@ void StatsLogProcessor::OnLogEvent(LogEvent* event, int64_t elapsedRealtimeNs) {
     }
 
 
-    if (event->GetTagId() != android::os::statsd::util::ISOLATED_UID_CHANGED) {
+    if (atomId != android::os::statsd::util::ISOLATED_UID_CHANGED) {
         // Map the isolated uid to host uid if necessary.
         mapIsolatedUidToHostUidIfNecessaryLocked(event);
     }
@@ -1066,8 +1053,8 @@ int64_t StatsLogProcessor::getLastReportTimeNs(const ConfigKey& key) {
 void StatsLogProcessor::notifyAppUpgrade(const int64_t& eventTimeNs, const string& apk,
                                          const int uid, const int64_t version) {
     std::lock_guard<std::mutex> lock(mMetricsMutex);
-    ALOGW("Received app upgrade");
-    for (auto it : mMetricsManagers) {
+    VLOG("Received app upgrade");
+    for (const auto& it : mMetricsManagers) {
         it.second->notifyAppUpgrade(eventTimeNs, apk, uid, version);
     }
 }
@@ -1075,17 +1062,25 @@ void StatsLogProcessor::notifyAppUpgrade(const int64_t& eventTimeNs, const strin
 void StatsLogProcessor::notifyAppRemoved(const int64_t& eventTimeNs, const string& apk,
                                          const int uid) {
     std::lock_guard<std::mutex> lock(mMetricsMutex);
-    ALOGW("Received app removed");
-    for (auto it : mMetricsManagers) {
+    VLOG("Received app removed");
+    for (const auto& it : mMetricsManagers) {
         it.second->notifyAppRemoved(eventTimeNs, apk, uid);
     }
 }
 
 void StatsLogProcessor::onUidMapReceived(const int64_t& eventTimeNs) {
     std::lock_guard<std::mutex> lock(mMetricsMutex);
-    ALOGW("Received uid map");
-    for (auto it : mMetricsManagers) {
+    VLOG("Received uid map");
+    for (const auto& it : mMetricsManagers) {
         it.second->onUidMapReceived(eventTimeNs);
+    }
+}
+
+void StatsLogProcessor::onStatsdInitCompleted(const int64_t& elapsedTimeNs) {
+    std::lock_guard<std::mutex> lock(mMetricsMutex);
+    VLOG("Received boot completed signal");
+    for (const auto& it : mMetricsManagers) {
+        it.second->onStatsdInitCompleted(elapsedTimeNs);
     }
 }
 

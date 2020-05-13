@@ -17,6 +17,7 @@
 <LinearLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/controls_management_root"
     android:orientation="vertical"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
@@ -25,47 +26,20 @@
     android:paddingStart="@dimen/controls_management_side_padding"
     android:paddingEnd="@dimen/controls_management_side_padding" >
 
-    <LinearLayout
-        android:orientation="horizontal"
+
+    <TextView
+        android:id="@+id/title"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:gravity="center_vertical">
-
-        <FrameLayout
-            android:id="@+id/icon_frame"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:gravity="start|center_vertical"
-            android:minWidth="56dp"
-            android:visibility="gone"
-            android:paddingTop="@dimen/controls_app_icon_frame_top_padding"
-            android:paddingBottom="@dimen/controls_app_icon_frame_bottom_padding"
-            android:paddingEnd="@dimen/controls_app_icon_frame_side_padding"
-            android:paddingStart="@dimen/controls_app_icon_frame_side_padding" >
-
-            <ImageView
-                android:id="@android:id/icon"
-                android:layout_width="@dimen/controls_app_icon_size"
-                android:layout_height="@dimen/controls_app_icon_size" />
-        </FrameLayout>
-
-        <TextView
-            android:id="@+id/title"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:textAppearance="?android:attr/textAppearanceLarge"
-            android:textSize="@dimen/controls_title_size"
-            android:textAlignment="center" />
-
-    </LinearLayout>
-
+        android:textAppearance="@style/TextAppearance.Control.Management.Title"
+        android:textAlignment="center" />
 
     <TextView
         android:id="@+id/subtitle"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="@dimen/controls_management_titles_margin"
-        android:textAppearance="?android:attr/textAppearanceSmall"
+        android:textAppearance="@style/TextAppearance.Control.Management.Subtitle"
         android:textAlignment="center" />
 
     <ViewStub
@@ -76,7 +50,7 @@
 
     <FrameLayout
         android:layout_width="match_parent"
-        android:layout_height="64dp">
+        android:layout_height="72dp">
 
         <View
             android:layout_width="match_parent"
@@ -87,7 +61,7 @@
         <androidx.constraintlayout.widget.ConstraintLayout
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:padding="4dp">
+            android:padding="@dimen/controls_management_footer_side_margin">
 
             <Button
                 android:id="@+id/other_apps"

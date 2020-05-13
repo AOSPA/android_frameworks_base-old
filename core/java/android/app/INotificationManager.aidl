@@ -58,6 +58,7 @@ interface INotificationManager
 
     void setShowBadge(String pkg, int uid, boolean showBadge);
     boolean canShowBadge(String pkg, int uid);
+    boolean hasSentMessage(String pkg, int uid);
     void setNotificationsEnabledForPackage(String pkg, int uid, boolean enabled);
     /**
      * Updates the notification's enabled state. Additionally locks importance for all of the
@@ -78,10 +79,9 @@ interface INotificationManager
     boolean shouldHideSilentStatusIcons(String callingPkg);
     void setHideSilentStatusIcons(boolean hide);
 
-    void setBubblesAllowed(String pkg, int uid, boolean allowed);
+    void setBubblesAllowed(String pkg, int uid, int bubblePreference);
     boolean areBubblesAllowed(String pkg);
-    boolean areBubblesAllowedForPackage(String pkg, int uid);
-    boolean hasUserApprovedBubblesForPackage(String pkg, int uid);
+    int getBubblePreferenceForPackage(String pkg, int uid);
 
     void createNotificationChannelGroups(String pkg, in ParceledListSlice channelGroupList);
     void createNotificationChannels(String pkg, in ParceledListSlice channelsList);

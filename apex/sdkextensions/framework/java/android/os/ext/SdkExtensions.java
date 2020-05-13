@@ -38,6 +38,9 @@ public class SdkExtensions {
 
     private static final int R_EXTENSION_INT;
     static {
+        // Note: when adding more extension versions, the logic that records current
+        // extension versions when saving a rollback must also be updated.
+        // At the time of writing this is in RollbackManagerServiceImpl#getExtensionVersions()
         R_EXTENSION_INT = SystemProperties.getInt("build.version.extensions.r", 0);
     }
 
@@ -62,7 +65,11 @@ public class SdkExtensions {
         if (sdk < VERSION_CODES.R) {
             throw new IllegalArgumentException(String.valueOf(sdk) + " does not have extensions");
         }
-        return R_EXTENSION_INT;
+
+        if (sdk == VERSION_CODES.R) {
+            return R_EXTENSION_INT;
+        }
+        return 0;
     }
 
 }

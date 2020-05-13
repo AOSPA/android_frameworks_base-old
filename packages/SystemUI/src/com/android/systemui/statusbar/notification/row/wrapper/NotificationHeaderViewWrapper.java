@@ -18,7 +18,6 @@ package com.android.systemui.statusbar.notification.row.wrapper;
 
 import static com.android.systemui.statusbar.notification.TransformState.TRANSFORM_Y;
 
-import android.annotation.NonNull;
 import android.app.AppOpsManager;
 import android.app.Notification;
 import android.content.Context;
@@ -28,11 +27,13 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.animation.Interpolator;
 import android.view.animation.PathInterpolator;
+import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.TextView;
 
 import com.android.internal.widget.CachingIconView;
 import com.android.internal.widget.NotificationExpandButton;
+import com.android.settingslib.Utils;
 import com.android.systemui.Interpolators;
 import com.android.systemui.R;
 import com.android.systemui.statusbar.TransformableView;
@@ -61,12 +62,14 @@ public class NotificationHeaderViewWrapper extends NotificationViewWrapper {
     private NotificationExpandButton mExpandButton;
     protected NotificationHeaderView mNotificationHeader;
     private TextView mHeaderText;
+    private TextView mAppNameText;
     private ImageView mWorkProfileImage;
     private View mCameraIcon;
     private View mMicIcon;
     private View mOverlayIcon;
     private View mAppOps;
     private View mAudiblyAlertedIcon;
+    private FrameLayout mIconContainer;
 
     private boolean mIsLowPriority;
     private boolean mTransformLowPriorityTitle;
@@ -109,8 +112,10 @@ public class NotificationHeaderViewWrapper extends NotificationViewWrapper {
     }
 
     protected void resolveHeaderViews() {
+        mIconContainer = mView.findViewById(com.android.internal.R.id.header_icon_container);
         mIcon = mView.findViewById(com.android.internal.R.id.icon);
         mHeaderText = mView.findViewById(com.android.internal.R.id.header_text);
+        mAppNameText = mView.findViewById(com.android.internal.R.id.app_name_text);
         mExpandButton = mView.findViewById(com.android.internal.R.id.expand_button);
         mWorkProfileImage = mView.findViewById(com.android.internal.R.id.profile_badge);
         mNotificationHeader = mView.findViewById(com.android.internal.R.id.notification_header);
@@ -132,15 +137,6 @@ public class NotificationHeaderViewWrapper extends NotificationViewWrapper {
         }
         if (mAppOps != null) {
             mAppOps.setOnClickListener(listener);
-        }
-        if (mCameraIcon != null) {
-            mCameraIcon.setOnClickListener(listener);
-        }
-        if (mMicIcon != null) {
-            mMicIcon.setOnClickListener(listener);
-        }
-        if (mOverlayIcon != null) {
-            mOverlayIcon.setOnClickListener(listener);
         }
     }
 
@@ -169,7 +165,7 @@ public class NotificationHeaderViewWrapper extends NotificationViewWrapper {
     @Override
     public void onContentUpdated(ExpandableNotificationRow row) {
         super.onContentUpdated(row);
-        mIsLowPriority = row.isLowPriority();
+        mIsLowPriority = row.getEntry().isAmbient();
         mTransformLowPriorityTitle = !row.isChildInGroup() && !row.isSummaryWithChildren();
         ArraySet<View> previousViews = mTransformationHelper.getAllTransformingViews();
 
@@ -189,6 +185,61 @@ public class NotificationHeaderViewWrapper extends NotificationViewWrapper {
             if (!currentViews.contains(view)) {
                 mTransformationHelper.resetTransformedView(view);
             }
+        }
+    }
+
+    public void applyConversationSkin() {
+        if (mAppNameText != null) {
+            mAppNameText.setTextAppearance(
+                    com.android.internal.R.style
+                            .TextAppearance_DeviceDefault_Notification_Conversation_AppName);
+            ViewGroup.MarginLayoutParams layoutParams =
+                    (ViewGroup.MarginLayoutParams) mAppNameText.getLayoutParams();
+            layoutParams.setMarginStart(0);
+        }
+        if (mIconContainer != null) {
+            ViewGroup.MarginLayoutParams layoutParams =
+                    (ViewGroup.MarginLayoutParams) mIconContainer.getLayoutParams();
+            layoutParams.width =
+                    mIconContainer.getContext().getResources().getDimensionPixelSize(
+                            com.android.internal.R.dimen.conversation_content_start);
+            final int marginStart =
+                    mIconContainer.getContext().getResources().getDimensionPixelSize(
+                            com.android.internal.R.dimen.notification_content_margin_start);
+            layoutParams.setMarginStart(marginStart * -1);
+        }
+        if (mIcon != null) {
+            ViewGroup.MarginLayoutParams layoutParams =
+                    (ViewGroup.MarginLayoutParams) mIcon.getLayoutParams();
+            layoutParams.setMarginEnd(0);
+        }
+    }
+
+    public void clearConversationSkin() {
+        if (mAppNameText != null) {
+            final int textAppearance = Utils.getThemeAttr(
+                    mAppNameText.getContext(),
+                    com.android.internal.R.attr.notificationHeaderTextAppearance,
+                    com.android.internal.R.style.TextAppearance_DeviceDefault_Notification_Info);
+            mAppNameText.setTextAppearance(textAppearance);
+            ViewGroup.MarginLayoutParams layoutParams =
+                    (ViewGroup.MarginLayoutParams) mAppNameText.getLayoutParams();
+            final int marginStart = mAppNameText.getContext().getResources().getDimensionPixelSize(
+                    com.android.internal.R.dimen.notification_header_app_name_margin_start);
+            layoutParams.setMarginStart(marginStart);
+        }
+        if (mIconContainer != null) {
+            ViewGroup.MarginLayoutParams layoutParams =
+                    (ViewGroup.MarginLayoutParams) mIconContainer.getLayoutParams();
+            layoutParams.width = ViewGroup.LayoutParams.WRAP_CONTENT;
+            layoutParams.setMarginStart(0);
+        }
+        if (mIcon != null) {
+            ViewGroup.MarginLayoutParams layoutParams =
+                    (ViewGroup.MarginLayoutParams) mIcon.getLayoutParams();
+            final int marginEnd = mIcon.getContext().getResources().getDimensionPixelSize(
+                    com.android.internal.R.dimen.notification_header_icon_margin_end);
+            layoutParams.setMarginEnd(marginEnd);
         }
     }
 

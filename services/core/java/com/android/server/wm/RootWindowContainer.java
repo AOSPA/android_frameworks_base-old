@@ -23,7 +23,6 @@ import static android.app.WindowConfiguration.ACTIVITY_TYPE_HOME;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_RECENTS;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_STANDARD;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_UNDEFINED;
-import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN_OR_SPLIT_SCREEN_SECONDARY;
 import static android.app.WindowConfiguration.WINDOWING_MODE_PINNED;
 import static android.app.WindowConfiguration.WINDOWING_MODE_SPLIT_SCREEN_PRIMARY;
@@ -38,10 +37,12 @@ import static android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON;
 import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_SUSTAINED_PERFORMANCE_MODE;
 import static android.view.WindowManager.LayoutParams.TYPE_KEYGUARD_DIALOG;
 import static android.view.WindowManager.TRANSIT_CRASHING_ACTIVITY_CLOSE;
+import static android.view.WindowManager.TRANSIT_NONE;
 import static android.view.WindowManager.TRANSIT_SHOW_SINGLE_TASK_DISPLAY;
 
 import static com.android.server.policy.WindowManagerPolicy.FINISH_LAYOUT_REDO_LAYOUT;
 import static com.android.server.policy.WindowManagerPolicy.FINISH_LAYOUT_REDO_WALLPAPER;
+import static com.android.server.wm.ActivityStack.ActivityState.FINISHING;
 import static com.android.server.wm.ActivityStack.ActivityState.PAUSED;
 import static com.android.server.wm.ActivityStack.ActivityState.RESUMED;
 import static com.android.server.wm.ActivityStack.ActivityState.STOPPED;
@@ -66,6 +67,7 @@ import static com.android.server.wm.ProtoLogGroup.WM_DEBUG_KEEP_SCREEN_ON;
 import static com.android.server.wm.ProtoLogGroup.WM_DEBUG_ORIENTATION;
 import static com.android.server.wm.ProtoLogGroup.WM_SHOW_SURFACE_ALLOC;
 import static com.android.server.wm.ProtoLogGroup.WM_SHOW_TRANSACTIONS;
+import static com.android.server.wm.RecentsAnimationController.REORDER_KEEP_IN_PLACE;
 import static com.android.server.wm.RootWindowContainerProto.IS_HOME_RECENTS_COMPONENT;
 import static com.android.server.wm.RootWindowContainerProto.KEYGUARD_CONTROLLER;
 import static com.android.server.wm.RootWindowContainerProto.PENDING_ACTIVITIES;
@@ -138,6 +140,7 @@ import android.view.Display;
 import android.view.DisplayInfo;
 import android.view.SurfaceControl;
 import android.view.WindowManager;
+import android.window.WindowContainerToken;
 
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.app.ResolverActivity;
@@ -664,7 +667,7 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
 
     void setSecureSurfaceState(int userId, boolean disabled) {
         forAllWindows((w) -> {
-            if (w.mHasSurface && userId == UserHandle.getUserId(w.mOwnerUid)) {
+            if (w.mHasSurface && userId == w.mShowUserId) {
                 w.mWinAnimator.setSecureLocked(disabled);
             }
         }, true /* traverseTopToBottom */);
@@ -1369,8 +1372,7 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
         calculateDefaultMinimalSizeOfResizeableTasks();
 
         final TaskDisplayArea defaultTaskDisplayArea = getDefaultTaskDisplayArea();
-        defaultTaskDisplayArea.getOrCreateStack(WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_HOME,
-                ON_TOP);
+        defaultTaskDisplayArea.getOrCreateRootHomeTask();
         positionChildAt(POSITION_TOP, defaultTaskDisplayArea.mDisplayContent,
                 false /* includingParents */);
     }
@@ -1461,8 +1463,12 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
     void startHomeOnEmptyDisplays(String reason) {
         for (int i = getChildCount() - 1; i >= 0; i--) {
             final DisplayContent display = getChildAt(i);
-            if (display.topRunningActivity() == null) {
-                startHomeOnDisplay(mCurrentUser, reason, display.mDisplayId);
+            for (int tdaNdx = display.getTaskDisplayAreaCount() - 1; tdaNdx >= 0; --tdaNdx) {
+                final TaskDisplayArea taskDisplayArea = display.getTaskDisplayAreaAt(tdaNdx);
+                if (taskDisplayArea.topRunningActivity() == null) {
+                    startHomeOnTaskDisplayArea(mCurrentUser, reason, taskDisplayArea,
+                            false /* allowInstrumenting */, false /* fromHomeKey */);
+                }
             }
         }
     }
@@ -1472,32 +1478,51 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
                 false /* fromHomeKey */);
     }
 
+    boolean startHomeOnDisplay(int userId, String reason, int displayId, boolean allowInstrumenting,
+            boolean fromHomeKey) {
+        // Fallback to top focused display or default display if the displayId is invalid.
+        if (displayId == INVALID_DISPLAY) {
+            final ActivityStack stack = getTopDisplayFocusedStack();
+            displayId = stack != null ? stack.getDisplayId() : DEFAULT_DISPLAY;
+        }
+
+        final DisplayContent display = getDisplayContent(displayId);
+        boolean result = false;
+        for (int tcNdx = display.getTaskDisplayAreaCount() - 1; tcNdx >= 0; --tcNdx) {
+            final TaskDisplayArea taskDisplayArea = display.getTaskDisplayAreaAt(tcNdx);
+            result |= startHomeOnTaskDisplayArea(userId, reason, taskDisplayArea,
+                    allowInstrumenting, fromHomeKey);
+        }
+        return result;
+    }
+
     /**
-     * This starts home activity on displays that can have system decorations based on displayId -
-     * Default display always use primary home component.
-     * For Secondary displays, the home activity must have category SECONDARY_HOME and then resolves
-     * according to the priorities listed below.
+     * This starts home activity on display areas that can have system decorations based on
+     * displayId - default display area always uses primary home component.
+     * For secondary display areas, the home activity must have category SECONDARY_HOME and then
+     * resolves according to the priorities listed below.
      *  - If default home is not set, always use the secondary home defined in the config.
      *  - Use currently selected primary home activity.
      *  - Use the activity in the same package as currently selected primary home activity.
      *    If there are multiple activities matched, use first one.
      *  - Use the secondary home defined in the config.
      */
-    boolean startHomeOnDisplay(int userId, String reason, int displayId, boolean allowInstrumenting,
-            boolean fromHomeKey) {
-        // Fallback to top focused display if the displayId is invalid.
-        if (displayId == INVALID_DISPLAY) {
+    boolean startHomeOnTaskDisplayArea(int userId, String reason, TaskDisplayArea taskDisplayArea,
+            boolean allowInstrumenting, boolean fromHomeKey) {
+        // Fallback to top focused display area if the provided one is invalid.
+        if (taskDisplayArea == null) {
             final ActivityStack stack = getTopDisplayFocusedStack();
-            displayId = stack != null ? stack.getDisplayId() : DEFAULT_DISPLAY;
+            taskDisplayArea = stack != null ? stack.getDisplayArea()
+                    : getDefaultTaskDisplayArea();
         }
 
         Intent homeIntent = null;
         ActivityInfo aInfo = null;
-        if (displayId == DEFAULT_DISPLAY) {
+        if (taskDisplayArea == getDefaultTaskDisplayArea()) {
             homeIntent = mService.getHomeIntent();
             aInfo = resolveHomeActivity(userId, homeIntent);
-        } else if (shouldPlaceSecondaryHomeOnDisplay(displayId)) {
-            Pair<ActivityInfo, Intent> info = resolveSecondaryHomeActivity(userId, displayId);
+        } else if (shouldPlaceSecondaryHomeOnDisplayArea(taskDisplayArea)) {
+            Pair<ActivityInfo, Intent> info = resolveSecondaryHomeActivity(userId, taskDisplayArea);
             aInfo = info.first;
             homeIntent = info.second;
         }
@@ -1505,7 +1530,7 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
             return false;
         }
 
-        if (!canStartHomeOnDisplay(aInfo, displayId, allowInstrumenting)) {
+        if (!canStartHomeOnDisplayArea(aInfo, taskDisplayArea, allowInstrumenting)) {
             return false;
         }
 
@@ -1515,13 +1540,14 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
         // Updates the extra information of the intent.
         if (fromHomeKey) {
             homeIntent.putExtra(WindowManagerPolicy.EXTRA_FROM_HOME_KEY, true);
+            mWindowManager.cancelRecentsAnimation(REORDER_KEEP_IN_PLACE, "startHomeActivity");
         }
         // Update the reason for ANR debugging to verify if the user activity is the one that
         // actually launched.
         final String myReason = reason + ":" + userId + ":" + UserHandle.getUserId(
-                aInfo.applicationInfo.uid) + ":" + displayId;
+                aInfo.applicationInfo.uid) + ":" + taskDisplayArea.getDisplayId();
         mService.getActivityStartController().startHomeActivity(homeIntent, aInfo, myReason,
-                displayId);
+                taskDisplayArea);
         return true;
     }
 
@@ -1562,10 +1588,11 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
     }
 
     @VisibleForTesting
-    Pair<ActivityInfo, Intent> resolveSecondaryHomeActivity(int userId, int displayId) {
-        if (displayId == DEFAULT_DISPLAY) {
+    Pair<ActivityInfo, Intent> resolveSecondaryHomeActivity(int userId,
+            @NonNull TaskDisplayArea taskDisplayArea) {
+        if (taskDisplayArea == getDefaultTaskDisplayArea()) {
             throw new IllegalArgumentException(
-                    "resolveSecondaryHomeActivity: Should not be DEFAULT_DISPLAY");
+                    "resolveSecondaryHomeActivity: Should not be default task container");
         }
         // Resolve activities in the same package as currently selected primary home activity.
         Intent homeIntent = mService.getHomeIntent();
@@ -1599,7 +1626,7 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
         }
 
         if (aInfo != null) {
-            if (!canStartHomeOnDisplay(aInfo, displayId, false /* allowInstrumenting */)) {
+            if (!canStartHomeOnDisplayArea(aInfo, taskDisplayArea, false /* allowInstrumenting */)) {
                 aInfo = null;
             }
         }
@@ -1632,19 +1659,18 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
         return resolutions;
     }
 
-    boolean resumeHomeActivity(ActivityRecord prev, String reason, int displayId) {
+    boolean resumeHomeActivity(ActivityRecord prev, String reason,
+            TaskDisplayArea taskDisplayArea) {
         if (!mService.isBooting() && !mService.isBooted()) {
             // Not ready yet!
             return false;
         }
 
-        if (displayId == INVALID_DISPLAY) {
-            displayId = DEFAULT_DISPLAY;
+        if (taskDisplayArea == null) {
+            taskDisplayArea = getDefaultTaskDisplayArea();
         }
 
-        // TODO(multi-display-area): Resume home on the right task container
-        final ActivityRecord r = getDisplayContent(displayId).getDefaultTaskDisplayArea()
-                .getHomeActivity();
+        final ActivityRecord r = taskDisplayArea.getHomeActivity();
         final String myReason = reason + " resumeHomeActivity";
 
         // Only resume home activity if isn't finishing.
@@ -1652,23 +1678,24 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
             r.moveFocusableActivityToTop(myReason);
             return resumeFocusedStacksTopActivities(r.getRootTask(), prev, null);
         }
-        return startHomeOnDisplay(mCurrentUser, myReason, displayId);
+        return startHomeOnTaskDisplayArea(mCurrentUser, myReason, taskDisplayArea,
+                false /* allowInstrumenting */, false /* fromHomeKey */);
     }
 
     /**
-     * Check if the display is valid for secondary home activity.
-     * @param displayId The id of the target display.
+     * Check if the display area is valid for secondary home activity.
+     * @param taskDisplayArea The target display area.
      * @return {@code true} if allow to launch, {@code false} otherwise.
      */
-    boolean shouldPlaceSecondaryHomeOnDisplay(int displayId) {
-        if (displayId == DEFAULT_DISPLAY) {
+    boolean shouldPlaceSecondaryHomeOnDisplayArea(TaskDisplayArea taskDisplayArea) {
+        if (getDefaultTaskDisplayArea() == taskDisplayArea) {
             throw new IllegalArgumentException(
-                    "shouldPlaceSecondaryHomeOnDisplay: Should not be DEFAULT_DISPLAY");
-        } else if (displayId == INVALID_DISPLAY) {
+                    "shouldPlaceSecondaryHomeOnDisplay: Should not be on default task container");
+        } else if (taskDisplayArea == null) {
             return false;
         }
 
-        if (!mService.mSupportsMultiDisplay) {
+        if (taskDisplayArea.getDisplayId() != DEFAULT_DISPLAY && !mService.mSupportsMultiDisplay) {
             // Can't launch home on secondary display if device does not support multi-display.
             return false;
         }
@@ -1677,16 +1704,16 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
                 mService.mContext.getContentResolver(),
                 Settings.Global.DEVICE_PROVISIONED, 0) != 0;
         if (!deviceProvisioned) {
-            // Can't launch home on secondary display before device is provisioned.
+            // Can't launch home on secondary display areas before device is provisioned.
             return false;
         }
 
         if (!StorageManager.isUserKeyUnlocked(mCurrentUser)) {
-            // Can't launch home on secondary displays if device is still locked.
+            // Can't launch home on secondary display areas if device is still locked.
             return false;
         }
 
-        final DisplayContent display = getDisplayContent(displayId);
+        final DisplayContent display = taskDisplayArea.getDisplayContent();
         if (display == null || display.isRemoved() || !display.supportsSystemDecorations()) {
             // Can't launch home on display that doesn't support system decorations.
             return false;
@@ -1698,11 +1725,11 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
     /**
      * Check if home activity start should be allowed on a display.
      * @param homeInfo {@code ActivityInfo} of the home activity that is going to be launched.
-     * @param displayId The id of the target display.
+     * @param taskDisplayArea The target display area.
      * @param allowInstrumenting Whether launching home should be allowed if being instrumented.
      * @return {@code true} if allow to launch, {@code false} otherwise.
      */
-    boolean canStartHomeOnDisplay(ActivityInfo homeInfo, int displayId,
+    boolean canStartHomeOnDisplayArea(ActivityInfo homeInfo, TaskDisplayArea taskDisplayArea,
             boolean allowInstrumenting) {
         if (mService.mFactoryTest == FactoryTest.FACTORY_TEST_LOW_LEVEL
                 && mService.mTopAction == null) {
@@ -1718,13 +1745,15 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
             return false;
         }
 
+        final int displayId = taskDisplayArea != null ? taskDisplayArea.getDisplayId()
+                : INVALID_DISPLAY;
         if (displayId == DEFAULT_DISPLAY || (displayId != INVALID_DISPLAY
                 && displayId == mService.mVr2dDisplayId)) {
             // No restrictions to default display or vr 2d display.
             return true;
         }
 
-        if (!shouldPlaceSecondaryHomeOnDisplay(displayId)) {
+        if (!shouldPlaceSecondaryHomeOnDisplayArea(taskDisplayArea)) {
             return false;
         }
 
@@ -2022,7 +2051,7 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
             stack.moveToFront("switchUserOnHomeDisplay");
         } else {
             // Stack was moved to another display while user was swapped out.
-            resumeHomeActivity(null, "switchUserOnOtherDisplay", DEFAULT_DISPLAY);
+            resumeHomeActivity(null, "switchUserOnOtherDisplay", getDefaultTaskDisplayArea());
         }
         return homeInFront;
     }
@@ -2046,6 +2075,38 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
     }
 
     /**
+     * Move stack with all its existing content to specified task display area.
+     * @param stackId Id of stack to move.
+     * @param taskDisplayArea The task display area to move stack to.
+     * @param onTop Indicates whether container should be place on top or on bottom.
+     */
+    void moveStackToTaskDisplayArea(int stackId, TaskDisplayArea taskDisplayArea, boolean onTop) {
+        final ActivityStack stack = getStack(stackId);
+        if (stack == null) {
+            throw new IllegalArgumentException("moveStackToTaskDisplayArea: Unknown stackId="
+                    + stackId);
+        }
+
+        final TaskDisplayArea currentTaskDisplayArea = stack.getDisplayArea();
+        if (currentTaskDisplayArea == null) {
+            throw new IllegalStateException("moveStackToTaskDisplayArea: stack=" + stack
+                    + " is not attached to any task display area.");
+        }
+
+        if (taskDisplayArea == null) {
+            throw new IllegalArgumentException(
+                    "moveStackToTaskDisplayArea: Unknown taskDisplayArea=" + taskDisplayArea);
+        }
+
+        if (currentTaskDisplayArea == taskDisplayArea) {
+            throw new IllegalArgumentException("Trying to move stack=" + stack
+                    + " to its current taskDisplayArea=" + taskDisplayArea);
+        }
+        stack.reparent(taskDisplayArea, onTop);
+        // TODO(multi-display): resize stacks properly if moved from split-screen.
+    }
+
+    /**
      * Move stack with all its existing content to specified display.
      * @param stackId Id of stack to move.
      * @param displayId Id of display to move stack to.
@@ -2057,32 +2118,15 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
             throw new IllegalArgumentException("moveStackToDisplay: Unknown displayId="
                     + displayId);
         }
-        final ActivityStack stack = getStack(stackId);
-        if (stack == null) {
-            throw new IllegalArgumentException("moveStackToDisplay: Unknown stackId="
-                    + stackId);
-        }
-
-        final DisplayContent currentDisplay = stack.getDisplay();
-        if (currentDisplay == null) {
-            throw new IllegalStateException("moveStackToDisplay: Stack with stack=" + stack
-                    + " is not attached to any display.");
-        }
-
-        if (currentDisplay.mDisplayId == displayId) {
-            throw new IllegalArgumentException("Trying to move stack=" + stack
-                    + " to its current displayId=" + displayId);
-        }
 
         if (displayContent.isSingleTaskInstance() && displayContent.getStackCount() > 0) {
             // We don't allow moving stacks to single instance display that already has a child.
-            Slog.e(TAG, "Can not move stack=" + stack
+            Slog.e(TAG, "Can not move stackId=" + stackId
                     + " to single task instance display=" + displayContent);
             return;
         }
 
-        stack.reparent(displayContent.getDefaultTaskDisplayArea(), onTop);
-        // TODO(multi-display): resize stacks properly if moved from split-screen.
+        moveStackToTaskDisplayArea(stackId, displayContent.getDefaultTaskDisplayArea(), onTop);
     }
 
     boolean moveTopStackActivityToPinnedStack(int stackId) {
@@ -2105,43 +2149,46 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
             return false;
         }
 
-        moveActivityToPinnedStack(r, null /* sourceBounds */, 0f /* aspectRatio */,
-                "moveTopActivityToPinnedStack");
+        moveActivityToPinnedStack(r, "moveTopActivityToPinnedStack");
         return true;
     }
 
-    void moveActivityToPinnedStack(ActivityRecord r, Rect sourceHintBounds, float aspectRatio,
-            String reason) {
+    void moveActivityToPinnedStack(ActivityRecord r, String reason) {
         mService.deferWindowLayout();
 
         final TaskDisplayArea taskDisplayArea = r.getDisplayArea();
 
         try {
             final Task task = r.getTask();
-
             final ActivityStack pinnedStack = taskDisplayArea.getRootPinnedTask();
+
             // This will change the pinned stack's windowing mode to its original mode, ensuring
             // we only have one stack that is in pinned mode.
             if (pinnedStack != null) {
                 pinnedStack.dismissPip();
             }
 
-            final boolean singleActivity = task.getChildCount() == 1;
+            // Set a transition to ensure that we don't immediately try and update the visibility
+            // of the activity entering PIP
+            r.getDisplayContent().prepareAppTransition(TRANSIT_NONE, false);
 
+            final boolean singleActivity = task.getChildCount() == 1;
             final ActivityStack stack;
             if (singleActivity) {
                 stack = r.getRootTask();
-                stack.setWindowingMode(WINDOWING_MODE_PINNED);
             } else {
                 // In the case of multiple activities, we will create a new task for it and then
                 // move the PIP activity into the task.
-                stack = taskDisplayArea.createStack(WINDOWING_MODE_PINNED, r.getActivityType(),
+                stack = taskDisplayArea.createStack(WINDOWING_MODE_UNDEFINED, r.getActivityType(),
                         ON_TOP, r.info, r.intent, false /* createdByOrganizer */);
 
                 // There are multiple activities in the task and moving the top activity should
                 // reveal/leave the other activities in their original task.
-                r.reparent(stack, MAX_VALUE, "moveActivityToStack");
+                // On the other hand, ActivityRecord#onParentChanged takes care of setting the
+                // up-to-dated pinned stack information on this newly created stack.
+                r.reparent(stack, MAX_VALUE, reason);
             }
+            stack.setWindowingMode(WINDOWING_MODE_PINNED);
 
             // Reset the state that indicates it can enter PiP while pausing after we've moved it
             // to the pinned stack
@@ -2150,11 +2197,6 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
             mService.continueWindowLayout();
         }
 
-        // TODO: revisit the following statement after the animation is moved from WM to SysUI.
-        // Update the visibility of all activities after the they have been reparented to the new
-        // stack.  This MUST run after the animation above is scheduled to ensure that the windows
-        // drawn signal is scheduled after the bounds animation start call on the bounds animator
-        // thread.
         ensureActivitiesVisible(null, 0, false /* preserveWindows */);
         resumeFocusedStacksTopActivities();
 
@@ -2168,15 +2210,14 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
         }
     }
 
-    ActivityRecord findTask(ActivityRecord r, int preferredDisplayId) {
+    ActivityRecord findTask(ActivityRecord r, TaskDisplayArea preferredTaskDisplayArea) {
         if (DEBUG_TASKS) Slog.d(TAG_TASKS, "Looking for task of " + r);
         mTmpFindTaskResult.clear();
 
-        // Looking up task on preferred display first
-        final DisplayContent preferredDisplay = getDisplayContent(preferredDisplayId);
-        if (preferredDisplay != null) {
-            preferredDisplay.getDefaultTaskDisplayArea().findTaskLocked(r,
-                    true /* isPreferredDisplay */, mTmpFindTaskResult);
+        // Looking up task on preferred display area first
+        if (preferredTaskDisplayArea != null) {
+            preferredTaskDisplayArea.findTaskLocked(r, true /* isPreferredDisplay */,
+                    mTmpFindTaskResult);
             if (mTmpFindTaskResult.mIdealMatch) {
                 return mTmpFindTaskResult.mRecord;
             }
@@ -2184,14 +2225,17 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
 
         for (int displayNdx = getChildCount() - 1; displayNdx >= 0; --displayNdx) {
             final DisplayContent display = getChildAt(displayNdx);
-            if (display.mDisplayId == preferredDisplayId) {
-                continue;
-            }
+            for (int tdaNdx = display.getTaskDisplayAreaCount() - 1; tdaNdx >= 0; --tdaNdx) {
+                final TaskDisplayArea taskDisplayArea = display.getTaskDisplayAreaAt(tdaNdx);
+                if (taskDisplayArea == preferredTaskDisplayArea) {
+                    continue;
+                }
 
-            display.getDefaultTaskDisplayArea().findTaskLocked(r, false /* isPreferredDisplay */,
-                    mTmpFindTaskResult);
-            if (mTmpFindTaskResult.mIdealMatch) {
-                return mTmpFindTaskResult.mRecord;
+                taskDisplayArea.findTaskLocked(r, false /* isPreferredDisplay */,
+                        mTmpFindTaskResult);
+                if (mTmpFindTaskResult.mIdealMatch) {
+                    return mTmpFindTaskResult.mRecord;
+                }
             }
         }
 
@@ -2215,7 +2259,7 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
                 // It is possible that request to finish activity might also remove its task and
                 // stack, so we need to be careful with indexes in the loop and check child count
                 // every time.
-                for (int stackNdx = 0; stackNdx < display.getStackCount(); ++stackNdx) {
+                for (int stackNdx = 0; stackNdx < taskDisplayArea.getStackCount(); ++stackNdx) {
                     final ActivityStack stack = taskDisplayArea.getStackAt(stackNdx);
                     final Task t = stack.finishTopCrashedActivityLocked(app, reason);
                     if (stack == focusedStack || finishedTask == null) {
@@ -2282,7 +2326,7 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
                     result |= focusedStack.resumeTopActivityUncheckedLocked(target, targetOptions);
                 } else if (targetStack == null) {
                     result |= resumeHomeActivity(null /* prev */, "no-focusable-task",
-                            display.mDisplayId);
+                            display.getDefaultTaskDisplayArea());
                 }
             }
         }
@@ -2382,6 +2426,7 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
         info.userId = stack.mCurrentUser;
         info.visible = stack.shouldBeVisible(null);
         // A stack might be not attached to a display.
+        // TODO: Can be removed since no one is using it.
         info.position = taskDisplayArea != null ? taskDisplayArea.getIndexOf(stack) : 0;
         info.configuration.setTo(stack.getConfiguration());
 
@@ -2783,11 +2828,15 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
             int realCallingUid) {
         int taskId = INVALID_TASK_ID;
         int displayId = INVALID_DISPLAY;
+        TaskDisplayArea taskDisplayArea = null;
 
         // We give preference to the launch preference in activity options.
         if (options != null) {
             taskId = options.getLaunchTaskId();
             displayId = options.getLaunchDisplayId();
+            final WindowContainerToken daToken = options.getLaunchTaskDisplayArea();
+            taskDisplayArea = daToken != null
+                    ? (TaskDisplayArea) WindowContainer.fromBinder(daToken.asBinder()) : null;
         }
 
         // First preference for stack goes to the task Id set in the activity options. Use the stack
@@ -2806,30 +2855,34 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
         final int activityType = resolveActivityType(r, options, candidateTask);
         ActivityStack stack = null;
 
-        // Next preference for stack goes to the display Id set the candidate display.
-        if (launchParams != null && launchParams.mPreferredDisplayId != INVALID_DISPLAY) {
-            displayId = launchParams.mPreferredDisplayId;
+        // Next preference for stack goes to the taskDisplayArea candidate.
+        if (launchParams != null && launchParams.mPreferredTaskDisplayArea != null) {
+            taskDisplayArea = launchParams.mPreferredTaskDisplayArea;
         }
-        final boolean canLaunchOnDisplayFromStartRequest =
-                realCallingPid != 0 && realCallingUid > 0 && r != null
-                        && mStackSupervisor.canPlaceEntityOnDisplay(displayId, realCallingPid,
-                        realCallingUid, r.info);
-        // Checking if the activity's launch caller, or the realCallerId of the activity from
-        // start request (i.e. entity that invokes PendingIntent) is allowed to launch on the
-        // display.
-        if (displayId != INVALID_DISPLAY && (canLaunchOnDisplay(r, displayId)
-                || canLaunchOnDisplayFromStartRequest)) {
-            if (r != null) {
-                stack = getValidLaunchStackOnDisplay(displayId, r, candidateTask, options,
-                        launchParams);
-                if (stack != null) {
-                    return stack;
-                }
+
+        if (taskDisplayArea == null && displayId != INVALID_DISPLAY) {
+            final DisplayContent displayContent = getDisplayContent(displayId);
+            if (displayContent != null) {
+                taskDisplayArea = displayContent.getDefaultTaskDisplayArea();
             }
-            final DisplayContent display = getDisplayContentOrCreate(displayId);
-            if (display != null) {
+        }
+
+        if (taskDisplayArea != null) {
+            final int tdaDisplayId = taskDisplayArea.getDisplayId();
+            final boolean canLaunchOnDisplayFromStartRequest =
+                    realCallingPid != 0 && realCallingUid > 0 && r != null
+                            && mStackSupervisor.canPlaceEntityOnDisplay(tdaDisplayId,
+                            realCallingPid, realCallingUid, r.info);
+            if (canLaunchOnDisplayFromStartRequest || canLaunchOnDisplay(r, tdaDisplayId)) {
+                if (r != null) {
+                    final ActivityStack result = getValidLaunchStackInTaskDisplayArea(
+                            taskDisplayArea, r, candidateTask, options, launchParams);
+                    if (result != null) {
+                        return result;
+                    }
+                }
                 // Falling back to default task container
-                final TaskDisplayArea taskDisplayArea = display.getDefaultTaskDisplayArea();
+                taskDisplayArea = taskDisplayArea.mDisplayContent.getDefaultTaskDisplayArea();
                 stack = taskDisplayArea.getOrCreateStack(r, options, candidateTask, activityType,
                         onTop);
                 if (stack != null) {
@@ -2896,40 +2949,37 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
     }
 
     /**
-     * Get a topmost stack on the display, that is a valid launch stack for specified activity.
+     * Get a topmost stack on the display area, that is a valid launch stack for specified activity.
      * If there is no such stack, new dynamic stack can be created.
-     * @param displayId Target display.
+     * @param taskDisplayArea Target display area.
      * @param r Activity that should be launched there.
      * @param candidateTask The possible task the activity might be put in.
      * @return Existing stack if there is a valid one, new dynamic stack if it is valid or null.
      */
     @VisibleForTesting
-    ActivityStack getValidLaunchStackOnDisplay(int displayId, @NonNull ActivityRecord r,
-            @Nullable Task candidateTask, @Nullable ActivityOptions options,
+    ActivityStack getValidLaunchStackInTaskDisplayArea(@NonNull TaskDisplayArea taskDisplayArea,
+            @NonNull ActivityRecord r, @Nullable Task candidateTask,
+            @Nullable ActivityOptions options,
             @Nullable LaunchParamsController.LaunchParams launchParams) {
-        final DisplayContent displayContent = getDisplayContentOrCreate(displayId);
-        if (displayContent == null) {
-            throw new IllegalArgumentException(
-                    "Display with displayId=" + displayId + " not found.");
-        }
-
-        if (!r.canBeLaunchedOnDisplay(displayId)) {
+        if (!r.canBeLaunchedOnDisplay(taskDisplayArea.getDisplayId())) {
             return null;
         }
 
-        // If {@code r} is already in target display and its task is the same as the candidate task,
-        // the intention should be getting a launch stack for the reusable activity, so we can use
-        // the existing stack.
+        // If {@code r} is already in target display area and its task is the same as the candidate
+        // task, the intention should be getting a launch stack for the reusable activity, so we can
+        // use the existing stack.
         if (candidateTask != null && (r.getTask() == null || r.getTask() == candidateTask)) {
-            final int attachedDisplayId = r.getDisplayId();
-            if (attachedDisplayId == INVALID_DISPLAY || attachedDisplayId == displayId) {
+            // TODO(b/153920825): Fix incorrect evaluation of attached state
+            final TaskDisplayArea attachedTaskDisplayArea = r.getTask() != null
+                    ? r.getTask().getDisplayArea() : r.getDisplayArea();
+            if (attachedTaskDisplayArea == null || attachedTaskDisplayArea == taskDisplayArea) {
                 return candidateTask.getStack();
             }
             // Or the candidate task is already a root task that can be reused by reparenting
             // it to the target display.
             if (candidateTask.isRootTask()) {
                 final ActivityStack stack = candidateTask.getStack();
-                stack.reparent(displayContent.getDefaultTaskDisplayArea(), true /* onTop */);
+                stack.reparent(taskDisplayArea, true /* onTop */);
                 return stack;
             }
         }
@@ -2944,37 +2994,28 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
             windowingMode = options != null ? options.getLaunchWindowingMode()
                     : r.getWindowingMode();
         }
+        windowingMode = taskDisplayArea.validateWindowingMode(windowingMode, r, candidateTask,
+                r.getActivityType());
 
         // Return the topmost valid stack on the display.
-        for (int tdaNdx = displayContent.getTaskDisplayAreaCount() - 1; tdaNdx >= 0; --tdaNdx) {
-            final TaskDisplayArea taskDisplayArea = displayContent.getTaskDisplayAreaAt(tdaNdx);
-            final int validatedWindowingMode = taskDisplayArea
-                    .validateWindowingMode(windowingMode, r, candidateTask, r.getActivityType());
-            for (int sNdx = taskDisplayArea.getStackCount() - 1; sNdx >= 0; --sNdx) {
-                final ActivityStack stack = taskDisplayArea.getStackAt(sNdx);
-                if (isValidLaunchStack(stack, r, validatedWindowingMode)) {
-                    return stack;
-                }
+        for (int i = taskDisplayArea.getStackCount() - 1; i >= 0; --i) {
+            final ActivityStack stack = taskDisplayArea.getStackAt(i);
+            if (isValidLaunchStack(stack, r, windowingMode)) {
+                return stack;
             }
         }
 
-        // If there is no valid stack on the external display - check if new dynamic stack will do.
-        if (displayId != DEFAULT_DISPLAY) {
+        // If there is no valid stack on the secondary display area - check if new dynamic stack
+        // will do.
+        if (taskDisplayArea != getDisplayContent(taskDisplayArea.getDisplayId())
+                .getDefaultTaskDisplayArea()) {
             final int activityType =
                     options != null && options.getLaunchActivityType() != ACTIVITY_TYPE_UNDEFINED
                             ? options.getLaunchActivityType() : r.getActivityType();
-            final TaskDisplayArea taskDisplayArea = displayContent.getDefaultTaskDisplayArea();
             return taskDisplayArea.createStack(windowingMode, activityType, true /*onTop*/);
         }
 
         return null;
-    }
-
-    ActivityStack getValidLaunchStackOnDisplay(int displayId, @NonNull ActivityRecord r,
-            @Nullable ActivityOptions options,
-            @Nullable LaunchParamsController.LaunchParams launchParams) {
-        return getValidLaunchStackOnDisplay(displayId, r, null /* candidateTask */, options,
-                launchParams);
     }
 
     // TODO: Can probably be consolidated into getLaunchStack()...
@@ -3284,7 +3325,7 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
                 for (int sNdx = taskDisplayArea.getStackCount() - 1; sNdx >= 0; --sNdx) {
                     final ActivityStack stack = taskDisplayArea.getStackAt(sNdx);
                     final ActivityRecord r = stack.mPausingActivity;
-                    if (r != null && !r.isState(PAUSED, STOPPED, STOPPING)) {
+                    if (r != null && !r.isState(PAUSED, STOPPED, STOPPING, FINISHING)) {
                         if (DEBUG_STATES) {
                             Slog.d(TAG_STATES, "allPausedActivitiesComplete: r=" + r
                                     + " state=" + r.getState());
@@ -3561,31 +3602,40 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
         boolean needSep = false;
         for (int displayNdx = getChildCount() - 1; displayNdx >= 0; --displayNdx) {
             DisplayContent displayContent = getChildAt(displayNdx);
+            if (printed) {
+                pw.println();
+            }
             pw.print("Display #"); pw.print(displayContent.mDisplayId);
             pw.println(" (activities from top to bottom):");
             for (int tdaNdx = displayContent.getTaskDisplayAreaCount() - 1; tdaNdx >= 0; --tdaNdx) {
                 final TaskDisplayArea taskDisplayArea = displayContent.getTaskDisplayAreaAt(tdaNdx);
                 for (int sNdx = taskDisplayArea.getStackCount() - 1; sNdx >= 0; --sNdx) {
                     final ActivityStack stack = taskDisplayArea.getStackAt(sNdx);
-                    pw.println();
-                    printed = stack.dump(fd, pw, dumpAll, dumpClient, dumpPackage, needSep);
-                    needSep = printed;
+                    if (needSep) {
+                        pw.println();
+                    }
+                    needSep = stack.dump(fd, pw, dumpAll, dumpClient, dumpPackage, false);
+                    printed |= needSep;
                 }
             }
-            pw.println(" (resumed activities in task display areas from top to bottom):");
             for (int tdaNdx = displayContent.getTaskDisplayAreaCount() - 1; tdaNdx >= 0; --tdaNdx) {
                 final TaskDisplayArea taskDisplayArea = displayContent.getTaskDisplayAreaAt(tdaNdx);
-                printThisActivity(pw, taskDisplayArea.getFocusedActivity(), dumpPackage, needSep,
-                        "   ResumedActivity:");
+                printed |= printThisActivity(pw, taskDisplayArea.getFocusedActivity(),
+                        dumpPackage, needSep, "    Resumed: ", () -> {
+                            pw.println("  Resumed activities in task display areas"
+                                    + " (from top to bottom):");
+                        });
             }
         }
 
         printed |= dumpHistoryList(fd, pw, mStackSupervisor.mFinishingActivities, "  ",
                 "Fin", false, !dumpAll,
-                false, dumpPackage, true, "  Activities waiting to finish:", null);
+                false, dumpPackage, true,
+                () -> { pw.println("  Activities waiting to finish:"); }, null);
         printed |= dumpHistoryList(fd, pw, mStackSupervisor.mStoppingActivities, "  ",
                 "Stop", false, !dumpAll,
-                false, dumpPackage, true, "  Activities waiting to stop:", null);
+                false, dumpPackage, true,
+                () -> { pw.println("  Activities waiting to stop:"); }, null);
 
         return printed;
     }

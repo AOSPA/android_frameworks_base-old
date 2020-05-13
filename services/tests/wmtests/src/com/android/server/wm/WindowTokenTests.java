@@ -16,6 +16,7 @@
 
 package com.android.server.wm;
 
+import static android.os.Process.INVALID_UID;
 import static android.view.WindowManager.LayoutParams.FIRST_SUB_WINDOW;
 import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION;
 import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY;
@@ -28,6 +29,7 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.mock;
 
+import android.content.res.Configuration;
 import android.os.IBinder;
 import android.platform.test.annotations.Presubmit;
 
@@ -133,6 +135,30 @@ public class WindowTokenTests extends WindowTestsBase {
         assertEquals(0, token.getWindowsCount());
     }
 
+    @Test
+    public void testFinishFixedRotationTransform() {
+        final WindowToken appToken = mAppWindow.mToken;
+        final WindowToken wallpaperToken = mWallpaperWindow.mToken;
+        final Configuration config = new Configuration(mDisplayContent.getConfiguration());
+        final int originalRotation = config.windowConfiguration.getRotation();
+        final int targetRotation = (originalRotation + 1) % 4;
+
+        config.windowConfiguration.setRotation(targetRotation);
+        appToken.applyFixedRotationTransform(mDisplayInfo, mDisplayContent.mDisplayFrames, config);
+        wallpaperToken.linkFixedRotationTransform(appToken);
+
+        // The window tokens should apply the rotation by the transformation.
+        assertEquals(targetRotation, appToken.getWindowConfiguration().getRotation());
+        assertEquals(targetRotation, wallpaperToken.getWindowConfiguration().getRotation());
+
+        // The display doesn't rotate, the transformation will be canceled.
+        mAppWindow.mToken.finishFixedRotationTransform();
+
+        // The window tokens should restore to the original rotation.
+        assertEquals(originalRotation, appToken.getWindowConfiguration().getRotation());
+        assertEquals(originalRotation, wallpaperToken.getWindowConfiguration().getRotation());
+    }
+
     /**
      * Test that {@link WindowToken} constructor parameters is set with expectation.
      */
@@ -152,7 +178,7 @@ public class WindowTokenTests extends WindowTestsBase {
 
         token = new WindowToken(mDisplayContent.mWmService, mock(IBinder.class), TYPE_TOAST,
                 true /* persistOnEmpty */, mDisplayContent, true /* ownerCanManageAppTokens */,
-                true /* roundedCornerOverlay */, true /* fromClientToken */);
+                INVALID_UID, true /* roundedCornerOverlay */, true /* fromClientToken */);
         assertTrue(token.mRoundedCornerOverlay);
         assertTrue(token.mFromClientToken);
     }
@@ -166,7 +192,7 @@ public class WindowTokenTests extends WindowTestsBase {
     public void testSurfaceCreatedForWindowToken() {
         final WindowToken fromClientToken = new WindowToken(mDisplayContent.mWmService,
                 mock(IBinder.class), TYPE_APPLICATION_OVERLAY, true /* persistOnEmpty */,
-                mDisplayContent, true /* ownerCanManageAppTokens */,
+                mDisplayContent, true /* ownerCanManageAppTokens */, INVALID_UID,
                 true /* roundedCornerOverlay */, true /* fromClientToken */);
         assertNull(fromClientToken.mSurfaceControl);
 
@@ -175,7 +201,7 @@ public class WindowTokenTests extends WindowTestsBase {
 
         final WindowToken nonClientToken = new WindowToken(mDisplayContent.mWmService,
                 mock(IBinder.class), TYPE_TOAST, true /* persistOnEmpty */, mDisplayContent,
-                true /* ownerCanManageAppTokens */, true /* roundedCornerOverlay */,
+                true /* ownerCanManageAppTokens */, INVALID_UID, true /* roundedCornerOverlay */,
                 false /* fromClientToken */);
         assertNotNull(nonClientToken.mSurfaceControl);
     }

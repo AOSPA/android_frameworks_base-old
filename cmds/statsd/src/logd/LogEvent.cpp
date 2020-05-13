@@ -114,14 +114,6 @@ LogEvent::LogEvent(int64_t wallClockTimestampNs, int64_t elapsedTimestampNs,
     mValues.push_back(FieldValue(Field(mTagId, getSimpleField(4)), Value(trainInfo.status)));
 }
 
-LogEvent::~LogEvent() {
-    if (mContext) {
-        // This is for the case when LogEvent is created using the test interface
-        // but init() isn't called.
-        android_log_destroy(&mContext);
-    }
-}
-
 void LogEvent::parseInt32(int32_t* pos, int32_t depth, bool* last, uint8_t numAnnotations) {
     int32_t value = readNextValue<int32_t>();
     addToValues(pos, depth, value, last);
@@ -219,8 +211,8 @@ void LogEvent::parseKeyValuePairs(int32_t* pos, int32_t depth, bool* last, uint8
 
 void LogEvent::parseAttributionChain(int32_t* pos, int32_t depth, bool* last,
                                      uint8_t numAnnotations) {
-    int firstUidInChainIndex = mValues.size();
-    int32_t numNodes = readNextValue<uint8_t>();
+    const unsigned int firstUidInChainIndex = mValues.size();
+    const int32_t numNodes = readNextValue<uint8_t>();
     for (pos[1] = 1; pos[1] <= numNodes; pos[1]++) {
         last[1] = (pos[1] == numNodes);
 
@@ -233,6 +225,11 @@ void LogEvent::parseAttributionChain(int32_t* pos, int32_t depth, bool* last,
         last[2] = true;
         parseString(pos, /*depth=*/2, last, /*numAnnotations=*/0);
     }
+    // Check if at least one node was successfully parsed.
+    if (mValues.size() - 1 > firstUidInChainIndex) {
+        mAttributionChainStartIndex = static_cast<int8_t>(firstUidInChainIndex);
+        mAttributionChainEndIndex = static_cast<int8_t>(mValues.size() - 1);
+    }
 
     parseAnnotations(numAnnotations, firstUidInChainIndex);
 
@@ -240,14 +237,20 @@ void LogEvent::parseAttributionChain(int32_t* pos, int32_t depth, bool* last,
     last[1] = last[2] = false;
 }
 
+// Assumes that mValues is not empty
+bool LogEvent::checkPreviousValueType(Type expected) {
+    return mValues[mValues.size() - 1].mValue.getType() == expected;
+}
+
 void LogEvent::parseIsUidAnnotation(uint8_t annotationType) {
-    if (mValues.empty() || annotationType != BOOL_TYPE) {
+    if (mValues.empty() || !checkPreviousValueType(INT) || annotationType != BOOL_TYPE) {
         mValid = false;
         return;
     }
 
     bool isUid = readNextValue<uint8_t>();
-    if (isUid) mUidFieldIndex = mValues.size() - 1;
+    if (isUid) mUidFieldIndex = static_cast<int8_t>(mValues.size() - 1);
+    mValues[mValues.size() - 1].mAnnotations.setUidField(isUid);
 }
 
 void LogEvent::parseTruncateTimestampAnnotation(uint8_t annotationType) {
@@ -287,7 +290,8 @@ void LogEvent::parseExclusiveStateAnnotation(uint8_t annotationType) {
     }
 
     const bool exclusiveState = readNextValue<uint8_t>();
-    mValues[mValues.size() - 1].mAnnotations.setExclusiveState(exclusiveState);
+    mExclusiveStateFieldIndex = static_cast<int8_t>(mValues.size() - 1);
+    mValues[getExclusiveStateFieldIndex()].mAnnotations.setExclusiveState(exclusiveState);
 }
 
 void LogEvent::parseTriggerStateResetAnnotation(uint8_t annotationType) {
@@ -296,8 +300,7 @@ void LogEvent::parseTriggerStateResetAnnotation(uint8_t annotationType) {
         return;
     }
 
-    int32_t resetState = readNextValue<int32_t>();
-    mValues[mValues.size() - 1].mAnnotations.setResetState(resetState);
+    mResetState = readNextValue<int32_t>();
 }
 
 void LogEvent::parseStateNestedAnnotation(uint8_t annotationType) {
@@ -379,7 +382,6 @@ bool LogEvent::parseBuffer(uint8_t* buf, size_t len) {
         typeInfo = readNextValue<uint8_t>();
         uint8_t typeId = getTypeId(typeInfo);
 
-        // TODO(b/144373276): handle errors passed to the socket
         switch (typeId) {
             case BOOL_TYPE:
                 parseBool(pos, /*depth=*/0, last, getNumAnnotations(typeInfo));
@@ -404,10 +406,14 @@ bool LogEvent::parseBuffer(uint8_t* buf, size_t len) {
                 break;
             case ATTRIBUTION_CHAIN_TYPE:
                 parseAttributionChain(pos, /*depth=*/0, last, getNumAnnotations(typeInfo));
-                if (mAttributionChainIndex == -1) mAttributionChainIndex = pos[0];
+                break;
+            case ERROR_TYPE:
+                /* mErrorBitmask =*/ readNextValue<int32_t>();
+                mValid = false;
                 break;
             default:
                 mValid = false;
+                break;
         }
     }
 
@@ -563,6 +569,19 @@ string LogEvent::ToString() const {
 
 void LogEvent::ToProto(ProtoOutputStream& protoOutput) const {
     writeFieldValueTreeToStream(mTagId, getValues(), &protoOutput);
+}
+
+bool LogEvent::hasAttributionChain(std::pair<int, int>* indexRange) const {
+    if (mAttributionChainStartIndex == -1 || mAttributionChainEndIndex == -1) {
+        return false;
+    }
+
+    if (nullptr != indexRange) {
+        indexRange->first = static_cast<int>(mAttributionChainStartIndex);
+        indexRange->second = static_cast<int>(mAttributionChainEndIndex);
+    }
+
+    return true;
 }
 
 void writeExperimentIdsToProto(const std::vector<int64_t>& experimentIds,

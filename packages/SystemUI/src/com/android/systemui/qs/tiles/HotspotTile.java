@@ -19,6 +19,7 @@ package com.android.systemui.qs.tiles;
 import android.annotation.Nullable;
 import android.content.Context;
 import android.content.Intent;
+import android.net.wifi.ScanResult;
 import android.net.wifi.WifiManager;
 import android.os.UserManager;
 import android.provider.Settings;
@@ -139,12 +140,12 @@ public class HotspotTile extends QSTileImpl<BooleanState> {
             state.icon = ResourceIcon.get(
                     com.android.internal.R.drawable.ic_hotspot_transient_animation);
         } else if (state.value) {
-            int generation = mWifiManager.getSoftApWifiGeneration();
-            if (generation == WifiManager.WIFI_GENERATION_6) {
+            int standard = mWifiManager.getSoftApWifiStandard();
+            if (standard == ScanResult.WIFI_STANDARD_11AX) {
                 state.icon = mWifi6EnabledStatic;
-            } else if (generation == WifiManager.WIFI_GENERATION_5) {
+            } else if (standard == ScanResult.WIFI_STANDARD_11AC) {
                 state.icon = mWifi5EnabledStatic;
-            } else if (generation == WifiManager.WIFI_GENERATION_4) {
+            } else if (standard == ScanResult.WIFI_STANDARD_11N) {
                 state.icon = mWifi4EnabledStatic;
             }
         }

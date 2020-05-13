@@ -122,7 +122,6 @@ import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
 import java.util.function.Predicate;
@@ -1789,8 +1788,8 @@ public final class ActiveServices {
     private void updateServiceForegroundLocked(ProcessRecord proc, boolean oomAdj) {
         boolean anyForeground = false;
         int fgServiceTypes = 0;
-        for (int i = proc.services.size() - 1; i >= 0; i--) {
-            ServiceRecord sr = proc.services.valueAt(i);
+        for (int i = proc.numberOfRunningServices() - 1; i >= 0; i--) {
+            ServiceRecord sr = proc.getRunningServiceAt(i);
             if (sr.isForeground || sr.fgRequired) {
                 anyForeground = true;
                 fgServiceTypes |= sr.foregroundServiceType;
@@ -1801,8 +1800,8 @@ public final class ActiveServices {
 
     private void updateWhitelistManagerLocked(ProcessRecord proc) {
         proc.whitelistManager = false;
-        for (int i=proc.services.size()-1; i>=0; i--) {
-            ServiceRecord sr = proc.services.valueAt(i);
+        for (int i = proc.numberOfRunningServices() - 1; i >= 0; i--) {
+            ServiceRecord sr = proc.getRunningServiceAt(i);
             if (sr.whitelistManager) {
                 proc.whitelistManager = true;
                 break;
@@ -1838,8 +1837,8 @@ public final class ActiveServices {
         }
 
         boolean anyClientActivities = false;
-        for (int i=proc.services.size()-1; i>=0 && !anyClientActivities; i--) {
-            ServiceRecord sr = proc.services.valueAt(i);
+        for (int i = proc.numberOfRunningServices() - 1; i >= 0 && !anyClientActivities; i--) {
+            ServiceRecord sr = proc.getRunningServiceAt(i);
             ArrayMap<IBinder, ArrayList<ConnectionRecord>> connections = sr.getConnections();
             for (int conni = connections.size() - 1; conni >= 0 && !anyClientActivities; conni--) {
                 ArrayList<ConnectionRecord> clist = connections.valueAt(conni);
@@ -2901,6 +2900,7 @@ public final class ActiveServices {
             return;
         }
         try {
+            /* TODO(b/154865060) - re-enable SERVICE_RESCHEDULE
             if(SERVICE_RESCHEDULE) {
                 boolean shouldDelay = false;
                 ActivityRecord top_rc = null;
@@ -2928,8 +2928,9 @@ public final class ActiveServices {
                     scheduleServiceRestartLocked(r, true);
                 }
             } else {
+            */
                 bringUpServiceLocked(r, r.intent.getIntent().getFlags(), r.createdFromFg, true, false);
-            }
+            //}
         } catch (TransactionTooLargeException e) {
             // Ignore, it's been logged and nothing upstack cares.
         }
@@ -3138,7 +3139,7 @@ public final class ActiveServices {
         r.setProcess(app);
         r.restartTime = r.lastActivity = SystemClock.uptimeMillis();
 
-        final boolean newService = app.services.add(r);
+        final boolean newService = app.startService(r);
         bumpServiceExecutingLocked(r, execInFg, "create");
         mAm.updateLruProcessLocked(app, false, null);
         updateServiceForegroundLocked(r.app, /* oomAdj= */ false);
@@ -3195,7 +3196,7 @@ public final class ActiveServices {
 
                 // Cleanup.
                 if (newService) {
-                    app.services.remove(r);
+                    app.stopService(r);
                     r.app = null;
                     if (SERVICE_RESCHEDULE && DEBUG_DELAYED_SERVICE) {
                     Slog.w(TAG, " Failed to create Service !!!! ."
@@ -3544,7 +3545,7 @@ public final class ActiveServices {
             synchronized (r.stats.getBatteryStats()) {
                 r.stats.stopLaunchedLocked();
             }
-            r.app.services.remove(r);
+            r.app.stopService(r);
             r.app.updateBoundClientUids();
             if (r.whitelistManager) {
                 updateWhitelistManagerLocked(r.app);
@@ -3834,7 +3835,7 @@ public final class ActiveServices {
             }
             if (finishing) {
                 if (r.app != null && !r.app.isPersistent()) {
-                    r.app.services.remove(r);
+                    r.app.stopService(r);
                     r.app.updateBoundClientUids();
                     if (r.whitelistManager) {
                         updateWhitelistManagerLocked(r.app);
@@ -3930,7 +3931,7 @@ public final class ActiveServices {
                 didSomething = true;
                 Slog.i(TAG, "  Force stopping service " + service);
                 if (service.app != null && !service.app.isPersistent()) {
-                    service.app.services.remove(service);
+                    service.app.stopService(service);
                     service.app.updateBoundClientUids();
                     if (service.whitelistManager) {
                         updateWhitelistManagerLocked(service.app);
@@ -4043,24 +4044,22 @@ public final class ActiveServices {
         if (false) {
             // XXX we are letting the client link to the service for
             // death notifications.
-            if (app.services.size() > 0) {
-                Iterator<ServiceRecord> it = app.services.iterator();
-                while (it.hasNext()) {
-                    ServiceRecord r = it.next();
-                    ArrayMap<IBinder, ArrayList<ConnectionRecord>> connections = r.getConnections();
-                    for (int conni=connections.size()-1; conni>=0; conni--) {
-                        ArrayList<ConnectionRecord> cl = connections.valueAt(conni);
-                        for (int i=0; i<cl.size(); i++) {
-                            ConnectionRecord c = cl.get(i);
-                            if (c.binding.client != app) {
-                                try {
-                                    //c.conn.connected(r.className, null);
-                                } catch (Exception e) {
-                                    // todo: this should be asynchronous!
-                                    Slog.w(TAG, "Exception thrown disconnected servce "
-                                          + r.shortInstanceName
-                                          + " from app " + app.processName, e);
-                                }
+            int numberOfRunningServices = app.numberOfRunningServices();
+            for (int sIndex = 0; sIndex < numberOfRunningServices; sIndex++) {
+                ServiceRecord r = app.getRunningServiceAt(sIndex);
+                ArrayMap<IBinder, ArrayList<ConnectionRecord>> connections = r.getConnections();
+                for (int conni = connections.size() - 1; conni >= 0; conni--) {
+                    ArrayList<ConnectionRecord> cl = connections.valueAt(conni);
+                    for (int i = 0; i < cl.size(); i++) {
+                        ConnectionRecord c = cl.get(i);
+                        if (c.binding.client != app) {
+                            try {
+                                //c.conn.connected(r.className, null);
+                            } catch (Exception e) {
+                                // todo: this should be asynchronous!
+                                Slog.w(TAG, "Exception thrown disconnected servce "
+                                        + r.shortInstanceName
+                                        + " from app " + app.processName, e);
                             }
                         }
                     }
@@ -4088,13 +4087,13 @@ public final class ActiveServices {
         app.whitelistManager = false;
 
         // Clear app state from services.
-        for (int i = app.services.size() - 1; i >= 0; i--) {
-            ServiceRecord sr = app.services.valueAt(i);
+        for (int i = app.numberOfRunningServices() - 1; i >= 0; i--) {
+            ServiceRecord sr = app.getRunningServiceAt(i);
             synchronized (sr.stats.getBatteryStats()) {
                 sr.stats.stopLaunchedLocked();
             }
             if (sr.app != app && sr.app != null && !sr.app.isPersistent()) {
-                sr.app.services.remove(sr);
+                sr.app.stopService(sr);
                 sr.app.updateBoundClientUids();
             }
             sr.setProcess(null);
@@ -4153,13 +4152,13 @@ public final class ActiveServices {
         ServiceMap smap = getServiceMapLocked(app.userId);
 
         // Now do remaining service cleanup.
-        for (int i=app.services.size()-1; i>=0; i--) {
-            ServiceRecord sr = app.services.valueAt(i);
+        for (int i = app.numberOfRunningServices() - 1; i >= 0; i--) {
+            ServiceRecord sr = app.getRunningServiceAt(i);
 
             // Unless the process is persistent, this process record is going away,
             // so make sure the service is cleaned out of it.
             if (!app.isPersistent()) {
-                app.services.removeAt(i);
+                app.stopService(sr);
                 app.updateBoundClientUids();
             }
 
@@ -4209,7 +4208,7 @@ public final class ActiveServices {
         }
 
         if (!allowRestart) {
-            app.services.clear();
+            app.stopAllServices();
             app.clearBoundClientUids();
 
             // Make sure there are no more restarting services for this process.
@@ -5111,8 +5110,8 @@ public final class ActiveServices {
             if (pr.uid != uid) {
                 continue;
             }
-            for (int j = pr.services.size() - 1; j >= 0; j--) {
-                ServiceRecord r = pr.services.valueAt(j);
+            for (int j = pr.numberOfRunningServices() - 1; j >= 0; j--) {
+                ServiceRecord r = pr.getRunningServiceAt(j);
                 if (!r.isForeground) {
                     continue;
                 }

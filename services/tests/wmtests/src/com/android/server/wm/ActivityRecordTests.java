@@ -32,6 +32,7 @@ import static com.android.dx.mockito.inline.extended.ExtendedMockito.any;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.anyBoolean;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.atLeast;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.doAnswer;
+import static com.android.dx.mockito.inline.extended.ExtendedMockito.doCallRealMethod;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.doReturn;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.eq;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.reset;
@@ -63,7 +64,9 @@ import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.never;
 
 import android.app.ActivityOptions;
@@ -750,6 +753,31 @@ public class ActivityRecordTests extends ActivityTestsBase {
     }
 
     /**
+     * Verify that when finishing the top focused activity while root task was created by organizer,
+     * the stack order will be changed by adjusting focus.
+     */
+    @Test
+    public void testFinishActivityIfPossible_adjustStackOrderOrganizedRoot() {
+        // Make mStack be a the root task that created by task organizer
+        mStack.mCreatedByOrganizer = true;
+
+        // Have two tasks (topRootableTask and mTask) as the children of mStack.
+        ActivityRecord topActivity = new ActivityBuilder(mActivity.mAtmService)
+                .setCreateTask(true)
+                .setStack(mStack)
+                .build();
+        ActivityStack topRootableTask = (ActivityStack) topActivity.getTask();
+        topRootableTask.moveToFront("test");
+        assertTrue(mStack.isTopStackInDisplayArea());
+
+        // Finish top activity and verify the next focusable rootable task has adjusted to top.
+        topActivity.setState(RESUMED, "test");
+        topActivity.finishIfPossible(0 /* resultCode */, null /* resultData */, "test",
+                false /* oomAdj */);
+        assertEquals(mTask, mStack.getTopMostTask());
+    }
+
+    /**
      * Verify that resumed activity is paused due to finish request.
      */
     @Test
@@ -1024,6 +1052,78 @@ public class ActivityRecordTests extends ActivityTestsBase {
     }
 
     /**
+     * Verify that complete finish request for a show-when-locked activity must ensure the
+     * keyguard occluded state being updated.
+     */
+    @Test
+    public void testCompleteFinishing_showWhenLocked() {
+        // Make keyguard locked and set the top activity show-when-locked.
+        KeyguardController keyguardController = mActivity.mStackSupervisor.getKeyguardController();
+        doReturn(true).when(keyguardController).isKeyguardLocked();
+        final ActivityRecord topActivity = new ActivityBuilder(mService).setTask(mTask).build();
+        topActivity.mVisibleRequested = true;
+        topActivity.nowVisible = true;
+        topActivity.setState(RESUMED, "true");
+        doCallRealMethod().when(mRootWindowContainer).ensureActivitiesVisible(
+                any() /* starting */, anyInt() /* configChanges */,
+                anyBoolean() /* preserveWindows */, anyBoolean() /* notifyClients */);
+        topActivity.setShowWhenLocked(true);
+
+        // Verify the stack-top activity is occluded keyguard.
+        assertEquals(topActivity, mStack.topRunningActivity());
+        assertTrue(mStack.topActivityOccludesKeyguard());
+
+        // Finish the top activity
+        topActivity.setState(PAUSED, "true");
+        topActivity.finishing = true;
+        topActivity.completeFinishing("test");
+
+        // Verify new top activity does not occlude keyguard.
+        assertEquals(mActivity, mStack.topRunningActivity());
+        assertFalse(mStack.topActivityOccludesKeyguard());
+    }
+
+    /**
+     * Verify that complete finish request for an activity which the resume activity is translucent
+     * must ensure the visibilities of activities being updated.
+     */
+    @Test
+    public void testCompleteFinishing_ensureActivitiesVisible() {
+        final ActivityRecord firstActivity = new ActivityBuilder(mService).setTask(mTask).build();
+        firstActivity.mVisibleRequested = false;
+        firstActivity.nowVisible = false;
+        firstActivity.setState(STOPPED, "true");
+
+        final ActivityRecord secondActivity = new ActivityBuilder(mService).setTask(mTask).build();
+        secondActivity.mVisibleRequested = true;
+        secondActivity.nowVisible = true;
+        secondActivity.setState(PAUSED, "true");
+
+        final ActivityRecord translucentActivity =
+                new ActivityBuilder(mService).setTask(mTask).build();
+        translucentActivity.mVisibleRequested = true;
+        translucentActivity.nowVisible = true;
+        translucentActivity.setState(RESUMED, "true");
+
+        doReturn(false).when(translucentActivity).occludesParent();
+
+        // Finish the second activity
+        secondActivity.finishing = true;
+        secondActivity.completeFinishing("test");
+        verify(secondActivity.getDisplay()).ensureActivitiesVisible(null /* starting */,
+                0 /* configChanges */ , false /* preserveWindows */,
+                true /* notifyClients */);
+
+        // Finish the first activity
+        firstActivity.finishing = true;
+        firstActivity.mVisibleRequested = true;
+        firstActivity.completeFinishing("test");
+        verify(firstActivity.getDisplay(), times(2)).ensureActivitiesVisible(null /* starting */,
+                0 /* configChanges */ , false /* preserveWindows */,
+                true /* notifyClients */);
+    }
+
+    /**
      * Verify destroy activity request completes successfully.
      */
     @Test
@@ -1270,6 +1370,59 @@ public class ActivityRecordTests extends ActivityTestsBase {
         assertTrue(wpc.registeredForActivityConfigChanges());
         assertEquals(0, secondActivityRecord.getMergedOverrideConfiguration()
                 .diff(wpc.getRequestedOverrideConfiguration()));
+    }
+
+    @Test
+    public void testActivityOnCancelFixedRotationTransform() {
+        mService.mWindowManager.mIsFixedRotationTransformEnabled = true;
+        final DisplayRotation displayRotation = mActivity.mDisplayContent.getDisplayRotation();
+        spyOn(displayRotation);
+
+        final DisplayContent display = mActivity.mDisplayContent;
+        final int originalRotation = display.getRotation();
+
+        // Make {@link DisplayContent#sendNewConfiguration} not apply rotation immediately.
+        doReturn(true).when(displayRotation).isWaitingForRemoteRotation();
+        doReturn((originalRotation + 1) % 4).when(displayRotation).rotationForOrientation(
+                anyInt() /* orientation */, anyInt() /* lastRotation */);
+        // Set to visible so the activity can freeze the screen.
+        mActivity.setVisibility(true);
+
+        display.rotateInDifferentOrientationIfNeeded(mActivity);
+        display.mFixedRotationLaunchingApp = mActivity;
+        displayRotation.updateRotationUnchecked(true /* forceUpdate */);
+
+        assertTrue(displayRotation.isRotatingSeamlessly());
+
+        // Simulate the rotation has been updated to previous one, e.g. sensor updates before the
+        // remote rotation is completed.
+        doReturn(originalRotation).when(displayRotation).rotationForOrientation(
+                anyInt() /* orientation */, anyInt() /* lastRotation */);
+        display.updateOrientation();
+
+        final DisplayInfo rotatedInfo = mActivity.getFixedRotationTransformDisplayInfo();
+        mActivity.finishFixedRotationTransform();
+        final ScreenRotationAnimation rotationAnim = display.getRotationAnimation();
+        assertNotNull(rotationAnim);
+        rotationAnim.setRotation(display.getPendingTransaction(), originalRotation);
+
+        // Because the display doesn't rotate, the rotated activity needs to cancel the fixed
+        // rotation. There should be a rotation animation to cover the change of activity.
+        verify(mActivity).onCancelFixedRotationTransform(rotatedInfo.rotation);
+        assertTrue(mActivity.isFreezingScreen());
+        assertFalse(displayRotation.isRotatingSeamlessly());
+        assertTrue(rotationAnim.isRotating());
+
+        // Simulate the remote rotation has completed and the configuration doesn't change, then
+        // the rotated activity should also be restored by clearing the transform.
+        displayRotation.updateRotationUnchecked(true /* forceUpdate */);
+        doReturn(false).when(displayRotation).isWaitingForRemoteRotation();
+        clearInvocations(mActivity);
+        display.mFixedRotationLaunchingApp = mActivity;
+        display.sendNewConfiguration();
+
+        assertNull(display.mFixedRotationLaunchingApp);
+        assertFalse(mActivity.hasFixedRotationTransform());
     }
 
     @Test

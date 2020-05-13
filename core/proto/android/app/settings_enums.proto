@@ -2523,16 +2523,10 @@ enum PageId {
     // OS: R
     PANEL_ADD_WIFI_NETWORKS = 1809;
 
-    // OPEN: Settings > Accessibility > Enable accessibility service > Show tutorial dialog
+    // OPEN: Settings > Accessibility > Enable the feature or shortcut > Show tutorial dialog
     // CATEGORY: SETTINGS
     // OS: R
-    DIALOG_TOGGLE_SCREEN_ACCESSIBILITY_BUTTON = 1810;
-
-    // OPEN: Settings > Accessibility > Enable accessibility service > Show tutorial dialog in
-    // gesture mode
-    // CATEGORY: SETTINGS
-    // OS: R
-    DIALOG_TOGGLE_SCREEN_GESTURE_NAVIGATION = 1811;
+    DIALOG_ACCESSIBILITY_TUTORIAL = 1810;
 
     // OPEN: Settings > Accessibility > Edit shortcut dialog
     // CATEGORY: SETTINGS
@@ -2674,4 +2668,25 @@ enum PageId {
     // CATEGORY: SETTINGS
     // OS: R
     FUELGAUGE_ADVANCED_BATTERY_OPTION = 1842;
+
+    // OPEN: Settings > System > Gestures > Power menu
+    // CATEGORY: SETTINGS
+    // OS: R
+    POWER_MENU_SETTINGS = 1843;
+
+    // OPEN: Settings > System > Gestures > Power menu > Device controls
+    // CATEGORY: SETTINGS
+    // OS: R
+    DEVICE_CONTROLS_SETTINGS = 1844;
+
+    // ACTION: Settings > Wi-Fi > Tap on Openroaming Wi-Fi
+    // CATEGORY: SETTINGS
+    // OS: R
+    OPENROAMING_TAP  = 1845;
+
+    // When device already using any Wi-Fi service, to track if user still want to use Openroaming
+    // ACTION: Settings > Wi-Fi > Tap on Openroaming Wi-Fi
+    // CATEGORY: SETTINGS
+    // OS: R
+    OPENROAMING_TAP_ON_WIFI_CONNECTION  = 1846;
 }

@@ -1282,7 +1282,8 @@ public final class Settings {
         return result;
     }
 
-    boolean removeIntentFilterVerificationLPw(String packageName, int userId) {
+    boolean removeIntentFilterVerificationLPw(String packageName, int userId,
+            boolean alsoResetStatus) {
         PackageSetting ps = mPackages.get(packageName);
         if (ps == null) {
             if (DEBUG_DOMAIN_VERIFICATION) {
@@ -1290,14 +1291,17 @@ public final class Settings {
             }
             return false;
         }
-        ps.clearDomainVerificationStatusForUser(userId);
+        if (alsoResetStatus) {
+            ps.clearDomainVerificationStatusForUser(userId);
+        }
+        ps.setIntentFilterVerificationInfo(null);
         return true;
     }
 
     boolean removeIntentFilterVerificationLPw(String packageName, int[] userIds) {
         boolean result = false;
         for (int userId : userIds) {
-            result |= removeIntentFilterVerificationLPw(packageName, userId);
+            result |= removeIntentFilterVerificationLPw(packageName, userId, true);
         }
         return result;
     }
@@ -1827,6 +1831,10 @@ public final class Settings {
                 mBlockUninstallPackages.remove(userId);
             }
         }
+    }
+
+    void clearBlockUninstallLPw(int userId) {
+        mBlockUninstallPackages.remove(userId);
     }
 
     boolean getBlockUninstallLPr(int userId, String packageName) {
@@ -3221,60 +3229,66 @@ public final class Settings {
             }
         }
 
-        // Read preferred apps from .../etc/preferred-apps directory.
-        File preferredDir = new File(Environment.getRootDirectory(), "etc/preferred-apps");
-        if (!preferredDir.exists() || !preferredDir.isDirectory()) {
-            return;
-        }
-        if (!preferredDir.canRead()) {
-            Slog.w(TAG, "Directory " + preferredDir + " cannot be read");
-            return;
-        }
+        // Read preferred apps from .../etc/preferred-apps directories.
+        int size = PackageManagerService.SYSTEM_PARTITIONS.size();
+        for (int index = 0; index < size; index++) {
+            PackageManagerService.ScanPartition partition =
+                    PackageManagerService.SYSTEM_PARTITIONS.get(index);
 
-        // Iterate over the files in the directory and scan .xml files
-        for (File f : preferredDir.listFiles()) {
-            if (!f.getPath().endsWith(".xml")) {
-                Slog.i(TAG, "Non-xml file " + f + " in " + preferredDir + " directory, ignoring");
-                continue;
-            }
-            if (!f.canRead()) {
-                Slog.w(TAG, "Preferred apps file " + f + " cannot be read");
+            File preferredDir = new File(partition.folder, "etc/preferred-apps");
+            if (!preferredDir.exists() || !preferredDir.isDirectory()) {
                 continue;
             }
 
-            if (PackageManagerService.DEBUG_PREFERRED) Log.d(TAG, "Reading default preferred " + f);
-            InputStream str = null;
-            try {
-                str = new BufferedInputStream(new FileInputStream(f));
-                XmlPullParser parser = Xml.newPullParser();
-                parser.setInput(str, null);
+            if (!preferredDir.canRead()) {
+                Slog.w(TAG, "Directory " + preferredDir + " cannot be read");
+                continue;
+            }
 
-                int type;
-                while ((type = parser.next()) != XmlPullParser.START_TAG
-                        && type != XmlPullParser.END_DOCUMENT) {
-                    ;
-                }
+            // Iterate over the files in the directory and scan .xml files
+            File[] files = preferredDir.listFiles();
+            if (ArrayUtils.isEmpty(files)) {
+                continue;
+            }
 
-                if (type != XmlPullParser.START_TAG) {
-                    Slog.w(TAG, "Preferred apps file " + f + " does not have start tag");
+            for (File f : files) {
+                if (!f.getPath().endsWith(".xml")) {
+                    Slog.i(TAG, "Non-xml file " + f + " in " + preferredDir
+                            + " directory, ignoring");
                     continue;
                 }
-                if (!"preferred-activities".equals(parser.getName())) {
-                    Slog.w(TAG, "Preferred apps file " + f
-                            + " does not start with 'preferred-activities'");
+                if (!f.canRead()) {
+                    Slog.w(TAG, "Preferred apps file " + f + " cannot be read");
                     continue;
                 }
-                readDefaultPreferredActivitiesLPw(parser, userId);
-            } catch (XmlPullParserException e) {
-                Slog.w(TAG, "Error reading apps file " + f, e);
-            } catch (IOException e) {
-                Slog.w(TAG, "Error reading apps file " + f, e);
-            } finally {
-                if (str != null) {
-                    try {
-                        str.close();
-                    } catch (IOException e) {
+                if (PackageManagerService.DEBUG_PREFERRED) {
+                    Log.d(TAG, "Reading default preferred " + f);
+                }
+
+                try (InputStream str = new BufferedInputStream(new FileInputStream(f))) {
+                    XmlPullParser parser = Xml.newPullParser();
+                    parser.setInput(str, null);
+
+                    int type;
+                    while ((type = parser.next()) != XmlPullParser.START_TAG
+                            && type != XmlPullParser.END_DOCUMENT) {
+                        ;
                     }
+
+                    if (type != XmlPullParser.START_TAG) {
+                        Slog.w(TAG, "Preferred apps file " + f + " does not have start tag");
+                        continue;
+                    }
+                    if (!"preferred-activities".equals(parser.getName())) {
+                        Slog.w(TAG, "Preferred apps file " + f
+                                + " does not start with 'preferred-activities'");
+                        continue;
+                    }
+                    readDefaultPreferredActivitiesLPw(parser, userId);
+                } catch (XmlPullParserException e) {
+                    Slog.w(TAG, "Error reading apps file " + f, e);
+                } catch (IOException e) {
+                    Slog.w(TAG, "Error reading apps file " + f, e);
                 }
             }
         }
@@ -4207,18 +4221,12 @@ public final class Settings {
             }
         }
         t.traceBegin("createAppData");
-        for (int i = 0; i < packagesCount; i++) {
-            if (names[i] == null) {
-                continue;
-            }
-            // TODO: triage flags!
-            final int flags = StorageManager.FLAG_STORAGE_CE | StorageManager.FLAG_STORAGE_DE;
-            try {
-                installer.createAppData(volumeUuids[i], names[i], userHandle, flags, appIds[i],
-                        seinfos[i], targetSdkVersions[i]);
-            } catch (InstallerException e) {
-                Slog.w(TAG, "Failed to prepare app data", e);
-            }
+        final int flags = StorageManager.FLAG_STORAGE_CE | StorageManager.FLAG_STORAGE_DE;
+        try {
+            installer.createAppDataBatched(volumeUuids, names, userHandle, flags, appIds, seinfos,
+                    targetSdkVersions);
+        } catch (InstallerException e) {
+            Slog.w(TAG, "Failed to prepare app data", e);
         }
         t.traceEnd(); // createAppData
         synchronized (mLock) {
@@ -4361,19 +4369,21 @@ public final class Settings {
         return pkg.installSource.isOrphaned;
     }
 
-    int getApplicationEnabledSettingLPr(String packageName, int userId) {
+    int getApplicationEnabledSettingLPr(String packageName, int userId)
+            throws PackageManager.NameNotFoundException {
         final PackageSetting pkg = mPackages.get(packageName);
         if (pkg == null) {
-            throw new IllegalArgumentException("Unknown package: " + packageName);
+            throw new PackageManager.NameNotFoundException(packageName);
         }
         return pkg.getEnabled(userId);
     }
 
-    int getComponentEnabledSettingLPr(ComponentName componentName, int userId) {
+    int getComponentEnabledSettingLPr(ComponentName componentName, int userId)
+            throws PackageManager.NameNotFoundException {
         final String packageName = componentName.getPackageName();
         final PackageSetting pkg = mPackages.get(packageName);
         if (pkg == null) {
-            throw new IllegalArgumentException("Unknown component: " + componentName);
+            throw new PackageManager.NameNotFoundException(componentName.getPackageName());
         }
         final String classNameStr = componentName.getClassName();
         return pkg.getCurrentEnabledStateLPr(classNameStr, userId);

@@ -170,8 +170,13 @@ class InsetsStateController {
         }
 
         if (aboveIme) {
-            state = new InsetsState(state);
-            state.removeSource(ITYPE_IME);
+            InsetsSource imeSource = state.peekSource(ITYPE_IME);
+            if (imeSource != null && imeSource.isVisible()) {
+                imeSource = new InsetsSource(imeSource);
+                imeSource.setVisible(false);
+                state = new InsetsState(state);
+                state.addSource(imeSource);
+            }
         }
 
         return state;
@@ -407,6 +412,10 @@ class InsetsStateController {
             return;
         }
         mDisplayContent.mWmService.mAnimator.addAfterPrepareSurfacesRunnable(() -> {
+            for (int i = mProviders.size() - 1; i >= 0; i--) {
+                final InsetsSourceProvider provider = mProviders.valueAt(i);
+                provider.onSurfaceTransactionApplied();
+            }
             for (int i = mPendingControlChanged.size() - 1; i >= 0; i--) {
                 final InsetsControlTarget controlTarget = mPendingControlChanged.valueAt(i);
                 controlTarget.notifyInsetsControlChanged();

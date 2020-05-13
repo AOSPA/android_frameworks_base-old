@@ -2338,8 +2338,7 @@ public final class PowerManagerService extends SystemService
                     nextTimeout = -1;
                 }
 
-                if (((mUserActivitySummary & USER_ACTIVITY_SCREEN_BRIGHT) != 0
-                        || (mUserActivitySummary & USER_ACTIVITY_SCREEN_DIM) != 0)
+                if ((mUserActivitySummary & USER_ACTIVITY_SCREEN_BRIGHT) != 0
                         && (mWakeLockSummary & WAKE_LOCK_STAY_AWAKE) == 0) {
                     nextTimeout = mAttentionDetector.updateUserActivity(nextTimeout,
                             screenDimDuration);
@@ -3219,6 +3218,10 @@ public final class PowerManagerService extends SystemService
     private void shutdownOrRebootInternal(final @HaltMode int haltMode, final boolean confirm,
             @Nullable final String reason, boolean wait) {
         if (PowerManager.REBOOT_USERSPACE.equals(reason)) {
+            if (!PowerManager.isRebootingUserspaceSupportedImpl()) {
+                throw new UnsupportedOperationException(
+                        "Attempted userspace reboot on a device that doesn't support it");
+            }
             UserspaceRebootLogger.noteUserspaceRebootWasRequested();
         }
         if (mHandler == null || !mSystemReady) {

@@ -59,6 +59,16 @@ public interface ParseInput {
         @ChangeId
         @EnabledAfter(targetSdkVersion = Build.VERSION_CODES.Q)
         public static final long EMPTY_INTENT_ACTION_CATEGORY = 151163173;
+
+        /**
+         * The {@code resources.arsc} of one of the APKs being installed is compressed or not
+         * aligned on a 4-byte boundary. Resource tables that cannot be memory mapped exert excess
+         * memory pressure on the system and drastically slow down construction of
+         * {@link android.content.res.Resources} objects.
+         */
+        @ChangeId
+        @EnabledAfter(targetSdkVersion = Build.VERSION_CODES.Q)
+        public static final long RESOURCES_ARSC_COMPRESSED = 132742131;
     }
 
     <ResultType> ParseResult<ResultType> success(ResultType result);
@@ -77,6 +87,14 @@ public interface ParseInput {
      * error was registered. The result contains null and should not be unwrapped.
      */
     ParseResult<?> enableDeferredError(String packageName, int targetSdkVersion);
+
+    /**
+     * This will assign errorCode to {@link PackageManager#INSTALL_PARSE_FAILED_SKIPPED, used for
+     * packages which should be ignored by the caller.
+     *
+     * @see #error(int, String, Exception)
+     */
+    <ResultType> ParseResult<ResultType> skip(@NonNull String parseError);
 
     /** @see #error(int, String, Exception) */
     <ResultType> ParseResult<ResultType> error(int parseError);

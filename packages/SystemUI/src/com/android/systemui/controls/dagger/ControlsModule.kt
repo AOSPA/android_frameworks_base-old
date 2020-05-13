@@ -22,6 +22,7 @@ import com.android.systemui.controls.controller.ControlsBindingControllerImpl
 import com.android.systemui.controls.controller.ControlsController
 import com.android.systemui.controls.controller.ControlsControllerImpl
 import com.android.systemui.controls.controller.ControlsFavoritePersistenceWrapper
+import com.android.systemui.controls.management.ControlsEditingActivity
 import com.android.systemui.controls.management.ControlsFavoritingActivity
 import com.android.systemui.controls.management.ControlsListingController
 import com.android.systemui.controls.management.ControlsListingControllerImpl
@@ -29,6 +30,8 @@ import com.android.systemui.controls.management.ControlsProviderSelectorActivity
 import com.android.systemui.controls.management.ControlsRequestDialog
 import com.android.systemui.controls.ui.ControlsUiController
 import com.android.systemui.controls.ui.ControlsUiControllerImpl
+import com.android.systemui.controls.ui.ControlActionCoordinator
+import com.android.systemui.controls.ui.ControlActionCoordinatorImpl
 import dagger.Binds
 import dagger.BindsOptionalOf
 import dagger.Module
@@ -54,6 +57,11 @@ abstract class ControlsModule {
     @Binds
     abstract fun provideUiController(controller: ControlsUiControllerImpl): ControlsUiController
 
+    @Binds
+    abstract fun provideControlActionCoordinator(
+        coordinator: ControlActionCoordinatorImpl
+    ): ControlActionCoordinator
+
     @BindsOptionalOf
     abstract fun optionalPersistenceWrapper(): ControlsFavoritePersistenceWrapper
 
@@ -69,6 +77,13 @@ abstract class ControlsModule {
     @ClassKey(ControlsFavoritingActivity::class)
     abstract fun provideControlsFavoritingActivity(
         activity: ControlsFavoritingActivity
+    ): Activity
+
+    @Binds
+    @IntoMap
+    @ClassKey(ControlsEditingActivity::class)
+    abstract fun provideControlsEditingActivity(
+        activity: ControlsEditingActivity
     ): Activity
 
     @Binds

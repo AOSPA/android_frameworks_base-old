@@ -25,6 +25,7 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.PackageInstaller;
 import android.content.pm.PackageManager;
+import android.content.pm.PackageManagerInternal;
 import android.content.pm.VersionedPackage;
 import android.content.rollback.PackageRollbackInfo;
 import android.content.rollback.RollbackInfo;
@@ -35,16 +36,19 @@ import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.PowerManager;
 import android.os.SystemProperties;
-import android.text.TextUtils;
 import android.util.ArraySet;
 import android.util.Slog;
+import android.util.SparseArray;
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.util.FrameworkStatsLog;
+import com.android.server.LocalServices;
 import com.android.server.PackageWatchdog;
 import com.android.server.PackageWatchdog.FailureReasons;
 import com.android.server.PackageWatchdog.PackageHealthObserver;
 import com.android.server.PackageWatchdog.PackageHealthObserverImpact;
+import com.android.server.pm.ApexManager;
+import com.android.server.pm.parsing.pkg.AndroidPackage;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -52,9 +56,7 @@ import java.io.FileOutputStream;
 import java.io.FileReader;
 import java.io.IOException;
 import java.io.PrintWriter;
-import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
 
@@ -71,6 +73,7 @@ public final class RollbackPackageHealthObserver implements PackageHealthObserve
 
     private final Context mContext;
     private final Handler mHandler;
+    private final ApexManager mApexManager;
     private final File mLastStagedRollbackIdsFile;
     // Staged rollback ids that have been committed but their session is not yet ready
     @GuardedBy("mPendingStagedRollbackIds")
@@ -85,6 +88,7 @@ public final class RollbackPackageHealthObserver implements PackageHealthObserve
         dataDir.mkdirs();
         mLastStagedRollbackIdsFile = new File(dataDir, "last-staged-rollback-ids");
         PackageWatchdog.getInstance(mContext).registerHealthObserver(this);
+        mApexManager = ApexManager.getInstance();
     }
 
     @Override
@@ -150,12 +154,11 @@ public final class RollbackPackageHealthObserver implements PackageHealthObserve
             PackageWatchdog.getInstance(mContext).scheduleCheckAndMitigateNativeCrashes();
         }
 
-        List<Integer> rollbackIds = popLastStagedRollbackIds();
-        Iterator<Integer> rollbackIterator = rollbackIds.iterator();
-        while (rollbackIterator.hasNext()) {
-            int rollbackId = rollbackIterator.next();
-            WatchdogRollbackLogger.logRollbackStatusOnBoot(
-                    mContext, rollbackId, rollbackManager.getRecentlyCommittedRollbacks());
+        SparseArray<String> rollbackIds = popLastStagedRollbackIds();
+        for (int i = 0; i < rollbackIds.size(); i++) {
+            WatchdogRollbackLogger.logRollbackStatusOnBoot(mContext,
+                    rollbackIds.keyAt(i), rollbackIds.valueAt(i),
+                    rollbackManager.getRecentlyCommittedRollbacks());
         }
     }
 
@@ -218,7 +221,7 @@ public final class RollbackPackageHealthObserver implements PackageHealthObserve
                         packageInstaller.getSessionInfo(sessionId);
                 if (sessionInfo.isStagedSessionReady() && markStagedSessionHandled(rollbackId)) {
                     mContext.unregisterReceiver(listener);
-                    saveStagedRollbackId(rollbackId);
+                    saveStagedRollbackId(rollbackId, logPackage);
                     WatchdogRollbackLogger.logEvent(logPackage,
                             FrameworkStatsLog
                             .WATCHDOG_ROLLBACK_OCCURRED__ROLLBACK_TYPE__ROLLBACK_BOOT_TRIGGERED,
@@ -262,39 +265,54 @@ public final class RollbackPackageHealthObserver implements PackageHealthObserve
         }
     }
 
-    private void saveStagedRollbackId(int stagedRollbackId) {
+    private void saveStagedRollbackId(int stagedRollbackId, @Nullable VersionedPackage logPackage) {
+        writeStagedRollbackId(mLastStagedRollbackIdsFile, stagedRollbackId, logPackage);
+    }
+
+    static void writeStagedRollbackId(File file, int stagedRollbackId,
+            @Nullable VersionedPackage logPackage) {
         try {
-            FileOutputStream fos = new FileOutputStream(
-                    mLastStagedRollbackIdsFile, /*append*/true);
+            FileOutputStream fos = new FileOutputStream(file, true);
             PrintWriter pw = new PrintWriter(fos);
-            pw.append(",").append(String.valueOf(stagedRollbackId));
+            String logPackageName = logPackage != null ? logPackage.getPackageName() : "";
+            pw.append(String.valueOf(stagedRollbackId)).append(",").append(logPackageName);
+            pw.println();
             pw.flush();
             FileUtils.sync(fos);
             pw.close();
         } catch (IOException e) {
             Slog.e(TAG, "Failed to save last staged rollback id", e);
+            file.delete();
+        }
+    }
+
+    private SparseArray<String> popLastStagedRollbackIds() {
+        try {
+            return readStagedRollbackIds(mLastStagedRollbackIdsFile);
+        } finally {
             mLastStagedRollbackIdsFile.delete();
         }
     }
 
-    private List<Integer> popLastStagedRollbackIds() {
-        try (BufferedReader reader =
-                     new BufferedReader(new FileReader(mLastStagedRollbackIdsFile))) {
-            String line = reader.readLine();
-            // line is of format : ",id1,id2,id3....,idn"
-            String[] sessionIdsStr = line.split(",");
-            ArrayList<Integer> result = new ArrayList<>();
-            for (String sessionIdStr: sessionIdsStr) {
-                if (!TextUtils.isEmpty(sessionIdStr.trim())) {
-                    result.add(Integer.parseInt(sessionIdStr));
+    static SparseArray<String> readStagedRollbackIds(File file) {
+        SparseArray<String> result = new SparseArray<>();
+        try {
+            String line;
+            BufferedReader reader = new BufferedReader(new FileReader(file));
+            while ((line = reader.readLine()) != null) {
+                // Each line is of the format: "id,logging_package"
+                String[] values = line.trim().split(",");
+                String rollbackId = values[0];
+                String logPackageName = "";
+                if (values.length > 1) {
+                    logPackageName = values[1];
                 }
+                result.put(Integer.parseInt(rollbackId), logPackageName);
             }
-            return result;
         } catch (Exception ignore) {
-            return Collections.emptyList();
-        } finally {
-            mLastStagedRollbackIdsFile.delete();
+            return new SparseArray<>();
         }
+        return result;
     }
 
 
@@ -302,6 +320,18 @@ public final class RollbackPackageHealthObserver implements PackageHealthObserve
      * Returns true if the package name is the name of a module.
      */
     private boolean isModule(String packageName) {
+        // Check if the package is an APK inside an APEX. If it is, use the parent APEX package when
+        // querying PackageManager.
+        PackageManagerInternal pmi = LocalServices.getService(PackageManagerInternal.class);
+        AndroidPackage apkPackage = pmi.getPackage(packageName);
+        if (apkPackage != null) {
+            String apexPackageName = mApexManager.getActiveApexPackageNameContainingPackage(
+                    apkPackage);
+            if (apexPackageName != null) {
+                packageName = apexPackageName;
+            }
+        }
+
         PackageManager pm = mContext.getPackageManager();
         try {
             return pm.getModuleInfo(packageName, 0) != null;

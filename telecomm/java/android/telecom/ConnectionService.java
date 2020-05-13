@@ -1554,6 +1554,14 @@ public abstract class ConnectionService extends Service {
         }
 
         @Override
+        public void onCallDirectionChanged(Conference c, int direction) {
+            String id = mIdByConference.get(c);
+            if (id != null) {
+                mAdapter.setCallDirection(id, direction);
+            }
+        }
+
+        @Override
         public void onAddressChanged(Conference c, Uri newAddress, int presentation) {
             String id = mIdByConference.get(c);
             if (id != null) {
@@ -1851,31 +1859,45 @@ public abstract class ConnectionService extends Service {
                     new DisconnectCause(DisconnectCause.ERROR, "IMPL_RETURNED_NULL_CONFERENCE"),
                     request.getAccountHandle());
         }
-        if (conference.getExtras() != null) {
-            conference.getExtras().putString(Connection.EXTRA_ORIGINAL_CONNECTION_ID, callId);
+
+        Bundle extras = request.getExtras();
+        Bundle newExtras = new Bundle();
+        newExtras.putString(Connection.EXTRA_ORIGINAL_CONNECTION_ID, callId);
+        if (extras != null) {
+            // If the request originated from a remote connection service, we will add some
+            // tracking information that Telecom can use to keep informed of which package
+            // made the remote request, and which remote connection service was used.
+            if (extras.containsKey(Connection.EXTRA_REMOTE_CONNECTION_ORIGINATING_PACKAGE_NAME)) {
+                newExtras.putString(
+                        Connection.EXTRA_REMOTE_CONNECTION_ORIGINATING_PACKAGE_NAME,
+                        extras.getString(
+                                Connection.EXTRA_REMOTE_CONNECTION_ORIGINATING_PACKAGE_NAME));
+                newExtras.putParcelable(Connection.EXTRA_REMOTE_PHONE_ACCOUNT_HANDLE,
+                        request.getAccountHandle());
+            }
         }
+        conference.putExtras(newExtras);
+
         mConferenceById.put(callId, conference);
         mIdByConference.put(conference, callId);
         conference.addListener(mConferenceListener);
-        ParcelableConference parcelableConference = new ParcelableConference(
-                request.getAccountHandle(),
-                conference.getState(),
-                conference.getConnectionCapabilities(),
-                conference.getConnectionProperties(),
-                Collections.<String>emptyList(), //connectionIds
-                conference.getVideoProvider() == null ?
-                        null : conference.getVideoProvider().getInterface(),
-                conference.getVideoState(),
-                conference.getConnectTimeMillis(),
-                conference.getConnectionStartElapsedRealtimeMillis(),
-                conference.getStatusHints(),
-                conference.getExtras(),
-                conference.getAddress(),
-                conference.getAddressPresentation(),
-                conference.getCallerDisplayName(),
-                conference.getCallerDisplayNamePresentation(),
-                conference.getDisconnectCause(),
-                conference.isRingbackRequested());
+        ParcelableConference parcelableConference = new ParcelableConference.Builder(
+                request.getAccountHandle(), conference.getState())
+                .setConnectionCapabilities(conference.getConnectionCapabilities())
+                .setConnectionProperties(conference.getConnectionProperties())
+                .setVideoAttributes(conference.getVideoProvider() == null
+                                ? null : conference.getVideoProvider().getInterface(),
+                        conference.getVideoState())
+                .setConnectTimeMillis(conference.getConnectTimeMillis(),
+                        conference.getConnectionStartElapsedRealtimeMillis())
+                .setStatusHints(conference.getStatusHints())
+                .setExtras(conference.getExtras())
+                .setAddress(conference.getAddress(), conference.getAddressPresentation())
+                .setCallerDisplayName(conference.getCallerDisplayName(),
+                        conference.getCallerDisplayNamePresentation())
+                .setDisconnectCause(conference.getDisconnectCause())
+                .setRingbackRequested(conference.isRingbackRequested())
+                .build();
         if (conference.getState() != Connection.STATE_DISCONNECTED) {
             conference.setTelecomCallId(callId);
             mAdapter.setVideoProvider(callId, conference.getVideoProvider());
@@ -1930,6 +1952,30 @@ public abstract class ConnectionService extends Service {
             Log.i(this, "createConnection, implementation returned null connection.");
             connection = Connection.createFailedConnection(
                     new DisconnectCause(DisconnectCause.ERROR, "IMPL_RETURNED_NULL_CONNECTION"));
+        } else {
+            try {
+                Bundle extras = request.getExtras();
+                if (extras != null) {
+                    // If the request originated from a remote connection service, we will add some
+                    // tracking information that Telecom can use to keep informed of which package
+                    // made the remote request, and which remote connection service was used.
+                    if (extras.containsKey(
+                            Connection.EXTRA_REMOTE_CONNECTION_ORIGINATING_PACKAGE_NAME)) {
+                        Bundle newExtras = new Bundle();
+                        newExtras.putString(
+                                Connection.EXTRA_REMOTE_CONNECTION_ORIGINATING_PACKAGE_NAME,
+                                extras.getString(
+                                        Connection.EXTRA_REMOTE_CONNECTION_ORIGINATING_PACKAGE_NAME
+                                ));
+                        newExtras.putParcelable(Connection.EXTRA_REMOTE_PHONE_ACCOUNT_HANDLE,
+                                request.getAccountHandle());
+                        connection.putExtras(newExtras);
+                    }
+                }
+            } catch (UnsupportedOperationException ose) {
+                // Do nothing; if the ConnectionService reported a failure it will be an instance
+                // of an immutable Connection which we cannot edit, so we're out of luck.
+            }
         }
 
         boolean isSelfManaged =
@@ -2476,27 +2522,34 @@ public abstract class ConnectionService extends Service {
                 }
             }
             conference.setTelecomCallId(id);
-            ParcelableConference parcelableConference = new ParcelableConference(
-                    conference.getPhoneAccountHandle(),
-                    conference.getState(),
-                    conference.getConnectionCapabilities(),
-                    conference.getConnectionProperties(),
-                    connectionIds,
-                    conference.getVideoProvider() == null ?
-                            null : conference.getVideoProvider().getInterface(),
-                    conference.getVideoState(),
-                    conference.getConnectTimeMillis(),
-                    conference.getConnectionStartElapsedRealtimeMillis(),
-                    conference.getStatusHints(),
-                    conference.getExtras(),
-                    conference.getAddress(),
-                    conference.getAddressPresentation(),
-                    conference.getCallerDisplayName(),
-                    conference.getCallerDisplayNamePresentation());
+            ParcelableConference parcelableConference = new ParcelableConference.Builder(
+                    conference.getPhoneAccountHandle(), conference.getState())
+                    .setConnectionCapabilities(conference.getConnectionCapabilities())
+                    .setConnectionProperties(conference.getConnectionProperties())
+                    .setConnectionIds(connectionIds)
+                    .setVideoAttributes(conference.getVideoProvider() == null
+                                    ? null : conference.getVideoProvider().getInterface(),
+                            conference.getVideoState())
+                    .setConnectTimeMillis(conference.getConnectTimeMillis(),
+                            conference.getConnectionStartElapsedRealtimeMillis())
+                    .setStatusHints(conference.getStatusHints())
+                    .setExtras(conference.getExtras())
+                    .setAddress(conference.getAddress(), conference.getAddressPresentation())
+                    .setCallerDisplayName(conference.getCallerDisplayName(),
+                            conference.getCallerDisplayNamePresentation())
+                    .setDisconnectCause(conference.getDisconnectCause())
+                    .setRingbackRequested(conference.isRingbackRequested())
+                    .setCallDirection(conference.getCallDirection())
+                    .build();
 
             mAdapter.addConferenceCall(id, parcelableConference);
             mAdapter.setVideoProvider(id, conference.getVideoProvider());
             mAdapter.setVideoState(id, conference.getVideoState());
+            // In some instances a conference can start its life as a standalone call with just a
+            // single participant; ensure we signal to Telecom in this case.
+            if (!conference.isMultiparty()) {
+                mAdapter.setConferenceState(id, conference.isMultiparty());
+            }
 
             // Go through any child calls and set the parent.
             for (Connection connection : conference.getConnections()) {

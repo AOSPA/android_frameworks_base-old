@@ -79,6 +79,7 @@ import android.util.TypedValue;
 import android.view.ContextThemeWrapper;
 import android.view.Gravity;
 import android.view.IRotationWatcher.Stub;
+import android.view.IScrollCaptureController;
 import android.view.IWindowManager;
 import android.view.InputDevice;
 import android.view.InputEvent;
@@ -89,6 +90,7 @@ import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.MotionEvent;
+import android.view.ScrollCaptureCallback;
 import android.view.SearchEvent;
 import android.view.SurfaceHolder.Callback2;
 import android.view.View;
@@ -343,8 +345,7 @@ public class PhoneWindow extends Window implements MenuBuilder.Callback {
     /** @see ViewRootImpl#mActivityConfigCallback */
     private ActivityConfigCallback mActivityConfigCallback;
 
-    private OnContentApplyWindowInsetsListener mPendingOnContentApplyWindowInsetsListener =
-            sDefaultContentInsetsApplier;
+    boolean mDecorFitsSystemWindows = true;
 
     static class WindowManagerHolder {
         static final IWindowManager sWindowManager = IWindowManager.Stub.asInterface(
@@ -2138,9 +2139,7 @@ public class PhoneWindow extends Window implements MenuBuilder.Callback {
     /** Notify when decor view is attached to window and {@link ViewRootImpl} is available. */
     void onViewRootImplSet(ViewRootImpl viewRoot) {
         viewRoot.setActivityConfigCallback(mActivityConfigCallback);
-        viewRoot.setOnContentApplyWindowInsetsListener(
-                mPendingOnContentApplyWindowInsetsListener);
-        mPendingOnContentApplyWindowInsetsListener = null;
+        applyDecorFitsSystemWindows();
     }
 
     static private final String FOCUSED_ID_TAG = "android:focusedViewId";
@@ -2359,7 +2358,7 @@ public class PhoneWindow extends Window implements MenuBuilder.Callback {
             if (applicationContext == null) {
                 context = getContext();
             } else {
-                context = new DecorContext(applicationContext, getContext());
+                context = new DecorContext(applicationContext, this);
                 if (mTheme != -1) {
                     context.setTheme(mTheme);
                 }
@@ -3907,14 +3906,47 @@ public class PhoneWindow extends Window implements MenuBuilder.Callback {
 
     @Override
     public void setDecorFitsSystemWindows(boolean decorFitsSystemWindows) {
+        mDecorFitsSystemWindows = decorFitsSystemWindows;
+        applyDecorFitsSystemWindows();
+    }
+
+    private void applyDecorFitsSystemWindows() {
         ViewRootImpl impl = getViewRootImplOrNull();
-        OnContentApplyWindowInsetsListener listener = decorFitsSystemWindows
-                ? sDefaultContentInsetsApplier
-                : null;
         if (impl != null) {
-            impl.setOnContentApplyWindowInsetsListener(listener);
-        } else {
-            mPendingOnContentApplyWindowInsetsListener = listener;
+            impl.setOnContentApplyWindowInsetsListener(mDecorFitsSystemWindows
+                    ? sDefaultContentInsetsApplier
+                    : null);
         }
+    }
+
+    /**
+     * System request to begin scroll capture.
+     *
+     * @param controller the controller to receive responses
+     * @hide
+     */
+    @Override
+    public void requestScrollCapture(IScrollCaptureController controller) {
+        getViewRootImpl().dispatchScrollCaptureRequest(controller);
+    }
+
+    /**
+     * Registers a handler providing scrolling capture support for window content.
+     *
+     * @param callback the callback to add
+     */
+    @Override
+    public void addScrollCaptureCallback(@NonNull ScrollCaptureCallback callback) {
+        getViewRootImpl().addScrollCaptureCallback(callback);
+    }
+
+    /**
+     * Unregisters the given {@link ScrollCaptureCallback}.
+     *
+     * @param callback the callback to remove
+     */
+    @Override
+    public void removeScrollCaptureCallback(@NonNull ScrollCaptureCallback callback) {
+        getViewRootImpl().removeScrollCaptureCallback(callback);
     }
 }

@@ -27,6 +27,11 @@ import java.lang.annotation.RetentionPolicy;
 public final class ShortcutConstants {
     private ShortcutConstants() {}
 
+    /**
+     * Package name of the accessibility chooser and used for {@link android.content.Intent}.
+     */
+    public static final String CHOOSER_PACKAGE_NAME = "android";
+
     public static final char SERVICES_SEPARATOR = ':';
 
     /**
@@ -55,41 +60,27 @@ public final class ShortcutConstants {
     }
 
     /**
-     * Annotation for different accessibilityService fragment UI type.
+     * Annotation for the different accessibility fragment type.
      *
-     * {@code LEGACY} for displaying appearance aligned with sdk version Q accessibility service
-     * page, but only hardware shortcut allowed and under service in version Q or early.
-     * {@code INVISIBLE} for displaying appearance without switch bar.
-     * {@code INTUITIVE} for displaying appearance with version R accessibility design.
-     * {@code BOUNCE} for displaying appearance with pop-up action.
+     * {@code VOLUME_SHORTCUT_TOGGLE} for displaying appearance with switch bar and only one
+     * shortcut option that is volume key shortcut.
+     * {@code INVISIBLE_TOGGLE} for displaying appearance without switch bar.
+     * {@code TOGGLE} for displaying appearance with switch bar.
+     * {@code LAUNCH_ACTIVITY} for displaying appearance with pop-up action that is for launch
+     * activity.
      */
     @Retention(RetentionPolicy.SOURCE)
     @IntDef({
-            AccessibilityServiceFragmentType.LEGACY,
-            AccessibilityServiceFragmentType.INVISIBLE,
-            AccessibilityServiceFragmentType.INTUITIVE,
-            AccessibilityServiceFragmentType.BOUNCE,
+            AccessibilityFragmentType.VOLUME_SHORTCUT_TOGGLE,
+            AccessibilityFragmentType.INVISIBLE_TOGGLE,
+            AccessibilityFragmentType.TOGGLE,
+            AccessibilityFragmentType.LAUNCH_ACTIVITY,
     })
-    public @interface AccessibilityServiceFragmentType {
-        int LEGACY = 0;
-        int INVISIBLE = 1;
-        int INTUITIVE = 2;
-        int BOUNCE = 3;
-    }
-
-    /**
-     * Annotation for different shortcut target.
-     */
-    @Retention(RetentionPolicy.SOURCE)
-    @IntDef({
-            TargetType.ACCESSIBILITY_SERVICE,
-            TargetType.ACCESSIBILITY_ACTIVITY,
-            TargetType.WHITE_LISTING,
-    })
-    public @interface TargetType {
-        int ACCESSIBILITY_SERVICE = 0;
-        int ACCESSIBILITY_ACTIVITY = 1;
-        int WHITE_LISTING = 2;
+    public @interface AccessibilityFragmentType {
+        int VOLUME_SHORTCUT_TOGGLE = 0;
+        int INVISIBLE_TOGGLE = 1;
+        int TOGGLE = 2;
+        int LAUNCH_ACTIVITY = 3;
     }
 
     /**
@@ -106,31 +97,5 @@ public final class ShortcutConstants {
     public @interface ShortcutMenuMode {
         int LAUNCH = 0;
         int EDIT = 1;
-    }
-
-    /**
-     * Annotation for align the element index of white listing feature
-     * {@code WHITE_LISTING_FEATURES}.
-     *
-     * {@code COMPONENT_ID} is to get the service component name.
-     * {@code LABEL_ID} is to get the service label text.
-     * {@code ICON_ID} is to get the service icon.
-     * {@code FRAGMENT_TYPE} is to get the service fragment type.
-     * {@code SETTINGS_KEY} is to get the service settings key.
-     */
-    @Retention(RetentionPolicy.SOURCE)
-    @IntDef({
-            WhiteListingFeatureElementIndex.COMPONENT_ID,
-            WhiteListingFeatureElementIndex.LABEL_ID,
-            WhiteListingFeatureElementIndex.ICON_ID,
-            WhiteListingFeatureElementIndex.FRAGMENT_TYPE,
-            WhiteListingFeatureElementIndex.SETTINGS_KEY,
-    })
-    public @interface WhiteListingFeatureElementIndex {
-        int COMPONENT_ID = 0;
-        int LABEL_ID = 1;
-        int ICON_ID = 2;
-        int FRAGMENT_TYPE = 3;
-        int SETTINGS_KEY = 4;
     }
 }

@@ -284,6 +284,8 @@ public final class CellIdentityNr extends CellIdentity {
         mBands = in.createIntArray();
         mNci = in.readLong();
         mAdditionalPlmns = (ArraySet<String>) in.readArraySet(null);
+
+        updateGlobalCellId();
     }
 
     /** Implement the Parcelable interface */

@@ -42,6 +42,7 @@ import android.view.IDisplayFoldListener;
 import android.view.IDisplayWindowRotationController;
 import android.view.IOnKeyguardExitResult;
 import android.view.IPinnedStackListener;
+import android.view.IScrollCaptureController;
 import android.view.RemoteAnimationAdapter;
 import android.view.IRotationWatcher;
 import android.view.ISystemGestureExclusionListener;
@@ -124,13 +125,20 @@ interface IWindowManager
      * @param type Window type to be used with this token.
      * @param options A bundle used to pass window-related options.
      * @param displayId The ID of the display where this token should be added.
-     * @param packageName The name of package to request to add window token.
+     * @param packageName The name of package to request to add window token. Could be {@code null}
+     *                    if callers holds the MANAGE_APP_TOKENS permission.
      * @return {@link WindowManagerGlobal#ADD_OKAY} if the addition was successful, an error code
      *         otherwise.
      */
     int addWindowTokenWithOptions(IBinder token, int type, int displayId, in Bundle options,
             String packageName);
     void addWindowToken(IBinder token, int type, int displayId);
+    /**
+     * Remove window token on a specific display.
+     *
+     * @param token Token to be removed
+     * @displayId The ID of the display where this token should be removed.
+     */
     void removeWindowToken(IBinder token, int displayId);
     void prepareAppTransition(int transit, boolean alwaysKeepCurrent);
 
@@ -151,6 +159,14 @@ interface IWindowManager
      * @return a SurfaceControl to add things to.
      */
     SurfaceControl addShellRoot(int displayId, IWindow client, int windowType);
+
+    /**
+     * Sets the window token sent to accessibility for a particular shell root. The
+     * displayId and windowType identify which shell-root to update.
+     *
+     * @param target The IWindow that accessibility service interfaces with.
+     */
+    void setShellRootAccessibilityWindow(int displayId, int windowType, IWindow target);
 
     /**
      * Like overridePendingAppTransitionMultiThumb, but uses a future to supply the specs. This is
@@ -735,4 +751,25 @@ interface IWindowManager
      * Called to show global actions.
      */
     void showGlobalActions();
+
+    /**
+     * Sets layer tracing flags for SurfaceFlingerTrace. 
+     *
+     * @param flags see definition in SurfaceTracing.cpp
+     */
+    void setLayerTracingFlags(int flags);
+
+    /**
+     * Forwards a scroll capture request to the appropriate window, if available.
+     *
+     * @param displayId the id of the display to target
+     * @param behindClient token for a window, used to filter the search to windows behind it, or
+     *                     {@code null} to accept a window at any zOrder
+     * @param taskId specifies the id of a task the result must belong to, or -1 to ignore task ids
+     * @param controller the controller to receive results, a call to either
+     *      {@link IScrollCaptureController#onClientConnected} or
+     *      {@link IScrollCaptureController#onClientUnavailable}.
+     */
+    void requestScrollCapture(int displayId, IBinder behindClient, int taskId,
+            IScrollCaptureController controller);
 }

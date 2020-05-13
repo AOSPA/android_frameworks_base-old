@@ -24,7 +24,6 @@
 
 #include "statscompanion_util.h"
 
-using android::util::AtomsInfo;
 using android::util::FIELD_COUNT_REPEATED;
 using android::util::FIELD_TYPE_BOOL;
 using android::util::FIELD_TYPE_FIXED64;
@@ -80,6 +79,8 @@ const int FIELD_ID_STATS_COMPANION_BINDER_TRANSACTION_FAILED = 14;
 const int FIELD_ID_EMPTY_DATA = 15;
 const int FIELD_ID_PULL_REGISTERED_COUNT = 16;
 const int FIELD_ID_PULL_UNREGISTERED_COUNT = 17;
+const int FIELD_ID_ATOM_ERROR_COUNT = 18;
+
 // for AtomMetricStats proto
 const int FIELD_ID_ATOM_METRIC_STATS = 17;
 const int FIELD_ID_METRIC_ID = 1;
@@ -492,6 +493,7 @@ void writePullerStatsToStream(const std::pair<int, StatsdStats::PulledAtomStats>
                        (long long) pair.second.registeredCount);
     protoOutput->write(FIELD_TYPE_INT64 | FIELD_ID_PULL_UNREGISTERED_COUNT,
                        (long long) pair.second.unregisteredCount);
+    protoOutput->write(FIELD_TYPE_INT32 | FIELD_ID_ATOM_ERROR_COUNT, pair.second.atomErrorCount);
     protoOutput->end(token);
 }
 
@@ -549,14 +551,13 @@ int64_t getWallClockMillis() {
     return time(nullptr) * MS_PER_SEC;
 }
 
-int64_t truncateTimestampIfNecessary(int atomId, int64_t timestampNs) {
-    if (AtomsInfo::kTruncatingTimestampAtomBlackList.find(atomId) !=
-            AtomsInfo::kTruncatingTimestampAtomBlackList.end() ||
-        (atomId >= StatsdStats::kTimestampTruncationStartTag &&
-         atomId <= StatsdStats::kTimestampTruncationEndTag)) {
-        return timestampNs / NS_PER_SEC / (5 * 60) * NS_PER_SEC * (5 * 60);
+int64_t truncateTimestampIfNecessary(const LogEvent& event) {
+    if (event.shouldTruncateTimestamp() ||
+        (event.GetTagId() >= StatsdStats::kTimestampTruncationStartTag &&
+         event.GetTagId() <= StatsdStats::kTimestampTruncationEndTag)) {
+        return event.GetElapsedTimestampNs() / NS_PER_SEC / (5 * 60) * NS_PER_SEC * (5 * 60);
     } else {
-        return timestampNs;
+        return event.GetElapsedTimestampNs();
     }
 }
 

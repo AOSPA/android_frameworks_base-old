@@ -119,7 +119,6 @@ public class SoundTriggerMiddlewareService extends ISoundTriggerMiddlewareServic
         @Override
         public void unloadModel(int modelHandle) throws RemoteException {
             mDelegate.unloadModel(modelHandle);
-            ;
         }
 
         @Override

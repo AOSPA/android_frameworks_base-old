@@ -15,8 +15,14 @@
  */
 package com.android.settingslib.media;
 
+import static android.media.MediaRoute2Info.TYPE_BLUETOOTH_A2DP;
+import static android.media.MediaRoute2Info.TYPE_BUILTIN_SPEAKER;
+import static android.media.MediaRoute2Info.TYPE_REMOTE_SPEAKER;
+import static android.media.MediaRoute2Info.TYPE_WIRED_HEADPHONES;
+
 import static com.google.common.truth.Truth.assertThat;
 
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -144,12 +150,19 @@ public class MediaDeviceTest {
         when(mCachedDevice2.isConnected()).thenReturn(true);
         when(mCachedDevice3.getBondState()).thenReturn(BluetoothDevice.BOND_BONDED);
         when(mCachedDevice3.isConnected()).thenReturn(true);
+        when(mBluetoothRouteInfo1.getType()).thenReturn(TYPE_BLUETOOTH_A2DP);
+        when(mBluetoothRouteInfo2.getType()).thenReturn(TYPE_BLUETOOTH_A2DP);
+        when(mBluetoothRouteInfo3.getType()).thenReturn(TYPE_BLUETOOTH_A2DP);
         when(mRouteInfo1.getId()).thenReturn(ROUTER_ID_1);
         when(mRouteInfo2.getId()).thenReturn(ROUTER_ID_2);
         when(mRouteInfo3.getId()).thenReturn(ROUTER_ID_3);
         when(mRouteInfo1.getName()).thenReturn(DEVICE_NAME_1);
         when(mRouteInfo2.getName()).thenReturn(DEVICE_NAME_2);
         when(mRouteInfo3.getName()).thenReturn(DEVICE_NAME_3);
+        when(mRouteInfo1.getType()).thenReturn(TYPE_REMOTE_SPEAKER);
+        when(mRouteInfo2.getType()).thenReturn(TYPE_REMOTE_SPEAKER);
+        when(mRouteInfo3.getType()).thenReturn(TYPE_REMOTE_SPEAKER);
+        when(mPhoneRouteInfo.getType()).thenReturn(TYPE_BUILTIN_SPEAKER);
         when(mLocalBluetoothManager.getProfileManager()).thenReturn(mProfileManager);
         when(mProfileManager.getA2dpProfile()).thenReturn(mA2dpProfile);
         when(mProfileManager.getHearingAidProfile()).thenReturn(mHapProfile);
@@ -199,14 +212,14 @@ public class MediaDeviceTest {
     }
 
     @Test
-    public void compareTo_carKit_phone_phoneFirst() {
+    public void compareTo_carKit_phone_carKitFirst() {
         when(mDevice1.getBluetoothClass()).thenReturn(mCarkitClass);
-        mMediaDevices.add(mBluetoothMediaDevice1);
         mMediaDevices.add(mPhoneMediaDevice);
+        mMediaDevices.add(mBluetoothMediaDevice1);
 
-        assertThat(mMediaDevices.get(0)).isEqualTo(mBluetoothMediaDevice1);
-        Collections.sort(mMediaDevices, COMPARATOR);
         assertThat(mMediaDevices.get(0)).isEqualTo(mPhoneMediaDevice);
+        Collections.sort(mMediaDevices, COMPARATOR);
+        assertThat(mMediaDevices.get(0)).isEqualTo(mBluetoothMediaDevice1);
     }
 
     @Test
@@ -270,23 +283,55 @@ public class MediaDeviceTest {
     }
 
     @Test
-    public void compareTo_info_bluetooth_infoFirst() {
-        mMediaDevices.add(mBluetoothMediaDevice1);
+    public void compareTo_info_bluetooth_bluetoothFirst() {
         mMediaDevices.add(mInfoMediaDevice1);
+        mMediaDevices.add(mBluetoothMediaDevice1);
 
-        assertThat(mMediaDevices.get(0)).isEqualTo(mBluetoothMediaDevice1);
-        Collections.sort(mMediaDevices, COMPARATOR);
         assertThat(mMediaDevices.get(0)).isEqualTo(mInfoMediaDevice1);
+        Collections.sort(mMediaDevices, COMPARATOR);
+        assertThat(mMediaDevices.get(0)).isEqualTo(mBluetoothMediaDevice1);
     }
 
     @Test
-    public void compareTo_bluetooth_phone_phoneFirst() {
-        mMediaDevices.add(mBluetoothMediaDevice1);
+    public void compareTo_bluetooth_phone_bluetoothFirst() {
         mMediaDevices.add(mPhoneMediaDevice);
+        mMediaDevices.add(mBluetoothMediaDevice1);
+
+        assertThat(mMediaDevices.get(0)).isEqualTo(mPhoneMediaDevice);
+        Collections.sort(mMediaDevices, COMPARATOR);
+        assertThat(mMediaDevices.get(0)).isEqualTo(mBluetoothMediaDevice1);
+    }
+
+    @Test
+    public void compareTo_bluetooth_wiredHeadset_wiredHeadsetFirst() {
+        final MediaRoute2Info phoneRouteInfo = mock(MediaRoute2Info.class);
+        when(phoneRouteInfo.getType()).thenReturn(TYPE_WIRED_HEADPHONES);
+
+        final PhoneMediaDevice phoneMediaDevice = new PhoneMediaDevice(mContext,
+                mMediaRouter2Manager, phoneRouteInfo, TEST_PACKAGE_NAME);
+
+        mMediaDevices.add(mBluetoothMediaDevice1);
+        mMediaDevices.add(phoneMediaDevice);
 
         assertThat(mMediaDevices.get(0)).isEqualTo(mBluetoothMediaDevice1);
         Collections.sort(mMediaDevices, COMPARATOR);
-        assertThat(mMediaDevices.get(0)).isEqualTo(mPhoneMediaDevice);
+        assertThat(mMediaDevices.get(0)).isEqualTo(phoneMediaDevice);
+    }
+
+    @Test
+    public void compareTo_info_wiredHeadset_wiredHeadsetFirst() {
+        final MediaRoute2Info phoneRouteInfo = mock(MediaRoute2Info.class);
+        when(phoneRouteInfo.getType()).thenReturn(TYPE_WIRED_HEADPHONES);
+
+        final PhoneMediaDevice phoneMediaDevice = new PhoneMediaDevice(mContext,
+                mMediaRouter2Manager, phoneRouteInfo, TEST_PACKAGE_NAME);
+
+        mMediaDevices.add(mInfoMediaDevice1);
+        mMediaDevices.add(phoneMediaDevice);
+
+        assertThat(mMediaDevices.get(0)).isEqualTo(mInfoMediaDevice1);
+        Collections.sort(mMediaDevices, COMPARATOR);
+        assertThat(mMediaDevices.get(0)).isEqualTo(phoneMediaDevice);
     }
 
     @Test
@@ -327,7 +372,7 @@ public class MediaDeviceTest {
     // 5.mBluetoothMediaDevice2: * 2 times usage
     // 6.mBluetoothMediaDevice3: * 1 time usage
     // 7.mPhoneMediaDevice:      * 0 time usage
-    // Order: 7 -> 2 -> 1 -> 3 -> 5 -> 4 -> 6
+    // Order: 2 -> 5 -> 6 -> 1 -> 3 -> 4 -> 7
     @Test
     public void compareTo_mixedDevices_carKitFirst() {
         when(mDevice1.getBluetoothClass()).thenReturn(mCarkitClass);
@@ -349,13 +394,13 @@ public class MediaDeviceTest {
         mInfoMediaDevice1.connect();
 
         Collections.sort(mMediaDevices, COMPARATOR);
-        assertThat(mMediaDevices.get(0)).isEqualTo(mPhoneMediaDevice);
-        assertThat(mMediaDevices.get(1)).isEqualTo(mBluetoothMediaDevice1);
-        assertThat(mMediaDevices.get(2)).isEqualTo(mInfoMediaDevice1);
-        assertThat(mMediaDevices.get(3)).isEqualTo(mInfoMediaDevice2);
-        assertThat(mMediaDevices.get(4)).isEqualTo(mBluetoothMediaDevice2);
+        assertThat(mMediaDevices.get(0)).isEqualTo(mBluetoothMediaDevice1);
+        assertThat(mMediaDevices.get(1)).isEqualTo(mBluetoothMediaDevice2);
+        assertThat(mMediaDevices.get(2)).isEqualTo(mBluetoothMediaDevice3);
+        assertThat(mMediaDevices.get(3)).isEqualTo(mInfoMediaDevice1);
+        assertThat(mMediaDevices.get(4)).isEqualTo(mInfoMediaDevice2);
         assertThat(mMediaDevices.get(5)).isEqualTo(mInfoMediaDevice3);
-        assertThat(mMediaDevices.get(6)).isEqualTo(mBluetoothMediaDevice3);
+        assertThat(mMediaDevices.get(6)).isEqualTo(mPhoneMediaDevice);
     }
 
     // 1.mInfoMediaDevice1:      Last Selected device
@@ -365,7 +410,7 @@ public class MediaDeviceTest {
     // 5.mBluetoothMediaDevice2: * 4 times usage not connected
     // 6.mBluetoothMediaDevice3: * 1 time usage
     // 7.mPhoneMediaDevice:      * 0 time usage
-    // Order: 7 -> 1 -> 3 -> 4 -> 6 -> 2 -> 5
+    // Order: 6 -> 1 -> 3 -> 4 -> 7 -> 2 -> 5
     @Test
     public void compareTo_mixedDevices_connectDeviceFirst() {
         when(mDevice1.getBluetoothClass()).thenReturn(mCarkitClass);
@@ -391,11 +436,11 @@ public class MediaDeviceTest {
         mInfoMediaDevice1.connect();
 
         Collections.sort(mMediaDevices, COMPARATOR);
-        assertThat(mMediaDevices.get(0)).isEqualTo(mPhoneMediaDevice);
+        assertThat(mMediaDevices.get(0)).isEqualTo(mBluetoothMediaDevice3);
         assertThat(mMediaDevices.get(1)).isEqualTo(mInfoMediaDevice1);
         assertThat(mMediaDevices.get(2)).isEqualTo(mInfoMediaDevice2);
         assertThat(mMediaDevices.get(3)).isEqualTo(mInfoMediaDevice3);
-        assertThat(mMediaDevices.get(4)).isEqualTo(mBluetoothMediaDevice3);
+        assertThat(mMediaDevices.get(4)).isEqualTo(mPhoneMediaDevice);
         assertThat(mMediaDevices.get(5)).isEqualTo(mBluetoothMediaDevice1);
         assertThat(mMediaDevices.get(6)).isEqualTo(mBluetoothMediaDevice2);
     }

@@ -142,7 +142,7 @@
     <string name="wfcSpnFormat_wifi" msgid="1376356951297043426">"Wi-Fi"</string>
     <string name="wfcSpnFormat_wifi_calling_wo_hyphen" msgid="7178561009225028264">"Chiamate Wi-Fi"</string>
     <string name="wfcSpnFormat_vowifi" msgid="8371335230890725606">"VoWifi"</string>
-    <string name="wifi_calling_off_summary" msgid="5626710010766902560">"OFF"</string>
+    <string name="wifi_calling_off_summary" msgid="5626710010766902560">"Off"</string>
     <string name="wfc_mode_wifi_preferred_summary" msgid="1035175836270943089">"Chiamata tramite Wi-Fi"</string>
     <string name="wfc_mode_cellular_preferred_summary" msgid="4958965609212575619">"Chiamata su rete mobile"</string>
     <string name="wfc_mode_wifi_only_summary" msgid="104951993894678665">"Solo Wi-Fi"</string>
@@ -192,7 +192,7 @@
     <string name="network_logging_notification_title" msgid="554983187553845004">"Il dispositivo è gestito"</string>
     <string name="network_logging_notification_text" msgid="1327373071132562512">"Questo dispositivo è gestito dalla tua organizzazione, che potrebbe monitorare il traffico di rete. Tocca per i dettagli."</string>
     <string name="location_changed_notification_title" msgid="3620158742816699316">"Le app possono accedere alla tua posizione"</string>
-    <string name="location_changed_notification_text" msgid="7158423339982706912">"Contatta l\'amministratore IT per avere ulteriori informazioni"</string>
+    <string name="location_changed_notification_text" msgid="7158423339982706912">"Contatta l\'amministratore IT per saperne di più"</string>
     <string name="country_detector" msgid="7023275114706088854">"Rilevatore paese"</string>
     <string name="location_service" msgid="2439187616018455546">"Servizio di geolocalizzazione"</string>
     <string name="sensor_notification_service" msgid="7474531979178682676">"Servizio di notifica dei sensori"</string>
@@ -200,9 +200,9 @@
     <string name="factory_reset_warning" msgid="6858705527798047809">"Il dispositivo verrà resettato"</string>
     <string name="factory_reset_message" msgid="2657049595153992213">"Impossibile usare l\'app di amministrazione. Il dispositivo verrà resettato.\n\nPer eventuali domande, contatta l\'amministratore della tua organizzazione."</string>
     <string name="printing_disabled_by" msgid="3517499806528864633">"Stampa disattivata da <xliff:g id="OWNER_APP">%s</xliff:g>."</string>
-    <string name="personal_apps_suspended_title" msgid="4543693107104417750">"Sblocca le tue app personali"</string>
-    <string name="personal_apps_suspended_tomorrow_title" msgid="6414440257969874914">"App saranno bloccate domani"</string>
-    <string name="personal_apps_suspended_text" msgid="8954038765131038226">"L\'amministratore IT non consente di sospendere il profilo di lavoro per più di <xliff:g id="DAYS">%1$d</xliff:g> giorni"</string>
+    <string name="personal_apps_suspension_title" msgid="7561416677884286600">"Attiva il profilo di lavoro"</string>
+    <string name="personal_apps_suspension_text" msgid="6115455688932935597">"Le tue app personali sono bloccate fino all\'attivazione del tuo profilo di lavoro"</string>
+    <string name="personal_apps_suspension_tomorrow_text" msgid="6322541302153673994">"Le tue app personali verranno bloccate domani"</string>
     <string name="personal_apps_suspended_turn_profile_on" msgid="4278188538997940785">"Attiva profilo di lavoro"</string>
     <string name="me" msgid="6207584824693813140">"Io"</string>
     <string name="power_dialog" product="tablet" msgid="8333207765671417261">"Opzioni tablet"</string>
@@ -295,7 +295,7 @@
     <string name="managed_profile_label" msgid="7316778766973512382">"Passa a profilo di lavoro"</string>
     <string name="permgrouplab_contacts" msgid="4254143639307316920">"Contatti"</string>
     <string name="permgroupdesc_contacts" msgid="9163927941244182567">"accedere ai contatti"</string>
-    <string name="permgrouplab_location" msgid="1858277002233964394">"Geolocalizz."</string>
+    <string name="permgrouplab_location" msgid="1858277002233964394">"Geolocalizzazione"</string>
     <string name="permgroupdesc_location" msgid="1995955142118450685">"accedere alla posizione di questo dispositivo"</string>
     <string name="permgrouplab_calendar" msgid="6426860926123033230">"Calendario"</string>
     <string name="permgroupdesc_calendar" msgid="6762751063361489379">"accedere al calendario"</string>
@@ -309,7 +309,7 @@
     <string name="permgroupdesc_activityRecognition" msgid="4725624819457670704">"Consente di accedere all\'attività fisica"</string>
     <string name="permgrouplab_camera" msgid="9090413408963547706">"Fotocamera"</string>
     <string name="permgroupdesc_camera" msgid="7585150538459320326">"scattare foto e registrare video"</string>
-    <string name="permgrouplab_calllog" msgid="7926834372073550288">"Log chiamate"</string>
+    <string name="permgrouplab_calllog" msgid="7926834372073550288">"Registri chiamate"</string>
     <string name="permgroupdesc_calllog" msgid="2026996642917801803">"leggere e modificare il registro chiamate del telefono"</string>
     <string name="permgrouplab_phone" msgid="570318944091926620">"Telefono"</string>
     <string name="permgroupdesc_phone" msgid="270048070781478204">"eseguire e gestire le telefonate"</string>
@@ -1457,6 +1457,9 @@
     <string name="gpsNotifMessage" msgid="7346649122793758032">"Richiesto da <xliff:g id="NAME">%1$s</xliff:g> (<xliff:g id="SERVICE">%2$s</xliff:g>)"</string>
     <string name="gpsVerifYes" msgid="3719843080744112940">"Sì"</string>
     <string name="gpsVerifNo" msgid="1671201856091564741">"No"</string>
+    <string name="gnss_nfw_notification_title" msgid="5004493772059563423">"Posizione usata durante un\'emergenza"</string>
+    <string name="gnss_nfw_notification_message_oem" msgid="3683958907027107969">"Il produttore del dispositivo ha usato la tua posizione durante una recente sessione di emergenza"</string>
+    <string name="gnss_nfw_notification_message_carrier" msgid="815888995791562151">"L\'operatore ha usato la tua posizione durante una recente sessione di emergenza"</string>
     <string name="sync_too_many_deletes" msgid="6999440774578705300">"Limite di eliminazioni superato"</string>
     <string name="sync_too_many_deletes_desc" msgid="7409327940303504440">"Ci sono <xliff:g id="NUMBER_OF_DELETED_ITEMS">%1$d</xliff:g> elementi eliminati per <xliff:g id="TYPE_OF_SYNC">%2$s</xliff:g>, account <xliff:g id="ACCOUNT_NAME">%3$s</xliff:g> . Come vuoi procedere?"</string>
     <string name="sync_really_delete" msgid="5657871730315579051">"Elimina gli elementi"</string>
@@ -1628,6 +1631,8 @@
     <string name="accessibility_shortcut_single_service_warning" msgid="6363127705112844257">"Se tieni premuti entrambi i tasti del volume per qualche secondo verrà attivata la funzione di accessibilità <xliff:g id="SERVICE">%1$s</xliff:g>. Questa operazione potrebbe modificare il funzionamento del dispositivo.\n\nPuoi associare questa scorciatoia a un\'altra funzionalità in Impostazioni &gt; Accessibilità."</string>
     <string name="accessibility_shortcut_on" msgid="5463618449556111344">"Attiva"</string>
     <string name="accessibility_shortcut_off" msgid="3651336255403648739">"Non attivare"</string>
+    <string name="accessibility_shortcut_menu_item_status_on" msgid="6608392117189732543">"ON"</string>
+    <string name="accessibility_shortcut_menu_item_status_off" msgid="5531598275559472393">"OFF"</string>
     <string name="accessibility_enable_service_title" msgid="3931558336268541484">"Vuoi consentire a <xliff:g id="SERVICE">%1$s</xliff:g> di avere il controllo totale del tuo dispositivo?"</string>
     <string name="accessibility_enable_service_encryption_warning" msgid="8603532708618236909">"Se attivi <xliff:g id="SERVICE">%1$s</xliff:g>, il dispositivo non utilizzerà il blocco schermo per migliorare la crittografia dei dati."</string>
     <string name="accessibility_service_warning_description" msgid="291674995220940133">"Il pieno controllo è appropriato per le app che rispondono alle tue esigenze di accessibilità, ma non per gran parte delle app."</string>
@@ -1789,8 +1794,8 @@
     <string name="package_updated_device_owner" msgid="7560272363805506941">"Aggiornato dall\'amministratore"</string>
     <string name="package_deleted_device_owner" msgid="2292335928930293023">"Eliminato dall\'amministratore"</string>
     <string name="confirm_battery_saver" msgid="5247976246208245754">"OK"</string>
-    <string name="battery_saver_description_with_learn_more" msgid="1817385558636532621">"Per estendere la durata della batteria, Risparmio energetico:\n·Attiva il Tema scuro\n·Disattiva o limita le attività in background, alcuni effetti visivi e altre funzionalità come \"Ok Google\"\n\n"<annotation id="url">"Ulteriori informazioni"</annotation></string>
-    <string name="battery_saver_description" msgid="7618492104632328184">"Per estendere la durata della batteria, Risparmio energetico:\n·Attiva il Tema scuro\n·Disattiva o limita le attività in background, alcuni effetti visivi e altre funzionalità come \"Ok Google\""</string>
+    <string name="battery_saver_description_with_learn_more" msgid="5997766757551917769">"Per estendere la durata della batteria, la funzionalità di risparmio energetico:\n\n•Attiva il Tema scuro\n•Disattiva o limita le attività in background, alcuni effetti visivi e altre funzionalità come \"Ok Google\"\n\n"<annotation id="url">"Ulteriori informazioni"</annotation></string>
+    <string name="battery_saver_description" msgid="8587408568232177204">"Per estendere la durata della batteria, la funzionalità di risparmio energetico:\n\n•Attiva il Tema scuro\n•Disattiva o limita le attività in background, alcuni effetti visivi e altre funzionalità come \"Ok Google\""</string>
     <string name="data_saver_description" msgid="4995164271550590517">"Per contribuire a ridurre l\'utilizzo dei dati, la funzione Risparmio dati impedisce ad alcune app di inviare o ricevere dati in background. Un\'app in uso può accedere ai dati, ma potrebbe farlo con meno frequenza. Esempio: le immagini non vengono visualizzate finché non le tocchi."</string>
     <string name="data_saver_enable_title" msgid="7080620065745260137">"Attivare Risparmio dati?"</string>
     <string name="data_saver_enable_button" msgid="4399405762586419726">"Attiva"</string>
@@ -2035,13 +2040,14 @@
     <string name="accessibility_system_action_notifications_label" msgid="6083767351772162010">"Notifiche"</string>
     <string name="accessibility_system_action_quick_settings_label" msgid="4583900123506773783">"Impostazioni rapide"</string>
     <string name="accessibility_system_action_power_dialog_label" msgid="8095341821683910781">"Finestra di dialogo Alimentazione"</string>
-    <string name="accessibility_system_action_toggle_split_screen_label" msgid="6626177163849387748">"Attiva/disattiva schermo diviso"</string>
     <string name="accessibility_system_action_lock_screen_label" msgid="5484190691945563838">"Schermata di blocco"</string>
     <string name="accessibility_system_action_screenshot_label" msgid="3581566515062741676">"Screenshot"</string>
-    <string name="accessibility_system_action_accessibility_menu_label" msgid="8436484650391125184">"Menu Accessibilità"</string>
+    <string name="accessibility_system_action_accessibility_button_label" msgid="5941347017132886642">"Scorciatoia Accessibilità sullo schermo"</string>
+    <string name="accessibility_system_action_accessibility_button_chooser_label" msgid="6973618519666227981">"Selettore scorciatoia Accessibilità sullo schermo"</string>
     <string name="accessibility_freeform_caption" msgid="8377519323496290122">"Barra del titolo di <xliff:g id="APP_NAME">%1$s</xliff:g>."</string>
     <string name="as_app_forced_to_restricted_bucket" msgid="8233871289353898964">"<xliff:g id="PACKAGE_NAME">%1$s</xliff:g> è stato inserito nel bucket RESTRICTED"</string>
     <string name="conversation_single_line_name_display" msgid="8958948312915255999">"<xliff:g id="SENDER_NAME">%1$s</xliff:g>:"</string>
+    <string name="conversation_single_line_image_placeholder" msgid="6983271082911936900">"ha inviato un\'immagine"</string>
     <string name="conversation_title_fallback_one_to_one" msgid="1980753619726908614">"Conversazione"</string>
     <string name="conversation_title_fallback_group_chat" msgid="456073374993104303">"Conversazione di gruppo"</string>
     <string name="unread_convo_overflow" msgid="920517615597353833">"<xliff:g id="MAX_UNREAD_COUNT">%1$d</xliff:g>+"</string>

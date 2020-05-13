@@ -64,21 +64,16 @@ public abstract class VibrationEffect implements Parcelable {
 
     /**
      * A click effect. Use this effect as a baseline, as it's the most common type of click effect.
-     *
-     * @see #get(int)
      */
     public static final int EFFECT_CLICK = Effect.CLICK;
 
     /**
      * A double click effect.
-     *
-     * @see #get(int)
      */
     public static final int EFFECT_DOUBLE_CLICK = Effect.DOUBLE_CLICK;
 
     /**
      * A tick effect. This effect is less strong compared to {@link #EFFECT_CLICK}.
-     * @see #get(int)
      */
     public static final int EFFECT_TICK = Effect.TICK;
 
@@ -102,7 +97,6 @@ public abstract class VibrationEffect implements Parcelable {
 
     /**
      * A heavy click effect. This effect is stronger than {@link #EFFECT_CLICK}.
-     * @see #get(int)
      */
     public static final int EFFECT_HEAVY_CLICK = Effect.HEAVY_CLICK;
 
@@ -897,6 +891,34 @@ public abstract class VibrationEffect implements Parcelable {
             return -1;
         }
 
+        /**
+         * Scale all primitives of this effect.
+         *
+         * @param gamma the gamma adjustment to apply
+         * @param maxAmplitude the new maximum amplitude of the effect, must be between 0 and
+         *         MAX_AMPLITUDE
+         * @throws IllegalArgumentException if maxAmplitude less than 0 or more than MAX_AMPLITUDE
+         *
+         * @return A {@link Composed} effect with same but scaled primitives.
+         */
+        public Composed scale(float gamma, int maxAmplitude) {
+            if (maxAmplitude > MAX_AMPLITUDE || maxAmplitude < 0) {
+                throw new IllegalArgumentException(
+                        "Amplitude is negative or greater than MAX_AMPLITUDE");
+            }
+            if (gamma == 1.0f && maxAmplitude == MAX_AMPLITUDE) {
+                // Just return a copy of the original if there's no scaling to be done.
+                return new Composed(mPrimitiveEffects);
+            }
+            List<Composition.PrimitiveEffect> scaledPrimitives = new ArrayList<>();
+            for (Composition.PrimitiveEffect primitive : mPrimitiveEffects) {
+                float adjustedScale = MathUtils.pow(primitive.scale, gamma);
+                float newScale = adjustedScale * maxAmplitude / (float) MAX_AMPLITUDE;
+                scaledPrimitives.add(new Composition.PrimitiveEffect(
+                        primitive.id, newScale, primitive.delay));
+            }
+            return new Composed(scaledPrimitives);
+        }
 
         /**
          * @hide

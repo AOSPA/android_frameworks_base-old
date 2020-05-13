@@ -16,52 +16,47 @@
 
 package com.android.systemui.controls.ui
 
-import android.app.PendingIntent
-import android.content.Intent
-import android.provider.Settings
-import android.service.controls.actions.BooleanAction
-import android.service.controls.actions.CommandAction
-import android.util.Log
-import android.view.HapticFeedbackConstants
+import android.service.controls.Control
 
-object ControlActionCoordinator {
-    public const val MIN_LEVEL = 0
-    public const val MAX_LEVEL = 10000
+/**
+ * All control interactions should be routed through this coordinator. It handles dispatching of
+ * actions, haptic support, and all detail panels
+ */
+interface ControlActionCoordinator {
 
-    private var useDetailDialog: Boolean? = null
+    /**
+     * Close any dialogs which may have been open
+     */
+    fun closeDialogs()
 
-    fun toggle(cvh: ControlViewHolder, templateId: String, isChecked: Boolean) {
-        cvh.action(BooleanAction(templateId, !isChecked))
+    /**
+     * Create a [BooleanAction], and inform the service of a request to change the device state
+     *
+     * @param cvh [ControlViewHolder] for the control
+     * @param templateId id of the control's template, as given by the service
+     * @param isChecked new requested state of the control
+     */
+    fun toggle(cvh: ControlViewHolder, templateId: String, isChecked: Boolean)
 
-        val nextLevel = if (isChecked) MIN_LEVEL else MAX_LEVEL
-        cvh.clipLayer.setLevel(nextLevel)
-    }
+    /**
+     * For non-toggle controls, touching may create a dialog or invoke a [CommandAction].
+     *
+     * @param cvh [ControlViewHolder] for the control
+     * @param templateId id of the control's template, as given by the service
+     * @param control the control as sent by the service
+     */
+    fun touch(cvh: ControlViewHolder, templateId: String, control: Control)
 
-    fun touch(cvh: ControlViewHolder, templateId: String) {
-        cvh.action(CommandAction(templateId))
-    }
+    /**
+     * When a ToggleRange control is interacting with, a drag event is sent.
+     *
+     * @param isEdge did the drag event reach a control edge
+     */
+    fun drag(isEdge: Boolean)
 
-    fun longPress(cvh: ControlViewHolder) {
-        // Long press snould only be called when there is valid control state, otherwise ignore
-        cvh.cws.control?.let {
-            if (useDetailDialog == null) {
-                useDetailDialog = Settings.Secure.getInt(cvh.context.getContentResolver(),
-                    "systemui.controls_use_detail_panel", 0) != 0
-            }
-
-            try {
-                cvh.layout.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
-                if (useDetailDialog!!) {
-                    DetailDialog(cvh.context, it.getAppIntent()).show()
-                } else {
-                    it.getAppIntent().send()
-                    val closeDialog = Intent(Intent.ACTION_CLOSE_SYSTEM_DIALOGS)
-                    cvh.context.sendBroadcast(closeDialog)
-                }
-            } catch (e: PendingIntent.CanceledException) {
-                Log.e(ControlsUiController.TAG, "Error sending pending intent", e)
-                cvh.setTransientStatus("Error opening application")
-            }
-        }
-    }
+    /**
+     * All long presses will be shown in a 3/4 height bottomsheet panel, in order for the user to
+     * retain context with their favorited controls in the power menu.
+     */
+    fun longPress(cvh: ControlViewHolder)
 }

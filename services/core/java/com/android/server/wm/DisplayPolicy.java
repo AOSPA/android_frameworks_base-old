@@ -278,6 +278,8 @@ public class DisplayPolicy {
     @Px
     private int mRightGestureInset;
 
+    private boolean mNavButtonForcedVisible;
+
     StatusBarManagerInternal getStatusBarManagerInternal() {
         synchronized (mServiceAcquireLock) {
             if (mStatusBarManagerInternal == null) {
@@ -1192,12 +1194,14 @@ public class DisplayPolicy {
                             // calculate inset.
                             if (navigationBarPosition(displayFrames.mDisplayWidth,
                                     displayFrames.mDisplayHeight,
-                                    displayFrames.mRotation) == NAV_BAR_BOTTOM) {
+                                    displayFrames.mRotation) == NAV_BAR_BOTTOM
+                                    && !mNavButtonForcedVisible) {
+
                                 sTmpRect.set(displayFrames.mUnrestricted);
                                 sTmpRect.intersectUnchecked(displayFrames.mDisplayCutoutSafe);
                                 inOutFrame.top = sTmpRect.bottom
                                         - getNavigationBarHeight(displayFrames.mRotation,
-                                                mDisplayContent.getConfiguration().uiMode);
+                                        mDisplayContent.getConfiguration().uiMode);
                             }
                         },
 
@@ -2956,6 +2960,8 @@ public class DisplayPolicy {
         mNavBarOpacityMode = res.getInteger(R.integer.config_navBarOpacityMode);
         mLeftGestureInset = mGestureNavigationSettingsObserver.getLeftSensitivity(res);
         mRightGestureInset = mGestureNavigationSettingsObserver.getRightSensitivity(res);
+        mNavButtonForcedVisible =
+                mGestureNavigationSettingsObserver.areNavigationButtonForcedVisible();
         mNavigationBarLetsThroughTaps = res.getBoolean(R.bool.config_navBarTapThrough);
         mNavigationBarAlwaysShowOnSideGesture =
                 res.getBoolean(R.bool.config_navBarAlwaysShowOnSideEdgeGesture);
@@ -3929,13 +3935,14 @@ public class DisplayPolicy {
      * @param screenshotType The type of screenshot, for example either
      *                       {@link WindowManager#TAKE_SCREENSHOT_FULLSCREEN} or
      *                       {@link WindowManager#TAKE_SCREENSHOT_SELECTED_REGION}
+     * @param source Where the screenshot originated from (see WindowManager.ScreenshotSource)
      */
-    public void takeScreenshot(int screenshotType) {
+    public void takeScreenshot(int screenshotType, int source) {
         if (mScreenshotHelper != null) {
             mScreenshotHelper.takeScreenshot(screenshotType,
                     mStatusBar != null && mStatusBar.isVisibleLw(),
                     mNavigationBar != null && mNavigationBar.isVisibleLw(),
-                    mHandler, null /* completionConsumer */);
+                    source, mHandler, null /* completionConsumer */);
         }
     }
 

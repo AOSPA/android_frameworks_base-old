@@ -283,6 +283,12 @@
       "group": "WM_DEBUG_APP_TRANSITIONS",
       "at": "com\/android\/server\/wm\/ActivityRecord.java"
     },
+    "-1517908912": {
+      "message": "requestScrollCapture: caught exception dispatching to window.token=%s",
+      "level": "WARN",
+      "group": "WM_ERROR",
+      "at": "com\/android\/server\/wm\/WindowManagerService.java"
+    },
     "-1515151503": {
       "message": ">>> OPEN TRANSACTION removeReplacedWindows",
       "level": "INFO",
@@ -883,6 +889,12 @@
       "group": "WM_DEBUG_ORIENTATION",
       "at": "com\/android\/server\/wm\/ActivityRecord.java"
     },
+    "-242787066": {
+      "message": "addTaskToRecentsAnimationIfNeeded, control: %s, task: %s, transit: %s",
+      "level": "DEBUG",
+      "group": "WM_DEBUG_RECENTS_ANIMATIONS",
+      "at": "com\/android\/server\/wm\/WindowContainer.java"
+    },
     "-198463978": {
       "message": "updateRotationUnchecked: alwaysSendConfiguration=%b forceRelayout=%b",
       "level": "VERBOSE",
@@ -900,6 +912,12 @@
       "level": "DEBUG",
       "group": "WM_DEBUG_ORIENTATION",
       "at": "com\/android\/server\/wm\/ScreenRotationAnimation.java"
+    },
+    "-172900257": {
+      "message": "addTaskToTargets, target: %s",
+      "level": "DEBUG",
+      "group": "WM_DEBUG_RECENTS_ANIMATIONS",
+      "at": "com\/android\/server\/wm\/RecentsAnimationController.java"
     },
     "-167822951": {
       "message": "Attempted to add starting window to token with already existing starting window",
@@ -1201,6 +1219,12 @@
       "group": "WM_SHOW_TRANSACTIONS",
       "at": "com\/android\/server\/wm\/WindowSurfaceController.java"
     },
+    "315395835": {
+      "message": "Trying to add window with invalid user=%d",
+      "level": "WARN",
+      "group": "WM_ERROR",
+      "at": "com\/android\/server\/wm\/WindowManagerService.java"
+    },
     "342460966": {
       "message": "DRAG %s: pos=(%d,%d)",
       "level": "INFO",
@@ -1423,6 +1447,12 @@
       "group": "WM_DEBUG_RECENTS_ANIMATIONS",
       "at": "com\/android\/server\/wm\/RecentsAnimation.java"
     },
+    "646981048": {
+      "message": "Invalid displayId for requestScrollCapture: %d",
+      "level": "ERROR",
+      "group": "WM_ERROR",
+      "at": "com\/android\/server\/wm\/WindowManagerService.java"
+    },
     "662572728": {
       "message": "Attempted to add a toast window with bad token %s.  Aborting.",
       "level": "WARN",
@@ -1507,11 +1537,29 @@
       "group": "WM_DEBUG_REMOTE_ANIMATIONS",
       "at": "com\/android\/server\/wm\/RemoteAnimationController.java"
     },
+    "838570988": {
+      "message": "Could not report token removal to the window token client.",
+      "level": "WARN",
+      "group": "WM_ERROR",
+      "at": "com\/android\/server\/wm\/WindowToken.java"
+    },
+    "845234215": {
+      "message": "App is requesting an orientation, return %d for display id=%d",
+      "level": "VERBOSE",
+      "group": "WM_DEBUG_ORIENTATION",
+      "at": "com\/android\/server\/wm\/DisplayContent.java"
+    },
     "853091290": {
       "message": "Moved stack=%s behind stack=%s",
       "level": "DEBUG",
       "group": "WM_DEBUG_RECENTS_ANIMATIONS",
       "at": "com\/android\/server\/wm\/RecentsAnimation.java"
+    },
+    "854237232": {
+      "message": "addTaskToRecentsAnimationIfNeeded, control: %s, task: %s, transit: %s",
+      "level": "DEBUG",
+      "group": "WM_DEBUG_RECENTS_ANIMATIONS",
+      "at": "com\/android\/server\/wm\/Task.java"
     },
     "873914452": {
       "message": "goodToGo()",
@@ -1557,6 +1605,12 @@
     },
     "1001904964": {
       "message": "***** BOOT TIMEOUT: forcing display enabled",
+      "level": "WARN",
+      "group": "WM_ERROR",
+      "at": "com\/android\/server\/wm\/WindowManagerService.java"
+    },
+    "1046922686": {
+      "message": "requestScrollCapture: caught exception dispatching callback: %s",
       "level": "WARN",
       "group": "WM_ERROR",
       "at": "com\/android\/server\/wm\/WindowManagerService.java"

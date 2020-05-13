@@ -27,7 +27,6 @@ struct Matcher;
 struct Field;
 struct FieldValue;
 
-const int32_t kAttributionField = 1;
 const int32_t kMaxLogDepth = 2;
 const int32_t kLastBitMask = 0x80;
 const int32_t kClearLastBitDeco = 0x7f;
@@ -181,6 +180,7 @@ public:
 
         return false;
     }
+
     bool matches(const Matcher& that) const;
 };
 
@@ -360,14 +360,17 @@ struct Value {
 
 class Annotations {
 public:
-    Annotations() {}
+    Annotations() {
+        setNested(true);  // Nested = true by default
+    }
 
     // This enum stores where particular annotations can be found in the
     // bitmask. Note that these pos do not correspond to annotation ids.
     enum {
         NESTED_POS = 0x0,
         PRIMARY_POS = 0x1,
-        EXCLUSIVE_POS = 0x2
+        EXCLUSIVE_POS = 0x2,
+        UID_POS = 0x3
     };
 
     inline void setNested(bool nested) { setBitmaskAtPos(NESTED_POS, nested); }
@@ -376,7 +379,7 @@ public:
 
     inline void setExclusiveState(bool exclusive) { setBitmaskAtPos(EXCLUSIVE_POS, exclusive); }
 
-    inline void setResetState(int resetState) { mResetState = resetState; }
+    inline void setUidField(bool isUid) { setBitmaskAtPos(UID_POS, isUid); }
 
     // Default value = false
     inline bool isNested() const { return getValueFromBitmask(NESTED_POS); }
@@ -387,9 +390,8 @@ public:
     // Default value = false
     inline bool isExclusiveState() const { return getValueFromBitmask(EXCLUSIVE_POS); }
 
-    // If a reset state is not sent in the StatsEvent, returns -1. Note that a
-    // reset satate is only sent if and only if a reset should be triggered.
-    inline int getResetState() const { return mResetState; }
+    // Default value = false
+    inline bool isUidField() const { return getValueFromBitmask(UID_POS); }
 
 private:
     inline void setBitmaskAtPos(int pos, bool value) {
@@ -402,10 +404,8 @@ private:
     }
 
     // This is a bitmask over all annotations stored in boolean form. Because
-    // there are only 3 booleans, just one byte is required.
+    // there are only 4 booleans, just one byte is required.
     uint8_t mBooleanBitmask = 0;
-
-    int mResetState = -1;
 };
 
 /**
@@ -449,7 +449,7 @@ int getUidIfExists(const FieldValue& value);
 void translateFieldMatcher(const FieldMatcher& matcher, std::vector<Matcher>* output);
 
 bool isAttributionUidField(const Field& field, const Value& value);
-bool isUidField(const Field& field, const Value& value);
+bool isUidField(const FieldValue& fieldValue);
 
 bool equalDimensions(const std::vector<Matcher>& dimension_a,
                      const std::vector<Matcher>& dimension_b);

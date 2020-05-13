@@ -23,12 +23,14 @@ import static com.android.server.wm.WindowManagerService.MAX_ANIMATION_DURATION;
 
 import android.annotation.NonNull;
 import android.graphics.Point;
+import android.graphics.Rect;
 import android.os.IBinder;
 import android.os.RemoteException;
 import android.util.Slog;
 import android.view.DisplayInfo;
 import android.view.IWindow;
 import android.view.SurfaceControl;
+import android.view.WindowInfo;
 import android.view.animation.Animation;
 
 /**
@@ -41,6 +43,8 @@ public class ShellRoot {
     private WindowToken mToken;
     private final IBinder.DeathRecipient mDeathRecipient;
     private SurfaceControl mSurfaceControl = null;
+    private IWindow mAccessibilityWindow;
+    private IBinder.DeathRecipient mAccessibilityWindowDeath;
 
     ShellRoot(@NonNull IWindow client, @NonNull DisplayContent dc, final int windowType) {
         mDisplayContent = dc;
@@ -101,6 +105,55 @@ public class ShellRoot {
                 mDisplayContent.mWmService.mSurfaceAnimationRunner);
         mToken.startAnimation(mToken.getPendingTransaction(), adapter, false /* hidden */,
                 ANIMATION_TYPE_WINDOW_ANIMATION, null /* animationFinishedCallback */);
+    }
+
+    WindowInfo getWindowInfo() {
+        if (mToken.windowType != TYPE_DOCK_DIVIDER) {
+            return null;
+        }
+        if (!mDisplayContent.getDefaultTaskDisplayArea().isSplitScreenModeActivated()) {
+            return null;
+        }
+        if (mAccessibilityWindow == null) {
+            return null;
+        }
+        WindowInfo windowInfo = WindowInfo.obtain();
+        windowInfo.displayId = mToken.getDisplayArea().getDisplayContent().mDisplayId;
+        windowInfo.type = mToken.windowType;
+        windowInfo.layer = mToken.getWindowLayerFromType();
+        windowInfo.token = mAccessibilityWindow.asBinder();
+        windowInfo.title = "Splitscreen Divider";
+        windowInfo.focused = false;
+        windowInfo.inPictureInPicture = false;
+        windowInfo.hasFlagWatchOutsideTouch = false;
+        final Rect regionRect = new Rect();
+        mDisplayContent.getDockedDividerController().getTouchRegion(regionRect);
+        windowInfo.regionInScreen.set(regionRect);
+        return windowInfo;
+    }
+
+    void setAccessibilityWindow(IWindow window) {
+        if (mAccessibilityWindow != null) {
+            mAccessibilityWindow.asBinder().unlinkToDeath(mAccessibilityWindowDeath, 0);
+        }
+        mAccessibilityWindow = window;
+        if (mAccessibilityWindow != null) {
+            try {
+                mAccessibilityWindowDeath = () -> {
+                    synchronized (mDisplayContent.mWmService.mGlobalLock) {
+                        mAccessibilityWindow = null;
+                        setAccessibilityWindow(null);
+                    }
+                };
+                mAccessibilityWindow.asBinder().linkToDeath(mAccessibilityWindowDeath, 0);
+            } catch (RemoteException e) {
+                mAccessibilityWindow = null;
+            }
+        }
+        if (mDisplayContent.mWmService.mAccessibilityController != null) {
+            mDisplayContent.mWmService.mAccessibilityController.onSomeWindowResizedOrMovedLocked(
+                    mDisplayContent.getDisplayId());
+        }
     }
 }
 

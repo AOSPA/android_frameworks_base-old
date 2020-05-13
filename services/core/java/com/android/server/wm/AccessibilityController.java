@@ -16,6 +16,7 @@
 
 package com.android.server.wm;
 
+import static android.view.InsetsState.ITYPE_NAVIGATION_BAR;
 import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_IS_ROUNDED_CORNERS_OVERLAY;
 import static android.view.WindowManager.LayoutParams.TYPE_DOCK_DIVIDER;
 import static android.view.WindowManager.LayoutParams.TYPE_MAGNIFICATION_OVERLAY;
@@ -44,10 +45,12 @@ import android.os.IBinder;
 import android.os.Looper;
 import android.os.Message;
 import android.util.ArraySet;
+import android.util.IntArray;
 import android.util.Slog;
 import android.util.SparseArray;
 import android.util.TypedValue;
 import android.view.Display;
+import android.view.InsetsState;
 import android.view.MagnificationSpec;
 import android.view.Surface;
 import android.view.Surface.OutOfResourcesException;
@@ -64,6 +67,7 @@ import com.android.server.policy.WindowManagerPolicy;
 import com.android.server.wm.WindowManagerInternal.MagnificationCallbacks;
 import com.android.server.wm.WindowManagerInternal.WindowsForAccessibilityCallback;
 
+import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -125,14 +129,13 @@ final class AccessibilityController {
      */
     public boolean setWindowsForAccessibilityCallbackLocked(int displayId,
             WindowsForAccessibilityCallback callback) {
-        if (callback != null) {
-            final DisplayContent dc = mService.mRoot.getDisplayContentOrCreate(displayId);
-            if (dc == null) {
-                return false;
-            }
+        final DisplayContent dc = mService.mRoot.getDisplayContentOrCreate(displayId);
+        if (dc == null) {
+            return false;
+        }
 
-            final Display display = dc.getDisplay();
-            if (display.getType() == Display.TYPE_VIRTUAL && dc.getParentWindow() != null) {
+        if (callback != null) {
+            if (isEmbeddedDisplay(dc)) {
                 // If this display is an embedded one, its window observer should have been set from
                 // window manager after setting its parent window. But if its window observer is
                 // empty, that means this mapping didn't be set, and needs to do this again.
@@ -149,13 +152,22 @@ final class AccessibilityController {
             mWindowsForAccessibilityObserver.put(displayId,
                     new WindowsForAccessibilityObserver(mService, displayId, callback));
         } else {
+            if (isEmbeddedDisplay(dc)) {
+                // If this display is an embedded one, its window observer should be removed along
+                // with the window observer of its parent display removed because the window
+                // observer of the embedded display and its parent display is the same, and would
+                // be removed together when stopping the window tracking of its parent display. So
+                // here don't need to do removing window observer of the embedded display again.
+                return true;
+            }
             final WindowsForAccessibilityObserver windowsForA11yObserver =
                     mWindowsForAccessibilityObserver.get(displayId);
-            if  (windowsForA11yObserver == null) {
+            if (windowsForA11yObserver == null) {
                 throw new IllegalStateException(
                         "Windows for accessibility callback of display " + displayId
                                 + " already cleared!");
             }
+            removeObserverOfEmbeddedDisplay(windowsForA11yObserver);
             mWindowsForAccessibilityObserver.remove(displayId);
         }
         return true;
@@ -329,6 +341,7 @@ final class AccessibilityController {
                 mWindowsForAccessibilityObserver.get(parentDisplayId);
 
         if (windowsForA11yObserver != null) {
+            windowsForA11yObserver.addEmbeddedDisplay(embeddedDisplayId);
             // Replaces the observer of embedded display to the one of parent display
             mWindowsForAccessibilityObserver.put(embeddedDisplayId, windowsForA11yObserver);
         }
@@ -337,6 +350,33 @@ final class AccessibilityController {
     private static void populateTransformationMatrixLocked(WindowState windowState,
             Matrix outMatrix) {
         windowState.getTransformationMatrix(sTempFloats, outMatrix);
+    }
+
+    void dump(PrintWriter pw, String prefix) {
+        for (int i = 0; i < mDisplayMagnifiers.size(); i++) {
+            final DisplayMagnifier displayMagnifier = mDisplayMagnifiers.valueAt(i);
+            if (displayMagnifier != null) {
+                displayMagnifier.dump(pw, prefix
+                        + "Magnification display# " + mDisplayMagnifiers.keyAt(i));
+            }
+        }
+    }
+
+    private void removeObserverOfEmbeddedDisplay(WindowsForAccessibilityObserver
+            observerOfParentDisplay) {
+        final IntArray embeddedDisplayIdList =
+                observerOfParentDisplay.getAndClearEmbeddedDisplayIdList();
+
+        for (int index = 0; index < embeddedDisplayIdList.size(); index++) {
+            final int embeddedDisplayId = embeddedDisplayIdList.get(index);
+            mWindowsForAccessibilityObserver.remove(embeddedDisplayId);
+        }
+    }
+
+    private static boolean isEmbeddedDisplay(DisplayContent dc) {
+        final Display display = dc.getDisplay();
+
+        return display.getType() == Display.TYPE_VIRTUAL && dc.getParentWindow() != null;
     }
 
     /**
@@ -549,6 +589,10 @@ final class AccessibilityController {
             mMagnifedViewport.drawWindowIfNeededLocked(t);
         }
 
+        void dump(PrintWriter pw, String prefix) {
+            mMagnifedViewport.dump(pw, prefix);
+        }
+
         private final class MagnifiedViewport {
 
             private final SparseArray<WindowState> mTempWindowStates =
@@ -672,6 +716,15 @@ final class AccessibilityController {
                         availableBounds.op(windowBounds, Region.Op.DIFFERENCE);
                     }
 
+                    // If the navigation bar window doesn't have touchable region, count
+                    // navigation bar insets into nonMagnifiedBounds. It happens when
+                    // navigation mode is gestural.
+                    if (isUntouchableNavigationBar(windowState, mTempRegion3)) {
+                        final Rect navBarInsets = getNavBarInsets(mDisplayContent);
+                        nonMagnifiedBounds.op(navBarInsets, Region.Op.UNION);
+                        availableBounds.op(navBarInsets, Region.Op.DIFFERENCE);
+                    }
+
                     // Count letterbox into nonMagnifiedBounds
                     if (windowState.isLetterboxedForDisplayCutoutLw()) {
                         Region letterboxBounds = getLetterboxBounds(windowState);
@@ -715,8 +768,7 @@ final class AccessibilityController {
                     } else {
                         final Region dirtyRegion = mTempRegion3;
                         dirtyRegion.set(mMagnificationRegion);
-                        dirtyRegion.op(mOldMagnificationRegion, Region.Op.UNION);
-                        dirtyRegion.op(nonMagnifiedBounds, Region.Op.INTERSECT);
+                        dirtyRegion.op(mOldMagnificationRegion, Region.Op.XOR);
                         dirtyRegion.getBounds(dirtyRect);
                         mWindow.invalidate(dirtyRect);
                     }
@@ -808,6 +860,10 @@ final class AccessibilityController {
                         outWindows.put(mTempLayer, w);
                     }
                 }, false /* traverseTopToBottom */ );
+            }
+
+            void dump(PrintWriter pw, String prefix) {
+                mWindow.dump(pw, prefix);
             }
 
             private final class ViewportWindow {
@@ -975,6 +1031,14 @@ final class AccessibilityController {
                     mSurface.release();
                 }
 
+                void dump(PrintWriter pw, String prefix) {
+                    pw.println(prefix
+                            + " mBounds= " + mBounds
+                            + " mDirtyRect= " + mDirtyRect
+                            + " mWidth= " + mSurfaceControl.getWidth()
+                            + " mHeight= " + mSurfaceControl.getHeight());
+                }
+
                 private final class AnimationController extends Handler {
                     private static final String PROPERTY_NAME_ALPHA = "alpha";
 
@@ -1089,6 +1153,24 @@ final class AccessibilityController {
         }
     }
 
+    static boolean isUntouchableNavigationBar(WindowState windowState,
+            Region touchableRegion) {
+        if (windowState.mAttrs.type != WindowManager.LayoutParams.TYPE_NAVIGATION_BAR) {
+            return false;
+        }
+
+        // Gets the touchable region.
+        windowState.getTouchableRegion(touchableRegion);
+
+        return touchableRegion.isEmpty();
+    }
+
+    static Rect getNavBarInsets(DisplayContent displayContent) {
+        final InsetsState insetsState =
+                displayContent.getInsetsStateController().getRawInsetsState();
+        return insetsState.getSource(ITYPE_NAVIGATION_BAR).getFrame();
+    }
+
     /**
      * This class encapsulates the functionality related to computing the windows
      * reported for accessibility purposes. These windows are all windows a sighted
@@ -1124,6 +1206,8 @@ final class AccessibilityController {
 
         private final long mRecurringAccessibilityEventsIntervalMillis;
 
+        private final IntArray mEmbeddedDisplayIdList = new IntArray(0);
+
         public WindowsForAccessibilityObserver(WindowManagerService windowManagerService,
                 int displayId,
                 WindowsForAccessibilityCallback callback) {
@@ -1146,6 +1230,21 @@ final class AccessibilityController {
                 mHandler.sendEmptyMessageDelayed(MyHandler.MESSAGE_COMPUTE_CHANGED_WINDOWS,
                         mRecurringAccessibilityEventsIntervalMillis);
             }
+        }
+
+        IntArray getAndClearEmbeddedDisplayIdList() {
+            final IntArray returnedArray = new IntArray(mEmbeddedDisplayIdList.size());
+            returnedArray.addAll(mEmbeddedDisplayIdList);
+            mEmbeddedDisplayIdList.clear();
+
+            return returnedArray;
+        }
+
+        void addEmbeddedDisplay(int displayId) {
+            if (displayId == mDisplayId) {
+                return;
+            }
+            mEmbeddedDisplayIdList.add(displayId);
         }
 
         /**
@@ -1203,11 +1302,28 @@ final class AccessibilityController {
                         updateUnaccountedSpace(windowState, regionInScreen, unaccountedSpace,
                                 skipRemainingWindowsForTasks);
                         focusedWindowAdded |= windowState.isFocused();
+                    } else if (isUntouchableNavigationBar(windowState, mTempRegion1)) {
+                        // If this widow is navigation bar without touchable region, accounting the
+                        // region of navigation bar inset because all touch events from this region
+                        // would be received by launcher, i.e. this region is a un-touchable one
+                        // for the application.
+                        unaccountedSpace.op(getNavBarInsets(dc), unaccountedSpace,
+                                Region.Op.REVERSE_DIFFERENCE);
                     }
 
                     if (unaccountedSpace.isEmpty() && focusedWindowAdded) {
                         break;
                     }
+                }
+
+                for (int i = dc.mShellRoots.size() - 1; i >= 0; --i) {
+                    final WindowInfo info = dc.mShellRoots.valueAt(i).getWindowInfo();
+                    if (info == null) {
+                        continue;
+                    }
+                    info.layer = addedWindows.size();
+                    windows.add(info);
+                    addedWindows.add(info.token);
                 }
 
                 // Remove child/parent references to windows that were not added.

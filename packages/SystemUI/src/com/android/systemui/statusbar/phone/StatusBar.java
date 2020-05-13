@@ -116,6 +116,9 @@ import android.widget.DateTimeView;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.colorextraction.ColorExtractor;
 import com.android.internal.logging.MetricsLogger;
+import com.android.internal.logging.UiEvent;
+import com.android.internal.logging.UiEventLogger;
+import com.android.internal.logging.UiEventLoggerImpl;
 import com.android.internal.logging.nano.MetricsProto.MetricsEvent;
 import com.android.internal.statusbar.IStatusBarService;
 import com.android.internal.statusbar.RegisterStatusBarResult;
@@ -140,6 +143,7 @@ import com.android.systemui.bubbles.BubbleController;
 import com.android.systemui.charging.WirelessChargingAnimation;
 import com.android.systemui.classifier.FalsingLog;
 import com.android.systemui.colorextraction.SysuiColorExtractor;
+import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.dagger.qualifiers.UiBackground;
 import com.android.systemui.fragments.ExtensionFragmentListener;
 import com.android.systemui.fragments.FragmentHostManager;
@@ -193,7 +197,6 @@ import com.android.systemui.statusbar.notification.VisualStabilityManager;
 import com.android.systemui.statusbar.notification.collection.NotificationEntry;
 import com.android.systemui.statusbar.notification.init.NotificationsController;
 import com.android.systemui.statusbar.notification.interruption.BypassHeadsUpNotifier;
-import com.android.systemui.statusbar.notification.interruption.NotificationAlertingManager;
 import com.android.systemui.statusbar.notification.interruption.NotificationInterruptStateProvider;
 import com.android.systemui.statusbar.notification.logging.NotificationLogger;
 import com.android.systemui.statusbar.notification.row.ExpandableNotificationRow;
@@ -300,6 +303,8 @@ public class StatusBar extends SystemUI implements DemoMode,
 
     /** If true, the lockscreen will show a distinct wallpaper */
     public static final boolean ENABLE_LOCKSCREEN_WALLPAPER = true;
+
+    private static final UiEventLogger sUiEventLogger = new UiEventLoggerImpl();
 
     static {
         boolean onlyCoreApps;
@@ -459,6 +464,44 @@ public class StatusBar extends SystemUI implements DemoMode,
         }
     };
 
+    @VisibleForTesting
+    public enum StatusBarUiEvent implements UiEventLogger.UiEventEnum {
+        @UiEvent(doc = "Secured lockscreen is opened.")
+        LOCKSCREEN_OPEN_SECURE(405),
+
+        @UiEvent(doc = "Lockscreen without security is opened.")
+        LOCKSCREEN_OPEN_INSECURE(406),
+
+        @UiEvent(doc = "Secured lockscreen is closed.")
+        LOCKSCREEN_CLOSE_SECURE(407),
+
+        @UiEvent(doc = "Lockscreen without security is closed.")
+        LOCKSCREEN_CLOSE_INSECURE(408),
+
+        @UiEvent(doc = "Secured bouncer is opened.")
+        BOUNCER_OPEN_SECURE(409),
+
+        @UiEvent(doc = "Bouncer without security is opened.")
+        BOUNCER_OPEN_INSECURE(410),
+
+        @UiEvent(doc = "Secured bouncer is closed.")
+        BOUNCER_CLOSE_SECURE(411),
+
+        @UiEvent(doc = "Bouncer without security is closed.")
+        BOUNCER_CLOSE_INSECURE(412);
+
+        private final int mId;
+
+        StatusBarUiEvent(int id) {
+            mId = id;
+        }
+
+        @Override
+        public int getId() {
+            return mId;
+        }
+    }
+
     protected final H mHandler = createHandler();
 
     private int mInteractingWindows;
@@ -468,6 +511,7 @@ public class StatusBar extends SystemUI implements DemoMode,
     private final ScrimController mScrimController;
     protected DozeScrimController mDozeScrimController;
     private final Executor mUiBgExecutor;
+    private final Executor mMainExecutor;
 
     protected boolean mDozing;
 
@@ -488,11 +532,9 @@ public class StatusBar extends SystemUI implements DemoMode,
             WallpaperInfo info = wallpaperManager.getWallpaperInfo(UserHandle.USER_CURRENT);
             final boolean deviceSupportsAodWallpaper = mContext.getResources().getBoolean(
                     com.android.internal.R.bool.config_dozeSupportsAodWallpaper);
-            final boolean imageWallpaperInAmbient = !mDozeParameters.getDisplayNeedsBlanking();
             // If WallpaperInfo is null, it must be ImageWallpaper.
             final boolean supportsAmbientMode = deviceSupportsAodWallpaper
-                    && ((info == null && imageWallpaperInAmbient)
-                        || (info != null && info.supportsAmbientMode()));
+                    && (info != null && info.supportsAmbientMode());
 
             mNotificationShadeWindowController.setWallpaperSupportsAmbientMode(supportsAmbientMode);
             mScrimController.setWallpaperSupportsAmbientMode(supportsAmbientMode);
@@ -625,10 +667,10 @@ public class StatusBar extends SystemUI implements DemoMode,
             NotificationInterruptStateProvider notificationInterruptStateProvider,
             NotificationViewHierarchyManager notificationViewHierarchyManager,
             KeyguardViewMediator keyguardViewMediator,
-            NotificationAlertingManager notificationAlertingManager, // need to inject for now
             DisplayMetrics displayMetrics,
             MetricsLogger metricsLogger,
             @UiBackground Executor uiBgExecutor,
+            @Main Executor mainExecutor,
             NotificationMediaManager notificationMediaManager,
             NotificationLockscreenUserManager lockScreenUserManager,
             NotificationRemoteInputManager remoteInputManager,
@@ -709,6 +751,7 @@ public class StatusBar extends SystemUI implements DemoMode,
         mDisplayMetrics = displayMetrics;
         mMetricsLogger = metricsLogger;
         mUiBgExecutor = uiBgExecutor;
+        mMainExecutor = mainExecutor;
         mMediaManager = notificationMediaManager;
         mLockscreenUserManager = lockScreenUserManager;
         mRemoteInputManager = remoteInputManager;
@@ -1101,7 +1144,7 @@ public class StatusBar extends SystemUI implements DemoMode,
 
         ScrimView scrimBehind = mNotificationShadeWindowView.findViewById(R.id.scrim_behind);
         ScrimView scrimInFront = mNotificationShadeWindowView.findViewById(R.id.scrim_in_front);
-        ScrimView scrimForBubble = mNotificationShadeWindowView.findViewById(R.id.scrim_for_bubble);
+        ScrimView scrimForBubble = mBubbleController.getScrimForBubble();
 
         mScrimController.setScrimVisibleListener(scrimsVisible -> {
             mNotificationShadeWindowController.setScrimsVisibility(scrimsVisible);
@@ -1236,7 +1279,8 @@ public class StatusBar extends SystemUI implements DemoMode,
         mActivityLaunchAnimator = new ActivityLaunchAnimator(
                 mNotificationShadeWindowViewController, this, mNotificationPanelViewController,
                 mNotificationShadeDepthControllerLazy.get(),
-                (NotificationListContainer) mStackScroller);
+                (NotificationListContainer) mStackScroller,
+                mMainExecutor);
 
         // TODO: inject this.
         mPresenter = new StatusBarNotificationPresenter(mContext, mNotificationPanelViewController,
@@ -1256,6 +1300,9 @@ public class StatusBar extends SystemUI implements DemoMode,
                         .setNotificationPresenter(mPresenter)
                         .setNotificationPanelViewController(mNotificationPanelViewController)
                         .build();
+
+        ((NotificationListContainer) mStackScroller)
+                .setNotificationActivityStarter(mNotificationActivityStarter);
 
         mGutsManager.setNotificationActivityStarter(mNotificationActivityStarter);
 
@@ -1399,7 +1446,7 @@ public class StatusBar extends SystemUI implements DemoMode,
                 mStackScroller, mKeyguardBypassController, mFalsingManager);
         mKeyguardIndicationController
                 .setStatusBarKeyguardViewManager(mStatusBarKeyguardViewManager);
-        mBiometricUnlockController.setStatusBarKeyguardViewManager(mStatusBarKeyguardViewManager);
+        mBiometricUnlockController.setKeyguardViewController(mStatusBarKeyguardViewManager);
         mRemoteInputManager.getController().addCallback(mStatusBarKeyguardViewManager);
         mDynamicPrivacyController.setStatusBarKeyguardViewManager(mStatusBarKeyguardViewManager);
 
@@ -2908,6 +2955,12 @@ public class StatusBar extends SystemUI implements DemoMode,
                     isSecure ? 1 : 0,
                     unlocked ? 1 : 0);
             mLastLoggedStateFingerprint = stateFingerprint;
+
+            StringBuilder uiEventValueBuilder = new StringBuilder();
+            uiEventValueBuilder.append(isBouncerShowing ? "BOUNCER" : "LOCKSCREEN");
+            uiEventValueBuilder.append(isShowing ? "_OPEN" : "_CLOSE");
+            uiEventValueBuilder.append(isSecure ? "_SECURE" : "_INSECURE");
+            sUiEventLogger.log(StatusBarUiEvent.valueOf(uiEventValueBuilder.toString()));
         }
     }
 

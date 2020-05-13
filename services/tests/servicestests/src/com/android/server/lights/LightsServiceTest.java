@@ -16,12 +16,11 @@
 
 package com.android.server.lights;
 
-import static android.hardware.lights.LightsRequest.Builder;
-
-import static android.graphics.Color.BLACK;
 import static android.graphics.Color.BLUE;
 import static android.graphics.Color.GREEN;
+import static android.graphics.Color.TRANSPARENT;
 import static android.graphics.Color.WHITE;
+import static android.hardware.lights.LightsRequest.Builder;
 
 import static com.google.common.truth.Truth.assertThat;
 
@@ -63,6 +62,16 @@ public class LightsServiceTest {
                 fakeHwLight(105, LightsManager.LIGHT_TYPE_MICROPHONE, 2)
             };
         }
+
+        @Override
+        public int getInterfaceVersion() {
+            return this.VERSION;
+        }
+
+        @Override
+        public String getInterfaceHash() {
+            return this.HASH;
+        }
     };
 
     private static HwLight fakeHwLight(int id, int type, int ordinal) {
@@ -83,7 +92,7 @@ public class LightsServiceTest {
 
     @Test
     public void testGetLights_filtersSystemLights() {
-        LightsService service = new LightsService(mContext, mHal, Looper.getMainLooper());
+        LightsService service = new LightsService(mContext, () -> mHal, Looper.getMainLooper());
         LightsManager manager = new LightsManager(mContext, service.mManagerService);
 
         // When lights are listed, only the 4 MICROPHONE lights should be visible.
@@ -92,7 +101,7 @@ public class LightsServiceTest {
 
     @Test
     public void testControlMultipleLights() {
-        LightsService service = new LightsService(mContext, mHal, Looper.getMainLooper());
+        LightsService service = new LightsService(mContext, () -> mHal, Looper.getMainLooper());
         LightsManager manager = new LightsManager(mContext, service.mManagerService);
 
         // When the session requests to turn 3/4 lights on:
@@ -114,12 +123,12 @@ public class LightsServiceTest {
 
     @Test
     public void testControlLights_onlyEffectiveForLifetimeOfClient() {
-        LightsService service = new LightsService(mContext, mHal, Looper.getMainLooper());
+        LightsService service = new LightsService(mContext, () -> mHal, Looper.getMainLooper());
         LightsManager manager = new LightsManager(mContext, service.mManagerService);
         Light micLight = manager.getLights().get(0);
 
         // The light should begin by being off.
-        assertThat(manager.getLightState(micLight).getColor()).isEqualTo(BLACK);
+        assertThat(manager.getLightState(micLight).getColor()).isEqualTo(TRANSPARENT);
 
         // When a session commits changes:
         LightsManager.LightsSession session = manager.openSession();
@@ -130,12 +139,12 @@ public class LightsServiceTest {
         // When the session goes away:
         session.close();
         // Then the light should turn off.
-        assertThat(manager.getLightState(micLight).getColor()).isEqualTo(BLACK);
+        assertThat(manager.getLightState(micLight).getColor()).isEqualTo(TRANSPARENT);
     }
 
     @Test
     public void testControlLights_firstCallerWinsContention() {
-        LightsService service = new LightsService(mContext, mHal, Looper.getMainLooper());
+        LightsService service = new LightsService(mContext, () -> mHal, Looper.getMainLooper());
         LightsManager manager = new LightsManager(mContext, service.mManagerService);
         Light micLight = manager.getLights().get(0);
 
@@ -161,7 +170,7 @@ public class LightsServiceTest {
 
     @Test
     public void testClearLight() {
-        LightsService service = new LightsService(mContext, mHal, Looper.getMainLooper());
+        LightsService service = new LightsService(mContext, () -> mHal, Looper.getMainLooper());
         LightsManager manager = new LightsManager(mContext, service.mManagerService);
         Light micLight = manager.getLights().get(0);
 

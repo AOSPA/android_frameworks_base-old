@@ -29,6 +29,7 @@ import android.content.Context;
 import android.content.pm.PackageManager;
 import android.content.pm.ServiceInfo;
 import android.content.res.Resources;
+import android.os.Handler;
 import android.os.Looper;
 
 import androidx.test.filters.SmallTest;
@@ -84,6 +85,32 @@ public class TvRemoteProviderWatcherTest {
     }
 
     @Test
+    public void acceptsValidCsvPackageName() {
+        // Test intentionally includes empty spacing for a more complex test
+        when(mMockResources.getString(com.android.internal.R.string.config_tvRemoteServicePackage))
+            .thenReturn(",,foo,  " + TV_REMOTE_SERVICE_PACKAGE_NAME + ",bar, baz,,");
+
+        // Re-create the object since package name is loaded in the constructor
+        TvRemoteProviderWatcher watcher =
+                new TvRemoteProviderWatcher(
+                        mMockContext, new Object(), new Handler(Looper.getMainLooper()));
+        assertTrue(watcher.verifyServiceTrusted(createTvServiceInfo()));
+    }
+
+    @Test
+    public void rejectsInvalidCsvPackageName() {
+        // Checks include empty strings to validate that processing as well
+        when(mMockResources.getString(com.android.internal.R.string.config_tvRemoteServicePackage))
+            .thenReturn(",,foo,,  ,bar,   baz,,");
+
+        // Re-create the object since package name is loaded in the constructor
+        TvRemoteProviderWatcher watcher =
+                new TvRemoteProviderWatcher(
+                        mMockContext, new Object(), new Handler(Looper.getMainLooper()));
+        assertFalse(watcher.verifyServiceTrusted(createTvServiceInfo()));
+    }
+
+    @Test
     public void tvServiceIsTrusted() {
         assertTrue(mTvRemoteProviderWatcher.verifyServiceTrusted(createTvServiceInfo()));
     }
@@ -123,14 +150,9 @@ public class TvRemoteProviderWatcherTest {
     public void whitelistingPackageNameIsRequired() {
         reset(mMockResources);
         when(mMockResources.getString(anyInt())).thenReturn("");
-
-        // Create a new watcher, as the resources are read in the constructor of the class
-        if (Looper.myLooper() == null) {
-            Looper.prepare();
-        }
-
         TvRemoteProviderWatcher watcher =
-                new TvRemoteProviderWatcher(mMockContext, new Object());
+                new TvRemoteProviderWatcher(
+                        mMockContext, new Object(), new Handler(Looper.getMainLooper()));
         assertFalse(watcher.verifyServiceTrusted(createTvServiceInfo()));
     }
 

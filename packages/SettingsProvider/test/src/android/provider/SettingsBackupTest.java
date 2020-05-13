@@ -101,7 +101,8 @@ public class SettingsBackupTest {
                     Settings.System.MIN_REFRESH_RATE, // depends on hardware capabilities
                     Settings.System.PEAK_REFRESH_RATE, // depends on hardware capabilities
                     Settings.System.SCREEN_BRIGHTNESS_FLOAT,
-                    Settings.System.SCREEN_BRIGHTNESS_FOR_VR_FLOAT
+                    Settings.System.SCREEN_BRIGHTNESS_FOR_VR_FLOAT,
+                    Settings.System.MULTI_AUDIO_FOCUS_ENABLED // form-factor/OEM specific
                     );
 
     private static final Set<String> BACKUP_BLACKLISTED_GLOBAL_SETTINGS =
@@ -295,6 +296,7 @@ public class SettingsBackupTest {
                     Settings.Global.HDMI_CONTROL_AUTO_DEVICE_OFF_ENABLED,
                     Settings.Global.HDMI_CONTROL_AUTO_WAKEUP_ENABLED,
                     Settings.Global.HDMI_CONTROL_ENABLED,
+                    Settings.Global.HDMI_CONTROL_VOLUME_CONTROL_ENABLED,
                     Settings.Global.HDMI_SYSTEM_AUDIO_CONTROL_ENABLED,
                     Settings.Global.HEADS_UP_NOTIFICATIONS_ENABLED,
                     Settings.Global.HIDDEN_API_POLICY,
@@ -418,7 +420,6 @@ public class SettingsBackupTest {
                     Settings.Global.RECOMMENDED_NETWORK_EVALUATOR_CACHE_EXPIRY_MS,
                     Settings.Global.READ_EXTERNAL_STORAGE_ENFORCED_DEFAULT,
                     Settings.Global.REQUIRE_PASSWORD_TO_DECRYPT,
-                    Settings.Global.REQUIRE_SHORTCUTS_FOR_CONVERSATIONS,
                     Settings.Global.SAFE_BOOT_DISALLOWED,
                     Settings.Global.SELINUX_STATUS,
                     Settings.Global.SELINUX_UPDATE_CONTENT_URL,

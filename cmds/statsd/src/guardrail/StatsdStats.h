@@ -16,7 +16,6 @@
 #pragma once
 
 #include "config/ConfigKey.h"
-#include "atoms_info.h"
 
 #include <gtest/gtest_prod.h>
 #include <log/log_time.h>
@@ -165,6 +164,10 @@ public:
 
     // Maximum number of pushed atoms statsd stats will track above kMaxPushedAtomId.
     static const int kMaxNonPlatformPushedAtoms = 100;
+
+    // Maximum atom id value that we consider a platform pushed atom.
+    // This should be updated once highest pushed atom id in atoms.proto approaches this value.
+    static const int kMaxPushedAtomId = 500;
 
     // Atom id that is the start of the pulled atoms.
     static const int kPullAtomStartTag = 10000;
@@ -457,6 +460,16 @@ public:
      */
      void noteActivationBroadcastGuardrailHit(const int uid);
 
+     /**
+      * Reports that an atom is erroneous or cannot be parsed successfully by
+      * statsd. An atom tag of 0 indicates that the client did not supply the
+      * atom id within the encoding.
+      *
+      * For pushed atoms only, this call should be preceded by a call to
+      * noteAtomLogged.
+      */
+     void noteAtomError(int atomTag, bool pull=false);
+
     /**
      * Reset the historical stats. Including all stats in icebox, and the tracked stats about
      * metrics, matchers, and atoms. The active configs will be kept and StatsdStats will continue
@@ -495,6 +508,7 @@ public:
         long emptyData = 0;
         long registeredCount = 0;
         long unregisteredCount = 0;
+        int32_t atomErrorCount = 0;
     } PulledAtomStats;
 
     typedef struct {
@@ -541,6 +555,12 @@ private:
 
     // Maps PullAtomId to its stats. The size is capped by the puller atom counts.
     std::map<int, PulledAtomStats> mPulledAtomStats;
+
+    // Stores the number of times a pushed atom was logged erroneously. The
+    // corresponding counts for pulled atoms are stored in PulledAtomStats.
+    // The max size of this map is kMaxAtomErrorsStatsSize.
+    std::map<int, int> mPushedAtomErrorStats;
+    int kMaxPushedAtomErrorStatsSize = 100;
 
     // Maps metric ID to its stats. The size is capped by the number of metrics.
     std::map<int64_t, AtomMetricStats> mAtomMetricStats;
@@ -609,6 +629,8 @@ private:
 
     void addToIceBoxLocked(std::shared_ptr<ConfigStats>& stats);
 
+    int getPushedAtomErrors(int atomId) const;
+
     /**
      * Get a reference to AtomMetricStats for a metric. If none exists, create it. The reference
      * will live as long as `this`.
@@ -627,6 +649,7 @@ private:
     FRIEND_TEST(StatsdStatsTest, TestPullAtomStats);
     FRIEND_TEST(StatsdStatsTest, TestAtomMetricsStats);
     FRIEND_TEST(StatsdStatsTest, TestActivationBroadcastGuardrailHit);
+    FRIEND_TEST(StatsdStatsTest, TestAtomErrorStats);
 };
 
 }  // namespace statsd

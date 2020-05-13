@@ -21,16 +21,26 @@ import static com.android.systemui.util.InjectionInflationController.VIEW_CONTEX
 import static com.android.systemui.util.Utils.useQsMediaPlayer;
 
 import android.annotation.Nullable;
+import android.app.Notification;
+import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
+import android.content.SharedPreferences;
 import android.content.res.Configuration;
 import android.content.res.Resources;
+import android.graphics.Color;
+import android.graphics.drawable.Drawable;
 import android.graphics.drawable.Icon;
+import android.media.MediaDescription;
 import android.media.session.MediaSession;
 import android.metrics.LogMaker;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
+import android.os.UserHandle;
+import android.os.UserManager;
 import android.service.notification.StatusBarNotification;
 import android.service.quicksettings.Tile;
 import android.util.AttributeSet;
@@ -42,12 +52,13 @@ import android.widget.HorizontalScrollView;
 import android.widget.LinearLayout;
 
 import com.android.internal.logging.MetricsLogger;
+import com.android.internal.logging.UiEventLogger;
 import com.android.internal.logging.nano.MetricsProto.MetricsEvent;
+import com.android.internal.statusbar.NotificationVisibility;
 import com.android.settingslib.Utils;
 import com.android.settingslib.bluetooth.LocalBluetoothManager;
 import com.android.settingslib.media.InfoMediaManager;
 import com.android.settingslib.media.LocalMediaManager;
-import com.android.settingslib.media.MediaDevice;
 import com.android.systemui.Dependency;
 import com.android.systemui.Dumpable;
 import com.android.systemui.R;
@@ -55,6 +66,8 @@ import com.android.systemui.broadcast.BroadcastDispatcher;
 import com.android.systemui.dagger.qualifiers.Background;
 import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.dump.DumpManager;
+import com.android.systemui.media.MediaControlPanel;
+import com.android.systemui.plugins.ActivityStarter;
 import com.android.systemui.plugins.qs.DetailAdapter;
 import com.android.systemui.plugins.qs.QSTile;
 import com.android.systemui.plugins.qs.QSTileView;
@@ -64,7 +77,9 @@ import com.android.systemui.qs.external.CustomTile;
 import com.android.systemui.qs.logging.QSLogger;
 import com.android.systemui.settings.BrightnessController;
 import com.android.systemui.settings.ToggleSliderView;
-import com.android.systemui.statusbar.NotificationMediaManager;
+import com.android.systemui.statusbar.notification.NotificationEntryListener;
+import com.android.systemui.statusbar.notification.NotificationEntryManager;
+import com.android.systemui.statusbar.notification.collection.NotificationEntry;
 import com.android.systemui.statusbar.policy.BrightnessMirrorController;
 import com.android.systemui.statusbar.policy.BrightnessMirrorController.BrightnessMirrorListener;
 import com.android.systemui.tuner.TunerService;
@@ -75,7 +90,6 @@ import java.io.FileDescriptor;
 import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.List;
 import java.util.concurrent.Executor;
 import java.util.stream.Collectors;
 
@@ -93,6 +107,7 @@ public class QSPanel extends LinearLayout implements Tunable, Callback, Brightne
 
     protected final Context mContext;
     protected final ArrayList<TileRecord> mRecords = new ArrayList<>();
+    private final BroadcastDispatcher mBroadcastDispatcher;
     private String mCachedSpecs = "";
     protected final View mBrightnessView;
     private final H mHandler = new H();
@@ -101,13 +116,12 @@ public class QSPanel extends LinearLayout implements Tunable, Callback, Brightne
 
     private final LinearLayout mMediaCarousel;
     private final ArrayList<QSMediaPlayer> mMediaPlayers = new ArrayList<>();
-    private final NotificationMediaManager mNotificationMediaManager;
     private final LocalBluetoothManager mLocalBluetoothManager;
     private final Executor mForegroundExecutor;
     private final DelayableExecutor mBackgroundExecutor;
-    private LocalMediaManager mLocalMediaManager;
-    private MediaDevice mDevice;
     private boolean mUpdateCarousel = false;
+    private ActivityStarter mActivityStarter;
+    private NotificationEntryManager mNotificationEntryManager;
 
     protected boolean mExpanded;
     protected boolean mListening;
@@ -116,6 +130,7 @@ public class QSPanel extends LinearLayout implements Tunable, Callback, Brightne
     private BrightnessController mBrightnessController;
     private final DumpManager mDumpManager;
     private final QSLogger mQSLogger;
+    protected final UiEventLogger mUiEventLogger;
     protected QSTileHost mHost;
 
     protected QSSecurityFooter mFooter;
@@ -129,32 +144,26 @@ public class QSPanel extends LinearLayout implements Tunable, Callback, Brightne
 
     private BrightnessMirrorController mBrightnessMirrorController;
     private View mDivider;
+    private boolean mHasLoadedMediaControls;
 
-    private final LocalMediaManager.DeviceCallback mDeviceCallback =
-            new LocalMediaManager.DeviceCallback() {
+    private final BroadcastReceiver mUserChangeReceiver = new BroadcastReceiver() {
         @Override
-        public void onDeviceListUpdate(List<MediaDevice> devices) {
-            if (mLocalMediaManager == null) {
-                return;
-            }
-            MediaDevice currentDevice = mLocalMediaManager.getCurrentConnectedDevice();
-            // Check because this can be called several times while changing devices
-            if (mDevice == null || !mDevice.equals(currentDevice)) {
-                mDevice = currentDevice;
-                for (QSMediaPlayer p : mMediaPlayers) {
-                    p.updateDevice(mDevice);
+        public void onReceive(Context context, Intent intent) {
+            final String action = intent.getAction();
+            if (Intent.ACTION_USER_UNLOCKED.equals(action)) {
+                if (!mHasLoadedMediaControls) {
+                    loadMediaResumptionControls();
                 }
             }
         }
+    };
 
+    private final NotificationEntryListener mNotificationEntryListener =
+            new NotificationEntryListener() {
         @Override
-        public void onSelectedDeviceStateChanged(MediaDevice device, int state) {
-            if (mDevice == null || !mDevice.equals(device)) {
-                mDevice = device;
-                for (QSMediaPlayer p : mMediaPlayers) {
-                    p.updateDevice(mDevice);
-                }
-            }
+        public void onEntryRemoved(NotificationEntry entry, NotificationVisibility visibility,
+                boolean removedByUser, int reason) {
+            checkToRemoveMediaNotification(entry);
         }
     };
 
@@ -165,19 +174,24 @@ public class QSPanel extends LinearLayout implements Tunable, Callback, Brightne
             DumpManager dumpManager,
             BroadcastDispatcher broadcastDispatcher,
             QSLogger qsLogger,
-            NotificationMediaManager notificationMediaManager,
             @Main Executor foregroundExecutor,
             @Background DelayableExecutor backgroundExecutor,
-            @Nullable LocalBluetoothManager localBluetoothManager
+            @Nullable LocalBluetoothManager localBluetoothManager,
+            ActivityStarter activityStarter,
+            NotificationEntryManager entryManager,
+            UiEventLogger uiEventLogger
     ) {
         super(context, attrs);
         mContext = context;
         mQSLogger = qsLogger;
         mDumpManager = dumpManager;
-        mNotificationMediaManager = notificationMediaManager;
         mForegroundExecutor = foregroundExecutor;
         mBackgroundExecutor = backgroundExecutor;
         mLocalBluetoothManager = localBluetoothManager;
+        mBroadcastDispatcher = broadcastDispatcher;
+        mActivityStarter = activityStarter;
+        mNotificationEntryManager = entryManager;
+        mUiEventLogger = uiEventLogger;
 
         setOrientation(VERTICAL);
 
@@ -210,7 +224,7 @@ public class QSPanel extends LinearLayout implements Tunable, Callback, Brightne
         addView(mFooter.getView());
 
         mBrightnessController = new BrightnessController(getContext(),
-                findViewById(R.id.brightness_slider), broadcastDispatcher);
+                findViewById(R.id.brightness_slider), mBroadcastDispatcher);
 
         updateResources();
     }
@@ -236,13 +250,16 @@ public class QSPanel extends LinearLayout implements Tunable, Callback, Brightne
      * Add or update a player for the associated media session
      * @param token
      * @param icon
+     * @param largeIcon
      * @param iconColor
      * @param bgColor
      * @param actionsContainer
      * @param notif
+     * @param key
      */
-    public void addMediaSession(MediaSession.Token token, Icon icon, int iconColor, int bgColor,
-            View actionsContainer, StatusBarNotification notif) {
+    public void addMediaSession(MediaSession.Token token, Drawable icon, Icon largeIcon,
+            int iconColor, int bgColor, View actionsContainer, StatusBarNotification notif,
+            String key) {
         if (!useQsMediaPlayer(mContext)) {
             // Shouldn't happen, but just in case
             Log.e(TAG, "Tried to add media session without player!");
@@ -253,21 +270,8 @@ public class QSPanel extends LinearLayout implements Tunable, Callback, Brightne
             return;
         }
 
-        QSMediaPlayer player = null;
         String packageName = notif.getPackageName();
-        for (QSMediaPlayer p : mMediaPlayers) {
-            if (p.getMediaSessionToken().equals(token)) {
-                Log.d(TAG, "a player for this session already exists");
-                player = p;
-                break;
-            }
-
-            if (packageName.equals(p.getMediaPlayerPackage())) {
-                Log.d(TAG, "found an old session for this app");
-                player = p;
-                break;
-            }
-        }
+        QSMediaPlayer player = findMediaPlayer(packageName, token, key);
 
         int playerWidth = (int) getResources().getDimension(R.dimen.qs_media_width);
         int padding = (int) getResources().getDimension(R.dimen.qs_media_padding);
@@ -276,9 +280,16 @@ public class QSPanel extends LinearLayout implements Tunable, Callback, Brightne
         lp.setMarginEnd(padding);
 
         if (player == null) {
-            Log.d(TAG, "creating new player");
-            player = new QSMediaPlayer(mContext, this, mNotificationMediaManager,
-                    mForegroundExecutor, mBackgroundExecutor);
+            Log.d(TAG, "creating new player for " + packageName);
+            // Set up listener for device changes
+            // TODO: integrate with MediaTransferManager?
+            InfoMediaManager imm = new InfoMediaManager(mContext, notif.getPackageName(),
+                    notif.getNotification(), mLocalBluetoothManager);
+            LocalMediaManager routeManager = new LocalMediaManager(mContext, mLocalBluetoothManager,
+                    imm, notif.getPackageName());
+
+            player = new QSMediaPlayer(mContext, this, routeManager, mForegroundExecutor,
+                    mBackgroundExecutor, mActivityStarter);
             player.setListening(mListening);
             if (player.isPlaying()) {
                 mMediaCarousel.addView(player.getView(), 0, lp); // add in front
@@ -291,24 +302,43 @@ public class QSPanel extends LinearLayout implements Tunable, Callback, Brightne
         }
 
         Log.d(TAG, "setting player session");
-        player.setMediaSession(token, icon, iconColor, bgColor, actionsContainer,
-                notif.getNotification(), mDevice);
+        String appName = Notification.Builder.recoverBuilder(getContext(), notif.getNotification())
+                .loadHeaderAppName();
+        player.setMediaSession(token, icon, largeIcon, iconColor, bgColor, actionsContainer,
+                notif.getNotification().contentIntent, appName, key);
 
         if (mMediaPlayers.size() > 0) {
             ((View) mMediaCarousel.getParent()).setVisibility(View.VISIBLE);
+        }
+    }
 
-            if (mLocalMediaManager == null) {
-                // Set up listener for device changes
-                // TODO: integrate with MediaTransferManager?
-                InfoMediaManager imm =
-                        new InfoMediaManager(mContext, null, null, mLocalBluetoothManager);
-                mLocalMediaManager = new LocalMediaManager(mContext, mLocalBluetoothManager, imm,
-                        null);
-                mLocalMediaManager.startScan();
-                mDevice = mLocalMediaManager.getCurrentConnectedDevice();
-                mLocalMediaManager.registerCallback(mDeviceCallback);
+    /**
+     * Check for an existing media player using the given information
+     * @param packageName
+     * @param token
+     * @param key
+     * @return a player, or null if no match found
+     */
+    private QSMediaPlayer findMediaPlayer(String packageName, MediaSession.Token token,
+            String key) {
+        for (QSMediaPlayer player : mMediaPlayers) {
+            if (player.getKey() == null || key == null) {
+                // No notification key = loaded via mediabrowser, so just match on package
+                if (packageName.equals(player.getMediaPlayerPackage())) {
+                    Log.d(TAG, "Found matching resume player by package: " + packageName);
+                    return player;
+                }
+            } else if (player.getMediaSessionToken().equals(token)) {
+                Log.d(TAG, "Found matching player by token " + packageName);
+                return player;
+            } else if (packageName.equals(player.getMediaPlayerPackage())
+                    && key.equals(player.getKey())) {
+                // Also match if it's the same package and notification key
+                Log.d(TAG, "Found matching player by package " + packageName + ", " + key);
+                return player;
             }
         }
+        return null;
     }
 
     protected View getMediaPanel() {
@@ -330,13 +360,106 @@ public class QSPanel extends LinearLayout implements Tunable, Callback, Brightne
         mMediaCarousel.removeView(player.getView());
         if (mMediaPlayers.size() == 0) {
             ((View) mMediaCarousel.getParent()).setVisibility(View.GONE);
-            if (mLocalMediaManager != null) {
-                mLocalMediaManager.stopScan();
-                mLocalMediaManager.unregisterCallback(mDeviceCallback);
-                mLocalMediaManager = null;
-            }
         }
         return true;
+    }
+
+    private final QSMediaBrowser.Callback mMediaBrowserCallback = new QSMediaBrowser.Callback() {
+        @Override
+        public void addTrack(MediaDescription desc, ComponentName component,
+                QSMediaBrowser browser) {
+            if (component == null) {
+                Log.e(TAG, "Component cannot be null");
+                return;
+            }
+
+            if (desc == null || desc.getTitle() == null) {
+                Log.e(TAG, "Description incomplete");
+                return;
+            }
+
+            Log.d(TAG, "adding track from browser: " + desc + ", " + component);
+
+            // Check if there's an old player for this app
+            String pkgName = component.getPackageName();
+            MediaSession.Token token = browser.getToken();
+            QSMediaPlayer player = findMediaPlayer(pkgName, token, null);
+
+            if (player == null) {
+                player = new QSMediaPlayer(mContext, QSPanel.this,
+                        null, mForegroundExecutor, mBackgroundExecutor, mActivityStarter);
+
+                // Add to carousel
+                int playerWidth = (int) getResources().getDimension(R.dimen.qs_media_width);
+                int padding = (int) getResources().getDimension(R.dimen.qs_media_padding);
+                LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(playerWidth,
+                        LayoutParams.MATCH_PARENT);
+                lp.setMarginStart(padding);
+                lp.setMarginEnd(padding);
+                mMediaCarousel.addView(player.getView(), lp);
+                ((View) mMediaCarousel.getParent()).setVisibility(View.VISIBLE);
+                mMediaPlayers.add(player);
+            }
+
+            int iconColor = Color.DKGRAY;
+            int bgColor = Color.LTGRAY;
+            player.setMediaSession(token, desc, iconColor, bgColor, browser.getAppIntent(),
+                    pkgName);
+        }
+    };
+
+    /**
+     * Load controls for resuming media, if available
+     */
+    private void loadMediaResumptionControls() {
+        if (!useQsMediaPlayer(mContext)) {
+            return;
+        }
+        Log.d(TAG, "Loading resumption controls");
+
+        //  Look up saved components to resume
+        Context userContext = mContext.createContextAsUser(mContext.getUser(), 0);
+        SharedPreferences prefs = userContext.getSharedPreferences(
+                MediaControlPanel.MEDIA_PREFERENCES, Context.MODE_PRIVATE);
+        String listString = prefs.getString(MediaControlPanel.MEDIA_PREFERENCE_KEY, null);
+        if (listString == null) {
+            Log.d(TAG, "No saved media components");
+            return;
+        }
+
+        String[] components = listString.split(QSMediaBrowser.DELIMITER);
+        Log.d(TAG, "components are: " + listString + " count " + components.length);
+        for (int i = 0; i < components.length && i < QSMediaBrowser.MAX_RESUMPTION_CONTROLS; i++) {
+            String[] info = components[i].split("/");
+            String packageName = info[0];
+            String className = info[1];
+            ComponentName component = new ComponentName(packageName, className);
+            QSMediaBrowser browser = new QSMediaBrowser(mContext, mMediaBrowserCallback,
+                    component);
+            browser.findRecentMedia();
+        }
+        mHasLoadedMediaControls = true;
+    }
+
+    private void checkToRemoveMediaNotification(NotificationEntry entry) {
+        if (!useQsMediaPlayer(mContext)) {
+            return;
+        }
+
+        if (!entry.isMediaNotification()) {
+            return;
+        }
+
+        // If this entry corresponds to an existing set of controls, clear the controls
+        // This will handle apps that use an action to clear their notification
+        for (QSMediaPlayer p : mMediaPlayers) {
+            if (p.getKey() != null && p.getKey().equals(entry.getKey())) {
+                Log.d(TAG, "Clearing controls since notification removed " + entry.getKey());
+                p.clearControls();
+                return;
+            }
+        }
+        Log.d(TAG, "Media notification removed but no player found " + entry.getKey());
     }
 
     protected void addDivider() {
@@ -389,6 +512,23 @@ public class QSPanel extends LinearLayout implements Tunable, Callback, Brightne
             mBrightnessMirrorController.addCallback(this);
         }
         mDumpManager.registerDumpable(getDumpableTag(), this);
+
+        if (getClass() == QSPanel.class) {
+            //TODO(ethibodeau) remove class check after media refactor in ag/11059751
+            // Only run this in QSPanel proper, not QQS
+            IntentFilter filter = new IntentFilter();
+            filter.addAction(Intent.ACTION_USER_UNLOCKED);
+            mBroadcastDispatcher.registerReceiver(mUserChangeReceiver, filter, null,
+                    UserHandle.ALL);
+            mHasLoadedMediaControls = false;
+
+            UserManager userManager = mContext.getSystemService(UserManager.class);
+            if (userManager.isUserUnlocked(mContext.getUserId())) {
+                // If it's already unlocked (like if dark theme was toggled), we can load now
+                loadMediaResumptionControls();
+            }
+        }
+        mNotificationEntryManager.addNotificationEntryListener(mNotificationEntryListener);
     }
 
     @Override
@@ -404,11 +544,8 @@ public class QSPanel extends LinearLayout implements Tunable, Callback, Brightne
             mBrightnessMirrorController.removeCallback(this);
         }
         mDumpManager.unregisterDumpable(getDumpableTag());
-        if (mLocalMediaManager != null) {
-            mLocalMediaManager.stopScan();
-            mLocalMediaManager.unregisterCallback(mDeviceCallback);
-            mLocalMediaManager = null;
-        }
+        mBroadcastDispatcher.unregisterReceiver(mUserChangeReceiver);
+        mNotificationEntryManager.removeNotificationEntryListener(mNotificationEntryListener);
         super.onDetachedFromWindow();
     }
 
@@ -562,8 +699,10 @@ public class QSPanel extends LinearLayout implements Tunable, Callback, Brightne
         }
         mMetricsLogger.visibility(MetricsEvent.QS_PANEL, mExpanded);
         if (!mExpanded) {
+            mUiEventLogger.log(closePanelEvent());
             closeDetail();
         } else {
+            mUiEventLogger.log(openPanelEvent());
             logTiles();
         }
     }
@@ -668,6 +807,18 @@ public class QSPanel extends LinearLayout implements Tunable, Callback, Brightne
 
     protected QSTileView createTileView(QSTile tile, boolean collapsedView) {
         return mHost.createTileView(tile, collapsedView);
+    }
+
+    protected QSEvent openPanelEvent() {
+        return QSEvent.QS_PANEL_EXPANDED;
+    }
+
+    protected QSEvent closePanelEvent() {
+        return QSEvent.QS_PANEL_COLLAPSED;
+    }
+
+    protected QSEvent tileVisibleEvent() {
+        return QSEvent.QS_TILE_VISIBLE;
     }
 
     protected boolean shouldShowDetail() {

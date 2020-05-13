@@ -2830,7 +2830,6 @@ public class AppOpsService extends IAppOpsService.Stub {
 
     private int checkOperationImpl(int code, int uid, String packageName,
                 boolean raw) {
-        verifyIncomingUid(uid);
         verifyIncomingOp(code);
         String resolvedPackageName = resolvePackageName(uid, packageName);
         if (resolvedPackageName == null) {
@@ -4134,9 +4133,6 @@ public class AppOpsService extends IAppOpsService.Stub {
             throws NumberFormatException,
         XmlPullParserException, IOException {
         int opCode = Integer.parseInt(parser.getAttributeValue(null, "n"));
-        if (isIgnoredAppOp(opCode)) {
-            return;
-        }
         Op op = new Op(uidState, pkgName, opCode, uidState.uid);
 
         final int mode = XmlUtils.readIntAttribute(parser, "m",
@@ -4169,16 +4165,6 @@ public class AppOpsService extends IAppOpsService.Stub {
             uidState.pkgOps.put(pkgName, ops);
         }
         ops.put(op.op, op);
-    }
-
-    //TODO(b/149995538): Remove once this has reached all affected devices
-    private static boolean isIgnoredAppOp(int op) {
-        switch (op) {
-            case AppOpsManager.OP_MANAGE_EXTERNAL_STORAGE:
-                return true;
-            default:
-                return false;
-        }
     }
 
     void writeState() {
@@ -5202,8 +5188,9 @@ public class AppOpsService extends IAppOpsService.Stub {
             if (mNotedWatchers.size() > 0 && dumpMode < 0) {
                 needSep = true;
                 boolean printedHeader = false;
-                for (int i = 0; i < mNotedWatchers.size(); i++) {
-                    final SparseArray<NotedCallback> notedWatchers = mNotedWatchers.valueAt(i);
+                for (int watcherNum = 0; watcherNum < mNotedWatchers.size(); watcherNum++) {
+                    final SparseArray<NotedCallback> notedWatchers =
+                            mNotedWatchers.valueAt(watcherNum);
                     if (notedWatchers.size() <= 0) {
                         continue;
                     }
@@ -5221,16 +5208,16 @@ public class AppOpsService extends IAppOpsService.Stub {
                     }
                     pw.print("    ");
                     pw.print(Integer.toHexString(System.identityHashCode(
-                            mNotedWatchers.keyAt(i))));
+                            mNotedWatchers.keyAt(watcherNum))));
                     pw.println(" ->");
                     pw.print("        [");
                     final int opCount = notedWatchers.size();
-                    for (i = 0; i < opCount; i++) {
-                        if (i > 0) {
+                    for (int opNum = 0; opNum < opCount; opNum++) {
+                        if (opNum > 0) {
                             pw.print(' ');
                         }
-                        pw.print(AppOpsManager.opToName(notedWatchers.keyAt(i)));
-                        if (i < opCount - 1) {
+                        pw.print(AppOpsManager.opToName(notedWatchers.keyAt(opNum)));
+                        if (opNum < opCount - 1) {
                             pw.print(',');
                         }
                     }
@@ -5308,6 +5295,12 @@ public class AppOpsService extends IAppOpsService.Stub {
                 if (uidState.capability != uidState.pendingCapability) {
                     pw.print("    pendingCapability=");
                     pw.println(uidState.pendingCapability);
+                }
+                pw.print("    appWidgetVisible=");
+                pw.println(uidState.appWidgetVisible);
+                if (uidState.appWidgetVisible != uidState.pendingAppWidgetVisible) {
+                    pw.print("    pendingAppWidgetVisible=");
+                    pw.println(uidState.pendingAppWidgetVisible);
                 }
                 if (uidState.pendingStateCommitTime != 0) {
                     pw.print("    pendingStateCommitTime=");
@@ -5745,7 +5738,7 @@ public class AppOpsService extends IAppOpsService.Stub {
      */
     private void switchPackageIfBootTimeOrRarelyUsedLocked(@NonNull String packageName) {
         if (mSampledPackage == null) {
-            if (ThreadLocalRandom.current().nextFloat() < 0.1f) {
+            if (ThreadLocalRandom.current().nextFloat() < 0.5f) {
                 mSamplingStrategy = SAMPLING_STRATEGY_BOOT_TIME_SAMPLING;
                 resampleAppOpForPackageLocked(packageName);
             }

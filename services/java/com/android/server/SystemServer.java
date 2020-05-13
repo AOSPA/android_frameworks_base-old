@@ -21,6 +21,8 @@ import static android.os.IServiceManager.DUMP_FLAG_PRIORITY_CRITICAL;
 import static android.os.IServiceManager.DUMP_FLAG_PRIORITY_HIGH;
 import static android.os.IServiceManager.DUMP_FLAG_PRIORITY_NORMAL;
 import static android.os.IServiceManager.DUMP_FLAG_PROTO;
+import static android.os.Process.SYSTEM_UID;
+import static android.os.Process.myPid;
 import static android.view.Display.DEFAULT_DISPLAY;
 
 import static com.android.server.utils.TimingsTraceAndSlog.SYSTEM_SERVER_TIMING_TAG;
@@ -29,6 +31,7 @@ import android.annotation.NonNull;
 import android.annotation.StringRes;
 import android.app.ActivityThread;
 import android.app.AppCompatCallbacks;
+import android.app.ApplicationErrorReport;
 import android.app.INotificationManager;
 import android.app.SystemServiceRegistry;
 import android.app.usage.UsageStatsManagerInternal;
@@ -53,6 +56,7 @@ import android.os.Debug;
 import android.os.Environment;
 import android.os.FactoryTest;
 import android.os.FileUtils;
+import android.os.IBinder;
 import android.os.IIncidentManager;
 import android.os.IBinder;
 import android.os.Looper;
@@ -68,16 +72,19 @@ import android.os.UserHandle;
 import android.os.storage.IStorageManager;
 import android.provider.DeviceConfig;
 import android.provider.Settings;
+import android.server.ServerProtoEnums;
 import android.sysprop.VoldProperties;
 import android.text.TextUtils;
 import android.util.DisplayMetrics;
 import android.util.EventLog;
+import android.util.Pair;
 import android.util.Slog;
 import android.view.contentcapture.ContentCaptureManager;
 
 import com.android.internal.R;
 import com.android.internal.notification.SystemNotificationChannels;
 import com.android.internal.os.BinderInternal;
+import com.android.internal.os.RuntimeInit;
 import com.android.internal.util.ConcurrentUtils;
 import com.android.internal.util.EmergencyAffordanceManager;
 import com.android.internal.util.FrameworkStatsLog;
@@ -113,6 +120,7 @@ import com.android.server.inputmethod.InputMethodSystemProperty;
 import com.android.server.inputmethod.MultiClientInputMethodManagerService;
 import com.android.server.integrity.AppIntegrityManagerService;
 import com.android.server.lights.LightsService;
+import com.android.server.location.LocationManagerService;
 import com.android.server.media.MediaResourceMonitorService;
 import com.android.server.media.MediaRouterService;
 import com.android.server.media.MediaSessionService;
@@ -182,6 +190,7 @@ import com.google.android.startop.iorap.IorapForwardingService;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.LinkedList;
 import java.util.Locale;
 import java.util.Timer;
 import java.util.concurrent.CountDownLatch;
@@ -359,6 +368,11 @@ public final class SystemServer {
     private Future<?> mSensorServiceStart;
     private Future<?> mZygotePreload;
     private Future<?> mBlobStoreServiceStart;
+
+    /**
+     * The pending WTF to be logged into dropbox.
+     */
+    private static LinkedList<Pair<String, ApplicationErrorReport.CrashInfo>> sPendingWtfs;
 
     /**
      * Start the sensor service. This is a blocking call and can take time.
@@ -570,6 +584,9 @@ public final class SystemServer {
         } finally {
             t.traceEnd();  // InitBeforeStartServices
         }
+
+        // Setup the default WTF handler
+        RuntimeInit.setDefaultApplicationWtfHandler(SystemServer::handleEarlySystemWtf);
 
         // Start services.
         try {
@@ -2169,6 +2186,14 @@ public final class SystemServer {
         }
         t.traceEnd();
 
+        // Emit any pending system_server WTFs
+        synchronized (SystemService.class) {
+            if (sPendingWtfs != null) {
+                mActivityManagerService.schedulePendingSystemServerWtfs(sPendingWtfs);
+                sPendingWtfs = null;
+            }
+        }
+
         if (safeMode) {
             mActivityManagerService.showSafeModeOverlay();
         }
@@ -2204,12 +2229,6 @@ public final class SystemServer {
         t.traceBegin("MakePackageManagerServiceReady");
         mPackageManagerService.systemReady();
         t.traceEnd();
-
-        if (mIncrementalServiceHandle != 0) {
-            t.traceBegin("MakeIncrementalServiceReady");
-            setIncrementalServiceSystemReady(mIncrementalServiceHandle);
-            t.traceEnd();
-        }
 
         t.traceBegin("MakeDisplayManagerServiceReady");
         try {
@@ -2480,6 +2499,12 @@ public final class SystemServer {
                 reportWtf("Notifying incident daemon running", e);
             }
             t.traceEnd();
+
+            if (mIncrementalServiceHandle != 0) {
+                t.traceBegin("MakeIncrementalServiceReady");
+                setIncrementalServiceSystemReady(mIncrementalServiceHandle);
+                t.traceEnd();
+            }
         }, t);
 
         t.traceEnd(); // startOtherServices
@@ -2558,4 +2583,29 @@ public final class SystemServer {
         context.startServiceAsUser(intent, UserHandle.SYSTEM);
         windowManager.onSystemUiStarted();
     }
+
+    /**
+     * Handle the serious errors during early system boot, used by {@link Log} via
+     * {@link com.android.internal.os.RuntimeInit}.
+     */
+    private static boolean handleEarlySystemWtf(final IBinder app, final String tag, boolean system,
+            final ApplicationErrorReport.ParcelableCrashInfo crashInfo, int immediateCallerPid) {
+        final String processName = "system_server";
+        final int myPid = myPid();
+
+        com.android.server.am.EventLogTags.writeAmWtf(UserHandle.getUserId(SYSTEM_UID), myPid,
+                processName, -1, tag, crashInfo.exceptionMessage);
+
+        FrameworkStatsLog.write(FrameworkStatsLog.WTF_OCCURRED, SYSTEM_UID, tag, processName,
+                myPid, ServerProtoEnums.SYSTEM_SERVER);
+
+        synchronized (SystemServer.class) {
+            if (sPendingWtfs == null) {
+                sPendingWtfs = new LinkedList<>();
+            }
+            sPendingWtfs.add(new Pair<>(tag, crashInfo));
+        }
+        return false;
+    }
+
 }

@@ -46,6 +46,7 @@ import "frameworks/base/core/proto/android/stats/dnsresolver/dns_resolver.proto"
 import "frameworks/base/core/proto/android/stats/devicepolicy/device_policy.proto";
 import "frameworks/base/core/proto/android/stats/devicepolicy/device_policy_enums.proto";
 import "frameworks/base/core/proto/android/stats/docsui/docsui_enums.proto";
+import "frameworks/base/core/proto/android/stats/accessibility/accessibility_enums.proto";
 import "frameworks/base/core/proto/android/stats/enums.proto";
 import "frameworks/base/core/proto/android/stats/intelligence/enums.proto";
 import "frameworks/base/core/proto/android/stats/launcher/launcher.proto";
@@ -384,12 +385,12 @@ message Atom {
         PerfettoUploaded perfetto_uploaded = 229 [(module) = "perfetto"];
         VmsClientConnectionStateChanged vms_client_connection_state_changed =
                 230 [(module) = "car"];
-        MediaProviderScanEvent media_provider_scan_event = 233 [(module) = "mediaprovider"];
-        MediaProviderDeletionEvent media_provider_deletion_event = 234 [(module) = "mediaprovider"];
-        MediaProviderPermissionEvent media_provider_permission_event =
+        MediaProviderScanOccurred media_provider_scan_occurred = 233 [(module) = "mediaprovider"];
+        MediaContentDeleted media_content_deleted = 234 [(module) = "mediaprovider"];
+        MediaProviderPermissionRequested media_provider_permission_requested =
             235 [(module) = "mediaprovider"];
-        MediaProviderSchemaChange media_provider_schema_change = 236 [(module) = "mediaprovider"];
-        MediaProviderIdleMaintenance media_provider_idle_maintenance =
+        MediaProviderSchemaChanged media_provider_schema_changed = 236 [(module) = "mediaprovider"];
+        MediaProviderIdleMaintenanceFinished media_provider_idle_maintenance_finished =
             237 [(module) = "mediaprovider"];
         RebootEscrowRecoveryReported reboot_escrow_recovery_reported = 238 [(module) = "framework"];
         BootTimeEventDuration boot_time_event_duration_reported = 239 [(module) = "framework"];
@@ -419,7 +420,18 @@ message Atom {
         SharesheetStarted sharesheet_started = 259 [(module) = "framework"];
         RankingSelected ranking_selected = 260 [(module) = "framework"];
         TvSettingsUIInteracted tvsettings_ui_interacted = 261 [(module) = "tv_settings"];
+        LauncherStaticLayout launcher_snapshot = 262 [(module) = "sysui"];
+        PackageInstallerV2Reported package_installer_v2_reported = 263 [(module) = "framework"];
+        UserLifecycleJourneyReported user_lifecycle_journey_reported = 264 [(module) = "framework"];
+        UserLifecycleEventOccurred user_lifecycle_event_occurred = 265 [(module) = "framework"];
+        AccessibilityShortcutReported accessibility_shortcut_reported =
+            266 [(module) = "framework"];
+        AccessibilityServiceReported accessibility_service_reported = 267 [(module) = "settings"];
+        DocsUIDragAndDropReported docs_ui_drag_and_drop_reported = 268 [(module) = "docsui"];
         SdkExtensionStatus sdk_extension_status = 354;
+
+        // StatsdStats tracks platform atoms with ids upto 500.
+        // Update StatsdStats::kMaxPushedAtomId when atom ids here approach that value.
     }
 
     // Pulled events will start at field 10000.
@@ -443,9 +455,9 @@ message Atom {
         BluetoothActivityInfo bluetooth_activity_info = 10007 [(module) = "framework"];
         ProcessMemoryState process_memory_state = 10013 [(module) = "framework"];
         SystemElapsedRealtime system_elapsed_realtime = 10014 [(module) = "framework"];
-        SystemUptime system_uptime = 10015 [(module) = "framework", (module) = "statsdtest"];
+        SystemUptime system_uptime = 10015 [(module) = "framework"];
         CpuActiveTime cpu_active_time = 10016 [(module) = "framework", (module) = "statsdtest"];
-        CpuClusterTime cpu_cluster_time = 10017 [(module) = "framework", (module) = "statsdtest"];
+        CpuClusterTime cpu_cluster_time = 10017 [(module) = "framework"];
         DiskSpace disk_space = 10018 [deprecated=true, (module) = "statsdtest"];
         RemainingBatteryCapacity remaining_battery_capacity = 10019 [(module) = "framework"];
         FullBatteryCapacity full_battery_capacity = 10020 [(module) = "framework"];
@@ -657,7 +669,8 @@ message ActivityManagerSleepStateChanged {
         ASLEEP = 1;
         AWAKE = 2;
     }
-    optional State state = 1 [(state_field_option).exclusive_state = true];
+    optional State state = 1
+            [(state_field_option).exclusive_state = true, (state_field_option).nested = false];
 }
 
 /**
@@ -1174,7 +1187,8 @@ message BatterySaverModeStateChanged {
         OFF = 0;
         ON = 1;
     }
-    optional State state = 1;
+    optional State state = 1
+            [(state_field_option).exclusive_state = true, (state_field_option).nested = false];
 }
 
 /**
@@ -1184,7 +1198,8 @@ message BatterySaverModeStateChanged {
  *   frameworks/base/core/java/com/android/internal/os/BatteryStatsImpl.java
  */
 message DeviceIdleModeStateChanged {
-    optional android.server.DeviceIdleModeEnum state = 1;
+    optional android.server.DeviceIdleModeEnum state = 1
+            [(state_field_option).exclusive_state = true, (state_field_option).nested = false];
 }
 
 
@@ -1195,7 +1210,8 @@ message DeviceIdleModeStateChanged {
  *   frameworks/base/core/java/com/android/internal/os/BatteryStatsImpl.java
  */
 message DeviceIdlingModeStateChanged {
-    optional android.server.DeviceIdleModeEnum state = 1;
+    optional android.server.DeviceIdleModeEnum state = 1
+            [(state_field_option).exclusive_state = true, (state_field_option).nested = false];
 }
 
 /**
@@ -1239,7 +1255,8 @@ message ChargingStateChanged {
  */
 message PluggedStateChanged {
     // Whether the device is plugged in, from frameworks/base/core/proto/android/os/enums.proto.
-    optional android.os.BatteryPluggedStateEnum state = 1;
+    optional android.os.BatteryPluggedStateEnum state = 1
+            [(state_field_option).exclusive_state = true, (state_field_option).nested = false];
 }
 
 /**
@@ -2703,8 +2720,9 @@ message UsbConnectorStateChanged {
         STATE_DISCONNECTED = 0;
         STATE_CONNECTED = 1;
     }
-    optional State state = 1;
-    optional string id = 2;
+    optional State state = 1
+            [(state_field_option).exclusive_state = true, (state_field_option).nested = false];
+    optional string id = 2 [(state_field_option).primary_field = true];
     // Last active session in ms.
     // 0 when the port is in connected state.
     optional int64 last_connect_duration_millis = 3;
@@ -2979,14 +2997,98 @@ message ExclusionRectStateChanged {
     optional int32 duration_millis = 7;
 }
 
+/**
+ * Logs when Launcher (HomeScreen) UI has changed or was interacted.
+ *
+ * Logged from:
+ *   packages/apps/Launcher3
+ */
 message LauncherUIChanged {
-    optional android.stats.launcher.LauncherAction action = 1;
+    optional android.stats.launcher.LauncherAction action = 1 [deprecated = true];
     optional android.stats.launcher.LauncherState src_state = 2;
     optional android.stats.launcher.LauncherState dst_state = 3;
-    optional android.stats.launcher.LauncherExtension extension = 4 [(log_mode) = MODE_BYTES];
-    optional bool is_swipe_up_enabled = 5;
+    optional android.stats.launcher.LauncherExtension extension = 4 [(log_mode) = MODE_BYTES, deprecated = true];
+    optional bool is_swipe_up_enabled = 5 [deprecated = true];
+
+    // The event id (e.g., app launch, drag and drop, long press)
+    optional int32 event_id = 6;
+    // The event's source or target id (e.g., icon, task, button)
+    optional int32 target_id = 7;
+    // If the target needs to be tracked, use this id field
+    optional int32 instance_id = 8;
+    optional int32 uid = 9 [(is_uid) = true];
+    optional string package_name = 10;
+    optional string component_name = 11;
+
+    // (x, y) coordinate and the index information of the target on the container
+    optional int32 grid_x = 12;
+    optional int32 grid_y = 13;
+    optional int32 page_id = 14;
+
+    // e.g., folder icon's (x, y) location and index information on the workspace
+    optional int32 grid_x_parent = 15;
+    optional int32 grid_y_parent = 16;
+    optional int32 page_id_parent = 17;
+
+    // e.g., SEARCHBOX_ALLAPPS, FOLDER_WORKSPACE
+    optional int32 hierarchy = 18;
+
+    optional bool is_work_profile = 19;
+
+    // Used to store the predicted rank of the target
+    optional int32 rank = 20;
+
+    // e.g., folderLabelState can be captured in the following two fields
+    optional int32 from_state = 21;
+    optional int32 to_state = 22;
+
+    // e.g., autofilled or suggested texts that are not user entered
+    optional string edittext = 23;
 }
 
+/**
+ * Used for snapshot of the HomeScreen UI elements
+ *
+ * Logged from:
+ *   packages/apps/Launcher3
+ */
+message LauncherStaticLayout {
+    // The event id (e.g., snapshot, drag and drop)
+    optional int32 event_id = 1;
+    // The event's source or target id (e.g., icon, shortcut, widget)
+    optional int32 target_id = 2;
+    // If the target needs to be tracked, use this id field
+    optional int32 instance_id = 3;
+    optional int32 uid = 4 [(is_uid) = true];
+    optional string package_name = 5;
+    optional string component_name = 6;
+
+    // (x, y) coordinate and the index information of the target on the container
+    optional int32 grid_x = 7;
+    optional int32 grid_y = 8;
+    optional int32 page_id = 9;
+
+    // e.g., folder icon's (x, y) location and index information on the workspace
+    optional int32 grid_x_parent = 10;
+    optional int32 grid_y_parent = 11;
+    optional int32 page_id_parent = 12;
+
+    // e.g., WORKSPACE, HOTSEAT, FOLDER_WORKSPACE, FOLDER_HOTSEAT
+    optional int32 hierarchy = 13;
+
+    optional bool is_work_profile = 14;
+
+    // e.g., PIN, WIDGET TRAY, APPS TRAY, PREDICTION
+    optional int32 origin = 15;
+}
+
+/**
+ * Logs when Wallpaper or ThemePicker UI has changed.
+ *
+ * Logged from:
+ *   packages/apps/ThemePicker
+ *   packages/apps/WallpaperPicker2
+ */
 message StyleUIChanged {
     optional android.stats.style.Action action = 1;
     optional int32 color_package_hash = 2;
@@ -3503,11 +3605,8 @@ message OverlayStateChanged {
         ENTERED = 1;
         EXITED = 2;
     }
-    optional State state = 4 [
-        (state_field_option).exclusive_state = true,
-        (state_field_option).nested = false,
-        (state_field_option).default_state_value = 2
-    ];
+    optional State state = 4
+            [(state_field_option).exclusive_state = true, (state_field_option).nested = false];
 }
 
 /**
@@ -3817,9 +3916,10 @@ message Notification {
     enum NotificationSection {
         SECTION_UNKNOWN = 0;
         SECTION_HEADS_UP = 1;
-        SECTION_PEOPLE = 2;
-        SECTION_ALERTING = 3;
-        SECTION_SILENT = 4;
+        SECTION_MEDIA_CONTROLS = 2;
+        SECTION_PEOPLE = 3;
+        SECTION_ALERTING = 4;
+        SECTION_SILENT = 5;
     }
     optional NotificationSection section = 6;
 }
@@ -4370,7 +4470,7 @@ message VmsClientConnectionStateChanged {
  * Logged from:
  *   packages/providers/MediaProvider/src/com/android/providers/media/scan/ModernMediaScanner.java
  */
-message MediaProviderScanEvent {
+message MediaProviderScanOccurred {
     enum Reason {
         // Scan triggered due to unknown reason
         UNKNOWN = 0;
@@ -4404,15 +4504,13 @@ message MediaProviderScanEvent {
  * Logged from:
  *   packages/providers/MediaProvider/src/com/android/providers/media/MediaProvider.java
  */
-message MediaProviderDeletionEvent {
+message MediaContentDeleted {
     // Volume type that this event pertains to
     optional android.stats.mediaprovider.VolumeType volume_type = 1;
-    // Device timestamp when this deletion event occurred
-    optional int64 timestamp_millis = 2;
-    // App that requested deletion
-    optional string package_name = 3;
+    // UID of app that requested deletion
+    optional int32 uid = 2 [(is_uid) = true];
     // Number of items that were deleted
-    optional int32 item_count = 4;
+    optional int32 item_count = 3;
 }
 
 /**
@@ -4421,7 +4519,7 @@ message MediaProviderDeletionEvent {
  * Logged from:
  *   packages/providers/MediaProvider/src/com/android/providers/media/PermissionActivity.java
  */
-message MediaProviderPermissionEvent {
+message MediaProviderPermissionRequested {
     enum Result {
         UNKNOWN = 0;
         USER_GRANTED = 1;
@@ -4433,14 +4531,12 @@ message MediaProviderPermissionEvent {
 
     // Volume type that this event pertains to
     optional android.stats.mediaprovider.VolumeType volume_type = 1;
-    // Device timestamp when this permission event occurred
-    optional int64 timestamp_millis = 2;
-    // App that requested permission
-    optional string package_name = 3;
+    // UID of app that requested permission
+    optional int32 uid = 2 [(is_uid) = true];
     // Number of items that were requested
-    optional int32 item_count = 4;
+    optional int32 item_count = 3;
     // Result of this request
-    optional Result result = 5;
+    optional Result result = 4;
 }
 
 /**
@@ -4449,7 +4545,7 @@ message MediaProviderPermissionEvent {
  * Logged from:
  *   packages/providers/MediaProvider/src/com/android/providers/media/DatabaseHelper.java
  */
-message MediaProviderSchemaChange {
+message MediaProviderSchemaChanged {
     // Volume type that this event pertains to
     optional android.stats.mediaprovider.VolumeType volume_type = 1;
     // Old database version code
@@ -4468,7 +4564,7 @@ message MediaProviderSchemaChange {
  * Logged from:
  *   packages/providers/MediaProvider/src/com/android/providers/media/MediaProvider.java
  */
-message MediaProviderIdleMaintenance {
+message MediaProviderIdleMaintenanceFinished {
     // Volume type that this event pertains to
     optional android.stats.mediaprovider.VolumeType volume_type = 1;
 
@@ -6384,6 +6480,15 @@ message DocsUIPickResultReported {
     optional android.stats.docsui.Root picked_from = 5;
     optional android.stats.docsui.MimeType mime_type = 6;
     optional int32 repeatedly_pick_times = 7;
+}
+
+/** Logs the drag and drop of files.
+
+ * Logged from:
+ *     package/app/DocumentsUI/src/com/android/documentsui/Metrics.java
+ */
+message DocsUIDragAndDropReported {
+    optional bool drag_initiated_from_docsui = 1;
 }
 
 /**
@@ -8909,7 +9014,7 @@ message AppFreezeChanged {
  * Each pull creates multiple atoms, one for each call. The sequence is randomized when pulled.
  *
  * Pulled from:
- *   frameworks/opt/telephony/src/java/com/android/internal/telephony/metrics/PersistPullers.java
+ *   frameworks/opt/telephony/src/java/com/android/internal/telephony/metrics/MetricsCollector.java
  */
 message VoiceCallSession {
     // Bearer (IMS or CS) when the call started.
@@ -8973,9 +9078,7 @@ message VoiceCallSession {
     // See https://source.android.com/devices/tech/config/carrierid.
     optional int32 carrier_id = 18;
 
-    // Whether an SRVCC has been completed successfully.
-    // SRVCC (CS fallback) should be recorded in the IMS call since there will be no more SRVCC
-    // events once the call is switched to CS.
+    // Whether an SRVCC has been completed successfully for this call.
     optional bool srvcc_completed = 19;
 
     // Number of SRVCC failures.
@@ -8984,7 +9087,8 @@ message VoiceCallSession {
     // Number of SRVCC cancellations.
     optional int64 srvcc_cancellation_count = 21;
 
-    // Whether the Real-Time Text (RTT) was ever used in the call.
+    // Whether the Real-Time Text (RTT) was ever used in the call (rather than whether RTT was
+    // enabled in the dialer's settings).
     optional bool rtt_enabled = 22;
 
     // Whether this was an emergency call.
@@ -9001,7 +9105,7 @@ message VoiceCallSession {
  * time. The atom will be skipped if not enough data is available.
  *
  * Pulled from:
- *   frameworks/opt/telephony/src/java/com/android/internal/telephony/metrics/PersistPullers.java
+ *   frameworks/opt/telephony/src/java/com/android/internal/telephony/metrics/MetricsCollector.java
  */
 message VoiceCallRatUsage {
     // Carrier ID (https://source.android.com/devices/tech/config/carrierid).
@@ -9022,7 +9126,7 @@ message VoiceCallRatUsage {
  * Pulls the number of active SIM slots and SIMs/eSIM profiles.
  *
  * Pulled from:
- *   frameworks/opt/telephony/src/java/com/android/internal/telephony/metrics/NonPersistPullers.java
+ *   frameworks/opt/telephony/src/java/com/android/internal/telephony/metrics/MetricsCollector.java
  */
 message SimSlotState {
     // Number of active SIM slots (both physical and eSIM profiles) in the device.
@@ -9043,7 +9147,7 @@ message SimSlotState {
  * This atom reports the capabilities of the device, rather than the network it has access to.
  *
  * Pulled from:
- *   frameworks/opt/telephony/src/java/com/android/internal/telephony/metrics/NonPersistPullers.java
+ *   frameworks/opt/telephony/src/java/com/android/internal/telephony/metrics/MetricsCollector.java
  */
 message SupportedRadioAccessFamily {
     // A bitmask of supported radio technologies.
@@ -9167,12 +9271,13 @@ message SharesheetStarted {
     optional bool is_workprofile = 7;
 
     enum SharesheetPreviewType {  // Constants from ChooserActivity.java
+        CONTENT_PREVIEW_TYPE_UNKNOWN = 0;  // Default for proto 2 / 3 compatibility.
         CONTENT_PREVIEW_IMAGE = 1;  // The preview shown in the sharesheet is an image.
         CONTENT_PREVIEW_FILE = 2;  // The preview shown in the sharesheet is a file.
         CONTENT_PREVIEW_TEXT = 3;  // The preview shown in the sharesheet is text.
     }
     // How the sharesheet preview is presented.
-    optional SharesheetPreviewType previewType = 8;
+    optional SharesheetPreviewType preview_type = 8;
 
     enum ResolverActivityIntent { // Intents handled by ResolverActivity.java
         INTENT_DEFAULT = 0;
@@ -9185,7 +9290,7 @@ message SharesheetStarted {
         INTENT_ACTION_MAIN = 7;
     }
     // The intent being processed (only SEND and SEND_MULTIPLE are system sharesheet)
-    optional ResolverActivityIntent intentType = 9;
+    optional ResolverActivityIntent intent_type = 9;
 }
 
 /**
@@ -9223,6 +9328,27 @@ message TvSettingsUIInteracted {
 }
 
 /**
+ * Logs information about a package installation using package installer V2 APIs.
+ *
+ * Logged from:
+ *      frameworks/base/services/core/java/com/android/server/pm/PackageInstallerSession.java
+ */
+message PackageInstallerV2Reported {
+    // Whether this installation uses Incremental File System
+    optional bool is_incremental = 1;
+    // Name of the package that is intended to be installed
+    optional string package_name = 2;
+    // The duration between when the install was requested to when the install has completed
+    optional int64 duration_millis = 3;
+    // Installation result in final integer, which are SystemApi's.
+    // Return_code 1 indicates success.
+    // For full list, see frameworks/base/core/java/android/content/pm/PackageManager.java
+    optional int32 return_code  = 4;
+    // Total size of the APKs installed for this package
+    optional int64 apks_size_bytes = 5;
+}
+
+/**
  * Logs settings provider values.
  *
  * Use DeviceConfig.getProperties to get a list Setting key, query the data from content provider,
@@ -9254,4 +9380,118 @@ message SettingSnapshot {
 
     // Android user index. 0 for primary user, 10, 11 for secondary or profile user
     optional int32 user_id = 7;
+}
+
+/**
+ * An event logged to indicate that a user journey is about to be performed. This atom includes
+ * relevant information about the users involved in the journey. A UserLifecycleEventOccurred event
+ * will immediately follow this atom which will describe the event(s) and its state.
+ *
+ * Logged from:
+ *   frameworks/base/services/core/java/com/android/server/am/UserController.java
+ *   frameworks/base/services/core/java/com/android/server/pm/UserManagerService.java
+ */
+message UserLifecycleJourneyReported {
+    // An identifier to track a chain of user lifecycle events occurring (referenced in the
+    // UserLifecycleEventOccurred atom)
+    optional int64 session_id = 1;
+
+    // Indicates what type of user journey this session is related to
+    enum Journey {
+        UNKNOWN = 0; // Undefined user lifecycle journey
+        USER_SWITCH_UI = 1; // A user switch journey where a UI is shown
+        USER_SWITCH_FG = 2; // A user switch journey without a UI shown
+        USER_START = 3; // A user start journey
+        USER_CREATE = 4; // A user creation journey
+    }
+    optional Journey journey = 2;
+    // Which user the journey is originating from - could be -1 for certain phases (eg USER_CREATE)
+    // This integer is a UserIdInt (eg 0 for the system user, 10 for secondary/guest)
+    optional int32 origin_user = 3;
+    // Which user the journey is targeting
+    // This integer is a UserIdInt (eg 0 for the system user, 10 for secondary/guest)
+    optional int32 target_user = 4;
+
+    // What is the user type of the target user
+    // These should be in sync with USER_TYPE_* flags defined in UserManager.java
+    enum UserType {
+        TYPE_UNKNOWN = 0;
+        FULL_SYSTEM = 1;
+        FULL_SECONDARY = 2;
+        FULL_GUEST = 3;
+        FULL_DEMO = 4;
+        FULL_RESTRICTED = 5;
+        PROFILE_MANAGED = 6;
+        SYSTEM_HEADLESS = 7;
+    }
+    optional UserType user_type = 5;
+    // What are the flags attached to the target user
+    optional int32 user_flags = 6;
+}
+
+/**
+ * An event logged when a specific user lifecycle event is performed. These events should be
+ * correlated with a UserLifecycleJourneyReported atom via the session_id.
+ * Note: journeys can span over multiple events, hence some events may share a single session id.
+ *
+ * Logged from:
+ *   frameworks/base/services/core/java/com/android/server/am/UserController.java
+ *   frameworks/base/services/core/java/com/android/server/pm/UserManagerService.java
+ */
+message UserLifecycleEventOccurred {
+    // An id which links back to user details (reported in the UserLifecycleJourneyReported atom)
+    optional int64 session_id = 1;
+    // The target user for this event (same as target_user in the UserLifecycleJourneyReported atom)
+    // This integer is a UserIdInt (eg 0 for the system user, 10 for secondary/guest)
+    optional int32 user_id = 2;
+
+    enum Event {
+        UNKNOWN = 0; // Indicates that the associated user journey timed-out or resulted in an error
+        SWITCH_USER = 1; // Indicates that this is a user switch event
+        START_USER = 2; // Indicates that this is a user start event
+        CREATE_USER = 3; // Indicates that this is a user create event
+    }
+    optional Event event = 3;
+
+    enum State {
+        NONE = 0; // Indicates the associated event has no start/end defined
+        BEGIN = 1;
+        FINISH = 2;
+    }
+    optional State state = 4; // Represents the state of an event (beginning/ending)
+}
+
+/**
+ * Logs when accessibility shortcut clicked.
+ *
+ * Logged from:
+ *   frameworks/base/services/accessibility/java/com/android/server/accessibility
+ */
+message AccessibilityShortcutReported {
+    // The accessibility feature(including installed a11y service, framework a11y feature,
+    // and installed a11y activity) package name that is assigned to the accessibility shortcut.
+    optional string package_name = 1;
+
+    // The definition of the accessibility shortcut.
+    // From frameworks/base/core/proto/android/stats/accessibility/accessibility_enums.proto.
+    optional android.stats.accessibility.ShortcutType shortcut_type = 2;
+
+    // The definition of the service status.
+    // From frameworks/base/core/proto/android/stats/accessibility/accessibility_enums.proto.
+    optional android.stats.accessibility.ServiceStatus service_status = 3;
+}
+
+/**
+ * Logs when accessibility service status changed.
+ *
+ * Logged from:
+ *   packages/apps/Settings/src/com/android/settings/accessibility
+ */
+message AccessibilityServiceReported {
+    // The accessibility service package name.
+    optional string package_name = 1;
+
+    // The definition of the service status.
+    // From frameworks/base/core/proto/android/stats/accessibility/accessibility_enums.proto.
+    optional android.stats.accessibility.ServiceStatus service_status = 2;
 }

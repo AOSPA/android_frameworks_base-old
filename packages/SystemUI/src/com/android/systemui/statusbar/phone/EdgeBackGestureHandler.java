@@ -34,8 +34,11 @@ import android.os.RemoteException;
 import android.os.SystemClock;
 import android.os.SystemProperties;
 import android.os.UserHandle;
+import android.provider.DeviceConfig;
 import android.provider.Settings;
+import android.util.DisplayMetrics;
 import android.util.Log;
+import android.util.TypedValue;
 import android.view.ISystemGestureExclusionListener;
 import android.view.InputChannel;
 import android.view.InputDevice;
@@ -50,14 +53,17 @@ import android.view.ViewConfiguration;
 import android.view.WindowManager;
 import android.view.WindowManagerGlobal;
 
+import com.android.internal.config.sysui.SystemUiDeviceConfigFlags;
 import com.android.internal.policy.GestureNavigationSettingsObserver;
 import com.android.systemui.Dependency;
 import com.android.systemui.R;
+import com.android.systemui.broadcast.BroadcastDispatcher;
 import com.android.systemui.bubbles.BubbleController;
 import com.android.systemui.model.SysUiState;
 import com.android.systemui.plugins.NavigationEdgeBackPlugin;
 import com.android.systemui.plugins.PluginListener;
 import com.android.systemui.recents.OverviewProxyService;
+import com.android.systemui.settings.CurrentUserTracker;
 import com.android.systemui.shared.plugins.PluginManager;
 import com.android.systemui.shared.system.ActivityManagerWrapper;
 import com.android.systemui.shared.system.QuickStepContract;
@@ -74,7 +80,7 @@ import java.util.concurrent.Executor;
 /**
  * Utility class to handle edge swipes for back gesture
  */
-public class EdgeBackGestureHandler implements DisplayListener,
+public class EdgeBackGestureHandler extends CurrentUserTracker implements DisplayListener,
         PluginListener<NavigationEdgeBackPlugin>, ProtoTraceable<SystemUiTraceProto> {
 
     private static final String TAG = "EdgeBackGestureHandler";
@@ -142,9 +148,9 @@ public class EdgeBackGestureHandler implements DisplayListener,
     // The right side edge width where touch down is allowed
     private int mEdgeWidthRight;
     // The bottom gesture area height
-    private int mBottomGestureHeight;
+    private float mBottomGestureHeight;
     // The slop to distinguish between horizontal and vertical motion
-    private final float mTouchSlop;
+    private float mTouchSlop;
     // Duration after which we consider the event as longpress.
     private final int mLongPressTimeout;
     private int mStartingQuickstepRotation = -1;
@@ -165,6 +171,7 @@ public class EdgeBackGestureHandler implements DisplayListener,
     private boolean mIsGesturalModeEnabled;
     private boolean mIsEnabled;
     private boolean mIsNavBarShownTransiently;
+    private boolean mIsBackGestureAllowed;
 
     private InputMonitor mInputMonitor;
     private InputEventReceiver mInputEventReceiver;
@@ -200,7 +207,7 @@ public class EdgeBackGestureHandler implements DisplayListener,
 
     public EdgeBackGestureHandler(Context context, OverviewProxyService overviewProxyService,
             SysUiState sysUiFlagContainer, PluginManager pluginManager) {
-        final Resources res = context.getResources();
+        super(Dependency.get(BroadcastDispatcher.class));
         mContext = context;
         mDisplayId = context.getDisplayId();
         mMainExecutor = context.getMainExecutor();
@@ -208,26 +215,45 @@ public class EdgeBackGestureHandler implements DisplayListener,
         mPluginManager = pluginManager;
         Dependency.get(ProtoTracer.class).add(this);
 
-        // Reduce the default touch slop to ensure that we can intercept the gesture
-        // before the app starts to react to it.
-        // TODO(b/130352502) Tune this value and extract into a constant
-        mTouchSlop = ViewConfiguration.get(context).getScaledTouchSlop() * 0.75f;
         mLongPressTimeout = Math.min(MAX_LONG_PRESS_TIMEOUT,
                 ViewConfiguration.getLongPressTimeout());
 
         mGestureNavigationSettingsObserver = new GestureNavigationSettingsObserver(
-                mContext.getMainThreadHandler(), mContext, () -> updateCurrentUserResources(res));
+                mContext.getMainThreadHandler(), mContext, this::updateCurrentUserResources);
 
-        updateCurrentUserResources(res);
+        updateCurrentUserResources();
         sysUiFlagContainer.addCallback(sysUiFlags -> mSysUiFlags = sysUiFlags);
     }
 
-    public void updateCurrentUserResources(Resources res) {
+    public void updateCurrentUserResources() {
+        Resources res = Dependency.get(NavigationModeController.class).getCurrentUserContext()
+                .getResources();
         mEdgeWidthLeft = mGestureNavigationSettingsObserver.getLeftSensitivity(res);
         mEdgeWidthRight = mGestureNavigationSettingsObserver.getRightSensitivity(res);
+        mIsBackGestureAllowed =
+                !mGestureNavigationSettingsObserver.areNavigationButtonForcedVisible();
 
-        mBottomGestureHeight = res.getDimensionPixelSize(
-                com.android.internal.R.dimen.navigation_bar_gesture_height);
+        final DisplayMetrics dm = res.getDisplayMetrics();
+        final float defaultGestureHeight = res.getDimension(
+                com.android.internal.R.dimen.navigation_bar_gesture_height) / dm.density;
+        final float gestureHeight = DeviceConfig.getFloat(DeviceConfig.NAMESPACE_SYSTEMUI,
+                SystemUiDeviceConfigFlags.BACK_GESTURE_BOTTOM_HEIGHT,
+                defaultGestureHeight);
+        mBottomGestureHeight = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, gestureHeight,
+                dm);
+
+        // Reduce the default touch slop to ensure that we can intercept the gesture
+        // before the app starts to react to it.
+        // TODO(b/130352502) Tune this value and extract into a constant
+        final float backGestureSlop = DeviceConfig.getFloat(DeviceConfig.NAMESPACE_SYSTEMUI,
+                        SystemUiDeviceConfigFlags.BACK_GESTURE_SLOP_MULTIPLIER, 0.75f);
+        mTouchSlop = ViewConfiguration.get(mContext).getScaledTouchSlop() * backGestureSlop;
+    }
+
+    @Override
+    public void onUserSwitched(int newUserId) {
+        updateIsEnabled();
+        updateCurrentUserResources();
     }
 
     /**
@@ -243,6 +269,7 @@ public class EdgeBackGestureHandler implements DisplayListener,
                 Settings.Global.getUriFor(FIXED_ROTATION_TRANSFORM_SETTING_NAME),
                 false /* notifyForDescendants */, mFixedRotationObserver, UserHandle.USER_ALL);
         updateIsEnabled();
+        startTracking();
     }
 
     /**
@@ -255,6 +282,7 @@ public class EdgeBackGestureHandler implements DisplayListener,
         }
         mContext.getContentResolver().unregisterContentObserver(mFixedRotationObserver);
         updateIsEnabled();
+        stopTracking();
     }
 
     private void setRotationCallbacks(boolean enable) {
@@ -269,10 +297,13 @@ public class EdgeBackGestureHandler implements DisplayListener,
         }
     }
 
-    public void onNavigationModeChanged(int mode, Context currentUserContext) {
+    /**
+     * @see NavigationModeController.ModeChangedListener#onNavigationModeChanged
+     */
+    public void onNavigationModeChanged(int mode) {
         mIsGesturalModeEnabled = QuickStepContract.isGesturalMode(mode);
         updateIsEnabled();
-        updateCurrentUserResources(currentUserContext.getResources());
+        updateCurrentUserResources();
     }
 
     public void onNavBarTransientStateChanged(boolean isTransient) {
@@ -312,7 +343,7 @@ public class EdgeBackGestureHandler implements DisplayListener,
                 WindowManagerGlobal.getWindowManagerService()
                         .unregisterSystemGestureExclusionListener(
                                 mGestureExclusionListener, mDisplayId);
-            } catch (RemoteException e) {
+            } catch (RemoteException | IllegalArgumentException e) {
                 Log.e(TAG, "Failed to unregister window manager callbacks", e);
             }
 
@@ -326,7 +357,7 @@ public class EdgeBackGestureHandler implements DisplayListener,
                 WindowManagerGlobal.getWindowManagerService()
                         .registerSystemGestureExclusionListener(
                                 mGestureExclusionListener, mDisplayId);
-            } catch (RemoteException e) {
+            } catch (RemoteException | IllegalArgumentException e) {
                 Log.e(TAG, "Failed to register window manager callbacks", e);
             }
 
@@ -361,6 +392,10 @@ public class EdgeBackGestureHandler implements DisplayListener,
         mEdgeBackPlugin.setBackCallback(mBackCallback);
         mEdgeBackPlugin.setLayoutParams(createLayoutParams());
         updateDisplaySize();
+    }
+
+    public boolean isHandlingGestures() {
+        return mIsEnabled && mIsBackGestureAllowed;
     }
 
     private WindowManager.LayoutParams createLayoutParams() {
@@ -469,9 +504,9 @@ public class EdgeBackGestureHandler implements DisplayListener,
             mIsOnLeftEdge = ev.getX() <= mEdgeWidthLeft + mLeftInset;
             mLogGesture = false;
             mInRejectedExclusion = false;
-            mAllowGesture = !QuickStepContract.isBackGestureDisabled(mSysUiFlags)
-                    && isWithinTouchRegion((int) ev.getX(), (int) ev.getY())
-                    && !mDisabledForQuickstep;
+            mAllowGesture = !mDisabledForQuickstep && mIsBackGestureAllowed
+                    && !QuickStepContract.isBackGestureDisabled(mSysUiFlags)
+                    && isWithinTouchRegion((int) ev.getX(), (int) ev.getY());
             if (mAllowGesture) {
                 mEdgeBackPlugin.setIsLeftPanel(mIsOnLeftEdge);
                 mEdgeBackPlugin.onMotionEvent(ev);
@@ -534,7 +569,8 @@ public class EdgeBackGestureHandler implements DisplayListener,
 
     private void updateDisabledForQuickstep() {
         int rotation = mContext.getResources().getConfiguration().windowConfiguration.getRotation();
-        mDisabledForQuickstep = mStartingQuickstepRotation != rotation;
+        mDisabledForQuickstep = mStartingQuickstepRotation > -1 &&
+                mStartingQuickstepRotation != rotation;
     }
 
     @Override
@@ -599,6 +635,7 @@ public class EdgeBackGestureHandler implements DisplayListener,
     public void dump(PrintWriter pw) {
         pw.println("EdgeBackGestureHandler:");
         pw.println("  mIsEnabled=" + mIsEnabled);
+        pw.println("  mIsBackGestureAllowed=" + mIsBackGestureAllowed);
         pw.println("  mAllowGesture=" + mAllowGesture);
         pw.println("  mDisabledForQuickstep=" + mDisabledForQuickstep);
         pw.println("  mInRejectedExclusion" + mInRejectedExclusion);

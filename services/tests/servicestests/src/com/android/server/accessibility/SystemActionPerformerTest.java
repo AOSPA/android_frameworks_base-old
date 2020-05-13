@@ -16,6 +16,8 @@
 
 package com.android.server.accessibility;
 
+import static android.view.WindowManager.ScreenshotSource.SCREENSHOT_ACCESSIBILITY_ACTIONS;
+
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.not;
@@ -65,7 +67,7 @@ import java.util.concurrent.TimeUnit;
  */
 public class SystemActionPerformerTest {
     private static final int LATCH_TIMEOUT_MS = 500;
-    private static final int LEGACY_SYSTEM_ACTION_COUNT = 9;
+    private static final int LEGACY_SYSTEM_ACTION_COUNT = 8;
     private static final int NEW_ACTION_ID = 20;
     private static final String LABEL_1 = "label1";
     private static final String LABEL_2 = "label2";
@@ -308,7 +310,7 @@ public class SystemActionPerformerTest {
                 AccessibilityService.GLOBAL_ACTION_TAKE_SCREENSHOT);
         verify(mMockScreenshotHelper).takeScreenshot(
                 eq(android.view.WindowManager.TAKE_SCREENSHOT_FULLSCREEN), anyBoolean(),
-                anyBoolean(), any(Handler.class), any());
+                anyBoolean(), eq(SCREENSHOT_ACCESSIBILITY_ACTIONS), any(Handler.class), any());
     }
 
     // PendingIntent is a final class and cannot be mocked. So we are using this

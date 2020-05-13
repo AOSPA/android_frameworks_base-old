@@ -72,6 +72,13 @@ public class TaskStackTests extends WindowTestsBase {
         stack.positionChildAt(WindowContainer.POSITION_TOP, task2, false /* includingParents */);
         assertEquals(stack.mChildren.get(0), task2);
         assertEquals(stack.mChildren.get(1), task1);
+
+        // Non-leaf task should be moved to top regardless of the user id.
+        createTaskInStack((ActivityStack) task2, 0 /* userId */);
+        createTaskInStack((ActivityStack) task2, 1 /* userId */);
+        stack.positionChildAt(WindowContainer.POSITION_TOP, task2, false /* includingParents */);
+        assertEquals(stack.mChildren.get(0), task1);
+        assertEquals(stack.mChildren.get(1), task2);
     }
 
     @Test
@@ -186,7 +193,7 @@ public class TaskStackTests extends WindowTestsBase {
         final ActivityStack stack = createTaskStackOnDisplay(mDisplayContent);
         final int stackOutset = 10;
         spyOn(stack);
-        doReturn(stackOutset).when(stack).getStackOutset();
+        doReturn(stackOutset).when(stack).getTaskOutset();
         doReturn(true).when(stack).inMultiWindowMode();
 
         // Mock the resolved override windowing mode to non-fullscreen
@@ -197,7 +204,7 @@ public class TaskStackTests extends WindowTestsBase {
                 .when(windowConfiguration).getWindowingMode();
 
         // Prevent adjust task dimensions
-        doNothing().when(stack).adjustForMinimalTaskDimensions(any(), any());
+        doNothing().when(stack).adjustForMinimalTaskDimensions(any(), any(), any());
 
         final Rect stackBounds = new Rect(200, 200, 800, 1000);
         // Update surface position and size by the given bounds.
@@ -207,5 +214,23 @@ public class TaskStackTests extends WindowTestsBase {
         assertEquals(stackBounds.height() + 2 * stackOutset, stack.getLastSurfaceSize().y);
         assertEquals(stackBounds.left - stackOutset, stack.getLastSurfacePosition().x);
         assertEquals(stackBounds.top - stackOutset, stack.getLastSurfacePosition().y);
+    }
+
+    @Test
+    public void testActivityAndTaskGetsProperType() {
+        final ActivityStack stack = createTaskStackOnDisplay(mDisplayContent);
+        final Task task1 = createTaskInStack(stack, 0 /* userId */);
+        ActivityRecord activity1 = WindowTestUtils.createTestActivityRecord(mDisplayContent);
+
+        // First activity should become standard
+        task1.addChild(activity1, 0);
+        assertEquals(WindowConfiguration.ACTIVITY_TYPE_STANDARD, activity1.getActivityType());
+        assertEquals(WindowConfiguration.ACTIVITY_TYPE_STANDARD, task1.getActivityType());
+
+        // Second activity should also become standard
+        ActivityRecord activity2 = WindowTestUtils.createTestActivityRecord(mDisplayContent);
+        task1.addChild(activity2, WindowContainer.POSITION_TOP);
+        assertEquals(WindowConfiguration.ACTIVITY_TYPE_STANDARD, activity2.getActivityType());
+        assertEquals(WindowConfiguration.ACTIVITY_TYPE_STANDARD, task1.getActivityType());
     }
 }

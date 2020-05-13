@@ -16,6 +16,7 @@
 
 package android.window;
 
+import android.annotation.BinderThread;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
@@ -23,6 +24,7 @@ import android.annotation.TestApi;
 import android.app.ActivityManager;
 import android.os.RemoteException;
 import android.util.Singleton;
+import android.view.SurfaceControl;
 
 import java.util.List;
 
@@ -39,7 +41,7 @@ public class TaskOrganizer extends WindowOrganizer {
      * and receive taskVanished callbacks in the process.
      */
     @RequiresPermission(android.Manifest.permission.MANAGE_ACTIVITY_STACKS)
-    public void registerOrganizer(int windowingMode) {
+    public final void registerOrganizer(int windowingMode) {
         try {
             getController().registerTaskOrganizer(mInterface, windowingMode);
         } catch (RemoteException e) {
@@ -49,7 +51,7 @@ public class TaskOrganizer extends WindowOrganizer {
 
     /** Unregisters a previously registered task organizer. */
     @RequiresPermission(android.Manifest.permission.MANAGE_ACTIVITY_STACKS)
-    public void unregisterOrganizer() {
+    public final void unregisterOrganizer() {
         try {
             getController().unregisterTaskOrganizer(mInterface);
         } catch (RemoteException e) {
@@ -57,13 +59,18 @@ public class TaskOrganizer extends WindowOrganizer {
         }
     }
 
-    public void onTaskAppeared(@NonNull ActivityManager.RunningTaskInfo taskInfo) {}
+    @BinderThread
+    public void onTaskAppeared(@NonNull ActivityManager.RunningTaskInfo taskInfo,
+            @NonNull SurfaceControl leash) {}
 
+    @BinderThread
     public void onTaskVanished(@NonNull ActivityManager.RunningTaskInfo taskInfo) {}
 
-    public void onTaskInfoChanged(@NonNull ActivityManager.RunningTaskInfo info) {}
+    @BinderThread
+    public void onTaskInfoChanged(@NonNull ActivityManager.RunningTaskInfo taskInfo) {}
 
-    public void onBackPressedOnTaskRoot(@NonNull ActivityManager.RunningTaskInfo info) {}
+    @BinderThread
+    public void onBackPressedOnTaskRoot(@NonNull ActivityManager.RunningTaskInfo taskInfo) {}
 
     /** Creates a persistent root task in WM for a particular windowing-mode. */
     @RequiresPermission(android.Manifest.permission.MANAGE_ACTIVITY_STACKS)
@@ -150,8 +157,8 @@ public class TaskOrganizer extends WindowOrganizer {
     private final ITaskOrganizer mInterface = new ITaskOrganizer.Stub() {
 
         @Override
-        public void onTaskAppeared(ActivityManager.RunningTaskInfo taskInfo) {
-            TaskOrganizer.this.onTaskAppeared(taskInfo);
+        public void onTaskAppeared(ActivityManager.RunningTaskInfo taskInfo, SurfaceControl leash) {
+            TaskOrganizer.this.onTaskAppeared(taskInfo, leash);
         }
 
         @Override

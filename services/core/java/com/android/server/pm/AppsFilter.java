@@ -27,12 +27,11 @@ import android.content.IntentFilter;
 import android.content.pm.PackageManager;
 import android.content.pm.PackageManagerInternal;
 import android.content.pm.PackageParser;
-import android.content.pm.parsing.component.ParsedActivity;
 import android.content.pm.parsing.component.ParsedComponent;
 import android.content.pm.parsing.component.ParsedInstrumentation;
 import android.content.pm.parsing.component.ParsedIntentInfo;
+import android.content.pm.parsing.component.ParsedMainComponent;
 import android.content.pm.parsing.component.ParsedProvider;
-import android.content.pm.parsing.component.ParsedService;
 import android.os.Binder;
 import android.os.Process;
 import android.os.Trace;
@@ -113,6 +112,7 @@ public class AppsFilter {
 
     private final OverlayReferenceMapper mOverlayReferenceMapper;
     private PackageParser.SigningDetails mSystemSigningDetails;
+    private Set<String> mProtectedBroadcasts = new ArraySet<>();
 
     AppsFilter(FeatureConfig featureConfig, String[] forceQueryableWhitelist,
             boolean systemAppsQueryable,
@@ -298,10 +298,10 @@ public class AppsFilter {
 
     /** Returns true if the querying package may query for the potential target package */
     private static boolean canQueryViaComponents(AndroidPackage querying,
-            AndroidPackage potentialTarget) {
+            AndroidPackage potentialTarget, Set<String> protectedBroadcasts) {
         if (!querying.getQueriesIntents().isEmpty()) {
             for (Intent intent : querying.getQueriesIntents()) {
-                if (matchesIntentFilters(intent, potentialTarget)) {
+                if (matchesPackage(intent, potentialTarget, protectedBroadcasts)) {
                     return true;
                 }
             }
@@ -353,47 +353,58 @@ public class AppsFilter {
         return false;
     }
 
-    private static boolean matchesIntentFilters(Intent intent, AndroidPackage potentialTarget) {
-        for (int s = ArrayUtils.size(potentialTarget.getServices()) - 1; s >= 0; s--) {
-            ParsedService service = potentialTarget.getServices().get(s);
-            if (!service.isExported()) {
-                continue;
-            }
-            if (matchesAnyFilter(intent, service)) {
-                return true;
-            }
+    private static boolean matchesPackage(Intent intent, AndroidPackage potentialTarget,
+            Set<String> protectedBroadcasts) {
+        if (matchesAnyComponents(
+                intent, potentialTarget.getServices(), null /*protectedBroadcasts*/)) {
+            return true;
         }
-        for (int a = ArrayUtils.size(potentialTarget.getActivities()) - 1; a >= 0; a--) {
-            ParsedActivity activity = potentialTarget.getActivities().get(a);
-            if (!activity.isExported()) {
-                continue;
-            }
-            if (matchesAnyFilter(intent, activity)) {
-                return true;
-            }
+        if (matchesAnyComponents(
+                intent, potentialTarget.getActivities(), null /*protectedBroadcasts*/)) {
+            return true;
         }
-        for (int r = ArrayUtils.size(potentialTarget.getReceivers()) - 1; r >= 0; r--) {
-            ParsedActivity receiver = potentialTarget.getReceivers().get(r);
-            if (!receiver.isExported()) {
+        if (matchesAnyComponents(intent, potentialTarget.getReceivers(), protectedBroadcasts)) {
+            return true;
+        }
+        if (matchesAnyComponents(
+                intent, potentialTarget.getProviders(), null /*protectedBroadcasts*/)) {
+            return true;
+        }
+        return false;
+    }
+
+    private static boolean matchesAnyComponents(Intent intent,
+            List<? extends ParsedMainComponent> components,
+            Set<String> protectedBroadcasts) {
+        for (int i = ArrayUtils.size(components) - 1; i >= 0; i--) {
+            ParsedMainComponent component = components.get(i);
+            if (!component.isExported()) {
                 continue;
             }
-            if (matchesAnyFilter(intent, receiver)) {
+            if (matchesAnyFilter(intent, component, protectedBroadcasts)) {
                 return true;
             }
         }
         return false;
     }
 
-    private static boolean matchesAnyFilter(Intent intent, ParsedComponent component) {
+    private static boolean matchesAnyFilter(Intent intent, ParsedComponent component,
+            Set<String> protectedBroadcasts) {
         List<ParsedIntentInfo> intents = component.getIntents();
         for (int i = ArrayUtils.size(intents) - 1; i >= 0; i--) {
             IntentFilter intentFilter = intents.get(i);
-            if (intentFilter.match(intent.getAction(), intent.getType(), intent.getScheme(),
-                    intent.getData(), intent.getCategories(), "AppsFilter", true) > 0) {
+            if (matchesIntentFilter(intent, intentFilter, protectedBroadcasts)) {
                 return true;
             }
         }
         return false;
+    }
+
+    private static boolean matchesIntentFilter(Intent intent, IntentFilter intentFilter,
+            @Nullable Set<String> protectedBroadcasts) {
+        return intentFilter.match(intent.getAction(), intent.getType(), intent.getScheme(),
+                intent.getData(), intent.getCategories(), "AppsFilter", true, protectedBroadcasts)
+                > 0;
     }
 
     /**
@@ -434,6 +445,12 @@ public class AppsFilter {
                 }
             }
         }
+
+        if (!newPkgSetting.pkg.getProtectedBroadcasts().isEmpty()) {
+            mProtectedBroadcasts.addAll(newPkgSetting.pkg.getProtectedBroadcasts());
+            recomputeComponentVisibility(existingSettings, newPkgSetting.pkg.getPackageName());
+        }
+
         Trace.traceBegin(TRACE_TAG_PACKAGE_MANAGER, "filter.addPackage");
         try {
             final AndroidPackage newPkg = newPkgSetting.pkg;
@@ -464,7 +481,7 @@ public class AppsFilter {
                 final AndroidPackage existingPkg = existingSetting.pkg;
                 // let's evaluate the ability of already added packages to see this new package
                 if (!newIsForceQueryable) {
-                    if (canQueryViaComponents(existingPkg, newPkg)) {
+                    if (canQueryViaComponents(existingPkg, newPkg, mProtectedBroadcasts)) {
                         mQueriesViaComponent.add(existingSetting.appId, newPkgSetting.appId);
                     }
                     if (canQueryViaPackage(existingPkg, newPkg)
@@ -474,7 +491,7 @@ public class AppsFilter {
                 }
                 // now we'll evaluate our new package's ability to see existing packages
                 if (!mForceQueryable.contains(existingSetting.appId)) {
-                    if (canQueryViaComponents(newPkg, existingPkg)) {
+                    if (canQueryViaComponents(newPkg, existingPkg, mProtectedBroadcasts)) {
                         mQueriesViaComponent.add(newPkgSetting.appId, existingSetting.appId);
                     }
                     if (canQueryViaPackage(newPkg, existingPkg)
@@ -511,10 +528,47 @@ public class AppsFilter {
                 && pkgSetting.signatures.mSigningDetails.signaturesMatchExactly(sysSigningDetails);
     }
 
-    private static void sort(int[] uids, int nextUidIndex) {
-        Arrays.sort(uids, 0, nextUidIndex);
+    private ArraySet<String> collectProtectedBroadcasts(
+            ArrayMap<String, PackageSetting> existingSettings, @Nullable String excludePackage) {
+        ArraySet<String> ret = new ArraySet<>();
+        for (int i = existingSettings.size() - 1; i >= 0; i--) {
+            PackageSetting setting = existingSettings.valueAt(i);
+            if (setting.pkg == null || setting.pkg.getPackageName().equals(excludePackage)) {
+                continue;
+            }
+            final List<String> protectedBroadcasts = setting.pkg.getProtectedBroadcasts();
+            if (!protectedBroadcasts.isEmpty()) {
+                ret.addAll(protectedBroadcasts);
+            }
+        }
+        return ret;
     }
 
+    private void recomputeComponentVisibility(ArrayMap<String, PackageSetting> existingSettings,
+            @Nullable String excludePackage) {
+        mQueriesViaComponent.clear();
+        for (int i = existingSettings.size() - 1; i >= 0; i--) {
+            PackageSetting setting = existingSettings.valueAt(i);
+            if (setting.pkg == null
+                    || setting.pkg.getPackageName().equals(excludePackage)
+                    || mForceQueryable.contains(setting.appId)) {
+                continue;
+            }
+            for (int j = existingSettings.size() - 1; j >= 0; j--) {
+                if (i == j) {
+                    continue;
+                }
+                final PackageSetting otherSetting = existingSettings.valueAt(j);
+                if (otherSetting.pkg == null
+                        || otherSetting.pkg.getPackageName().equals(excludePackage)) {
+                    continue;
+                }
+                if (canQueryViaComponents(setting.pkg, otherSetting.pkg, mProtectedBroadcasts)) {
+                    mQueriesViaComponent.add(setting.appId, otherSetting.appId);
+                }
+            }
+        }
+    }
     /**
      * Fetches all app Ids that a given setting is currently visible to, per provided user. This
      * only includes UIDs >= {@link Process#FIRST_APPLICATION_UID} as all other UIDs can already see
@@ -559,7 +613,7 @@ public class AppsFilter {
                     }
                     final int insert = ~loc;
                     System.arraycopy(appIds, insert, buffer, 0, whitelistSize - insert);
-                    appIds[insert] = existingUid;
+                    appIds[insert] = existingAppId;
                     System.arraycopy(buffer, 0, appIds, insert + 1, whitelistSize - insert);
                     whitelistSize++;
                 }
@@ -606,6 +660,14 @@ public class AppsFilter {
                 }
                 addPackage(setting.sharedUser.packages.valueAt(i), existingSettings);
             }
+        }
+
+        if (!setting.pkg.getProtectedBroadcasts().isEmpty()) {
+            final String removingPackageName = setting.pkg.getPackageName();
+            mProtectedBroadcasts.clear();
+            mProtectedBroadcasts.addAll(
+                    collectProtectedBroadcasts(existingSettings, removingPackageName));
+            recomputeComponentVisibility(existingSettings, removingPackageName);
         }
 
         mOverlayReferenceMapper.removePkg(setting.name);

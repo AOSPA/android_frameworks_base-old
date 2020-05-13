@@ -129,6 +129,7 @@ import com.android.internal.content.PackageHelper;
 import com.android.internal.messages.nano.SystemMessageProto;
 import com.android.internal.os.SomeArgs;
 import com.android.internal.util.ArrayUtils;
+import com.android.internal.util.FrameworkStatsLog;
 import com.android.internal.util.IndentingPrintWriter;
 import com.android.server.LocalServices;
 import com.android.server.pm.Installer.InstallerException;
@@ -150,7 +151,6 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
@@ -164,6 +164,7 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
     private static final int MSG_STREAM_VALIDATE_AND_COMMIT = 1;
     private static final int MSG_INSTALL = 2;
     private static final int MSG_ON_PACKAGE_INSTALLED = 3;
+    private static final int MSG_SESSION_VERIFICATION_FAILURE = 4;
 
     /** XML constants used for persisting a session */
     static final String TAG_SESSION = "session";
@@ -456,6 +457,11 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
                             isInstallerDeviceOwnerOrAffiliatedProfileOwnerLocked(), userId,
                             packageName, returnCode, message, extras);
 
+                    break;
+                case MSG_SESSION_VERIFICATION_FAILURE:
+                    final int error = msg.arg1;
+                    final String detailMessage = (String) msg.obj;
+                    onSessionVerificationFailure(error, detailMessage);
                     break;
             }
 
@@ -1136,21 +1142,52 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
     }
 
     private void handleStreamValidateAndCommit() {
-        boolean success = streamValidateAndCommit();
+        PackageManagerException unrecoverableFailure = null;
+        // This will track whether the session and any children were validated and are ready to
+        // progress to the next phase of install
+        boolean allSessionsReady = false;
+        try {
+            allSessionsReady = streamValidateAndCommit();
+        } catch (PackageManagerException e) {
+            unrecoverableFailure = e;
+        }
 
         if (isMultiPackage()) {
-            for (int i = mChildSessionIds.size() - 1; i >= 0; --i) {
+            int childCount = mChildSessionIds.size();
+
+            // This will contain all child sessions that do not encounter an unrecoverable failure
+            ArrayList<PackageInstallerSession> nonFailingSessions = new ArrayList<>(childCount);
+
+            for (int i = childCount - 1; i >= 0; --i) {
                 final int childSessionId = mChildSessionIds.keyAt(i);
                 // commit all children, regardless if any of them fail; we'll throw/return
                 // as appropriate once all children have been processed
-                if (!mSessionProvider.getSession(childSessionId)
-                        .streamValidateAndCommit()) {
-                    success = false;
+                try {
+                    PackageInstallerSession session = mSessionProvider.getSession(childSessionId);
+                    if (!session.streamValidateAndCommit()) {
+                        allSessionsReady = false;
+                    }
+                    nonFailingSessions.add(session);
+                } catch (PackageManagerException e) {
+                    allSessionsReady = false;
+                    if (unrecoverableFailure == null) {
+                        unrecoverableFailure = e;
+                    }
+                }
+            }
+            // If we encountered any unrecoverable failures, destroy all
+            // other impacted sessions besides the parent; that will be cleaned up by the
+            // ChildStatusIntentReceiver.
+            if (unrecoverableFailure != null) {
+                // fail other child sessions that did not already fail
+                for (int i = nonFailingSessions.size() - 1; i >= 0; --i) {
+                    PackageInstallerSession session = nonFailingSessions.get(i);
+                    session.onSessionVerificationFailure(unrecoverableFailure);
                 }
             }
         }
 
-        if (!success) {
+        if (!allSessionsReady) {
             return;
         }
 
@@ -1230,14 +1267,12 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
                         mStatusReceiver.sendIntent(mContext, 0, intent, null, null);
                     } catch (IntentSender.SendIntentException ignore) {
                     }
-                } else {
+                } else { // failure, let's forward and clean up this session.
                     intent.putExtra(PackageInstaller.EXTRA_SESSION_ID,
                             PackageInstallerSession.this.sessionId);
                     mChildSessionsRemaining.clear(); // we're done. Don't send any more.
-                    try {
-                        mStatusReceiver.sendIntent(mContext, 0, intent, null, null);
-                    } catch (IntentSender.SendIntentException ignore) {
-                    }
+                    onSessionVerificationFailure(status,
+                            intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE));
                 }
             });
         }
@@ -1343,7 +1378,13 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
         return true;
     }
 
-    private boolean streamValidateAndCommit() {
+    /**
+     * Returns true if the session is successfully validated and committed. Returns false if the
+     * dataloader could not be prepared. This can be called multiple times so long as no
+     * exception is thrown.
+     * @throws PackageManagerException on an unrecoverable error.
+     */
+    private boolean streamValidateAndCommit() throws PackageManagerException {
         synchronized (mLock) {
             if (mCommitted) {
                 return true;
@@ -1363,7 +1404,6 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
 
             mCommitted = true;
         }
-
         return true;
     }
 
@@ -1463,10 +1503,11 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
      * Prepare DataLoader and stream content for DataLoader sessions.
      * Validate the contents of all session.
      *
-     * @return false if validation failed.
+     * @return false if the data loader could not be prepared.
+     * @throws PackageManagerException when an unrecoverable exception is encountered
      */
     @GuardedBy("mLock")
-    private boolean streamAndValidateLocked() {
+    private boolean streamAndValidateLocked() throws PackageManagerException {
         try {
             // Read transfers from the original owner stay open, but as the session's data cannot
             // be modified anymore, there is no leak of information. For staged sessions, further
@@ -1486,28 +1527,33 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
             if (params.isStaged) {
                 mStagingManager.checkNonOverlappingWithStagedSessions(this);
             }
-
             return true;
         } catch (PackageManagerException e) {
-            onSessionVerificationFailure(e);
+            throw onSessionVerificationFailure(e);
         } catch (Throwable e) {
             // Convert all exceptions into package manager exceptions as only those are handled
             // in the code above.
-            onSessionVerificationFailure(new PackageManagerException(e));
+            throw onSessionVerificationFailure(new PackageManagerException(e));
         }
-        return false;
     }
 
     private PackageManagerException onSessionVerificationFailure(PackageManagerException e) {
-        // Session is sealed but could not be verified, we need to destroy it.
-        destroyInternal();
-        // Dispatch message to remove session from PackageInstallerService.
-        dispatchSessionFinished(e.error, ExceptionUtils.getCompleteMessage(e), null);
-
+        onSessionVerificationFailure(e.error, ExceptionUtils.getCompleteMessage(e));
         return e;
     }
 
+    private void onSessionVerificationFailure(int error, String detailMessage) {
+        // Session is sealed but could not be verified, we need to destroy it.
+        destroyInternal();
+        // Dispatch message to remove session from PackageInstallerService.
+        dispatchSessionFinished(error, detailMessage, null);
+    }
+
     private void onDataLoaderUnrecoverable() {
+        if (TextUtils.isEmpty(mPackageName)) {
+            // The package has not been installed.
+            return;
+        }
         final PackageManagerService packageManagerService = mPm;
         final String packageName = mPackageName;
         mHandler.post(() -> {
@@ -1821,6 +1867,46 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
         }
     }
 
+    private void logDataLoaderInstallationSession(int returnCode) {
+        // Skip logging the side-loaded app installations, as those are private and aren't reported
+        // anywhere; app stores already have a record of the installation and that's why reporting
+        // it here is fine
+        final String packageNameToLog =
+                (params.installFlags & PackageManager.INSTALL_FROM_ADB) == 0 ? mPackageName : "";
+        final long currentTimestamp = System.currentTimeMillis();
+        FrameworkStatsLog.write(FrameworkStatsLog.PACKAGE_INSTALLER_V2_REPORTED,
+                isIncrementalInstallation(),
+                packageNameToLog,
+                currentTimestamp - createdMillis,
+                returnCode,
+                getApksSize());
+    }
+
+    private long getApksSize() {
+        final PackageSetting ps = mPm.getPackageSetting(mPackageName);
+        if (ps == null) {
+            return 0;
+        }
+        final File apkDirOrPath = ps.codePath;
+        if (apkDirOrPath == null) {
+            return 0;
+        }
+        if (apkDirOrPath.isFile() && apkDirOrPath.getName().toLowerCase().endsWith(".apk")) {
+            return apkDirOrPath.length();
+        }
+        if (!apkDirOrPath.isDirectory()) {
+            return 0;
+        }
+        final File[] files = apkDirOrPath.listFiles();
+        long apksSize = 0;
+        for (int i = 0; i < files.length; i++) {
+            if (files[i].getName().toLowerCase().endsWith(".apk")) {
+                apksSize += files[i].length();
+            }
+        }
+        return apksSize;
+    }
+
     /**
      * Returns true if the session should attempt to inherit any existing native libraries already
      * extracted at the current install location. This is necessary to prevent double loading of
@@ -2109,11 +2195,13 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
                             continue;
                         }
 
-                        mResolvedInstructionSets.add(archSubDir.getName());
-                        List<File> oatFiles = Arrays.asList(archSubDir.listFiles());
-                        if (!oatFiles.isEmpty()) {
-                            mResolvedInheritedFiles.addAll(oatFiles);
+                        File[] files = archSubDir.listFiles();
+                        if (files == null || files.length == 0) {
+                            continue;
                         }
+
+                        mResolvedInstructionSets.add(archSubDir.getName());
+                        mResolvedInheritedFiles.addAll(Arrays.asList(files));
                     }
                 }
             }
@@ -2127,7 +2215,8 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
                     if (!libDir.exists() || !libDir.isDirectory()) {
                         continue;
                     }
-                    final List<File> libDirsToInherit = new LinkedList<>();
+                    final List<String> libDirsToInherit = new ArrayList<>();
+                    final List<File> libFilesToInherit = new ArrayList<>();
                     for (File archSubDir : libDir.listFiles()) {
                         if (!archSubDir.isDirectory()) {
                             continue;
@@ -2139,14 +2228,24 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
                             Slog.e(TAG, "Skipping linking of native library directory!", e);
                             // shouldn't be possible, but let's avoid inheriting these to be safe
                             libDirsToInherit.clear();
+                            libFilesToInherit.clear();
                             break;
                         }
-                        if (!mResolvedNativeLibPaths.contains(relLibPath)) {
-                            mResolvedNativeLibPaths.add(relLibPath);
+
+                        File[] files = archSubDir.listFiles();
+                        if (files == null || files.length == 0) {
+                            continue;
                         }
-                        libDirsToInherit.addAll(Arrays.asList(archSubDir.listFiles()));
+
+                        libDirsToInherit.add(relLibPath);
+                        libFilesToInherit.addAll(Arrays.asList(files));
                     }
-                    mResolvedInheritedFiles.addAll(libDirsToInherit);
+                    for (String subDir : libDirsToInherit) {
+                        if (!mResolvedNativeLibPaths.contains(subDir)) {
+                            mResolvedNativeLibPaths.add(subDir);
+                        }
+                    }
+                    mResolvedInheritedFiles.addAll(libFilesToInherit);
                 }
             }
         }
@@ -2603,20 +2702,23 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
                     "Failed to find data loader manager service");
         }
 
+        final DataLoaderParams params = this.params.dataLoaderParams;
         final boolean manualStartAndDestroy = !isIncrementalInstallation();
-        IDataLoaderStatusListener listener = new IDataLoaderStatusListener.Stub() {
+        final IDataLoaderStatusListener listener = new IDataLoaderStatusListener.Stub() {
             @Override
             public void onStatusChanged(int dataLoaderId, int status) {
                 switch (status) {
                     case IDataLoaderStatusListener.DATA_LOADER_STOPPED:
                     case IDataLoaderStatusListener.DATA_LOADER_DESTROYED:
                         return;
-                    case IDataLoaderStatusListener.DATA_LOADER_UNRECOVERABLE:
-                        onDataLoaderUnrecoverable();
-                        return;
                 }
 
                 if (mDestroyed || mDataLoaderFinished) {
+                    switch (status) {
+                        case IDataLoaderStatusListener.DATA_LOADER_UNRECOVERABLE:
+                            onDataLoaderUnrecoverable();
+                            return;
+                    }
                     return;
                 }
 
@@ -2624,13 +2726,21 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
                     IDataLoader dataLoader = dataLoaderManager.getDataLoader(dataLoaderId);
                     if (dataLoader == null) {
                         mDataLoaderFinished = true;
-                        onSessionVerificationFailure(
-                                new PackageManagerException(INSTALL_FAILED_MEDIA_UNAVAILABLE,
-                                        "Failure to obtain data loader"));
+                        dispatchSessionVerificationFailure(INSTALL_FAILED_MEDIA_UNAVAILABLE,
+                                "Failure to obtain data loader");
                         return;
                     }
 
                     switch (status) {
+                        case IDataLoaderStatusListener.DATA_LOADER_BOUND: {
+                            if (manualStartAndDestroy) {
+                                FileSystemControlParcel control = new FileSystemControlParcel();
+                                control.callback = new FileSystemConnector(addedFiles);
+                                dataLoader.create(dataLoaderId, params.getData(), control, this);
+                            }
+
+                            break;
+                        }
                         case IDataLoaderStatusListener.DATA_LOADER_CREATED: {
                             if (manualStartAndDestroy) {
                                 // IncrementalFileStorages will call start after all files are
@@ -2662,28 +2772,38 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
                         }
                         case IDataLoaderStatusListener.DATA_LOADER_IMAGE_NOT_READY: {
                             mDataLoaderFinished = true;
-                            onSessionVerificationFailure(
-                                    new PackageManagerException(INSTALL_FAILED_MEDIA_UNAVAILABLE,
-                                            "Failed to prepare image."));
+                            dispatchSessionVerificationFailure(INSTALL_FAILED_MEDIA_UNAVAILABLE,
+                                    "Failed to prepare image.");
                             if (manualStartAndDestroy) {
                                 dataLoader.destroy(dataLoaderId);
                             }
                             break;
                         }
+                        case IDataLoaderStatusListener.DATA_LOADER_UNAVAILABLE: {
+                            // Don't fail or commit the session. Allow caller to commit again.
+                            sendPendingStreaming(mContext, mRemoteStatusReceiver, sessionId,
+                                    "DataLoader unavailable");
+                            break;
+                        }
+                        case IDataLoaderStatusListener.DATA_LOADER_UNRECOVERABLE:
+                            mDataLoaderFinished = true;
+                            dispatchSessionVerificationFailure(INSTALL_FAILED_MEDIA_UNAVAILABLE,
+                                    "DataLoader reported unrecoverable failure.");
+                            break;
                     }
                 } catch (RemoteException e) {
                     // In case of streaming failure we don't want to fail or commit the session.
                     // Just return from this method and allow caller to commit again.
                     sendPendingStreaming(mContext, mRemoteStatusReceiver, sessionId,
-                            new StreamingException(e));
+                            e.getMessage());
                 }
             }
         };
 
         if (!manualStartAndDestroy) {
             try {
-                mIncrementalFileStorages = IncrementalFileStorages.initialize(mContext,
-                        stageDir, params.dataLoaderParams, listener, addedFiles);
+                mIncrementalFileStorages = IncrementalFileStorages.initialize(mContext, stageDir,
+                        params, listener, addedFiles);
                 return false;
             } catch (IOException e) {
                 throw new PackageManagerException(INSTALL_FAILED_MEDIA_UNAVAILABLE, e.getMessage(),
@@ -2691,18 +2811,18 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
             }
         }
 
-        final FileSystemConnector connector = new FileSystemConnector(addedFiles);
-        final FileSystemControlParcel control = new FileSystemControlParcel();
-        control.callback = connector;
-
-        final DataLoaderParams params = this.params.dataLoaderParams;
-        if (!dataLoaderManager.initializeDataLoader(
-                sessionId, params.getData(), control, listener)) {
+        if (!dataLoaderManager.bindToDataLoader(
+                sessionId, params.getData(), listener)) {
             throw new PackageManagerException(INSTALL_FAILED_MEDIA_UNAVAILABLE,
                     "Failed to initialize data loader");
         }
 
         return false;
+    }
+
+    private void dispatchSessionVerificationFailure(int error, String detailMessage) {
+        mHandler.obtainMessage(MSG_SESSION_VERIFICATION_FAILURE, error, -1,
+                detailMessage).sendToTarget();
     }
 
     @Override
@@ -2813,6 +2933,9 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
         }
 
         mCallback.onSessionFinished(this, success);
+        if (isDataLoaderInstallation()) {
+            logDataLoaderInstallationSession(returnCode);
+        }
     }
 
     /** {@hide} */
@@ -3030,13 +3153,13 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
     }
 
     private static void sendPendingStreaming(Context context, IntentSender target, int sessionId,
-            Throwable cause) {
+            @Nullable String cause) {
         final Intent intent = new Intent();
         intent.putExtra(PackageInstaller.EXTRA_SESSION_ID, sessionId);
         intent.putExtra(PackageInstaller.EXTRA_STATUS, PackageInstaller.STATUS_PENDING_STREAMING);
-        if (cause != null && !TextUtils.isEmpty(cause.getMessage())) {
+        if (!TextUtils.isEmpty(cause)) {
             intent.putExtra(PackageInstaller.EXTRA_STATUS_MESSAGE,
-                    "Staging Image Not Ready [" + cause.getMessage() + "]");
+                    "Staging Image Not Ready [" + cause + "]");
         } else {
             intent.putExtra(PackageInstaller.EXTRA_STATUS_MESSAGE, "Staging Image Not Ready");
         }

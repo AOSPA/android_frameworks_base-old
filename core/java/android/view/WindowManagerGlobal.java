@@ -102,6 +102,14 @@ public final class WindowManagerGlobal {
     public static final int RELAYOUT_RES_CONSUME_ALWAYS_SYSTEM_BARS = 0x40;
 
     /**
+     * This flag indicates the client should not directly submit it's next frame,
+     * but instead should pass it in the postDrawTransaction of
+     * {@link WindowManagerService#finishDrawing}. This is used by the WM
+     * BLASTSyncEngine to synchronize rendering of multiple windows.
+     */
+    public static final int RELAYOUT_RES_BLAST_SYNC = 0x80;
+
+    /**
      * Flag for relayout: the client will be later giving
      * internal insets; as a result, the window will not impact other window
      * layouts until the insets are given.
@@ -116,8 +124,10 @@ public final class WindowManagerGlobal {
      */
     public static final int RELAYOUT_DEFER_SURFACE_DESTROY = 0x2;
 
+    public static final int ADD_FLAG_IN_TOUCH_MODE = 0x1;
     public static final int ADD_FLAG_APP_VISIBLE = 0x2;
-    public static final int ADD_FLAG_IN_TOUCH_MODE = RELAYOUT_RES_IN_TOUCH_MODE;
+    public static final int ADD_FLAG_USE_TRIPLE_BUFFERING = 0x4;
+    public static final int ADD_FLAG_USE_BLAST = 0x8;
 
     /**
      * Like {@link #RELAYOUT_RES_CONSUME_ALWAYS_SYSTEM_BARS}, but as a "hint" when adding the
@@ -136,6 +146,8 @@ public final class WindowManagerGlobal {
     public static final int ADD_PERMISSION_DENIED = -8;
     public static final int ADD_INVALID_DISPLAY = -9;
     public static final int ADD_INVALID_TYPE = -10;
+    public static final int ADD_INVALID_USER = -11;
+    public static final int ADD_TOO_MANY_TOKENS = -12;
 
     @UnsupportedAppUsage
     private static WindowManagerGlobal sDefaultWindowManager;
@@ -317,7 +329,7 @@ public final class WindowManagerGlobal {
     }
 
     public void addView(View view, ViewGroup.LayoutParams params,
-            Display display, Window parentWindow) {
+            Display display, Window parentWindow, int userId) {
         if (view == null) {
             throw new IllegalArgumentException("view must not be null");
         }
@@ -394,7 +406,7 @@ public final class WindowManagerGlobal {
 
             // do this last because it fires off messages to start doing things
             try {
-                root.setView(view, wparams, panelParentView);
+                root.setView(view, wparams, panelParentView, userId);
             } catch (RuntimeException e) {
                 // BadTokenException or InvalidDisplayException, clean up.
                 if (index >= 0) {

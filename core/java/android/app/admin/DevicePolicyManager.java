@@ -3666,6 +3666,28 @@ public class DevicePolicyManager {
     }
 
     /**
+     * Returns whether the given user's credential will be sufficient for all password policy
+     * requirement, once the user's profile has switched to unified challenge.
+     *
+     * <p>This is different from {@link #isActivePasswordSufficient()} since once the profile
+     * switches to unified challenge, policies set explicitly on the profile will start to affect
+     * the parent user.
+     * @param userHandle the user whose password requirement will be checked
+     * @param profileUser the profile user whose lockscreen challenge will be unified.
+     * @hide
+     */
+    public boolean isPasswordSufficientAfterProfileUnification(int userHandle, int profileUser) {
+        if (mService != null) {
+            try {
+                return mService.isPasswordSufficientAfterProfileUnification(userHandle,
+                        profileUser);
+            } catch (RemoteException e) {
+                throw e.rethrowFromSystemServer();
+            }
+        }
+        return false;
+    }
+    /**
      * Retrieve the number of times the user has failed at entering a password since that last
      * successful password entry.
      * <p>
@@ -8606,7 +8628,7 @@ public class DevicePolicyManager {
      * <p>
      * This method may be called on the {@code DevicePolicyManager} instance returned from
      * {@link #getParentProfileInstance(ComponentName)}. Note that only a profile owner on
-     * an organization-deviced can affect account types on the parent profile instance.
+     * an organization-owned device can affect account types on the parent profile instance.
      *
      * @return a list of account types for which account management has been disabled.
      *
@@ -10229,6 +10251,9 @@ public class DevicePolicyManager {
      * <p>
      * The confirm credentials screen can be created using
      * {@link android.app.KeyguardManager#createConfirmDeviceCredentialIntent}.
+     * <p>
+     * Starting from Android R, the organization color will no longer be used as the background
+     * color of the confirm credentials screen.
      *
      * @param admin Which {@link DeviceAdminReceiver} this request is associated with.
      * @param color The 24bit (0xRRGGBB) representation of the color to be used.
@@ -10925,6 +10950,22 @@ public class DevicePolicyManager {
     public List<String> getOwnerInstalledCaCerts(@NonNull UserHandle user) {
         try {
             return mService.getOwnerInstalledCaCerts(user).getList();
+        } catch (RemoteException re) {
+            throw re.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Returns whether factory reset protection policy is supported on the device.
+     *
+     * @return {@code true} if the device support factory reset protection policy.
+     *
+     * @hide
+     */
+    @TestApi
+    public boolean isFactoryResetProtectionPolicySupported() {
+        try {
+            return mService.isFactoryResetProtectionPolicySupported();
         } catch (RemoteException re) {
             throw re.rethrowFromSystemServer();
         }

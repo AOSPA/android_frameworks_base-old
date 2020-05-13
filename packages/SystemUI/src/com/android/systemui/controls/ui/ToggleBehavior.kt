@@ -18,13 +18,11 @@ package com.android.systemui.controls.ui
 
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.LayerDrawable
-import android.view.View
 import android.service.controls.Control
 import android.service.controls.templates.ToggleTemplate
-
+import android.view.View
 import com.android.systemui.R
-import com.android.systemui.controls.ui.ControlActionCoordinator.MIN_LEVEL
-import com.android.systemui.controls.ui.ControlActionCoordinator.MAX_LEVEL
+import com.android.systemui.controls.ui.ControlViewHolder.Companion.MAX_LEVEL
 
 class ToggleBehavior : Behavior {
     lateinit var clipLayer: Drawable
@@ -34,10 +32,10 @@ class ToggleBehavior : Behavior {
 
     override fun initialize(cvh: ControlViewHolder) {
         this.cvh = cvh
-        cvh.applyRenderInfo(false)
+        cvh.applyRenderInfo(false /* enabled */, 0 /* offset */, false /* animated */)
 
         cvh.layout.setOnClickListener(View.OnClickListener() {
-            ControlActionCoordinator.toggle(cvh, template.getTemplateId(), template.isChecked())
+            cvh.controlActionCoordinator.toggle(cvh, template.getTemplateId(), template.isChecked())
         })
     }
 
@@ -49,9 +47,9 @@ class ToggleBehavior : Behavior {
 
         val ld = cvh.layout.getBackground() as LayerDrawable
         clipLayer = ld.findDrawableByLayerId(R.id.clip_layer)
+        clipLayer.level = MAX_LEVEL
 
         val checked = template.isChecked()
-        clipLayer.setLevel(if (checked) MAX_LEVEL else MIN_LEVEL)
         cvh.applyRenderInfo(checked)
     }
 }

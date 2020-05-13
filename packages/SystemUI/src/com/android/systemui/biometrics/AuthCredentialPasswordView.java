@@ -17,12 +17,13 @@
 package com.android.systemui.biometrics;
 
 import android.content.Context;
+import android.os.UserHandle;
 import android.text.InputType;
 import android.util.AttributeSet;
 import android.view.KeyEvent;
 import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputMethodManager;
-import android.widget.EditText;
+import android.widget.ImeAwareEditText;
 import android.widget.TextView;
 
 import com.android.internal.widget.LockPatternChecker;
@@ -38,7 +39,7 @@ public class AuthCredentialPasswordView extends AuthCredentialView
     private static final String TAG = "BiometricPrompt/AuthCredentialPasswordView";
 
     private final InputMethodManager mImm;
-    private EditText mPasswordField;
+    private ImeAwareEditText mPasswordField;
 
     public AuthCredentialPasswordView(Context context,
             AttributeSet attrs) {
@@ -68,16 +69,14 @@ public class AuthCredentialPasswordView extends AuthCredentialView
     protected void onAttachedToWindow() {
         super.onAttachedToWindow();
 
+        mPasswordField.setTextOperationUser(UserHandle.of(mUserId));
         if (mCredentialType == Utils.CREDENTIAL_PIN) {
             mPasswordField.setInputType(
                     InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_VARIATION_PASSWORD);
         }
 
-        // Wait a bit to focus the field so the focusable flag on the window is already set then.
-        postDelayed(() -> {
-            mPasswordField.requestFocus();
-            mImm.showSoftInput(mPasswordField, InputMethodManager.SHOW_IMPLICIT);
-        }, 100);
+        mPasswordField.requestFocus();
+        mPasswordField.scheduleShowSoftInput();
     }
 
     @Override

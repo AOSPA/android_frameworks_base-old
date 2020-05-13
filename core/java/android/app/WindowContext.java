@@ -16,6 +16,7 @@
 package android.app;
 
 import static android.view.WindowManagerGlobal.ADD_OKAY;
+import static android.view.WindowManagerGlobal.ADD_TOO_MANY_TOKENS;
 
 import android.annotation.NonNull;
 import android.annotation.Nullable;
@@ -27,6 +28,8 @@ import android.os.RemoteException;
 import android.view.IWindowManager;
 import android.view.WindowManagerGlobal;
 import android.view.WindowManagerImpl;
+
+import com.android.internal.annotations.VisibleForTesting;
 
 import java.lang.ref.Reference;
 
@@ -75,11 +78,14 @@ public class WindowContext extends ContextWrapper {
             // config back to the client.
             result = mWms.addWindowTokenWithOptions(
                     mToken, type, getDisplayId(), options, getPackageName());
-
-            // TODO(window-context): remove token with a DeathObserver
         }  catch (RemoteException e) {
             mOwnsToken = false;
             throw e.rethrowFromSystemServer();
+        }
+        if (result == ADD_TOO_MANY_TOKENS) {
+            throw new UnsupportedOperationException("createWindowContext failed! Too many unused "
+                    + "window contexts. Please see Context#createWindowContext documentation for "
+                    + "detail.");
         }
         mOwnsToken = result == ADD_OKAY;
         Reference.reachabilityFence(this);
@@ -100,6 +106,13 @@ public class WindowContext extends ContextWrapper {
 
     @Override
     protected void finalize() throws Throwable {
+        release();
+        super.finalize();
+    }
+
+    /** Used for test to invoke because we can't invoke finalize directly. */
+    @VisibleForTesting
+    public void release() {
         if (mOwnsToken) {
             try {
                 mWms.removeWindowToken(mToken, getDisplayId());
@@ -108,6 +121,12 @@ public class WindowContext extends ContextWrapper {
                 throw e.rethrowFromSystemServer();
             }
         }
-        super.finalize();
+        destroy();
+    }
+
+    void destroy() {
+        final ContextImpl impl = (ContextImpl) getBaseContext();
+        impl.scheduleFinalCleanup(getClass().getName(), "WindowContext");
+        Reference.reachabilityFence(this);
     }
 }

@@ -16,7 +16,6 @@
 
 package com.android.keyguard;
 
-import android.app.Activity;
 import android.app.ActivityManager;
 import android.content.Context;
 import android.content.res.ColorStateList;
@@ -30,6 +29,8 @@ import android.util.AttributeSet;
 import android.util.Log;
 import android.view.KeyEvent;
 import android.widget.FrameLayout;
+
+import androidx.annotation.VisibleForTesting;
 
 import com.android.internal.widget.LockPatternUtils;
 import com.android.keyguard.KeyguardSecurityContainer.SecurityCallback;
@@ -85,7 +86,8 @@ public class KeyguardHostView extends FrameLayout implements SecurityCallback {
                         // the user proved presence via some other way to the trust agent.
                         Log.i(TAG, "TrustAgent dismissed Keyguard.");
                     }
-                    dismiss(false /* authenticated */, userId);
+                    dismiss(false /* authenticated */, userId,
+                            /* bypassSecondaryLockScreen */ false);
                 } else {
                     mViewMediatorCallback.playTrustedSound();
                 }
@@ -100,7 +102,8 @@ public class KeyguardHostView extends FrameLayout implements SecurityCallback {
     public static final boolean DEBUG = KeyguardConstants.DEBUG;
     private static final String TAG = "KeyguardViewBase";
 
-    private KeyguardSecurityContainer mSecurityContainer;
+    @VisibleForTesting
+    protected KeyguardSecurityContainer mSecurityContainer;
 
     public KeyguardHostView(Context context) {
         this(context, null);
@@ -190,7 +193,7 @@ public class KeyguardHostView extends FrameLayout implements SecurityCallback {
      * @return True if the keyguard is done.
      */
     public boolean dismiss(int targetUserId) {
-        return dismiss(false, targetUserId);
+        return dismiss(false, targetUserId, false);
     }
 
     public boolean handleBackKey() {
@@ -206,8 +209,10 @@ public class KeyguardHostView extends FrameLayout implements SecurityCallback {
     }
 
     @Override
-    public boolean dismiss(boolean authenticated, int targetUserId) {
-        return mSecurityContainer.showNextSecurityScreenOrFinish(authenticated, targetUserId);
+    public boolean dismiss(boolean authenticated, int targetUserId,
+            boolean bypassSecondaryLockScreen) {
+        return mSecurityContainer.showNextSecurityScreenOrFinish(authenticated, targetUserId,
+                bypassSecondaryLockScreen);
     }
 
     /**
@@ -442,5 +447,12 @@ public class KeyguardHostView extends FrameLayout implements SecurityCallback {
 
     public SecurityMode getCurrentSecurityMode() {
         return mSecurityContainer.getCurrentSecurityMode();
+    }
+
+    /**
+     * When bouncer was visible and is starting to become hidden.
+     */
+    public void onStartingToHide() {
+        mSecurityContainer.onStartingToHide();
     }
 }

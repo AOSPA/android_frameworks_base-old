@@ -87,7 +87,7 @@
     <string name="screenshot_failed_to_save_text" msgid="8344173457344027501">"ಪರಿಮಿತ ಸಂಗ್ರಹಣೆ ಸ್ಥಳದ ಕಾರಣದಿಂದಾಗಿ ಸ್ಕ್ರೀನ್‌ಶಾಟ್ ಉಳಿಸಲು ಸಾಧ್ಯವಿಲ್ಲ"</string>
     <string name="screenshot_failed_to_capture_text" msgid="7818288545874407451">"ಅಪ್ಲಿಕೇಶನ್ ಅಥವಾ ಸಂಸ್ಥೆಯು ಸ್ಕ್ರೀನ್‌ಶಾಟ್‌ಗಳನ್ನು ತೆಗೆಯುವುದನ್ನು ಅನುಮತಿಸುವುದಿಲ್ಲ"</string>
     <string name="screenshot_dismiss_ui_description" msgid="934736855340147968">"ಸ್ಕ್ರೀನ್‌ಶಾಟ್ ಅನ್ನು ವಜಾಗೊಳಿಸಿ"</string>
-    <string name="screenshot_preview_description" msgid="669177537416980449">"ಸ್ಕ್ರೀನ್‌ಶಾಟ್ ಅನ್ನು ತೆರೆಯಿರಿ"</string>
+    <string name="screenshot_preview_description" msgid="7606510140714080474">"ಸ್ಕ್ರೀನ್‍ಶಾಟ್‍ನ ಪೂರ್ವವೀಕ್ಷಣೆ"</string>
     <string name="screenrecord_name" msgid="2596401223859996572">"ಸ್ಕ್ರೀನ್ ರೆಕಾರ್ಡರ್"</string>
     <string name="screenrecord_channel_description" msgid="4147077128486138351">"ಸ್ಕ್ರೀನ್ ರೆಕಾರ್ಡಿಂಗ್ ಸೆಶನ್‌ಗಾಗಿ ಚಾಲ್ತಿಯಲ್ಲಿರುವ ಅಧಿಸೂಚನೆ"</string>
     <string name="screenrecord_start_label" msgid="1750350278888217473">"ರೆಕಾರ್ಡಿಂಗ್ ಪ್ರಾರಂಭಿಸಬೇಕೆ?"</string>
@@ -255,6 +255,8 @@
     <!-- no translation found for accessibility_work_mode (1280025758672376313) -->
     <skip />
     <string name="accessibility_notification_dismissed" msgid="4411652015138892952">"ಅಧಿಸೂಚನೆ ವಜಾಗೊಂಡಿದೆ."</string>
+    <!-- no translation found for accessibility_bubble_dismissed (270358867566720729) -->
+    <skip />
     <string name="accessibility_desc_notification_shade" msgid="5355229129428759989">"ಅಧಿಸೂಚನೆಯ ಛಾಯೆ."</string>
     <string name="accessibility_desc_quick_settings" msgid="4374766941484719179">"ತ್ವರಿತ ಸೆಟ್ಟಿಂಗ್‍ಗಳು."</string>
     <string name="accessibility_desc_lock_screen" msgid="5983125095181194887">"ಲಾಕ್‌ ಪರದೆ."</string>
@@ -430,6 +432,7 @@
     <string name="quick_settings_screen_record_label" msgid="1594046461509776676">"ಸ್ಕ್ರೀನ್ ರೆಕಾರ್ಡ್"</string>
     <string name="quick_settings_screen_record_start" msgid="1574725369331638985">"ಪ್ರಾರಂಭಿಸಿ"</string>
     <string name="quick_settings_screen_record_stop" msgid="8087348522976412119">"ನಿಲ್ಲಿಸಿ"</string>
+    <string name="media_seamless_remote_device" msgid="177033467332920464">"ಸಾಧನ"</string>
     <string name="recents_swipe_up_onboarding" msgid="2820265886420993995">"ಅಪ್ಲಿಕೇಶನ್‌ಗಳನ್ನು ಬದಲಾಯಿಸಲು ಸ್ವೈಪ್ ಮಾಡಿ"</string>
     <string name="recents_quick_scrub_onboarding" msgid="765934300283514912">"ಅಪ್ಲಿಕೇಶನ್‌ಗಳನ್ನು ಬದಲಿಸಲು ತ್ವರಿತವಾಗಿ ಬಲಕ್ಕೆ ಡ್ರ್ಯಾಗ್ ಮಾಡಿ"</string>
     <string name="quick_step_accessibility_toggle_overview" msgid="7908949976727578403">"ಟಾಗಲ್ ನ ಅವಲೋಕನ"</string>
@@ -509,7 +512,7 @@
     <string name="manage_notifications_history_text" msgid="57055985396576230">"ಇತಿಹಾಸ"</string>
     <string name="notification_section_header_gentle" msgid="3044910806569985386">"ನಿಶ್ಶಬ್ಧ ಅಧಿಸೂಚನೆಗಳು"</string>
     <string name="notification_section_header_alerting" msgid="3168140660646863240">"ಎಚ್ಚರಿಸುವ ಅಧಿಸೂಚನೆಗಳು"</string>
-    <string name="notification_section_header_conversations" msgid="821834744538345661">"ಸಂವಾದಗಳು"</string>
+    <string name="notification_section_header_conversations" msgid="821834744538345661">"ಸಂಭಾಷಣೆಗಳು"</string>
     <string name="accessibility_notification_section_header_gentle_clear_all" msgid="6490207897764933919">"ಎಲ್ಲಾ ನಿಶ್ಶಬ್ಧ ಅಧಿಸೂಚನೆಗಳನ್ನು ತೆರವುಗೊಳಿಸಿ"</string>
     <string name="dnd_suppressing_shade_text" msgid="5588252250634464042">"ಅಡಚಣೆ ಮಾಡಬೇಡಿ ಎನ್ನುವ ಮೂಲಕ ಅಧಿಸೂಚನೆಗಳನ್ನು ವಿರಾಮಗೊಳಿಸಲಾಗಿದೆ"</string>
     <string name="media_projection_action_text" msgid="3634906766918186440">"ಈಗ ಪ್ರಾರಂಭಿಸಿ"</string>
@@ -707,12 +710,13 @@
     <string name="notification_bubble_title" msgid="8330481035191903164">"ಬಬಲ್"</string>
     <string name="notification_channel_summary_low" msgid="7300447764759926720">"ಶಬ್ದ ಅಥವಾ ವೈಬ್ರೇಷನ್ ಇರದಂತೆ ನಿಮಗೆ ಗಮನಹರಿಸಲು ಸಹಾಯ ಮಾಡುತ್ತದೆ."</string>
     <string name="notification_channel_summary_default" msgid="3539949463907902037">"ಧ್ವನಿ ಅಥವಾ ವೈಬ್ರೇಷನ್ ಮೂಲಕ ನಿಮ್ಮ ಗಮನವನ್ನು ಸೆಳೆಯುತ್ತದೆ."</string>
+    <string name="notification_channel_summary_default_with_bubbles" msgid="6298026344552480458">"ಧ್ವನಿ ಅಥವಾ ವೈಬ್ರೇಷನ್ ಮೂಲಕ ನಿಮ್ಮ ಗಮನವನ್ನು ಸೆಳೆಯುತ್ತದೆ. ಡಿಫಾಲ್ಟ್ ಆಗಿ, <xliff:g id="APP_NAME">%1$s</xliff:g> ನ ಬಬಲ್ ಸಂಭಾಷಣೆಗಳು."</string>
     <string name="notification_channel_summary_bubble" msgid="7235935211580860537">"ಈ ವಿಷಯಕ್ಕೆ ಲಿಂಕ್ ಮಾಡಿ ಕೊಂಡೊಯ್ಯುವ ಶಾರ್ಟ್‌ಕಟ್‌ ಕಡೆಗೆ ಗಮನ ಇರಿಸಿ."</string>
     <string name="notification_channel_summary_priority" msgid="7415770044553264622">"ಸಂಭಾಷಣೆ ವಿಭಾಗದ ಮೇಲ್ಬಾಗದಲ್ಲಿ ಕಾಣಿಸುತ್ತದೆ ಮತ್ತು ಬಬಲ್‌ನಂತೆ ಗೋಚರಿಸುತ್ತದೆ."</string>
-    <string name="notification_conversation_channel_all_bubble" msgid="5389290797101635297">"ಡೀಫಾಲ್ಟ್ ಆಗಿ <xliff:g id="APP_NAME_0">%1$s</xliff:g> ನ ಎಲ್ಲಾ ಸಂಭಾಷಣೆಗಳನ್ನು ಬಬಲ್‌ ಆಗಿ ತೋರಿಸಿ. <xliff:g id="APP_NAME_1">%2$s</xliff:g> ನಲ್ಲಿ ನಿರ್ವಹಿಸಿ."</string>
     <string name="notification_conversation_channel_settings" msgid="2409977688430606835">"ಸೆಟ್ಟಿಂಗ್‌ಗಳು"</string>
     <string name="notification_priority_title" msgid="2079708866333537093">"ಆದ್ಯತೆ"</string>
-    <string name="bubble_overflow_empty_title" msgid="3120029421991510842">"ಯಾವುದೇ ಇತ್ತೀಚಿನ ಬಬಲ್‌ಗಳಿಲ್ಲ"</string>
+    <string name="no_shortcut" msgid="7176375126961212514">"<xliff:g id="APP_NAME">%1$s</xliff:g> ಆ್ಯಪ್ ಸಂಭಾಷಣೆ ನಿರ್ದಿಷ್ಟ ಸೆಟ್ಟಿಂಗ್‌ಗಳನ್ನು ಬೆಂಬಲಿಸುವುದಿಲ್ಲ"</string>
+    <string name="bubble_overflow_empty_title" msgid="3120029421991510842">"ಯಾವುದೇ ಇತ್ತೀಚಿನ ಬಬಲ್ಸ್ ಇಲ್ಲ"</string>
     <string name="bubble_overflow_empty_subtitle" msgid="2030874469510497397">"ಇತ್ತೀಚಿನ ಬಬಲ್ಸ್ ಮತ್ತು ವಜಾಗೊಳಿಸಿದ ಬಬಲ್ಸ್ ಇಲ್ಲಿ ಗೋಚರಿಸುತ್ತವೆ"</string>
     <string name="notification_unblockable_desc" msgid="2073030886006190804">"ಈ ಅಧಿಸೂಚನೆಗಳನ್ನು ಮಾರ್ಪಡಿಸಲು ಸಾಧ್ಯವಿಲ್ಲ."</string>
     <string name="notification_multichannel_desc" msgid="7414593090056236179">"ಈ ಗುಂಪಿನ ಅಧಿಸೂಚನೆಗಳನ್ನು ಇಲ್ಲಿ ಕಾನ್ಫಿಗರ್‌ ಮಾಡಲಾಗಿರುವುದಿಲ್ಲ"</string>
@@ -741,7 +745,7 @@
     <string name="notification_conversation_mute" msgid="268951550222925548">"ಮೌನಗೊಳಿಸಲಾಗಿದೆ"</string>
     <string name="notification_conversation_unmute" msgid="2692255619510896710">"ಎಚ್ಚರಿಸಲಾಗುತ್ತಿದೆ"</string>
     <string name="notification_conversation_bubble" msgid="2242180995373949022">"ಬಬಲ್ ತೋರಿಸಿ"</string>
-    <string name="notification_conversation_unbubble" msgid="6908427185031099868">"ಬಬಲ್‌ಗಳನ್ನು ತೆಗೆದುಹಾಕಿ"</string>
+    <string name="notification_conversation_unbubble" msgid="6908427185031099868">"ಬಬಲ್ಸ್‌ ಅನ್ನು ತೆಗೆದುಹಾಕಿ"</string>
     <string name="notification_conversation_home_screen" msgid="8347136037958438935">"ಮುಖಪುಟದ ಪರದೆಗೆ ಸೇರಿಸಿ"</string>
     <string name="notification_menu_accessibility" msgid="8984166825879886773">"<xliff:g id="APP_NAME">%1$s</xliff:g> <xliff:g id="MENU_DESCRIPTION">%2$s</xliff:g>"</string>
     <string name="notification_menu_gear_description" msgid="6429668976593634862">"ಅಧಿಸೂಚನೆ ನಿಯಂತ್ರಣಗಳು"</string>
@@ -962,7 +966,7 @@
     <string name="running_foreground_services_title" msgid="5137313173431186685">"ಅಪ್ಲಿಕೇಶನ್‌ಗಳು ಹಿನ್ನೆಲೆಯಲ್ಲಿ ರನ್ ಆಗುತ್ತಿವೆ"</string>
     <string name="running_foreground_services_msg" msgid="3009459259222695385">"ಬ್ಯಾಟರಿ,ಡೇಟಾ ಬಳಕೆಯ ವಿವರಗಳಿಗಾಗಿ ಟ್ಯಾಪ್ ಮಾಡಿ"</string>
     <string name="mobile_data_disable_title" msgid="5366476131671617790">"ಮೊಬೈಲ್ ಡೇಟಾ ಆಫ್ ಮಾಡಬೇಕೆ?"</string>
-    <string name="mobile_data_disable_message" msgid="8604966027899770415">"ನೀವು <xliff:g id="CARRIER">%s</xliff:g> ಮೂಲಕ ಡೇಟಾ ಅಥವಾ ಇಂಟರ್ನೆಟ್‌ಗೆ ಪ್ರವೇಶವನ್ನು ಹೊಂದಿಲ್ಲ. ಇಂಟರ್ನೆಟ್ ವೈ-ಫೈ ಮೂಲಕ ಮಾತ್ರ ಲಭ್ಯವಿರುತ್ತದೆ."</string>
+    <string name="mobile_data_disable_message" msgid="8604966027899770415">"ನೀವು <xliff:g id="CARRIER">%s</xliff:g> ಮೂಲಕ ಡೇಟಾ ಅಥವಾ ಇಂಟರ್ನೆಟ್‌ಗೆ ಪ್ರವೇಶವನ್ನು ಹೊಂದಿರುವುದಿಲ್ಲ. ಇಂಟರ್ನೆಟ್, ವೈ-ಫೈ ಮೂಲಕ ಮಾತ್ರ ಲಭ್ಯವಿರುತ್ತದೆ."</string>
     <string name="mobile_data_disable_message_default_carrier" msgid="6496033312431658238">"ನಿಮ್ಮ ವಾಹಕ"</string>
     <string name="touch_filtered_warning" msgid="8119511393338714836">"ಅನುಮತಿ ವಿನಂತಿಯನ್ನು ಅಪ್ಲಿಕೇಶನ್ ಮರೆಮಾಚುತ್ತಿರುವ ಕಾರಣ, ಸೆಟ್ಟಿಂಗ್‌ಗಳಿಗೆ ನಿಮ್ಮ ಪ್ರತಿಕ್ರಿಯೆಯನ್ನು ಪರಿಶೀಲಿಸಲು ಸಾಧ್ಯವಿಲ್ಲ."</string>
     <string name="slice_permission_title" msgid="3262615140094151017">"<xliff:g id="APP_2">%2$s</xliff:g> ಸ್ಲೈಸ್‌ಗಳನ್ನು ತೋರಿಸಲು <xliff:g id="APP_0">%1$s</xliff:g> ಅನ್ನು ಅನುಮತಿಸುವುದೇ?"</string>
@@ -983,7 +987,7 @@
     <string name="device_services" msgid="1549944177856658705">"ಸಾಧನ ಸೇವೆಗಳು"</string>
     <string name="music_controls_no_title" msgid="4166497066552290938">"ಯಾವುದೇ ಶೀರ್ಷಿಕೆಯಿಲ್ಲ"</string>
     <string name="restart_button_description" msgid="6916116576177456480">"ಈ ಆ್ಯಪ್ ಅನ್ನು ಮರುಪ್ರಾರಂಭಿಸಲು ಮತ್ತು ಪೂರ್ಣ ಸ್ಕ್ರೀನ್‌ನಲ್ಲಿ ನೋಡಲು ಟ್ಯಾಪ್ ಮಾಡಿ."</string>
-    <string name="bubbles_settings_button_description" msgid="7324245408859877545">"<xliff:g id="APP_NAME">%1$s</xliff:g> ಬಬಲ್‌ಗಳಿಗಾಗಿ ಸೆಟ್ಟಿಂಗ್‌ಗಳು"</string>
+    <string name="bubbles_settings_button_description" msgid="7324245408859877545">"<xliff:g id="APP_NAME">%1$s</xliff:g> ಬಬಲ್ಸ್‌ಗಾಗಿ ಸೆಟ್ಟಿಂಗ್‌ಗಳು"</string>
     <string name="manage_bubbles_text" msgid="6856830436329494850">"ನಿರ್ವಹಿಸಿ"</string>
     <string name="bubble_content_description_single" msgid="5175160674436546329">"<xliff:g id="APP_NAME">%2$s</xliff:g> ಆ್ಯಪ್‌ನ <xliff:g id="NOTIFICATION_TITLE">%1$s</xliff:g>"</string>
     <string name="bubble_content_description_stack" msgid="7907610717462651870">"<xliff:g id="APP_NAME">%2$s</xliff:g> ಮತ್ತು <xliff:g id="BUBBLE_COUNT">%3$d</xliff:g> ಹೆಚ್ಚಿನವುಗಳ <xliff:g id="NOTIFICATION_TITLE">%1$s</xliff:g>"</string>
@@ -997,17 +1001,23 @@
     <string name="bubbles_user_education_title" msgid="5547017089271445797">"ಬಬಲ್ಸ್ ಬಳಸಿ ಚಾಟ್ ಮಾಡಿ"</string>
     <string name="bubbles_user_education_description" msgid="1160281719576715211">"ಹೊಸ ಸಂಭಾಷಣೆಗಳು ತೇಲುವ ಐಕಾನ್‌ಗಳು ಅಥವಾ ಬಬಲ್ಸ್ ಆಗಿ ಗೋಚರಿಸುತ್ತವೆ. ಬಬಲ್ ತೆರೆಯಲು ಟ್ಯಾಪ್ ಮಾಡಿ. ಅದನ್ನು ಡ್ರ್ಯಾಗ್ ಮಾಡಲು ಎಳೆಯಿರಿ."</string>
     <string name="bubbles_user_education_manage_title" msgid="2848511858160342320">"ಯಾವುದೇ ಸಮಯದಲ್ಲಿ ಬಬಲ್ಸ್ ಅನ್ನು ನಿಯಂತ್ರಿಸಿ"</string>
-    <string name="bubbles_user_education_manage" msgid="1391639189507036423">"ಈ ಆ್ಯಪ್‌ನಿಂದ ಬಬಲ್‌ಗಳನ್ನು ಆಫ್ ಮಾಡಲು ನಿರ್ವಹಿಸಿ ಟ್ಯಾಪ್ ಮಾಡಿ"</string>
+    <string name="bubbles_user_education_manage" msgid="1391639189507036423">"ಈ ಆ್ಯಪ್‌ನಿಂದ ಬಬಲ್ಸ್ ಅನ್ನು ಆಫ್ ಮಾಡಲು ನಿರ್ವಹಿಸಿ ಟ್ಯಾಪ್ ಮಾಡಿ"</string>
     <string name="bubbles_user_education_got_it" msgid="8282812431953161143">"ಅರ್ಥವಾಯಿತು"</string>
+    <string name="bubbles_app_settings" msgid="5779443644062348657">"<xliff:g id="NOTIFICATION_TITLE">%1$s</xliff:g> ಸೆಟ್ಟಿಂಗ್‌ಗಳು"</string>
     <string name="notification_content_system_nav_changed" msgid="5077913144844684544">"ಸಿಸ್ಟಂ ನ್ಯಾವಿಗೇಷನ ಅಪ್‌ಡೇಟ್ ಮಾಡಲಾಗಿದೆ ಬದಲಾವಣೆಗಳನ್ನು ಮಾಡಲು, ಸೆಟ್ಟಿಂಗ್‌ಗಳಿಗೆ ಹೋಗಿ."</string>
     <string name="notification_content_gesture_nav_available" msgid="4431460803004659888">"ಸಿಸ್ಟಂ ನ್ಯಾವಿಗೇಷನ್ ಅಪ್‌ಡೇಟ್ ಮಾಡಲು ಸೆಟ್ಟಿಂಗ್‌ಗಳಿಗೆ ಹೋಗಿ"</string>
     <string name="inattentive_sleep_warning_title" msgid="3891371591713990373">"ಸ್ಟ್ಯಾಂಡ್‌ಬೈ"</string>
+    <string name="priority_onboarding_show_at_top_text" msgid="1678400241025513541">"ಸಂಭಾಷಣೆ ವಿಭಾಗದ ಮೇಲ್ಭಾಗದಲ್ಲಿ ತೋರಿಸಿ"</string>
+    <string name="priority_onboarding_show_avatar_text" msgid="5756291381124091508">"ಲಾಕ್ ಸ್ಕ್ರೀನ್‌ ಮೇಲೆ ಪ್ರೊಫೈಲ್ ಚಿತ್ರವನ್ನು ತೋರಿಸಿ"</string>
+    <string name="priority_onboarding_appear_as_bubble_text" msgid="4227039772250263122">"ಆ್ಯಪ್‌ಗಳ ಮೇಲ್ಭಾಗದಲ್ಲಿ ತೇಲುವ ಬಬಲ್‌ನಂತೆ ಗೋಚರಿಸಲಿ"</string>
+    <string name="priority_onboarding_ignores_dnd_text" msgid="2918952762719600529">"ಅಡಚಣೆ ಮಾಡಬೇಡ ಅನ್ನು ಅಡ್ಡಿಪಡಿಸಿ"</string>
+    <string name="priority_onboarding_done_button_title" msgid="4569550984286506007">"ಅರ್ಥವಾಯಿತು"</string>
     <string name="magnification_overlay_title" msgid="6584179429612427958">"ವರ್ಧನೆಯ ಓವರ್‌ಲೇ ವಿಂಡೋ"</string>
     <string name="magnification_window_title" msgid="4863914360847258333">"ವರ್ಧನೆಯ ವಿಂಡೋ"</string>
     <string name="magnification_controls_title" msgid="8421106606708891519">"ವರ್ಧನೆಯ ವಿಂಡೋ ನಿಯಂತ್ರಣಗಳು"</string>
-    <string name="quick_controls_title" msgid="1686913115679255053">"ತ್ವರಿತ ನಿಯಂತ್ರಣಗಳು"</string>
+    <string name="quick_controls_title" msgid="6839108006171302273">"ಸಾಧನ ನಿಯಂತ್ರಣಗಳು"</string>
     <string name="quick_controls_subtitle" msgid="1667408093326318053">"ನಿಮ್ಮ ಸಂಪರ್ಕಿತ ಸಾಧನಗಳಿಗೆ ನಿಯಂತ್ರಣಗಳನ್ನು ಸೇರಿಸಿ"</string>
-    <string name="quick_controls_setup_title" msgid="9079435969373471268">"ತ್ವರಿತ ನಿಯಂತ್ರಣಗಳನ್ನು ಹೊಂದಿಸಿ"</string>
+    <string name="quick_controls_setup_title" msgid="8901436655997849822">"ಸಾಧನ ನಿಯಂತ್ರಣಗಳನ್ನು ಸೆಟಪ್ ಮಾಡಿ"</string>
     <string name="quick_controls_setup_subtitle" msgid="1681506617879773824">"ನಿಮ್ಮ ನಿಯಂತ್ರಣಗಳನ್ನು ಪ್ರವೇಶಿಸಲು ಪವರ್ ಬಟನ್ ಅನ್ನು ಒತ್ತಿ ಹಿಡಿದುಕೊಳ್ಳಿ"</string>
     <string name="controls_providers_title" msgid="6879775889857085056">"ನಿಯಂತ್ರಣಗಳನ್ನು ಸೇರಿಸಲು ಆ್ಯಪ್ ಅನ್ನು ಆಯ್ಕೆಮಾಡಿ"</string>
     <plurals name="controls_number_of_favorites" formatted="false" msgid="1057347832073807380">
@@ -1016,15 +1026,19 @@
     </plurals>
     <string name="controls_favorite_default_title" msgid="967742178688938137">"ನಿಯಂತ್ರಣಗಳು"</string>
     <string name="controls_favorite_subtitle" msgid="6604402232298443956">"ಪವರ್ ಮೆನುವಿನಿಂದ ಪ್ರವೇಶಿಸಲು ನಿಯಂತ್ರಣಗಳನ್ನು ಆರಿಸಿ"</string>
-    <string name="controls_favorite_rearrange" msgid="7364147066539766260">"ಅದನ್ನು ಸರಿಸಲು ನಿಯಂತ್ರಣವೊಂದನ್ನು ಹಿಡಿದುಕೊಂಡು ಡ್ರ್ಯಾಗ್ ಮಾಡಿ"</string>
+    <string name="controls_favorite_rearrange" msgid="5616952398043063519">"ನಿಯಂತ್ರಣಗಳನ್ನು ಮರುಹೊಂದಿಸಲು ಹೋಲ್ಡ್ ಮಾಡಿ ಮತ್ತು ಡ್ರ್ಯಾಗ್‌ ಮಾಡಿ"</string>
+    <string name="controls_favorite_removed" msgid="5276978408529217272">"ಎಲ್ಲಾ ನಿಯಂತ್ರಣಗಳನ್ನು ತೆಗೆದುಹಾಕಲಾಗಿದೆ"</string>
+    <!-- no translation found for controls_favorite_toast_no_changes (7094494210840877931) -->
+    <skip />
     <string name="controls_favorite_load_error" msgid="2533215155804455348">"ಎಲ್ಲಾ ನಿಯಂತ್ರಣಗಳ ಪಟ್ಟಿಯನ್ನು ಲೋಡ್ ಮಾಡಲು ಆಗಲಿಲ್ಲ."</string>
     <string name="controls_favorite_other_zone_header" msgid="9089613266575525252">"ಇತರ"</string>
-    <string name="controls_dialog_title" msgid="3475025327938684220">"ತ್ವರಿತ ನಿಯಂತ್ರಣಗಳಿಗೆ ಸೇರಿಸಿ"</string>
+    <string name="controls_dialog_title" msgid="2343565267424406202">"ಸಾಧನ ನಿಯಂತ್ರಣಗಳಿಗೆ ಸೇರಿಸಿ"</string>
     <string name="controls_dialog_ok" msgid="7011816381344485651">"ಮೆಚ್ಚಿನವುಗಳಿಗೆ ಸೇರಿಸಿ"</string>
     <string name="controls_dialog_message" msgid="6292099631702047540">"ಈ ನಿಯಂತ್ರಣವನ್ನು ನಿಮ್ಮ ಮೆಚ್ಚಿನವುಗಳಿಗೆ ಸೇರಿಸಲು <xliff:g id="APP">%s</xliff:g> ಸೂಚಿಸಿದೆ."</string>
     <string name="controls_dialog_confirmation" msgid="586517302736263447">"ನಿಯಂತ್ರಣಗಳನ್ನು ನವೀಕರಿಸಲಾಗಿದೆ"</string>
     <string name="controls_pin_use_alphanumeric" msgid="8478371861023048414">"ಪಿನ್ ಅಕ್ಷರಗಳು ಅಥವಾ ಸಂಕೇತಗಳನ್ನು ಒಳಗೊಂಡಿದೆ"</string>
     <string name="controls_pin_verify" msgid="3452778292918877662">"<xliff:g id="DEVICE">%s</xliff:g> ಅನ್ನು ಪರಿಶೀಲಿಸಿ"</string>
+    <string name="controls_pin_wrong" msgid="6162694056042164211">"ತಪ್ಪಾದ ಪಿನ್‌"</string>
     <string name="controls_pin_verifying" msgid="3755045989392131746">"ಪರಿಶೀಲಿಸಲಾಗುತ್ತಿದೆ…"</string>
     <string name="controls_pin_instructions" msgid="6363309783822475238">"ಪಿನ್ ನಮೂದಿಸಿ"</string>
     <string name="controls_pin_instructions_retry" msgid="1566667581012131046">"ಮತ್ತೊಂದು ಪಿನ್ ಅನ್ನು ಪ್ರಯತ್ನಿಸಿ"</string>
@@ -1034,6 +1048,9 @@
     <string name="controls_seeding_in_progress" msgid="3033855341410264148">"ಶಿಫಾರಸುಗಳು ಲೋಡ್ ಆಗುತ್ತಿವೆ"</string>
     <string name="controls_media_close_session" msgid="9023534788828414585">"ಈ ಮಾಧ್ಯಮ ಸೆಶನ್ ಅನ್ನು ಮುಚ್ಚಿರಿ"</string>
     <string name="controls_error_timeout" msgid="794197289772728958">"ನಿಷ್ಕ್ರಿಯ, ಆ್ಯಪ್ ಪರಿಶೀಲಿಸಿ"</string>
+    <string name="controls_error_retryable" msgid="864025882878378470">"ದೋಷ, ಮರುಪ್ರಯತ್ನಿಸಲಾಗುತ್ತಿದೆ…"</string>
+    <string name="controls_error_removed" msgid="6299213591234723805">"ಸಾಧನವನ್ನು ತೆಗೆದುಹಾಕಲಾಗಿದೆ"</string>
+    <string name="controls_error_generic" msgid="352500456918362905">"ಸ್ಥಿತಿ ಲೋಡ್ ಮಾಡಲು ಸಾಧ್ಯವಿಲ್ಲ"</string>
     <string name="controls_error_failed" msgid="960228639198558525">"ದೋಷ, ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ"</string>
     <string name="controls_in_progress" msgid="4421080500238215939">"ಪ್ರಗತಿಯಲ್ಲಿದೆ"</string>
     <string name="controls_added_tooltip" msgid="4842812921719153085">"ಹೊಸ ನಿಯಂತ್ರಣಗಳನ್ನು ನೋಡಲು ಪವರ್ ಬಟನ್ ಹಿಡಿದುಕೊಳ್ಳಿ"</string>

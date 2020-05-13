@@ -206,13 +206,13 @@
     <string name="enable_adb" msgid="8072776357237289039">"Налагодження USB"</string>
     <string name="enable_adb_summary" msgid="3711526030096574316">"Вмикати налагодження, коли телефон підключено через USB"</string>
     <string name="clear_adb_keys" msgid="3010148733140369917">"Скасувати доступ до налагодження USB"</string>
-    <string name="enable_adb_wireless" msgid="6973226350963971018">"Бездротове налагодження"</string>
+    <string name="enable_adb_wireless" msgid="6973226350963971018">"Налагодження через Wi-Fi"</string>
     <string name="enable_adb_wireless_summary" msgid="7344391423657093011">"Вмикати режим налагодження, коли пристрій підключено до мережі Wi-Fi"</string>
     <string name="adb_wireless_error" msgid="721958772149779856">"Помилка"</string>
-    <string name="adb_wireless_settings" msgid="2295017847215680229">"Бездротове налагодження"</string>
-    <string name="adb_wireless_list_empty_off" msgid="1713707973837255490">"Щоб переглядати та використовувати доступні пристрої, увімкніть бездротове налагодження"</string>
+    <string name="adb_wireless_settings" msgid="2295017847215680229">"Налагодження через Wi-Fi"</string>
+    <string name="adb_wireless_list_empty_off" msgid="1713707973837255490">"Щоб переглядати та використовувати доступні пристрої, увімкніть налагодження через Wi-Fi"</string>
     <string name="adb_pair_method_qrcode_title" msgid="6982904096137468634">"Підключати пристрій за допомогою QR-коду"</string>
-    <string name="adb_pair_method_qrcode_summary" msgid="3729901496856458634">"Підключати нові пристрої за допомогою сканера QR-кодів"</string>
+    <string name="adb_pair_method_qrcode_summary" msgid="7130694277228970888">"Підключати нові пристрої за допомогою сканера QR-кодів"</string>
     <string name="adb_pair_method_code_title" msgid="1122590300445142904">"Підключати пристрій за допомогою коду підключення"</string>
     <string name="adb_pair_method_code_summary" msgid="6370414511333685185">"Підключати нові пристрої за допомогою шестизначного коду"</string>
     <string name="adb_paired_devices_title" msgid="5268997341526217362">"Підключені пристрої"</string>
@@ -231,7 +231,7 @@
     <string name="adb_qrcode_pairing_device_failed_msg" msgid="6936292092592914132">"Не вдалося підключитися до пристрою. Надано неправильний QR-код або пристрій не підключено до тієї ж мережі."</string>
     <string name="adb_wireless_ip_addr_preference_title" msgid="8335132107715311730">"IP-адреса та порт"</string>
     <string name="adb_wireless_qrcode_pairing_title" msgid="1906409667944674707">"Сканувати QR-код"</string>
-    <string name="adb_wireless_qrcode_pairing_description" msgid="8578868049289910131">"Підключати пристрій через Wi‑Fi за допомогою QR-коду"</string>
+    <string name="adb_wireless_qrcode_pairing_description" msgid="6014121407143607851">"Підключати пристрій через Wi‑Fi за допомогою QR-коду"</string>
     <string name="adb_wireless_no_network_msg" msgid="2365795244718494658">"Підключіть пристрій до мережі Wi-Fi"</string>
     <string name="keywords_adb_wireless" msgid="6507505581882171240">"adb, налагодження, розробка"</string>
     <string name="bugreport_in_power" msgid="8664089072534638709">"Ярлик звіту про помилки"</string>
@@ -251,6 +251,7 @@
     <string name="wifi_display_certification" msgid="1805579519992520381">"Сертифікація бездрот. екрана"</string>
     <string name="wifi_verbose_logging" msgid="1785910450009679371">"Докладний запис у журнал Wi-Fi"</string>
     <string name="wifi_scan_throttling" msgid="2985624788509913617">"Зменшити радіус пошуку мереж Wi‑Fi"</string>
+    <string name="wifi_enhanced_mac_randomization" msgid="5437378364995776979">"Довільний вибір MAC-адрес із Wi‑Fi"</string>
     <string name="mobile_data_always_on" msgid="8275958101875563572">"Не вимикати мобільне передавання даних"</string>
     <string name="tethering_hardware_offload" msgid="4116053719006939161">"Апаратне прискорення під час використання телефона в режимі модема"</string>
     <string name="bluetooth_show_devices_without_names" msgid="923584526471885819">"Показувати пристрої Bluetooth без назв"</string>
@@ -273,16 +274,18 @@
     <string name="bluetooth_select_a2dp_codec_ldac_playback_quality" msgid="3233402355917446304">"Кодек для аудіо Bluetooth LDAC: якість відтворення"</string>
     <string name="bluetooth_select_a2dp_codec_ldac_playback_quality_dialog_title" msgid="7274396574659784285">"Активувати LDAC для аудіо Bluetooth\nВибір кодека: якість відтворення"</string>
     <string name="bluetooth_select_a2dp_codec_streaming_label" msgid="2040810756832027227">"Трансляція: <xliff:g id="STREAMING_PARAMETER">%1$s</xliff:g>"</string>
-    <string name="select_private_dns_configuration_title" msgid="7887550926056143018">"Приватна DNS"</string>
-    <string name="select_private_dns_configuration_dialog_title" msgid="3731422918335951912">"Режим приватної системи DNS"</string>
+    <string name="select_private_dns_configuration_title" msgid="7887550926056143018">"Приватний DNS-сервер"</string>
+    <string name="select_private_dns_configuration_dialog_title" msgid="3731422918335951912">"Режим приватного DNS-сервера"</string>
     <string name="private_dns_mode_off" msgid="7065962499349997041">"Вимкнено"</string>
     <string name="private_dns_mode_opportunistic" msgid="1947864819060442354">"Автоматично"</string>
-    <string name="private_dns_mode_provider" msgid="3619040641762557028">"Ім’я хосту приватного постачальника послуг DNS"</string>
+    <string name="private_dns_mode_provider" msgid="3619040641762557028">"Ім’я хосту постачальника приватного DNS-сервера"</string>
     <string name="private_dns_mode_provider_hostname_hint" msgid="6564868953748514595">"Введіть ім’я хосту постачальника послуг DNS"</string>
     <string name="private_dns_mode_provider_failure" msgid="8356259467861515108">"Не вдалося під’єднатися"</string>
     <string name="wifi_display_certification_summary" msgid="8111151348106907513">"Показати параметри сертифікації бездротового екрана"</string>
     <string name="wifi_verbose_logging_summary" msgid="4993823188807767892">"Показувати в журналі RSSI для кожного SSID під час вибору Wi-Fi"</string>
     <string name="wifi_scan_throttling_summary" msgid="2577105472017362814">"Зменшує споживання заряду акумулятора й підвищує ефективність роботи мережі"</string>
+    <!-- no translation found for wifi_enhanced_mac_randomization_summary (1210663439867489931) -->
+    <skip />
     <string name="wifi_metered_label" msgid="8737187690304098638">"З тарифікацією трафіку"</string>
     <string name="wifi_unmetered_label" msgid="6174142840934095093">"Без тарифікації трафіку"</string>
     <string name="select_logd_size_title" msgid="1604578195914595173">"Розміри буфера журналу"</string>
@@ -300,8 +303,8 @@
     <string name="tethering_hardware_offload_summary" msgid="7801345335142803029">"Якщо доступно, вмикати апаратне прискорення під час використання телефона в режимі модема"</string>
     <string name="adb_warning_title" msgid="7708653449506485728">"Дозвол. налагодж. USB?"</string>
     <string name="adb_warning_message" msgid="8145270656419669221">"Налагодження USB застосовується лише з метою розробки. Його можна використовувати для копіювання даних між комп’ютером і пристроєм, встановлення програм на вашому пристрої без сповіщення та читання даних журналу."</string>
-    <string name="adbwifi_warning_title" msgid="727104571653031865">"Дозволити бездротове налагодження?"</string>
-    <string name="adbwifi_warning_message" msgid="8005936574322702388">"Бездротове налагодження застосовується лише з метою розробки. Його можна використовувати, щоб копіювати дані між комп\'ютером і пристроєм, встановлювати додатки на пристрої без сповіщення та переглядати дані журналу."</string>
+    <string name="adbwifi_warning_title" msgid="727104571653031865">"Дозволити налагодження через Wi-Fi?"</string>
+    <string name="adbwifi_warning_message" msgid="8005936574322702388">"Налагодження через Wi-Fi застосовується лише з метою розробки. Його можна використовувати, щоб копіювати дані між комп\'ютером і пристроєм, встановлювати додатки на пристрої без сповіщення та переглядати дані журналу."</string>
     <string name="adb_keys_warning_message" msgid="2968555274488101220">"Скасувати доступ до налагодження USB для всіх комп’ютерів, які раніше отримали таке право?"</string>
     <string name="dev_settings_warning_title" msgid="8251234890169074553">"Дозволити налаштування розробки?"</string>
     <string name="dev_settings_warning_message" msgid="37741686486073668">"Ці налаштування застосовуються лише з метою розробки. Вони можуть спричиняти вихід з ладу або неправильне функціонування вашого пристрою чи програм у ньому."</string>
@@ -432,10 +435,10 @@
     <string name="power_discharge_by_only" msgid="92545648425937000">"Вистачить приблизно до <xliff:g id="TIME">%1$s</xliff:g>"</string>
     <string name="power_discharge_by_only_short" msgid="5883041507426914446">"До <xliff:g id="TIME">%1$s</xliff:g>"</string>
     <string name="power_suggestion_battery_run_out" msgid="6332089307827787087">"Акумулятор може розрядитися до <xliff:g id="TIME">%1$s</xliff:g>"</string>
-    <string name="power_remaining_less_than_duration_only" msgid="5802195288324091585">"Залишилося менше ніж <xliff:g id="THRESHOLD">%1$s</xliff:g>"</string>
-    <string name="power_remaining_less_than_duration" msgid="1812668275239801236">"Залишилося менше ніж <xliff:g id="THRESHOLD">%1$s</xliff:g> (<xliff:g id="LEVEL">%2$s</xliff:g>)"</string>
-    <string name="power_remaining_more_than_subtext" msgid="7919119719242734848">"Залишилося понад <xliff:g id="TIME_REMAINING">%1$s</xliff:g> (<xliff:g id="LEVEL">%2$s</xliff:g>)"</string>
-    <string name="power_remaining_only_more_than_subtext" msgid="3274496164769110480">"Залишилося понад <xliff:g id="TIME_REMAINING">%1$s</xliff:g>"</string>
+    <string name="power_remaining_less_than_duration_only" msgid="8956656616031395152">"Залишилося менше ніж <xliff:g id="THRESHOLD">%1$s</xliff:g>"</string>
+    <string name="power_remaining_less_than_duration" msgid="318215464914990578">"Залишилося менше ніж <xliff:g id="THRESHOLD">%1$s</xliff:g> (<xliff:g id="LEVEL">%2$s</xliff:g>)"</string>
+    <string name="power_remaining_more_than_subtext" msgid="446388082266121894">"Залишилося понад <xliff:g id="TIME_REMAINING">%1$s</xliff:g> (<xliff:g id="LEVEL">%2$s</xliff:g>)"</string>
+    <string name="power_remaining_only_more_than_subtext" msgid="4873750633368888062">"Залишилося понад <xliff:g id="TIME_REMAINING">%1$s</xliff:g>"</string>
     <string name="power_remaining_duration_only_shutdown_imminent" product="default" msgid="137330009791560774">"Телефон може невдовзі вимкнутися"</string>
     <string name="power_remaining_duration_only_shutdown_imminent" product="tablet" msgid="145489081521468132">"Планшет може невдовзі вимкнутися"</string>
     <string name="power_remaining_duration_only_shutdown_imminent" product="device" msgid="1070562682853942350">"Пристрій може невдовзі вимкнутися"</string>
@@ -450,7 +453,7 @@
     <string name="battery_info_status_charging_fast" msgid="8027559755902954885">"Швидке заряджання"</string>
     <string name="battery_info_status_charging_slow" msgid="3190803837168962319">"Повільне заряджання"</string>
     <string name="battery_info_status_discharging" msgid="6962689305413556485">"Не заряджається"</string>
-    <string name="battery_info_status_not_charging" msgid="8330015078868707899">"Підключено. Не вдається зарядити"</string>
+    <string name="battery_info_status_not_charging" msgid="8330015078868707899">"Підключено, не заряджається"</string>
     <string name="battery_info_status_full" msgid="4443168946046847468">"Акумулятор заряджено"</string>
     <string name="disabled_by_admin_summary_text" msgid="5343911767402923057">"Керується адміністратором"</string>
     <string name="disabled" msgid="8017887509554714950">"Вимкнено"</string>

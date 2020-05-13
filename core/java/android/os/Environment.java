@@ -235,6 +235,7 @@ public class Environment {
      * @hide
      */
     @SystemApi
+    @TestApi
     public static @NonNull File getOemDirectory() {
         return DIR_OEM_ROOT;
     }
@@ -246,6 +247,7 @@ public class Environment {
      * @hide
      */
     @SystemApi
+    @TestApi
     public static @NonNull File getOdmDirectory() {
         return DIR_ODM_ROOT;
     }
@@ -256,6 +258,7 @@ public class Environment {
      * @hide
      */
     @SystemApi
+    @TestApi
     public static @NonNull File getVendorDirectory() {
         return DIR_VENDOR_ROOT;
     }
@@ -294,6 +297,7 @@ public class Environment {
      * @hide
      */
     @SystemApi
+    @TestApi
     public static @NonNull File getSystemExtDirectory() {
         return DIR_SYSTEM_EXT_ROOT;
     }
@@ -968,6 +972,15 @@ public class Environment {
     public static File[] buildExternalStorageAndroidDataDirs() {
         throwIfUserRequired();
         return sCurrentUser.buildExternalStorageAndroidDataDirs();
+    }
+
+    /**
+     * Returns the path for android-specific OBB data on the SD card.
+     * @hide
+     */
+    public static File[] buildExternalStorageAndroidObbDirs() {
+        throwIfUserRequired();
+        return sCurrentUser.buildExternalStorageAndroidObbDirs();
     }
 
     /**

@@ -213,13 +213,11 @@ public class WifiConfiguration implements Parcelable {
         * IEEE 802.11ai FILS SK with SHA256
          * @hide
         */
-        @SystemApi
         public static final int FILS_SHA256 = 15;
         /**
          * IEEE 802.11ai FILS SK with SHA384:
          * @hide
          */
-        @SystemApi
         public static final int FILS_SHA384 = 16;
         /**
          * Device Provisioning Protocol
@@ -3076,5 +3074,16 @@ public class WifiConfiguration implements Parcelable {
      * @hide
      */
     public boolean isMostRecentlyConnected = false;
+
+    /**
+     * Whether the key mgmt indicates if the WifiConfiguration needs a preSharedKey or not.
+     * @return true if preSharedKey is needed, false otherwise.
+     * @hide
+     */
+    public boolean needsPreSharedKey() {
+        return allowedKeyManagement.get(KeyMgmt.WPA_PSK)
+                || allowedKeyManagement.get(KeyMgmt.SAE)
+                || allowedKeyManagement.get(KeyMgmt.WAPI_PSK);
+    }
 
 }

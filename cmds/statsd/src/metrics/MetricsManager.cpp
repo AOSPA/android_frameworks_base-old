@@ -189,7 +189,7 @@ MetricsManager::~MetricsManager() {
             StateManager::getInstance().unregisterListener(atomId, it);
         }
     }
-    mPullerManager->UnregisterPullUidProvider(mConfigKey);
+    mPullerManager->UnregisterPullUidProvider(mConfigKey, this);
 
     VLOG("~MetricsManager()");
 }
@@ -231,8 +231,8 @@ bool MetricsManager::isConfigValid() const {
 void MetricsManager::notifyAppUpgrade(const int64_t& eventTimeNs, const string& apk, const int uid,
                                       const int64_t version) {
     // Inform all metric producers.
-    for (auto it : mAllMetricProducers) {
-        it->notifyAppUpgrade(eventTimeNs, apk, uid, version);
+    for (const auto& it : mAllMetricProducers) {
+        it->notifyAppUpgrade(eventTimeNs);
     }
     // check if we care this package
     if (std::find(mAllowedPkg.begin(), mAllowedPkg.end(), apk) != mAllowedPkg.end()) {
@@ -252,8 +252,8 @@ void MetricsManager::notifyAppUpgrade(const int64_t& eventTimeNs, const string& 
 void MetricsManager::notifyAppRemoved(const int64_t& eventTimeNs, const string& apk,
                                       const int uid) {
     // Inform all metric producers.
-    for (auto it : mAllMetricProducers) {
-        it->notifyAppRemoved(eventTimeNs, apk, uid);
+    for (const auto& it : mAllMetricProducers) {
+        it->notifyAppRemoved(eventTimeNs);
     }
     // check if we care this package
     if (std::find(mAllowedPkg.begin(), mAllowedPkg.end(), apk) != mAllowedPkg.end()) {
@@ -280,6 +280,13 @@ void MetricsManager::onUidMapReceived(const int64_t& eventTimeNs) {
         return;
     }
     initLogSourceWhiteList();
+}
+
+void MetricsManager::onStatsdInitCompleted(const int64_t& eventTimeNs) {
+    // Inform all metric producers.
+    for (const auto& it : mAllMetricProducers) {
+        it->onStatsdInitCompleted(eventTimeNs);
+    }
 }
 
 void MetricsManager::init() {
@@ -380,11 +387,14 @@ bool MetricsManager::eventSanityCheck(const LogEvent& event) {
         // Uid is 3rd from last field and must match the caller's uid,
         // unless that caller is statsd itself (statsd is allowed to spoof uids).
         long appHookUid = event.GetLong(event.size()-2, &err);
-        if (err != NO_ERROR ) {
+        if (err != NO_ERROR) {
             VLOG("APP_BREADCRUMB_REPORTED had error when parsing the uid");
             return false;
         }
-        int32_t loggerUid = event.GetUid();
+
+        // Because the uid within the LogEvent may have been mapped from
+        // isolated to host, map the loggerUid similarly before comparing.
+        int32_t loggerUid = mUidMap->getHostUidOrSelf(event.GetUid());
         if (loggerUid != appHookUid && loggerUid != AID_STATSD) {
             VLOG("APP_BREADCRUMB_REPORTED has invalid uid: claimed %ld but caller is %d",
                  appHookUid, loggerUid);
@@ -393,7 +403,7 @@ bool MetricsManager::eventSanityCheck(const LogEvent& event) {
 
         // The state must be from 0,3. This part of code must be manually updated.
         long appHookState = event.GetLong(event.size(), &err);
-        if (err != NO_ERROR ) {
+        if (err != NO_ERROR) {
             VLOG("APP_BREADCRUMB_REPORTED had error when parsing the state field");
             return false;
         } else if (appHookState < 0 || appHookState > 3) {
@@ -407,7 +417,7 @@ bool MetricsManager::eventSanityCheck(const LogEvent& event) {
 
         // Uid is the first field provided.
         long jankUid = event.GetLong(1, &err);
-        if (err != NO_ERROR ) {
+        if (err != NO_ERROR) {
             VLOG("Davey occurred had error when parsing the uid");
             return false;
         }
@@ -419,7 +429,7 @@ bool MetricsManager::eventSanityCheck(const LogEvent& event) {
         }
 
         long duration = event.GetLong(event.size(), &err);
-        if (err != NO_ERROR ) {
+        if (err != NO_ERROR) {
             VLOG("Davey occurred had error when parsing the duration");
             return false;
         } else if (duration > 100000) {

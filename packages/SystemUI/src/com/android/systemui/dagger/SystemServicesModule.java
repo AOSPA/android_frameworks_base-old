@@ -19,8 +19,10 @@ package com.android.systemui.dagger;
 import android.annotation.Nullable;
 import android.annotation.SuppressLint;
 import android.app.ActivityManager;
+import android.app.ActivityTaskManager;
 import android.app.AlarmManager;
 import android.app.IActivityManager;
+import android.app.IActivityTaskManager;
 import android.app.IWallpaperManager;
 import android.app.KeyguardManager;
 import android.app.NotificationManager;
@@ -35,6 +37,7 @@ import android.content.pm.PackageManager;
 import android.content.pm.ShortcutManager;
 import android.content.res.Resources;
 import android.hardware.SensorPrivacyManager;
+import android.hardware.display.DisplayManager;
 import android.media.AudioManager;
 import android.net.ConnectivityManager;
 import android.net.NetworkScoreManager;
@@ -111,6 +114,12 @@ public class SystemServicesModule {
     }
 
     @Provides
+    @Singleton
+    static DevicePolicyManager provideDevicePolicyManager(Context context) {
+        return context.getSystemService(DevicePolicyManager.class);
+    }
+
+    @Provides
     @DisplayId
     static int provideDisplayId(Context context) {
         return context.getDisplayId();
@@ -118,14 +127,20 @@ public class SystemServicesModule {
 
     @Provides
     @Singleton
-    static DevicePolicyManager provideDevicePolicyManager(Context context) {
-        return context.getSystemService(DevicePolicyManager.class);
+    static DisplayManager provideDisplayManager(Context context) {
+        return context.getSystemService(DisplayManager.class);
     }
 
     @Singleton
     @Provides
     static IActivityManager provideIActivityManager() {
         return ActivityManager.getService();
+    }
+
+    @Singleton
+    @Provides
+    static IActivityTaskManager provideIActivityTaskManager() {
+        return ActivityTaskManager.getService();
     }
 
     @Provides

@@ -26,6 +26,7 @@ import android.app.admin.DevicePolicyManager;
 import android.app.trust.IStrongAuthTracker;
 import android.content.Context;
 import android.os.Handler;
+import android.os.Looper;
 import android.os.Message;
 import android.os.RemoteCallbackList;
 import android.os.RemoteException;
@@ -36,6 +37,7 @@ import android.util.Slog;
 import android.util.SparseBooleanArray;
 import android.util.SparseIntArray;
 
+import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.util.IndentingPrintWriter;
 import com.android.internal.widget.LockPatternUtils.StrongAuthTracker;
 
@@ -56,12 +58,16 @@ public class LockSettingsStrongAuth {
     private static final int MSG_SCHEDULE_NON_STRONG_BIOMETRIC_TIMEOUT = 7;
     private static final int MSG_STRONG_BIOMETRIC_UNLOCK = 8;
     private static final int MSG_SCHEDULE_NON_STRONG_BIOMETRIC_IDLE_TIMEOUT = 9;
+    private static final int MSG_REFRESH_STRONG_AUTH_TIMEOUT = 10;
 
-    private static final String STRONG_AUTH_TIMEOUT_ALARM_TAG =
+    @VisibleForTesting
+    protected static final String STRONG_AUTH_TIMEOUT_ALARM_TAG =
             "LockSettingsStrongAuth.timeoutForUser";
-    private static final String NON_STRONG_BIOMETRIC_TIMEOUT_ALARM_TAG =
+    @VisibleForTesting
+    protected static final String NON_STRONG_BIOMETRIC_TIMEOUT_ALARM_TAG =
             "LockSettingsPrimaryAuth.nonStrongBiometricTimeoutForUser";
-    private static final String NON_STRONG_BIOMETRIC_IDLE_TIMEOUT_ALARM_TAG =
+    @VisibleForTesting
+    protected static final String NON_STRONG_BIOMETRIC_IDLE_TIMEOUT_ALARM_TAG =
             "LockSettingsPrimaryAuth.nonStrongBiometricIdleTimeoutForUser";
 
     /**
@@ -73,28 +79,80 @@ public class LockSettingsStrongAuth {
             4 * 60 * 60 * 1000; // 4h
 
     private final RemoteCallbackList<IStrongAuthTracker> mTrackers = new RemoteCallbackList<>();
-    private final SparseIntArray mStrongAuthForUser = new SparseIntArray();
-    private final SparseBooleanArray mIsNonStrongBiometricAllowedForUser = new SparseBooleanArray();
-    private final ArrayMap<Integer, StrongAuthTimeoutAlarmListener>
+    @VisibleForTesting
+    protected final SparseIntArray mStrongAuthForUser = new SparseIntArray();
+    @VisibleForTesting
+    protected final SparseBooleanArray mIsNonStrongBiometricAllowedForUser =
+            new SparseBooleanArray();
+    @VisibleForTesting
+    protected final ArrayMap<Integer, StrongAuthTimeoutAlarmListener>
             mStrongAuthTimeoutAlarmListenerForUser = new ArrayMap<>();
     // Track non-strong biometric timeout
-    private final ArrayMap<Integer, NonStrongBiometricTimeoutAlarmListener>
+    @VisibleForTesting
+    protected final ArrayMap<Integer, NonStrongBiometricTimeoutAlarmListener>
             mNonStrongBiometricTimeoutAlarmListener = new ArrayMap<>();
     // Track non-strong biometric idle timeout
-    private final ArrayMap<Integer, NonStrongBiometricIdleTimeoutAlarmListener>
+    @VisibleForTesting
+    protected final ArrayMap<Integer, NonStrongBiometricIdleTimeoutAlarmListener>
             mNonStrongBiometricIdleTimeoutAlarmListener = new ArrayMap<>();
 
     private final int mDefaultStrongAuthFlags;
     private final boolean mDefaultIsNonStrongBiometricAllowed = true;
 
     private final Context mContext;
-
-    private AlarmManager mAlarmManager;
+    private final Injector mInjector;
+    private final AlarmManager mAlarmManager;
 
     public LockSettingsStrongAuth(Context context) {
+        this(context, new Injector());
+    }
+
+    @VisibleForTesting
+    protected LockSettingsStrongAuth(Context context, Injector injector) {
         mContext = context;
-        mDefaultStrongAuthFlags = StrongAuthTracker.getDefaultFlags(context);
-        mAlarmManager = context.getSystemService(AlarmManager.class);
+        mInjector = injector;
+        mDefaultStrongAuthFlags = mInjector.getDefaultStrongAuthFlags(context);
+        mAlarmManager = mInjector.getAlarmManager(context);
+    }
+
+    /**
+     * Class for injecting dependencies into LockSettingsStrongAuth.
+     */
+    @VisibleForTesting
+    public static class Injector {
+
+        /**
+         * Allows to mock AlarmManager for testing.
+         */
+        @VisibleForTesting
+        public AlarmManager getAlarmManager(Context context) {
+            return context.getSystemService(AlarmManager.class);
+        }
+
+        /**
+         * Allows to get different default StrongAuthFlags for testing.
+         */
+        @VisibleForTesting
+        public int getDefaultStrongAuthFlags(Context context) {
+            return StrongAuthTracker.getDefaultFlags(context);
+        }
+
+        /**
+         * Allows to get different triggerAtMillis values when setting alarms for testing.
+         */
+        @VisibleForTesting
+        public long getNextAlarmTimeMs(long timeout) {
+            return SystemClock.elapsedRealtime() + timeout;
+        }
+
+        /**
+         * Wraps around {@link SystemClock#elapsedRealtime}, which returns the number of
+         * milliseconds since boot, including time spent in sleep.
+         */
+        @VisibleForTesting
+        public long getElapsedRealtimeMs() {
+            return SystemClock.elapsedRealtime();
+        }
     }
 
     private void handleAddStrongAuthTracker(IStrongAuthTracker tracker) {
@@ -183,21 +241,33 @@ public class LockSettingsStrongAuth {
         }
     }
 
-    private void handleScheduleStrongAuthTimeout(int userId) {
+    /**
+     * Re-schedule the strong auth timeout alarm with latest information on the most recent
+     * successful strong auth time and strong auth timeout from device policy.
+     */
+    private void rescheduleStrongAuthTimeoutAlarm(long strongAuthTime, int userId) {
         final DevicePolicyManager dpm =
                 (DevicePolicyManager) mContext.getSystemService(Context.DEVICE_POLICY_SERVICE);
-        long when = SystemClock.elapsedRealtime() + dpm.getRequiredStrongAuthTimeout(null, userId);
         // cancel current alarm listener for the user (if there was one)
         StrongAuthTimeoutAlarmListener alarm = mStrongAuthTimeoutAlarmListenerForUser.get(userId);
         if (alarm != null) {
             mAlarmManager.cancel(alarm);
+            alarm.setLatestStrongAuthTime(strongAuthTime);
         } else {
-            alarm = new StrongAuthTimeoutAlarmListener(userId);
+            alarm = new StrongAuthTimeoutAlarmListener(strongAuthTime, userId);
             mStrongAuthTimeoutAlarmListenerForUser.put(userId, alarm);
         }
+        // AlarmManager.set() correctly handles the case where nextAlarmTime has already been in
+        // the past (by firing the listener straight away), so nothing special for us to do here.
+        long nextAlarmTime = strongAuthTime + dpm.getRequiredStrongAuthTimeout(null, userId);
+
         // schedule a new alarm listener for the user
-        mAlarmManager.set(AlarmManager.ELAPSED_REALTIME, when, STRONG_AUTH_TIMEOUT_ALARM_TAG,
-                alarm, mHandler);
+        mAlarmManager.set(AlarmManager.ELAPSED_REALTIME, nextAlarmTime,
+                STRONG_AUTH_TIMEOUT_ALARM_TAG, alarm, mHandler);
+    }
+
+    private void handleScheduleStrongAuthTimeout(int userId) {
+        rescheduleStrongAuthTimeoutAlarm(mInjector.getElapsedRealtimeMs(), userId);
 
         // cancel current non-strong biometric alarm listener for the user (if there was one)
         cancelNonStrongBiometricAlarmListener(userId);
@@ -207,9 +277,16 @@ public class LockSettingsStrongAuth {
         setIsNonStrongBiometricAllowed(true, userId);
     }
 
+    private void handleRefreshStrongAuthTimeout(int userId) {
+        StrongAuthTimeoutAlarmListener alarm = mStrongAuthTimeoutAlarmListenerForUser.get(userId);
+        if (alarm != null) {
+            rescheduleStrongAuthTimeoutAlarm(alarm.getLatestStrongAuthTime(), userId);
+        }
+    }
+
     private void handleScheduleNonStrongBiometricTimeout(int userId) {
         if (DEBUG) Slog.d(TAG, "handleScheduleNonStrongBiometricTimeout for userId=" + userId);
-        long when = SystemClock.elapsedRealtime() + DEFAULT_NON_STRONG_BIOMETRIC_TIMEOUT_MS;
+        long nextAlarmTime = mInjector.getNextAlarmTimeMs(DEFAULT_NON_STRONG_BIOMETRIC_TIMEOUT_MS);
         NonStrongBiometricTimeoutAlarmListener alarm = mNonStrongBiometricTimeoutAlarmListener
                 .get(userId);
         if (alarm != null) {
@@ -226,7 +303,7 @@ public class LockSettingsStrongAuth {
             alarm = new NonStrongBiometricTimeoutAlarmListener(userId);
             mNonStrongBiometricTimeoutAlarmListener.put(userId, alarm);
             // schedule a new alarm listener for the user
-            mAlarmManager.set(AlarmManager.ELAPSED_REALTIME, when,
+            mAlarmManager.set(AlarmManager.ELAPSED_REALTIME, nextAlarmTime,
                     NON_STRONG_BIOMETRIC_TIMEOUT_ALARM_TAG, alarm, mHandler);
         }
 
@@ -268,7 +345,8 @@ public class LockSettingsStrongAuth {
         }
     }
 
-    private void setIsNonStrongBiometricAllowed(boolean allowed, int userId) {
+    @VisibleForTesting
+    protected void setIsNonStrongBiometricAllowed(boolean allowed, int userId) {
         if (DEBUG) {
             Slog.d(TAG, "setIsNonStrongBiometricAllowed for allowed=" + allowed
                     + ", userId=" + userId);
@@ -302,7 +380,8 @@ public class LockSettingsStrongAuth {
 
     private void handleScheduleNonStrongBiometricIdleTimeout(int userId) {
         if (DEBUG) Slog.d(TAG, "handleScheduleNonStrongBiometricIdleTimeout for userId=" + userId);
-        long when = SystemClock.elapsedRealtime() + DEFAULT_NON_STRONG_BIOMETRIC_IDLE_TIMEOUT_MS;
+        long nextAlarmTime =
+                mInjector.getNextAlarmTimeMs(DEFAULT_NON_STRONG_BIOMETRIC_IDLE_TIMEOUT_MS);
         // cancel current alarm listener for the user (if there was one)
         NonStrongBiometricIdleTimeoutAlarmListener alarm =
                 mNonStrongBiometricIdleTimeoutAlarmListener.get(userId);
@@ -315,7 +394,7 @@ public class LockSettingsStrongAuth {
         }
         // schedule a new alarm listener for the user
         if (DEBUG) Slog.d(TAG, "Schedule a new alarm for non-strong biometric idle timeout");
-        mAlarmManager.set(AlarmManager.ELAPSED_REALTIME, when,
+        mAlarmManager.set(AlarmManager.ELAPSED_REALTIME, nextAlarmTime,
                 NON_STRONG_BIOMETRIC_IDLE_TIMEOUT_ALARM_TAG, alarm, mHandler);
     }
 
@@ -405,6 +484,13 @@ public class LockSettingsStrongAuth {
     }
 
     /**
+     * Refreshes pending strong auth timeout with the latest admin requirement set by device policy.
+     */
+    public void refreshStrongAuthTimeout(int userId) {
+        mHandler.obtainMessage(MSG_REFRESH_STRONG_AUTH_TIMEOUT, userId, 0).sendToTarget();
+    }
+
+    /**
      * Report successful unlocking with biometric
      */
     public void reportSuccessfulBiometricUnlock(boolean isStrongBiometric, int userId) {
@@ -435,12 +521,31 @@ public class LockSettingsStrongAuth {
     /**
      * Alarm of fallback timeout for primary auth
      */
-    private class StrongAuthTimeoutAlarmListener implements OnAlarmListener {
+    @VisibleForTesting
+    protected class StrongAuthTimeoutAlarmListener implements OnAlarmListener {
 
+        private long mLatestStrongAuthTime;
         private final int mUserId;
 
-        public StrongAuthTimeoutAlarmListener(int userId) {
+        public StrongAuthTimeoutAlarmListener(long latestStrongAuthTime, int userId) {
+            mLatestStrongAuthTime = latestStrongAuthTime;
             mUserId = userId;
+        }
+
+        /**
+         * Sets the most recent time when a successful strong auth happened, in number of
+         * milliseconds.
+         */
+        public void setLatestStrongAuthTime(long strongAuthTime) {
+            mLatestStrongAuthTime = strongAuthTime;
+        }
+
+        /**
+         * Returns the most recent time when a successful strong auth happened, in number of
+         * milliseconds.
+         */
+        public long getLatestStrongAuthTime() {
+            return mLatestStrongAuthTime;
         }
 
         @Override
@@ -452,7 +557,8 @@ public class LockSettingsStrongAuth {
     /**
      * Alarm of fallback timeout for non-strong biometric (i.e. weak or convenience)
      */
-    private class NonStrongBiometricTimeoutAlarmListener implements OnAlarmListener {
+    @VisibleForTesting
+    protected class NonStrongBiometricTimeoutAlarmListener implements OnAlarmListener {
 
         private final int mUserId;
 
@@ -469,7 +575,8 @@ public class LockSettingsStrongAuth {
     /**
      * Alarm of idle timeout for non-strong biometric (i.e. weak or convenience biometric)
      */
-    private class NonStrongBiometricIdleTimeoutAlarmListener implements OnAlarmListener {
+    @VisibleForTesting
+    protected class NonStrongBiometricIdleTimeoutAlarmListener implements OnAlarmListener {
 
         private final int mUserId;
 
@@ -484,7 +591,8 @@ public class LockSettingsStrongAuth {
         }
     }
 
-    private final Handler mHandler = new Handler() {
+    @VisibleForTesting
+    protected final Handler mHandler = new Handler(Looper.getMainLooper()) {
         @Override
         public void handleMessage(Message msg) {
             switch (msg.what) {
@@ -502,6 +610,9 @@ public class LockSettingsStrongAuth {
                     break;
                 case MSG_SCHEDULE_STRONG_AUTH_TIMEOUT:
                     handleScheduleStrongAuthTimeout(msg.arg1);
+                    break;
+                case MSG_REFRESH_STRONG_AUTH_TIMEOUT:
+                    handleRefreshStrongAuthTimeout(msg.arg1);
                     break;
                 case MSG_NO_LONGER_REQUIRE_STRONG_AUTH:
                     handleNoLongerRequireStrongAuth(msg.arg1, msg.arg2);

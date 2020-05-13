@@ -19,6 +19,7 @@ package com.android.systemui.media
 import android.media.MediaMetadata
 import android.media.session.MediaController
 import android.media.session.PlaybackState
+import android.os.SystemClock
 import android.view.MotionEvent
 import android.view.View
 import android.widget.SeekBar
@@ -31,11 +32,48 @@ import com.android.systemui.util.concurrency.DelayableExecutor
 
 private const val POSITION_UPDATE_INTERVAL_MILLIS = 100L
 
+private fun PlaybackState.isInMotion(): Boolean {
+    return this.state == PlaybackState.STATE_PLAYING ||
+            this.state == PlaybackState.STATE_FAST_FORWARDING ||
+            this.state == PlaybackState.STATE_REWINDING
+}
+
+/**
+ * Gets the playback position while accounting for the time since the [PlaybackState] was last
+ * retrieved.
+ *
+ * This method closely follows the implementation of
+ * [MediaSessionRecord#getStateWithUpdatedPosition].
+ */
+private fun PlaybackState.computePosition(duration: Long): Long {
+    var currentPosition = this.position
+    if (this.isInMotion()) {
+        val updateTime = this.getLastPositionUpdateTime()
+        val currentTime = SystemClock.elapsedRealtime()
+        if (updateTime > 0) {
+            var position = (this.playbackSpeed * (currentTime - updateTime)).toLong() +
+                    this.getPosition()
+            if (duration >= 0 && position > duration) {
+                position = duration.toLong()
+            } else if (position < 0) {
+                position = 0
+            }
+            currentPosition = position
+        }
+    }
+    return currentPosition
+}
+
 /** ViewModel for seek bar in QS media player. */
 class SeekBarViewModel(val bgExecutor: DelayableExecutor) {
 
+    private var _data = Progress(false, false, null, null, null)
+        set(value) {
+            field = value
+            _progress.postValue(value)
+        }
     private val _progress = MutableLiveData<Progress>().apply {
-        postValue(Progress(false, false, null, null, null))
+        postValue(_data)
     }
     val progress: LiveData<Progress>
         get() = _progress
@@ -72,18 +110,31 @@ class SeekBarViewModel(val bgExecutor: DelayableExecutor) {
         val seekAvailable = ((playbackState?.actions ?: 0L) and PlaybackState.ACTION_SEEK_TO) != 0L
         val position = playbackState?.position?.toInt()
         val duration = mediaMetadata?.getLong(MediaMetadata.METADATA_KEY_DURATION)?.toInt()
-        val enabled = if (duration != null && duration <= 0) false else true
-        _progress.postValue(Progress(enabled, seekAvailable, position, duration, color))
+        val enabled = if (playbackState == null ||
+                playbackState?.getState() == PlaybackState.STATE_NONE ||
+                (duration != null && duration <= 0)) false else true
+        _data = Progress(enabled, seekAvailable, position, duration, color)
         if (shouldPollPlaybackPosition()) {
             checkPlaybackPosition()
         }
     }
 
+    /**
+     * Puts the seek bar into a resumption state.
+     *
+     * This should be called when the media session behind the controller has been destroyed.
+     */
+    @AnyThread
+    fun clearController() = bgExecutor.execute {
+        _data = _data.copy(enabled = false)
+    }
+
     @AnyThread
     private fun checkPlaybackPosition(): Runnable = bgExecutor.executeDelayed({
-        val currentPosition = controller?.playbackState?.position?.toInt()
-        if (currentPosition != null && _progress.value!!.elapsedTime != currentPosition) {
-            _progress.postValue(_progress.value!!.copy(elapsedTime = currentPosition))
+        val duration = _data?.duration ?: -1
+        val currentPosition = playbackState?.computePosition(duration.toLong())?.toInt()
+        if (currentPosition != null && _data.elapsedTime != currentPosition) {
+            _data = _data.copy(elapsedTime = currentPosition)
         }
         if (shouldPollPlaybackPosition()) {
             checkPlaybackPosition()
@@ -92,13 +143,7 @@ class SeekBarViewModel(val bgExecutor: DelayableExecutor) {
 
     @WorkerThread
     private fun shouldPollPlaybackPosition(): Boolean {
-        val state = playbackState?.state
-        val moving = if (state == null) false else
-                state == PlaybackState.STATE_PLAYING ||
-                state == PlaybackState.STATE_BUFFERING ||
-                state == PlaybackState.STATE_FAST_FORWARDING ||
-                state == PlaybackState.STATE_REWINDING
-        return moving && listening
+        return listening && playbackState?.isInMotion() ?: false
     }
 
     /** Gets a listener to attach to the seek bar to handle seeking. */

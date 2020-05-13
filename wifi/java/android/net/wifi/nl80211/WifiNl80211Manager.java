@@ -246,20 +246,6 @@ public class WifiNl80211Manager {
          * @param bandwidth The new bandwidth of the SoftAp.
          */
         void onSoftApChannelSwitched(int frequencyMhz, @WifiAnnotations.Bandwidth int bandwidth);
-
-        /**
-         * Invoked when the station connected to Any AP.
-         * @hide
-         */
-        @SystemApi
-        void onStaConnected(@NonNull String bssidStr);
-
-        /**
-         * Invoked when the station disconnected to Any AP.
-         * @hide
-         */
-        @SystemApi
-        void onStaDisconnected(@NonNull String bssidStr);
     }
 
     /**
@@ -381,13 +367,7 @@ public class WifiNl80211Manager {
 
         @Override
         public void onConnectedClientsChanged(NativeWifiClient client, boolean isConnected) {
-            if (mVerboseLoggingEnabled) {
-                Log.d(TAG, "onConnectedClientsChanged called with "
-                        + client.getMacAddress() + " isConnected: " + isConnected);
-            }
-
-            Binder.clearCallingIdentity();
-            mExecutor.execute(() -> mSoftApListener.onConnectedClientsChanged(client, isConnected));
+            // Ignore event from wificond. This is handled from hostapd now.
         }
 
         @Override
@@ -1331,118 +1311,5 @@ public class WifiNl80211Manager {
             int idExt,
             @NonNull byte[] bytes) {
         return null;
-    }
-
-    /** @hide **/
-    @SystemApi
-    public static class WifiGenerationCapabilities {
-
-        /** @hide */
-        @SystemApi
-        public final boolean htSupport2g;
-        /** @hide */
-        @SystemApi
-        public final boolean vhtSupport2g;
-        /** @hide */
-        @SystemApi
-        public final boolean staHeSupport2g;
-        /** @hide */
-        @SystemApi
-        public final boolean sapHeSupport2g;
-        /** @hide */
-        @SystemApi
-        public final boolean htSupport5g;
-        /** @hide */
-        @SystemApi
-        public final boolean vhtSupport5g;
-        /** @hide */
-        @SystemApi
-        public final boolean staHeSupport5g;
-        /** @hide */
-        @SystemApi
-        public final boolean sapHeSupport5g;
-
-        /** @hide */
-        @SystemApi
-        public WifiGenerationCapabilities(
-                boolean htSupport2g, boolean vhtSupport2g,
-                boolean staHeSupport2g, boolean sapHeSupport2g,
-                boolean htSupport5g, boolean vhtSupport5g,
-                boolean staHeSupport5g, boolean sapHeSupport5g) {
-            this.htSupport2g = htSupport2g;
-            this.vhtSupport2g = vhtSupport2g;
-            this.staHeSupport2g = staHeSupport2g;
-            this.sapHeSupport2g = sapHeSupport2g;
-            this.htSupport5g = htSupport5g;
-            this.vhtSupport5g = vhtSupport5g;
-            this.staHeSupport5g = staHeSupport5g;
-            this.sapHeSupport5g = sapHeSupport5g;
-        }
-    }
-
-    /**
-     * Query the Wi-Fi generation capabilities for 2G and 5G bands.
-     *
-     * @return WifiGenerationCapabilities object, or null for error.
-     * @hide
-     */
-    @SystemApi
-    @Nullable public WifiGenerationCapabilities getWifiGenerationCapabilities() {
-        if (!retrieveWificondAndRegisterForDeath()) {
-            return null;
-        }
-
-        int wifiGenerationCapaMask = 0;
-        try {
-            wifiGenerationCapaMask = mWificond.QcGetWifiGenerationCapabilities();
-        } catch (RemoteException e1) {
-            Log.e(TAG, "Failed to request getWifiGenerationCapabilities due to remote exception");
-            return null;
-        }
-
-        if (wifiGenerationCapaMask == -1) {
-            Log.e(TAG, "Failed to get Wifi generation capabilities.");
-            return null;
-        }
-
-        boolean htSupport2g = false;
-        boolean vhtSupport2g = false;
-        boolean staHeSupport2g = false;
-        boolean sapHeSupport2g = false;
-        boolean htSupport5g = false;
-        boolean vhtSupport5g = false;
-        boolean staHeSupport5g = false;
-        boolean sapHeSupport5g = false;
-
-        if ((wifiGenerationCapaMask & (1 << IWificond.QC_2G_HT_SUPPORT)) != 0) {
-            htSupport2g = true;
-        }
-        if ((wifiGenerationCapaMask & (1 << IWificond.QC_2G_VHT_SUPPORT)) != 0) {
-            vhtSupport2g = true;
-        }
-        if ((wifiGenerationCapaMask & (1 << IWificond.QC_2G_STA_HE_SUPPORT)) != 0) {
-            staHeSupport2g = true;
-        }
-        if ((wifiGenerationCapaMask & (1 << IWificond.QC_2G_SAP_HE_SUPPORT)) != 0) {
-            sapHeSupport2g = true;
-        }
-        if ((wifiGenerationCapaMask & (1 << IWificond.QC_5G_HT_SUPPORT)) != 0) {
-            htSupport5g = true;
-        }
-        if ((wifiGenerationCapaMask & (1 << IWificond.QC_5G_VHT_SUPPORT)) != 0) {
-            vhtSupport5g = true;
-        }
-        if ((wifiGenerationCapaMask & (1 << IWificond.QC_5G_STA_HE_SUPPORT)) != 0) {
-            staHeSupport5g = true;
-        }
-        if ((wifiGenerationCapaMask & (1 << IWificond.QC_5G_SAP_HE_SUPPORT)) != 0) {
-            sapHeSupport5g = true;
-        }
-
-        WifiGenerationCapabilities wifiGenerationCapa = new WifiGenerationCapabilities(
-                htSupport2g, vhtSupport2g, staHeSupport2g, sapHeSupport2g,
-                htSupport5g, vhtSupport5g, staHeSupport5g, sapHeSupport5g);
-
-        return wifiGenerationCapa;
     }
 }

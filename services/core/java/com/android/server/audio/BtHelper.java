@@ -115,11 +115,29 @@ public class BtHelper {
 
     private static final int BT_HEARING_AID_GAIN_MIN = -128;
 
+    /**
+     * Returns a string representation of the scoAudioMode.
+     */
+    public static String scoAudioModeToString(int scoAudioMode) {
+        switch (scoAudioMode) {
+            case SCO_MODE_UNDEFINED:
+                return "SCO_MODE_UNDEFINED";
+            case SCO_MODE_VIRTUAL_CALL:
+                return "SCO_MODE_VIRTUAL_CALL";
+            case SCO_MODE_RAW:
+                return "SCO_MODE_RAW";
+            case SCO_MODE_VR:
+                return "SCO_MODE_VR";
+            default:
+                return "SCO_MODE_(" + scoAudioMode + ")";
+        }
+    }
+
     //----------------------------------------------------------------------
     /*package*/ static class BluetoothA2dpDeviceInfo {
         private final @NonNull BluetoothDevice mBtDevice;
         private final int mVolume;
-        private final int mCodec;
+        private final @AudioSystem.AudioFormatNativeEnumForBtCodec int mCodec;
 
         BluetoothA2dpDeviceInfo(@NonNull BluetoothDevice btDevice) {
             this(btDevice, -1, AudioSystem.AUDIO_FORMAT_DEFAULT);
@@ -139,15 +157,26 @@ public class BtHelper {
             return mVolume;
         }
 
-        public int getCodec() {
+        public @AudioSystem.AudioFormatNativeEnumForBtCodec int getCodec() {
             return mCodec;
         }
 
         // redefine equality op so we can match messages intended for this device
         @Override
         public boolean equals(Object o) {
-            return mBtDevice.equals(o);
+            if (o == null) {
+                return false;
+            }
+            if (this == o) {
+                return true;
+            }
+            if (o instanceof BluetoothA2dpDeviceInfo) {
+                return mBtDevice.equals(((BluetoothA2dpDeviceInfo) o).getBtDevice());
+            }
+            return false;
         }
+
+
     }
 
     // A2DP device events
@@ -256,7 +285,8 @@ public class BtHelper {
         mA2dp.setAvrcpAbsoluteVolume(index);
     }
 
-    /*package*/ synchronized int getA2dpCodec(@NonNull BluetoothDevice device) {
+    /*package*/ synchronized @AudioSystem.AudioFormatNativeEnumForBtCodec int getA2dpCodec(
+            @NonNull BluetoothDevice device) {
         if (mA2dp == null) {
             return AudioSystem.AUDIO_FORMAT_DEFAULT;
         }
@@ -268,7 +298,7 @@ public class BtHelper {
         if (btCodecConfig == null) {
             return AudioSystem.AUDIO_FORMAT_DEFAULT;
         }
-        return mapBluetoothCodecToAudioFormat(btCodecConfig.getCodecType());
+        return AudioSystem.bluetoothCodecToAudioFormat(btCodecConfig.getCodecType());
     }
 
      //SCO device tracking for TWSPLUS device
@@ -1163,26 +1193,26 @@ public class BtHelper {
         return result;
     }
 
-    private int mapBluetoothCodecToAudioFormat(int btCodecType) {
+    /**
+     * Returns the String equivalent of the btCodecType.
+     *
+     * This uses an "ENCODING_" prefix for consistency with Audio;
+     * we could alternately use the "SOURCE_CODEC_TYPE_" prefix from Bluetooth.
+     */
+    public static String bluetoothCodecToEncodingString(int btCodecType) {
         switch (btCodecType) {
             case BluetoothCodecConfig.SOURCE_CODEC_TYPE_SBC:
-                return AudioSystem.AUDIO_FORMAT_SBC;
+                return "ENCODING_SBC";
             case BluetoothCodecConfig.SOURCE_CODEC_TYPE_AAC:
-                return AudioSystem.AUDIO_FORMAT_AAC;
+                return "ENCODING_AAC";
             case BluetoothCodecConfig.SOURCE_CODEC_TYPE_APTX:
-                return AudioSystem.AUDIO_FORMAT_APTX;
+                return "ENCODING_APTX";
             case BluetoothCodecConfig.SOURCE_CODEC_TYPE_APTX_HD:
-                return AudioSystem.AUDIO_FORMAT_APTX_HD;
+                return "ENCODING_APTX_HD";
             case BluetoothCodecConfig.SOURCE_CODEC_TYPE_LDAC:
-                return AudioSystem.AUDIO_FORMAT_LDAC;
-            case BluetoothCodecConfig.SOURCE_CODEC_TYPE_CELT:
-                return AudioSystem.AUDIO_FORMAT_CELT;
-            case BluetoothCodecConfig.SOURCE_CODEC_TYPE_APTX_ADAPTIVE:
-                return AudioSystem.AUDIO_FORMAT_APTX_ADAPTIVE;
-            case BluetoothCodecConfig.SOURCE_CODEC_TYPE_APTX_TWSP:
-                return AudioSystem.AUDIO_FORMAT_APTX_TWSP;
+                return "ENCODING_LDAC";
             default:
-                return AudioSystem.AUDIO_FORMAT_DEFAULT;
+                return "ENCODING_BT_CODEC_TYPE(" + btCodecType + ")";
         }
     }
 }

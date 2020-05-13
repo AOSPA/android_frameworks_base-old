@@ -147,14 +147,16 @@ public final class MediaRouter2Manager {
         }
 
         synchronized (sLock) {
-            if (mCallbackRecords.size() == 0 && mClient != null) {
-                try {
-                    mMediaRouterService.unregisterManager(mClient);
-                } catch (RemoteException ex) {
-                    Log.e(TAG, "Unable to unregister media router manager", ex);
+            if (mCallbackRecords.size() == 0) {
+                if (mClient != null) {
+                    try {
+                        mMediaRouterService.unregisterManager(mClient);
+                    } catch (RemoteException ex) {
+                        Log.e(TAG, "Unable to unregister media router manager", ex);
+                    }
+                    mClient = null;
                 }
-                //TODO: clear mRoutes?
-                mClient = null;
+                mRoutes.clear();
                 mPreferredFeaturesMap.clear();
             }
         }
@@ -312,7 +314,6 @@ public final class MediaRouter2Manager {
 
         //TODO: Ignore unknown route.
         if (sessionInfo.getTransferableRoutes().contains(route.getId())) {
-            //TODO: callbacks must be called after this.
             transferToRoute(sessionInfo, route);
             return;
         }
@@ -338,7 +339,6 @@ public final class MediaRouter2Manager {
             } catch (RemoteException ex) {
                 Log.e(TAG, "Unable to select media route", ex);
             }
-            releaseSession(sessionInfo);
         }
     }
 
@@ -487,6 +487,7 @@ public final class MediaRouter2Manager {
             notifyTransferFailed(matchingRequest.mOldSessionInfo, requestedRoute);
             return;
         }
+        releaseSession(matchingRequest.mOldSessionInfo);
         notifyTransferred(matchingRequest.mOldSessionInfo, sessionInfo);
     }
 

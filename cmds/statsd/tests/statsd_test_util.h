@@ -17,6 +17,7 @@
 #include <aidl/android/os/BnPullAtomCallback.h>
 #include <aidl/android/os/IPullAtomCallback.h>
 #include <aidl/android/os/IPullAtomResultReceiver.h>
+#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
 #include "frameworks/base/cmds/statsd/src/stats_log.pb.h"
@@ -24,6 +25,7 @@
 #include "src/StatsLogProcessor.h"
 #include "src/hash.h"
 #include "src/logd/LogEvent.h"
+#include "src/packages/UidMap.h"
 #include "src/stats_log_util.h"
 #include "stats_event.h"
 #include "statslog_statsdtest.h"
@@ -32,6 +34,7 @@ namespace android {
 namespace os {
 namespace statsd {
 
+using namespace testing;
 using ::aidl::android::os::BnPullAtomCallback;
 using ::aidl::android::os::IPullAtomCallback;
 using ::aidl::android::os::IPullAtomResultReceiver;
@@ -41,6 +44,14 @@ using Status = ::ndk::ScopedAStatus;
 
 const int SCREEN_STATE_ATOM_ID = util::SCREEN_STATE_CHANGED;
 const int UID_PROCESS_STATE_ATOM_ID = util::UID_PROCESS_STATE_CHANGED;
+
+enum BucketSplitEvent { APP_UPGRADE, BOOT_COMPLETE };
+
+class MockUidMap : public UidMap {
+public:
+    MOCK_METHOD(int, getHostUidOrSelf, (int uid), (const));
+    MOCK_METHOD(std::set<int32_t>, getAppUid, (const string& package), (const));
+};
 
 // Converts a ProtoOutputStream to a StatsLogReport proto.
 StatsLogReport outputStreamToProto(ProtoOutputStream* proto);
@@ -138,27 +149,16 @@ State CreateUidProcessState();
 // Create State proto for overlay state atom.
 State CreateOverlayState();
 
-State CreateScreenStateWithOnOffMap();
-
-State CreateScreenStateWithInDozeMap();
+State CreateScreenStateWithOnOffMap(int64_t screenOnId, int64_t screenOffId);
 
 // Create StateGroup proto for ScreenState ON group
-StateMap_StateGroup CreateScreenStateOnGroup();
+StateMap_StateGroup CreateScreenStateOnGroup(int64_t screenOnId);
 
 // Create StateGroup proto for ScreenState OFF group
-StateMap_StateGroup CreateScreenStateOffGroup();
+StateMap_StateGroup CreateScreenStateOffGroup(int64_t screenOffId);
 
 // Create StateMap proto for ScreenState ON/OFF map
-StateMap CreateScreenStateOnOffMap();
-
-// Create StateGroup proto for ScreenState IN DOZE group
-StateMap_StateGroup CreateScreenStateInDozeGroup();
-
-// Create StateGroup proto for ScreenState NOT IN DOZE group
-StateMap_StateGroup CreateScreenStateNotDozeGroup();
-
-// Create StateMap proto for ScreenState IN DOZE map
-StateMap CreateScreenStateInDozeMap();
+StateMap CreateScreenStateOnOffMap(int64_t screenOnId, int64_t screenOffId);
 
 // Add a predicate to the predicate combination.
 void addPredicateToPredicateCombination(const Predicate& predicate, Predicate* combination);
@@ -220,6 +220,15 @@ void CreateRepeatedValueLogEvent(LogEvent* logEvent, int atomId, int64_t eventTi
 std::shared_ptr<LogEvent> CreateNoValuesLogEvent(int atomId, int64_t eventTimeNs);
 
 void CreateNoValuesLogEvent(LogEvent* logEvent, int atomId, int64_t eventTimeNs);
+
+std::shared_ptr<LogEvent> makeUidLogEvent(int atomId, int64_t eventTimeNs, int uid, int data1,
+                                          int data2);
+
+std::shared_ptr<LogEvent> makeAttributionLogEvent(int atomId, int64_t eventTimeNs,
+                                                  const vector<int>& uids,
+                                                  const vector<string>& tags, int data1, int data2);
+
+sp<MockUidMap> makeMockUidMapForOneHost(int hostUid, const vector<int>& isolatedUids);
 
 // Create log event for screen state changed.
 std::unique_ptr<LogEvent> CreateScreenStateChangedEvent(
@@ -302,7 +311,8 @@ std::unique_ptr<LogEvent> CreateOverlayStateChangedEvent(int64_t timestampNs, co
 sp<StatsLogProcessor> CreateStatsLogProcessor(const int64_t timeBaseNs, const int64_t currentTimeNs,
                                               const StatsdConfig& config, const ConfigKey& key,
                                               const shared_ptr<IPullAtomCallback>& puller = nullptr,
-                                              const int32_t atomTag = 0 /*for puller only*/);
+                                              const int32_t atomTag = 0 /*for puller only*/,
+                                              const sp<UidMap> = new UidMap());
 
 // Util function to sort the log events by timestamp.
 void sortLogEventsByTimestamp(std::vector<std::unique_ptr<LogEvent>> *events);
@@ -319,12 +329,14 @@ void ValidateAttributionUidAndTagDimension(
     const DimensionsValue& value, int node_idx, int atomId, int uid, const std::string& tag);
 
 struct DimensionsPair {
-    DimensionsPair(DimensionsValue m1, DimensionsValue m2) : dimInWhat(m1), dimInCondition(m2){};
+    DimensionsPair(DimensionsValue m1, google::protobuf::RepeatedPtrField<StateValue> m2)
+        : dimInWhat(m1), stateValues(m2){};
 
     DimensionsValue dimInWhat;
-    DimensionsValue dimInCondition;
+    google::protobuf::RepeatedPtrField<StateValue> stateValues;
 };
 
+bool LessThan(const StateValue& s1, const StateValue& s2);
 bool LessThan(const DimensionsValue& s1, const DimensionsValue& s2);
 bool LessThan(const DimensionsPair& s1, const DimensionsPair& s2);
 
@@ -393,7 +405,7 @@ void sortMetricDataByDimensionsValue(const T& metricData, T* sortedMetricData) {
     for (int i = 0; i < metricData.data_size(); ++i) {
         dimensionIndexMap.insert(
                 std::make_pair(DimensionsPair(metricData.data(i).dimensions_in_what(),
-                                              metricData.data(i).dimensions_in_condition()),
+                                              metricData.data(i).slice_by_state()),
                                i));
     }
     for (const auto& itr : dimensionIndexMap) {

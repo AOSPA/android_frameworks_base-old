@@ -17,7 +17,9 @@
 package com.android.internal.widget;
 
 import android.annotation.NonNull;
+import android.annotation.Nullable;
 import android.os.Bundle;
+import android.os.IBinder;
 
 import java.util.Objects;
 import java.util.Set;
@@ -50,14 +52,33 @@ public final class InlinePresentationStyleUtils {
         for (String key : keys) {
             Object value1 = bundle1.get(key);
             Object value2 = bundle2.get(key);
-            if (value1 instanceof Bundle && value2 instanceof Bundle
-                    && !bundleEquals((Bundle) value1, (Bundle) value2)) {
-                return false;
-            } else if (!Objects.equals(value1, value2)) {
+            final boolean equal = value1 instanceof Bundle && value2 instanceof Bundle
+                    ? bundleEquals((Bundle) value1, (Bundle) value2)
+                    : Objects.equals(value1, value2);
+            if (!equal) {
                 return false;
             }
         }
         return true;
+    }
+
+    /**
+     * Removes remote objects from the bundle.
+     */
+    public static void filterContentTypes(@Nullable Bundle bundle) {
+        if (bundle == null) {
+            return;
+        }
+
+        for (String key : bundle.keySet()) {
+            Object o = bundle.get(key);
+
+            if (o instanceof Bundle) {
+                filterContentTypes((Bundle) o);
+            } else if (o instanceof IBinder) {
+                bundle.remove(key);
+            }
+        }
     }
 
     /**

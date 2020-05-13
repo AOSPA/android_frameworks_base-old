@@ -16,6 +16,10 @@
 
 package com.android.systemui.screenshot;
 
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
@@ -40,7 +44,6 @@ import androidx.test.filters.SmallTest;
 import com.android.systemui.SystemUIFactory;
 import com.android.systemui.SysuiTestCase;
 
-import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -80,11 +83,12 @@ public class ScreenshotNotificationSmartActionsTest extends SysuiTestCase {
                 eq(false))).thenThrow(
                 RuntimeException.class);
         CompletableFuture<List<Notification.Action>> smartActionsFuture =
-                ScreenshotSmartActions.getSmartActionsFuture("", "", bitmap,
-                        smartActionsProvider, true, false);
-        Assert.assertNotNull(smartActionsFuture);
+                ScreenshotSmartActions.getSmartActionsFuture(
+                        "", Uri.parse("content://authority/data"), bitmap, smartActionsProvider,
+                        true, false);
+        assertNotNull(smartActionsFuture);
         List<Notification.Action> smartActions = smartActionsFuture.get(5, TimeUnit.MILLISECONDS);
-        Assert.assertEquals(Collections.emptyList(), smartActions);
+        assertEquals(Collections.emptyList(), smartActions);
     }
 
     // Tests any exception thrown in waiting for smart actions future to complete does
@@ -98,8 +102,8 @@ public class ScreenshotNotificationSmartActionsTest extends SysuiTestCase {
         when(smartActionsFuture.get(timeoutMs, TimeUnit.MILLISECONDS)).thenThrow(
                 RuntimeException.class);
         List<Notification.Action> actions = ScreenshotSmartActions.getSmartActions(
-                "", "", smartActionsFuture, timeoutMs, mSmartActionsProvider);
-        Assert.assertEquals(Collections.emptyList(), actions);
+                "", smartActionsFuture, timeoutMs, mSmartActionsProvider);
+        assertEquals(Collections.emptyList(), actions);
     }
 
     // Tests any exception thrown in notifying feedback does not affect regular screenshot flow.
@@ -119,13 +123,14 @@ public class ScreenshotNotificationSmartActionsTest extends SysuiTestCase {
         Bitmap bitmap = mock(Bitmap.class);
         when(bitmap.getConfig()).thenReturn(Bitmap.Config.RGB_565);
         CompletableFuture<List<Notification.Action>> smartActionsFuture =
-                ScreenshotSmartActions.getSmartActionsFuture("", "", bitmap,
-                        mSmartActionsProvider, true, true);
+                ScreenshotSmartActions.getSmartActionsFuture(
+                        "", Uri.parse("content://autority/data"), bitmap, mSmartActionsProvider,
+                        true, true);
         verify(mSmartActionsProvider, never()).getActions(any(), any(), any(), any(),
                 eq(false));
-        Assert.assertNotNull(smartActionsFuture);
+        assertNotNull(smartActionsFuture);
         List<Notification.Action> smartActions = smartActionsFuture.get(5, TimeUnit.MILLISECONDS);
-        Assert.assertEquals(Collections.emptyList(), smartActions);
+        assertEquals(Collections.emptyList(), smartActions);
     }
 
     // Tests for a hardware bitmap, ScreenshotNotificationSmartActionsProvider is invoked once.
@@ -133,8 +138,9 @@ public class ScreenshotNotificationSmartActionsTest extends SysuiTestCase {
     public void testScreenshotNotificationSmartActionsProviderInvokedOnce() {
         Bitmap bitmap = mock(Bitmap.class);
         when(bitmap.getConfig()).thenReturn(Bitmap.Config.HARDWARE);
-        ScreenshotSmartActions.getSmartActionsFuture("", "", bitmap, mSmartActionsProvider,
-                true, true);
+        ScreenshotSmartActions.getSmartActionsFuture(
+                "", Uri.parse("content://autority/data"), bitmap, mSmartActionsProvider, true,
+                true);
         verify(mSmartActionsProvider, times(1))
                 .getActions(any(), any(), any(), any(), eq(true));
     }
@@ -149,17 +155,17 @@ public class ScreenshotNotificationSmartActionsTest extends SysuiTestCase {
                 SystemUIFactory.getInstance().createScreenshotNotificationSmartActionsProvider(
                         mContext, null, mHandler);
         CompletableFuture<List<Notification.Action>> smartActionsFuture =
-                ScreenshotSmartActions.getSmartActionsFuture("", "", bitmap,
+                ScreenshotSmartActions.getSmartActionsFuture("", null, bitmap,
                         actionsProvider,
                         true, true);
-        Assert.assertNotNull(smartActionsFuture);
+        assertNotNull(smartActionsFuture);
         List<Notification.Action> smartActions = smartActionsFuture.get(5, TimeUnit.MILLISECONDS);
-        Assert.assertEquals(smartActions.size(), 0);
+        assertEquals(smartActions.size(), 0);
     }
 
-    // Tests for notification action extras.
+    // Tests for share action extras
     @Test
-    public void testNotificationActionExtras() {
+    public void testShareActionExtras() {
         if (Looper.myLooper() == null) {
             Looper.prepare();
         }
@@ -169,35 +175,70 @@ public class ScreenshotNotificationSmartActionsTest extends SysuiTestCase {
         data.image = Bitmap.createBitmap(100, 100, Bitmap.Config.ARGB_8888);
         data.finisher = null;
         data.mActionsReadyListener = null;
-        data.createDeleteAction = true;
         SaveImageInBackgroundTask task = new SaveImageInBackgroundTask(mContext, data);
-        List<Notification.Action> actions = task.populateNotificationActions(
-                mContext, mContext.getResources(),
+
+        Notification.Action shareAction = task.createShareAction(mContext, mContext.getResources(),
                 Uri.parse("Screenshot_123.png"));
 
-        Assert.assertEquals(actions.size(), 3);
-        boolean isShareFound = false;
-        boolean isEditFound = false;
-        boolean isDeleteFound = false;
-        for (Notification.Action action : actions) {
-            Intent intent = action.actionIntent.getIntent();
-            Assert.assertNotNull(intent);
-            Bundle bundle = intent.getExtras();
-            Assert.assertTrue(bundle.containsKey(GlobalScreenshot.EXTRA_ID));
-            Assert.assertTrue(
-                    bundle.containsKey(GlobalScreenshot.EXTRA_SMART_ACTIONS_ENABLED));
+        Intent intent = shareAction.actionIntent.getIntent();
+        assertNotNull(intent);
+        Bundle bundle = intent.getExtras();
+        assertTrue(bundle.containsKey(GlobalScreenshot.EXTRA_ID));
+        assertTrue(bundle.containsKey(GlobalScreenshot.EXTRA_SMART_ACTIONS_ENABLED));
+        assertEquals(GlobalScreenshot.ACTION_TYPE_SHARE, shareAction.title);
+        assertEquals(Intent.ACTION_SEND, intent.getAction());
+    }
 
-            if (action.title.equals(GlobalScreenshot.ACTION_TYPE_DELETE)) {
-                isDeleteFound = intent.getAction() == null;
-            } else if (action.title.equals(GlobalScreenshot.ACTION_TYPE_EDIT)) {
-                isEditFound = Intent.ACTION_EDIT.equals(intent.getAction());
-            } else if (action.title.equals(GlobalScreenshot.ACTION_TYPE_SHARE)) {
-                isShareFound = Intent.ACTION_SEND.equals(intent.getAction());
-            }
+    // Tests for edit action extras
+    @Test
+    public void testEditActionExtras() {
+        if (Looper.myLooper() == null) {
+            Looper.prepare();
         }
 
-        Assert.assertTrue(isEditFound);
-        Assert.assertTrue(isDeleteFound);
-        Assert.assertTrue(isShareFound);
+        GlobalScreenshot.SaveImageInBackgroundData
+                data = new GlobalScreenshot.SaveImageInBackgroundData();
+        data.image = Bitmap.createBitmap(100, 100, Bitmap.Config.ARGB_8888);
+        data.finisher = null;
+        data.mActionsReadyListener = null;
+        SaveImageInBackgroundTask task = new SaveImageInBackgroundTask(mContext, data);
+
+        Notification.Action editAction = task.createEditAction(mContext, mContext.getResources(),
+                Uri.parse("Screenshot_123.png"));
+
+        Intent intent = editAction.actionIntent.getIntent();
+        assertNotNull(intent);
+        Bundle bundle = intent.getExtras();
+        assertTrue(bundle.containsKey(GlobalScreenshot.EXTRA_ID));
+        assertTrue(bundle.containsKey(GlobalScreenshot.EXTRA_SMART_ACTIONS_ENABLED));
+        assertEquals(GlobalScreenshot.ACTION_TYPE_EDIT, editAction.title);
+        assertEquals(Intent.ACTION_EDIT, intent.getAction());
+    }
+
+    // Tests for share action extras
+    @Test
+    public void testDeleteActionExtras() {
+        if (Looper.myLooper() == null) {
+            Looper.prepare();
+        }
+
+        GlobalScreenshot.SaveImageInBackgroundData
+                data = new GlobalScreenshot.SaveImageInBackgroundData();
+        data.image = Bitmap.createBitmap(100, 100, Bitmap.Config.ARGB_8888);
+        data.finisher = null;
+        data.mActionsReadyListener = null;
+        SaveImageInBackgroundTask task = new SaveImageInBackgroundTask(mContext, data);
+
+        Notification.Action deleteAction = task.createDeleteAction(mContext,
+                mContext.getResources(),
+                Uri.parse("Screenshot_123.png"));
+
+        Intent intent = deleteAction.actionIntent.getIntent();
+        assertNotNull(intent);
+        Bundle bundle = intent.getExtras();
+        assertTrue(bundle.containsKey(GlobalScreenshot.EXTRA_ID));
+        assertTrue(bundle.containsKey(GlobalScreenshot.EXTRA_SMART_ACTIONS_ENABLED));
+        assertEquals(deleteAction.title, GlobalScreenshot.ACTION_TYPE_DELETE);
+        assertNull(intent.getAction());
     }
 }

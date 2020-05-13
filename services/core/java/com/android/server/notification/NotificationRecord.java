@@ -55,7 +55,6 @@ import android.service.notification.SnoozeCriterion;
 import android.service.notification.StatusBarNotification;
 import android.text.TextUtils;
 import android.util.ArraySet;
-import android.util.FeatureFlagUtils;
 import android.util.Log;
 import android.util.TimeUtils;
 import android.util.proto.ProtoOutputStream;
@@ -581,6 +580,8 @@ public final class NotificationRecord {
         pw.println(prefix + "mLight= " + mLight);
         pw.println(prefix + "mShowBadge=" + mShowBadge);
         pw.println(prefix + "mColorized=" + notification.isColorized());
+        pw.println(prefix + "mAllowBubble=" + mAllowBubble);
+        pw.println(prefix + "isBubble=" + notification.isBubbleNotification());
         pw.println(prefix + "mIsInterruptive=" + mIsInterruptive);
         pw.println(prefix + "effectiveNotificationChannel=" + getChannel());
         if (getPeopleOverride() != null) {
@@ -590,6 +591,8 @@ public final class NotificationRecord {
             pw.println(prefix + "snoozeCriteria=" + TextUtils.join(",", getSnoozeCriteria()));
         }
         pw.println(prefix + "mAdjustments=" + mAdjustments);
+        pw.println(prefix + "shortcut=" + notification.getShortcutId()
+                + " found valid? " + (mShortcutInfo != null));
     }
 
     @Override
@@ -1381,10 +1384,6 @@ public final class NotificationRecord {
         Notification notification = getNotification();
         if (mChannel.isDemoted()
                 || !Notification.MessagingStyle.class.equals(notification.getNotificationStyle())) {
-            return false;
-        }
-        if (mShortcutInfo == null && Settings.Global.getInt(mContext.getContentResolver(),
-                Settings.Global.REQUIRE_SHORTCUTS_FOR_CONVERSATIONS, 0) == 1) {
             return false;
         }
         if (mIsNotConversationOverride) {

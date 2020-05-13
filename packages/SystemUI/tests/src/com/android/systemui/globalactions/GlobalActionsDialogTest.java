@@ -16,8 +16,14 @@
 
 package com.android.systemui.globalactions;
 
+import static junit.framework.Assert.assertEquals;
+
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import android.app.IActivityManager;
 import android.app.admin.DevicePolicyManager;
@@ -26,11 +32,13 @@ import android.content.ContentResolver;
 import android.content.res.Resources;
 import android.media.AudioManager;
 import android.net.ConnectivityManager;
+import android.os.Handler;
 import android.os.UserManager;
 import android.service.dreams.IDreamManager;
 import android.telephony.TelephonyManager;
 import android.testing.AndroidTestingRunner;
 import android.testing.TestableLooper;
+import android.util.FeatureFlagUtils;
 import android.view.IWindowManager;
 
 import androidx.test.filters.SmallTest;
@@ -52,6 +60,8 @@ import com.android.systemui.statusbar.NotificationShadeDepthController;
 import com.android.systemui.statusbar.phone.NotificationShadeWindowController;
 import com.android.systemui.statusbar.policy.ConfigurationController;
 import com.android.systemui.statusbar.policy.KeyguardStateController;
+import com.android.systemui.util.RingerModeLiveData;
+import com.android.systemui.util.RingerModeTracker;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -63,7 +73,7 @@ import java.util.concurrent.Executor;
 
 @SmallTest
 @RunWith(AndroidTestingRunner.class)
-@TestableLooper.RunWithLooper
+@TestableLooper.RunWithLooper()
 public class GlobalActionsDialogTest extends SysuiTestCase {
     private GlobalActionsDialog mGlobalActionsDialog;
 
@@ -95,6 +105,9 @@ public class GlobalActionsDialogTest extends SysuiTestCase {
     @Mock private ControlsListingController mControlsListingController;
     @Mock private ControlsController mControlsController;
     @Mock private UiEventLogger mUiEventLogger;
+    @Mock private RingerModeTracker mRingerModeTracker;
+    @Mock private RingerModeLiveData mRingerModeLiveData;
+    @Mock private Handler mHandler;
 
     private TestableLooper mTestableLooper;
 
@@ -103,6 +116,8 @@ public class GlobalActionsDialogTest extends SysuiTestCase {
         MockitoAnnotations.initMocks(this);
         mTestableLooper = TestableLooper.get(this);
         allowTestableLooperAsMainThread();
+
+        when(mRingerModeTracker.getRingerMode()).thenReturn(mRingerModeLiveData);
         mGlobalActionsDialog = new GlobalActionsDialog(mContext,
                 mWindowManagerFuncs,
                 mAudioManager,
@@ -133,13 +148,123 @@ public class GlobalActionsDialogTest extends SysuiTestCase {
                 mBackgroundExecutor,
                 mControlsListingController,
                 mControlsController,
-                mUiEventLogger
+                mUiEventLogger,
+                mRingerModeTracker,
+                mHandler
         );
+        mGlobalActionsDialog.setZeroDialogPressDelayForTesting();
     }
+
     @Test
     public void testShouldLogVisibility() {
         mGlobalActionsDialog.onShow(null);
+        mTestableLooper.processAllMessages();
+        verifyLogPosted(GlobalActionsDialog.GlobalActionsEvent.GA_POWER_MENU_OPEN);
+    }
+
+    @Test
+    public void testShouldLogBugreportPress() throws InterruptedException {
+        GlobalActionsDialog.BugReportAction bugReportAction =
+                mGlobalActionsDialog.makeBugReportActionForTesting();
+        bugReportAction.onPress();
+        verifyLogPosted(GlobalActionsDialog.GlobalActionsEvent.GA_BUGREPORT_PRESS);
+    }
+
+    @Test
+    public void testShouldLogBugreportLongPress() {
+        GlobalActionsDialog.BugReportAction bugReportAction =
+                mGlobalActionsDialog.makeBugReportActionForTesting();
+        bugReportAction.onLongPress();
+        verifyLogPosted(GlobalActionsDialog.GlobalActionsEvent.GA_BUGREPORT_LONG_PRESS);
+    }
+
+    @Test
+    public void testShouldLogEmergencyDialerPress() {
+        GlobalActionsDialog.EmergencyDialerAction emergencyDialerAction =
+                mGlobalActionsDialog.makeEmergencyDialerActionForTesting();
+        emergencyDialerAction.onPress();
+        verifyLogPosted(GlobalActionsDialog.GlobalActionsEvent.GA_EMERGENCY_DIALER_PRESS);
+    }
+
+    @Test
+    public void testShouldLogScreenshotPress() {
+        GlobalActionsDialog.ScreenshotAction screenshotAction =
+                mGlobalActionsDialog.makeScreenshotActionForTesting();
+        screenshotAction.onPress();
+        verifyLogPosted(GlobalActionsDialog.GlobalActionsEvent.GA_SCREENSHOT_PRESS);
+    }
+
+    @Test
+    public void testShouldLogScreenshotLongPress() {
+        FeatureFlagUtils.setEnabled(mContext, FeatureFlagUtils.SCREENRECORD_LONG_PRESS, true);
+        GlobalActionsDialog.ScreenshotAction screenshotAction =
+                mGlobalActionsDialog.makeScreenshotActionForTesting();
+        screenshotAction.onLongPress();
+        verifyLogPosted(GlobalActionsDialog.GlobalActionsEvent.GA_SCREENSHOT_LONG_PRESS);
+    }
+
+    private void verifyLogPosted(GlobalActionsDialog.GlobalActionsEvent event) {
+        mTestableLooper.processAllMessages();
         verify(mUiEventLogger, times(1))
-                .log(GlobalActionsDialog.GlobalActionsEvent.GA_POWER_MENU_OPEN);
+                .log(event);
+    }
+
+    @Test
+    public void testCreateActionItems_maxThree() {
+        mGlobalActionsDialog = spy(mGlobalActionsDialog);
+        // allow 3 items to be shown
+        doReturn(3).when(mGlobalActionsDialog).getMaxShownPowerItems();
+        // ensure items are not blocked by keyguard or device provisioning
+        doReturn(true).when(mGlobalActionsDialog).shouldShowAction(any());
+        String[] actions = {
+                GlobalActionsDialog.GLOBAL_ACTION_KEY_EMERGENCY,
+                GlobalActionsDialog.GLOBAL_ACTION_KEY_POWER,
+                GlobalActionsDialog.GLOBAL_ACTION_KEY_RESTART,
+                GlobalActionsDialog.GLOBAL_ACTION_KEY_SCREENSHOT,
+        };
+        doReturn(actions).when(mGlobalActionsDialog).getDefaultActions();
+        mGlobalActionsDialog.createActionItems();
+
+        assertEquals(3, mGlobalActionsDialog.mItems.size());
+        assertEquals(1, mGlobalActionsDialog.mOverflowItems.size());
+    }
+
+    @Test
+    public void testCreateActionItems_maxAny() {
+        mGlobalActionsDialog = spy(mGlobalActionsDialog);
+        // allow any number of power menu items to be shown
+        doReturn(Integer.MAX_VALUE).when(mGlobalActionsDialog).getMaxShownPowerItems();
+        // ensure items are not blocked by keyguard or device provisioning
+        doReturn(true).when(mGlobalActionsDialog).shouldShowAction(any());
+        String[] actions = {
+                GlobalActionsDialog.GLOBAL_ACTION_KEY_EMERGENCY,
+                GlobalActionsDialog.GLOBAL_ACTION_KEY_POWER,
+                GlobalActionsDialog.GLOBAL_ACTION_KEY_RESTART,
+                GlobalActionsDialog.GLOBAL_ACTION_KEY_SCREENSHOT,
+        };
+        doReturn(actions).when(mGlobalActionsDialog).getDefaultActions();
+        mGlobalActionsDialog.createActionItems();
+
+        assertEquals(4, mGlobalActionsDialog.mItems.size());
+        assertEquals(0, mGlobalActionsDialog.mOverflowItems.size());
+    }
+
+    @Test
+    public void testCreateActionItems_maxThree_itemNotShown() {
+        mGlobalActionsDialog = spy(mGlobalActionsDialog);
+        // allow only 3 items to be shown
+        doReturn(3).when(mGlobalActionsDialog).getMaxShownPowerItems();
+        String[] actions = {
+                GlobalActionsDialog.GLOBAL_ACTION_KEY_EMERGENCY,
+                // screenshot blocked because device not provisioned
+                GlobalActionsDialog.GLOBAL_ACTION_KEY_SCREENSHOT,
+                GlobalActionsDialog.GLOBAL_ACTION_KEY_POWER,
+                GlobalActionsDialog.GLOBAL_ACTION_KEY_RESTART,
+        };
+        doReturn(actions).when(mGlobalActionsDialog).getDefaultActions();
+        mGlobalActionsDialog.createActionItems();
+
+        assertEquals(3, mGlobalActionsDialog.mItems.size());
+        assertEquals(0, mGlobalActionsDialog.mOverflowItems.size());
     }
 }

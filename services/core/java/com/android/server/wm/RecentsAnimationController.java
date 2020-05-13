@@ -43,6 +43,7 @@ import android.os.RemoteException;
 import android.os.SystemClock;
 import android.util.ArrayMap;
 import android.util.ArraySet;
+import android.util.IntArray;
 import android.util.Slog;
 import android.util.SparseBooleanArray;
 import android.util.proto.ProtoOutputStream;
@@ -99,6 +100,8 @@ public class RecentsAnimationController implements DeathRecipient {
     private IRecentsAnimationRunner mRunner;
     private final RecentsAnimationCallbacks mCallbacks;
     private final ArrayList<TaskAnimationAdapter> mPendingAnimations = new ArrayList<>();
+    private final IntArray mPendingNewTaskTargets = new IntArray(0);
+
     private final ArrayList<WallpaperAnimationAdapter> mPendingWallpaperAnimations =
             new ArrayList<>();
     private final int mDisplayId;
@@ -220,6 +223,10 @@ public class RecentsAnimationController implements DeathRecipient {
                     if (mCanceled) {
                         return;
                     }
+                    // Remove all new task targets.
+                    for (int i = mPendingNewTaskTargets.size() - 1; i >= 0; i--) {
+                        removeTaskInternal(mPendingNewTaskTargets.get(i));
+                    }
                 }
 
                 // Note, the callback will handle its own synchronization, do not lock on WM lock
@@ -310,6 +317,18 @@ public class RecentsAnimationController implements DeathRecipient {
                 mWillFinishToHome = willFinishToHome;
             }
         }
+
+        @Override
+        public boolean removeTask(int taskId) {
+            final long token = Binder.clearCallingIdentity();
+            try {
+                synchronized (mService.getWindowManagerLock()) {
+                    return removeTaskInternal(taskId);
+                }
+            } finally {
+                Binder.restoreCallingIdentity(token);
+            }
+        }
     };
 
     /**
@@ -392,10 +411,7 @@ public class RecentsAnimationController implements DeathRecipient {
 
         mService.mWindowPlacerLocked.performSurfacePlacement();
 
-        // If the target activity has a fixed orientation which is different from the current top
-        // activity, it will be rotated before being shown so we avoid a screen rotation
-        // animation when showing the Recents view.
-        mDisplayContent.rotateInDifferentOrientationIfNeeded(mTargetActivityRecord);
+        mDisplayContent.mFixedRotationTransitionListener.onStartRecentsAnimation(targetActivity);
 
         // Notify that the animation has started
         if (mStatusBar != null) {
@@ -405,11 +421,18 @@ public class RecentsAnimationController implements DeathRecipient {
 
     @VisibleForTesting
     AnimationAdapter addAnimation(Task task, boolean isRecentTaskInvisible) {
+        return addAnimation(task, isRecentTaskInvisible, false /* hidden */,
+                null /* finishedCallback */);
+    }
+
+    @VisibleForTesting
+    AnimationAdapter addAnimation(Task task, boolean isRecentTaskInvisible, boolean hidden,
+            OnAnimationFinishedCallback finishedCallback) {
         ProtoLog.d(WM_DEBUG_RECENTS_ANIMATIONS, "addAnimation(%s)", task.getName());
         final TaskAnimationAdapter taskAdapter = new TaskAnimationAdapter(task,
                 isRecentTaskInvisible);
-        task.startAnimation(task.getPendingTransaction(), taskAdapter, false /* hidden */,
-                ANIMATION_TYPE_RECENTS);
+        task.startAnimation(task.getPendingTransaction(), taskAdapter, hidden,
+                ANIMATION_TYPE_RECENTS, finishedCallback);
         task.commitPendingTransaction();
         mPendingAnimations.add(taskAdapter);
         return taskAdapter;
@@ -487,6 +510,49 @@ public class RecentsAnimationController implements DeathRecipient {
             mService.mAtmService.mStackSupervisor.getActivityMetricsLogger()
                     .notifyTransitionStarting(reasons);
         }
+    }
+
+    void addTaskToTargets(Task task, OnAnimationFinishedCallback finishedCallback) {
+        if (mRunner != null) {
+            final RemoteAnimationTarget target = createTaskRemoteAnimation(task, finishedCallback);
+            if (target == null) return;
+
+            ProtoLog.d(WM_DEBUG_RECENTS_ANIMATIONS, "addTaskToTargets, target: %s", target);
+            try {
+                mRunner.onTaskAppeared(target);
+            } catch (RemoteException e) {
+                Slog.e(TAG, "Failed to report task appeared", e);
+            }
+        }
+    }
+
+    private RemoteAnimationTarget createTaskRemoteAnimation(Task task,
+            OnAnimationFinishedCallback finishedCallback) {
+        final SparseBooleanArray recentTaskIds =
+                mService.mAtmService.getRecentTasks().getRecentTaskIds();
+        TaskAnimationAdapter adapter = (TaskAnimationAdapter) addAnimation(task,
+                !recentTaskIds.get(task.mTaskId), true /* hidden */, finishedCallback);
+        mPendingNewTaskTargets.add(task.mTaskId);
+        return adapter.createRemoteAnimationTarget();
+    }
+
+    private boolean removeTaskInternal(int taskId) {
+        boolean result = false;
+        for (int i = mPendingAnimations.size() - 1; i >= 0; i--) {
+            // Only allows when task target has became visible to user, to prevent
+            // the flickering during remove animation and task visible.
+            final TaskAnimationAdapter target = mPendingAnimations.get(i);
+            if (target.mTask.mTaskId == taskId && target.mTask.isOnTop()) {
+                removeAnimation(target);
+                final int taskIndex = mPendingNewTaskTargets.indexOf(taskId);
+                if (taskIndex != -1) {
+                    mPendingNewTaskTargets.remove(taskIndex);
+                }
+                result = true;
+                break;
+            }
+        }
+        return result;
     }
 
     private RemoteAnimationTarget[] createAppAnimations() {
@@ -668,11 +734,13 @@ public class RecentsAnimationController implements DeathRecipient {
             if (reorderMode == REORDER_MOVE_TO_TOP || reorderMode == REORDER_KEEP_IN_PLACE) {
                 mDisplayContent.mAppTransition.notifyAppTransitionFinishedLocked(
                         mTargetActivityRecord.token);
-            }
-            if (mTargetActivityRecord.hasFixedRotationTransform()) {
+            } else {
+                // The target activity will be moved to original position (non-top). Since it won't
+                // affect display orientation, just finish the transform.
                 mTargetActivityRecord.finishFixedRotationTransform();
             }
         }
+        mDisplayContent.mFixedRotationTransitionListener.onFinishRecentsAnimation();
 
         // Notify that the animation has ended
         if (mStatusBar != null) {
@@ -830,11 +898,11 @@ public class RecentsAnimationController implements DeathRecipient {
         TaskAnimationAdapter(Task task, boolean isRecentTaskInvisible) {
             mTask = task;
             mIsRecentTaskInvisible = isRecentTaskInvisible;
-            mBounds.set(mTask.getDisplayedBounds());
+            mBounds.set(mTask.getBounds());
 
             mLocalBounds.set(mBounds);
             Point tmpPos = new Point();
-            mTask.getRelativeDisplayedPosition(tmpPos);
+            mTask.getRelativePosition(tmpPos);
             mLocalBounds.offsetTo(tmpPos.x, tmpPos.y);
         }
 
@@ -868,8 +936,7 @@ public class RecentsAnimationController implements DeathRecipient {
         @Override
         public void startAnimation(SurfaceControl animationLeash, Transaction t,
                 @AnimationType int type, OnAnimationFinishedCallback finishCallback) {
-            // Restore z-layering, position and stack crop until client has a chance to modify it.
-            t.setLayer(animationLeash, mTask.getPrefixOrderIndex());
+            // Restore position and stack crop until client has a chance to modify it.
             t.setPosition(animationLeash, mLocalBounds.left, mLocalBounds.top);
             mTmpRect.set(mLocalBounds);
             mTmpRect.offsetTo(0, 0);

@@ -41,6 +41,7 @@ import static org.mockito.Mockito.mock;
 
 import android.content.Context;
 import android.content.Intent;
+import android.os.UserHandle;
 import android.util.Log;
 import android.view.Display;
 import android.view.DisplayInfo;
@@ -51,12 +52,8 @@ import android.view.WindowManager;
 
 import com.android.server.AttributeCache;
 
-import org.junit.After;
 import org.junit.Before;
 import org.junit.BeforeClass;
-
-import java.util.HashSet;
-import java.util.LinkedList;
 
 /**
  * Common base class for window manager unit test classes.
@@ -84,7 +81,6 @@ class WindowTestsBase extends SystemServiceTestsBase {
     WindowState mAppWindow;
     WindowState mChildAppWindowAbove;
     WindowState mChildAppWindowBelow;
-    HashSet<WindowState> mCommonWindows;
 
     /**
      * Spied {@link Transaction} class than can be used to verify calls.
@@ -114,7 +110,6 @@ class WindowTestsBase extends SystemServiceTestsBase {
             mDisplayContent = createNewDisplay(true /* supportIme */);
 
             // Set-up some common windows.
-            mCommonWindows = new HashSet<>();
             synchronized (mWm.mGlobalLock) {
                 mWallpaperWindow = createCommonWindow(null, TYPE_WALLPAPER, "wallpaperWindow");
                 mImeWindow = createCommonWindow(null, TYPE_INPUT_METHOD, "mImeWindow");
@@ -150,48 +145,9 @@ class WindowTestsBase extends SystemServiceTestsBase {
         // Called before display is created.
     }
 
-    @After
-    public void tearDownBase() {
-        // If @After throws an exception, the error isn't logged. This will make sure any failures
-        // in the tear down are clear. This can be removed when b/37850063 is fixed.
-        try {
-            // Test may schedule to perform surface placement or other messages. Wait until a
-            // stable state to clean up for consistency.
-            waitUntilHandlersIdle();
-
-            final LinkedList<WindowState> nonCommonWindows = new LinkedList<>();
-
-            synchronized (mWm.mGlobalLock) {
-                mWm.mRoot.forAllWindows(w -> {
-                    if (!mCommonWindows.contains(w)) {
-                        nonCommonWindows.addLast(w);
-                    }
-                }, true /* traverseTopToBottom */);
-
-                while (!nonCommonWindows.isEmpty()) {
-                    nonCommonWindows.pollLast().removeImmediately();
-                }
-
-                // Remove app transition & window freeze timeout callbacks to prevent unnecessary
-                // actions after test.
-                mWm.getDefaultDisplayContentLocked().mAppTransition
-                        .removeAppTransitionTimeoutCallbacks();
-                mWm.mH.removeMessages(WindowManagerService.H.WINDOW_FREEZE_TIMEOUT);
-                mDisplayContent.mInputMethodTarget = null;
-            }
-
-            // Cleaned up everything in Handler.
-            cleanupWindowManagerHandlers();
-        } catch (Exception e) {
-            Log.e(TAG, "Failed to tear down test", e);
-            throw e;
-        }
-    }
-
     private WindowState createCommonWindow(WindowState parent, int type, String name) {
         synchronized (mWm.mGlobalLock) {
             final WindowState win = createWindow(parent, type, name);
-            mCommonWindows.add(win);
             // Prevent common windows from been IMe targets
             win.mAttrs.flags |= FLAG_NOT_FOCUSABLE;
             return win;
@@ -246,7 +202,7 @@ class WindowTestsBase extends SystemServiceTestsBase {
     WindowState createAppWindow(Task task, int type, String name) {
         synchronized (mWm.mGlobalLock) {
             final ActivityRecord activity =
-                    WindowTestUtils.createTestActivityRecord(mDisplayContent);
+                    WindowTestUtils.createTestActivityRecord(task.getDisplayContent());
             task.addChild(activity, 0);
             return createWindow(null, type, activity, name);
         }
@@ -296,12 +252,13 @@ class WindowTestsBase extends SystemServiceTestsBase {
 
     WindowState createWindow(WindowState parent, int type, WindowToken token, String name,
             int ownerId, boolean ownerCanAddInternalSystemWindow) {
-        return createWindow(parent, type, token, name, ownerId, ownerCanAddInternalSystemWindow,
-                mWm, mMockSession, mIWindow, mSystemServicesTestRule.getPowerManagerWrapper());
+        return createWindow(parent, type, token, name, ownerId, UserHandle.getUserId(ownerId),
+                ownerCanAddInternalSystemWindow, mWm, mMockSession, mIWindow,
+                mSystemServicesTestRule.getPowerManagerWrapper());
     }
 
     static WindowState createWindow(WindowState parent, int type, WindowToken token,
-            String name, int ownerId, boolean ownerCanAddInternalSystemWindow,
+            String name, int ownerId, int userId, boolean ownerCanAddInternalSystemWindow,
             WindowManagerService service, Session session, IWindow iWindow,
             WindowState.PowerManagerWrapper powerManagerWrapper) {
         synchronized (service.mGlobalLock) {
@@ -309,8 +266,8 @@ class WindowTestsBase extends SystemServiceTestsBase {
             attrs.setTitle(name);
 
             final WindowState w = new WindowState(service, session, iWindow, token, parent,
-                    OP_NONE,
-                    0, attrs, VISIBLE, ownerId, ownerCanAddInternalSystemWindow,
+                    OP_NONE, 0, attrs, VISIBLE, ownerId, userId,
+                    ownerCanAddInternalSystemWindow,
                     powerManagerWrapper);
             // TODO: Probably better to make this call in the WindowState ctor to avoid errors with
             // adding it to the token...
@@ -339,6 +296,20 @@ class WindowTestsBase extends SystemServiceTestsBase {
             return new ActivityTestsBase.StackBuilder(
                     dc.mWmService.mAtmService.mRootWindowContainer)
                     .setDisplay(dc)
+                    .setWindowingMode(windowingMode)
+                    .setActivityType(activityType)
+                    .setCreateActivity(false)
+                    .setIntent(new Intent())
+                    .build();
+        }
+    }
+
+    ActivityStack createTaskStackOnTaskDisplayArea(
+            int windowingMode, int activityType, TaskDisplayArea tda) {
+        synchronized (mWm.mGlobalLock) {
+            return new ActivityTestsBase.StackBuilder(
+                    tda.mDisplayContent.mWmService.mAtmService.mRootWindowContainer)
+                    .setTaskDisplayArea(tda)
                     .setWindowingMode(windowingMode)
                     .setActivityType(activityType)
                     .setCreateActivity(false)

@@ -163,7 +163,7 @@ public abstract class PanelViewController {
     protected void onExpandingStarted() {
     }
 
-    private void notifyExpandingStarted() {
+    protected void notifyExpandingStarted() {
         if (!mExpanding) {
             mExpanding = true;
             onExpandingStarted();

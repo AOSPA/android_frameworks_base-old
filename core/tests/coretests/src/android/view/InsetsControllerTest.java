@@ -60,8 +60,8 @@ import android.view.animation.LinearInterpolator;
 import android.view.test.InsetsModeSession;
 import android.widget.TextView;
 
-import androidx.test.InstrumentationRegistry;
-import androidx.test.runner.AndroidJUnit4;
+import androidx.test.ext.junit.runners.AndroidJUnit4;
+import androidx.test.platform.app.InstrumentationRegistry;
 
 import com.android.server.testutils.OffsettableClock;
 import com.android.server.testutils.TestHandler;
@@ -93,6 +93,7 @@ public class InsetsControllerTest {
     private SurfaceSession mSession = new SurfaceSession();
     private SurfaceControl mLeash;
     private ViewRootImpl mViewRoot;
+    private TestHost mTestHost;
     private TestHandler mTestHandler;
     private OffsettableClock mTestClock;
     private static InsetsModeSession sInsetsModeSession;
@@ -113,7 +114,7 @@ public class InsetsControllerTest {
                 .setName("testSurface")
                 .build();
         InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> {
-            Context context = InstrumentationRegistry.getTargetContext();
+            Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
             // cannot mock ViewRootImpl since it's final.
             mViewRoot = new ViewRootImpl(context, context.getDisplayNoVerify());
             try {
@@ -123,7 +124,8 @@ public class InsetsControllerTest {
             }
             mTestClock = new OffsettableClock();
             mTestHandler = new TestHandler(null, mTestClock);
-            mController = new InsetsController(mViewRoot, (controller, type) -> {
+            mTestHost = new TestHost(mViewRoot);
+            mController = new InsetsController(mTestHost, (controller, type) -> {
                 if (type == ITYPE_IME) {
                     return new InsetsSourceConsumer(type, controller.getState(),
                             Transaction::new, controller) {
@@ -685,6 +687,24 @@ public class InsetsControllerTest {
         });
     }
 
+    @Test
+    public void testRequestedState() {
+        InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> {
+            mController.onControlsChanged(createSingletonControl(ITYPE_STATUS_BAR));
+            mController.hide(statusBars());
+            assertFalse(mTestHost.getModifiedState().peekSource(ITYPE_STATUS_BAR).isVisible());
+            mController.onControlsChanged(new InsetsSourceControl[0]);
+            assertFalse(mTestHost.getModifiedState().peekSource(ITYPE_STATUS_BAR).isVisible());
+            InsetsState newState = new InsetsState(mController.getState(), true /* copySource */);
+            mController.onStateChanged(newState);
+            assertFalse(mTestHost.getModifiedState().peekSource(ITYPE_STATUS_BAR).isVisible());
+            mController.show(statusBars());
+            assertFalse(mTestHost.getModifiedState().peekSource(ITYPE_STATUS_BAR).isVisible());
+            mController.onControlsChanged(createSingletonControl(ITYPE_STATUS_BAR));
+            assertTrue(mTestHost.getModifiedState().peekSource(ITYPE_STATUS_BAR).isVisible());
+        });
+    }
+
     private void waitUntilNextFrame() throws Exception {
         final CountDownLatch latch = new CountDownLatch(1);
         Choreographer.getMainThreadInstance().postCallback(Choreographer.CALLBACK_COMMIT,
@@ -715,5 +735,24 @@ public class InsetsControllerTest {
         controls[2] = ime;
         mController.onControlsChanged(controls);
         return controls;
+    }
+
+    private static class TestHost extends ViewRootInsetsControllerHost {
+
+        private InsetsState mModifiedState = new InsetsState();
+
+        TestHost(ViewRootImpl viewRoot) {
+            super(viewRoot);
+        }
+
+        @Override
+        public void onInsetsModified(InsetsState insetsState) {
+            mModifiedState = new InsetsState(insetsState, true /* copySource */);
+            super.onInsetsModified(insetsState);
+        }
+
+        public InsetsState getModifiedState() {
+            return mModifiedState;
+        }
     }
 }

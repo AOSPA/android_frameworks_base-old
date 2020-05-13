@@ -110,6 +110,7 @@ import com.android.internal.util.ArrayUtils;
 import com.android.internal.util.ConcurrentUtils;
 import com.android.internal.util.IndentingPrintWriter;
 import com.android.server.LocalServices;
+import com.android.server.pm.parsing.pkg.AndroidPackage;
 import com.android.server.usage.AppIdleHistory.AppUsageHistory;
 
 import java.io.File;
@@ -172,8 +173,7 @@ public class AppStandbyController implements AppStandbyInternal {
             COMPRESS_TIME ?  1 * ONE_MINUTE : 12 * ONE_HOUR,
             COMPRESS_TIME ?  4 * ONE_MINUTE : 24 * ONE_HOUR,
             COMPRESS_TIME ? 16 * ONE_MINUTE : 48 * ONE_HOUR,
-            // TODO(149050681): increase timeout to 30+ days
-            COMPRESS_TIME ? 32 * ONE_MINUTE : 4 * ONE_DAY
+            COMPRESS_TIME ? 32 * ONE_MINUTE : 30 * ONE_DAY
     };
 
     /** The minimum allowed values for each index in {@link #ELAPSED_TIME_THRESHOLDS}. */
@@ -1364,6 +1364,19 @@ public class AppStandbyController implements AppStandbyInternal {
                     if (DEBUG) {
                         Slog.d(TAG, "    Keeping at WORKING_SET due to min timeout");
                     }
+                } else if (newBucket == STANDBY_BUCKET_RARE
+                        && getBucketForLocked(packageName, userId, elapsedRealtime)
+                        == STANDBY_BUCKET_RESTRICTED) {
+                    // Prediction doesn't think the app will be used anytime soon and
+                    // it's been long enough that it could just time out into restricted,
+                    // so time it out there instead. Using TIMEOUT will allow prediction
+                    // to raise the bucket when it needs to.
+                    newBucket = STANDBY_BUCKET_RESTRICTED;
+                    reason = REASON_MAIN_TIMEOUT;
+                    if (DEBUG) {
+                        Slog.d(TAG,
+                                "Prediction to RARE overridden by timeout into RESTRICTED");
+                    }
                 }
             }
 
@@ -1850,10 +1863,15 @@ public class AppStandbyController implements AppStandbyInternal {
 
         public List<UserHandle> getValidCrossProfileTargets(String pkg, int userId) {
             final int uid = mPackageManagerInternal.getPackageUidInternal(pkg, 0, userId);
+            final AndroidPackage aPkg = mPackageManagerInternal.getPackage(uid);
             if (uid < 0
-                    || !mPackageManagerInternal.getPackage(uid).isCrossProfile()
+                    || aPkg == null
+                    || !aPkg.isCrossProfile()
                     || !mCrossProfileAppsInternal
                             .verifyUidHasInteractAcrossProfilePermission(pkg, uid)) {
+                if (uid >= 0 && aPkg == null) {
+                    Slog.wtf(TAG, "Null package retrieved for UID " + uid);
+                }
                 return Collections.emptyList();
             }
             return mCrossProfileAppsInternal.getTargetUserProfiles(pkg, userId);

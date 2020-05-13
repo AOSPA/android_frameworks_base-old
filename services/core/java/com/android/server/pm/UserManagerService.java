@@ -103,6 +103,8 @@ import com.android.internal.logging.MetricsLogger;
 import com.android.internal.os.BackgroundThread;
 import com.android.internal.util.DumpUtils;
 import com.android.internal.util.FastXmlSerializer;
+import com.android.internal.util.FrameworkStatsLog;
+import com.android.internal.util.IndentingPrintWriter;
 import com.android.internal.util.Preconditions;
 import com.android.internal.util.XmlUtils;
 import com.android.internal.widget.LockPatternUtils;
@@ -137,6 +139,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.ThreadLocalRandom;
 
 /**
  * Service for {@link UserManager}.
@@ -3151,13 +3154,17 @@ public class UserManagerService extends IUserManager.Stub {
 
     /**
      * Removes the app restrictions file for a specific package and user id, if it exists.
+     *
+     * @return whether there were any restrictions.
      */
-    private static void cleanAppRestrictionsForPackageLAr(String pkg, @UserIdInt int userId) {
-        File dir = Environment.getUserSystemDirectory(userId);
-        File resFile = new File(dir, packageToRestrictionsFileName(pkg));
+    private static boolean cleanAppRestrictionsForPackageLAr(String pkg, @UserIdInt int userId) {
+        final File dir = Environment.getUserSystemDirectory(userId);
+        final File resFile = new File(dir, packageToRestrictionsFileName(pkg));
         if (resFile.exists()) {
             resFile.delete();
+            return true;
         }
+        return false;
     }
 
     /**
@@ -3244,14 +3251,37 @@ public class UserManagerService extends IUserManager.Stub {
             @NonNull String userType, @UserInfoFlag int flags, @UserIdInt int parentId,
             boolean preCreate, @Nullable String[] disallowedPackages)
             throws UserManager.CheckedUserOperationException {
+        final int nextProbableUserId = getNextAvailableId();
         final TimingsTraceAndSlog t = new TimingsTraceAndSlog();
         t.traceBegin("createUser-" + flags);
+        final long sessionId = logUserCreateJourneyBegin(nextProbableUserId, userType, flags);
         try {
             return createUserInternalUncheckedNoTracing(name, userType, flags, parentId,
                     preCreate, disallowedPackages, t);
         } finally {
+            logUserCreateJourneyFinish(sessionId, nextProbableUserId);
             t.traceEnd();
         }
+    }
+
+    private long logUserCreateJourneyBegin(@UserIdInt int userId, String userType,
+            @UserInfoFlag int flags) {
+        final long sessionId = ThreadLocalRandom.current().nextLong(1, Long.MAX_VALUE);
+        // log the journey atom with the user metadata
+        FrameworkStatsLog.write(FrameworkStatsLog.USER_LIFECYCLE_JOURNEY_REPORTED, sessionId,
+                FrameworkStatsLog.USER_LIFECYCLE_JOURNEY_REPORTED__JOURNEY__USER_CREATE,
+                /* origin_user= */ -1, userId, UserManager.getUserTypeForStatsd(userType), flags);
+        // log the event atom to indicate the event start
+        FrameworkStatsLog.write(FrameworkStatsLog.USER_LIFECYCLE_EVENT_OCCURRED, sessionId, userId,
+                FrameworkStatsLog.USER_LIFECYCLE_EVENT_OCCURRED__EVENT__CREATE_USER,
+                FrameworkStatsLog.USER_LIFECYCLE_EVENT_OCCURRED__STATE__BEGIN);
+        return sessionId;
+    }
+
+    private void logUserCreateJourneyFinish(long sessionId, @UserIdInt int userId) {
+        FrameworkStatsLog.write(FrameworkStatsLog.USER_LIFECYCLE_EVENT_OCCURRED, sessionId, userId,
+                FrameworkStatsLog.USER_LIFECYCLE_EVENT_OCCURRED__EVENT__CREATE_USER,
+                FrameworkStatsLog.USER_LIFECYCLE_EVENT_OCCURRED__STATE__FINISH);
     }
 
     private UserInfo createUserInternalUncheckedNoTracing(@Nullable String name,
@@ -3860,9 +3890,8 @@ public class UserManagerService extends IUserManager.Stub {
                             new Thread() {
                                 @Override
                                 public void run() {
-                                    // Clean up any ActivityTaskManager state
-                                    LocalServices.getService(ActivityTaskManagerInternal.class)
-                                            .onUserStopped(userId);
+                                    LocalServices.getService(ActivityManagerInternal.class)
+                                            .onUserRemoved(userId);
                                     removeUserState(userId);
                                 }
                             }.start();
@@ -3978,17 +4007,24 @@ public class UserManagerService extends IUserManager.Stub {
         if (restrictions != null) {
             restrictions.setDefusable(true);
         }
+        final boolean changed;
         synchronized (mAppRestrictionsLock) {
             if (restrictions == null || restrictions.isEmpty()) {
-                cleanAppRestrictionsForPackageLAr(packageName, userId);
+                changed = cleanAppRestrictionsForPackageLAr(packageName, userId);
             } else {
                 // Write the restrictions to XML
                 writeApplicationRestrictionsLAr(packageName, restrictions, userId);
+                // TODO(b/154323615): avoid unnecessary broadcast when there is no change.
+                changed = true;
             }
         }
 
+        if (!changed) {
+            return;
+        }
+
         // Notify package of changes via an intent - only sent to explicitly registered receivers.
-        Intent changeIntent = new Intent(Intent.ACTION_APPLICATION_RESTRICTIONS_CHANGED);
+        final Intent changeIntent = new Intent(Intent.ACTION_APPLICATION_RESTRICTIONS_CHANGED);
         changeIntent.setPackage(packageName);
         changeIntent.addFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY);
         mContext.sendBroadcastAsUser(changeIntent, UserHandle.of(userId));
@@ -4480,6 +4516,8 @@ public class UserManagerService extends IUserManager.Stub {
             switch(cmd) {
                 case "list":
                     return runList(pw, shell);
+                case "list-missing-system-packages":
+                    return runListMissingSystemPackages(pw, shell);
                 default:
                     return shell.handleDefaultCommands(cmd);
             }
@@ -4544,6 +4582,30 @@ public class UserManagerService extends IUserManager.Stub {
             }
             return 0;
         }
+    }
+
+    private int runListMissingSystemPackages(PrintWriter pw, Shell shell) {
+        boolean verbose = false;
+        boolean force = false;
+        String opt;
+        while ((opt = shell.getNextOption()) != null) {
+            switch (opt) {
+                case "-v":
+                    verbose = true;
+                    break;
+                case "--force":
+                    force = true;
+                    break;
+                default:
+                    pw.println("Invalid option: " + opt);
+                    return -1;
+            }
+        }
+
+        try (IndentingPrintWriter ipw = new IndentingPrintWriter(pw, "  ")) {
+            mSystemPackageInstaller.dumpMissingSystemPackages(ipw, force, verbose);
+        }
+        return 0;
     }
 
     @Override
@@ -5118,6 +5180,9 @@ public class UserManagerService extends IUserManager.Stub {
             pw.println("");
             pw.println("  list [-v] [-all]");
             pw.println("    Prints all users on the system.");
+            pw.println("  list-missing-system-packages [-v] [--force]");
+            pw.println("    Prints all system packages that were not explicitly configured to be "
+                    + "installed.");
         }
     }
 

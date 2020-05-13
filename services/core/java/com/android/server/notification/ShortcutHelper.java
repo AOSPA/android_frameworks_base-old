@@ -18,26 +18,40 @@ package com.android.server.notification;
 
 import static android.content.pm.LauncherApps.ShortcutQuery.FLAG_MATCH_CACHED;
 import static android.content.pm.LauncherApps.ShortcutQuery.FLAG_MATCH_DYNAMIC;
-import static android.content.pm.LauncherApps.ShortcutQuery.FLAG_MATCH_PINNED;
+import static android.content.pm.LauncherApps.ShortcutQuery.FLAG_MATCH_PINNED_BY_ANY_LAUNCHER;
 
 import android.annotation.NonNull;
+import android.content.IntentFilter;
 import android.content.pm.LauncherApps;
 import android.content.pm.ShortcutInfo;
+import android.content.pm.ShortcutServiceInternal;
 import android.os.Binder;
 import android.os.Handler;
 import android.os.UserHandle;
+import android.util.Slog;
 
 import com.android.internal.annotations.VisibleForTesting;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 
 /**
  * Helper for querying shortcuts.
  */
-class ShortcutHelper {
+public class ShortcutHelper {
+    private static final String TAG = "ShortcutHelper";
+
+    private static final IntentFilter SHARING_FILTER = new IntentFilter();
+    static {
+        try {
+            SHARING_FILTER.addDataType("*/*");
+        } catch (IntentFilter.MalformedMimeTypeException e) {
+            Slog.e(TAG, "Bad mime type", e);
+        }
+    }
 
     /**
      * Listener to call when a shortcut we're tracking has been removed.
@@ -48,6 +62,7 @@ class ShortcutHelper {
 
     private LauncherApps mLauncherAppsService;
     private ShortcutListener mShortcutListener;
+    private ShortcutServiceInternal mShortcutServiceInternal;
 
     // Key: packageName Value: <shortcutId, notifId>
     private HashMap<String, HashMap<String, String>> mActiveShortcutBubbles = new HashMap<>();
@@ -111,9 +126,11 @@ class ShortcutHelper {
         }
     };
 
-    ShortcutHelper(LauncherApps launcherApps, ShortcutListener listener) {
+    ShortcutHelper(LauncherApps launcherApps, ShortcutListener listener,
+            ShortcutServiceInternal shortcutServiceInternal) {
         mLauncherAppsService = launcherApps;
         mShortcutListener = listener;
+        mShortcutServiceInternal = shortcutServiceInternal;
     }
 
     @VisibleForTesting
@@ -121,8 +138,31 @@ class ShortcutHelper {
         mLauncherAppsService = launcherApps;
     }
 
+    @VisibleForTesting
+    void setShortcutServiceInternal(ShortcutServiceInternal shortcutServiceInternal) {
+        mShortcutServiceInternal = shortcutServiceInternal;
+    }
+
     /**
-     * Only returns shortcut info if it's found and if it's {@link ShortcutInfo#isLongLived()}.
+     * Returns whether the given shortcut info is a conversation shortcut.
+     */
+    public static boolean isConversationShortcut(
+            ShortcutInfo shortcutInfo, ShortcutServiceInternal mShortcutServiceInternal,
+            int callingUserId) {
+        if (shortcutInfo == null || !shortcutInfo.isLongLived() || !shortcutInfo.isEnabled()) {
+            return false;
+        }
+        // TODO (b/155016294) uncomment when sharing shortcuts are required
+        /*
+        mShortcutServiceInternal.isSharingShortcut(callingUserId, "android",
+                shortcutInfo.getPackage(), shortcutInfo.getId(), shortcutInfo.getUserId(),
+                SHARING_FILTER);
+         */
+        return true;
+    }
+
+    /**
+     * Only returns shortcut info if it's found and if it's a conversation shortcut.
      */
     ShortcutInfo getValidShortcutInfo(String shortcutId, String packageName, UserHandle user) {
         if (mLauncherAppsService == null) {
@@ -136,14 +176,29 @@ class ShortcutHelper {
             LauncherApps.ShortcutQuery query = new LauncherApps.ShortcutQuery();
             query.setPackage(packageName);
             query.setShortcutIds(Arrays.asList(shortcutId));
-            query.setQueryFlags(FLAG_MATCH_DYNAMIC | FLAG_MATCH_PINNED | FLAG_MATCH_CACHED);
+            query.setQueryFlags(
+                    FLAG_MATCH_DYNAMIC | FLAG_MATCH_PINNED_BY_ANY_LAUNCHER | FLAG_MATCH_CACHED);
             List<ShortcutInfo> shortcuts = mLauncherAppsService.getShortcuts(query, user);
             ShortcutInfo info = shortcuts != null && shortcuts.size() > 0
                     ? shortcuts.get(0)
                     : null;
-            return info != null && info.isLongLived() ? info : null;
+            if (isConversationShortcut(info, mShortcutServiceInternal, user.getIdentifier())) {
+                return info;
+            }
+            return null;
         } finally {
             Binder.restoreCallingIdentity(token);
+        }
+    }
+
+    /**
+     * Caches the given shortcut in Shortcut Service.
+     */
+    void cacheShortcut(ShortcutInfo shortcutInfo, UserHandle user) {
+        if (shortcutInfo.isLongLived() && !shortcutInfo.isCached()) {
+            mShortcutServiceInternal.cacheShortcuts(user.getIdentifier(), "android",
+                    shortcutInfo.getPackage(), Collections.singletonList(shortcutInfo.getId()),
+                    shortcutInfo.getUserId());
         }
     }
 

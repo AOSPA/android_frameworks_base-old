@@ -16,7 +16,6 @@
 
 package android.window;
 
-import static android.app.WindowConfiguration.WINDOWING_MODE_MULTI_WINDOW;
 import static android.hardware.display.DisplayManager.VIRTUAL_DISPLAY_FLAG_DESTROY_CONTENT_ON_REMOVAL;
 import static android.hardware.display.DisplayManager.VIRTUAL_DISPLAY_FLAG_OWN_CONTENT_ONLY;
 import static android.hardware.display.DisplayManager.VIRTUAL_DISPLAY_FLAG_PUBLIC;
@@ -65,9 +64,11 @@ public class VirtualDisplayTaskEmbedder extends TaskEmbedder {
     // For Virtual Displays
     private int mDisplayDensityDpi;
     private final boolean mSingleTaskInstance;
+    private final boolean mUsePublicVirtualDisplay;
     private VirtualDisplay mVirtualDisplay;
     private Insets mForwardedInsets;
     private DisplayMetrics mTmpDisplayMetrics;
+    private TaskStackListener mTaskStackListener;
 
     /**
      * Constructs a new TaskEmbedder.
@@ -78,14 +79,10 @@ public class VirtualDisplayTaskEmbedder extends TaskEmbedder {
      *                           only applicable if virtual displays are used
      */
     public VirtualDisplayTaskEmbedder(Context context, VirtualDisplayTaskEmbedder.Host host,
-            boolean singleTaskInstance) {
+            boolean singleTaskInstance, boolean usePublicVirtualDisplay) {
         super(context, host);
         mSingleTaskInstance = singleTaskInstance;
-    }
-
-    @Override
-    public TaskStackListener createTaskStackListener() {
-        return new TaskStackListenerImpl();
+        mUsePublicVirtualDisplay = usePublicVirtualDisplay;
     }
 
     /**
@@ -102,11 +99,16 @@ public class VirtualDisplayTaskEmbedder extends TaskEmbedder {
     public boolean onInitialize() {
         final DisplayManager displayManager = mContext.getSystemService(DisplayManager.class);
         mDisplayDensityDpi = getBaseDisplayDensity();
+
+        int virtualDisplayFlags = VIRTUAL_DISPLAY_FLAG_OWN_CONTENT_ONLY
+                | VIRTUAL_DISPLAY_FLAG_DESTROY_CONTENT_ON_REMOVAL;
+        if (mUsePublicVirtualDisplay) {
+            virtualDisplayFlags |= VIRTUAL_DISPLAY_FLAG_PUBLIC;
+        }
+
         mVirtualDisplay = displayManager.createVirtualDisplay(
                 DISPLAY_NAME + "@" + System.identityHashCode(this), mHost.getWidth(),
-                mHost.getHeight(), mDisplayDensityDpi, null,
-                VIRTUAL_DISPLAY_FLAG_PUBLIC | VIRTUAL_DISPLAY_FLAG_OWN_CONTENT_ONLY
-                        | VIRTUAL_DISPLAY_FLAG_DESTROY_CONTENT_ON_REMOVAL);
+                mHost.getHeight(), mDisplayDensityDpi, null, virtualDisplayFlags);
 
         if (mVirtualDisplay == null) {
             Log.e(TAG, "Failed to initialize TaskEmbedder");
@@ -125,6 +127,9 @@ public class VirtualDisplayTaskEmbedder extends TaskEmbedder {
                         .setDisplayToSingleTaskInstance(displayId);
             }
             setForwardedInsets(mForwardedInsets);
+
+            mTaskStackListener = new TaskStackListenerImpl();
+            mActivityTaskManager.registerTaskStackListener(mTaskStackListener);
         } catch (RemoteException e) {
             e.rethrowAsRuntimeException();
         }
@@ -142,6 +147,15 @@ public class VirtualDisplayTaskEmbedder extends TaskEmbedder {
 
         // Clear tap-exclude region (if any) for this window.
         clearTapExcludeRegion();
+
+        if (mTaskStackListener != null) {
+            try {
+                mActivityTaskManager.unregisterTaskStackListener(mTaskStackListener);
+            } catch (RemoteException e) {
+                Log.e(TAG, "Failed to unregister task stack listener", e);
+            }
+            mTaskStackListener = null;
+        }
 
         if (isInitialized()) {
             mVirtualDisplay.release();
@@ -237,6 +251,14 @@ public class VirtualDisplayTaskEmbedder extends TaskEmbedder {
         return INVALID_DISPLAY;
     }
 
+    @Override
+    public VirtualDisplay getVirtualDisplay() {
+        if (isInitialized()) {
+            return mVirtualDisplay;
+        }
+        return null;
+    }
+
     /**
      * Check if container is ready to launch and create {@link ActivityOptions} to target the
      * virtual display.
@@ -247,7 +269,6 @@ public class VirtualDisplayTaskEmbedder extends TaskEmbedder {
     protected ActivityOptions prepareActivityOptions(ActivityOptions options) {
         options = super.prepareActivityOptions(options);
         options.setLaunchDisplayId(getDisplayId());
-        options.setLaunchWindowingMode(WINDOWING_MODE_MULTI_WINDOW);
         return options;
     }
 

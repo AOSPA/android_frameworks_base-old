@@ -16,6 +16,10 @@
 
 package com.android.systemui.controls.ui
 
+import android.animation.Animator
+import android.animation.AnimatorListenerAdapter
+import android.animation.ValueAnimator
+import android.app.Dialog
 import android.content.Context
 import android.graphics.drawable.ClipDrawable
 import android.graphics.drawable.GradientDrawable
@@ -28,27 +32,49 @@ import android.service.controls.templates.StatelessTemplate
 import android.service.controls.templates.TemperatureControlTemplate
 import android.service.controls.templates.ToggleRangeTemplate
 import android.service.controls.templates.ToggleTemplate
+import android.util.MathUtils
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageView
 import android.widget.TextView
-
+import com.android.internal.graphics.ColorUtils
+import com.android.systemui.Interpolators
+import com.android.systemui.R
 import com.android.systemui.controls.controller.ControlsController
 import com.android.systemui.util.concurrency.DelayableExecutor
-import com.android.systemui.R
-
 import kotlin.reflect.KClass
 
-private const val UPDATE_DELAY_IN_MILLIS = 3000L
-private const val ALPHA_ENABLED = (255.0 * 0.2).toInt()
-private const val ALPHA_DISABLED = 255
-
+/**
+ * Wraps the widgets that make up the UI representation of a {@link Control}. Updates to the view
+ * are signaled via calls to {@link #bindData}. Similar to the ViewHolder concept used in
+ * RecyclerViews.
+ */
 class ControlViewHolder(
     val layout: ViewGroup,
     val controlsController: ControlsController,
     val uiExecutor: DelayableExecutor,
-    val bgExecutor: DelayableExecutor
+    val bgExecutor: DelayableExecutor,
+    val controlActionCoordinator: ControlActionCoordinator
 ) {
+
+    companion object {
+        const val STATE_ANIMATION_DURATION = 700L
+        private const val UPDATE_DELAY_IN_MILLIS = 3000L
+        private const val ALPHA_ENABLED = 255
+        private const val ALPHA_DISABLED = 0
+        private val FORCE_PANEL_DEVICES = setOf(
+            DeviceTypes.TYPE_THERMOSTAT,
+            DeviceTypes.TYPE_CAMERA
+        )
+
+        const val MIN_LEVEL = 0
+        const val MAX_LEVEL = 10000
+    }
+
+    private val toggleBackgroundIntensity: Float = layout.context.resources
+            .getFraction(R.fraction.controls_toggle_bg_intensity, 1, 1)
+    private var stateAnimator: ValueAnimator? = null
+    private val baseLayer: GradientDrawable
     val icon: ImageView = layout.requireViewById(R.id.icon)
     val status: TextView = layout.requireViewById(R.id.status)
     val title: TextView = layout.requireViewById(R.id.title)
@@ -59,11 +85,17 @@ class ControlViewHolder(
     var cancelUpdate: Runnable? = null
     var behavior: Behavior? = null
     var lastAction: ControlAction? = null
+    private var lastChallengeDialog: Dialog? = null
+
+    val deviceType: Int
+        get() = cws.control?.let { it.getDeviceType() } ?: cws.ci.deviceType
 
     init {
         val ld = layout.getBackground() as LayerDrawable
         ld.mutate()
         clipLayer = ld.findDrawableByLayerId(R.id.clip_layer) as ClipDrawable
+        clipLayer.alpha = ALPHA_DISABLED
+        baseLayer = ld.findDrawableByLayerId(R.id.background) as GradientDrawable
         // needed for marquee to start
         status.setSelected(true)
     }
@@ -76,7 +108,7 @@ class ControlViewHolder(
         val (controlStatus, template) = cws.control?.let {
             title.setText(it.getTitle())
             subtitle.setText(it.getSubtitle())
-            Pair(it.getStatus(), it.getControlTemplate())
+            Pair(it.status, it.controlTemplate)
         } ?: run {
             title.setText(cws.ci.controlTitle)
             subtitle.setText(cws.ci.controlSubtitle)
@@ -86,12 +118,12 @@ class ControlViewHolder(
         cws.control?.let {
             layout.setClickable(true)
             layout.setOnLongClickListener(View.OnLongClickListener() {
-                ControlActionCoordinator.longPress(this@ControlViewHolder)
+                controlActionCoordinator.longPress(this@ControlViewHolder)
                 true
             })
         }
 
-        val clazz = findBehavior(controlStatus, template)
+        val clazz = findBehavior(controlStatus, template, deviceType)
         if (behavior == null || behavior!!::class != clazz) {
             // Behavior changes can signal a change in template from the app or
             // first time setup
@@ -108,7 +140,37 @@ class ControlViewHolder(
     }
 
     fun actionResponse(@ControlAction.ResponseResult response: Int) {
-        // TODO: b/150931809 - handle response codes
+        // OK responses signal normal behavior, and the app will provide control updates
+        val failedAttempt = lastChallengeDialog != null
+        when (response) {
+            ControlAction.RESPONSE_OK ->
+                lastChallengeDialog = null
+            ControlAction.RESPONSE_UNKNOWN -> {
+                lastChallengeDialog = null
+                setTransientStatus(context.resources.getString(R.string.controls_error_failed))
+            }
+            ControlAction.RESPONSE_FAIL -> {
+                lastChallengeDialog = null
+                setTransientStatus(context.resources.getString(R.string.controls_error_failed))
+            }
+            ControlAction.RESPONSE_CHALLENGE_PIN -> {
+                lastChallengeDialog = ChallengeDialogs.createPinDialog(this, false, failedAttempt)
+                lastChallengeDialog?.show()
+            }
+            ControlAction.RESPONSE_CHALLENGE_PASSPHRASE -> {
+                lastChallengeDialog = ChallengeDialogs.createPinDialog(this, true, failedAttempt)
+                lastChallengeDialog?.show()
+            }
+            ControlAction.RESPONSE_CHALLENGE_ACK -> {
+                lastChallengeDialog = ChallengeDialogs.createConfirmationDialog(this)
+                lastChallengeDialog?.show()
+            }
+        }
+    }
+
+    fun dismiss() {
+        lastChallengeDialog?.dismiss()
+        lastChallengeDialog = null
     }
 
     fun setTransientStatus(tempStatus: String) {
@@ -126,9 +188,18 @@ class ControlViewHolder(
         controlsController.action(cws.componentName, cws.ci, action)
     }
 
-    private fun findBehavior(status: Int, template: ControlTemplate): KClass<out Behavior> {
+    fun usePanel(): Boolean = deviceType in ControlViewHolder.FORCE_PANEL_DEVICES
+
+    private fun findBehavior(
+        status: Int,
+        template: ControlTemplate,
+        deviceType: Int
+    ): KClass<out Behavior> {
         return when {
-            status == Control.STATUS_UNKNOWN -> UnknownBehavior::class
+            status == Control.STATUS_UNKNOWN -> StatusBehavior::class
+            status == Control.STATUS_ERROR -> StatusBehavior::class
+            status == Control.STATUS_NOT_FOUND -> StatusBehavior::class
+            deviceType == DeviceTypes.TYPE_CAMERA -> TouchBehavior::class
             template is ToggleTemplate -> ToggleBehavior::class
             template is StatelessTemplate -> TouchBehavior::class
             template is ToggleRangeTemplate -> ToggleRangeBehavior::class
@@ -137,31 +208,76 @@ class ControlViewHolder(
         }
     }
 
-    internal fun applyRenderInfo(enabled: Boolean, offset: Int = 0) {
+    internal fun applyRenderInfo(enabled: Boolean, offset: Int = 0, animated: Boolean = true) {
         setEnabled(enabled)
 
-        val deviceType = cws.control?.let { it.getDeviceType() } ?: cws.ci.deviceType
         val ri = RenderInfo.lookup(context, cws.componentName, deviceType, enabled, offset)
 
-        val fg = context.getResources().getColorStateList(ri.foreground, context.getTheme())
-        val (bg, alpha) = if (enabled) {
-            Pair(ri.enabledBackground, ALPHA_ENABLED)
+        val fg = context.resources.getColorStateList(ri.foreground, context.theme)
+        val bg = context.resources.getColor(R.color.control_default_background, context.theme)
+        var (newClipColor, newAlpha) = if (enabled) {
+            // allow color overrides for the enabled state only
+            val color = cws.control?.getCustomColor()?.let {
+                val state = intArrayOf(android.R.attr.state_enabled)
+                it.getColorForState(state, it.getDefaultColor())
+            } ?: context.resources.getColor(ri.enabledBackground, context.theme)
+            listOf(color, ALPHA_ENABLED)
         } else {
-            Pair(R.color.control_default_background, ALPHA_DISABLED)
+            listOf(
+                context.resources.getColor(R.color.control_default_background, context.theme),
+                ALPHA_DISABLED
+            )
         }
 
         status.setTextColor(fg)
 
-        icon.setImageDrawable(ri.icon)
+        cws.control?.getCustomIcon()?.let {
+            // do not tint custom icons, assume the intended icon color is correct
+            icon.imageTintList = null
+            icon.setImageIcon(it)
+        } ?: run {
+            icon.setImageDrawable(ri.icon)
 
-        // do not color app icons
-        if (deviceType != DeviceTypes.TYPE_ROUTINE) {
-            icon.setImageTintList(fg)
+            // do not color app icons
+            if (deviceType != DeviceTypes.TYPE_ROUTINE) {
+                icon.imageTintList = fg
+            }
         }
 
         (clipLayer.getDrawable() as GradientDrawable).apply {
-            setColor(context.getResources().getColor(bg, context.getTheme()))
-            setAlpha(alpha)
+            val newBaseColor = if (behavior is ToggleRangeBehavior) {
+                ColorUtils.blendARGB(bg, newClipColor, toggleBackgroundIntensity)
+            } else {
+                bg
+            }
+            stateAnimator?.cancel()
+            if (animated) {
+                val oldColor = color?.defaultColor ?: newClipColor
+                val oldBaseColor = baseLayer.color?.defaultColor ?: newBaseColor
+                val oldAlpha = layout.alpha
+                stateAnimator = ValueAnimator.ofInt(clipLayer.alpha, newAlpha).apply {
+                    addUpdateListener {
+                        alpha = it.animatedValue as Int
+                        setColor(ColorUtils.blendARGB(oldColor, newClipColor, it.animatedFraction))
+                        baseLayer.setColor(ColorUtils.blendARGB(oldBaseColor,
+                                newBaseColor, it.animatedFraction))
+                        layout.alpha = MathUtils.lerp(oldAlpha, 1f, it.animatedFraction)
+                    }
+                    addListener(object : AnimatorListenerAdapter() {
+                        override fun onAnimationEnd(animation: Animator?) {
+                            stateAnimator = null
+                        }
+                    })
+                    duration = STATE_ANIMATION_DURATION
+                    interpolator = Interpolators.CONTROL_STATE
+                    start()
+                }
+            } else {
+                alpha = newAlpha
+                setColor(newClipColor)
+                baseLayer.setColor(newBaseColor)
+                layout.alpha = 1f
+            }
         }
     }
 

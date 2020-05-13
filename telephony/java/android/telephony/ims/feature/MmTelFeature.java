@@ -218,13 +218,7 @@ public class MmTelFeature extends ImsFeature {
      * {@link MmTelCapabilities#CAPABILITY_TYPE_UT}, and
      * {@link MmTelCapabilities#CAPABILITY_TYPE_SMS}.
      *
-     * The capabilities of this MmTelFeature will be set by the framework and can be queried with
-     * {@see #queryCapabilityStatus()}.
-     *
-     * This MmTelFeature can then return the status of each of these capabilities (enabled or not)
-     * by sending a {@see #notifyCapabilitiesStatusChanged} callback to the framework. The current
-     * status can also be queried using {@see #queryCapabilityStatus()}.
-     * @see #isCapable(int)
+     * The capabilities of this MmTelFeature will be set by the framework.
      */
     public static class MmTelCapabilities extends Capabilities {
 
@@ -430,7 +424,6 @@ public class MmTelFeature extends ImsFeature {
     /**
      * @param listener A {@link Listener} used when the MmTelFeature receives an incoming call and
      *     notifies the framework.
-     * @hide
      */
     private void setListener(IImsMmTelListener listener) {
         synchronized (mLock) {
@@ -438,6 +431,16 @@ public class MmTelFeature extends ImsFeature {
             if (mListener != null) {
                 onFeatureReady();
             }
+        }
+    }
+
+    /**
+     * @return the listener associated with this MmTelFeature. May be null if it has not been set
+     * by the framework yet.
+     */
+    private IImsMmTelListener getListener() {
+        synchronized (mLock) {
+            return mListener;
         }
     }
 
@@ -489,15 +492,14 @@ public class MmTelFeature extends ImsFeature {
             throw new IllegalArgumentException("ImsCallSessionImplBase and Bundle can not be "
                     + "null.");
         }
-        synchronized (mLock) {
-            if (mListener == null) {
-                throw new IllegalStateException("Session is not available.");
-            }
-            try {
-                mListener.onIncomingCall(c.getServiceImpl(), extras);
-            } catch (RemoteException e) {
-                throw new RuntimeException(e);
-            }
+        IImsMmTelListener listener = getListener();
+        if (listener == null) {
+            throw new IllegalStateException("Session is not available.");
+        }
+        try {
+            listener.onIncomingCall(c.getServiceImpl(), extras);
+        } catch (RemoteException e) {
+            throw new RuntimeException(e);
         }
     }
 
@@ -516,15 +518,14 @@ public class MmTelFeature extends ImsFeature {
             throw new IllegalArgumentException("ImsCallProfile and ImsReasonInfo must not be "
                     + "null.");
         }
-        synchronized (mLock) {
-            if (mListener == null) {
-                throw new IllegalStateException("Session is not available.");
-            }
-            try {
-                mListener.onRejectedCall(callProfile, reason);
-            } catch (RemoteException e) {
-                throw new RuntimeException(e);
-            }
+        IImsMmTelListener listener = getListener();
+        if (listener == null) {
+            throw new IllegalStateException("Session is not available.");
+        }
+        try {
+            listener.onRejectedCall(callProfile, reason);
+        } catch (RemoteException e) {
+            throw new RuntimeException(e);
         }
     }
 
@@ -533,15 +534,14 @@ public class MmTelFeature extends ImsFeature {
      * @hide
      */
     public final void notifyIncomingCallSession(IImsCallSession c, Bundle extras) {
-        synchronized (mLock) {
-            if (mListener == null) {
-                throw new IllegalStateException("Session is not available.");
-            }
-            try {
-                mListener.onIncomingCall(c, extras);
-            } catch (RemoteException e) {
-                throw new RuntimeException(e);
-            }
+        IImsMmTelListener listener = getListener();
+        if (listener == null) {
+            throw new IllegalStateException("Session is not available.");
+        }
+        try {
+            listener.onIncomingCall(c, extras);
+        } catch (RemoteException e) {
+            throw new RuntimeException(e);
         }
     }
 
@@ -552,15 +552,14 @@ public class MmTelFeature extends ImsFeature {
      */
     @SystemApi @TestApi
     public final void notifyVoiceMessageCountUpdate(int count) {
-        synchronized (mLock) {
-            if (mListener == null) {
-                throw new IllegalStateException("Session is not available.");
-            }
-            try {
-                mListener.onVoiceMessageCountUpdate(count);
-            } catch (RemoteException e) {
-                throw new RuntimeException(e);
-            }
+        IImsMmTelListener listener = getListener();
+        if (listener == null) {
+            throw new IllegalStateException("Session is not available.");
+        }
+        try {
+            listener.onVoiceMessageCountUpdate(count);
+        } catch (RemoteException e) {
+            throw new RuntimeException(e);
         }
     }
 

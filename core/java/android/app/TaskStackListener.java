@@ -55,7 +55,7 @@ public abstract class TaskStackListener extends ITaskStackListener.Stub {
     @Override
     @UnsupportedAppUsage
     public void onActivityRestartAttempt(RunningTaskInfo task, boolean homeTaskVisible,
-            boolean clearedTask) throws RemoteException {
+            boolean clearedTask, boolean wasVisible) throws RemoteException {
     }
 
     @Override
@@ -194,5 +194,9 @@ public abstract class TaskStackListener extends ITaskStackListener.Stub {
 
     @Override
     public void onTaskFocusChanged(int taskId, boolean focused) {
+    }
+
+    @Override
+    public void onTaskRequestedOrientationChanged(int taskId, int requestedOrientation) {
     }
 }

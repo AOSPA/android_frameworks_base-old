@@ -87,11 +87,9 @@ class ControlsControllerImplTest : SysuiTestCase() {
     private lateinit var structureInfoCaptor: ArgumentCaptor<StructureInfo>
 
     @Captor
-    private lateinit var booleanConsumer: ArgumentCaptor<Consumer<Boolean>>
-
-    @Captor
     private lateinit var controlLoadCallbackCaptor:
             ArgumentCaptor<ControlsBindingController.LoadCallback>
+
     @Captor
     private lateinit var broadcastReceiverCaptor: ArgumentCaptor<BroadcastReceiver>
     @Captor
@@ -100,6 +98,7 @@ class ControlsControllerImplTest : SysuiTestCase() {
 
     private lateinit var delayableExecutor: FakeExecutor
     private lateinit var controller: ControlsControllerImpl
+    private lateinit var canceller: DidRunRunnable
 
     companion object {
         fun <T> capture(argumentCaptor: ArgumentCaptor<T>): T = argumentCaptor.capture()
@@ -148,6 +147,9 @@ class ControlsControllerImplTest : SysuiTestCase() {
                 return baseContext
             }
         }
+
+        canceller = DidRunRunnable()
+        `when`(bindingController.bindAndLoad(any(), any())).thenReturn(canceller)
 
         controller = ControlsControllerImpl(
                 wrapper,
@@ -269,7 +271,7 @@ class ControlsControllerImplTest : SysuiTestCase() {
 
             assertTrue(favorites.isEmpty())
             assertFalse(data.errorOnLoad)
-        })
+        }, Consumer {})
 
         verify(bindingController).bindAndLoad(eq(TEST_COMPONENT),
                 capture(controlLoadCallbackCaptor))
@@ -304,7 +306,7 @@ class ControlsControllerImplTest : SysuiTestCase() {
             assertEquals(1, favorites.size)
             assertEquals(TEST_CONTROL_ID, favorites[0])
             assertFalse(data.errorOnLoad)
-        })
+        }, Consumer {})
 
         verify(bindingController).bindAndLoad(eq(TEST_COMPONENT),
                 capture(controlLoadCallbackCaptor))
@@ -335,7 +337,7 @@ class ControlsControllerImplTest : SysuiTestCase() {
             assertEquals(1, favorites.size)
             assertEquals(TEST_CONTROL_ID, favorites[0])
             assertFalse(data.errorOnLoad)
-        })
+        }, Consumer {})
 
         verify(bindingController).bindAndLoad(eq(TEST_COMPONENT),
                 capture(controlLoadCallbackCaptor))
@@ -366,7 +368,7 @@ class ControlsControllerImplTest : SysuiTestCase() {
             assertEquals(1, favorites.size)
             assertEquals(TEST_CONTROL_ID, favorites[0])
             assertTrue(data.errorOnLoad)
-        })
+        }, Consumer {})
 
         verify(bindingController).bindAndLoad(eq(TEST_COMPONENT),
                 capture(controlLoadCallbackCaptor))
@@ -380,22 +382,15 @@ class ControlsControllerImplTest : SysuiTestCase() {
 
     @Test
     fun testCancelLoad() {
-        val canceller = object : Runnable {
-            var ran = false
-            override fun run() {
-                ran = true
-            }
-        }
-        `when`(bindingController.bindAndLoad(any(), any())).thenReturn(canceller)
-
         var loaded = false
+        var cancelRunnable: Runnable? = null
         controller.replaceFavoritesForStructure(TEST_STRUCTURE_INFO)
         delayableExecutor.runAllReady()
         controller.loadForComponent(TEST_COMPONENT, Consumer {
             loaded = true
-        })
+        }, Consumer { runnable -> cancelRunnable = runnable })
 
-        controller.cancelLoad()
+        cancelRunnable?.run()
         delayableExecutor.runAllReady()
 
         assertFalse(loaded)
@@ -403,61 +398,47 @@ class ControlsControllerImplTest : SysuiTestCase() {
     }
 
     @Test
-    fun testCancelLoad_noCancelAfterSuccessfulLoad() {
-        val canceller = object : Runnable {
-            var ran = false
-            override fun run() {
-                ran = true
-            }
-        }
-        `when`(bindingController.bindAndLoad(any(), any())).thenReturn(canceller)
-
+    fun testCancelLoad_afterSuccessfulLoad() {
         var loaded = false
+        var cancelRunnable: Runnable? = null
         controller.replaceFavoritesForStructure(TEST_STRUCTURE_INFO)
         delayableExecutor.runAllReady()
         controller.loadForComponent(TEST_COMPONENT, Consumer {
             loaded = true
-        })
+        }, Consumer { runnable -> cancelRunnable = runnable })
 
         verify(bindingController).bindAndLoad(eq(TEST_COMPONENT),
             capture(controlLoadCallbackCaptor))
 
         controlLoadCallbackCaptor.value.accept(emptyList())
 
-        controller.cancelLoad()
+        cancelRunnable?.run()
         delayableExecutor.runAllReady()
 
         assertTrue(loaded)
-        assertFalse(canceller.ran)
+        assertTrue(canceller.ran)
     }
 
     @Test
-    fun testCancelLoad_noCancelAfterErrorLoad() {
-        val canceller = object : Runnable {
-            var ran = false
-            override fun run() {
-                ran = true
-            }
-        }
-        `when`(bindingController.bindAndLoad(any(), any())).thenReturn(canceller)
-
+    fun testCancelLoad_afterErrorLoad() {
         var loaded = false
+        var cancelRunnable: Runnable? = null
         controller.replaceFavoritesForStructure(TEST_STRUCTURE_INFO)
         delayableExecutor.runAllReady()
         controller.loadForComponent(TEST_COMPONENT, Consumer {
             loaded = true
-        })
+        }, Consumer { runnable -> cancelRunnable = runnable })
 
         verify(bindingController).bindAndLoad(eq(TEST_COMPONENT),
             capture(controlLoadCallbackCaptor))
 
         controlLoadCallbackCaptor.value.error("")
 
-        controller.cancelLoad()
+        cancelRunnable?.run()
         delayableExecutor.runAllReady()
 
         assertTrue(loaded)
-        assertFalse(canceller.ran)
+        assertTrue(canceller.ran)
     }
 
     @Test
@@ -468,7 +449,7 @@ class ControlsControllerImplTest : SysuiTestCase() {
         val newControlInfo = TEST_CONTROL_INFO.copy(controlTitle = TEST_CONTROL_TITLE_2)
         val control = statelessBuilderFromInfo(newControlInfo).build()
 
-        controller.loadForComponent(TEST_COMPONENT, Consumer {})
+        controller.loadForComponent(TEST_COMPONENT, Consumer {}, Consumer {})
 
         verify(bindingController).bindAndLoad(eq(TEST_COMPONENT),
                 capture(controlLoadCallbackCaptor))
@@ -935,5 +916,41 @@ class ControlsControllerImplTest : SysuiTestCase() {
 
         verifyNoMoreInteractions(persistenceWrapper)
         verifyNoMoreInteractions(auxiliaryPersistenceWrapper)
+    }
+
+    @Test
+    fun testGetFavoritesForStructure() {
+        controller.replaceFavoritesForStructure(TEST_STRUCTURE_INFO)
+        controller.replaceFavoritesForStructure(
+                TEST_STRUCTURE_INFO_2.copy(componentName = TEST_COMPONENT))
+        delayableExecutor.runAllReady()
+
+        assertEquals(TEST_STRUCTURE_INFO.controls,
+                controller.getFavoritesForStructure(TEST_COMPONENT, TEST_STRUCTURE))
+        assertEquals(TEST_STRUCTURE_INFO_2.controls,
+                controller.getFavoritesForStructure(TEST_COMPONENT, TEST_STRUCTURE_2))
+    }
+
+    @Test
+    fun testGetFavoritesForStructure_wrongStructure() {
+        controller.replaceFavoritesForStructure(TEST_STRUCTURE_INFO)
+        delayableExecutor.runAllReady()
+
+        assertTrue(controller.getFavoritesForStructure(TEST_COMPONENT, TEST_STRUCTURE_2).isEmpty())
+    }
+
+    @Test
+    fun testGetFavoritesForStructure_wrongComponent() {
+        controller.replaceFavoritesForStructure(TEST_STRUCTURE_INFO)
+        delayableExecutor.runAllReady()
+
+        assertTrue(controller.getFavoritesForStructure(TEST_COMPONENT_2, TEST_STRUCTURE).isEmpty())
+    }
+}
+
+private class DidRunRunnable() : Runnable {
+    var ran = false
+    override fun run() {
+        ran = true
     }
 }

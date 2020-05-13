@@ -24,7 +24,7 @@ import android.telephony.TelephonyManager;
 
 import com.android.internal.widget.LockPatternUtils;
 import com.android.systemui.Dependency;
-
+import com.android.systemui.keyguard.KeyguardViewMediator;
 import javax.inject.Inject;
 import javax.inject.Singleton;
 
@@ -65,13 +65,13 @@ public class KeyguardSecurityModel {
     public SecurityMode getSecurityMode(int userId) {
         KeyguardUpdateMonitor monitor = Dependency.get(KeyguardUpdateMonitor.class);
 
-        if (mIsPukScreenAvailable && SubscriptionManager.isValidSubscriptionId(
-                monitor.getNextSubIdForState(TelephonyManager.SIM_STATE_PUK_REQUIRED))) {
+        int subId = monitor.getUnlockedSubIdForState(TelephonyManager.SIM_STATE_PUK_REQUIRED);
+        if (mIsPukScreenAvailable && SubscriptionManager.isValidSubscriptionId(subId)){
             return SecurityMode.SimPuk;
         }
 
-        if (SubscriptionManager.isValidSubscriptionId(
-                monitor.getNextSubIdForState(TelephonyManager.SIM_STATE_PIN_REQUIRED))) {
+        subId = monitor.getUnlockedSubIdForState(TelephonyManager.SIM_STATE_PIN_REQUIRED);
+        if (SubscriptionManager.isValidSubscriptionId((subId))){
             return SecurityMode.SimPin;
         }
 

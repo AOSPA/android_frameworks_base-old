@@ -37,21 +37,30 @@ using std::shared_ptr;
 using std::make_shared;
 
 shared_ptr<StatsService> gStatsService = nullptr;
+sp<StatsSocketListener> gSocketListener = nullptr;
 
-void sigHandler(int sig) {
-    if (gStatsService != nullptr) {
-        gStatsService->Terminate();
+void signalHandler(int sig) {
+    if (sig == SIGPIPE) {
+        // ShellSubscriber uses SIGPIPE as a signal to detect the end of the
+        // client process. Don't prematurely exit(1) here. Instead, ignore the
+        // signal and allow the write call to return EPIPE.
+        ALOGI("statsd received SIGPIPE. Ignoring signal.");
+        return;
     }
+
+    if (gSocketListener != nullptr) gSocketListener->stopListener();
+    if (gStatsService != nullptr) gStatsService->Terminate();
     ALOGW("statsd terminated on receiving signal %d.", sig);
     exit(1);
 }
 
-void registerSigHandler()
+void registerSignalHandlers()
 {
     struct sigaction sa;
     sigemptyset(&sa.sa_mask);
     sa.sa_flags = 0;
-    sa.sa_handler = sigHandler;
+    sa.sa_handler = signalHandler;
+    sigaction(SIGPIPE, &sa, nullptr);
     sigaction(SIGHUP, &sa, nullptr);
     sigaction(SIGINT, &sa, nullptr);
     sigaction(SIGQUIT, &sa, nullptr);
@@ -79,17 +88,17 @@ int main(int /*argc*/, char** /*argv*/) {
         return -1;
     }
 
-    registerSigHandler();
+    registerSignalHandlers();
 
     gStatsService->sayHiToStatsCompanion();
 
     gStatsService->Startup();
 
-    sp<StatsSocketListener> socketListener = new StatsSocketListener(eventQueue);
+    gSocketListener = new StatsSocketListener(eventQueue);
 
     ALOGI("Statsd starts to listen to socket.");
     // Backlog and /proc/sys/net/unix/max_dgram_qlen set to large value
-    if (socketListener->startListener(600)) {
+    if (gSocketListener->startListener(600)) {
         exit(1);
     }
 

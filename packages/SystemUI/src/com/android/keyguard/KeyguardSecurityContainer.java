@@ -19,7 +19,10 @@ import static android.view.ViewRootImpl.NEW_INSETS_MODE_FULL;
 import static android.view.ViewRootImpl.sNewInsetsMode;
 import static android.view.WindowInsets.Type.ime;
 import static android.view.WindowInsets.Type.systemBars;
+import static android.view.WindowInsetsAnimation.Callback.DISPATCH_MODE_STOP;
+
 import static com.android.systemui.DejankUtils.whitelistIpcs;
+
 import static java.lang.Integer.max;
 
 import android.app.Activity;
@@ -35,6 +38,7 @@ import android.os.Looper;
 import android.os.UserHandle;
 import android.util.AttributeSet;
 import android.util.Log;
+import android.util.MathUtils;
 import android.util.Slog;
 import android.util.TypedValue;
 import android.view.LayoutInflater;
@@ -43,6 +47,7 @@ import android.view.VelocityTracker;
 import android.view.View;
 import android.view.ViewConfiguration;
 import android.view.WindowInsets;
+import android.view.WindowInsetsAnimation;
 import android.view.WindowManager;
 import android.widget.FrameLayout;
 
@@ -51,6 +56,9 @@ import androidx.dynamicanimation.animation.DynamicAnimation;
 import androidx.dynamicanimation.animation.SpringAnimation;
 
 import com.android.internal.logging.MetricsLogger;
+import com.android.internal.logging.UiEvent;
+import com.android.internal.logging.UiEventLogger;
+import com.android.internal.logging.UiEventLoggerImpl;
 import com.android.internal.logging.nano.MetricsProto.MetricsEvent;
 import com.android.internal.widget.LockPatternUtils;
 import com.android.keyguard.KeyguardSecurityModel.SecurityMode;
@@ -61,6 +69,8 @@ import com.android.systemui.SystemUIFactory;
 import com.android.systemui.shared.system.SysUiStatsLog;
 import com.android.systemui.statusbar.policy.KeyguardStateController;
 import com.android.systemui.util.InjectionInflationController;
+
+import java.util.List;
 
 public class KeyguardSecurityContainer extends FrameLayout implements KeyguardSecurityView {
     private static final boolean DEBUG = KeyguardConstants.DEBUG;
@@ -88,6 +98,8 @@ public class KeyguardSecurityContainer extends FrameLayout implements KeyguardSe
     // How much to scale the default slop by, to avoid accidental drags.
     private static final float SLOP_SCALE = 4f;
 
+    private static final UiEventLogger sUiEventLogger = new UiEventLoggerImpl();
+
     private KeyguardSecurityModel mSecurityModel;
     private LockPatternUtils mLockPatternUtils;
 
@@ -113,9 +125,51 @@ public class KeyguardSecurityContainer extends FrameLayout implements KeyguardSe
     private boolean mIsDragging;
     private float mStartTouchY = -1;
 
+    private final WindowInsetsAnimation.Callback mWindowInsetsAnimationCallback =
+            new WindowInsetsAnimation.Callback(DISPATCH_MODE_STOP) {
+
+                private final Rect mInitialBounds = new Rect();
+                private final Rect mFinalBounds = new Rect();
+
+                @Override
+                public void onPrepare(WindowInsetsAnimation animation) {
+                    mSecurityViewFlipper.getBoundsOnScreen(mInitialBounds);
+                }
+
+                @Override
+                public WindowInsetsAnimation.Bounds onStart(WindowInsetsAnimation animation,
+                        WindowInsetsAnimation.Bounds bounds) {
+                    mSecurityViewFlipper.getBoundsOnScreen(mFinalBounds);
+                    return bounds;
+                }
+
+                @Override
+                public WindowInsets onProgress(WindowInsets windowInsets,
+                        List<WindowInsetsAnimation> list) {
+                    int translationY = 0;
+                    for (WindowInsetsAnimation animation : list) {
+                        if ((animation.getTypeMask() & WindowInsets.Type.ime()) == 0) {
+                            continue;
+                        }
+                        final int paddingBottom = (int) MathUtils.lerp(
+                                mInitialBounds.bottom - mFinalBounds.bottom, 0,
+                                animation.getInterpolatedFraction());
+                        translationY += paddingBottom;
+                    }
+                    mSecurityViewFlipper.setTranslationY(translationY);
+                    return windowInsets;
+                }
+
+                @Override
+                public void onEnd(WindowInsetsAnimation animation) {
+                    mSecurityViewFlipper.setTranslationY(0);
+                }
+            };
+
     // Used to notify the container when something interesting happens.
     public interface SecurityCallback {
-        public boolean dismiss(boolean authenticated, int targetUserId);
+        public boolean dismiss(boolean authenticated, int targetUserId,
+                boolean bypassSecondaryLockScreen);
         public void userActivity();
         public void onSecurityModeChanged(SecurityMode securityMode, boolean needsInput);
 
@@ -127,6 +181,44 @@ public class KeyguardSecurityContainer extends FrameLayout implements KeyguardSe
         public void finish(boolean strongAuth, int targetUserId);
         public void reset();
         public void onCancelClicked();
+    }
+
+    @VisibleForTesting
+    public enum BouncerUiEvent implements UiEventLogger.UiEventEnum {
+        @UiEvent(doc = "Default UiEvent used for variable initialization.")
+        UNKNOWN(0),
+
+        @UiEvent(doc = "Bouncer is dismissed using extended security access.")
+        BOUNCER_DISMISS_EXTENDED_ACCESS(413),
+
+        @UiEvent(doc = "Bouncer is dismissed using biometric.")
+        BOUNCER_DISMISS_BIOMETRIC(414),
+
+        @UiEvent(doc = "Bouncer is dismissed without security access.")
+        BOUNCER_DISMISS_NONE_SECURITY(415),
+
+        @UiEvent(doc = "Bouncer is dismissed using password security.")
+        BOUNCER_DISMISS_PASSWORD(416),
+
+        @UiEvent(doc = "Bouncer is dismissed using sim security access.")
+        BOUNCER_DISMISS_SIM(417),
+
+        @UiEvent(doc = "Bouncer is successfully unlocked using password.")
+        BOUNCER_PASSWORD_SUCCESS(418),
+
+        @UiEvent(doc = "An attempt to unlock bouncer using password has failed.")
+        BOUNCER_PASSWORD_FAILURE(419);
+
+        private final int mId;
+
+        BouncerUiEvent(int id) {
+            mId = id;
+        }
+
+        @Override
+        public int getId() {
+            return mId;
+        }
     }
 
     public KeyguardSecurityContainer(Context context, AttributeSet attrs) {
@@ -160,6 +252,7 @@ public class KeyguardSecurityContainer extends FrameLayout implements KeyguardSe
         if (mCurrentSecuritySelection != SecurityMode.None) {
             getSecurityView(mCurrentSecuritySelection).onResume(reason);
         }
+        mSecurityViewFlipper.setWindowInsetsAnimationCallback(mWindowInsetsAnimationCallback);
         updateBiometricRetry();
     }
 
@@ -172,6 +265,14 @@ public class KeyguardSecurityContainer extends FrameLayout implements KeyguardSe
         mSecondaryLockScreenController.hide();
         if (mCurrentSecuritySelection != SecurityMode.None) {
             getSecurityView(mCurrentSecuritySelection).onPause();
+        }
+        mSecurityViewFlipper.setWindowInsetsAnimationCallback(null);
+    }
+
+    @Override
+    public void onStartingToHide() {
+        if (mCurrentSecuritySelection != SecurityMode.None) {
+            getSecurityView(mCurrentSecuritySelection).onStartingToHide();
         }
     }
 
@@ -331,7 +432,9 @@ public class KeyguardSecurityContainer extends FrameLayout implements KeyguardSe
         }
     }
 
-    protected void onFinishInflate() {
+    @Override
+    public void onFinishInflate() {
+        super.onFinishInflate();
         mSecurityViewFlipper = findViewById(R.id.view_flipper);
         mSecurityViewFlipper.setLockPatternUtils(mLockPatternUtils);
     }
@@ -504,24 +607,31 @@ public class KeyguardSecurityContainer extends FrameLayout implements KeyguardSe
      * @param authenticated true if the user entered the correct authentication
      * @param targetUserId a user that needs to be the foreground user at the finish (if called)
      *     completion.
+     * @param bypassSecondaryLockScreen true if the user is allowed to bypass the secondary
+     *     secondary lock screen requirement, if any.
      * @return true if keyguard is done
      */
-    boolean showNextSecurityScreenOrFinish(boolean authenticated, int targetUserId) {
+    boolean showNextSecurityScreenOrFinish(boolean authenticated, int targetUserId,
+            boolean bypassSecondaryLockScreen) {
         if (DEBUG) Log.d(TAG, "showNextSecurityScreenOrFinish(" + authenticated + ")");
         boolean finish = false;
         boolean strongAuth = false;
         int eventSubtype = -1;
+        BouncerUiEvent uiEvent = BouncerUiEvent.UNKNOWN;
         if (mUpdateMonitor.getUserHasTrust(targetUserId)) {
             finish = true;
             eventSubtype = BOUNCER_DISMISS_EXTENDED_ACCESS;
+            uiEvent = BouncerUiEvent.BOUNCER_DISMISS_EXTENDED_ACCESS;
         } else if (mUpdateMonitor.getUserUnlockedWithBiometric(targetUserId)) {
             finish = true;
             eventSubtype = BOUNCER_DISMISS_BIOMETRIC;
+            uiEvent = BouncerUiEvent.BOUNCER_DISMISS_BIOMETRIC;
         } else if (SecurityMode.None == mCurrentSecuritySelection) {
             SecurityMode securityMode = mSecurityModel.getSecurityMode(targetUserId);
             if (SecurityMode.None == securityMode) {
                 finish = true; // no security required
                 eventSubtype = BOUNCER_DISMISS_NONE_SECURITY;
+                uiEvent = BouncerUiEvent.BOUNCER_DISMISS_NONE_SECURITY;
             } else {
                 showSecurityScreen(securityMode); // switch to the alternate security view
             }
@@ -533,6 +643,7 @@ public class KeyguardSecurityContainer extends FrameLayout implements KeyguardSe
                     strongAuth = true;
                     finish = true;
                     eventSubtype = BOUNCER_DISMISS_PASSWORD;
+                    uiEvent = BouncerUiEvent.BOUNCER_DISMISS_PASSWORD;
                     break;
 
                 case SimPin:
@@ -543,6 +654,7 @@ public class KeyguardSecurityContainer extends FrameLayout implements KeyguardSe
                             KeyguardUpdateMonitor.getCurrentUser())) {
                         finish = true;
                         eventSubtype = BOUNCER_DISMISS_SIM;
+                        uiEvent = BouncerUiEvent.BOUNCER_DISMISS_SIM;
                     } else {
                         showSecurityScreen(securityMode);
                     }
@@ -555,7 +667,7 @@ public class KeyguardSecurityContainer extends FrameLayout implements KeyguardSe
             }
         }
         // Check for device admin specified additional security measures.
-        if (finish) {
+        if (finish && !bypassSecondaryLockScreen) {
             Intent secondaryLockscreenIntent =
                     mUpdateMonitor.getSecondaryLockscreenRequirement(targetUserId);
             if (secondaryLockscreenIntent != null) {
@@ -566,6 +678,9 @@ public class KeyguardSecurityContainer extends FrameLayout implements KeyguardSe
         if (eventSubtype != -1) {
             mMetricsLogger.write(new LogMaker(MetricsEvent.BOUNCER)
                     .setType(MetricsEvent.TYPE_DISMISS).setSubtype(eventSubtype));
+        }
+        if (uiEvent != BouncerUiEvent.UNKNOWN) {
+            sUiEventLogger.log(uiEvent);
         }
         if (finish) {
             mSecurityCallback.finish(strongAuth, targetUserId);
@@ -636,8 +751,15 @@ public class KeyguardSecurityContainer extends FrameLayout implements KeyguardSe
             mUpdateMonitor.cancelFaceAuth();
         }
 
+        @Override
         public void dismiss(boolean authenticated, int targetId) {
-            mSecurityCallback.dismiss(authenticated, targetId);
+            dismiss(authenticated, targetId, /* bypassSecondaryLockScreen */ false);
+        }
+
+        @Override
+        public void dismiss(boolean authenticated, int targetId,
+                boolean bypassSecondaryLockScreen) {
+            mSecurityCallback.dismiss(authenticated, targetId, bypassSecondaryLockScreen);
         }
 
         public boolean isVerifyUnlockOnly() {
@@ -665,6 +787,8 @@ public class KeyguardSecurityContainer extends FrameLayout implements KeyguardSe
             }
             mMetricsLogger.write(new LogMaker(MetricsEvent.BOUNCER)
                     .setType(success ? MetricsEvent.TYPE_SUCCESS : MetricsEvent.TYPE_FAILURE));
+            sUiEventLogger.log(success ? BouncerUiEvent.BOUNCER_PASSWORD_SUCCESS
+                    : BouncerUiEvent.BOUNCER_PASSWORD_FAILURE);
         }
 
         public void reset() {
@@ -688,6 +812,9 @@ public class KeyguardSecurityContainer extends FrameLayout implements KeyguardSe
         public boolean isVerifyUnlockOnly() { return false; }
         @Override
         public void dismiss(boolean securityVerified, int targetUserId) { }
+        @Override
+        public void dismiss(boolean authenticated, int targetId,
+                boolean bypassSecondaryLockScreen) { }
         @Override
         public void onUserInput() { }
         @Override

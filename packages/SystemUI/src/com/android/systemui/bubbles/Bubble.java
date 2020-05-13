@@ -78,6 +78,7 @@ class Bubble implements BubbleViewProvider {
 
     private BubbleViewInfoTask mInflationTask;
     private boolean mInflateSynchronously;
+    private boolean mPendingIntentCanceled;
 
     /**
      * Presentational info about the flyout.
@@ -90,6 +91,7 @@ class Bubble implements BubbleViewProvider {
     }
 
     private FlyoutMessage mFlyoutMessage;
+    private Drawable mBadgedAppIcon;
     private Bitmap mBadgedImage;
     private int mDotColor;
     private Path mDotPath;
@@ -131,6 +133,10 @@ class Bubble implements BubbleViewProvider {
     @Override
     public Bitmap getBadgedImage() {
         return mBadgedImage;
+    }
+
+    public Drawable getBadgedAppIcon() {
+        return mBadgedAppIcon;
     }
 
     @Override
@@ -175,6 +181,14 @@ class Bubble implements BubbleViewProvider {
             mExpandedView = null;
         }
         mIconView = null;
+    }
+
+    void setPendingIntentCanceled() {
+        mPendingIntentCanceled = true;
+    }
+
+    boolean getPendingIntentCanceled() {
+        return mPendingIntentCanceled;
     }
 
     /**
@@ -239,6 +253,7 @@ class Bubble implements BubbleViewProvider {
         mAppName = info.appName;
         mFlyoutMessage = info.flyoutMessage;
 
+        mBadgedAppIcon = info.badgedAppIcon;
         mBadgedImage = info.badgedBubbleImage;
         mDotColor = info.dotColor;
         mDotPath = info.dotPath;
@@ -286,6 +301,13 @@ class Bubble implements BubbleViewProvider {
      */
     long getLastUpdateTime() {
         return mLastUpdated;
+    }
+
+    /**
+     * @return if the bubble was ever expanded
+     */
+    boolean getWasAccessed() {
+        return mLastAccessed != 0L;
     }
 
     /**

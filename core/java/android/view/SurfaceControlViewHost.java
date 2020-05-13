@@ -39,7 +39,7 @@ import java.util.Objects;
  * {@link SurfaceView#setChildSurfacePackage}.
  */
 public class SurfaceControlViewHost {
-    private ViewRootImpl mViewRoot;
+    private final ViewRootImpl mViewRoot;
     private WindowlessWindowManager mWm;
 
     private SurfaceControl mSurfaceControl;
@@ -50,6 +50,22 @@ public class SurfaceControlViewHost {
      * elements. It's expected to get this object from
      * {@link SurfaceControlViewHost#getSurfacePackage} afterwards it can be embedded within
      * a SurfaceView by calling {@link SurfaceView#setChildSurfacePackage}.
+     *
+     * Note that each {@link SurfacePackage} must be released by calling
+     * {@link SurfacePackage#release}. However, if you use the recommended flow,
+     *  the framework will automatically handle the lifetime for you.
+     *
+     * 1. When sending the package to the remote process, return it from an AIDL method
+     * or manually use FLAG_WRITE_RETURN_VALUE in writeToParcel. This will automatically
+     * release the package in the local process.
+     * 2. In the remote process, consume the package using SurfaceView. This way the
+     * SurfaceView will take over the lifetime and call {@link SurfacePackage#release}
+     * for the user.
+     *
+     * One final note: The {@link SurfacePackage} lifetime is totally de-coupled
+     * from the lifetime of the underlying {@link SurfaceControlViewHost}. Regardless
+     * of the lifetime of the package the user should still call
+     * {@link SurfaceControlViewHost#release} when finished.
      */
     public static final class SurfacePackage implements Parcelable {
         private SurfaceControl mSurfaceControl;
@@ -207,6 +223,22 @@ public class SurfaceControlViewHost {
      */
     public @Nullable View getView() {
         return mViewRoot.getView();
+    }
+
+    /**
+     * @return the ViewRootImpl wrapped by this host.
+     * @hide
+     */
+    public IWindow getWindowToken() {
+        return mViewRoot.mWindow;
+    }
+
+    /**
+     * @return the WindowlessWindowManager instance that this host is attached to.
+     * @hide
+     */
+    public @NonNull WindowlessWindowManager getWindowlessWM() {
+        return mWm;
     }
 
     /**

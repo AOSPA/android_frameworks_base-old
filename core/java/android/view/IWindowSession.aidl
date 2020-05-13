@@ -48,6 +48,11 @@ interface IWindowSession {
             out Rect outContentInsets, out Rect outStableInsets,
             out DisplayCutout.ParcelableWrapper displayCutout, out InputChannel outInputChannel,
             out InsetsState insetsState, out InsetsSourceControl[] activeControls);
+    int addToDisplayAsUser(IWindow window, int seq, in WindowManager.LayoutParams attrs,
+                in int viewVisibility, in int layerStackId, in int userId,
+                out Rect outFrame, out Rect outContentInsets, out Rect outStableInsets,
+                out DisplayCutout.ParcelableWrapper displayCutout, out InputChannel outInputChannel,
+                out InsetsState insetsState, out InsetsSourceControl[] activeControls);
     int addToDisplayWithoutInputChannel(IWindow window, int seq, in WindowManager.LayoutParams attrs,
             in int viewVisibility, in int layerStackId, out Rect outContentInsets,
             out Rect outStableInsets, out InsetsState insetsState);
@@ -220,13 +225,13 @@ interface IWindowSession {
      * For multi screen launcher type applications, xstep and ystep indicate
      * how big the increment is from one screen to another.
      */
-    void setWallpaperPosition(IBinder windowToken, float x, float y, float xstep, float ystep);
+    oneway void setWallpaperPosition(IBinder windowToken, float x, float y, float xstep, float ystep);
 
     /**
      * For wallpaper windows, sets the scale of the wallpaper based on
      * SystemUI behavior.
      */
-    void setWallpaperZoomOut(IBinder windowToken, float scale);
+    oneway void setWallpaperZoomOut(IBinder windowToken, float scale);
 
     /**
      * For wallpaper windows, sets whether the wallpaper should actually be
@@ -337,5 +342,5 @@ interface IWindowSession {
      * Update the flags on an input channel associated with a particular surface.
      */
     void updateInputChannel(in IBinder channelToken, int displayId, in SurfaceControl surface,
-            int flags);
+            int flags, in Region region);
 }

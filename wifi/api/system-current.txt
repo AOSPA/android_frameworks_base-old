@@ -245,6 +245,7 @@ package android.net.wifi {
     field @NonNull public static final android.os.Parcelable.Creator<android.net.wifi.SoftApCapability> CREATOR;
     field public static final long SOFTAP_FEATURE_ACS_OFFLOAD = 1L; // 0x1L
     field public static final long SOFTAP_FEATURE_CLIENT_FORCE_DISCONNECT = 2L; // 0x2L
+    field public static final long SOFTAP_FEATURE_WPA3_OWE = 8L; // 0x8L
     field public static final long SOFTAP_FEATURE_WPA3_SAE = 4L; // 0x4L
   }
 
@@ -264,7 +265,6 @@ package android.net.wifi {
     field public static final int BAND_ANY = 7; // 0x7
     field public static final int BAND_DUAL = 8; // 0x8
     field public static final int SECURITY_TYPE_OWE = 4; // 0x4
-    field public static final int SECURITY_TYPE_SAE = 5; // 0x5
   }
 
   public static final class SoftApConfiguration.Builder {
@@ -349,8 +349,6 @@ package android.net.wifi {
 
   @Deprecated public static class WifiConfiguration.KeyMgmt {
     field @Deprecated public static final int DPP = 17; // 0x11
-    field @Deprecated public static final int FILS_SHA256 = 15; // 0xf
-    field @Deprecated public static final int FILS_SHA384 = 16; // 0x10
     field @Deprecated public static final int WAPI_CERT = 14; // 0xe
     field @Deprecated public static final int WAPI_PSK = 13; // 0xd
     field @Deprecated public static final int WPA2_PSK = 4; // 0x4
@@ -418,11 +416,10 @@ package android.net.wifi {
     method public int getScore();
     method public double getSuccessfulRxPacketsPerSecond();
     method public double getSuccessfulTxPacketsPerSecond();
-    method public int getWifiGeneration();
     method public boolean isEphemeral();
+    method public boolean isHe8ssCapableAp();
     method public boolean isOsuAp();
     method public boolean isPasspointAp();
-    method public boolean isTwtSupported();
     method public boolean isVhtMax8SpatialStreamsSupported();
     method @Nullable public static String sanitizeSsid(@Nullable String);
     field public static final String DEFAULT_MAC_ADDRESS = "02:00:00:00:00:00";
@@ -452,7 +449,7 @@ package android.net.wifi {
     method @NonNull @RequiresPermission(allOf={android.Manifest.permission.ACCESS_FINE_LOCATION, android.Manifest.permission.ACCESS_WIFI_STATE}) public java.util.Map<android.net.wifi.WifiNetworkSuggestion,java.util.List<android.net.wifi.ScanResult>> getMatchingScanResults(@NonNull java.util.List<android.net.wifi.WifiNetworkSuggestion>, @Nullable java.util.List<android.net.wifi.ScanResult>);
     method @RequiresPermission(allOf={android.Manifest.permission.ACCESS_FINE_LOCATION, android.Manifest.permission.ACCESS_WIFI_STATE, android.Manifest.permission.READ_WIFI_CREDENTIAL}) public java.util.List<android.net.wifi.WifiConfiguration> getPrivilegedConfiguredNetworks();
     method @NonNull @RequiresPermission(android.Manifest.permission.NETWORK_SETTINGS) public android.net.wifi.SoftApConfiguration getSoftApConfiguration();
-    method public int getSoftApWifiGeneration();
+    method public int getSoftApWifiStandard();
     method @RequiresPermission(android.Manifest.permission.ACCESS_WIFI_STATE) public void getWifiActivityEnergyInfoAsync(@NonNull java.util.concurrent.Executor, @NonNull android.net.wifi.WifiManager.OnWifiActivityEnergyInfoListener);
     method @Deprecated @Nullable @RequiresPermission(android.Manifest.permission.ACCESS_WIFI_STATE) public android.net.wifi.WifiConfiguration getWifiApConfiguration();
     method @RequiresPermission(android.Manifest.permission.ACCESS_WIFI_STATE) public int getWifiApState();
@@ -463,6 +460,7 @@ package android.net.wifi {
     method public boolean isExtendingWifi();
     method public boolean isPortableHotspotSupported();
     method public boolean isVerboseLoggingEnabled();
+    method public boolean isVht8ssCapableDevice();
     method @RequiresPermission(android.Manifest.permission.ACCESS_WIFI_STATE) public boolean isWifiApEnabled();
     method public boolean isWifiCoverageExtendFeatureEnabled();
     method public boolean isWifiScannerSupported();
@@ -550,10 +548,6 @@ package android.net.wifi {
     field public static final String WIFI_CREDENTIAL_CHANGED_ACTION = "android.net.wifi.WIFI_CREDENTIAL_CHANGED";
     field public static final int WIFI_CREDENTIAL_FORGOT = 1; // 0x1
     field public static final int WIFI_CREDENTIAL_SAVED = 0; // 0x0
-    field public static final int WIFI_GENERATION_4 = 4; // 0x4
-    field public static final int WIFI_GENERATION_5 = 5; // 0x5
-    field public static final int WIFI_GENERATION_6 = 6; // 0x6
-    field public static final int WIFI_GENERATION_DEFAULT = 0; // 0x0
   }
 
   public static interface WifiManager.ActionListener {
@@ -592,8 +586,6 @@ package android.net.wifi {
     method public default void onCapabilityChanged(@NonNull android.net.wifi.SoftApCapability);
     method public default void onConnectedClientsChanged(@NonNull java.util.List<android.net.wifi.WifiClient>);
     method public default void onInfoChanged(@NonNull android.net.wifi.SoftApInfo);
-    method public default void onStaConnected(@NonNull String, int);
-    method public default void onStaDisconnected(@NonNull String, int);
     method public default void onStateChanged(int, int);
   }
 

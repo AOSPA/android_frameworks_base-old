@@ -39,6 +39,7 @@ import android.content.res.Configuration;
 import android.graphics.Rect;
 import android.os.IBinder;
 import android.os.RemoteException;
+import android.platform.test.annotations.Presubmit;
 import android.view.IDisplayWindowListener;
 
 import androidx.test.filters.MediumTest;
@@ -57,6 +58,7 @@ import java.util.ArrayList;
  * Build/Install/Run:
  *  atest WmTests:ActivityTaskManagerServiceTests
  */
+@Presubmit
 @MediumTest
 @RunWith(WindowTestRunner.class)
 public class ActivityTaskManagerServiceTests extends ActivityTestsBase {
@@ -89,13 +91,13 @@ public class ActivityTaskManagerServiceTests extends ActivityTestsBase {
     public void testOnPictureInPictureRequested() throws RemoteException {
         final ActivityStack stack = new StackBuilder(mRootWindowContainer).build();
         final ActivityRecord activity = stack.getBottomMostTask().getTopNonFinishingActivity();
-        ClientLifecycleManager lifecycleManager = mService.getLifecycleManager();
-        doNothing().when(lifecycleManager).scheduleTransaction(any());
+        final ClientLifecycleManager mockLifecycleManager = mock(ClientLifecycleManager.class);
+        doReturn(mockLifecycleManager).when(mService).getLifecycleManager();
         doReturn(true).when(activity).checkEnterPictureInPictureState(anyString(), anyBoolean());
 
         mService.requestPictureInPictureMode(activity.token);
 
-        verify(lifecycleManager).scheduleTransaction(mClientTransactionCaptor.capture());
+        verify(mockLifecycleManager).scheduleTransaction(mClientTransactionCaptor.capture());
         final ClientTransaction transaction = mClientTransactionCaptor.getValue();
         // Check that only an enter pip request item callback was scheduled.
         assertEquals(1, transaction.getCallbacks().size());

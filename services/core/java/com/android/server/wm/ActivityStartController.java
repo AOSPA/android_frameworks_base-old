@@ -19,6 +19,7 @@ package com.android.server.wm;
 import static android.app.ActivityManager.START_SUCCESS;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_HOME;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN;
+import static android.app.WindowConfiguration.WINDOWING_MODE_UNDEFINED;
 import static android.content.Intent.FLAG_ACTIVITY_NEW_TASK;
 import static android.os.FactoryTest.FACTORY_TEST_LOW_LEVEL;
 
@@ -171,7 +172,8 @@ public class ActivityStartController {
         mLastStarter.postStartActivityProcessing(r, result, targetStack);
     }
 
-    void startHomeActivity(Intent intent, ActivityInfo aInfo, String reason, int displayId) {
+    void startHomeActivity(Intent intent, ActivityInfo aInfo, String reason,
+            TaskDisplayArea taskDisplayArea) {
         final ActivityOptions options = ActivityOptions.makeBasic();
         options.setLaunchWindowingMode(WINDOWING_MODE_FULLSCREEN);
         if (!ActivityRecord.isResolverActivity(aInfo.name)) {
@@ -180,19 +182,20 @@ public class ActivityStartController {
             // foreground instead of bring home stack to front.
             options.setLaunchActivityType(ACTIVITY_TYPE_HOME);
         }
+        final int displayId = taskDisplayArea.getDisplayId();
         options.setLaunchDisplayId(displayId);
+        options.setLaunchTaskDisplayArea(taskDisplayArea.mRemoteToken
+                .toWindowContainerToken());
 
-        final DisplayContent display =
-                mService.mRootWindowContainer.getDisplayContent(displayId);
         // The home activity will be started later, defer resuming to avoid unneccerary operations
         // (e.g. start home recursively) when creating home stack.
         mSupervisor.beginDeferResume();
         final ActivityStack homeStack;
         try {
-            // TODO(multi-display-area): Support starting home in a task display area
-            // Make sure home stack exist on display.
-            homeStack = display.getDefaultTaskDisplayArea().getOrCreateStack(
-                    WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_HOME, ON_TOP);
+            // Make sure home stack exists on display area.
+            // TODO(b/153624902): Replace with TaskDisplayArea#getOrCreateRootHomeTask()
+            homeStack = taskDisplayArea.getOrCreateStack(WINDOWING_MODE_UNDEFINED,
+                    ACTIVITY_TYPE_HOME, ON_TOP);
         } finally {
             mSupervisor.endDeferResume();
         }
@@ -546,18 +549,27 @@ public class ActivityStartController {
         return mPendingRemoteAnimationRegistry;
     }
 
-    void dump(PrintWriter pw, String prefix, String dumpPackage) {
+    void dumpLastHomeActivityStartResult(PrintWriter pw, String prefix) {
         pw.print(prefix);
         pw.print("mLastHomeActivityStartResult=");
         pw.println(mLastHomeActivityStartResult);
+    }
 
-        if (mLastHomeActivityStartRecord != null) {
+    void dump(PrintWriter pw, String prefix, String dumpPackage) {
+        boolean dumped = false;
+
+        final boolean dumpPackagePresent = dumpPackage != null;
+
+        if (mLastHomeActivityStartRecord != null && (!dumpPackagePresent
+                || dumpPackage.equals(mLastHomeActivityStartRecord.packageName))) {
+            if (!dumped) {
+                dumped = true;
+                dumpLastHomeActivityStartResult(pw, prefix);
+            }
             pw.print(prefix);
             pw.println("mLastHomeActivityStartRecord:");
             mLastHomeActivityStartRecord.dump(pw, prefix + "  ", true /* dumpAll */);
         }
-
-        final boolean dumpPackagePresent = dumpPackage != null;
 
         if (mLastStarter != null) {
             final boolean dump = !dumpPackagePresent
@@ -566,6 +578,10 @@ public class ActivityStartController {
                             && dumpPackage.equals(mLastHomeActivityStartRecord.packageName));
 
             if (dump) {
+                if (!dumped) {
+                    dumped = true;
+                    dumpLastHomeActivityStartResult(pw, prefix);
+                }
                 pw.print(prefix);
                 mLastStarter.dump(pw, prefix + "  ");
 
@@ -575,7 +591,7 @@ public class ActivityStartController {
             }
         }
 
-        if (dumpPackagePresent) {
+        if (!dumped) {
             pw.print(prefix);
             pw.println("(nothing)");
         }

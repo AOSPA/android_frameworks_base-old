@@ -15,10 +15,12 @@
  */
 
 package com.android.internal.accessibility.util;
-import static com.android.internal.accessibility.common.ShortcutConstants.AccessibilityServiceFragmentType;
+
+import static com.android.internal.accessibility.common.ShortcutConstants.AccessibilityFragmentType;
 import static com.android.internal.accessibility.common.ShortcutConstants.SERVICES_SEPARATOR;
 
 import android.accessibilityservice.AccessibilityServiceInfo;
+import android.annotation.NonNull;
 import android.content.ComponentName;
 import android.content.Context;
 import android.os.Build;
@@ -26,9 +28,11 @@ import android.os.UserHandle;
 import android.provider.Settings;
 import android.text.TextUtils;
 import android.util.ArraySet;
+import android.view.accessibility.AccessibilityManager;
 
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 /**
@@ -112,20 +116,43 @@ public final class AccessibilityUtils {
      * Gets the corresponding fragment type of a given accessibility service.
      *
      * @param accessibilityServiceInfo The accessibilityService's info.
-     * @return int from {@link AccessibilityServiceFragmentType}.
+     * @return int from {@link AccessibilityFragmentType}.
      */
-    public static @AccessibilityServiceFragmentType int getAccessibilityServiceFragmentType(
-            AccessibilityServiceInfo accessibilityServiceInfo) {
+    public static @AccessibilityFragmentType int getAccessibilityServiceFragmentType(
+            @NonNull AccessibilityServiceInfo accessibilityServiceInfo) {
         final int targetSdk = accessibilityServiceInfo.getResolveInfo()
                 .serviceInfo.applicationInfo.targetSdkVersion;
         final boolean requestA11yButton = (accessibilityServiceInfo.flags
                 & AccessibilityServiceInfo.FLAG_REQUEST_ACCESSIBILITY_BUTTON) != 0;
 
         if (targetSdk <= Build.VERSION_CODES.Q) {
-            return AccessibilityServiceFragmentType.LEGACY;
+            return AccessibilityFragmentType.VOLUME_SHORTCUT_TOGGLE;
         }
         return requestA11yButton
-                ? AccessibilityServiceFragmentType.INVISIBLE
-                : AccessibilityServiceFragmentType.INTUITIVE;
+                ? AccessibilityFragmentType.INVISIBLE_TOGGLE
+                : AccessibilityFragmentType.TOGGLE;
+    }
+
+    /**
+     * Returns if a {@code componentId} service is enabled.
+     *
+     * @param context The current context.
+     * @param componentId The component id that need to be checked.
+     * @return {@code true} if a {@code componentId} service is enabled.
+     */
+    public static boolean isAccessibilityServiceEnabled(Context context,
+            @NonNull String componentId) {
+        final AccessibilityManager am = context.getSystemService(AccessibilityManager.class);
+        final List<AccessibilityServiceInfo> enabledServices =
+                am.getEnabledAccessibilityServiceList(AccessibilityServiceInfo.FEEDBACK_ALL_MASK);
+
+        for (AccessibilityServiceInfo info : enabledServices) {
+            final String id = info.getComponentName().flattenToString();
+            if (id.equals(componentId)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

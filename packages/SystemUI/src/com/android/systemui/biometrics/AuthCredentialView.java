@@ -220,15 +220,18 @@ public abstract class AuthCredentialView extends LinearLayout {
         setTextOrHide(mDescriptionView, getDescription(mBiometricPromptBundle));
         announceForAccessibility(title);
 
-        final boolean isManagedProfile = Utils.isManagedProfile(mContext, mEffectiveUserId);
-        final Drawable image;
-        if (isManagedProfile) {
-            image = getResources().getDrawable(R.drawable.auth_dialog_enterprise,
-                    mContext.getTheme());
-        } else {
-            image = getResources().getDrawable(R.drawable.auth_dialog_lock, mContext.getTheme());
+        if (mIconView != null) {
+            final boolean isManagedProfile = Utils.isManagedProfile(mContext, mEffectiveUserId);
+            final Drawable image;
+            if (isManagedProfile) {
+                image = getResources().getDrawable(R.drawable.auth_dialog_enterprise,
+                        mContext.getTheme());
+            } else {
+                image = getResources().getDrawable(R.drawable.auth_dialog_lock,
+                        mContext.getTheme());
+            }
+            mIconView.setImageDrawable(image);
         }
-        mIconView.setImageDrawable(image);
 
         // Only animate this if we're transitioning from a biometric view.
         if (mShouldAnimateContents) {
@@ -286,6 +289,7 @@ public abstract class AuthCredentialView extends LinearLayout {
 
         if (matched) {
             mClearErrorRunnable.run();
+            mLockPatternUtils.userPresent(mEffectiveUserId);
             mCallback.onCredentialMatched(attestation);
         } else {
             if (timeoutMs > 0) {

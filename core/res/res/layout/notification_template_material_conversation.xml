@@ -139,6 +139,33 @@
                         android:layout_weight="1"
                         />
 
+
+                    <TextView
+                        android:id="@+id/app_name_divider"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:textAppearance="?attr/notificationHeaderTextAppearance"
+                        android:layout_marginStart="@dimen/notification_header_separating_margin"
+                        android:layout_marginEnd="@dimen/notification_header_separating_margin"
+                        android:text="@string/notification_header_divider_symbol"
+                        android:layout_gravity="center"
+                        android:paddingTop="1sp"
+                        android:singleLine="true"
+                        android:visibility="gone"
+                    />
+
+                    <!-- App Name -->
+                    <com.android.internal.widget.ObservableTextView
+                        android:id="@+id/app_name_text"
+                        android:textAppearance="@style/TextAppearance.DeviceDefault.Notification.Info"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="center"
+                        android:layout_marginStart="@dimen/notification_header_separating_margin"
+                        android:paddingTop="1sp"
+                        android:singleLine="true"
+                    />
+
                     <TextView
                         android:id="@+id/time_divider"
                         android:layout_width="wrap_content"
@@ -195,50 +222,40 @@
                         android:layout_width="wrap_content"
                         android:paddingTop="3dp"
                         android:layout_marginStart="2dp"
+                        android:background="?android:selectableItemBackgroundBorderless"
                         android:orientation="horizontal" >
-                        <ImageButton
+                        <ImageView
                             android:layout_marginStart="4dp"
                             android:id="@+id/camera"
                             android:layout_width="?attr/notificationHeaderIconSize"
                             android:layout_height="?attr/notificationHeaderIconSize"
                             android:src="@drawable/ic_camera"
-                            android:background="?android:selectableItemBackgroundBorderless"
                             android:visibility="gone"
+                            android:focusable="false"
                             android:contentDescription="@string/notification_appops_camera_active"
                             />
-                        <ImageButton
+                        <ImageView
                             android:id="@+id/mic"
                             android:layout_width="?attr/notificationHeaderIconSize"
                             android:layout_height="?attr/notificationHeaderIconSize"
                             android:src="@drawable/ic_mic"
-                            android:background="?android:selectableItemBackgroundBorderless"
                             android:layout_marginStart="4dp"
                             android:visibility="gone"
+                            android:focusable="false"
                             android:contentDescription="@string/notification_appops_microphone_active"
                             />
-                        <ImageButton
+                        <ImageView
                             android:id="@+id/overlay"
                             android:layout_width="?attr/notificationHeaderIconSize"
                             android:layout_height="?attr/notificationHeaderIconSize"
                             android:src="@drawable/ic_alert_window_layer"
-                            android:background="?android:selectableItemBackgroundBorderless"
                             android:layout_marginStart="4dp"
                             android:visibility="gone"
+                            android:focusable="false"
                             android:contentDescription="@string/notification_appops_overlay_active"
                             />
                     </LinearLayout>
                 </LinearLayout>
-
-                <!-- App Name -->
-                <com.android.internal.widget.ObservableTextView
-                    android:id="@+id/app_name_text"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="@dimen/conversation_content_start"
-                    android:textSize="12sp"
-                    android:layout_marginBottom="16dp"
-                    android:textAppearance="@style/TextAppearance.DeviceDefault.Notification"
-                />
 
                 <!-- Messages -->
                 <com.android.internal.widget.MessagingLinearLayout

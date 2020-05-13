@@ -25,7 +25,6 @@ import android.os.Looper
 import android.os.Message
 import android.os.UserHandle
 import android.text.TextUtils
-import android.util.Log
 import android.util.SparseArray
 import com.android.internal.annotations.VisibleForTesting
 import com.android.systemui.Dumpable
@@ -34,6 +33,7 @@ import com.android.systemui.dagger.qualifiers.Main
 import com.android.systemui.dump.DumpManager
 import java.io.FileDescriptor
 import java.io.PrintWriter
+import java.lang.IllegalStateException
 import java.util.concurrent.Executor
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -60,7 +60,7 @@ private const val DEBUG = true
  *
  * Use only for IntentFilters with actions and optionally categories. It does not support,
  * permissions, schemes, data types, data authorities or priority different than 0.
- * Cannot be used for getting sticky broadcasts.
+ * Cannot be used for getting sticky broadcasts (either as return of registering or as re-delivery).
  */
 @Singleton
 open class BroadcastDispatcher @Inject constructor (
@@ -189,8 +189,8 @@ open class BroadcastDispatcher @Inject constructor (
                         data.user.identifier
                     }
                     if (userId < UserHandle.USER_ALL) {
-                        if (DEBUG) Log.w(TAG, "Register receiver for invalid user: $userId")
-                        return
+                        throw IllegalStateException(
+                                "Attempting to register receiver for invalid user {$userId}")
                     }
                     val uBR = receiversByUser.get(userId, createUBRForUser(userId))
                     receiversByUser.put(userId, uBR)

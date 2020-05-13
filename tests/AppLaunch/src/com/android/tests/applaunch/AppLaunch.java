@@ -15,6 +15,8 @@
  */
 package com.android.tests.applaunch;
 
+import static org.junit.Assert.assertNotNull;
+
 import android.accounts.Account;
 import android.accounts.AccountManager;
 import android.app.ActivityManager;
@@ -29,7 +31,9 @@ import android.content.pm.ResolveInfo;
 import android.os.Bundle;
 import android.os.ParcelFileDescriptor;
 import android.os.RemoteException;
+import android.os.SystemClock;
 import android.os.UserHandle;
+import android.support.test.uiautomator.UiDevice;
 import android.test.InstrumentationTestCase;
 import android.test.InstrumentationTestRunner;
 import android.util.Log;
@@ -46,6 +50,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
+import java.nio.file.Paths;
 import java.time.format.DateTimeFormatter;
 import java.time.ZonedDateTime;
 import java.time.ZoneOffset;
@@ -67,6 +72,7 @@ import java.util.Set;
  * in the following format:
  * -e apps <app name>^<result key>|<app name>^<result key>
  */
+@Deprecated
 public class AppLaunch extends InstrumentationTestCase {
 
     private static final int JOIN_TIMEOUT = 10000;
@@ -94,6 +100,9 @@ public class AppLaunch extends InstrumentationTestCase {
     private static final String KEY_TRACE_DUMPINTERVAL = "tracedump_interval";
     private static final String KEY_COMPILER_FILTERS = "compiler_filters";
     private static final String KEY_FORCE_STOP_APP = "force_stop_app";
+    private static final String ENABLE_SCREEN_RECORDING = "enable_screen_recording";
+    private static final int MAX_RECORDING_PARTS = 5;
+    private static final long VIDEO_TAIL_BUFFER = 500;
 
     private static final String SIMPLEPERF_APP_CMD =
             "simpleperf --log fatal stat --csv -e cpu-cycles,major-faults --app %s & %s";
@@ -107,7 +116,9 @@ public class AppLaunch extends InstrumentationTestCase {
     private static final int PROFILE_SAVE_SLEEP_TIMEOUT = 1000; // Allow 1s for the profile to save
     private static final int IORAP_TRACE_DURATION_TIMEOUT = 7000; // Allow 7s for trace to complete.
     private static final int IORAP_TRIAL_LAUNCH_ITERATIONS = 3;  // min 3 launches to merge traces.
-    private static final int IORAP_COMPILE_CMD_TIMEOUT = 600;  // in seconds: 10 minutes
+    private static final int IORAP_COMPILE_CMD_TIMEOUT = 60;  // in seconds: 1 minutes
+    private static final int IORAP_COMPILE_MIN_TRACES = 1;  // configure iorapd to need 1 trace.
+    private static final int IORAP_COMPILE_RETRIES = 3;  // retry compiler 3 times if it fails.
     private static final String LAUNCH_SUB_DIRECTORY = "launch_logs";
     private static final String LAUNCH_FILE = "applaunch.txt";
     private static final String TRACE_SUB_DIRECTORY = "atrace_logs";
@@ -132,9 +143,9 @@ public class AppLaunch extends InstrumentationTestCase {
     private static final String LAUNCH_ORDER_CYCLIC = "cyclic";
     private static final String LAUNCH_ORDER_SEQUENTIAL = "sequential";
     private static final String COMPILE_CMD = "cmd package compile -f -m %s %s";
-    private static final String IORAP_COMPILE_CMD = "cmd jobscheduler run -f android 283673059";
+    private static final String IORAP_COMPILE_CMD = "dumpsys iorapd --compile-package %s";
     private static final String IORAP_MAINTENANCE_CMD =
-            "iorap.cmd.maintenance --purge-package %s /data/misc/iorapd/sqlite.db";
+            "dumpsys iorapd --purge-package %s";
     private static final String IORAP_DUMPSYS_CMD = "dumpsys iorapd";
     private static final String SPEED_PROFILE_FILTER = "speed-profile";
     private static final String VERIFY_FILTER = "verify";
@@ -142,14 +153,17 @@ public class AppLaunch extends InstrumentationTestCase {
 
     private Map<String, Intent> mNameToIntent;
     private List<LaunchOrder> mLaunchOrderList = new ArrayList<LaunchOrder>();
+    private RecordingThread mCurrentThread;
     private Map<String, String> mNameToResultKey;
     private Map<String, Map<String, List<AppLaunchResult>>> mNameToLaunchTime;
     private IActivityManager mAm;
+    private File launchSubDir = null;
     private String mSimplePerfCmd = null;
     private String mLaunchOrder = null;
     private boolean mDropCache = false;
     private int mLaunchIterations = 10;
     private boolean mForceStopApp = true;
+    private boolean mEnableRecording = false;
     private int mTraceLaunchCount = 0;
     private String mTraceDirectoryStr = null;
     private Bundle mResult = new Bundle();
@@ -164,6 +178,7 @@ public class AppLaunch extends InstrumentationTestCase {
     private boolean mCycleCleanUp = false;
     private boolean mTraceAll = false;
     private boolean mIterationCycle = false;
+    private UiDevice mDevice;
 
     enum IorapStatus {
         UNDEFINED,
@@ -220,7 +235,7 @@ public class AppLaunch extends InstrumentationTestCase {
         }
 
         try {
-            File launchSubDir = new File(launchRootDir, LAUNCH_SUB_DIRECTORY);
+            launchSubDir = new File(launchRootDir, LAUNCH_SUB_DIRECTORY);
 
             if (!launchSubDir.exists() && !launchSubDir.mkdirs()) {
                 throw new IOException("Unable to create the lauch file sub directory "
@@ -350,9 +365,9 @@ public class AppLaunch extends InstrumentationTestCase {
                     sleep(IORAP_TRACE_DURATION_TIMEOUT);
 
                     if (launch.getLaunchReason().equals(IORAP_TRIAL_LAUNCH_LAST)) {
-                        // run the iorap job scheduler and wait for iorap to compile fully.
-                        assertTrue(String.format("Not able to iorap-compile the app : %s", appPkgName),
-                                compileAppForIorap(appPkgName));
+                        // run the iorap compiler and wait for iorap to compile fully.
+                        // this throws an exception if it fails.
+                        compileAppForIorapWithRetries(appPkgName, IORAP_COMPILE_RETRIES);
                     }
                 }
 
@@ -506,6 +521,22 @@ public class AppLaunch extends InstrumentationTestCase {
     }
 
     /**
+     * Compile the app package using compilerFilter,
+     * retrying if the compilation command fails in between.
+     */
+    private void compileAppForIorapWithRetries(String appPkgName, int retries) throws IOException {
+        for (int i = 0; i < retries; ++i) {
+            if (compileAppForIorap(appPkgName)) {
+                return;
+            }
+            sleep(1000);
+        }
+
+        throw new IllegalStateException("compileAppForIorapWithRetries: timed out after "
+                + retries + " retries");
+    }
+
+    /**
      * Compile the app package using compilerFilter and return true or false
      * based on status of the compilation command.
      */
@@ -513,7 +544,7 @@ public class AppLaunch extends InstrumentationTestCase {
         String logcatTimestamp = getTimeNowForLogcat();
 
         getInstrumentation().getUiAutomation().
-                executeShellCommand(IORAP_COMPILE_CMD);
+                executeShellCommand(String.format(IORAP_COMPILE_CMD, appPkgName));
 
         int i = 0;
         for (i = 0; i < IORAP_COMPILE_CMD_TIMEOUT; ++i) {
@@ -525,7 +556,8 @@ public class AppLaunch extends InstrumentationTestCase {
             } else if (status == IorapCompilationStatus.INSUFFICIENT_TRACES) {
                 Log.e(TAG, "compileAppForIorap: failed due to insufficient traces");
                 logDumpsysIorapd(appPkgName);
-                return false;
+                throw new IllegalStateException(
+                        "compileAppForIorap: failed due to insufficient traces");
             } // else INCOMPLETE. keep asking iorapd if it's done yet.
             sleep(1000);
         }
@@ -536,19 +568,7 @@ public class AppLaunch extends InstrumentationTestCase {
             return false;
         }
 
-        // Wait for the job to finish completely.
-        // Other packages could be compiled in cyclic runs.
-        int currentAttempt = 0;
-        do {
-            String logcatLines = getLogcatSinceTime(logcatTimestamp);
-            if (logcatLines.contains("IorapForwardingService: Finished background job")) {
-                return true;
-            }
-            sleep(1000);
-        } while (currentAttempt++ < IORAP_COMPILE_CMD_TIMEOUT);
-
-        Log.e(TAG, "compileAppForIorap: failed due to jobscheduler timeout.");
-        return false;
+        return true;
     }
 
     /** Save the contents of $(adb shell dumpsys iorapd) to the launch_logs directory. */
@@ -808,11 +828,9 @@ public class AppLaunch extends InstrumentationTestCase {
         }
 
         Log.v(TAG, "Purge iorap package: " + packageName);
-        stopIorapd();
         getInstrumentation().getUiAutomation()
                 .executeShellCommand(String.format(IORAP_MAINTENANCE_CMD, packageName));
         Log.v(TAG, "Executed: " + String.format(IORAP_MAINTENANCE_CMD, packageName));
-        startIorapd();
     }
 
     String executeShellCommandWithTempFile(String cmd) {
@@ -892,12 +910,16 @@ public class AppLaunch extends InstrumentationTestCase {
             throw new AssertionError(e);
         }
 
-        stopIorapd();
         getInstrumentation().getUiAutomation()
                 .executeShellCommand(String.format("setprop iorapd.perfetto.enable %b", enable));
         getInstrumentation().getUiAutomation()
                 .executeShellCommand(String.format("setprop iorapd.readahead.enable %b", enable));
-        startIorapd();
+        getInstrumentation().getUiAutomation()
+                .executeShellCommand(String.format(
+                        "setprop iorapd.maintenance.min_traces %d", IORAP_COMPILE_MIN_TRACES));
+        // this last command blocks until iorapd refreshes its system properties
+        getInstrumentation().getUiAutomation()
+                .executeShellCommand(String.format("dumpsys iorapd --refresh-properties"));
 
         if (enable) {
             mIorapStatus = IorapStatus.ENABLED;
@@ -914,8 +936,15 @@ public class AppLaunch extends InstrumentationTestCase {
             mLaunchIterations = Integer.parseInt(launchIterations);
         }
         String forceStopApp = args.getString(KEY_FORCE_STOP_APP);
+
         if (forceStopApp != null) {
             mForceStopApp = Boolean.parseBoolean(forceStopApp);
+        }
+
+        String enableRecording = args.getString(ENABLE_SCREEN_RECORDING);
+
+        if (enableRecording != null) {
+            mEnableRecording = Boolean.parseBoolean(enableRecording);
         }
         String appList = args.getString(KEY_APPS);
         if (appList == null)
@@ -1029,6 +1058,9 @@ public class AppLaunch extends InstrumentationTestCase {
     private AppLaunchResult startApp(String appName, String launchReason)
             throws NameNotFoundException, RemoteException {
         Log.i(TAG, "Starting " + appName);
+        if(mEnableRecording) {
+            startRecording(appName, launchReason);
+        }
 
         Intent startIntent = mNameToIntent.get(appName);
         if (startIntent == null) {
@@ -1043,6 +1075,10 @@ public class AppLaunch extends InstrumentationTestCase {
             t.join(JOIN_TIMEOUT);
         } catch (InterruptedException e) {
             // ignore
+        }
+
+        if(mEnableRecording) {
+            stopRecording();
         }
         return runnable.getResult();
     }
@@ -1350,5 +1386,127 @@ public class AppLaunch extends InstrumentationTestCase {
             return new AppLaunchResult(launchTime, cpuCycles, majorFaults);
         }
 
+    }
+
+    /**
+     * Start the screen recording while launching the app.
+     *
+     * @param appName
+     * @param launchReason
+     */
+    private void startRecording(String appName, String launchReason) {
+        Log.v(TAG, "Started Recording");
+        mCurrentThread = new RecordingThread("test-screen-record",
+                String.format("%s_%s", appName, launchReason));
+        mCurrentThread.start();
+    }
+
+    /**
+     * Stop already started screen recording.
+     */
+    private void stopRecording() {
+        // Skip if not directory.
+        if (launchSubDir == null) {
+            return;
+        }
+
+        // Add some extra time to the video end.
+        SystemClock.sleep(VIDEO_TAIL_BUFFER);
+        // Ctrl + C all screen record processes.
+        mCurrentThread.cancel();
+        // Wait for the thread to completely die.
+        try {
+            mCurrentThread.join();
+        } catch (InterruptedException ex) {
+            Log.e(TAG, "Interrupted when joining the recording thread.", ex);
+        }
+        Log.v(TAG, "Stopped Recording");
+    }
+
+    /** Returns the recording's name for part {@code part} of launch description. */
+    private File getOutputFile(String description, int part) {
+        // Omit the iteration number for the first iteration.
+        final String fileName =
+                String.format(
+                        "%s-video%s.mp4", description, part == 1 ? "" : part);
+        return Paths.get(launchSubDir.getAbsolutePath(), description).toFile();
+    }
+
+
+    /**
+     * Encapsulates the start and stop screen recording logic.
+     * Copied from ScreenRecordCollector.
+     */
+    private class RecordingThread extends Thread {
+        private final String mDescription;
+        private final List<File> mRecordings;
+
+        private boolean mContinue;
+
+        public RecordingThread(String name, String description) {
+            super(name);
+
+            mContinue = true;
+            mRecordings = new ArrayList<>();
+
+            assertNotNull("No test description provided for recording.", description);
+            mDescription = description;
+        }
+
+        @Override
+        public void run() {
+            try {
+                // Start at i = 1 to encode parts as X.mp4, X2.mp4, X3.mp4, etc.
+                for (int i = 1; i <= MAX_RECORDING_PARTS && mContinue; i++) {
+                    File output = getOutputFile(mDescription, i);
+                    Log.d(
+                            TAG,
+                            String.format("Recording screen to %s", output.getAbsolutePath()));
+                    mRecordings.add(output);
+                    // Make sure not to block on this background command in the main thread so
+                    // that the test continues to run, but block in this thread so it does not
+                    // trigger a new screen recording session before the prior one completes.
+                    getDevice().executeShellCommand(
+                                    String.format("screenrecord %s", output.getAbsolutePath()));
+                }
+            } catch (IOException e) {
+                throw new RuntimeException("Caught exception while screen recording.");
+            }
+        }
+
+        public void cancel() {
+            mContinue = false;
+
+            // Identify the screenrecord PIDs and send SIGINT 2 (Ctrl + C) to each.
+            try {
+                String[] pids = getDevice().executeShellCommand(
+                        "pidof screenrecord").split(" ");
+                for (String pid : pids) {
+                    // Avoid empty process ids, because of weird splitting behavior.
+                    if (pid.isEmpty()) {
+                        continue;
+                    }
+
+                    getDevice().executeShellCommand(
+                            String.format("kill -2 %s", pid));
+                    Log.d(
+                            TAG,
+                            String.format("Sent SIGINT 2 to screenrecord process (%s)", pid));
+                }
+            } catch (IOException e) {
+                throw new RuntimeException("Failed to kill screen recording process.");
+            }
+        }
+
+        public List<File> getRecordings() {
+            return mRecordings;
+        }
+    }
+
+    public UiDevice getDevice() {
+        if (mDevice == null) {
+            mDevice = UiDevice.getInstance(getInstrumentation());
+        }
+        return mDevice;
     }
 }

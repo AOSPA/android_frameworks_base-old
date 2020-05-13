@@ -246,7 +246,7 @@
          correctly use them when installed on your device.  Otherwise, keep this disabled
          so that applications can still use their own mechanisms. -->
     <bool name="config_enableAutoPowerModes">false</bool>
- 
+
     <!-- Whether (if true) this is a kind of device that can be moved around (eg. phone/laptop),
          or (if false) something for which movement is either not measurable or should not count
          toward power states (eg. tv/soundbar). -->
@@ -475,10 +475,6 @@
         <item>eth0</item>
         -->
     </string-array>
-
-    <!-- Package name for the default CellBroadcastService module [DO NOT TRANSLATE] -->
-    <string name="cellbroadcast_default_package" translatable="false">com.android.cellbroadcastservice
-    </string>
 
     <!-- If the mobile hotspot feature requires provisioning, a package name and class name
         can be provided to launch a supported application that provisions the devices.
@@ -1911,7 +1907,7 @@
     <!-- The name of the package that will hold the call screening role by default. -->
     <string name="config_defaultCallScreening" translatable="false"></string>
     <!-- The name of the package that will hold the system gallery role. -->
-    <string name="config_systemGallery" translatable="false">com.android.gallery</string>
+    <string name="config_systemGallery" translatable="false">com.android.gallery3d</string>
 
     <!-- The name of the package that will be allowed to change its components' label/icon. -->
     <string name="config_overrideComponentUiPackage" translatable="false"></string>
@@ -2871,7 +2867,6 @@
         <item>lockdown</item>
         <item>logout</item>
         <item>bugreport</item>
-        <item>screenshot</item>
     </string-array>
 
     <!-- Number of milliseconds to hold a wake lock to ensure that drawing is fully
@@ -3403,7 +3398,7 @@
 
     <!-- Inactivity threshold (in milliseconds) used in JobScheduler. JobScheduler will consider
          the device to be "idle" after being inactive for this long. -->
-    <integer name="config_jobSchedulerInactivityIdleThreshold">4260000</integer>
+    <integer name="config_jobSchedulerInactivityIdleThreshold">1860000</integer>
     <!-- The alarm window (in milliseconds) that JobScheduler uses to enter the idle state -->
     <integer name="config_jobSchedulerIdleWindowSlop">300000</integer>
 
@@ -3453,8 +3448,9 @@
          TODO: move to input HAL once ready. -->
     <string name="config_doubleTouchGestureEnableFile"></string>
 
-    <!-- Package of the unbundled tv remote service which can connect to tv
-         remote provider -->
+    <!-- Comma-separated list of unbundled packages which can connect to the
+         tv remote provider. The tv remote service is an example of such a
+         service. -->
     <string name="config_tvRemoteServicePackage" translatable="false"></string>
 
     <!-- True if the device supports persisting security logs across reboots.
@@ -3501,10 +3497,9 @@
 
     <!-- Do not translate. Mcc codes whose existence trigger the presence of emergency
          affordances-->
-    <integer-array name="config_emergency_mcc_codes" translatable="false">
-        <item>404</item>
-        <item>405</item>
-    </integer-array>
+    <string-array name="config_emergency_iso_country_codes" translatable="false">
+        <item>in</item>
+    </string-array>
 
     <!-- Package name for the device provisioning package. -->
     <string name="config_deviceProvisioningPackage"></string>
@@ -3579,11 +3574,6 @@
 
     <!-- Flag indicates that whether non-system apps can be installed on internal storage. -->
     <bool name="config_allow3rdPartyAppOnInternal">true</bool>
-
-    <!-- Package names of the default cell broadcast receivers -->
-    <string-array name="config_defaultCellBroadcastReceiverPkgs" translatable="false">
-        <item>com.android.cellbroadcastreceiver</item>
-    </string-array>
 
     <!-- Specifies the path that is used by AdaptiveIconDrawable class to crop launcher icons. -->
     <string name="config_icon_mask" translatable="false">"M50,0L92,0C96.42,0 100,4.58 100 8L100,92C100, 96.42 96.42 100 92 100L8 100C4.58, 100 0 96.42 0 92L0 8 C 0 4.42 4.42 0 8 0L50 0Z"</string>

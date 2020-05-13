@@ -104,9 +104,9 @@ public class WifiStatusTracker {
     public int rssi;
     public int level;
     public String statusLabel;
-    public int wifiGeneration;
+    public int wifiStandard;
     public boolean vhtMax8SpatialStreamsSupport;
-    public boolean twtSupport;
+    public boolean he8ssCapableAp;
 
     public WifiStatusTracker(Context context, WifiManager wifiManager,
             NetworkScoreManager networkScoreManager, ConnectivityManager connectivityManager,
@@ -136,6 +136,35 @@ public class WifiStatusTracker {
         }
     }
 
+    /**
+     * Fetches initial state as if a WifiManager.NETWORK_STATE_CHANGED_ACTION have been received.
+     * This replaces the dependency on the initial sticky broadcast.
+     */
+    public void fetchInitialState() {
+        if (mWifiManager == null) {
+            return;
+        }
+        updateWifiState();
+        final NetworkInfo networkInfo =
+                mConnectivityManager.getNetworkInfo(ConnectivityManager.TYPE_WIFI);
+        connected = networkInfo != null && networkInfo.isConnected();
+        mWifiInfo = null;
+        ssid = null;
+        if (connected) {
+            mWifiInfo = mWifiManager.getConnectionInfo();
+            if (mWifiInfo != null) {
+                if (mWifiInfo.isPasspointAp() || mWifiInfo.isOsuAp()) {
+                    ssid = mWifiInfo.getPasspointProviderFriendlyName();
+                } else {
+                    ssid = getValidSsid(mWifiInfo);
+                }
+                updateRssi(mWifiInfo.getRssi());
+                maybeRequestNetworkScore();
+            }
+        }
+        updateStatusLabel();
+    }
+
     public void handleBroadcast(Intent intent) {
         if (mWifiManager == null) {
             return;
@@ -160,9 +189,9 @@ public class WifiStatusTracker {
                     }
                     updateRssi(mWifiInfo.getRssi());
                     maybeRequestNetworkScore();
-                    wifiGeneration = mWifiInfo.getWifiGeneration();
+                    wifiStandard = mWifiInfo.getWifiStandard();
                     vhtMax8SpatialStreamsSupport = mWifiInfo.isVhtMax8SpatialStreamsSupported();
-                    twtSupport = mWifiInfo.isTwtSupported();
+                    he8ssCapableAp = mWifiInfo.isHe8ssCapableAp();
                 }
             }
             updateStatusLabel();

@@ -57,6 +57,7 @@ import com.android.systemui.shared.system.ActivityManagerWrapper;
 import com.android.systemui.shared.system.PinnedStackListenerForwarder.PinnedStackListener;
 import com.android.systemui.shared.system.TaskStackChangeListener;
 import com.android.systemui.shared.system.WindowManagerWrapper;
+import com.android.systemui.stackdivider.Divider;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -208,12 +209,13 @@ public class PipManager implements BasePipManager, PipTaskOrganizer.PipTransitio
         }
 
         @Override
-        public void onMovementBoundsChanged(Rect animatingBounds, boolean fromImeAdjustment) {
+        public void onMovementBoundsChanged(boolean fromImeAdjustment) {
             mHandler.post(() -> {
                 // Populate the inset / normal bounds and DisplayInfo from mPipBoundsHandler first.
+                final Rect destinationBounds = new Rect();
                 mPipBoundsHandler.onMovementBoundsChanged(mTmpInsetBounds, mTmpNormalBounds,
-                        animatingBounds, mTmpDisplayInfo);
-                mDefaultPipBounds.set(animatingBounds);
+                        destinationBounds, mTmpDisplayInfo);
+                mDefaultPipBounds.set(destinationBounds);
             });
         }
 
@@ -231,7 +233,8 @@ public class PipManager implements BasePipManager, PipTaskOrganizer.PipTransitio
     @Inject
     public PipManager(Context context, BroadcastDispatcher broadcastDispatcher,
             PipBoundsHandler pipBoundsHandler,
-            PipSurfaceTransactionHelper surfaceTransactionHelper) {
+            PipSurfaceTransactionHelper surfaceTransactionHelper,
+            Divider divider) {
         if (mInitialized) {
             return;
         }
@@ -239,10 +242,16 @@ public class PipManager implements BasePipManager, PipTaskOrganizer.PipTransitio
         mInitialized = true;
         mContext = context;
         mPipBoundsHandler = pipBoundsHandler;
+        // Ensure that we have the display info in case we get calls to update the bounds before the
+        // listener calls back
+        final DisplayInfo displayInfo = new DisplayInfo();
+        context.getDisplay().getDisplayInfo(displayInfo);
+        mPipBoundsHandler.onDisplayInfoChanged(displayInfo);
+
         mResizeAnimationDuration = context.getResources()
                 .getInteger(R.integer.config_pipResizeAnimationDuration);
         mPipTaskOrganizer = new PipTaskOrganizer(mContext, mPipBoundsHandler,
-                surfaceTransactionHelper);
+                surfaceTransactionHelper, divider);
         mPipTaskOrganizer.registerPipTransitionCallback(this);
         mActivityTaskManager = ActivityTaskManager.getService();
         ActivityManagerWrapper.getInstance().registerTaskStackListener(mTaskStackListener);
@@ -455,8 +464,12 @@ public class PipManager implements BasePipManager, PipTaskOrganizer.PipTransitio
                 mCurrentPipBounds = mPipBounds;
                 break;
         }
-        mPipTaskOrganizer.scheduleAnimateResizePip(mCurrentPipBounds, mResizeAnimationDuration,
-                null);
+        if (mCurrentPipBounds != null) {
+            mPipTaskOrganizer.scheduleAnimateResizePip(mCurrentPipBounds, mResizeAnimationDuration,
+                    null);
+        } else {
+            mPipTaskOrganizer.dismissPip(mResizeAnimationDuration);
+        }
     }
 
     /**
@@ -695,15 +708,15 @@ public class PipManager implements BasePipManager, PipTaskOrganizer.PipTransitio
                     mActiveMediaSessionListener, null);
             updateMediaController(mMediaSessionManager.getActiveSessions(null));
             for (int i = mListeners.size() - 1; i >= 0; i--) {
-                mListeners.get(i).onPipEntered();
+                mListeners.get(i).onPipEntered(packageName);
             }
             updatePipVisibility(true);
         }
 
         @Override
         public void onActivityRestartAttempt(RunningTaskInfo task, boolean homeTaskVisible,
-                boolean clearedTask) {
-            if (task.configuration.windowConfiguration.getWindowingMode()
+                boolean clearedTask, boolean wasVisible) {
+            if (!wasVisible || task.configuration.windowConfiguration.getWindowingMode()
                     != WINDOWING_MODE_PINNED) {
                 return;
             }
@@ -745,7 +758,7 @@ public class PipManager implements BasePipManager, PipTaskOrganizer.PipTransitio
          * because there's no guarantee for the PIP manager be return relavent information
          * correctly. (e.g. {@link isPipShown}).
          */
-        void onPipEntered();
+        void onPipEntered(String packageName);
         /** Invoked when a PIPed activity is closed. */
         void onPipActivityClosed();
         /** Invoked when the PIP menu gets shown. */

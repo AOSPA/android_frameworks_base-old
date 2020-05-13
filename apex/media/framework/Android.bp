@@ -49,23 +49,22 @@ java_library {
         "com.android.media",
         "test_com.android.media",
     ],
+    min_sdk_version: "29",
 }
 
 filegroup {
     name: "updatable-media-srcs",
     srcs: [
         ":mediaparser-srcs",
-        ":mediasession2-srcs",
+        ":mediasession2-java-srcs",
+        ":mediasession2-aidl-srcs",
     ],
 }
 
 filegroup {
-    name: "mediasession2-srcs",
+    name: "mediasession2-java-srcs",
     srcs: [
         "java/android/media/Controller2Link.java",
-        "java/android/media/IMediaController2.aidl",
-        "java/android/media/IMediaSession2.aidl",
-        "java/android/media/IMediaSession2Service.aidl",
         "java/android/media/MediaConstants.java",
         "java/android/media/MediaController2.java",
         "java/android/media/MediaSession2.java",
@@ -83,7 +82,7 @@ filegroup {
     srcs: [
         "java/android/media/MediaParser.java"
     ],
-    path: "java"
+    path: "java",
 }
 
 stubs_defaults {
@@ -94,7 +93,7 @@ stubs_defaults {
         // TODO(b/135922046) remove this
         include_dirs: ["frameworks/base/core/java"],
     },
-    sdk_version: "system_current",
+    dist: { dest: "framework-media.txt" },
 }
 
 droidstubs {
@@ -133,18 +132,21 @@ java_library {
     name: "framework-media-stubs-publicapi",
     srcs: [":framework-media-stubs-srcs-publicapi"],
     defaults: ["framework-module-stubs-lib-defaults-publicapi"],
+    dist: { dest: "framework-media.jar" },
 }
 
 java_library {
     name: "framework-media-stubs-systemapi",
     srcs: [":framework-media-stubs-srcs-systemapi"],
     defaults: ["framework-module-stubs-lib-defaults-systemapi"],
+    dist: { dest: "framework-media.jar" },
 }
 
 java_library {
     name: "framework-media-stubs-module_libs_api",
     srcs: [":framework-media-stubs-srcs-module_libs_api"],
     defaults: ["framework-module-stubs-lib-defaults-module_libs_api"],
+    dist: { dest: "framework-media.jar" },
 }
 
 java_library {

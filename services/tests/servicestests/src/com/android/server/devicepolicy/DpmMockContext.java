@@ -460,6 +460,15 @@ public class DpmMockContext extends MockContext {
     }
 
     @Override
+    public Context createContextAsUser(UserHandle user, int flags) {
+        try {
+            return mMockSystemServices.createPackageContextAsUser(packageName, flags, user);
+        } catch (PackageManager.NameNotFoundException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    @Override
     public ContentResolver getContentResolver() {
         return mMockSystemServices.contentResolver;
     }
@@ -472,5 +481,10 @@ public class DpmMockContext extends MockContext {
     @Override
     public int checkCallingPermission(String permission) {
         return spiedContext.checkCallingPermission(permission);
+    }
+
+    @Override
+    public void startActivityAsUser(Intent intent, UserHandle userHandle) {
+        spiedContext.startActivityAsUser(intent, userHandle);
     }
 }

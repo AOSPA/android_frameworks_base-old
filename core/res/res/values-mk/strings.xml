@@ -194,15 +194,15 @@
     <string name="location_changed_notification_title" msgid="3620158742816699316">"Апликациите може да пристапуваат до вашата локација"</string>
     <string name="location_changed_notification_text" msgid="7158423339982706912">"Контактирајте со IT-администраторот за да дознаете повеќе"</string>
     <string name="country_detector" msgid="7023275114706088854">"Детектор на земја"</string>
-    <string name="location_service" msgid="2439187616018455546">"Услуги според локација"</string>
+    <string name="location_service" msgid="2439187616018455546">"Услуга за локација"</string>
     <string name="sensor_notification_service" msgid="7474531979178682676">"Услуга за известување од сензорот"</string>
     <string name="twilight_service" msgid="8964898045693187224">"Услуга за самрак"</string>
     <string name="factory_reset_warning" msgid="6858705527798047809">"Уредот ќе се избрише"</string>
     <string name="factory_reset_message" msgid="2657049595153992213">"Апликацијата на администраторот не може да се користи. Уредот ќе се избрише сега.\n\nАко имате прашања, контактирајте со администраторот на организацијата."</string>
     <string name="printing_disabled_by" msgid="3517499806528864633">"Печатењето е оневозможено од <xliff:g id="OWNER_APP">%s</xliff:g>."</string>
-    <string name="personal_apps_suspended_title" msgid="4543693107104417750">"Деблокирајте лични апликации"</string>
-    <string name="personal_apps_suspended_tomorrow_title" msgid="6414440257969874914">"Блокирање на апликациите утре"</string>
-    <string name="personal_apps_suspended_text" msgid="8954038765131038226">"IT-администраторот не дозволува паузирање на работниот профил за повеќе од <xliff:g id="DAYS">%1$d</xliff:g> дена"</string>
+    <string name="personal_apps_suspension_title" msgid="7561416677884286600">"Вклучете го работниот профил"</string>
+    <string name="personal_apps_suspension_text" msgid="6115455688932935597">"Вашите лични апликации се блокирани додека да го вклучите работниот профил"</string>
+    <string name="personal_apps_suspension_tomorrow_text" msgid="6322541302153673994">"Вашите лични апликации ќе се блокираат утре"</string>
     <string name="personal_apps_suspended_turn_profile_on" msgid="4278188538997940785">"Вклучи го работниот профил"</string>
     <string name="me" msgid="6207584824693813140">"Јас"</string>
     <string name="power_dialog" product="tablet" msgid="8333207765671417261">"Опции на таблет"</string>
@@ -678,14 +678,14 @@
     <string name="policydesc_watchLogin_secondaryUser" product="tablet" msgid="2049038943004297474">"Набљудувај го бројот на погрешно внесени лозинки при отклучување на екранот и заклучи го таблетот или избриши ги сите податоци од овој корисник доколку се внесени премногу погрешни лозинки."</string>
     <string name="policydesc_watchLogin_secondaryUser" product="tv" msgid="8965224107449407052">"Го следи бројот на погрешно внесени лозинки при отклучување на екранот и го заклучува уредот Android TV или ги брише сите податоци од овој корисник доколку се внесени премногу погрешни лозинки."</string>
     <string name="policydesc_watchLogin_secondaryUser" product="default" msgid="9177645136475155924">"Набљудувај го бројот на погрешно внесени лозинки при отклучување на екранот и заклучи го телефонот или избриши ги сите податоци од овој корисник доколку се внесени премногу погрешни лозинки."</string>
-    <string name="policylab_resetPassword" msgid="214556238645096520">"Промени го заклучувањето на екранот."</string>
+    <string name="policylab_resetPassword" msgid="214556238645096520">"Промени го заклучувањето на екранот"</string>
     <string name="policydesc_resetPassword" msgid="4626419138439341851">"Промени го заклучувањето на екранот."</string>
     <string name="policylab_forceLock" msgid="7360335502968476434">"Заклучи го екранот"</string>
     <string name="policydesc_forceLock" msgid="1008844760853899693">"Контролирај како и кога се заклучува екранот."</string>
     <string name="policylab_wipeData" msgid="1359485247727537311">"Избриши ги сите податоци"</string>
-    <string name="policydesc_wipeData" product="tablet" msgid="7245372676261947507">"Избриши ги податоците во таблетот без предупредување со вршење на фабричко ресетирање на податоци."</string>
+    <string name="policydesc_wipeData" product="tablet" msgid="7245372676261947507">"Избриши ги податоците во таблетот без предупредување со ресетирање на фабрички податоци."</string>
     <string name="policydesc_wipeData" product="tv" msgid="513862488950801261">"Ги брише податоците на вашиот уред Android TV без предупредување, така што ќе изврши ресетирање на фабричките податоци."</string>
-    <string name="policydesc_wipeData" product="default" msgid="8036084184768379022">"Избриши ги податоците во телефонот без предупредување со вршење на фабричко ресетирање на податоци."</string>
+    <string name="policydesc_wipeData" product="default" msgid="8036084184768379022">"Избриши ги податоците во телефонот без предупредување со ресетирање на фабрички податоци."</string>
     <string name="policylab_wipeData_secondaryUser" msgid="413813645323433166">"Избриши ги податоците на корисникот"</string>
     <string name="policydesc_wipeData_secondaryUser" product="tablet" msgid="2336676480090926470">"Избриши ги податоците на овој корисник на таблетот без предупредување."</string>
     <string name="policydesc_wipeData_secondaryUser" product="tv" msgid="2293713284515865200">"Ги брише податоците на овој корисник на уредов Android TV без предупредување."</string>
@@ -699,7 +699,7 @@
     <string name="policylab_disableCamera" msgid="5749486347810162018">"Оневозможи фотоапарати"</string>
     <string name="policydesc_disableCamera" msgid="3204405908799676104">"Спречи употреба на сите камери на уредот."</string>
     <string name="policylab_disableKeyguardFeatures" msgid="5071855750149949741">"Онев. функции од заклуч. екран"</string>
-    <string name="policydesc_disableKeyguardFeatures" msgid="6641673177041195957">"Спречете користење на некои функции од заклучување на екранот."</string>
+    <string name="policydesc_disableKeyguardFeatures" msgid="6641673177041195957">"Спречи користење на некои функции од заклучување на екранот."</string>
   <string-array name="phoneTypes">
     <item msgid="8996339953292723951">"Дома"</item>
     <item msgid="7740243458912727194">"Мобилен"</item>
@@ -1299,7 +1299,7 @@
     <string name="usb_supplying_notification_title" msgid="5378546632408101811">"Поврзаниот уред се полни преку USB"</string>
     <string name="usb_mtp_notification_title" msgid="1065989144124499810">"Вклучен е пренос на датотеки преку USB"</string>
     <string name="usb_ptp_notification_title" msgid="5043437571863443281">"Вклучен е PTP преку USB"</string>
-    <string name="usb_tether_notification_title" msgid="8828527870612663771">"Вклучено е врзување преку USB"</string>
+    <string name="usb_tether_notification_title" msgid="8828527870612663771">"Вклучен е интернет преку USB"</string>
     <string name="usb_midi_notification_title" msgid="7404506788950595557">"Вклучен е MIDI преку USB"</string>
     <string name="usb_accessory_notification_title" msgid="1385394660861956980">"Поврзан е USB-додаток"</string>
     <string name="usb_notification_message" msgid="4715163067192110676">"Допрете за повеќе опции."</string>
@@ -1457,14 +1457,17 @@
     <string name="gpsNotifMessage" msgid="7346649122793758032">"Побарано од <xliff:g id="NAME">%1$s</xliff:g> (<xliff:g id="SERVICE">%2$s</xliff:g>)"</string>
     <string name="gpsVerifYes" msgid="3719843080744112940">"Да"</string>
     <string name="gpsVerifNo" msgid="1671201856091564741">"Не"</string>
+    <string name="gnss_nfw_notification_title" msgid="5004493772059563423">"Пристапено до локацијата за итни случаи"</string>
+    <string name="gnss_nfw_notification_message_oem" msgid="3683958907027107969">"Производителот на уредот пристапи до вашата локација при неодамнешна итна сесија"</string>
+    <string name="gnss_nfw_notification_message_carrier" msgid="815888995791562151">"Операторот пристапи до вашата локација при неодамнешна итна сесија"</string>
     <string name="sync_too_many_deletes" msgid="6999440774578705300">"Границата на бришење е надмината"</string>
     <string name="sync_too_many_deletes_desc" msgid="7409327940303504440">"Постојат <xliff:g id="NUMBER_OF_DELETED_ITEMS">%1$d</xliff:g> избришани ставки за <xliff:g id="TYPE_OF_SYNC">%2$s</xliff:g>, <xliff:g id="ACCOUNT_NAME">%3$s</xliff:g> сметка. Што сакате да направите?"</string>
     <string name="sync_really_delete" msgid="5657871730315579051">"Избриши ги ставките"</string>
     <string name="sync_undo_deletes" msgid="5786033331266418896">"Врати ги избришаните"</string>
     <string name="sync_do_nothing" msgid="4528734662446469646">"Не прави ништо засега"</string>
     <string name="choose_account_label" msgid="5557833752759831548">"Изберете сметка"</string>
-    <string name="add_account_label" msgid="4067610644298737417">"Додај сметка"</string>
-    <string name="add_account_button_label" msgid="322390749416414097">"Додај сметка"</string>
+    <string name="add_account_label" msgid="4067610644298737417">"Додајте сметка"</string>
+    <string name="add_account_button_label" msgid="322390749416414097">"Додајте сметка"</string>
     <string name="number_picker_increment_button" msgid="7621013714795186298">"Зголеми"</string>
     <string name="number_picker_decrement_button" msgid="5116948444762708204">"Намали"</string>
     <string name="number_picker_increment_scroll_mode" msgid="8403893549806805985">"<xliff:g id="VALUE">%s</xliff:g> допри и задржи."</string>
@@ -1630,6 +1633,8 @@
     <string name="accessibility_shortcut_single_service_warning" msgid="6363127705112844257">"Ако ги задржите притиснати двете копчиња за јачина на звук неколку секунди, ќе се вклучи функцијата за пристапност <xliff:g id="SERVICE">%1$s</xliff:g>. Ова може да го промени начинот на функционирање на уредот.\n\nМоже да ја измените кратенкава да биде за друга функција во „Поставки &gt; Пристапност“."</string>
     <string name="accessibility_shortcut_on" msgid="5463618449556111344">"Вклучи"</string>
     <string name="accessibility_shortcut_off" msgid="3651336255403648739">"Не вклучувај"</string>
+    <string name="accessibility_shortcut_menu_item_status_on" msgid="6608392117189732543">"ВКЛУЧЕНО"</string>
+    <string name="accessibility_shortcut_menu_item_status_off" msgid="5531598275559472393">"ИСКЛУЧЕНО"</string>
     <string name="accessibility_enable_service_title" msgid="3931558336268541484">"Дали дозволувате <xliff:g id="SERVICE">%1$s</xliff:g> да има целосна контрола врз вашиот уред?"</string>
     <string name="accessibility_enable_service_encryption_warning" msgid="8603532708618236909">"Ако вклучите <xliff:g id="SERVICE">%1$s</xliff:g>, уредот нема да го користи заклучувањето на екранот за да го подобри шифрирањето на податоците."</string>
     <string name="accessibility_service_warning_description" msgid="291674995220940133">"Целосната контрола е соодветна за апликации што ви помагаат со потребите за пристапност, но не и за повеќето апликации."</string>
@@ -1791,10 +1796,10 @@
     <string name="package_updated_device_owner" msgid="7560272363805506941">"Ажурирано од администраторот"</string>
     <string name="package_deleted_device_owner" msgid="2292335928930293023">"Избришано од администраторот"</string>
     <string name="confirm_battery_saver" msgid="5247976246208245754">"Во ред"</string>
-    <string name="battery_saver_description_with_learn_more" msgid="1817385558636532621">"За да го продолжи траењето на батеријата, „Штедачот на батерија“:\n·вклучува темна тема\n·исклучува или ограничува активност во заднина, некои визуелни ефекти и други функции како „Hey Google“\n\n"<annotation id="url">"Дознајте повеќе"</annotation></string>
-    <string name="battery_saver_description" msgid="7618492104632328184">"За да го продолжи траењето на батеријата, „Штедачот на батерија“:\n·вклучува темна тема\n·исклучува или ограничува активност во заднина, некои визуелни ефекти и други функции како „Hey Google“"</string>
-    <string name="data_saver_description" msgid="4995164271550590517">"За да се намали користењето интернет, „Штедачот на интернет“ спречува дел од апликациите да испраќаат или да примаат податоци во заднина. Апликацијата што ја користите во моментов можеби ќе пристапува до интернет, но тоа ќе го прави поретко. Ова значи, на пример, дека сликите нема да се прикажат додека не ги допрете."</string>
-    <string name="data_saver_enable_title" msgid="7080620065745260137">"Вклучете Штедач на интернет?"</string>
+    <string name="battery_saver_description_with_learn_more" msgid="5997766757551917769">"За да го продолжи траењето на батеријата, „Штедачот на батерија“:\n\n•вклучува темна тема;\n•исклучува или ограничува активност во заднина, некои визуелни ефекти и други функции како „Ok Google“.\n\n"<annotation id="url">"Дознајте повеќе"</annotation></string>
+    <string name="battery_saver_description" msgid="8587408568232177204">"За да го продолжи траењето на батеријата, „Штедачот на батерија“:\n\n•вклучува темна тема;\n•исклучува или ограничува активност во заднина, некои визуелни ефекти и други функции како „Ok Google“."</string>
+    <string name="data_saver_description" msgid="4995164271550590517">"За да се намали користењето интернет, „Штедачот на интернет“ спречува дел од апликациите да испраќаат или да примаат податоци во заднина. Одредена апликација што ја користите ќе може да користи интернет, но можеби тоа ќе го прави поретко. Ова значи, на пример, дека сликите нема да се прикажуваат додека не ги допрете."</string>
+    <string name="data_saver_enable_title" msgid="7080620065745260137">"Да се вклучи „Штедач на интернет“?"</string>
     <string name="data_saver_enable_button" msgid="4399405762586419726">"Вклучи"</string>
     <plurals name="zen_mode_duration_minutes_summary" formatted="false" msgid="2877101784123058273">
       <item quantity="one">За %1$d минута (до <xliff:g id="FORMATTEDTIME_1">%2$s</xliff:g>)</item>
@@ -1874,7 +1879,7 @@
     <string name="notification_history_title_placeholder" msgid="7748630986182249599">"Приспособено известување за апликација"</string>
     <string name="user_creation_account_exists" msgid="2239146360099708035">"Дозволувате <xliff:g id="APP">%1$s</xliff:g> да создаде нов корисник со <xliff:g id="ACCOUNT">%2$s</xliff:g>? (Веќе постои корисник со оваа сметка.)"</string>
     <string name="user_creation_adding" msgid="7305185499667958364">"Дозволувате <xliff:g id="APP">%1$s</xliff:g> да создаде нов корисник со <xliff:g id="ACCOUNT">%2$s</xliff:g>?"</string>
-    <string name="language_selection_title" msgid="52674936078683285">"Додај јазик"</string>
+    <string name="language_selection_title" msgid="52674936078683285">"Додајте јазик"</string>
     <string name="country_selection_title" msgid="5221495687299014379">"Претпочитувања за регион"</string>
     <string name="search_language_hint" msgid="7004225294308793583">"Внеси име на јазик"</string>
     <string name="language_picker_section_suggested" msgid="6556199184638990447">"Предложени"</string>
@@ -2037,17 +2042,17 @@
     <string name="accessibility_system_action_notifications_label" msgid="6083767351772162010">"Известувања"</string>
     <string name="accessibility_system_action_quick_settings_label" msgid="4583900123506773783">"Брзи поставки"</string>
     <string name="accessibility_system_action_power_dialog_label" msgid="8095341821683910781">"Дијалог за напојување"</string>
-    <string name="accessibility_system_action_toggle_split_screen_label" msgid="6626177163849387748">"Вклучи/исклучи поделен екран"</string>
     <string name="accessibility_system_action_lock_screen_label" msgid="5484190691945563838">"Заклучен екран"</string>
     <string name="accessibility_system_action_screenshot_label" msgid="3581566515062741676">"Слика од екранот"</string>
-    <string name="accessibility_system_action_accessibility_menu_label" msgid="8436484650391125184">"Мени за пристапност"</string>
+    <string name="accessibility_system_action_accessibility_button_label" msgid="5941347017132886642">"Кратенка за пристапност на екранот"</string>
+    <string name="accessibility_system_action_accessibility_button_chooser_label" msgid="6973618519666227981">"Избирач на кратенка за пристапност на екранот"</string>
     <string name="accessibility_freeform_caption" msgid="8377519323496290122">"Насловна лента на <xliff:g id="APP_NAME">%1$s</xliff:g>."</string>
     <string name="as_app_forced_to_restricted_bucket" msgid="8233871289353898964">"<xliff:g id="PACKAGE_NAME">%1$s</xliff:g> е ставен во корпата ОГРАНИЧЕНИ"</string>
     <string name="conversation_single_line_name_display" msgid="8958948312915255999">"<xliff:g id="SENDER_NAME">%1$s</xliff:g>:"</string>
+    <string name="conversation_single_line_image_placeholder" msgid="6983271082911936900">"испрати слика"</string>
     <string name="conversation_title_fallback_one_to_one" msgid="1980753619726908614">"Разговор"</string>
     <string name="conversation_title_fallback_group_chat" msgid="456073374993104303">"Групен разговор"</string>
-    <!-- no translation found for unread_convo_overflow (920517615597353833) -->
-    <skip />
+    <string name="unread_convo_overflow" msgid="920517615597353833">"<xliff:g id="MAX_UNREAD_COUNT">%1$d</xliff:g>+"</string>
     <string name="resolver_personal_tab" msgid="2051260504014442073">"Лични"</string>
     <string name="resolver_work_tab" msgid="2690019516263167035">"Службени"</string>
     <string name="resolver_personal_tab_accessibility" msgid="5739524949153091224">"Личен приказ"</string>

@@ -17,6 +17,8 @@
 #include "BinderIncrementalService.h"
 
 #include <android-base/logging.h>
+#include <android-base/no_destructor.h>
+#include <android/os/IVold.h>
 #include <binder/IResultReceiver.h>
 #include <binder/PermissionCache.h>
 #include <incfs.h>
@@ -57,10 +59,10 @@ static bool incFsValid(const sp<IVold>& vold) {
     return true;
 }
 
-BinderIncrementalService::BinderIncrementalService(const sp<IServiceManager>& sm)
-      : mImpl(RealServiceManager(sm), getIncrementalDir()) {}
+BinderIncrementalService::BinderIncrementalService(const sp<IServiceManager>& sm, JNIEnv* env)
+      : mImpl(RealServiceManager(sm, env), getIncrementalDir()) {}
 
-BinderIncrementalService* BinderIncrementalService::start() {
+BinderIncrementalService* BinderIncrementalService::start(JNIEnv* env) {
     if (!incFsEnabled()) {
         return nullptr;
     }
@@ -80,7 +82,7 @@ BinderIncrementalService* BinderIncrementalService::start() {
         return nullptr;
     }
 
-    sp<BinderIncrementalService> self(new BinderIncrementalService(sm));
+    sp<BinderIncrementalService> self(new BinderIncrementalService(sm, env));
     status_t ret = sm->addService(String16{getServiceName()}, self);
     if (ret != android::OK) {
         return nullptr;
@@ -93,8 +95,8 @@ BinderIncrementalService* BinderIncrementalService::start() {
 }
 
 status_t BinderIncrementalService::dump(int fd, const Vector<String16>&) {
-    static const String16 kDump("android.permission.DUMP");
-    if (!PermissionCache::checkCallingPermission(kDump)) {
+    static const android::base::NoDestructor<String16> kDump("android.permission.DUMP");
+    if (!PermissionCache::checkCallingPermission(*kDump)) {
         return PERMISSION_DENIED;
     }
     mImpl.onDump(fd);
@@ -115,11 +117,15 @@ binder::Status BinderIncrementalService::openStorage(const std::string& path,
     return ok();
 }
 
-binder::Status BinderIncrementalService::createStorage(const std::string& path,
-                                                       const DataLoaderParamsParcel& params,
-                                                       const ::android::sp<::android::content::pm::IDataLoaderStatusListener>& listener,
-                                                       int32_t createMode, int32_t* _aidl_return) {
-    *_aidl_return = mImpl.createStorage(path, const_cast<DataLoaderParamsParcel&&>(params), listener, android::incremental::IncrementalService::CreateOptions(createMode));
+binder::Status BinderIncrementalService::createStorage(
+        const std::string& path, const content::pm::DataLoaderParamsParcel& params,
+        const ::android::sp<::android::content::pm::IDataLoaderStatusListener>& listener,
+        int32_t createMode, int32_t* _aidl_return) {
+    *_aidl_return =
+            mImpl.createStorage(path, const_cast<content::pm::DataLoaderParamsParcel&&>(params),
+                                listener,
+                                android::incremental::IncrementalService::CreateOptions(
+                                        createMode));
     return ok();
 }
 
@@ -180,7 +186,8 @@ static std::tuple<int, incfs::FileId, incfs::NewFileParams> toMakeFileParams(
     if (!params.signature) {
         nfp.signature = {};
     } else {
-        nfp.signature = {(const char*)params.signature->data(), (IncFsSize)params.signature->size()};
+        nfp.signature = {(const char*)params.signature->data(),
+                         (IncFsSize)params.signature->size()};
     }
     return {0, id, nfp};
 }
@@ -233,11 +240,8 @@ binder::Status BinderIncrementalService::isFileRangeLoaded(int32_t storageId,
 binder::Status BinderIncrementalService::getMetadataByPath(int32_t storageId,
                                                            const std::string& path,
                                                            std::vector<uint8_t>* _aidl_return) {
-    auto fid = mImpl.nodeFor(storageId, path);
-    if (fid != kIncFsInvalidFileId) {
-        auto metadata = mImpl.getMetadata(storageId, fid);
-        _aidl_return->assign(metadata.begin(), metadata.end());
-    }
+    auto metadata = mImpl.getMetadata(storageId, path);
+    _aidl_return->assign(metadata.begin(), metadata.end());
     return ok();
 }
 
@@ -277,10 +281,16 @@ binder::Status BinderIncrementalService::configureNativeBinaries(
     return ok();
 }
 
+binder::Status BinderIncrementalService::waitForNativeBinariesExtraction(int storageId,
+                                                                         bool* _aidl_return) {
+    *_aidl_return = mImpl.waitForNativeBinariesExtraction(storageId);
+    return ok();
+}
+
 } // namespace android::os::incremental
 
-jlong Incremental_IncrementalService_Start() {
-    return (jlong)android::os::incremental::BinderIncrementalService::start();
+jlong Incremental_IncrementalService_Start(JNIEnv* env) {
+    return (jlong)android::os::incremental::BinderIncrementalService::start(env);
 }
 void Incremental_IncrementalService_OnSystemReady(jlong self) {
     if (self) {

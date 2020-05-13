@@ -169,6 +169,17 @@ public class ChooserActivity extends ResolverActivity implements
     public static final String EXTRA_PRIVATE_RETAIN_IN_ON_STOP
             = "com.android.internal.app.ChooserActivity.EXTRA_PRIVATE_RETAIN_IN_ON_STOP";
 
+    /**
+     * Integer extra to indicate which profile should be automatically selected.
+     * <p>Can only be used if there is a work profile.
+     * <p>Possible values can be either {@link #PROFILE_PERSONAL} or {@link #PROFILE_WORK}.
+     */
+    static final String EXTRA_SELECTED_PROFILE =
+            "com.android.internal.app.ChooserActivity.EXTRA_SELECTED_PROFILE";
+
+    static final int PROFILE_PERSONAL = AbstractMultiProfilePagerAdapter.PROFILE_PERSONAL;
+    static final int PROFILE_WORK = AbstractMultiProfilePagerAdapter.PROFILE_WORK;
+
     private static final String PREF_NUM_SHEET_EXPANSIONS = "pref_num_sheet_expansions";
 
     private static final String CHIP_LABEL_METADATA_KEY = "android.service.chooser.chip_label";
@@ -844,10 +855,11 @@ public class ChooserActivity extends ResolverActivity implements
             Intent[] initialIntents,
             List<ResolveInfo> rList,
             boolean filterLastUsed) {
+        int selectedProfile = findSelectedProfile();
         ChooserGridAdapter personalAdapter = createChooserGridAdapter(
                 /* context */ this,
                 /* payloadIntents */ mIntents,
-                initialIntents,
+                selectedProfile == PROFILE_PERSONAL ? initialIntents : null,
                 rList,
                 filterLastUsed,
                 mUseLayoutForBrowsables,
@@ -855,7 +867,7 @@ public class ChooserActivity extends ResolverActivity implements
         ChooserGridAdapter workAdapter = createChooserGridAdapter(
                 /* context */ this,
                 /* payloadIntents */ mIntents,
-                initialIntents,
+                selectedProfile == PROFILE_WORK ? initialIntents : null,
                 rList,
                 filterLastUsed,
                 mUseLayoutForBrowsables,
@@ -864,9 +876,24 @@ public class ChooserActivity extends ResolverActivity implements
                 /* context */ this,
                 personalAdapter,
                 workAdapter,
-                /* defaultProfile */ getCurrentProfile(),
+                selectedProfile,
                 getPersonalProfileUserHandle(),
                 getWorkProfileUserHandle());
+    }
+
+    private int findSelectedProfile() {
+        int selectedProfile;
+        if (getIntent().hasExtra(EXTRA_SELECTED_PROFILE)) {
+            selectedProfile = getIntent().getIntExtra(EXTRA_SELECTED_PROFILE, /* defValue = */ -1);
+            if (selectedProfile != PROFILE_PERSONAL && selectedProfile != PROFILE_WORK) {
+                throw new IllegalArgumentException(EXTRA_SELECTED_PROFILE + " has invalid value "
+                        + selectedProfile + ". Must be either ChooserActivity.PROFILE_PERSONAL or "
+                        + "ChooserActivity.PROFILE_WORK.");
+            }
+        } else {
+            selectedProfile = getProfileForUser(getUser());
+        }
+        return selectedProfile;
     }
 
     @Override
@@ -2144,7 +2171,7 @@ public class ChooserActivity extends ResolverActivity implements
                         mChooserMultiProfilePagerAdapter.getActiveListAdapter();
                 if (currentListAdapter != null) {
                     currentListAdapter.updateModel(info.getResolvedComponentName());
-                    currentListAdapter.updateChooserCounts(ri.activityInfo.packageName, getUserId(),
+                    currentListAdapter.updateChooserCounts(ri.activityInfo.packageName,
                             targetIntent.getAction());
                 }
                 if (DEBUG) {
@@ -2377,15 +2404,24 @@ public class ChooserActivity extends ResolverActivity implements
     public ChooserGridAdapter createChooserGridAdapter(Context context,
             List<Intent> payloadIntents, Intent[] initialIntents, List<ResolveInfo> rList,
             boolean filterLastUsed, boolean useLayoutForBrowsables, UserHandle userHandle) {
-        ChooserListAdapter chooserListAdapter = new ChooserListAdapter(context, payloadIntents,
-                initialIntents, rList,
-                filterLastUsed, createListController(userHandle), useLayoutForBrowsables,
-                this, this);
+        ChooserListAdapter chooserListAdapter = createChooserListAdapter(context, payloadIntents,
+                initialIntents, rList, filterLastUsed,
+                useLayoutForBrowsables, createListController(userHandle));
         AppPredictor.Callback appPredictorCallback = createAppPredictorCallback(chooserListAdapter);
         AppPredictor appPredictor = setupAppPredictorForUser(userHandle, appPredictorCallback);
         chooserListAdapter.setAppPredictor(appPredictor);
         chooserListAdapter.setAppPredictorCallback(appPredictorCallback);
         return new ChooserGridAdapter(chooserListAdapter);
+    }
+
+    @VisibleForTesting
+    public ChooserListAdapter createChooserListAdapter(Context context,
+            List<Intent> payloadIntents, Intent[] initialIntents, List<ResolveInfo> rList,
+            boolean filterLastUsed, boolean useLayoutForBrowsables,
+            ResolverListController resolverListController) {
+        return new ChooserListAdapter(context, payloadIntents, initialIntents, rList,
+                filterLastUsed, resolverListController, useLayoutForBrowsables,
+                this, this, context.getPackageManager());
     }
 
     @VisibleForTesting
@@ -2479,7 +2515,10 @@ public class ChooserActivity extends ResolverActivity implements
                         gridAdapter.getMaxTargetsPerRow());
             }
 
-            if (mChooserMultiProfilePagerAdapter.getCurrentUserHandle() != getUser()) {
+            UserHandle currentUserHandle = mChooserMultiProfilePagerAdapter.getCurrentUserHandle();
+            int currentProfile = getProfileForUser(currentUserHandle);
+            int initialProfile = findSelectedProfile();
+            if (currentProfile != initialProfile) {
                 return;
             }
 
@@ -2574,6 +2613,20 @@ public class ChooserActivity extends ResolverActivity implements
                 mResolverDrawerLayout.setCollapsibleHeightReserved(Math.min(offset, bottom - top));
             });
         }
+    }
+
+    /**
+     * Returns {@link #PROFILE_PERSONAL}, {@link #PROFILE_WORK}, or -1 if the given user handle
+     * does not match either the personal or work user handle.
+     **/
+    private int getProfileForUser(UserHandle currentUserHandle) {
+        if (currentUserHandle.equals(getPersonalProfileUserHandle())) {
+            return PROFILE_PERSONAL;
+        } else if (currentUserHandle.equals(getWorkProfileUserHandle())) {
+            return PROFILE_WORK;
+        }
+        Log.e(TAG, "User " + currentUserHandle + " does not belong to a personal or work profile.");
+        return -1;
     }
 
     private ViewGroup getCurrentEmptyStateView() {
@@ -2677,11 +2730,12 @@ public class ChooserActivity extends ResolverActivity implements
     }
 
     private void setupScrollListener() {
-        if (mResolverDrawerLayout == null || shouldShowTabs()) {
+        if (mResolverDrawerLayout == null) {
             return;
         }
-        final View chooserHeader = mResolverDrawerLayout.findViewById(R.id.chooser_header);
-        final float defaultElevation = chooserHeader.getElevation();
+        int elevatedViewResId = shouldShowTabs() ? R.id.resolver_tab_divider : R.id.chooser_header;
+        final View elevatedView = mResolverDrawerLayout.findViewById(elevatedViewResId);
+        final float defaultElevation = elevatedView.getElevation();
         final float chooserHeaderScrollElevation =
                 getResources().getDimensionPixelSize(R.dimen.chooser_header_scroll_elevation);
 
@@ -2694,12 +2748,12 @@ public class ChooserActivity extends ResolverActivity implements
                         if (view.getChildCount() > 0) {
                             View child = view.getLayoutManager().findViewByPosition(0);
                             if (child == null || child.getTop() < 0) {
-                                chooserHeader.setElevation(chooserHeaderScrollElevation);
+                                elevatedView.setElevation(chooserHeaderScrollElevation);
                                 return;
                             }
                         }
 
-                        chooserHeader.setElevation(defaultElevation);
+                        elevatedView.setElevation(defaultElevation);
                     }
                 });
     }
@@ -2839,6 +2893,13 @@ public class ChooserActivity extends ResolverActivity implements
     @Override
     protected String getMetricsCategory() {
         return METRICS_CATEGORY_CHOOSER;
+    }
+
+    @Override
+    protected void onProfileTabSelected() {
+        ChooserGridAdapter currentRootAdapter =
+                mChooserMultiProfilePagerAdapter.getCurrentRootAdapter();
+        currentRootAdapter.updateDirectShareExpansion();
     }
 
     /**
@@ -3313,20 +3374,24 @@ public class ChooserActivity extends ResolverActivity implements
         }
 
         public void handleScroll(View v, int y, int oldy) {
-            // Only expand direct share area if there is a minimum number of shortcuts,
-            // which will help reduce the amount of visible shuffling due to older-style
-            // direct share targets.
-            int orientation = getResources().getConfiguration().orientation;
-            boolean canExpandDirectShare =
-                    mChooserListAdapter.getNumShortcutResults() > getMaxTargetsPerRow()
-                    && orientation == Configuration.ORIENTATION_PORTRAIT
-                    && !isInMultiWindowMode();
-
+            boolean canExpandDirectShare = canExpandDirectShare();
             if (mDirectShareViewHolder != null && canExpandDirectShare) {
                 mDirectShareViewHolder.handleScroll(
                         mChooserMultiProfilePagerAdapter.getActiveAdapterView(), y, oldy,
                         getMaxTargetsPerRow());
             }
+        }
+
+        /**
+         * Only expand direct share area if there is a minimum number of shortcuts,
+         * which will help reduce the amount of visible shuffling due to older-style
+         * direct share targets.
+         */
+        private boolean canExpandDirectShare() {
+            int orientation = getResources().getConfiguration().orientation;
+            return mChooserListAdapter.getNumShortcutResults() > getMaxTargetsPerRow()
+                    && orientation == Configuration.ORIENTATION_PORTRAIT
+                    && !isInMultiWindowMode();
         }
 
         public ChooserListAdapter getListAdapter() {
@@ -3335,6 +3400,19 @@ public class ChooserActivity extends ResolverActivity implements
 
         boolean shouldCellSpan(int position) {
             return getItemViewType(position) == VIEW_TYPE_NORMAL;
+        }
+
+        void updateDirectShareExpansion() {
+            if (mDirectShareViewHolder == null || !canExpandDirectShare()) {
+                return;
+            }
+            RecyclerView activeAdapterView =
+                    mChooserMultiProfilePagerAdapter.getActiveAdapterView();
+            if (mResolverDrawerLayout.isCollapsed()) {
+                mDirectShareViewHolder.collapse(activeAdapterView);
+            } else {
+                mDirectShareViewHolder.expand(activeAdapterView);
+            }
         }
     }
 
@@ -3533,6 +3611,20 @@ public class ChooserActivity extends ResolverActivity implements
             newHeight = Math.max(newHeight, mDirectShareMinHeight);
             yDiff = newHeight - prevHeight;
 
+            updateDirectShareRowHeight(view, yDiff, newHeight);
+        }
+
+        void expand(RecyclerView view) {
+            updateDirectShareRowHeight(view, mDirectShareMaxHeight - mDirectShareCurrHeight,
+                    mDirectShareMaxHeight);
+        }
+
+        void collapse(RecyclerView view) {
+            updateDirectShareRowHeight(view, mDirectShareMinHeight - mDirectShareCurrHeight,
+                    mDirectShareMinHeight);
+        }
+
+        private void updateDirectShareRowHeight(RecyclerView view, int yDiff, int newHeight) {
             if (view == null || view.getChildCount() == 0 || yDiff == 0) {
                 return;
             }

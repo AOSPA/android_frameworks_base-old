@@ -35,6 +35,7 @@ import static com.android.systemui.statusbar.notification.stack.NotificationSect
 
 import static java.util.Objects.requireNonNull;
 
+import android.annotation.CurrentTimeMillisLong;
 import android.app.Notification;
 import android.app.Notification.MessagingStyle.Message;
 import android.app.NotificationChannel;
@@ -93,6 +94,7 @@ public final class NotificationEntry extends ListEntry {
     private final String mKey;
     private StatusBarNotification mSbn;
     private Ranking mRanking;
+    private long mCreationTime;
 
     /*
      * Bookkeeping members
@@ -171,21 +173,29 @@ public final class NotificationEntry extends ListEntry {
     private boolean mAllowFgsDismissal;
     private int mBucket = BUCKET_ALERTING;
 
+    /**
+     * @param sbn the StatusBarNotification from system server
+     * @param ranking also from system server
+     * @param creationTime SystemClock.uptimeMillis of when we were created
+     */
     public NotificationEntry(
             @NonNull StatusBarNotification sbn,
-            @NonNull Ranking ranking) {
-        this(sbn, ranking, false);
+            @NonNull Ranking ranking,
+            long creationTime) {
+        this(sbn, ranking, false, creationTime);
     }
 
     public NotificationEntry(
             @NonNull StatusBarNotification sbn,
             @NonNull Ranking ranking,
-            boolean allowFgsDismissal
+            boolean allowFgsDismissal,
+            long creationTime
     ) {
         super(requireNonNull(Objects.requireNonNull(sbn).getKey()));
 
         requireNonNull(ranking);
 
+        mCreationTime = creationTime;
         mKey = sbn.getKey();
         setSbn(sbn);
         setRanking(ranking);
@@ -235,6 +245,21 @@ public final class NotificationEntry extends ListEntry {
      */
     public Ranking getRanking() {
         return mRanking;
+    }
+
+    /**
+     * A timestamp of SystemClock.uptimeMillis() of when this entry was first created, regardless
+     * of any changes to the data presented. It is set once on creation and will never change, and
+     * allows us to know exactly how long this notification has been alive for in our listener
+     * service. It is entirely unrelated to the information inside of the notification.
+     *
+     * This is different to Notification#when because it persists throughout updates, whereas
+     * system server treats every single call to notify() as a new notification and we handle
+     * updates to NotificationEntry locally.
+     */
+    @CurrentTimeMillisLong
+    public long getCreationTime() {
+        return mCreationTime;
     }
 
     /**
@@ -353,6 +378,7 @@ public final class NotificationEntry extends ListEntry {
     /**
      * Returns the data needed for a bubble for this notification, if it exists.
      */
+    @Nullable
     public Notification.BubbleMetadata getBubbleMetadata() {
         return mBubbleMetadata;
     }
@@ -360,7 +386,7 @@ public final class NotificationEntry extends ListEntry {
     /**
      * Sets bubble metadata for this notification.
      */
-    public void setBubbleMetadata(Notification.BubbleMetadata metadata) {
+    public void setBubbleMetadata(@Nullable Notification.BubbleMetadata metadata) {
         mBubbleMetadata = metadata;
     }
 
@@ -381,15 +407,6 @@ public final class NotificationEntry extends ListEntry {
             mSbn.getNotification().flags |= FLAG_BUBBLE;
         }
         return wasBubble != isBubble();
-    }
-
-    /**
-     * Resets the notification entry to be re-used.
-     */
-    public void reset() {
-        if (row != null) {
-            row.reset();
-        }
     }
 
     @NotificationSectionsManager.PriorityBucket
@@ -418,13 +435,18 @@ public final class NotificationEntry extends ListEntry {
         mRowController = controller;
     }
 
-    @Nullable
-    public List<NotificationEntry> getChildren() {
+    /**
+     * Get the children that are actually attached to this notification's row.
+     *
+     * TODO: Seems like most callers here should probably be using
+     * {@link com.android.systemui.statusbar.phone.NotificationGroupManager#getChildren}
+     */
+    public @Nullable List<NotificationEntry> getAttachedNotifChildren() {
         if (row == null) {
             return null;
         }
 
-        List<ExpandableNotificationRow> rowChildren = row.getNotificationChildren();
+        List<ExpandableNotificationRow> rowChildren = row.getAttachedChildren();
         if (rowChildren == null) {
             return null;
         }
@@ -732,7 +754,7 @@ public final class NotificationEntry extends ListEntry {
             return false;
         }
 
-        List<NotificationEntry> children = getChildren();
+        List<NotificationEntry> children = getAttachedNotifChildren();
         if (children != null && children.size() > 0) {
             for (int i = 0; i < children.size(); i++) {
                 NotificationEntry child =  children.get(i);

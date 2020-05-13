@@ -38,7 +38,7 @@ public class BluetoothMediaDevice extends MediaDevice {
 
     BluetoothMediaDevice(Context context, CachedBluetoothDevice device,
             MediaRouter2Manager routerManager, MediaRoute2Info info, String packageName) {
-        super(context, MediaDeviceType.TYPE_BLUETOOTH_DEVICE, routerManager, info, packageName);
+        super(context, routerManager, info, packageName);
         mCachedDevice = device;
         initDeviceRecord();
     }
@@ -86,6 +86,13 @@ public class BluetoothMediaDevice extends MediaDevice {
             }
         }
         return false;
+    }
+
+    @Override
+    public boolean isFastPairDevice() {
+        return mCachedDevice != null
+                && BluetoothUtils.getBooleanMetaData(
+                mCachedDevice.getDevice(), BluetoothDevice.METADATA_IS_UNTETHERED_HEADSET);
     }
 
     @Override

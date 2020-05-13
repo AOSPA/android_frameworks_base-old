@@ -57,6 +57,7 @@ import static com.android.server.wm.WindowStateAnimatorProto.SURFACE;
 import static com.android.server.wm.WindowStateAnimatorProto.SYSTEM_DECOR_RECT;
 import static com.android.server.wm.WindowSurfacePlacer.SET_ORIENTATION_CHANGE_COMPLETE;
 
+import android.app.WindowConfiguration;
 import android.content.Context;
 import android.graphics.Matrix;
 import android.graphics.PixelFormat;
@@ -787,7 +788,8 @@ class WindowStateAnimator {
             return false;
         }
 
-        if (w.getWindowConfiguration().tasksAreFloating()) {
+        if (w.getWindowConfiguration().tasksAreFloating()
+                || WindowConfiguration.isSplitScreenWindowingMode(w.getWindowingMode())) {
             return false;
         }
 
@@ -884,8 +886,8 @@ class WindowStateAnimator {
             clipRect = mTmpClipRect;
         }
 
-        if (mSurfaceResized && (mAttrType == TYPE_BASE_APPLICATION) &&
-            (task != null) && (task.getMainWindowSizeChangeTransaction() != null)) {
+        if (w.mInRelayout && (mAttrType == TYPE_BASE_APPLICATION) && (task != null)
+                && (task.getMainWindowSizeChangeTransaction() != null)) {
             mSurfaceController.deferTransactionUntil(mWin.getClientViewRootSurface(),
                     mWin.getFrameNumber());
             SurfaceControl.mergeToGlobalTransaction(task.getMainWindowSizeChangeTransaction());
@@ -1030,7 +1032,7 @@ class WindowStateAnimator {
                         mTmpPos.x = 0;
                         mTmpPos.y = 0;
                         if (stack != null) {
-                            stack.getRelativeDisplayedPosition(mTmpPos);
+                            stack.getRelativePosition(mTmpPos);
                         }
 
                         xOffset = -mTmpPos.x;
@@ -1476,6 +1478,7 @@ class WindowStateAnimator {
         if (dumpAll) {
             pw.print(prefix); pw.print("mDrawState="); pw.print(drawStateToString());
             pw.print(prefix); pw.print(" mLastHidden="); pw.println(mLastHidden);
+            pw.print(prefix); pw.print("mEnterAnimationPending=" + mEnterAnimationPending);
             pw.print(prefix); pw.print("mSystemDecorRect="); mSystemDecorRect.printShortString(pw);
             pw.print(" mLastClipRect="); mLastClipRect.printShortString(pw);
 

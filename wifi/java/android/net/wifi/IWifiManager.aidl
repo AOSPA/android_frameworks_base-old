@@ -305,5 +305,7 @@ interface IWifiManager
 
     boolean isAutoWakeupEnabled();
 
-    int getSoftApWifiGeneration();
+    int getSoftApWifiStandard();
+
+    boolean isVht8ssCapableDevice();
 }

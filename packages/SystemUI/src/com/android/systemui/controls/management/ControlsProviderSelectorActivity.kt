@@ -16,20 +16,25 @@
 
 package com.android.systemui.controls.management
 
+import android.app.ActivityOptions
 import android.content.ComponentName
 import android.content.Intent
 import android.os.Bundle
 import android.view.LayoutInflater
+import android.view.View
+import android.view.ViewGroup
 import android.view.ViewStub
 import android.widget.Button
 import android.widget.TextView
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import androidx.recyclerview.widget.RecyclerView.AdapterDataObserver
 import com.android.systemui.R
 import com.android.systemui.broadcast.BroadcastDispatcher
 import com.android.systemui.controls.controller.ControlsController
 import com.android.systemui.dagger.qualifiers.Background
 import com.android.systemui.dagger.qualifiers.Main
+import com.android.systemui.globalactions.GlobalActionsComponent
 import com.android.systemui.settings.CurrentUserTracker
 import com.android.systemui.util.LifecycleActivity
 import java.util.concurrent.Executor
@@ -43,6 +48,7 @@ class ControlsProviderSelectorActivity @Inject constructor(
     @Background private val backExecutor: Executor,
     private val listingController: ControlsListingController,
     private val controlsController: ControlsController,
+    private val globalActionsComponent: GlobalActionsComponent,
     broadcastDispatcher: BroadcastDispatcher
 ) : LifecycleActivity() {
 
@@ -64,13 +70,49 @@ class ControlsProviderSelectorActivity @Inject constructor(
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
         setContentView(R.layout.controls_management)
+
+        getLifecycle().addObserver(
+            ControlsAnimations.observerForAnimations(
+                requireViewById<ViewGroup>(R.id.controls_management_root),
+                window,
+                intent
+            )
+        )
+
         requireViewById<ViewStub>(R.id.stub).apply {
             layoutResource = R.layout.controls_management_apps
             inflate()
         }
 
         recyclerView = requireViewById(R.id.list)
+        recyclerView.layoutManager = LinearLayoutManager(applicationContext)
+
+        requireViewById<TextView>(R.id.title).apply {
+            text = resources.getText(R.string.controls_providers_title)
+        }
+
+        requireViewById<Button>(R.id.other_apps).apply {
+            visibility = View.VISIBLE
+            setText(com.android.internal.R.string.cancel)
+            setOnClickListener {
+                onBackPressed()
+            }
+        }
+        requireViewById<View>(R.id.done).visibility = View.GONE
+    }
+
+    override fun onBackPressed() {
+        globalActionsComponent.handleShowGlobalActionsMenu()
+        animateExitAndFinish()
+    }
+
+    override fun onStart() {
+        super.onStart()
+        currentUserTracker.startTracking()
+
+        recyclerView.alpha = 0.0f
         recyclerView.adapter = AppAdapter(
                 backExecutor,
                 executor,
@@ -79,17 +121,22 @@ class ControlsProviderSelectorActivity @Inject constructor(
                 LayoutInflater.from(this),
                 ::launchFavoritingActivity,
                 FavoritesRenderer(resources, controlsController::countFavoritesForComponent),
-                resources)
-        recyclerView.layoutManager = LinearLayoutManager(applicationContext)
-
-        requireViewById<TextView>(R.id.title).text =
-                resources.getText(R.string.controls_providers_title)
-
-        requireViewById<Button>(R.id.done).setOnClickListener {
-            this@ControlsProviderSelectorActivity.finishAffinity()
+                resources).apply {
+            registerAdapterDataObserver(object : RecyclerView.AdapterDataObserver() {
+                var hasAnimated = false
+                override fun onChanged() {
+                    if (!hasAnimated) {
+                        hasAnimated = true
+                        ControlsAnimations.enterAnimation(recyclerView).start()
+                    }
+                }
+            })
         }
+    }
 
-        currentUserTracker.startTracking()
+    override fun onStop() {
+        super.onStop()
+        currentUserTracker.stopTracking()
     }
 
     /**
@@ -97,16 +144,16 @@ class ControlsProviderSelectorActivity @Inject constructor(
      * @param component a component name for a [ControlsProviderService]
      */
     fun launchFavoritingActivity(component: ComponentName?) {
-        backExecutor.execute {
+        executor.execute {
             component?.let {
                 val intent = Intent(applicationContext, ControlsFavoritingActivity::class.java)
                         .apply {
                     putExtra(ControlsFavoritingActivity.EXTRA_APP,
                             listingController.getAppLabel(it))
                     putExtra(Intent.EXTRA_COMPONENT_NAME, it)
-                    flags = Intent.FLAG_ACTIVITY_SINGLE_TOP
+                    putExtra(ControlsFavoritingActivity.EXTRA_FROM_PROVIDER_SELECTOR, true)
                 }
-                startActivity(intent)
+                startActivity(intent, ActivityOptions.makeSceneTransitionAnimation(this).toBundle())
             }
         }
     }
@@ -114,5 +161,17 @@ class ControlsProviderSelectorActivity @Inject constructor(
     override fun onDestroy() {
         currentUserTracker.stopTracking()
         super.onDestroy()
+    }
+
+    private fun animateExitAndFinish() {
+        val rootView = requireViewById<ViewGroup>(R.id.controls_management_root)
+        ControlsAnimations.exitAnimation(
+                rootView,
+                object : Runnable {
+                    override fun run() {
+                        finish()
+                    }
+                }
+        ).start()
     }
 }

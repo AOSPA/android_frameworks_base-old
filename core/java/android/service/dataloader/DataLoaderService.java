@@ -34,6 +34,8 @@ import android.os.ParcelFileDescriptor;
 import android.util.ExceptionUtils;
 import android.util.Slog;
 
+import libcore.io.IoUtils;
+
 import java.io.IOException;
 import java.util.Collection;
 
@@ -107,30 +109,16 @@ public abstract class DataLoaderService extends Service {
                 @NonNull IDataLoaderStatusListener listener)
                 throws RuntimeException {
             try {
-                if (!nativeCreateDataLoader(id, control, params, listener)) {
-                    Slog.e(TAG, "Failed to create native loader for " + id);
-                }
+                nativeCreateDataLoader(id, control, params, listener);
             } catch (Exception ex) {
                 Slog.e(TAG, "Failed to create native loader for " + id, ex);
                 destroy(id);
                 throw new RuntimeException(ex);
             } finally {
-                // Closing FDs.
                 if (control.incremental != null) {
-                    if (control.incremental.cmd != null) {
-                        try {
-                            control.incremental.cmd.close();
-                        } catch (IOException e) {
-                            Slog.e(TAG, "Failed to close IncFs CMD file descriptor " + e);
-                        }
-                    }
-                    if (control.incremental.log != null) {
-                        try {
-                            control.incremental.log.close();
-                        } catch (IOException e) {
-                            Slog.e(TAG, "Failed to close IncFs LOG file descriptor " + e);
-                        }
-                    }
+                    IoUtils.closeQuietly(control.incremental.cmd);
+                    IoUtils.closeQuietly(control.incremental.pendingReads);
+                    IoUtils.closeQuietly(control.incremental.log);
                 }
             }
         }

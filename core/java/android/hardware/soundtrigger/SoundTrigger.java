@@ -1880,6 +1880,8 @@ public class SoundTrigger {
                     return STATUS_PERMISSION_DENIED;
                 case Status.DEAD_OBJECT:
                     return STATUS_DEAD_OBJECT;
+                case Status.INTERNAL_ERROR:
+                    return STATUS_ERROR;
             }
             return STATUS_ERROR;
         }
@@ -1943,7 +1945,7 @@ public class SoundTrigger {
         Looper looper = handler != null ? handler.getLooper() : Looper.getMainLooper();
         try {
             return new SoundTriggerModule(getService(), moduleId, listener, looper);
-        } catch (RemoteException e) {
+        } catch (Exception e) {
             Log.e(TAG, "", e);
             return null;
         }

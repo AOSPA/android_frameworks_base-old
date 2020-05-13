@@ -29,6 +29,7 @@ import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.content.res.Resources;
 import android.media.AudioManager;
+import android.net.wifi.ScanResult;
 import android.net.wifi.WifiManager;
 import android.os.Handler;
 import android.os.RemoteException;
@@ -39,6 +40,8 @@ import android.service.notification.ZenModeConfig;
 import android.telecom.TelecomManager;
 import android.text.format.DateFormat;
 import android.util.Log;
+
+import androidx.lifecycle.Observer;
 
 import com.android.systemui.R;
 import com.android.systemui.broadcast.BroadcastDispatcher;
@@ -65,6 +68,7 @@ import com.android.systemui.statusbar.policy.RotationLockController.RotationLock
 import com.android.systemui.statusbar.policy.SensorPrivacyController;
 import com.android.systemui.statusbar.policy.UserInfoController;
 import com.android.systemui.statusbar.policy.ZenModeController;
+import com.android.systemui.util.RingerModeTracker;
 import com.android.systemui.util.time.DateFormatUtil;
 
 import java.util.Locale;
@@ -110,7 +114,6 @@ public class PhoneStatusBarPolicy
     private final SharedPreferences mSharedPreferences;
     private final DateFormatUtil mDateFormatUtil;
     private final TelecomManager mTelecomManager;
-    private final AudioManager mAudioManager;
 
     private final Handler mHandler = new Handler();
     private final CastController mCast;
@@ -133,6 +136,7 @@ public class PhoneStatusBarPolicy
     private final Executor mUiBgExecutor;
     private final SensorPrivacyController mSensorPrivacyController;
     private final RecordingController mRecordingController;
+    private final RingerModeTracker mRingerModeTracker;
 
     private boolean mZenVisible;
     private boolean mVolumeVisible;
@@ -142,7 +146,6 @@ public class PhoneStatusBarPolicy
 
     private BluetoothController mBluetooth;
     private AlarmManager.AlarmClockInfo mNextAlarm;
-    private WifiManager mWifiManager;
 
     @Inject
     public PhoneStatusBarPolicy(StatusBarIconController iconController,
@@ -156,10 +159,11 @@ public class PhoneStatusBarPolicy
             KeyguardStateController keyguardStateController,
             LocationController locationController,
             SensorPrivacyController sensorPrivacyController, IActivityManager iActivityManager,
-            AlarmManager alarmManager, UserManager userManager, AudioManager audioManager,
+            AlarmManager alarmManager, UserManager userManager,
             RecordingController recordingController,
             @Nullable TelecomManager telecomManager, @DisplayId int displayId,
-            @Main SharedPreferences sharedPreferences, DateFormatUtil dateFormatUtil) {
+            @Main SharedPreferences sharedPreferences, DateFormatUtil dateFormatUtil,
+            RingerModeTracker ringerModeTracker) {
         mIconController = iconController;
         mCommandQueue = commandQueue;
         mBroadcastDispatcher = broadcastDispatcher;
@@ -181,8 +185,8 @@ public class PhoneStatusBarPolicy
         mSensorPrivacyController = sensorPrivacyController;
         mRecordingController = recordingController;
         mUiBgExecutor = uiBgExecutor;
-        mAudioManager = audioManager;
         mTelecomManager = telecomManager;
+        mRingerModeTracker = ringerModeTracker;
 
         mSlotCast = resources.getString(com.android.internal.R.string.status_bar_cast);
         mSlotHotspot = resources.getString(com.android.internal.R.string.status_bar_hotspot);
@@ -210,16 +214,18 @@ public class PhoneStatusBarPolicy
     public void init() {
         // listen for broadcasts
         IntentFilter filter = new IntentFilter();
-        filter.addAction(AudioManager.RINGER_MODE_CHANGED_ACTION);
-        filter.addAction(AudioManager.INTERNAL_RINGER_MODE_CHANGED_ACTION);
+
         filter.addAction(AudioManager.ACTION_HEADSET_PLUG);
         filter.addAction(Intent.ACTION_SIM_STATE_CHANGED);
         filter.addAction(TelecomManager.ACTION_CURRENT_TTY_MODE_CHANGED);
         filter.addAction(Intent.ACTION_MANAGED_PROFILE_AVAILABLE);
         filter.addAction(Intent.ACTION_MANAGED_PROFILE_UNAVAILABLE);
         filter.addAction(Intent.ACTION_MANAGED_PROFILE_REMOVED);
-        filter.addAction(Intent.ACTION_BOOT_COMPLETED);
         mBroadcastDispatcher.registerReceiverWithHandler(mIntentReceiver, filter, mHandler);
+        Observer<Integer> observer = ringer -> mHandler.post(this::updateVolumeZen);
+
+        mRingerModeTracker.getRingerMode().observeForever(observer);
+        mRingerModeTracker.getRingerModeInternal().observeForever(observer);
 
         // listen for user / profile change.
         try {
@@ -348,14 +354,18 @@ public class PhoneStatusBarPolicy
         }
 
         if (!ZenModeConfig.isZenOverridingRinger(zen, mZenController.getConsolidatedPolicy())) {
-            if (mAudioManager.getRingerModeInternal() == AudioManager.RINGER_MODE_VIBRATE) {
-                volumeVisible = true;
-                volumeIconId = R.drawable.stat_sys_ringer_vibrate;
-                volumeDescription = mResources.getString(R.string.accessibility_ringer_vibrate);
-            } else if (mAudioManager.getRingerModeInternal() == AudioManager.RINGER_MODE_SILENT) {
-                volumeVisible = true;
-                volumeIconId = R.drawable.stat_sys_ringer_silent;
-                volumeDescription = mResources.getString(R.string.accessibility_ringer_silent);
+            final Integer ringerModeInternal =
+                    mRingerModeTracker.getRingerModeInternal().getValue();
+            if (ringerModeInternal != null) {
+                if (ringerModeInternal == AudioManager.RINGER_MODE_VIBRATE) {
+                    volumeVisible = true;
+                    volumeIconId = R.drawable.stat_sys_ringer_vibrate;
+                    volumeDescription = mResources.getString(R.string.accessibility_ringer_vibrate);
+                } else if (ringerModeInternal == AudioManager.RINGER_MODE_SILENT) {
+                    volumeVisible = true;
+                    volumeIconId = R.drawable.stat_sys_ringer_silent;
+                    volumeDescription = mResources.getString(R.string.accessibility_ringer_silent);
+                }
             }
         }
 
@@ -505,7 +515,11 @@ public class PhoneStatusBarPolicy
     private final HotspotController.Callback mHotspotCallback = new HotspotController.Callback() {
         @Override
         public void onHotspotChanged(boolean enabled, int numDevices) {
-            updateHotspotIcon();
+            mIconController.setIconVisibility(mSlotHotspot, enabled);
+        }
+        @Override
+        public void onHotspotChanged(boolean enabled, int numDevices, int standard) {
+            updateHotspotIcon(standard);
             mIconController.setIconVisibility(mSlotHotspot, enabled);
         }
     };
@@ -615,10 +629,6 @@ public class PhoneStatusBarPolicy
         public void onReceive(Context context, Intent intent) {
             String action = intent.getAction();
             switch (action) {
-                case AudioManager.RINGER_MODE_CHANGED_ACTION:
-                case AudioManager.INTERNAL_RINGER_MODE_CHANGED_ACTION:
-                    updateVolumeZen();
-                    break;
                 case Intent.ACTION_SIM_STATE_CHANGED:
                     // Avoid rebroadcast because SysUI is direct boot aware.
                     if (intent.getBooleanExtra(Intent.EXTRA_REBROADCAST_ON_UNLOCK, false)) {
@@ -636,9 +646,6 @@ public class PhoneStatusBarPolicy
                     break;
                 case AudioManager.ACTION_HEADSET_PLUG:
                     updateHeadsetPlug(intent);
-                    break;
-                case Intent.ACTION_BOOT_COMPLETED:
-                    handleBootCompleted();
                     break;
             }
         }
@@ -694,33 +701,19 @@ public class PhoneStatusBarPolicy
         mHandler.post(() -> mIconController.setIconVisibility(mSlotScreenRecord, false));
     }
 
-    private void updateHotspotIcon() {
-        int generation;
-        if (mWifiManager != null) {
-            generation = mWifiManager.getSoftApWifiGeneration();
-        } else {
-            generation = WifiManager.WIFI_GENERATION_DEFAULT; // boot not completed yet
-        }
-        if (generation == WifiManager.WIFI_GENERATION_6) {
+    private void updateHotspotIcon(int standard) {
+        if (standard == ScanResult.WIFI_STANDARD_11AX) {
             mIconController.setIcon(mSlotHotspot, R.drawable.stat_sys_wifi_6_hotspot,
                 mResources.getString(R.string.accessibility_status_bar_hotspot));
-        } else if (generation == WifiManager.WIFI_GENERATION_5) {
+        } else if (standard == ScanResult.WIFI_STANDARD_11AC) {
             mIconController.setIcon(mSlotHotspot, R.drawable.stat_sys_wifi_5_hotspot,
                 mResources.getString(R.string.accessibility_status_bar_hotspot));
-        } else if (generation == WifiManager.WIFI_GENERATION_4) {
+        } else if (standard == ScanResult.WIFI_STANDARD_11N) {
             mIconController.setIcon(mSlotHotspot, R.drawable.stat_sys_wifi_4_hotspot,
                 mResources.getString(R.string.accessibility_status_bar_hotspot));
         } else {
             mIconController.setIcon(mSlotHotspot, R.drawable.stat_sys_hotspot,
                 mResources.getString(R.string.accessibility_status_bar_hotspot));
         }
-    }
-
-    private void handleBootCompleted() {
-        // TODO(b/150786696): provide WifiManager via injection
-        //mWifiManager = (WifiManager) mContext.getSystemService(Context.WIFI_SERVICE);
-        // hotspot
-        updateHotspotIcon();
-        mIconController.setIconVisibility(mSlotHotspot, mHotspot.isHotspotEnabled());
     }
 }

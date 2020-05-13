@@ -18,6 +18,8 @@ package android.app.activity;
 
 import static android.content.Intent.ACTION_EDIT;
 import static android.content.Intent.ACTION_VIEW;
+import static android.content.res.Configuration.ORIENTATION_LANDSCAPE;
+import static android.content.res.Configuration.ORIENTATION_PORTRAIT;
 
 import static com.google.common.truth.Truth.assertThat;
 
@@ -31,6 +33,7 @@ import android.app.Activity;
 import android.app.ActivityThread;
 import android.app.IApplicationThread;
 import android.app.PictureInPictureParams;
+import android.app.ResourcesManager;
 import android.app.servertransaction.ActivityConfigurationChangeItem;
 import android.app.servertransaction.ActivityRelaunchItem;
 import android.app.servertransaction.ClientTransaction;
@@ -38,9 +41,14 @@ import android.app.servertransaction.ClientTransactionItem;
 import android.app.servertransaction.NewIntentItem;
 import android.app.servertransaction.ResumeActivityItem;
 import android.app.servertransaction.StopActivityItem;
+import android.content.Context;
 import android.content.Intent;
 import android.content.res.Configuration;
+import android.content.res.Resources;
+import android.graphics.Rect;
+import android.hardware.display.DisplayManager;
 import android.os.IBinder;
+import android.util.DisplayMetrics;
 import android.util.MergedConfiguration;
 import android.view.Display;
 import android.view.View;
@@ -230,9 +238,9 @@ public class ActivityThreadTest {
             final ActivityThread activityThread = activity.getActivityThread();
 
             final Configuration pendingConfig = new Configuration();
-            pendingConfig.orientation = orientation == Configuration.ORIENTATION_LANDSCAPE
-                    ? Configuration.ORIENTATION_PORTRAIT
-                    : Configuration.ORIENTATION_LANDSCAPE;
+            pendingConfig.orientation = orientation == ORIENTATION_LANDSCAPE
+                    ? ORIENTATION_PORTRAIT
+                    : ORIENTATION_LANDSCAPE;
             pendingConfig.seq = seq + 2;
             activityThread.updatePendingActivityConfiguration(activity.getActivityToken(),
                     pendingConfig);
@@ -257,7 +265,7 @@ public class ActivityThreadTest {
         InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> {
             final Configuration config = new Configuration();
             config.seq = BASE_SEQ;
-            config.orientation = Configuration.ORIENTATION_PORTRAIT;
+            config.orientation = ORIENTATION_PORTRAIT;
 
             activityThread.handleActivityConfigurationChanged(activity.getActivityToken(),
                     config, Display.INVALID_DISPLAY);
@@ -304,6 +312,113 @@ public class ActivityThreadTest {
         // BASE_SEQ + 4. Configurations scheduled in between should be dropped.
         assertEquals(numOfConfig + 2, activity.mNumOfConfigChanges);
         assertEquals(400, activity.mConfig.smallestScreenWidthDp);
+    }
+
+    @Test
+    public void testOrientationChanged_DoesntOverrideVirtualDisplayOrientation() {
+        final TestActivity activity = mActivityTestRule.launchActivity(new Intent());
+        final ActivityThread activityThread = activity.getActivityThread();
+
+        InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> {
+            Context appContext = activity.getApplication();
+            Configuration originalAppConfig =
+                    new Configuration(appContext.getResources().getConfiguration());
+            DisplayManager dm = appContext.getSystemService(DisplayManager.class);
+
+            int virtualDisplayWidth;
+            int virtualDisplayHeight;
+            if (originalAppConfig.orientation == ORIENTATION_PORTRAIT) {
+                virtualDisplayWidth = 100;
+                virtualDisplayHeight = 200;
+            } else {
+                virtualDisplayWidth = 200;
+                virtualDisplayHeight = 100;
+            }
+            Display virtualDisplay = dm.createVirtualDisplay("virtual-display",
+                    virtualDisplayWidth, virtualDisplayHeight, 200, null, 0).getDisplay();
+            Context virtualDisplayContext = appContext.createDisplayContext(virtualDisplay);
+            int originalVirtualDisplayOrientation = virtualDisplayContext.getResources()
+                    .getConfiguration().orientation;
+
+            Configuration newAppConfig = new Configuration(originalAppConfig);
+            newAppConfig.seq++;
+            newAppConfig.orientation = newAppConfig.orientation == ORIENTATION_PORTRAIT
+                    ? ORIENTATION_LANDSCAPE : ORIENTATION_PORTRAIT;
+
+            activityThread.updatePendingConfiguration(newAppConfig);
+            activityThread.handleConfigurationChanged(newAppConfig);
+
+            try {
+                assertEquals("Virtual display orientation should not change when process"
+                                + " configuration orientation changes.",
+                        originalVirtualDisplayOrientation,
+                        virtualDisplayContext.getResources().getConfiguration().orientation);
+            } finally {
+                // Make sure to reset the process config to prevent side effects to other
+                // tests.
+                Configuration activityThreadConfig = activityThread.getConfiguration();
+                activityThreadConfig.seq = originalAppConfig.seq - 1;
+
+                Configuration resourceManagerConfig = ResourcesManager.getInstance()
+                        .getConfiguration();
+                resourceManagerConfig.seq = originalAppConfig.seq - 1;
+
+                activityThread.updatePendingConfiguration(originalAppConfig);
+                activityThread.handleConfigurationChanged(originalAppConfig);
+            }
+        });
+    }
+
+    @Test
+    public void testHandleConfigurationChanged_DoesntOverrideActivityConfig() {
+        final TestActivity activity = mActivityTestRule.launchActivity(new Intent());
+
+        InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> {
+            final Configuration oldActivityConfig =
+                    new Configuration(activity.getResources().getConfiguration());
+            final DisplayMetrics oldActivityMetrics = new DisplayMetrics();
+            activity.getDisplay().getMetrics(oldActivityMetrics);
+            final Resources oldAppResources = activity.getApplication().getResources();
+            final Configuration oldAppConfig =
+                    new Configuration(oldAppResources.getConfiguration());
+            final DisplayMetrics oldApplicationMetrics = new DisplayMetrics();
+            oldApplicationMetrics.setTo(oldAppResources.getDisplayMetrics());
+            assertEquals("Process config must match the top activity config by default",
+                    0, oldActivityConfig.diffPublicOnly(oldAppConfig));
+            assertEquals("Process config must match the top activity config by default",
+                    oldActivityMetrics, oldApplicationMetrics);
+
+            // Update the application configuration separately from activity config
+            final Configuration newAppConfig = new Configuration(oldAppConfig);
+            newAppConfig.densityDpi += 100;
+            newAppConfig.screenHeightDp += 100;
+            final Rect newBounds = new Rect(newAppConfig.windowConfiguration.getAppBounds());
+            newBounds.bottom += 100;
+            newAppConfig.windowConfiguration.setAppBounds(newBounds);
+            newAppConfig.windowConfiguration.setBounds(newBounds);
+            newAppConfig.seq++;
+
+            final ActivityThread activityThread = activity.getActivityThread();
+            activityThread.handleConfigurationChanged(newAppConfig);
+
+            // Verify that application config update was applied, but didn't change activity config.
+            assertEquals("Activity config must not change if the process config changes",
+                    oldActivityConfig, activity.getResources().getConfiguration());
+
+            final DisplayMetrics newActivityMetrics = new DisplayMetrics();
+            activity.getDisplay().getMetrics(newActivityMetrics);
+            assertEquals("Activity display size must not change if the process config changes",
+                    oldActivityMetrics, newActivityMetrics);
+            final Resources newAppResources = activity.getApplication().getResources();
+            assertEquals("Application config must be updated",
+                    newAppConfig, newAppResources.getConfiguration());
+            final DisplayMetrics newApplicationMetrics = new DisplayMetrics();
+            newApplicationMetrics.setTo(newAppResources.getDisplayMetrics());
+            assertNotEquals("Application display size must be updated after config update",
+                    oldApplicationMetrics, newApplicationMetrics);
+            assertNotEquals("Application display size must be updated after config update",
+                    newActivityMetrics, newApplicationMetrics);
+        });
     }
 
     @Test
@@ -386,7 +501,7 @@ public class ActivityThreadTest {
 
         final int numOfConfig = activity.mNumOfConfigChanges;
         Configuration config = new Configuration();
-        config.orientation = Configuration.ORIENTATION_PORTRAIT;
+        config.orientation = ORIENTATION_PORTRAIT;
         config.seq = seq;
         activityThread.handleActivityConfigurationChanged(activity.getActivityToken(), config,
                 Display.INVALID_DISPLAY);
@@ -396,7 +511,7 @@ public class ActivityThreadTest {
         }
 
         config = new Configuration();
-        config.orientation = Configuration.ORIENTATION_LANDSCAPE;
+        config.orientation = ORIENTATION_LANDSCAPE;
         config.seq = seq + 1;
         activityThread.handleActivityConfigurationChanged(activity.getActivityToken(), config,
                 Display.INVALID_DISPLAY);

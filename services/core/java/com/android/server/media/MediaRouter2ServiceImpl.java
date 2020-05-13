@@ -16,6 +16,8 @@
 
 package com.android.server.media;
 
+import static android.media.MediaRoute2ProviderService.REASON_ROUTE_NOT_AVAILABLE;
+import static android.media.MediaRoute2ProviderService.REASON_UNKNOWN_ERROR;
 import static android.media.MediaRoute2ProviderService.REQUEST_ID_NONE;
 import static android.media.MediaRouter2Utils.getOriginalId;
 import static android.media.MediaRouter2Utils.getProviderId;
@@ -247,6 +249,22 @@ class MediaRouter2ServiceImpl {
         }
     }
 
+    public void notifySessionHintsForCreatingSession(IMediaRouter2 router,
+            long uniqueRequestId, MediaRoute2Info route, Bundle sessionHints) {
+        Objects.requireNonNull(router, "router must not be null");
+        Objects.requireNonNull(route, "route must not be null");
+
+        final long token = Binder.clearCallingIdentity();
+        try {
+            synchronized (mLock) {
+                notifySessionHintsForCreatingSessionLocked(uniqueRequestId,
+                        router, route, sessionHints);
+            }
+        } finally {
+            Binder.restoreCallingIdentity(token);
+        }
+    }
+
     public void selectRouteWithRouter2(IMediaRouter2 router, String uniqueSessionId,
             MediaRoute2Info route) {
         Objects.requireNonNull(router, "router must not be null");
@@ -264,7 +282,6 @@ class MediaRouter2ServiceImpl {
             Binder.restoreCallingIdentity(token);
         }
     }
-
 
     public void deselectRouteWithRouter2(IMediaRouter2 router, String uniqueSessionId,
             MediaRoute2Info route) {
@@ -622,12 +639,40 @@ class MediaRouter2ServiceImpl {
             return;
         }
 
+        if (route.isSystemRoute() && !routerRecord.mHasModifyAudioRoutingPermission
+                && !TextUtils.equals(route.getId(),
+                routerRecord.mUserRecord.mHandler.mSystemProvider.getDefaultRoute().getId())) {
+            Slog.w(TAG, "MODIFY_AUDIO_ROUTING permission is required to transfer to"
+                    + route);
+            routerRecord.mUserRecord.mHandler.notifySessionCreationFailedToRouter(
+                    routerRecord, requestId);
+            return;
+        }
+
         long uniqueRequestId = toUniqueRequestId(routerRecord.mRouterId, requestId);
         routerRecord.mUserRecord.mHandler.sendMessage(
-                obtainMessage(UserHandler::requestCreateSessionOnHandler,
+                obtainMessage(UserHandler::requestCreateSessionWithRouter2OnHandler,
                         routerRecord.mUserRecord.mHandler,
-                        uniqueRequestId, routerRecord, /* managerRecord= */ null, route,
+                        uniqueRequestId, routerRecord, route,
                         sessionHints));
+    }
+
+    private void notifySessionHintsForCreatingSessionLocked(long uniqueRequestId,
+            @NonNull IMediaRouter2 router,
+            @NonNull MediaRoute2Info route, @Nullable Bundle sessionHints) {
+        final IBinder binder = router.asBinder();
+        final RouterRecord routerRecord = mAllRouterRecords.get(binder);
+
+        if (routerRecord == null) {
+            Slog.w(TAG, "requestCreateSessionWithRouter2ByManagerRequestLocked: "
+                    + "Ignoring unknown router.");
+            return;
+        }
+
+        routerRecord.mUserRecord.mHandler.sendMessage(
+                obtainMessage(UserHandler::requestCreateSessionWithManagerOnHandler,
+                        routerRecord.mUserRecord.mHandler,
+                        uniqueRequestId, routerRecord, route, sessionHints));
     }
 
     private void selectRouteWithRouter2Locked(@NonNull IMediaRouter2 router,
@@ -816,12 +861,13 @@ class MediaRouter2ServiceImpl {
         }
 
         long uniqueRequestId = toUniqueRequestId(managerRecord.mManagerId, requestId);
-        //TODO(b/152851868): Use MediaRouter2's OnCreateSessionListener to send session hints.
+
+        // Before requesting to the provider, get session hints from the media router.
+        // As a return, media router will request to create a session.
         routerRecord.mUserRecord.mHandler.sendMessage(
-                obtainMessage(UserHandler::requestCreateSessionOnHandler,
+                obtainMessage(UserHandler::getSessionHintsForCreatingSessionOnHandler,
                         routerRecord.mUserRecord.mHandler,
-                        uniqueRequestId, routerRecord, managerRecord, route,
-                        /* sessionHints= */ null));
+                        uniqueRequestId, routerRecord, managerRecord, route));
     }
 
     private void selectRouteWithManagerLocked(int requestId, @NonNull IMediaRouter2Manager manager,
@@ -915,9 +961,6 @@ class MediaRouter2ServiceImpl {
 
         RouterRecord routerRecord = managerRecord.mUserRecord.mHandler
                 .findRouterforSessionLocked(uniqueSessionId);
-        if (routerRecord == null) {
-            return;
-        }
 
         long uniqueRequestId = toUniqueRequestId(managerRecord.mManagerId, requestId);
         managerRecord.mUserRecord.mHandler.sendMessage(
@@ -1142,7 +1185,6 @@ class MediaRouter2ServiceImpl {
                     this, provider, uniqueRequestId, sessionInfo));
         }
 
-
         @Override
         public void onSessionUpdated(@NonNull MediaRoute2Provider provider,
                 @NonNull RoutingSessionInfo sessionInfo) {
@@ -1260,8 +1302,26 @@ class MediaRouter2ServiceImpl {
             return -1;
         }
 
-        private void requestCreateSessionOnHandler(long uniqueRequestId,
-                @NonNull RouterRecord routerRecord, @Nullable ManagerRecord managerRecord,
+        private void getSessionHintsForCreatingSessionOnHandler(long uniqueRequestId,
+                @NonNull RouterRecord routerRecord, @NonNull ManagerRecord managerRecord,
+                @NonNull MediaRoute2Info route) {
+            SessionCreationRequest request =
+                    new SessionCreationRequest(routerRecord, uniqueRequestId, route, managerRecord);
+            mSessionCreationRequests.add(request);
+
+            try {
+                routerRecord.mRouter.getSessionHintsForCreatingSession(uniqueRequestId, route);
+            } catch (RemoteException ex) {
+                Slog.w(TAG, "requestGetSessionHintsOnHandler: "
+                        + "Failed to request. Router probably died.");
+                mSessionCreationRequests.remove(request);
+                notifyRequestFailedToManager(managerRecord.mManager,
+                        toOriginalRequestId(uniqueRequestId), REASON_UNKNOWN_ERROR);
+            }
+        }
+
+        private void requestCreateSessionWithRouter2OnHandler(long uniqueRequestId,
+                @NonNull RouterRecord routerRecord,
                 @NonNull MediaRoute2Info route, @Nullable Bundle sessionHints) {
 
             final MediaRoute2Provider provider = findProvider(route.getProviderId());
@@ -1272,19 +1332,47 @@ class MediaRouter2ServiceImpl {
                         toOriginalRequestId(uniqueRequestId));
                 return;
             }
-            if (route.isSystemRoute() && !routerRecord.mHasModifyAudioRoutingPermission
-                    && !TextUtils.equals(route.getId(),
-                            mSystemProvider.getDefaultRoute().getId())) {
-                Slog.w(TAG, "MODIFY_AUDIO_ROUTING permission is required to transfer to"
-                        + route);
-                notifySessionCreationFailedToRouter(routerRecord,
-                        toOriginalRequestId(uniqueRequestId));
+
+            SessionCreationRequest request =
+                    new SessionCreationRequest(routerRecord, uniqueRequestId, route, null);
+            mSessionCreationRequests.add(request);
+
+            provider.requestCreateSession(uniqueRequestId, routerRecord.mPackageName,
+                    route.getOriginalId(), sessionHints);
+        }
+
+        private void requestCreateSessionWithManagerOnHandler(long uniqueRequestId,
+                @NonNull RouterRecord routerRecord,
+                @NonNull MediaRoute2Info route, @Nullable Bundle sessionHints) {
+            SessionCreationRequest matchingRequest = null;
+            for (SessionCreationRequest request : mSessionCreationRequests) {
+                if (request.mUniqueRequestId == uniqueRequestId) {
+                    matchingRequest = request;
+                    break;
+                }
+            }
+            if (matchingRequest == null) {
+                Slog.w(TAG, "requestCreateSessionWithKnownRequestOnHandler: "
+                        + "Ignoring an unknown request.");
                 return;
             }
 
-            SessionCreationRequest request =
-                    new SessionCreationRequest(routerRecord, uniqueRequestId, route, managerRecord);
-            mSessionCreationRequests.add(request);
+            if (!TextUtils.equals(matchingRequest.mRoute.getId(), route.getId())) {
+                Slog.w(TAG, "requestCreateSessionWithKnownRequestOnHandler: "
+                        + "The given route is different from the requested route.");
+                return;
+            }
+
+            final MediaRoute2Provider provider = findProvider(route.getProviderId());
+            if (provider == null) {
+                Slog.w(TAG, "Ignoring session creation request since no provider found for"
+                        + " given route=" + route);
+
+                mSessionCreationRequests.remove(matchingRequest);
+                notifyRequestFailedToManager(matchingRequest.mRequestedManagerRecord.mManager,
+                        toOriginalRequestId(uniqueRequestId), REASON_ROUTE_NOT_AVAILABLE);
+                return;
+            }
 
             provider.requestCreateSession(uniqueRequestId, routerRecord.mPackageName,
                     route.getOriginalId(), sessionHints);
@@ -1404,11 +1492,11 @@ class MediaRouter2ServiceImpl {
         }
 
         private void releaseSessionOnHandler(long uniqueRequestId,
-                @NonNull RouterRecord routerRecord, @NonNull String uniqueSessionId) {
+                @Nullable RouterRecord routerRecord, @NonNull String uniqueSessionId) {
             final RouterRecord matchingRecord = mSessionToRouterMap.get(uniqueSessionId);
             if (matchingRecord != routerRecord) {
-                Slog.w(TAG, "Ignoring releasing session from non-matching router."
-                        + " packageName=" + routerRecord.mPackageName
+                Slog.w(TAG, "Ignoring releasing session from non-matching router. packageName="
+                        + (routerRecord == null ? null : routerRecord.mPackageName)
                         + " uniqueSessionId=" + uniqueSessionId);
                 return;
             }
@@ -1486,8 +1574,15 @@ class MediaRouter2ServiceImpl {
             }
 
             // Succeeded
-            notifySessionCreatedToRouter(matchingRequest.mRouterRecord,
-                    toOriginalRequestId(uniqueRequestId), sessionInfo);
+            if (sessionInfo.isSystemSession()
+                    && !matchingRequest.mRouterRecord.mHasModifyAudioRoutingPermission) {
+                notifySessionCreatedToRouter(matchingRequest.mRouterRecord,
+                        toOriginalRequestId(uniqueRequestId),
+                        mSystemProvider.getDefaultSessionInfo());
+            } else {
+                notifySessionCreatedToRouter(matchingRequest.mRouterRecord,
+                        toOriginalRequestId(uniqueRequestId), sessionInfo);
+            }
             mSessionToRouterMap.put(sessionInfo.getId(), routerRecord);
         }
 

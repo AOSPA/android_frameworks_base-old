@@ -746,6 +746,15 @@ public class ListPopupWindow implements ShowableListMenu {
     }
 
     /**
+     * Remove existing exit transition from PopupWindow and force immediate dismissal.
+     * @hide
+     */
+    public void dismissImmediate() {
+        mPopup.setExitTransition(null);
+        dismiss();
+    }
+
+    /**
      * Set a listener to receive a callback when the popup is dismissed.
      *
      * @param listener Listener that will be notified when the popup is dismissed.
@@ -1005,6 +1014,7 @@ public class ListPopupWindow implements ShowableListMenu {
                         case KeyEvent.KEYCODE_DPAD_CENTER:
                         case KeyEvent.KEYCODE_DPAD_DOWN:
                         case KeyEvent.KEYCODE_DPAD_UP:
+                        case KeyEvent.KEYCODE_NUMPAD_ENTER:
                             return true;
                     }
                 } else {

@@ -201,6 +201,12 @@ public class SettingsInjector {
     }
 
     /**
+     * Gives descendants a chance to log Preference click event
+     */
+    protected void logPreferenceClick(Intent intent) {
+    }
+
+    /**
      * Returns the settings parsed from the attributes of the
      * {@link SettingInjectorService#META_DATA_NAME} tag, or null.
      *
@@ -314,6 +320,7 @@ public class SettingsInjector {
             // Settings > Location.
             Intent settingIntent = new Intent();
             settingIntent.setClassName(mInfo.packageName, mInfo.settingsActivity);
+            logPreferenceClick(settingIntent);
             // Sometimes the user may navigate back to "Settings" and launch another different
             // injected setting after one injected setting has been launched.
             //

@@ -68,7 +68,6 @@ import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.InsetDrawable;
 import android.graphics.drawable.LayerDrawable;
-import android.os.Build.VERSION_CODES;
 import android.util.DisplayMetrics;
 import android.util.Log;
 import android.util.Pair;
@@ -120,7 +119,6 @@ import com.android.internal.widget.DecorCaptionView;
 import com.android.internal.widget.FloatingToolbar;
 
 import java.util.List;
-import java.util.function.Function;
 
 /** @hide */
 public class DecorView extends FrameLayout implements RootViewSurfaceTaker, WindowCallbacks {
@@ -283,11 +281,6 @@ public class DecorView extends FrameLayout implements RootViewSurfaceTaker, Wind
     private Insets mLastBackgroundInsets = Insets.NONE;
     private boolean mDrawLegacyNavigationBarBackground;
 
-    /**
-     * Whether the app targets an SDK that uses the new insets APIs.
-     */
-    private boolean mUseNewInsetsApi;
-
     private PendingInsetsController mPendingInsetsController = new PendingInsetsController();
 
     DecorView(Context context, int featureId, PhoneWindow window,
@@ -319,7 +312,6 @@ public class DecorView extends FrameLayout implements RootViewSurfaceTaker, Wind
         initResizingPaints();
 
         mLegacyNavigationBarBackgroundPaint.setColor(Color.BLACK);
-        mUseNewInsetsApi = context.getApplicationInfo().targetSdkVersion >= VERSION_CODES.R;
     }
 
     void setBackgroundFallback(@Nullable Drawable fallbackDrawable) {
@@ -1189,23 +1181,23 @@ public class DecorView extends FrameLayout implements RootViewSurfaceTaker, Wind
         // these flags wouldn't make the window draw behind the navigation bar, unless
         // LAYOUT_HIDE_NAVIGATION was set.
         //
-        // Note: Once the app targets R+, we no longer do this logic because we can't rely on
-        // SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION to indicate whether the app wants to handle it by
-        // themselves.
+        // Note: Once the app uses the R+ Window.setDecorFitsSystemWindows(false) API we no longer
+        // consume insets because they might no longer set SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION.
         boolean hideNavigation = (sysUiVisibility & SYSTEM_UI_FLAG_HIDE_NAVIGATION) != 0
                 || !(controller == null || controller.isRequestedVisible(ITYPE_NAVIGATION_BAR));
+        boolean decorFitsSystemWindows = mWindow.mDecorFitsSystemWindows;
         boolean forceConsumingNavBar = (mForceWindowDrawsBarBackgrounds
                         && (attrs.flags & FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS) == 0
                         && (sysUiVisibility & SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION) == 0
+                        && decorFitsSystemWindows
                         && !hideNavigation)
                 || (mLastShouldAlwaysConsumeSystemBars && hideNavigation);
 
         boolean consumingNavBar =
                 ((attrs.flags & FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS) != 0
                         && (sysUiVisibility & SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION) == 0
-                        && !hideNavigation
-                        // TODO IME wrap_content windows need to have margin to work properly
-                        && (!mUseNewInsetsApi || isImeWindow))
+                        && decorFitsSystemWindows
+                        && !hideNavigation)
                 || forceConsumingNavBar;
 
         // If we didn't request fullscreen layout, but we still got it because of the
@@ -1216,6 +1208,7 @@ public class DecorView extends FrameLayout implements RootViewSurfaceTaker, Wind
                 || (attrs.flags & FLAG_FULLSCREEN) != 0
                 || !(controller == null || controller.isRequestedVisible(ITYPE_STATUS_BAR));
         boolean consumingStatusBar = (sysUiVisibility & SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN) == 0
+                && decorFitsSystemWindows
                 && (attrs.flags & FLAG_LAYOUT_IN_SCREEN) == 0
                 && (attrs.flags & FLAG_LAYOUT_INSET_DECOR) == 0
                 && mForceWindowDrawsBarBackgrounds
@@ -1638,9 +1631,7 @@ public class DecorView extends FrameLayout implements RootViewSurfaceTaker, Wind
 
         int opacity = PixelFormat.OPAQUE;
         final WindowConfiguration winConfig = getResources().getConfiguration().windowConfiguration;
-        // TODO(b/149585281) remove when root task has the correct bounds for freeform
-        final boolean renderShadowsInCompositor = mWindow.mRenderShadowsInCompositor
-                && winConfig.getWindowingMode() != WINDOWING_MODE_FREEFORM;
+        final boolean renderShadowsInCompositor = mWindow.mRenderShadowsInCompositor;
         // If we draw shadows in the compositor we don't need to force the surface to be
         // translucent.
         if (winConfig.hasWindowShadow() && !renderShadowsInCompositor) {
@@ -2028,8 +2019,15 @@ public class DecorView extends FrameLayout implements RootViewSurfaceTaker, Wind
             if (getForeground() != null) {
                 drawableChanged();
             }
-            getWindowInsetsController().setCaptionInsetsHeight(getCaptionInsetsHeight());
         }
+    }
+
+    /**
+     * An interface to be called when the caption visibility or height changed, to report the
+     * corresponding insets change to the InsetsController.
+     */
+    public void notifyCaptionHeightChanged() {
+        getWindowInsetsController().setCaptionInsetsHeight(getCaptionInsetsHeight());
     }
 
     void setWindow(PhoneWindow phoneWindow) {
@@ -2102,7 +2100,6 @@ public class DecorView extends FrameLayout implements RootViewSurfaceTaker, Wind
             mDecorCaptionView.onConfigurationChanged(displayWindowDecor);
             enableCaption(displayWindowDecor);
         }
-        getWindowInsetsController().setCaptionInsetsHeight(getCaptionInsetsHeight());
     }
 
     void onResourcesLoaded(LayoutInflater inflater, int layoutResource) {
@@ -2434,8 +2431,7 @@ public class DecorView extends FrameLayout implements RootViewSurfaceTaker, Wind
     private void updateElevation() {
         final int windowingMode =
                 getResources().getConfiguration().windowConfiguration.getWindowingMode();
-        final boolean renderShadowsInCompositor = mWindow.mRenderShadowsInCompositor
-                && windowingMode != WINDOWING_MODE_FREEFORM;
+        final boolean renderShadowsInCompositor = mWindow.mRenderShadowsInCompositor;
         // If rendering shadows in the compositor, don't set an elevation on the view
         if (renderShadowsInCompositor) {
             return;

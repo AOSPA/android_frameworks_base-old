@@ -32,9 +32,11 @@ import android.content.pm.PackageInstaller;
 import android.content.pm.PackageManager;
 import android.content.pm.PackageParser.PackageParserException;
 import android.content.pm.parsing.PackageInfoWithoutStateUtils;
+import android.content.pm.parsing.ParsingPackageUtils;
 import android.os.Binder;
 import android.os.Environment;
 import android.os.RemoteException;
+import android.os.ServiceManager;
 import android.os.Trace;
 import android.sysprop.ApexProperties;
 import android.util.ArrayMap;
@@ -48,6 +50,7 @@ import com.android.internal.util.IndentingPrintWriter;
 import com.android.internal.util.Preconditions;
 import com.android.server.pm.parsing.PackageParser2;
 import com.android.server.pm.parsing.pkg.AndroidPackage;
+import com.android.server.pm.parsing.pkg.ParsedPackage;
 import com.android.server.utils.TimingsTraceAndSlog;
 
 import com.google.android.collect.Lists;
@@ -59,7 +62,6 @@ import java.lang.annotation.RetentionPolicy;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
@@ -289,6 +291,21 @@ public abstract class ApexManager {
     abstract void registerApkInApex(AndroidPackage pkg);
 
     /**
+     * Reports error raised during installation of apk-in-apex.
+     *
+     * @param scanDir the directory of the apex inside which apk-in-apex resides.
+     */
+    abstract void reportErrorWithApkInApex(String scanDirPath);
+
+    /**
+     * Returns true if there were no errors when installing apk-in-apex inside
+     * {@param apexPackageName}, otherwise false.
+     *
+     * @param apexPackageName Package name of the apk container of apex
+     */
+    abstract boolean isApkInApexInstallSuccess(String apexPackageName);
+
+    /**
      * Returns list of {@code packageName} of apks inside the given apex.
      * @param apexPackageName Package name of the apk container of apex
      */
@@ -367,6 +384,13 @@ public abstract class ApexManager {
         @GuardedBy("mLock")
         private ArrayMap<String, List<String>> mApksInApex = new ArrayMap<>();
 
+        /**
+         * Contains the list of {@code Exception}s that were raised when installing apk-in-apex
+         * inside {@code apexModuleName}.
+         */
+        @GuardedBy("mLock")
+        private Set<String> mErrorWithApkInApex = new ArraySet<>();
+
         @GuardedBy("mLock")
         private List<PackageInfo> mAllPackagesCache;
 
@@ -398,11 +422,9 @@ public abstract class ApexManager {
          */
         @VisibleForTesting
         protected IApexService waitForApexService() {
-            try {
-                return IApexService.Stub.asInterface(Binder.waitForService("apexservice"));
-            } catch (RemoteException e) {
-                throw new IllegalStateException("Required service apexservice not available");
-            }
+            // Since apexd is a trusted platform component, synchronized calls are allowable
+            return IApexService.Stub.asInterface(
+                    Binder.allowBlocking(ServiceManager.waitForService("apexservice")));
         }
 
         @Override
@@ -460,7 +482,7 @@ public abstract class ApexManager {
             if (allPkgs.length == 0) {
                 return;
             }
-            int flags = PackageManager.GET_META_DATA
+            final int flags = PackageManager.GET_META_DATA
                     | PackageManager.GET_SIGNING_CERTIFICATES
                     | PackageManager.GET_SIGNATURES;
             ArrayMap<File, ApexInfo> parsingApexInfo = new ArrayMap<>();
@@ -469,7 +491,7 @@ public abstract class ApexManager {
 
             for (ApexInfo ai : allPkgs) {
                 File apexFile = new File(ai.modulePath);
-                parallelPackageParser.submit(apexFile, flags);
+                parallelPackageParser.submit(apexFile, 0);
                 parsingApexInfo.put(apexFile, ai);
             }
 
@@ -482,8 +504,18 @@ public abstract class ApexManager {
                 ApexInfo ai = parsingApexInfo.get(parseResult.scanFile);
 
                 if (throwable == null) {
+                    // Unfortunately, ParallelPackageParser won't collect certificates for us. We
+                    // need to manually collect them here.
+                    ParsedPackage pp = parseResult.parsedPackage;
+                    try {
+                        pp.setSigningDetails(
+                                ParsingPackageUtils.collectCertificates(pp, false));
+                    } catch (PackageParserException e) {
+                        throw new IllegalStateException(
+                                "Unable to collect certificates for " + ai.modulePath, e);
+                    }
                     final PackageInfo packageInfo = PackageInfoWithoutStateUtils.generate(
-                            parseResult.parsedPackage, ai, flags);
+                            pp, ai, flags);
                     if (packageInfo == null) {
                         throw new IllegalStateException("Unable to generate package info: "
                                 + ai.modulePath);
@@ -734,9 +766,7 @@ public abstract class ApexManager {
         @Override
         void registerApkInApex(AndroidPackage pkg) {
             synchronized (mLock) {
-                final Iterator<ActiveApexInfo> it = mActiveApexInfosCache.iterator();
-                while (it.hasNext()) {
-                    final ActiveApexInfo aai = it.next();
+                for (ActiveApexInfo aai : mActiveApexInfosCache) {
                     if (pkg.getBaseCodePath().startsWith(aai.apexDirectory.getAbsolutePath())) {
                         List<String> apks = mApksInApex.get(aai.apexModuleName);
                         if (apks == null) {
@@ -746,6 +776,30 @@ public abstract class ApexManager {
                         apks.add(pkg.getPackageName());
                     }
                 }
+            }
+        }
+
+        @Override
+        void reportErrorWithApkInApex(String scanDirPath) {
+            synchronized (mLock) {
+                for (ActiveApexInfo aai : mActiveApexInfosCache) {
+                    if (scanDirPath.startsWith(aai.apexDirectory.getAbsolutePath())) {
+                        mErrorWithApkInApex.add(aai.apexModuleName);
+                    }
+                }
+            }
+        }
+
+        @Override
+        boolean isApkInApexInstallSuccess(String apexPackageName) {
+            synchronized (mLock) {
+                Preconditions.checkState(mPackageNameToApexModuleName != null,
+                        "APEX packages have not been scanned");
+                String moduleName = mPackageNameToApexModuleName.get(apexPackageName);
+                if (moduleName == null) {
+                    return false;
+                }
+                return !mErrorWithApkInApex.contains(moduleName);
             }
         }
 
@@ -1038,6 +1092,16 @@ public abstract class ApexManager {
         @Override
         void registerApkInApex(AndroidPackage pkg) {
             // No-op
+        }
+
+        @Override
+        void reportErrorWithApkInApex(String scanDirPath) {
+            // No-op
+        }
+
+        @Override
+        boolean isApkInApexInstallSuccess(String apexPackageName) {
+            return true;
         }
 
         @Override

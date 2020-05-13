@@ -888,8 +888,8 @@ public class Intent implements Parcelable, Cloneable {
 
                 public ShortcutIconResource createFromParcel(Parcel source) {
                     ShortcutIconResource icon = new ShortcutIconResource();
-                    icon.packageName = source.readString();
-                    icon.resourceName = source.readString();
+                    icon.packageName = source.readString8();
+                    icon.resourceName = source.readString8();
                     return icon;
                 }
 
@@ -906,8 +906,8 @@ public class Intent implements Parcelable, Cloneable {
         }
 
         public void writeToParcel(Parcel dest, int flags) {
-            dest.writeString(packageName);
-            dest.writeString(resourceName);
+            dest.writeString8(packageName);
+            dest.writeString8(resourceName);
         }
 
         @Override
@@ -1885,8 +1885,9 @@ public class Intent implements Parcelable, Cloneable {
     /**
      * Activity action: Launch UI to manage auto-revoke state.
      * <p>
-     * Input: {@link #EXTRA_PACKAGE_NAME} specifies the package whose
-     * auto-revoke state will be reviewed (mandatory).
+     * Input: {@link Intent#setData data} should be a {@code package}-scheme {@link Uri} with
+     * a package name, whose auto-revoke state will be reviewed (mandatory).
+     * E.g. {@code Uri.fromParts("package", packageName, null) }
      * </p>
      * <p>
      * Output: Nothing.
@@ -6026,6 +6027,8 @@ public class Intent implements Parcelable, Cloneable {
             FLAG_ACTIVITY_TASK_ON_HOME,
             FLAG_ACTIVITY_RETAIN_IN_RECENTS,
             FLAG_ACTIVITY_LAUNCH_ADJACENT,
+            FLAG_ACTIVITY_REQUIRE_NON_BROWSER,
+            FLAG_ACTIVITY_REQUIRE_DEFAULT,
             FLAG_RECEIVER_REGISTERED_ONLY,
             FLAG_RECEIVER_REPLACE_PENDING,
             FLAG_RECEIVER_FOREGROUND,
@@ -10819,12 +10822,12 @@ public class Intent implements Parcelable, Cloneable {
     }
 
     public void writeToParcel(Parcel out, int flags) {
-        out.writeString(mAction);
+        out.writeString8(mAction);
         Uri.writeToParcel(out, mData);
-        out.writeString(mType);
-        out.writeString(mIdentifier);
+        out.writeString8(mType);
+        out.writeString8(mIdentifier);
         out.writeInt(mFlags);
-        out.writeString(mPackage);
+        out.writeString8(mPackage);
         ComponentName.writeToParcel(mComponent, out);
 
         if (mSourceBounds != null) {
@@ -10838,7 +10841,7 @@ public class Intent implements Parcelable, Cloneable {
             final int N = mCategories.size();
             out.writeInt(N);
             for (int i=0; i<N; i++) {
-                out.writeString(mCategories.valueAt(i));
+                out.writeString8(mCategories.valueAt(i));
             }
         } else {
             out.writeInt(0);
@@ -10877,12 +10880,12 @@ public class Intent implements Parcelable, Cloneable {
     }
 
     public void readFromParcel(Parcel in) {
-        setAction(in.readString());
+        setAction(in.readString8());
         mData = Uri.CREATOR.createFromParcel(in);
-        mType = in.readString();
-        mIdentifier = in.readString();
+        mType = in.readString8();
+        mIdentifier = in.readString8();
         mFlags = in.readInt();
-        mPackage = in.readString();
+        mPackage = in.readString8();
         mComponent = ComponentName.readFromParcel(in);
 
         if (in.readInt() != 0) {
@@ -10894,7 +10897,7 @@ public class Intent implements Parcelable, Cloneable {
             mCategories = new ArraySet<String>();
             int i;
             for (i=0; i<N; i++) {
-                mCategories.add(in.readString().intern());
+                mCategories.add(in.readString8().intern());
             }
         } else {
             mCategories = null;

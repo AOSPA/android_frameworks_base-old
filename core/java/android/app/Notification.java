@@ -2301,11 +2301,11 @@ public class Notification implements Parcelable
 
         priority = parcel.readInt();
 
-        category = parcel.readString();
+        category = parcel.readString8();
 
-        mGroupKey = parcel.readString();
+        mGroupKey = parcel.readString8();
 
-        mSortKey = parcel.readString();
+        mSortKey = parcel.readString8();
 
         extras = Bundle.setDefusable(parcel.readBundle(), true); // may be null
         fixDuplicateExtras();
@@ -2329,12 +2329,12 @@ public class Notification implements Parcelable
         color = parcel.readInt();
 
         if (parcel.readInt() != 0) {
-            mChannelId = parcel.readString();
+            mChannelId = parcel.readString8();
         }
         mTimeout = parcel.readLong();
 
         if (parcel.readInt() != 0) {
-            mShortcutId = parcel.readString();
+            mShortcutId = parcel.readString8();
         }
 
         if (parcel.readInt() != 0) {
@@ -2766,11 +2766,11 @@ public class Notification implements Parcelable
 
         parcel.writeInt(priority);
 
-        parcel.writeString(category);
+        parcel.writeString8(category);
 
-        parcel.writeString(mGroupKey);
+        parcel.writeString8(mGroupKey);
 
-        parcel.writeString(mSortKey);
+        parcel.writeString8(mSortKey);
 
         parcel.writeBundle(extras); // null ok
 
@@ -2803,7 +2803,7 @@ public class Notification implements Parcelable
 
         if (mChannelId != null) {
             parcel.writeInt(1);
-            parcel.writeString(mChannelId);
+            parcel.writeString8(mChannelId);
         } else {
             parcel.writeInt(0);
         }
@@ -2811,7 +2811,7 @@ public class Notification implements Parcelable
 
         if (mShortcutId != null) {
             parcel.writeInt(1);
-            parcel.writeString(mShortcutId);
+            parcel.writeString8(mShortcutId);
         } else {
             parcel.writeInt(0);
         }
@@ -3071,8 +3071,8 @@ public class Notification implements Parcelable
         StringBuilder sb = new StringBuilder();
         sb.append("Notification(channel=");
         sb.append(getChannelId());
-        sb.append(" pri=");
-        sb.append(priority);
+        sb.append(" shortcut=");
+        sb.append(getShortcutId());
         sb.append(" contentView=");
         if (contentView != null) {
             sb.append(contentView.getPackage());
@@ -3513,7 +3513,7 @@ public class Notification implements Parcelable
         }
 
         /**
-         * @deprecated use {@link Notification.Builder#Notification.Builder(Context, String)}
+         * @deprecated use {@link #Builder(Context, String)}
          * instead. All posted Notifications must specify a NotificationChannel Id.
          */
         @Deprecated
@@ -3594,22 +3594,44 @@ public class Notification implements Parcelable
         }
 
         /**
-         * If this notification is duplicative of a Launcher shortcut, sets the
-         * {@link ShortcutInfo#getId() id} of the shortcut, in case the Launcher wants to hide
-         * the shortcut.
+         * From Android 11, messaging notifications (those that use {@link MessagingStyle}) that
+         * use this method to link to a published long-lived sharing shortcut may appear in a
+         * dedicated Conversation section of the shade and may show configuration options that
+         * are unique to conversations. This behavior should be reserved for person to person(s)
+         * conversations where there is a likely social obligation for an individual to respond.
+         * <p>
+         * For example, the following are some examples of notifications that belong in the
+         * conversation space:
+         * <ul>
+         * <li>1:1 conversations between two individuals</li>
+         * <li>Group conversations between individuals where everyone can contribute</li>
+         * </ul>
+         * And the following are some examples of notifications that do not belong in the
+         * conversation space:
+         * <ul>
+         * <li>Advertisements from a bot (even if personal and contextualized)</li>
+         * <li>Engagement notifications from a bot</li>
+         * <li>Directional conversations where there is an active speaker and many passive
+         * individuals</li>
+         * <li>Stream / posting updates from other individuals</li>
+         * </ul>
+         * </p>
          *
-         * This field will be ignored by Launchers that don't support badging, don't show
-         * notification content, or don't show {@link android.content.pm.ShortcutManager shortcuts}.
-         *
+         * <p>
+         * Additionally, this method can be used for all types of notifications to mark this
+         * notification as duplicative of a Launcher shortcut. Launchers that show badges or
+         * notification content may then suppress the shortcut in favor of the content of this
+         * notification.
+         * <p>
          * If this notification has {@link BubbleMetadata} attached that was created with
          * a shortcutId a check will be performed to ensure the shortcutId supplied to bubble
          * metadata matches the shortcutId set here, if one was set. If the shortcutId's were
          * specified but do not match, an exception is thrown.
          *
          * @param shortcutId the {@link ShortcutInfo#getId() id} of the shortcut this notification
-         *                   supersedes
+         *                   is linked to
          *
-         * @see Notification.BubbleMetadata.Builder#Builder(String)
+         * @see BubbleMetadata.Builder#Builder(String)
          */
         @NonNull
         public Builder setShortcutId(String shortcutId) {
@@ -5971,7 +5993,7 @@ public class Notification implements Parcelable
          * metadata matches the shortcutId set on the  notification builder, if one was set.
          * If the shortcutId's were specified but do not match, an exception is thrown here.
          *
-         * @see Notification.BubbleMetadata.Builder#Builder(String)
+         * @see BubbleMetadata.Builder#Builder(String)
          * @see #setShortcutId(String)
          */
         @NonNull
@@ -7275,7 +7297,7 @@ public class Notification implements Parcelable
          * Should be unique amongst all individuals in the conversation, and should be
          * consistent during re-posts of the notification.
          *
-         * @see Message#Notification.MessagingStyle.Message(CharSequence, long, CharSequence)
+         * @see Message#Message(CharSequence, long, CharSequence)
          *
          * @return this object for method chaining
          *
@@ -7295,7 +7317,7 @@ public class Notification implements Parcelable
          * Should be <code>null</code> for messages by the current user, in which case
          * the platform will insert the user set in {@code MessagingStyle(Person)}.
          *
-         * @see Message#Notification.MessagingStyle.Message(CharSequence, long, CharSequence)
+         * @see Message#Message(CharSequence, long, CharSequence)
          *
          * @return this object for method chaining
          */
@@ -7589,10 +7611,8 @@ public class Notification implements Parcelable
                     >= Build.VERSION_CODES.P;
             boolean isOneToOne;
             CharSequence nameReplacement = null;
-            Icon avatarReplacement = null;
             if (!atLeastP) {
                 isOneToOne = TextUtils.isEmpty(conversationTitle);
-                avatarReplacement = mBuilder.mN.mLargeIcon;
                 if (hasOnlyWhiteSpaceSenders()) {
                     isOneToOne = true;
                     nameReplacement = conversationTitle;
@@ -7641,7 +7661,7 @@ public class Notification implements Parcelable
             contentView.setBoolean(R.id.status_bar_latest_event_content, "setIsCollapsed",
                     isCollapsed);
             contentView.setIcon(R.id.status_bar_latest_event_content, "setAvatarReplacement",
-                    avatarReplacement);
+                    mBuilder.mN.mLargeIcon);
             contentView.setCharSequence(R.id.status_bar_latest_event_content, "setNameReplacement",
                     nameReplacement);
             contentView.setBoolean(R.id.status_bar_latest_event_content, "setIsOneToOne",
@@ -8853,7 +8873,7 @@ public class Notification implements Parcelable
             }
             mDesiredHeightResId = in.readInt();
             if (in.readInt() != 0) {
-                mShortcutId = in.readString();
+                mShortcutId = in.readString8();
             }
         }
 
@@ -9009,7 +9029,7 @@ public class Notification implements Parcelable
             out.writeInt(mDesiredHeightResId);
             out.writeInt(TextUtils.isEmpty(mShortcutId) ? 0 : 1);
             if (!TextUtils.isEmpty(mShortcutId)) {
-                out.writeString(mShortcutId);
+                out.writeString8(mShortcutId);
             }
         }
 

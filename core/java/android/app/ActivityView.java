@@ -29,6 +29,7 @@ import android.graphics.Matrix;
 import android.graphics.Point;
 import android.graphics.Rect;
 import android.graphics.Region;
+import android.hardware.display.VirtualDisplay;
 import android.os.Bundle;
 import android.os.UserHandle;
 import android.util.AttributeSet;
@@ -90,11 +91,23 @@ public class ActivityView extends ViewGroup implements android.window.TaskEmbedd
 
     public ActivityView(Context context, AttributeSet attrs, int defStyle,
             boolean singleTaskInstance) {
+        this(context, attrs, defStyle, singleTaskInstance, false /* usePublicVirtualDisplay */);
+    }
+
+    /**
+     * This constructor let's the caller explicitly request a public virtual display as the backing
+     * display. Using a public display is not recommended as it exposes it to other applications,
+     * but it might be needed for backwards compatibility.
+     */
+    public ActivityView(
+            @NonNull Context context, @NonNull AttributeSet attrs, int defStyle,
+            boolean singleTaskInstance, boolean usePublicVirtualDisplay) {
         super(context, attrs, defStyle);
         if (useTaskOrganizer()) {
             mTaskEmbedder = new TaskOrganizerTaskEmbedder(context, this);
         } else {
-            mTaskEmbedder = new VirtualDisplayTaskEmbedder(context, this, singleTaskInstance);
+            mTaskEmbedder = new VirtualDisplayTaskEmbedder(context, this, singleTaskInstance,
+                    usePublicVirtualDisplay);
         }
         mSurfaceView = new SurfaceView(context);
         // Since ActivityView#getAlpha has been overridden, we should use parent class's alpha
@@ -429,6 +442,14 @@ public class ActivityView extends ViewGroup implements android.window.TaskEmbedd
      */
     public int getVirtualDisplayId() {
         return mTaskEmbedder.getDisplayId();
+    }
+
+    /**
+     * @hide
+     * @return virtual display.
+     */
+    public VirtualDisplay getVirtualDisplay() {
+        return mTaskEmbedder.getVirtualDisplay();
     }
 
     /**

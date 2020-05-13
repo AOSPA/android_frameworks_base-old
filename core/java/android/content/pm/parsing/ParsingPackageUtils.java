@@ -21,8 +21,8 @@ import static android.content.pm.ActivityInfo.RESIZE_MODE_UNRESIZEABLE;
 import static android.content.pm.PackageManager.FEATURE_WATCH;
 import static android.content.pm.PackageManager.INSTALL_PARSE_FAILED_BAD_MANIFEST;
 import static android.content.pm.PackageManager.INSTALL_PARSE_FAILED_INCONSISTENT_CERTIFICATES;
-import static android.content.pm.PackageManager.INSTALL_PARSE_FAILED_NOT_APK;
 import static android.content.pm.PackageManager.INSTALL_PARSE_FAILED_ONLY_COREAPP_ALLOWED;
+import static android.content.pm.PackageManager.INSTALL_PARSE_FAILED_RESOURCES_ARSC_COMPRESSED;
 import static android.content.pm.PackageManager.INSTALL_PARSE_FAILED_UNEXPECTED_EXCEPTION;
 import static android.os.Build.VERSION_CODES.DONUT;
 import static android.os.Build.VERSION_CODES.O;
@@ -84,7 +84,6 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.FileUtils;
 import android.os.RemoteException;
-import android.os.SystemProperties;
 import android.os.Trace;
 import android.os.ext.SdkExtensions;
 import android.text.TextUtils;
@@ -95,6 +94,7 @@ import android.util.DisplayMetrics;
 import android.util.Pair;
 import android.util.Slog;
 import android.util.SparseArray;
+import android.util.SparseIntArray;
 import android.util.TypedValue;
 import android.util.apk.ApkSignatureVerifier;
 
@@ -253,10 +253,8 @@ public class ParsingPackageUtils {
             final File baseApk = new File(lite.baseCodePath);
             ParseResult<ParsingPackage> result = parseBaseApk(input, baseApk,
                     lite.codePath, assets, flags);
-            // TODO(b/135203078): Pass original error up?
             if (result.isError()) {
-                return input.error(INSTALL_PARSE_FAILED_NOT_APK,
-                        "Failed to parse base APK: " + baseApk);
+                return input.error(result);
             }
 
             ParsingPackage pkg = result.getResult();
@@ -347,7 +345,19 @@ public class ParsingPackageUtils {
                                 + result.getErrorMessage());
             }
 
-            ParsingPackage pkg = result.getResult();
+            final ParsingPackage pkg = result.getResult();
+            if (assets.containsAllocatedTable()) {
+                final ParseResult<?> deferResult = input.deferError(
+                        "Targeting R+ (version " + Build.VERSION_CODES.R + " and above) requires"
+                                + " the resources.arsc of installed APKs to be stored uncompressed"
+                                + " and aligned on a 4-byte boundary",
+                        DeferredError.RESOURCES_ARSC_COMPRESSED);
+                if (deferResult.isError()) {
+                    return input.error(INSTALL_PARSE_FAILED_RESOURCES_ARSC_COMPRESSED,
+                            deferResult.getErrorMessage());
+                }
+            }
+
             ApkAssets apkAssets = assets.getApkAssets()[0];
             if (apkAssets.definesOverlayable()) {
                 SparseArray<String> packageNames = assets.getAssignedPackageIdentifiers();
@@ -1244,6 +1254,7 @@ public class ParsingPackageUtils {
 
                 int type;
                 final int innerDepth = parser.getDepth();
+                SparseIntArray minExtensionVersions = null;
                 while ((type = parser.next()) != XmlPullParser.END_DOCUMENT
                         && (type != XmlPullParser.END_TAG || parser.getDepth() > innerDepth)) {
                     if (type == XmlPullParser.END_TAG || type == XmlPullParser.TEXT) {
@@ -1252,7 +1263,10 @@ public class ParsingPackageUtils {
 
                     final ParseResult result;
                     if (parser.getName().equals("extension-sdk")) {
-                        result = parseExtensionSdk(input, pkg, res, parser);
+                        if (minExtensionVersions == null) {
+                            minExtensionVersions = new SparseIntArray();
+                        }
+                        result = parseExtensionSdk(input, res, parser, minExtensionVersions);
                         XmlUtils.skipCurrentTag(parser);
                     } else {
                         result = ParsingUtils.unknownTag("<uses-sdk>", pkg, parser, input);
@@ -1262,6 +1276,7 @@ public class ParsingPackageUtils {
                         return input.error(result);
                     }
                 }
+                pkg.setMinExtensionVersions(exactSizedCopyOfSparseArray(minExtensionVersions));
             } finally {
                 sa.recycle();
             }
@@ -1269,8 +1284,21 @@ public class ParsingPackageUtils {
         return input.success(pkg);
     }
 
-    private static ParseResult parseExtensionSdk(ParseInput input, ParsingPackage pkg,
-            Resources res, XmlResourceParser parser) {
+    @Nullable
+    private static SparseIntArray exactSizedCopyOfSparseArray(@Nullable SparseIntArray input) {
+        if (input == null) {
+            return null;
+        }
+        SparseIntArray output = new SparseIntArray(input.size());
+        for (int i = 0; i < input.size(); i++) {
+            output.put(input.keyAt(i), input.valueAt(i));
+        }
+        return output;
+    }
+
+    private static ParseResult<SparseIntArray> parseExtensionSdk(
+            ParseInput input, Resources res, XmlResourceParser parser,
+            SparseIntArray minExtensionVersions) {
         int sdkVersion;
         int minVersion;
         TypedArray sa = res.obtainAttributes(parser, R.styleable.AndroidManifestExtensionSdk);
@@ -1305,7 +1333,8 @@ public class ParsingPackageUtils {
                     PackageManager.INSTALL_PARSE_FAILED_MANIFEST_MALFORMED,
                     "Specified sdkVersion " + sdkVersion + " is not valid");
         }
-        return input.success(pkg);
+        minExtensionVersions.put(sdkVersion, minVersion);
+        return input.success(minExtensionVersions);
     }
 
     /**
@@ -1500,8 +1529,8 @@ public class ParsingPackageUtils {
             } else if (parser.getName().equals("package")) {
                 final TypedArray sa = res.obtainAttributes(parser,
                         R.styleable.AndroidManifestQueriesPackage);
-                final String packageName = sa.getString(
-                        R.styleable.AndroidManifestQueriesPackage_name);
+                final String packageName = sa.getNonConfigurationString(
+                        R.styleable.AndroidManifestQueriesPackage_name, 0);
                 if (TextUtils.isEmpty(packageName)) {
                     return input.error("Package name is missing from package tag.");
                 }
@@ -1510,8 +1539,8 @@ public class ParsingPackageUtils {
                 final TypedArray sa = res.obtainAttributes(parser,
                         R.styleable.AndroidManifestQueriesProvider);
                 try {
-                    final String authorities =
-                            sa.getString(R.styleable.AndroidManifestQueriesProvider_authorities);
+                    final String authorities = sa.getNonConfigurationString(
+                            R.styleable.AndroidManifestQueriesProvider_authorities, 0);
                     if (TextUtils.isEmpty(authorities)) {
                         return input.error(
                                 PackageManager.INSTALL_PARSE_FAILED_MANIFEST_MALFORMED,
@@ -2317,15 +2346,13 @@ public class ParsingPackageUtils {
                     R.styleable.AndroidManifestResourceOverlay_requiredSystemPropertyName);
             String propValue = sa.getString(
                     R.styleable.AndroidManifestResourceOverlay_requiredSystemPropertyValue);
-            if (!checkOverlayRequiredSystemProperty(propName, propValue)) {
-                Slog.i(TAG, "Skipping target and overlay pair " + target + " and "
+            if (!PackageParser.checkRequiredSystemProperties(propName, propValue)) {
+                String message = "Skipping target and overlay pair " + target + " and "
                         + pkg.getBaseCodePath()
                         + ": overlay ignored due to required system property: "
-                        + propName + " with value: " + propValue);
-                return input.error("Skipping target and overlay pair " + target + " and "
-                        + pkg.getBaseCodePath()
-                        + ": overlay ignored due to required system property: "
-                        + propName + " with value: " + propValue);
+                        + propName + " with value: " + propValue;
+                Slog.i(TAG, message);
+                return input.skip(message);
             }
 
             return input.success(pkg.setOverlay(true)
@@ -2489,24 +2516,6 @@ public class ParsingPackageUtils {
                 }
             }
         }
-    }
-
-    private static boolean checkOverlayRequiredSystemProperty(String propName, String propValue) {
-        if (TextUtils.isEmpty(propName) || TextUtils.isEmpty(propValue)) {
-            if (!TextUtils.isEmpty(propName) || !TextUtils.isEmpty(propValue)) {
-                // malformed condition - incomplete
-                Slog.w(TAG, "Disabling overlay - incomplete property :'" + propName
-                        + "=" + propValue + "' - require both requiredSystemPropertyName"
-                        + " AND requiredSystemPropertyValue to be specified.");
-                return false;
-            }
-            // no valid condition set - so no exclusion criteria, overlay will be included.
-            return true;
-        }
-
-        // check property value - make sure it is both set and equal to expected value
-        final String currValue = SystemProperties.get(propName);
-        return (currValue != null && currValue.equals(propValue));
     }
 
     /**

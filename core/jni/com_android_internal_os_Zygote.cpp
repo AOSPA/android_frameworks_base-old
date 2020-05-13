@@ -121,6 +121,7 @@ typedef const std::function<void(std::string)>& fail_fn_t;
 
 static pid_t gSystemServerPid = 0;
 
+static constexpr const char* kVoldAppDataIsolation = "persist.sys.vold_app_data_isolation_enabled";
 static constexpr const char* kPropFuse = "persist.sys.fuse";
 static const char kZygoteClassName[] = "com/android/internal/os/Zygote";
 static jclass gZygoteClass;
@@ -840,6 +841,7 @@ static void MountEmulatedStorage(uid_t uid, jint mount_mode,
              multiuser_get_uid(user_id, AID_EVERYBODY), fail_fn);
 
   bool isFuse = GetBoolProperty(kPropFuse, false);
+  bool isAppDataIsolationEnabled = GetBoolProperty(kVoldAppDataIsolation, false);
 
   if (isFuse) {
     if (mount_mode == MOUNT_EXTERNAL_PASS_THROUGH) {
@@ -849,6 +851,9 @@ static void MountEmulatedStorage(uid_t uid, jint mount_mode,
     } else if (mount_mode == MOUNT_EXTERNAL_INSTALLER) {
       const std::string installer_source = StringPrintf("/mnt/installer/%d", user_id);
       BindMount(installer_source, "/storage", fail_fn);
+    } else if (isAppDataIsolationEnabled && mount_mode == MOUNT_EXTERNAL_ANDROID_WRITABLE) {
+      const std::string writable_source = StringPrintf("/mnt/androidwritable/%d", user_id);
+      BindMount(writable_source, "/storage", fail_fn);
     } else {
       BindMount(user_source, "/storage", fail_fn);
     }
@@ -1559,22 +1564,15 @@ static void isolateJitProfile(JNIEnv* env, jobjectArray pkg_data_info_list,
 static void BindMountStorageToLowerFs(const userid_t user_id, const char* dir_name,
     const char* package, fail_fn_t fail_fn) {
 
-  bool hasPackage = (package != nullptr);
   bool hasSdcardFs = IsFilesystemSupported("sdcardfs");
   std::string source;
   if (hasSdcardFs) {
-    source = hasPackage ?
-        StringPrintf("/mnt/runtime/default/emulated/%d/%s/%s", user_id, dir_name, package) :
-        StringPrintf("/mnt/runtime/default/emulated/%d/%s", user_id, dir_name);
+    source = StringPrintf("/mnt/runtime/default/emulated/%d/%s/%s", user_id, dir_name, package);
   } else {
-    source = hasPackage ?
-        StringPrintf("/mnt/pass_through/%d/emulated/%d/%s/%s",
-            user_id, user_id, dir_name, package) :
-        StringPrintf("/mnt/pass_through/%d/emulated/%d/%s", user_id, user_id, dir_name);
+    source = StringPrintf("/mnt/pass_through/%d/emulated/%d/%s/%s",
+        user_id, user_id, dir_name, package);
   }
-  std::string target = hasPackage ?
-      StringPrintf("/storage/emulated/%d/%s/%s", user_id, dir_name, package) :
-      StringPrintf("/storage/emulated/%d/%s", user_id, dir_name);
+  std::string target = StringPrintf("/storage/emulated/%d/%s/%s", user_id, dir_name, package);
 
   if (access(source.c_str(), F_OK) != 0) {
     fail_fn(CREATE_ERROR("Error accessing %s: %s", source.c_str(), strerror(errno)));
@@ -1598,10 +1596,7 @@ static void BindMountStorageDirs(JNIEnv* env, jobjectArray pkg_data_info_list,
   int size = (pkg_data_info_list != nullptr) ? env->GetArrayLength(pkg_data_info_list) : 0;
 
   if (size == 0) {
-    // App data isolation is not enabled for this process, so we bind mount to whole obb/ dir.
-    BindMountStorageToLowerFs(user_id, "Android/obb", /* package */ nullptr, fail_fn);
-    BindMountStorageToLowerFs(user_id, "Android/data", /* package */ nullptr, fail_fn);
-    return;
+    fail_fn(CREATE_ERROR("Data package list cannot be empty"));
   }
 
   // Bind mount each package obb directory
@@ -1662,7 +1657,9 @@ static void SpecializeCommon(JNIEnv* env, uid_t uid, gid_t gid, jintArray gids,
             uid, process_name, managed_nice_name, fail_fn);
     isolateJitProfile(env, pkg_data_info_list, uid, process_name, managed_nice_name, fail_fn);
   }
-  if ((mount_external != MOUNT_EXTERNAL_INSTALLER) && mount_storage_dirs) {
+  if (mount_external != MOUNT_EXTERNAL_INSTALLER &&
+      mount_external != MOUNT_EXTERNAL_PASS_THROUGH &&
+      mount_storage_dirs) {
     BindMountStorageDirs(env, pkg_data_info_list, uid, process_name, managed_nice_name, fail_fn);
   }
 

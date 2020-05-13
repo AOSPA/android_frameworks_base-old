@@ -17,8 +17,10 @@
 package com.android.server.wm;
 
 import static android.Manifest.permission.MANAGE_ACTIVITY_STACKS;
+import static android.Manifest.permission.READ_FRAME_BUFFER;
 
 import static com.android.server.wm.ActivityStackSupervisor.PRESERVE_WINDOWS;
+import static com.android.server.wm.ActivityTaskManagerService.LAYOUT_REASON_CONFIG_CHANGED;
 import static com.android.server.wm.Task.FLAG_FORCE_HIDDEN_FOR_TASK_ORG;
 import static com.android.server.wm.WindowContainer.POSITION_BOTTOM;
 import static com.android.server.wm.WindowContainer.POSITION_TOP;
@@ -26,17 +28,20 @@ import static com.android.server.wm.WindowContainer.POSITION_TOP;
 import android.app.WindowConfiguration;
 import android.content.pm.ActivityInfo;
 import android.content.res.Configuration;
+import android.graphics.PixelFormat;
 import android.graphics.Rect;
 import android.os.Binder;
 import android.os.IBinder;
 import android.os.RemoteException;
 import android.util.ArraySet;
 import android.util.Slog;
+import android.view.Surface;
 import android.view.SurfaceControl;
 import android.window.IDisplayAreaOrganizerController;
 import android.window.ITaskOrganizerController;
 import android.window.IWindowContainerTransactionCallback;
 import android.window.IWindowOrganizerController;
+import android.window.WindowContainerToken;
 import android.window.WindowContainerTransaction;
 
 import com.android.internal.util.function.pooled.PooledConsumer;
@@ -129,6 +134,10 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
                         final Map.Entry<IBinder, WindowContainerTransaction.Change> entry =
                                 entries.next();
                         final WindowContainer wc = WindowContainer.fromBinder(entry.getKey());
+                        if (!wc.isAttached()) {
+                            Slog.e(TAG, "Attempt to operate on detached container: " + wc);
+                            continue;
+                        }
                         int containerEffect = applyWindowContainerChange(wc, entry.getValue());
                         effects |= containerEffect;
 
@@ -146,6 +155,10 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
                     for (int i = 0, n = hops.size(); i < n; ++i) {
                         final WindowContainerTransaction.HierarchyOp hop = hops.get(i);
                         final WindowContainer wc = WindowContainer.fromBinder(hop.getContainer());
+                        if (!wc.isAttached()) {
+                            Slog.e(TAG, "Attempt to operate on detached container: " + wc);
+                            continue;
+                        }
                         effects |= sanitizeAndApplyHierarchyOp(wc, hop);
                     }
                     if ((effects & TRANSACT_EFFECTS_LIFECYCLE) != 0) {
@@ -156,7 +169,7 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
                         final PooledConsumer f = PooledLambda.obtainConsumer(
                                 ActivityRecord::ensureActivityConfiguration,
                                 PooledLambda.__(ActivityRecord.class), 0,
-                                false /* preserveWindow */);
+                                true /* preserveWindow */);
                         try {
                             for (int i = haveConfigChanges.size() - 1; i >= 0; --i) {
                                 haveConfigChanges.valueAt(i).forAllActivities(f);
@@ -164,6 +177,10 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
                         } finally {
                             f.recycle();
                         }
+                    }
+
+                    if ((effects & TRANSACT_EFFECTS_CLIENT_CONFIG) == 0) {
+                        mService.addWindowLayoutReasons(LAYOUT_REASON_CONFIG_CHANGED);
                     }
                 } finally {
                     mService.continueWindowLayout();
@@ -178,12 +195,7 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
         return syncId;
     }
 
-    private int sanitizeAndApplyChange(WindowContainer container,
-            WindowContainerTransaction.Change change) {
-        if (!(container instanceof Task)) {
-            throw new RuntimeException("Invalid token in task transaction");
-        }
-        final Task task = (Task) container;
+    private int applyChanges(WindowContainer container, WindowContainerTransaction.Change change) {
         // The "client"-facing API should prevent bad changes; however, just in case, sanitize
         // masks here.
         final int configMask = change.getConfigSetMask() & CONTROLLABLE_CONFIGS;
@@ -203,11 +215,38 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
                 effects |= TRANSACT_EFFECTS_LIFECYCLE;
             }
         }
-        if ((change.getChangeMask() & WindowContainerTransaction.Change.CHANGE_HIDDEN) != 0) {
-            if (task.setForceHidden(FLAG_FORCE_HIDDEN_FOR_TASK_ORG, change.getHidden())) {
-                effects |= TRANSACT_EFFECTS_LIFECYCLE;
+
+        final int windowingMode = change.getWindowingMode();
+        if (windowingMode > -1) {
+            container.setWindowingMode(windowingMode);
+        }
+        return effects;
+    }
+
+    private int applyTaskChanges(Task tr, WindowContainerTransaction.Change c) {
+        int effects = 0;
+        final SurfaceControl.Transaction t = c.getBoundsChangeTransaction();
+
+        if ((c.getChangeMask() & WindowContainerTransaction.Change.CHANGE_HIDDEN) != 0) {
+            if (tr.setForceHidden(FLAG_FORCE_HIDDEN_FOR_TASK_ORG, c.getHidden())) {
+                effects = TRANSACT_EFFECTS_LIFECYCLE;
             }
         }
+
+        final int childWindowingMode = c.getActivityWindowingMode();
+        if (childWindowingMode > -1) {
+            tr.setActivityWindowingMode(childWindowingMode);
+        }
+
+        if (t != null) {
+            tr.setMainWindowSizeChangeTransaction(t);
+        }
+
+        Rect enterPipBounds = c.getEnterPipBounds();
+        if (enterPipBounds != null) {
+            mService.mStackSupervisor.updatePictureInPictureMode(tr, enterPipBounds, true);
+        }
+
         return effects;
     }
 
@@ -275,30 +314,20 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
         return TRANSACT_EFFECTS_LIFECYCLE;
     }
 
+    private void sanitizeWindowContainer(WindowContainer wc) {
+        if (!(wc instanceof Task) && !(wc instanceof DisplayArea)) {
+            throw new RuntimeException("Invalid token in task or displayArea transaction");
+        }
+    }
+
     private int applyWindowContainerChange(WindowContainer wc,
             WindowContainerTransaction.Change c) {
-        int effects = sanitizeAndApplyChange(wc, c);
+        sanitizeWindowContainer(wc);
 
-        final Task tr = wc.asTask();
+        int effects = applyChanges(wc, c);
 
-        final SurfaceControl.Transaction t = c.getBoundsChangeTransaction();
-        if (t != null) {
-            tr.setMainWindowSizeChangeTransaction(t);
-        }
-
-        Rect enterPipBounds = c.getEnterPipBounds();
-        if (enterPipBounds != null) {
-            mService.mStackSupervisor.updatePictureInPictureMode(tr,
-                    enterPipBounds, true);
-        }
-
-        final int windowingMode = c.getWindowingMode();
-        if (windowingMode > -1) {
-            tr.setWindowingMode(windowingMode);
-        }
-        final int childWindowingMode = c.getActivityWindowingMode();
-        if (childWindowingMode > -1) {
-            tr.setActivityWindowingMode(childWindowingMode);
+        if (wc instanceof Task) {
+            effects |= applyTaskChanges(wc.asTask(), c);
         }
 
         return effects;
@@ -312,7 +341,7 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
             final ActivityStack stack = (ActivityStack) container;
             if (stack.inPinnedWindowingMode()) {
                 stack.resize(config.windowConfiguration.getBounds(),
-                        null /* configBounds */, PRESERVE_WINDOWS, true /* deferResume */);
+                        PRESERVE_WINDOWS, true /* deferResume */);
             }
         }
     }
@@ -350,6 +379,40 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
         }
 
         mTransactionCallbacksByPendingSyncId.remove(mSyncId);
+    }
+
+    @Override
+    public boolean takeScreenshot(WindowContainerToken token, SurfaceControl outSurfaceControl) {
+        mService.mAmInternal.enforceCallingPermission(READ_FRAME_BUFFER, "takeScreenshot()");
+        final WindowContainer wc = WindowContainer.fromBinder(token.asBinder());
+        if (wc == null) {
+            throw new RuntimeException("Invalid token in screenshot transaction");
+        }
+
+        final Rect bounds = new Rect();
+        wc.getBounds(bounds);
+        bounds.offsetTo(0, 0);
+        SurfaceControl.ScreenshotGraphicBuffer buffer = SurfaceControl.captureLayers(
+                wc.getSurfaceControl(), bounds, 1);
+
+        if (buffer == null || buffer.getGraphicBuffer() == null) {
+            return false;
+        }
+
+        SurfaceControl screenshot = mService.mWindowManager.mSurfaceControlFactory.apply(null)
+                .setName(wc.getName() + " - Organizer Screenshot")
+                .setBufferSize(bounds.width(), bounds.height())
+                .setFormat(PixelFormat.TRANSLUCENT)
+                .setParent(wc.getParentSurfaceControl())
+                .build();
+
+        Surface surface = new Surface();
+        surface.copyFrom(screenshot);
+        surface.attachAndQueueBufferWithColorSpace(buffer.getGraphicBuffer(), null);
+        surface.release();
+
+        outSurfaceControl.copyFrom(screenshot);
+        return true;
     }
 
     private void enforceStackPermission(String func) {

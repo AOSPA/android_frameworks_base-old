@@ -114,6 +114,11 @@ public interface KeyguardViewController {
     void keyguardGoingAway();
 
     /**
+     * Sets the system state depending on whether the keyguard is going away or not.
+     */
+    void setKeyguardGoingAwayState(boolean isKeyguardGoingAway);
+
+    /**
      * @return Whether window animation for unlock should be disabled.
      */
     boolean shouldDisableWindowAnimationsForUnlock();
@@ -146,6 +151,28 @@ public interface KeyguardViewController {
      * @return the ViewRootImpl of the View where the Keyguard is mounted.
      */
     ViewRootImpl getViewRootImpl();
+
+    /**
+     * Notifies that the user has authenticated by other means than using the bouncer, for example,
+     * fingerprint.
+     */
+    void notifyKeyguardAuthenticated(boolean strongAuth);
+
+    /**
+     * Shows the Bouncer.
+     *
+     */
+    void showBouncer(boolean scrimmed);
+
+    /**
+     * Returns {@code true} when the bouncer is currently showing
+     */
+    boolean isBouncerShowing();
+
+    /**
+     * When bouncer is fully visible or it is showing but animation didn't finish yet.
+     */
+    boolean bouncerIsOrWillBeShowing();
 
     // TODO: Deprecate registerStatusBar in KeyguardViewController interface. It is currently
     //  only used for testing purposes in StatusBarKeyguardViewManager, and it prevents us from

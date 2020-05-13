@@ -69,7 +69,6 @@ public class SecureSettings {
         Settings.Secure.WIFI_NETWORKS_AVAILABLE_NOTIFICATION_ON,            // moved to global
         Settings.Secure.WIFI_NETWORKS_AVAILABLE_REPEAT_DELAY,               // moved to global
         Settings.Secure.WIFI_NUM_OPEN_NETWORKS_KEPT,                        // moved to global
-        Settings.Secure.WIFI_DISCONNECT_DELAY_DURATION,
         Settings.Secure.MOUNT_PLAY_NOTIFICATION_SND,
         Settings.Secure.MOUNT_UMS_AUTOSTART,
         Settings.Secure.MOUNT_UMS_PROMPT,
@@ -98,6 +97,7 @@ public class SecureSettings {
         Settings.Secure.SYSTEM_NAVIGATION_KEYS_ENABLED,
         Settings.Secure.QS_TILES,
         Settings.Secure.CONTROLS_ENABLED,
+        Settings.Secure.POWER_MENU_LOCKED_SHOW_CONTENT,
         Settings.Secure.DOZE_ENABLED,
         Settings.Secure.DOZE_ALWAYS_ON,
         Settings.Secure.DOZE_PICK_UP_GESTURE,

@@ -46,12 +46,11 @@ stubs_defaults {
     name: "framework-permission-stubs-defaults",
     srcs: [ ":framework-permission-sources" ],
     libs: [ "framework-annotations-lib" ],
-    sdk_version: "system_current",
+    dist: { dest: "framework-permission.txt" },
 }
 
 droidstubs {
     name: "framework-permission-stubs-srcs-publicapi",
-    sdk_version: "system_current",
     defaults: [
         "framework-module-stubs-defaults-publicapi",
         "framework-permission-stubs-defaults",
@@ -60,7 +59,6 @@ droidstubs {
 
 droidstubs {
     name: "framework-permission-stubs-srcs-systemapi",
-    sdk_version: "system_current",
     defaults: [
         "framework-module-stubs-defaults-systemapi",
         "framework-permission-stubs-defaults",
@@ -69,7 +67,6 @@ droidstubs {
 
 droidstubs {
     name: "framework-permission-api-module_libs_api",
-    sdk_version: "system_current",
     defaults: [
         "framework-module-api-defaults-module_libs_api",
         "framework-permission-stubs-defaults",
@@ -78,7 +75,6 @@ droidstubs {
 
 droidstubs {
     name: "framework-permission-stubs-srcs-module_libs_api",
-    sdk_version: "system_current",
     defaults: [
         "framework-module-stubs-defaults-module_libs_api",
         "framework-permission-stubs-defaults",
@@ -89,16 +85,19 @@ java_library {
     name: "framework-permission-stubs-publicapi",
     srcs: [ ":framework-permission-stubs-srcs-publicapi" ],
     defaults: ["framework-module-stubs-lib-defaults-publicapi"],
+    dist: { dest: "framework-permission.jar" },
 }
 
 java_library {
     name: "framework-permission-stubs-systemapi",
     srcs: [ ":framework-permission-stubs-srcs-systemapi" ],
     defaults: ["framework-module-stubs-lib-defaults-systemapi"],
+    dist: { dest: "framework-permission.jar" },
 }
 
 java_library {
     name: "framework-permission-stubs-module_libs_api",
     srcs: [ ":framework-permission-stubs-srcs-module_libs_api" ],
     defaults: ["framework-module-stubs-lib-defaults-module_libs_api"],
+    dist: { dest: "framework-permission.jar" },
 }

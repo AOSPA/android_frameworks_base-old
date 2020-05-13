@@ -76,8 +76,6 @@ class ControlsControllerImpl @Inject constructor (
 
     private var userChanging: Boolean = true
 
-    private var loadCanceller: Runnable? = null
-
     private var seedingInProgress = false
     private val seedingCallbacks = mutableListOf<Consumer<Boolean>>()
 
@@ -150,6 +148,7 @@ class ControlsControllerImpl @Inject constructor (
             val user = intent.getIntExtra(Intent.EXTRA_USER_ID, UserHandle.USER_NULL)
             if (user == currentUserId) {
                 executor.execute {
+                    Log.d(TAG, "Restore finished, storing auxiliary favorites")
                     auxiliaryPersistenceWrapper.initialize()
                     listingController.removeCallback(listingCallback)
                     persistenceWrapper.storeFavorites(auxiliaryPersistenceWrapper.favorites)
@@ -220,6 +219,7 @@ class ControlsControllerImpl @Inject constructor (
 
                 // Check if something has been added or removed, if so, store the new list
                 if (changed) {
+                    Log.d(TAG, "Detected change in available services, storing updated favorites")
                     persistenceWrapper.storeFavorites(Favorites.getAllStructures())
                 }
             }
@@ -275,28 +275,29 @@ class ControlsControllerImpl @Inject constructor (
 
     override fun loadForComponent(
         componentName: ComponentName,
-        dataCallback: Consumer<ControlsController.LoadData>
+        dataCallback: Consumer<ControlsController.LoadData>,
+        cancelWrapper: Consumer<Runnable>
     ) {
         if (!confirmAvailability()) {
             if (userChanging) {
                 // Try again later, userChanging should not last forever. If so, we have bigger
                 // problems. This will return a runnable that allows to cancel the delayed version,
                 // it will not be able to cancel the load if
-                loadCanceller = executor.executeDelayed(
-                        { loadForComponent(componentName, dataCallback) },
-                        USER_CHANGE_RETRY_DELAY,
-                        TimeUnit.MILLISECONDS
+                executor.executeDelayed(
+                    { loadForComponent(componentName, dataCallback, cancelWrapper) },
+                    USER_CHANGE_RETRY_DELAY,
+                    TimeUnit.MILLISECONDS
                 )
-            } else {
-                dataCallback.accept(createLoadDataObject(emptyList(), emptyList(), true))
             }
-            return
+
+            dataCallback.accept(createLoadDataObject(emptyList(), emptyList(), true))
         }
-        loadCanceller = bindingController.bindAndLoad(
+
+        cancelWrapper.accept(
+            bindingController.bindAndLoad(
                 componentName,
                 object : ControlsBindingController.LoadCallback {
                     override fun accept(controls: List<Control>) {
-                        loadCanceller = null
                         executor.execute {
                             val favoritesForComponentKeys = Favorites
                                 .getControlsForComponent(componentName).map { it.controlId }
@@ -332,7 +333,6 @@ class ControlsControllerImpl @Inject constructor (
                     }
 
                     override fun error(message: String) {
-                        loadCanceller = null
                         executor.execute {
                             val controls = Favorites.getStructuresForComponent(componentName)
                                     .flatMap { st ->
@@ -347,6 +347,7 @@ class ControlsControllerImpl @Inject constructor (
                         }
                     }
                 }
+            )
         )
     }
 
@@ -365,6 +366,8 @@ class ControlsControllerImpl @Inject constructor (
         componentName: ComponentName,
         callback: Consumer<Boolean>
     ) {
+        if (seedingInProgress) return
+
         Log.i(TAG, "Beginning request to seed favorites for: $componentName")
         if (!confirmAvailability()) {
             if (userChanging) {
@@ -429,12 +432,6 @@ class ControlsControllerImpl @Inject constructor (
         seedingCallbacks.clear()
     }
 
-    override fun cancelLoad() {
-        loadCanceller?.let {
-            executor.execute(it)
-        }
-    }
-
     private fun createRemovedStatus(
         componentName: ComponentName,
         controlInfo: ControlInfo,
@@ -495,6 +492,13 @@ class ControlsControllerImpl @Inject constructor (
         }
     }
 
+    override fun resetFavorites() {
+        executor.execute {
+            Favorites.clear()
+            persistenceWrapper.storeFavorites(Favorites.getAllStructures())
+        }
+    }
+
     override fun refreshStatus(componentName: ComponentName, control: Control) {
         if (!confirmAvailability()) {
             Log.d(TAG, "Controls not available")
@@ -534,6 +538,15 @@ class ControlsControllerImpl @Inject constructor (
 
     override fun getFavoritesForComponent(componentName: ComponentName): List<StructureInfo> =
         Favorites.getStructuresForComponent(componentName)
+
+    override fun getFavoritesForStructure(
+        componentName: ComponentName,
+        structureName: CharSequence
+    ): List<ControlInfo> {
+        return Favorites.getControlsForStructure(
+                StructureInfo(componentName, structureName, emptyList())
+        )
+    }
 
     override fun dump(fd: FileDescriptor, pw: PrintWriter, args: Array<out String>) {
         pw.println("ControlsController state:")

@@ -179,6 +179,8 @@ public class WifiManager {
     /**
      * Reason code if one or more of the network suggestions added already exists in platform's
      * database.
+     * Note: this code will not be returned with Android 11 as in-place modification is allowed,
+     * please check {@link #addNetworkSuggestions(List)}.
      * @see WifiNetworkSuggestion#equals(Object)
      */
     public static final int STATUS_NETWORK_SUGGESTIONS_ERROR_ADD_DUPLICATE = 3;
@@ -186,6 +188,8 @@ public class WifiManager {
     /**
      * Reason code if the number of network suggestions provided by the app crosses the max
      * threshold set per app.
+     * The framework will reject all suggestions provided by {@link #addNetworkSuggestions(List)} if
+     * the total size exceeds the limit.
      * @see #getMaxNumberOfNetworkSuggestionsPerApp()
      */
     public static final int STATUS_NETWORK_SUGGESTIONS_ERROR_ADD_EXCEEDS_MAX_PER_APP = 4;
@@ -193,21 +197,27 @@ public class WifiManager {
     /**
      * Reason code if one or more of the network suggestions removed does not exist in platform's
      * database.
+     * The framework won't remove any suggestions if one or more of suggestions provided
+     * by {@link #removeNetworkSuggestions(List)} does not exist in database.
+     * @see WifiNetworkSuggestion#equals(Object)
      */
     public static final int STATUS_NETWORK_SUGGESTIONS_ERROR_REMOVE_INVALID = 5;
 
     /**
      * Reason code if one or more of the network suggestions added is not allowed.
-     *
+     * The framework will reject all suggestions provided by {@link #addNetworkSuggestions(List)}
+     * if one or more of them is not allowed.
      * This error may be caused by suggestion is using SIM-based encryption method, but calling app
      * is not carrier privileged.
      */
     public static final int STATUS_NETWORK_SUGGESTIONS_ERROR_ADD_NOT_ALLOWED = 6;
 
     /**
-     * Reason code if one or more of the network suggestions added is invalid.
-     *
-     * Please user {@link WifiNetworkSuggestion.Builder} to create network suggestions.
+     * Reason code if one or more of the network suggestions added is invalid. Framework will reject
+     * all the suggestions in the list.
+     * The framework will reject all suggestions provided by {@link #addNetworkSuggestions(List)}
+     * if one or more of them is invalid.
+     * Please use {@link WifiNetworkSuggestion.Builder} to create network suggestions.
      */
     public static final int STATUS_NETWORK_SUGGESTIONS_ERROR_ADD_INVALID = 7;
 
@@ -778,6 +788,13 @@ public class WifiManager {
     @SystemApi
     public static final int SAP_CLIENT_BLOCK_REASON_CODE_NO_MORE_STAS = 1;
 
+    /**
+     * Client disconnected for unspecified reason. This could for example be because the AP is being
+     * shut down.
+     * @hide
+     */
+    public static final int SAP_CLIENT_DISCONNECT_REASON_CODE_UNSPECIFIED = 2;
+
     /** @hide */
     @Retention(RetentionPolicy.SOURCE)
     @IntDef(prefix = {"IFACE_IP_MODE_"}, value = {
@@ -1179,15 +1196,6 @@ public class WifiManager {
     public static final String EXTRA_COUNTRY_CODE = "country_code";
 
     /**
-     * Broadcast intent action indicating that the user initiated Wifi OFF
-     * or APM ON and Wifi disconnection is in progress
-     * Actual Wifi disconnection happens after mDisconnectDelayDuration seconds.
-     * @hide
-     */
-    public static final String  ACTION_WIFI_DISCONNECT_IN_PROGRESS =
-            "com.qualcomm.qti.net.wifi.WIFI_DISCONNECT_IN_PROGRESS";
-
-    /**
      * Directed broadcast intent action indicating that the device has connected to one of the
      * network suggestions provided by the app. This will be sent post connection to a network
      * which was created with {@link WifiNetworkSuggestion.Builder#setIsAppInteractionRequired(
@@ -1366,20 +1374,6 @@ public class WifiManager {
     private LocalOnlyHotspotCallbackProxy mLOHSCallbackProxy;
     @GuardedBy("mLock")
     private LocalOnlyHotspotObserverProxy mLOHSObserverProxy;
-
-    /* Wi-Fi generation codes */
-    /** @hide */
-    @SystemApi
-    public static final int WIFI_GENERATION_DEFAULT = 0;
-    /** @hide */
-    @SystemApi
-    public static final int WIFI_GENERATION_4 = 4;
-    /** @hide */
-    @SystemApi
-    public static final int WIFI_GENERATION_5 = 5;
-    /** @hide */
-    @SystemApi
-    public static final int WIFI_GENERATION_6 = 6;
 
     /**
      * Create a new WifiManager instance.
@@ -1738,9 +1732,9 @@ public class WifiManager {
       * @hide no intent to publish
       */
       @SystemApi
-      public int getSoftApWifiGeneration() {
+      public int getSoftApWifiStandard() {
           try {
-              return mService.getSoftApWifiGeneration();
+              return mService.getSoftApWifiStandard();
           } catch (RemoteException e) {
               throw e.rethrowFromSystemServer();
           }
@@ -2044,7 +2038,7 @@ public class WifiManager {
      * <li> If user reset network settings, all added suggestions will be discarded. Apps can use
      * {@link #getNetworkSuggestions()} to check if their suggestions are in the device.</li>
      * <li> In-place modification of existing suggestions are allowed.
-     * <li>If the provided suggestions includes any previously provided suggestions by the app,
+     * <li> If the provided suggestions include any previously provided suggestions by the app,
      * previous suggestions will be updated.</li>
      * <li>If one of the provided suggestions marks a previously unmetered suggestion as metered and
      * the device is currently connected to that suggested network, then the device will disconnect
@@ -3787,24 +3781,6 @@ public class WifiManager {
                 @SapClientBlockedReason int blockedReason) {
             // Do nothing: can be used to ask user to update client to allowed list or blocked list.
         }
-
-        /**
-         * Called when Stations connected to soft AP.
-         *
-         * @param Macaddr Mac Address of connected Stations to soft AP
-         * @param numClients number of connected clients
-         */
-        default void onStaConnected(@NonNull String Macaddr, int numClients) {
-        }
-
-        /**
-         * Called when Stations disconnected to soft AP.
-         *
-         * @param Macaddr Mac Address of Disconnected Stations to soft AP
-         * @param numClients number of connected clients
-         */
-        default void onStaDisconnected(@NonNull String Macaddr, int numClients) {
-        }
     }
 
     /**
@@ -3882,24 +3858,6 @@ public class WifiManager {
             Binder.clearCallingIdentity();
             mExecutor.execute(() -> {
                 mCallback.onBlockedClientConnecting(client, blockedReason);
-            });
-        }
-
-        @Override
-        public void onStaConnected(String Macaddr, int numClients) throws RemoteException {
-            Log.v(TAG, "SoftApCallbackProxy: [" + numClients + "]onStaConnected Macaddr =" + Macaddr);
-            Binder.clearCallingIdentity();
-            mExecutor.execute(() -> {
-                mCallback.onStaConnected(Macaddr, numClients);
-            });
-        }
-
-        @Override
-        public void onStaDisconnected(String Macaddr, int numClients) throws RemoteException {
-            Log.v(TAG, "SoftApCallbackProxy: [" + numClients + "]onStaDisconnected Macaddr =" + Macaddr);
-            Binder.clearCallingIdentity();
-            mExecutor.execute(() -> {
-                mCallback.onStaDisconnected(Macaddr, numClients);
             });
         }
     }
@@ -6577,6 +6535,22 @@ public class WifiManager {
     public boolean isAutoWakeupEnabled() {
         try {
             return mService.isAutoWakeupEnabled();
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+     /**
+      * Get device VHT 8SS capability info.
+      *
+      * @return true if device supports VHT 8SS or false.
+      *
+      * @hide no intent to publish
+      */
+    @SystemApi
+    public boolean isVht8ssCapableDevice() {
+        try {
+            return mService.isVht8ssCapableDevice();
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }

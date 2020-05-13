@@ -66,6 +66,7 @@ import androidx.test.filters.SmallTest;
 import com.android.internal.logging.MetricsLogger;
 import com.android.systemui.SysuiTestCase;
 import com.android.systemui.plugins.statusbar.NotificationMenuRowPlugin;
+import com.android.systemui.settings.CurrentUserContextTracker;
 import com.android.systemui.statusbar.NotificationLockscreenUserManager;
 import com.android.systemui.statusbar.NotificationPresenter;
 import com.android.systemui.statusbar.notification.NotificationActivityStarter;
@@ -83,10 +84,13 @@ import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.mockito.Answers;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
+
+import javax.inject.Provider;
 
 /**
  * Tests for {@link NotificationGutsManager}.
@@ -119,7 +123,12 @@ public class NotificationGutsManagerTest extends SysuiTestCase {
     @Mock private INotificationManager mINotificationManager;
     @Mock private LauncherApps mLauncherApps;
     @Mock private ShortcutManager mShortcutManager;
+    @Mock private ChannelEditorDialogController mChannelEditorDialogController;
     @Mock private PeopleNotificationIdentifier mPeopleNotificationIdentifier;
+    @Mock private CurrentUserContextTracker mContextTracker;
+    @Mock(answer = Answers.RETURNS_SELF)
+    private PriorityOnboardingDialogController.Builder mBuilder;
+    private Provider<PriorityOnboardingDialogController.Builder> mProvider = () -> mBuilder;
 
     @Before
     public void setUp() {
@@ -136,7 +145,8 @@ public class NotificationGutsManagerTest extends SysuiTestCase {
 
         mGutsManager = new NotificationGutsManager(mContext, mVisualStabilityManager,
                 () -> mStatusBar, mHandler, mAccessibilityManager, mHighPriorityProvider,
-                mINotificationManager, mLauncherApps, mShortcutManager);
+                mINotificationManager, mLauncherApps, mShortcutManager,
+                mChannelEditorDialogController, mContextTracker, mProvider);
         mGutsManager.setUpWithPresenter(mPresenter, mStackScroller,
                 mCheckSaveListener, mOnSettingsClickListener);
         mGutsManager.setNotificationActivityStarter(mNotificationActivityStarter);
@@ -342,6 +352,7 @@ public class NotificationGutsManagerTest extends SysuiTestCase {
                 any(PackageManager.class),
                 any(INotificationManager.class),
                 eq(mVisualStabilityManager),
+                eq(mChannelEditorDialogController),
                 eq(statusBarNotification.getPackageName()),
                 any(NotificationChannel.class),
                 anySet(),
@@ -373,6 +384,7 @@ public class NotificationGutsManagerTest extends SysuiTestCase {
                 any(PackageManager.class),
                 any(INotificationManager.class),
                 eq(mVisualStabilityManager),
+                eq(mChannelEditorDialogController),
                 eq(statusBarNotification.getPackageName()),
                 any(NotificationChannel.class),
                 anySet(),
@@ -402,6 +414,7 @@ public class NotificationGutsManagerTest extends SysuiTestCase {
                 any(PackageManager.class),
                 any(INotificationManager.class),
                 eq(mVisualStabilityManager),
+                eq(mChannelEditorDialogController),
                 eq(statusBarNotification.getPackageName()),
                 any(NotificationChannel.class),
                 anySet(),

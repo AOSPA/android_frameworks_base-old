@@ -147,6 +147,10 @@ import java.util.regex.Pattern;
  * information unless it has the appropriate permissions declared in
  * its manifest file. Where permissions apply, they are noted in the
  * the methods through which you access the protected information.
+ *
+ * <p>TelephonyManager is intended for use on devices that implement
+ * {@link android.content.pm.PackageManager#FEATURE_TELEPHONY FEATURE_TELEPHONY}. On devices
+ * that do not implement this feature, the behavior is not reliable.
  */
 @SystemService(Context.TELEPHONY_SERVICE)
 public class TelephonyManager {
@@ -5848,6 +5852,10 @@ public class TelephonyManager {
      * {@link android.telephony.PhoneStateListener#onCellInfoChanged onCellInfoChanged()}
      * for each active subscription.
      *
+     * <p>This method returns valid data for devices with
+     * {@link android.content.pm.PackageManager#FEATURE_TELEPHONY FEATURE_TELEPHONY}. On devices
+     * that do not implement this feature, the behavior is not reliable.
+     *
      * @param executor the executor on which callback will be invoked.
      * @param callback a callback to receive CellInfo.
      */
@@ -5893,6 +5901,10 @@ public class TelephonyManager {
      * <p>Any available results from this request will be provided by calls to
      * {@link android.telephony.PhoneStateListener#onCellInfoChanged onCellInfoChanged()}
      * for each active subscription.
+     *
+     * <p>This method returns valid data for devices with
+     * {@link android.content.pm.PackageManager#FEATURE_TELEPHONY FEATURE_TELEPHONY}. On devices
+     * that do not implement this feature, the behavior is not reliable.
      *
      * @param workSource the requestor to whom the power consumption for this should be attributed.
      * @param executor the executor on which callback will be invoked.
@@ -13113,6 +13125,7 @@ public class TelephonyManager {
             if (sISub != null) {
                 sISub.asBinder().unlinkToDeath(sServiceDeath, 0);
                 sISub = null;
+                SubscriptionManager.clearCaches();
             }
             if (sISms != null) {
                 sISms.asBinder().unlinkToDeath(sServiceDeath, 0);
@@ -13243,5 +13256,22 @@ public class TelephonyManager {
     @VisibleForTesting
     public static void enableServiceHandleCaching() {
         sServiceHandleCacheEnabled = true;
+    }
+
+    /**
+     * Whether device can connect to 5G network when two SIMs are active.
+     * @hide
+     * TODO b/153669716: remove or make system API.
+     */
+    public boolean canConnectTo5GInDsdsMode() {
+        ITelephony telephony = getITelephony();
+        if (telephony == null) return true;
+        try {
+            return telephony.canConnectTo5GInDsdsMode();
+        } catch (RemoteException ex) {
+            return true;
+        } catch (NullPointerException ex) {
+            return true;
+        }
     }
 }

@@ -2731,6 +2731,32 @@ public class AudioManager {
     }
 
     /**
+     * @hide
+     */
+    public static String audioFocusToString(int focus) {
+        switch (focus) {
+            case AUDIOFOCUS_NONE:
+                return "AUDIOFOCUS_NONE";
+            case AUDIOFOCUS_GAIN:
+                return "AUDIOFOCUS_GAIN";
+            case AUDIOFOCUS_GAIN_TRANSIENT:
+                return "AUDIOFOCUS_GAIN_TRANSIENT";
+            case AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK:
+                return "AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK";
+            case AUDIOFOCUS_GAIN_TRANSIENT_EXCLUSIVE:
+                return "AUDIOFOCUS_GAIN_TRANSIENT_EXCLUSIVE";
+            case AUDIOFOCUS_LOSS:
+                return "AUDIOFOCUS_LOSS";
+            case AUDIOFOCUS_LOSS_TRANSIENT:
+                return "AUDIOFOCUS_LOSS_TRANSIENT";
+            case AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK: // Note CAN_DUCK not MAY_DUCK.
+                return "AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK";
+            default:
+                return "AUDIO_FOCUS_UNKNOWN(" + focus + ")";
+        }
+    }
+
+    /**
      * Used to indicate no audio focus has been gained or lost, or requested.
      */
     public static final int AUDIOFOCUS_NONE = 0;
@@ -6190,6 +6216,17 @@ public class AudioManager {
     public static void setRttEnabled(boolean rttEnabled) {
         try {
             getService().setRttEnabled(rttEnabled);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /** @hide
+     * TODO: make this a @SystemApi */
+    @RequiresPermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING)
+    public void setMultiAudioFocusEnabled(boolean enabled) {
+        try {
+            getService().setMultiAudioFocusEnabled(enabled);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }

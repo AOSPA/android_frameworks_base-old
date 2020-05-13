@@ -22,6 +22,7 @@ import static android.app.WindowConfiguration.ACTIVITY_TYPE_UNDEFINED;
 import static android.app.WindowConfiguration.WINDOWING_MODE_UNDEFINED;
 import static android.view.Display.INVALID_DISPLAY;
 
+import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
 import android.annotation.TestApi;
@@ -51,6 +52,7 @@ import android.view.RemoteAnimationAdapter;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
+import android.window.WindowContainerToken;
 
 import java.util.ArrayList;
 
@@ -184,6 +186,14 @@ public class ActivityOptions {
     private static final String KEY_CALLER_DISPLAY_ID = "android.activity.callerDisplayId";
 
     /**
+     * The task display area token the activity should be launched into.
+     * @see #setLaunchTaskDisplayArea(WindowContainerToken)
+     * @hide
+     */
+    private static final String KEY_LAUNCH_TASK_DISPLAY_AREA_TOKEN =
+            "android.activity.launchTaskDisplayAreaToken";
+
+    /**
      * The windowing mode the activity should be launched into.
      * @hide
      */
@@ -254,6 +264,14 @@ public class ActivityOptions {
      */
     private static final String KEY_DISALLOW_ENTER_PICTURE_IN_PICTURE_WHILE_LAUNCHING =
             "android:activity.disallowEnterPictureInPictureWhileLaunching";
+
+    /**
+     * Indicates flags should be applied to the launching activity such that it will behave
+     * correctly in a bubble.
+     * @hide
+     */
+    private static final String KEY_APPLY_ACTIVITY_FLAGS_FOR_BUBBLES =
+            "android:activity.applyActivityFlagsForBubbles";
 
     /**
      * For Activity transitions, the calling Activity's TransitionListener used to
@@ -334,6 +352,7 @@ public class ActivityOptions {
     private PendingIntent mUsageTimeReport;
     private int mLaunchDisplayId = INVALID_DISPLAY;
     private int mCallerDisplayId = INVALID_DISPLAY;
+    private WindowContainerToken mLaunchTaskDisplayArea;
     @WindowConfiguration.WindowingMode
     private int mLaunchWindowingMode = WINDOWING_MODE_UNDEFINED;
     @WindowConfiguration.ActivityType
@@ -343,6 +362,7 @@ public class ActivityOptions {
     private int mSplitScreenCreateMode = SPLIT_SCREEN_CREATE_MODE_TOP_OR_LEFT;
     private boolean mLockTaskMode = false;
     private boolean mDisallowEnterPictureInPictureWhileLaunching;
+    private boolean mApplyActivityFlagsForBubbles;
     private boolean mTaskAlwaysOnTop;
     private boolean mTaskOverlay;
     private boolean mTaskOverlayCanResume;
@@ -369,7 +389,7 @@ public class ActivityOptions {
      */
     public static ActivityOptions makeCustomAnimation(Context context,
             int enterResId, int exitResId) {
-        return makeCustomAnimation(context, enterResId, exitResId, null, null);
+        return makeCustomAnimation(context, enterResId, exitResId, null, null, null);
     }
 
     /**
@@ -400,6 +420,38 @@ public class ActivityOptions {
         opts.mCustomEnterResId = enterResId;
         opts.mCustomExitResId = exitResId;
         opts.setOnAnimationStartedListener(handler, listener);
+        return opts;
+    }
+
+    /**
+     * Create an ActivityOptions specifying a custom animation to run when
+     * the activity is displayed.
+     *
+     * @param context Who is defining this.  This is the application that the
+     * animation resources will be loaded from.
+     * @param enterResId A resource ID of the animation resource to use for
+     * the incoming activity.  Use 0 for no animation.
+     * @param exitResId A resource ID of the animation resource to use for
+     * the outgoing activity.  Use 0 for no animation.
+     * @param handler If <var>listener</var> is non-null this must be a valid
+     * Handler on which to dispatch the callback; otherwise it should be null.
+     * @param startedListener Optional OnAnimationStartedListener to find out when the
+     * requested animation has started running.  If for some reason the animation
+     * is not executed, the callback will happen immediately.
+     * @param finishedListener Optional OnAnimationFinishedListener when the animation
+     * has finished running.
+     * @return Returns a new ActivityOptions object that you can use to
+     * supply these options as the options Bundle when starting an activity.
+     * @hide
+     */
+    @TestApi
+    public static @NonNull ActivityOptions makeCustomAnimation(@NonNull Context context,
+            int enterResId, int exitResId, @Nullable Handler handler,
+            @Nullable OnAnimationStartedListener startedListener,
+            @Nullable OnAnimationFinishedListener finishedListener) {
+        ActivityOptions opts = makeCustomAnimation(context, enterResId, exitResId, handler,
+                startedListener);
+        opts.setOnAnimationFinishedListener(handler, finishedListener);
         return opts;
     }
 
@@ -448,6 +500,7 @@ public class ActivityOptions {
      * to find out when the given animation has started running.
      * @hide
      */
+    @TestApi
     public interface OnAnimationStartedListener {
         void onAnimationStarted();
     }
@@ -474,6 +527,7 @@ public class ActivityOptions {
      * to find out when the given animation has drawn its last frame.
      * @hide
      */
+    @TestApi
     public interface OnAnimationFinishedListener {
         void onAnimationFinished();
     }
@@ -974,6 +1028,7 @@ public class ActivityOptions {
         mLockTaskMode = opts.getBoolean(KEY_LOCK_TASK_MODE, false);
         mLaunchDisplayId = opts.getInt(KEY_LAUNCH_DISPLAY_ID, INVALID_DISPLAY);
         mCallerDisplayId = opts.getInt(KEY_CALLER_DISPLAY_ID, INVALID_DISPLAY);
+        mLaunchTaskDisplayArea = opts.getParcelable(KEY_LAUNCH_TASK_DISPLAY_AREA_TOKEN);
         mLaunchWindowingMode = opts.getInt(KEY_LAUNCH_WINDOWING_MODE, WINDOWING_MODE_UNDEFINED);
         mLaunchActivityType = opts.getInt(KEY_LAUNCH_ACTIVITY_TYPE, ACTIVITY_TYPE_UNDEFINED);
         mLaunchTaskId = opts.getInt(KEY_LAUNCH_TASK_ID, -1);
@@ -987,6 +1042,8 @@ public class ActivityOptions {
                 SPLIT_SCREEN_CREATE_MODE_TOP_OR_LEFT);
         mDisallowEnterPictureInPictureWhileLaunching = opts.getBoolean(
                 KEY_DISALLOW_ENTER_PICTURE_IN_PICTURE_WHILE_LAUNCHING, false);
+        mApplyActivityFlagsForBubbles = opts.getBoolean(
+                KEY_APPLY_ACTIVITY_FLAGS_FOR_BUBBLES, false);
         if (opts.containsKey(KEY_ANIM_SPECS)) {
             Parcelable[] specs = opts.getParcelableArray(KEY_ANIM_SPECS);
             mAnimSpecs = new AppTransitionAnimationSpec[specs.length];
@@ -1089,7 +1146,7 @@ public class ActivityOptions {
     }
 
     /** @hide */
-    public IRemoteCallback getOnAnimationStartListener() {
+    public IRemoteCallback getAnimationStartedListener() {
         return mAnimationStartedListener;
     }
 
@@ -1241,6 +1298,18 @@ public class ActivityOptions {
     /** @hide */
     public ActivityOptions setCallerDisplayId(int callerDisplayId) {
         mCallerDisplayId = callerDisplayId;
+        return this;
+    }
+
+    /** @hide */
+    public WindowContainerToken getLaunchTaskDisplayArea() {
+        return mLaunchTaskDisplayArea;
+    }
+
+    /** @hide */
+    public ActivityOptions setLaunchTaskDisplayArea(
+            WindowContainerToken windowContainerToken) {
+        mLaunchTaskDisplayArea = windowContainerToken;
         return this;
     }
 
@@ -1407,6 +1476,16 @@ public class ActivityOptions {
         return mDisallowEnterPictureInPictureWhileLaunching;
     }
 
+    /** @hide */
+    public void setApplyActivityFlagsForBubbles(boolean apply) {
+        mApplyActivityFlagsForBubbles = apply;
+    }
+
+    /**  @hide */
+    public boolean isApplyActivityFlagsForBubbles() {
+        return mApplyActivityFlagsForBubbles;
+    }
+
     /**
      * Update the current values in this ActivityOptions from those supplied
      * in <var>otherOptions</var>.  Any values
@@ -1568,6 +1647,9 @@ public class ActivityOptions {
         if (mCallerDisplayId != INVALID_DISPLAY) {
             b.putInt(KEY_CALLER_DISPLAY_ID, mCallerDisplayId);
         }
+        if (mLaunchTaskDisplayArea != null) {
+            b.putParcelable(KEY_LAUNCH_TASK_DISPLAY_AREA_TOKEN, mLaunchTaskDisplayArea);
+        }
         if (mLaunchWindowingMode != WINDOWING_MODE_UNDEFINED) {
             b.putInt(KEY_LAUNCH_WINDOWING_MODE, mLaunchWindowingMode);
         }
@@ -1601,6 +1683,9 @@ public class ActivityOptions {
         if (mDisallowEnterPictureInPictureWhileLaunching) {
             b.putBoolean(KEY_DISALLOW_ENTER_PICTURE_IN_PICTURE_WHILE_LAUNCHING,
                     mDisallowEnterPictureInPictureWhileLaunching);
+        }
+        if (mApplyActivityFlagsForBubbles) {
+            b.putBoolean(KEY_APPLY_ACTIVITY_FLAGS_FOR_BUBBLES, mApplyActivityFlagsForBubbles);
         }
         if (mAnimSpecs != null) {
             b.putParcelableArray(KEY_ANIM_SPECS, mAnimSpecs);

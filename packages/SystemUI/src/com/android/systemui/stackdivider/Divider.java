@@ -21,23 +21,24 @@ import static android.content.res.Configuration.SCREEN_HEIGHT_DP_UNDEFINED;
 import static android.content.res.Configuration.SCREEN_WIDTH_DP_UNDEFINED;
 import static android.view.Display.DEFAULT_DISPLAY;
 
+import static com.android.systemui.shared.system.WindowManagerWrapper.WINDOWING_MODE_SPLIT_SCREEN_PRIMARY;
+
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
 import android.animation.ValueAnimator;
+import android.app.ActivityManager;
 import android.app.ActivityTaskManager;
 import android.content.Context;
 import android.content.res.Configuration;
 import android.graphics.Rect;
 import android.os.Handler;
-import android.os.RemoteException;
 import android.provider.Settings;
 import android.util.Slog;
-import android.window.TaskOrganizer;
-import android.window.WindowContainerToken;
 import android.view.LayoutInflater;
 import android.view.SurfaceControl;
-import android.view.SurfaceSession;
 import android.view.View;
+import android.window.TaskOrganizer;
+import android.window.WindowContainerToken;
 import android.window.WindowContainerTransaction;
 import android.window.WindowOrganizer;
 
@@ -48,6 +49,8 @@ import com.android.systemui.R;
 import com.android.systemui.SystemUI;
 import com.android.systemui.TransactionPool;
 import com.android.systemui.recents.Recents;
+import com.android.systemui.shared.system.ActivityManagerWrapper;
+import com.android.systemui.shared.system.TaskStackChangeListener;
 import com.android.systemui.statusbar.policy.KeyguardStateController;
 import com.android.systemui.wm.DisplayChangeController;
 import com.android.systemui.wm.DisplayController;
@@ -90,7 +93,6 @@ public class Divider extends SystemUI implements DividerView.DividerCallbacks,
     private boolean mHomeStackResizable = false;
     private ForcedResizableInfoActivityController mForcedResizableController;
     private SystemWindows mSystemWindows;
-    final SurfaceSession mSurfaceSession = new SurfaceSession();
     private DisplayController mDisplayController;
     private DisplayImeController mImeController;
     final TransactionPool mTransactionPool;
@@ -259,10 +261,24 @@ public class Divider extends SystemUI implements DividerView.DividerCallbacks,
                 wct.setScreenSizeDp(mSplits.mSecondary.token,
                         mSplits.mSecondary.configuration.screenWidthDp,
                         mSplits.mSecondary.configuration.screenHeightDp);
+
+                wct.setBounds(mSplits.mPrimary.token, mSplitLayout.mAdjustedPrimary);
+                adjustAppBounds = new Rect(mSplits.mPrimary.configuration
+                        .windowConfiguration.getAppBounds());
+                adjustAppBounds.offset(0, mSplitLayout.mAdjustedPrimary.top
+                        - mSplitLayout.mPrimary.top);
+                wct.setAppBounds(mSplits.mPrimary.token, adjustAppBounds);
+                wct.setScreenSizeDp(mSplits.mPrimary.token,
+                        mSplits.mPrimary.configuration.screenWidthDp,
+                        mSplits.mPrimary.configuration.screenHeightDp);
             } else {
                 wct.setBounds(mSplits.mSecondary.token, mSplitLayout.mSecondary);
                 wct.setAppBounds(mSplits.mSecondary.token, null);
                 wct.setScreenSizeDp(mSplits.mSecondary.token,
+                        SCREEN_WIDTH_DP_UNDEFINED, SCREEN_HEIGHT_DP_UNDEFINED);
+                wct.setBounds(mSplits.mPrimary.token, mSplitLayout.mPrimary);
+                wct.setAppBounds(mSplits.mPrimary.token, null);
+                wct.setScreenSizeDp(mSplits.mPrimary.token,
                         SCREEN_WIDTH_DP_UNDEFINED, SCREEN_HEIGHT_DP_UNDEFINED);
             }
 
@@ -415,6 +431,21 @@ public class Divider extends SystemUI implements DividerView.DividerCallbacks,
     }
     private final DividerImeController mImePositionProcessor = new DividerImeController();
 
+    private TaskStackChangeListener mActivityRestartListener = new TaskStackChangeListener() {
+        @Override
+        public void onActivityRestartAttempt(ActivityManager.RunningTaskInfo task,
+                boolean homeTaskVisible, boolean clearedTask, boolean wasVisible) {
+            if (!wasVisible || task.configuration.windowConfiguration.getWindowingMode()
+                    != WINDOWING_MODE_SPLIT_SCREEN_PRIMARY || !mSplits.isSplitScreenSupported()) {
+                return;
+            }
+
+            if (isMinimized()) {
+                onUndockingTask();
+            }
+        }
+    };
+
     public Divider(Context context, Optional<Lazy<Recents>> recentsOptionalLazy,
             DisplayController displayController, SystemWindows systemWindows,
             DisplayImeController imeController, Handler handler,
@@ -474,7 +505,7 @@ public class Divider extends SystemUI implements DividerView.DividerCallbacks,
             return;
         }
         try {
-            mSplits.init(mSurfaceSession);
+            mSplits.init();
             // Set starting tile bounds based on middle target
             final WindowContainerTransaction tct = new WindowContainerTransaction();
             int midPos = mSplitLayout.getSnapAlgorithm().getMiddleTarget().position;
@@ -485,7 +516,7 @@ public class Divider extends SystemUI implements DividerView.DividerCallbacks,
             removeDivider();
             return;
         }
-        update(mDisplayController.getDisplayContext(displayId).getResources().getConfiguration());
+        ActivityManagerWrapper.getInstance().registerTaskStackListener(mActivityRestartListener);
     }
 
     @Override
@@ -554,12 +585,27 @@ public class Divider extends SystemUI implements DividerView.DividerCallbacks,
     }
 
     private void update(Configuration configuration) {
+        final boolean isDividerHidden = mView != null && mView.isHidden();
+
         removeDivider();
         addDivider(configuration);
-        if (mMinimized && mView != null) {
-            mView.setMinimizedDockStack(true, mHomeStackResizable);
-            updateTouchable();
+
+        if (mView != null) {
+            if (mMinimized) {
+                mView.setMinimizedDockStack(true, mHomeStackResizable);
+                updateTouchable();
+            }
+            mView.setHidden(isDividerHidden);
         }
+    }
+
+    void onTaskVanished() {
+        mHandler.post(this::removeDivider);
+    }
+
+    void onTasksReady() {
+        mHandler.post(() -> update(mDisplayController.getDisplayContext(
+                mContext.getDisplayId()).getResources().getConfiguration()));
     }
 
     void updateVisibility(final boolean visible) {

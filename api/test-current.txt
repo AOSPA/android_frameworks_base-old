@@ -38,7 +38,7 @@ package android {
   public static final class R.string {
     field public static final int config_defaultAssistant = 17039393; // 0x1040021
     field public static final int config_defaultDialer = 17039395; // 0x1040023
-    field public static final int config_systemGallery = 17039402; // 0x104002a
+    field public static final int config_systemGallery = 17039399; // 0x1040027
   }
 
 }
@@ -107,6 +107,7 @@ package android.app {
   }
 
   public class ActivityOptions {
+    method @NonNull public static android.app.ActivityOptions makeCustomAnimation(@NonNull android.content.Context, int, int, @Nullable android.os.Handler, @Nullable android.app.ActivityOptions.OnAnimationStartedListener, @Nullable android.app.ActivityOptions.OnAnimationFinishedListener);
     method public static void setExitTransitionTimeout(long);
     method public void setLaunchActivityType(int);
     method public void setLaunchTaskId(int);
@@ -115,8 +116,17 @@ package android.app {
     method public void setTaskOverlay(boolean, boolean);
   }
 
+  public static interface ActivityOptions.OnAnimationFinishedListener {
+    method public void onAnimationFinished();
+  }
+
+  public static interface ActivityOptions.OnAnimationStartedListener {
+    method public void onAnimationStarted();
+  }
+
   public class ActivityTaskManager {
     method @RequiresPermission(android.Manifest.permission.MANAGE_ACTIVITY_STACKS) public void clearLaunchParamsForPackages(java.util.List<java.lang.String>);
+    method public static boolean currentUiModeSupportsErrorDialogs(@NonNull android.content.Context);
     method @RequiresPermission(android.Manifest.permission.MANAGE_ACTIVITY_STACKS) public String listAllStacks();
     method @RequiresPermission(android.Manifest.permission.MANAGE_ACTIVITY_STACKS) public void moveTaskToStack(int, int, boolean);
     method @RequiresPermission(android.Manifest.permission.MANAGE_ACTIVITY_STACKS) public boolean moveTopActivityToPinnedStack(int, android.graphics.Rect);
@@ -142,6 +152,7 @@ package android.app {
     ctor public ActivityView(android.content.Context, android.util.AttributeSet);
     ctor public ActivityView(android.content.Context, android.util.AttributeSet, int);
     ctor public ActivityView(android.content.Context, android.util.AttributeSet, int, boolean);
+    ctor public ActivityView(@NonNull android.content.Context, @NonNull android.util.AttributeSet, int, boolean, boolean);
     method public int getVirtualDisplayId();
     method public void onLayout(boolean, int, int, int, int);
     method public void onLocationChanged();
@@ -494,6 +505,11 @@ package android.app {
     method public boolean isStatusBarExpansionDisabled();
   }
 
+  public class TaskInfo {
+    method @NonNull public android.content.res.Configuration getConfiguration();
+    method @NonNull public android.window.WindowContainerToken getToken();
+  }
+
   public class TimePickerDialog extends android.app.AlertDialog implements android.content.DialogInterface.OnClickListener android.widget.TimePicker.OnTimeChangedListener {
     method public android.widget.TimePicker getTimePicker();
   }
@@ -564,6 +580,7 @@ package android.app.admin {
     method public java.util.List<java.lang.String> getOwnerInstalledCaCerts(@NonNull android.os.UserHandle);
     method public boolean isCurrentInputMethodSetByOwner();
     method public boolean isDeviceManaged();
+    method public boolean isFactoryResetProtectionPolicySupported();
     field public static final String ACCOUNT_FEATURE_DEVICE_OR_PROFILE_OWNER_ALLOWED = "android.account.DEVICE_OR_PROFILE_OWNER_ALLOWED";
     field public static final String ACCOUNT_FEATURE_DEVICE_OR_PROFILE_OWNER_DISALLOWED = "android.account.DEVICE_OR_PROFILE_OWNER_DISALLOWED";
     field public static final String ACTION_DATA_SHARING_RESTRICTION_APPLIED = "android.app.action.DATA_SHARING_RESTRICTION_APPLIED";
@@ -713,6 +730,11 @@ package android.app.role {
 
   public interface OnRoleHoldersChangedListener {
     method public void onRoleHoldersChanged(@NonNull String, @NonNull android.os.UserHandle);
+  }
+
+  public class RoleControllerManager {
+    method @RequiresPermission("android.permission.MANAGE_ROLE_HOLDERS") public void isApplicationVisibleForRole(@NonNull String, @NonNull String, @NonNull java.util.concurrent.Executor, @NonNull java.util.function.Consumer<java.lang.Boolean>);
+    method @RequiresPermission("android.permission.MANAGE_ROLE_HOLDERS") public void isRoleVisible(@NonNull String, @NonNull java.util.concurrent.Executor, @NonNull java.util.function.Consumer<java.lang.Boolean>);
   }
 
   public final class RoleManager {
@@ -1307,6 +1329,34 @@ package android.hardware.lights {
     method @NonNull public android.hardware.lights.LightsRequest build();
     method @NonNull public android.hardware.lights.LightsRequest.Builder clearLight(@NonNull android.hardware.lights.Light);
     method @NonNull public android.hardware.lights.LightsRequest.Builder setLight(@NonNull android.hardware.lights.Light, @NonNull android.hardware.lights.LightState);
+  }
+
+}
+
+package android.hardware.soundtrigger {
+
+  public class KeyphraseEnrollmentInfo {
+    ctor public KeyphraseEnrollmentInfo(@NonNull android.content.pm.PackageManager);
+    method @Nullable public android.hardware.soundtrigger.KeyphraseMetadata getKeyphraseMetadata(@NonNull String, @NonNull java.util.Locale);
+    method @Nullable public android.content.Intent getManageKeyphraseIntent(int, @NonNull String, @NonNull java.util.Locale);
+    method @NonNull public String getParseError();
+    method @NonNull public java.util.Collection<android.hardware.soundtrigger.KeyphraseMetadata> listKeyphraseMetadata();
+    field public static final int MANAGE_ACTION_ENROLL = 0; // 0x0
+    field public static final int MANAGE_ACTION_RE_ENROLL = 1; // 0x1
+    field public static final int MANAGE_ACTION_UN_ENROLL = 2; // 0x2
+  }
+
+  public final class KeyphraseMetadata implements android.os.Parcelable {
+    ctor public KeyphraseMetadata(int, @NonNull String, @NonNull java.util.Set<java.util.Locale>, int);
+    method public int describeContents();
+    method public int getId();
+    method @NonNull public String getKeyphrase();
+    method public int getRecognitionModeFlags();
+    method @NonNull public java.util.Set<java.util.Locale> getSupportedLocales();
+    method public boolean supportsLocale(@Nullable java.util.Locale);
+    method public boolean supportsPhrase(@Nullable String);
+    method public void writeToParcel(@NonNull android.os.Parcel, int);
+    field @NonNull public static final android.os.Parcelable.Creator<android.hardware.soundtrigger.KeyphraseMetadata> CREATOR;
   }
 
 }
@@ -2264,7 +2314,11 @@ package android.os {
 
   public class Environment {
     method public static java.io.File buildPath(java.io.File, java.lang.String...);
+    method @NonNull public static java.io.File getOdmDirectory();
+    method @NonNull public static java.io.File getOemDirectory();
     method @NonNull public static java.io.File getProductDirectory();
+    method @NonNull public static java.io.File getSystemExtDirectory();
+    method @NonNull public static java.io.File getVendorDirectory();
   }
 
   public final class FileUtils {
@@ -2841,14 +2895,20 @@ package android.permission {
 
   public final class PermissionControllerManager {
     method @RequiresPermission(anyOf={"android.permission.GRANT_RUNTIME_PERMISSIONS", "android.permission.RESTORE_RUNTIME_PERMISSIONS"}) public void applyStagedRuntimePermissionBackup(@NonNull String, @NonNull android.os.UserHandle, @NonNull java.util.concurrent.Executor, @NonNull java.util.function.Consumer<java.lang.Boolean>);
+    method @RequiresPermission("android.permission.GET_RUNTIME_PERMISSIONS") public void countPermissionApps(@NonNull java.util.List<java.lang.String>, int, @NonNull android.permission.PermissionControllerManager.OnCountPermissionAppsResultCallback, @Nullable android.os.Handler);
     method @RequiresPermission("android.permission.GET_RUNTIME_PERMISSIONS") public void getAppPermissions(@NonNull String, @NonNull android.permission.PermissionControllerManager.OnGetAppPermissionResultCallback, @Nullable android.os.Handler);
     method @RequiresPermission("android.permission.GET_RUNTIME_PERMISSIONS") public void getRuntimePermissionBackup(@NonNull android.os.UserHandle, @NonNull java.util.concurrent.Executor, @NonNull java.util.function.Consumer<byte[]>);
+    method @RequiresPermission("android.permission.REVOKE_RUNTIME_PERMISSIONS") public void revokeRuntimePermission(@NonNull String, @NonNull String);
     method @RequiresPermission("android.permission.REVOKE_RUNTIME_PERMISSIONS") public void revokeRuntimePermissions(@NonNull java.util.Map<java.lang.String,java.util.List<java.lang.String>>, boolean, int, @NonNull java.util.concurrent.Executor, @NonNull android.permission.PermissionControllerManager.OnRevokeRuntimePermissionsCallback);
     method @RequiresPermission(anyOf={"android.permission.GRANT_RUNTIME_PERMISSIONS", "android.permission.RESTORE_RUNTIME_PERMISSIONS"}) public void stageAndApplyRuntimePermissionsBackup(@NonNull byte[], @NonNull android.os.UserHandle);
     field public static final int COUNT_ONLY_WHEN_GRANTED = 1; // 0x1
     field public static final int COUNT_WHEN_SYSTEM = 2; // 0x2
     field public static final int REASON_INSTALLER_POLICY_VIOLATION = 2; // 0x2
     field public static final int REASON_MALWARE = 1; // 0x1
+  }
+
+  public static interface PermissionControllerManager.OnCountPermissionAppsResultCallback {
+    method public void onCountPermissionApps(int);
   }
 
   public static interface PermissionControllerManager.OnGetAppPermissionResultCallback {
@@ -3040,6 +3100,7 @@ package android.provider {
     field public static final String LOCK_SCREEN_SHOW_NOTIFICATIONS = "lock_screen_show_notifications";
     field public static final String NFC_PAYMENT_DEFAULT_COMPONENT = "nfc_payment_default_component";
     field public static final String NOTIFICATION_BADGING = "notification_badging";
+    field public static final String POWER_MENU_LOCKED_SHOW_CONTENT = "power_menu_locked_show_content";
     field @RequiresPermission(android.Manifest.permission.WRITE_SECURE_SETTINGS) public static final String SYNC_PARENT_SOUNDS = "sync_parent_sounds";
     field public static final String USER_SETUP_COMPLETE = "user_setup_complete";
     field public static final String VOICE_INTERACTION_SERVICE = "voice_interaction_service";
@@ -3636,6 +3697,7 @@ package android.telecom {
   }
 
   public class TelecomManager {
+    method @NonNull public android.content.Intent createLaunchEmergencyDialerIntent(@Nullable String);
     method @NonNull @RequiresPermission("android.permission.READ_PRIVILEGED_PHONE_STATE") public java.util.List<android.telecom.PhoneAccountHandle> getCallCapablePhoneAccounts(boolean);
     method @RequiresPermission("android.permission.READ_PRIVILEGED_PHONE_STATE") public int getCurrentTtyMode();
     method @Nullable @RequiresPermission("android.permission.READ_PRIVILEGED_PHONE_STATE") public String getDefaultDialerPackage(@NonNull android.os.UserHandle);
@@ -4929,7 +4991,9 @@ package android.view.accessibility {
     method public void addAccessibilityServicesStateChangeListener(@NonNull android.view.accessibility.AccessibilityManager.AccessibilityServicesStateChangeListener, @Nullable android.os.Handler);
     method @NonNull @RequiresPermission("android.permission.MANAGE_ACCESSIBILITY") public java.util.List<java.lang.String> getAccessibilityShortcutTargets(int);
     method @RequiresPermission("android.permission.MANAGE_ACCESSIBILITY") public void performAccessibilityShortcut();
+    method @RequiresPermission("android.permission.MANAGE_ACCESSIBILITY") public void registerSystemAction(@NonNull android.app.RemoteAction, int);
     method public void removeAccessibilityServicesStateChangeListener(@NonNull android.view.accessibility.AccessibilityManager.AccessibilityServicesStateChangeListener);
+    method @RequiresPermission("android.permission.MANAGE_ACCESSIBILITY") public void unregisterSystemAction(int);
   }
 
   public static interface AccessibilityManager.AccessibilityServicesStateChangeListener {
@@ -4938,6 +5002,7 @@ package android.view.accessibility {
 
   public class AccessibilityNodeInfo implements android.os.Parcelable {
     method public void addChild(@NonNull android.os.IBinder);
+    method public long getSourceNodeId();
     method public void setLeashedParent(@Nullable android.os.IBinder, int);
     method public static void setNumInstancesInUseCounter(java.util.concurrent.atomic.AtomicInteger);
     method public void writeToParcelNoRecycle(android.os.Parcel, int);
@@ -5213,10 +5278,21 @@ package android.widget {
 
 package android.window {
 
+  public final class DisplayAreaInfo implements android.os.Parcelable {
+    ctor public DisplayAreaInfo(@NonNull android.window.WindowContainerToken, int, int);
+    method public int describeContents();
+    method public void writeToParcel(@NonNull android.os.Parcel, int);
+    field @NonNull public static final android.os.Parcelable.Creator<android.window.DisplayAreaInfo> CREATOR;
+    field @NonNull public final android.content.res.Configuration configuration;
+    field public final int displayId;
+    field public final int featureId;
+    field @NonNull public final android.window.WindowContainerToken token;
+  }
+
   public class DisplayAreaOrganizer extends android.window.WindowOrganizer {
     ctor public DisplayAreaOrganizer();
-    method public void onDisplayAreaAppeared(@NonNull android.window.WindowContainerToken);
-    method public void onDisplayAreaVanished(@NonNull android.window.WindowContainerToken);
+    method public void onDisplayAreaAppeared(@NonNull android.window.DisplayAreaInfo, @NonNull android.view.SurfaceControl);
+    method public void onDisplayAreaVanished(@NonNull android.window.DisplayAreaInfo);
     method @RequiresPermission(android.Manifest.permission.MANAGE_ACTIVITY_STACKS) public void registerOrganizer(int);
     field public static final int FEATURE_DEFAULT_TASK_CONTAINER = 1; // 0x1
     field public static final int FEATURE_ROOT = 0; // 0x0
@@ -5234,19 +5310,18 @@ package android.window {
     method @Nullable @RequiresPermission(android.Manifest.permission.MANAGE_ACTIVITY_STACKS) public static java.util.List<android.app.ActivityManager.RunningTaskInfo> getChildTasks(@NonNull android.window.WindowContainerToken, @NonNull int[]);
     method @Nullable @RequiresPermission(android.Manifest.permission.MANAGE_ACTIVITY_STACKS) public static android.window.WindowContainerToken getImeTarget(int);
     method @Nullable @RequiresPermission(android.Manifest.permission.MANAGE_ACTIVITY_STACKS) public static java.util.List<android.app.ActivityManager.RunningTaskInfo> getRootTasks(int, @NonNull int[]);
-    method public void onBackPressedOnTaskRoot(@NonNull android.app.ActivityManager.RunningTaskInfo);
-    method public void onTaskAppeared(@NonNull android.app.ActivityManager.RunningTaskInfo);
-    method public void onTaskInfoChanged(@NonNull android.app.ActivityManager.RunningTaskInfo);
-    method public void onTaskVanished(@NonNull android.app.ActivityManager.RunningTaskInfo);
-    method @RequiresPermission(android.Manifest.permission.MANAGE_ACTIVITY_STACKS) public void registerOrganizer(int);
+    method @BinderThread public void onBackPressedOnTaskRoot(@NonNull android.app.ActivityManager.RunningTaskInfo);
+    method @BinderThread public void onTaskAppeared(@NonNull android.app.ActivityManager.RunningTaskInfo, @NonNull android.view.SurfaceControl);
+    method @BinderThread public void onTaskInfoChanged(@NonNull android.app.ActivityManager.RunningTaskInfo);
+    method @BinderThread public void onTaskVanished(@NonNull android.app.ActivityManager.RunningTaskInfo);
+    method @RequiresPermission(android.Manifest.permission.MANAGE_ACTIVITY_STACKS) public final void registerOrganizer(int);
     method @RequiresPermission(android.Manifest.permission.MANAGE_ACTIVITY_STACKS) public void setInterceptBackPressedOnTaskRoot(boolean);
     method @RequiresPermission(android.Manifest.permission.MANAGE_ACTIVITY_STACKS) public static void setLaunchRoot(int, @NonNull android.window.WindowContainerToken);
-    method @RequiresPermission(android.Manifest.permission.MANAGE_ACTIVITY_STACKS) public void unregisterOrganizer();
+    method @RequiresPermission(android.Manifest.permission.MANAGE_ACTIVITY_STACKS) public final void unregisterOrganizer();
   }
 
   public final class WindowContainerToken implements android.os.Parcelable {
     method public int describeContents();
-    method @Nullable public android.view.SurfaceControl getLeash();
     method public void writeToParcel(@NonNull android.os.Parcel, int);
     field @NonNull public static final android.os.Parcelable.Creator<android.window.WindowContainerToken> CREATOR;
   }

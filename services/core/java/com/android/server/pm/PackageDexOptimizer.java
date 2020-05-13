@@ -22,6 +22,7 @@ import static com.android.server.pm.Installer.DEXOPT_BOOTCOMPLETE;
 import static com.android.server.pm.Installer.DEXOPT_DEBUGGABLE;
 import static com.android.server.pm.Installer.DEXOPT_ENABLE_HIDDEN_API_CHECKS;
 import static com.android.server.pm.Installer.DEXOPT_FORCE;
+import static com.android.server.pm.Installer.DEXOPT_FOR_RESTORE;
 import static com.android.server.pm.Installer.DEXOPT_GENERATE_APP_IMAGE;
 import static com.android.server.pm.Installer.DEXOPT_GENERATE_COMPACT_DEX;
 import static com.android.server.pm.Installer.DEXOPT_IDLE_BACKGROUND_JOB;
@@ -32,6 +33,7 @@ import static com.android.server.pm.Installer.DEXOPT_STORAGE_CE;
 import static com.android.server.pm.Installer.DEXOPT_STORAGE_DE;
 import static com.android.server.pm.InstructionSets.getAppDexInstructionSets;
 import static com.android.server.pm.InstructionSets.getDexCodeInstructionSets;
+import static com.android.server.pm.PackageManagerService.PLATFORM_PACKAGE_NAME;
 import static com.android.server.pm.PackageManagerService.WATCHDOG_TIMEOUT;
 import static com.android.server.pm.PackageManagerServiceCompilerMapping.getReasonName;
 
@@ -51,6 +53,7 @@ import android.os.SystemClock;
 import android.os.SystemProperties;
 import android.os.UserHandle;
 import android.os.WorkSource;
+import android.os.storage.StorageManager;
 import android.util.Log;
 import android.util.Slog;
 import android.util.SparseArray;
@@ -79,7 +82,7 @@ import java.util.Map;
  * Helper class for running dexopt command on packages.
  */
 public class PackageDexOptimizer {
-    private static final String TAG = "PackageManager.DexOptimizer";
+    private static final String TAG = "PackageDexOptimizer";
     static final String OAT_DIR_NAME = "oat";
     // TODO b/19550105 Remove error codes and use exceptions
     public static final int DEX_OPT_SKIPPED = 0;
@@ -114,7 +117,9 @@ public class PackageDexOptimizer {
 
     static boolean canOptimizePackage(AndroidPackage pkg) {
         // We do not dexopt a package with no code.
-        if (!pkg.isHasCode()) {
+        // Note that the system package is marked as having no code, however we can
+        // still optimize it via dexoptSystemServerPath.
+        if (!PLATFORM_PACKAGE_NAME.equals(pkg.getPackageName()) && !pkg.isHasCode()) {
             return false;
         }
 
@@ -131,6 +136,10 @@ public class PackageDexOptimizer {
     int performDexOpt(AndroidPackage pkg, @NonNull PackageSetting pkgSetting,
             String[] instructionSets, CompilerStats.PackageStats packageStats,
             PackageDexUsage.PackageUseInfo packageUseInfo, DexoptOptions options) {
+        if (PLATFORM_PACKAGE_NAME.equals(pkg.getPackageName())) {
+            throw new IllegalArgumentException("System server dexopting should be done via "
+                    + " DexManager and PackageDexOptimizer#dexoptSystemServerPath");
+        }
         if (pkg.getUid() == -1) {
             throw new IllegalArgumentException("Dexopt for " + pkg.getPackageName()
                     + " has invalid uid.");
@@ -305,6 +314,55 @@ public class PackageDexOptimizer {
             Slog.w(TAG, "Failed to dexopt", e);
             return DEX_OPT_FAILED;
         }
+    }
+
+    /**
+     * Perform dexopt (if needed) on a system server code path).
+     */
+    public int dexoptSystemServerPath(
+            String dexPath, PackageDexUsage.DexUseInfo dexUseInfo, DexoptOptions options) {
+        int dexoptFlags = DEXOPT_PUBLIC
+                | (options.isBootComplete() ? DEXOPT_BOOTCOMPLETE : 0)
+                | (options.isDexoptIdleBackgroundJob() ? DEXOPT_IDLE_BACKGROUND_JOB : 0);
+
+        int result = DEX_OPT_SKIPPED;
+        for (String isa : dexUseInfo.getLoaderIsas()) {
+            int dexoptNeeded = getDexoptNeeded(
+                    dexPath,
+                    isa,
+                    options.getCompilerFilter(),
+                    dexUseInfo.getClassLoaderContext(),
+                    /* newProfile= */false,
+                    /* downgrade= */ false);
+
+            if (dexoptNeeded == DexFile.NO_DEXOPT_NEEDED) {
+                continue;
+            }
+            try {
+                mInstaller.dexopt(
+                        dexPath,
+                        android.os.Process.SYSTEM_UID,
+                        /* packageName= */ "android",
+                        isa,
+                        dexoptNeeded,
+                        /* oatDir= */ null,
+                        dexoptFlags,
+                        options.getCompilerFilter(),
+                        StorageManager.UUID_PRIVATE_INTERNAL,
+                        dexUseInfo.getClassLoaderContext(),
+                        /* seInfo= */ null,
+                        /* downgrade= */ false ,
+                        /* targetSdk= */ 0,
+                        /* profileName */ null,
+                        /* dexMetadataPath */ null,
+                        getReasonName(options.getCompilationReason()));
+            } catch (InstallerException e) {
+                Slog.w(TAG, "Failed to dexopt", e);
+                return DEX_OPT_FAILED;
+            }
+            result = DEX_OPT_PERFORMED;
+        }
+        return result;
     }
 
     private String getAugmentedReasonName(int compilationReason, boolean useDexMetadata) {
@@ -649,6 +707,7 @@ public class PackageDexOptimizer {
                 | (options.isDexoptIdleBackgroundJob() ? DEXOPT_IDLE_BACKGROUND_JOB : 0)
                 | (generateCompactDex ? DEXOPT_GENERATE_COMPACT_DEX : 0)
                 | (generateAppImage ? DEXOPT_GENERATE_APP_IMAGE : 0)
+                | (options.isDexoptInstallForRestore() ? DEXOPT_FOR_RESTORE : 0)
                 | hiddenApiFlag;
         return adjustDexoptFlags(dexFlags);
     }
@@ -665,6 +724,9 @@ public class PackageDexOptimizer {
                     newProfile, downgrade);
         } catch (IOException ioe) {
             Slog.w(TAG, "IOException reading apk: " + path, ioe);
+            return DEX_OPT_FAILED;
+        } catch (Exception e) {
+            Slog.wtf(TAG, "Unexpected exception when calling dexoptNeeded on " + path, e);
             return DEX_OPT_FAILED;
         }
         return adjustDexoptNeeded(dexoptNeeded);

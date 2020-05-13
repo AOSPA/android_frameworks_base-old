@@ -212,7 +212,7 @@
     <string name="adb_wireless_settings" msgid="2295017847215680229">"無線偵錯"</string>
     <string name="adb_wireless_list_empty_off" msgid="1713707973837255490">"如要查看並使用可用的裝置，請開啟無線偵錯"</string>
     <string name="adb_pair_method_qrcode_title" msgid="6982904096137468634">"使用 QR 圖碼配對裝置"</string>
-    <string name="adb_pair_method_qrcode_summary" msgid="3729901496856458634">"使用 QR 圖碼掃描器配對新裝置"</string>
+    <string name="adb_pair_method_qrcode_summary" msgid="7130694277228970888">"使用 QR 圖碼掃描器配對新裝置"</string>
     <string name="adb_pair_method_code_title" msgid="1122590300445142904">"使用配對碼配對裝置"</string>
     <string name="adb_pair_method_code_summary" msgid="6370414511333685185">"使用六位數的配對碼配對新裝置"</string>
     <string name="adb_paired_devices_title" msgid="5268997341526217362">"已配對的裝置"</string>
@@ -231,7 +231,7 @@
     <string name="adb_qrcode_pairing_device_failed_msg" msgid="6936292092592914132">"無法配對裝置。可能是QR 圖碼錯誤，或是裝置未連上相同的網路。"</string>
     <string name="adb_wireless_ip_addr_preference_title" msgid="8335132107715311730">"IP 位址和通訊埠"</string>
     <string name="adb_wireless_qrcode_pairing_title" msgid="1906409667944674707">"掃描 QR 圖碼"</string>
-    <string name="adb_wireless_qrcode_pairing_description" msgid="8578868049289910131">"掃描 QR 圖碼即可透過 Wi-Fi 配對裝置"</string>
+    <string name="adb_wireless_qrcode_pairing_description" msgid="6014121407143607851">"掃描 QR 圖碼即可透過 Wi-Fi 配對裝置"</string>
     <string name="adb_wireless_no_network_msg" msgid="2365795244718494658">"請連上 Wi-Fi 網路"</string>
     <string name="keywords_adb_wireless" msgid="6507505581882171240">"ADB, 偵錯, 開發"</string>
     <string name="bugreport_in_power" msgid="8664089072534638709">"錯誤回報捷徑"</string>
@@ -251,8 +251,9 @@
     <string name="wifi_display_certification" msgid="1805579519992520381">"無線螢幕分享認證"</string>
     <string name="wifi_verbose_logging" msgid="1785910450009679371">"啟用 Wi‑Fi 詳細記錄設定"</string>
     <string name="wifi_scan_throttling" msgid="2985624788509913617">"Wi-Fi 掃描調節"</string>
+    <string name="wifi_enhanced_mac_randomization" msgid="5437378364995776979">"Wi‑Fi 加強型 MAC 隨機化"</string>
     <string name="mobile_data_always_on" msgid="8275958101875563572">"行動數據連線一律保持啟用狀態"</string>
-    <string name="tethering_hardware_offload" msgid="4116053719006939161">"數據連線硬體加速"</string>
+    <string name="tethering_hardware_offload" msgid="4116053719006939161">"網路共用硬體加速"</string>
     <string name="bluetooth_show_devices_without_names" msgid="923584526471885819">"顯示沒有名稱的藍牙裝置"</string>
     <string name="bluetooth_disable_absolute_volume" msgid="1452342324349203434">"停用絕對音量功能"</string>
     <string name="bluetooth_enable_gabeldorsche" msgid="9131730396242883416">"啟用 Gabeldorsche"</string>
@@ -283,6 +284,8 @@
     <string name="wifi_display_certification_summary" msgid="8111151348106907513">"顯示無線螢幕分享認證的選項"</string>
     <string name="wifi_verbose_logging_summary" msgid="4993823188807767892">"讓 Wi‑Fi 記錄功能升級，在 Wi‑Fi 選擇器中依每個 SSID RSSI 顯示 Wi‑Fi 詳細記錄"</string>
     <string name="wifi_scan_throttling_summary" msgid="2577105472017362814">"降低耗電量以及改善網路效能"</string>
+    <!-- no translation found for wifi_enhanced_mac_randomization_summary (1210663439867489931) -->
+    <skip />
     <string name="wifi_metered_label" msgid="8737187690304098638">"計量付費"</string>
     <string name="wifi_unmetered_label" msgid="6174142840934095093">"非計量付費"</string>
     <string name="select_logd_size_title" msgid="1604578195914595173">"記錄器緩衝區空間"</string>
@@ -297,7 +300,7 @@
     <string name="allow_mock_location_summary" msgid="179780881081354579">"允許模擬位置"</string>
     <string name="debug_view_attributes" msgid="3539609843984208216">"啟用檢視屬性檢查"</string>
     <string name="mobile_data_always_on_summary" msgid="1112156365594371019">"即使 Wi‑Fi 連線已啟用，一律將行動數據連線保持啟用狀態 (以便快速切換網路)。"</string>
-    <string name="tethering_hardware_offload_summary" msgid="7801345335142803029">"使用數據連線硬體加速功能 (如果可用的話)"</string>
+    <string name="tethering_hardware_offload_summary" msgid="7801345335142803029">"使用網路共用硬體加速功能 (如果可用的話)"</string>
     <string name="adb_warning_title" msgid="7708653449506485728">"允許 USB 偵錯嗎？"</string>
     <string name="adb_warning_message" msgid="8145270656419669221">"USB 偵錯是針對應用程式開發而設計的功能，可讓你複製電腦和裝置中的資料、不需經由通知即可在裝置上安裝應用程式，以及讀取記錄資料。"</string>
     <string name="adbwifi_warning_title" msgid="727104571653031865">"要啟用無線偵錯嗎？"</string>
@@ -429,13 +432,13 @@
     <string name="power_discharge_by_enhanced" msgid="563438403581662942">"根據你的使用情形，目前電量為 <xliff:g id="LEVEL">%2$s</xliff:g>，預估可持續使用到<xliff:g id="TIME">%1$s</xliff:g>"</string>
     <string name="power_discharge_by_only_enhanced" msgid="3268796172652988877">"根據你的使用情形，預估可持續使用到<xliff:g id="TIME">%1$s</xliff:g>"</string>
     <string name="power_discharge_by" msgid="4113180890060388350">"目前電量 <xliff:g id="LEVEL">%2$s</xliff:g>，預估還能持續使用到<xliff:g id="TIME">%1$s</xliff:g>"</string>
-    <string name="power_discharge_by_only" msgid="92545648425937000">"預估還能持續使用到<xliff:g id="TIME">%1$s</xliff:g>"</string>
+    <string name="power_discharge_by_only" msgid="92545648425937000">"預估電力大約可使用到<xliff:g id="TIME">%1$s</xliff:g>"</string>
     <string name="power_discharge_by_only_short" msgid="5883041507426914446">"還能持續使用到<xliff:g id="TIME">%1$s</xliff:g>"</string>
     <string name="power_suggestion_battery_run_out" msgid="6332089307827787087">"電池電力可能於<xliff:g id="TIME">%1$s</xliff:g> 前耗盡"</string>
-    <string name="power_remaining_less_than_duration_only" msgid="5802195288324091585">"電池可用時間不到 <xliff:g id="THRESHOLD">%1$s</xliff:g>"</string>
-    <string name="power_remaining_less_than_duration" msgid="1812668275239801236">"電池可用時間不到 <xliff:g id="THRESHOLD">%1$s</xliff:g> (<xliff:g id="LEVEL">%2$s</xliff:g>)"</string>
-    <string name="power_remaining_more_than_subtext" msgid="7919119719242734848">"電池可用時間超過 <xliff:g id="TIME_REMAINING">%1$s</xliff:g> (<xliff:g id="LEVEL">%2$s</xliff:g>)"</string>
-    <string name="power_remaining_only_more_than_subtext" msgid="3274496164769110480">"電池可用時間超過 <xliff:g id="TIME_REMAINING">%1$s</xliff:g>"</string>
+    <string name="power_remaining_less_than_duration_only" msgid="8956656616031395152">"電池可用時間不到 <xliff:g id="THRESHOLD">%1$s</xliff:g>"</string>
+    <string name="power_remaining_less_than_duration" msgid="318215464914990578">"電池可用時間不到 <xliff:g id="THRESHOLD">%1$s</xliff:g> (<xliff:g id="LEVEL">%2$s</xliff:g>)"</string>
+    <string name="power_remaining_more_than_subtext" msgid="446388082266121894">"電池可用時間超過 <xliff:g id="TIME_REMAINING">%1$s</xliff:g> (<xliff:g id="LEVEL">%2$s</xliff:g>)"</string>
+    <string name="power_remaining_only_more_than_subtext" msgid="4873750633368888062">"電池可用時間超過 <xliff:g id="TIME_REMAINING">%1$s</xliff:g>"</string>
     <string name="power_remaining_duration_only_shutdown_imminent" product="default" msgid="137330009791560774">"手機可能即將關機"</string>
     <string name="power_remaining_duration_only_shutdown_imminent" product="tablet" msgid="145489081521468132">"平板電腦可能即將關機"</string>
     <string name="power_remaining_duration_only_shutdown_imminent" product="device" msgid="1070562682853942350">"裝置可能即將關機"</string>

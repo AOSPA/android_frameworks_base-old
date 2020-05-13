@@ -17,14 +17,10 @@
 package android.window;
 
 import android.annotation.NonNull;
-import android.annotation.Nullable;
 import android.annotation.TestApi;
 import android.os.IBinder;
 import android.os.Parcel;
 import android.os.Parcelable;
-import android.os.RemoteException;
-import android.view.SurfaceControl;
-import android.window.IWindowContainerToken;
 
 /**
  * Interface for a window container to communicate with the window manager. This also acts as a
@@ -43,15 +39,6 @@ public final class WindowContainerToken implements Parcelable {
 
     private WindowContainerToken(Parcel in) {
         mRealToken = IWindowContainerToken.Stub.asInterface(in.readStrongBinder());
-    }
-
-    @Nullable
-    public SurfaceControl getLeash() {
-        try {
-            return mRealToken.getLeash();
-        } catch (RemoteException e) {
-            throw e.rethrowFromSystemServer();
-        }
     }
 
     /** @hide */
@@ -83,5 +70,18 @@ public final class WindowContainerToken implements Parcelable {
     /** @hide */
     public int describeContents() {
         return 0;
+    }
+
+    @Override
+    public int hashCode() {
+        return mRealToken.asBinder().hashCode();
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+        if (!(obj instanceof WindowContainerToken)) {
+            return false;
+        }
+        return mRealToken.asBinder() == ((WindowContainerToken) obj).asBinder();
     }
 }

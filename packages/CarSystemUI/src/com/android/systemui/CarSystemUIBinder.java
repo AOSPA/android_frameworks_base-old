@@ -18,19 +18,24 @@ package com.android.systemui;
 
 import com.android.systemui.biometrics.AuthController;
 import com.android.systemui.bubbles.dagger.BubbleModule;
+import com.android.systemui.car.navigationbar.CarNavigationBar;
 import com.android.systemui.car.notification.CarNotificationModule;
+import com.android.systemui.car.sideloaded.SideLoadedAppController;
+import com.android.systemui.car.statusbar.CarStatusBar;
+import com.android.systemui.car.statusbar.CarStatusBarModule;
+import com.android.systemui.car.voicerecognition.ConnectedDeviceVoiceRecognitionNotifier;
+import com.android.systemui.car.volume.VolumeUI;
+import com.android.systemui.car.window.OverlayWindowModule;
+import com.android.systemui.car.window.SystemUIOverlayWindowManager;
 import com.android.systemui.globalactions.GlobalActionsComponent;
 import com.android.systemui.keyguard.KeyguardViewMediator;
 import com.android.systemui.keyguard.dagger.KeyguardModule;
-import com.android.systemui.navigationbar.car.CarNavigationBar;
 import com.android.systemui.pip.PipUI;
 import com.android.systemui.power.PowerUI;
 import com.android.systemui.recents.Recents;
 import com.android.systemui.recents.RecentsModule;
 import com.android.systemui.shortcut.ShortcutKeyDispatcher;
 import com.android.systemui.stackdivider.Divider;
-import com.android.systemui.statusbar.car.CarStatusBar;
-import com.android.systemui.statusbar.car.CarStatusBarModule;
 import com.android.systemui.statusbar.notification.InstantAppNotifier;
 import com.android.systemui.statusbar.notification.dagger.NotificationsModule;
 import com.android.systemui.statusbar.phone.StatusBar;
@@ -38,10 +43,6 @@ import com.android.systemui.statusbar.tv.TvStatusBar;
 import com.android.systemui.theme.ThemeOverlayController;
 import com.android.systemui.toast.ToastUI;
 import com.android.systemui.util.leak.GarbageMonitor;
-import com.android.systemui.voicerecognition.car.ConnectedDeviceVoiceRecognitionNotifier;
-import com.android.systemui.volume.VolumeUI;
-import com.android.systemui.window.OverlayWindowModule;
-import com.android.systemui.window.SystemUIOverlayWindowManager;
 
 import dagger.Binds;
 import dagger.Module;
@@ -65,7 +66,7 @@ public abstract class CarSystemUIBinder {
     @ClassKey(Divider.class)
     public abstract SystemUI bindDivider(Divider sysui);
 
-    /** */
+    /** Inject Car Navigation Bar. */
     @Binds
     @IntoMap
     @ClassKey(CarNavigationBar.class)
@@ -192,4 +193,10 @@ public abstract class CarSystemUIBinder {
     @IntoMap
     @ClassKey(SystemUIOverlayWindowManager.class)
     public abstract SystemUI bindSystemUIPrimaryWindowManager(SystemUIOverlayWindowManager sysui);
+
+    /** Inject into SideLoadedAppController. */
+    @Binds
+    @IntoMap
+    @ClassKey(SideLoadedAppController.class)
+    public abstract SystemUI bindSideLoadedAppController(SideLoadedAppController sysui);
 }

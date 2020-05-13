@@ -50,6 +50,10 @@
     <!-- The color of the text in the Global Actions menu -->
     <color name="global_actions_alert_text">@color/GM2_red_700</color>
 
+    <!-- The color of the background of the emergency button when home controls are visible -->
+    <color name="global_actions_emergency_background">@color/GM2_red_400</color>
+    <color name="global_actions_emergency_text">@color/GM2_grey_100</color>
+
     <!-- Tint color for the content on the notification overflow card. -->
     <color name="keyguard_overflow_content_color">#ff686868</color>
 
@@ -194,6 +198,8 @@
     <color name="global_screenshot_button_border">@color/GM2_grey_300</color>
     <color name="global_screenshot_button_ripple">#1f000000</color>
     <color name="global_screenshot_button_icon">@color/GM2_blue_500</color>
+    <color name="global_screenshot_dismiss_background">#FFFFFF</color>
+    <color name="global_screenshot_dismiss_foreground">@color/GM2_grey_500</color>
 
     <!-- GM2 colors -->
     <color name="GM2_grey_50">#F8F9FA</color>
@@ -211,6 +217,7 @@
     <color name="GM2_red_50">#FCE8E6</color>
     <color name="GM2_red_200">#F6AEA9</color>
     <color name="GM2_red_300">#F28B82</color>
+    <color name="GM2_red_400">#EE675C</color>
     <color name="GM2_red_500">#B71C1C</color>
     <color name="GM2_red_700">#C5221F</color>
 
@@ -239,8 +246,14 @@
     <color name="control_list_popup_background">@*android:color/background_floating_material_dark</color>
     <color name="control_spinner_dropdown">@*android:color/foreground_material_dark</color>
     <color name="control_more_vert">@*android:color/foreground_material_dark</color>
-    <color name="control_enabled_light_background">@color/GM2_yellow_200</color>
-    <color name="control_enabled_thermo_heat_background">@color/GM2_red_200</color>
-    <color name="control_enabled_thermo_cool_background">@color/GM2_blue_200</color>
-    <color name="control_enabled_default_background">@color/GM2_blue_200</color>
+    <color name="control_enabled_light_background">#413C2D</color>
+    <color name="control_enabled_thermo_heat_background">#41312E</color>
+    <color name="control_enabled_thermo_cool_background">#303744</color>
+    <color name="control_enabled_default_background">#3C3D40</color>
+    <color name="control_enabled_heat_foreground">#FF8B66</color>
+    <color name="control_enabled_default_foreground">@color/GM2_blue_300</color>
+    <color name="control_enabled_cool_foreground">@color/GM2_blue_300</color>
+
+    <!-- Docked misalignment message -->
+    <color name="misalignment_text_color">#F28B82</color>
 </resources>

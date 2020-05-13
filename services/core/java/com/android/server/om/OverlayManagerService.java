@@ -1120,7 +1120,11 @@ public final class OverlayManagerService extends SystemService {
 
         @Override
         public List<PackageInfo> getOverlayPackages(final int userId) {
-            return mPackageManagerInternal.getOverlayPackages(userId);
+            final List<PackageInfo> overlays = mPackageManagerInternal.getOverlayPackages(userId);
+            for (final PackageInfo info : overlays) {
+                cachePackageInfo(info.packageName, userId, info);
+            }
+            return overlays;
         }
 
         @Nullable
@@ -1151,9 +1155,8 @@ public final class OverlayManagerService extends SystemService {
 
         @Override
         public boolean doesTargetDefineOverlayable(String targetPackageName, int userId)
-                throws RemoteException, IOException {
-            PackageInfo packageInfo = mPackageManager.getPackageInfo(targetPackageName, 0,
-                    userId);
+                throws IOException {
+            PackageInfo packageInfo = getPackageInfo(targetPackageName, userId);
             if (packageInfo == null) {
                 throw new IOException("Unable to get target package");
             }

@@ -68,6 +68,8 @@ import org.mockito.MockitoAnnotations;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 
 @RunWith(AndroidJUnit4.class)
 public class IntentForwarderActivityTest {
@@ -213,12 +215,8 @@ public class IntentForwarderActivityTest {
     }
 
     @Test
-    public void forwardToManagedProfile_canForward_chooserIntent() throws Exception {
+    public void launchInSameProfile_chooserIntent() {
         sComponentName = FORWARD_TO_MANAGED_PROFILE_COMPONENT_NAME;
-
-        // Intent can be forwarded.
-        when(mIPm.canForwardTo(
-                any(Intent.class), nullable(String.class), anyInt(), anyInt())).thenReturn(true);
 
         // Manage profile exists.
         List<UserInfo> profiles = new ArrayList<>();
@@ -235,10 +233,6 @@ public class IntentForwarderActivityTest {
         intent.putExtra(Intent.EXTRA_INTENT, sendIntent);
         IntentForwarderWrapperActivity activity = mActivityRule.launchActivity(intent);
 
-        ArgumentCaptor<Intent> intentCaptor = ArgumentCaptor.forClass(Intent.class);
-        verify(mIPm).canForwardTo(intentCaptor.capture(), eq(TYPE_PLAIN_TEXT), anyInt(), anyInt());
-        assertEquals(Intent.ACTION_SEND, intentCaptor.getValue().getAction());
-
         assertNotNull(activity.mStartActivityIntent);
         assertEquals(Intent.ACTION_CHOOSER, activity.mStartActivityIntent.getAction());
         assertNull(activity.mStartActivityIntent.getPackage());
@@ -249,9 +243,9 @@ public class IntentForwarderActivityTest {
         assertEquals(Intent.ACTION_SEND, innerIntent.getAction());
         assertNull(innerIntent.getComponent());
         assertNull(innerIntent.getPackage());
-        assertEquals(CURRENT_USER_INFO.id, innerIntent.getContentUserHint());
+        assertEquals(UserHandle.USER_CURRENT, innerIntent.getContentUserHint());
 
-        assertEquals(MANAGED_PROFILE_INFO.id, activity.mUserIdActivityLaunchedIn);
+        assertEquals(CURRENT_USER_INFO.id, activity.mUserIdActivityLaunchedIn);
     }
 
     @Test
@@ -641,6 +635,11 @@ public class IntentForwarderActivityTest {
         public void onCreate(@Nullable Bundle savedInstanceState) {
             getIntent().setComponent(sComponentName);
             super.onCreate(savedInstanceState);
+            try {
+                mExecutorService.awaitTermination(/* timeout= */ 30, TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
         }
 
         @Override
@@ -679,7 +678,8 @@ public class IntentForwarderActivityTest {
         }
 
         @Override
-        public ResolveInfo resolveActivityAsUser(Intent intent, int flags, int userId) {
+        public CompletableFuture<ResolveInfo> resolveActivityAsUser(
+                Intent intent, int flags, int userId) {
             ActivityInfo activityInfo = new ActivityInfo();
             activityInfo.packageName = sPackageName;
             activityInfo.name = sActivityName;
@@ -688,7 +688,7 @@ public class IntentForwarderActivityTest {
             ResolveInfo resolveInfo = new ResolveInfo();
             resolveInfo.activityInfo = activityInfo;
 
-            return resolveInfo;
+            return CompletableFuture.completedFuture(resolveInfo);
         }
 
         @Override

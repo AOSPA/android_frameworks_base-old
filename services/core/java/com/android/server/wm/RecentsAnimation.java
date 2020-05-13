@@ -165,17 +165,6 @@ class RecentsAnimation implements RecentsAnimationCallbacks,
         ProtoLog.d(WM_DEBUG_RECENTS_ANIMATIONS, "startRecentsActivity(): intent=%s", mTargetIntent);
         Trace.traceBegin(TRACE_TAG_WINDOW_MANAGER, "RecentsAnimation#startRecentsActivity");
 
-        // TODO(multi-display) currently only support recents animation in default display.
-        final DisplayContent dc =
-                mService.mRootWindowContainer.getDefaultDisplay().mDisplayContent;
-        if (!mWindowManager.canStartRecentsAnimation()) {
-            notifyAnimationCancelBeforeStart(recentsAnimationRunner);
-            ProtoLog.d(WM_DEBUG_RECENTS_ANIMATIONS,
-                    "Can't start recents animation, nextAppTransition=%s",
-                        dc.mAppTransition.getAppTransition());
-            return;
-        }
-
         // If the activity is associated with the recents stack, then try and get that first
         ActivityStack targetStack = mDefaultTaskDisplayArea.getStack(WINDOWING_MODE_UNDEFINED,
                 mTargetActivityType);
@@ -313,7 +302,7 @@ class RecentsAnimation implements RecentsAnimationCallbacks,
                     // Prefer to use the original target activity instead of top activity because
                     // we may have moved another task to top (starting 3p launcher).
                     final ActivityRecord targetActivity = targetStack != null
-                            ? targetStack.isInStackLocked(mLaunchedTargetActivity)
+                            ? targetStack.isInTask(mLaunchedTargetActivity)
                             : null;
                     ProtoLog.d(WM_DEBUG_RECENTS_ANIMATIONS,
                             "onAnimationFinished(): targetStack=%s targetActivity=%s "
@@ -442,10 +431,6 @@ class RecentsAnimation implements RecentsAnimationCallbacks,
             // Always prepare an app transition since we rely on the transition callbacks to cleanup
             mWindowManager.prepareAppTransition(TRANSIT_NONE, false);
             controller.setCancelOnNextTransitionStart();
-        } else {
-            // Just cancel directly to unleash from launcher when the next launching task is the
-            // current top task.
-            mWindowManager.cancelRecentsAnimation(REORDER_KEEP_IN_PLACE, "stackOrderChanged");
         }
     }
 

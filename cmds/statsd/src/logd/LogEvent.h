@@ -70,7 +70,7 @@ public:
     explicit LogEvent(int64_t wallClockTimestampNs, int64_t elapsedTimestampNs,
                       const InstallTrainInfo& installTrainInfo);
 
-    ~LogEvent();
+    ~LogEvent() {}
 
     /**
      * Get the timestamp associated with this event.
@@ -145,7 +145,7 @@ public:
     }
 
     // Default value = false
-    inline bool shouldTruncateTimestamp() {
+    inline bool shouldTruncateTimestamp() const {
         return mTruncateTimestamp;
     }
 
@@ -160,14 +160,32 @@ public:
     //    }
     // Note that atomIndex is 1-indexed.
     inline int getUidFieldIndex() {
-        return mUidFieldIndex;
+        return static_cast<int>(mUidFieldIndex);
     }
 
-    // Returns the index of (the first) attribution chain within the atom
-    // definition. Note that the value is 1-indexed. If there is no attribution
-    // chain, returns -1.
-    inline int getAttributionChainIndex() {
-        return mAttributionChainIndex;
+    // Returns whether this LogEvent has an AttributionChain.
+    // If it does and indexRange is not a nullptr, populate indexRange with the start and end index
+    // of the AttributionChain within mValues.
+    bool hasAttributionChain(std::pair<int, int>* indexRange = nullptr) const;
+
+    // Returns the index of the exclusive state field within the FieldValues vector if
+    // an exclusive state exists. If there is no exclusive state field, returns -1.
+    //
+    // If the index within the atom definition is desired, do the following:
+    //    int vectorIndex = LogEvent.getExclusiveStateFieldIndex();
+    //    if (vectorIndex != -1) {
+    //        FieldValue& v = LogEvent.getValues()[vectorIndex];
+    //        int atomIndex = v.mField.getPosAtDepth(0);
+    //    }
+    // Note that atomIndex is 1-indexed.
+    inline int getExclusiveStateFieldIndex() const {
+        return static_cast<int>(mExclusiveStateFieldIndex);
+    }
+
+    // If a reset state is not sent in the StatsEvent, returns -1. Note that a
+    // reset state is sent if and only if a reset should be triggered.
+    inline int getResetState() const {
+        return mResetState;
     }
 
     inline LogEvent makeCopy() {
@@ -188,6 +206,10 @@ public:
             }
         }
         return BAD_INDEX;
+    }
+
+    bool isValid() const {
+        return mValid;
     }
 
 private:
@@ -213,14 +235,16 @@ private:
     void parseExclusiveStateAnnotation(uint8_t annotationType);
     void parseTriggerStateResetAnnotation(uint8_t annotationType);
     void parseStateNestedAnnotation(uint8_t annotationType);
+    bool checkPreviousValueType(Type expected);
 
     /**
-     * The below three variables are only valid during the execution of
+     * The below two variables are only valid during the execution of
      * parseBuffer. There are no guarantees about the state of these variables
      * before/after.
      */
     uint8_t* mBuf;
     uint32_t mRemainingLen; // number of valid bytes left in the buffer being parsed
+
     bool mValid = true; // stores whether the event we received from the socket is valid
 
     /**
@@ -272,19 +296,15 @@ private:
     // matching.
     std::vector<FieldValue> mValues;
 
-    // This field is used when statsD wants to create log event object and write fields to it. After
-    // calling init() function, this object would be destroyed to save memory usage.
-    // When the log event is created from log msg, this field is never initiated.
-    android_log_context mContext = NULL;
-
     // The timestamp set by the logd.
     int64_t mLogdTimestampNs;
 
     // The elapsed timestamp set by statsd log writer.
     int64_t mElapsedTimestampNs;
 
-    // The atom tag of the event.
-    int mTagId;
+    // The atom tag of the event (defaults to 0 if client does not
+    // appropriately set the atom id).
+    int mTagId = 0;
 
     // The uid of the logging client (defaults to -1).
     int32_t mLogUid = -1;
@@ -294,8 +314,14 @@ private:
 
     // Annotations
     bool mTruncateTimestamp = false;
-    int mUidFieldIndex = -1;
-    int mAttributionChainIndex = -1;
+    int mResetState = -1;
+
+    // Indexes within the FieldValue vector can be stored in 7 bits because
+    // that's the assumption enforced by the encoding used in FieldValue.
+    int8_t mUidFieldIndex = -1;
+    int8_t mAttributionChainStartIndex = -1;
+    int8_t mAttributionChainEndIndex = -1;
+    int8_t mExclusiveStateFieldIndex = -1;
 };
 
 void writeExperimentIdsToProto(const std::vector<int64_t>& experimentIds, std::vector<uint8_t>* protoOut);

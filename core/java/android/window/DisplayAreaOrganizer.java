@@ -21,6 +21,7 @@ import android.annotation.RequiresPermission;
 import android.annotation.TestApi;
 import android.os.RemoteException;
 import android.util.Singleton;
+import android.view.SurfaceControl;
 
 /**
  * Interface for WindowManager to delegate control of display areas.
@@ -52,21 +53,44 @@ public class DisplayAreaOrganizer extends WindowOrganizer {
         }
     }
 
-    public void onDisplayAreaAppeared(@NonNull WindowContainerToken displayArea) {}
+    /**
+     * @hide
+     */
+    @RequiresPermission(android.Manifest.permission.MANAGE_ACTIVITY_STACKS)
+    public void unregisterOrganizer() {
+        try {
+            getController().unregisterOrganizer(mInterface);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
 
-    public void onDisplayAreaVanished(@NonNull WindowContainerToken displayArea) {}
+    public void onDisplayAreaAppeared(@NonNull DisplayAreaInfo displayAreaInfo,
+            @NonNull SurfaceControl leash) {}
 
+    public void onDisplayAreaVanished(@NonNull DisplayAreaInfo displayAreaInfo) {}
+
+    /**
+     * @hide
+     */
+    public void onDisplayAreaInfoChanged(@NonNull DisplayAreaInfo displayAreaInfo) {}
 
     private final IDisplayAreaOrganizer mInterface = new IDisplayAreaOrganizer.Stub() {
 
         @Override
-        public void onDisplayAreaAppeared(@NonNull WindowContainerToken displayArea) {
-            DisplayAreaOrganizer.this.onDisplayAreaAppeared(displayArea);
+        public void onDisplayAreaAppeared(@NonNull DisplayAreaInfo displayAreaInfo,
+                @NonNull SurfaceControl leash) {
+            DisplayAreaOrganizer.this.onDisplayAreaAppeared(displayAreaInfo, leash);
         }
 
         @Override
-        public void onDisplayAreaVanished(@NonNull WindowContainerToken displayArea) {
-            DisplayAreaOrganizer.this.onDisplayAreaVanished(displayArea);
+        public void onDisplayAreaVanished(@NonNull DisplayAreaInfo displayAreaInfo) {
+            DisplayAreaOrganizer.this.onDisplayAreaVanished(displayAreaInfo);
+        }
+
+        @Override
+        public void onDisplayAreaInfoChanged(@NonNull DisplayAreaInfo displayAreaInfo) {
+            DisplayAreaOrganizer.this.onDisplayAreaInfoChanged(displayAreaInfo);
         }
     };
 
