@@ -1292,12 +1292,6 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         }
 
         if (stack != null && stack.topRunningActivity() == this) {
-            // carry over the PictureInPictureParams to the parent stack without calling
-            // TaskOrganizerController#dispatchTaskInfoChanged.
-            // this is to ensure the stack holding up-to-dated pinned stack information
-            // when activity is re-parented to enter pip mode, see also
-            // RootWindowContainer#moveActivityToPinnedStack
-            stack.mPictureInPictureParams.copyOnlySet(pictureInPictureArgs);
             // make ensure the TaskOrganizer still works after re-parenting
             if (firstWindowDrawn) {
                 stack.setHasBeenVisible(true);
@@ -7812,6 +7806,6 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
 
     void setPictureInPictureParams(PictureInPictureParams p) {
         pictureInPictureArgs.copyOnlySet(p);
-        getTask().getRootTask().setPictureInPictureParams(p);
+        getTask().getRootTask().onPictureInPictureParamsChanged();
     }
 }
