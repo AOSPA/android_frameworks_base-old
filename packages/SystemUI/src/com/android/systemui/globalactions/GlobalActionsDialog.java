@@ -69,6 +69,9 @@ import android.telecom.TelecomManager;
 import android.telephony.PhoneStateListener;
 import android.telephony.ServiceState;
 import android.telephony.TelephonyManager;
+import android.transition.AutoTransition;
+import android.transition.TransitionManager;
+import android.transition.TransitionSet;
 import android.util.ArraySet;
 import android.util.FeatureFlagUtils;
 import android.util.Log;
@@ -206,7 +209,8 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
     @VisibleForTesting
     protected final ArrayList<Action> mOverflowItems = new ArrayList<>();
 
-    private ActionsDialog mDialog;
+    @VisibleForTesting
+    protected ActionsDialog mDialog;
 
     private Action mSilentModeAction;
     private ToggleAction mAirplaneModeOn;
@@ -245,6 +249,9 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
     public enum GlobalActionsEvent implements UiEventLogger.UiEventEnum {
         @UiEvent(doc = "The global actions / power menu surface became visible on the screen.")
         GA_POWER_MENU_OPEN(337),
+
+        @UiEvent(doc = "The global actions / power menu surface was dismissed.")
+        GA_POWER_MENU_CLOSE(471),
 
         @UiEvent(doc = "The global actions bugreport button was pressed.")
         GA_BUGREPORT_PRESS(344),
@@ -360,10 +367,9 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
             @Override
             public void onUnlockedChanged() {
                 if (mDialog != null) {
-                    boolean unlocked = keyguardStateController.isUnlocked()
-                            || keyguardStateController.canDismissLockScreen();
                     if (mDialog.mPanelController != null) {
-                        mDialog.mPanelController.onDeviceLockStateChanged(unlocked);
+                        mDialog.mPanelController.onDeviceLockStateChanged(
+                                !mKeyguardStateController.isUnlocked());
                     }
                     if (!mDialog.isShowingControls() && shouldShowControls()) {
                         mDialog.showControls(mControlsUiController);
@@ -1168,6 +1174,7 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
         if (mDialog == dialog) {
             mDialog = null;
         }
+        mUiEventLogger.log(GlobalActionsEvent.GA_POWER_MENU_CLOSE);
         mWindowManagerFuncs.onGlobalActionsHidden();
         mLifecycle.setCurrentState(Lifecycle.State.DESTROYED);
     }
@@ -2022,7 +2029,22 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
                         new FrameLayout.LayoutParams(
                                 FrameLayout.LayoutParams.MATCH_PARENT,
                                 FrameLayout.LayoutParams.MATCH_PARENT);
-                panelContainer.addView(mPanelController.getPanelContent(), panelParams);
+                View walletView = mPanelController.getPanelContent();
+                panelContainer.addView(walletView, panelParams);
+                // Smooth transitions when wallet is resized, which can happen when a card is added
+                ViewGroup root = findViewById(com.android.systemui.R.id.global_actions_grid_root);
+                if (root != null) {
+                    walletView.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
+                        int oldHeight = ob - ot;
+                        int newHeight = b - t;
+                        if (oldHeight > 0 && oldHeight != newHeight) {
+                            TransitionSet transition = new AutoTransition()
+                                    .setDuration(250)
+                                    .setOrdering(TransitionSet.ORDERING_TOGETHER);
+                            TransitionManager.beginDelayedTransition(root, transition);
+                        }
+                    });
+                }
             }
         }
 
@@ -2378,11 +2400,10 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
 
     @VisibleForTesting
     protected boolean shouldShowControls() {
-        boolean isUnlocked = mKeyguardStateController.isUnlocked()
-                || mKeyguardStateController.canDismissLockScreen();
-        return (isUnlocked || mShowLockScreenCardsAndControls)
+        return (mKeyguardStateController.isUnlocked() || mShowLockScreenCardsAndControls)
                 && mControlsUiController.getAvailable()
-                && !mControlsServiceInfos.isEmpty();
+                && !mControlsServiceInfos.isEmpty()
+                && mDeviceProvisioned;
     }
     // TODO: Remove legacy layout XML and classes.
     protected boolean shouldUseControlsLayout() {

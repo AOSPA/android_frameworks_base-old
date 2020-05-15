@@ -2782,7 +2782,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
                         // the Messenger, but if this ever changes, not making a defensive copy
                         // here will give attack vectors to clients using this code path.
                         networkCapabilities = new NetworkCapabilities(networkCapabilities);
-                        networkCapabilities.restrictCapabilitesForTestNetwork();
+                        networkCapabilities.restrictCapabilitesForTestNetwork(nai.creatorUid);
                     }
                     updateCapabilities(nai.getCurrentScore(), nai, networkCapabilities);
                     break;
@@ -3129,10 +3129,6 @@ public class ConnectivityService extends IConnectivityManager.Stub
 
         @Override
         public void notifyDataStallSuspected(DataStallReportParcelable p) {
-            final Message msg = mConnectivityDiagnosticsHandler.obtainMessage(
-                    ConnectivityDiagnosticsHandler.EVENT_DATA_STALL_SUSPECTED,
-                    p.detectionMethod, mNetId, p.timestampMillis);
-
             final PersistableBundle extras = new PersistableBundle();
             switch (p.detectionMethod) {
                 case DETECTION_METHOD_DNS_EVENTS:
@@ -3147,12 +3143,9 @@ public class ConnectivityService extends IConnectivityManager.Stub
                     log("Unknown data stall detection method, ignoring: " + p.detectionMethod);
                     return;
             }
-            msg.setData(new Bundle(extras));
 
-            // NetworkStateTrackerHandler currently doesn't take any actions based on data
-            // stalls so send the message directly to ConnectivityDiagnosticsHandler and avoid
-            // the cost of going through two handlers.
-            mConnectivityDiagnosticsHandler.sendMessage(msg);
+            proxyDataStallToConnectivityDiagnosticsHandler(
+                    p.detectionMethod, mNetId, p.timestampMillis, extras);
         }
 
         @Override
@@ -3164,6 +3157,19 @@ public class ConnectivityService extends IConnectivityManager.Stub
         public String getInterfaceHash() {
             return this.HASH;
         }
+    }
+
+    private void proxyDataStallToConnectivityDiagnosticsHandler(int detectionMethod, int netId,
+            long timestampMillis, @NonNull PersistableBundle extras) {
+        final Message msg = mConnectivityDiagnosticsHandler.obtainMessage(
+                    ConnectivityDiagnosticsHandler.EVENT_DATA_STALL_SUSPECTED,
+                    detectionMethod, netId, timestampMillis);
+        msg.setData(new Bundle(extras));
+
+        // NetworkStateTrackerHandler currently doesn't take any actions based on data
+        // stalls so send the message directly to ConnectivityDiagnosticsHandler and avoid
+        // the cost of going through two handlers.
+        mConnectivityDiagnosticsHandler.sendMessage(msg);
     }
 
     private boolean networkRequiresPrivateDnsValidation(NetworkAgentInfo nai) {
@@ -5911,7 +5917,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
             // the call to mixInCapabilities below anyway, but sanitizing here means the NAI never
             // sees capabilities that may be malicious, which might prevent mistakes in the future.
             networkCapabilities = new NetworkCapabilities(networkCapabilities);
-            networkCapabilities.restrictCapabilitesForTestNetwork();
+            networkCapabilities.restrictCapabilitesForTestNetwork(Binder.getCallingUid());
         } else {
             enforceNetworkFactoryPermission();
         }
@@ -5924,7 +5930,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
         final NetworkAgentInfo nai = new NetworkAgentInfo(messenger, new AsyncChannel(),
                 new Network(mNetIdManager.reserveNetId()), new NetworkInfo(networkInfo), lp, nc,
                 currentScore, mContext, mTrackerHandler, new NetworkAgentConfig(networkAgentConfig),
-                this, mNetd, mDnsResolver, mNMS, providerId);
+                this, mNetd, mDnsResolver, mNMS, providerId, Binder.getCallingUid());
 
         // Make sure the LinkProperties and NetworkCapabilities reflect what the agent info says.
         nai.getAndSetNetworkCapabilities(mixInCapabilities(nai, nc));
@@ -6025,7 +6031,8 @@ public class ConnectivityService extends IConnectivityManager.Stub
             // Start or stop DNS64 detection and 464xlat according to network state.
             networkAgent.clatd.update();
             notifyIfacesChangedForNetworkStats();
-            networkAgent.networkMonitor().notifyLinkPropertiesChanged(newLp);
+            networkAgent.networkMonitor().notifyLinkPropertiesChanged(
+                    new LinkProperties(newLp, true /* parcelSensitiveFields */));
             if (networkAgent.everConnected) {
                 notifyNetworkCallbacks(networkAgent, ConnectivityManager.CALLBACK_IP_CHANGED);
             }
@@ -7250,7 +7257,9 @@ public class ConnectivityService extends IConnectivityManager.Stub
                 networkAgent.networkMonitor().setAcceptPartialConnectivity();
             }
             networkAgent.networkMonitor().notifyNetworkConnected(
-                    networkAgent.linkProperties, networkAgent.networkCapabilities);
+                    new LinkProperties(networkAgent.linkProperties,
+                            true /* parcelSensitiveFields */),
+                    networkAgent.networkCapabilities);
             scheduleUnvalidatedPrompt(networkAgent);
 
             // Whether a particular NetworkRequest listen should cause signal strength thresholds to
@@ -8247,6 +8256,26 @@ public class ConnectivityService extends IConnectivityManager.Stub
                         Binder.getCallingUid(),
                         0,
                         callback));
+    }
+
+    @Override
+    public void simulateDataStall(int detectionMethod, long timestampMillis,
+            @NonNull Network network, @NonNull PersistableBundle extras) {
+        enforceAnyPermissionOf(android.Manifest.permission.MANAGE_TEST_NETWORKS,
+                android.Manifest.permission.NETWORK_STACK);
+        final NetworkCapabilities nc = getNetworkCapabilitiesInternal(network);
+        if (!nc.hasTransport(TRANSPORT_TEST)) {
+            throw new SecurityException("Data Stall simluation is only possible for test networks");
+        }
+
+        final NetworkAgentInfo nai = getNetworkAgentInfoForNetwork(network);
+        if (nai == null || nai.creatorUid != Binder.getCallingUid()) {
+            throw new SecurityException("Data Stall simulation is only possible for network "
+                + "creators");
+        }
+
+        proxyDataStallToConnectivityDiagnosticsHandler(
+                detectionMethod, network.netId, timestampMillis, extras);
     }
 
     private boolean isMobileNetwork(NetworkAgentInfo nai) {

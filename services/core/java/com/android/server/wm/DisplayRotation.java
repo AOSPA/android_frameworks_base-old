@@ -621,6 +621,7 @@ public class DisplayRotation {
         }, true /* traverseTopToBottom */);
         mSeamlessRotationCount = 0;
         mRotatingSeamlessly = false;
+        mDisplayContent.finishFixedRotationAnimation();
     }
 
     private void prepareSeamlessRotation() {
@@ -707,6 +708,7 @@ public class DisplayRotation {
                     "Performing post-rotate rotation after seamless rotation");
             // Finish seamless rotation.
             mRotatingSeamlessly = false;
+            mDisplayContent.finishFixedRotationAnimation();
 
             updateRotationAndSendNewConfigIfChanged();
         }
