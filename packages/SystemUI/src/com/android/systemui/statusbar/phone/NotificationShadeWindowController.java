@@ -279,7 +279,7 @@ public class NotificationShadeWindowController implements Callback, Dumpable,
         } else if (state.isKeyguardShowingAndNotOccluded() || panelFocusable) {
             mLpChanged.flags &= ~LayoutParams.FLAG_NOT_FOCUSABLE;
             // Make sure to remove FLAG_ALT_FOCUSABLE_IM when keyguard needs input.
-            if (state.mKeyguardNeedsInput) {
+            if (state.mKeyguardNeedsInput && state.isKeyguardShowingAndNotOccluded()) {
                 mLpChanged.flags &= ~LayoutParams.FLAG_ALT_FOCUSABLE_IM;
             } else {
                 mLpChanged.flags |= LayoutParams.FLAG_ALT_FOCUSABLE_IM;
@@ -321,8 +321,7 @@ public class NotificationShadeWindowController implements Callback, Dumpable,
                 || state.mPanelVisible || state.mKeyguardFadingAway || state.mBouncerShowing
                 || state.mHeadsUpShowing
                 || state.mScrimsVisibility != ScrimController.TRANSPARENT)
-                || state.mBackgroundBlurRadius > 0
-                || state.mLaunchingActivity;
+                || state.mBackgroundBlurRadius > 0;
     }
 
     private void applyFitsSystemWindows(State state) {
@@ -486,11 +485,6 @@ public class NotificationShadeWindowController implements Callback, Dumpable,
         apply(mCurrentState);
     }
 
-    void setLaunchingActivity(boolean launching) {
-        mCurrentState.mLaunchingActivity = launching;
-        apply(mCurrentState);
-    }
-
     public void setScrimsVisibility(int scrimsVisibility) {
         mCurrentState.mScrimsVisibility = scrimsVisibility;
         apply(mCurrentState);
@@ -651,7 +645,6 @@ public class NotificationShadeWindowController implements Callback, Dumpable,
         boolean mForceCollapsed;
         boolean mForceDozeBrightness;
         boolean mForceUserActivity;
-        boolean mLaunchingActivity;
         boolean mBackdropShowing;
         boolean mWallpaperSupportsAmbientMode;
         boolean mNotTouchable;
