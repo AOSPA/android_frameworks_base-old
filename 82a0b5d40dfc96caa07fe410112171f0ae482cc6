@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "64b6bc2a_4be459a1",
+        "filename": "core/java/android/app/AppLockManager.java",
+        "patchSetId": 14
+      },
+      "lineNbr": 2,
+      "author": {
+        "id": 1000012
+      },
+      "writtenOn": "2020-05-16T16:39:30Z",
+      "side": 1,
+      "message": "Paranoid Android, not The ParanoidAndroid Project",
+      "revId": "82a0b5d40dfc96caa07fe410112171f0ae482cc6",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    }
+  ]
+}
