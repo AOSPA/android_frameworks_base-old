@@ -30,6 +30,8 @@ import android.widget.Switch;
 import com.android.systemui.Dependency;
 import com.android.systemui.R;
 
+import static android.provider.Settings.System.SCREENRECORD_AUDIO_SOURCE;
+
 public class ScreenRecordDialog extends Activity {
 
     private static final int REQUEST_CODE = 2;
@@ -39,6 +41,9 @@ public class ScreenRecordDialog extends Activity {
 
     private RecordingController mController;
     private Switch mAudioSwitch;
+    private int mAudioSourceOpt;
+
+    private Spinner mAudioSourceSpinner;
     private Switch mTapsSwitch;
 
     @Override
@@ -64,11 +69,29 @@ public class ScreenRecordDialog extends Activity {
                 finish();
             }
         });
-        mAudioSwitch = (Switch) findViewById(R.id.screenrecord_audio_switch);
         mTapsSwitch = (Switch) findViewById(R.id.screenrecord_taps_switch);
+
+        // recording bitrate spinner
+        mBitratePicker = (Spinner) findViewById(R.id.screenrecord_bitrate_picker);
+        ArrayAdapter<CharSequence> bitrateAdapter = ArrayAdapter.createFromResource(this,
+            SystemProperties.get("ro.config.low_ram").equals("true") ? R.array.screen_video_quality_go_entries :
+                        R.array.screen_video_quality_entries, android.R.layout.simple_spinner_item);
+        bitrateAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        mBitratePicker.setAdapter(bitrateAdapter);
+        initialCheckSpinner(mBitratePicker, SCREENRECORD_VIDEO_BITRATE, 2 /* average option */);
+        setSpinnerListener(mBitratePicker, SCREENRECORD_VIDEO_BITRATE);
+        // audio source spinner
+        mAudioSourceSpinner = findViewById(R.id.spinner_audio_source);
+        ArrayAdapter<CharSequence> audioSourceAdapter = ArrayAdapter.createFromResource(this,
+            R.array.screen_audio_recording_entries, android.R.layout.simple_spinner_item);
+        audioSourceAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        mAudioSourceSpinner.setAdapter(audioSourceAdapter);
+        initialCheckSpinner(mAudioSourceSpinner, SCREENRECORD_AUDIO_SOURCE, 0 /* disabled */);
+        setSpinnerListener(mAudioSourceSpinner, SCREENRECORD_AUDIO_SOURCE);
     }
 
     private void requestScreenCapture() {
+        mAudioSourceOpt = mAudioSourceSpinner.getSelectedItemPosition();
         mController.startCountdown(COUNTDOWN_MILLIS, COUNTDOWN_INTERVAL, PendingIntent.getForegroundService(this, REQUEST_CODE, 
                 RecordingService.getStartIntent(this, RESULT_OK, (Intent) null, mAudioSwitch.isChecked(), 
                 mTapsSwitch.isChecked()), PendingIntent.FLAG_UPDATE_CURRENT), PendingIntent.getService(this, REQUEST_CODE, 
