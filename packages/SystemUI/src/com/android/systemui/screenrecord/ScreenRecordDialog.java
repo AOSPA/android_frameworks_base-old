@@ -38,8 +38,10 @@ public class ScreenRecordDialog extends Activity {
     private static final long COUNTDOWN_INTERVAL = 1000;
 
     private RecordingController mController;
-    private Switch mAudioSwitch;
     private Switch mTapsSwitch;
+
+    private int mAudioSource;
+    private Spinner mAudioSourcePref;
 
     @Override
     public void onCreate(Bundle bundle) {
@@ -64,13 +66,21 @@ public class ScreenRecordDialog extends Activity {
                 finish();
             }
         });
-        mAudioSwitch = (Switch) findViewById(R.id.screenrecord_audio_switch);
+
+        mAudioSourcePref = findViewById(R.id.screenrecord_audio_source);
+        ArrayAdapter<CharSequence> adapter = ArrayAdapter.createFromResource(this,
+            R.array.screen_audio_recording_entries, android.R.layout.simple_spinner_item);
+        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        mAudioSourceSpinner.setAdapter(adapter);
+        mAudioSourcePref.setSelection(0 /*disabled*/);
+
         mTapsSwitch = (Switch) findViewById(R.id.screenrecord_taps_switch);
     }
 
     private void requestScreenCapture() {
+        mAudioSource = mAudioSourcePref.getSelectedItemPosition();
         mController.startCountdown(COUNTDOWN_MILLIS, COUNTDOWN_INTERVAL, PendingIntent.getForegroundService(this, REQUEST_CODE, 
-                RecordingService.getStartIntent(this, RESULT_OK, (Intent) null, mAudioSwitch.isChecked(), 
+                RecordingService.getStartIntent(this, RESULT_OK, (Intent) null, mAudioSource, 
                 mTapsSwitch.isChecked()), PendingIntent.FLAG_UPDATE_CURRENT), PendingIntent.getService(this, REQUEST_CODE, 
                 RecordingService.getStopIntent(this), PendingIntent.FLAG_UPDATE_CURRENT));
     }
