@@ -29,7 +29,9 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Message;
+import android.os.UserHandle;
 import android.os.UserManager;
+import android.provider.Settings;
 import android.text.TextUtils;
 import android.util.DisplayMetrics;
 import android.util.Log;
@@ -65,6 +67,7 @@ public abstract class BiometricDialogView extends LinearLayout {
     private static final String KEY_ERROR_TEXT_STRING = "key_error_text_string";
     private static final String KEY_ERROR_TEXT_IS_TEMPORARY = "key_error_text_is_temporary";
     private static final String KEY_ERROR_TEXT_COLOR = "key_error_text_color";
+    private static final String FOD = "vendor.pa.biometrics.fingerprint.inscreen";
 
     private static final int ANIMATION_DURATION_SHOW = 250; // ms
     private static final int ANIMATION_DURATION_AWAY = 350; // ms
@@ -112,6 +115,7 @@ public abstract class BiometricDialogView extends LinearLayout {
     private boolean mIsFace;
     protected boolean mRequireConfirmation;
     private int mUserId; // used to determine if we should show work background
+    private final boolean mHasFod;
 
     private boolean mCompletedAnimatingIn;
     private boolean mPendingDismissDialog;
@@ -169,6 +173,7 @@ public abstract class BiometricDialogView extends LinearLayout {
                 .getDimension(R.dimen.biometric_dialog_animation_translation_offset);
         mErrorColor = getResources().getColor(R.color.biometric_dialog_error);
         mTextColor = getResources().getColor(R.color.biometric_dialog_gray);
+        mHasFod = mPackageManager.hasSystemFeature(FOD);
 
         DisplayMetrics metrics = new DisplayMetrics();
         mWindowManager.getDefaultDisplay().getMetrics(metrics);
@@ -355,6 +360,29 @@ public abstract class BiometricDialogView extends LinearLayout {
     public void setFaceAndFingerprint(boolean isFace, boolean isFingerprint) {
         mIsFace = isFace;
         mIsFingerprint = isFingerprint;
+        if (mIsFingerprint) {
+            mBiometricIcon.setVisibility(mHasFod ? View.INVISIBLE : View.VISIBLE);
+            if (mHasFod) {
+                boolean isNavBarMode = !Settings.Secure.getStringForUser(mContext.getContentResolver(),
+                        Settings.Secure.NAVIGATION_MODE, UserHandle.USER_CURRENT).equals("2");
+
+                LinearLayout.LayoutParams lp = (LinearLayout.LayoutParams) mBiometricIcon.getLayoutParams();
+                if (!isNavBarMode) {
+                    final int fodMargin = getResources().getDimensionPixelSize(
+                            R.dimen.biometric_dialog_fod_margin);
+                    lp.topMargin = fodMargin;
+                }
+
+                // Add Errortext above the biometric icon
+                mDialog.removeView(mErrorText);
+                mDialog.addView(mErrorText, mDialog.indexOfChild(mBiometricIcon));
+                lp = (LinearLayout.LayoutParams) mDescriptionText.getLayoutParams();
+                lp.bottomMargin = mErrorText.getPaddingTop();
+                mErrorText.setPadding(0, 0, 0, 0);
+            }
+        } else if (mIsFace) {
+            mBiometricIcon.setVisibility(View.VISIBLE);
+        }
     }
 
     private void setDismissesDialog(View v) {
