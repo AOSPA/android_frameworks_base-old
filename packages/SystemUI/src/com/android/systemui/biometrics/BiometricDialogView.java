@@ -69,6 +69,7 @@ public abstract class BiometricDialogView extends LinearLayout {
     private static final String KEY_ERROR_TEXT_STRING = "key_error_text_string";
     private static final String KEY_ERROR_TEXT_IS_TEMPORARY = "key_error_text_is_temporary";
     private static final String KEY_ERROR_TEXT_COLOR = "key_error_text_color";
+    private static final String FOD = "vendor.pa.biometrics.fingerprint.inscreen";
 
     private static final int ANIMATION_DURATION_SHOW = 250; // ms
     private static final int ANIMATION_DURATION_AWAY = 350; // ms
@@ -119,6 +120,7 @@ public abstract class BiometricDialogView extends LinearLayout {
     private boolean mIsFace;
     protected boolean mRequireConfirmation;
     private int mUserId; // used to determine if we should show work background
+    private final boolean mHasFod;
 
     private boolean mCompletedAnimatingIn;
     private boolean mPendingDismissDialog;
@@ -176,6 +178,7 @@ public abstract class BiometricDialogView extends LinearLayout {
                 .getDimension(R.dimen.biometric_dialog_animation_translation_offset);
         mErrorColor = getResources().getColor(R.color.biometric_dialog_error);
         mTextColor = getResources().getColor(R.color.biometric_dialog_gray);
+        mHasFod = mPackageManager.hasSystemFeature(FOD);
 
         DisplayMetrics metrics = new DisplayMetrics();
         mWindowManager.getDefaultDisplay().getMetrics(metrics);
@@ -409,6 +412,20 @@ public abstract class BiometricDialogView extends LinearLayout {
     public void setFaceAndFingerprint(boolean isFace, boolean isFingerprint) {
         mIsFace = isFace;
         mIsFingerprint = isFingerprint;
+        if (mIsFingerprint) {
+            mBiometricIcon.setVisibility(mHasFod ? View.INVISIBLE : View.VISIBLE);
+            if (mHasFod) {
+                LinearLayout.LayoutParams lp = (LinearLayout.LayoutParams) mErrorText.getLayoutParams();
+                lp.bottomMargin = -mErrorText.getPaddingBottom();
+                lp = (LinearLayout.LayoutParams) mBiometricIcon.getLayoutParams();
+                final int fodMargin = getResources().getDimensionPixelSize(
+                    R.dimen.biometric_dialog_fod_margin);
+                lp.topMargin = fodMargin;
+                mErrorText.setPadding(0, 0, 0, 0);
+            }
+        } else if (mIsFace) {
+            mBiometricIcon.setVisibility(View.VISIBLE);
+        }
     }
 
     private void setDismissesDialog(View v) {
