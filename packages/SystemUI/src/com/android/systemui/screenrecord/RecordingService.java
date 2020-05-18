@@ -31,6 +31,14 @@ import android.graphics.Point;
 import android.graphics.drawable.Icon;
 import android.hardware.display.DisplayManager;
 import android.hardware.display.VirtualDisplay;
+import android.media.AudioAttributes;
+import android.media.AudioFormat;
+import android.media.AudioRecord;
+import android.media.MediaCodec;
+import android.media.MediaCodecInfo;
+import android.media.MediaFormat;
+import android.media.MediaMuxer;
+import android.media.AudioPlaybackCaptureConfiguration;
 import android.media.MediaRecorder;
 import android.media.projection.IMediaProjection;
 import android.media.projection.IMediaProjectionManager;
@@ -51,6 +59,8 @@ import android.widget.Toast;
 
 import com.android.systemui.Dependency;
 import com.android.systemui.R;
+import com.android.systemui.screenrecord.task.AudioEncoderTask;
+import com.android.systemui.screenrecord.task.AudioRecorderTask;
 
 import java.io.File;
 import java.io.IOException;
@@ -69,7 +79,7 @@ public class RecordingService extends Service {
     private static final String EXTRA_RESULT_CODE = "extra_resultCode";
     private static final String EXTRA_DATA = "extra_data";
     private static final String EXTRA_PATH = "extra_path";
-    private static final String EXTRA_USE_AUDIO = "extra_useAudio";
+    private static final String EXTRA_AUDIO_SOURCE = "extra_audioSource";
     private static final String EXTRA_SHOW_TAPS = "extra_showTaps";
     private static final int REQUEST_CODE = 2;
 
@@ -83,18 +93,27 @@ public class RecordingService extends Service {
     private static int VIDEO_BIT_RATE = 24000000;
     private static int VIDEO_FRAME_RATE = 60;
     private static final int AUDIO_BIT_RATE = 16;
+    private static final int AUDIO_CHANNEL_TYPE = AudioFormat.CHANNEL_IN_MONO;
     private static final int AUDIO_SAMPLE_RATE = 44100;
+    public static final int SAMPLES_PER_FRAME = 1024;
 
     private MediaProjection mMediaProjection;
     private Surface mInputSurface;
     private VirtualDisplay mVirtualDisplay;
     private MediaRecorder mMediaRecorder;
+    public MediaMuxer mMuxer;
+    public MediaCodec mAudioEncoder;
+    private int mAudioBufferBytes;
+    public AudioRecord mInternalAudio;
     private Notification.Builder mRecordingNotificationBuilder;
     private RecordingController mController;
 
-    private boolean mUseAudio;
+    private int mAudioSource;
     private boolean mShowTaps;
     private File mTempFile;
+
+    public boolean mAudioRecording;
+    public boolean mAudioEncoding;
 
     private WindowManager mWindowManager;
 
@@ -106,16 +125,16 @@ public class RecordingService extends Service {
      *                   android.content.Intent)}
      * @param data       The data from {@link android.app.Activity#onActivityResult(int, int,
      *                   android.content.Intent)}
-     * @param useAudio   True to enable microphone input while recording
+     * @param audioSource   Choose the audio source for recording, 0 equals disabled
      * @param showTaps   True to make touches visible while recording
      */
     public static Intent getStartIntent(Context context, int resultCode, Intent data,
-            boolean useAudio, boolean showTaps) {
+            int audioSource, boolean showTaps) {
         return new Intent(context, RecordingService.class)
                 .setAction(ACTION_START)
                 .putExtra(EXTRA_RESULT_CODE, resultCode)
                 .putExtra(EXTRA_DATA, data)
-                .putExtra(EXTRA_USE_AUDIO, useAudio)
+                .putExtra(EXTRA_AUDIO_SOURCE, audioSource)
                 .putExtra(EXTRA_SHOW_TAPS, showTaps);
     }
 
@@ -134,7 +153,7 @@ public class RecordingService extends Service {
 
         switch (action) {
             case ACTION_START:
-                mUseAudio = intent.getBooleanExtra(EXTRA_USE_AUDIO, false);
+                mAudioSource = intent.getIntExtra(EXTRA_AUDIO_SOURCE, 0);
                 mShowTaps = intent.getBooleanExtra(EXTRA_SHOW_TAPS, false);
                 try {
                     IBinder b = IMediaProjectionManager.Stub.asInterface(ServiceManager.getService(Context.MEDIA_PROJECTION_SERVICE))
@@ -242,9 +261,6 @@ public class RecordingService extends Service {
 
             // Set up media recorder
             mMediaRecorder = new MediaRecorder();
-            if (mUseAudio) {
-                mMediaRecorder.setAudioSource(MediaRecorder.AudioSource.MIC);
-            }
             mMediaRecorder.setVideoSource(MediaRecorder.VideoSource.SURFACE);
             mMediaRecorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4);
 
@@ -259,15 +275,48 @@ public class RecordingService extends Service {
             mMediaRecorder.setVideoEncodingBitRate(VIDEO_BIT_RATE);
 
             // Set up audio
-            if (mUseAudio) {
-                mMediaRecorder.setAudioEncoder(MediaRecorder.AudioEncoder.AMR_NB);
+            if (mAudioSource == 1) {
+                mAudioBufferBytes =  AudioRecord.getMinBufferSize(
+                        AUDIO_SAMPLE_RATE,
+                        AUDIO_CHANNEL_TYPE,
+                        AudioFormat.ENCODING_PCM_16BIT);
+                // Preparing audio encoder
+                MediaFormat audioFormat = MediaFormat.createAudioFormat("audio/mp4a-latm", AUDIO_SAMPLE_RATE, TOTAL_NUM_TRACKS);
+                audioFormat.setInteger(MediaFormat.KEY_AAC_PROFILE, MediaCodecInfo.CodecProfileLevel.AACObjectLC);
+                audioFormat.setInteger(MediaFormat.KEY_MAX_INPUT_SIZE, 16384);
+                audioFormat.setInteger(MediaFormat.KEY_BIT_RATE, AUDIO_BIT_RATE);
+                mAudioEncoder = MediaCodec.createEncoderByType("audio/mp4a-latm");
+                mAudioEncoder.configure(audioFormat, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
+                int bufferSize = SAMPLES_PER_FRAME * VIDEO_FRAME_RATE;
+                if (bufferSize < mAudioBufferBytes)
+                    bufferSize = ((mAudioBufferBytes / SAMPLES_PER_FRAME) + 1) * SAMPLES_PER_FRAME * 2;
+                mMuxer = new MediaMuxer(mTempFile.getAbsolutePath(), MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4);
+                // Preparing internal recorder
+                AudioPlaybackCaptureConfiguration internalAudioConfig =
+                new AudioPlaybackCaptureConfiguration.Builder(mMediaProjection)
+                    .addMatchingUsage(AudioAttributes.USAGE_MEDIA)
+                    .addMatchingUsage(AudioAttributes.USAGE_UNKNOWN)
+                        .addMatchingUsage(AudioAttributes.USAGE_GAME)
+                    .build();
+                mInternalAudio = new AudioRecord.Builder()
+                    .setAudioFormat(
+                        new AudioFormat.Builder()
+                            .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                            .setSampleRate(AUDIO_SAMPLE_RATE)
+                            .setChannelMask(AUDIO_CHANNEL_TYPE)
+                            .build())
+                    .setAudioPlaybackCaptureConfig(internalAudioConfig)
+                    .build();
+            } else if (mAudioSource == 2){
+                mMediaRecorder.setAudioSource(MediaRecorder.AudioSource.MIC);
+                mMediaRecorder.setAudioEncoder(MediaRecorder.AudioEncoder.AAC);
                 mMediaRecorder.setAudioChannels(TOTAL_NUM_TRACKS);
                 mMediaRecorder.setAudioEncodingBitRate(AUDIO_BIT_RATE);
                 mMediaRecorder.setAudioSamplingRate(AUDIO_SAMPLE_RATE);
-            }
 
-            mMediaRecorder.setOutputFile(mTempFile);
-            mMediaRecorder.prepare();
+                mMediaRecorder.setOutputFile(mTempFile);
+                mMediaRecorder.prepare();
+            }
 
             // Create surface
             mInputSurface = mMediaRecorder.getSurface();
@@ -281,7 +330,15 @@ public class RecordingService extends Service {
                     null,
                     null);
 
-            mMediaRecorder.start();
+            if (mAudioSource == 1) {
+                mAudioEncoder.start();
+                new Thread(new AudioEncoderTask(this), "AudioEncoderTask").start();
+                mInternalAudio.startRecording();
+                mAudioRecording = true;
+                new Thread(new AudioRecorderTask(this), "AudioRecorderTask").start();
+            } else if (mAudioSource == 2) {
+                mMediaRecorder.start();
+            }
             mController.updateState(true);
             createRecordingNotification();
         } catch (IOException e) {
@@ -305,7 +362,7 @@ public class RecordingService extends Service {
 
         Bundle extras = new Bundle();
         extras.putString("android.substName", getResources().getString(R.string.screenrecord_name));
-        title = mUseAudio ? getResources().getString(R.string.screenrecord_ongoing_screen_and_audio) :
+        title = mAudioSource > 0 ? getResources().getString(R.string.screenrecord_ongoing_screen_and_audio) :
                 getResources().getString(R.string.screenrecord_ongoing_screen_only);
         mRecordingNotificationBuilder = new Notification.Builder(this, CHANNEL_ID)
                 .setSmallIcon(R.drawable.ic_screenrecord)
@@ -381,13 +438,18 @@ public class RecordingService extends Service {
 
     private void stopRecording() {
         setTapsVisible(false);
-        mMediaRecorder.stop();
-        mMediaRecorder.release();
-        mMediaRecorder = null;
-        mMediaProjection.stop();
-        mMediaProjection = null;
-        mInputSurface.release();
-        mVirtualDisplay.release();
+        if (mAudioSource == 1) {
+            mAudioRecording = false;
+            mAudioEncoding = false;
+        } else if (mAudioSource == 2) {
+            mMediaRecorder.stop();
+            mMediaRecorder.release();
+            mMediaRecorder = null;
+            mMediaProjection.stop();
+            mMediaProjection = null;
+            mInputSurface.release();
+            mVirtualDisplay.release();
+        }
         stopSelf();
         mController.updateState(false);
     }
