@@ -11161,18 +11161,22 @@ public class ActivityManagerService extends IActivityManager.Stub
 
     void dumpLruEntryLocked(PrintWriter pw, int index, ProcessRecord proc, String prefix) {
         pw.print(prefix);
-        pw.print("#");
+        pw.print('#');
+        if (index < 10) {
+            pw.print(' ');
+        }
         pw.print(index);
         pw.print(": ");
         pw.print(ProcessList.makeOomAdjString(proc.setAdj, false));
-        pw.print(" ");
+        pw.print(' ');
         pw.print(ProcessList.makeProcStateString(proc.getCurProcState()));
-        pw.print(" ");
+        pw.print(' ');
+        ActivityManager.printCapabilitiesSummary(pw, proc.curCapability);
+        pw.print(' ');
         pw.print(proc.toShortString());
-        pw.print(" ");
         if (proc.hasActivitiesOrRecentTasks() || proc.hasClientActivities()
                 || proc.treatLikeActivity) {
-            pw.print(" activity=");
+            pw.print(" act:");
             boolean printed = false;
             if (proc.hasActivities()) {
                 pw.print("activities");
@@ -12637,7 +12641,7 @@ public class ActivityManagerService extends IActivityManager.Stub
             char schedGroup;
             switch (r.setSchedGroup) {
                 case ProcessList.SCHED_GROUP_BACKGROUND:
-                    schedGroup = 'B';
+                    schedGroup = 'b';
                     break;
                 case ProcessList.SCHED_GROUP_DEFAULT:
                     schedGroup = 'F';
@@ -12647,6 +12651,9 @@ public class ActivityManagerService extends IActivityManager.Stub
                     break;
                 case ProcessList.SCHED_GROUP_RESTRICTED:
                     schedGroup = 'R';
+                    break;
+                case ProcessList.SCHED_GROUP_TOP_APP_BOUND:
+                    schedGroup = 'B';
                     break;
                 default:
                     schedGroup = '?';
@@ -12675,7 +12682,10 @@ public class ActivityManagerService extends IActivityManager.Stub
             pw.print(foreground);
             pw.print('/');
             pw.print(procState);
-            pw.print(" trm:");
+            pw.print(' ');
+            ActivityManager.printCapabilitiesSummary(pw, r.curCapability);
+            pw.print(' ');
+            pw.print(" t:");
             if (r.trimMemoryLevel < 10) pw.print(' ');
             pw.print(r.trimMemoryLevel);
             pw.print(' ');

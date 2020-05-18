@@ -28,12 +28,11 @@ import com.android.systemui.statusbar.notification.NotificationSectionsFeatureMa
 import com.android.systemui.statusbar.notification.collection.provider.HighPriorityProvider
 import com.android.systemui.statusbar.notification.people.PeopleNotificationIdentifier
 import com.android.systemui.statusbar.notification.people.PeopleNotificationIdentifier.Companion.TYPE_NON_PERSON
-import com.android.systemui.statusbar.notification.stack.NotificationSectionsManager.BUCKET_ALERTING
-import com.android.systemui.statusbar.notification.stack.NotificationSectionsManager.BUCKET_FOREGROUND_SERVICE
-import com.android.systemui.statusbar.notification.stack.NotificationSectionsManager.BUCKET_HEADS_UP
-import com.android.systemui.statusbar.notification.stack.NotificationSectionsManager.BUCKET_PEOPLE
-import com.android.systemui.statusbar.notification.stack.NotificationSectionsManager.BUCKET_SILENT
-import com.android.systemui.statusbar.notification.stack.NotificationSectionsManager.PriorityBucket
+import com.android.systemui.statusbar.notification.stack.BUCKET_ALERTING
+import com.android.systemui.statusbar.notification.stack.BUCKET_FOREGROUND_SERVICE
+import com.android.systemui.statusbar.notification.stack.BUCKET_PEOPLE
+import com.android.systemui.statusbar.notification.stack.BUCKET_SILENT
+import com.android.systemui.statusbar.notification.stack.PriorityBucket
 import com.android.systemui.statusbar.phone.NotificationGroupManager
 import com.android.systemui.statusbar.policy.HeadsUpManager
 import dagger.Lazy
@@ -135,26 +134,20 @@ open class NotificationRankingManager @Inject constructor(
     ): List<NotificationEntry> {
         logger.logFilterAndSort(reason)
         val filtered = entries.asSequence()
-                .filterNot(notifFilter::shouldFilterOut)
+                .filterNot(this::filter)
                 .sortedWith(rankingComparator)
                 .toList()
-        assignBuckets(filtered)
+        entries.forEach { it.bucket = getBucketForEntry(it) }
         return filtered
     }
 
-    private fun assignBuckets(entries: List<NotificationEntry>) {
-        entries.forEach { it.bucket = getBucketForEntry(it) }
-        if (!usePeopleFiltering) {
-            // If we don't have a Conversation section, just assign buckets normally based on the
-            // content.
-            return
+    private fun filter(entry: NotificationEntry): Boolean {
+        val filtered = notifFilter.shouldFilterOut(entry)
+        if (filtered) {
+            // notification is removed from the list, so we reset its initialization time
+            entry.resetInitializationTime()
         }
-        // If HUNs are not continuous with the top section, break out into a new Incoming section.
-        entries.asReversed().asSequence().zipWithNext().forEach { (next, entry) ->
-            if (entry.isRowHeadsUp && entry.bucket > next.bucket) {
-                entry.bucket = BUCKET_HEADS_UP
-            }
-        }
+        return filtered
     }
 
     @PriorityBucket
