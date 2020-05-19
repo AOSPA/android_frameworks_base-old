@@ -72,7 +72,9 @@ android_library {
         "jsr330"
     ],
     manifest: "AndroidManifest.xml",
-
+    defaults: [
+       "framework-wifi-vendor-hide-access-defaults",
+    ],
     libs: [
         "android.car",
         "android.car.userlib",
