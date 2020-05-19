@@ -224,7 +224,6 @@ public class WifiConfiguration implements Parcelable {
          * Device Provisioning Protocol
          * @hide
          */
-        @SystemApi
         public static final int DPP = 17;
 
         public static final String varName = "key_mgmt";
@@ -702,7 +701,6 @@ public class WifiConfiguration implements Parcelable {
      * @hide
      * This configuration is used in AP to extend the coverage.
      */
-    @SystemApi
     public boolean shareThisAp;
 
     /**

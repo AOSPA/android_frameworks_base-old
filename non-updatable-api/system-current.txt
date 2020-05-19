@@ -6804,7 +6804,6 @@ package android.net.wifi.nl80211 {
     method public boolean tearDownClientInterface(@NonNull String);
     method public boolean tearDownInterfaces();
     method public boolean tearDownSoftApInterface(@NonNull String);
-    method public boolean unsubscribeScan(@NonNull String);
     field public static final int SCAN_TYPE_PNO_SCAN = 1; // 0x1
     field public static final int SCAN_TYPE_SINGLE_SCAN = 0; // 0x0
     field public static final int SEND_MGMT_FRAME_ERROR_ALREADY_STARTED = 5; // 0x5
@@ -8073,7 +8072,6 @@ package android.provider {
     field public static final String THEATER_MODE_ON = "theater_mode_on";
     field public static final String WEBVIEW_MULTIPROCESS = "webview_multiprocess";
     field public static final String WIFI_BADGING_THRESHOLDS = "wifi_badging_thresholds";
-    field public static final String WIFI_COVERAGE_EXTEND_FEATURE_ENABLED = "wifi_coverage_extend_feature_enabled";
     field @Deprecated public static final String WIFI_WAKEUP_ENABLED = "wifi_wakeup_enabled";
   }
 
