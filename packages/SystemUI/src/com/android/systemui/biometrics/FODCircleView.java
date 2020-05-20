@@ -266,7 +266,7 @@ public class FODCircleView extends ImageView implements OnTouchListener {
 
         mDisplayManager = context.getSystemService(DisplayManager.class);
 
-        mLockPatternUtils = new LockPatternUtils(mContext);
+        mLockPatternUtils = new LockPatternUtils(context);
     }
 
     @Override
