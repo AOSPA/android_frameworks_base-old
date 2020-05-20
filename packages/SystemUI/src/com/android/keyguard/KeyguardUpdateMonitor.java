@@ -59,6 +59,7 @@ import android.database.ContentObserver;
 import android.hardware.biometrics.BiometricManager;
 import android.hardware.biometrics.BiometricSourceType;
 import android.hardware.biometrics.IBiometricEnabledOnKeyguardCallback;
+import android.hardware.display.DisplayManager;
 import android.hardware.face.FaceManager;
 import android.hardware.fingerprint.FingerprintManager;
 import android.hardware.fingerprint.FingerprintManager.AuthenticationCallback;
@@ -902,6 +903,9 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
         // asynchronousness of the cancel cycle. So only notify them if the actually running state
         // has changed.
         if (wasRunning != isRunning) {
+            if (isAssistiveLightingEnabled()) {
+                updateAssistiveLightingState(wasRunning);
+            }
             notifyFaceRunningStateChanged();
         }
     }
@@ -925,6 +929,16 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
                 cb.onFaceUnlockStateChanged(running, userId);
             }
         }
+    }
+
+    private void updateAssistiveLightingState(boolean isRunning) {
+        final DisplayManager dm = mContext.getSystemService(DisplayManager.class);
+        dm.setTemporaryBrightness(isRunning ? 255 : -1);
+    }
+
+    private boolean isAssistiveLightingEnabled() {
+        return Settings.System.getIntForUser(mContext.getContentResolver(),
+                Settings.System.FACE_UNLOCK_ASSISTIVE_LIGHTING, 0, UserHandle.USER_CURRENT) != 0;
     }
 
     public boolean isFaceUnlockRunning(int userId) {

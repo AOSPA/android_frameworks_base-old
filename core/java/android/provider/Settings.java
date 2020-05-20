@@ -8605,6 +8605,16 @@ public final class Settings {
                 BOOLEAN_VALIDATOR;
 
         /**
+         * Whether or not face unlock should use a boosted brightness.
+         * @hide
+         */
+        public static final String FACE_UNLOCK_ASSISTIVE_LIGHTING =
+                "face_unlock_assistive_lighting";
+
+        private static final Validator FACE_UNLOCK_ASSISTIVE_LIGHTING_VALIDATOR =
+                BOOLEAN_VALIDATOR;
+
+        /**
          * Whether or not media is shown automatically when bypassing as a heads up.
          * @hide
          */
