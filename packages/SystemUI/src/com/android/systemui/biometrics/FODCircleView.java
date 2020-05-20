@@ -33,6 +33,7 @@ import android.os.Looper;
 import android.os.RemoteException;
 import android.os.SystemProperties;
 import android.provider.Settings;
+import android.util.Log;
 import android.view.Display;
 import android.view.Gravity;
 import android.view.MotionEvent;
@@ -56,6 +57,9 @@ import java.util.Timer;
 import java.util.TimerTask;
 
 public class FODCircleView extends ImageView implements OnTouchListener {
+
+    private static final String TAG = "FODCircleView";
+
     private final int mPositionX;
     private final int mPositionY;
     private final int mWidth;
@@ -95,6 +99,7 @@ public class FODCircleView extends ImageView implements OnTouchListener {
             mIsInsideCircle = true;
 
             mHandler.post(() -> {
+                Log.d(TAG, "daemon: onFingerDown()");
                 setDim(true);
                 setImageDrawable(null);
 
@@ -107,6 +112,7 @@ public class FODCircleView extends ImageView implements OnTouchListener {
             mIsInsideCircle = false;
 
             mHandler.post(() -> {
+                Log.d(TAG, "daemon: onFingerUp()");
                 setDim(false);
                 setImageResource(R.drawable.fod_icon_default);
 
@@ -295,8 +301,9 @@ public class FODCircleView extends ImageView implements OnTouchListener {
                 if (daemon != null) {
                     try {
                         daemon.onPress();
+                        Log.d(TAG, "daemon: onPress()");
                     } catch (RemoteException e) {
-                        // do nothing
+                        Log.d(TAG, "daemon: onPress(): remote exception");
                     }
                 }
                 mIsPressed = true;
@@ -308,8 +315,9 @@ public class FODCircleView extends ImageView implements OnTouchListener {
                 if (daemon != null) {
                     try {
                         daemon.onRelease();
+                        Log.d(TAG, "daemon: onRelease()");
                     } catch (RemoteException e) {
-                        // do nothing
+                        Log.d(TAG, "daemon: onRelease(): remote exception");
                     }
                 }
                 mIsPressed = false;
@@ -367,6 +375,7 @@ public class FODCircleView extends ImageView implements OnTouchListener {
         if (daemon != null) {
             try {
                 daemon.onHideFODView();
+                Log.d(TAG, "daemon: onHideFODView()");
             } catch (RemoteException e) {
                 // do nothing
             }
@@ -381,6 +390,7 @@ public class FODCircleView extends ImageView implements OnTouchListener {
         if (daemon != null) {
             try {
                 daemon.onShowFODView();
+                Log.d(TAG, "daemon: onShowFODView()");
             } catch (RemoteException e) {
                 // do nothing
             }
@@ -398,7 +408,7 @@ public class FODCircleView extends ImageView implements OnTouchListener {
                     }, 0);
                 }
             } catch (NoSuchElementException | RemoteException e) {
-                // do nothing
+                Log.d(TAG, "Exception occured when getting fingerprint inscreen service");
             }
         }
         return mFingerprintInscreenDaemon;
@@ -499,12 +509,14 @@ public class FODCircleView extends ImageView implements OnTouchListener {
             if (daemon != null) {
                 try {
                     dimAmount = daemon.getDimAmount(curBrightness);
+                    Log.d(TAG, "daemon: getDimAmount(): " + dimAmount);
                 } catch (RemoteException e) {
-                    // do nothing
+                    Log.d(TAG, "daemon: getDimAmount(): remote exception");
                 }
             }
 
             if (mShouldBoostBrightness) {
+                Log.d(TAG, "shouldBoostBrightness: " + mShouldBoostBrightness);
                 mDisplayManager.setTemporaryBrightness(255);
             }
 
