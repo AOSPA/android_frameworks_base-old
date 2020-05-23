@@ -107,7 +107,6 @@ public class KeyHandler {
     private HandlerThread mHandlerThread;
     private CameraManager mCameraManager;
     private AudioManager mAudioManager;
-    private TelecomManager mTelecomManager;
     private StatusBarManagerInternal mStatusBarManagerInternal;
     private KeyguardManager mKeyguardManager;
     private Vibrator mVibrator;
@@ -168,16 +167,12 @@ public class KeyHandler {
 
         @Override
         public void handleMessage(Message msg) {
-            if (msg.obj != null && msg.obj instanceof KeyEvent) {
-                final KeyEvent event = (KeyEvent) msg.obj;
-
+            if (msg.what == GESTURE_REQUEST) {
                 if (DEBUG) {
-                    Log.w(TAG, "EventHandler.handleMessage(): event.toString(): "
-                            + event.toString());
+                    Log.w(TAG, "EventHandler.handleMessage(): scanCode: "
+                            + (int) msg.obj);
                 }
-
-                final int scanCode = event.getScanCode();
-                handleGesture(mGestures.get(scanCode));
+                handleGesture((int) msg.obj);
             }
         }
     }
@@ -197,7 +192,6 @@ public class KeyHandler {
 
         // Set up managers.
         ensureAudioManager();
-        ensureTelecomManager();
         ensureVibrator();
         ensurePowerManager();
         ensureStatusBarService();
@@ -392,12 +386,6 @@ public class KeyHandler {
     private void ensureAudioManager() {
         if (mAudioManager == null) {
             mAudioManager = (AudioManager) mContext.getSystemService(Context.AUDIO_SERVICE);
-        }
-    }
-
-    private void ensureTelecomManager() {
-        if (mTelecomManager == null) {
-            mTelecomManager = TelecomManager.from(mContext);
         }
     }
 
@@ -613,7 +601,7 @@ public class KeyHandler {
             Log.w(TAG, "handleKeyEvent(): event.toString(): " + event.toString());
         }
 
-        if (!mSystemReady || !mGesturesEnabled || isDisabledByPhoneState()) {
+        if (!mSystemReady || !mGesturesEnabled) {
             return false;
         }
 
@@ -636,7 +624,8 @@ public class KeyHandler {
             return false;
         }
 
-        boolean isKeySupportedAndEnabled = mGestures.get(scanCode) > 0;
+        final int gesture = mGestures.get(scanCode);
+        final boolean isKeySupportedAndEnabled = gesture > 0;
 
         if (DEBUG) {
             Log.w(TAG, "handleKeyEvent(): isKeySupportedAndEnabled = " + isKeySupportedAndEnabled);
@@ -644,7 +633,7 @@ public class KeyHandler {
 
         // If it's held, means we just processed a gesture or we are in the middle of one
         if (isKeySupportedAndEnabled && !mGestureWakeLock.isHeld()) {
-            Message msg = getMessageForKeyEvent(event);
+            final Message msg = getMessageForKeyEvent(gesture);
             if (!mIsInPocket) {
                 if (scanCode == mSingleTapKeyCode && mSingleDoubleSpecialCase) {
                     mHandler.sendMessageDelayed(msg, ViewConfiguration.getDoubleTapTimeout());
@@ -662,9 +651,9 @@ public class KeyHandler {
         mIsInPocket = inPocket;
     }
 
-    private Message getMessageForKeyEvent(KeyEvent keyEvent) {
+    private Message getMessageForKeyEvent(int gesture) {
         Message msg = mHandler.obtainMessage(GESTURE_REQUEST);
-        msg.obj = keyEvent;
+        msg.obj = gesture;
         return msg;
     }
 
@@ -779,12 +768,5 @@ public class KeyHandler {
             out[i] = ar[i];
         }
         return out;
-    }
-
-    private boolean isDisabledByPhoneState() {
-        if (mTelecomManager != null) {
-            return mTelecomManager.isInCall() || mTelecomManager.isRinging();
-        }
-        return false;
     }
 }
