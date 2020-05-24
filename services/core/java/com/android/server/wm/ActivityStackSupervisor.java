@@ -1788,6 +1788,10 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
         }
     }
 
+    public ActivityRecord getTopResumedActivity() {
+        return mTopResumedActivity;
+    }
+
     void comeOutOfSleepIfNeededLocked() {
         removeSleepTimeouts();
         if (mGoingToSleepWakeLock.isHeld()) {
