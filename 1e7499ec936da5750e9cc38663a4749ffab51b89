@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "99e21964_ca56380d",
+        "filename": "core/res/res/values/pa_config.xml",
+        "patchSetId": 5
+      },
+      "lineNbr": 172,
+      "author": {
+        "id": 1000012
+      },
+      "writtenOn": "2020-05-25T14:45:19Z",
+      "side": 1,
+      "message": "Shouldn\u0027t all of these default to 0?",
+      "revId": "1e7499ec936da5750e9cc38663a4749ffab51b89",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    }
+  ]
+}
