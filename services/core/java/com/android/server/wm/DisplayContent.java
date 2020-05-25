@@ -54,7 +54,6 @@ import static android.view.WindowManager.LayoutParams.FIRST_APPLICATION_WINDOW;
 import static android.view.WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE;
 import static android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
 import static android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL;
-import static android.view.WindowManager.LayoutParams.FLAG_SECURE;
 import static android.view.WindowManager.LayoutParams.FLAG_SHOW_WALLPAPER;
 import static android.view.WindowManager.LayoutParams.FLAG_SPLIT_TOUCH;
 import static android.view.WindowManager.LayoutParams.LAST_APPLICATION_WINDOW;
@@ -1620,9 +1619,7 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
             }
         }
 
-        // Announce rotation only if we will not animate as we already have the
-        // windows in final state. Otherwise, we make this call at the rotation end.
-        if (screenRotationAnimation == null && mWmService.mAccessibilityController != null) {
+        if (mWmService.mAccessibilityController != null) {
             mWmService.mAccessibilityController.onRotationChangedLocked(this);
         }
     }
@@ -2547,6 +2544,9 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
         }
         for (int i = mTapExcludedWindows.size() - 1; i >= 0; i--) {
             final WindowState win = mTapExcludedWindows.get(i);
+            if (!win.isVisibleLw()) {
+                continue;
+            }
             win.getTouchableRegion(mTmpRegion);
             mTouchExcludeRegion.op(mTmpRegion, Region.Op.UNION);
         }
@@ -3704,8 +3704,7 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
     }
 
     boolean hasSecureWindowOnScreen() {
-        final WindowState win = getWindow(
-                w -> w.isOnScreen() && (w.mAttrs.flags & FLAG_SECURE) != 0);
+        final WindowState win = getWindow(w -> w.isOnScreen() && mWmService.isSecureLocked(w));
         return win != null;
     }
 
@@ -5241,25 +5240,13 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
      * the display naturally.
      */
     private void applyRotationAndFinishFixedRotation(int oldRotation, int newRotation) {
-        if (mFixedRotationLaunchingApp == null) {
+        final WindowToken rotatedLaunchingApp = mFixedRotationLaunchingApp;
+        if (rotatedLaunchingApp == null) {
             applyRotation(oldRotation, newRotation);
             return;
         }
 
-        // The display may be about to rotate seamlessly, and the animation of closing apps may
-        // still animate in old rotation. So make sure the outdated animation won't show on the
-        // rotated display.
-        forAllActivities(a -> {
-            if (a.nowVisible && a != mFixedRotationLaunchingApp
-                    && a.getWindowConfiguration().getRotation() != newRotation) {
-                final WindowContainer<?> w = a.getAnimatingContainer();
-                if (w != null) {
-                    w.cancelAnimation();
-                }
-            }
-        });
-
-        mFixedRotationLaunchingApp.finishFixedRotationTransform(
+        rotatedLaunchingApp.finishFixedRotationTransform(
                 () -> applyRotation(oldRotation, newRotation));
         mFixedRotationLaunchingApp = null;
     }

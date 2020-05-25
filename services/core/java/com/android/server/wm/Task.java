@@ -82,7 +82,6 @@ import static com.android.server.wm.ActivityTaskManagerDebugConfig.POSTFIX_TASKS
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.TAG_ATM;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.TAG_WITH_CLASS_NAME;
 import static com.android.server.wm.ActivityTaskManagerService.TAG_STACK;
-import static com.android.server.wm.DragResizeMode.DRAG_RESIZE_MODE_DOCKED_DIVIDER;
 import static com.android.server.wm.IdentifierProto.HASH_CODE;
 import static com.android.server.wm.IdentifierProto.TITLE;
 import static com.android.server.wm.IdentifierProto.USER_ID;
@@ -2013,7 +2012,7 @@ class Task extends WindowContainer<WindowContainer> {
     }
 
     void updateSurfaceSize(SurfaceControl.Transaction transaction) {
-        if (mSurfaceControl == null || mCreatedByOrganizer) {
+        if (mSurfaceControl == null || isOrganized()) {
             return;
         }
 
@@ -3059,15 +3058,6 @@ class Task extends WindowContainer<WindowContainer> {
         return mDragResizeMode;
     }
 
-    /**
-     * Puts this task into docked drag resizing mode. See {@link DragResizeMode}.
-     *
-     * @param resizing Whether to put the task into drag resize mode.
-     */
-    public void setTaskDockedResizing(boolean resizing) {
-        setDragResizing(resizing, DRAG_RESIZE_MODE_DOCKED_DIVIDER);
-    }
-
     void adjustBoundsForDisplayChangeIfNeeded(final DisplayContent displayContent) {
         if (displayContent == null) {
             return;
@@ -3332,6 +3322,16 @@ class Task extends WindowContainer<WindowContainer> {
             // skip hidden (or about to hide) apps
             return !r.mIsExiting && r.isClientVisible() && r.mVisibleRequested;
         });
+    }
+
+    boolean isTopActivityFocusable() {
+        final ActivityRecord r = topRunningActivity();
+        return r != null ? r.isFocusable()
+                : (isFocusable() && getWindowConfiguration().canReceiveKeys());
+    }
+
+    boolean isFocusableAndVisible() {
+        return isTopActivityFocusable() && shouldBeVisible(null /* starting */);
     }
 
     void positionChildAtTop(ActivityRecord child) {
@@ -4552,7 +4552,14 @@ class Task extends WindowContainer<WindowContainer> {
         if (mForceHiddenFlags == newFlags) {
             return false;
         }
+        final boolean wasHidden = isForceHidden();
         mForceHiddenFlags = newFlags;
+        if (wasHidden && isFocusableAndVisible()) {
+            // The change in force-hidden state will change visibility without triggering a stack
+            // order change, so we should reset the preferred top focusable stack to ensure it's not
+            // used if a new activity is started from this task.
+            getDisplayArea().resetPreferredTopFocusableStackIfBelow(this);
+        }
         return true;
     }
 

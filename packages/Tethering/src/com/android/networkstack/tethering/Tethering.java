@@ -63,7 +63,6 @@ import static android.telephony.SubscriptionManager.INVALID_SUBSCRIPTION_ID;
 
 import static com.android.networkstack.tethering.TetheringNotificationUpdater.DOWNSTREAM_NONE;
 
-import android.app.usage.NetworkStatsManager;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothPan;
 import android.bluetooth.BluetoothProfile;
@@ -270,12 +269,15 @@ public class Tethering {
         mTetherMasterSM = new TetherMasterSM("TetherMaster", mLooper, deps);
         mTetherMasterSM.start();
 
-        final NetworkStatsManager statsManager =
-                (NetworkStatsManager) mContext.getSystemService(Context.NETWORK_STATS_SERVICE);
         mHandler = mTetherMasterSM.getHandler();
-        mOffloadController = new OffloadController(mHandler,
-                mDeps.getOffloadHardwareInterface(mHandler, mLog), mContext.getContentResolver(),
-                statsManager, mLog, new OffloadController.Dependencies());
+        mOffloadController = mDeps.getOffloadController(mHandler, mLog,
+                new OffloadController.Dependencies() {
+
+                    @Override
+                    public TetheringConfiguration getTetherConfig() {
+                        return mConfig;
+                    }
+                });
         mUpstreamNetworkMonitor = mDeps.getUpstreamNetworkMonitor(mContext, mTetherMasterSM, mLog,
                 TetherMasterSM.EVENT_UPSTREAM_CALLBACK);
         mForwardedDownstreams = new LinkedHashSet<>();
@@ -284,8 +286,9 @@ public class Tethering {
         filter.addAction(ACTION_CARRIER_CONFIG_CHANGED);
         // EntitlementManager will send EVENT_UPSTREAM_PERMISSION_CHANGED when cellular upstream
         // permission is changed according to entitlement check result.
-        mEntitlementMgr = mDeps.getEntitlementManager(mContext, mTetherMasterSM, mLog,
-                TetherMasterSM.EVENT_UPSTREAM_PERMISSION_CHANGED);
+        mEntitlementMgr = mDeps.getEntitlementManager(mContext, mHandler, mLog,
+                () -> mTetherMasterSM.sendMessage(
+                TetherMasterSM.EVENT_UPSTREAM_PERMISSION_CHANGED));
         mEntitlementMgr.setOnUiEntitlementFailedListener((int downstream) -> {
             mLog.log("OBSERVED UiEnitlementFailed");
             stopTethering(downstream);

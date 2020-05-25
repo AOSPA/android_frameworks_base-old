@@ -155,7 +155,7 @@ public class KeyguardSimPinView extends KeyguardPinBasedInputView {
 
     private void handleSubInfoChangeIfNeeded() {
         KeyguardUpdateMonitor monitor = Dependency.get(KeyguardUpdateMonitor.class);
-        int subId = monitor.getNextSubIdForState(TelephonyManager.SIM_STATE_PIN_REQUIRED);
+        int subId = monitor.getUnlockedSubIdForState(TelephonyManager.SIM_STATE_PIN_REQUIRED);
         if (subId != mSubId && SubscriptionManager.isValidSubscriptionId(subId)) {
             mSubId = subId;
             mShowDefaultMessage = true;

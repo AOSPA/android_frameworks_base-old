@@ -72,6 +72,7 @@ import static android.view.WindowManager.LayoutParams.TYPE_QS_DIALOG;
 import static android.view.WindowManager.LayoutParams.TYPE_STATUS_BAR;
 import static android.view.WindowManager.LayoutParams.TYPE_TOAST;
 import static android.view.WindowManager.LayoutParams.TYPE_VOICE_INTERACTION;
+import static android.view.WindowManager.LayoutParams.TYPE_VOLUME_OVERLAY;
 import static android.view.WindowManager.LayoutParams.TYPE_WALLPAPER;
 import static android.view.WindowManager.REMOVE_CONTENT_MODE_UNDEFINED;
 import static android.view.WindowManagerGlobal.ADD_OKAY;
@@ -195,6 +196,7 @@ import android.provider.DeviceConfig;
 import android.provider.Settings;
 import android.service.vr.IVrManager;
 import android.service.vr.IVrStateCallbacks;
+import android.sysprop.SurfaceFlingerProperties;
 import android.text.format.DateUtils;
 import android.util.ArrayMap;
 import android.util.ArraySet;
@@ -305,7 +307,9 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.NoSuchElementException;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
@@ -930,8 +934,14 @@ public class WindowManagerService extends IWindowManager.Stub
         }
 
         void updateFixedRotationTransform() {
-            mIsFixedRotationTransformEnabled = Settings.Global.getInt(mContext.getContentResolver(),
-                    FIXED_ROTATION_TRANSFORM_SETTING_NAME, 0) != 0;
+            final int enabled = Settings.Global.getInt(mContext.getContentResolver(),
+                    FIXED_ROTATION_TRANSFORM_SETTING_NAME, 2);
+            if (enabled == 2) {
+                // Make sure who read the settings won't use inconsistent default value.
+                Settings.Global.putInt(mContext.getContentResolver(),
+                        FIXED_ROTATION_TRANSFORM_SETTING_NAME, 1);
+            }
+            mIsFixedRotationTransformEnabled = enabled != 0;
         }
     }
 
@@ -1061,12 +1071,10 @@ public class WindowManagerService extends IWindowManager.Stub
 
         @Override
         public void onAppTransitionCancelledLocked(int transit) {
-            mAtmInternal.notifyAppTransitionCancelled();
         }
 
         @Override
         public void onAppTransitionFinishedLocked(IBinder token) {
-            mAtmInternal.notifyAppTransitionFinished();
             final ActivityRecord atoken = mRoot.getActivityRecord(token);
             if (atoken == null) {
                 return;
@@ -1371,6 +1379,7 @@ public class WindowManagerService extends IWindowManager.Stub
             case TYPE_NOTIFICATION_SHADE:
             case TYPE_NAVIGATION_BAR:
             case TYPE_INPUT_METHOD_DIALOG:
+            case TYPE_VOLUME_OVERLAY:
                 return true;
         }
         return false;
@@ -4706,6 +4715,11 @@ public class WindowManagerService extends IWindowManager.Stub
     }
 
     private static boolean queryWideColorGamutSupport() {
+        boolean defaultValue = false;
+        Optional<Boolean> hasWideColorProp = SurfaceFlingerProperties.has_wide_color_display();
+        if (hasWideColorProp.isPresent()) {
+            return hasWideColorProp.get();
+        }
         try {
             ISurfaceFlingerConfigs surfaceFlinger = ISurfaceFlingerConfigs.getService();
             OptionalBool hasWideColor = surfaceFlinger.hasWideColorDisplay();
@@ -4714,11 +4728,18 @@ public class WindowManagerService extends IWindowManager.Stub
             }
         } catch (RemoteException e) {
             // Ignore, we're in big trouble if we can't talk to SurfaceFlinger's config store
+        } catch (NoSuchElementException e) {
+            return defaultValue;
         }
         return false;
     }
 
     private static boolean queryHdrSupport() {
+        boolean defaultValue = false;
+        Optional<Boolean> hasHdrProp = SurfaceFlingerProperties.has_HDR_display();
+        if (hasHdrProp.isPresent()) {
+            return hasHdrProp.get();
+        }
         try {
             ISurfaceFlingerConfigs surfaceFlinger = ISurfaceFlingerConfigs.getService();
             OptionalBool hasHdr = surfaceFlinger.hasHDRDisplay();
@@ -4727,6 +4748,8 @@ public class WindowManagerService extends IWindowManager.Stub
             }
         } catch (RemoteException e) {
             // Ignore, we're in big trouble if we can't talk to SurfaceFlinger's config store
+        } catch (NoSuchElementException e) {
+            return defaultValue;
         }
         return false;
     }
@@ -8080,7 +8103,7 @@ public class WindowManagerService extends IWindowManager.Stub
                 | LayoutParams.FLAG_SLIPPERY);
         h.layoutParamsFlags = WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL | sanitizedFlags;
         h.layoutParamsType = 0;
-        h.dispatchingTimeoutNanos = -1;
+        h.dispatchingTimeoutNanos = DEFAULT_INPUT_DISPATCHING_TIMEOUT_NANOS;
         h.canReceiveKeys = false;
         h.hasFocus = false;
         h.hasWallpaper = false;

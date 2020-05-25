@@ -149,6 +149,8 @@ import com.android.server.policy.SoftRestrictedPermissionPolicy;
 
 import libcore.util.EmptyArray;
 
+import java.io.FileDescriptor;
+import java.io.PrintWriter;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.util.ArrayList;
@@ -415,6 +417,11 @@ public class PermissionManagerService extends IPermissionManager.Stub {
                 new PermissionManagerServiceInternalImpl();
         LocalServices.addService(PermissionManagerServiceInternal.class, localService);
         LocalServices.addService(PermissionManagerInternal.class, localService);
+    }
+
+    @Override
+    public void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
+        mContext.getSystemService(PermissionControllerManager.class).dump(fd, pw, args);
     }
 
     /**
@@ -1282,6 +1289,7 @@ public class PermissionManagerService extends IPermissionManager.Stub {
 
         final AndroidPackage pkg = mPackageManagerInt.getPackage(packageName);
         final int callingUid = Binder.getCallingUid();
+        final int packageUid = UserHandle.getUid(userId, pkg.getUid());
 
         if (!checkAutoRevokeAccess(pkg, callingUid)) {
             return false;
@@ -1289,7 +1297,7 @@ public class PermissionManagerService extends IPermissionManager.Stub {
 
         if (mAppOpsManager
                 .checkOpNoThrow(AppOpsManager.OP_AUTO_REVOKE_MANAGED_BY_INSTALLER,
-                        callingUid, packageName)
+                        packageUid, packageName)
                 != MODE_ALLOWED) {
             // Whitelist user set - don't override
             return false;
@@ -1298,7 +1306,7 @@ public class PermissionManagerService extends IPermissionManager.Stub {
         final long identity = Binder.clearCallingIdentity();
         try {
             mAppOpsManager.setMode(AppOpsManager.OP_AUTO_REVOKE_PERMISSIONS_IF_UNUSED,
-                    callingUid, packageName,
+                    packageUid, packageName,
                     whitelisted ? MODE_IGNORED : MODE_ALLOWED);
         } finally {
             Binder.restoreCallingIdentity(identity);
@@ -1331,6 +1339,7 @@ public class PermissionManagerService extends IPermissionManager.Stub {
 
         final AndroidPackage pkg = mPackageManagerInt.getPackage(packageName);
         final int callingUid = Binder.getCallingUid();
+        final int packageUid = UserHandle.getUid(userId, pkg.getUid());
 
         if (!checkAutoRevokeAccess(pkg, callingUid)) {
             return false;
@@ -1339,7 +1348,7 @@ public class PermissionManagerService extends IPermissionManager.Stub {
         final long identity = Binder.clearCallingIdentity();
         try {
             return mAppOpsManager.checkOpNoThrow(
-                    AppOpsManager.OP_AUTO_REVOKE_PERMISSIONS_IF_UNUSED, callingUid, packageName)
+                    AppOpsManager.OP_AUTO_REVOKE_PERMISSIONS_IF_UNUSED, packageUid, packageName)
                     == MODE_IGNORED;
         } finally {
             Binder.restoreCallingIdentity(identity);
@@ -4639,17 +4648,39 @@ public class PermissionManagerService extends IPermissionManager.Stub {
         }
 
         @Override
-        public @NonNull ArrayList<PermissionInfo> getAllPermissionWithProtection(
+        public @NonNull ArrayList<PermissionInfo> getAllPermissionsWithProtection(
                 @PermissionInfo.Protection int protection) {
             ArrayList<PermissionInfo> matchingPermissions = new ArrayList<>();
 
-            synchronized (PermissionManagerService.this.mLock) {
+            synchronized (mLock) {
                 int numTotalPermissions = mSettings.mPermissions.size();
 
                 for (int i = 0; i < numTotalPermissions; i++) {
                     BasePermission bp = mSettings.mPermissions.valueAt(i);
 
                     if (bp.perm != null && bp.perm.getProtection() == protection) {
+                        matchingPermissions.add(
+                                PackageInfoUtils.generatePermissionInfo(bp.perm, 0));
+                    }
+                }
+            }
+
+            return matchingPermissions;
+        }
+
+        @Override
+        public @NonNull ArrayList<PermissionInfo> getAllPermissionsWithProtectionFlags(
+                @PermissionInfo.ProtectionFlags int protectionFlags) {
+            ArrayList<PermissionInfo> matchingPermissions = new ArrayList<>();
+
+            synchronized (mLock) {
+                int numTotalPermissions = mSettings.mPermissions.size();
+
+                for (int i = 0; i < numTotalPermissions; i++) {
+                    BasePermission bp = mSettings.mPermissions.valueAt(i);
+
+                    if (bp.perm != null && (bp.perm.getProtectionFlags() & protectionFlags)
+                            == protectionFlags) {
                         matchingPermissions.add(
                                 PackageInfoUtils.generatePermissionInfo(bp.perm, 0));
                     }

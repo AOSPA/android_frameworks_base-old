@@ -431,6 +431,7 @@ package android.app {
   }
 
   public class DreamManager {
+    method @RequiresPermission("android.permission.READ_DREAM_STATE") public boolean isDreaming();
     method @RequiresPermission("android.permission.WRITE_DREAM_STATE") public void setActiveDream(@NonNull android.content.ComponentName);
     method @RequiresPermission("android.permission.WRITE_DREAM_STATE") public void startDream(@NonNull android.content.ComponentName);
     method @RequiresPermission("android.permission.WRITE_DREAM_STATE") public void stopDream();
@@ -4966,6 +4967,11 @@ package android.view {
   public class ViewDebug {
     method @Deprecated @Nullable public static AutoCloseable startRenderingCommandsCapture(android.view.View, java.util.concurrent.Executor, java.util.function.Function<android.graphics.Picture,java.lang.Boolean>);
     method @Nullable public static AutoCloseable startRenderingCommandsCapture(android.view.View, java.util.concurrent.Executor, java.util.concurrent.Callable<java.io.OutputStream>);
+  }
+
+  public abstract class Window {
+    method @Nullable public android.view.View getNavigationBarBackgroundView();
+    method @Nullable public android.view.View getStatusBarBackgroundView();
   }
 
   public interface WindowManager extends android.view.ViewManager {

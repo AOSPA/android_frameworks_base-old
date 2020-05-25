@@ -20,15 +20,21 @@ import static com.android.systemui.Dependency.ALLOW_NOTIFICATION_LONG_PRESS_NAME
 import static com.android.systemui.Dependency.LEAK_REPORT_EMAIL_NAME;
 
 import android.content.Context;
+import android.os.Handler;
+import android.os.PowerManager;
 
 import com.android.keyguard.KeyguardViewController;
+import com.android.systemui.broadcast.BroadcastDispatcher;
 import com.android.systemui.car.CarDeviceProvisionedController;
 import com.android.systemui.car.CarDeviceProvisionedControllerImpl;
 import com.android.systemui.car.keyguard.CarKeyguardViewController;
 import com.android.systemui.car.statusbar.CarStatusBar;
 import com.android.systemui.car.statusbar.CarStatusBarKeyguardViewManager;
+import com.android.systemui.car.statusbar.DummyNotificationShadeWindowController;
 import com.android.systemui.car.volume.CarVolumeDialogComponent;
 import com.android.systemui.dagger.SystemUIRootComponent;
+import com.android.systemui.dagger.qualifiers.Background;
+import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.dock.DockManager;
 import com.android.systemui.dock.DockManagerImpl;
 import com.android.systemui.plugins.qs.QSFactory;
@@ -47,6 +53,7 @@ import com.android.systemui.statusbar.phone.HeadsUpManagerPhone;
 import com.android.systemui.statusbar.phone.KeyguardBypassController;
 import com.android.systemui.statusbar.phone.KeyguardEnvironmentImpl;
 import com.android.systemui.statusbar.phone.NotificationGroupManager;
+import com.android.systemui.statusbar.phone.NotificationShadeWindowController;
 import com.android.systemui.statusbar.phone.ShadeController;
 import com.android.systemui.statusbar.phone.ShadeControllerImpl;
 import com.android.systemui.statusbar.phone.StatusBar;
@@ -111,10 +118,17 @@ public abstract class CarSystemUIModule {
     abstract NotificationLockscreenUserManager bindNotificationLockscreenUserManager(
             NotificationLockscreenUserManagerImpl notificationLockscreenUserManager);
 
-    @Binds
+    @Provides
     @Singleton
-    public abstract BatteryController provideBatteryController(
-            BatteryControllerImpl controllerImpl);
+    static BatteryController provideBatteryController(Context context,
+            EnhancedEstimates enhancedEstimates, PowerManager powerManager,
+            BroadcastDispatcher broadcastDispatcher, @Main Handler mainHandler,
+            @Background Handler bgHandler) {
+        BatteryController bC = new BatteryControllerImpl(context, enhancedEstimates, powerManager,
+                broadcastDispatcher, mainHandler, bgHandler);
+        bC.init();
+        return bC;
+    }
 
     @Binds
     @Singleton
@@ -156,4 +170,8 @@ public abstract class CarSystemUIModule {
     @Binds
     abstract CarDeviceProvisionedController bindCarDeviceProvisionedController(
             CarDeviceProvisionedControllerImpl deviceProvisionedController);
+
+    @Binds
+    abstract NotificationShadeWindowController bindNotificationShadeWindowController(
+            DummyNotificationShadeWindowController notificationShadeWindowController);
 }

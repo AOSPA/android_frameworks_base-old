@@ -240,6 +240,8 @@
 
     <!-- Notification title displayed for screen recording [CHAR LIMIT=50]-->
     <string name="screenrecord_name">Screen Recorder</string>
+    <!-- Processing screen recoding video in the background [CHAR LIMIT=30]-->
+    <string name="screenrecord_background_processing_label">Processing screen recording</string>
     <!-- Description of the screen recording notification channel [CHAR LIMIT=NONE]-->
     <string name="screenrecord_channel_description">Ongoing notification for a screen record session</string>
     <!-- Title for the screen prompting the user to begin recording their screen [CHAR LIMIT=NONE]-->
@@ -1252,6 +1254,9 @@
 
     <!-- The text for the notification history link. [CHAR LIMIT=40] -->
     <string name="manage_notifications_history_text">History</string>
+
+    <!-- Section title for notifications that have recently appeared. [CHAR LIMIT=40] -->
+    <string name="notification_section_header_incoming">Incoming</string>
 
     <!-- Section title for notifications that do not vibrate or make noise. [CHAR LIMIT=40] -->
     <string name="notification_section_header_gentle">Silent notifications</string>
@@ -2608,6 +2613,10 @@
     <!-- Text used for content description of settings button in the header of expanded bubble
          view. [CHAR_LIMIT=NONE] -->
     <string name="bubbles_settings_button_description">Settings for <xliff:g id="app_name" example="YouTube">%1$s</xliff:g> bubbles</string>
+    <!-- Content description for button that shows bubble overflow on click [CHAR LIMIT=NONE] -->
+    <string name="bubble_overflow_button_content_description">Overflow</string>
+    <!-- Action to add overflow bubble back to stack. [CHAR LIMIT=NONE] -->
+    <string name="bubble_accessibility_action_add_back">Add back to stack</string>
     <!-- The text for the manage bubbles link. [CHAR LIMIT=NONE] -->
     <string name="manage_bubbles_text">Manage</string>
     <!-- Content description when a bubble is focused. [CHAR LIMIT=NONE] -->
@@ -2710,9 +2719,9 @@
     <!-- Controls dialog title [CHAR LIMIT=40] -->
     <string name="controls_dialog_title">Add to device controls</string>
     <!-- Controls dialog add to favorites [CHAR LIMIT=40] -->
-    <string name="controls_dialog_ok">Add to favorites</string>
-    <!-- Controls dialog message [CHAR LIMIT=NONE] -->
-    <string name="controls_dialog_message"><xliff:g id="app" example="System UI">%s</xliff:g> suggested this control to add to your favorites.</string>
+    <string name="controls_dialog_ok">Add</string>
+    <!-- Controls dialog message. Indicates app that suggested this control [CHAR LIMIT=NONE] -->
+    <string name="controls_dialog_message">Suggested by <xliff:g id="app" example="System UI">%s</xliff:g></string>
     <!-- Controls dialog confirmation [CHAR LIMIT=30] -->
     <string name="controls_dialog_confirmation">Controls updated</string>
 

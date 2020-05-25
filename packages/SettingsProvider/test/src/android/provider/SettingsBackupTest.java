@@ -264,6 +264,7 @@ public class SettingsBackupTest {
                     Settings.Global.ENABLE_DELETION_HELPER_NO_THRESHOLD_TOGGLE,
                     Settings.Global.ENABLE_DISKSTATS_LOGGING,
                     Settings.Global.ENABLE_EPHEMERAL_FEATURE,
+                    Settings.Global.ENABLE_RESTRICTED_BUCKET,
                     Settings.Global.DYNAMIC_POWER_SAVINGS_ENABLED,
                     Settings.Global.DYNAMIC_POWER_SAVINGS_DISABLE_THRESHOLD,
                     Settings.Global.SMART_REPLIES_IN_NOTIFICATIONS_FLAGS,
@@ -585,8 +586,10 @@ public class SettingsBackupTest {
                     Settings.Global.MODEM_STACK_ENABLED_FOR_SLOT,
                     Settings.Global.POWER_BUTTON_LONG_PRESS,
                     Settings.Global.POWER_BUTTON_VERY_LONG_PRESS,
+                    Settings.Global.SHOW_MEDIA_ON_QUICK_SETTINGS, // Temporary for R beta
                     Settings.Global.INTEGRITY_CHECK_INCLUDES_RULE_PROVIDER,
-                    Settings.Global.ADVANCED_BATTERY_USAGE_AMOUNT);
+                    Settings.Global.ADVANCED_BATTERY_USAGE_AMOUNT,
+                    Settings.Global.CACHED_APPS_FREEZER_ENABLED);
 
     private static final Set<String> BACKUP_BLACKLISTED_SECURE_SETTINGS =
              newHashSet(

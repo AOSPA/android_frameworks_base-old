@@ -20,16 +20,20 @@ import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothProfile;
 import android.content.Context;
+import android.media.RoutingSessionInfo;
 import android.text.TextUtils;
 import android.util.Log;
 
 import androidx.annotation.IntDef;
 
 import com.android.internal.annotations.VisibleForTesting;
+import com.android.settingslib.bluetooth.A2dpProfile;
 import com.android.settingslib.bluetooth.BluetoothCallback;
 import com.android.settingslib.bluetooth.CachedBluetoothDevice;
 import com.android.settingslib.bluetooth.CachedBluetoothDeviceManager;
+import com.android.settingslib.bluetooth.HearingAidProfile;
 import com.android.settingslib.bluetooth.LocalBluetoothManager;
+import com.android.settingslib.bluetooth.LocalBluetoothProfile;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -256,22 +260,6 @@ public class LocalMediaManager implements BluetoothCallback {
     }
 
     /**
-     * Find the active MediaDevice.
-     *
-     * @param type the media device type.
-     * @return MediaDevice list
-     */
-    public List<MediaDevice> getActiveMediaDevice(@MediaDevice.MediaDeviceType int type) {
-        final List<MediaDevice> devices = new ArrayList<>();
-        for (MediaDevice device : mMediaDevices) {
-            if (type == device.mType && device.getClientPackageName() != null) {
-                devices.add(device);
-            }
-        }
-        return devices;
-    }
-
-    /**
      * Add a MediaDevice to let it play current media.
      *
      * @param device MediaDevice
@@ -319,6 +307,23 @@ public class LocalMediaManager implements BluetoothCallback {
     /**
      * Adjust the volume of session.
      *
+     * @param sessionId the value of media session id
+     * @param volume the value of volume
+     */
+    public void adjustSessionVolume(String sessionId, int volume) {
+        final List<RoutingSessionInfo> infos = getActiveMediaSession();
+        for (RoutingSessionInfo info : infos) {
+            if (TextUtils.equals(sessionId, info.getId())) {
+                mInfoMediaManager.adjustSessionVolume(info, volume);
+                return;
+            }
+        }
+        Log.w(TAG, "adjustSessionVolume: Unable to find session: " + sessionId);
+    }
+
+    /**
+     * Adjust the volume of session.
+     *
      * @param volume the value of volume
      */
     public void adjustSessionVolume(int volume) {
@@ -350,6 +355,15 @@ public class LocalMediaManager implements BluetoothCallback {
      */
     public CharSequence getSessionName() {
         return mInfoMediaManager.getSessionName();
+    }
+
+    /**
+     * Gets the current active session.
+     *
+     * @return current active session list{@link android.media.RoutingSessionInfo}
+     */
+    public List<RoutingSessionInfo> getActiveMediaSession() {
+        return mInfoMediaManager.getActiveMediaSession();
     }
 
     private MediaDevice updateCurrentConnectedDevice() {
@@ -419,7 +433,8 @@ public class LocalMediaManager implements BluetoothCallback {
                         cachedDeviceManager.findDevice(device);
                 if (cachedDevice != null) {
                     if (cachedDevice.getBondState() == BluetoothDevice.BOND_BONDED
-                            && !cachedDevice.isConnected()) {
+                            && !cachedDevice.isConnected()
+                            && isA2dpOrHearingAidDevice(cachedDevice)) {
                         deviceCount++;
                         cachedBluetoothDeviceList.add(cachedDevice);
                         if (deviceCount >= MAX_DISCONNECTED_DEVICE_NUM) {
@@ -441,6 +456,15 @@ public class LocalMediaManager implements BluetoothCallback {
                 }
             }
             return new ArrayList<>(mDisconnectedMediaDevices);
+        }
+
+        private boolean isA2dpOrHearingAidDevice(CachedBluetoothDevice device) {
+            for (LocalBluetoothProfile profile : device.getConnectableProfiles()) {
+                if (profile instanceof A2dpProfile || profile instanceof HearingAidProfile) {
+                    return true;
+                }
+            }
+            return false;
         }
 
         @Override
@@ -465,10 +489,7 @@ public class LocalMediaManager implements BluetoothCallback {
             if (connectDevice != null) {
                 connectDevice.setState(MediaDeviceState.STATE_CONNECTED);
             }
-            if (connectDevice == mCurrentConnectedDevice) {
-                Log.d(TAG, "onConnectedDeviceChanged() this device all ready connected!");
-                return;
-            }
+
             mCurrentConnectedDevice = connectDevice;
             dispatchSelectedDeviceStateChanged(mCurrentConnectedDevice,
                     MediaDeviceState.STATE_CONNECTED);
