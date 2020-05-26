@@ -1303,6 +1303,7 @@ public class VolumeDialogImpl implements VolumeDialog,
                     mRingerIcon.setTag(Events.ICON_STATE_VIBRATE);
                     if (mHasAlertSlider) {
                         row.slider.setProgress(ss.levelMin * 100, true);
+                        row.slider.setEnabled(false);
                         Util.setText(row.header, Utils.formatPercentage(ss.levelMin, ss.levelMax));
                     }
                     break;
@@ -1313,6 +1314,7 @@ public class VolumeDialogImpl implements VolumeDialog,
                             mContext.getString(R.string.volume_ringer_hint_unmute));
                     if (mHasAlertSlider) {
                         row.slider.setProgress(ss.levelMin * 100, true);
+                        row.slider.setEnabled(false);
                         Util.setText(row.header, Utils.formatPercentage(ss.levelMin, ss.levelMax));
                     }
                     break;
@@ -1334,6 +1336,9 @@ public class VolumeDialogImpl implements VolumeDialog,
                                     mContext.getString(R.string.volume_ringer_hint_mute));
                         }
                         mRingerIcon.setTag(Events.ICON_STATE_UNMUTE);
+                        if (mHasAlertSlider) {
+                            row.slider.setEnabled(true);
+                        }
                     }
                     break;
             }
@@ -1849,6 +1854,7 @@ public class VolumeDialogImpl implements VolumeDialog,
             if (mRow.stream == STREAM_RING && mHasAlertSlider) {
                 if (mRow.ss.muted) {
                     seekBar.setProgress(mRow.ss.levelMin * 100);
+                    seekBar.setEnabled(false);
                     return;
                 }
             }
@@ -1865,10 +1871,15 @@ public class VolumeDialogImpl implements VolumeDialog,
             if (mRow.stream == STREAM_RING && mHasAlertSlider) {
                 if (mRow.ss.level == (mRow.ss.levelMin + 1) && userLevel <= mRow.ss.level) {
                     seekBar.setProgress((mRow.ss.levelMin + 1) * 100);
+                    seekBar.setEnabled(false);
                     Util.setText(mRow.header,
                             Utils.formatPercentage(mRow.ss.levelMin + 1, mRow.ss.levelMax));
                     return;
                 }
+            }
+
+            if (mHasAlertSlider) {
+                seekBar.setEnabled(true);
             }
 
             Util.setText(mRow.header, Utils.formatPercentage(userLevel, mRow.ss.levelMax));
