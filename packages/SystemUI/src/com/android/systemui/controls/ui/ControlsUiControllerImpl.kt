@@ -59,6 +59,7 @@ import com.android.systemui.dagger.qualifiers.Background
 import com.android.systemui.dagger.qualifiers.Main
 import com.android.systemui.globalactions.GlobalActionsPopupMenu
 import com.android.systemui.plugins.ActivityStarter
+import com.android.systemui.statusbar.phone.ShadeController
 import com.android.systemui.statusbar.policy.KeyguardStateController
 import com.android.systemui.util.concurrency.DelayableExecutor
 import dagger.Lazy
@@ -79,7 +80,8 @@ class ControlsUiControllerImpl @Inject constructor (
     @Main val sharedPreferences: SharedPreferences,
     val controlActionCoordinator: ControlActionCoordinator,
     private val activityStarter: ActivityStarter,
-    private val keyguardStateController: KeyguardStateController
+    private val keyguardStateController: KeyguardStateController,
+    private val shadeController: ShadeController
 ) : ControlsUiController {
 
     companion object {
@@ -105,6 +107,7 @@ class ControlsUiControllerImpl @Inject constructor (
     private var popup: ListPopupWindow? = null
     private var hidden = true
     private lateinit var dismissGlobalActions: Runnable
+    private val popupThemedContext = ContextThemeWrapper(context, R.style.Control_ListPopupWindow)
 
     override val available: Boolean
         get() = controlsController.get().available
@@ -254,14 +257,11 @@ class ControlsUiControllerImpl @Inject constructor (
         intent.putExtra(ControlsUiController.EXTRA_ANIMATE, true)
         dismissGlobalActions.run()
 
-        if (!keyguardStateController.isUnlocked()) {
-            activityStarter.dismissKeyguardThenExecute({
-                context.startActivity(intent)
-                true
-            }, null, true)
-        } else {
+        activityStarter.dismissKeyguardThenExecute({
+            shadeController.collapsePanel(false)
             context.startActivity(intent)
-        }
+            true
+        }, null, true)
     }
 
     private fun showControlsView(items: List<SelectionItem>) {
@@ -284,7 +284,10 @@ class ControlsUiControllerImpl @Inject constructor (
         val anchor = parent.requireViewById<ImageView>(R.id.controls_more)
         anchor.setOnClickListener(object : View.OnClickListener {
             override fun onClick(v: View) {
-                popup = GlobalActionsPopupMenu(context, false /* isDropDownMode */).apply {
+                popup = GlobalActionsPopupMenu(
+                        popupThemedContext,
+                        false /* isDropDownMode */
+                ).apply {
                     setAnchorView(anchor)
                     setAdapter(adapter)
                     setOnItemClickListener(object : AdapterView.OnItemClickListener {
@@ -369,7 +372,7 @@ class ControlsUiControllerImpl @Inject constructor (
         val spinner = parent.requireViewById<TextView>(R.id.app_or_structure_spinner).apply {
             setText(selectionItem.getTitle())
             // override the default color on the dropdown drawable
-            (getBackground() as LayerDrawable).getDrawable(1)
+            (getBackground() as LayerDrawable).getDrawable(0)
                 .setTint(context.resources.getColor(R.color.control_spinner_dropdown, null))
         }
 
@@ -381,13 +384,12 @@ class ControlsUiControllerImpl @Inject constructor (
         val anchor = parent.requireViewById<ViewGroup>(R.id.controls_header)
         anchor.setOnClickListener(object : View.OnClickListener {
             override fun onClick(v: View) {
-                popup = GlobalActionsPopupMenu(context, true /* isDropDownMode */).apply {
+                popup = GlobalActionsPopupMenu(
+                        popupThemedContext,
+                        true /* isDropDownMode */
+                ).apply {
                     setAnchorView(anchor)
                     setAdapter(adapter)
-                    val theme = ContextThemeWrapper(context, R.style.Control_ListPopupWindow)
-                        .getTheme()
-                    setBackgroundDrawable(
-                        context.resources.getDrawable(R.drawable.rounded_bg_full, theme))
 
                     setOnItemClickListener(object : AdapterView.OnItemClickListener {
                         override fun onItemClick(

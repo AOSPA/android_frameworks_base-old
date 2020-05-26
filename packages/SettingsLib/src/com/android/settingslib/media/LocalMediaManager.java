@@ -15,6 +15,8 @@
  */
 package com.android.settingslib.media;
 
+import static android.media.MediaRoute2ProviderService.REASON_UNKNOWN_ERROR;
+
 import android.app.Notification;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
@@ -145,15 +147,16 @@ public class LocalMediaManager implements BluetoothCallback {
     /**
      * Connect the MediaDevice to transfer media
      * @param connectDevice the MediaDevice
+     * @return {@code true} if successfully call, otherwise return {@code false}
      */
-    public void connectDevice(MediaDevice connectDevice) {
+    public boolean connectDevice(MediaDevice connectDevice) {
         MediaDevice device = null;
         synchronized (mMediaDevicesLock) {
             device = getMediaDeviceById(mMediaDevices, connectDevice.getId());
         }
         if (device == null) {
             Log.w(TAG, "connectDevice() connectDevice not in the list!");
-            return;
+            return false;
         }
         if (device instanceof BluetoothMediaDevice) {
             final CachedBluetoothDevice cachedDevice =
@@ -162,13 +165,13 @@ public class LocalMediaManager implements BluetoothCallback {
                 mOnTransferBluetoothDevice = connectDevice;
                 device.setState(MediaDeviceState.STATE_CONNECTING);
                 cachedDevice.connect();
-                return;
+                return true;
             }
         }
 
         if (device == mCurrentConnectedDevice) {
             Log.d(TAG, "connectDevice() this device all ready connected! : " + device.getName());
-            return;
+            return false;
         }
 
         if (mCurrentConnectedDevice != null) {
@@ -181,6 +184,7 @@ public class LocalMediaManager implements BluetoothCallback {
         } else {
             device.connect();
         }
+        return true;
     }
 
     void dispatchSelectedDeviceStateChanged(MediaDevice device, @MediaDeviceState int state) {
@@ -381,6 +385,15 @@ public class LocalMediaManager implements BluetoothCallback {
         return mInfoMediaManager.getActiveMediaSession();
     }
 
+    /**
+     * Gets the current package name.
+     *
+     * @return current package name
+     */
+    public String getPackageName() {
+        return mPackageName;
+    }
+
     private MediaDevice updateCurrentConnectedDevice() {
         synchronized (mMediaDevicesLock) {
             for (MediaDevice device : mMediaDevices) {
@@ -437,6 +450,8 @@ public class LocalMediaManager implements BluetoothCallback {
             if (mOnTransferBluetoothDevice != null && mOnTransferBluetoothDevice.isConnected()) {
                 connectDevice(mOnTransferBluetoothDevice);
                 mOnTransferBluetoothDevice.setState(MediaDeviceState.STATE_CONNECTED);
+                dispatchSelectedDeviceStateChanged(mOnTransferBluetoothDevice,
+                        MediaDeviceState.STATE_CONNECTED);
                 mOnTransferBluetoothDevice = null;
             }
         }
@@ -615,6 +630,7 @@ public class LocalMediaManager implements BluetoothCallback {
                 // Failed to connect
                 mOnTransferBluetoothDevice.setState(MediaDeviceState.STATE_DISCONNECTED);
                 mOnTransferBluetoothDevice = null;
+                dispatchOnRequestFailed(REASON_UNKNOWN_ERROR);
             }
             dispatchDeviceAttributesChanged();
         }

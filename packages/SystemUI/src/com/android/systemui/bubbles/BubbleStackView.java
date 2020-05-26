@@ -49,6 +49,7 @@ import android.graphics.RectF;
 import android.graphics.Region;
 import android.os.Bundle;
 import android.os.Vibrator;
+import android.service.notification.StatusBarNotification;
 import android.util.Log;
 import android.view.Choreographer;
 import android.view.DisplayCutout;
@@ -361,6 +362,10 @@ public class BubbleStackView extends FrameLayout
             new MagnetizedObject.MagnetListener() {
                 @Override
                 public void onStuckToTarget(@NonNull MagnetizedObject.MagneticTarget target) {
+                    if (mExpandedAnimationController.getDraggedOutBubble() == null) {
+                        return;
+                    }
+
                     animateDesaturateAndDarken(
                             mExpandedAnimationController.getDraggedOutBubble(), true);
                 }
@@ -368,6 +373,10 @@ public class BubbleStackView extends FrameLayout
                 @Override
                 public void onUnstuckFromTarget(@NonNull MagnetizedObject.MagneticTarget target,
                         float velX, float velY, boolean wasFlungOut) {
+                    if (mExpandedAnimationController.getDraggedOutBubble() == null) {
+                        return;
+                    }
+
                     animateDesaturateAndDarken(
                             mExpandedAnimationController.getDraggedOutBubble(), false);
 
@@ -382,6 +391,10 @@ public class BubbleStackView extends FrameLayout
 
                 @Override
                 public void onReleasedInTarget(@NonNull MagnetizedObject.MagneticTarget target) {
+                    if (mExpandedAnimationController.getDraggedOutBubble() == null) {
+                        return;
+                    }
+
                     mExpandedAnimationController.dismissDraggedOutBubble(
                             mExpandedAnimationController.getDraggedOutBubble() /* bubble */,
                             mDismissTargetContainer.getHeight() /* translationYBy */,
@@ -655,7 +668,8 @@ public class BubbleStackView extends FrameLayout
             @Nullable SurfaceSynchronizer synchronizer,
             FloatingContentCoordinator floatingContentCoordinator,
             SysUiState sysUiState,
-            NotificationShadeWindowController notificationShadeWindowController) {
+            NotificationShadeWindowController notificationShadeWindowController,
+            Runnable allBubblesAnimatedOutAction) {
         super(context);
 
         mBubbleData = data;
@@ -690,11 +704,18 @@ public class BubbleStackView extends FrameLayout
         mExpandedViewPadding = res.getDimensionPixelSize(R.dimen.bubble_expanded_view_padding);
         int elevation = res.getDimensionPixelSize(R.dimen.bubble_elevation);
 
+        final Runnable onBubbleAnimatedOut = () -> {
+            if (getBubbleCount() == 0) {
+                allBubblesAnimatedOutAction.run();
+            }
+        };
+
         mStackAnimationController = new StackAnimationController(
-                floatingContentCoordinator, this::getBubbleCount);
+                floatingContentCoordinator, this::getBubbleCount, onBubbleAnimatedOut);
 
         mExpandedAnimationController = new ExpandedAnimationController(
-                mDisplaySize, mExpandedViewPadding, res.getConfiguration().orientation);
+                mDisplaySize, mExpandedViewPadding, res.getConfiguration().orientation,
+                onBubbleAnimatedOut);
         mSurfaceSynchronizer = synchronizer != null ? synchronizer : DEFAULT_SURFACE_SYNCHRONIZER;
 
         setUpUserEducation();
@@ -870,7 +891,7 @@ public class BubbleStackView extends FrameLayout
                 }
             }
 
-            return false;
+            return true;
         });
     }
 
@@ -918,10 +939,10 @@ public class BubbleStackView extends FrameLayout
                     showManageMenu(false /* show */);
                     final Bubble bubble = mBubbleData.getSelectedBubble();
                     if (bubble != null && mBubbleData.hasBubbleInStackWithKey(bubble.getKey())) {
-                        final Intent intent = bubble.getSettingsIntent(mContext);
+                        final Intent intent = bubble.getSettingsIntent();
                         collapseStack(() -> {
-
-                            mContext.startActivityAsUser(intent, bubble.getUser());
+                            mContext.startActivityAsUser(
+                                    intent, bubble.getEntry().getSbn().getUser());
                             logBubbleClickEvent(
                                     bubble,
                                     SysUiStatsLog.BUBBLE_UICHANGED__ACTION__HEADER_GO_TO_SETTINGS);
@@ -1178,19 +1199,13 @@ public class BubbleStackView extends FrameLayout
         for (int i = 0; i < mBubbleData.getBubbles().size(); i++) {
             final Bubble bubble = mBubbleData.getBubbles().get(i);
             final String appName = bubble.getAppName();
+            final Notification notification = bubble.getEntry().getSbn().getNotification();
+            final CharSequence titleCharSeq =
+                    notification.extras.getCharSequence(Notification.EXTRA_TITLE);
 
-            final CharSequence titleCharSeq;
-            if (bubble.getEntry() == null) {
-                titleCharSeq = null;
-            } else {
-                titleCharSeq = bubble.getEntry().getSbn().getNotification().extras.getCharSequence(
-                        Notification.EXTRA_TITLE);
-            }
-            final String titleStr;
+            String titleStr = getResources().getString(R.string.notification_bubble_title);
             if (titleCharSeq != null) {
                 titleStr = titleCharSeq.toString();
-            } else {
-                titleStr = getResources().getString(R.string.notification_bubble_title);
             }
 
             if (bubble.getIconView() != null) {
@@ -1803,7 +1818,7 @@ public class BubbleStackView extends FrameLayout
     private void dismissBubbleIfExists(@Nullable Bubble bubble) {
         if (bubble != null && mBubbleData.hasBubbleInStackWithKey(bubble.getKey())) {
             mBubbleData.notificationEntryRemoved(
-                    bubble.getKey(), BubbleController.DISMISS_USER_GESTURE);
+                    bubble.getEntry(), BubbleController.DISMISS_USER_GESTURE);
         }
     }
 
@@ -2301,12 +2316,18 @@ public class BubbleStackView extends FrameLayout
      * @param action the user interaction enum.
      */
     private void logBubbleClickEvent(Bubble bubble, int action) {
-        bubble.logUIEvent(
+        StatusBarNotification notification = bubble.getEntry().getSbn();
+        SysUiStatsLog.write(SysUiStatsLog.BUBBLE_UI_CHANGED,
+                notification.getPackageName(),
+                notification.getNotification().getChannelId(),
+                notification.getId(),
+                getBubbleIndex(getExpandedBubble()),
                 getBubbleCount(),
                 action,
                 getNormalizedXPosition(),
                 getNormalizedYPosition(),
-                getBubbleIndex(getExpandedBubble())
-        );
+                bubble.showInShade(),
+                bubble.isOngoing(),
+                false /* isAppForeground (unused) */);
     }
 }

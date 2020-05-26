@@ -42,8 +42,8 @@ import static android.os.storage.OnObbStateChangeListener.ERROR_NOT_MOUNTED;
 import static android.os.storage.OnObbStateChangeListener.ERROR_PERMISSION_DENIED;
 import static android.os.storage.OnObbStateChangeListener.MOUNTED;
 import static android.os.storage.OnObbStateChangeListener.UNMOUNTED;
+import static android.os.storage.StorageManager.PROP_FORCED_SCOPED_STORAGE_WHITELIST;
 import static android.os.storage.StorageManager.PROP_FUSE;
-import static android.os.storage.StorageManager.PROP_LEGACY_OP_STICKY;
 import static android.os.storage.StorageManager.PROP_SETTINGS_FUSE;
 
 import static com.android.internal.util.XmlUtils.readIntAttribute;
@@ -83,6 +83,7 @@ import android.content.res.ObbInfo;
 import android.database.ContentObserver;
 import android.net.Uri;
 import android.os.Binder;
+import android.os.Build;
 import android.os.DropBoxManager;
 import android.os.Environment;
 import android.os.Handler;
@@ -915,7 +916,6 @@ class StorageManagerService extends IStorageManager.Stub
                     refreshIsolatedStorageSettings();
                 }
             });
-        updateLegacyStorageOpSticky();
         // For now, simply clone property when it changes
         DeviceConfig.addOnPropertiesChangedListener(DeviceConfig.NAMESPACE_STORAGE_NATIVE_BOOT,
                 mContext.getMainExecutor(), (properties) -> {
@@ -1835,13 +1835,6 @@ class StorageManagerService extends IStorageManager.Stub
             // Then perform hard reboot to kick policy into place
             mContext.getSystemService(PowerManager.class).reboot("fuse_prop");
         }
-    }
-
-    private void updateLegacyStorageOpSticky() {
-        final boolean propertyValue = DeviceConfig.getBoolean(
-                DeviceConfig.NAMESPACE_STORAGE_NATIVE_BOOT,
-                "legacy_storage_op_sticky", true);
-        SystemProperties.set(PROP_LEGACY_OP_STICKY, propertyValue ? "true" : "false");
     }
 
     private void start() {
@@ -4457,6 +4450,9 @@ class StorageManagerService extends IStorageManager.Stub
             pw.println("Isolated storage, remote feature flag: "
                     + Settings.Global.getInt(cr, Settings.Global.ISOLATED_STORAGE_REMOTE, 0));
             pw.println("Isolated storage, resolved: " + StorageManager.hasIsolatedStorage());
+            pw.println("Forced scoped storage app list: "
+                    + DeviceConfig.getProperty(DeviceConfig.NAMESPACE_STORAGE_NATIVE_BOOT,
+                    PROP_FORCED_SCOPED_STORAGE_WHITELIST));
         }
 
         synchronized (mObbMounts) {
@@ -4682,6 +4678,10 @@ class StorageManagerService extends IStorageManager.Stub
         }
 
         public void onAppOpsChanged(int code, int uid, @Nullable String packageName, int mode) {
+            if (packageName == null) {
+                // This happens :(
+                return;
+            }
             final long token = Binder.clearCallingIdentity();
             try {
                 if (mIsFuseEnabled) {
@@ -4689,7 +4689,20 @@ class StorageManagerService extends IStorageManager.Stub
                     switch(code) {
                         case OP_REQUEST_INSTALL_PACKAGES:
                             // Always kill regardless of op change, to remount apps /storage
-                            killAppForOpChange(code, uid, packageName);
+                            try {
+                                ApplicationInfo ai = mIPackageManager.getApplicationInfo(
+                                        packageName,
+                                        0, UserHandle.getUserId(uid));
+                                if (ai.targetSdkVersion >= Build.VERSION_CODES.O) {
+                                    killAppForOpChange(code, uid, packageName);
+                                } else {
+                                    // Apps targeting <26 didn't need this app op to install
+                                    // packages - they only need the manifest permission, instead.
+                                    // So, there's also no need to kill them.
+                                }
+                            } catch (RemoteException e) {
+                                // Ignore, this is an in-process call
+                            }
                             return;
                         case OP_MANAGE_EXTERNAL_STORAGE:
                             if (mode != MODE_ALLOWED) {

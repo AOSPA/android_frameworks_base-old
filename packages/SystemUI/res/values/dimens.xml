@@ -314,13 +314,14 @@
     <dimen name="screenshot_dismiss_button_margin">8dp</dimen>
     <dimen name="screenshot_action_container_offset_y">32dp</dimen>
     <dimen name="screenshot_action_container_corner_radius">10dp</dimen>
-    <dimen name="screenshot_action_container_padding_vertical">16dp</dimen>
+    <dimen name="screenshot_action_container_padding_vertical">6dp</dimen>
     <dimen name="screenshot_action_container_margin_horizontal">8dp</dimen>
     <dimen name="screenshot_action_container_padding_left">96dp</dimen>
     <dimen name="screenshot_action_container_padding_right">8dp</dimen>
     <!-- Radius of the chip background on global screenshot actions -->
     <dimen name="screenshot_button_corner_radius">20dp</dimen>
     <dimen name="screenshot_action_chip_margin_right">8dp</dimen>
+    <dimen name="screenshot_action_chip_margin_vertical">10dp</dimen>
     <dimen name="screenshot_action_chip_padding_vertical">7dp</dimen>
     <dimen name="screenshot_action_chip_icon_size">18dp</dimen>
     <dimen name="screenshot_action_chip_padding_start">8dp</dimen>
@@ -998,8 +999,15 @@
     <!-- The touchable/draggable edge size for PIP resize. -->
     <dimen name="pip_resize_edge_size">48dp</dimen>
 
+    <!-- PIP Resize handle size and margin. -->
+    <dimen name="pip_resize_handle_size">12dp</dimen>
+    <dimen name="pip_resize_handle_margin">4dp</dimen>
+
     <!-- The corner radius for PiP window. -->
     <dimen name="pip_corner_radius">8dp</dimen>
+
+    <!-- The buffer to use when calculating whether the pip is in an adjust zone. -->
+    <dimen name="pip_bottom_offset_buffer">1dp</dimen>
 
     <dimen name="default_gear_space">18dp</dimen>
     <dimen name="cell_overlay_padding">18dp</dimen>
@@ -1026,6 +1034,9 @@
 
     <!-- Amount to shift the layout when exiting/entering for controls activities -->
     <dimen name="global_actions_controls_y_translation">20dp</dimen>
+
+    <!-- Shift quick access wallet down in Global Actions when Controls are unavailable -->
+    <dimen name="global_actions_wallet_top_margin">40dp</dimen>
 
     <!-- The maximum offset in either direction that elements are moved horizontally to prevent
          burn-in on AOD. -->

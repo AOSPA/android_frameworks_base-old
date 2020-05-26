@@ -428,6 +428,20 @@ public abstract class ActivityManagerInternal {
             String[] requiredPermissions, boolean serialized,
             int userId, int[] appIdWhitelist);
 
+    /**
+     * Add or delete uid from the ActivityManagerService PendingStartActivityUids list.
+     * @param uid uid
+     * @param pending add to the list if true, delete from list if false.
+     */
+    public abstract void updatePendingTopUid(int uid, boolean pending);
+
+    /**
+     * Is the uid in ActivityManagerService PendingStartActivityUids list?
+     * @param uid
+     * @return true if exists, false otherwise.
+     */
+    public abstract boolean isPendingTopUid(int uid);
+
     // Starts a process as empty.
     public abstract int startActivityAsUserEmpty(Bundle options);
 }

@@ -212,6 +212,13 @@
     <!-- Power menu item for taking a screenshot [CHAR LIMIT=20]-->
     <string name="global_action_screenshot">Screenshot</string>
 
+    <!-- Text shown when viewing global actions while phone is locked and additional controls are hidden [CHAR LIMIT=NONE] -->
+    <string name="global_action_lock_message" product="default">Unlock your phone for more options</string>
+    <!-- Text shown when viewing global actions while phone is locked and additional controls are hidden [CHAR LIMIT=NONE] -->
+    <string name="global_action_lock_message" product="tablet">Unlock your tablet for more options</string>
+    <!-- Text shown when viewing global actions while phone is locked and additional controls are hidden [CHAR LIMIT=NONE] -->
+    <string name="global_action_lock_message" product="device">Unlock your device for more options</string>
+
     <!-- text to show in place of RemoteInput images when they cannot be shown.
          [CHAR LIMIT=50] -->
     <string name="remote_input_image_insertion_text">sent an image</string>
@@ -790,6 +797,9 @@
     <!-- Accessibility text describing sensors off active. [CHAR LIMIT=NONE] -->
     <string name="accessibility_sensors_off_active">Sensors off active</string>
 
+    <!-- Accessibility text describing that media is playing. [CHAR LIMIT=NONE] -->
+    <string name="accessibility_media_active">Media is active</string>
+
     <!-- Content description of the clear button in the notification panel for accessibility (not shown on the screen). [CHAR LIMIT=NONE] -->
     <string name="accessibility_clear_all">Clear all notifications.</string>
 
@@ -1259,10 +1269,10 @@
     <string name="notification_section_header_incoming">Incoming</string>
 
     <!-- Section title for notifications that do not vibrate or make noise. [CHAR LIMIT=40] -->
-    <string name="notification_section_header_gentle">Silent notifications</string>
+    <string name="notification_section_header_gentle">Silent</string>
 
     <!-- Section title for notifications that vibrate or make noise. [CHAR LIMIT=40] -->
-    <string name="notification_section_header_alerting">Alerting notifications</string>
+    <string name="notification_section_header_alerting">Notifications</string>
 
     <!-- Section title for conversational notifications. [CHAR LIMIT=40] -->
     <string name="notification_section_header_conversations">Conversations</string>
@@ -1829,25 +1839,28 @@
     <string name="notification_silence_title">Silent</string>
 
     <!-- [CHAR LIMIT=100] Notification Importance title -->
-    <string name="notification_alert_title">Alerting</string>
+    <string name="notification_alert_title">Default</string>
 
     <!-- [CHAR LIMIT=100] Notification Importance title -->
     <string name="notification_bubble_title">Bubble</string>
 
     <!-- [CHAR LIMIT=150] Notification Importance title: low importance level summary -->
-    <string name="notification_channel_summary_low">Helps you focus without sound or vibration.</string>
+    <string name="notification_channel_summary_low">No sound or vibration</string>
+
+    <!-- [CHAR LIMIT=150] Notification Importance title: low importance level summary -->
+    <string name="notification_conversation_summary_low">No sound or vibration and appears lower in conversation section</string>
 
     <!-- [CHAR LIMIT=150] Notification Importance title: normal importance level summary -->
-    <string name="notification_channel_summary_default">Gets your attention with sound or vibration.</string>
+    <string name="notification_channel_summary_default">May ring or vibrate based on phone settings</string>
 
     <!-- [CHAR LIMIT=150] Conversation Notification Importance title: normal conversation level, with bubbling summary -->
-    <string name="notification_channel_summary_default_with_bubbles">Gets your attention with sound or vibration. Conversations from <xliff:g id="app_name" example="YouTube">%1$s</xliff:g> bubble by default.</string>
+    <string name="notification_channel_summary_default_with_bubbles">May ring or vibrate based on phone settings. Conversations from <xliff:g id="app_name" example="YouTube">%1$s</xliff:g> bubble by default.</string>
 
     <!-- [CHAR LIMIT=150] Notification Importance title: bubble level summary -->
     <string name="notification_channel_summary_bubble">Keeps your attention with a floating shortcut to this content.</string>
 
     <!-- [CHAR LIMIT=150] Notification Importance title: important conversation level summary -->
-    <string name="notification_channel_summary_priority">Shows at top of conversation section and appears as a bubble.</string>
+    <string name="notification_channel_summary_priority">Shows at top of conversation section, appears as floating bubble, displays profile picture on lock screen</string>
 
     <!--[CHAR LIMIT=30] Linkable text to Settings app -->
     <string name="notification_conversation_channel_settings">Settings</string>
@@ -2711,6 +2724,8 @@
     <string name="accessibility_control_change_favorite">favorite</string>
     <!-- a11y action to unfavorite a control. It will read as "Double-tap to unfavorite" in screen readers [CHAR LIMIT=NONE] -->
     <string name="accessibility_control_change_unfavorite">unfavorite</string>
+    <!-- a11y action to move a control to the position specified by the parameter [CHAR LIMIT=NONE] -->
+    <string name="accessibility_control_move">Move to position <xliff:g id="number" example="1">%d</xliff:g></string>
 
     <!-- Controls management controls screen default title [CHAR LIMIT=30] -->
     <string name="controls_favorite_default_title">Controls</string>
