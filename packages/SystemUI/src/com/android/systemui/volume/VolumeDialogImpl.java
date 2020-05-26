@@ -1303,6 +1303,7 @@ public class VolumeDialogImpl implements VolumeDialog,
                     mRingerIcon.setTag(Events.ICON_STATE_VIBRATE);
                     if (mHasAlertSlider) {
                         row.slider.setProgress(ss.levelMin * 100, true);
+                        row.slider.setEnabled(false);
                         Util.setText(row.header, Utils.formatPercentage(ss.levelMin, ss.levelMax));
                     }
                     break;
@@ -1313,6 +1314,7 @@ public class VolumeDialogImpl implements VolumeDialog,
                             mContext.getString(R.string.volume_ringer_hint_unmute));
                     if (mHasAlertSlider) {
                         row.slider.setProgress(ss.levelMin * 100, true);
+                        row.slider.setEnabled(false);
                         Util.setText(row.header, Utils.formatPercentage(ss.levelMin, ss.levelMax));
                     }
                     break;
@@ -1334,6 +1336,9 @@ public class VolumeDialogImpl implements VolumeDialog,
                                     mContext.getString(R.string.volume_ringer_hint_mute));
                         }
                         mRingerIcon.setTag(Events.ICON_STATE_UNMUTE);
+                        if (mHasAlertSlider) {
+                            row.slider.setEnabled(true);
+                        }
                     }
                     break;
             }
