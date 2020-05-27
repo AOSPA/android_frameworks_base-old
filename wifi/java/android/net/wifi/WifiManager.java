@@ -5607,5 +5607,18 @@ public class WifiManager {
           }
       }
 
+    /**
+     * Run driver command from user space
+     * @hide
+     */
+    public String doDriverCmd(String command)
+    {
+        try {
+            return mService.doDriverCmd(command);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
     /* QTI specific changes - END */
+
 }
