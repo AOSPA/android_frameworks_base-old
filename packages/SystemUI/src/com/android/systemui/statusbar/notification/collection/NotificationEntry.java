@@ -31,7 +31,7 @@ import static android.app.NotificationManager.Policy.SUPPRESSED_EFFECT_PEEK;
 import static android.app.NotificationManager.Policy.SUPPRESSED_EFFECT_STATUS_BAR;
 
 import static com.android.systemui.statusbar.notification.collection.NotifCollection.REASON_NOT_CANCELED;
-import static com.android.systemui.statusbar.notification.stack.NotificationSectionsManager.BUCKET_ALERTING;
+import static com.android.systemui.statusbar.notification.stack.NotificationSectionsManagerKt.BUCKET_ALERTING;
 
 import static java.util.Objects.requireNonNull;
 
@@ -68,7 +68,7 @@ import com.android.systemui.statusbar.notification.icon.IconPack;
 import com.android.systemui.statusbar.notification.row.ExpandableNotificationRow;
 import com.android.systemui.statusbar.notification.row.ExpandableNotificationRowController;
 import com.android.systemui.statusbar.notification.row.NotificationGuts;
-import com.android.systemui.statusbar.notification.stack.NotificationSectionsManager;
+import com.android.systemui.statusbar.notification.stack.PriorityBucket;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -151,6 +151,8 @@ public final class NotificationEntry extends ListEntry {
     public CharSequence headsUpStatusBarText;
     public CharSequence headsUpStatusBarTextPublic;
 
+    // indicates when this entry's view was first attached to a window
+    // this value will reset when the view is completely removed from the shade (ie: filtered out)
     private long initializationTime = -1;
 
     /**
@@ -409,12 +411,12 @@ public final class NotificationEntry extends ListEntry {
         return wasBubble != isBubble();
     }
 
-    @NotificationSectionsManager.PriorityBucket
+    @PriorityBucket
     public int getBucket() {
         return mBucket;
     }
 
-    public void setBucket(@NotificationSectionsManager.PriorityBucket int bucket) {
+    public void setBucket(@PriorityBucket int bucket) {
         mBucket = bucket;
     }
 
@@ -473,8 +475,8 @@ public final class NotificationEntry extends ListEntry {
     }
 
     public boolean hasFinishedInitialization() {
-        return initializationTime == -1
-                || SystemClock.elapsedRealtime() > initializationTime + INITIALIZATION_DELAY;
+        return initializationTime != -1
+                && SystemClock.elapsedRealtime() > initializationTime + INITIALIZATION_DELAY;
     }
 
     public int getContrastedColor(Context context, boolean isLowPriority,
@@ -563,6 +565,10 @@ public final class NotificationEntry extends ListEntry {
             }
         }
         return false;
+    }
+
+    public void resetInitializationTime() {
+        initializationTime = -1;
     }
 
     public void setInitializationTime(long time) {
