@@ -1,0 +1,38 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "1dfe1b24_fb1b3a35",
+        "filename": "packages/SystemUI/src/com/android/systemui/volume/VolumeDialogImpl.java",
+        "patchSetId": 3
+      },
+      "lineNbr": 455,
+      "author": {
+        "id": 1000480
+      },
+      "writtenOn": "2020-05-28T22:07:02Z",
+      "side": 1,
+      "message": "We might want to remove the index 0 for the volume panel on the right side here, so that the new rows will appear on the left and the music row stays at it\u0027s place",
+      "revId": "13edf39737b45cba5dd630771a9633263c3372a7",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "526e4477_8324e7f5",
+        "filename": "packages/SystemUI/src/com/android/systemui/volume/VolumeDialogImpl.java",
+        "patchSetId": 3
+      },
+      "lineNbr": 687,
+      "author": {
+        "id": 1000480
+      },
+      "writtenOn": "2020-05-28T22:07:02Z",
+      "side": 1,
+      "message": "I think we should hide all the rows here and set the active stream back to the music stream so that there aren\u0027t 2 rows on the small volume panel.\nsame goes for the other rows here",
+      "revId": "13edf39737b45cba5dd630771a9633263c3372a7",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    }
+  ]
+}
