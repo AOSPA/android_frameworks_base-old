@@ -155,6 +155,9 @@
          to communicate pocket state to the pocket judge kernel driver. -->
     <string name="config_pocketBridgeSysfsInpocket"></string>
 
+    <!-- Defines custom OEM sensor for pocket detection. -->
+    <string name="config_pocketJudgeVendorSensorName"></string>
+
     <!-- Whether the device has a popup camera -->
     <bool name="config_hasPopupCamera">false</bool>
 
