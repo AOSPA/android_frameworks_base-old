@@ -386,7 +386,7 @@ public class BatteryMeterView extends LinearLayout implements
             if (mShowPercentMode == MODE_ESTIMATE && !mCharging) {
                 mBatteryController.getEstimatedTimeRemainingString((String estimate) -> {
                     if (estimate != null) {
-                        mBatteryPercentView.setText(estimate);
+                        batteryPercentViewSetText(estimate);
                         setContentDescription(getContext().getString(
                                 R.string.accessibility_battery_level_with_estimate,
                                 mLevel, estimate));
@@ -410,7 +410,7 @@ public class BatteryMeterView extends LinearLayout implements
         String bolt = "\u26A1\uFE0E";
         CharSequence mChargeIndicator = mCharging && (mBatteryStyle == BATTERY_STYLE_HIDDEN)
                 ? (bolt + " ") : "";
-        mBatteryPercentView.setText(mChargeIndicator +
+        batteryPercentViewSetText(mChargeIndicator +
                 NumberFormat.getPercentInstance().format(mLevel / 100f));
         setContentDescription(
                 getContext().getString(mCharging ? R.string.accessibility_battery_level_charging
@@ -454,6 +454,32 @@ public class BatteryMeterView extends LinearLayout implements
         updatePercentText();
     }
 
+<<<<<<< HEAD
+=======
+    public void setIsQsHeader(boolean isQs) {
+        mIsQsHeader = isQs;
+    }
+
+    public void updateVisibility() {
+        if (mBatteryStyle == BATTERY_STYLE_TEXT || mBatteryStyle == BATTERY_STYLE_HIDDEN) {
+            mBatteryIconView.setVisibility(View.GONE);
+            mBatteryIconView.setImageDrawable(null);
+            //setVisibility(View.GONE);
+        } else {
+            mBatteryIconView.setVisibility(View.VISIBLE);
+            //setVisibility(View.VISIBLE);
+            scaleBatteryMeterViews();
+        }
+    }
+
+    private void batteryPercentViewSetText(CharSequence text) {
+        CharSequence currentText = mBatteryPercentView.getText();
+        if (!currentText.toString().equals(text.toString())) {
+            mBatteryPercentView.setText(text);
+        }
+    }
+
+>>>>>>> 6cb44236cf48... Battery icon: fix requestLayout() calls spam when in lockscreen
     @Override
     public void onDensityOrFontScaleChanged() {
         scaleBatteryMeterViews();
