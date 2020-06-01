@@ -573,16 +573,14 @@ public class NotificationEntryManager implements
                     SystemClock.uptimeMillis());
             mAllNotifications.add(entry);
             mLeakDetector.trackInstance(entry);
-        }
 
-        abortExistingInflation(key, "addNotification");
+            for (NotifCollectionListener listener : mNotifCollectionListeners) {
+                listener.onEntryInit(entry);
+            }
+        }
 
         for (NotifCollectionListener listener : mNotifCollectionListeners) {
             listener.onEntryBind(entry, notification);
-        }
-
-        for (NotifCollectionListener listener : mNotifCollectionListeners) {
-            listener.onEntryInit(entry);
         }
 
         // Construct the expanded view.

@@ -1,18 +1,20 @@
 package com.android.systemui.media
 
 import android.content.Context
+import android.graphics.Color
 import android.view.LayoutInflater
+import android.view.GestureDetector
+import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
-import com.android.settingslib.bluetooth.LocalBluetoothManager
-import com.android.settingslib.media.InfoMediaManager
-import com.android.settingslib.media.LocalMediaManager
+import androidx.core.view.GestureDetectorCompat
 import com.android.systemui.R
 import com.android.systemui.dagger.qualifiers.Background
 import com.android.systemui.dagger.qualifiers.Main
 import com.android.systemui.plugins.ActivityStarter
+import com.android.systemui.qs.PageIndicator
 import com.android.systemui.statusbar.notification.VisualStabilityManager
 import com.android.systemui.util.animation.MeasurementOutput
 import com.android.systemui.util.animation.UniqueObjectHostView
@@ -20,6 +22,8 @@ import com.android.systemui.util.concurrency.DelayableExecutor
 import java.util.concurrent.Executor
 import javax.inject.Inject
 import javax.inject.Singleton
+
+private const val FLING_SLOP = 1000000
 
 /**
  * Class that is responsible for keeping the view carousel up to date.
@@ -30,19 +34,21 @@ class MediaViewManager @Inject constructor(
     private val context: Context,
     @Main private val foregroundExecutor: Executor,
     @Background private val backgroundExecutor: DelayableExecutor,
-    private val localBluetoothManager: LocalBluetoothManager?,
     private val visualStabilityManager: VisualStabilityManager,
     private val activityStarter: ActivityStarter,
-    mediaManager: MediaDataManager
+    mediaManager: MediaDataCombineLatest
 ) {
     private var playerWidth: Int = 0
     private var playerWidthPlusPadding: Int = 0
     private var desiredState: MediaHost.MediaHostState? = null
     private var currentState: MediaState? = null
-    val mediaCarousel: HorizontalScrollView
+    private val mediaCarousel: HorizontalScrollView
+    val mediaFrame: ViewGroup
     private val mediaContent: ViewGroup
     private val mediaPlayers: MutableMap<String, MediaControlPanel> = mutableMapOf()
-    private val visualStabilityCallback : VisualStabilityManager.Callback
+    private val pageIndicator: PageIndicator
+    private val gestureDetector: GestureDetectorCompat
+    private val visualStabilityCallback: VisualStabilityManager.Callback
     private var activeMediaIndex: Int = 0
     private var needsReordering: Boolean = false
     private var scrollIntoCurrentMedia: Int = 0
@@ -70,10 +76,30 @@ class MediaViewManager @Inject constructor(
                     scrollX % playerWidthPlusPadding)
         }
     }
+    private val gestureListener = object : GestureDetector.SimpleOnGestureListener() {
+        override fun onFling(
+            eStart: MotionEvent?,
+            eCurrent: MotionEvent?,
+            vX: Float,
+            vY: Float
+        ): Boolean {
+            return this@MediaViewManager.onFling(eStart, eCurrent, vX, vY)
+        }
+    }
+    private val touchListener = object : View.OnTouchListener {
+        override fun onTouch(view: View, motionEvent: MotionEvent?): Boolean {
+            return this@MediaViewManager.onTouch(view, motionEvent)
+        }
+    }
 
     init {
-        mediaCarousel = inflateMediaCarousel()
+        gestureDetector = GestureDetectorCompat(context, gestureListener)
+        mediaFrame = inflateMediaCarousel()
+        mediaCarousel = mediaFrame.requireViewById(R.id.media_carousel_scroller)
+        pageIndicator = mediaFrame.requireViewById(R.id.media_page_indicator)
         mediaCarousel.setOnScrollChangeListener(scrollChangedListener)
+        mediaCarousel.setOnTouchListener(touchListener)
+        mediaCarousel.setOverScrollMode(View.OVER_SCROLL_NEVER)
         mediaContent = mediaCarousel.requireViewById(R.id.media_carousel)
         visualStabilityCallback = VisualStabilityManager.Callback {
             if (needsReordering) {
@@ -107,14 +133,15 @@ class MediaViewManager @Inject constructor(
                                 playerWidthPlusPadding, 0)
                     }
                     updatePlayerVisibilities()
+                    updatePageIndicator()
                 }
             }
         })
     }
 
-    private fun inflateMediaCarousel(): HorizontalScrollView {
+    private fun inflateMediaCarousel(): ViewGroup {
         return LayoutInflater.from(context).inflate(R.layout.media_carousel,
-                UniqueObjectHostView(context), false) as HorizontalScrollView
+                UniqueObjectHostView(context), false) as ViewGroup
     }
 
     private fun reorderAllPlayers() {
@@ -137,6 +164,47 @@ class MediaViewManager @Inject constructor(
             activeMediaIndex = newIndex
             updatePlayerVisibilities()
         }
+        val location = activeMediaIndex.toFloat() + if (playerWidthPlusPadding > 0)
+                scrollInAmount.toFloat() / playerWidthPlusPadding else 0f
+        pageIndicator.setLocation(location)
+    }
+
+    private fun onTouch(view: View, motionEvent: MotionEvent?): Boolean {
+        if (gestureDetector.onTouchEvent(motionEvent)) {
+            return true
+        }
+        if (motionEvent?.getAction() == MotionEvent.ACTION_UP) {
+            val pos = mediaCarousel.scrollX % playerWidthPlusPadding
+            if (pos > playerWidthPlusPadding / 2) {
+                mediaCarousel.smoothScrollBy(playerWidthPlusPadding - pos, 0)
+            } else {
+                mediaCarousel.smoothScrollBy(-1 * pos, 0)
+            }
+            return true
+        }
+        return view.onTouchEvent(motionEvent)
+    }
+
+    private fun onFling(
+        eStart: MotionEvent?,
+        eCurrent: MotionEvent?,
+        vX: Float,
+        vY: Float
+    ): Boolean {
+        if (vX * vX < 0.5 * vY * vY) {
+            return false
+        }
+        if (vX * vX < FLING_SLOP) {
+            return false
+        }
+        val pos = mediaCarousel.scrollX
+        val currentIndex = if (playerWidthPlusPadding > 0) pos / playerWidthPlusPadding else 0
+        var destIndex = if (vX <= 0) currentIndex + 1 else currentIndex
+        destIndex = Math.max(0, destIndex)
+        destIndex = Math.min(mediaContent.getChildCount() - 1, destIndex)
+        val view = mediaContent.getChildAt(destIndex)
+        mediaCarousel.smoothScrollTo(view.left, mediaCarousel.scrollY)
+        return true
     }
 
     private fun updatePlayerVisibilities() {
@@ -151,15 +219,8 @@ class MediaViewManager @Inject constructor(
     private fun updateView(key: String, data: MediaData) {
         var existingPlayer = mediaPlayers[key]
         if (existingPlayer == null) {
-            // Set up listener for device changes
-            // TODO: integrate with MediaTransferManager?
-            val imm = InfoMediaManager(context, data.packageName,
-                    null /* notification */, localBluetoothManager)
-            val routeManager = LocalMediaManager(context, localBluetoothManager,
-                    imm, data.packageName)
-
-            existingPlayer = MediaControlPanel(context, routeManager, foregroundExecutor,
-                    backgroundExecutor, activityStarter)
+            existingPlayer = MediaControlPanel(context, foregroundExecutor, backgroundExecutor,
+                    activityStarter)
             existingPlayer.attach(PlayerViewHolder.create(LayoutInflater.from(context),
                     mediaContent))
             mediaPlayers[key] = existingPlayer
@@ -187,6 +248,7 @@ class MediaViewManager @Inject constructor(
         // motion model
         existingPlayer.view?.player?.progress = currentState?.expansion ?: 0.0f
         updateMediaPaddings()
+        updatePageIndicator()
     }
 
     private fun updatePlayerToCurrentState(existingPlayer: MediaControlPanel) {
@@ -210,6 +272,14 @@ class MediaViewManager @Inject constructor(
         }
     }
 
+    private fun updatePageIndicator() {
+        val numPages = mediaContent.getChildCount()
+        pageIndicator.setNumPages(numPages, Color.WHITE)
+        if (numPages == 1) {
+            pageIndicator.setLocation(0f)
+        }
+    }
+
     /**
      * Set the current state of a view. This is updated often during animations and we shouldn't
      * do anything expensive.
@@ -217,6 +287,9 @@ class MediaViewManager @Inject constructor(
     fun setCurrentState(state: MediaState) {
         currentState = state
         currentlyExpanded = state.expansion > 0
+        // Hack: Since the indicator doesn't move with the player expansion, just make it disappear
+        // and then reappear at the end.
+        pageIndicator.alpha = if (state.expansion == 1f || state.expansion == 0f) 1f else 0f
         for (mediaPlayer in mediaPlayers.values) {
             val view = mediaPlayer.view?.player
             view?.progress = state.expansion

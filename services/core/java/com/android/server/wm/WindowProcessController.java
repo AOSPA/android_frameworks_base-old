@@ -44,6 +44,7 @@ import static com.android.server.wm.ActivityTaskManagerService.RELAUNCH_REASON_N
 import android.Manifest;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.app.ActivityManager;
 import android.app.ActivityThread;
 import android.app.IApplicationThread;
 import android.app.ProfilerInfo;
@@ -1065,6 +1066,10 @@ public class WindowProcessController extends ConfigurationContainer<Configuratio
             // to track as a separate apk in the process.
             packageName = info.packageName;
         }
+        // update ActivityManagerService.PendingStartActivityUids list.
+        if (topProcessState == ActivityManager.PROCESS_STATE_TOP) {
+            mAtm.mAmInternal.updatePendingTopUid(mUid, true);
+        }
         // Posting the message at the front of queue so WM lock isn't held when we call into AM,
         // and the process state of starting activity can be updated quicker which will give it a
         // higher scheduling group.
@@ -1315,12 +1320,15 @@ public class WindowProcessController extends ConfigurationContainer<Configuratio
      *
      * @param isCached whether or not the process is cached.
      */
+    @HotPath(caller = HotPath.OOM_ADJUSTMENT)
     public void onProcCachedStateChanged(boolean isCached) {
-        synchronized (mAtm.mGlobalLock) {
-            if (!isCached && mPendingConfiguration != null) {
-                final Configuration config = mPendingConfiguration;
-                mPendingConfiguration = null;
-                dispatchConfigurationChange(config);
+        if (!isCached) {
+            synchronized (mAtm.mGlobalLockWithoutBoost) {
+                if (mPendingConfiguration != null) {
+                    final Configuration config = mPendingConfiguration;
+                    mPendingConfiguration = null;
+                    dispatchConfigurationChange(config);
+                }
             }
         }
     }

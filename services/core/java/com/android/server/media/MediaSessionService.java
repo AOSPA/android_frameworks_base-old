@@ -342,13 +342,10 @@ public class MediaSessionService extends SystemService implements Monitor {
         updateUser();
     }
 
-    // Called when the user with the userId is removed.
     @Override
-    public void onStopUser(int userId) {
-        if (DEBUG) Log.d(TAG, "onStopUser: " + userId);
+    public void onCleanupUser(int userId) {
+        if (DEBUG) Log.d(TAG, "onCleanupUser: " + userId);
         synchronized (mLock) {
-            // TODO: Also handle removing user in updateUser() because adding/switching user is
-            //       handled in updateUser().
             FullUserRecord user = getFullUserRecordLocked(userId);
             if (user != null) {
                 if (user.mFullUserId == userId) {
@@ -1134,8 +1131,19 @@ public class MediaSessionService extends SystemService implements Monitor {
                 if (cb == null) {
                     throw new IllegalArgumentException("Controller callback cannot be null");
                 }
-                return createSessionInternal(pid, uid, resolvedUserId, packageName, cb, tag,
-                        sessionInfo).getSessionBinder();
+                MediaSessionRecord session = createSessionInternal(
+                        pid, uid, resolvedUserId, packageName, cb, tag, sessionInfo);
+                if (session == null) {
+                    throw new IllegalStateException("Failed to create a new session record");
+                }
+                ISession sessionBinder = session.getSessionBinder();
+                if (sessionBinder == null) {
+                    throw new IllegalStateException("Invalid session record");
+                }
+                return sessionBinder;
+            } catch (Exception e) {
+                Slog.w(TAG, "Exception in creating a new session", e);
+                throw e;
             } finally {
                 Binder.restoreCallingIdentity(token);
             }
@@ -2096,16 +2104,19 @@ public class MediaSessionService extends SystemService implements Monitor {
                     public void run() {
                         final String callingOpPackageName;
                         final int callingUid;
+                        final int callingPid;
                         if (asSystemService) {
                             callingOpPackageName = mContext.getOpPackageName();
                             callingUid = Process.myUid();
+                            callingPid = Process.myPid();
                         } else {
                             callingOpPackageName = opPackageName;
                             callingUid = uid;
+                            callingPid = pid;
                         }
                         try {
                             mAudioManagerInternal.adjustSuggestedStreamVolumeForUid(suggestedStream,
-                                    direction, flags, callingOpPackageName, callingUid);
+                                    direction, flags, callingOpPackageName, callingUid, callingPid);
                         } catch (SecurityException | IllegalArgumentException e) {
                             Log.e(TAG, "Cannot adjust volume: direction=" + direction
                                     + ", suggestedStream=" + suggestedStream + ", flags=" + flags

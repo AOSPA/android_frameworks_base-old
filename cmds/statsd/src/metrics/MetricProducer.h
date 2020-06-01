@@ -182,8 +182,8 @@ public:
     };
 
     void onStateChanged(const int64_t eventTimeNs, const int32_t atomId,
-                        const HashableDimensionKey& primaryKey, const int32_t oldState,
-                        const int32_t newState){};
+                        const HashableDimensionKey& primaryKey, const FieldValue& oldState,
+                        const FieldValue& newState){};
 
     // Output the metrics data to [protoOutput]. All metrics reports end with the same timestamp.
     // This method clears all the past buckets.
@@ -459,6 +459,7 @@ protected:
     FRIEND_TEST(CountMetricE2eTest, TestSlicedStateWithMap);
     FRIEND_TEST(CountMetricE2eTest, TestMultipleSlicedStates);
     FRIEND_TEST(CountMetricE2eTest, TestSlicedStateWithPrimaryFields);
+    FRIEND_TEST(CountMetricE2eTest, TestInitialConditionChanges);
 
     FRIEND_TEST(DurationMetricE2eTest, TestOneBucket);
     FRIEND_TEST(DurationMetricE2eTest, TestTwoBuckets);
@@ -488,6 +489,7 @@ protected:
     FRIEND_TEST(ValueMetricE2eTest, TestInitWithSlicedState);
     FRIEND_TEST(ValueMetricE2eTest, TestInitWithSlicedState_WithDimensions);
     FRIEND_TEST(ValueMetricE2eTest, TestInitWithSlicedState_WithIncorrectDimensions);
+    FRIEND_TEST(ValueMetricE2eTest, TestInitialConditionChanges);
 };
 
 }  // namespace statsd

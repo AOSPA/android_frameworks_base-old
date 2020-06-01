@@ -2474,7 +2474,7 @@
 
     <!-- Allows interaction across profiles in the same profile group. -->
     <permission android:name="android.permission.INTERACT_ACROSS_PROFILES"
-        android:protectionLevel="signature|appop|documenter|wellbeing" />
+        android:protectionLevel="signature|appop" />
 
     <!-- Allows configuring apps to have the INTERACT_ACROSS_PROFILES permission so that they can
          interact across profiles in the same profile group.
@@ -5511,15 +5511,17 @@
                  android:permission="android.permission.BIND_JOB_SERVICE">
         </service>
 
-        <service android:name="com.android.server.pm.PackageManagerShellCommandDataLoader">
+        <service android:name="com.android.server.pm.PackageManagerShellCommandDataLoader"
+            android:exported="false">
             <intent-filter>
-                <action android:name="android.intent.action.LOAD_DATA" />
+                <action android:name="android.intent.action.LOAD_DATA"/>
             </intent-filter>
         </service>
 
         <provider
             android:name="com.android.server.textclassifier.IconsContentProvider"
             android:authorities="com.android.textclassifier.icons"
+            android:singleUser="true"
             android:enabled="true"
             android:exported="true">
         </provider>

@@ -621,7 +621,6 @@ public class DisplayRotation {
         }, true /* traverseTopToBottom */);
         mSeamlessRotationCount = 0;
         mRotatingSeamlessly = false;
-        mDisplayContent.finishFixedRotationAnimation();
     }
 
     private void prepareSeamlessRotation() {
@@ -639,7 +638,7 @@ public class DisplayRotation {
     boolean shouldRotateSeamlessly(int oldRotation, int newRotation, boolean forceUpdate) {
         // Display doesn't need to be frozen because application has been started in correct
         // rotation already, so the rest of the windows can use seamless rotation.
-        if (mDisplayContent.mFixedRotationLaunchingApp != null) {
+        if (mDisplayContent.getFixedRotationLaunchingApp() != null) {
             return true;
         }
 
@@ -708,7 +707,6 @@ public class DisplayRotation {
                     "Performing post-rotate rotation after seamless rotation");
             // Finish seamless rotation.
             mRotatingSeamlessly = false;
-            mDisplayContent.finishFixedRotationAnimation();
 
             updateRotationAndSendNewConfigIfChanged();
         }
