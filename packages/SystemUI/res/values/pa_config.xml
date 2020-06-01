@@ -26,6 +26,9 @@
     <!-- Color of the FOD view -->
     <color name="config_fodColor">#00ff00</color>
 
+    <!-- Whether to dim the FOD icon -->
+    <bool name="config_fodIconDim">false</bool>
+
     <!-- Allow devices to use unordinary cutout overlays -->
     <bool name="config_customCutout">false</bool>
 
