@@ -33,7 +33,6 @@ import android.graphics.drawable.GradientDrawable;
 import android.graphics.drawable.Icon;
 import android.graphics.drawable.RippleDrawable;
 import android.media.session.MediaController;
-import android.media.session.MediaController.PlaybackInfo;
 import android.media.session.MediaSession;
 import android.media.session.PlaybackState;
 import android.service.media.MediaBrowserService;
@@ -41,7 +40,6 @@ import android.util.Log;
 import android.view.View;
 import android.widget.ImageButton;
 import android.widget.ImageView;
-import android.widget.LinearLayout;
 import android.widget.SeekBar;
 import android.widget.TextView;
 
@@ -56,14 +54,11 @@ import androidx.core.graphics.drawable.RoundedBitmapDrawable;
 import androidx.core.graphics.drawable.RoundedBitmapDrawableFactory;
 
 import com.android.settingslib.Utils;
-import com.android.settingslib.media.LocalMediaManager;
-import com.android.settingslib.media.MediaDevice;
 import com.android.settingslib.media.MediaOutputSliceConstants;
 import com.android.settingslib.widget.AdaptiveIcon;
 import com.android.systemui.R;
 import com.android.systemui.plugins.ActivityStarter;
 import com.android.systemui.qs.QSMediaBrowser;
-import com.android.systemui.util.Assert;
 import com.android.systemui.util.concurrency.DelayableExecutor;
 
 import org.jetbrains.annotations.NotNull;
@@ -77,7 +72,6 @@ import java.util.concurrent.Executor;
  */
 public class MediaControlPanel {
     private static final String TAG = "MediaControlPanel";
-    @Nullable private final LocalMediaManager mLocalMediaManager;
 
     // Button IDs for QS controls
     static final int[] ACTION_IDS = {
@@ -100,7 +94,6 @@ public class MediaControlPanel {
     private MediaSession.Token mToken;
     private MediaController mController;
     private int mBackgroundColor;
-    private MediaDevice mDevice;
     protected ComponentName mServiceComponent;
     private boolean mIsRegistered = false;
     private List<KeyFrames> mKeyFrames;
@@ -113,7 +106,6 @@ public class MediaControlPanel {
     public static final String MEDIA_PREFERENCE_KEY = "browser_components";
     private SharedPreferences mSharedPrefs;
     private boolean mCheckedForResumption = false;
-    private boolean mIsRemotePlayback;
     private QSMediaBrowser mQSMediaBrowser;
 
     private final MediaController.Callback mSessionCallback = new MediaController.Callback() {
@@ -122,7 +114,6 @@ public class MediaControlPanel {
             Log.d(TAG, "session destroyed");
             mController.unregisterCallback(mSessionCallback);
             clearControls();
-            makeInactive();
         }
         @Override
         public void onPlaybackStateChanged(PlaybackState state) {
@@ -130,31 +121,6 @@ public class MediaControlPanel {
             if (s == PlaybackState.STATE_NONE) {
                 Log.d(TAG, "playback state change will trigger resumption, state=" + state);
                 clearControls();
-                makeInactive();
-            }
-        }
-    };
-
-    private final LocalMediaManager.DeviceCallback mDeviceCallback =
-            new LocalMediaManager.DeviceCallback() {
-        @Override
-        public void onDeviceListUpdate(List<MediaDevice> devices) {
-            if (mLocalMediaManager == null) {
-                return;
-            }
-            MediaDevice currentDevice = mLocalMediaManager.getCurrentConnectedDevice();
-            // Check because this can be called several times while changing devices
-            if (mDevice == null || !mDevice.equals(currentDevice)) {
-                mDevice = currentDevice;
-                updateDevice(mDevice);
-            }
-        }
-
-        @Override
-        public void onSelectedDeviceStateChanged(MediaDevice device, int state) {
-            if (mDevice == null || !mDevice.equals(device)) {
-                mDevice = device;
-                updateDevice(mDevice);
             }
         }
     };
@@ -162,16 +128,13 @@ public class MediaControlPanel {
     /**
      * Initialize a new control panel
      * @param context
-     * @param routeManager Manager used to listen for device change events.
      * @param foregroundExecutor foreground executor
      * @param backgroundExecutor background executor, used for processing artwork
      * @param activityStarter activity starter
      */
-    public MediaControlPanel(Context context, @Nullable LocalMediaManager routeManager,
-            Executor foregroundExecutor, DelayableExecutor backgroundExecutor,
-            ActivityStarter activityStarter) {
+    public MediaControlPanel(Context context, Executor foregroundExecutor,
+            DelayableExecutor backgroundExecutor, ActivityStarter activityStarter) {
         mContext = context;
-        mLocalMediaManager = routeManager;
         mForegroundExecutor = foregroundExecutor;
         mBackgroundExecutor = backgroundExecutor;
         mActivityStarter = activityStarter;
@@ -183,7 +146,7 @@ public class MediaControlPanel {
         if (mSeekBarObserver != null) {
             mSeekBarViewModel.getProgress().removeObserver(mSeekBarObserver);
         }
-        makeInactive();
+        mSeekBarViewModel.onDestroy();
     }
 
     private void loadDimens() {
@@ -228,7 +191,7 @@ public class MediaControlPanel {
         mLayoutAnimationHelper = new LayoutAnimationHelper(motionView);
         GoneChildrenHideHelper.clipGoneChildrenOnLayout(motionView);
         mKeyFrames = motionView.getDefinedTransitions().get(0).getKeyFrameList();
-        mSeekBarObserver = new SeekBarObserver(motionView);
+        mSeekBarObserver = new SeekBarObserver(vh);
         mSeekBarViewModel.getProgress().observeForever(mSeekBarObserver);
         SeekBar bar = vh.getSeekBar();
         bar.setOnSeekBarChangeListener(mSeekBarViewModel.getSeekBarListener());
@@ -318,34 +281,59 @@ public class MediaControlPanel {
         artistText.setText(data.getArtist());
 
         // Transfer chip
-        if (mLocalMediaManager != null) {
-            mViewHolder.getSeamless().setVisibility(View.VISIBLE);
-            setVisibleAndAlpha(collapsedSet, R.id.media_seamless, true /*visible */);
-            setVisibleAndAlpha(expandedSet, R.id.media_seamless, true /*visible */);
-            updateDevice(mLocalMediaManager.getCurrentConnectedDevice());
-            if (mViewHolder.getBackground().getBackground() instanceof IlluminationDrawable) {
-                    ((IlluminationDrawable) mViewHolder.getBackground().getBackground())
-                            .setupTouch(mViewHolder.getSeamless(), mViewHolder.getPlayer());
+        mViewHolder.getSeamless().setVisibility(View.VISIBLE);
+        setVisibleAndAlpha(collapsedSet, R.id.media_seamless, true /*visible */);
+        setVisibleAndAlpha(expandedSet, R.id.media_seamless, true /*visible */);
+        mViewHolder.getSeamless().setOnClickListener(v -> {
+            final Intent intent = new Intent()
+                    .setAction(MediaOutputSliceConstants.ACTION_MEDIA_OUTPUT)
+                    .putExtra(MediaOutputSliceConstants.EXTRA_PACKAGE_NAME,
+                            mController.getPackageName())
+                    .putExtra(MediaOutputSliceConstants.KEY_MEDIA_SESSION_TOKEN, mToken);
+            mActivityStarter.startActivity(intent, false, true /* dismissShade */,
+                    Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+        });
+
+        ImageView iconView = mViewHolder.getSeamlessIcon();
+        TextView deviceName = mViewHolder.getSeamlessText();
+
+        // Update the outline color
+        RippleDrawable bkgDrawable = (RippleDrawable) mViewHolder.getSeamless().getBackground();
+        GradientDrawable rect = (GradientDrawable) bkgDrawable.getDrawable(0);
+        rect.setStroke(2, deviceName.getCurrentTextColor());
+        rect.setColor(Color.TRANSPARENT);
+
+        final MediaDeviceData device = data.getDevice();
+        if (device != null && !device.getEnabled()) {
+            mViewHolder.getSeamless().setEnabled(false);
+            // TODO(b/156875717): setEnabled should cause the alpha to change.
+            mViewHolder.getSeamless().setAlpha(0.38f);
+            iconView.setImageResource(R.drawable.ic_hardware_speaker);
+            iconView.setVisibility(View.VISIBLE);
+            deviceName.setText(R.string.media_seamless_remote_device);
+        } else if (device != null) {
+            mViewHolder.getSeamless().setEnabled(true);
+            mViewHolder.getSeamless().setAlpha(1f);
+            Drawable icon = device.getIcon();
+            iconView.setVisibility(View.VISIBLE);
+
+            if (icon instanceof AdaptiveIcon) {
+                AdaptiveIcon aIcon = (AdaptiveIcon) icon;
+                aIcon.setBackgroundColor(mBackgroundColor);
+                iconView.setImageDrawable(aIcon);
+            } else {
+                iconView.setImageDrawable(icon);
             }
-            mViewHolder.getSeamless().setOnClickListener(v -> {
-                final Intent intent = new Intent()
-                        .setAction(MediaOutputSliceConstants.ACTION_MEDIA_OUTPUT)
-                        .putExtra(MediaOutputSliceConstants.EXTRA_PACKAGE_NAME,
-                                mController.getPackageName())
-                        .putExtra(MediaOutputSliceConstants.KEY_MEDIA_SESSION_TOKEN, mToken);
-                mActivityStarter.startActivity(intent, false, true /* dismissShade */,
-                        Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
-            });
+            deviceName.setText(device.getName());
         } else {
-            Log.d(TAG, "LocalMediaManager is null. Not binding output chip for pkg=" + pkgName);
+            // Reset to default
+            Log.w(TAG, "device is null. Not binding output chip.");
+            mViewHolder.getSeamless().setEnabled(true);
+            mViewHolder.getSeamless().setAlpha(1f);
+            iconView.setVisibility(View.GONE);
+            deviceName.setText(com.android.internal.R.string.ext_media_seamless_action);
         }
-        PlaybackInfo playbackInfo = mController.getPlaybackInfo();
-        if (playbackInfo != null) {
-            mIsRemotePlayback = playbackInfo.getPlaybackType() == PlaybackInfo.PLAYBACK_TYPE_REMOTE;
-        } else {
-            Log.d(TAG, "PlaybackInfo was null. Defaulting to local playback.");
-            mIsRemotePlayback = false;
-        }
+
         List<Integer> actionsWhenCollapsed = data.getActionsToShowInCompact();
         // Media controls
         int i = 0;
@@ -357,11 +345,6 @@ public class MediaControlPanel {
             button.setImageDrawable(mediaAction.getDrawable());
             button.setContentDescription(mediaAction.getContentDescription());
             PendingIntent actionIntent = mediaAction.getIntent();
-
-            if (mViewHolder.getBackground().getBackground() instanceof IlluminationDrawable) {
-                ((IlluminationDrawable) mViewHolder.getBackground().getBackground())
-                        .setupTouch(button, mViewHolder.getPlayer());
-            }
 
             button.setOnClickListener(v -> {
                 if (actionIntent != null) {
@@ -390,8 +373,6 @@ public class MediaControlPanel {
 
         // Set up long press menu
         // TODO: b/156036025 bring back media guts
-
-        makeActive();
 
         // Update both constraint sets to regenerate the animation.
         mViewHolder.getPlayer().updateState(R.id.collapsed, collapsedSet);
@@ -524,60 +505,6 @@ public class MediaControlPanel {
     }
 
     /**
-     * Update the current device information
-     * @param device device information to display
-     */
-    private void updateDevice(MediaDevice device) {
-        mForegroundExecutor.execute(() -> {
-            updateChipInternal(device);
-        });
-    }
-
-    private void updateChipInternal(MediaDevice device) {
-        if (mViewHolder == null) {
-            return;
-        }
-        ImageView iconView = mViewHolder.getSeamlessIcon();
-        TextView deviceName = mViewHolder.getSeamlessText();
-
-        // Update the outline color
-        LinearLayout viewLayout = (LinearLayout) mViewHolder.getSeamless();
-        RippleDrawable bkgDrawable = (RippleDrawable) viewLayout.getBackground();
-        GradientDrawable rect = (GradientDrawable) bkgDrawable.getDrawable(0);
-        rect.setStroke(2, deviceName.getCurrentTextColor());
-        rect.setColor(Color.TRANSPARENT);
-
-        if (mIsRemotePlayback) {
-            mViewHolder.getSeamless().setEnabled(false);
-            mViewHolder.getSeamless().setAlpha(0.38f);
-            iconView.setImageResource(R.drawable.ic_hardware_speaker);
-            iconView.setVisibility(View.VISIBLE);
-            deviceName.setText(R.string.media_seamless_remote_device);
-        } else if (device != null) {
-            mViewHolder.getSeamless().setEnabled(true);
-            mViewHolder.getSeamless().setAlpha(1f);
-            Drawable icon = device.getIcon();
-            iconView.setVisibility(View.VISIBLE);
-
-            if (icon instanceof AdaptiveIcon) {
-                AdaptiveIcon aIcon = (AdaptiveIcon) icon;
-                aIcon.setBackgroundColor(mBackgroundColor);
-                iconView.setImageDrawable(aIcon);
-            } else {
-                iconView.setImageDrawable(icon);
-            }
-            deviceName.setText(device.getName());
-        } else {
-            // Reset to default
-            Log.d(TAG, "device is null. Not binding output chip.");
-            mViewHolder.getSeamless().setEnabled(true);
-            mViewHolder.getSeamless().setAlpha(1f);
-            iconView.setVisibility(View.GONE);
-            deviceName.setText(com.android.internal.R.string.ext_media_seamless_action);
-        }
-    }
-
-    /**
      * Puts controls into a resumption state if possible, or calls removePlayer if no component was
      * found that could resume playback
      */
@@ -651,27 +578,6 @@ public class MediaControlPanel {
         set.setAlpha(actionId, visible ? 1.0f : 0.0f);
     }
 
-    private void makeActive() {
-        Assert.isMainThread();
-        if (!mIsRegistered) {
-            if (mLocalMediaManager != null) {
-                mLocalMediaManager.registerCallback(mDeviceCallback);
-                mLocalMediaManager.startScan();
-            }
-            mIsRegistered = true;
-        }
-    }
-
-    private void makeInactive() {
-        Assert.isMainThread();
-        if (mIsRegistered) {
-            if (mLocalMediaManager != null) {
-                mLocalMediaManager.stopScan();
-                mLocalMediaManager.unregisterCallback(mDeviceCallback);
-            }
-            mIsRegistered = false;
-        }
-    }
     /**
      * Verify that we can connect to the given component with a MediaBrowser, and if so, add that
      * component to the list of resumption components

@@ -24,6 +24,7 @@ import "frameworks/base/cmds/statsd/src/atom_field_options.proto";
 import "frameworks/base/core/proto/android/app/enums.proto";
 import "frameworks/base/core/proto/android/app/job/enums.proto";
 import "frameworks/base/core/proto/android/app/settings_enums.proto";
+import "frameworks/base/core/proto/android/app/media_output_enum.proto";
 import "frameworks/base/core/proto/android/app/tvsettings_enums.proto";
 import "frameworks/base/core/proto/android/bluetooth/a2dp/enums.proto";
 import "frameworks/base/core/proto/android/bluetooth/enums.proto";
@@ -440,6 +441,9 @@ message Atom {
             273 [(module) = "permissioncontroller"];
         EvsUsageStatsReported evs_usage_stats_reported = 274 [(module) = "evs"];
         AudioPowerUsageDataReported audio_power_usage_data_reported = 275;
+        TvTunerStateChanged tv_tuner_state_changed = 276 [(module) = "framework"];
+        MediaOutputOpSwitchReported mediaoutput_op_switch_reported =
+            277 [(module) = "settings"];
         SdkExtensionStatus sdk_extension_status = 354;
 
         // StatsdStats tracks platform atoms with ids upto 500.
@@ -447,7 +451,7 @@ message Atom {
     }
 
     // Pulled events will start at field 10000.
-    // Next: 10082
+    // Next: 10084
     oneof pulled {
         WifiBytesTransfer wifi_bytes_transfer = 10000 [(module) = "framework"];
         WifiBytesTransferByFgBg wifi_bytes_transfer_by_fg_bg = 10001 [(module) = "framework"];
@@ -539,6 +543,9 @@ message Atom {
         SupportedRadioAccessFamily supported_radio_access_family = 10079 [(module) = "telephony"];
         SettingSnapshot setting_snapshot = 10080 [(module) = "framework"];
         DisplayWakeReason display_wake_reason = 10081 [(module) = "framework"];
+        DataUsageBytesTransfer data_usage_bytes_transfer = 10082 [(module) = "framework"];
+        BytesTransferByTagAndMetered bytes_transfer_by_tag_and_metered =
+                10083 [(module) = "framework"];
     }
 
     // DO NOT USE field numbers above 100,000 in AOSP.
@@ -4940,6 +4947,60 @@ message MobileBytesTransferByFgBg {
 }
 
 /**
+ * Used for pull network statistics via mobile|wifi networks, and sliced by interesting dimensions.
+ * Note that the data is expected to be sliced into more dimensions in future. In other words,
+ * the caller must not assume any row of data is one full report when filtering with a set of
+ * matching conditions, because future data may represent with multiple rows what is currently
+ * represented by one.
+ * To avoid being broken by future slicing, callers must take care to aggregate rows even if they
+ * query all the existing columns.
+ *
+ * Pulled from:
+ *   StatsPullAtomService (using NetworkStatsService to get NetworkStats)
+ */
+message DataUsageBytesTransfer {
+    // State of this record. Should be NetworkStats#SET_DEFAULT or NetworkStats#SET_FOREGROUND to
+    // indicate the foreground state, or NetworkStats#SET_ALL to indicate the record is for all
+    // states combined, not including debug states. See NetworkStats#SET_*.
+    optional int32 state = 1;
+
+    optional int64 rx_bytes = 2;
+
+    optional int64 rx_packets = 3;
+
+    optional int64 tx_bytes = 4;
+
+    optional int64 tx_packets = 5;
+
+    // Radio Access Technology (RAT) type of this record, should be one of
+    // TelephonyManager#NETWORK_TYPE_* constants, or NetworkTemplate#NETWORK_TYPE_ALL to indicate
+    // the record is for all rat types combined.
+    optional int32 rat_type = 6;
+
+    // Mcc/Mnc read from sim if the record is for a specific subscription, null indicates the
+    // record is combined across subscriptions.
+    optional string sim_mcc = 7;
+    optional string sim_mnc = 8;
+
+    // Allows mobile virtual network operators (MVNOs) to be identified with individual IDs.
+    // See TelephonyManager#getSimCarrierId.
+    optional int32 carrier_id = 9;
+
+    // Enumeration of opportunistic states with an additional ALL state indicates the record is
+    // combined regardless of the boolean value in its field.
+    enum DataSubscriptionState {
+        UNKNOWN = 0; // For server side backward compatibility.
+        ALL = 1;
+        OPPORTUNISTIC = 2;
+        NOT_OPPORTUNISTIC = 3;
+    }
+    // Mark whether the subscription is an opportunistic data subscription, and ALL indicates the
+    // record is combined across opportunistic data subscriptions.
+    // See {@link SubscriptionManager#setOpportunistic}.
+    optional DataSubscriptionState opportunistic_data_sub = 10;
+}
+
+/**
  * Pulls bytes transferred via bluetooth. It is pulled from Bluetooth controller.
  *
  * Pulled from:
@@ -5982,6 +6043,12 @@ message PackageNotificationChannelPreferences {
     optional int32 user_locked_fields = 6;
     // Indicates if the channel was deleted by the app.
     optional bool is_deleted = 7;
+    // Indicates if the channel was marked as a conversation by the app.
+    optional bool is_conversation = 8;
+    // Indicates if the channel is a conversation that was demoted by the user.
+    optional bool is_demoted_conversation = 9;
+    // Indicates if the channel is a conversation that was marked as important by the user.
+    optional bool is_important_conversation = 10;
 }
 
 /**
@@ -9121,6 +9188,28 @@ message SdkExtensionStatus {
 }
 
 /**
+ * Logs when a tune occurs through device's Frontend.
+ * This is atom ID 276.
+ *
+ * Logged from:
+ *   frameworks/base/media/java/android/media/tv/tuner/Tuner.java
+ */
+message TvTunerStateChanged {
+    enum State {
+        UNKNOWN = 0;
+        TUNING = 1; // Signal is tuned
+        LOCKED = 2;    // the signal is locked
+        NOT_LOCKED = 3; // the signal isn’t locked.
+        SIGNAL_LOST = 4; // the signal was locked, but is lost now.
+        SCANNING = 5; // the signal is scanned
+        SCAN_STOPPED = 6; // the scan is stopped.
+    }
+    // The uid of the application that sent this custom atom.
+    optional int32 uid = 1 [(is_uid) = true];
+    //  new state
+    optional State state = 2;
+}
+/**
  * Logs when an app is frozen or unfrozen.
  *
  * Logged from:
@@ -9587,6 +9676,9 @@ message UserLifecycleEventOccurred {
         SWITCH_USER = 1; // Indicates that this is a user switch event
         START_USER = 2; // Indicates that this is a user start event
         CREATE_USER = 3; // Indicates that this is a user create event
+        USER_RUNNING_LOCKED = 4; // Indicates that user is running in locked state
+        UNLOCKING_USER = 5; // Indicates that this is a user unlocking event
+        UNLOCKED_USER = 6; // Indicates that this is a user unlocked event
     }
     optional Event event = 3;
 
@@ -9755,4 +9847,63 @@ message AudioPowerUsageDataReported {
         RECORD_TYPE = 7;  // other recording
     }
     optional AudioType type = 4;
+}
+
+/**
+  * Pulls bytes transferred over WiFi and mobile networks sliced by uid, is_metered, and tag.
+  *
+  * Pulled from:
+  *   StatsPullAtomService, which uses NetworkStatsService to query NetworkStats.
+  */
+message BytesTransferByTagAndMetered {
+    optional int32 uid = 1 [(is_uid) = true];
+
+    optional bool is_metered = 2;
+
+    optional int32 tag = 3;
+
+    optional int64 rx_bytes = 4;
+
+    optional int64 rx_packets = 5;
+
+    optional int64 tx_bytes = 6;
+
+    optional int64 tx_packets = 7;
+}
+
+/*
+ * Logs when the Media Output Switcher finishes a media switch operation.
+ *
+ * Logged from:
+ *  packages/apps/Settings/src/com/android/settings/media/MediaOutputSliceWorker.java
+ */
+message MediaOutputOpSwitchReported {
+    // Source medium type before switching.
+    optional android.app.settings.mediaoutput.MediumType source = 1;
+
+    // Target medium type after switching.
+    optional android.app.settings.mediaoutput.MediumType target = 2;
+
+    // The result of switching.
+    optional android.app.settings.mediaoutput.SwitchResult result = 3;
+
+    // The detail code of a switching result.
+    optional android.app.settings.mediaoutput.SubResult subresult = 4;
+
+    /*
+     * The package name of a pre-installed app, whose media session is being switched.
+     */
+    optional string media_session_package_name = 5;
+
+    // The amount of available wired devices when a switching is being performed.
+    optional int32 available_wired_device_count = 6;
+
+    // The amount of available Bluetooth devices a switching is being performed.
+    optional int32 available_bt_device_count = 7;
+
+    // The amount of available remote devices when a switching is being performed.
+    optional int32 available_remote_device_count = 8;
+
+    // The amount of applied devices within a remote dynamic group after a switching is done.
+    optional int32 applied_device_count_within_remote_group = 9;
 }

@@ -24,9 +24,12 @@ import com.android.internal.statusbar.IStatusBarService;
 import com.android.systemui.bubbles.BubbleController;
 import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.media.MediaDataManager;
+import com.android.systemui.media.MediaDeviceManager;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
+import com.android.systemui.statusbar.ActionClickLogger;
 import com.android.systemui.statusbar.CommandQueue;
 import com.android.systemui.statusbar.MediaArtworkProcessor;
+import com.android.systemui.statusbar.NotificationClickNotifier;
 import com.android.systemui.statusbar.NotificationListener;
 import com.android.systemui.statusbar.NotificationLockscreenUserManager;
 import com.android.systemui.statusbar.NotificationMediaManager;
@@ -46,6 +49,7 @@ import com.android.systemui.statusbar.phone.StatusBar;
 import com.android.systemui.statusbar.policy.RemoteInputUriController;
 import com.android.systemui.tracing.ProtoTracer;
 import com.android.systemui.util.DeviceConfigProxy;
+import com.android.systemui.util.concurrency.DelayableExecutor;
 
 import java.util.concurrent.Executor;
 
@@ -73,7 +77,9 @@ public interface StatusBarDependenciesModule {
             Lazy<StatusBar> statusBarLazy,
             StatusBarStateController statusBarStateController,
             Handler mainHandler,
-            RemoteInputUriController remoteInputUriController) {
+            RemoteInputUriController remoteInputUriController,
+            NotificationClickNotifier clickNotifier,
+            ActionClickLogger actionClickLogger) {
         return new NotificationRemoteInputManager(
                 context,
                 lockscreenUserManager,
@@ -82,7 +88,9 @@ public interface StatusBarDependenciesModule {
                 statusBarLazy,
                 statusBarStateController,
                 mainHandler,
-                remoteInputUriController);
+                remoteInputUriController,
+                clickNotifier,
+                actionClickLogger);
     }
 
     /** */
@@ -95,9 +103,10 @@ public interface StatusBarDependenciesModule {
             NotificationEntryManager notificationEntryManager,
             MediaArtworkProcessor mediaArtworkProcessor,
             KeyguardBypassController keyguardBypassController,
-            @Main Executor mainExecutor,
+            @Main DelayableExecutor mainExecutor,
             DeviceConfigProxy deviceConfigProxy,
-            MediaDataManager mediaDataManager) {
+            MediaDataManager mediaDataManager,
+            MediaDeviceManager mediaDeviceManager) {
         return new NotificationMediaManager(
                 context,
                 statusBarLazy,
@@ -107,7 +116,8 @@ public interface StatusBarDependenciesModule {
                 keyguardBypassController,
                 mainExecutor,
                 deviceConfigProxy,
-                mediaDataManager);
+                mediaDataManager,
+                mediaDeviceManager);
     }
 
     /** */
@@ -125,8 +135,10 @@ public interface StatusBarDependenciesModule {
     @Singleton
     @Provides
     static SmartReplyController provideSmartReplyController(
-            NotificationEntryManager entryManager, IStatusBarService statusBarService) {
-        return new SmartReplyController(entryManager, statusBarService);
+            NotificationEntryManager entryManager,
+            IStatusBarService statusBarService,
+            NotificationClickNotifier clickNotifier) {
+        return new SmartReplyController(entryManager, statusBarService, clickNotifier);
     }
 
     /** */

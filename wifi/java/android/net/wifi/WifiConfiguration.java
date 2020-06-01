@@ -128,7 +128,8 @@ public class WifiConfiguration implements Parcelable {
                 WAPI_PSK,
                 WAPI_CERT,
                 FILS_SHA256,
-                FILS_SHA384})
+                FILS_SHA384,
+                DPP})
         public @interface KeyMgmtScheme {}
 
         /** WPA is not used; plaintext or static WEP could be used. */

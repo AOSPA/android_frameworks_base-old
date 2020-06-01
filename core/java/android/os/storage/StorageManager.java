@@ -162,12 +162,9 @@ public class StorageManager {
     /** {@hide} */
     public static final String PROP_SETTINGS_FUSE = FeatureFlagUtils.PERSIST_PREFIX
             + FeatureFlagUtils.SETTINGS_FUSE_FLAG;
-    /**
-     * Property that determines whether {@link OP_LEGACY_STORAGE} is sticky for
-     * legacy apps.
-     * @hide
-     */
-    public static final String PROP_LEGACY_OP_STICKY = "persist.sys.legacy_storage_sticky";
+    /** {@hide} */
+    public static final String PROP_FORCED_SCOPED_STORAGE_WHITELIST =
+            "forced_scoped_storage_whitelist";
 
     /** {@hide} */
     public static final String UUID_PRIVATE_INTERNAL = null;
@@ -226,9 +223,10 @@ public class StorageManager {
      * <p>
      * This intent should be launched using
      * {@link Activity#startActivityForResult(Intent, int)} so that the user
-     * knows which app is requesting to clear cache. The returned result will
-     * be {@link Activity#RESULT_OK} if the activity was launched and the user accepted to clear
-     * cache, or {@link Activity#RESULT_CANCELED} otherwise.
+     * knows which app is requesting to clear cache. The returned result will be:
+     * {@link Activity#RESULT_OK} if the activity was launched and all cache was cleared,
+     * {@link OsConstants#EIO} if an error occurred while clearing the cache or
+     * {@link Activity#RESULT_CANCELED} otherwise.
      */
     @RequiresPermission(android.Manifest.permission.MANAGE_EXTERNAL_STORAGE)
     @SdkConstant(SdkConstant.SdkConstantType.ACTIVITY_INTENT_ACTION)

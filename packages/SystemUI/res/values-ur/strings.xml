@@ -77,6 +77,12 @@
     <string name="compat_mode_on" msgid="4963711187149440884">"پوری سکرین پر زوم کریں"</string>
     <string name="compat_mode_off" msgid="7682459748279487945">"پوری سکرین پر پھیلائیں"</string>
     <string name="global_action_screenshot" msgid="2760267567509131654">"اسکرین شاٹ"</string>
+    <!-- no translation found for global_action_lock_message (4466026255205186456) -->
+    <skip />
+    <!-- no translation found for global_action_lock_message (7621167597240332986) -->
+    <skip />
+    <!-- no translation found for global_action_lock_message (538790401275363781) -->
+    <skip />
     <string name="remote_input_image_insertion_text" msgid="4850791636452521123">"ایک تصویر بھیجی"</string>
     <string name="screenshot_saving_ticker" msgid="6519186952674544916">"اسکرین شاٹ محفوظ ہو رہا ہے…"</string>
     <string name="screenshot_saving_title" msgid="2298349784913287333">"اسکرین شاٹ محفوظ ہو رہا ہے…"</string>
@@ -323,6 +329,8 @@
     <string name="gps_notification_found_text" msgid="3145873880174658526">"‏مقام متعین کیا گیا بذریعہ GPS"</string>
     <string name="accessibility_location_active" msgid="2845747916764660369">"مقام کی درخواستیں فعال ہیں"</string>
     <string name="accessibility_sensors_off_active" msgid="2619725434618911551">"سینسرز آف فعال ہے"</string>
+    <!-- no translation found for accessibility_media_active (4942087422908239969) -->
+    <skip />
     <string name="accessibility_clear_all" msgid="970525598287244592">"سبھی اطلاعات صاف کریں۔"</string>
     <string name="notification_group_overflow_indicator" msgid="7605120293801012648">"<xliff:g id="NUMBER">%s</xliff:g> +"</string>
     <plurals name="notification_group_overflow_description" formatted="false" msgid="91483442850649192">
@@ -511,8 +519,10 @@
     <string name="manage_notifications_text" msgid="6885645344647733116">"نظم کریں"</string>
     <string name="manage_notifications_history_text" msgid="57055985396576230">"سرگزشت"</string>
     <string name="notification_section_header_incoming" msgid="5295312809341711367">"اِن کمنگ"</string>
-    <string name="notification_section_header_gentle" msgid="3044910806569985386">"اطلاعات خاموش کریں"</string>
-    <string name="notification_section_header_alerting" msgid="3168140660646863240">"متنبہ کرنے کی اطلاعات"</string>
+    <!-- no translation found for notification_section_header_gentle (6804099527336337197) -->
+    <skip />
+    <!-- no translation found for notification_section_header_alerting (5581175033680477651) -->
+    <skip />
     <string name="notification_section_header_conversations" msgid="821834744538345661">"گفتگوئیں"</string>
     <string name="accessibility_notification_section_header_gentle_clear_all" msgid="6490207897764933919">"سبھی خاموش اطلاعات کو صاف کریں"</string>
     <string name="dnd_suppressing_shade_text" msgid="5588252250634464042">"\'ڈسٹرب نہ کریں\' کے ذریعے اطلاعات کو موقوف کیا گیا"</string>
@@ -586,7 +596,7 @@
     <string name="accessibility_volume_settings" msgid="1458961116951564784">"صوتی ترتیبات"</string>
     <string name="accessibility_volume_expand" msgid="7653070939304433603">"پھیلائیں"</string>
     <string name="accessibility_volume_collapse" msgid="2746845391013829996">"سکیڑیں"</string>
-    <string name="volume_odi_captions_tip" msgid="8825655463280990941">"خودکار طور پر کیپشن میڈیا"</string>
+    <string name="volume_odi_captions_tip" msgid="8825655463280990941">"خودکار طور پر میڈیا پر کیپشن لگائیں"</string>
     <string name="accessibility_volume_close_odi_captions_tip" msgid="8924753283621160480">"کیپشنز کی تجویز بند کریں"</string>
     <string name="volume_odi_captions_content_description" msgid="4172765742046013630">"کیپشنز کا اوورلے"</string>
     <string name="volume_odi_captions_hint_enable" msgid="2073091194012843195">"فعال کریں"</string>
@@ -707,13 +717,20 @@
     <string name="inline_turn_off_notifications" msgid="8543989584403106071">"اطلاعات کو آف کریں"</string>
     <string name="inline_keep_showing_app" msgid="4393429060390649757">"اس ایپ کی طرف سے اطلاعات دکھانا جاری رکھیں؟"</string>
     <string name="notification_silence_title" msgid="8608090968400832335">"خاموش"</string>
-    <string name="notification_alert_title" msgid="7629202599338071971">"الرٹ کرنا"</string>
+    <!-- no translation found for notification_alert_title (3656229781017543655) -->
+    <skip />
     <string name="notification_bubble_title" msgid="8330481035191903164">"بلبلہ"</string>
-    <string name="notification_channel_summary_low" msgid="7300447764759926720">"بغیر آواز یا وائبریشن کے آپ کو فوکس کرنے میں مدد کرتا ہے۔"</string>
-    <string name="notification_channel_summary_default" msgid="3539949463907902037">"آواز اور وائبریشن کے ذریعے آپ کی توجہ حاصل کرتا ہے۔"</string>
-    <string name="notification_channel_summary_default_with_bubbles" msgid="6298026344552480458">"آواز اور وائبریشن کے ذریعے آپ کی توجہ حاصل کرتا ہے۔ بذریعہ ڈیفالٹ <xliff:g id="APP_NAME">%1$s</xliff:g> بلبلہ سے گفتگوئیں."</string>
+    <!-- no translation found for notification_channel_summary_low (4860617986908931158) -->
+    <skip />
+    <!-- no translation found for notification_conversation_summary_low (1734433426085468009) -->
+    <skip />
+    <!-- no translation found for notification_channel_summary_default (3282930979307248890) -->
+    <skip />
+    <!-- no translation found for notification_channel_summary_default_with_bubbles (1782419896613644568) -->
+    <skip />
     <string name="notification_channel_summary_bubble" msgid="7235935211580860537">"اس مواد کے فلوٹنگ شارٹ کٹ کے ساتھ آپ کی توجہ دیتی ہے۔"</string>
-    <string name="notification_channel_summary_priority" msgid="7415770044553264622">"گفتگو کے سیکشن میں سب سے اوپر دکھاتا ہے اور بلبلہ کے طور پر ظاہر ہوتا ہے۔"</string>
+    <!-- no translation found for notification_channel_summary_priority (7952654515769021553) -->
+    <skip />
     <string name="notification_conversation_channel_settings" msgid="2409977688430606835">"ترتیبات"</string>
     <string name="notification_priority_title" msgid="2079708866333537093">"ترجیح"</string>
     <string name="no_shortcut" msgid="7176375126961212514">"<xliff:g id="APP_NAME">%1$s</xliff:g> گفتگو سے متعلق مخصوص ترتیبات کو سپورٹ نہیں کرتی"</string>
@@ -1013,7 +1030,7 @@
     <string name="priority_onboarding_show_at_top_text" msgid="1678400241025513541">"گفتگو کے سیکشن میں سب سے اوپر دکھائیں"</string>
     <string name="priority_onboarding_show_avatar_text" msgid="5756291381124091508">"مقفل سکرین پر پروفائل کی تصویر دکھائیں"</string>
     <string name="priority_onboarding_appear_as_bubble_text" msgid="4227039772250263122">"ایپس کے سب سے اوپر فلوٹنگ بلبلہ کے طور پر ظاہر ہوں"</string>
-    <string name="priority_onboarding_ignores_dnd_text" msgid="2918952762719600529">"مداخلت کریں ڈسٹرب نہ کریں"</string>
+    <string name="priority_onboarding_ignores_dnd_text" msgid="2918952762719600529">"ڈسٹرب نہ کریں میں مداخلت کریں"</string>
     <string name="priority_onboarding_done_button_title" msgid="4569550984286506007">"سمجھ آ گئی"</string>
     <string name="magnification_overlay_title" msgid="6584179429612427958">"میگنیفیکیشن اوورلے ونڈو"</string>
     <string name="magnification_window_title" msgid="4863914360847258333">"میگنیفکیشن ونڈو"</string>
@@ -1027,6 +1044,13 @@
       <item quantity="other"><xliff:g id="NUMBER_1">%s</xliff:g> کنٹرولز شامل کر دیے گئے۔</item>
       <item quantity="one"><xliff:g id="NUMBER_0">%s</xliff:g> کنٹرول شامل کر دیا گیا۔</item>
     </plurals>
+    <string name="controls_removed" msgid="3731789252222856959">"ہٹا دیا گیا"</string>
+    <string name="accessibility_control_favorite" msgid="8694362691985545985">"پسند کردہ"</string>
+    <string name="accessibility_control_favorite_position" msgid="54220258048929221">"پسند کردہ، پوزیشن <xliff:g id="NUMBER">%d</xliff:g>"</string>
+    <string name="accessibility_control_not_favorite" msgid="1291760269563092359">"ناپسند کردہ"</string>
+    <string name="accessibility_control_change_favorite" msgid="2943178027582253261">"پسندیدہ بنائیں"</string>
+    <string name="accessibility_control_change_unfavorite" msgid="6997408061750740327">"پسندیدگی ختم کریں"</string>
+    <string name="accessibility_control_move" msgid="8980344493796647792">"پوزیشن <xliff:g id="NUMBER">%d</xliff:g> میں منتقل کریں"</string>
     <string name="controls_favorite_default_title" msgid="967742178688938137">"کنٹرولز"</string>
     <string name="controls_favorite_subtitle" msgid="6604402232298443956">"پاور مینو سے رسائی حاصل کرنے کے لیے کنٹرولز کو منتخب کریں"</string>
     <string name="controls_favorite_rearrange" msgid="5616952398043063519">"کنٹرولز کو دوبارہ ترتیب دینے کے ليے پکڑیں اور گھسیٹیں"</string>

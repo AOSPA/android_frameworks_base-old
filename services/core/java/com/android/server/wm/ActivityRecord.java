@@ -3598,7 +3598,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
 
     @Override
     ActivityRecord getActivity(Predicate<ActivityRecord> callback, boolean traverseTopToBottom,
-            WindowContainer boundary) {
+            ActivityRecord boundary) {
         return callback.test(this) ? this : null;
     }
 
@@ -6708,6 +6708,13 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         // Use task-bounds if available so that activity-level letterbox (maxAspectRatio) is
         // included in the animation.
         return task != null ? task.getBounds() : getBounds();
+    }
+
+    @Override
+    void getAnimationPosition(Point outPosition) {
+        // Always animate from zero because if the activity doesn't fill the task, the letterbox
+        // will fill the remaining area that should be included in the animation.
+        outPosition.set(0, 0);
     }
 
     @Override

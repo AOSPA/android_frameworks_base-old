@@ -1415,11 +1415,12 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
     }
 
     ActivityRecord getActivity(Predicate<ActivityRecord> callback, boolean traverseTopToBottom,
-            WindowContainer boundary) {
+            ActivityRecord boundary) {
         if (traverseTopToBottom) {
             for (int i = mChildren.size() - 1; i >= 0; --i) {
                 final WindowContainer wc = mChildren.get(i);
-                if (wc == boundary) return null;
+                // TODO(b/156986561): Improve the correctness of the boundary check.
+                if (wc == boundary) return boundary;
 
                 final ActivityRecord r = wc.getActivity(callback, traverseTopToBottom, boundary);
                 if (r != null) {
@@ -1430,7 +1431,8 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
             final int count = mChildren.size();
             for (int i = 0; i < count; i++) {
                 final WindowContainer wc = mChildren.get(i);
-                if (wc == boundary) return null;
+                // TODO(b/156986561): Improve the correctness of the boundary check.
+                if (wc == boundary) return boundary;
 
                 final ActivityRecord r = wc.getActivity(callback, traverseTopToBottom, boundary);
                 if (r != null) {
@@ -2120,6 +2122,11 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         return getBounds();
     }
 
+    /** Gets the position relative to parent for animation. */
+    void getAnimationPosition(Point outPosition) {
+        getRelativePosition(outPosition);
+    }
+
     /**
      * Applies the app transition animation according the given the layout properties in the
      * window hierarchy.
@@ -2177,10 +2184,11 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         final int appStackClipMode = getDisplayContent().mAppTransition.getAppStackClipMode();
 
         // Separate position and size for use in animators.
-        mTmpRect.set(getAnimationBounds(appStackClipMode));
-        if (sHierarchicalAnimations) {
-            getRelativePosition(mTmpPoint);
-        } else {
+        final Rect screenBounds = getAnimationBounds(appStackClipMode);
+        mTmpRect.set(screenBounds);
+        getAnimationPosition(mTmpPoint);
+        if (!sHierarchicalAnimations) {
+            // Non-hierarchical animation uses position in global coordinates.
             mTmpPoint.set(mTmpRect.left, mTmpRect.top);
         }
         mTmpRect.offsetTo(0, 0);
@@ -2196,7 +2204,7 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
             localBounds.offsetTo(mTmpPoint.x, mTmpPoint.y);
             final RemoteAnimationController.RemoteAnimationRecord adapters =
                     controller.createRemoteAnimationRecord(this, mTmpPoint, localBounds,
-                            mTmpRect, (isChanging ? mSurfaceFreezer.mFreezeBounds : null));
+                            screenBounds, (isChanging ? mSurfaceFreezer.mFreezeBounds : null));
             resultAdapters = new Pair<>(adapters.mAdapter, adapters.mThumbnailAdapter);
         } else if (isChanging) {
             final float durationScale = mWmService.getTransitionAnimationScaleLocked();
@@ -2609,10 +2617,8 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         return willSync;
     }
 
-    boolean prepareForSync(BLASTSyncEngine.TransactionReadyListener waitingListener,
-            int waitingId) {
-        boolean willSync = true;
-
+    boolean setPendingListener(BLASTSyncEngine.TransactionReadyListener waitingListener,
+        int waitingId) {
         // If we are invisible, no need to sync, likewise if we are already engaged in a sync,
         // we can't support overlapping syncs on a single container yet.
         if (!isVisible() || mWaitingListener != null) {
@@ -2623,6 +2629,15 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         // Make sure to set these before we call setReady in case the sync was a no-op
         mWaitingSyncId = waitingId;
         mWaitingListener = waitingListener;
+        return true;
+    }
+
+    boolean prepareForSync(BLASTSyncEngine.TransactionReadyListener waitingListener,
+            int waitingId) {
+        boolean willSync = setPendingListener(waitingListener, waitingId);
+        if (!willSync) {
+            return false;
+        }
 
         int localId = mBLASTSyncEngine.startSyncSet(this);
         willSync |= addChildrenToSyncSet(localId);
