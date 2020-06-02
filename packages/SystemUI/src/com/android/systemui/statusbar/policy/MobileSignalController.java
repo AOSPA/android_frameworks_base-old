@@ -492,6 +492,14 @@ public class MobileSignalController extends SignalController<
         if ( mConfig.enableRatIconEnhancement ) {
             typeIcon = getEnhancementDataRatIcon();
         }
+
+        MobileIconGroup vowifiIconGroup = getVowifiIconGroup();
+        if ( mConfig.showVowifiIcon && vowifiIconGroup != null ) {
+            typeIcon = vowifiIconGroup.mDataType;
+            statusIcon = new IconState(true,
+                    mCurrentState.enabled && !mCurrentState.airplaneMode? statusIcon.icon : 0,
+                    statusIcon.contentDescription);
+        }
         if (DEBUG) {
             Log.d(mTag, "notifyListeners mConfig.alwaysShowNetworkTypeIcon="
                     + mConfig.alwaysShowNetworkTypeIcon + "  mDataNetType:" + mDataNetType +
@@ -503,7 +511,8 @@ public class MobileSignalController extends SignalController<
                     + " icons.mDataType=" + icons.mDataType
                     + " mConfig.showVolteIcon=" + mConfig.showVolteIcon
                     + " isVolteSwitchOn=" + isVolteSwitchOn()
-                    + " volteIcon=" + volteIcon);
+                    + " volteIcon=" + volteIcon
+                    + " mConfig.showVowifiIcon=" + mConfig.showVowifiIcon);
         }
         callback.setMobileDataIndicators(statusIcon, qsIcon, typeIcon, qsTypeIcon,
                 activityIn, activityOut, volteIcon, dataContentDescription, dataContentDescriptionHtml,
@@ -1034,6 +1043,21 @@ public class MobileSignalController extends SignalController<
             ratIcon = iconGroup.mDataType;
         }
         return ratIcon;
+    }
+
+    private boolean isVowifiAvailable() {
+        return mCurrentState.voiceCapable &&  mCurrentState.imsRegistered
+                && getDataNetworkType() == TelephonyManager.NETWORK_TYPE_IWLAN;
+    }
+
+    private MobileIconGroup getVowifiIconGroup() {
+        if ( isVowifiAvailable() && !isCallIdle() ) {
+            return TelephonyIcons.VOWIFI_CALLING;
+        }else if (isVowifiAvailable()) {
+            return TelephonyIcons.VOWIFI;
+        }else {
+            return null;
+        }
     }
 
     @Override
