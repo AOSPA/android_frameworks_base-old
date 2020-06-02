@@ -23,18 +23,15 @@ import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.SeekBar
 import android.widget.TextView
-
-import androidx.constraintlayout.motion.widget.MotionLayout
-
 import com.android.systemui.R
+import com.android.systemui.util.animation.TransitionLayout
 
 /**
  * ViewHolder for a media player.
  */
 class PlayerViewHolder private constructor(itemView: View) {
 
-    val player = itemView as MotionLayout
-    val background = itemView.requireViewById<View>(R.id.media_background)
+    val player = itemView as TransitionLayout
 
     // Player information
     val appIcon = itemView.requireViewById<ImageView>(R.id.icon)
@@ -44,7 +41,7 @@ class PlayerViewHolder private constructor(itemView: View) {
     val artistText = itemView.requireViewById<TextView>(R.id.header_artist)
 
     // Output switcher
-    val seamless = itemView.findViewById<ViewGroup>(R.id.media_seamless)
+    val seamless = itemView.requireViewById<ViewGroup>(R.id.media_seamless)
     val seamlessIcon = itemView.requireViewById<ImageView>(R.id.media_seamless_image)
     val seamlessText = itemView.requireViewById<TextView>(R.id.media_seamless_text)
 
@@ -61,13 +58,13 @@ class PlayerViewHolder private constructor(itemView: View) {
     val action4 = itemView.requireViewById<ImageButton>(R.id.action4)
 
     init {
-        (background.background as IlluminationDrawable).let {
-            it.setupTouch(seamless, player)
-            it.setupTouch(action0, player)
-            it.setupTouch(action1, player)
-            it.setupTouch(action2, player)
-            it.setupTouch(action3, player)
-            it.setupTouch(action4, player)
+        (player.background as IlluminationDrawable).let {
+            it.registerLightSource(seamless)
+            it.registerLightSource(action0)
+            it.registerLightSource(action1)
+            it.registerLightSource(action2)
+            it.registerLightSource(action3)
+            it.registerLightSource(action4)
         }
     }
 
@@ -95,7 +92,7 @@ class PlayerViewHolder private constructor(itemView: View) {
          * @param parent Parent of inflated view.
          */
         @JvmStatic fun create(inflater: LayoutInflater, parent: ViewGroup): PlayerViewHolder {
-            val v = inflater.inflate(R.layout.qs_media_panel, parent, false)
+            val v = inflater.inflate(R.layout.media_view, parent, false)
             return PlayerViewHolder(v)
         }
     }

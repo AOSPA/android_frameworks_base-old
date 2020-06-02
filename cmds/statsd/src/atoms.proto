@@ -444,7 +444,6 @@ message Atom {
         TvTunerStateChanged tv_tuner_state_changed = 276 [(module) = "framework"];
         MediaOutputOpSwitchReported mediaoutput_op_switch_reported =
             277 [(module) = "settings"];
-        SdkExtensionStatus sdk_extension_status = 354;
 
         // StatsdStats tracks platform atoms with ids upto 500.
         // Update StatsdStats::kMaxPushedAtomId when atom ids here approach that value.
@@ -4861,6 +4860,14 @@ message SnapshotMergeReported {
     // Number of reboots that occurred after issuing and before completing the
     // merge of all the snapshot devices.
     optional int32 intermediate_reboots = 3;
+
+    // The device has been upgraded to Virtual A/B.
+    optional bool is_vab_retrofit = 4;
+
+    // Space that has been temporarily allocated in the /data partition
+    // containing the dm-snapshot's copy-on-write data generated during a
+    // Virtual A/B update.
+    optional int64 cow_file_size_bytes = 5;
 }
 
 //////////////////////////////////////////////////////////////////////
@@ -6713,11 +6720,11 @@ message NetworkDnsEventReported {
  * Logs when a data stall event occurs.
  *
  * Log from:
- *     frameworks/base/services/core/java/com/android/server/connectivity/NetworkMonitor.java
+ *     packages/modules/NetworkStack/src/com/android/server/connectivity/NetworkMonitor.java
  */
 message DataStallEvent {
     // Data stall evaluation type.
-    // See frameworks/base/services/core/java/com/android/server/connectivity/NetworkMonitor.java
+    // See packages/modules/NetworkStack/src/com/android/server/connectivity/NetworkMonitor.java
     // Refer to the definition of DATA_STALL_EVALUATION_TYPE_*.
     optional int32 evaluation_type = 1;
     // See definition in data_stall_event.proto.
@@ -6730,6 +6737,10 @@ message DataStallEvent {
     optional com.android.server.connectivity.CellularData cell_info = 5 [(log_mode) = MODE_BYTES];
     // See definition in data_stall_event.proto.
     optional com.android.server.connectivity.DnsEvent dns_event = 6 [(log_mode) = MODE_BYTES];
+    // The tcp packets fail rate from the latest tcp polling.
+    optional int32 tcp_fail_rate = 7;
+    // Number of packets sent since the last received packet.
+    optional int32 tcp_sent_since_last_recv = 8;
 }
 
 /*
@@ -8634,6 +8645,15 @@ message UpdateEngineUpdateAttemptReported {
     // system property when the device takes the update. e.g.
     // Android/aosp_sailfish/sailfish:10/QP1A.190425.004/5507117:userdebug/test-keys
     optional string source_fingerprint = 8;
+
+    // Size of super partition.
+    optional int64 super_partition_size_bytes = 9;
+
+    // Size of current slot within the super partition.
+    optional int64 slot_size_bytes = 10;
+
+    // Free space available in the super partition.
+    optional int64 super_free_space_bytes = 11;
 }
 
 /**
@@ -9161,30 +9181,6 @@ message CellBroadcastMessageError {
 
     // Exception message (or log message) associated with the error (max 1000 chars)
     optional string exception_message = 2;
-}
-
-/**
- * Logs when the SDK Extensions test app has polled the current version.
- * This is atom ID 354.
- *
- * Logged from:
- *   vendor/google_testing/integration/packages/apps/SdkExtensionsTestApp/
- */
-message SdkExtensionStatus {
-    enum ApiCallStatus {
-        CALL_NOT_ATTEMPTED = 0;
-        CALL_SUCCESSFUL = 1;
-        CALL_FAILED = 2;
-    }
-
-    optional ApiCallStatus result = 1;
-
-    // The R extension version, i.e. android.os.ext.SdkExtension.getExtensionVersion(R).
-    optional int32 r_extension_version = 2;
-
-    // A number identifying which particular symbol's call failed, if any. 0 means no missing symbol.
-    // "Failed" here can mean a symbol that wasn't meant to be visible was, or the other way around.
-    optional int32 failed_call_symbol = 3;
 }
 
 /**

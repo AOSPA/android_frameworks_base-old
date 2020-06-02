@@ -120,8 +120,8 @@ import com.android.systemui.broadcast.BroadcastDispatcher;
 import com.android.systemui.colorextraction.SysuiColorExtractor;
 import com.android.systemui.controls.ControlsServiceInfo;
 import com.android.systemui.controls.controller.ControlsController;
+import com.android.systemui.controls.dagger.ControlsComponent;
 import com.android.systemui.controls.management.ControlsAnimations;
-import com.android.systemui.controls.management.ControlsListingController;
 import com.android.systemui.controls.ui.ControlsUiController;
 import com.android.systemui.dagger.qualifiers.Background;
 import com.android.systemui.dagger.qualifiers.Main;
@@ -129,6 +129,7 @@ import com.android.systemui.model.SysUiState;
 import com.android.systemui.plugins.ActivityStarter;
 import com.android.systemui.plugins.GlobalActions.GlobalActionsManager;
 import com.android.systemui.plugins.GlobalActionsPanelPlugin;
+import com.android.systemui.settings.CurrentUserContextTracker;
 import com.android.systemui.statusbar.NotificationShadeDepthController;
 import com.android.systemui.statusbar.phone.NotificationShadeWindowController;
 import com.android.systemui.statusbar.policy.ConfigurationController;
@@ -138,7 +139,11 @@ import com.android.systemui.util.RingerModeTracker;
 import com.android.systemui.util.leak.RotationUtils;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.Executor;
 
 import javax.inject.Inject;
@@ -178,8 +183,9 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
     static final String GLOBAL_ACTION_KEY_EMERGENCY = "emergency";
     static final String GLOBAL_ACTION_KEY_SCREENSHOT = "screenshot";
 
-    private static final String PREFS_CONTROLS_SEEDING_COMPLETED = "ControlsSeedingCompleted";
+    private static final String PREFS_CONTROLS_SEEDING_COMPLETED = "SeedingCompleted";
     private static final String PREFS_CONTROLS_FILE = "controls_prefs";
+    private static final int SEEDING_MAX = 2;
 
     private final Context mContext;
     private final GlobalActionsManager mWindowManagerFuncs;
@@ -233,15 +239,16 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
     private final IStatusBarService mStatusBarService;
     private final NotificationShadeWindowController mNotificationShadeWindowController;
     private GlobalActionsPanelPlugin mWalletPlugin;
-    private ControlsUiController mControlsUiController;
+    private Optional<ControlsUiController> mControlsUiControllerOptional;
     private final IWindowManager mIWindowManager;
     private final Executor mBackgroundExecutor;
     private List<ControlsServiceInfo> mControlsServiceInfos = new ArrayList<>();
-    private ControlsController mControlsController;
+    private Optional<ControlsController> mControlsControllerOptional;
     private SharedPreferences mControlsPreferences;
     private final RingerModeTracker mRingerModeTracker;
     private int mDialogPressDelay = DIALOG_PRESS_DELAY; // ms
     private Handler mMainHandler;
+    private CurrentUserContextTracker mCurrentUserContextTracker;
     @VisibleForTesting
     boolean mShowLockScreenCardsAndControls = false;
 
@@ -297,12 +304,13 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
             NotificationShadeDepthController depthController, SysuiColorExtractor colorExtractor,
             IStatusBarService statusBarService,
             NotificationShadeWindowController notificationShadeWindowController,
-            ControlsUiController controlsUiController, IWindowManager iWindowManager,
+            IWindowManager iWindowManager,
             @Background Executor backgroundExecutor,
-            ControlsListingController controlsListingController,
-            ControlsController controlsController, UiEventLogger uiEventLogger,
-            RingerModeTracker ringerModeTracker, SysUiState sysUiState, @Main Handler handler) {
-        mContext = new ContextThemeWrapper(context, com.android.systemui.R.style.qs_theme);
+            UiEventLogger uiEventLogger,
+            RingerModeTracker ringerModeTracker, SysUiState sysUiState, @Main Handler handler,
+            ControlsComponent controlsComponent,
+            CurrentUserContextTracker currentUserContextTracker) {
+        mContext = context;
         mWindowManagerFuncs = windowManagerFuncs;
         mAudioManager = audioManager;
         mDreamManager = iDreamManager;
@@ -323,13 +331,14 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
         mSysuiColorExtractor = colorExtractor;
         mStatusBarService = statusBarService;
         mNotificationShadeWindowController = notificationShadeWindowController;
-        mControlsUiController = controlsUiController;
+        mControlsUiControllerOptional = controlsComponent.getControlsUiController();
         mIWindowManager = iWindowManager;
         mBackgroundExecutor = backgroundExecutor;
         mRingerModeTracker = ringerModeTracker;
-        mControlsController = controlsController;
+        mControlsControllerOptional = controlsComponent.getControlsController();
         mSysUiState = sysUiState;
         mMainHandler = handler;
+        mCurrentUserContextTracker = currentUserContextTracker;
 
         // receive broadcasts
         IntentFilter filter = new IntentFilter();
@@ -371,7 +380,7 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
                         mDialog.mWalletViewController.onDeviceLockStateChanged(!unlocked);
                     }
                     if (!mDialog.isShowingControls() && shouldShowControls()) {
-                        mDialog.showControls(mControlsUiController);
+                        mDialog.showControls(mControlsUiControllerOptional.get());
                     }
                     if (unlocked) {
                         mDialog.hideLockMessage();
@@ -380,7 +389,10 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
             }
         });
 
-        controlsListingController.addCallback(list -> mControlsServiceInfos = list);
+        if (controlsComponent.getControlsListingController().isPresent()) {
+            controlsComponent.getControlsListingController().get()
+                    .addCallback(list -> mControlsServiceInfos = list);
+        }
 
         // Need to be user-specific with the context to make sure we read the correct prefs
         Context userContext = context.createContextAsUser(
@@ -401,41 +413,55 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
                 });
     }
 
+    /**
+     * See if any available control service providers match one of the preferred components. If
+     * they do, and there are no current favorites for that component, query the preferred
+     * component for a limited number of suggested controls.
+     */
     private void seedFavorites() {
-        if (mControlsServiceInfos.isEmpty()
-                || mControlsController.getFavorites().size() > 0
-                || mControlsPreferences.getBoolean(PREFS_CONTROLS_SEEDING_COMPLETED, false)) {
+        if (!mControlsControllerOptional.isPresent()
+                || mControlsServiceInfos.isEmpty()) {
             return;
         }
 
-        /*
-         * See if any service providers match the preferred component. If they do,
-         * and there are no current favorites, and we haven't successfully loaded favorites to
-         * date, query the preferred component for a limited number of suggested controls.
-         */
-        String preferredControlsPackage = mContext.getResources()
-                .getString(com.android.systemui.R.string.config_controlsPreferredPackage);
+        String[] preferredControlsPackages = mContext.getResources()
+                .getStringArray(com.android.systemui.R.array.config_controlsPreferredPackages);
 
-        ComponentName preferredComponent = null;
+        SharedPreferences prefs = mCurrentUserContextTracker.getCurrentUserContext()
+                .getSharedPreferences(PREFS_CONTROLS_FILE, Context.MODE_PRIVATE);
+        Set<String> seededPackages = prefs.getStringSet(PREFS_CONTROLS_SEEDING_COMPLETED,
+                Collections.emptySet());
+
+        List<ComponentName> componentsToSeed = new ArrayList<>();
         for (ControlsServiceInfo info : mControlsServiceInfos) {
-            if (info.componentName.getPackageName().equals(preferredControlsPackage)) {
-                preferredComponent = info.componentName;
-                break;
+            String pkg = info.componentName.getPackageName();
+            if (seededPackages.contains(pkg)
+                    || mControlsControllerOptional.get().countFavoritesForComponent(
+                            info.componentName) > 0) {
+                continue;
+            }
+
+            for (int i = 0; i < Math.min(SEEDING_MAX, preferredControlsPackages.length); i++) {
+                if (pkg.equals(preferredControlsPackages[i])) {
+                    componentsToSeed.add(info.componentName);
+                    break;
+                }
             }
         }
 
-        if (preferredComponent == null) {
-            Log.i(TAG, "Controls seeding: No preferred component has been set, will not seed");
-            mControlsPreferences.edit().putBoolean(PREFS_CONTROLS_SEEDING_COMPLETED, true).apply();
-            return;
-        }
+        if (componentsToSeed.isEmpty()) return;
 
-        mControlsController.seedFavoritesForComponent(
-                preferredComponent,
-                (accepted) -> {
-                    Log.i(TAG, "Controls seeded: " + accepted);
-                    mControlsPreferences.edit().putBoolean(PREFS_CONTROLS_SEEDING_COMPLETED,
-                        accepted).apply();
+        mControlsControllerOptional.get().seedFavoritesForComponents(
+                componentsToSeed,
+                (response) -> {
+                    Log.d(TAG, "Controls seeded: " + response);
+                    Set<String> completedPkgs = prefs.getStringSet(PREFS_CONTROLS_SEEDING_COMPLETED,
+                                                                   new HashSet<String>());
+                    if (response.getAccepted()) {
+                        completedPkgs.add(response.getPackageName());
+                        prefs.edit().putStringSet(PREFS_CONTROLS_SEEDING_COMPLETED,
+                                                  completedPkgs).apply();
+                    }
                 });
     }
 
@@ -550,8 +576,8 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
 
         mItems.clear();
         mOverflowItems.clear();
-        String[] defaultActions = getDefaultActions();
 
+        String[] defaultActions = getDefaultActions();
         // make sure emergency affordance action is first, if needed
         if (mEmergencyAffordanceManager.needsEmergencyAffordance()) {
             addActionItem(new EmergencyAffordanceAction());
@@ -634,10 +660,14 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
         mDepthController.setShowingHomeControls(true);
         GlobalActionsPanelPlugin.PanelViewController walletViewController =
                 getWalletViewController();
+        ControlsUiController uiController = null;
+        if (mControlsUiControllerOptional.isPresent() && shouldShowControls()) {
+            uiController = mControlsUiControllerOptional.get();
+        }
         ActionsDialog dialog = new ActionsDialog(mContext, mAdapter, mOverflowAdapter,
                 walletViewController, mDepthController, mSysuiColorExtractor,
                 mStatusBarService, mNotificationShadeWindowController,
-                controlsAvailable(), shouldShowControls() ? mControlsUiController : null,
+                controlsAvailable(), uiController,
                 mSysUiState, this::onRotate, mKeyguardShowing);
         boolean walletViewAvailable = walletViewController != null
                 && walletViewController.getPanelContent() != null;
@@ -1171,7 +1201,7 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
         }
         mUiEventLogger.log(GlobalActionsEvent.GA_POWER_MENU_CLOSE);
         mWindowManagerFuncs.onGlobalActionsHidden();
-        mLifecycle.setCurrentState(Lifecycle.State.DESTROYED);
+        mLifecycle.setCurrentState(Lifecycle.State.CREATED);
     }
 
     /**
@@ -1323,17 +1353,10 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
             View view = convertView != null ? convertView
                     : LayoutInflater.from(mContext).inflate(viewLayoutResource, parent, false);
             TextView textView = (TextView) view;
-            textView.setOnClickListener(v -> onClickItem(position));
             if (action.getMessageResId() != 0) {
                 textView.setText(action.getMessageResId());
             } else {
                 textView.setText(action.getMessage());
-            }
-
-            if (action instanceof LongPressAction) {
-                textView.setOnLongClickListener(v -> onLongClickItem(position));
-            } else {
-                textView.setOnLongClickListener(null);
             }
             return textView;
         }
@@ -2046,11 +2069,15 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
         }
 
         private ListPopupWindow createPowerOverflowPopup() {
-            ListPopupWindow popup = new GlobalActionsPopupMenu(
+            GlobalActionsPopupMenu popup = new GlobalActionsPopupMenu(
                     new ContextThemeWrapper(
-                        mContext,
-                        com.android.systemui.R.style.Control_ListPopupWindow
+                            mContext,
+                            com.android.systemui.R.style.Control_ListPopupWindow
                     ), false /* isDropDownMode */);
+            popup.setOnItemClickListener(
+                    (parent, view, position, id) -> mOverflowAdapter.onClickItem(position));
+            popup.setOnItemLongClickListener(
+                    (parent, view, position, id) -> mOverflowAdapter.onLongClickItem(position));
             View overflowButton =
                     findViewById(com.android.systemui.R.id.global_actions_overflow_button);
             popup.setAnchorView(overflowButton);
@@ -2401,7 +2428,8 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
 
     private boolean controlsAvailable() {
         return mDeviceProvisioned
-                && mControlsUiController.getAvailable()
+                && mControlsUiControllerOptional.isPresent()
+                && mControlsUiControllerOptional.get().getAvailable()
                 && !mControlsServiceInfos.isEmpty();
     }
 

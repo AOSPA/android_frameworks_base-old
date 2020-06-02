@@ -210,7 +210,7 @@ public class DataManager {
 
     /** Reports the sharing related {@link AppTargetEvent} from App Prediction Manager. */
     public void reportShareTargetEvent(@NonNull AppTargetEvent event,
-            @Nullable IntentFilter intentFilter) {
+            @NonNull IntentFilter intentFilter) {
         AppTarget appTarget = event.getTarget();
         if (appTarget == null || event.getAction() != AppTargetEvent.ACTION_LAUNCH) {
             return;
@@ -220,8 +220,7 @@ public class DataManager {
             return;
         }
         PackageData packageData = userData.getOrCreatePackageData(appTarget.getPackageName());
-        String mimeType = intentFilter != null ? intentFilter.getDataType(0) : null;
-        @Event.EventType int eventType = mimeTypeToShareEventType(mimeType);
+        @Event.EventType int eventType = mimeTypeToShareEventType(intentFilter.getDataType(0));
         EventHistoryImpl eventHistory;
         if (ChooserActivity.LAUNCH_LOCATION_DIRECT_SHARE.equals(event.getLaunchLocation())) {
             // Direct share event
@@ -294,14 +293,14 @@ public class DataManager {
             if (notificationListener != null) {
                 String packageName = packageData.getPackageName();
                 packageData.forAllConversations(conversationInfo -> {
-                    if (conversationInfo.isShortcutCached()
+                    if (conversationInfo.isShortcutCachedForNotification()
                             && conversationInfo.getNotificationChannelId() == null
                             && !notificationListener.hasActiveNotifications(
                                     packageName, conversationInfo.getShortcutId())) {
                         mShortcutServiceInternal.uncacheShortcuts(userId,
                                 mContext.getPackageName(), packageName,
                                 Collections.singletonList(conversationInfo.getShortcutId()),
-                                userId);
+                                userId, ShortcutInfo.FLAG_CACHED_NOTIFICATIONS);
                     }
                 });
             }
@@ -821,12 +820,12 @@ public class DataManager {
                         // The shortcut was cached by Notification Manager synchronously when the
                         // associated notification was posted. Uncache it here when all the
                         // associated notifications are removed.
-                        if (conversationInfo.isShortcutCached()
+                        if (conversationInfo.isShortcutCachedForNotification()
                                 && conversationInfo.getNotificationChannelId() == null) {
                             mShortcutServiceInternal.uncacheShortcuts(mUserId,
                                     mContext.getPackageName(), sbn.getPackageName(),
                                     Collections.singletonList(conversationInfo.getShortcutId()),
-                                    mUserId);
+                                    mUserId, ShortcutInfo.FLAG_CACHED_NOTIFICATIONS);
                         }
                     } else {
                         mActiveNotifCounts.put(conversationKey, count);
@@ -891,12 +890,12 @@ public class DataManager {
                 ConversationInfo conversationInfo =
                         packageData != null ? packageData.getConversationInfo(shortcutId) : null;
                 if (conversationInfo != null
-                        && conversationInfo.isShortcutCached()
+                        && conversationInfo.isShortcutCachedForNotification()
                         && conversationInfo.getNotificationChannelId() == null) {
                     mShortcutServiceInternal.uncacheShortcuts(mUserId,
                             mContext.getPackageName(), packageName,
                             Collections.singletonList(shortcutId),
-                            mUserId);
+                            mUserId, ShortcutInfo.FLAG_CACHED_NOTIFICATIONS);
                 }
             }
         }

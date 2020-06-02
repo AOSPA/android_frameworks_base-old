@@ -108,7 +108,7 @@ ValueMetricProducer::ValueMetricProducer(
       mSkipZeroDiffOutput(metric.skip_zero_diff_output()),
       mUseZeroDefaultBase(metric.use_zero_default_base()),
       mHasGlobalBase(false),
-      mCurrentBucketIsInvalid(false),
+      mCurrentBucketIsSkipped(false),
       mMaxPullDelayNs(metric.max_pull_delay_sec() > 0 ? metric.max_pull_delay_sec() * NS_PER_SEC
                                                       : StatsdStats::kPullMaxDelayNs),
       mSplitBucketForAppUpgrade(metric.split_bucket_for_app_upgrade()),
@@ -187,8 +187,9 @@ void ValueMetricProducer::onStateChanged(int64_t eventTimeNs, int32_t atomId,
     VLOG("ValueMetric %lld onStateChanged time %lld, State %d, key %s, %d -> %d",
          (long long)mMetricId, (long long)eventTimeNs, atomId, primaryKey.toString().c_str(),
          oldState.mValue.int_value, newState.mValue.int_value);
-    // If condition is not true, we do not need to pull for this state change.
-    if (mCondition != ConditionState::kTrue) {
+    // If condition is not true or metric is not active, we do not need to pull
+    // for this state change.
+    if (mCondition != ConditionState::kTrue || !mIsActive) {
         return;
     }
 
@@ -383,21 +384,26 @@ void ValueMetricProducer::onDumpReportLocked(const int64_t dumpTimeNs,
 
 void ValueMetricProducer::invalidateCurrentBucketWithoutResetBase(const int64_t dropTimeNs,
                                                                   const BucketDropReason reason) {
-    if (!mCurrentBucketIsInvalid) {
+    if (!mCurrentBucketIsSkipped) {
         // Only report to StatsdStats once per invalid bucket.
         StatsdStats::getInstance().noteInvalidatedBucket(mMetricId);
     }
 
-    if (!maxDropEventsReached()) {
-        mCurrentSkippedBucket.dropEvents.emplace_back(buildDropEvent(dropTimeNs, reason));
-    }
-    mCurrentBucketIsInvalid = true;
+    skipCurrentBucket(dropTimeNs, reason);
 }
 
 void ValueMetricProducer::invalidateCurrentBucket(const int64_t dropTimeNs,
                                                   const BucketDropReason reason) {
     invalidateCurrentBucketWithoutResetBase(dropTimeNs, reason);
     resetBase();
+}
+
+void ValueMetricProducer::skipCurrentBucket(const int64_t dropTimeNs,
+                                            const BucketDropReason reason) {
+    if (!maxDropEventsReached()) {
+        mCurrentSkippedBucket.dropEvents.emplace_back(buildDropEvent(dropTimeNs, reason));
+    }
+    mCurrentBucketIsSkipped = true;
 }
 
 void ValueMetricProducer::resetBase() {
@@ -767,22 +773,24 @@ void ValueMetricProducer::onMatchedLogEventInternalLocked(
     bool shouldSkipForPulledMetric = mIsPulled && !mUseDiff
             && mCondition != ConditionState::kTrue;
     if (shouldSkipForPushMetric || shouldSkipForPulledMetric) {
-        VLOG("ValueMetric skip event because condition is false");
+        VLOG("ValueMetric skip event because condition is false and we are not using diff (for "
+             "pulled metric)");
         return;
     }
 
     if (hitGuardRailLocked(eventKey)) {
         return;
     }
+
     vector<BaseInfo>& baseInfos = mCurrentBaseInfo[whatKey];
     if (baseInfos.size() < mFieldMatchers.size()) {
         VLOG("Resizing number of intervals to %d", (int)mFieldMatchers.size());
         baseInfos.resize(mFieldMatchers.size());
     }
 
-    for (auto baseInfo : baseInfos) {
+    for (BaseInfo& baseInfo : baseInfos) {
         if (!baseInfo.hasCurrentState) {
-            baseInfo.currentState = DEFAULT_DIMENSION_KEY;
+            baseInfo.currentState = getUnknownStateKey();
             baseInfo.hasCurrentState = true;
         }
     }
@@ -943,6 +951,11 @@ void ValueMetricProducer::flushCurrentBucketLocked(const int64_t& eventTimeNs,
         StatsdStats::getInstance().noteBucketUnknownCondition(mMetricId);
     }
 
+    VLOG("finalizing bucket for %ld, dumping %d slices", (long)mCurrentBucketStartTimeNs,
+         (int)mCurrentSlicedBucket.size());
+
+    int64_t fullBucketEndTimeNs = getCurrentBucketEndTimeNs();
+    int64_t bucketEndTime = fullBucketEndTimeNs;
     int64_t numBucketsForward = calcBucketsForwardCount(eventTimeNs);
     if (numBucketsForward > 1) {
         VLOG("Skipping forward %lld buckets", (long long)numBucketsForward);
@@ -951,22 +964,20 @@ void ValueMetricProducer::flushCurrentBucketLocked(const int64_t& eventTimeNs,
         // to mark the current bucket as invalid. The last pull might have been successful through.
         invalidateCurrentBucketWithoutResetBase(eventTimeNs,
                                                 BucketDropReason::MULTIPLE_BUCKETS_SKIPPED);
+        // End the bucket at the next bucket start time so the entire interval is skipped.
+        bucketEndTime = nextBucketStartTimeNs;
+    } else if (eventTimeNs < fullBucketEndTimeNs) {
+        bucketEndTime = eventTimeNs;
     }
 
-    VLOG("finalizing bucket for %ld, dumping %d slices", (long)mCurrentBucketStartTimeNs,
-         (int)mCurrentSlicedBucket.size());
-    int64_t fullBucketEndTimeNs = getCurrentBucketEndTimeNs();
-    int64_t bucketEndTime = eventTimeNs < fullBucketEndTimeNs ? eventTimeNs : fullBucketEndTimeNs;
     // Close the current bucket.
     int64_t conditionTrueDuration = mConditionTimer.newBucketStart(bucketEndTime);
     bool isBucketLargeEnough = bucketEndTime - mCurrentBucketStartTimeNs >= mMinBucketSizeNs;
     if (!isBucketLargeEnough) {
-        if (!maxDropEventsReached()) {
-            mCurrentSkippedBucket.dropEvents.emplace_back(
-                    buildDropEvent(eventTimeNs, BucketDropReason::BUCKET_TOO_SMALL));
-        }
+        skipCurrentBucket(eventTimeNs, BucketDropReason::BUCKET_TOO_SMALL);
     }
-    if (isBucketLargeEnough && !mCurrentBucketIsInvalid) {
+    if (!mCurrentBucketIsSkipped) {
+        bool bucketHasData = false;
         // The current bucket is large enough to keep.
         for (const auto& slice : mCurrentSlicedBucket) {
             ValueBucket bucket = buildPartialBucket(bucketEndTime, slice.second);
@@ -975,15 +986,34 @@ void ValueMetricProducer::flushCurrentBucketLocked(const int64_t& eventTimeNs,
             if (bucket.valueIndex.size() > 0) {
                 auto& bucketList = mPastBuckets[slice.first];
                 bucketList.push_back(bucket);
+                bucketHasData = true;
             }
         }
-    } else {
+        if (!bucketHasData) {
+            skipCurrentBucket(eventTimeNs, BucketDropReason::NO_DATA);
+        }
+    }
+
+    if (mCurrentBucketIsSkipped) {
         mCurrentSkippedBucket.bucketStartTimeNs = mCurrentBucketStartTimeNs;
         mCurrentSkippedBucket.bucketEndTimeNs = bucketEndTime;
         mSkippedBuckets.emplace_back(mCurrentSkippedBucket);
     }
 
-    appendToFullBucket(eventTimeNs, fullBucketEndTimeNs);
+    // This means that the current bucket was not flushed before a forced bucket split.
+    // This can happen if an app update or a dump report with include_current_partial_bucket is
+    // requested before we get a chance to flush the bucket due to receiving new data, either from
+    // the statsd socket or the StatsPullerManager.
+    if (bucketEndTime < nextBucketStartTimeNs) {
+        SkippedBucket bucketInGap;
+        bucketInGap.bucketStartTimeNs = bucketEndTime;
+        bucketInGap.bucketEndTimeNs = nextBucketStartTimeNs;
+        bucketInGap.dropEvents.emplace_back(
+                buildDropEvent(eventTimeNs, BucketDropReason::NO_DATA));
+        mSkippedBuckets.emplace_back(bucketInGap);
+    }
+
+    appendToFullBucket(eventTimeNs > fullBucketEndTimeNs);
     initCurrentSlicedBucket(nextBucketStartTimeNs);
     // Update the condition timer again, in case we skipped buckets.
     mConditionTimer.newBucketStart(nextBucketStartTimeNs);
@@ -1033,25 +1063,24 @@ void ValueMetricProducer::initCurrentSlicedBucket(int64_t nextBucketStartTimeNs)
         } else {
             it++;
         }
-        // TODO: remove mCurrentBaseInfo entries when obsolete
+        // TODO(b/157655103): remove mCurrentBaseInfo entries when obsolete
     }
 
-    mCurrentBucketIsInvalid = false;
+    mCurrentBucketIsSkipped = false;
     mCurrentSkippedBucket.reset();
 
     // If we do not have a global base when the condition is true,
     // we will have incomplete bucket for the next bucket.
     if (mUseDiff && !mHasGlobalBase && mCondition) {
-        mCurrentBucketIsInvalid = false;
+        mCurrentBucketIsSkipped = false;
     }
     mCurrentBucketStartTimeNs = nextBucketStartTimeNs;
     VLOG("metric %lld: new bucket start time: %lld", (long long)mMetricId,
          (long long)mCurrentBucketStartTimeNs);
 }
 
-void ValueMetricProducer::appendToFullBucket(int64_t eventTimeNs, int64_t fullBucketEndTimeNs) {
-    bool isFullBucketReached = eventTimeNs > fullBucketEndTimeNs;
-    if (mCurrentBucketIsInvalid) {
+void ValueMetricProducer::appendToFullBucket(const bool isFullBucketReached) {
+    if (mCurrentBucketIsSkipped) {
         if (isFullBucketReached) {
             // If the bucket is invalid, we ignore the full bucket since it contains invalid data.
             mCurrentFullBucket.clear();

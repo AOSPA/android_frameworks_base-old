@@ -142,8 +142,14 @@ private:
 
     // Mark the data as invalid.
     void invalidateCurrentBucket(const int64_t dropTimeNs, const BucketDropReason reason);
+
     void invalidateCurrentBucketWithoutResetBase(const int64_t dropTimeNs,
                                                  const BucketDropReason reason);
+
+    // Skips the current bucket without notifying StatsdStats of the skipped bucket.
+    // This should only be called from #flushCurrentBucketLocked. Otherwise, a future event that
+    // causes the bucket to be invalidated will not notify StatsdStats.
+    void skipCurrentBucket(const int64_t dropTimeNs, const BucketDropReason reason);
 
     const int mWhatMatcherIndex;
 
@@ -205,6 +211,7 @@ private:
 
     // Util function to check whether the specified dimension hits the guardrail.
     bool hitGuardRailLocked(const MetricDimensionKey& newKey);
+
     bool hasReachedGuardRailLimit() const;
 
     bool hitFullBucketGuardRailLocked(const MetricDimensionKey& newKey);
@@ -216,8 +223,10 @@ private:
 
     ValueBucket buildPartialBucket(int64_t bucketEndTime,
                                    const std::vector<Interval>& intervals);
+
     void initCurrentSlicedBucket(int64_t nextBucketStartTimeNs);
-    void appendToFullBucket(int64_t eventTimeNs, int64_t fullBucketEndTimeNs);
+
+    void appendToFullBucket(const bool isFullBucketReached);
 
     // Reset diff base and mHasGlobalBase
     void resetBase();
@@ -250,11 +259,9 @@ private:
     // diff against.
     bool mHasGlobalBase;
 
-    // Invalid bucket. There was a problem in collecting data in the current bucket so we cannot
-    // trust any of the data in this bucket.
-    //
-    // For instance, one pull failed.
-    bool mCurrentBucketIsInvalid;
+    // This is to track whether or not the bucket is skipped for any of the reasons listed in
+    // BucketDropReason, many of which make the bucket potentially invalid.
+    bool mCurrentBucketIsSkipped;
 
     const int64_t mMaxPullDelayNs;
 

@@ -56,7 +56,7 @@ import java.util.concurrent.Executors;
 public class InfoMediaManager extends MediaManager {
 
     private static final String TAG = "InfoMediaManager";
-    private static final boolean DEBUG = false;
+    private static final boolean DEBUG = Log.isLoggable(TAG, Log.DEBUG);;
     @VisibleForTesting
     final RouterManagerCallback mMediaRouterCallback = new RouterManagerCallback();
     @VisibleForTesting
@@ -219,6 +219,33 @@ public class InfoMediaManager extends MediaManager {
     }
 
     /**
+     * Get the MediaDevice list that can be removed from current media session.
+     *
+     * @return list of MediaDevice
+     */
+    List<MediaDevice> getDeselectableMediaDevice() {
+        final List<MediaDevice> deviceList = new ArrayList<>();
+        if (TextUtils.isEmpty(mPackageName)) {
+            Log.d(TAG, "getDeselectableMediaDevice() package name is null or empty!");
+            return deviceList;
+        }
+
+        final RoutingSessionInfo info = getRoutingSessionInfo();
+        if (info != null) {
+            for (MediaRoute2Info route : mRouterManager.getDeselectableRoutes(info)) {
+                deviceList.add(new InfoMediaDevice(mContext, mRouterManager,
+                        route, mPackageName));
+                Log.d(TAG, route.getName() + " is deselectable for " + mPackageName);
+            }
+            return deviceList;
+        }
+        Log.d(TAG, "getDeselectableMediaDevice() cannot found deselectable MediaDevice from : "
+                + mPackageName);
+
+        return deviceList;
+    }
+
+    /**
      * Get the MediaDevice list that has been selected to current media.
      *
      * @return list of MediaDevice
@@ -364,8 +391,8 @@ public class InfoMediaManager extends MediaManager {
     private void buildAvailableRoutes() {
         for (MediaRoute2Info route : mRouterManager.getAvailableRoutes(mPackageName)) {
             if (DEBUG) {
-                Log.d(TAG, "buildAvailableRoutes() route : " + route.getName()
-                        + ", type : " + route.getType());
+                Log.d(TAG, "buildAvailableRoutes() route : " + route.getName() + ", volume : "
+                        + route.getVolume() + ", type : " + route.getType());
             }
             addMediaDevice(route);
         }
