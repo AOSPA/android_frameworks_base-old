@@ -25,8 +25,6 @@ import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.PixelFormat;
 import android.graphics.Point;
-import android.hardware.biometrics.BiometricSourceType;
-import android.hardware.display.DisplayManager;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.RemoteException;
@@ -39,13 +37,14 @@ import android.view.View;
 import android.view.WindowManager;
 import android.widget.ImageView;
 
+import com.android.internal.widget.LockPatternUtils;
+import com.android.keyguard.KeyguardSecurityModel.SecurityMode;
 import com.android.keyguard.KeyguardUpdateMonitor;
 import com.android.keyguard.KeyguardUpdateMonitorCallback;
-import com.android.keyguard.KeyguardSecurityModel.SecurityMode;
-import com.android.internal.widget.LockPatternUtils;
 import com.android.systemui.R;
 
 import vendor.pa.biometrics.fingerprint.inscreen.V1_0.IFingerprintInscreen;
+import vendor.pa.biometrics.fingerprint.inscreen.V1_0.IFingerprintInscreenCallback;
 
 import java.util.NoSuchElementException;
 import java.util.Timer;
@@ -63,18 +62,18 @@ public class FODCircleView extends ImageView {
     private final WindowManager.LayoutParams mParams = new WindowManager.LayoutParams();
     private final WindowManager.LayoutParams mPressedParams = new WindowManager.LayoutParams();
     private final WindowManager mWindowManager;
-    private final DisplayManager mDisplayManager;
 
     private IFingerprintInscreen mFingerprintInscreenDaemon;
 
     private int mDreamingOffsetX;
     private int mDreamingOffsetY;
 
+    private int mColor;
+    private int mColorBackground;
+
     private boolean mIsBouncer;
     private boolean mIsDreaming;
     private boolean mIsCircleShowing;
-
-    private int mCurBrightness = -1;
 
     private Handler mHandler;
 
@@ -83,6 +82,19 @@ public class FODCircleView extends ImageView {
     private LockPatternUtils mLockPatternUtils;
 
     private Timer mBurnInProtectionTimer;
+
+    private IFingerprintInscreenCallback mFingerprintInscreenCallback =
+            new IFingerprintInscreenCallback.Stub() {
+        @Override
+        public void onFingerDown() {
+            mHandler.post(() -> showCircle());
+        }
+
+        @Override
+        public void onFingerUp() {
+            mHandler.post(() -> hideCircle());
+        }
+    };
 
     private KeyguardUpdateMonitor mUpdateMonitor;
 
@@ -115,19 +127,6 @@ public class FODCircleView extends ImageView {
         }
 
         @Override
-        public void onBiometricRunningStateChanged(boolean running,
-                BiometricSourceType biometricSourceType) {
-            super.onBiometricRunningStateChanged(running, biometricSourceType);
-            if (biometricSourceType == BiometricSourceType.FINGERPRINT){
-                if (running) {
-                    show();
-                } else {
-                    hide();
-                }
-            }
-        }
-
-        @Override
         public void onScreenTurnedOff() {
             hide();
         }
@@ -142,6 +141,8 @@ public class FODCircleView extends ImageView {
 
     public FODCircleView(Context context) {
         super(context);
+
+        setScaleType(ScaleType.CENTER);
 
         IFingerprintInscreen daemon = getFingerprintInScreenDaemon();
         if (daemon == null) {
@@ -159,12 +160,15 @@ public class FODCircleView extends ImageView {
 
         Resources res = context.getResources();
 
-        mPaintFingerprint.setColor(res.getColor(R.color.config_fodColor));
+        mColor = res.getColor(R.color.config_fodColor);
+        mPaintFingerprint.setColor(mColor);
         mPaintFingerprint.setAntiAlias(true);
 
-        mDisplayManager = context.getSystemService(DisplayManager.class);
+        mColorBackground = res.getColor(R.color.config_fodColorBackground);
+        mPaintFingerprintBackground.setColor(mColorBackground);
+        mPaintFingerprintBackground.setAntiAlias(true);
+
         mWindowManager = context.getSystemService(WindowManager.class);
-        mLockPatternUtils = new LockPatternUtils(context);
 
         mNavigationBarSize = res.getDimensionPixelSize(R.dimen.navigation_bar_size);
 
@@ -203,9 +207,10 @@ public class FODCircleView extends ImageView {
         updatePosition();
         hide();
 
+        mLockPatternUtils = new LockPatternUtils(mContext);
+
         mUpdateMonitor = KeyguardUpdateMonitor.getInstance(context);
         mUpdateMonitor.registerCallback(mMonitorCallback);
-
     }
 
     @Override
@@ -246,6 +251,7 @@ public class FODCircleView extends ImageView {
             try {
                 mFingerprintInscreenDaemon = IFingerprintInscreen.getService();
                 if (mFingerprintInscreenDaemon != null) {
+                    mFingerprintInscreenDaemon.setCallback(mFingerprintInscreenCallback);
                     mFingerprintInscreenDaemon.asBinder().linkToDeath((cookie) -> {
                         mFingerprintInscreenDaemon = null;
                     }, 0);
@@ -323,8 +329,8 @@ public class FODCircleView extends ImageView {
             return;
         }
 
-        if (mIsBouncer) {
-            // Ignore show calls when Keyguard pin screen is being shown
+        if (mIsBouncer && !isPinOrPattern(mUpdateMonitor.getCurrentUser())) {
+            // Ignore show calls when Keyguard password screen is being shown
             return;
         }
 
@@ -389,14 +395,14 @@ public class FODCircleView extends ImageView {
     }
 
     private void setDim(boolean dim) {
-        mCurBrightness = Settings.System.getInt(getContext().getContentResolver(),
-                Settings.System.SCREEN_BRIGHTNESS, 100);
         if (dim) {
+            int curBrightness = Settings.System.getInt(getContext().getContentResolver(),
+                    Settings.System.SCREEN_BRIGHTNESS, 100);
             int dimAmount = 0;
 
             IFingerprintInscreen daemon = getFingerprintInScreenDaemon();
             try {
-                dimAmount = daemon.getDimAmount(mCurBrightness);
+                dimAmount = daemon.getDimAmount(curBrightness);
             } catch (RemoteException e) {
                 // do nothing
             }
