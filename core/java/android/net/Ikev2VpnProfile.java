@@ -25,6 +25,8 @@ import static com.android.internal.util.Preconditions.checkStringNotEmpty;
 
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.annotation.RequiresFeature;
+import android.content.pm.PackageManager;
 import android.os.Process;
 import android.security.Credentials;
 import android.security.KeyStore;
@@ -101,6 +103,7 @@ public final class Ikev2VpnProfile extends PlatformVpnProfile {
     private final boolean mIsBypassable; // Defaults in builder
     private final boolean mIsMetered; // Defaults in builder
     private final int mMaxMtu; // Defaults in builder
+    private final boolean mIsRestrictedToTestNetworks;
 
     private Ikev2VpnProfile(
             int type,
@@ -116,7 +119,8 @@ public final class Ikev2VpnProfile extends PlatformVpnProfile {
             @NonNull List<String> allowedAlgorithms,
             boolean isBypassable,
             boolean isMetered,
-            int maxMtu) {
+            int maxMtu,
+            boolean restrictToTestNetworks) {
         super(type);
 
         checkNotNull(serverAddr, MISSING_PARAM_MSG_TMPL, "Server address");
@@ -140,6 +144,7 @@ public final class Ikev2VpnProfile extends PlatformVpnProfile {
         mIsBypassable = isBypassable;
         mIsMetered = isMetered;
         mMaxMtu = maxMtu;
+        mIsRestrictedToTestNetworks = restrictToTestNetworks;
 
         validate();
     }
@@ -329,6 +334,15 @@ public final class Ikev2VpnProfile extends PlatformVpnProfile {
         return mMaxMtu;
     }
 
+    /**
+     * Returns whether or not this VPN profile is restricted to test networks.
+     *
+     * @hide
+     */
+    public boolean isRestrictedToTestNetworks() {
+        return mIsRestrictedToTestNetworks;
+    }
+
     @Override
     public int hashCode() {
         return Objects.hash(
@@ -345,7 +359,8 @@ public final class Ikev2VpnProfile extends PlatformVpnProfile {
                 mAllowedAlgorithms,
                 mIsBypassable,
                 mIsMetered,
-                mMaxMtu);
+                mMaxMtu,
+                mIsRestrictedToTestNetworks);
     }
 
     @Override
@@ -368,7 +383,8 @@ public final class Ikev2VpnProfile extends PlatformVpnProfile {
                 && Objects.equals(mAllowedAlgorithms, other.mAllowedAlgorithms)
                 && mIsBypassable == other.mIsBypassable
                 && mIsMetered == other.mIsMetered
-                && mMaxMtu == other.mMaxMtu;
+                && mMaxMtu == other.mMaxMtu
+                && mIsRestrictedToTestNetworks == other.mIsRestrictedToTestNetworks;
     }
 
     /**
@@ -381,7 +397,8 @@ public final class Ikev2VpnProfile extends PlatformVpnProfile {
      */
     @NonNull
     public VpnProfile toVpnProfile() throws IOException, GeneralSecurityException {
-        final VpnProfile profile = new VpnProfile("" /* Key; value unused by IKEv2VpnProfile(s) */);
+        final VpnProfile profile = new VpnProfile("" /* Key; value unused by IKEv2VpnProfile(s) */,
+                mIsRestrictedToTestNetworks);
         profile.type = mType;
         profile.server = mServerAddr;
         profile.ipsecIdentifier = mUserIdentity;
@@ -449,6 +466,9 @@ public final class Ikev2VpnProfile extends PlatformVpnProfile {
         builder.setBypassable(profile.isBypassable);
         builder.setMetered(profile.isMetered);
         builder.setMaxMtu(profile.maxMtu);
+        if (profile.isRestrictedToTestNetworks) {
+            builder.restrictToTestNetworks();
+        }
 
         switch (profile.type) {
             case TYPE_IKEV2_IPSEC_USER_PASS:
@@ -621,6 +641,7 @@ public final class Ikev2VpnProfile extends PlatformVpnProfile {
         private boolean mIsBypassable = false;
         private boolean mIsMetered = true;
         private int mMaxMtu = PlatformVpnProfile.MAX_MTU_DEFAULT;
+        private boolean mIsRestrictedToTestNetworks = false;
 
         /**
          * Creates a new builder with the basic parameters of an IKEv2/IPsec VPN.
@@ -628,6 +649,7 @@ public final class Ikev2VpnProfile extends PlatformVpnProfile {
          * @param serverAddr the server that the VPN should connect to
          * @param identity the identity string to be used for IKEv2 authentication
          */
+        @RequiresFeature(PackageManager.FEATURE_IPSEC_TUNNELS)
         public Builder(@NonNull String serverAddr, @NonNull String identity) {
             checkNotNull(serverAddr, MISSING_PARAM_MSG_TMPL, "serverAddr");
             checkNotNull(identity, MISSING_PARAM_MSG_TMPL, "identity");
@@ -661,6 +683,7 @@ public final class Ikev2VpnProfile extends PlatformVpnProfile {
          *     unrecognized format
          */
         @NonNull
+        @RequiresFeature(PackageManager.FEATURE_IPSEC_TUNNELS)
         public Builder setAuthUsernamePassword(
                 @NonNull String user,
                 @NonNull String pass,
@@ -696,6 +719,7 @@ public final class Ikev2VpnProfile extends PlatformVpnProfile {
          *     unrecognized format
          */
         @NonNull
+        @RequiresFeature(PackageManager.FEATURE_IPSEC_TUNNELS)
         public Builder setAuthDigitalSignature(
                 @NonNull X509Certificate userCert,
                 @NonNull PrivateKey key,
@@ -726,6 +750,7 @@ public final class Ikev2VpnProfile extends PlatformVpnProfile {
          * @return this {@link Builder} object to facilitate chaining of method calls
          */
         @NonNull
+        @RequiresFeature(PackageManager.FEATURE_IPSEC_TUNNELS)
         public Builder setAuthPsk(@NonNull byte[] psk) {
             checkNotNull(psk, MISSING_PARAM_MSG_TMPL, "psk");
 
@@ -749,6 +774,7 @@ public final class Ikev2VpnProfile extends PlatformVpnProfile {
          * @return this {@link Builder} object to facilitate chaining of method calls
          */
         @NonNull
+        @RequiresFeature(PackageManager.FEATURE_IPSEC_TUNNELS)
         public Builder setBypassable(boolean isBypassable) {
             mIsBypassable = isBypassable;
             return this;
@@ -763,6 +789,7 @@ public final class Ikev2VpnProfile extends PlatformVpnProfile {
          * @return this {@link Builder} object to facilitate chaining of method calls
          */
         @NonNull
+        @RequiresFeature(PackageManager.FEATURE_IPSEC_TUNNELS)
         public Builder setProxy(@Nullable ProxyInfo proxy) {
             mProxyInfo = proxy;
             return this;
@@ -779,6 +806,7 @@ public final class Ikev2VpnProfile extends PlatformVpnProfile {
          * @throws IllegalArgumentException if the value is not at least the minimum IPv6 MTU (1280)
          */
         @NonNull
+        @RequiresFeature(PackageManager.FEATURE_IPSEC_TUNNELS)
         public Builder setMaxMtu(int mtu) {
             // IPv6 MTU is greater; since profiles may be started by the system on IPv4 and IPv6
             // networks, the VPN must provide a link fulfilling the stricter of the two conditions
@@ -806,6 +834,7 @@ public final class Ikev2VpnProfile extends PlatformVpnProfile {
          * @see NetworkCapabilities#NET_CAPABILITY_NOT_METERED
          */
         @NonNull
+        @RequiresFeature(PackageManager.FEATURE_IPSEC_TUNNELS)
         public Builder setMetered(boolean isMetered) {
             mIsMetered = isMetered;
             return this;
@@ -833,6 +862,7 @@ public final class Ikev2VpnProfile extends PlatformVpnProfile {
          * @see IpSecAlgorithm
          */
         @NonNull
+        @RequiresFeature(PackageManager.FEATURE_IPSEC_TUNNELS)
         public Builder setAllowedAlgorithms(@NonNull List<String> algorithmNames) {
             checkNotNull(algorithmNames, MISSING_PARAM_MSG_TMPL, "algorithmNames");
             validateAllowedAlgorithms(algorithmNames);
@@ -842,11 +872,28 @@ public final class Ikev2VpnProfile extends PlatformVpnProfile {
         }
 
         /**
+         * Restricts this profile to use test networks (only).
+         *
+         * <p>This method is for testing only, and must not be used by apps. Calling
+         * provisionVpnProfile() with a profile where test-network usage is enabled will require the
+         * MANAGE_TEST_NETWORKS permission.
+         *
+         * @hide
+         */
+        @NonNull
+        @RequiresFeature(PackageManager.FEATURE_IPSEC_TUNNELS)
+        public Builder restrictToTestNetworks() {
+            mIsRestrictedToTestNetworks = true;
+            return this;
+        }
+
+        /**
          * Validates, builds and provisions the VpnProfile.
          *
          * @throws IllegalArgumentException if any of the required keys or values were invalid
          */
         @NonNull
+        @RequiresFeature(PackageManager.FEATURE_IPSEC_TUNNELS)
         public Ikev2VpnProfile build() {
             return new Ikev2VpnProfile(
                     mType,
@@ -862,7 +909,8 @@ public final class Ikev2VpnProfile extends PlatformVpnProfile {
                     mAllowedAlgorithms,
                     mIsBypassable,
                     mIsMetered,
-                    mMaxMtu);
+                    mMaxMtu,
+                    mIsRestrictedToTestNetworks);
         }
     }
 }

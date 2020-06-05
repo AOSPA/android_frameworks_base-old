@@ -82,7 +82,9 @@ enum BucketDropReason {
     DIMENSION_GUARDRAIL_REACHED = 6,
     MULTIPLE_BUCKETS_SKIPPED = 7,
     // Not an invalid bucket case, but the bucket is dropped.
-    BUCKET_TOO_SMALL = 8
+    BUCKET_TOO_SMALL = 8,
+    // Not an invalid bucket case, but the bucket is skipped.
+    NO_DATA = 9
 };
 
 struct Activation {
@@ -383,6 +385,10 @@ protected:
     // value with the group id mapped to the value.
     // If no state map exists, keep the original state value.
     void mapStateValue(const int32_t atomId, FieldValue* value);
+
+    // Returns a HashableDimensionKey with unknown state value for each state
+    // atom.
+    HashableDimensionKey getUnknownStateKey();
 
     DropEvent buildDropEvent(const int64_t dropTimeNs, const BucketDropReason reason);
 

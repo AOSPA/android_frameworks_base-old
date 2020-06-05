@@ -307,6 +307,7 @@ import com.android.server.am.PendingIntentRecord;
 import com.android.server.display.color.ColorDisplayService;
 import com.android.server.policy.WindowManagerPolicy;
 import com.android.server.protolog.common.ProtoLog;
+import com.android.server.uri.NeededUriGrants;
 import com.android.server.uri.UriPermissionOwner;
 import com.android.server.wm.ActivityMetricsLogger.TransitionInfoSnapshot;
 import com.android.server.wm.ActivityStack.ActivityState;
@@ -2444,7 +2445,8 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
      * Sets the result for activity that started this one, clears the references to activities
      * started for result from this one, and clears new intents.
      */
-    private void finishActivityResults(int resultCode, Intent resultData) {
+    private void finishActivityResults(int resultCode, Intent resultData,
+            NeededUriGrants resultGrants) {
         // Send the result if needed
         if (resultTo != null) {
             if (DEBUG_RESULTS) {
@@ -2458,9 +2460,8 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
                 }
             }
             if (info.applicationInfo.uid > 0) {
-                mAtmService.mUgmInternal.grantUriPermissionFromIntent(info.applicationInfo.uid,
-                        resultTo.packageName, resultData,
-                        resultTo.getUriPermissionsLocked(), resultTo.mUserId);
+                mAtmService.mUgmInternal.grantUriPermissionUncheckedFromIntent(resultGrants,
+                        resultTo.getUriPermissionsLocked());
             }
             resultTo.addResultLocked(this, resultWho, requestCode, resultCode, resultData);
             resultTo = null;
@@ -2496,7 +2497,8 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
      * See {@link #finishIfPossible(int, Intent, String, boolean)}
      */
     @FinishRequest int finishIfPossible(String reason, boolean oomAdj) {
-        return finishIfPossible(Activity.RESULT_CANCELED, null /* resultData */, reason, oomAdj);
+        return finishIfPossible(Activity.RESULT_CANCELED,
+                null /* resultData */, null /* resultGrants */, reason, oomAdj);
     }
 
     /**
@@ -2510,8 +2512,8 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
      * {@link #FINISH_RESULT_CANCELLED} if activity is already finishing or in invalid state and the
      * request to finish it was not ignored.
      */
-    @FinishRequest int finishIfPossible(int resultCode, Intent resultData, String reason,
-            boolean oomAdj) {
+    @FinishRequest int finishIfPossible(int resultCode, Intent resultData,
+            NeededUriGrants resultGrants, String reason, boolean oomAdj) {
         if (DEBUG_RESULTS || DEBUG_STATES) {
             Slog.v(TAG_STATES, "Finishing activity r=" + this + ", result=" + resultCode
                     + ", data=" + resultData + ", reason=" + reason);
@@ -2563,7 +2565,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
                         shouldAdjustGlobalFocus);
             }
 
-            finishActivityResults(resultCode, resultData);
+            finishActivityResults(resultCode, resultData, resultGrants);
 
             final boolean endTask = task.getActivityBelow(this) == null
                     && !task.isClearingToReuseTask();
@@ -2921,7 +2923,8 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
 
     /** Note: call {@link #cleanUp(boolean, boolean)} before this method. */
     void removeFromHistory(String reason) {
-        finishActivityResults(Activity.RESULT_CANCELED, null /* resultData */);
+        finishActivityResults(Activity.RESULT_CANCELED,
+                null /* resultData */, null /* resultGrants */);
         makeFinishingLocked();
         if (ActivityTaskManagerDebugConfig.DEBUG_ADD_REMOVE) {
             Slog.i(TAG_ADD_REMOVE, "Removing activity " + this + " from stack callers="
@@ -3375,8 +3378,6 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
                 ProtoLog.v(WM_DEBUG_ADD_REMOVE,
                         "Removing starting %s from %s", tStartingWindow, fromActivity);
                 fromActivity.removeChild(tStartingWindow);
-                fromActivity.postWindowRemoveStartingWindowCleanup(tStartingWindow);
-                fromActivity.mVisibleSetFromTransferredStartingWindow = false;
                 addWindow(tStartingWindow);
 
                 // Propagate other interesting state between the tokens. If the old token is displayed,
@@ -3403,6 +3404,9 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
                     // we've transferred the animation.
                     mUseTransferredAnimation = true;
                 }
+                // Post cleanup after the visibility and animation are transferred.
+                fromActivity.postWindowRemoveStartingWindowCleanup(tStartingWindow);
+                fromActivity.mVisibleSetFromTransferredStartingWindow = false;
 
                 mWmService.updateFocusedWindowLocked(
                         UPDATE_FOCUS_WILL_PLACE_SURFACES, true /*updateInputWindows*/);
@@ -3670,10 +3674,10 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
     }
 
     void sendResult(int callingUid, String resultWho, int requestCode, int resultCode,
-            Intent data) {
+            Intent data, NeededUriGrants dataGrants) {
         if (callingUid > 0) {
-            mAtmService.mUgmInternal.grantUriPermissionFromIntent(callingUid, packageName,
-                    data, getUriPermissionsLocked(), mUserId);
+            mAtmService.mUgmInternal.grantUriPermissionUncheckedFromIntent(dataGrants,
+                    getUriPermissionsLocked());
         }
 
         if (DEBUG_RESULTS) {
@@ -3712,10 +3716,11 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
      * Deliver a new Intent to an existing activity, so that its onNewIntent()
      * method will be called at the proper time.
      */
-    final void deliverNewIntentLocked(int callingUid, Intent intent, String referrer) {
+    final void deliverNewIntentLocked(int callingUid, Intent intent, NeededUriGrants intentGrants,
+            String referrer) {
         // The activity now gets access to the data associated with this Intent.
-        mAtmService.mUgmInternal.grantUriPermissionFromIntent(callingUid, packageName,
-                intent, getUriPermissionsLocked(), mUserId);
+        mAtmService.mUgmInternal.grantUriPermissionUncheckedFromIntent(intentGrants,
+                getUriPermissionsLocked());
         final ReferrerIntent rintent = new ReferrerIntent(intent, referrer);
         boolean unsent = true;
         final boolean isTopActivityWhileSleeping = isTopRunningActivity() && isSleeping();
@@ -6011,9 +6016,9 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
 
         if (mSurfaceControl != null) {
             if (show && !mLastSurfaceShowing) {
-                getPendingTransaction().show(mSurfaceControl);
+                getSyncTransaction().show(mSurfaceControl);
             } else if (!show && mLastSurfaceShowing) {
-                getPendingTransaction().hide(mSurfaceControl);
+                getSyncTransaction().hide(mSurfaceControl);
             }
         }
         if (mThumbnail != null) {
@@ -6562,14 +6567,14 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         final Configuration resolvedConfig = getResolvedOverrideConfiguration();
         final Rect resolvedBounds = resolvedConfig.windowConfiguration.getBounds();
         final int requestedOrientation = getRequestedConfigurationOrientation();
-        final boolean orientationRequested = requestedOrientation != ORIENTATION_UNDEFINED;
+        final boolean orientationRequested = requestedOrientation != ORIENTATION_UNDEFINED
+                && !mDisplayContent.ignoreRotationForApps();
         final int orientation = orientationRequested
                 ? requestedOrientation
                 : newParentConfiguration.orientation;
         int rotation = newParentConfiguration.windowConfiguration.getRotation();
         final boolean canChangeOrientation = handlesOrientationChangeFromDescendant();
-        if (canChangeOrientation && mCompatDisplayInsets.mIsRotatable
-                && !mCompatDisplayInsets.mIsFloating) {
+        if (canChangeOrientation && !mCompatDisplayInsets.mIsFloating) {
             // Use parent rotation because the original display can rotate by requested orientation.
             resolvedConfig.windowConfiguration.setRotation(rotation);
         } else {
@@ -7655,7 +7660,6 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         private final int mWidth;
         private final int mHeight;
         final boolean mIsFloating;
-        final boolean mIsRotatable;
 
         /**
          * The nonDecorInsets for each rotation. Includes the navigation bar and cutout insets. It
@@ -7672,7 +7676,6 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         /** Constructs the environment to simulate the bounds behavior of the given container. */
         CompatDisplayInsets(DisplayContent display, WindowContainer container) {
             mIsFloating = container.getWindowConfiguration().tasksAreFloating();
-            mIsRotatable = !mIsFloating && !display.ignoreRotationForApps();
             if (mIsFloating) {
                 final Rect containerBounds = container.getWindowConfiguration().getBounds();
                 mWidth = containerBounds.width();
@@ -7729,7 +7732,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
                 return;
             }
 
-            if (mIsRotatable && canChangeOrientation) {
+            if (canChangeOrientation) {
                 getBoundsByRotation(outBounds, rotation);
                 if (orientationRequested) {
                     getFrameByOrientation(outAppBounds, orientation);

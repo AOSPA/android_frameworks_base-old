@@ -21,7 +21,6 @@ import static com.android.systemui.bubbles.BubbleDebugConfig.TAG_BUBBLES;
 import static com.android.systemui.bubbles.BubbleDebugConfig.TAG_WITH_CLASS_NAME;
 
 import android.app.Activity;
-import android.app.Notification;
 import android.content.Context;
 import android.content.res.Configuration;
 import android.content.res.Resources;
@@ -70,6 +69,9 @@ public class BubbleOverflowActivity extends Activity {
         }
         @Override
         public boolean canScrollVertically() {
+            if (mBubbleController.inLandscape()) {
+                return super.canScrollVertically();
+            }
             return false;
         }
     }
@@ -89,6 +91,14 @@ public class BubbleOverflowActivity extends Activity {
         mRecyclerView = findViewById(R.id.bubble_overflow_recycler);
         mEmptyStateImage = findViewById(R.id.bubble_overflow_empty_state_image);
 
+        updateDimensions();
+        onDataChanged(mBubbleController.getOverflowBubbles());
+        mBubbleController.setOverflowCallback(() -> {
+            onDataChanged(mBubbleController.getOverflowBubbles());
+        });
+    }
+
+    void updateDimensions() {
         Resources res = getResources();
         final int columns = res.getInteger(R.integer.bubbles_overflow_columns);
         mRecyclerView.setLayoutManager(
@@ -96,8 +106,9 @@ public class BubbleOverflowActivity extends Activity {
 
         DisplayMetrics displayMetrics = new DisplayMetrics();
         getWindowManager().getDefaultDisplay().getMetrics(displayMetrics);
-        final int recyclerViewWidth = (displayMetrics.widthPixels
-                - res.getDimensionPixelSize(R.dimen.bubble_overflow_padding));
+
+        final int overflowPadding = res.getDimensionPixelSize(R.dimen.bubble_overflow_padding);
+        final int recyclerViewWidth = displayMetrics.widthPixels - (overflowPadding * 2);
         final int viewWidth = recyclerViewWidth / columns;
 
         final int maxOverflowBubbles = res.getInteger(R.integer.bubbles_max_overflow);
@@ -109,17 +120,12 @@ public class BubbleOverflowActivity extends Activity {
         mAdapter = new BubbleOverflowAdapter(getApplicationContext(), mOverflowBubbles,
                 mBubbleController::promoteBubbleFromOverflow, viewWidth, viewHeight);
         mRecyclerView.setAdapter(mAdapter);
-        onDataChanged(mBubbleController.getOverflowBubbles());
-        mBubbleController.setOverflowCallback(() -> {
-            onDataChanged(mBubbleController.getOverflowBubbles());
-        });
-        onThemeChanged();
     }
 
     /**
      * Handle theme changes.
      */
-    void onThemeChanged() {
+    void updateTheme() {
         final int mode =
                 getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK;
         switch (mode) {
@@ -178,7 +184,8 @@ public class BubbleOverflowActivity extends Activity {
     @Override
     public void onResume() {
         super.onResume();
-        onThemeChanged();
+        updateDimensions();
+        updateTheme();
     }
 
     @Override
@@ -252,12 +259,9 @@ class BubbleOverflowAdapter extends RecyclerView.Adapter<BubbleOverflowAdapter.V
             mPromoteBubbleFromOverflow.accept(b);
         });
 
-        final CharSequence titleCharSeq =
-                b.getEntry().getSbn().getNotification().extras.getCharSequence(
-                        Notification.EXTRA_TITLE);
-        String titleStr = mContext.getResources().getString(R.string.notification_bubble_title);
-        if (titleCharSeq != null) {
-            titleStr = titleCharSeq.toString();
+        String titleStr = b.getTitle();
+        if (titleStr == null) {
+            titleStr = mContext.getResources().getString(R.string.notification_bubble_title);
         }
         vh.iconView.setContentDescription(mContext.getResources().getString(
                 R.string.bubble_content_description_single, titleStr, b.getAppName()));
@@ -280,7 +284,7 @@ class BubbleOverflowAdapter extends RecyclerView.Adapter<BubbleOverflowAdapter.V
 
         Bubble.FlyoutMessage message = b.getFlyoutMessage();
         if (message != null && message.senderName != null) {
-            vh.textView.setText(message.senderName);
+            vh.textView.setText(message.senderName.toString());
         } else {
             vh.textView.setText(b.getAppName());
         }

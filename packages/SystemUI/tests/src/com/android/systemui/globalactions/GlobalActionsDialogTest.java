@@ -59,12 +59,14 @@ import com.android.systemui.SysuiTestCase;
 import com.android.systemui.broadcast.BroadcastDispatcher;
 import com.android.systemui.colorextraction.SysuiColorExtractor;
 import com.android.systemui.controls.controller.ControlsController;
+import com.android.systemui.controls.dagger.ControlsComponent;
 import com.android.systemui.controls.management.ControlsListingController;
 import com.android.systemui.controls.ui.ControlsUiController;
 import com.android.systemui.model.SysUiState;
 import com.android.systemui.plugins.ActivityStarter;
 import com.android.systemui.plugins.GlobalActions;
 import com.android.systemui.plugins.GlobalActionsPanelPlugin;
+import com.android.systemui.settings.CurrentUserContextTracker;
 import com.android.systemui.statusbar.NotificationShadeDepthController;
 import com.android.systemui.statusbar.phone.NotificationShadeWindowController;
 import com.android.systemui.statusbar.policy.ConfigurationController;
@@ -119,6 +121,8 @@ public class GlobalActionsDialogTest extends SysuiTestCase {
     @Mock GlobalActionsPanelPlugin mWalletPlugin;
     @Mock GlobalActionsPanelPlugin.PanelViewController mWalletController;
     @Mock private Handler mHandler;
+    @Mock private CurrentUserContextTracker mCurrentUserContextTracker;
+    private ControlsComponent mControlsComponent;
 
     private TestableLooper mTestableLooper;
 
@@ -129,6 +133,14 @@ public class GlobalActionsDialogTest extends SysuiTestCase {
         allowTestableLooperAsMainThread();
 
         when(mRingerModeTracker.getRingerMode()).thenReturn(mRingerModeLiveData);
+        when(mCurrentUserContextTracker.getCurrentUserContext()).thenReturn(mContext);
+        mControlsComponent = new ControlsComponent(
+                true,
+                () -> mControlsController,
+                () -> mControlsUiController,
+                () -> mControlsListingController
+        );
+
         mGlobalActionsDialog = new GlobalActionsDialog(mContext,
                 mWindowManagerFuncs,
                 mAudioManager,
@@ -153,15 +165,14 @@ public class GlobalActionsDialogTest extends SysuiTestCase {
                 mColorExtractor,
                 mStatusBarService,
                 mNotificationShadeWindowController,
-                mControlsUiController,
                 mWindowManager,
                 mBackgroundExecutor,
-                mControlsListingController,
-                mControlsController,
                 mUiEventLogger,
                 mRingerModeTracker,
                 mSysUiState,
-                mHandler
+                mHandler,
+                mControlsComponent,
+                mCurrentUserContextTracker
         );
         mGlobalActionsDialog.setZeroDialogPressDelayForTesting();
 

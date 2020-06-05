@@ -17,6 +17,7 @@
 package android.net.ip;
 
 import static android.net.INetd.IF_STATE_UP;
+import static android.net.RouteInfo.RTN_UNICAST;
 import static android.net.TetheringManager.TETHERING_BLUETOOTH;
 import static android.net.TetheringManager.TETHERING_NCM;
 import static android.net.TetheringManager.TETHERING_USB;
@@ -74,8 +75,10 @@ import android.net.dhcp.IDhcpServer;
 import android.net.dhcp.IDhcpServerCallbacks;
 import android.net.ip.IpNeighborMonitor.NeighborEvent;
 import android.net.ip.IpNeighborMonitor.NeighborEventConsumer;
+import android.net.ip.RouterAdvertisementDaemon.RaParams;
 import android.net.util.InterfaceParams;
 import android.net.util.InterfaceSet;
+import android.net.util.PrefixUtils;
 import android.net.util.SharedLog;
 import android.os.RemoteException;
 import android.os.test.TestLooper;
@@ -83,6 +86,8 @@ import android.text.TextUtils;
 
 import androidx.test.filters.SmallTest;
 import androidx.test.runner.AndroidJUnit4;
+
+import com.android.networkstack.tethering.PrivateAddressCoordinator;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -107,7 +112,7 @@ public class IpServerTest {
     private static final String UPSTREAM_IFACE2 = "upstream1";
     private static final int UPSTREAM_IFINDEX = 101;
     private static final int UPSTREAM_IFINDEX2 = 102;
-    private static final String BLUETOOTH_IFACE_ADDR = "192.168.42.1";
+    private static final String BLUETOOTH_IFACE_ADDR = "192.168.44.1";
     private static final int BLUETOOTH_DHCP_PREFIX_LENGTH = 24;
     private static final int DHCP_LEASE_TIME_SECS = 3600;
     private static final boolean DEFAULT_USING_BPF_OFFLOAD = true;
@@ -117,6 +122,9 @@ public class IpServerTest {
 
     private static final int MAKE_DHCPSERVER_TIMEOUT_MS = 1000;
 
+    private final LinkAddress mTestAddress = new LinkAddress("192.168.42.5/24");
+    private final IpPrefix mBluetoothPrefix = new IpPrefix("192.168.44.0/24");
+
     @Mock private INetd mNetd;
     @Mock private IpServer.Callback mCallback;
     @Mock private SharedLog mSharedLog;
@@ -124,6 +132,7 @@ public class IpServerTest {
     @Mock private RouterAdvertisementDaemon mRaDaemon;
     @Mock private IpNeighborMonitor mIpNeighborMonitor;
     @Mock private IpServer.Dependencies mDependencies;
+    @Mock private PrivateAddressCoordinator mAddressCoordinator;
 
     @Captor private ArgumentCaptor<DhcpServingParamsParcel> mDhcpParamsCaptor;
 
@@ -171,7 +180,7 @@ public class IpServerTest {
 
         mIpServer = new IpServer(
                 IFACE_NAME, mLooper.getLooper(), interfaceType, mSharedLog, mNetd,
-                mCallback, usingLegacyDhcp, usingBpfOffload, mDependencies);
+                mCallback, usingLegacyDhcp, usingBpfOffload, mAddressCoordinator, mDependencies);
         mIpServer.start();
         mNeighborEventConsumer = neighborCaptor.getValue();
 
@@ -196,14 +205,16 @@ public class IpServerTest {
         if (upstreamIface != null) {
             LinkProperties lp = new LinkProperties();
             lp.setInterfaceName(upstreamIface);
-            dispatchTetherConnectionChanged(upstreamIface, lp);
+            dispatchTetherConnectionChanged(upstreamIface, lp, 0);
         }
-        reset(mNetd, mCallback);
+        reset(mNetd, mCallback, mAddressCoordinator);
+        when(mAddressCoordinator.requestDownstreamAddress(any())).thenReturn(mTestAddress);
     }
 
     @Before public void setUp() throws Exception {
         MockitoAnnotations.initMocks(this);
         when(mSharedLog.forSubComponent(anyString())).thenReturn(mSharedLog);
+        when(mAddressCoordinator.requestDownstreamAddress(any())).thenReturn(mTestAddress);
     }
 
     @Test
@@ -212,7 +223,7 @@ public class IpServerTest {
                 .thenReturn(mIpNeighborMonitor);
         mIpServer = new IpServer(IFACE_NAME, mLooper.getLooper(), TETHERING_BLUETOOTH, mSharedLog,
                 mNetd, mCallback, false /* usingLegacyDhcp */, DEFAULT_USING_BPF_OFFLOAD,
-                mDependencies);
+                mAddressCoordinator, mDependencies);
         mIpServer.start();
         mLooper.dispatchAll();
         verify(mCallback).updateInterfaceState(
@@ -275,16 +286,17 @@ public class IpServerTest {
         initTetheredStateMachine(TETHERING_BLUETOOTH, null);
 
         dispatchCommand(IpServer.CMD_TETHER_UNREQUESTED);
-        InOrder inOrder = inOrder(mNetd, mCallback);
+        InOrder inOrder = inOrder(mCallback, mNetd, mAddressCoordinator);
         inOrder.verify(mNetd).tetherApplyDnsInterfaces();
         inOrder.verify(mNetd).tetherInterfaceRemove(IFACE_NAME);
         inOrder.verify(mNetd).networkRemoveInterface(INetd.LOCAL_NET_ID, IFACE_NAME);
         inOrder.verify(mNetd).interfaceSetCfg(argThat(cfg -> IFACE_NAME.equals(cfg.ifName)));
+        inOrder.verify(mAddressCoordinator).releaseDownstream(any());
         inOrder.verify(mCallback).updateInterfaceState(
                 mIpServer, STATE_AVAILABLE, TETHER_ERROR_NO_ERROR);
         inOrder.verify(mCallback).updateLinkProperties(
                 eq(mIpServer), any(LinkProperties.class));
-        verifyNoMoreInteractions(mNetd, mCallback);
+        verifyNoMoreInteractions(mNetd, mCallback, mAddressCoordinator);
     }
 
     @Test
@@ -292,7 +304,8 @@ public class IpServerTest {
         initStateMachine(TETHERING_USB);
 
         dispatchCommand(IpServer.CMD_TETHER_REQUESTED, STATE_TETHERED);
-        InOrder inOrder = inOrder(mCallback, mNetd);
+        InOrder inOrder = inOrder(mCallback, mNetd, mAddressCoordinator);
+        inOrder.verify(mAddressCoordinator).requestDownstreamAddress(any());
         inOrder.verify(mNetd).interfaceSetCfg(argThat(cfg ->
                   IFACE_NAME.equals(cfg.ifName) && assertContainsFlag(cfg.flags, IF_STATE_UP)));
         inOrder.verify(mNetd).tetherInterfaceAdd(IFACE_NAME);
@@ -304,7 +317,7 @@ public class IpServerTest {
         inOrder.verify(mCallback).updateLinkProperties(
                 eq(mIpServer), mLinkPropertiesCaptor.capture());
         assertIPv4AddressAndDirectlyConnectedRoute(mLinkPropertiesCaptor.getValue());
-        verifyNoMoreInteractions(mNetd, mCallback);
+        verifyNoMoreInteractions(mNetd, mCallback, mAddressCoordinator);
     }
 
     @Test
@@ -312,7 +325,8 @@ public class IpServerTest {
         initStateMachine(TETHERING_WIFI_P2P);
 
         dispatchCommand(IpServer.CMD_TETHER_REQUESTED, STATE_LOCAL_ONLY);
-        InOrder inOrder = inOrder(mCallback, mNetd);
+        InOrder inOrder = inOrder(mCallback, mNetd, mAddressCoordinator);
+        inOrder.verify(mAddressCoordinator).requestDownstreamAddress(any());
         inOrder.verify(mNetd).interfaceSetCfg(argThat(cfg ->
                   IFACE_NAME.equals(cfg.ifName) && assertNotContainsFlag(cfg.flags, IF_STATE_UP)));
         inOrder.verify(mNetd).tetherInterfaceAdd(IFACE_NAME);
@@ -324,7 +338,7 @@ public class IpServerTest {
         inOrder.verify(mCallback).updateLinkProperties(
                 eq(mIpServer), mLinkPropertiesCaptor.capture());
         assertIPv4AddressAndDirectlyConnectedRoute(mLinkPropertiesCaptor.getValue());
-        verifyNoMoreInteractions(mNetd, mCallback);
+        verifyNoMoreInteractions(mNetd, mCallback, mAddressCoordinator);
     }
 
     @Test
@@ -390,18 +404,19 @@ public class IpServerTest {
         initTetheredStateMachine(TETHERING_BLUETOOTH, UPSTREAM_IFACE);
 
         dispatchCommand(IpServer.CMD_TETHER_UNREQUESTED);
-        InOrder inOrder = inOrder(mNetd, mCallback);
+        InOrder inOrder = inOrder(mNetd, mCallback, mAddressCoordinator);
         inOrder.verify(mNetd).ipfwdRemoveInterfaceForward(IFACE_NAME, UPSTREAM_IFACE);
         inOrder.verify(mNetd).tetherRemoveForward(IFACE_NAME, UPSTREAM_IFACE);
         inOrder.verify(mNetd).tetherApplyDnsInterfaces();
         inOrder.verify(mNetd).tetherInterfaceRemove(IFACE_NAME);
         inOrder.verify(mNetd).networkRemoveInterface(INetd.LOCAL_NET_ID, IFACE_NAME);
         inOrder.verify(mNetd).interfaceSetCfg(argThat(cfg -> IFACE_NAME.equals(cfg.ifName)));
+        inOrder.verify(mAddressCoordinator).releaseDownstream(any());
         inOrder.verify(mCallback).updateInterfaceState(
                 mIpServer, STATE_AVAILABLE, TETHER_ERROR_NO_ERROR);
         inOrder.verify(mCallback).updateLinkProperties(
                 eq(mIpServer), any(LinkProperties.class));
-        verifyNoMoreInteractions(mNetd, mCallback);
+        verifyNoMoreInteractions(mNetd, mCallback, mAddressCoordinator);
     }
 
     @Test
@@ -481,7 +496,7 @@ public class IpServerTest {
         initTetheredStateMachine(TETHERING_WIFI, UPSTREAM_IFACE);
         dispatchTetherConnectionChanged(UPSTREAM_IFACE);
 
-        assertDhcpStarted(new IpPrefix("192.168.43.0/24"));
+        assertDhcpStarted(PrefixUtils.asIpPrefix(mTestAddress));
     }
 
     @Test
@@ -489,7 +504,7 @@ public class IpServerTest {
         initTetheredStateMachine(TETHERING_BLUETOOTH, UPSTREAM_IFACE);
         dispatchTetherConnectionChanged(UPSTREAM_IFACE);
 
-        assertDhcpStarted(new IpPrefix("192.168.44.0/24"));
+        assertDhcpStarted(mBluetoothPrefix);
     }
 
     @Test
@@ -497,7 +512,7 @@ public class IpServerTest {
         initTetheredStateMachine(TETHERING_WIFI_P2P, UPSTREAM_IFACE);
         dispatchTetherConnectionChanged(UPSTREAM_IFACE);
 
-        assertDhcpStarted(new IpPrefix("192.168.49.0/24"));
+        assertDhcpStarted(PrefixUtils.asIpPrefix(mTestAddress));
     }
 
     @Test
@@ -522,21 +537,27 @@ public class IpServerTest {
         eventCallbacks = dhcpEventCbsCaptor.getValue();
         assertDhcpStarted(new IpPrefix("192.168.42.0/24"));
 
-        // Simulate the DHCP server receives DHCPDECLINE on MirrorLink and then signals
-        // onNewPrefixRequest callback.
-        eventCallbacks.onNewPrefixRequest(new IpPrefix("192.168.42.0/24"));
-        mLooper.dispatchAll();
-
         final ArgumentCaptor<LinkProperties> lpCaptor =
                 ArgumentCaptor.forClass(LinkProperties.class);
-        InOrder inOrder = inOrder(mNetd, mCallback);
-        inOrder.verify(mCallback).updateInterfaceState(
-                mIpServer, STATE_LOCAL_ONLY, TETHER_ERROR_NO_ERROR);
-        inOrder.verify(mCallback).updateLinkProperties(eq(mIpServer), lpCaptor.capture());
+        InOrder inOrder = inOrder(mNetd, mCallback, mAddressCoordinator);
+        inOrder.verify(mAddressCoordinator).requestDownstreamAddress(any());
         inOrder.verify(mNetd).networkAddInterface(INetd.LOCAL_NET_ID, IFACE_NAME);
         // One for ipv4 route, one for ipv6 link local route.
         inOrder.verify(mNetd, times(2)).networkAddRoute(eq(INetd.LOCAL_NET_ID), eq(IFACE_NAME),
                 any(), any());
+        inOrder.verify(mCallback).updateInterfaceState(
+                mIpServer, STATE_LOCAL_ONLY, TETHER_ERROR_NO_ERROR);
+        inOrder.verify(mCallback).updateLinkProperties(eq(mIpServer), lpCaptor.capture());
+        verifyNoMoreInteractions(mCallback, mAddressCoordinator);
+
+        // Simulate the DHCP server receives DHCPDECLINE on MirrorLink and then signals
+        // onNewPrefixRequest callback.
+        final LinkAddress newAddress = new LinkAddress("192.168.100.125/24");
+        when(mAddressCoordinator.requestDownstreamAddress(any())).thenReturn(newAddress);
+        eventCallbacks.onNewPrefixRequest(new IpPrefix("192.168.42.0/24"));
+        mLooper.dispatchAll();
+
+        inOrder.verify(mAddressCoordinator).requestDownstreamAddress(any());
         inOrder.verify(mNetd).tetherApplyDnsInterfaces();
         inOrder.verify(mCallback).updateLinkProperties(eq(mIpServer), lpCaptor.capture());
         verifyNoMoreInteractions(mCallback);
@@ -694,7 +715,7 @@ public class IpServerTest {
         InOrder inOrder = inOrder(mNetd);
         LinkProperties lp = new LinkProperties();
         lp.setInterfaceName(UPSTREAM_IFACE2);
-        dispatchTetherConnectionChanged(UPSTREAM_IFACE2, lp);
+        dispatchTetherConnectionChanged(UPSTREAM_IFACE2, lp, -1);
         inOrder.verify(mNetd).tetherOffloadRuleAdd(matches(UPSTREAM_IFINDEX2, neighA, macA));
         inOrder.verify(mNetd).tetherOffloadRuleRemove(matches(UPSTREAM_IFINDEX, neighA, macA));
         inOrder.verify(mNetd).tetherOffloadRuleAdd(matches(UPSTREAM_IFINDEX2, neighB, macB));
@@ -702,7 +723,7 @@ public class IpServerTest {
         reset(mNetd);
 
         // When the upstream is lost, rules are removed.
-        dispatchTetherConnectionChanged(null, null);
+        dispatchTetherConnectionChanged(null, null, 0);
         verify(mNetd).tetherOffloadRuleRemove(matches(UPSTREAM_IFINDEX2, neighA, macA));
         verify(mNetd).tetherOffloadRuleRemove(matches(UPSTREAM_IFINDEX2, neighB, macB));
         reset(mNetd);
@@ -715,19 +736,19 @@ public class IpServerTest {
 
         // Rules can be added again once upstream IPv6 connectivity is available.
         lp.setInterfaceName(UPSTREAM_IFACE);
-        dispatchTetherConnectionChanged(UPSTREAM_IFACE, lp);
+        dispatchTetherConnectionChanged(UPSTREAM_IFACE, lp, -1);
         recvNewNeigh(myIfindex, neighB, NUD_REACHABLE, macB);
         verify(mNetd).tetherOffloadRuleAdd(matches(UPSTREAM_IFINDEX, neighB, macB));
         verify(mNetd, never()).tetherOffloadRuleAdd(matches(UPSTREAM_IFINDEX, neighA, macA));
 
         // If upstream IPv6 connectivity is lost, rules are removed.
         reset(mNetd);
-        dispatchTetherConnectionChanged(UPSTREAM_IFACE, null);
+        dispatchTetherConnectionChanged(UPSTREAM_IFACE, null, 0);
         verify(mNetd).tetherOffloadRuleRemove(matches(UPSTREAM_IFINDEX, neighB, macB));
 
         // When the interface goes down, rules are removed.
         lp.setInterfaceName(UPSTREAM_IFACE);
-        dispatchTetherConnectionChanged(UPSTREAM_IFACE, lp);
+        dispatchTetherConnectionChanged(UPSTREAM_IFACE, lp, -1);
         recvNewNeigh(myIfindex, neighA, NUD_REACHABLE, macA);
         recvNewNeigh(myIfindex, neighB, NUD_REACHABLE, macB);
         verify(mNetd).tetherOffloadRuleAdd(matches(UPSTREAM_IFINDEX, neighA, macA));
@@ -788,6 +809,49 @@ public class IpServerTest {
         verify(mIpNeighborMonitor, never()).start();
     }
 
+    private LinkProperties buildIpv6OnlyLinkProperties(final String iface) {
+        final LinkProperties linkProp = new LinkProperties();
+        linkProp.setInterfaceName(iface);
+        linkProp.addLinkAddress(new LinkAddress("2001:db8::1/64"));
+        linkProp.addRoute(new RouteInfo(new IpPrefix("::/0"), null, iface, RTN_UNICAST));
+        final InetAddress dns = InetAddresses.parseNumericAddress("2001:4860:4860::8888");
+        linkProp.addDnsServer(dns);
+
+        return linkProp;
+    }
+
+    @Test
+    public void testAdjustTtlValue() throws Exception {
+        final ArgumentCaptor<RaParams> raParamsCaptor =
+                ArgumentCaptor.forClass(RaParams.class);
+        initTetheredStateMachine(TETHERING_WIFI, UPSTREAM_IFACE);
+        verify(mRaDaemon).buildNewRa(any(), raParamsCaptor.capture());
+        final RaParams noV6Params = raParamsCaptor.getValue();
+        assertEquals(65, noV6Params.hopLimit);
+        reset(mRaDaemon);
+
+        when(mNetd.getProcSysNet(
+                INetd.IPV6, INetd.CONF, UPSTREAM_IFACE, "hop_limit")).thenReturn("64");
+        final LinkProperties lp = buildIpv6OnlyLinkProperties(UPSTREAM_IFACE);
+        dispatchTetherConnectionChanged(UPSTREAM_IFACE, lp, 1);
+        verify(mRaDaemon).buildNewRa(any(), raParamsCaptor.capture());
+        final RaParams nonCellularParams = raParamsCaptor.getValue();
+        assertEquals(65, nonCellularParams.hopLimit);
+        reset(mRaDaemon);
+
+        dispatchTetherConnectionChanged(UPSTREAM_IFACE, null, 0);
+        verify(mRaDaemon).buildNewRa(any(), raParamsCaptor.capture());
+        final RaParams noUpstream = raParamsCaptor.getValue();
+        assertEquals(65, nonCellularParams.hopLimit);
+        reset(mRaDaemon);
+
+        dispatchTetherConnectionChanged(UPSTREAM_IFACE, lp, -1);
+        verify(mRaDaemon).buildNewRa(any(), raParamsCaptor.capture());
+        final RaParams cellularParams = raParamsCaptor.getValue();
+        assertEquals(63, cellularParams.hopLimit);
+        reset(mRaDaemon);
+    }
+
     private void assertDhcpServingParams(final DhcpServingParamsParcel params,
             final IpPrefix prefix) {
         // Last address byte is random
@@ -838,9 +902,10 @@ public class IpServerTest {
      * @param upstreamIface String name of upstream interface (or null)
      * @param v6lp IPv6 LinkProperties of the upstream interface, or null for an IPv4-only upstream.
      */
-    private void dispatchTetherConnectionChanged(String upstreamIface, LinkProperties v6lp) {
+    private void dispatchTetherConnectionChanged(String upstreamIface, LinkProperties v6lp,
+            int ttlAdjustment) {
         dispatchTetherConnectionChanged(upstreamIface);
-        mIpServer.sendMessage(IpServer.CMD_IPV6_TETHER_UPDATE, v6lp);
+        mIpServer.sendMessage(IpServer.CMD_IPV6_TETHER_UPDATE, ttlAdjustment, 0, v6lp);
         mLooper.dispatchAll();
     }
 

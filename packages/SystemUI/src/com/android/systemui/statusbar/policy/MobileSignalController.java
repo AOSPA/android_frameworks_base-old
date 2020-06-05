@@ -1089,6 +1089,8 @@ public class MobileSignalController extends SignalController<
             }
             mDataState = state;
             if (networkType != mTelephonyDisplayInfo.getNetworkType()) {
+                Log.d(mTag, "onDataConnectionStateChanged:"
+                        + " network type change and reset displayInfo. type=" + networkType);
                 mTelephonyDisplayInfo = new TelephonyDisplayInfo(networkType,
                         TelephonyDisplayInfo.OVERRIDE_NETWORK_TYPE_NONE);
             }
