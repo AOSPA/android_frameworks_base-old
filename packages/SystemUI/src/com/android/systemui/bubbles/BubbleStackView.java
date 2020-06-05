@@ -47,6 +47,7 @@ import android.graphics.PointF;
 import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.Region;
+import android.graphics.drawable.TransitionDrawable;
 import android.os.Bundle;
 import android.provider.Settings;
 import android.util.Log;
@@ -132,6 +133,9 @@ public class BubbleStackView extends FrameLayout
 
     /** Percent to darken the bubbles when they're in the dismiss target. */
     private static final float DARKEN_PERCENT = 0.3f;
+
+    /** Duration of the dismiss scrim fading in/out. */
+    private static final int DISMISS_TRANSITION_DURATION_MS = 200;
 
     /** How long to wait, in milliseconds, before hiding the flyout. */
     @VisibleForTesting
@@ -340,6 +344,12 @@ public class BubbleStackView extends FrameLayout
     private final SurfaceSynchronizer mSurfaceSynchronizer;
 
     private final NotificationShadeWindowController mNotificationShadeWindowController;
+
+    /**
+     * Callback to run when the IME visibility changes - BubbleController uses this to update the
+     * Bubbles window focusability flags with the WindowManager.
+     */
+    public final Consumer<Boolean> mOnImeVisibilityChanged;
 
     /**
      * The currently magnetized object, which is being dragged and will be attracted to the magnetic
@@ -667,7 +677,8 @@ public class BubbleStackView extends FrameLayout
             FloatingContentCoordinator floatingContentCoordinator,
             SysUiState sysUiState,
             NotificationShadeWindowController notificationShadeWindowController,
-            Runnable allBubblesAnimatedOutAction) {
+            Runnable allBubblesAnimatedOutAction,
+            Consumer<Boolean> onImeVisibilityChanged) {
         super(context);
 
         mBubbleData = data;
@@ -716,6 +727,12 @@ public class BubbleStackView extends FrameLayout
 
         setUpUserEducation();
 
+        // Force LTR by default since most of the Bubbles UI is positioned manually by the user, or
+        // is centered. It greatly simplifies translation positioning/animations. Views that will
+        // actually lay out differently in RTL, such as the flyout and expanded view, will set their
+        // layout direction to LOCALE.
+        setLayoutDirection(LAYOUT_DIRECTION_LTR);
+
         mBubbleContainer = new PhysicsAnimationLayout(context);
         mBubbleContainer.setActiveController(mStackAnimationController);
         mBubbleContainer.setElevation(elevation);
@@ -724,8 +741,6 @@ public class BubbleStackView extends FrameLayout
 
         mExpandedViewContainer = new FrameLayout(context);
         mExpandedViewContainer.setElevation(elevation);
-        mExpandedViewContainer.setPadding(mExpandedViewPadding, mExpandedViewPadding,
-                mExpandedViewPadding, mExpandedViewPadding);
         mExpandedViewContainer.setClipChildren(false);
         addView(mExpandedViewContainer);
 
@@ -741,7 +756,7 @@ public class BubbleStackView extends FrameLayout
         final View targetView = new DismissCircleView(context);
         final FrameLayout.LayoutParams newParams =
                 new FrameLayout.LayoutParams(targetSize, targetSize);
-        newParams.gravity = Gravity.CENTER;
+        newParams.gravity = Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL;
         targetView.setLayoutParams(newParams);
         mDismissTargetAnimator = PhysicsAnimator.getInstance(targetView);
 
@@ -750,9 +765,16 @@ public class BubbleStackView extends FrameLayout
                 MATCH_PARENT,
                 getResources().getDimensionPixelSize(R.dimen.floating_dismiss_gradient_height),
                 Gravity.BOTTOM));
+
+        final int bottomMargin =
+                getResources().getDimensionPixelSize(R.dimen.floating_dismiss_bottom_margin);
+        mDismissTargetContainer.setPadding(0, 0, 0, bottomMargin);
+        mDismissTargetContainer.setClipToPadding(false);
         mDismissTargetContainer.setClipChildren(false);
         mDismissTargetContainer.addView(targetView);
         mDismissTargetContainer.setVisibility(View.INVISIBLE);
+        mDismissTargetContainer.setBackgroundResource(
+                R.drawable.floating_dismiss_gradient_transition);
         addView(mDismissTargetContainer);
 
         // Start translated down so the target springs up.
@@ -793,7 +815,11 @@ public class BubbleStackView extends FrameLayout
 
         setUpOverflow();
 
+        mOnImeVisibilityChanged = onImeVisibilityChanged;
+
         setOnApplyWindowInsetsListener((View view, WindowInsets insets) -> {
+            onImeVisibilityChanged.accept(insets.getInsets(WindowInsets.Type.ime()).bottom > 0);
+
             if (!mIsExpanded || mIsExpansionAnimating) {
                 return view.onApplyWindowInsets(insets);
             }
@@ -952,6 +978,9 @@ public class BubbleStackView extends FrameLayout
 
         mManageSettingsIcon = mManageMenu.findViewById(R.id.bubble_manage_menu_settings_icon);
         mManageSettingsText = mManageMenu.findViewById(R.id.bubble_manage_menu_settings_name);
+
+        // The menu itself should respect locale direction so the icons are on the correct side.
+        mManageMenu.setLayoutDirection(LAYOUT_DIRECTION_LOCALE);
         addView(mManageMenu);
     }
 
@@ -1073,6 +1102,16 @@ public class BubbleStackView extends FrameLayout
 
         mManageMenu.setVisibility(View.INVISIBLE);
         mShowingManage = false;
+    }
+
+    /** Tells the views with locale-dependent layout direction to resolve the new direction. */
+    public void onLayoutDirectionChanged() {
+        mManageMenu.resolveLayoutDirection();
+        mFlyout.resolveLayoutDirection();
+
+        if (mExpandedBubble != null && mExpandedBubble.getExpandedView() != null) {
+            mExpandedBubble.getExpandedView().resolveLayoutDirection();
+        }
     }
 
     /** Respond to the display size change by recalculating view size and location. */
@@ -1856,6 +1895,9 @@ public class BubbleStackView extends FrameLayout
         mDismissTargetContainer.setZ(Short.MAX_VALUE - 1);
         mDismissTargetContainer.setVisibility(VISIBLE);
 
+        ((TransitionDrawable) mDismissTargetContainer.getBackground()).startTransition(
+                DISMISS_TRANSITION_DURATION_MS);
+
         mDismissTargetAnimator.cancel();
         mDismissTargetAnimator
                 .spring(DynamicAnimation.TRANSLATION_Y, 0f, mDismissTargetSpring)
@@ -1872,6 +1914,9 @@ public class BubbleStackView extends FrameLayout
         }
 
         mShowingDismiss = false;
+
+        ((TransitionDrawable) mDismissTargetContainer.getBackground()).reverseTransition(
+                DISMISS_TRANSITION_DURATION_MS);
 
         mDismissTargetAnimator
                 .spring(DynamicAnimation.TRANSLATION_Y, mDismissTargetContainer.getHeight(),
@@ -2086,16 +2131,21 @@ public class BubbleStackView extends FrameLayout
 
         mExpandedBubble.getExpandedView().getManageButtonBoundsOnScreen(mTempRect);
 
-        // When the menu is open, it should be at these coordinates. This will make the menu's
-        // bottom left corner match up with the button's bottom left corner.
-        final float targetX = mTempRect.left;
+        final boolean isLtr =
+                getResources().getConfiguration().getLayoutDirection() == LAYOUT_DIRECTION_LTR;
+
+        // When the menu is open, it should be at these coordinates. The menu pops out to the right
+        // in LTR and to the left in RTL.
+        final float targetX = isLtr ? mTempRect.left : mTempRect.right - mManageMenu.getWidth();
         final float targetY = mTempRect.bottom - mManageMenu.getHeight();
+
+        final float xOffsetForAnimation = (isLtr ? 1 : -1) * mManageMenu.getWidth() / 4f;
 
         if (show) {
             mManageMenu.setScaleX(0.5f);
             mManageMenu.setScaleY(0.5f);
-            mManageMenu.setTranslationX(targetX - mManageMenu.getWidth() / 4);
-            mManageMenu.setTranslationY(targetY + mManageMenu.getHeight() / 4);
+            mManageMenu.setTranslationX(targetX - xOffsetForAnimation);
+            mManageMenu.setTranslationY(targetY + mManageMenu.getHeight() / 4f);
             mManageMenu.setAlpha(0f);
 
             PhysicsAnimator.getInstance(mManageMenu)
@@ -2112,8 +2162,8 @@ public class BubbleStackView extends FrameLayout
                     .spring(DynamicAnimation.ALPHA, 0f)
                     .spring(DynamicAnimation.SCALE_X, 0.5f)
                     .spring(DynamicAnimation.SCALE_Y, 0.5f)
-                    .spring(DynamicAnimation.TRANSLATION_X, targetX - mManageMenu.getWidth() / 4)
-                    .spring(DynamicAnimation.TRANSLATION_Y, targetY + mManageMenu.getHeight() / 4)
+                    .spring(DynamicAnimation.TRANSLATION_X, targetX - xOffsetForAnimation)
+                    .spring(DynamicAnimation.TRANSLATION_Y, targetY + mManageMenu.getHeight() / 4f)
                     .withEndActions(() -> mManageMenu.setVisibility(View.INVISIBLE))
                     .start();
         }
@@ -2126,6 +2176,13 @@ public class BubbleStackView extends FrameLayout
         if (DEBUG_BUBBLE_STACK_VIEW) {
             Log.d(TAG, "updateExpandedBubble()");
         }
+
+        if (mExpandedBubble != null && mExpandedBubble.getExpandedView() != null) {
+            // Hide the currently expanded bubble's IME if it's visible before switching to a new
+            // bubble.
+            mExpandedBubble.getExpandedView().hideImeIfVisible();
+        }
+
         mExpandedViewContainer.removeAllViews();
         if (mIsExpanded && mExpandedBubble != null
                 && mExpandedBubble.getExpandedView() != null) {

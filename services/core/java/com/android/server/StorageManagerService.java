@@ -377,6 +377,7 @@ class StorageManagerService extends IStorageManager.Stub
     private class WatchedLockedUsers {
         private int[] users = EmptyArray.INT;
         public WatchedLockedUsers() {
+            invalidateIsUserUnlockedCache();
         }
         public void append(int userId) {
             users = ArrayUtils.appendInt(users, userId);
@@ -1134,6 +1135,8 @@ class StorageManagerService extends IStorageManager.Stub
         } catch (Exception e) {
             Slog.wtf(TAG, e);
         }
+
+        onKeyguardStateChanged(false);
 
         mHandler.obtainMessage(H_COMPLETE_UNLOCK_USER, userId).sendToTarget();
     }

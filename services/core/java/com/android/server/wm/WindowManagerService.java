@@ -3868,6 +3868,11 @@ public class WindowManagerService extends IWindowManager.Stub
                     final boolean rotationChanged = displayContent.updateRotationUnchecked();
                     Trace.traceEnd(TRACE_TAG_WINDOW_MANAGER);
 
+                    if (rotationChanged) {
+                        mAtmService.getTaskChangeNotificationController()
+                                .notifyOnActivityRotation();
+                    }
+
                     if (!rotationChanged || forceRelayout) {
                         displayContent.setLayoutNeeded();
                         layoutNeeded = true;
