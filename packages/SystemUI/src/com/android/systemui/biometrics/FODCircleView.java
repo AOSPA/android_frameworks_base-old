@@ -125,6 +125,9 @@ public class FODCircleView extends ImageView {
                 mBurnInProtectionTimer.schedule(new BurnInProtectionTask(), 0, 60 * 1000);
             } else if (mBurnInProtectionTimer != null) {
                 mBurnInProtectionTimer.cancel();
+                mDreamingOffsetX = 0;
+                mDreamingOffsetY = 0;
+                mHandler.post(() -> updatePosition());
             }
         }
 
