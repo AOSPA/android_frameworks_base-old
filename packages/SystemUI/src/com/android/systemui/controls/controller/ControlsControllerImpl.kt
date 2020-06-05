@@ -72,6 +72,10 @@ class ControlsControllerImpl @Inject constructor (
         private const val USER_CHANGE_RETRY_DELAY = 500L // ms
         private const val DEFAULT_ENABLED = 1
         private const val PERMISSION_SELF = "com.android.systemui.permission.SELF"
+        const val SUGGESTED_CONTROLS_PER_STRUCTURE = 6
+
+        private fun isAvailable(userId: Int, cr: ContentResolver) = Settings.Secure.getIntForUser(
+            cr, CONTROLS_AVAILABLE, DEFAULT_ENABLED, userId) != 0
     }
 
     private var userChanging: Boolean = true
@@ -85,8 +89,7 @@ class ControlsControllerImpl @Inject constructor (
 
     private val contentResolver: ContentResolver
         get() = context.contentResolver
-    override var available = Settings.Secure.getIntForUser(
-            contentResolver, CONTROLS_AVAILABLE, DEFAULT_ENABLED, currentUserId) != 0
+    override var available = isAvailable(currentUserId, contentResolver)
         private set
 
     private val persistenceWrapper: ControlsFavoritePersistenceWrapper
@@ -119,8 +122,7 @@ class ControlsControllerImpl @Inject constructor (
                 BackupManager(userStructure.userContext)
         )
         auxiliaryPersistenceWrapper.changeFile(userStructure.auxiliaryFile)
-        available = Settings.Secure.getIntForUser(contentResolver, CONTROLS_AVAILABLE,
-                DEFAULT_ENABLED, newUser.identifier) != 0
+        available = isAvailable(newUser.identifier, contentResolver)
         resetFavorites(available)
         bindingController.changeUser(newUser)
         listingController.changeUser(newUser)
@@ -131,7 +133,6 @@ class ControlsControllerImpl @Inject constructor (
         override fun onReceive(context: Context, intent: Intent) {
             if (intent.action == Intent.ACTION_USER_SWITCHED) {
                 userChanging = true
-                listingController.removeCallback(listingCallback)
                 val newUser =
                         UserHandle.of(intent.getIntExtra(Intent.EXTRA_USER_HANDLE, sendingUserId))
                 if (currentUser == newUser) {
@@ -151,7 +152,6 @@ class ControlsControllerImpl @Inject constructor (
                 executor.execute {
                     Log.d(TAG, "Restore finished, storing auxiliary favorites")
                     auxiliaryPersistenceWrapper.initialize()
-                    listingController.removeCallback(listingCallback)
                     persistenceWrapper.storeFavorites(auxiliaryPersistenceWrapper.favorites)
                     resetFavorites(available)
                 }
@@ -172,8 +172,7 @@ class ControlsControllerImpl @Inject constructor (
             if (userChanging || userId != currentUserId) {
                 return
             }
-            available = Settings.Secure.getIntForUser(contentResolver, CONTROLS_AVAILABLE,
-                DEFAULT_ENABLED, currentUserId) != 0
+            available = isAvailable(currentUserId, contentResolver)
             resetFavorites(available)
         }
     }
@@ -244,6 +243,7 @@ class ControlsControllerImpl @Inject constructor (
             null
         )
         contentResolver.registerContentObserver(URI, false, settingObserver, UserHandle.USER_ALL)
+        listingController.addCallback(listingCallback)
     }
 
     fun destroy() {
@@ -258,7 +258,6 @@ class ControlsControllerImpl @Inject constructor (
 
         if (shouldLoad) {
             Favorites.load(persistenceWrapper.readFavorites())
-            listingController.addCallback(listingCallback)
         }
     }
 
@@ -363,29 +362,47 @@ class ControlsControllerImpl @Inject constructor (
         return true
     }
 
-    override fun seedFavoritesForComponent(
-        componentName: ComponentName,
-        callback: Consumer<Boolean>
+    override fun seedFavoritesForComponents(
+        componentNames: List<ComponentName>,
+        callback: Consumer<SeedResponse>
     ) {
-        if (seedingInProgress) return
+        if (seedingInProgress || componentNames.isEmpty()) return
 
-        Log.i(TAG, "Beginning request to seed favorites for: $componentName")
         if (!confirmAvailability()) {
             if (userChanging) {
                 // Try again later, userChanging should not last forever. If so, we have bigger
                 // problems. This will return a runnable that allows to cancel the delayed version,
                 // it will not be able to cancel the load if
                 executor.executeDelayed(
-                    { seedFavoritesForComponent(componentName, callback) },
+                    { seedFavoritesForComponents(componentNames, callback) },
                     USER_CHANGE_RETRY_DELAY,
                     TimeUnit.MILLISECONDS
                 )
             } else {
-                callback.accept(false)
+                componentNames.forEach {
+                    callback.accept(SeedResponse(it.packageName, false))
+                }
             }
             return
         }
         seedingInProgress = true
+        startSeeding(componentNames, callback, false)
+    }
+
+    private fun startSeeding(
+        remainingComponentNames: List<ComponentName>,
+        callback: Consumer<SeedResponse>,
+        didAnyFail: Boolean
+    ) {
+        if (remainingComponentNames.isEmpty()) {
+            endSeedingCall(!didAnyFail)
+            return
+        }
+
+        val componentName = remainingComponentNames[0]
+        Log.d(TAG, "Beginning request to seed favorites for: $componentName")
+
+        val remaining = remainingComponentNames.drop(1)
         bindingController.bindAndLoadSuggested(
             componentName,
             object : ControlsBindingController.LoadCallback {
@@ -398,9 +415,11 @@ class ControlsControllerImpl @Inject constructor (
                             val structure = it.structure ?: ""
                             val list = structureToControls.get(structure)
                                 ?: mutableListOf<ControlInfo>()
-                            list.add(
-                                ControlInfo(it.controlId, it.title, it.subtitle, it.deviceType))
-                            structureToControls.put(structure, list)
+                            if (list.size < SUGGESTED_CONTROLS_PER_STRUCTURE) {
+                                list.add(
+                                    ControlInfo(it.controlId, it.title, it.subtitle, it.deviceType))
+                                structureToControls.put(structure, list)
+                            }
                         }
 
                         structureToControls.forEach {
@@ -409,16 +428,16 @@ class ControlsControllerImpl @Inject constructor (
                         }
 
                         persistenceWrapper.storeFavorites(Favorites.getAllStructures())
-                        callback.accept(true)
-                        endSeedingCall(true)
+                        callback.accept(SeedResponse(componentName.packageName, true))
+                        startSeeding(remaining, callback, didAnyFail)
                     }
                 }
 
                 override fun error(message: String) {
                     Log.e(TAG, "Unable to seed favorites: $message")
                     executor.execute {
-                        callback.accept(false)
-                        endSeedingCall(false)
+                        callback.accept(SeedResponse(componentName.packageName, false))
+                        startSeeding(remaining, callback, true)
                     }
                 }
             }
@@ -569,12 +588,12 @@ class UserStructure(context: Context, user: UserHandle) {
     val userContext = context.createContextAsUser(user, 0)
 
     val file = Environment.buildPath(
-            context.filesDir,
+            userContext.filesDir,
             ControlsFavoritePersistenceWrapper.FILE_NAME
     )
 
     val auxiliaryFile = Environment.buildPath(
-            context.filesDir,
+            userContext.filesDir,
             AuxiliaryPersistenceWrapper.AUXILIARY_FILE_NAME
     )
 }

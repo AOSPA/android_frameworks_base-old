@@ -73,6 +73,7 @@ import static com.android.server.wm.ActivityTaskManagerService.RELAUNCH_REASON_N
 import static com.android.server.wm.RootWindowContainer.MATCH_TASK_IN_STACKS_OR_RECENT_TASKS;
 import static com.android.server.wm.RootWindowContainer.MATCH_TASK_IN_STACKS_OR_RECENT_TASKS_AND_RESTORE;
 import static com.android.server.wm.RootWindowContainer.TAG_STATES;
+import static com.android.server.wm.SurfaceAnimator.ANIMATION_TYPE_APP_TRANSITION;
 import static com.android.server.wm.Task.FLAG_FORCE_HIDDEN_FOR_PINNED_TASK;
 import static com.android.server.wm.Task.LOCK_TASK_AUTH_LAUNCHABLE;
 import static com.android.server.wm.Task.LOCK_TASK_AUTH_LAUNCHABLE_PRIV;
@@ -142,6 +143,7 @@ import com.android.internal.util.function.pooled.PooledConsumer;
 import com.android.internal.util.function.pooled.PooledLambda;
 import com.android.server.am.ActivityManagerService;
 import com.android.server.am.UserState;
+import com.android.server.uri.NeededUriGrants;
 import com.android.server.wm.ActivityMetricsLogger.LaunchingState;
 
 import java.io.FileDescriptor;
@@ -391,14 +393,17 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
         final int startFlags;
         final ActivityStack stack;
         final WindowProcessController callerApp;
+        final NeededUriGrants intentGrants;
 
-        PendingActivityLaunch(ActivityRecord _r, ActivityRecord _sourceRecord,
-                int _startFlags, ActivityStack _stack, WindowProcessController app) {
-            r = _r;
-            sourceRecord = _sourceRecord;
-            startFlags = _startFlags;
-            stack = _stack;
-            callerApp = app;
+        PendingActivityLaunch(ActivityRecord r, ActivityRecord sourceRecord,
+                int startFlags, ActivityStack stack, WindowProcessController callerApp,
+                NeededUriGrants intentGrants) {
+            this.r = r;
+            this.sourceRecord = sourceRecord;
+            this.startFlags = startFlags;
+            this.stack = stack;
+            this.callerApp = callerApp;
+            this.intentGrants = intentGrants;
         }
 
         void sendErrorResult(String message) {
@@ -1026,7 +1031,7 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
                 || actionRestriction == ACTIVITY_RESTRICTION_PERMISSION) {
             if (resultRecord != null) {
                 resultRecord.sendResult(INVALID_UID, resultWho, requestCode,
-                        Activity.RESULT_CANCELED, null /* data */);
+                        Activity.RESULT_CANCELED, null /* data */, null /* dataGrants */);
             }
             final String msg;
             if (actionRestriction == ACTIVITY_RESTRICTION_PERMISSION) {
@@ -1474,11 +1479,7 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
         try {
             stack.setWindowingMode(WINDOWING_MODE_UNDEFINED);
             stack.setBounds(null);
-            if (toDisplay.getDisplayId() != stack.getDisplayId()) {
-                stack.reparent(toDisplay.getDefaultTaskDisplayArea(), false /* onTop */);
-            } else {
-                toDisplay.getDefaultTaskDisplayArea().positionStackAtBottom(stack);
-            }
+            toDisplay.getDefaultTaskDisplayArea().positionTaskBehindHome(stack);
 
             // Follow on the workaround: activities are kept force hidden till the new windowing
             // mode is set.
@@ -1876,15 +1877,11 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
         ArrayList<ActivityRecord> readyToStopActivities = null;
         for (int i = mStoppingActivities.size() - 1; i >= 0; --i) {
             final ActivityRecord s = mStoppingActivities.get(i);
-            final boolean animating = s.isAnimating(TRANSITION | PARENTS);
+            final boolean animating = s.isAnimating(TRANSITION | PARENTS,
+                    ANIMATION_TYPE_APP_TRANSITION);
             if (DEBUG_STATES) Slog.v(TAG, "Stopping " + s + ": nowVisible=" + s.nowVisible
                     + " animating=" + animating + " finishing=" + s.finishing);
-
-            final ActivityStack stack = s.getRootTask();
-            final boolean shouldSleepOrShutDown = stack != null
-                    ? stack.shouldSleepOrShutDownActivities()
-                    : mService.isSleepingOrShuttingDownLocked();
-            if (!animating || shouldSleepOrShutDown) {
+            if (!animating || mService.mShuttingDown) {
                 if (!processPausingActivities && s.isState(PAUSING)) {
                     // Defer processing pausing activities in this iteration and reschedule
                     // a delayed idle to reprocess it again

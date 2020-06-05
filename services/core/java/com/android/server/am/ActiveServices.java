@@ -626,7 +626,7 @@ public final class ActiveServices {
         }
 
         NeededUriGrants neededGrants = mAm.mUgmInternal.checkGrantUriPermissionFromIntent(
-                callingUid, r.packageName, service, service.getFlags(), null, r.userId);
+                service, callingUid, r.packageName, r.userId);
 
         // If permissions need a review before any of the app components can run,
         // we do not start the service and launch a review activity if the calling app
@@ -2543,6 +2543,16 @@ public final class ActiveServices {
                             && mAm.isValidSingletonCall(callingUid, sInfo.applicationInfo.uid)) {
                         userId = 0;
                         smap = getServiceMapLocked(0);
+                        ResolveInfo rInfoForUserId0 =
+                                mAm.getPackageManagerInternalLocked().resolveService(service,
+                                        resolvedType, flags, userId, callingUid);
+                        if (rInfoForUserId0 == null) {
+                            Slog.w(TAG_SERVICE,
+                                    "Unable to resolve service " + service + " U=" + userId
+                                            + ": not found");
+                            return null;
+                        }
+                        sInfo = rInfoForUserId0.serviceInfo;
                     }
                     sInfo = new ServiceInfo(sInfo);
                     sInfo.applicationInfo = mAm.getAppInfoForUser(sInfo.applicationInfo, userId);
@@ -5101,8 +5111,13 @@ public final class ActiveServices {
 
     // TODO: remove this toast after feature development is done
     void showWhileInUseDebugToastLocked(int uid, int op, int mode) {
-        for (int i = mAm.mProcessList.mLruProcesses.size() - 1; i >= 0; i--) {
-            ProcessRecord pr = mAm.mProcessList.mLruProcesses.get(i);
+        final UidRecord uidRec = mAm.mProcessList.getUidRecordLocked(uid);
+        if (uidRec == null) {
+            return;
+        }
+
+        for (int i = uidRec.procRecords.size() - 1; i >= 0; i--) {
+            ProcessRecord pr = uidRec.procRecords.valueAt(i);
             if (pr.uid != uid) {
                 continue;
             }

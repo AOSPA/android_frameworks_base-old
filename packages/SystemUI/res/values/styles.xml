@@ -396,6 +396,7 @@
     <style name="Theme.SystemUI.Dialog.Alert" parent="@*android:style/Theme.DeviceDefault.Light.Dialog.Alert" />
 
     <style name="Theme.SystemUI.Dialog.GlobalActions" parent="@android:style/Theme.DeviceDefault.Light.NoActionBar.Fullscreen">
+        <item name="android:colorError">@*android:color/error_color_material_dark</item>
         <item name="android:windowIsFloating">true</item>
     </style>
 
@@ -573,6 +574,7 @@
         <item name="android:textColor">?attr/wallpaperTextColor</item>
         <item name="android:textAllCaps">false</item>
         <item name="android:textSize">14sp</item>
+        <item name="android:minWidth">0dp</item>
     </style>
 
     <style name="TextAppearance.HeadsUpStatusBarText"
@@ -621,7 +623,7 @@
     </style>
 
     <style name="MediaPlayer.Button" parent="@android:style/Widget.Material.Button.Borderless.Small">
-        <item name="android:background">@null</item>
+        <item name="android:background">@drawable/qs_media_light_source</item>
         <item name="android:tint">@android:color/white</item>
         <item name="android:stateListAnimator">@anim/media_button_state_list_animator</item>
     </style>

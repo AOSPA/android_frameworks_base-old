@@ -308,6 +308,15 @@ public class LocalMediaManager implements BluetoothCallback {
     }
 
     /**
+     * Get the MediaDevice list that can be removed from current media session.
+     *
+     * @return list of MediaDevice
+     */
+    public List<MediaDevice> getDeselectableMediaDevice() {
+        return mInfoMediaManager.getDeselectableMediaDevice();
+    }
+
+    /**
      * Release session to stop playing media on MediaDevice.
      */
     public boolean releaseSession() {
@@ -394,7 +403,9 @@ public class LocalMediaManager implements BluetoothCallback {
         return mPackageName;
     }
 
-    private MediaDevice updateCurrentConnectedDevice() {
+    @VisibleForTesting
+    MediaDevice updateCurrentConnectedDevice() {
+        MediaDevice connectedDevice = null;
         synchronized (mMediaDevicesLock) {
             for (MediaDevice device : mMediaDevices) {
                 if (device instanceof BluetoothMediaDevice) {
@@ -402,12 +413,12 @@ public class LocalMediaManager implements BluetoothCallback {
                         return device;
                     }
                 } else if (device instanceof PhoneMediaDevice) {
-                    return device;
+                    connectedDevice = device;
                 }
             }
         }
-        Log.w(TAG, "updateCurrentConnectedDevice() can't found current connected device");
-        return null;
+
+        return connectedDevice;
     }
 
     private boolean isActiveDevice(CachedBluetoothDevice device) {
@@ -628,7 +639,7 @@ public class LocalMediaManager implements BluetoothCallback {
                     .isBusy()
                     && !mOnTransferBluetoothDevice.isConnected()) {
                 // Failed to connect
-                mOnTransferBluetoothDevice.setState(MediaDeviceState.STATE_DISCONNECTED);
+                mOnTransferBluetoothDevice.setState(MediaDeviceState.STATE_CONNECTING_FAILED);
                 mOnTransferBluetoothDevice = null;
                 dispatchOnRequestFailed(REASON_UNKNOWN_ERROR);
             }

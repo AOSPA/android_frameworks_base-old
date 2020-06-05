@@ -29,7 +29,6 @@ import static android.os.UserHandle.USER_CURRENT;
 import static android.os.UserHandle.USER_NULL;
 
 import static com.android.server.blob.BlobStoreConfig.LOGV;
-import static com.android.server.blob.BlobStoreConfig.SESSION_EXPIRY_TIMEOUT_MILLIS;
 import static com.android.server.blob.BlobStoreConfig.TAG;
 import static com.android.server.blob.BlobStoreConfig.XML_VERSION_CURRENT;
 import static com.android.server.blob.BlobStoreConfig.getAdjustedCommitTimeMs;
@@ -987,8 +986,7 @@ public class BlobStoreManagerService extends SystemService {
                 boolean shouldRemove = false;
 
                 // Cleanup sessions which haven't been modified in a while.
-                if (blobStoreSession.getSessionFile().lastModified()
-                        < System.currentTimeMillis() - SESSION_EXPIRY_TIMEOUT_MILLIS) {
+                if (blobStoreSession.isExpired()) {
                     shouldRemove = true;
                 }
 
@@ -1056,6 +1054,18 @@ public class BlobStoreManagerService extends SystemService {
     void runIdleMaintenance() {
         synchronized (mBlobsLock) {
             handleIdleMaintenanceLocked();
+        }
+    }
+
+    boolean isBlobAvailable(long blobId, int userId) {
+        synchronized (mBlobsLock) {
+            final ArrayMap<BlobHandle, BlobMetadata> userBlobs = getUserBlobsLocked(userId);
+            for (BlobMetadata blobMetadata : userBlobs.values()) {
+                if (blobMetadata.getBlobId() == blobId) {
+                    return true;
+                }
+            }
+            return false;
         }
     }
 

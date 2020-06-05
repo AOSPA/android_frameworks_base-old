@@ -670,7 +670,7 @@ java_library {
 
 filegroup {
     name: "framework-ike-shared-srcs",
-    visibility: ["//frameworks/opt/net/ike"],
+    visibility: ["//packages/modules/IPsec"],
     srcs: [
         "core/java/android/annotation/StringDef.java",
         "core/java/android/net/annotations/PolicyDirection.java",
@@ -930,6 +930,8 @@ filegroup {
     srcs: [
         "core/java/android/os/incremental/IIncrementalService.aidl",
         "core/java/android/os/incremental/IncrementalNewFileParams.aidl",
+        "core/java/android/os/incremental/IStorageHealthListener.aidl",
+        "core/java/android/os/incremental/StorageHealthCheckParams.aidl",
     ],
     path: "core/java",
 }

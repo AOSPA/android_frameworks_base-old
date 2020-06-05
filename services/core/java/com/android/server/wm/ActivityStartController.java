@@ -467,28 +467,33 @@ public class ActivityStartController {
             final ActivityRecord[] outActivity = new ActivityRecord[1];
             // Lock the loop to ensure the activities launched in a sequence.
             synchronized (mService.mGlobalLock) {
-                for (int i = 0; i < starters.length; i++) {
-                    final int startResult = starters[i].setResultTo(resultTo)
-                            .setOutActivity(outActivity).execute();
-                    if (startResult < START_SUCCESS) {
-                        // Abort by error result and recycle unused starters.
-                        for (int j = i + 1; j < starters.length; j++) {
-                            mFactory.recycle(starters[j]);
+                mService.deferWindowLayout();
+                try {
+                    for (int i = 0; i < starters.length; i++) {
+                        final int startResult = starters[i].setResultTo(resultTo)
+                                .setOutActivity(outActivity).execute();
+                        if (startResult < START_SUCCESS) {
+                            // Abort by error result and recycle unused starters.
+                            for (int j = i + 1; j < starters.length; j++) {
+                                mFactory.recycle(starters[j]);
+                            }
+                            return startResult;
                         }
-                        return startResult;
-                    }
-                    final ActivityRecord started = outActivity[0];
-                    if (started != null && started.getUid() == filterCallingUid) {
-                        // Only the started activity which has the same uid as the source caller can
-                        // be the caller of next activity.
-                        resultTo = started.appToken;
-                    } else {
-                        resultTo = sourceResultTo;
-                        // Different apps not adjacent to the caller are forced to be new task.
-                        if (i < starters.length - 1) {
-                            starters[i + 1].getIntent().addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                        final ActivityRecord started = outActivity[0];
+                        if (started != null && started.getUid() == filterCallingUid) {
+                            // Only the started activity which has the same uid as the source caller
+                            // can be the caller of next activity.
+                            resultTo = started.appToken;
+                        } else {
+                            resultTo = sourceResultTo;
+                            // Different apps not adjacent to the caller are forced to be new task.
+                            if (i < starters.length - 1) {
+                                starters[i + 1].getIntent().addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                            }
                         }
                     }
+                } finally {
+                    mService.continueWindowLayout();
                 }
             }
         } finally {
@@ -512,7 +517,7 @@ public class ActivityStartController {
                     "pendingActivityLaunch");
             try {
                 starter.startResolvedActivity(pal.r, pal.sourceRecord, null, null, pal.startFlags,
-                        resume, pal.r.pendingOptions, null);
+                        resume, pal.r.pendingOptions, null, pal.intentGrants);
             } catch (Exception e) {
                 Slog.e(TAG, "Exception during pending activity launch pal=" + pal, e);
                 pal.sendErrorResult(e.getMessage());

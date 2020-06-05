@@ -77,12 +77,9 @@
     <string name="compat_mode_on" msgid="4963711187149440884">"Зумирај на целом екрану"</string>
     <string name="compat_mode_off" msgid="7682459748279487945">"Развуци на цео екран"</string>
     <string name="global_action_screenshot" msgid="2760267567509131654">"Снимак екрана"</string>
-    <!-- no translation found for global_action_lock_message (4466026255205186456) -->
-    <skip />
-    <!-- no translation found for global_action_lock_message (7621167597240332986) -->
-    <skip />
-    <!-- no translation found for global_action_lock_message (538790401275363781) -->
-    <skip />
+    <string name="global_action_lock_message" product="default" msgid="4466026255205186456">"Откључајте телефон за још опција"</string>
+    <string name="global_action_lock_message" product="tablet" msgid="7621167597240332986">"Откључајте таблет за још опција"</string>
+    <string name="global_action_lock_message" product="device" msgid="538790401275363781">"Откључајте уређај за још опција"</string>
     <string name="remote_input_image_insertion_text" msgid="4850791636452521123">"је послао/ла слику"</string>
     <string name="screenshot_saving_ticker" msgid="6519186952674544916">"Чување снимка екрана..."</string>
     <string name="screenshot_saving_title" msgid="2298349784913287333">"Чување снимка екрана..."</string>
@@ -329,8 +326,6 @@
     <string name="gps_notification_found_text" msgid="3145873880174658526">"Локацију је подесио GPS"</string>
     <string name="accessibility_location_active" msgid="2845747916764660369">"Има активних захтева за локацију"</string>
     <string name="accessibility_sensors_off_active" msgid="2619725434618911551">"Сензори су искључени"</string>
-    <!-- no translation found for accessibility_media_active (4942087422908239969) -->
-    <skip />
     <string name="accessibility_clear_all" msgid="970525598287244592">"Обриши сва обавештења."</string>
     <string name="notification_group_overflow_indicator" msgid="7605120293801012648">"и још <xliff:g id="NUMBER">%s</xliff:g>"</string>
     <plurals name="notification_group_overflow_description" formatted="false" msgid="91483442850649192">
@@ -522,10 +517,8 @@
     <string name="manage_notifications_text" msgid="6885645344647733116">"Управљајте"</string>
     <string name="manage_notifications_history_text" msgid="57055985396576230">"Историја"</string>
     <string name="notification_section_header_incoming" msgid="5295312809341711367">"Долазно"</string>
-    <!-- no translation found for notification_section_header_gentle (6804099527336337197) -->
-    <skip />
-    <!-- no translation found for notification_section_header_alerting (5581175033680477651) -->
-    <skip />
+    <string name="notification_section_header_gentle" msgid="6804099527336337197">"Нечујно"</string>
+    <string name="notification_section_header_alerting" msgid="5581175033680477651">"Обавештења"</string>
     <string name="notification_section_header_conversations" msgid="821834744538345661">"Конверзације"</string>
     <string name="accessibility_notification_section_header_gentle_clear_all" msgid="6490207897764933919">"Обришите сва нечујна обавештења"</string>
     <string name="dnd_suppressing_shade_text" msgid="5588252250634464042">"Обавештења су паузирана режимом Не узнемиравај"</string>
@@ -605,19 +598,21 @@
     <string name="volume_odi_captions_hint_enable" msgid="2073091194012843195">"омогућите"</string>
     <string name="volume_odi_captions_hint_disable" msgid="2518846326748183407">"онемогућите"</string>
     <string name="accessibility_output_chooser" msgid="7807898688967194183">"Промените излазни уређај"</string>
-    <string name="screen_pinning_title" msgid="7357611095909618178">"Екран је закачен"</string>
+    <string name="screen_pinning_title" msgid="9058007390337841305">"Апликација је закачена"</string>
     <string name="screen_pinning_description" msgid="8699395373875667743">"На овај начин се ово стално приказује док га не откачите. Додирните и задржите Назад и Преглед да бисте га откачили."</string>
     <string name="screen_pinning_description_recents_invisible" msgid="4564466648700390037">"На овај начин се ово стално приказује док га не откачите. Додирните и задржите Назад и Почетна да бисте га откачили."</string>
     <string name="screen_pinning_description_gestural" msgid="7246323931831232068">"На овај начин се стално приказује док га не откачите. Превуците нагоре и задржите да бисте га откачили."</string>
     <string name="screen_pinning_description_accessible" msgid="7386449191953535332">"На овај начин се ово стално приказује док га не откачите. Додирните и задржите Преглед да бисте га откачили."</string>
     <string name="screen_pinning_description_recents_invisible_accessible" msgid="2857071808674481986">"На овај начин се ово стално приказује док га не откачите. Додирните и задржите Почетна да бисте га откачили."</string>
-    <string name="screen_pinning_toast" msgid="2083944237147005811">"Да бисте откачили овај екран, додирните и задржите дугмад Назад и Преглед"</string>
-    <string name="screen_pinning_toast_recents_invisible" msgid="6343770487795352573">"Да бисте откачили овај екран, додирните и задржите дугмад Назад и Почетна"</string>
-    <string name="screen_pinning_toast_gesture_nav" msgid="2884536903398445645">"Да бисте откачили овај екран, превуците нагоре и задржите"</string>
+    <string name="screen_pinning_exposes_personal_data" msgid="8189852022981524789">"Могу да буду доступни лични подаци (као што су контакти и садржај имејлова)."</string>
+    <string name="screen_pinning_can_open_other_apps" msgid="7529756813231421455">"Закачена апликација може да отвара друге апликације."</string>
+    <string name="screen_pinning_toast" msgid="8177286912533744328">"Да бисте откачили ову апликацију, додирните и задржите дугмад Назад и Преглед"</string>
+    <string name="screen_pinning_toast_recents_invisible" msgid="6850978077443052594">"Да бисте откачили ову апликацију, додирните и задржите дугмад Назад и Почетна"</string>
+    <string name="screen_pinning_toast_gesture_nav" msgid="170699893395336705">"Да бисте откачили ову апликацију, превуците нагоре и задржите"</string>
     <string name="screen_pinning_positive" msgid="3285785989665266984">"Важи"</string>
     <string name="screen_pinning_negative" msgid="6882816864569211666">"Не, хвала"</string>
-    <string name="screen_pinning_start" msgid="5695091877402422575">"Екран је закачен"</string>
-    <string name="screen_pinning_exit" msgid="5114993350662745840">"Екран је откачен"</string>
+    <string name="screen_pinning_start" msgid="7483998671383371313">"Апликација је закачена"</string>
+    <string name="screen_pinning_exit" msgid="4553787518387346893">"Апликација је откачена"</string>
     <string name="quick_settings_reset_confirmation_title" msgid="463533331480997595">"Желите ли да сакријете <xliff:g id="TILE_LABEL">%1$s</xliff:g>?"</string>
     <string name="quick_settings_reset_confirmation_message" msgid="2320586180785674186">"Ово ће се поново појавити када га следећи пут будете укључили у подешавањима."</string>
     <string name="quick_settings_reset_confirmation_button" msgid="3341477479055016776">"Сакриј"</string>
@@ -720,20 +715,14 @@
     <string name="inline_turn_off_notifications" msgid="8543989584403106071">"Искључи обавештења"</string>
     <string name="inline_keep_showing_app" msgid="4393429060390649757">"Желите ли да се обавештења из ове апликације и даље приказују?"</string>
     <string name="notification_silence_title" msgid="8608090968400832335">"Нечујно"</string>
-    <!-- no translation found for notification_alert_title (3656229781017543655) -->
-    <skip />
+    <string name="notification_alert_title" msgid="3656229781017543655">"Подразумевано"</string>
     <string name="notification_bubble_title" msgid="8330481035191903164">"Облачић"</string>
-    <!-- no translation found for notification_channel_summary_low (4860617986908931158) -->
-    <skip />
-    <!-- no translation found for notification_conversation_summary_low (1734433426085468009) -->
-    <skip />
-    <!-- no translation found for notification_channel_summary_default (3282930979307248890) -->
-    <skip />
-    <!-- no translation found for notification_channel_summary_default_with_bubbles (1782419896613644568) -->
-    <skip />
+    <string name="notification_channel_summary_low" msgid="4860617986908931158">"Без звука и вибрирања"</string>
+    <string name="notification_conversation_summary_low" msgid="1734433426085468009">"Без звука и вибрирања и приказује се у наставку одељка за конверзације"</string>
+    <string name="notification_channel_summary_default" msgid="3282930979307248890">"Може да звони или вибрира у зависности од подешавања телефона"</string>
+    <string name="notification_channel_summary_default_with_bubbles" msgid="1782419896613644568">"Може да звони или вибрира у зависности од подешавања телефона. Конверзације из апликације <xliff:g id="APP_NAME">%1$s</xliff:g> се подразумевано приказују у облачићима."</string>
     <string name="notification_channel_summary_bubble" msgid="7235935211580860537">"Привлачи вам пажњу помоћу плутајуће пречице до овог садржаја."</string>
-    <!-- no translation found for notification_channel_summary_priority (7952654515769021553) -->
-    <skip />
+    <string name="notification_channel_summary_priority" msgid="7952654515769021553">"Приказује се у врху одељка за конверзације као плутајући облачић, приказује слику профила на закључаном екрану"</string>
     <string name="notification_conversation_channel_settings" msgid="2409977688430606835">"Подешавања"</string>
     <string name="notification_priority_title" msgid="2079708866333537093">"Приоритет"</string>
     <string name="no_shortcut" msgid="7176375126961212514">"<xliff:g id="APP_NAME">%1$s</xliff:g> не подржава подешавања за конверзације"</string>

@@ -292,6 +292,7 @@ import java.io.PrintWriter;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
@@ -530,6 +531,7 @@ public class NotificationManagerService extends SystemService {
     private final SavePolicyFileRunnable mSavePolicyFile = new SavePolicyFileRunnable();
     private NotificationRecordLogger mNotificationRecordLogger;
     private InstanceIdSequence mNotificationInstanceIdSequence;
+    private Set<String> mMsgPkgsAllowedAsConvos = new HashSet();
 
     static class Archive {
         final SparseArray<Boolean> mEnabled;
@@ -2042,6 +2044,9 @@ public class NotificationManagerService extends SystemService {
         mStripRemoteViewsSizeBytes = getContext().getResources().getInteger(
                 com.android.internal.R.integer.config_notificationStripRemoteViewSizeBytes);
 
+        mMsgPkgsAllowedAsConvos = Set.of(
+                getContext().getResources().getStringArray(
+                        com.android.internal.R.array.config_notificationMsgPkgsAllowedAsConvos));
         mStatsManager = statsManager;
     }
 
@@ -3164,6 +3169,12 @@ public class NotificationManagerService extends SystemService {
             checkCallerIsSystem();
             mPreferencesHelper.setShowBadge(pkg, uid, showBadge);
             handleSavePolicyFile();
+        }
+
+        @Override
+        public boolean hasSentValidMsg(String pkg, int uid) {
+            checkCallerIsSystem();
+            return mPreferencesHelper.hasSentValidMsg(pkg, uid);
         }
 
         @Override
@@ -5683,6 +5694,7 @@ public class NotificationManagerService extends SystemService {
         r.setIsAppImportanceLocked(mPreferencesHelper.getIsAppImportanceLocked(pkg, callingUid));
         r.setPostSilently(postSilently);
         r.setFlagBubbleRemoved(false);
+        r.setPkgAllowedAsConvo(mMsgPkgsAllowedAsConvos.contains(pkg));
 
         if ((notification.flags & Notification.FLAG_FOREGROUND_SERVICE) != 0) {
             final boolean fgServiceShown = channel.isFgServiceShown();

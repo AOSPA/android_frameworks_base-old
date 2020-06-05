@@ -101,6 +101,7 @@ import android.view.View.MeasureSpec;
 import android.view.View.OnClickListener;
 import android.view.ViewGroup;
 import android.view.ViewGroup.LayoutParams;
+import android.view.ViewTreeObserver;
 import android.view.animation.AccelerateInterpolator;
 import android.view.animation.DecelerateInterpolator;
 import android.widget.Button;
@@ -169,17 +170,6 @@ public class ChooserActivity extends ResolverActivity implements
      */
     public static final String EXTRA_PRIVATE_RETAIN_IN_ON_STOP
             = "com.android.internal.app.ChooserActivity.EXTRA_PRIVATE_RETAIN_IN_ON_STOP";
-
-    /**
-     * Integer extra to indicate which profile should be automatically selected.
-     * <p>Can only be used if there is a work profile.
-     * <p>Possible values can be either {@link #PROFILE_PERSONAL} or {@link #PROFILE_WORK}.
-     */
-    static final String EXTRA_SELECTED_PROFILE =
-            "com.android.internal.app.ChooserActivity.EXTRA_SELECTED_PROFILE";
-
-    static final int PROFILE_PERSONAL = AbstractMultiProfilePagerAdapter.PROFILE_PERSONAL;
-    static final int PROFILE_WORK = AbstractMultiProfilePagerAdapter.PROFILE_WORK;
 
     private static final String PREF_NUM_SHEET_EXPANSIONS = "pref_num_sheet_expansions";
 
@@ -885,7 +875,6 @@ public class ChooserActivity extends ResolverActivity implements
                 initialIntents,
                 rList,
                 filterLastUsed,
-                mUseLayoutForBrowsables,
                 /* userHandle */ UserHandle.of(UserHandle.myUserId()));
         return new ChooserMultiProfilePagerAdapter(
                 /* context */ this,
@@ -906,7 +895,6 @@ public class ChooserActivity extends ResolverActivity implements
                 selectedProfile == PROFILE_PERSONAL ? initialIntents : null,
                 rList,
                 filterLastUsed,
-                mUseLayoutForBrowsables,
                 /* userHandle */ getPersonalProfileUserHandle());
         ChooserGridAdapter workAdapter = createChooserGridAdapter(
                 /* context */ this,
@@ -914,7 +902,6 @@ public class ChooserActivity extends ResolverActivity implements
                 selectedProfile == PROFILE_WORK ? initialIntents : null,
                 rList,
                 filterLastUsed,
-                mUseLayoutForBrowsables,
                 /* userHandle */ getWorkProfileUserHandle());
         return new ChooserMultiProfilePagerAdapter(
                 /* context */ this,
@@ -927,15 +914,8 @@ public class ChooserActivity extends ResolverActivity implements
     }
 
     private int findSelectedProfile() {
-        int selectedProfile;
-        if (getIntent().hasExtra(EXTRA_SELECTED_PROFILE)) {
-            selectedProfile = getIntent().getIntExtra(EXTRA_SELECTED_PROFILE, /* defValue = */ -1);
-            if (selectedProfile != PROFILE_PERSONAL && selectedProfile != PROFILE_WORK) {
-                throw new IllegalArgumentException(EXTRA_SELECTED_PROFILE + " has invalid value "
-                        + selectedProfile + ". Must be either ChooserActivity.PROFILE_PERSONAL or "
-                        + "ChooserActivity.PROFILE_WORK.");
-            }
-        } else {
+        int selectedProfile = getSelectedProfileExtra();
+        if (selectedProfile == -1) {
             selectedProfile = getProfileForUser(getUser());
         }
         return selectedProfile;
@@ -1634,7 +1614,7 @@ public class ChooserActivity extends ResolverActivity implements
             targetList = Collections.singletonList(ti);
         }
 
-        ResolverTargetActionsDialogFragment f = new ResolverTargetActionsDialogFragment(
+        ChooserTargetActionsDialogFragment f = new ChooserTargetActionsDialogFragment(
                 targetList, mChooserMultiProfilePagerAdapter.getCurrentUserHandle());
 
         f.show(getFragmentManager(), TARGET_DETAILS_FRAGMENT_TAG);
@@ -1694,15 +1674,9 @@ public class ChooserActivity extends ResolverActivity implements
         if (targetInfo instanceof MultiDisplayResolveInfo) {
             MultiDisplayResolveInfo mti = (MultiDisplayResolveInfo) targetInfo;
             if (!mti.hasSelected()) {
-                // Stacked apps get a disambiguation first
-                CharSequence[] labels = new CharSequence[mti.getTargets().size()];
-                int i = 0;
-                for (TargetInfo ti : mti.getTargets()) {
-                    labels[i++] = ti.getResolveInfo().loadLabel(getPackageManager());
-                }
                 ChooserStackedAppDialogFragment f = new ChooserStackedAppDialogFragment(
-                        targetInfo.getDisplayLabel(),
-                        ((MultiDisplayResolveInfo) targetInfo), labels, which);
+                        mti, which,
+                        mChooserMultiProfilePagerAdapter.getCurrentUserHandle());
 
                 f.show(getFragmentManager(), TARGET_DETAILS_FRAGMENT_TAG);
                 return;
@@ -2147,8 +2121,7 @@ public class ChooserActivity extends ResolverActivity implements
             extras.putString(Intent.EXTRA_SHORTCUT_ID, shortcutInfo.getId());
 
             ChooserTarget chooserTarget = new ChooserTarget(
-                    shortcutInfo.getLongLabel() != null ? shortcutInfo.getLongLabel()
-                            : shortcutInfo.getShortLabel(),
+                    shortcutInfo.getLabel(),
                     null, // Icon will be loaded later if this target is selected to be shown.
                     score, matchingShortcuts.get(i).getTargetComponent().clone(), extras);
 
@@ -2504,10 +2477,10 @@ public class ChooserActivity extends ResolverActivity implements
     @VisibleForTesting
     public ChooserGridAdapter createChooserGridAdapter(Context context,
             List<Intent> payloadIntents, Intent[] initialIntents, List<ResolveInfo> rList,
-            boolean filterLastUsed, boolean useLayoutForBrowsables, UserHandle userHandle) {
+            boolean filterLastUsed, UserHandle userHandle) {
         ChooserListAdapter chooserListAdapter = createChooserListAdapter(context, payloadIntents,
                 initialIntents, rList, filterLastUsed,
-                useLayoutForBrowsables, createListController(userHandle));
+                createListController(userHandle));
         AppPredictor.Callback appPredictorCallback = createAppPredictorCallback(chooserListAdapter);
         AppPredictor appPredictor = setupAppPredictorForUser(userHandle, appPredictorCallback);
         chooserListAdapter.setAppPredictor(appPredictor);
@@ -2518,11 +2491,10 @@ public class ChooserActivity extends ResolverActivity implements
     @VisibleForTesting
     public ChooserListAdapter createChooserListAdapter(Context context,
             List<Intent> payloadIntents, Intent[] initialIntents, List<ResolveInfo> rList,
-            boolean filterLastUsed, boolean useLayoutForBrowsables,
-            ResolverListController resolverListController) {
+            boolean filterLastUsed, ResolverListController resolverListController) {
         return new ChooserListAdapter(context, payloadIntents, initialIntents, rList,
-                filterLastUsed, resolverListController, useLayoutForBrowsables,
-                this, this, context.getPackageManager());
+                filterLastUsed, resolverListController, this,
+                this, context.getPackageManager());
     }
 
     @VisibleForTesting
@@ -2778,6 +2750,7 @@ public class ChooserActivity extends ResolverActivity implements
     @Override
     public void onListRebuilt(ResolverListAdapter listAdapter) {
         setupScrollListener();
+        maybeSetupGlobalLayoutListener();
 
         ChooserListAdapter chooserListAdapter = (ChooserListAdapter) listAdapter;
         if (chooserListAdapter.getUserHandle()
@@ -2855,6 +2828,28 @@ public class ChooserActivity extends ResolverActivity implements
                         }
 
                         elevatedView.setElevation(defaultElevation);
+                    }
+                });
+    }
+
+    private void maybeSetupGlobalLayoutListener() {
+        if (shouldShowTabs()) {
+            return;
+        }
+        final View recyclerView = mChooserMultiProfilePagerAdapter.getActiveAdapterView();
+        recyclerView.getViewTreeObserver()
+                .addOnGlobalLayoutListener(new ViewTreeObserver.OnGlobalLayoutListener() {
+                    @Override
+                    public void onGlobalLayout() {
+                        // Fixes an issue were the accessibility border disappears on list creation.
+                        recyclerView.getViewTreeObserver().removeOnGlobalLayoutListener(this);
+                        final TextView titleView = findViewById(R.id.title);
+                        if (titleView != null) {
+                            titleView.setFocusable(true);
+                            titleView.setFocusableInTouchMode(true);
+                            titleView.requestFocus();
+                            titleView.requestAccessibilityFocus();
+                        }
                     }
                 });
     }
@@ -2972,16 +2967,16 @@ public class ChooserActivity extends ResolverActivity implements
                 itemView.setOnClickListener(v -> startSelected(mListPosition,
                         false/* always */, true/* filterd */));
 
-                TargetInfo ti = mChooserMultiProfilePagerAdapter.getActiveListAdapter()
-                        .targetInfoForPosition(mListPosition, /* filtered */ true);
+                itemView.setOnLongClickListener(v -> {
+                    final TargetInfo ti = mChooserMultiProfilePagerAdapter.getActiveListAdapter()
+                            .targetInfoForPosition(mListPosition, /* filtered */ true);
 
-                // This should always be the case for ItemViewHolder, check for sanity
-                if (ti instanceof DisplayResolveInfo) {
-                    itemView.setOnLongClickListener(v -> {
+                    // This should always be the case for ItemViewHolder, check for sanity
+                    if (ti instanceof DisplayResolveInfo) {
                         showTargetDetails((DisplayResolveInfo) ti);
-                        return true;
-                    });
-                }
+                    }
+                    return true;
+                });
             }
         }
     }
@@ -3309,16 +3304,15 @@ public class ChooserActivity extends ResolverActivity implements
 
                 // Direct Share targets should not show any menu
                 if (!isDirectShare) {
-                    final TargetInfo ti = mChooserListAdapter.targetInfoForPosition(
-                            holder.getItemIndex(column), true);
-
-                    // This should always be the case for non-DS targets, check for sanity
-                    if (ti instanceof DisplayResolveInfo) {
-                        v.setOnLongClickListener(v1 -> {
+                    v.setOnLongClickListener(v1 -> {
+                        final TargetInfo ti = mChooserListAdapter.targetInfoForPosition(
+                                holder.getItemIndex(column), true);
+                        // This should always be the case for non-DS targets, check for sanity
+                        if (ti instanceof DisplayResolveInfo) {
                             showTargetDetails((DisplayResolveInfo) ti);
-                            return true;
-                        });
-                    }
+                        }
+                        return true;
+                    });
                 }
 
                 holder.addView(i, v);

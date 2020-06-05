@@ -60,6 +60,11 @@ public class InfoMediaDevice extends MediaDevice {
                 mContext.getDrawable(getDrawableResId()), getId().hashCode());
     }
 
+    @Override
+    public Drawable getIconWithoutBackground() {
+        return mContext.getDrawable(getDrawableResId());
+    }
+
     @VisibleForTesting
     int getDrawableResId() {
         int resId;
@@ -68,9 +73,11 @@ public class InfoMediaDevice extends MediaDevice {
                 resId = R.drawable.ic_media_group_device;
                 break;
             case TYPE_REMOTE_TV:
+                resId = R.drawable.ic_media_display_device;
+                break;
             case TYPE_REMOTE_SPEAKER:
             default:
-                resId = R.drawable.ic_media_device;
+                resId = R.drawable.ic_media_speaker_device;
                 break;
         }
         return resId;

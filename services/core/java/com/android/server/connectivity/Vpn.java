@@ -66,6 +66,7 @@ import android.net.NetworkCapabilities;
 import android.net.NetworkInfo;
 import android.net.NetworkInfo.DetailedState;
 import android.net.NetworkProvider;
+import android.net.NetworkRequest;
 import android.net.RouteInfo;
 import android.net.UidRange;
 import android.net.VpnManager;
@@ -2227,12 +2228,27 @@ public class Vpn {
 
         @Override
         public void run() {
-            // Explicitly use only the network that ConnectivityService thinks is the "best." In
-            // other words, only ever use the currently selected default network. This does mean
-            // that in both onLost() and onConnected(), any old sessions MUST be torn down. This
-            // does NOT include VPNs.
+            // Unless the profile is restricted to test networks, explicitly use only the network
+            // that ConnectivityService thinks is the "best." In other words, only ever use the
+            // currently selected default network. This does mean that in both onLost() and
+            // onConnected(), any old sessions MUST be torn down. This does NOT include VPNs.
+            //
+            // When restricted to test networks, select any network with TRANSPORT_TEST. Since the
+            // creator of the profile and the test network creator both have MANAGE_TEST_NETWORKS,
+            // this is considered safe.
             final ConnectivityManager cm = ConnectivityManager.from(mContext);
-            cm.requestNetwork(cm.getDefaultRequest(), mNetworkCallback);
+            final NetworkRequest req;
+
+            if (mProfile.isRestrictedToTestNetworks()) {
+                req = new NetworkRequest.Builder()
+                        .clearCapabilities()
+                        .addTransportType(NetworkCapabilities.TRANSPORT_TEST)
+                        .build();
+            } else {
+                req = cm.getDefaultRequest();
+            }
+
+            cm.requestNetwork(req, mNetworkCallback);
         }
 
         private boolean isActiveNetwork(@Nullable Network network) {
@@ -2864,6 +2880,23 @@ public class Vpn {
         return Credentials.PLATFORM_VPN + mUserHandle + "_" + packageName;
     }
 
+    @VisibleForTesting
+    void validateRequiredFeatures(VpnProfile profile) {
+        switch (profile.type) {
+            case VpnProfile.TYPE_IKEV2_IPSEC_USER_PASS:
+            case VpnProfile.TYPE_IKEV2_IPSEC_PSK:
+            case VpnProfile.TYPE_IKEV2_IPSEC_RSA:
+                if (!mContext.getPackageManager().hasSystemFeature(
+                        PackageManager.FEATURE_IPSEC_TUNNELS)) {
+                    throw new UnsupportedOperationException(
+                            "Ikev2VpnProfile(s) requires PackageManager.FEATURE_IPSEC_TUNNELS");
+                }
+                break;
+            default:
+                return;
+        }
+    }
+
     /**
      * Stores an app-provisioned VPN profile and returns whether the app is already prepared.
      *
@@ -2880,6 +2913,12 @@ public class Vpn {
 
         verifyCallingUidAndPackage(packageName);
         enforceNotRestrictedUser();
+        validateRequiredFeatures(profile);
+
+        if (profile.isRestrictedToTestNetworks) {
+            mContext.enforceCallingPermission(Manifest.permission.MANAGE_TEST_NETWORKS,
+                    "Test-mode profiles require the MANAGE_TEST_NETWORKS permission");
+        }
 
         final byte[] encodedProfile = profile.encode();
         if (encodedProfile.length > MAX_VPN_PROFILE_SIZE_BYTES) {
