@@ -24,4 +24,7 @@
     <string-array name="config_vendorPlatformSignatures">
     </string-array>
 
+    <!-- Whether to dim the FOD icon -->
+    <bool name="config_fodIconDim">false</bool>
+    
 </resources>
