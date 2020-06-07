@@ -296,4 +296,7 @@
     -->
     <integer name="config_longPressOnAssistBehaviorHwkeys">4</integer>
 
+    <!-- FOD Dimming layer -->
+    <bool name="config_targetUsesInKernelDimming">false</bool>
+
 </resources>
