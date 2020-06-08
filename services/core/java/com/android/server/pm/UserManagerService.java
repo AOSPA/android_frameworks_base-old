@@ -491,6 +491,7 @@ public class UserManagerService extends IUserManager.Stub {
         final SparseIntArray states;
         public WatchedUserStates() {
             states = new SparseIntArray();
+            invalidateIsUserUnlockedCache();
         }
         public int get(int userId) {
             return states.get(userId);
@@ -2249,9 +2250,6 @@ public class UserManagerService extends IUserManager.Stub {
         // Managed profiles have their own specific rules.
         final boolean isManagedProfile = type.isManagedProfile();
         if (isManagedProfile) {
-            if (ActivityManager.isLowRamDeviceStatic()) {
-                return false;
-            }
             if (!mContext.getPackageManager().hasSystemFeature(
                     PackageManager.FEATURE_MANAGED_USERS)) {
                 return false;
