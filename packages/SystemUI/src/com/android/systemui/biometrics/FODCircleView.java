@@ -80,6 +80,8 @@ public class FODCircleView extends ImageView {
         new int[]{255, 0}
     };
 
+    private static final int FADE_ANIM_DURATION = 250;
+
     private final int mPositionX;
     private final int mPositionY;
     private final int mSize;
@@ -101,11 +103,12 @@ public class FODCircleView extends ImageView {
 
     private int mCurrentBrightness;
 
+    private boolean mFading;
     private boolean mIsBouncer;
     private boolean mIsDreaming;
     private boolean mIsCircleShowing;
     private boolean mCanUnlockWithFp;
-    private boolean mIsShowing;
+    private boolean mIsShowing = true;
     private boolean mFpDisabled;
 
     private Handler mHandler;
@@ -122,7 +125,7 @@ public class FODCircleView extends ImageView {
         @Override
         public void onDreamingStateChanged(boolean dreaming) {
             mIsDreaming = dreaming;
-            updateAlpha();
+            setAlpha(getFodAlpha());
 
             if (dreaming) {
                 mBurnInProtectionTimer = new Timer();
@@ -132,6 +135,13 @@ public class FODCircleView extends ImageView {
                 mDreamingOffsetX = 0;
                 mDreamingOffsetY = 0;
                 mHandler.post(() -> updatePosition());
+            }
+        }
+
+        @Override
+        public void onKeyguardVisibilityChanged(boolean showing) {
+            if (!showing) {
+                hide();
             }
         }
 
@@ -198,7 +208,7 @@ public class FODCircleView extends ImageView {
         @Override
         public void onStrongAuthStateChanged(int userId) {
             mCanUnlockWithFp = canUnlockWithFp();
-            updateAlpha();
+            setAlpha(getFodAlpha());
         }
     };
 
@@ -282,7 +292,7 @@ public class FODCircleView extends ImageView {
         mUpdateMonitor.registerCallback(mMonitorCallback);
 
         mCanUnlockWithFp = canUnlockWithFp();
-        updateAlpha();
+        setAlpha(getFodAlpha());
     }
 
     @Override
@@ -335,7 +345,7 @@ public class FODCircleView extends ImageView {
         boolean newIsInside = (x > 0 && x < mSize) && (y > 0 && y < mSize);
 
         if (event.getAction() == MotionEvent.ACTION_DOWN && newIsInside && mIsShowing
-                && mCanUnlockWithFp) {
+                && mCanUnlockWithFp && !mFading) {
             showCircle();
             return true;
         } else if (event.getAction() == MotionEvent.ACTION_UP  && mCanUnlockWithFp) {
@@ -438,27 +448,64 @@ public class FODCircleView extends ImageView {
         }
 
         mCanUnlockWithFp = canUnlockWithFp();
-        updateAlpha();
+        dispatchShow();
+
+        if (mIsShowing) {
+            setAlpha(getFodAlpha());
+            return;
+        }
 
         mIsShowing = true;
 
         updatePosition();
-
-        dispatchShow();
         setVisibility(View.VISIBLE);
+
+        if (!mCanUnlockWithFp && !mIsDreaming) {
+            animate().withStartAction(() -> mFading = true)
+                .alpha(getFodAlpha())
+                .setDuration(FADE_ANIM_DURATION)
+                .withEndAction(() -> {
+                    if (!mIsShowing) {
+                        setVisibility(View.GONE);
+                        setAlpha(0);
+                    } else {
+                        setAlpha(getFodAlpha());
+                    }
+                    mFading = false;
+                })
+                .start();
+        } else {
+            setAlpha(getFodAlpha());
+        }
     }
 
     public void hide() {
-        mIsShowing = false;
-        setVisibility(View.GONE);
         hideCircle();
         dispatchHide();
+
+        if (!mIsShowing) {
+            return;
+        }
+
+        mIsShowing = false;
+        animate().withStartAction(() -> mFading = true)
+            .alpha(0)
+            .setDuration(FADE_ANIM_DURATION/2)
+            .withEndAction(() -> {
+                if (mIsShowing) {
+                    setVisibility(View.VISIBLE);
+                    setAlpha(getFodAlpha());
+                } else {
+                    setVisibility(View.GONE);
+                }
+                mFading = false;
+            })
+            .start();
     }
 
-    private void updateAlpha() {
-        float alpha = (mIsDreaming ? 0.5f : 1f) *
-                (mCanUnlockWithFp ? 1f : 0.4f);
-        setAlpha(alpha);
+    private float getFodAlpha() {
+        return (mIsDreaming ? 0.5f : 1f) *
+                (mCanUnlockWithFp ? 1f : 0.5f);
     }
 
     private void updatePosition() {
