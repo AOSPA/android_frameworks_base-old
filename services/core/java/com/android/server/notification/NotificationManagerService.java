@@ -246,6 +246,7 @@ import com.android.internal.os.SomeArgs;
 import com.android.internal.statusbar.NotificationVisibility;
 import com.android.internal.util.ArrayUtils;
 import com.android.internal.util.CollectionUtils;
+import com.android.internal.util.ConcurrentUtils;
 import com.android.internal.util.DumpUtils;
 import com.android.internal.util.FastXmlSerializer;
 import com.android.internal.util.Preconditions;
@@ -1952,7 +1953,8 @@ public class NotificationManagerService extends SystemService {
                 mRankingHandler,
                 mZenModeHelper,
                 new NotificationChannelLoggerImpl(),
-                mAppOps);
+                mAppOps,
+                new SysUiStatsEvent.BuilderFactory());
         mRankingHelper = new RankingHelper(getContext(),
                 mRankingHandler,
                 mPreferencesHelper,
@@ -2172,19 +2174,19 @@ public class NotificationManagerService extends SystemService {
         mStatsManager.setPullAtomCallback(
                 PACKAGE_NOTIFICATION_PREFERENCES,
                 null, // use default PullAtomMetadata values
-                BackgroundThread.getExecutor(),
+                ConcurrentUtils.DIRECT_EXECUTOR,
                 mPullAtomCallback
         );
         mStatsManager.setPullAtomCallback(
                 PACKAGE_NOTIFICATION_CHANNEL_PREFERENCES,
                 null, // use default PullAtomMetadata values
-                BackgroundThread.getExecutor(),
+                ConcurrentUtils.DIRECT_EXECUTOR,
                 mPullAtomCallback
         );
         mStatsManager.setPullAtomCallback(
                 PACKAGE_NOTIFICATION_CHANNEL_GROUP_PREFERENCES,
                 null, // use default PullAtomMetadata values
-                BackgroundThread.getExecutor(),
+                ConcurrentUtils.DIRECT_EXECUTOR,
                 mPullAtomCallback
         );
     }
@@ -6802,9 +6804,13 @@ public class NotificationManagerService extends SystemService {
         boolean hasValidVibrate = false;
         boolean hasValidSound = false;
         boolean sentAccessibilityEvent = false;
-        // If the notification will appear in the status bar, it should send an accessibility
-        // event
-        if (!record.isUpdate && record.getImportance() > IMPORTANCE_MIN) {
+
+        // If the notification will appear in the status bar, it should send an accessibility event
+        final boolean suppressedByDnd = record.isIntercepted()
+                && (record.getSuppressedVisualEffects() & SUPPRESSED_EFFECT_STATUS_BAR) != 0;
+        if (!record.isUpdate
+                && record.getImportance() > IMPORTANCE_MIN
+                && !suppressedByDnd) {
             sendAccessibilityEvent(notification, record.getSbn().getPackageName());
             sentAccessibilityEvent = true;
         }

@@ -1884,6 +1884,9 @@ public class Intent implements Parcelable, Cloneable {
 
     /**
      * Activity action: Launch UI to manage auto-revoke state.
+     *
+     * This is equivalent to Intent#ACTION_APPLICATION_DETAILS_SETTINGS
+     *
      * <p>
      * Input: {@link Intent#setData data} should be a {@code package}-scheme {@link Uri} with
      * a package name, whose auto-revoke state will be reviewed (mandatory).
@@ -11285,6 +11288,19 @@ public class Intent implements Parcelable, Cloneable {
      * @hide
      */
     public boolean migrateExtraStreamToClipData() {
+        return migrateExtraStreamToClipData(AppGlobals.getInitialApplication());
+    }
+
+    /**
+     * Migrate any {@link #EXTRA_STREAM} in {@link #ACTION_SEND} and
+     * {@link #ACTION_SEND_MULTIPLE} to {@link ClipData}. Also inspects nested
+     * intents in {@link #ACTION_CHOOSER}.
+     *
+     * @param context app context
+     * @return Whether any contents were migrated.
+     * @hide
+     */
+    public boolean migrateExtraStreamToClipData(Context context) {
         // Refuse to touch if extras already parcelled
         if (mExtras != null && mExtras.isParcelled()) return false;
 
@@ -11302,7 +11318,7 @@ public class Intent implements Parcelable, Cloneable {
             try {
                 final Intent intent = getParcelableExtra(EXTRA_INTENT);
                 if (intent != null) {
-                    migrated |= intent.migrateExtraStreamToClipData();
+                    migrated |= intent.migrateExtraStreamToClipData(context);
                 }
             } catch (ClassCastException e) {
             }
@@ -11312,7 +11328,7 @@ public class Intent implements Parcelable, Cloneable {
                     for (int i = 0; i < intents.length; i++) {
                         final Intent intent = (Intent) intents[i];
                         if (intent != null) {
-                            migrated |= intent.migrateExtraStreamToClipData();
+                            migrated |= intent.migrateExtraStreamToClipData(context);
                         }
                     }
                 }
@@ -11375,13 +11391,17 @@ public class Intent implements Parcelable, Cloneable {
             } catch (ClassCastException e) {
             }
         } else if (isImageCaptureIntent()) {
-            final Uri output;
+            Uri output;
             try {
                 output = getParcelableExtra(MediaStore.EXTRA_OUTPUT);
             } catch (ClassCastException e) {
                 return false;
             }
+
             if (output != null) {
+                output = maybeConvertFileToContentUri(context, output);
+                putExtra(MediaStore.EXTRA_OUTPUT, output);
+
                 setClipData(ClipData.newRawUri("", output));
                 addFlags(FLAG_GRANT_WRITE_URI_PERMISSION|FLAG_GRANT_READ_URI_PERMISSION);
                 return true;
@@ -11389,6 +11409,23 @@ public class Intent implements Parcelable, Cloneable {
         }
 
         return false;
+    }
+
+    private Uri maybeConvertFileToContentUri(Context context, Uri uri) {
+        if (ContentResolver.SCHEME_FILE.equals(uri.getScheme())
+                && context.getApplicationInfo().targetSdkVersion < Build.VERSION_CODES.R) {
+            File file = new File(uri.getPath());
+            try {
+                if (!file.exists()) file.createNewFile();
+                uri = MediaStore.scanFile(context.getContentResolver(), new File(uri.getPath()));
+                if (uri != null) {
+                    return uri;
+                }
+            } catch (IOException e) {
+                Log.e(TAG, "Ignoring failure to create file " + file, e);
+            }
+        }
+        return uri;
     }
 
     /**

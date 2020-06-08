@@ -1220,8 +1220,10 @@ public class SurfaceView extends View implements ViewRootImpl.SurfaceChangedCall
         }
 
         if (mDeferredDestroySurfaceControl != null) {
-            mTmpTransaction.remove(mDeferredDestroySurfaceControl).apply();
-            mDeferredDestroySurfaceControl = null;
+            synchronized (mSurfaceControlLock) {
+                mTmpTransaction.remove(mDeferredDestroySurfaceControl).apply();
+                mDeferredDestroySurfaceControl = null;
+            }
         }
 
         runOnUiThread(this::performDrawFinished);
