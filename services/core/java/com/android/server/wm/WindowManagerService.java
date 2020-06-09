@@ -3870,7 +3870,7 @@ public class WindowManagerService extends IWindowManager.Stub
 
                     if (rotationChanged) {
                         mAtmService.getTaskChangeNotificationController()
-                                .notifyOnActivityRotation();
+                                .notifyOnActivityRotation(displayContent.mDisplayId);
                     }
 
                     if (!rotationChanged || forceRelayout) {
