@@ -900,22 +900,6 @@ public class AccessPoint implements Comparable<AccessPoint> {
         networkId = WifiConfiguration.INVALID_NETWORK_ID;
     }
 
-    public boolean isFils256Supported() {
-            WifiManager wifiManager = mContext.getSystemService(WifiManager.class);
-            String capability = wifiManager.getCapabilities("key_mgmt");
-
-            if (!capability.contains("FILS-SHA256")) {
-                  return false;
-            }
-
-            for (ScanResult result : mScanResults) {
-                if (result.capabilities.contains("FILS-SHA256")) {
-                    return true;
-                }
-            }
-        return false;
-    }
-
     public boolean isSuiteBSupported() {
             WifiManager wifiManager = mContext.getSystemService(WifiManager.class);
             String capability = wifiManager.getCapabilities("key_mgmt");
@@ -926,21 +910,6 @@ public class AccessPoint implements Comparable<AccessPoint> {
 
             for (ScanResult result : mScanResults) {
                 if (result.capabilities.contains("EAP_SUITE_B_192")) {
-                    return true;
-                }
-            }
-        return false;
-    }
-    public boolean isFils384Supported() {
-            WifiManager wifiManager = mContext.getSystemService(WifiManager.class);
-            String capability = wifiManager.getCapabilities("key_mgmt");
-
-            if (!capability.contains("FILS-SHA384")) {
-                  return false;
-            }
-
-            for (ScanResult result : mScanResults) {
-                if (result.capabilities.contains("FILS-SHA384")) {
                     return true;
                 }
             }
