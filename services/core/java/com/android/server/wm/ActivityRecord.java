@@ -2851,7 +2851,8 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
                     // their client may have activities.
                     // No longer have activities, so update LRU list and oom adj.
                     app.updateProcessInfo(true /* updateServiceConnectionActivities */,
-                            false /* activityChange */, true /* updateOomAdj */);
+                            false /* activityChange */, true /* updateOomAdj */,
+                            false /* addPendingTopUid */);
                 }
             }
 
