@@ -34,6 +34,7 @@ import android.net.wifi.IScanResultsCallback;
 import android.net.wifi.ISoftApCallback;
 import android.net.wifi.IWifiNotificationCallback;
 import android.net.wifi.ISuggestionConnectionStatusListener;
+import android.net.wifi.IStaStateCallback;
 import android.net.wifi.ITrafficStateCallback;
 import android.net.wifi.IWifiConnectedNetworkScorer;
 import android.net.wifi.ScanResult;
@@ -345,4 +346,8 @@ interface IWifiManager
     boolean isNewNetworkAutoConnectionEnabled();
 
     void enableNewNetworkAutoConnection(boolean enable);
+
+    void registerStaStateCallback(in IBinder binder, in IStaStateCallback callback, int callbackIdentifier);
+
+    void unregisterStaStateCallback(int callbackIdentifier);
 }
