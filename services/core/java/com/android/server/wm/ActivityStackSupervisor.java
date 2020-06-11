@@ -1955,7 +1955,7 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
     public void dump(PrintWriter pw, String prefix) {
         pw.println();
         pw.println("ActivityStackSupervisor state:");
-        mRootWindowContainer.dump(pw, prefix);
+        mRootWindowContainer.dump(pw, prefix, true /* dumpAll */);
         getKeyguardController().dump(pw, prefix);
         mService.getLockTaskController().dump(pw, prefix);
         pw.print(prefix);
