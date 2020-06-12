@@ -234,6 +234,13 @@ public class WifiManager {
     *
     * @hide
     **/
+    public static final String  WIFI_NETWORK_DISCONNECTION = "com.qualcomm.qti.net.wifi.WIFI_NETWORK_DISCONNECTION";
+
+    /**
+    *
+    *
+    * @hide
+    **/
     public static final String  WIFI_DHCP_FAILURE = "com.qualcomm.qti.net.wifi.WIFI_DHCP_FAILURE";
 
     /**
@@ -242,6 +249,18 @@ public class WifiManager {
     * @hide
     **/
     public static final String  EXTRA_WIFI_DATA_STALL_REASON = "data_stall_reasoncode";
+    /**
+    *
+    * see wifi network disconnection arg 1
+    * @hide
+    **/
+    public static final String  EXTRA_WIFI_NETWORK_DISCONNECTION_ARG1 = "network_disconnection_arg1";
+    /**
+    *
+    * see wifi network disconnection arg 2
+    * @hide
+    **/
+    public static final String  EXTRA_WIFI_NETWORK_DISCONNECTION_ARG2 = "network_disconnection_arg2";
     /**
     *
     * see dhcp failure reason code
