@@ -7567,7 +7567,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
     public String toString() {
         if (stringName != null) {
             return stringName + " t" + (task == null ? INVALID_TASK_ID : task.mTaskId) +
-                    (finishing ? " f}" : "") + (mIsExiting ? " mIsExiting=" : "") + "}";
+                    (finishing ? " f}" : "") + (mIsExiting ? " isExiting" : "") + "}";
         }
         StringBuilder sb = new StringBuilder(128);
         sb.append("ActivityRecord{");
