@@ -3633,7 +3633,7 @@ public class ActivityManagerService extends IActivityManager.Stub
 
     @Override
     public void crashApplication(int uid, int initialPid, String packageName, int userId,
-            String message) {
+            String message, boolean force) {
         if (checkCallingPermission(android.Manifest.permission.FORCE_STOP_PACKAGES)
                 != PackageManager.PERMISSION_GRANTED) {
             String msg = "Permission Denial: crashApplication() from pid="
@@ -3645,7 +3645,8 @@ public class ActivityManagerService extends IActivityManager.Stub
         }
 
         synchronized(this) {
-            mAppErrors.scheduleAppCrashLocked(uid, initialPid, packageName, userId, message);
+            mAppErrors.scheduleAppCrashLocked(uid, initialPid, packageName, userId,
+                    message, force);
         }
     }
 
@@ -4834,7 +4835,7 @@ public class ActivityManagerService extends IActivityManager.Stub
     }
 
     @GuardedBy("this")
-    private final boolean attachApplicationLocked(IApplicationThread thread,
+    private boolean attachApplicationLocked(@NonNull IApplicationThread thread,
             int pid, int callingUid, long startSeq) {
 
         // Find the application record that is being attached...  either via
@@ -5252,6 +5253,9 @@ public class ActivityManagerService extends IActivityManager.Stub
 
     @Override
     public final void attachApplication(IApplicationThread thread, long startSeq) {
+        if (thread == null) {
+            throw new SecurityException("Invalid application interface");
+        }
         synchronized (this) {
             int callingPid = Binder.getCallingPid();
             final int callingUid = Binder.getCallingUid();
@@ -18331,19 +18335,16 @@ public class ActivityManagerService extends IActivityManager.Stub
         }
 
         // The arguments here are untyped because the base ActivityManagerInternal class
-        // doesn't have compile-time visiblity into ActivityServiceConnectionHolder or
+        // doesn't have compile-time visibility into ActivityServiceConnectionHolder or
         // ConnectionRecord.
         @Override
-        public void disconnectActivityFromServices(Object connectionHolder, Object conns) {
+        public void disconnectActivityFromServices(Object connectionHolder) {
             // 'connectionHolder' is an untyped ActivityServiceConnectionsHolder
-            // 'conns' is an untyped HashSet<ConnectionRecord>
             final ActivityServiceConnectionsHolder holder =
                     (ActivityServiceConnectionsHolder) connectionHolder;
-            final HashSet<ConnectionRecord> toDisconnect = (HashSet<ConnectionRecord>) conns;
-            synchronized(ActivityManagerService.this) {
-                for (ConnectionRecord cr : toDisconnect) {
-                    mServices.removeConnectionLocked(cr, null, holder);
-                }
+            synchronized (ActivityManagerService.this) {
+                holder.forEachConnection(cr -> mServices.removeConnectionLocked(
+                        (ConnectionRecord) cr, null /* skipApp */, holder /* skipAct */));
             }
         }
 

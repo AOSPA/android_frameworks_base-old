@@ -582,11 +582,6 @@ public class BaseWifiService extends IWifiManager.Stub {
     }
 
     @Override
-    public boolean enableNetwork2(int staId, int netId, boolean disableOthers, String packageName) {
-        throw new UnsupportedOperationException();
-    }
-
-    @Override
     public ParceledListSlice getConfiguredNetworks2(int staId, String packageName) {
         throw new UnsupportedOperationException();
     }
@@ -623,6 +618,10 @@ public class BaseWifiService extends IWifiManager.Stub {
 
     @Override
     public void enableUnsavedNetworkLinkingFeature(boolean enable) {
+        throw new UnsupportedOperationException();
+    }
+    @Override
+    public String doDriverCmd(String command) {
         throw new UnsupportedOperationException();
     }
 }
