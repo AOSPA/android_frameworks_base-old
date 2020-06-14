@@ -106,7 +106,7 @@ public class FingerprintService extends BiometricServiceBase {
     private static final long FAIL_LOCKOUT_TIMEOUT_MS = 30 * 1000;
     private static final String KEY_LOCKOUT_RESET_USER = "lockout_reset_user";
     private static final String FOD = "vendor.pa.biometrics.fingerprint.inscreen";
-    private static final String FOD_DISABLED_BY_PROP = "ro.fingerprint.inscreen_disabled";
+    private static final String FOD_DISABLED_BY_PROP = "persist.fingerprint.inscreen_disabled";
 
     private final boolean mHasFod;
     private boolean mIsKeyguard;
