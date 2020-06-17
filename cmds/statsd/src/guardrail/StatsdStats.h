@@ -101,7 +101,7 @@ public:
     // Per atom dimension key size limit
     static const std::map<int, std::pair<size_t, size_t>> kAtomDimensionKeySizeLimitMap;
 
-    const static int kMaxConfigCountPerUid = 10;
+    const static int kMaxConfigCountPerUid = 20;
     const static int kMaxAlertCountPerConfig = 100;
     const static int kMaxConditionCountPerConfig = 300;
     const static int kMaxMetricCountPerConfig = 1000;
@@ -660,6 +660,8 @@ private:
     FRIEND_TEST(StatsdStatsTest, TestAtomMetricsStats);
     FRIEND_TEST(StatsdStatsTest, TestActivationBroadcastGuardrailHit);
     FRIEND_TEST(StatsdStatsTest, TestAtomErrorStats);
+
+    FRIEND_TEST(StatsLogProcessorTest, InvalidConfigRemoved);
 };
 
 }  // namespace statsd

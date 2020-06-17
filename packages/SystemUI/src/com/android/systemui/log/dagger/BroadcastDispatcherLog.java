@@ -14,15 +14,20 @@
  * limitations under the License.
  */
 
-package com.android.systemui.controls
+package com.android.systemui.log.dagger;
 
-import android.os.UserHandle
+import static java.lang.annotation.RetentionPolicy.RUNTIME;
 
-/**
- * An interface for controllers that keep track of the current user and can be notified of user
- * changes.
- */
-interface UserAwareController {
-    fun changeUser(newUser: UserHandle) {}
-    val currentUserId: Int
+import com.android.systemui.log.LogBuffer;
+
+import java.lang.annotation.Documented;
+import java.lang.annotation.Retention;
+
+import javax.inject.Qualifier;
+
+/** A {@link LogBuffer} for BroadcastDispatcher-related messages. */
+@Qualifier
+@Documented
+@Retention(RUNTIME)
+public @interface BroadcastDispatcherLog {
 }

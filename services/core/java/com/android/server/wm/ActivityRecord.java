@@ -312,7 +312,6 @@ import com.android.server.uri.UriPermissionOwner;
 import com.android.server.wm.ActivityMetricsLogger.TransitionInfoSnapshot;
 import com.android.server.wm.ActivityStack.ActivityState;
 import com.android.server.wm.SurfaceAnimator.AnimationType;
-import com.android.server.wm.SurfaceAnimator.OnAnimationFinishedCallback;
 import com.android.server.wm.WindowManagerService.H;
 import com.android.server.wm.utils.InsetUtils;
 
@@ -4175,14 +4174,12 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
     }
 
     @Override
-    boolean applyAnimation(WindowManager.LayoutParams lp, int transit, boolean enter,
-            boolean isVoiceInteraction,
-            @Nullable OnAnimationFinishedCallback animationFinishedCallback) {
+    boolean applyAnimation(LayoutParams lp, int transit, boolean enter,
+            boolean isVoiceInteraction, @Nullable ArrayList<WindowContainer> sources) {
         if (mUseTransferredAnimation) {
             return false;
         }
-        return super.applyAnimation(lp, transit, enter, isVoiceInteraction,
-                animationFinishedCallback);
+        return super.applyAnimation(lp, transit, enter, isVoiceInteraction, sources);
     }
 
     /**

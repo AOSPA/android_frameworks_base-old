@@ -85,7 +85,6 @@ import static com.android.server.wm.IdentifierProto.TITLE;
 import static com.android.server.wm.IdentifierProto.USER_ID;
 import static com.android.server.wm.ProtoLogGroup.WM_DEBUG_ADD_REMOVE;
 import static com.android.server.wm.ProtoLogGroup.WM_DEBUG_RECENTS_ANIMATIONS;
-import static com.android.server.wm.SurfaceAnimator.OnAnimationFinishedCallback;
 import static com.android.server.wm.WindowContainer.AnimationFlags.CHILDREN;
 import static com.android.server.wm.WindowContainer.AnimationFlags.TRANSITION;
 import static com.android.server.wm.WindowContainerChildProto.TASK;
@@ -1436,15 +1435,6 @@ class Task extends WindowContainer<WindowContainer> {
             mAtmService.getTaskChangeNotificationController().notifyTaskStackChanged();
         }
 
-        final boolean isRootTask = isRootTask();
-        if (isRootTask) {
-            final DisplayContent display = getDisplayContent();
-            if (display.isSingleTaskInstance()) {
-                mAtmService.notifySingleTaskDisplayEmpty(display.mDisplayId);
-            }
-            display.mDisplayContent.setLayoutNeeded();
-        }
-
         if (hasChild()) {
             updateEffectiveIntent();
 
@@ -1465,7 +1455,7 @@ class Task extends WindowContainer<WindowContainer> {
         } else if (!mReuseTask && !mCreatedByOrganizer) {
             // Remove entire task if it doesn't have any activity left and it isn't marked for reuse
             // or created by task organizer.
-            if (!isRootTask) {
+            if (!isRootTask()) {
                 getStack().removeChild(this, reason);
             }
             EventLogTags.writeWmTaskRemoved(mTaskId,
@@ -2817,6 +2807,10 @@ class Task extends WindowContainer<WindowContainer> {
         if (DEBUG_STACK) Slog.i(TAG, "removeTask: removing taskId=" + mTaskId);
         EventLogTags.writeWmTaskRemoved(mTaskId, "removeTask");
 
+        if (mDisplayContent != null && mDisplayContent.isSingleTaskInstance()) {
+            mAtmService.notifySingleTaskDisplayEmpty(mDisplayContent.mDisplayId);
+        }
+
         // If applicable let the TaskOrganizer know the Task is vanishing.
         setTaskOrganizer(null);
 
@@ -3500,7 +3494,7 @@ class Task extends WindowContainer<WindowContainer> {
     @Override
     protected void applyAnimationUnchecked(WindowManager.LayoutParams lp, boolean enter,
             int transit, boolean isVoiceInteraction,
-            @Nullable OnAnimationFinishedCallback finishedCallback) {
+            @Nullable ArrayList<WindowContainer> sources) {
         final RecentsAnimationController control = mWmService.getRecentsAnimationController();
         if (control != null) {
             // We let the transition to be controlled by RecentsAnimation, and callback task's
@@ -3509,10 +3503,14 @@ class Task extends WindowContainer<WindowContainer> {
                 ProtoLog.d(WM_DEBUG_RECENTS_ANIMATIONS,
                         "applyAnimationUnchecked, control: %s, task: %s, transit: %s",
                         control, asTask(), AppTransition.appTransitionToString(transit));
-                control.addTaskToTargets(this, finishedCallback);
+                control.addTaskToTargets(this, (type, anim) -> {
+                    for (int i = 0; i < sources.size(); ++i) {
+                        sources.get(i).onAnimationFinished(type, anim);
+                    }
+                });
             }
         } else {
-            super.applyAnimationUnchecked(lp, enter, transit, isVoiceInteraction, finishedCallback);
+            super.applyAnimationUnchecked(lp, enter, transit, isVoiceInteraction, sources);
         }
     }
 
