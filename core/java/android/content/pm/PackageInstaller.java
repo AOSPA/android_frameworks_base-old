@@ -720,6 +720,27 @@ public class PackageInstaller {
         }
     }
 
+    /**
+     * Uninstall the given package for the user for which this installer was created if the package
+     * will still exist for other users on the device.
+     *
+     * @param packageName The package to install.
+     * @param statusReceiver Where to deliver the result.
+     *
+     * {@hide}
+     */
+    @RequiresPermission(Manifest.permission.DELETE_PACKAGES)
+    public void uninstallExistingPackage(@NonNull String packageName,
+            @Nullable IntentSender statusReceiver) {
+        Objects.requireNonNull(packageName, "packageName cannot be null");
+        try {
+            mInstaller.uninstallExistingPackage(
+                    new VersionedPackage(packageName, PackageManager.VERSION_CODE_HIGHEST),
+                    mInstallerPackageName, statusReceiver, mUserId);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
 
     /** {@hide} */
     @SystemApi
@@ -1428,6 +1449,13 @@ public class PackageInstaller {
         /** {@hide} */
         public static final int UID_UNKNOWN = -1;
 
+        /**
+         * This value is derived from the maximum file name length. No package above this limit
+         * can ever be successfully installed on the device.
+         * @hide
+         */
+        public static final int MAX_PACKAGE_NAME_LENGTH = 255;
+
         /** {@hide} */
         @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
         public int mode = MODE_INVALID;
@@ -1621,6 +1649,8 @@ public class PackageInstaller {
 
         /**
          * Optionally set a label representing the app being installed.
+         *
+         * This value will be trimmed to the first 1000 characters.
          */
         public void setAppLabel(@Nullable CharSequence appLabel) {
             this.appLabel = (appLabel != null) ? appLabel.toString() : null;
@@ -1690,7 +1720,8 @@ public class PackageInstaller {
          *
          * <p>Initially, all restricted permissions are whitelisted but you can change
          * which ones are whitelisted by calling this method or the corresponding ones
-         * on the {@link PackageManager}.
+         * on the {@link PackageManager}. Only soft or hard restricted permissions on the current
+         * Android version are supported and any invalid entries will be removed.
          *
          * @see PackageManager#addWhitelistedRestrictedPermission(String, String, int)
          * @see PackageManager#removeWhitelistedRestrictedPermission(String, String, int)

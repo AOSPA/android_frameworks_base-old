@@ -89,8 +89,7 @@
     <string name="screenshot_dismiss_ui_description" msgid="934736855340147968">"Zamknij zrzut ekranu"</string>
     <string name="screenshot_preview_description" msgid="7606510140714080474">"Podgląd zrzutu ekranu"</string>
     <string name="screenrecord_name" msgid="2596401223859996572">"Nagrywanie ekranu"</string>
-    <!-- no translation found for screenrecord_background_processing_label (7244617554884238898) -->
-    <skip />
+    <string name="screenrecord_background_processing_label" msgid="7244617554884238898">"Przetwarzam nagrywanie ekranu"</string>
     <string name="screenrecord_channel_description" msgid="4147077128486138351">"Stałe powiadomienie o sesji rejestrowania zawartości ekranu"</string>
     <string name="screenrecord_start_label" msgid="1750350278888217473">"Rozpocząć nagrywanie?"</string>
     <string name="screenrecord_description" msgid="1123231719680353736">"Podczas nagrywania system Android może rejestrować wszelkie informacje poufne wyświetlane na ekranie lub odtwarzane na urządzeniu. Dotyczy to m.in. haseł, szczegółów płatności, zdjęć, wiadomości i odtwarzanych dźwięków."</string>
@@ -419,7 +418,7 @@
     <string name="quick_settings_cellular_detail_data_used" msgid="6798849610647988987">"Wykorzyst.: <xliff:g id="DATA_USED">%s</xliff:g>"</string>
     <string name="quick_settings_cellular_detail_data_limit" msgid="1791389609409211628">"Limit <xliff:g id="DATA_LIMIT">%s</xliff:g>"</string>
     <string name="quick_settings_cellular_detail_data_warning" msgid="7957253810481086455">"Ostrzeżenie: <xliff:g id="DATA_LIMIT">%s</xliff:g>"</string>
-    <string name="quick_settings_work_mode_label" msgid="2754212289804324685">"Profil do pracy"</string>
+    <string name="quick_settings_work_mode_label" msgid="2754212289804324685">"Profil służbowy"</string>
     <string name="quick_settings_night_display_label" msgid="8180030659141778180">"Podświetlenie nocne"</string>
     <string name="quick_settings_night_secondary_label_on_at_sunset" msgid="3358706312129866626">"Włącz o zachodzie"</string>
     <string name="quick_settings_night_secondary_label_until_sunrise" msgid="4063448287758262485">"Do wschodu słońca"</string>
@@ -517,10 +516,9 @@
     <string name="clear_all_notifications_text" msgid="348312370303046130">"Usuń wszystkie"</string>
     <string name="manage_notifications_text" msgid="6885645344647733116">"Zarządzaj"</string>
     <string name="manage_notifications_history_text" msgid="57055985396576230">"Historia"</string>
-    <!-- no translation found for notification_section_header_incoming (5295312809341711367) -->
-    <skip />
-    <string name="notification_section_header_gentle" msgid="3044910806569985386">"Ciche powiadomienia"</string>
-    <string name="notification_section_header_alerting" msgid="3168140660646863240">"Alerty"</string>
+    <string name="notification_section_header_incoming" msgid="5295312809341711367">"Przychodzące"</string>
+    <string name="notification_section_header_gentle" msgid="6804099527336337197">"Ciche"</string>
+    <string name="notification_section_header_alerting" msgid="5581175033680477651">"Powiadomienia"</string>
     <string name="notification_section_header_conversations" msgid="821834744538345661">"Rozmowy"</string>
     <string name="accessibility_notification_section_header_gentle_clear_all" msgid="6490207897764933919">"Usuń wszystkie ciche powiadomienia"</string>
     <string name="dnd_suppressing_shade_text" msgid="5588252250634464042">"Powiadomienia wstrzymane przez tryb Nie przeszkadzać"</string>
@@ -600,19 +598,21 @@
     <string name="volume_odi_captions_hint_enable" msgid="2073091194012843195">"włącz"</string>
     <string name="volume_odi_captions_hint_disable" msgid="2518846326748183407">"wyłącz"</string>
     <string name="accessibility_output_chooser" msgid="7807898688967194183">"Przełącz urządzenie wyjściowe"</string>
-    <string name="screen_pinning_title" msgid="7357611095909618178">"Ekran jest przypięty"</string>
+    <string name="screen_pinning_title" msgid="9058007390337841305">"Aplikacja jest przypięta"</string>
     <string name="screen_pinning_description" msgid="8699395373875667743">"Ekran będzie widoczny, dopóki go nie odepniesz. Aby to zrobić, kliknij i przytrzymaj Wstecz oraz Przegląd."</string>
     <string name="screen_pinning_description_recents_invisible" msgid="4564466648700390037">"Ekran będzie widoczny, dopóki go nie odepniesz. Aby to zrobić, naciśnij i przytrzymaj Wstecz oraz Ekran główny."</string>
     <string name="screen_pinning_description_gestural" msgid="7246323931831232068">"Ekran będzie widoczny, dopóki go nie odepniesz. Przesuń palcem w górę i przytrzymaj, by odpiąć."</string>
     <string name="screen_pinning_description_accessible" msgid="7386449191953535332">"Ekran będzie widoczny, dopóki go nie odepniesz. Aby to zrobić, kliknij i przytrzymaj Przegląd."</string>
     <string name="screen_pinning_description_recents_invisible_accessible" msgid="2857071808674481986">"Ekran będzie widoczny, dopóki go nie odepniesz. Aby to zrobić, naciśnij i przytrzymaj Ekran główny."</string>
-    <string name="screen_pinning_toast" msgid="2083944237147005811">"Aby odpiąć ten ekran, naciśnij i przytrzymaj przyciski Wstecz oraz Przegląd"</string>
-    <string name="screen_pinning_toast_recents_invisible" msgid="6343770487795352573">"Aby odpiąć ten ekran, naciśnij i przytrzymaj przyciski Wstecz oraz Ekran główny"</string>
-    <string name="screen_pinning_toast_gesture_nav" msgid="2884536903398445645">"Aby odpiąć ten ekran, przesuń w górę i przytrzymaj"</string>
+    <string name="screen_pinning_exposes_personal_data" msgid="8189852022981524789">"Dane osobowe mogą być dostępne (np. kontakty czy treść e-maili)."</string>
+    <string name="screen_pinning_can_open_other_apps" msgid="7529756813231421455">"Przypięta aplikacja może otwierać inne aplikacje."</string>
+    <string name="screen_pinning_toast" msgid="8177286912533744328">"Aby odpiąć tę aplikację, naciśnij i przytrzymaj przyciski Wstecz oraz Przegląd"</string>
+    <string name="screen_pinning_toast_recents_invisible" msgid="6850978077443052594">"Aby odpiąć tę aplikację, naciśnij i przytrzymaj przyciski Wstecz oraz Ekran główny"</string>
+    <string name="screen_pinning_toast_gesture_nav" msgid="170699893395336705">"Aby odpiąć tę aplikację, przesuń w górę i przytrzymaj"</string>
     <string name="screen_pinning_positive" msgid="3285785989665266984">"OK"</string>
     <string name="screen_pinning_negative" msgid="6882816864569211666">"Nie, dziękuję"</string>
-    <string name="screen_pinning_start" msgid="5695091877402422575">"Ekran przypięty"</string>
-    <string name="screen_pinning_exit" msgid="5114993350662745840">"Ekran odpięty"</string>
+    <string name="screen_pinning_start" msgid="7483998671383371313">"Aplikacja przypięta"</string>
+    <string name="screen_pinning_exit" msgid="4553787518387346893">"Aplikacja odpięta"</string>
     <string name="quick_settings_reset_confirmation_title" msgid="463533331480997595">"Ukryć <xliff:g id="TILE_LABEL">%1$s</xliff:g>?"</string>
     <string name="quick_settings_reset_confirmation_message" msgid="2320586180785674186">"Pojawi się ponownie, gdy następnym włączysz go w ustawieniach."</string>
     <string name="quick_settings_reset_confirmation_button" msgid="3341477479055016776">"Ukryj"</string>
@@ -659,7 +659,7 @@
     <string name="show_demo_mode" msgid="3677956462273059726">"Pokaż tryb demonstracyjny"</string>
     <string name="status_bar_ethernet" msgid="5690979758988647484">"Ethernet"</string>
     <string name="status_bar_alarm" msgid="87160847643623352">"Alarm"</string>
-    <string name="status_bar_work" msgid="5238641949837091056">"Profil do pracy"</string>
+    <string name="status_bar_work" msgid="5238641949837091056">"Profil służbowy"</string>
     <string name="status_bar_airplane" msgid="4848702508684541009">"Tryb samolotowy"</string>
     <string name="add_tile" msgid="6239678623873086686">"Dodaj nazwę"</string>
     <string name="broadcast_tile" msgid="5224010633596487481">"Rozgłaszana nazwa"</string>
@@ -669,7 +669,7 @@
     <string name="alarm_template_far" msgid="3561752195856839456">"w: <xliff:g id="WHEN">%1$s</xliff:g>"</string>
     <string name="accessibility_quick_settings_detail" msgid="544463655956179791">"Szybkie ustawienia, <xliff:g id="TITLE">%s</xliff:g>."</string>
     <string name="accessibility_status_bar_hotspot" msgid="2888479317489131669">"Hotspot"</string>
-    <string name="accessibility_managed_profile" msgid="4703836746209377356">"Profil do pracy"</string>
+    <string name="accessibility_managed_profile" msgid="4703836746209377356">"Profil służbowy"</string>
     <string name="tuner_warning_title" msgid="7721976098452135267">"Dobra zabawa, ale nie dla każdego"</string>
     <string name="tuner_warning" msgid="1861736288458481650">"Kalibrator System UI udostępnia dodatkowe sposoby dostrajania i dostosowywania interfejsu Androida. Te eksperymentalne funkcje mogą się zmienić, popsuć lub zniknąć w przyszłych wersjach. Zachowaj ostrożność."</string>
     <string name="tuner_persistent_warning" msgid="230466285569307806">"Te eksperymentalne funkcje mogą się zmienić, popsuć lub zniknąć w przyszłych wersjach. Zachowaj ostrożność."</string>
@@ -715,16 +715,17 @@
     <string name="inline_turn_off_notifications" msgid="8543989584403106071">"Wyłącz powiadomienia"</string>
     <string name="inline_keep_showing_app" msgid="4393429060390649757">"Nadal pokazywać powiadomienia z tej aplikacji?"</string>
     <string name="notification_silence_title" msgid="8608090968400832335">"Bez dźwięku"</string>
-    <string name="notification_alert_title" msgid="7629202599338071971">"Alert"</string>
+    <string name="notification_alert_title" msgid="3656229781017543655">"Domyślne"</string>
     <string name="notification_bubble_title" msgid="8330481035191903164">"Dymek"</string>
-    <string name="notification_channel_summary_low" msgid="7300447764759926720">"Pomaga Ci się skupić, nie sygnalizując niczego dźwiękiem ani wibracjami."</string>
-    <string name="notification_channel_summary_default" msgid="3539949463907902037">"Przyciąga uwagę dźwiękiem lub wibracjami."</string>
-    <string name="notification_channel_summary_default_with_bubbles" msgid="6298026344552480458">"Przyciąga uwagę dźwiękiem lub wibracjami. Rozmowy z aplikacji <xliff:g id="APP_NAME">%1$s</xliff:g> są domyślnie wyświetlane jako dymki."</string>
+    <string name="notification_channel_summary_low" msgid="4860617986908931158">"Brak dźwięku i wibracji"</string>
+    <string name="notification_conversation_summary_low" msgid="1734433426085468009">"Brak dźwięku i wibracji, wyświetla się niżej w sekcji rozmów"</string>
+    <string name="notification_channel_summary_default" msgid="3282930979307248890">"Może włączyć dzwonek lub wibracje w zależności od ustawień telefonu"</string>
+    <string name="notification_channel_summary_default_with_bubbles" msgid="1782419896613644568">"Może włączyć dzwonek lub wibracje w zależności od ustawień telefonu. Rozmowy z aplikacji <xliff:g id="APP_NAME">%1$s</xliff:g> są domyślnie wyświetlane jako dymki."</string>
     <string name="notification_channel_summary_bubble" msgid="7235935211580860537">"Przyciąga uwagę dzięki pływającym skrótom do treści."</string>
-    <string name="notification_channel_summary_priority" msgid="7415770044553264622">"Wyświetla się u góry sekcji rozmów i ma postać dymku."</string>
+    <string name="notification_channel_summary_priority" msgid="7952654515769021553">"Wyświetla się jako pływający dymek u góry sekcji rozmów, pokazuje zdjęcie profilowe na ekranie blokady"</string>
     <string name="notification_conversation_channel_settings" msgid="2409977688430606835">"Ustawienia"</string>
     <string name="notification_priority_title" msgid="2079708866333537093">"Priorytet"</string>
-    <string name="no_shortcut" msgid="7176375126961212514">"Aplikacja <xliff:g id="APP_NAME">%1$s</xliff:g> nie obsługuje ustawień rozmowy"</string>
+    <string name="no_shortcut" msgid="8257177117568230126">"Aplikacja <xliff:g id="APP_NAME">%1$s</xliff:g> nie obsługuje funkcji rozmów"</string>
     <string name="bubble_overflow_empty_title" msgid="3120029421991510842">"Brak ostatnich dymków"</string>
     <string name="bubble_overflow_empty_subtitle" msgid="2030874469510497397">"Tutaj będą pojawiać się ostatnie i odrzucone dymki"</string>
     <string name="notification_unblockable_desc" msgid="2073030886006190804">"Tych powiadomień nie można zmodyfikować."</string>
@@ -1001,10 +1002,8 @@
     <string name="music_controls_no_title" msgid="4166497066552290938">"Bez tytułu"</string>
     <string name="restart_button_description" msgid="6916116576177456480">"Kliknij, by uruchomić tę aplikację ponownie i przejść w tryb pełnoekranowy."</string>
     <string name="bubbles_settings_button_description" msgid="7324245408859877545">"Ustawienia dymków aplikacji <xliff:g id="APP_NAME">%1$s</xliff:g>"</string>
-    <!-- no translation found for bubble_overflow_button_content_description (5523744621434300510) -->
-    <skip />
-    <!-- no translation found for bubble_accessibility_action_add_back (6217995665917123890) -->
-    <skip />
+    <string name="bubble_overflow_button_content_description" msgid="5523744621434300510">"Przepełnienie"</string>
+    <string name="bubble_accessibility_action_add_back" msgid="6217995665917123890">"Dodaj ponownie do stosu"</string>
     <string name="manage_bubbles_text" msgid="6856830436329494850">"Zarządzaj"</string>
     <string name="bubble_content_description_single" msgid="5175160674436546329">"<xliff:g id="NOTIFICATION_TITLE">%1$s</xliff:g> z aplikacji <xliff:g id="APP_NAME">%2$s</xliff:g>"</string>
     <string name="bubble_content_description_stack" msgid="7907610717462651870">"<xliff:g id="NOTIFICATION_TITLE">%1$s</xliff:g> z aplikacji <xliff:g id="APP_NAME">%2$s</xliff:g> i jeszcze <xliff:g id="BUBBLE_COUNT">%3$d</xliff:g>"</string>
@@ -1013,7 +1012,8 @@
     <string name="bubble_accessibility_action_move_top_right" msgid="6916868852433483569">"Przenieś w prawy górny róg"</string>
     <string name="bubble_accessibility_action_move_bottom_left" msgid="6339015902495504715">"Przenieś w lewy dolny róg"</string>
     <string name="bubble_accessibility_action_move_bottom_right" msgid="7471571700628346212">"Przenieś w prawy dolny róg"</string>
-    <string name="bubble_dismiss_text" msgid="7071770411580452911">"Zamknij"</string>
+    <!-- no translation found for bubble_dismiss_text (1314082410868930066) -->
+    <skip />
     <string name="bubbles_dont_bubble_conversation" msgid="1033040343437428822">"Nie wyświetlaj rozmowy jako dymku"</string>
     <string name="bubbles_user_education_title" msgid="5547017089271445797">"Czatuj, korzystając z dymków"</string>
     <string name="bubbles_user_education_description" msgid="1160281719576715211">"Nowe rozmowy będą wyświetlane jako pływające ikony lub dymki. Kliknij, by otworzyć dymek. Przeciągnij, by go przenieść."</string>
@@ -1024,16 +1024,19 @@
     <string name="notification_content_system_nav_changed" msgid="5077913144844684544">"Nawigacja w systemie została zaktualizowana. Aby wprowadzić zmiany, otwórz Ustawienia."</string>
     <string name="notification_content_gesture_nav_available" msgid="4431460803004659888">"Otwórz Ustawienia, by zaktualizować nawigację w systemie"</string>
     <string name="inattentive_sleep_warning_title" msgid="3891371591713990373">"Tryb gotowości"</string>
+    <string name="priority_onboarding_title" msgid="2893070698479227616">"Rozmowę ustawiono jako priorytetową"</string>
+    <string name="priority_onboarding_behavior" msgid="5342816047020432929">"Rozmowy priorytetowe:"</string>
     <string name="priority_onboarding_show_at_top_text" msgid="1678400241025513541">"Wyświetlają się u góry sekcji rozmów"</string>
     <string name="priority_onboarding_show_avatar_text" msgid="5756291381124091508">"Pokazują zdjęcie profilowe na ekranie blokady"</string>
     <string name="priority_onboarding_appear_as_bubble_text" msgid="4227039772250263122">"Wyświetlane jako pływający dymek nad aplikacjami"</string>
     <string name="priority_onboarding_ignores_dnd_text" msgid="2918952762719600529">"Ignorują tryb Nie przeszkadzać"</string>
     <string name="priority_onboarding_done_button_title" msgid="4569550984286506007">"OK"</string>
+    <string name="priority_onboarding_settings_button_title" msgid="6663601574303585927">"Ustawienia"</string>
     <string name="magnification_overlay_title" msgid="6584179429612427958">"Okno nakładki powiększenia"</string>
     <string name="magnification_window_title" msgid="4863914360847258333">"Okno powiększenia"</string>
     <string name="magnification_controls_title" msgid="8421106606708891519">"Elementy sterujące okna powiększenia"</string>
     <string name="quick_controls_title" msgid="6839108006171302273">"Sterowanie urządzeniami"</string>
-    <string name="quick_controls_subtitle" msgid="1667408093326318053">"Dodaj elementy sterujące do połączonych urządzeń"</string>
+    <string name="quick_controls_subtitle" msgid="1667408093326318053">"Dodaj elementy sterujące połączonymi urządzeniami"</string>
     <string name="quick_controls_setup_title" msgid="8901436655997849822">"Konfigurowanie sterowania urządzeniami"</string>
     <string name="quick_controls_setup_subtitle" msgid="1681506617879773824">"Przytrzymaj przycisk zasilania, aby uzyskać dostęp do elementów sterujących"</string>
     <string name="controls_providers_title" msgid="6879775889857085056">"Wybierz aplikację, do której chcesz dodać elementy sterujące"</string>
@@ -1043,6 +1046,13 @@
       <item quantity="other">Dodano <xliff:g id="NUMBER_1">%s</xliff:g> elementu sterującego</item>
       <item quantity="one">Dodano <xliff:g id="NUMBER_0">%s</xliff:g> element sterujący</item>
     </plurals>
+    <string name="controls_removed" msgid="3731789252222856959">"Usunięto"</string>
+    <string name="accessibility_control_favorite" msgid="8694362691985545985">"Dodano do ulubionych"</string>
+    <string name="accessibility_control_favorite_position" msgid="54220258048929221">"Dodano do ulubionych, pozycja <xliff:g id="NUMBER">%d</xliff:g>"</string>
+    <string name="accessibility_control_not_favorite" msgid="1291760269563092359">"Usunięto z ulubionych"</string>
+    <string name="accessibility_control_change_favorite" msgid="2943178027582253261">"dodać do ulubionych"</string>
+    <string name="accessibility_control_change_unfavorite" msgid="6997408061750740327">"usunąć z ulubionych"</string>
+    <string name="accessibility_control_move" msgid="8980344493796647792">"Przenieś w położenie <xliff:g id="NUMBER">%d</xliff:g>"</string>
     <string name="controls_favorite_default_title" msgid="967742178688938137">"Elementy sterujące"</string>
     <string name="controls_favorite_subtitle" msgid="6604402232298443956">"Wybierz elementy sterujące dostępne w menu zasilania"</string>
     <string name="controls_favorite_rearrange" msgid="5616952398043063519">"Przytrzymaj i przeciągnij, aby przestawić elementy sterujące"</string>
@@ -1059,15 +1069,19 @@
     <string name="controls_pin_wrong" msgid="6162694056042164211">"Nieprawidłowy kod PIN"</string>
     <string name="controls_pin_verifying" msgid="3755045989392131746">"Sprawdzam…"</string>
     <string name="controls_pin_instructions" msgid="6363309783822475238">"Wpisz kod PIN"</string>
-    <string name="controls_pin_instructions_retry" msgid="1566667581012131046">"Spróbuj użyć innego kodu PIN"</string>
+    <string name="controls_pin_instructions_retry" msgid="1566667581012131046">"Wpisz inny kod PIN"</string>
     <string name="controls_confirmation_confirming" msgid="2596071302617310665">"Potwierdzam…"</string>
     <string name="controls_confirmation_message" msgid="7744104992609594859">"Potwierdź zmianę dotyczącą urządzenia <xliff:g id="DEVICE">%s</xliff:g>"</string>
     <string name="controls_structure_tooltip" msgid="4355922222944447867">"Przesuń palcem, by zobaczyć więcej"</string>
     <string name="controls_seeding_in_progress" msgid="3033855341410264148">"Wczytuję rekomendacje"</string>
     <string name="controls_media_close_session" msgid="9023534788828414585">"Zamknij tę sesję multimediów"</string>
+    <string name="controls_media_resume" msgid="1933520684481586053">"Wznów"</string>
     <string name="controls_error_timeout" msgid="794197289772728958">"Nieaktywny, sprawdź aplikację"</string>
     <string name="controls_error_retryable" msgid="864025882878378470">"Błąd, próbuję jeszcze raz…"</string>
-    <string name="controls_error_removed" msgid="6299213591234723805">"Usunięto urządzenie"</string>
+    <string name="controls_error_removed" msgid="6675638069846014366">"Nie znaleziono"</string>
+    <string name="controls_error_removed_title" msgid="1207794911208047818">"Element jest niedostępny"</string>
+    <string name="controls_error_removed_message" msgid="2885911717034750542">"Nie udało się połączyć z urządzeniem: <xliff:g id="DEVICE">%1$s</xliff:g>. Sprawdź aplikację <xliff:g id="APPLICATION">%2$s</xliff:g>, aby upewnić się, że element sterujący jest wciąż dostępny i ustawienia aplikacji się nie zmieniły."</string>
+    <string name="controls_open_app" msgid="483650971094300141">"Otwórz aplikację"</string>
     <string name="controls_error_generic" msgid="352500456918362905">"Nie udało się wczytać stanu"</string>
     <string name="controls_error_failed" msgid="960228639198558525">"Błąd, spróbuj ponownie"</string>
     <string name="controls_in_progress" msgid="4421080500238215939">"W toku"</string>

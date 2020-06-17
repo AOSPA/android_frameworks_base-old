@@ -36,13 +36,21 @@ import android.os.IBinder;
 import android.os.Looper;
 import android.os.Message;
 import android.os.PowerManager;
+import android.os.RemoteException;
 import android.os.SystemClock;
+import android.text.TextUtils;
 import android.util.Log;
 import android.util.PrintWriterPrinter;
 
 import com.android.internal.annotations.GuardedBy;
 
 import java.io.PrintWriter;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.NoSuchElementException;
+import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
+
 
 /** @hide */
 /*package*/ final class AudioDeviceBroker {
@@ -54,6 +62,9 @@ import java.io.PrintWriter;
     /*package*/ static final  int BTA2DP_DOCK_TIMEOUT_MS = 8000;
     // Timeout for connection to bluetooth headset service
     /*package*/ static final int BT_HEADSET_CNCT_TIMEOUT_MS = 3000;
+
+    // Delay before checking it music should be unmuted after processing an A2DP message
+    private static final int BTA2DP_MUTE_CHECK_DELAY_MS = 100;
 
     private final @NonNull AudioService mAudioService;
     private final @NonNull Context mContext;
@@ -90,6 +101,9 @@ import java.io.PrintWriter;
     // lock always taken when accessing AudioService.mSetModeDeathHandlers
     // TODO do not "share" the lock between AudioService and BtHelpr, see b/123769055
     /*package*/ final Object mSetModeLock = new Object();
+
+    /** PID of current audio mode owner communicated by AudioService */
+    private int mModeOwnerPid = 0;
 
     //-------------------------------------------------------------------
     /*package*/ AudioDeviceBroker(@NonNull Context context, @NonNull AudioService service) {
@@ -136,6 +150,7 @@ import java.io.PrintWriter;
     /*package*/ void onSystemReady() {
         synchronized (mSetModeLock) {
             synchronized (mDeviceStateLock) {
+                mModeOwnerPid = mAudioService.getModeOwnerPid();
                 mBtHelper.onSystemReady();
             }
         }
@@ -146,8 +161,10 @@ import java.io.PrintWriter;
         synchronized (mDeviceStateLock) {
             AudioSystem.setParameters(
                     "BT_SCO=" + (mForcedUseForComm == AudioSystem.FORCE_BT_SCO ? "on" : "off"));
-            onSetForceUse(AudioSystem.FOR_COMMUNICATION, mForcedUseForComm, "onAudioServerDied");
-            onSetForceUse(AudioSystem.FOR_RECORD, mForcedUseForComm, "onAudioServerDied");
+            onSetForceUse(AudioSystem.FOR_COMMUNICATION, mForcedUseForComm,
+                          false /*fromA2dp*/, "onAudioServerDied");
+            onSetForceUse(AudioSystem.FOR_RECORD, mForcedUseForComm,
+                          false /*fromA2dp*/, "onAudioServerDied");
         }
         // restore devices
         sendMsgNoDelay(MSG_RESTORE_DEVICES, SENDMSG_REPLACE);
@@ -202,25 +219,58 @@ import java.io.PrintWriter;
      * @param eventSource for logging purposes
      * @return true if speakerphone state changed
      */
-    /*package*/ boolean setSpeakerphoneOn(boolean on, String eventSource) {
+    /*package*/ boolean setSpeakerphoneOn(IBinder cb, int pid, boolean on, String eventSource) {
         synchronized (mDeviceStateLock) {
+            if (!addSpeakerphoneClient(cb, pid, on)) {
+                return false;
+            }
             final boolean wasOn = isSpeakerphoneOn();
-            if (on) {
-                if (mForcedUseForComm == AudioSystem.FORCE_BT_SCO) {
-                    setForceUse_Async(AudioSystem.FOR_RECORD, AudioSystem.FORCE_NONE, eventSource);
-                }
-                mForcedUseForComm = AudioSystem.FORCE_SPEAKER;
-            } else if (mForcedUseForComm == AudioSystem.FORCE_SPEAKER) {
-                mForcedUseForComm = AudioSystem.FORCE_NONE;
-            }
-
-            mForcedUseForCommExt = mForcedUseForComm;
-            if (AudioService.DEBUG_SCO) {
-                Log.i(TAG, "In setSpeakerphoneOn(), mForcedUseForCommExt: " + mForcedUseForCommExt);
-            }
-            setForceUse_Async(AudioSystem.FOR_COMMUNICATION, mForcedUseForComm, eventSource);
+            updateSpeakerphoneOn(eventSource);
             return (wasOn != isSpeakerphoneOn());
         }
+    }
+
+    @GuardedBy("mDeviceStateLock")
+    private void updateSpeakerphoneOn(String eventSource) {
+        if (isSpeakerphoneOnRequested()) {
+            if (mForcedUseForComm == AudioSystem.FORCE_BT_SCO) {
+                setForceUse_Async(AudioSystem.FOR_RECORD, AudioSystem.FORCE_NONE, eventSource);
+            }
+            mForcedUseForComm = AudioSystem.FORCE_SPEAKER;
+        } else if (mForcedUseForComm == AudioSystem.FORCE_SPEAKER) {
+            if (mBtHelper.isBluetoothScoOn()) {
+                mForcedUseForComm = AudioSystem.FORCE_BT_SCO;
+                setForceUse_Async(
+                        AudioSystem.FOR_RECORD, AudioSystem.FORCE_BT_SCO, eventSource);
+            } else {
+                mForcedUseForComm = AudioSystem.FORCE_NONE;
+            }
+        }
+        mForcedUseForCommExt = mForcedUseForComm;
+        if (AudioService.DEBUG_SCO) {
+            Log.i(TAG, "In updateSpeakerphoneOn(), mForcedUseForCommExt: " + mForcedUseForCommExt);
+        }
+        setForceUse_Async(AudioSystem.FOR_COMMUNICATION, mForcedUseForComm, eventSource);
+    }
+
+    /**
+     * Returns if speakerphone is requested ON or OFF.
+     * If the current audio mode owner is in the speakerphone client list, use this preference.
+     * Otherwise use first client's preference (first client corresponds to latest request).
+     * Speakerphone is requested OFF if no client is in the list.
+     * @return true if speakerphone is requested ON, false otherwise
+     */
+    @GuardedBy("mDeviceStateLock")
+    private boolean isSpeakerphoneOnRequested() {
+        if (mSpeakerphoneClients.isEmpty()) {
+            return false;
+        }
+        for (SpeakerphoneClient cl : mSpeakerphoneClients) {
+            if (cl.getPid() == mModeOwnerPid) {
+                return cl.isOn();
+            }
+        }
+        return mSpeakerphoneClients.get(0).isOn();
     }
 
     /*package*/ boolean isSpeakerphoneOn() {
@@ -285,6 +335,15 @@ import java.io.PrintWriter;
             int profile, boolean suppressNoisyIntent, int a2dpVolume) {
         final BtDeviceConnectionInfo info = new BtDeviceConnectionInfo(device, state, profile,
                 suppressNoisyIntent, a2dpVolume);
+
+        final String name = TextUtils.emptyIfNull(device.getName());
+        new MediaMetrics.Item(MediaMetrics.Name.AUDIO_DEVICE + MediaMetrics.SEPARATOR
+                + "postBluetoothA2dpDeviceConnectionStateSuppressNoisyIntent")
+                .set(MediaMetrics.Property.STATE, state == BluetoothProfile.STATE_CONNECTED
+                        ? MediaMetrics.Value.CONNECTED : MediaMetrics.Value.DISCONNECTED)
+                .set(MediaMetrics.Property.INDEX, a2dpVolume)
+                .set(MediaMetrics.Property.NAME, name)
+                .record();
 
         // operations of removing and posting messages related to A2DP device state change must be
         // mutually exclusive
@@ -401,7 +460,8 @@ import java.io.PrintWriter;
                 }
                 mForcedUseForComm = AudioSystem.FORCE_BT_SCO;
             } else if (mForcedUseForComm == AudioSystem.FORCE_BT_SCO) {
-                mForcedUseForComm = AudioSystem.FORCE_NONE;
+                mForcedUseForComm = isSpeakerphoneOnRequested()
+                        ? AudioSystem.FORCE_SPEAKER : AudioSystem.FORCE_NONE;
             }
             mForcedUseForCommExt = mForcedUseForComm;
             if (AudioService.DEBUG_SCO) {
@@ -450,8 +510,8 @@ import java.io.PrintWriter;
         sendIIMsgNoDelay(MSG_II_SET_HEARING_AID_VOLUME, SENDMSG_REPLACE, index, streamType);
     }
 
-    /*package*/ void postDisconnectBluetoothSco(int exceptPid) {
-        sendIMsgNoDelay(MSG_I_DISCONNECT_BT_SCO, SENDMSG_REPLACE, exceptPid);
+    /*package*/ void postSetModeOwnerPid(int pid) {
+        sendIMsgNoDelay(MSG_I_SET_MODE_OWNER_PID, SENDMSG_REPLACE, pid);
     }
 
     /*package*/ void postBluetoothA2dpDeviceConfigChange(@NonNull BluetoothDevice device) {
@@ -504,7 +564,7 @@ import java.io.PrintWriter;
     }
 
     /*package*/ int getModeOwnerPid() {
-        return mAudioService.getModeOwnerPid();
+        return mModeOwnerPid;
     }
 
     /*package*/ int getDeviceForStream(int streamType) {
@@ -626,6 +686,10 @@ import java.io.PrintWriter;
         sendLMsgNoDelay(MSG_L_SCOCLIENT_DIED, SENDMSG_QUEUE, obj);
     }
 
+    /*package*/ void postSpeakerphoneClientDied(Object obj) {
+        sendLMsgNoDelay(MSG_L_SPEAKERPHONE_CLIENT_DIED, SENDMSG_QUEUE, obj);
+    }
+
     /*package*/ void postSaveSetPreferredDeviceForStrategy(int strategy,
                                                            AudioDeviceAttributes device)
     {
@@ -642,7 +706,7 @@ import java.io.PrintWriter;
 
     // Handles request to override default use of A2DP for media.
     //@GuardedBy("mConnectedDevices")
-    /*package*/ void setBluetoothA2dpOnInt(boolean on, String source) {
+    /*package*/ void setBluetoothA2dpOnInt(boolean on, boolean fromA2dp, String source) {
         // for logging only
         final String eventSource = new StringBuilder("setBluetoothA2dpOn(").append(on)
                 .append(") from u/pid:").append(Binder.getCallingUid()).append("/")
@@ -654,6 +718,7 @@ import java.io.PrintWriter;
             onSetForceUse(
                     AudioSystem.FOR_MEDIA,
                     mBluetoothA2dpEnabled ? AudioSystem.FORCE_NONE : AudioSystem.FORCE_NO_BT_A2DP,
+                    fromA2dp,
                     eventSource);
         }
     }
@@ -680,8 +745,8 @@ import java.io.PrintWriter;
         mBrokerHandler.removeMessages(MSG_BT_HEADSET_CNCT_FAILED);
     }
 
-    /*package*/ void postReportNewRoutes() {
-        sendMsgNoDelay(MSG_REPORT_NEW_ROUTES, SENDMSG_NOOP);
+    /*package*/ void postReportNewRoutes(boolean fromA2dp) {
+        sendMsgNoDelay(fromA2dp ? MSG_REPORT_NEW_ROUTES_A2DP : MSG_REPORT_NEW_ROUTES, SENDMSG_NOOP);
     }
 
     /*package*/ void postA2dpActiveDeviceChange(
@@ -695,7 +760,7 @@ import java.io.PrintWriter;
                 new BtHelper.BluetoothA2dpDeviceInfo(btDevice);
         return (mBrokerHandler.hasEqualMessages(
                     MSG_IL_SET_A2DP_SINK_CONNECTION_STATE_CONNECTED, devInfoToCheck)
-                || mBrokerHandler.hasEqualMessages(
+            || mBrokerHandler.hasEqualMessages(
                     MSG_IL_SET_A2DP_SINK_CONNECTION_STATE_DISCONNECTED, devInfoToCheck));
     }
 
@@ -728,7 +793,20 @@ import java.io.PrintWriter;
         } else {
             pw.println("Message handler is null");
         }
+
         mDeviceInventory.dump(pw, prefix);
+
+        pw.println("\n" + prefix + "mForcedUseForComm: "
+                +  AudioSystem.forceUseConfigToString(mForcedUseForComm));
+        pw.println(prefix + "mForcedUseForCommExt: "
+                + AudioSystem.forceUseConfigToString(mForcedUseForCommExt));
+        pw.println(prefix + "mModeOwnerPid: " + mModeOwnerPid);
+        pw.println(prefix + "Speakerphone clients:");
+        mSpeakerphoneClients.forEach((cl) -> {
+            pw.println("  " + prefix + "pid: " + cl.getPid() + " on: "
+                        + cl.isOn() + " cb: " + cl.getBinder()); });
+
+        mBtHelper.dump(pw, prefix);
     }
 
     //---------------------------------------------------------------------
@@ -736,9 +814,9 @@ import java.io.PrintWriter;
     // These methods are ALL synchronous, in response to message handling in BrokerHandler
     // Blocking in any of those will block the message queue
 
-    private void onSetForceUse(int useCase, int config, String eventSource) {
+    private void onSetForceUse(int useCase, int config, boolean fromA2dp, String eventSource) {
         if (useCase == AudioSystem.FOR_MEDIA) {
-            postReportNewRoutes();
+            postReportNewRoutes(fromA2dp);
         }
         AudioService.sForceUseLogger.log(
                 new AudioServiceEvents.ForceUseEvent(useCase, config, eventSource));
@@ -832,9 +910,11 @@ import java.io.PrintWriter;
                     break;
                 case MSG_IIL_SET_FORCE_USE: // intended fall-through
                 case MSG_IIL_SET_FORCE_BT_A2DP_USE:
-                    onSetForceUse(msg.arg1, msg.arg2, (String) msg.obj);
+                    onSetForceUse(msg.arg1, msg.arg2,
+                                  (msg.what == MSG_IIL_SET_FORCE_BT_A2DP_USE), (String) msg.obj);
                     break;
                 case MSG_REPORT_NEW_ROUTES:
+                case MSG_REPORT_NEW_ROUTES_A2DP:
                     synchronized (mDeviceStateLock) {
                         mDeviceInventory.onReportNewRoutes();
                     }
@@ -898,10 +978,16 @@ import java.io.PrintWriter;
                         mBtHelper.setAvrcpAbsoluteVolumeIndex(msg.arg1);
                     }
                     break;
-                case MSG_I_DISCONNECT_BT_SCO:
+                case MSG_I_SET_MODE_OWNER_PID:
                     synchronized (mSetModeLock) {
                         synchronized (mDeviceStateLock) {
-                            mBtHelper.disconnectBluetoothSco(msg.arg1);
+                            if (mModeOwnerPid != msg.arg1) {
+                                mModeOwnerPid = msg.arg1;
+                                updateSpeakerphoneOn("setNewModeOwner");
+                                if (mModeOwnerPid != 0) {
+                                    mBtHelper.disconnectBluetoothSco(mModeOwnerPid);
+                                }
+                            }
                         }
                     }
                     break;
@@ -910,6 +996,11 @@ import java.io.PrintWriter;
                         synchronized (mDeviceStateLock) {
                             mBtHelper.scoClientDied(msg.obj);
                         }
+                    }
+                    break;
+                case MSG_L_SPEAKERPHONE_CLIENT_DIED:
+                    synchronized (mDeviceStateLock) {
+                        speakerphoneClientDied(msg.obj);
                     }
                     break;
                 case MSG_TOGGLE_HDMI:
@@ -1023,9 +1114,19 @@ import java.io.PrintWriter;
                     final int strategy = msg.arg1;
                     mDeviceInventory.onSaveRemovePreferredDevice(strategy);
                 } break;
+                case MSG_CHECK_MUTE_MUSIC:
+                    checkMessagesMuteMusic(0);
+                    break;
                 default:
                     Log.wtf(TAG, "Invalid message " + msg.what);
             }
+
+            // Give some time to Bluetooth service to post a connection message
+            // in case of active device switch
+            if (MESSAGES_MUTE_MUSIC.contains(msg.what)) {
+                sendMsg(MSG_CHECK_MUTE_MUSIC, SENDMSG_REPLACE, BTA2DP_MUTE_CHECK_DELAY_MS);
+            }
+
             if (isMessageHandledUnderWakelock(msg.what)) {
                 try {
                     mBrokerEventWakeLock.release();
@@ -1058,7 +1159,7 @@ import java.io.PrintWriter;
     private static final int MSG_REPORT_NEW_ROUTES = 13;
     private static final int MSG_II_SET_HEARING_AID_VOLUME = 14;
     private static final int MSG_I_SET_AVRCP_ABSOLUTE_VOLUME = 15;
-    private static final int MSG_I_DISCONNECT_BT_SCO = 16;
+    private static final int MSG_I_SET_MODE_OWNER_PID = 16;
 
     // process active A2DP device change, obj is BtHelper.BluetoothA2dpDeviceInfo
     private static final int MSG_L_A2DP_ACTIVE_DEVICE_CHANGE = 18;
@@ -1084,12 +1185,16 @@ import java.io.PrintWriter;
     private static final int MSG_L_HEARING_AID_DEVICE_CONNECTION_CHANGE_EXT = 31;
 
     // process external command to (dis)connect or change active A2DP device
-    private static final int MSG_L_A2DP_ACTIVE_DEVICE_CHANGE_EXT = 32;
+    private static final int MSG_L_A2DP_ACTIVE_DEVICE_CHANGE_EXT = 38;
 
     // a ScoClient died in BtHelper
-    private static final int MSG_L_SCOCLIENT_DIED = 33;
-    private static final int MSG_IL_SAVE_PREF_DEVICE_FOR_STRATEGY = 34;
-    private static final int MSG_I_SAVE_REMOVE_PREF_DEVICE_FOR_STRATEGY = 35;
+    private static final int MSG_L_SCOCLIENT_DIED = 32;
+    private static final int MSG_IL_SAVE_PREF_DEVICE_FOR_STRATEGY = 33;
+    private static final int MSG_I_SAVE_REMOVE_PREF_DEVICE_FOR_STRATEGY = 34;
+
+    private static final int MSG_L_SPEAKERPHONE_CLIENT_DIED = 35;
+    private static final int MSG_CHECK_MUTE_MUSIC = 36;
+    private static final int MSG_REPORT_NEW_ROUTES_A2DP = 37;
 
 
     private static boolean isMessageHandledUnderWakelock(int msgId) {
@@ -1106,6 +1211,7 @@ import java.io.PrintWriter;
             case MSG_L_A2DP_DEVICE_CONNECTION_CHANGE_EXT_CONNECTION:
             case MSG_L_A2DP_DEVICE_CONNECTION_CHANGE_EXT_DISCONNECTION:
             case MSG_L_HEARING_AID_DEVICE_CONNECTION_CHANGE_EXT:
+            case MSG_CHECK_MUTE_MUSIC:
             case MSG_L_A2DP_ACTIVE_DEVICE_CHANGE_EXT:
                 return true;
             default:
@@ -1181,6 +1287,10 @@ import java.io.PrintWriter;
             Binder.restoreCallingIdentity(identity);
         }
 
+        if (MESSAGES_MUTE_MUSIC.contains(msg)) {
+            checkMessagesMuteMusic(msg);
+        }
+
         synchronized (sLastDeviceConnectionMsgTimeLock) {
             long time = SystemClock.uptimeMillis() + delay;
 
@@ -1202,9 +1312,130 @@ import java.io.PrintWriter;
                 default:
                     break;
             }
-
             mBrokerHandler.sendMessageAtTime(mBrokerHandler.obtainMessage(msg, arg1, arg2, obj),
                     time);
         }
     }
+
+    /** List of messages for which music is muted while processing is pending */
+    private static final Set<Integer> MESSAGES_MUTE_MUSIC;
+    static {
+        MESSAGES_MUTE_MUSIC = new HashSet<>();
+        MESSAGES_MUTE_MUSIC.add(MSG_IL_SET_A2DP_SINK_CONNECTION_STATE_CONNECTED);
+        MESSAGES_MUTE_MUSIC.add(MSG_IL_SET_A2DP_SINK_CONNECTION_STATE_DISCONNECTED);
+        MESSAGES_MUTE_MUSIC.add(MSG_L_A2DP_DEVICE_CONFIG_CHANGE);
+        MESSAGES_MUTE_MUSIC.add(MSG_L_A2DP_ACTIVE_DEVICE_CHANGE);
+        MESSAGES_MUTE_MUSIC.add(MSG_L_A2DP_DEVICE_CONNECTION_CHANGE_EXT_CONNECTION);
+        MESSAGES_MUTE_MUSIC.add(MSG_L_A2DP_DEVICE_CONNECTION_CHANGE_EXT_DISCONNECTION);
+        MESSAGES_MUTE_MUSIC.add(MSG_IIL_SET_FORCE_BT_A2DP_USE);
+        MESSAGES_MUTE_MUSIC.add(MSG_REPORT_NEW_ROUTES_A2DP);
+    }
+
+    private AtomicBoolean mMusicMuted = new AtomicBoolean(false);
+
+    /** Mutes or unmutes music according to pending A2DP messages */
+    private void checkMessagesMuteMusic(int message) {
+        boolean mute = message != 0;
+        if (!mute) {
+            for (int msg : MESSAGES_MUTE_MUSIC) {
+                if (mBrokerHandler.hasMessages(msg)) {
+                    mute = true;
+                    break;
+                }
+            }
+        }
+
+        if (mute != mMusicMuted.getAndSet(mute)) {
+            mAudioService.setMusicMute(mute);
+        }
+    }
+
+    private class SpeakerphoneClient implements IBinder.DeathRecipient {
+        private final IBinder mCb;
+        private final int mPid;
+        private final boolean mOn;
+        SpeakerphoneClient(IBinder cb, int pid, boolean on) {
+            mCb = cb;
+            mPid = pid;
+            mOn = on;
+        }
+
+        public boolean registerDeathRecipient() {
+            boolean status = false;
+            try {
+                mCb.linkToDeath(this, 0);
+                status = true;
+            } catch (RemoteException e) {
+                Log.w(TAG, "SpeakerphoneClient could not link to " + mCb + " binder death");
+            }
+            return status;
+        }
+
+        public void unregisterDeathRecipient() {
+            try {
+                mCb.unlinkToDeath(this, 0);
+            } catch (NoSuchElementException e) {
+                Log.w(TAG, "SpeakerphoneClient could not not unregistered to binder");
+            }
+        }
+
+        @Override
+        public void binderDied() {
+            postSpeakerphoneClientDied(this);
+        }
+
+        IBinder getBinder() {
+            return mCb;
+        }
+
+        int getPid() {
+            return mPid;
+        }
+
+        boolean isOn() {
+            return mOn;
+        }
+    }
+
+    @GuardedBy("mDeviceStateLock")
+    private void speakerphoneClientDied(Object obj) {
+        if (obj == null) {
+            return;
+        }
+        Log.w(TAG, "Speaker client died");
+        if (removeSpeakerphoneClient(((SpeakerphoneClient) obj).getBinder(), false) != null) {
+            updateSpeakerphoneOn("speakerphoneClientDied");
+        }
+    }
+
+    private SpeakerphoneClient removeSpeakerphoneClient(IBinder cb, boolean unregister) {
+        for (SpeakerphoneClient cl : mSpeakerphoneClients) {
+            if (cl.getBinder() == cb) {
+                if (unregister) {
+                    cl.unregisterDeathRecipient();
+                }
+                mSpeakerphoneClients.remove(cl);
+                return cl;
+            }
+        }
+        return null;
+    }
+
+    @GuardedBy("mDeviceStateLock")
+    private boolean addSpeakerphoneClient(IBinder cb, int pid, boolean on) {
+        // always insert new request at first position
+        removeSpeakerphoneClient(cb, true);
+        SpeakerphoneClient client = new SpeakerphoneClient(cb, pid, on);
+        if (client.registerDeathRecipient()) {
+            mSpeakerphoneClients.add(0, client);
+            return true;
+        }
+        return false;
+    }
+
+    // List of clients requesting speakerPhone ON
+    @GuardedBy("mDeviceStateLock")
+    private final @NonNull ArrayList<SpeakerphoneClient> mSpeakerphoneClients =
+            new ArrayList<SpeakerphoneClient>();
+
 }

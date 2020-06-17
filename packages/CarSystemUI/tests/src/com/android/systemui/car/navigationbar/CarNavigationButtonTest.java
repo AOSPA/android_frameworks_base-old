@@ -36,8 +36,8 @@ import android.widget.LinearLayout;
 
 import androidx.test.filters.SmallTest;
 
-import com.android.keyguard.AlphaOptimizedImageButton;
 import com.android.systemui.SysuiTestCase;
+import com.android.systemui.statusbar.AlphaOptimizedImageView;
 import com.android.systemui.tests.R;
 
 import org.junit.Before;
@@ -74,7 +74,7 @@ public class CarNavigationButtonTest extends SysuiTestCase {
 
     @Test
     public void onCreate_iconIsVisible() {
-        AlphaOptimizedImageButton icon = mDefaultButton.findViewById(
+        AlphaOptimizedImageView icon = mDefaultButton.findViewById(
                 R.id.car_nav_button_icon_image);
 
         assertThat(icon.getDrawable()).isNotNull();
@@ -83,12 +83,12 @@ public class CarNavigationButtonTest extends SysuiTestCase {
     @Test
     public void onSelected_selectedIconDefined_togglesIcon() {
         mDefaultButton.setSelected(true);
-        Drawable selectedIconDrawable = ((AlphaOptimizedImageButton) mDefaultButton.findViewById(
+        Drawable selectedIconDrawable = ((AlphaOptimizedImageView) mDefaultButton.findViewById(
                 R.id.car_nav_button_icon_image)).getDrawable();
 
 
         mDefaultButton.setSelected(false);
-        Drawable unselectedIconDrawable = ((AlphaOptimizedImageButton) mDefaultButton.findViewById(
+        Drawable unselectedIconDrawable = ((AlphaOptimizedImageView) mDefaultButton.findViewById(
                 R.id.car_nav_button_icon_image)).getDrawable();
 
         assertThat(selectedIconDrawable).isNotEqualTo(unselectedIconDrawable);
@@ -100,12 +100,12 @@ public class CarNavigationButtonTest extends SysuiTestCase {
                 R.id.selected_icon_undefined);
 
         selectedIconUndefinedButton.setSelected(true);
-        Drawable selectedIconDrawable = ((AlphaOptimizedImageButton) mDefaultButton.findViewById(
+        Drawable selectedIconDrawable = ((AlphaOptimizedImageView) mDefaultButton.findViewById(
                 R.id.car_nav_button_icon_image)).getDrawable();
 
 
         selectedIconUndefinedButton.setSelected(false);
-        Drawable unselectedIconDrawable = ((AlphaOptimizedImageButton) mDefaultButton.findViewById(
+        Drawable unselectedIconDrawable = ((AlphaOptimizedImageView) mDefaultButton.findViewById(
                 R.id.car_nav_button_icon_image)).getDrawable();
 
         assertThat(selectedIconDrawable).isEqualTo(unselectedIconDrawable);
@@ -150,7 +150,7 @@ public class CarNavigationButtonTest extends SysuiTestCase {
     @Test
     public void onSelected_doesNotShowMoreWhenSelected_doesNotShowMoreIcon() {
         mDefaultButton.setSelected(true);
-        AlphaOptimizedImageButton moreIcon = mDefaultButton.findViewById(
+        AlphaOptimizedImageView moreIcon = mDefaultButton.findViewById(
                 R.id.car_nav_button_more_icon);
 
         assertThat(moreIcon.getVisibility()).isEqualTo(View.GONE);
@@ -161,7 +161,7 @@ public class CarNavigationButtonTest extends SysuiTestCase {
         CarNavigationButton showMoreWhenSelected = mTestView.findViewById(
                 R.id.not_highlightable_more_button);
         showMoreWhenSelected.setSelected(true);
-        AlphaOptimizedImageButton moreIcon = showMoreWhenSelected.findViewById(
+        AlphaOptimizedImageView moreIcon = showMoreWhenSelected.findViewById(
                 R.id.car_nav_button_more_icon);
 
         assertThat(moreIcon.getVisibility()).isEqualTo(View.VISIBLE);
@@ -173,10 +173,60 @@ public class CarNavigationButtonTest extends SysuiTestCase {
                 R.id.highlightable_no_more_button);
         showMoreWhenSelected.setSelected(true);
         showMoreWhenSelected.setSelected(false);
-        AlphaOptimizedImageButton moreIcon = showMoreWhenSelected.findViewById(
+        AlphaOptimizedImageView moreIcon = showMoreWhenSelected.findViewById(
                 R.id.car_nav_button_more_icon);
 
         assertThat(moreIcon.getVisibility()).isEqualTo(View.GONE);
+    }
+
+    @Test
+    public void onUnselected_withAppIcon_showsAppIcon() {
+        CarNavigationButton roleBasedButton = mTestView.findViewById(R.id.role_based_button);
+        Drawable appIcon = getContext().getDrawable(R.drawable.ic_android);
+
+        roleBasedButton.setSelected(false);
+        roleBasedButton.setAppIcon(appIcon);
+
+        Drawable currentDrawable = ((AlphaOptimizedImageView) roleBasedButton.findViewById(
+                R.id.car_nav_button_icon_image)).getDrawable();
+
+        assertThat(currentDrawable).isEqualTo(appIcon);
+    }
+
+    @Test
+    public void onUnselected_withAppIcon_applyUnselectedAlpha() {
+        CarNavigationButton roleBasedButton = mTestView.findViewById(R.id.role_based_button);
+
+        roleBasedButton.setSelected(false);
+        roleBasedButton.setAppIcon(getContext().getDrawable(R.drawable.ic_android));
+
+        assertThat(roleBasedButton.getAlpha()).isEqualTo(
+                CarNavigationButton.DEFAULT_UNSELECTED_ALPHA);
+    }
+
+    @Test
+    public void onSelected_withAppIcon_showsAppIconWithSelectedAlpha() {
+        CarNavigationButton roleBasedButton = mTestView.findViewById(R.id.role_based_button);
+        Drawable appIcon = getContext().getDrawable(R.drawable.ic_android);
+
+        roleBasedButton.setSelected(true);
+        roleBasedButton.setAppIcon(appIcon);
+
+        Drawable currentDrawable = ((AlphaOptimizedImageView) roleBasedButton.findViewById(
+                R.id.car_nav_button_icon_image)).getDrawable();
+
+        assertThat(currentDrawable).isEqualTo(appIcon);
+    }
+
+    @Test
+    public void onSelected_withAppIcon_applySelectedAlpha() {
+        CarNavigationButton roleBasedButton = mTestView.findViewById(R.id.role_based_button);
+
+        roleBasedButton.setSelected(true);
+        roleBasedButton.setAppIcon(getContext().getDrawable(R.drawable.ic_android));
+
+        assertThat(roleBasedButton.getAlpha()).isEqualTo(
+                CarNavigationButton.DEFAULT_SELECTED_ALPHA);
     }
 
     @Test

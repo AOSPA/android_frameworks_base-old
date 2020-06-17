@@ -41,6 +41,7 @@ import android.service.textclassifier.TextClassifierService;
 import android.service.textclassifier.TextClassifierService.ConnectionState;
 import android.text.TextUtils;
 import android.util.ArrayMap;
+import android.util.LruCache;
 import android.util.Slog;
 import android.util.SparseArray;
 import android.view.textclassifier.ConversationAction;
@@ -68,13 +69,10 @@ import com.android.server.SystemService;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
-import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Queue;
-import java.util.stream.Collectors;
 
 /**
  * A manager for TextClassifier services.
@@ -309,13 +307,15 @@ public final class TextClassificationManagerService extends ITextClassifierServi
         Objects.requireNonNull(classificationContext);
         Objects.requireNonNull(classificationContext.getSystemTextClassifierMetadata());
 
+        synchronized (mLock) {
+            mSessionCache.put(sessionId, classificationContext);
+        }
         handleRequest(
                 classificationContext.getSystemTextClassifierMetadata(),
                 /* verifyCallingPackage= */ true,
                 /* attemptToBind= */ false,
                 service -> {
                     service.onCreateTextClassificationSession(classificationContext, sessionId);
-                    mSessionCache.put(sessionId, classificationContext);
                 },
                 "onCreateTextClassificationSession",
                 NO_OP_CALLBACK);
@@ -589,12 +589,14 @@ public final class TextClassificationManagerService extends ITextClassifierServi
      * are cleaned up automatically when the client process is dead.
      */
     static final class SessionCache {
+        private static final int MAX_CACHE_SIZE = 100;
+
         @NonNull
         private final Object mLock;
         @NonNull
         @GuardedBy("mLock")
-        private final Map<TextClassificationSessionId, StrippedTextClassificationContext> mCache =
-                new ArrayMap<>();
+        private final LruCache<TextClassificationSessionId, StrippedTextClassificationContext>
+                mCache = new LruCache<>(MAX_CACHE_SIZE);
         @NonNull
         @GuardedBy("mLock")
         private final Map<TextClassificationSessionId, DeathRecipient> mDeathRecipients =
@@ -776,6 +778,8 @@ public final class TextClassificationManagerService extends ITextClassifierServi
     }
 
     private final class ServiceState {
+        private static final int MAX_PENDING_REQUESTS = 20;
+
         @UserIdInt
         final int mUserId;
         @NonNull
@@ -787,7 +791,15 @@ public final class TextClassificationManagerService extends ITextClassifierServi
         final int mBindServiceFlags;
         @NonNull
         @GuardedBy("mLock")
-        final Queue<PendingRequest> mPendingRequests = new ArrayDeque<>();
+        final FixedSizeQueue<PendingRequest> mPendingRequests =
+                new FixedSizeQueue<>(MAX_PENDING_REQUESTS,
+                        request -> {
+                            Slog.w(LOG_TAG,
+                                    String.format("Pending request[%s] is dropped", request.mName));
+                            if (request.mOnServiceFailure != null) {
+                                request.mOnServiceFailure.run();
+                            }
+                        });
         @Nullable
         @GuardedBy("mLock")
         ITextClassifierService mService;
@@ -883,6 +895,9 @@ public final class TextClassificationManagerService extends ITextClassifierServi
                 Slog.d(LOG_TAG, "Binding to " + serviceIntent.getComponent());
                 willBind = mContext.bindServiceAsUser(
                         serviceIntent, mConnection, mBindServiceFlags, UserHandle.of(mUserId));
+                if (!willBind) {
+                    Slog.e(LOG_TAG, "Could not bind to " + componentName);
+                }
                 mBinding = willBind;
             } finally {
                 Binder.restoreCallingIdentity(identity);
@@ -908,7 +923,7 @@ public final class TextClassificationManagerService extends ITextClassifierServi
                 pw.printPair("bindServiceFlags", mBindServiceFlags);
                 pw.printPair("boundServiceUid", mBoundServiceUid);
                 pw.printPair("binding", mBinding);
-                pw.printPair("numberRequests", mPendingRequests.size());
+                pw.printPair("numOfPendingRequests", mPendingRequests.size());
             }
         }
 
@@ -955,16 +970,19 @@ public final class TextClassificationManagerService extends ITextClassifierServi
 
             @Override
             public void onServiceDisconnected(ComponentName name) {
+                Slog.i(LOG_TAG, "onServiceDisconnected called with " + name);
                 cleanupService();
             }
 
             @Override
             public void onBindingDied(ComponentName name) {
+                Slog.i(LOG_TAG, "onBindingDied called with " + name);
                 cleanupService();
             }
 
             @Override
             public void onNullBinding(ComponentName name) {
+                Slog.i(LOG_TAG, "onNullBinding called with " + name);
                 cleanupService();
             }
 
@@ -1047,18 +1065,26 @@ public final class TextClassificationManagerService extends ITextClassifierServi
         private static void rewriteTextClassificationIcons(Bundle result) {
             final TextClassification classification = TextClassifierService.getResponse(result);
             boolean rewrite = false;
-            for (RemoteAction action : classification.getActions()) {
-                rewrite |= shouldRewriteIcon(action);
+            final List<RemoteAction> actions = classification.getActions();
+            final int size = actions.size();
+            final List<RemoteAction> validActions = new ArrayList<>(size);
+            for (int i = 0; i < size; i++) {
+                final RemoteAction action = actions.get(i);
+                final RemoteAction validAction;
+                if (shouldRewriteIcon(action)) {
+                    rewrite = true;
+                    validAction = validAction(action);
+                } else {
+                    validAction = action;
+                }
+                validActions.add(validAction);
             }
             if (rewrite) {
                 TextClassifierService.putResponse(
                         result,
                         classification.toBuilder()
                                 .clearActions()
-                                .addActions(classification.getActions()
-                                        .stream()
-                                        .map(action -> validAction(action))
-                                        .collect(Collectors.toList()))
+                                .addActions(validActions)
                                 .build());
             }
         }
@@ -1066,29 +1092,30 @@ public final class TextClassificationManagerService extends ITextClassifierServi
         private static void rewriteConversationActionsIcons(Bundle result) {
             final ConversationActions convActions = TextClassifierService.getResponse(result);
             boolean rewrite = false;
-            for (ConversationAction convAction : convActions.getConversationActions()) {
-                rewrite |= shouldRewriteIcon(convAction.getAction());
+            final List<ConversationAction> origConvActions = convActions.getConversationActions();
+            final int size = origConvActions.size();
+            final List<ConversationAction> validConvActions = new ArrayList<>(size);
+            for (int i = 0; i < size; i++) {
+                final ConversationAction convAction = origConvActions.get(i);
+                final ConversationAction validConvAction;
+                if (shouldRewriteIcon(convAction.getAction())) {
+                    rewrite = true;
+                    validConvAction = convAction.toBuilder()
+                            .setAction(validAction(convAction.getAction()))
+                            .build();
+                } else {
+                    validConvAction = convAction;
+                }
+                validConvActions.add(validConvAction);
             }
             if (rewrite) {
                 TextClassifierService.putResponse(
                         result,
-                        new ConversationActions(
-                                convActions.getConversationActions()
-                                        .stream()
-                                        .map(convAction -> convAction.toBuilder()
-                                                .setAction(validAction(convAction.getAction()))
-                                                .build())
-                                        .collect(Collectors.toList()),
-                                convActions.getId()));
+                        new ConversationActions(validConvActions, convActions.getId()));
             }
         }
 
-        @Nullable
-        private static RemoteAction validAction(@Nullable RemoteAction action) {
-            if (!shouldRewriteIcon(action)) {
-                return action;
-            }
-
+        private static RemoteAction validAction(RemoteAction action) {
             final RemoteAction newAction = new RemoteAction(
                     changeIcon(action.getIcon()),
                     action.getTitle(),

@@ -65,8 +65,8 @@ TEST(EventMetricProducerTest, TestNoCondition) {
 
     sp<MockConditionWizard> wizard = new NaggyMock<MockConditionWizard>();
 
-    EventMetricProducer eventProducer(kConfigKey, metric, -1 /*-1 meaning no condition*/, wizard,
-                                      bucketStartTimeNs);
+    EventMetricProducer eventProducer(kConfigKey, metric, -1 /*-1 meaning no condition*/, {},
+                                      wizard, bucketStartTimeNs);
 
     eventProducer.onMatchedLogEvent(1 /*matcher index*/, event1);
     eventProducer.onMatchedLogEvent(1 /*matcher index*/, event2);
@@ -79,7 +79,7 @@ TEST(EventMetricProducerTest, TestNoCondition) {
 
     StatsLogReport report = outputStreamToProto(&output);
     EXPECT_TRUE(report.has_event_metrics());
-    EXPECT_EQ(2, report.event_metrics().data_size());
+    ASSERT_EQ(2, report.event_metrics().data_size());
     EXPECT_EQ(bucketStartTimeNs + 1, report.event_metrics().data(0).elapsed_timestamp_nanos());
     EXPECT_EQ(bucketStartTimeNs + 2, report.event_metrics().data(1).elapsed_timestamp_nanos());
 }
@@ -101,7 +101,8 @@ TEST(EventMetricProducerTest, TestEventsWithNonSlicedCondition) {
 
     sp<MockConditionWizard> wizard = new NaggyMock<MockConditionWizard>();
 
-    EventMetricProducer eventProducer(kConfigKey, metric, 1, wizard, bucketStartTimeNs);
+    EventMetricProducer eventProducer(kConfigKey, metric, 0 /*condition index*/,
+                                      {ConditionState::kUnknown}, wizard, bucketStartTimeNs);
 
     eventProducer.onConditionChanged(true /*condition*/, bucketStartTimeNs);
     eventProducer.onMatchedLogEvent(1 /*matcher index*/, event1);
@@ -118,7 +119,7 @@ TEST(EventMetricProducerTest, TestEventsWithNonSlicedCondition) {
 
     StatsLogReport report = outputStreamToProto(&output);
     EXPECT_TRUE(report.has_event_metrics());
-    EXPECT_EQ(1, report.event_metrics().data_size());
+    ASSERT_EQ(1, report.event_metrics().data_size());
     EXPECT_EQ(bucketStartTimeNs + 1, report.event_metrics().data(0).elapsed_timestamp_nanos());
 }
 
@@ -155,7 +156,8 @@ TEST(EventMetricProducerTest, TestEventsWithSlicedCondition) {
     // Condition is true for second event.
     EXPECT_CALL(*wizard, query(_, key2, _)).WillOnce(Return(ConditionState::kTrue));
 
-    EventMetricProducer eventProducer(kConfigKey, metric, 1, wizard, bucketStartTimeNs);
+    EventMetricProducer eventProducer(kConfigKey, metric, 0 /*condition index*/,
+                                      {ConditionState::kUnknown}, wizard, bucketStartTimeNs);
 
     eventProducer.onMatchedLogEvent(1 /*matcher index*/, event1);
     eventProducer.onMatchedLogEvent(1 /*matcher index*/, event2);
@@ -168,7 +170,7 @@ TEST(EventMetricProducerTest, TestEventsWithSlicedCondition) {
 
     StatsLogReport report = outputStreamToProto(&output);
     EXPECT_TRUE(report.has_event_metrics());
-    EXPECT_EQ(1, report.event_metrics().data_size());
+    ASSERT_EQ(1, report.event_metrics().data_size());
     EXPECT_EQ(bucketStartTimeNs + 10, report.event_metrics().data(0).elapsed_timestamp_nanos());
 }
 

@@ -104,10 +104,9 @@ TEST(GaugeMetricProducerTest, TestFirstBucket) {
 
     // statsd started long ago.
     // The metric starts in the middle of the bucket
-    GaugeMetricProducer gaugeProducer(kConfigKey, metric, -1 /*-1 meaning no condition*/, wizard,
-                                      logEventMatcherIndex, eventMatcherWizard,
-                                      -1, -1, tagId, 5, 600 * NS_PER_SEC + NS_PER_SEC / 2,
-                                      pullerManager);
+    GaugeMetricProducer gaugeProducer(kConfigKey, metric, -1 /*-1 meaning no condition*/, {},
+                                      wizard, logEventMatcherIndex, eventMatcherWizard, -1, -1,
+                                      tagId, 5, 600 * NS_PER_SEC + NS_PER_SEC / 2, pullerManager);
     gaugeProducer.prepareFirstBucket();
 
     EXPECT_EQ(600500000000, gaugeProducer.mCurrentBucketStartTimeNs);
@@ -138,17 +137,18 @@ TEST(GaugeMetricProducerTest, TestPulledEventsNoCondition) {
     sp<MockStatsPullerManager> pullerManager = new StrictMock<MockStatsPullerManager>();
     EXPECT_CALL(*pullerManager, RegisterReceiver(tagId, kConfigKey, _, _, _)).WillOnce(Return());
     EXPECT_CALL(*pullerManager, UnRegisterReceiver(tagId, kConfigKey, _)).WillOnce(Return());
-    EXPECT_CALL(*pullerManager, Pull(tagId, kConfigKey, _, _))
-            .WillOnce(Invoke([](int tagId, const ConfigKey&,
+    EXPECT_CALL(*pullerManager, Pull(tagId, kConfigKey, bucketStartTimeNs, _, _))
+            .WillOnce(Invoke([](int tagId, const ConfigKey&, const int64_t eventTimeNs,
                                 vector<std::shared_ptr<LogEvent>>* data, bool) {
+                EXPECT_EQ(eventTimeNs, bucketStartTimeNs);
                 data->clear();
-                data->push_back(makeLogEvent(tagId, bucketStartTimeNs + 10, 3, "some value", 11));
+                data->push_back(makeLogEvent(tagId, eventTimeNs + 10, 3, "some value", 11));
                 return true;
             }));
 
-    GaugeMetricProducer gaugeProducer(kConfigKey, metric, -1 /*-1 meaning no condition*/, wizard,
-                                      logEventMatcherIndex, eventMatcherWizard, tagId, -1, tagId,
-                                      bucketStartTimeNs, bucketStartTimeNs, pullerManager);
+    GaugeMetricProducer gaugeProducer(kConfigKey, metric, -1 /*-1 meaning no condition*/, {},
+                                      wizard, logEventMatcherIndex, eventMatcherWizard, tagId, -1,
+                                      tagId, bucketStartTimeNs, bucketStartTimeNs, pullerManager);
     gaugeProducer.prepareFirstBucket();
 
     vector<shared_ptr<LogEvent>> allData;
@@ -156,13 +156,13 @@ TEST(GaugeMetricProducerTest, TestPulledEventsNoCondition) {
     allData.push_back(makeLogEvent(tagId, bucket2StartTimeNs + 1, 10, "some value", 11));
 
     gaugeProducer.onDataPulled(allData, /** succeed */ true, bucket2StartTimeNs);
-    EXPECT_EQ(1UL, gaugeProducer.mCurrentSlicedBucket->size());
+    ASSERT_EQ(1UL, gaugeProducer.mCurrentSlicedBucket->size());
     auto it = gaugeProducer.mCurrentSlicedBucket->begin()->second.front().mFields->begin();
     EXPECT_EQ(INT, it->mValue.getType());
     EXPECT_EQ(10, it->mValue.int_value);
     it++;
     EXPECT_EQ(11, it->mValue.int_value);
-    EXPECT_EQ(1UL, gaugeProducer.mPastBuckets.size());
+    ASSERT_EQ(1UL, gaugeProducer.mPastBuckets.size());
     EXPECT_EQ(3, gaugeProducer.mPastBuckets.begin()
                          ->second.back()
                          .mGaugeAtoms.front()
@@ -172,7 +172,7 @@ TEST(GaugeMetricProducerTest, TestPulledEventsNoCondition) {
     allData.clear();
     allData.push_back(makeLogEvent(tagId, bucket3StartTimeNs + 10, 24, "some value", 25));
     gaugeProducer.onDataPulled(allData, /** succeed */ true, bucket3StartTimeNs);
-    EXPECT_EQ(1UL, gaugeProducer.mCurrentSlicedBucket->size());
+    ASSERT_EQ(1UL, gaugeProducer.mCurrentSlicedBucket->size());
     it = gaugeProducer.mCurrentSlicedBucket->begin()->second.front().mFields->begin();
     EXPECT_EQ(INT, it->mValue.getType());
     EXPECT_EQ(24, it->mValue.int_value);
@@ -180,8 +180,8 @@ TEST(GaugeMetricProducerTest, TestPulledEventsNoCondition) {
     EXPECT_EQ(INT, it->mValue.getType());
     EXPECT_EQ(25, it->mValue.int_value);
     // One dimension.
-    EXPECT_EQ(1UL, gaugeProducer.mPastBuckets.size());
-    EXPECT_EQ(2UL, gaugeProducer.mPastBuckets.begin()->second.size());
+    ASSERT_EQ(1UL, gaugeProducer.mPastBuckets.size());
+    ASSERT_EQ(2UL, gaugeProducer.mPastBuckets.begin()->second.size());
     it = gaugeProducer.mPastBuckets.begin()->second.back().mGaugeAtoms.front().mFields->begin();
     EXPECT_EQ(INT, it->mValue.getType());
     EXPECT_EQ(10L, it->mValue.int_value);
@@ -190,10 +190,10 @@ TEST(GaugeMetricProducerTest, TestPulledEventsNoCondition) {
     EXPECT_EQ(11L, it->mValue.int_value);
 
     gaugeProducer.flushIfNeededLocked(bucket4StartTimeNs);
-    EXPECT_EQ(0UL, gaugeProducer.mCurrentSlicedBucket->size());
+    ASSERT_EQ(0UL, gaugeProducer.mCurrentSlicedBucket->size());
     // One dimension.
-    EXPECT_EQ(1UL, gaugeProducer.mPastBuckets.size());
-    EXPECT_EQ(3UL, gaugeProducer.mPastBuckets.begin()->second.size());
+    ASSERT_EQ(1UL, gaugeProducer.mPastBuckets.size());
+    ASSERT_EQ(3UL, gaugeProducer.mPastBuckets.begin()->second.size());
     it = gaugeProducer.mPastBuckets.begin()->second.back().mGaugeAtoms.front().mFields->begin();
     EXPECT_EQ(INT, it->mValue.getType());
     EXPECT_EQ(24L, it->mValue.int_value);
@@ -224,8 +224,8 @@ TEST_P(GaugeMetricProducerTest_PartialBucket, TestPushedEvents) {
             new EventMatcherWizard({new SimpleLogMatchingTracker(
                     atomMatcherId, logEventMatcherIndex, atomMatcher, uidMap)});
 
-    GaugeMetricProducer gaugeProducer(kConfigKey, metric, -1 /*-1 meaning no condition*/, wizard,
-                                      logEventMatcherIndex, eventMatcherWizard,
+    GaugeMetricProducer gaugeProducer(kConfigKey, metric, -1 /*-1 meaning no condition*/, {},
+                                      wizard, logEventMatcherIndex, eventMatcherWizard,
                                       -1 /* -1 means no pulling */, -1, tagId, bucketStartTimeNs,
                                       bucketStartTimeNs, pullerManager);
     gaugeProducer.prepareFirstBucket();
@@ -247,7 +247,7 @@ TEST_P(GaugeMetricProducerTest_PartialBucket, TestPushedEvents) {
             break;
     }
     EXPECT_EQ(0UL, (*gaugeProducer.mCurrentSlicedBucket).count(DEFAULT_METRIC_DIMENSION_KEY));
-    EXPECT_EQ(1UL, gaugeProducer.mPastBuckets[DEFAULT_METRIC_DIMENSION_KEY].size());
+    ASSERT_EQ(1UL, gaugeProducer.mPastBuckets[DEFAULT_METRIC_DIMENSION_KEY].size());
     EXPECT_EQ(bucketStartTimeNs,
               gaugeProducer.mPastBuckets[DEFAULT_METRIC_DIMENSION_KEY][0].mBucketStartNs);
     EXPECT_EQ(partialBucketSplitTimeNs,
@@ -262,7 +262,7 @@ TEST_P(GaugeMetricProducerTest_PartialBucket, TestPushedEvents) {
     CreateTwoValueLogEvent(&event2, tagId, bucketStartTimeNs + 59 * NS_PER_SEC, 1, 10);
     gaugeProducer.onMatchedLogEvent(1 /*log matcher index*/, event2);
     EXPECT_EQ(0L, gaugeProducer.mCurrentBucketNum);
-    EXPECT_EQ(1UL, gaugeProducer.mPastBuckets[DEFAULT_METRIC_DIMENSION_KEY].size());
+    ASSERT_EQ(1UL, gaugeProducer.mPastBuckets[DEFAULT_METRIC_DIMENSION_KEY].size());
     EXPECT_EQ(bucketStartTimeNs,
               gaugeProducer.mPastBuckets[DEFAULT_METRIC_DIMENSION_KEY][0].mBucketStartNs);
     EXPECT_EQ(partialBucketSplitTimeNs,
@@ -277,7 +277,7 @@ TEST_P(GaugeMetricProducerTest_PartialBucket, TestPushedEvents) {
     CreateTwoValueLogEvent(&event3, tagId, bucketStartTimeNs + 65 * NS_PER_SEC, 1, 10);
     gaugeProducer.onMatchedLogEvent(1 /*log matcher index*/, event3);
     EXPECT_EQ(1L, gaugeProducer.mCurrentBucketNum);
-    EXPECT_EQ(2UL, gaugeProducer.mPastBuckets[DEFAULT_METRIC_DIMENSION_KEY].size());
+    ASSERT_EQ(2UL, gaugeProducer.mPastBuckets[DEFAULT_METRIC_DIMENSION_KEY].size());
     EXPECT_EQ((int64_t)bucketStartTimeNs + bucketSizeNs, gaugeProducer.mCurrentBucketStartTimeNs);
     EXPECT_EQ(1, anomalyTracker->getSumOverPastBuckets(DEFAULT_METRIC_DIMENSION_KEY));
 
@@ -286,7 +286,7 @@ TEST_P(GaugeMetricProducerTest_PartialBucket, TestPushedEvents) {
     CreateTwoValueLogEvent(&event4, tagId, bucketStartTimeNs + 125 * NS_PER_SEC, 1, 10);
     gaugeProducer.onMatchedLogEvent(1 /*log matcher index*/, event4);
     EXPECT_EQ(2L, gaugeProducer.mCurrentBucketNum);
-    EXPECT_EQ(3UL, gaugeProducer.mPastBuckets[DEFAULT_METRIC_DIMENSION_KEY].size());
+    ASSERT_EQ(3UL, gaugeProducer.mPastBuckets[DEFAULT_METRIC_DIMENSION_KEY].size());
     EXPECT_EQ(2, anomalyTracker->getSumOverPastBuckets(DEFAULT_METRIC_DIMENSION_KEY));
 }
 
@@ -307,29 +307,28 @@ TEST_P(GaugeMetricProducerTest_PartialBucket, TestPulled) {
     sp<EventMatcherWizard> eventMatcherWizard =
             new EventMatcherWizard({new SimpleLogMatchingTracker(
                     atomMatcherId, logEventMatcherIndex, atomMatcher, uidMap)});
-
     sp<MockStatsPullerManager> pullerManager = new StrictMock<MockStatsPullerManager>();
     EXPECT_CALL(*pullerManager, RegisterReceiver(tagId, kConfigKey, _, _, _)).WillOnce(Return());
     EXPECT_CALL(*pullerManager, UnRegisterReceiver(tagId, kConfigKey, _)).WillOnce(Return());
-    EXPECT_CALL(*pullerManager, Pull(tagId, kConfigKey, _, _))
+    EXPECT_CALL(*pullerManager, Pull(tagId, kConfigKey, _, _, _))
             .WillOnce(Return(false))
-            .WillOnce(Invoke(
-                    [](int tagId, const ConfigKey&, vector<std::shared_ptr<LogEvent>>* data, bool) {
-                        data->clear();
-                        data->push_back(
-                                CreateRepeatedValueLogEvent(tagId, partialBucketSplitTimeNs, 2));
-                        return true;
-                    }));
+            .WillOnce(Invoke([](int tagId, const ConfigKey&, const int64_t eventTimeNs,
+                                vector<std::shared_ptr<LogEvent>>* data, bool) {
+                EXPECT_EQ(eventTimeNs, partialBucketSplitTimeNs);
+                data->clear();
+                data->push_back(CreateRepeatedValueLogEvent(tagId, eventTimeNs, 2));
+                return true;
+            }));
 
-    GaugeMetricProducer gaugeProducer(kConfigKey, metric, -1 /*-1 meaning no condition*/, wizard,
-                                      logEventMatcherIndex, eventMatcherWizard, tagId, -1, tagId,
-                                      bucketStartTimeNs, bucketStartTimeNs, pullerManager);
+    GaugeMetricProducer gaugeProducer(kConfigKey, metric, -1 /*-1 meaning no condition*/, {},
+                                      wizard, logEventMatcherIndex, eventMatcherWizard, tagId, -1,
+                                      tagId, bucketStartTimeNs, bucketStartTimeNs, pullerManager);
     gaugeProducer.prepareFirstBucket();
 
     vector<shared_ptr<LogEvent>> allData;
     allData.push_back(CreateRepeatedValueLogEvent(tagId, bucketStartTimeNs + 1, 1));
     gaugeProducer.onDataPulled(allData, /** succeed */ true, bucketStartTimeNs);
-    EXPECT_EQ(1UL, gaugeProducer.mCurrentSlicedBucket->size());
+    ASSERT_EQ(1UL, gaugeProducer.mCurrentSlicedBucket->size());
     EXPECT_EQ(1, gaugeProducer.mCurrentSlicedBucket->begin()
                          ->second.front()
                          .mFields->begin()
@@ -343,14 +342,14 @@ TEST_P(GaugeMetricProducerTest_PartialBucket, TestPulled) {
             gaugeProducer.onStatsdInitCompleted(partialBucketSplitTimeNs);
             break;
     }
-    EXPECT_EQ(1UL, gaugeProducer.mPastBuckets[DEFAULT_METRIC_DIMENSION_KEY].size());
+    ASSERT_EQ(1UL, gaugeProducer.mPastBuckets[DEFAULT_METRIC_DIMENSION_KEY].size());
     EXPECT_EQ(bucketStartTimeNs,
               gaugeProducer.mPastBuckets[DEFAULT_METRIC_DIMENSION_KEY][0].mBucketStartNs);
     EXPECT_EQ(partialBucketSplitTimeNs,
               gaugeProducer.mPastBuckets[DEFAULT_METRIC_DIMENSION_KEY][0].mBucketEndNs);
     EXPECT_EQ(0L, gaugeProducer.mCurrentBucketNum);
     EXPECT_EQ(partialBucketSplitTimeNs, gaugeProducer.mCurrentBucketStartTimeNs);
-    EXPECT_EQ(1UL, gaugeProducer.mCurrentSlicedBucket->size());
+    ASSERT_EQ(1UL, gaugeProducer.mCurrentSlicedBucket->size());
     EXPECT_EQ(2, gaugeProducer.mCurrentSlicedBucket->begin()
                          ->second.front()
                          .mFields->begin()
@@ -359,8 +358,8 @@ TEST_P(GaugeMetricProducerTest_PartialBucket, TestPulled) {
     allData.clear();
     allData.push_back(CreateRepeatedValueLogEvent(tagId, bucketStartTimeNs + bucketSizeNs + 1, 3));
     gaugeProducer.onDataPulled(allData, /** succeed */ true, bucketStartTimeNs + bucketSizeNs);
-    EXPECT_EQ(2UL, gaugeProducer.mPastBuckets[DEFAULT_METRIC_DIMENSION_KEY].size());
-    EXPECT_EQ(1UL, gaugeProducer.mCurrentSlicedBucket->size());
+    ASSERT_EQ(2UL, gaugeProducer.mPastBuckets[DEFAULT_METRIC_DIMENSION_KEY].size());
+    ASSERT_EQ(1UL, gaugeProducer.mCurrentSlicedBucket->size());
     EXPECT_EQ(3, gaugeProducer.mCurrentSlicedBucket->begin()
                          ->second.front()
                          .mFields->begin()
@@ -389,27 +388,28 @@ TEST(GaugeMetricProducerTest, TestPulledWithAppUpgradeDisabled) {
     sp<MockStatsPullerManager> pullerManager = new StrictMock<MockStatsPullerManager>();
     EXPECT_CALL(*pullerManager, RegisterReceiver(tagId, kConfigKey, _, _, _)).WillOnce(Return());
     EXPECT_CALL(*pullerManager, UnRegisterReceiver(tagId, kConfigKey, _)).WillOnce(Return());
-    EXPECT_CALL(*pullerManager, Pull(tagId, kConfigKey, _, _)).WillOnce(Return(false));
+    EXPECT_CALL(*pullerManager, Pull(tagId, kConfigKey, bucketStartTimeNs, _, _))
+            .WillOnce(Return(false));
 
-    GaugeMetricProducer gaugeProducer(kConfigKey, metric, -1 /*-1 meaning no condition*/, wizard,
-                                      logEventMatcherIndex, eventMatcherWizard, tagId, -1, tagId,
-                                      bucketStartTimeNs, bucketStartTimeNs, pullerManager);
+    GaugeMetricProducer gaugeProducer(kConfigKey, metric, -1 /*-1 meaning no condition*/, {},
+                                      wizard, logEventMatcherIndex, eventMatcherWizard, tagId, -1,
+                                      tagId, bucketStartTimeNs, bucketStartTimeNs, pullerManager);
     gaugeProducer.prepareFirstBucket();
 
     vector<shared_ptr<LogEvent>> allData;
     allData.push_back(CreateRepeatedValueLogEvent(tagId, bucketStartTimeNs + 1, 1));
     gaugeProducer.onDataPulled(allData, /** succeed */ true, bucketStartTimeNs);
-    EXPECT_EQ(1UL, gaugeProducer.mCurrentSlicedBucket->size());
+    ASSERT_EQ(1UL, gaugeProducer.mCurrentSlicedBucket->size());
     EXPECT_EQ(1, gaugeProducer.mCurrentSlicedBucket->begin()
                          ->second.front()
                          .mFields->begin()
                          ->mValue.int_value);
 
     gaugeProducer.notifyAppUpgrade(partialBucketSplitTimeNs);
-    EXPECT_EQ(0UL, gaugeProducer.mPastBuckets[DEFAULT_METRIC_DIMENSION_KEY].size());
+    ASSERT_EQ(0UL, gaugeProducer.mPastBuckets[DEFAULT_METRIC_DIMENSION_KEY].size());
     EXPECT_EQ(0L, gaugeProducer.mCurrentBucketNum);
     EXPECT_EQ(bucketStartTimeNs, gaugeProducer.mCurrentBucketStartTimeNs);
-    EXPECT_EQ(1UL, gaugeProducer.mCurrentSlicedBucket->size());
+    ASSERT_EQ(1UL, gaugeProducer.mCurrentSlicedBucket->size());
     EXPECT_EQ(1, gaugeProducer.mCurrentSlicedBucket->begin()
                          ->second.front()
                          .mFields->begin()
@@ -435,41 +435,44 @@ TEST(GaugeMetricProducerTest, TestPulledEventsWithCondition) {
             new EventMatcherWizard({new SimpleLogMatchingTracker(
                     atomMatcherId, logEventMatcherIndex, atomMatcher, uidMap)});
 
+    int64_t conditionChangeNs = bucketStartTimeNs + 8;
+
     sp<MockStatsPullerManager> pullerManager = new StrictMock<MockStatsPullerManager>();
     EXPECT_CALL(*pullerManager, RegisterReceiver(tagId, kConfigKey, _, _, _)).WillOnce(Return());
     EXPECT_CALL(*pullerManager, UnRegisterReceiver(tagId, kConfigKey, _)).WillOnce(Return());
-    EXPECT_CALL(*pullerManager, Pull(tagId, kConfigKey, _, _))
-            .WillOnce(Invoke([](int tagId, const ConfigKey&,
+    EXPECT_CALL(*pullerManager, Pull(tagId, kConfigKey, conditionChangeNs, _, _))
+            .WillOnce(Invoke([](int tagId, const ConfigKey&, const int64_t eventTimeNs,
                                 vector<std::shared_ptr<LogEvent>>* data, bool) {
                 data->clear();
-                data->push_back(CreateRepeatedValueLogEvent(tagId, bucketStartTimeNs + 10, 100));
+                data->push_back(CreateRepeatedValueLogEvent(tagId, eventTimeNs + 10, 100));
                 return true;
             }));
 
-    GaugeMetricProducer gaugeProducer(kConfigKey, metric, 1, wizard, logEventMatcherIndex,
+    GaugeMetricProducer gaugeProducer(kConfigKey, metric, 0 /*condition index*/,
+                                      {ConditionState::kUnknown}, wizard, logEventMatcherIndex,
                                       eventMatcherWizard, tagId, -1, tagId, bucketStartTimeNs,
                                       bucketStartTimeNs, pullerManager);
     gaugeProducer.prepareFirstBucket();
 
-    gaugeProducer.onConditionChanged(true, bucketStartTimeNs + 8);
-    EXPECT_EQ(1UL, gaugeProducer.mCurrentSlicedBucket->size());
+    gaugeProducer.onConditionChanged(true, conditionChangeNs);
+    ASSERT_EQ(1UL, gaugeProducer.mCurrentSlicedBucket->size());
     EXPECT_EQ(100, gaugeProducer.mCurrentSlicedBucket->begin()
                            ->second.front()
                            .mFields->begin()
                            ->mValue.int_value);
-    EXPECT_EQ(0UL, gaugeProducer.mPastBuckets.size());
+    ASSERT_EQ(0UL, gaugeProducer.mPastBuckets.size());
 
     vector<shared_ptr<LogEvent>> allData;
     allData.clear();
     allData.push_back(CreateRepeatedValueLogEvent(tagId, bucket2StartTimeNs + 1, 110));
     gaugeProducer.onDataPulled(allData, /** succeed */ true, bucket2StartTimeNs);
 
-    EXPECT_EQ(1UL, gaugeProducer.mCurrentSlicedBucket->size());
+    ASSERT_EQ(1UL, gaugeProducer.mCurrentSlicedBucket->size());
     EXPECT_EQ(110, gaugeProducer.mCurrentSlicedBucket->begin()
                            ->second.front()
                            .mFields->begin()
                            ->mValue.int_value);
-    EXPECT_EQ(1UL, gaugeProducer.mPastBuckets.size());
+    ASSERT_EQ(1UL, gaugeProducer.mPastBuckets.size());
     EXPECT_EQ(100, gaugeProducer.mPastBuckets.begin()
                            ->second.back()
                            .mGaugeAtoms.front()
@@ -478,8 +481,8 @@ TEST(GaugeMetricProducerTest, TestPulledEventsWithCondition) {
 
     gaugeProducer.onConditionChanged(false, bucket2StartTimeNs + 10);
     gaugeProducer.flushIfNeededLocked(bucket3StartTimeNs + 10);
-    EXPECT_EQ(1UL, gaugeProducer.mPastBuckets.size());
-    EXPECT_EQ(2UL, gaugeProducer.mPastBuckets.begin()->second.size());
+    ASSERT_EQ(1UL, gaugeProducer.mPastBuckets.size());
+    ASSERT_EQ(2UL, gaugeProducer.mPastBuckets.begin()->second.size());
     EXPECT_EQ(110L, gaugeProducer.mPastBuckets.begin()
                             ->second.back()
                             .mGaugeAtoms.front()
@@ -519,38 +522,41 @@ TEST(GaugeMetricProducerTest, TestPulledEventsWithSlicedCondition) {
                         return ConditionState::kTrue;
                     }));
 
+    int64_t sliceConditionChangeNs = bucketStartTimeNs + 8;
+
     sp<MockStatsPullerManager> pullerManager = new StrictMock<MockStatsPullerManager>();
     EXPECT_CALL(*pullerManager, RegisterReceiver(tagId, kConfigKey, _, _, _)).WillOnce(Return());
     EXPECT_CALL(*pullerManager, UnRegisterReceiver(tagId, kConfigKey, _)).WillOnce(Return());
-    EXPECT_CALL(*pullerManager, Pull(tagId, kConfigKey, _, _))
-            .WillOnce(Invoke([](int tagId, const ConfigKey&,
+    EXPECT_CALL(*pullerManager, Pull(tagId, kConfigKey, sliceConditionChangeNs, _, _))
+            .WillOnce(Invoke([](int tagId, const ConfigKey&, const int64_t eventTimeNs,
                                 vector<std::shared_ptr<LogEvent>>* data, bool) {
                 data->clear();
-                data->push_back(CreateTwoValueLogEvent(tagId, bucketStartTimeNs + 10, 1000, 100));
+                data->push_back(CreateTwoValueLogEvent(tagId, eventTimeNs + 10, 1000, 100));
                 return true;
             }));
 
-    GaugeMetricProducer gaugeProducer(kConfigKey, metric, 1, wizard, logEventMatcherIndex,
+    GaugeMetricProducer gaugeProducer(kConfigKey, metric, 0 /*condition index*/,
+                                      {ConditionState::kUnknown}, wizard, logEventMatcherIndex,
                                       eventMatcherWizard, tagId, -1, tagId, bucketStartTimeNs,
                                       bucketStartTimeNs, pullerManager);
     gaugeProducer.prepareFirstBucket();
 
-    gaugeProducer.onSlicedConditionMayChange(true, bucketStartTimeNs + 8);
+    gaugeProducer.onSlicedConditionMayChange(true, sliceConditionChangeNs);
 
-    EXPECT_EQ(1UL, gaugeProducer.mCurrentSlicedBucket->size());
+    ASSERT_EQ(1UL, gaugeProducer.mCurrentSlicedBucket->size());
     const auto& key = gaugeProducer.mCurrentSlicedBucket->begin()->first;
-    EXPECT_EQ(1UL, key.getDimensionKeyInWhat().getValues().size());
+    ASSERT_EQ(1UL, key.getDimensionKeyInWhat().getValues().size());
     EXPECT_EQ(1000, key.getDimensionKeyInWhat().getValues()[0].mValue.int_value);
 
-    EXPECT_EQ(0UL, gaugeProducer.mPastBuckets.size());
+    ASSERT_EQ(0UL, gaugeProducer.mPastBuckets.size());
 
     vector<shared_ptr<LogEvent>> allData;
     allData.clear();
     allData.push_back(CreateTwoValueLogEvent(tagId, bucket2StartTimeNs + 1, 1000, 110));
     gaugeProducer.onDataPulled(allData, /** succeed */ true, bucket2StartTimeNs);
 
-    EXPECT_EQ(1UL, gaugeProducer.mCurrentSlicedBucket->size());
-    EXPECT_EQ(1UL, gaugeProducer.mPastBuckets.size());
+    ASSERT_EQ(1UL, gaugeProducer.mCurrentSlicedBucket->size());
+    ASSERT_EQ(1UL, gaugeProducer.mPastBuckets.size());
 }
 
 TEST(GaugeMetricProducerTest, TestPulledEventsAnomalyDetection) {
@@ -560,7 +566,8 @@ TEST(GaugeMetricProducerTest, TestPulledEventsAnomalyDetection) {
     sp<MockStatsPullerManager> pullerManager = new StrictMock<MockStatsPullerManager>();
     EXPECT_CALL(*pullerManager, RegisterReceiver(tagId, kConfigKey, _, _, _)).WillOnce(Return());
     EXPECT_CALL(*pullerManager, UnRegisterReceiver(tagId, kConfigKey, _)).WillOnce(Return());
-    EXPECT_CALL(*pullerManager, Pull(tagId, kConfigKey, _, _)).WillOnce(Return(false));
+    EXPECT_CALL(*pullerManager, Pull(tagId, kConfigKey, bucketStartTimeNs, _, _))
+            .WillOnce(Return(false));
 
     GaugeMetric metric;
     metric.set_id(metricId);
@@ -577,9 +584,9 @@ TEST(GaugeMetricProducerTest, TestPulledEventsAnomalyDetection) {
             new EventMatcherWizard({new SimpleLogMatchingTracker(
                     atomMatcherId, logEventMatcherIndex, atomMatcher, uidMap)});
 
-    GaugeMetricProducer gaugeProducer(kConfigKey, metric, -1 /*-1 meaning no condition*/, wizard,
-                                      logEventMatcherIndex, eventMatcherWizard, tagId, -1, tagId,
-                                      bucketStartTimeNs, bucketStartTimeNs, pullerManager);
+    GaugeMetricProducer gaugeProducer(kConfigKey, metric, -1 /*-1 meaning no condition*/, {},
+                                      wizard, logEventMatcherIndex, eventMatcherWizard, tagId, -1,
+                                      tagId, bucketStartTimeNs, bucketStartTimeNs, pullerManager);
     gaugeProducer.prepareFirstBucket();
 
     Alert alert;
@@ -596,7 +603,7 @@ TEST(GaugeMetricProducerTest, TestPulledEventsAnomalyDetection) {
     allData.clear();
     allData.push_back(CreateRepeatedValueLogEvent(tagId, bucketStartTimeNs + 1, 13));
     gaugeProducer.onDataPulled(allData, /** succeed */ true, bucketStartTimeNs);
-    EXPECT_EQ(1UL, gaugeProducer.mCurrentSlicedBucket->size());
+    ASSERT_EQ(1UL, gaugeProducer.mCurrentSlicedBucket->size());
     EXPECT_EQ(13L, gaugeProducer.mCurrentSlicedBucket->begin()
                            ->second.front()
                            .mFields->begin()
@@ -609,7 +616,7 @@ TEST(GaugeMetricProducerTest, TestPulledEventsAnomalyDetection) {
     allData.clear();
     allData.push_back(event2);
     gaugeProducer.onDataPulled(allData, /** succeed */ true, bucketStartTimeNs + bucketSizeNs);
-    EXPECT_EQ(1UL, gaugeProducer.mCurrentSlicedBucket->size());
+    ASSERT_EQ(1UL, gaugeProducer.mCurrentSlicedBucket->size());
     EXPECT_EQ(15L, gaugeProducer.mCurrentSlicedBucket->begin()
                            ->second.front()
                            .mFields->begin()
@@ -621,7 +628,7 @@ TEST(GaugeMetricProducerTest, TestPulledEventsAnomalyDetection) {
     allData.push_back(
             CreateRepeatedValueLogEvent(tagId, bucketStartTimeNs + 2 * bucketSizeNs + 10, 26));
     gaugeProducer.onDataPulled(allData, /** succeed */ true, bucket2StartTimeNs + 2 * bucketSizeNs);
-    EXPECT_EQ(1UL, gaugeProducer.mCurrentSlicedBucket->size());
+    ASSERT_EQ(1UL, gaugeProducer.mCurrentSlicedBucket->size());
     EXPECT_EQ(26L, gaugeProducer.mCurrentSlicedBucket->begin()
                            ->second.front()
                            .mFields->begin()
@@ -633,7 +640,7 @@ TEST(GaugeMetricProducerTest, TestPulledEventsAnomalyDetection) {
     allData.clear();
     allData.push_back(CreateNoValuesLogEvent(tagId, bucketStartTimeNs + 3 * bucketSizeNs + 10));
     gaugeProducer.onDataPulled(allData, /** succeed */ true, bucketStartTimeNs + 3 * bucketSizeNs);
-    EXPECT_EQ(1UL, gaugeProducer.mCurrentSlicedBucket->size());
+    ASSERT_EQ(1UL, gaugeProducer.mCurrentSlicedBucket->size());
     EXPECT_TRUE(gaugeProducer.mCurrentSlicedBucket->begin()->second.front().mFields->empty());
 }
 
@@ -658,41 +665,44 @@ TEST(GaugeMetricProducerTest, TestPullOnTrigger) {
                     atomMatcherId, logEventMatcherIndex, atomMatcher, uidMap)});
 
     sp<MockStatsPullerManager> pullerManager = new StrictMock<MockStatsPullerManager>();
-    EXPECT_CALL(*pullerManager, Pull(tagId, kConfigKey, _, _))
-            .WillOnce(Invoke([](int tagId, const ConfigKey&,
+    EXPECT_CALL(*pullerManager, Pull(tagId, kConfigKey, _, _, _))
+            .WillOnce(Invoke([](int tagId, const ConfigKey&, const int64_t eventTimeNs,
                                 vector<std::shared_ptr<LogEvent>>* data, bool) {
+                EXPECT_EQ(eventTimeNs, bucketStartTimeNs + 10);
                 data->clear();
-                data->push_back(CreateRepeatedValueLogEvent(tagId, bucketStartTimeNs + 10, 4));
+                data->push_back(CreateRepeatedValueLogEvent(tagId, eventTimeNs, 4));
                 return true;
             }))
-            .WillOnce(Invoke([](int tagId, const ConfigKey&,
+            .WillOnce(Invoke([](int tagId, const ConfigKey&, const int64_t eventTimeNs,
                                 vector<std::shared_ptr<LogEvent>>* data, bool) {
+                EXPECT_EQ(eventTimeNs, bucketStartTimeNs + 20);
                 data->clear();
-                data->push_back(CreateRepeatedValueLogEvent(tagId, bucketStartTimeNs + 20, 5));
+                data->push_back(CreateRepeatedValueLogEvent(tagId, eventTimeNs, 5));
                 return true;
             }))
             .WillOnce(Return(true));
 
     int triggerId = 5;
-    GaugeMetricProducer gaugeProducer(kConfigKey, metric, -1 /*-1 meaning no condition*/, wizard,
-                                      logEventMatcherIndex, eventMatcherWizard, tagId, triggerId,
-                                      tagId, bucketStartTimeNs, bucketStartTimeNs, pullerManager);
+    GaugeMetricProducer gaugeProducer(kConfigKey, metric, -1 /*-1 meaning no condition*/, {},
+                                      wizard, logEventMatcherIndex, eventMatcherWizard, tagId,
+                                      triggerId, tagId, bucketStartTimeNs, bucketStartTimeNs,
+                                      pullerManager);
     gaugeProducer.prepareFirstBucket();
 
-    EXPECT_EQ(0UL, gaugeProducer.mCurrentSlicedBucket->size());
+    ASSERT_EQ(0UL, gaugeProducer.mCurrentSlicedBucket->size());
 
     LogEvent triggerEvent(/*uid=*/0, /*pid=*/0);
     CreateNoValuesLogEvent(&triggerEvent, triggerId, bucketStartTimeNs + 10);
     gaugeProducer.onMatchedLogEvent(1 /*log matcher index*/, triggerEvent);
-    EXPECT_EQ(1UL, gaugeProducer.mCurrentSlicedBucket->begin()->second.size());
+    ASSERT_EQ(1UL, gaugeProducer.mCurrentSlicedBucket->begin()->second.size());
     triggerEvent.setElapsedTimestampNs(bucketStartTimeNs + 20);
     gaugeProducer.onMatchedLogEvent(1 /*log matcher index*/, triggerEvent);
-    EXPECT_EQ(2UL, gaugeProducer.mCurrentSlicedBucket->begin()->second.size());
+    ASSERT_EQ(2UL, gaugeProducer.mCurrentSlicedBucket->begin()->second.size());
     triggerEvent.setElapsedTimestampNs(bucket2StartTimeNs + 1);
     gaugeProducer.onMatchedLogEvent(1 /*log matcher index*/, triggerEvent);
 
-    EXPECT_EQ(1UL, gaugeProducer.mPastBuckets.size());
-    EXPECT_EQ(2UL, gaugeProducer.mPastBuckets.begin()->second.back().mGaugeAtoms.size());
+    ASSERT_EQ(1UL, gaugeProducer.mPastBuckets.size());
+    ASSERT_EQ(2UL, gaugeProducer.mPastBuckets.begin()->second.back().mGaugeAtoms.size());
     EXPECT_EQ(4, gaugeProducer.mPastBuckets.begin()
                          ->second.back()
                          .mGaugeAtoms[0]
@@ -727,54 +737,58 @@ TEST(GaugeMetricProducerTest, TestRemoveDimensionInOutput) {
                     atomMatcherId, logEventMatcherIndex, atomMatcher, uidMap)});
 
     sp<MockStatsPullerManager> pullerManager = new StrictMock<MockStatsPullerManager>();
-    EXPECT_CALL(*pullerManager, Pull(tagId, kConfigKey, _, _))
-            .WillOnce(Invoke(
-                    [](int tagId, const ConfigKey&, vector<std::shared_ptr<LogEvent>>* data, bool) {
-                        data->clear();
-                        data->push_back(CreateTwoValueLogEvent(tagId, bucketStartTimeNs + 3, 3, 4));
-                        return true;
-                    }))
-            .WillOnce(Invoke([](int tagId, const ConfigKey&,
+    EXPECT_CALL(*pullerManager, Pull(tagId, kConfigKey, _, _, _))
+            .WillOnce(Invoke([](int tagId, const ConfigKey&, const int64_t eventTimeNs,
                                 vector<std::shared_ptr<LogEvent>>* data, bool) {
+                EXPECT_EQ(eventTimeNs, bucketStartTimeNs + 3);
                 data->clear();
-                data->push_back(CreateTwoValueLogEvent(tagId, bucketStartTimeNs + 10, 4, 5));
+                data->push_back(CreateTwoValueLogEvent(tagId, eventTimeNs, 3, 4));
                 return true;
             }))
-            .WillOnce(Invoke([](int tagId, const ConfigKey&,
+            .WillOnce(Invoke([](int tagId, const ConfigKey&, const int64_t eventTimeNs,
                                 vector<std::shared_ptr<LogEvent>>* data, bool) {
+                EXPECT_EQ(eventTimeNs, bucketStartTimeNs + 10);
                 data->clear();
-                data->push_back(CreateTwoValueLogEvent(tagId, bucketStartTimeNs + 20, 4, 6));
+                data->push_back(CreateTwoValueLogEvent(tagId, eventTimeNs, 4, 5));
+                return true;
+            }))
+            .WillOnce(Invoke([](int tagId, const ConfigKey&, const int64_t eventTimeNs,
+                                vector<std::shared_ptr<LogEvent>>* data, bool) {
+                EXPECT_EQ(eventTimeNs, bucketStartTimeNs + 20);
+                data->clear();
+                data->push_back(CreateTwoValueLogEvent(tagId, eventTimeNs, 4, 6));
                 return true;
             }))
             .WillOnce(Return(true));
 
     int triggerId = 5;
-    GaugeMetricProducer gaugeProducer(kConfigKey, metric, -1 /*-1 meaning no condition*/, wizard,
-                                      logEventMatcherIndex, eventMatcherWizard, tagId, triggerId,
-                                      tagId, bucketStartTimeNs, bucketStartTimeNs, pullerManager);
+    GaugeMetricProducer gaugeProducer(kConfigKey, metric, -1 /*-1 meaning no condition*/, {},
+                                      wizard, logEventMatcherIndex, eventMatcherWizard, tagId,
+                                      triggerId, tagId, bucketStartTimeNs, bucketStartTimeNs,
+                                      pullerManager);
     gaugeProducer.prepareFirstBucket();
 
     LogEvent triggerEvent(/*uid=*/0, /*pid=*/0);
     CreateNoValuesLogEvent(&triggerEvent, triggerId, bucketStartTimeNs + 3);
     gaugeProducer.onMatchedLogEvent(1 /*log matcher index*/, triggerEvent);
-    EXPECT_EQ(1UL, gaugeProducer.mCurrentSlicedBucket->size());
+    ASSERT_EQ(1UL, gaugeProducer.mCurrentSlicedBucket->size());
     triggerEvent.setElapsedTimestampNs(bucketStartTimeNs + 10);
     gaugeProducer.onMatchedLogEvent(1 /*log matcher index*/, triggerEvent);
-    EXPECT_EQ(2UL, gaugeProducer.mCurrentSlicedBucket->size());
-    EXPECT_EQ(1UL, gaugeProducer.mCurrentSlicedBucket->begin()->second.size());
+    ASSERT_EQ(2UL, gaugeProducer.mCurrentSlicedBucket->size());
+    ASSERT_EQ(1UL, gaugeProducer.mCurrentSlicedBucket->begin()->second.size());
     triggerEvent.setElapsedTimestampNs(bucketStartTimeNs + 20);
     gaugeProducer.onMatchedLogEvent(1 /*log matcher index*/, triggerEvent);
-    EXPECT_EQ(2UL, gaugeProducer.mCurrentSlicedBucket->begin()->second.size());
+    ASSERT_EQ(2UL, gaugeProducer.mCurrentSlicedBucket->begin()->second.size());
     triggerEvent.setElapsedTimestampNs(bucket2StartTimeNs + 1);
     gaugeProducer.onMatchedLogEvent(1 /*log matcher index*/, triggerEvent);
 
-    EXPECT_EQ(2UL, gaugeProducer.mPastBuckets.size());
+    ASSERT_EQ(2UL, gaugeProducer.mPastBuckets.size());
     auto bucketIt = gaugeProducer.mPastBuckets.begin();
-    EXPECT_EQ(1UL, bucketIt->second.back().mGaugeAtoms.size());
+    ASSERT_EQ(1UL, bucketIt->second.back().mGaugeAtoms.size());
     EXPECT_EQ(3, bucketIt->first.getDimensionKeyInWhat().getValues().begin()->mValue.int_value);
     EXPECT_EQ(4, bucketIt->second.back().mGaugeAtoms[0].mFields->begin()->mValue.int_value);
     bucketIt++;
-    EXPECT_EQ(2UL, bucketIt->second.back().mGaugeAtoms.size());
+    ASSERT_EQ(2UL, bucketIt->second.back().mGaugeAtoms.size());
     EXPECT_EQ(4, bucketIt->first.getDimensionKeyInWhat().getValues().begin()->mValue.int_value);
     EXPECT_EQ(5, bucketIt->second.back().mGaugeAtoms[0].mFields->begin()->mValue.int_value);
     EXPECT_EQ(6, bucketIt->second.back().mGaugeAtoms[1].mFields->begin()->mValue.int_value);
@@ -801,19 +815,20 @@ TEST(GaugeMetricProducerTest_BucketDrop, TestBucketDropWhenBucketTooSmall) {
                     atomMatcherId, logEventMatcherIndex, atomMatcher, uidMap)});
 
     sp<MockStatsPullerManager> pullerManager = new StrictMock<MockStatsPullerManager>();
-    EXPECT_CALL(*pullerManager, Pull(tagId, kConfigKey, _, _))
+    EXPECT_CALL(*pullerManager, Pull(tagId, kConfigKey, bucketStartTimeNs + 3, _, _))
             // Bucket start.
-            .WillOnce(Invoke(
-                    [](int tagId, const ConfigKey&, vector<std::shared_ptr<LogEvent>>* data, bool) {
-                        data->clear();
-                        data->push_back(CreateRepeatedValueLogEvent(tagId, bucketStartTimeNs, 10));
-                        return true;
-                    }));
+            .WillOnce(Invoke([](int tagId, const ConfigKey&, const int64_t eventTimeNs,
+                                vector<std::shared_ptr<LogEvent>>* data, bool) {
+                data->clear();
+                data->push_back(CreateRepeatedValueLogEvent(tagId, eventTimeNs, 10));
+                return true;
+            }));
 
     int triggerId = 5;
-    GaugeMetricProducer gaugeProducer(kConfigKey, metric, -1 /*-1 meaning no condition*/, wizard,
-                                      logEventMatcherIndex, eventMatcherWizard, tagId, triggerId,
-                                      tagId, bucketStartTimeNs, bucketStartTimeNs, pullerManager);
+    GaugeMetricProducer gaugeProducer(kConfigKey, metric, -1 /*-1 meaning no condition*/, {},
+                                      wizard, logEventMatcherIndex, eventMatcherWizard, tagId,
+                                      triggerId, tagId, bucketStartTimeNs, bucketStartTimeNs,
+                                      pullerManager);
     gaugeProducer.prepareFirstBucket();
 
     LogEvent triggerEvent(/*uid=*/0, /*pid=*/0);
@@ -828,14 +843,14 @@ TEST(GaugeMetricProducerTest_BucketDrop, TestBucketDropWhenBucketTooSmall) {
 
     StatsLogReport report = outputStreamToProto(&output);
     EXPECT_TRUE(report.has_gauge_metrics());
-    EXPECT_EQ(0, report.gauge_metrics().data_size());
-    EXPECT_EQ(1, report.gauge_metrics().skipped_size());
+    ASSERT_EQ(0, report.gauge_metrics().data_size());
+    ASSERT_EQ(1, report.gauge_metrics().skipped_size());
 
     EXPECT_EQ(NanoToMillis(bucketStartTimeNs),
               report.gauge_metrics().skipped(0).start_bucket_elapsed_millis());
     EXPECT_EQ(NanoToMillis(bucketStartTimeNs + 9000000),
               report.gauge_metrics().skipped(0).end_bucket_elapsed_millis());
-    EXPECT_EQ(1, report.gauge_metrics().skipped(0).drop_event_size());
+    ASSERT_EQ(1, report.gauge_metrics().skipped(0).drop_event_size());
 
     auto dropEvent = report.gauge_metrics().skipped(0).drop_event(0);
     EXPECT_EQ(BucketDropReason::BUCKET_TOO_SMALL, dropEvent.drop_reason());

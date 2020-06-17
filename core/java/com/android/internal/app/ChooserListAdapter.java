@@ -30,6 +30,7 @@ import android.content.pm.LabeledIntent;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.content.pm.ShortcutInfo;
+import android.graphics.drawable.Drawable;
 import android.os.AsyncTask;
 import android.os.UserHandle;
 import android.os.UserManager;
@@ -78,6 +79,8 @@ public class ChooserListAdapter extends ResolverListAdapter {
 
     private static final int MAX_SUGGESTED_APP_TARGETS = 4;
     private static final int MAX_CHOOSER_TARGETS_PER_APP = 2;
+    private static final int MAX_SERVICE_TARGET_APP = 8;
+    private static final int DEFAULT_DIRECT_SHARE_RANKING_SCORE = 1000;
 
     static final int MAX_SERVICE_TARGETS = 8;
 
@@ -97,13 +100,14 @@ public class ChooserListAdapter extends ResolverListAdapter {
     private ChooserTargetInfo
             mPlaceHolderTargetInfo = new ChooserActivity.PlaceHolderTargetInfo();
     private int mValidServiceTargetsNum = 0;
+    private int mAvailableServiceTargetsNum = 0;
     private final Map<ComponentName, Pair<List<ChooserTargetInfo>, Integer>>
             mParkingDirectShareTargets = new HashMap<>();
     private final Map<ComponentName, Map<String, Integer>> mChooserTargetScores = new HashMap<>();
     private Set<ComponentName> mPendingChooserTargetService = new HashSet<>();
     private Set<ComponentName> mShortcutComponents = new HashSet<>();
     private final List<ChooserTargetInfo> mServiceTargets = new ArrayList<>();
-    private final List<TargetInfo> mCallerTargets = new ArrayList<>();
+    private final List<DisplayResolveInfo> mCallerTargets = new ArrayList<>();
 
     private final ChooserActivity.BaseChooserTargetComparator mBaseTargetComparator =
             new ChooserActivity.BaseChooserTargetComparator();
@@ -117,15 +121,13 @@ public class ChooserListAdapter extends ResolverListAdapter {
     public ChooserListAdapter(Context context, List<Intent> payloadIntents,
             Intent[] initialIntents, List<ResolveInfo> rList,
             boolean filterLastUsed, ResolverListController resolverListController,
-            boolean useLayoutForBrowsables,
             ChooserListCommunicator chooserListCommunicator,
             SelectableTargetInfo.SelectableTargetInfoCommunicator selectableTargetInfoCommunicator,
             PackageManager packageManager) {
         // Don't send the initial intents through the shared ResolverActivity path,
         // we want to separate them into a different section.
         super(context, payloadIntents, null, rList, filterLastUsed,
-                resolverListController, useLayoutForBrowsables,
-                chooserListCommunicator, false);
+                resolverListController, chooserListCommunicator, false);
 
         createPlaceHolders();
         mMaxShortcutTargetsPerApp =
@@ -179,6 +181,7 @@ public class ChooserListAdapter extends ResolverListAdapter {
                     ri.icon = 0;
                 }
                 mCallerTargets.add(new DisplayResolveInfo(ii, ri, ii, makePresentationGetter(ri)));
+                if (mCallerTargets.size() == MAX_SUGGESTED_APP_TARGETS) break;
             }
         }
     }
@@ -235,8 +238,9 @@ public class ChooserListAdapter extends ResolverListAdapter {
     }
 
     @Override
-    protected void onBindView(View view, TargetInfo info) {
-        super.onBindView(view, info);
+    protected void onBindView(View view, TargetInfo info, int position) {
+        super.onBindView(view, info, position);
+        if (info == null) return;
 
         // If target is loading, show a special placeholder shape in the label, make unclickable
         final ViewHolder holder = (ViewHolder) view.getTag();
@@ -253,28 +257,49 @@ public class ChooserListAdapter extends ResolverListAdapter {
             holder.text.setBackground(null);
             holder.itemView.setBackground(holder.defaultItemViewBackground);
         }
+
+        if (info instanceof MultiDisplayResolveInfo) {
+            // If the target is grouped show an indicator
+            Drawable bkg = mContext.getDrawable(R.drawable.chooser_group_background);
+            holder.text.setPaddingRelative(0, 0, bkg.getIntrinsicWidth() /* end */, 0);
+            holder.text.setBackground(bkg);
+        } else if (info.isPinned() && getPositionTargetType(position) == TARGET_STANDARD) {
+            // If the target is pinned and in the suggested row show a pinned indicator
+            Drawable bkg = mContext.getDrawable(R.drawable.chooser_pinned_background);
+            holder.text.setPaddingRelative(bkg.getIntrinsicWidth() /* start */, 0, 0, 0);
+            holder.text.setBackground(bkg);
+        } else {
+            holder.text.setBackground(null);
+            holder.text.setPaddingRelative(0, 0, 0, 0);
+        }
     }
 
     void updateAlphabeticalList() {
         mSortedList.clear();
+        List<DisplayResolveInfo> tempList = new ArrayList<>();
+        tempList.addAll(mDisplayList);
+        tempList.addAll(mCallerTargets);
         if (mEnableStackedApps) {
             // Consolidate multiple targets from same app.
             Map<String, DisplayResolveInfo> consolidated = new HashMap<>();
-            for (DisplayResolveInfo info : mDisplayList) {
+            for (DisplayResolveInfo info : tempList) {
                 String packageName = info.getResolvedComponentName().getPackageName();
-                if (consolidated.get(packageName) != null) {
-                    // create consolidated target
-                    MultiDisplayResolveInfo multiDisplayResolveInfo =
-                            new MultiDisplayResolveInfo(packageName, info);
-                    multiDisplayResolveInfo.addTarget(consolidated.get(packageName));
-                    consolidated.put(packageName, multiDisplayResolveInfo);
-                } else {
+                DisplayResolveInfo multiDri = consolidated.get(packageName);
+                if (multiDri == null) {
                     consolidated.put(packageName, info);
+                } else if (multiDri instanceof MultiDisplayResolveInfo) {
+                    ((MultiDisplayResolveInfo) multiDri).addTarget(info);
+                } else {
+                    // create consolidated target from the single DisplayResolveInfo
+                    MultiDisplayResolveInfo multiDisplayResolveInfo =
+                            new MultiDisplayResolveInfo(packageName, multiDri);
+                    multiDisplayResolveInfo.addTarget(info);
+                    consolidated.put(packageName, multiDisplayResolveInfo);
                 }
             }
             mSortedList.addAll(consolidated.values());
         } else {
-            mSortedList.addAll(mDisplayList);
+            mSortedList.addAll(tempList);
         }
         Collections.sort(mSortedList, new ChooserActivity.AzInfoComparator(mContext));
     }
@@ -296,7 +321,7 @@ public class ChooserListAdapter extends ResolverListAdapter {
 
 
     public int getCallerTargetCount() {
-        return Math.min(mCallerTargets.size(), MAX_SUGGESTED_APP_TARGETS);
+        return mCallerTargets.size();
     }
 
     /**
@@ -322,11 +347,15 @@ public class ChooserListAdapter extends ResolverListAdapter {
     }
 
     int getAlphaTargetCount() {
-        int standardCount = mSortedList.size();
-        return standardCount > mChooserListCommunicator.getMaxRankedTargets() ? standardCount : 0;
+        int groupedCount = mSortedList.size();
+        int ungroupedCount = mCallerTargets.size() + mDisplayList.size();
+        return ungroupedCount > mChooserListCommunicator.getMaxRankedTargets() ? groupedCount : 0;
     }
 
-    int getRankedTargetCount() {
+    /**
+     * Fetch ranked app target count
+     */
+    public int getRankedTargetCount() {
         int spacesAvailable =
                 mChooserListCommunicator.getMaxRankedTargets() - getCallerTargetCount();
         return Math.min(spacesAvailable, super.getCount());
@@ -409,6 +438,19 @@ public class ChooserListAdapter extends ResolverListAdapter {
         }
 
         return null;
+    }
+
+    // Check whether {@code dri} should be added into mDisplayList.
+    @Override
+    protected boolean shouldAddResolveInfo(DisplayResolveInfo dri) {
+        // Checks if this info is already listed in callerTargets.
+        for (TargetInfo existingInfo : mCallerTargets) {
+            if (mResolverListCommunicator
+                    .resolveInfoMatch(dri.getResolveInfo(), existingInfo.getResolveInfo())) {
+                return false;
+            }
+        }
+        return super.shouldAddResolveInfo(dri);
     }
 
     /**
@@ -525,11 +567,13 @@ public class ChooserListAdapter extends ResolverListAdapter {
         }
         Map<String, Integer> scores = mChooserTargetScores.get(componentName);
         Collections.sort(mParkingDirectShareTargets.get(componentName).first, (o1, o2) -> {
-            // The score has been normalized between 0 and 2, the default is 1.
+            // The score has been normalized between 0 and 2000, the default is 1000.
             int score1 = scores.getOrDefault(
-                    ChooserUtil.md5(o1.getChooserTarget().getTitle().toString()), 1);
+                    ChooserUtil.md5(o1.getChooserTarget().getTitle().toString()),
+                    DEFAULT_DIRECT_SHARE_RANKING_SCORE);
             int score2 = scores.getOrDefault(
-                    ChooserUtil.md5(o2.getChooserTarget().getTitle().toString()), 1);
+                    ChooserUtil.md5(o2.getChooserTarget().getTitle().toString()),
+                    DEFAULT_DIRECT_SHARE_RANKING_SCORE);
             return score2 - score1;
         });
     }
@@ -570,7 +614,13 @@ public class ChooserListAdapter extends ResolverListAdapter {
             Pair<List<ChooserTargetInfo>, Integer> parkingTargetInfoPair =
                     mParkingDirectShareTargets.getOrDefault(origComponentName,
                             new Pair<>(new ArrayList<>(), 0));
-            parkingTargetInfoPair.first.addAll(parkingTargetInfos);
+            for (ChooserTargetInfo target : parkingTargetInfos) {
+                if (!checkDuplicateTarget(target, parkingTargetInfoPair.first)
+                        && !checkDuplicateTarget(target, mServiceTargets)) {
+                    parkingTargetInfoPair.first.add(target);
+                    mAvailableServiceTargetsNum++;
+                }
+            }
             mParkingDirectShareTargets.put(origComponentName, parkingTargetInfoPair);
             rankTargetsWithinComponent(origComponentName);
             if (isShortcutResult) {
@@ -615,7 +665,7 @@ public class ChooserListAdapter extends ResolverListAdapter {
             List<ChooserTargetInfo> parkingTargets = parkingTargetsItem.first;
             int insertedNum = parkingTargetsItem.second;
             while (insertedNum < quota && !parkingTargets.isEmpty()) {
-                if (!checkDuplicateTarget(parkingTargets.get(0))) {
+                if (!checkDuplicateTarget(parkingTargets.get(0), mServiceTargets)) {
                     mServiceTargets.add(mValidServiceTargetsNum, parkingTargets.get(0));
                     mValidServiceTargetsNum++;
                     insertedNum++;
@@ -629,9 +679,6 @@ public class ChooserListAdapter extends ResolverListAdapter {
                         + " score=" + score
                         + " totalScore=" + totalScore
                         + " quota=" + quota);
-            }
-            if (mShortcutComponents.contains(component)) {
-                mNumShortcutResults += insertedNum - parkingTargetsItem.second;
             }
             mParkingDirectShareTargets.put(component, new Pair<>(parkingTargets, insertedNum));
         }
@@ -648,19 +695,15 @@ public class ChooserListAdapter extends ResolverListAdapter {
             return;
         }
         Log.i(TAG, " fillAllServiceTargets");
-        int maxRankedTargets = mChooserListCommunicator.getMaxRankedTargets();
-        List<ComponentName> topComponentNames = getTopComponentNames(maxRankedTargets);
+        List<ComponentName> topComponentNames = getTopComponentNames(MAX_SERVICE_TARGET_APP);
         // Append all remaining targets of top recommended components into direct share row.
         for (ComponentName component : topComponentNames) {
             if (!mParkingDirectShareTargets.containsKey(component)) {
                 continue;
             }
             mParkingDirectShareTargets.get(component).first.stream()
-                    .filter(target -> !checkDuplicateTarget(target))
+                    .filter(target -> !checkDuplicateTarget(target, mServiceTargets))
                     .forEach(target -> {
-                        if (mShortcutComponents.contains(component)) {
-                            mNumShortcutResults++;
-                        }
                         mServiceTargets.add(mValidServiceTargetsNum, target);
                         mValidServiceTargetsNum++;
                     });
@@ -673,28 +716,34 @@ public class ChooserListAdapter extends ResolverListAdapter {
                 .map(pair -> pair.first)
                 .forEach(targets -> {
                     for (ChooserTargetInfo target : targets) {
-                        if (!checkDuplicateTarget(target)) {
+                        if (!checkDuplicateTarget(target, mServiceTargets)) {
                             mServiceTargets.add(mValidServiceTargetsNum, target);
                             mValidServiceTargetsNum++;
-                            mNumShortcutResults++;
                         }
                     }
                 });
         mParkingDirectShareTargets.clear();
     }
 
-    private boolean checkDuplicateTarget(ChooserTargetInfo chooserTargetInfo) {
+    private boolean checkDuplicateTarget(ChooserTargetInfo target,
+            List<ChooserTargetInfo> destination) {
         // Check for duplicates and abort if found
-        for (ChooserTargetInfo otherTargetInfo : mServiceTargets) {
-            if (chooserTargetInfo.isSimilar(otherTargetInfo)) {
+        for (ChooserTargetInfo otherTargetInfo : destination) {
+            if (target.isSimilar(otherTargetInfo)) {
                 return true;
             }
         }
         return false;
     }
 
-    int getNumShortcutResults() {
-        return mNumShortcutResults;
+    /**
+     * The return number have to exceed a minimum limit to make direct share area expandable. When
+     * append direct share targets is enabled, return count of all available targets parking in the
+     * memory; otherwise, it is shortcuts count which will help reduce the amount of visible
+     * shuffling due to older-style direct share targets.
+     */
+    int getNumServiceTargetsForExpand() {
+        return mAppendDirectShareEnabled ? mAvailableServiceTargetsNum : mNumShortcutResults;
     }
 
     /**

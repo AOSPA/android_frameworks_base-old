@@ -346,7 +346,7 @@ public final class ContentCaptureManager {
 
 
     /** @hide */
-    public static final int DEFAULT_MAX_BUFFER_SIZE = 100;
+    public static final int DEFAULT_MAX_BUFFER_SIZE = 500; // Enough for typical busy screen.
     /** @hide */
     public static final int DEFAULT_IDLE_FLUSHING_FREQUENCY_MS = 5_000;
     /** @hide */
@@ -487,6 +487,8 @@ public final class ContentCaptureManager {
             return resultReceiver.getParcelableResult();
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
+        } catch (SyncResultReceiver.TimeoutException e) {
+            throw new RuntimeException("Fail to get service componentName.");
         }
     }
 
@@ -516,6 +518,9 @@ public final class ContentCaptureManager {
             return resultReceiver.getParcelableResult();
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
+        } catch (SyncResultReceiver.TimeoutException e) {
+            Log.e(TAG, "Fail to get service settings componentName: " + e);
+            return null;
         }
     }
 
@@ -567,9 +572,13 @@ public final class ContentCaptureManager {
         final SyncResultReceiver resultReceiver = syncRun(
                 (r) -> mService.getContentCaptureConditions(mContext.getPackageName(), r));
 
-        final ArrayList<ContentCaptureCondition> result = resultReceiver
-                .getParcelableListResult();
-        return toSet(result);
+        try {
+            final ArrayList<ContentCaptureCondition> result = resultReceiver
+                    .getParcelableListResult();
+            return toSet(result);
+        } catch (SyncResultReceiver.TimeoutException e) {
+            throw new RuntimeException("Fail to get content capture conditions.");
+        }
     }
 
     /**
@@ -639,15 +648,21 @@ public final class ContentCaptureManager {
     public boolean isContentCaptureFeatureEnabled() {
         final SyncResultReceiver resultReceiver = syncRun(
                 (r) -> mService.isContentCaptureFeatureEnabled(r));
-        final int resultCode = resultReceiver.getIntResult();
-        switch (resultCode) {
-            case RESULT_CODE_TRUE:
-                return true;
-            case RESULT_CODE_FALSE:
-                return false;
-            default:
-                Log.wtf(TAG, "received invalid result: " + resultCode);
-                return false;
+
+        try {
+            final int resultCode = resultReceiver.getIntResult();
+            switch (resultCode) {
+                case RESULT_CODE_TRUE:
+                    return true;
+                case RESULT_CODE_FALSE:
+                    return false;
+                default:
+                    Log.wtf(TAG, "received invalid result: " + resultCode);
+                    return false;
+            }
+        } catch (SyncResultReceiver.TimeoutException e) {
+            Log.e(TAG, "Fail to get content capture feature enable status: " + e);
+            return false;
         }
     }
 
@@ -663,7 +678,7 @@ public final class ContentCaptureManager {
         try {
             mService.removeData(request);
         } catch (RemoteException e) {
-            e.rethrowFromSystemServer();
+            throw e.rethrowFromSystemServer();
         }
     }
 
@@ -691,7 +706,7 @@ public final class ContentCaptureManager {
                     new DataShareAdapterDelegate(executor, dataShareWriteAdapter,
                             mDataShareAdapterResourceManager));
         } catch (RemoteException e) {
-            e.rethrowFromSystemServer();
+            throw e.rethrowFromSystemServer();
         }
     }
 
@@ -709,10 +724,12 @@ public final class ContentCaptureManager {
             if (resultCode == RESULT_CODE_SECURITY_EXCEPTION) {
                 throw new SecurityException(resultReceiver.getStringResult());
             }
-            return resultReceiver;
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
+        } catch (SyncResultReceiver.TimeoutException e) {
+            throw new RuntimeException("Fail to get syn run result from SyncResultReceiver.");
         }
+        return resultReceiver;
     }
 
     /** @hide */
@@ -761,10 +778,6 @@ public final class ContentCaptureManager {
         public void write(ParcelFileDescriptor destination)
                 throws RemoteException {
             executeAdapterMethodLocked(adapter -> adapter.onWrite(destination), "onWrite");
-
-            // Client app and Service successfully connected, so this object would be kept alive
-            // until the session has finished.
-            clearHardReferences();
         }
 
         @Override
@@ -776,6 +789,11 @@ public final class ContentCaptureManager {
         @Override
         public void rejected() throws RemoteException {
             executeAdapterMethodLocked(DataShareWriteAdapter::onRejected, "onRejected");
+            clearHardReferences();
+        }
+
+        @Override
+        public void finish() throws RemoteException  {
             clearHardReferences();
         }
 

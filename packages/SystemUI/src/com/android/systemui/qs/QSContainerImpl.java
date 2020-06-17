@@ -42,7 +42,7 @@ public class QSContainerImpl extends FrameLayout {
     private QuickStatusBarHeader mHeader;
     private float mQsExpansion;
     private QSCustomizer mQSCustomizer;
-    private View mQSFooter;
+    private View mDragHandle;
 
     private View mBackground;
     private View mBackgroundGradient;
@@ -50,6 +50,8 @@ public class QSContainerImpl extends FrameLayout {
 
     private int mSideMargins;
     private boolean mQsDisabled;
+    private int mContentPaddingStart = -1;
+    private int mContentPaddingEnd = -1;
 
     public QSContainerImpl(Context context, AttributeSet attrs) {
         super(context, attrs);
@@ -62,14 +64,13 @@ public class QSContainerImpl extends FrameLayout {
         mQSDetail = findViewById(R.id.qs_detail);
         mHeader = findViewById(R.id.header);
         mQSCustomizer = findViewById(R.id.qs_customize);
-        mQSFooter = findViewById(R.id.qs_footer);
+        mDragHandle = findViewById(R.id.qs_drag_handle_view);
         mBackground = findViewById(R.id.quick_settings_background);
         mStatusBarBackground = findViewById(R.id.quick_settings_status_bar_background);
         mBackgroundGradient = findViewById(R.id.quick_settings_gradient_view);
-        mSideMargins = getResources().getDimensionPixelSize(R.dimen.notification_side_paddings);
+        updateResources();
 
         setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
-        setMargins();
     }
 
     @Override
@@ -103,10 +104,15 @@ public class QSContainerImpl extends FrameLayout {
         if (navBelow) {
             maxQs -= getResources().getDimensionPixelSize(R.dimen.navigation_bar_height);
         }
+
+        int padding = mPaddingLeft + mPaddingRight + layoutParams.leftMargin
+                + layoutParams.rightMargin;
+        final int qsPanelWidthSpec = getChildMeasureSpec(widthMeasureSpec, padding,
+                layoutParams.width);
         // Measure with EXACTLY. That way, PagedTileLayout will only use excess height and will be
         // measured last, after other views and padding is accounted for.
-        mQSPanel.measure(widthMeasureSpec, MeasureSpec.makeMeasureSpec(maxQs, MeasureSpec.EXACTLY));
-        int width = mQSPanel.getMeasuredWidth();
+        mQSPanel.measure(qsPanelWidthSpec, MeasureSpec.makeMeasureSpec(maxQs, MeasureSpec.EXACTLY));
+        int width = mQSPanel.getMeasuredWidth() + padding;
         int height = layoutParams.topMargin + layoutParams.bottomMargin
                 + mQSPanel.getMeasuredHeight() + getPaddingBottom();
         super.onMeasure(MeasureSpec.makeMeasureSpec(width, MeasureSpec.EXACTLY),
@@ -148,8 +154,18 @@ public class QSContainerImpl extends FrameLayout {
         LayoutParams layoutParams = (LayoutParams) mQSPanel.getLayoutParams();
         layoutParams.topMargin = mContext.getResources().getDimensionPixelSize(
                 com.android.internal.R.dimen.quick_qs_offset_height);
-
         mQSPanel.setLayoutParams(layoutParams);
+
+        mSideMargins = getResources().getDimensionPixelSize(R.dimen.notification_side_paddings);
+        mContentPaddingStart = getResources().getDimensionPixelSize(
+                com.android.internal.R.dimen.notification_content_margin_start);
+        int newPaddingEnd = getResources().getDimensionPixelSize(
+                com.android.internal.R.dimen.notification_content_margin_end);
+        boolean marginsChanged = newPaddingEnd != mContentPaddingEnd;
+        mContentPaddingEnd = newPaddingEnd;
+        if (marginsChanged) {
+            updatePaddingsAndMargins();
+        }
     }
 
     /**
@@ -167,8 +183,8 @@ public class QSContainerImpl extends FrameLayout {
         int height = calculateContainerHeight();
         setBottom(getTop() + height);
         mQSDetail.setBottom(getTop() + height);
-        // Pin QS Footer to the bottom of the panel.
-        mQSFooter.setTranslationY(height - mQSFooter.getHeight());
+        // Pin the drag handle to the bottom of the panel.
+        mDragHandle.setTranslationY(height - mDragHandle.getHeight());
         mBackground.setTop(mQSPanel.getTop());
         mBackground.setBottom(height);
     }
@@ -192,21 +208,36 @@ public class QSContainerImpl extends FrameLayout {
 
     public void setExpansion(float expansion) {
         mQsExpansion = expansion;
+        mDragHandle.setAlpha(1.0f - expansion);
         updateExpansion();
     }
 
-    private void setMargins() {
-        setMargins(mQSDetail);
-        setMargins(mBackground);
-        setMargins(mQSFooter);
-        mQSPanel.setMargins(mSideMargins);
-        mHeader.setMargins(mSideMargins);
-    }
-
-    private void setMargins(View view) {
-        FrameLayout.LayoutParams lp = (LayoutParams) view.getLayoutParams();
-        lp.rightMargin = mSideMargins;
-        lp.leftMargin = mSideMargins;
+    private void updatePaddingsAndMargins() {
+        for (int i = 0; i < getChildCount(); i++) {
+            View view = getChildAt(i);
+            if (view == mStatusBarBackground || view == mBackgroundGradient
+                    || view == mQSCustomizer) {
+                // Some views are always full width
+                continue;
+            }
+            LayoutParams lp = (LayoutParams) view.getLayoutParams();
+            lp.rightMargin = mSideMargins;
+            lp.leftMargin = mSideMargins;
+            if (view == mQSPanel) {
+                // QS panel lays out some of its content full width
+                mQSPanel.setContentMargins(mContentPaddingStart, mContentPaddingEnd);
+            } else if (view == mHeader) {
+                // The header contains the QQS panel which needs to have special padding, to
+                // visually align them.
+                mHeader.setContentMargins(mContentPaddingStart, mContentPaddingEnd);
+            } else {
+                view.setPaddingRelative(
+                        mContentPaddingStart,
+                        view.getPaddingTop(),
+                        mContentPaddingEnd,
+                        view.getPaddingBottom());
+            }
+        }
     }
 
     private int getDisplayHeight() {

@@ -220,6 +220,8 @@ public final class SurfaceControl implements Parcelable {
 
     private static native long nativeAcquireFrameRateFlexibilityToken();
     private static native void nativeReleaseFrameRateFlexibilityToken(long token);
+    private static native void nativeSetFixedTransformHint(long transactionObj, long nativeObject,
+            int transformHint);
 
     private final CloseGuard mCloseGuard = CloseGuard.get();
     private String mName;
@@ -319,6 +321,14 @@ public final class SurfaceControl implements Parcelable {
      * @hide
      */
     public static final int CURSOR_WINDOW = 0x00002000;
+
+    /**
+     * Surface creation flag: Indicates the effect layer will not have a color fill on
+     * creation.
+     *
+     * @hide
+     */
+    public static final int NO_COLOR_FILL = 0x00004000;
 
     /**
      * Surface creation flag: Creates a normal surface.
@@ -578,7 +588,7 @@ public final class SurfaceControl implements Parcelable {
                 throw new IllegalStateException(
                         "width and height must be positive or unset");
             }
-            if ((mWidth > 0 || mHeight > 0) && (isColorLayerSet() || isContainerLayerSet())) {
+            if ((mWidth > 0 || mHeight > 0) && (isEffectLayer() || isContainerLayer())) {
                 throw new IllegalStateException(
                         "Only buffer layers can set a valid buffer size.");
             }
@@ -750,10 +760,27 @@ public final class SurfaceControl implements Parcelable {
         }
 
         /**
-         * Indicate whether a 'ColorLayer' is to be constructed.
+         * Indicate whether an 'EffectLayer' is to be constructed.
          *
-         * Color layers will not have an associated BufferQueue and will instead always render a
-         * solid color (that is, solid before plane alpha). Currently that color is black.
+         * An effect layer behaves like a container layer by default but it can support
+         * color fill, shadows and/or blur. These layers will not have an associated buffer.
+         * When created, this layer has no effects set and will be transparent but the caller
+         * can render an effect by calling:
+         *  - {@link Transaction#setColor(SurfaceControl, float[])}
+         *  - {@link Transaction#setBackgroundBlurRadius(SurfaceControl, int)}
+         *  - {@link Transaction#setShadowRadius(SurfaceControl, float)}
+         *
+         * @hide
+         */
+        public Builder setEffectLayer() {
+            mFlags |= NO_COLOR_FILL;
+            unsetBufferSize();
+            return setFlags(FX_SURFACE_EFFECT, FX_SURFACE_MASK);
+        }
+
+        /**
+         * A convenience function to create an effect layer with a default color fill
+         * applied to it. Currently that color is black.
          *
          * @hide
          */
@@ -762,7 +789,7 @@ public final class SurfaceControl implements Parcelable {
             return setFlags(FX_SURFACE_EFFECT, FX_SURFACE_MASK);
         }
 
-        private boolean isColorLayerSet() {
+        private boolean isEffectLayer() {
             return  (mFlags & FX_SURFACE_EFFECT) == FX_SURFACE_EFFECT;
         }
 
@@ -787,7 +814,7 @@ public final class SurfaceControl implements Parcelable {
             return setFlags(FX_SURFACE_CONTAINER, FX_SURFACE_MASK);
         }
 
-        private boolean isContainerLayerSet() {
+        private boolean isContainerLayer() {
             return  (mFlags & FX_SURFACE_CONTAINER) == FX_SURFACE_CONTAINER;
         }
 
@@ -2306,6 +2333,39 @@ public final class SurfaceControl implements Parcelable {
             checkPreconditions(sc);
             mResizedSurfaces.put(sc, new Point(w, h));
             nativeSetSize(mNativeObject, sc.mNativeObject, w, h);
+            return this;
+        }
+
+        /**
+         * Provide the graphic producer a transform hint if the layer and its children are
+         * in an orientation different from the display's orientation. The caller is responsible
+         * for clearing this transform hint if the layer is no longer in a fixed orientation.
+         *
+         * The transform hint is used to prevent allocating a buffer of different size when a
+         * layer is rotated. The producer can choose to consume the hint and allocate the buffer
+         * with the same size.
+         *
+         * @return This Transaction.
+         * @hide
+         */
+        @NonNull
+        public Transaction setFixedTransformHint(@NonNull SurfaceControl sc,
+                       @Surface.Rotation int transformHint) {
+            checkPreconditions(sc);
+            nativeSetFixedTransformHint(mNativeObject, sc.mNativeObject, transformHint);
+            return this;
+        }
+
+        /**
+         * Clearing any transform hint if set on this layer.
+         *
+         * @return This Transaction.
+         * @hide
+         */
+        @NonNull
+        public Transaction unsetFixedTransformHint(@NonNull SurfaceControl sc) {
+            checkPreconditions(sc);
+            nativeSetFixedTransformHint(mNativeObject, sc.mNativeObject, -1/* INVALID_ROTATION */);
             return this;
         }
 

@@ -89,8 +89,7 @@
     <string name="screenshot_dismiss_ui_description" msgid="934736855340147968">"رد کردن نماگرفت"</string>
     <string name="screenshot_preview_description" msgid="7606510140714080474">"پیش‌نمایش نماگرفت"</string>
     <string name="screenrecord_name" msgid="2596401223859996572">"ضبط‌کننده صفحه‌نمایش"</string>
-    <!-- no translation found for screenrecord_background_processing_label (7244617554884238898) -->
-    <skip />
+    <string name="screenrecord_background_processing_label" msgid="7244617554884238898">"درحال پردازش ضبط صفحه‌نمایش"</string>
     <string name="screenrecord_channel_description" msgid="4147077128486138351">"اعلان درحال انجام برای جلسه ضبط صفحه‌نمایش"</string>
     <string name="screenrecord_start_label" msgid="1750350278888217473">"ضبط شروع شود؟"</string>
     <string name="screenrecord_description" msgid="1123231719680353736">"‏هنگام ضبط، «سیستم Android» می‌تواند هر اطلاعات حساسی را که روی صفحه‌نمایش شما نشان داده می‌شود یا روی دستگاه شما پخش می‌شود ضبط کند. این شامل گذرواژه‌ها، اطلاعات پرداخت، عکس‌ها، پیام‌ها، و صدا می‌شود."</string>
@@ -196,7 +195,7 @@
     <string name="accessibility_data_signal_full" msgid="283507058258113551">"قدرت سیگنال داده کامل است."</string>
     <string name="accessibility_wifi_name" msgid="4863440268606851734">"به <xliff:g id="WIFI">%s</xliff:g> متصل شد."</string>
     <string name="accessibility_bluetooth_name" msgid="7300973230214067678">"به <xliff:g id="BLUETOOTH">%s</xliff:g> متصل شد."</string>
-    <string name="accessibility_cast_name" msgid="7344437925388773685">"متصل به <xliff:g id="CAST">%s</xliff:g>."</string>
+    <string name="accessibility_cast_name" msgid="7344437925388773685">"به <xliff:g id="CAST">%s</xliff:g> متصل شد."</string>
     <string name="accessibility_no_wimax" msgid="2014864207473859228">"‏WiMAX وجود ندارد."</string>
     <string name="accessibility_wimax_one_bar" msgid="2996915709342221412">"‏WiMAX یک نوار دارد."</string>
     <string name="accessibility_wimax_two_bars" msgid="7335485192390018939">"‏WiMAX دو نوار دارد."</string>
@@ -511,10 +510,9 @@
     <string name="clear_all_notifications_text" msgid="348312370303046130">"پاک کردن همه موارد"</string>
     <string name="manage_notifications_text" msgid="6885645344647733116">"مدیریت"</string>
     <string name="manage_notifications_history_text" msgid="57055985396576230">"سابقه"</string>
-    <!-- no translation found for notification_section_header_incoming (5295312809341711367) -->
-    <skip />
-    <string name="notification_section_header_gentle" msgid="3044910806569985386">"اعلان‌های بی‌صدا"</string>
-    <string name="notification_section_header_alerting" msgid="3168140660646863240">"اعلان‌های هشداردهنده"</string>
+    <string name="notification_section_header_incoming" msgid="5295312809341711367">"ورودی"</string>
+    <string name="notification_section_header_gentle" msgid="6804099527336337197">"بی‌صدا"</string>
+    <string name="notification_section_header_alerting" msgid="5581175033680477651">"اعلان‌ها"</string>
     <string name="notification_section_header_conversations" msgid="821834744538345661">"مکالمه‌ها"</string>
     <string name="accessibility_notification_section_header_gentle_clear_all" msgid="6490207897764933919">"پاک کردن همه اعلان‌های بی‌صدا"</string>
     <string name="dnd_suppressing_shade_text" msgid="5588252250634464042">"اعلان‌ها توسط «مزاحم نشوید» موقتاً متوقف شدند"</string>
@@ -594,19 +592,21 @@
     <string name="volume_odi_captions_hint_enable" msgid="2073091194012843195">"فعال کردن"</string>
     <string name="volume_odi_captions_hint_disable" msgid="2518846326748183407">"غیرفعال کردن"</string>
     <string name="accessibility_output_chooser" msgid="7807898688967194183">"تغییر دستگاه خروجی"</string>
-    <string name="screen_pinning_title" msgid="7357611095909618178">"صفحه نمایش پین شد"</string>
+    <string name="screen_pinning_title" msgid="9058007390337841305">"برنامه پین شده است"</string>
     <string name="screen_pinning_description" msgid="8699395373875667743">"تا زمانی که پین را بردارید، در نما نگه‌داشته می‌شود. برای برداشتن پین، «برگشت» و «نمای کلی» را لمس کنید و نگه‌دارید."</string>
     <string name="screen_pinning_description_recents_invisible" msgid="4564466648700390037">"تا برداشتن پین، در نما نگه‌داشته می‌شود. برای برداشتن پین، «برگشت» و «صفحه اصلی» را لمس کنید و نگه‌دارید."</string>
     <string name="screen_pinning_description_gestural" msgid="7246323931831232068">"تا برداشتن پین، در نما نگه‌داشته می‌شود. برای برداشتن پین، از پایین صفحه تند به‌طرف بالا بکشید و نگه‌دارید."</string>
     <string name="screen_pinning_description_accessible" msgid="7386449191953535332">"تا زمانی که پین را بردارید، در نما نگه‌داشته می‌شود. برای برداشتن پین، «نمای کلی» را لمس کنید و نگه‌دارید."</string>
     <string name="screen_pinning_description_recents_invisible_accessible" msgid="2857071808674481986">"تا برداشتن پین، در نما نگه‌داشته می‌شود. برای برداشتن پین، «صفحه اصلی» را لمس کنید و نگه‌دارید."</string>
-    <string name="screen_pinning_toast" msgid="2083944237147005811">"برای برداشتن پین این صفحه، دکمه‌های «برگشت» و «نمای کلی» را لمس کنید و نگه‌دارید"</string>
-    <string name="screen_pinning_toast_recents_invisible" msgid="6343770487795352573">"برای برداشتن پین این صفحه، دکمه‌های «برگشت» و «صفحه اصلی» را لمس کنید و نگه‌دارید"</string>
-    <string name="screen_pinning_toast_gesture_nav" msgid="2884536903398445645">"برای برداشتن پین این صفحه‌نمایش، صفحه را تند بالا بکشید و نگه‌دارید"</string>
+    <string name="screen_pinning_exposes_personal_data" msgid="8189852022981524789">"ممکن است داده‌های شخصی (مانند مخاطبین و محتوای ایمیل) دردسترس باشند."</string>
+    <string name="screen_pinning_can_open_other_apps" msgid="7529756813231421455">"برنامه پین‌شده ممکن است برنامه‌های دیگر را باز کند."</string>
+    <string name="screen_pinning_toast" msgid="8177286912533744328">"برای برداشتن پین این برنامه، دکمه‌های «برگشت» و «نمای کلی» را لمس کنید و نگه‌دارید"</string>
+    <string name="screen_pinning_toast_recents_invisible" msgid="6850978077443052594">"برای برداشتن پین این برنامه، دکمه‌های «برگشت» و «صفحه اصلی» را لمس کنید و نگه دارید"</string>
+    <string name="screen_pinning_toast_gesture_nav" msgid="170699893395336705">"برای برداشتن پین این برنامه، صفحه را تند بالا بکشید و نگه دارید"</string>
     <string name="screen_pinning_positive" msgid="3285785989665266984">"متوجه شدم"</string>
     <string name="screen_pinning_negative" msgid="6882816864569211666">"نه متشکرم"</string>
-    <string name="screen_pinning_start" msgid="5695091877402422575">"صفحه پین شد"</string>
-    <string name="screen_pinning_exit" msgid="5114993350662745840">"پین صفحه برداشته شد"</string>
+    <string name="screen_pinning_start" msgid="7483998671383371313">"برنامه پین شد"</string>
+    <string name="screen_pinning_exit" msgid="4553787518387346893">"پین برنامه برداشته شد"</string>
     <string name="quick_settings_reset_confirmation_title" msgid="463533331480997595">"<xliff:g id="TILE_LABEL">%1$s</xliff:g> مخفی شود؟"</string>
     <string name="quick_settings_reset_confirmation_message" msgid="2320586180785674186">"دفعه بعد که آن را روشن کنید، در تنظیمات نشان داده می‌شود."</string>
     <string name="quick_settings_reset_confirmation_button" msgid="3341477479055016776">"پنهان کردن"</string>
@@ -709,16 +709,17 @@
     <string name="inline_turn_off_notifications" msgid="8543989584403106071">"خاموش کردن اعلان‌ها"</string>
     <string name="inline_keep_showing_app" msgid="4393429060390649757">"نمایش اعلان از این برنامه ادامه یابد؟"</string>
     <string name="notification_silence_title" msgid="8608090968400832335">"بی‌صدا"</string>
-    <string name="notification_alert_title" msgid="7629202599338071971">"هشدار دادن"</string>
+    <string name="notification_alert_title" msgid="3656229781017543655">"پیش‌فرض"</string>
     <string name="notification_bubble_title" msgid="8330481035191903164">"حباب"</string>
-    <string name="notification_channel_summary_low" msgid="7300447764759926720">"به شما کمک می‌کند بدون صدا یا لرزش تمرکز کنید."</string>
-    <string name="notification_channel_summary_default" msgid="3539949463907902037">"با صدا یا لرزش توجه شما را جلب می‌کند."</string>
-    <string name="notification_channel_summary_default_with_bubbles" msgid="6298026344552480458">"با صدا یا لرزش توجه شما را جلب می‌کند. مکالمه‌های <xliff:g id="APP_NAME">%1$s</xliff:g> به‌طور پیش‌فرض در حباب نشان داده می‌شوند."</string>
+    <string name="notification_channel_summary_low" msgid="4860617986908931158">"بدون صدا یا لرزش"</string>
+    <string name="notification_conversation_summary_low" msgid="1734433426085468009">"بدون صدا و لرزش در پایین بخش مکالمه نشان داده می‌شود"</string>
+    <string name="notification_channel_summary_default" msgid="3282930979307248890">"بسته به تنظیمات ممکن است تلفن زنگ بزند یا لرزش داشته باشد"</string>
+    <string name="notification_channel_summary_default_with_bubbles" msgid="1782419896613644568">"بسته به تنظیمات ممکن است تلفن زنگ بزند یا لرزش داشته باشد. مکالمه‌های <xliff:g id="APP_NAME">%1$s</xliff:g> به‌طور پیش‌فرض در حبابک نشان داده می‌شوند."</string>
     <string name="notification_channel_summary_bubble" msgid="7235935211580860537">"با میان‌بری شناور به این محتوا، توجه‌تان را جلب می‌کند."</string>
-    <string name="notification_channel_summary_priority" msgid="7415770044553264622">"در بالای بخش مکالمه نمایش داده می‌شود و به‌صورت ابزارک اعلان نمایان می‌شود."</string>
+    <string name="notification_channel_summary_priority" msgid="7952654515769021553">"در بالای بخش مکالمه به‌صورت حبابک شناور نشان داده می‌شود و تصویر نمایه را در صفحه قفل نمایش می‌دهد"</string>
     <string name="notification_conversation_channel_settings" msgid="2409977688430606835">"تنظیمات"</string>
     <string name="notification_priority_title" msgid="2079708866333537093">"اولویت"</string>
-    <string name="no_shortcut" msgid="7176375126961212514">"<xliff:g id="APP_NAME">%1$s</xliff:g> از تنظیمات خاص مکالمه پشتیبانی نمی‌کند"</string>
+    <string name="no_shortcut" msgid="8257177117568230126">"<xliff:g id="APP_NAME">%1$s</xliff:g> از ویژگی‌های مکالمه پشتیبانی نمی‌کند"</string>
     <string name="bubble_overflow_empty_title" msgid="3120029421991510842">"هیچ ابزارک اعلان جدیدی وجود ندارد"</string>
     <string name="bubble_overflow_empty_subtitle" msgid="2030874469510497397">"ابزارک اعلان اخیر و ابزارک اعلان ردشده اینجا ظاهر خواهند شد"</string>
     <string name="notification_unblockable_desc" msgid="2073030886006190804">"این اعلان‌ها قابل اصلاح نیستند."</string>
@@ -991,10 +992,8 @@
     <string name="music_controls_no_title" msgid="4166497066552290938">"بدون عنوان"</string>
     <string name="restart_button_description" msgid="6916116576177456480">"برای بازراه‌اندازی این برنامه و تغییر به حالت تمام‌صفحه، ضربه بزنید."</string>
     <string name="bubbles_settings_button_description" msgid="7324245408859877545">"تنظیم برای ابزارک‌های اعلان <xliff:g id="APP_NAME">%1$s</xliff:g>"</string>
-    <!-- no translation found for bubble_overflow_button_content_description (5523744621434300510) -->
-    <skip />
-    <!-- no translation found for bubble_accessibility_action_add_back (6217995665917123890) -->
-    <skip />
+    <string name="bubble_overflow_button_content_description" msgid="5523744621434300510">"لبریزشده"</string>
+    <string name="bubble_accessibility_action_add_back" msgid="6217995665917123890">"افزودن برگشت به پشته"</string>
     <string name="manage_bubbles_text" msgid="6856830436329494850">"مدیریت"</string>
     <string name="bubble_content_description_single" msgid="5175160674436546329">"<xliff:g id="NOTIFICATION_TITLE">%1$s</xliff:g> از <xliff:g id="APP_NAME">%2$s</xliff:g>"</string>
     <string name="bubble_content_description_stack" msgid="7907610717462651870">"<xliff:g id="NOTIFICATION_TITLE">%1$s</xliff:g> از <xliff:g id="APP_NAME">%2$s</xliff:g> و <xliff:g id="BUBBLE_COUNT">%3$d</xliff:g> مورد بیشتر"</string>
@@ -1003,7 +1002,8 @@
     <string name="bubble_accessibility_action_move_top_right" msgid="6916868852433483569">"انتقال به بالا سمت چپ"</string>
     <string name="bubble_accessibility_action_move_bottom_left" msgid="6339015902495504715">"انتقال به پایین سمت راست"</string>
     <string name="bubble_accessibility_action_move_bottom_right" msgid="7471571700628346212">"انتقال به پایین سمت چپ"</string>
-    <string name="bubble_dismiss_text" msgid="7071770411580452911">"رد کردن"</string>
+    <!-- no translation found for bubble_dismiss_text (1314082410868930066) -->
+    <skip />
     <string name="bubbles_dont_bubble_conversation" msgid="1033040343437428822">"مکالمه در حباب نشان داده نشود"</string>
     <string name="bubbles_user_education_title" msgid="5547017089271445797">"گپ بااستفاده از ابزارک اعلان"</string>
     <string name="bubbles_user_education_description" msgid="1160281719576715211">"مکالمه‌های جدید به‌صورت نمادهای شناور یا ابزارک اعلان نشان داده شوند. برای باز کردن ابزارک اعلان ضربه بزنید. برای جابه‌جایی، آن را بکشید."</string>
@@ -1014,11 +1014,14 @@
     <string name="notification_content_system_nav_changed" msgid="5077913144844684544">"پیمایش سیستم به‌روزرسانی شد. برای انجام تغییرات به «تنظیمات» بروید."</string>
     <string name="notification_content_gesture_nav_available" msgid="4431460803004659888">"برای به‌روزرسانی پیمایش سیستم، به «تنظیمات» بروید"</string>
     <string name="inattentive_sleep_warning_title" msgid="3891371591713990373">"آماده‌به‌کار"</string>
+    <string name="priority_onboarding_title" msgid="2893070698479227616">"مکالمه روی اولویت تنظیم شده است"</string>
+    <string name="priority_onboarding_behavior" msgid="5342816047020432929">"مکالمه‌های اولویت‌دار:"</string>
     <string name="priority_onboarding_show_at_top_text" msgid="1678400241025513541">"نمایش در بالای بخش مکالمه"</string>
     <string name="priority_onboarding_show_avatar_text" msgid="5756291381124091508">"نمایش تصویر نمایه در صفحه قفل"</string>
     <string name="priority_onboarding_appear_as_bubble_text" msgid="4227039772250263122">"به‌شکل ابزارک اعلان شناور روی برنامه‌ها ظاهر می‌شود"</string>
     <string name="priority_onboarding_ignores_dnd_text" msgid="2918952762719600529">"وقفه در «مزاحم نشوید»"</string>
     <string name="priority_onboarding_done_button_title" msgid="4569550984286506007">"متوجه‌ام"</string>
+    <string name="priority_onboarding_settings_button_title" msgid="6663601574303585927">"تنظیمات"</string>
     <string name="magnification_overlay_title" msgid="6584179429612427958">"پنجره همپوشانی بزرگ‌نمایی"</string>
     <string name="magnification_window_title" msgid="4863914360847258333">"پنجره بزرگ‌نمایی"</string>
     <string name="magnification_controls_title" msgid="8421106606708891519">"کنترل‌های پنجره بزرگ‌نمایی"</string>
@@ -1031,6 +1034,13 @@
       <item quantity="one"><xliff:g id="NUMBER_1">%s</xliff:g> کنترل اضافه شده است.</item>
       <item quantity="other"><xliff:g id="NUMBER_1">%s</xliff:g> کنترل اضافه شده است.</item>
     </plurals>
+    <string name="controls_removed" msgid="3731789252222856959">"حذف شد"</string>
+    <string name="accessibility_control_favorite" msgid="8694362691985545985">"به موارد دلخواه اضافه شد"</string>
+    <string name="accessibility_control_favorite_position" msgid="54220258048929221">"اضافه‌شده به موارد دلخواه، جایگاه <xliff:g id="NUMBER">%d</xliff:g>"</string>
+    <string name="accessibility_control_not_favorite" msgid="1291760269563092359">"حذف‌شده از موارد دلخواه"</string>
+    <string name="accessibility_control_change_favorite" msgid="2943178027582253261">"افزودن به موارد دلخواه"</string>
+    <string name="accessibility_control_change_unfavorite" msgid="6997408061750740327">"حذف کردن از موارد دلخواه"</string>
+    <string name="accessibility_control_move" msgid="8980344493796647792">"انتقال به موقعیت <xliff:g id="NUMBER">%d</xliff:g>"</string>
     <string name="controls_favorite_default_title" msgid="967742178688938137">"کنترل‌ها"</string>
     <string name="controls_favorite_subtitle" msgid="6604402232298443956">"برای دسترسی از منوی روشن/خاموش، کنترل‌ها را انتخاب کنید"</string>
     <string name="controls_favorite_rearrange" msgid="5616952398043063519">"برای تغییر دادن ترتیب کنترل‌ها، آن‌ها را نگه دارید و بکشید"</string>
@@ -1053,9 +1063,13 @@
     <string name="controls_structure_tooltip" msgid="4355922222944447867">"برای دیدن موارد بیشتر، تند بکشید"</string>
     <string name="controls_seeding_in_progress" msgid="3033855341410264148">"درحال بار کردن توصیه‌ها"</string>
     <string name="controls_media_close_session" msgid="9023534788828414585">"بستن این جلسه رسانه"</string>
+    <string name="controls_media_resume" msgid="1933520684481586053">"ازسرگیری"</string>
     <string name="controls_error_timeout" msgid="794197289772728958">"غیرفعال، برنامه را بررسی کنید"</string>
     <string name="controls_error_retryable" msgid="864025882878378470">"خطا، درحال تلاش مجدد…"</string>
-    <string name="controls_error_removed" msgid="6299213591234723805">"دستگاه برداشته شد"</string>
+    <string name="controls_error_removed" msgid="6675638069846014366">"پیدا نشد"</string>
+    <string name="controls_error_removed_title" msgid="1207794911208047818">"کنترل دردسترس نیست"</string>
+    <string name="controls_error_removed_message" msgid="2885911717034750542">"دسترسی به <xliff:g id="DEVICE">%1$s</xliff:g> ممکن نیست. برنامه <xliff:g id="APPLICATION">%2$s</xliff:g> را بررسی کنید تا مطمئن شوید کنترل هنوز دردسترس باشد و تنظیمات برنامه تغییر نکرده باشد."</string>
+    <string name="controls_open_app" msgid="483650971094300141">"بازکردن برنامه"</string>
     <string name="controls_error_generic" msgid="352500456918362905">"وضعیت بار نشد"</string>
     <string name="controls_error_failed" msgid="960228639198558525">"خطا، دوباره امتحان کنید"</string>
     <string name="controls_in_progress" msgid="4421080500238215939">"درحال انجام"</string>

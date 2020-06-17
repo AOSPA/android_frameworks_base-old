@@ -1118,6 +1118,10 @@ public abstract class WebSettings {
      * {@link #setAppCachePath}.
      *
      * @param flag {@code true} if the WebView should enable Application Caches
+     * @deprecated The Application Cache API is deprecated and this method will
+     *             become a no-op on all Android versions once support is
+     *             removed in Chromium. Consider using Service Workers instead.
+     *             See https://web.dev/appcache-removal/ for more information.
      */
     public abstract void setAppCacheEnabled(boolean flag);
 
@@ -1130,6 +1134,10 @@ public abstract class WebSettings {
      * @param appCachePath a String path to the directory containing
      *                     Application Caches files.
      * @see #setAppCacheEnabled
+     * @deprecated The Application Cache API is deprecated and this method will
+     *             become a no-op on all Android versions once support is
+     *             removed in Chromium. Consider using Service Workers instead.
+     *             See https://web.dev/appcache-removal/ for more information.
      */
     public abstract void setAppCachePath(String appCachePath);
 
@@ -1142,7 +1150,7 @@ public abstract class WebSettings {
      * It is recommended to leave the maximum size set to the default value.
      *
      * @param appCacheMaxSize the maximum size in bytes
-     * @deprecated In future quota will be managed automatically.
+     * @deprecated Quota is managed automatically; this method is a no-op.
      */
     @Deprecated
     public abstract void setAppCacheMaxSize(long appCacheMaxSize);

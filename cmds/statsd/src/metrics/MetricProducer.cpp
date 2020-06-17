@@ -45,7 +45,8 @@ const int FIELD_ID_ACTIVE_EVENT_ACTIVATION_STATE = 3;
 
 MetricProducer::MetricProducer(
         const int64_t& metricId, const ConfigKey& key, const int64_t timeBaseNs,
-        const int conditionIndex, const sp<ConditionWizard>& wizard,
+        const int conditionIndex, const vector<ConditionState>& initialConditionCache,
+        const sp<ConditionWizard>& wizard,
         const std::unordered_map<int, std::shared_ptr<Activation>>& eventActivationMap,
         const std::unordered_map<int, std::vector<std::shared_ptr<Activation>>>&
                 eventDeactivationMap,
@@ -56,7 +57,7 @@ MetricProducer::MetricProducer(
       mTimeBaseNs(timeBaseNs),
       mCurrentBucketStartTimeNs(timeBaseNs),
       mCurrentBucketNum(0),
-      mCondition(initialCondition(conditionIndex)),
+      mCondition(initialCondition(conditionIndex, initialConditionCache)),
       mConditionTrackerIndex(conditionIndex),
       mConditionSliced(false),
       mWizard(wizard),
@@ -97,7 +98,7 @@ void MetricProducer::onMatchedLogEventLocked(const size_t matcherIndex, const Lo
 
     // Stores atom id to primary key pairs for each state atom that the metric is
     // sliced by.
-    std::map<int, HashableDimensionKey> statePrimaryKeys;
+    std::map<int32_t, HashableDimensionKey> statePrimaryKeys;
 
     // For states with primary fields, use MetricStateLinks to get the primary
     // field values from the log event. These values will form a primary key
@@ -291,6 +292,17 @@ void MetricProducer::mapStateValue(const int32_t atomId, FieldValue* value) {
         // set mValue to group_id
         value->mValue.setLong(valueIt->second);
     }
+}
+
+HashableDimensionKey MetricProducer::getUnknownStateKey() {
+    HashableDimensionKey stateKey;
+    for (auto atom : mSlicedStateAtoms) {
+        FieldValue fieldValue;
+        fieldValue.mField.setTag(atom);
+        fieldValue.mValue.setInt(StateTracker::kStateUnknown);
+        stateKey.addValue(fieldValue);
+    }
+    return stateKey;
 }
 
 DropEvent MetricProducer::buildDropEvent(const int64_t dropTimeNs, const BucketDropReason reason) {

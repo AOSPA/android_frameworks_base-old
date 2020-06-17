@@ -29,14 +29,15 @@ import android.graphics.PointF;
 import android.graphics.Rect;
 import android.graphics.Region;
 import android.hardware.input.InputManager;
+import android.os.Handler;
 import android.os.Looper;
 import android.provider.DeviceConfig;
-import android.util.DisplayMetrics;
 import android.view.InputChannel;
 import android.view.InputEvent;
 import android.view.InputEventReceiver;
 import android.view.InputMonitor;
 import android.view.MotionEvent;
+import android.view.ViewConfiguration;
 
 import com.android.internal.policy.TaskResizingAlgorithm;
 import com.android.systemui.R;
@@ -45,6 +46,7 @@ import com.android.systemui.pip.PipTaskOrganizer;
 import com.android.systemui.util.DeviceConfigProxy;
 
 import java.util.concurrent.Executor;
+import java.util.function.Supplier;
 
 /**
  * Helper on top of PipTouchHandler that handles inputs OUTSIDE of the PIP window, which is used to
@@ -54,7 +56,7 @@ public class PipResizeGestureHandler {
 
     private static final String TAG = "PipResizeGestureHandler";
 
-    private final DisplayMetrics mDisplayMetrics = new DisplayMetrics();
+    private final Context mContext;
     private final PipBoundsHandler mPipBoundsHandler;
     private final PipMotionHelper mMotionHelper;
     private final int mDisplayId;
@@ -66,13 +68,22 @@ public class PipResizeGestureHandler {
     private final Point mMinSize = new Point();
     private final Rect mLastResizeBounds = new Rect();
     private final Rect mLastDownBounds = new Rect();
-    private final Rect mTmpBounds = new Rect();
-    private final int mDelta;
+    private final Rect mDragCornerSize = new Rect();
+    private final Rect mTmpTopLeftCorner = new Rect();
+    private final Rect mTmpTopRightCorner = new Rect();
+    private final Rect mTmpBottomLeftCorner = new Rect();
+    private final Rect mTmpBottomRightCorner = new Rect();
+    private final Rect mDisplayBounds = new Rect();
+    private final Supplier<Rect> mMovementBoundsSupplier;
+    private final Runnable mUpdateMovementBoundsRunnable;
 
+    private int mDelta;
+    private float mTouchSlop;
     private boolean mAllowGesture;
     private boolean mIsAttached;
     private boolean mIsEnabled;
     private boolean mEnableUserResize;
+    private boolean mThresholdCrossed;
 
     private InputMonitor mInputMonitor;
     private InputEventReceiver mInputEventReceiver;
@@ -82,17 +93,19 @@ public class PipResizeGestureHandler {
 
     public PipResizeGestureHandler(Context context, PipBoundsHandler pipBoundsHandler,
             PipMotionHelper motionHelper, DeviceConfigProxy deviceConfig,
-            PipTaskOrganizer pipTaskOrganizer) {
-        final Resources res = context.getResources();
-        context.getDisplay().getMetrics(mDisplayMetrics);
+            PipTaskOrganizer pipTaskOrganizer, Supplier<Rect> movementBoundsSupplier,
+            Runnable updateMovementBoundsRunnable) {
+        mContext = context;
         mDisplayId = context.getDisplayId();
         mMainExecutor = context.getMainExecutor();
         mPipBoundsHandler = pipBoundsHandler;
         mMotionHelper = motionHelper;
         mPipTaskOrganizer = pipTaskOrganizer;
+        mMovementBoundsSupplier = movementBoundsSupplier;
+        mUpdateMovementBoundsRunnable = updateMovementBoundsRunnable;
 
         context.getDisplay().getRealSize(mMaxSize);
-        mDelta = res.getDimensionPixelSize(R.dimen.pip_resize_edge_size);
+        reloadResources();
 
         mEnableUserResize = DeviceConfig.getBoolean(
                 DeviceConfig.NAMESPACE_SYSTEMUI,
@@ -108,6 +121,24 @@ public class PipResizeGestureHandler {
                         }
                     }
                 });
+    }
+
+    public void onConfigurationChanged() {
+        reloadResources();
+    }
+
+    private void reloadResources() {
+        final Resources res = mContext.getResources();
+        mDelta = res.getDimensionPixelSize(R.dimen.pip_resize_edge_size);
+        mTouchSlop = ViewConfiguration.get(mContext).getScaledTouchSlop();
+    }
+
+    private void resetDragCorners() {
+        mDragCornerSize.set(0, 0, mDelta, mDelta);
+        mTmpTopLeftCorner.set(mDragCornerSize);
+        mTmpTopRightCorner.set(mDragCornerSize);
+        mTmpBottomLeftCorner.set(mDragCornerSize);
+        mTmpBottomRightCorner.set(mDragCornerSize);
     }
 
     private void disposeInputChannel() {
@@ -154,34 +185,75 @@ public class PipResizeGestureHandler {
         }
     }
 
-    private boolean isWithinTouchRegion(int x, int y) {
+    /**
+     * Check whether the current x,y coordinate is within the region in which drag-resize should
+     * start.
+     * This consists of 4 small squares on the 4 corners of the PIP window, a quarter of which
+     * overlaps with the PIP window while the rest goes outside of the PIP window.
+     *  _ _           _ _
+     * |_|_|_________|_|_|
+     * |_|_|         |_|_|
+     *   |     PIP     |
+     *   |   WINDOW    |
+     *  _|_           _|_
+     * |_|_|_________|_|_|
+     * |_|_|         |_|_|
+     */
+    public boolean isWithinTouchRegion(int x, int y) {
         final Rect currentPipBounds = mMotionHelper.getBounds();
         if (currentPipBounds == null) {
             return false;
         }
+        resetDragCorners();
+        mTmpTopLeftCorner.offset(currentPipBounds.left - mDelta / 2,
+                currentPipBounds.top - mDelta /  2);
+        mTmpTopRightCorner.offset(currentPipBounds.right - mDelta / 2,
+                currentPipBounds.top - mDelta /  2);
+        mTmpBottomLeftCorner.offset(currentPipBounds.left - mDelta / 2,
+                currentPipBounds.bottom - mDelta /  2);
+        mTmpBottomRightCorner.offset(currentPipBounds.right - mDelta / 2,
+                currentPipBounds.bottom - mDelta /  2);
 
-        mTmpBounds.set(currentPipBounds);
-        mTmpBounds.inset(-mDelta, -mDelta);
+        mTmpRegion.setEmpty();
+        mTmpRegion.op(mTmpTopLeftCorner, Region.Op.UNION);
+        mTmpRegion.op(mTmpTopRightCorner, Region.Op.UNION);
+        mTmpRegion.op(mTmpBottomLeftCorner, Region.Op.UNION);
+        mTmpRegion.op(mTmpBottomRightCorner, Region.Op.UNION);
 
-        mTmpRegion.set(mTmpBounds);
-        mTmpRegion.op(currentPipBounds, Region.Op.DIFFERENCE);
+        return mTmpRegion.contains(x, y);
+    }
 
-        if (mTmpRegion.contains(x, y)) {
-            if (x < currentPipBounds.left) {
-                mCtrlType |= CTRL_LEFT;
-            }
-            if (x > currentPipBounds.right) {
-                mCtrlType |= CTRL_RIGHT;
-            }
-            if (y < currentPipBounds.top) {
-                mCtrlType |= CTRL_TOP;
-            }
-            if (y > currentPipBounds.bottom) {
-                mCtrlType |= CTRL_BOTTOM;
-            }
-            return true;
+    private void setCtrlType(int x, int y) {
+        final Rect currentPipBounds = mMotionHelper.getBounds();
+
+        Rect movementBounds = mMovementBoundsSupplier.get();
+        mDisplayBounds.set(movementBounds.left,
+                movementBounds.top,
+                movementBounds.right + currentPipBounds.width(),
+                movementBounds.bottom + currentPipBounds.height());
+
+        if (mTmpTopLeftCorner.contains(x, y) && currentPipBounds.top != mDisplayBounds.top
+                && currentPipBounds.left != mDisplayBounds.left) {
+            mCtrlType |= CTRL_LEFT;
+            mCtrlType |= CTRL_TOP;
         }
-        return false;
+        if (mTmpTopRightCorner.contains(x, y) && currentPipBounds.top != mDisplayBounds.top
+                && currentPipBounds.right != mDisplayBounds.right) {
+            mCtrlType |= CTRL_RIGHT;
+            mCtrlType |= CTRL_TOP;
+        }
+        if (mTmpBottomRightCorner.contains(x, y)
+                && currentPipBounds.bottom != mDisplayBounds.bottom
+                && currentPipBounds.right != mDisplayBounds.right) {
+            mCtrlType |= CTRL_RIGHT;
+            mCtrlType |= CTRL_BOTTOM;
+        }
+        if (mTmpBottomLeftCorner.contains(x, y)
+                && currentPipBounds.bottom != mDisplayBounds.bottom
+                && currentPipBounds.left != mDisplayBounds.left) {
+            mCtrlType |= CTRL_LEFT;
+            mCtrlType |= CTRL_BOTTOM;
+        }
     }
 
     private void onMotionEvent(MotionEvent ev) {
@@ -190,6 +262,7 @@ public class PipResizeGestureHandler {
             mLastResizeBounds.setEmpty();
             mAllowGesture = isWithinTouchRegion((int) ev.getX(), (int) ev.getY());
             if (mAllowGesture) {
+                setCtrlType((int) ev.getX(), (int) ev.getY());
                 mDownPoint.set(ev.getX(), ev.getY());
                 mLastDownBounds.set(mMotionHelper.getBounds());
             }
@@ -202,7 +275,12 @@ public class PipResizeGestureHandler {
                     break;
                 case MotionEvent.ACTION_MOVE:
                     // Capture inputs
-                    mInputMonitor.pilferPointers();
+                    float dx = Math.abs(ev.getX() - mDownPoint.x);
+                    float dy = Math.abs(ev.getY() - mDownPoint.y);
+                    if (!mThresholdCrossed && dx > mTouchSlop && dy > mTouchSlop) {
+                        mThresholdCrossed = true;
+                        mInputMonitor.pilferPointers();
+                    }
                     final Rect currentPipBounds = mMotionHelper.getBounds();
                     mLastResizeBounds.set(TaskResizingAlgorithm.resizeDrag(ev.getX(), ev.getY(),
                             mDownPoint.x, mDownPoint.y, currentPipBounds, mCtrlType, mMinSize.x,
@@ -214,13 +292,27 @@ public class PipResizeGestureHandler {
                     break;
                 case MotionEvent.ACTION_UP:
                 case MotionEvent.ACTION_CANCEL:
-                    mPipTaskOrganizer.scheduleFinishResizePip(mLastResizeBounds);
-                    mMotionHelper.synchronizePinnedStackBounds();
-                    mCtrlType = CTRL_NONE;
-                    mAllowGesture = false;
+                    if (!mLastResizeBounds.isEmpty()) {
+                        mPipTaskOrganizer.scheduleFinishResizePip(mLastResizeBounds,
+                                (Rect bounds) -> {
+                                    new Handler(Looper.getMainLooper()).post(() -> {
+                                        mMotionHelper.synchronizePinnedStackBounds();
+                                        mUpdateMovementBoundsRunnable.run();
+                                        resetState();
+                                    });
+                                });
+                    } else {
+                        resetState();
+                    }
                     break;
             }
         }
+    }
+
+    private void resetState() {
+        mCtrlType = CTRL_NONE;
+        mAllowGesture = false;
+        mThresholdCrossed = false;
     }
 
     void updateMaxSize(int maxX, int maxY) {

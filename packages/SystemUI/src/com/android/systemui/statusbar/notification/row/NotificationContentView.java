@@ -64,6 +64,7 @@ import com.android.systemui.statusbar.policy.SmartReplyView;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
+import java.util.ArrayList;
 
 /**
  * A frame layout containing the actual payload of the notification, including the contracted,
@@ -518,9 +519,12 @@ public class NotificationContentView extends FrameLayout {
     protected void onVisibilityChanged(View changedView, int visibility) {
         super.onVisibilityChanged(changedView, visibility);
         updateVisibility();
-        if (visibility != VISIBLE) {
+        if (visibility != VISIBLE && !mOnContentViewInactiveListeners.isEmpty()) {
             // View is no longer visible so all content views are inactive.
-            for (Runnable r : mOnContentViewInactiveListeners.values()) {
+            // Clone list as runnables may modify the list of listeners
+            ArrayList<Runnable> listeners = new ArrayList<>(
+                    mOnContentViewInactiveListeners.values());
+            for (Runnable r : listeners) {
                 r.run();
             }
             mOnContentViewInactiveListeners.clear();
@@ -553,9 +557,9 @@ public class NotificationContentView extends FrameLayout {
 
     private void focusExpandButtonIfNecessary() {
         if (mFocusOnVisibilityChange) {
-            NotificationHeaderView header = getVisibleNotificationHeader();
-            if (header != null) {
-                ImageView expandButton = header.getExpandButton();
+            NotificationViewWrapper wrapper = getVisibleWrapper(mVisibleType);
+            if (wrapper != null) {
+                View expandButton = wrapper.getExpandButton();
                 if (expandButton != null) {
                     expandButton.requestAccessibilityFocus();
                 }
@@ -1344,7 +1348,9 @@ public class NotificationContentView extends FrameLayout {
         }
         ImageView bubbleButton = layout.findViewById(com.android.internal.R.id.bubble_button);
         View actionContainer = layout.findViewById(com.android.internal.R.id.actions_container);
-        if (bubbleButton == null || actionContainer == null) {
+        LinearLayout actionContainerLayout =
+                layout.findViewById(com.android.internal.R.id.actions_container_layout);
+        if (bubbleButton == null || actionContainer == null || actionContainerLayout == null) {
             return;
         }
         boolean isPersonWithShortcut =
@@ -1370,8 +1376,16 @@ public class NotificationContentView extends FrameLayout {
             bubbleButton.setOnClickListener(mContainingNotification.getBubbleClickListener());
             bubbleButton.setVisibility(VISIBLE);
             actionContainer.setVisibility(VISIBLE);
+
+            int paddingEnd = getResources().getDimensionPixelSize(
+                    com.android.internal.R.dimen.bubble_visible_padding_end);
+            actionContainerLayout.setPaddingRelative(0, 0, paddingEnd, 0);
         } else  {
             bubbleButton.setVisibility(GONE);
+
+            int paddingEnd = getResources().getDimensionPixelSize(
+                    com.android.internal.R.dimen.bubble_gone_padding_end);
+            actionContainerLayout.setPaddingRelative(0, 0, paddingEnd, 0);
         }
     }
 

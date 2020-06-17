@@ -119,7 +119,6 @@ import android.os.Looper;
 import android.os.Message;
 import android.os.Messenger;
 import android.os.PowerManager;
-import android.os.RemoteCallbackList;
 import android.os.RemoteException;
 import android.os.SystemClock;
 import android.os.Trace;
@@ -160,6 +159,7 @@ import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
@@ -225,12 +225,6 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
     private static final String PREFIX_XT = "xt";
     private static final String PREFIX_UID = "uid";
     private static final String PREFIX_UID_TAG = "uid_tag";
-
-    /**
-     * Virtual network interface for video telephony. This is for VT data usage counting purpose.
-     */
-    // TODO: Remove this after no one is using it.
-    public static final String VT_INTERFACE = NetworkStats.IFACE_VT;
 
     /**
      * Settings that can be changed externally.
@@ -304,8 +298,8 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
             new DropBoxNonMonotonicObserver();
 
     private static final int MAX_STATS_PROVIDER_POLL_WAIT_TIME_MS = 100;
-    private final RemoteCallbackList<NetworkStatsProviderCallbackImpl> mStatsProviderCbList =
-            new RemoteCallbackList<>();
+    private final CopyOnWriteArrayList<NetworkStatsProviderCallbackImpl> mStatsProviderCbList =
+            new CopyOnWriteArrayList<>();
     /** Semaphore used to wait for stats provider to respond to request stats update. */
     private final Semaphore mStatsProviderSem = new Semaphore(0, true);
 
@@ -1317,21 +1311,39 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
                 }
 
                 // Traffic occurring on stacked interfaces is usually clatd.
-                // UID stats are always counted on the stacked interface and never
-                // on the base interface, because the packets on the base interface
-                // do not actually match application sockets until they are translated.
                 //
-                // Interface stats are more complicated. Packets subject to BPF offload
-                // never appear on the base interface and only appear on the stacked
-                // interface, so to ensure those packets increment interface stats, interface
-                // stats from stacked interfaces must be collected.
+                // UID stats are always counted on the stacked interface and never on the base
+                // interface, because the packets on the base interface do not actually match
+                // application sockets (they're not IPv4) and thus the app uid is not known.
+                // For receive this is obvious: packets must be translated from IPv6 to IPv4
+                // before the application socket can be found.
+                // For transmit: either they go through the clat daemon which by virtue of going
+                // through userspace strips the original socket association during the IPv4 to
+                // IPv6 translation process, or they are offloaded by eBPF, which doesn't:
+                // However, on an ebpf device the accounting is done in cgroup ebpf hooks,
+                // which don't trigger again post ebpf translation.
+                // (as such stats accounted to the clat uid are ignored)
+                //
+                // Interface stats are more complicated.
+                //
+                // eBPF offloaded 464xlat'ed packets never hit base interface ip6tables, and thus
+                // *all* statistics are collected by iptables on the stacked v4-* interface.
+                //
+                // Additionally for ingress all packets bound for the clat IPv6 address are dropped
+                // in ip6tables raw prerouting and thus even non-offloaded packets are only
+                // accounted for on the stacked interface.
+                //
+                // For egress, packets subject to eBPF offload never appear on the base interface
+                // and only appear on the stacked interface. Thus to ensure packets increment
+                // interface stats, we must collate data from stacked interfaces. For xt_qtaguid
+                // (or non eBPF offloaded) TX they would appear on both, however egress interface
+                // accounting is explicitly bypassed for traffic from the clat uid.
+                //
                 final List<LinkProperties> stackedLinks = state.linkProperties.getStackedLinks();
                 for (LinkProperties stackedLink : stackedLinks) {
                     final String stackedIface = stackedLink.getInterfaceName();
                     if (stackedIface != null) {
-                        if (mUseBpfTrafficStats) {
-                            findOrCreateNetworkIdentitySet(mActiveIfaces, stackedIface).add(ident);
-                        }
+                        findOrCreateNetworkIdentitySet(mActiveIfaces, stackedIface).add(ident);
                         findOrCreateNetworkIdentitySet(mActiveUidIfaces, stackedIface).add(ident);
                         if (isMobile) {
                             mobileIfaces.add(stackedIface);
@@ -1466,10 +1478,14 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
         final boolean persistForce = (flags & FLAG_PERSIST_FORCE) != 0;
 
         // Request asynchronous stats update from all providers for next poll. And wait a bit of
-        // time to allow providers report-in given that normally binder call should be fast.
+        // time to allow providers report-in given that normally binder call should be fast. Note
+        // that size of list might be changed because addition/removing at the same time. For
+        // addition, the stats of the missed provider can only be collected in next poll;
+        // for removal, wait might take up to MAX_STATS_PROVIDER_POLL_WAIT_TIME_MS
+        // once that happened.
         // TODO: request with a valid token.
         Trace.traceBegin(TRACE_TAG_NETWORK, "provider.requestStatsUpdate");
-        final int registeredCallbackCount = mStatsProviderCbList.getRegisteredCallbackCount();
+        final int registeredCallbackCount = mStatsProviderCbList.size();
         mStatsProviderSem.drainPermits();
         invokeForAllStatsProviderCallbacks(
                 (cb) -> cb.mProvider.onRequestStatsUpdate(0 /* unused */));
@@ -1643,7 +1659,7 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
 
         @Override
         public void setStatsProviderLimitAsync(@NonNull String iface, long quota) {
-            Slog.v(TAG, "setStatsProviderLimitAsync(" + iface + "," + quota + ")");
+            if (LOGV) Slog.v(TAG, "setStatsProviderLimitAsync(" + iface + "," + quota + ")");
             invokeForAllStatsProviderCallbacks((cb) -> cb.mProvider.onSetLimit(iface, quota));
         }
     }
@@ -1866,14 +1882,13 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
         // fold tethering stats and operations into uid snapshot
         final NetworkStats tetherSnapshot = getNetworkStatsTethering(STATS_PER_UID);
         tetherSnapshot.filter(UID_ALL, ifaces, TAG_ALL);
-        mStatsFactory.apply464xlatAdjustments(uidSnapshot, tetherSnapshot,
-                mUseBpfTrafficStats);
+        mStatsFactory.apply464xlatAdjustments(uidSnapshot, tetherSnapshot);
         uidSnapshot.combineAllValues(tetherSnapshot);
 
         // get a stale copy of uid stats snapshot provided by providers.
         final NetworkStats providerStats = getNetworkStatsFromProviders(STATS_PER_UID);
         providerStats.filter(UID_ALL, ifaces, TAG_ALL);
-        mStatsFactory.apply464xlatAdjustments(uidSnapshot, providerStats, mUseBpfTrafficStats);
+        mStatsFactory.apply464xlatAdjustments(uidSnapshot, providerStats);
         uidSnapshot.combineAllValues(providerStats);
 
         uidSnapshot.combineAllValues(mUidOperations);
@@ -1934,7 +1949,7 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
             NetworkStatsProviderCallbackImpl callback = new NetworkStatsProviderCallbackImpl(
                     tag, provider, mStatsProviderSem, mAlertObserver,
                     mStatsProviderCbList);
-            mStatsProviderCbList.register(callback);
+            mStatsProviderCbList.add(callback);
             Log.d(TAG, "registerNetworkStatsProvider from " + callback.mTag + " uid/pid="
                     + getCallingUid() + "/" + getCallingPid());
             return callback;
@@ -1958,20 +1973,11 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
 
     private void invokeForAllStatsProviderCallbacks(
             @NonNull ThrowingConsumer<NetworkStatsProviderCallbackImpl, RemoteException> task) {
-        synchronized (mStatsLock) {
-            final int length = mStatsProviderCbList.beginBroadcast();
+        for (final NetworkStatsProviderCallbackImpl cb : mStatsProviderCbList) {
             try {
-                for (int i = 0; i < length; i++) {
-                    final NetworkStatsProviderCallbackImpl cb =
-                            mStatsProviderCbList.getBroadcastItem(i);
-                    try {
-                        task.accept(cb);
-                    } catch (RemoteException e) {
-                        Log.e(TAG, "Fail to broadcast to provider: " + cb.mTag, e);
-                    }
-                }
-            } finally {
-                mStatsProviderCbList.finishBroadcast();
+                task.accept(cb);
+            } catch (RemoteException e) {
+                Log.e(TAG, "Fail to broadcast to provider: " + cb.mTag, e);
             }
         }
     }
@@ -1983,7 +1989,7 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
         @NonNull final INetworkStatsProvider mProvider;
         @NonNull private final Semaphore mSemaphore;
         @NonNull final INetworkManagementEventObserver mAlertObserver;
-        @NonNull final RemoteCallbackList<NetworkStatsProviderCallbackImpl> mStatsProviderCbList;
+        @NonNull final CopyOnWriteArrayList<NetworkStatsProviderCallbackImpl> mStatsProviderCbList;
 
         @NonNull private final Object mProviderStatsLock = new Object();
 
@@ -1997,7 +2003,7 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
                 @NonNull String tag, @NonNull INetworkStatsProvider provider,
                 @NonNull Semaphore semaphore,
                 @NonNull INetworkManagementEventObserver alertObserver,
-                @NonNull RemoteCallbackList<NetworkStatsProviderCallbackImpl> cbList)
+                @NonNull CopyOnWriteArrayList<NetworkStatsProviderCallbackImpl> cbList)
                 throws RemoteException {
             mTag = tag;
             mProvider = provider;
@@ -2054,13 +2060,13 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
         @Override
         public void binderDied() {
             Log.d(TAG, mTag + ": binderDied");
-            mStatsProviderCbList.unregister(this);
+            mStatsProviderCbList.remove(this);
         }
 
         @Override
         public void unregister() {
             Log.d(TAG, mTag + ": unregister");
-            mStatsProviderCbList.unregister(this);
+            mStatsProviderCbList.remove(this);
         }
 
     }

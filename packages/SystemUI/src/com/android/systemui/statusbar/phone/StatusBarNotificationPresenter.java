@@ -72,6 +72,7 @@ import com.android.systemui.statusbar.notification.row.NotificationGutsManager;
 import com.android.systemui.statusbar.notification.row.NotificationGutsManager.OnSettingsClickListener;
 import com.android.systemui.statusbar.notification.row.NotificationInfo.CheckSaveListener;
 import com.android.systemui.statusbar.notification.stack.NotificationListContainer;
+import com.android.systemui.statusbar.phone.LockscreenGestureLogger.LockscreenUiEvent;
 import com.android.systemui.statusbar.policy.ConfigurationController;
 import com.android.systemui.statusbar.policy.KeyguardStateController;
 
@@ -296,20 +297,20 @@ public class StatusBarNotificationPresenter implements NotificationPresenter,
     }
 
     @Override
-    public void updateNotificationViews() {
+    public void updateNotificationViews(final String reason) {
         // The function updateRowStates depends on both of these being non-null, so check them here.
         // We may be called before they are set from DeviceProvisionedController's callback.
         if (mScrimController == null) return;
 
         // Do not modify the notifications during collapse.
         if (isCollapsing()) {
-            mShadeController.addPostCollapseAction(this::updateNotificationViews);
+            mShadeController.addPostCollapseAction(() -> updateNotificationViews(reason));
             return;
         }
 
         mViewHierarchyManager.updateNotificationViews();
 
-        mNotificationPanel.updateNotificationViews();
+        mNotificationPanel.updateNotificationViews(reason);
     }
 
     public void onNotificationRemoved(String key, StatusBarNotification old) {
@@ -347,7 +348,7 @@ public class StatusBarNotificationPresenter implements NotificationPresenter,
             updateNotificationOnUiModeChanged();
             mDispatchUiModeChangeOnUserSwitched = false;
         }
-        updateNotificationViews();
+        updateNotificationViews("user switched");
         mMediaManager.clearCurrentMediaNotification();
         mStatusBar.setLockscreenUser(newUserId);
         updateMediaMetaData(true, false);
@@ -374,6 +375,7 @@ public class StatusBarNotificationPresenter implements NotificationPresenter,
         mLockscreenGestureLogger.write(
                 MetricsEvent.ACTION_LS_NOTE,
                 0 /* lengthDp - N/A */, 0 /* velocityDp - N/A */);
+        mLockscreenGestureLogger.log(LockscreenUiEvent.LOCKSCREEN_NOTIFICATION_FALSE_TOUCH);
         mNotificationPanel.showTransientIndication(R.string.notification_tap_again);
         ActivatableNotificationView previousView = mNotificationPanel.getActivatedChild();
         if (previousView != null) {

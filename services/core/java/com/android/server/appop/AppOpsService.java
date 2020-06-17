@@ -66,11 +66,6 @@ import static android.content.Intent.EXTRA_REPLACING;
 import static android.content.pm.PermissionInfo.PROTECTION_DANGEROUS;
 import static android.content.pm.PermissionInfo.PROTECTION_FLAG_APPOP;
 
-import static com.android.server.am.OomAdjuster.DEBUG_PROCESS_CAPABILITY_FOREGROUND_CAMERA;
-import static com.android.server.am.OomAdjuster.DEBUG_PROCESS_CAPABILITY_FOREGROUND_CAMERA_Q;
-import static com.android.server.am.OomAdjuster.DEBUG_PROCESS_CAPABILITY_FOREGROUND_LOCATION;
-import static com.android.server.am.OomAdjuster.DEBUG_PROCESS_CAPABILITY_FOREGROUND_MICROPHONE;
-import static com.android.server.am.OomAdjuster.DEBUG_PROCESS_CAPABILITY_FOREGROUND_MICROPHONE_Q;
 import static com.android.server.appop.AppOpsService.ModeCallback.ALL_OPS;
 
 import static java.lang.Long.max;
@@ -249,7 +244,7 @@ public class AppOpsService extends IAppOpsService.Stub {
             OP_CAMERA,
     };
 
-    private static final int MAX_UNFORWARED_OPS = 10;
+    private static final int MAX_UNFORWARDED_OPS = 10;
     private static final int MAX_UNUSED_POOLED_OBJECTS = 3;
     private static final int RARELY_USED_PACKAGES_INITIALIZATION_DELAY_MILLIS = 300000;
 
@@ -322,7 +317,7 @@ public class AppOpsService extends IAppOpsService.Stub {
     @VisibleForTesting
     final SparseArray<UidState> mUidStates = new SparseArray<>();
 
-    final HistoricalRegistry mHistoricalRegistry = new HistoricalRegistry(this);
+    volatile @NonNull HistoricalRegistry mHistoricalRegistry = new HistoricalRegistry(this);
 
     long mLastRealtime;
 
@@ -520,8 +515,6 @@ public class AppOpsService extends IAppOpsService.Stub {
         public SparseBooleanArray foregroundOps;
         public boolean hasForegroundWatchers;
 
-        public long lastTimeShowDebugToast;
-
         public UidState(int uid) {
             this.uid = uid;
         }
@@ -542,6 +535,9 @@ public class AppOpsService extends IAppOpsService.Stub {
             if (mode == MODE_FOREGROUND) {
                 if (appWidgetVisible) {
                     return MODE_ALLOWED;
+                } else if (mActivityManagerInternal != null
+                        && mActivityManagerInternal.isPendingTopUid(uid)) {
+                    return MODE_ALLOWED;
                 } else if (state <= UID_STATE_TOP) {
                     // process is in TOP.
                     return MODE_ALLOWED;
@@ -554,44 +550,19 @@ public class AppOpsService extends IAppOpsService.Stub {
                         case AppOpsManager.OP_MONITOR_HIGH_POWER_LOCATION:
                             if ((capability & PROCESS_CAPABILITY_FOREGROUND_LOCATION) != 0) {
                                 return MODE_ALLOWED;
-                            } else if ((capability
-                                    & DEBUG_PROCESS_CAPABILITY_FOREGROUND_LOCATION) != 0) {
-                                // The FGS has the location capability, but due to FGS BG start
-                                // restriction it lost the capability, use temp location capability
-                                // to mark this case.
-                                maybeShowWhileInUseDebugToast(op, DEBUG_FGS_ALLOW_WHILE_IN_USE);
-                                return MODE_IGNORED;
                             } else {
                                 return MODE_IGNORED;
                             }
                         case OP_CAMERA:
                             if ((capability & PROCESS_CAPABILITY_FOREGROUND_CAMERA) != 0) {
                                 return MODE_ALLOWED;
-                            } else if ((capability & DEBUG_PROCESS_CAPABILITY_FOREGROUND_CAMERA_Q)
-                                    != 0) {
-                                maybeShowWhileInUseDebugToast(op, DEBUG_FGS_ENFORCE_TYPE);
-                                return MODE_ALLOWED;
-                            } else if ((capability & DEBUG_PROCESS_CAPABILITY_FOREGROUND_CAMERA)
-                                    != 0) {
-                                maybeShowWhileInUseDebugToast(op, DEBUG_FGS_ENFORCE_TYPE);
-                                return MODE_IGNORED;
                             } else {
-                                maybeShowWhileInUseDebugToast(op, DEBUG_FGS_ALLOW_WHILE_IN_USE);
                                 return MODE_IGNORED;
                             }
                         case OP_RECORD_AUDIO:
                             if ((capability & PROCESS_CAPABILITY_FOREGROUND_MICROPHONE) != 0) {
                                 return MODE_ALLOWED;
-                            } else if ((capability
-                                    & DEBUG_PROCESS_CAPABILITY_FOREGROUND_MICROPHONE_Q) != 0) {
-                                maybeShowWhileInUseDebugToast(op, DEBUG_FGS_ENFORCE_TYPE);
-                                return MODE_ALLOWED;
-                            } else if  ((capability
-                                    & DEBUG_PROCESS_CAPABILITY_FOREGROUND_MICROPHONE) != 0) {
-                                maybeShowWhileInUseDebugToast(op, DEBUG_FGS_ENFORCE_TYPE);
-                                return MODE_IGNORED;
                             } else {
-                                maybeShowWhileInUseDebugToast(op, DEBUG_FGS_ALLOW_WHILE_IN_USE);
                                 return MODE_IGNORED;
                             }
                         default:
@@ -604,32 +575,21 @@ public class AppOpsService extends IAppOpsService.Stub {
             } else if (mode == MODE_ALLOWED) {
                 switch (op) {
                     case OP_CAMERA:
-                        if ((capability & PROCESS_CAPABILITY_FOREGROUND_CAMERA) != 0) {
+                        if (mActivityManagerInternal != null
+                                && mActivityManagerInternal.isPendingTopUid(uid)) {
                             return MODE_ALLOWED;
-                        } else if ((capability
-                                & DEBUG_PROCESS_CAPABILITY_FOREGROUND_CAMERA_Q) != 0) {
-                            maybeShowWhileInUseDebugToast(op, DEBUG_FGS_ENFORCE_TYPE);
+                        } else if ((capability & PROCESS_CAPABILITY_FOREGROUND_CAMERA) != 0) {
                             return MODE_ALLOWED;
-                        } else if ((capability & DEBUG_PROCESS_CAPABILITY_FOREGROUND_CAMERA) != 0) {
-                            maybeShowWhileInUseDebugToast(op, DEBUG_FGS_ENFORCE_TYPE);
-                            return MODE_IGNORED;
                         } else {
-                            maybeShowWhileInUseDebugToast(op, DEBUG_FGS_ALLOW_WHILE_IN_USE);
                             return MODE_IGNORED;
                         }
                     case OP_RECORD_AUDIO:
-                        if ((capability & PROCESS_CAPABILITY_FOREGROUND_MICROPHONE) != 0) {
+                        if (mActivityManagerInternal != null
+                                && mActivityManagerInternal.isPendingTopUid(uid)) {
                             return MODE_ALLOWED;
-                        } else if ((capability & DEBUG_PROCESS_CAPABILITY_FOREGROUND_MICROPHONE_Q)
-                                != 0) {
-                            maybeShowWhileInUseDebugToast(op, DEBUG_FGS_ENFORCE_TYPE);
+                        } else if ((capability & PROCESS_CAPABILITY_FOREGROUND_MICROPHONE) != 0) {
                             return MODE_ALLOWED;
-                        } else if ((capability & DEBUG_PROCESS_CAPABILITY_FOREGROUND_MICROPHONE)
-                                != 0) {
-                            maybeShowWhileInUseDebugToast(op, DEBUG_FGS_ENFORCE_TYPE);
-                            return MODE_IGNORED;
                         } else {
-                            maybeShowWhileInUseDebugToast(op, DEBUG_FGS_ALLOW_WHILE_IN_USE);
                             return MODE_IGNORED;
                         }
                     default:
@@ -682,27 +642,6 @@ public class AppOpsService extends IAppOpsService.Stub {
                 }
             }
             foregroundOps = which;
-        }
-
-        // TODO: remove this toast after feature development is done
-        // For DEBUG_FGS_ALLOW_WHILE_IN_USE, if the procstate is foreground service and while-in-use
-        // permission is denied, show a toast message and generate a WTF log so we know
-        // how many apps are impacted by the new background started foreground service while-in-use
-        // permission restriction.
-        // For DEBUG_FGS_ENFORCE_TYPE, The process has a foreground service that does not have
-        // camera/microphone foregroundServiceType in manifest file, and the process is asking
-        // AppOps for camera/microphone ops, show a toast message and generate a WTF log.
-        void maybeShowWhileInUseDebugToast(int op, int mode) {
-            if (mode == DEBUG_FGS_ALLOW_WHILE_IN_USE && state != UID_STATE_FOREGROUND_SERVICE) {
-                return;
-            }
-            final long now = System.currentTimeMillis();
-            if (lastTimeShowDebugToast == 0 ||  now - lastTimeShowDebugToast > 600000) {
-                lastTimeShowDebugToast = now;
-                mHandler.sendMessage(PooledLambda.obtainMessage(
-                        ActivityManagerInternal::showWhileInUseDebugToast,
-                        mActivityManagerInternal, uid, op, mode));
-            }
         }
     }
 
@@ -1750,8 +1689,7 @@ public class AppOpsService extends IAppOpsService.Stub {
         mHandler.postDelayed(new Runnable() {
             @Override
             public void run() {
-                List<String> packageNames = getPackageNamesForSampling();
-                resamplePackageAndAppOpLocked(packageNames);
+                List<String> packageNames = getPackageListAndResample();
                 initializeRarelyUsedPackagesList(new ArraySet<>(packageNames));
             }
         }, RARELY_USED_PACKAGES_INITIALIZATION_DELAY_MILLIS);
@@ -1952,6 +1890,8 @@ public class AppOpsService extends IAppOpsService.Stub {
         if (AppOpsManager.NOTE_OP_COLLECTION_ENABLED && mWriteNoteOpsScheduled) {
             writeNoteOps();
         }
+
+        mHistoricalRegistry.shutdown();
     }
 
     private ArrayList<AppOpsManager.OpEntry> collectOps(Ops pkgOps, int[] ops) {
@@ -2582,6 +2522,28 @@ public class AppOpsService extends IAppOpsService.Stub {
         }
     }
 
+    private static ArrayList<ChangeRec> addChange(ArrayList<ChangeRec> reports,
+            int op, int uid, String packageName) {
+        boolean duplicate = false;
+        if (reports == null) {
+            reports = new ArrayList<>();
+        } else {
+            final int reportCount = reports.size();
+            for (int j = 0; j < reportCount; j++) {
+                ChangeRec report = reports.get(j);
+                if (report.op == op && report.pkg.equals(packageName)) {
+                    duplicate = true;
+                    break;
+                }
+            }
+        }
+        if (!duplicate) {
+            reports.add(new ChangeRec(op, uid, packageName));
+        }
+
+        return reports;
+    }
+
     private static HashMap<ModeCallback, ArrayList<ChangeRec>> addCallbacks(
             HashMap<ModeCallback, ArrayList<ChangeRec>> callbacks,
             int op, int uid, String packageName, ArraySet<ModeCallback> cbs) {
@@ -2595,22 +2557,9 @@ public class AppOpsService extends IAppOpsService.Stub {
         for (int i=0; i<N; i++) {
             ModeCallback cb = cbs.valueAt(i);
             ArrayList<ChangeRec> reports = callbacks.get(cb);
-            boolean duplicate = false;
-            if (reports == null) {
-                reports = new ArrayList<>();
-                callbacks.put(cb, reports);
-            } else {
-                final int reportCount = reports.size();
-                for (int j = 0; j < reportCount; j++) {
-                    ChangeRec report = reports.get(j);
-                    if (report.op == op && report.pkg.equals(packageName)) {
-                        duplicate = true;
-                        break;
-                    }
-                }
-            }
-            if (!duplicate) {
-                reports.add(new ChangeRec(op, uid, packageName));
+            ArrayList<ChangeRec> changed = addChange(reports, op, uid, packageName);
+            if (changed != reports) {
+                callbacks.put(cb, changed);
             }
         }
         return callbacks;
@@ -2648,6 +2597,7 @@ public class AppOpsService extends IAppOpsService.Stub {
         enforceManageAppOpsModes(callingPid, callingUid, reqUid);
 
         HashMap<ModeCallback, ArrayList<ChangeRec>> callbacks = null;
+        ArrayList<ChangeRec> allChanges = new ArrayList<>();
         synchronized (this) {
             boolean changed = false;
             for (int i = mUidStates.size() - 1; i >= 0; i--) {
@@ -2668,6 +2618,9 @@ public class AppOpsService extends IAppOpsService.Stub {
                                         mOpModeWatchers.get(code));
                                 callbacks = addCallbacks(callbacks, code, uidState.uid, packageName,
                                         mPackageModeWatchers.get(packageName));
+
+                                allChanges = addChange(allChanges, code, uidState.uid,
+                                        packageName);
                             }
                         }
                     }
@@ -2707,6 +2660,7 @@ public class AppOpsService extends IAppOpsService.Stub {
                             callbacks = addCallbacks(callbacks, curOp.op, uid, packageName,
                                     mPackageModeWatchers.get(packageName));
 
+                            allChanges = addChange(allChanges, curOp.op, uid, packageName);
                             curOp.removeAttributionsWithNoTime();
                             if (curOp.mAttributions.isEmpty()) {
                                 pkgOps.removeAt(j);
@@ -2739,6 +2693,15 @@ public class AppOpsService extends IAppOpsService.Stub {
                             AppOpsService::notifyOpChanged,
                             this, cb, rep.op, rep.uid, rep.pkg));
                 }
+            }
+        }
+
+        if (allChanges != null) {
+            int numChanges = allChanges.size();
+            for (int i = 0; i < numChanges; i++) {
+                ChangeRec change = allChanges.get(i);
+                notifyOpChangedSync(change.op, change.uid, change.pkg,
+                        AppOpsManager.opToDefaultMode(change.op));
             }
         }
     }
@@ -3323,7 +3286,7 @@ public class AppOpsService extends IAppOpsService.Stub {
                     }
 
                     unforwardedOps.add(asyncNotedOp);
-                    if (unforwardedOps.size() > MAX_UNFORWARED_OPS) {
+                    if (unforwardedOps.size() > MAX_UNFORWARDED_OPS) {
                         unforwardedOps.remove(0);
                     }
                 }
@@ -5484,10 +5447,12 @@ public class AppOpsService extends IAppOpsService.Stub {
                     pw.println(AppOpsManager.getUidStateName(uidState.pendingState));
                 }
                 pw.print("    capability=");
-                pw.println(uidState.capability);
+                ActivityManager.printCapabilitiesFull(pw, uidState.capability);
+                pw.println();
                 if (uidState.capability != uidState.pendingCapability) {
                     pw.print("    pendingCapability=");
-                    pw.println(uidState.pendingCapability);
+                    ActivityManager.printCapabilitiesFull(pw, uidState.pendingCapability);
+                    pw.println();
                 }
                 pw.print("    appWidgetVisible=");
                 pw.println(uidState.appWidgetVisible);
@@ -5830,6 +5795,25 @@ public class AppOpsService extends IAppOpsService.Stub {
         mHistoricalRegistry.clearHistory();
     }
 
+    @Override
+    public void rebootHistory(long offlineDurationMillis) {
+        mContext.enforceCallingOrSelfPermission(android.Manifest.permission.MANAGE_APPOPS,
+                "rebootHistory");
+
+        Preconditions.checkArgument(offlineDurationMillis >= 0);
+
+        // Must not hold the appops lock
+        mHistoricalRegistry.shutdown();
+
+        if (offlineDurationMillis > 0) {
+            SystemClock.sleep(offlineDurationMillis);
+        }
+
+        mHistoricalRegistry = new HistoricalRegistry(mHistoricalRegistry);
+        mHistoricalRegistry.systemReady(mContext.getContentResolver());
+        mHistoricalRegistry.persistPendingHistory();
+    }
+
     /**
      * Report runtime access to AppOp together with message (including stack trace)
      *
@@ -5916,11 +5900,13 @@ public class AppOpsService extends IAppOpsService.Stub {
         mContext.enforcePermission(android.Manifest.permission.GET_APP_OPS_STATS,
                 Binder.getCallingPid(), Binder.getCallingUid(), null);
         RuntimeAppOpAccessMessage result;
-        List<String> packageNames = getPackageNamesForSampling();
         synchronized (this) {
             result = mCollectedRuntimePermissionMessage;
-            resamplePackageAndAppOpLocked(packageNames);
+            mCollectedRuntimePermissionMessage = null;
         }
+        mHandler.sendMessage(PooledLambda.obtainMessage(
+                AppOpsService::getPackageListAndResample,
+                this));
         return result;
     }
 
@@ -5944,6 +5930,15 @@ public class AppOpsService extends IAppOpsService.Stub {
         }
     }
 
+    /** Obtains package list and resamples package and appop to watch. */
+    private List<String> getPackageListAndResample() {
+        List<String> packageNames = getPackageNamesForSampling();
+        synchronized (this) {
+            resamplePackageAndAppOpLocked(packageNames);
+        }
+        return packageNames;
+    }
+
     /** Resamples package and appop to watch from the list provided. */
     private void resamplePackageAndAppOpLocked(@NonNull List<String> packageNames) {
         if (!packageNames.isEmpty()) {
@@ -5959,7 +5954,6 @@ public class AppOpsService extends IAppOpsService.Stub {
         mSampledAppOpCode = ThreadLocalRandom.current().nextInt(_NUM_OP);
         mAcceptableLeftDistance = _NUM_OP;
         mSampledPackage = packageName;
-        mCollectedRuntimePermissionMessage = null;
     }
 
     /**
@@ -5971,7 +5965,7 @@ public class AppOpsService extends IAppOpsService.Stub {
         List<String> runtimeAppOpsList = getRuntimeAppOpsList();
         AppOpsManager.HistoricalOpsRequest histOpsRequest =
                 new AppOpsManager.HistoricalOpsRequest.Builder(
-                        Instant.now().minus(7, ChronoUnit.DAYS).toEpochMilli(),
+                        Math.max(Instant.now().minus(7, ChronoUnit.DAYS).toEpochMilli(), 0),
                         Long.MAX_VALUE).setOpNames(runtimeAppOpsList).setFlags(
                         OP_FLAG_SELF | OP_FLAG_TRUSTED_PROXIED).build();
         appOps.getHistoricalOps(histOpsRequest, AsyncTask.THREAD_POOL_EXECUTOR,

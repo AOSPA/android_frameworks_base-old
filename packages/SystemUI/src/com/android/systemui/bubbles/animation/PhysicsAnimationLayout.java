@@ -767,6 +767,10 @@ public class PhysicsAnimationLayout extends FrameLayout {
                 int targetAnimDuration,
                 TimeInterpolator targetAnimInterpolator,
                 Runnable... pathAnimEndActions) {
+            if (mPathAnimator != null) {
+                mPathAnimator.cancel();
+            }
+
             mPathAnimator = ObjectAnimator.ofFloat(
                     this, mCurrentPointOnPathXProperty, mCurrentPointOnPathYProperty, path);
 
@@ -1033,6 +1037,11 @@ public class PhysicsAnimationLayout extends FrameLayout {
             if (view != null) {
                 final SpringAnimation animation =
                         (SpringAnimation) view.getTag(getTagIdForProperty(property));
+
+                if (animation == null) {
+                    return;
+                }
+
                 final SpringForce animationSpring = animation.getSpring();
 
                 if (animationSpring == null) {

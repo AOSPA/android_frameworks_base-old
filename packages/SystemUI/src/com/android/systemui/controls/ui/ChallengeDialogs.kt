@@ -50,7 +50,8 @@ object ChallengeDialogs {
     fun createPinDialog(
         cvh: ControlViewHolder,
         useAlphaNumeric: Boolean,
-        useRetryStrings: Boolean
+        useRetryStrings: Boolean,
+        onCancel: () -> Unit
     ): Dialog? {
         val lastAction = cvh.lastAction
         if (lastAction == null) {
@@ -86,7 +87,10 @@ object ChallengeDialogs {
             })
             setNegativeButton(
                 android.R.string.cancel,
-                DialogInterface.OnClickListener { dialog, _ -> dialog.cancel() }
+                DialogInterface.OnClickListener { dialog, _ ->
+                    onCancel.invoke()
+                    dialog.cancel()
+                }
             )
         }
         return builder.create().apply {
@@ -111,7 +115,7 @@ object ChallengeDialogs {
     /**
      * AlertDialogs to handle [ControlAction#RESPONSE_CHALLENGE_ACK] response type.
      */
-    fun createConfirmationDialog(cvh: ControlViewHolder): Dialog? {
+    fun createConfirmationDialog(cvh: ControlViewHolder, onCancel: () -> Unit): Dialog? {
         val lastAction = cvh.lastAction
         if (lastAction == null) {
             Log.e(ControlsUiController.TAG,
@@ -120,7 +124,7 @@ object ChallengeDialogs {
         }
         val builder = AlertDialog.Builder(cvh.context, STYLE).apply {
             val res = cvh.context.resources
-            setMessage(res.getString(
+            setTitle(res.getString(
                 R.string.controls_confirmation_message, cvh.title.getText()))
             setPositiveButton(
                 android.R.string.ok,
@@ -130,7 +134,10 @@ object ChallengeDialogs {
             })
             setNegativeButton(
                 android.R.string.cancel,
-                DialogInterface.OnClickListener { dialog, _ -> dialog.cancel() }
+                DialogInterface.OnClickListener { dialog, _ ->
+                    onCancel.invoke()
+                    dialog.cancel()
+                }
             )
         }
         return builder.create().apply {

@@ -31,7 +31,7 @@ import static android.app.NotificationManager.Policy.SUPPRESSED_EFFECT_PEEK;
 import static android.app.NotificationManager.Policy.SUPPRESSED_EFFECT_STATUS_BAR;
 
 import static com.android.systemui.statusbar.notification.collection.NotifCollection.REASON_NOT_CANCELED;
-import static com.android.systemui.statusbar.notification.stack.NotificationSectionsManager.BUCKET_ALERTING;
+import static com.android.systemui.statusbar.notification.stack.NotificationSectionsManagerKt.BUCKET_ALERTING;
 
 import static java.util.Objects.requireNonNull;
 
@@ -41,6 +41,7 @@ import android.app.Notification.MessagingStyle.Message;
 import android.app.NotificationChannel;
 import android.app.NotificationManager.Policy;
 import android.app.Person;
+import android.app.RemoteInput;
 import android.app.RemoteInputHistoryItem;
 import android.content.Context;
 import android.content.pm.ShortcutInfo;
@@ -68,7 +69,8 @@ import com.android.systemui.statusbar.notification.icon.IconPack;
 import com.android.systemui.statusbar.notification.row.ExpandableNotificationRow;
 import com.android.systemui.statusbar.notification.row.ExpandableNotificationRowController;
 import com.android.systemui.statusbar.notification.row.NotificationGuts;
-import com.android.systemui.statusbar.notification.stack.NotificationSectionsManager;
+import com.android.systemui.statusbar.notification.stack.PriorityBucket;
+import com.android.systemui.statusbar.phone.NotificationGroupManager;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -132,7 +134,7 @@ public final class NotificationEntry extends ListEntry {
     private ShortcutInfo mShortcutInfo;
 
     /**
-     * If {@link android.app.RemoteInput#getEditChoicesBeforeSending} is enabled, and the user is
+     * If {@link RemoteInput#getEditChoicesBeforeSending} is enabled, and the user is
      * currently editing a choice (smart reply), then this field contains the information about the
      * suggestion being edited. Otherwise <code>null</code>.
      */
@@ -151,6 +153,8 @@ public final class NotificationEntry extends ListEntry {
     public CharSequence headsUpStatusBarText;
     public CharSequence headsUpStatusBarTextPublic;
 
+    // indicates when this entry's view was first attached to a window
+    // this value will reset when the view is completely removed from the shade (ie: filtered out)
     private long initializationTime = -1;
 
     /**
@@ -172,6 +176,8 @@ public final class NotificationEntry extends ListEntry {
     private boolean mPulseSupressed;
     private boolean mAllowFgsDismissal;
     private int mBucket = BUCKET_ALERTING;
+    @Nullable private Long mPendingAnimationDuration;
+    private boolean mIsMarkedForUserTriggeredMovement;
 
     /**
      * @param sbn the StatusBarNotification from system server
@@ -191,7 +197,7 @@ public final class NotificationEntry extends ListEntry {
             boolean allowFgsDismissal,
             long creationTime
     ) {
-        super(requireNonNull(Objects.requireNonNull(sbn).getKey()));
+        super(requireNonNull(requireNonNull(sbn).getKey()));
 
         requireNonNull(ranking);
 
@@ -209,7 +215,7 @@ public final class NotificationEntry extends ListEntry {
     }
 
     /** The key for this notification. Guaranteed to be immutable and unique */
-    public String getKey() {
+    @NonNull public String getKey() {
         return mKey;
     }
 
@@ -217,7 +223,7 @@ public final class NotificationEntry extends ListEntry {
      * The StatusBarNotification that represents one half of a NotificationEntry (the other half
      * being the Ranking). This object is swapped out whenever a notification is updated.
      */
-    public StatusBarNotification getSbn() {
+    @NonNull public StatusBarNotification getSbn() {
         return mSbn;
     }
 
@@ -409,12 +415,12 @@ public final class NotificationEntry extends ListEntry {
         return wasBubble != isBubble();
     }
 
-    @NotificationSectionsManager.PriorityBucket
+    @PriorityBucket
     public int getBucket() {
         return mBucket;
     }
 
-    public void setBucket(@NotificationSectionsManager.PriorityBucket int bucket) {
+    public void setBucket(@PriorityBucket int bucket) {
         mBucket = bucket;
     }
 
@@ -439,7 +445,7 @@ public final class NotificationEntry extends ListEntry {
      * Get the children that are actually attached to this notification's row.
      *
      * TODO: Seems like most callers here should probably be using
-     * {@link com.android.systemui.statusbar.phone.NotificationGroupManager#getChildren}
+     * {@link NotificationGroupManager#getChildren}
      */
     public @Nullable List<NotificationEntry> getAttachedNotifChildren() {
         if (row == null) {
@@ -473,8 +479,8 @@ public final class NotificationEntry extends ListEntry {
     }
 
     public boolean hasFinishedInitialization() {
-        return initializationTime == -1
-                || SystemClock.elapsedRealtime() > initializationTime + INITIALIZATION_DELAY;
+        return initializationTime != -1
+                && SystemClock.elapsedRealtime() > initializationTime + INITIALIZATION_DELAY;
     }
 
     public int getContrastedColor(Context context, boolean isLowPriority,
@@ -563,6 +569,10 @@ public final class NotificationEntry extends ListEntry {
             }
         }
         return false;
+    }
+
+    public void resetInitializationTime() {
+        initializationTime = -1;
     }
 
     public void setInitializationTime(long time) {
@@ -803,7 +813,7 @@ public final class NotificationEntry extends ListEntry {
         }
 
         if ((mSbn.getNotification().flags
-                & Notification.FLAG_FOREGROUND_SERVICE) != 0) {
+                & FLAG_FOREGROUND_SERVICE) != 0) {
             return true;
         }
         if (mSbn.getNotification().isMediaNotification()) {
@@ -934,6 +944,19 @@ public final class NotificationEntry extends ListEntry {
 
     public void setPulseSuppressed(boolean suppressed) {
         mPulseSupressed = suppressed;
+    }
+
+    /** Whether or not this entry has been marked for a user-triggered movement. */
+    public boolean isMarkedForUserTriggeredMovement() {
+        return mIsMarkedForUserTriggeredMovement;
+    }
+
+    /**
+     * Mark this entry for movement triggered by a user action (ex: changing the priorirty of a
+     * conversation). This can then be used for custom animations.
+     */
+    public void markForUserTriggeredMovement(boolean marked) {
+        mIsMarkedForUserTriggeredMovement = marked;
     }
 
     /** Information about a suggestion that is being edited. */

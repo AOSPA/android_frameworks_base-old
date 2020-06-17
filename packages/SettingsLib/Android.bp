@@ -50,7 +50,7 @@ java_defaults {
         "SettingsLibAdaptiveIcon",
         "SettingsLibRadioButtonPreference",
         "SettingsLibDisplayDensityUtils",
-        "SettingsLibSchedulesProvider",
+        "SettingsLibUtils",
     ],
 }
 

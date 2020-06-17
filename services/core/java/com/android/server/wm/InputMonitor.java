@@ -16,13 +16,17 @@
 
 package com.android.server.wm;
 
+import static android.os.Process.myPid;
+import static android.os.Process.myUid;
 import static android.os.Trace.TRACE_TAG_WINDOW_MANAGER;
 import static android.view.WindowManager.INPUT_CONSUMER_NAVIGATION;
 import static android.view.WindowManager.INPUT_CONSUMER_PIP;
 import static android.view.WindowManager.INPUT_CONSUMER_RECENTS_ANIMATION;
 import static android.view.WindowManager.INPUT_CONSUMER_WALLPAPER;
 import static android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL;
+import static android.view.WindowManager.LayoutParams.INPUT_FEATURE_NO_INPUT_CHANNEL;
 import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_DISABLE_WALLPAPER_TOUCH_EVENTS;
+import static android.view.WindowManager.LayoutParams.TYPE_SECURE_SYSTEM_OVERLAY;
 import static android.view.WindowManager.LayoutParams.TYPE_WALLPAPER;
 
 import static com.android.server.wm.ProtoLogGroup.WM_DEBUG_FOCUS_LIGHT;
@@ -469,8 +473,12 @@ final class InputMonitor {
         public void accept(WindowState w) {
             final InputChannel inputChannel = w.mInputChannel;
             final InputWindowHandle inputWindowHandle = w.mInputWindowHandle;
+            final RecentsAnimationController recentsAnimationController =
+                    mService.getRecentsAnimationController();
+            final boolean shouldApplyRecentsInputConsumer = recentsAnimationController != null
+                    && recentsAnimationController.shouldApplyInputConsumer(w.mActivityRecord);
             if (inputChannel == null || inputWindowHandle == null || w.mRemoved
-                    || w.cantReceiveTouchInput()) {
+                    || (w.cantReceiveTouchInput() && !shouldApplyRecentsInputConsumer)) {
                 if (w.mWinAnimator.hasSurface()) {
                     mInputTransaction.setInputWindowInfo(
                         w.mWinAnimator.mSurfaceController.getClientViewRootSurface(),
@@ -486,22 +494,16 @@ final class InputMonitor {
             final boolean hasFocus = w.isFocused();
             final boolean isVisible = w.isVisibleLw();
 
-            if (mAddRecentsAnimationInputConsumerHandle) {
-                final RecentsAnimationController recentsAnimationController =
-                        mService.getRecentsAnimationController();
-                if (recentsAnimationController != null
-                        && recentsAnimationController.shouldApplyInputConsumer(w.mActivityRecord)) {
-                    if (recentsAnimationController.updateInputConsumerForApp(
-                            mRecentsAnimationInputConsumer.mWindowHandle, hasFocus)) {
-                        mRecentsAnimationInputConsumer.show(mInputTransaction, w);
-                        mAddRecentsAnimationInputConsumerHandle = false;
-                    }
+            if (mAddRecentsAnimationInputConsumerHandle && shouldApplyRecentsInputConsumer) {
+                if (recentsAnimationController.updateInputConsumerForApp(
+                        mRecentsAnimationInputConsumer.mWindowHandle, hasFocus)) {
+                    mRecentsAnimationInputConsumer.show(mInputTransaction, w);
+                    mAddRecentsAnimationInputConsumerHandle = false;
                 }
             }
 
             if (w.inPinnedWindowingMode()) {
                 if (mAddPipInputConsumerHandle) {
-
                     final Task rootTask = w.getTask().getRootTask();
                     mPipInputConsumer.mWindowHandle.replaceTouchableRegionWithCrop(
                             rootTask.getSurfaceControl());
@@ -551,5 +553,27 @@ final class InputMonitor {
                     inputWindowHandle);
             }
         }
+    }
+
+    /**
+     * Helper function to generate an InputInfo with type SECURE_SYSTEM_OVERLAY. This input
+     * info will not have an input channel or be touchable, but is used to omit Surfaces
+     * from occlusion detection, so that System global overlays like the Watermark aren't
+     * counted by the InputDispatcher as occluding applications below.
+     */
+    static void setTrustedOverlayInputInfo(SurfaceControl sc, SurfaceControl.Transaction t,
+            int displayId, String name) {
+        InputWindowHandle inputWindowHandle = new InputWindowHandle(null, displayId);
+        inputWindowHandle.name = name;
+        inputWindowHandle.layoutParamsType = TYPE_SECURE_SYSTEM_OVERLAY;
+        inputWindowHandle.dispatchingTimeoutNanos = -1;
+        inputWindowHandle.visible = true;
+        inputWindowHandle.canReceiveKeys = false;
+        inputWindowHandle.hasFocus = false;
+        inputWindowHandle.ownerPid = myPid();
+        inputWindowHandle.ownerUid = myUid();
+        inputWindowHandle.inputFeatures = INPUT_FEATURE_NO_INPUT_CHANNEL;
+        inputWindowHandle.scaleFactor = 1;
+        t.setInputWindowInfo(sc, inputWindowHandle);
     }
 }

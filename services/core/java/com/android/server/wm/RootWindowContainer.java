@@ -327,7 +327,7 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
             documentData = isDocument ? intent.getData() : null;
 
             if (DEBUG_TASKS) Slog.d(TAG_TASKS, "Looking for task of " + target + " in " + parent);
-            parent.forAllTasks(this);
+            parent.forAllLeafTasks(this);
         }
 
         void clear() {
@@ -1369,7 +1369,7 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
         calculateDefaultMinimalSizeOfResizeableTasks();
 
         final TaskDisplayArea defaultTaskDisplayArea = getDefaultTaskDisplayArea();
-        defaultTaskDisplayArea.getOrCreateRootHomeTask();
+        defaultTaskDisplayArea.getOrCreateRootHomeTask(ON_TOP);
         positionChildAt(POSITION_TOP, defaultTaskDisplayArea.mDisplayContent,
                 false /* includingParents */);
     }
@@ -2170,12 +2170,16 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
             final boolean singleActivity = task.getChildCount() == 1;
             final ActivityStack stack;
             if (singleActivity) {
-                stack = r.getRootTask();
+                stack = (ActivityStack) task;
             } else {
                 // In the case of multiple activities, we will create a new task for it and then
                 // move the PIP activity into the task.
                 stack = taskDisplayArea.createStack(WINDOWING_MODE_UNDEFINED, r.getActivityType(),
                         ON_TOP, r.info, r.intent, false /* createdByOrganizer */);
+                // It's possible the task entering PIP is in freeform, so save the last
+                // non-fullscreen bounds. Then when this new PIP task exits PIP, it can restore
+                // to its previous freeform bounds.
+                stack.setLastNonFullscreenBounds(task.mLastNonFullscreenBounds);
 
                 // There are multiple activities in the task and moving the top activity should
                 // reveal/leave the other activities in their original task.
@@ -2183,6 +2187,19 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
                 // up-to-dated pinned stack information on this newly created stack.
                 r.reparent(stack, MAX_VALUE, reason);
             }
+            // The intermediate windowing mode to be set on the ActivityRecord later.
+            // This needs to happen before the re-parenting, otherwise we will always set the
+            // ActivityRecord to be fullscreen.
+            final int intermediateWindowingMode = stack.getWindowingMode();
+            if (stack.getParent() != taskDisplayArea) {
+                // stack is nested, but pinned tasks need to be direct children of their
+                // display area, so reparent.
+                stack.reparent(taskDisplayArea, true /* onTop */);
+            }
+            // Defer the windowing mode change until after the transition to prevent the activity
+            // from doing work and changing the activity visuals while animating
+            // TODO(task-org): Figure-out more structured way to do this long term.
+            r.setWindowingMode(intermediateWindowingMode);
             stack.setWindowingMode(WINDOWING_MODE_PINNED);
 
             // Reset the state that indicates it can enter PiP while pausing after we've moved it
@@ -3553,12 +3570,14 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
         }
     }
 
-    public void dump(PrintWriter pw, String prefix) {
+    @Override
+    public void dump(PrintWriter pw, String prefix, boolean dumpAll) {
+        super.dump(pw, prefix, dumpAll);
         pw.print(prefix);
         pw.println("topDisplayFocusedStack=" + getTopDisplayFocusedStack());
         for (int i = getChildCount() - 1; i >= 0; --i) {
             final DisplayContent display = getChildAt(i);
-            display.dump(pw, prefix, true /* dumpAll */);
+            display.dump(pw, prefix, dumpAll);
         }
         pw.println();
     }

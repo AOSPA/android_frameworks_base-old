@@ -26,7 +26,6 @@ import android.content.ContentResolver;
 import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
-import android.content.pm.UserInfo;
 import android.content.res.Resources;
 import android.graphics.Bitmap;
 import android.graphics.drawable.Icon;
@@ -124,6 +123,7 @@ class SaveImageInBackgroundTask extends AsyncTask<Void, Void, Void> {
         if (isCancelled()) {
             return null;
         }
+        Thread.currentThread().setPriority(Thread.MAX_PRIORITY);
 
         ContentResolver resolver = mContext.getContentResolver();
         Bitmap image = mParams.image;
@@ -146,7 +146,7 @@ class SaveImageInBackgroundTask extends AsyncTask<Void, Void, Void> {
             CompletableFuture<List<Notification.Action>> smartActionsFuture =
                     ScreenshotSmartActions.getSmartActionsFuture(
                             mScreenshotId, uri, image, mSmartActionsProvider,
-                            mSmartActionsEnabled, isManagedProfile(mContext));
+                            mSmartActionsEnabled, getUserHandle(mContext));
 
             try {
                 // First, write the actual data for our screenshot
@@ -215,6 +215,7 @@ class SaveImageInBackgroundTask extends AsyncTask<Void, Void, Void> {
             mImageData.deleteAction = createDeleteAction(mContext, mContext.getResources(), uri);
 
             mParams.mActionsReadyListener.onActionsReady(mImageData);
+            mParams.finisher.accept(mImageData.uri);
             mParams.image = null;
             mParams.errorMsgResId = 0;
         } catch (Exception e) {
@@ -225,22 +226,18 @@ class SaveImageInBackgroundTask extends AsyncTask<Void, Void, Void> {
             mParams.errorMsgResId = R.string.screenshot_failed_to_save_text;
             mImageData.reset();
             mParams.mActionsReadyListener.onActionsReady(mImageData);
+            mParams.finisher.accept(null);
         }
 
         return null;
     }
 
     /**
-     * If we get a new screenshot request while this one is saving, we want to continue saving in
-     * the background but not return anything.
+     * Update the listener run when the saving task completes. Used to avoid showing UI for the
+     * first screenshot when a second one is taken.
      */
-    void ignoreResult() {
-        mParams.mActionsReadyListener = new GlobalScreenshot.ActionsReadyListener() {
-            @Override
-            void onActionsReady(GlobalScreenshot.SavedImageData imageData) {
-                // do nothing
-            }
-        };
+    void setActionsReadyListener(GlobalScreenshot.ActionsReadyListener listener) {
+        mParams.mActionsReadyListener = listener;
     }
 
     @Override
@@ -331,7 +328,7 @@ class SaveImageInBackgroundTask extends AsyncTask<Void, Void, Void> {
         int requestCode = mContext.getUserId();
 
         // Create a edit action
-        PendingIntent editAction = PendingIntent.getBroadcastAsUser(context, requestCode,
+        PendingIntent editAction = PendingIntent.getBroadcast(context, requestCode,
                 new Intent(context, GlobalScreenshot.ActionProxyReceiver.class)
                         .putExtra(GlobalScreenshot.EXTRA_ACTION_INTENT, editIntent)
                         .putExtra(GlobalScreenshot.EXTRA_CANCEL_NOTIFICATION,
@@ -341,7 +338,7 @@ class SaveImageInBackgroundTask extends AsyncTask<Void, Void, Void> {
                                 mSmartActionsEnabled)
                         .setAction(Intent.ACTION_EDIT)
                         .addFlags(Intent.FLAG_RECEIVER_FOREGROUND),
-                PendingIntent.FLAG_CANCEL_CURRENT, UserHandle.SYSTEM);
+                PendingIntent.FLAG_CANCEL_CURRENT);
         Notification.Action.Builder editActionBuilder = new Notification.Action.Builder(
                 Icon.createWithResource(r, R.drawable.ic_screenshot_edit),
                 r.getString(com.android.internal.R.string.screenshot_edit), editAction);
@@ -382,10 +379,9 @@ class SaveImageInBackgroundTask extends AsyncTask<Void, Void, Void> {
         }
     }
 
-    private boolean isManagedProfile(Context context) {
+    private UserHandle getUserHandle(Context context) {
         UserManager manager = UserManager.get(context);
-        UserInfo info = manager.getUserInfo(getUserHandleOfForegroundApplication(context));
-        return info.isManagedProfile();
+        return manager.getUserInfo(getUserHandleOfForegroundApplication(context)).getUserHandle();
     }
 
     private List<Notification.Action> buildSmartActions(

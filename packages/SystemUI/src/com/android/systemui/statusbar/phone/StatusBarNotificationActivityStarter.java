@@ -45,7 +45,6 @@ import android.view.RemoteAnimationAdapter;
 import android.view.View;
 
 import com.android.internal.logging.MetricsLogger;
-import com.android.internal.statusbar.IStatusBarService;
 import com.android.internal.statusbar.NotificationVisibility;
 import com.android.internal.widget.LockPatternUtils;
 import com.android.systemui.ActivityIntentHelper;
@@ -59,6 +58,7 @@ import com.android.systemui.plugins.ActivityStarter;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.statusbar.CommandQueue;
 import com.android.systemui.statusbar.FeatureFlags;
+import com.android.systemui.statusbar.NotificationClickNotifier;
 import com.android.systemui.statusbar.NotificationLockscreenUserManager;
 import com.android.systemui.statusbar.NotificationPresenter;
 import com.android.systemui.statusbar.NotificationRemoteInputManager;
@@ -103,7 +103,7 @@ public class StatusBarNotificationActivityStarter implements NotificationActivit
     private final NotifCollection mNotifCollection;
     private final HeadsUpManagerPhone mHeadsUpManager;
     private final ActivityStarter mActivityStarter;
-    private final IStatusBarService mBarService;
+    private final NotificationClickNotifier mClickNotifier;
     private final StatusBarStateController mStatusBarStateController;
     private final StatusBarKeyguardViewManager mStatusBarKeyguardViewManager;
     private final KeyguardManager mKeyguardManager;
@@ -142,7 +142,7 @@ public class StatusBarNotificationActivityStarter implements NotificationActivit
             NotifCollection notifCollection,
             HeadsUpManagerPhone headsUpManager,
             ActivityStarter activityStarter,
-            IStatusBarService statusBarService,
+            NotificationClickNotifier clickNotifier,
             StatusBarStateController statusBarStateController,
             StatusBarKeyguardViewManager statusBarKeyguardViewManager,
             KeyguardManager keyguardManager,
@@ -177,7 +177,7 @@ public class StatusBarNotificationActivityStarter implements NotificationActivit
         mNotifCollection = notifCollection;
         mHeadsUpManager = headsUpManager;
         mActivityStarter = activityStarter;
-        mBarService = statusBarService;
+        mClickNotifier = clickNotifier;
         mStatusBarStateController = statusBarStateController;
         mStatusBarKeyguardViewManager = statusBarKeyguardViewManager;
         mKeyguardManager = keyguardManager;
@@ -350,7 +350,6 @@ public class StatusBarNotificationActivityStarter implements NotificationActivit
         }
         Intent fillInIntent = null;
         NotificationEntry entry = row.getEntry();
-        final boolean isBubble = entry.isBubble();
         CharSequence remoteInputText = null;
         if (!TextUtils.isEmpty(entry.remoteInputText)) {
             remoteInputText = entry.remoteInputText;
@@ -359,14 +358,15 @@ public class StatusBarNotificationActivityStarter implements NotificationActivit
             fillInIntent = new Intent().putExtra(Notification.EXTRA_REMOTE_INPUT_DRAFT,
                     remoteInputText.toString());
         }
-        if (isBubble) {
+        final boolean canBubble = entry.canBubble();
+        if (canBubble) {
             mLogger.logExpandingBubble(notificationKey);
-            expandBubbleStackOnMainThread(notificationKey);
+            expandBubbleStackOnMainThread(entry);
         } else {
             startNotificationIntent(
                     intent, fillInIntent, entry, row, wasOccluded, isActivityIntent);
         }
-        if (isActivityIntent || isBubble) {
+        if (isActivityIntent || canBubble) {
             mAssistManagerLazy.get().hideAssist();
         }
         if (shouldCollapse()) {
@@ -379,13 +379,9 @@ public class StatusBarNotificationActivityStarter implements NotificationActivit
                 NotificationLogger.getNotificationLocation(entry);
         final NotificationVisibility nv = NotificationVisibility.obtain(notificationKey,
                 rank, count, true, location);
-        try {
-            mBarService.onNotificationClick(notificationKey, nv);
-        } catch (RemoteException ex) {
-            // system process is dead if we're here.
-        }
+        mClickNotifier.onNotificationClick(notificationKey, nv);
 
-        if (!isBubble) {
+        if (!canBubble) {
             if (parentToCancelFinal != null) {
                 // TODO: (b/145659174) remove - this cancels the parent if the notification clicked
                 // on will auto-cancel and is the only child in the group. This won't be
@@ -402,12 +398,12 @@ public class StatusBarNotificationActivityStarter implements NotificationActivit
         mIsCollapsingToShowActivityOverLockscreen = false;
     }
 
-    private void expandBubbleStackOnMainThread(String notificationKey) {
+    private void expandBubbleStackOnMainThread(NotificationEntry entry) {
         if (Looper.getMainLooper().isCurrentThread()) {
-            mBubbleController.expandStackAndSelectBubble(notificationKey);
+            mBubbleController.expandStackAndSelectBubble(entry);
         } else {
             mMainThreadHandler.post(
-                    () -> mBubbleController.expandStackAndSelectBubble(notificationKey));
+                    () -> mBubbleController.expandStackAndSelectBubble(entry));
         }
     }
 
@@ -429,7 +425,9 @@ public class StatusBarNotificationActivityStarter implements NotificationActivit
             }
             int launchResult = intent.sendAndReturnResult(mContext, 0, fillInIntent, null,
                     null, null, getActivityOptions(adapter));
-            mActivityLaunchAnimator.setLaunchResult(launchResult, isActivityIntent);
+            mMainThreadHandler.post(() -> {
+                mActivityLaunchAnimator.setLaunchResult(launchResult, isActivityIntent);
+            });
         } catch (RemoteException | PendingIntent.CanceledException e) {
             // the stack trace isn't very helpful here.
             // Just log the exception message.
@@ -449,10 +447,11 @@ public class StatusBarNotificationActivityStarter implements NotificationActivit
                                 mActivityLaunchAnimator.getLaunchAnimation(
                                         row, mStatusBar.isOccluded())),
                                 new UserHandle(UserHandle.getUserId(appUid)));
-                mActivityLaunchAnimator.setLaunchResult(launchResult, true /* isActivityIntent */);
 
                 // Putting it back on the main thread, since we're touching views
                 mMainThreadHandler.post(() -> {
+                    mActivityLaunchAnimator.setLaunchResult(launchResult,
+                            true /* isActivityIntent */);
                     removeHUN(row);
                 });
                 if (shouldCollapse()) {
@@ -648,7 +647,7 @@ public class StatusBarNotificationActivityStarter implements NotificationActivit
         private final NotifCollection mNotifCollection;
         private final HeadsUpManagerPhone mHeadsUpManager;
         private final ActivityStarter mActivityStarter;
-        private final IStatusBarService mStatusBarService;
+        private final NotificationClickNotifier mClickNotifier;
         private final StatusBarStateController mStatusBarStateController;
         private final StatusBarKeyguardViewManager mStatusBarKeyguardViewManager;
         private final KeyguardManager mKeyguardManager;
@@ -686,7 +685,7 @@ public class StatusBarNotificationActivityStarter implements NotificationActivit
                 NotifCollection notifCollection,
                 HeadsUpManagerPhone headsUpManager,
                 ActivityStarter activityStarter,
-                IStatusBarService statusBarService,
+                NotificationClickNotifier clickNotifier,
                 StatusBarStateController statusBarStateController,
                 StatusBarKeyguardViewManager statusBarKeyguardViewManager,
                 KeyguardManager keyguardManager,
@@ -717,7 +716,7 @@ public class StatusBarNotificationActivityStarter implements NotificationActivit
             mNotifCollection = notifCollection;
             mHeadsUpManager = headsUpManager;
             mActivityStarter = activityStarter;
-            mStatusBarService = statusBarService;
+            mClickNotifier = clickNotifier;
             mStatusBarStateController = statusBarStateController;
             mStatusBarKeyguardViewManager = statusBarKeyguardViewManager;
             mKeyguardManager = keyguardManager;
@@ -774,7 +773,7 @@ public class StatusBarNotificationActivityStarter implements NotificationActivit
                     mNotifCollection,
                     mHeadsUpManager,
                     mActivityStarter,
-                    mStatusBarService,
+                    mClickNotifier,
                     mStatusBarStateController,
                     mStatusBarKeyguardViewManager,
                     mKeyguardManager,

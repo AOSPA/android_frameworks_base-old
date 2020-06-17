@@ -131,11 +131,11 @@ TEST_F(StatsCallbackPullerTest, PullSuccess) {
     EXPECT_TRUE(puller.PullInternal(&dataHolder));
     int64_t endTimeNs = getElapsedRealtimeNs();
 
-    EXPECT_EQ(1, dataHolder.size());
+    ASSERT_EQ(1, dataHolder.size());
     EXPECT_EQ(pullTagId, dataHolder[0]->GetTagId());
     EXPECT_LT(startTimeNs, dataHolder[0]->GetElapsedTimestampNs());
     EXPECT_GT(endTimeNs, dataHolder[0]->GetElapsedTimestampNs());
-    EXPECT_EQ(1, dataHolder[0]->size());
+    ASSERT_EQ(1, dataHolder[0]->size());
     EXPECT_EQ(value, dataHolder[0]->getValues()[0].mValue.int_value);
 }
 
@@ -149,13 +149,13 @@ TEST_F(StatsCallbackPullerTest, PullFail) {
 
     vector<shared_ptr<LogEvent>> dataHolder;
     EXPECT_FALSE(puller.PullInternal(&dataHolder));
-    EXPECT_EQ(0, dataHolder.size());
+    ASSERT_EQ(0, dataHolder.size());
 }
 
 TEST_F(StatsCallbackPullerTest, PullTimeout) {
     shared_ptr<FakePullAtomCallback> cb = SharedRefBase::make<FakePullAtomCallback>();
     pullSuccess = true;
-    pullDelayNs = 500000000;  // 500ms.
+    pullDelayNs = MillisToNano(5);  // 5ms.
     pullTimeoutNs = 10000;    // 10 microseconds.
     int64_t value = 4321;
     values.push_back(value);
@@ -173,18 +173,18 @@ TEST_F(StatsCallbackPullerTest, PullTimeout) {
     // is bigger.
     EXPECT_LT(pullTimeoutNs, actualPullDurationNs);
     EXPECT_GT(pullDelayNs, actualPullDurationNs);
-    EXPECT_EQ(0, dataHolder.size());
+    ASSERT_EQ(0, dataHolder.size());
 
     // Let the pull return and make sure that the dataHolder is not modified.
     pullThread.join();
-    EXPECT_EQ(0, dataHolder.size());
+    ASSERT_EQ(0, dataHolder.size());
 }
 
 // Register a puller and ensure that the timeout logic works.
 TEST_F(StatsCallbackPullerTest, RegisterAndTimeout) {
     shared_ptr<FakePullAtomCallback> cb = SharedRefBase::make<FakePullAtomCallback>();
     pullSuccess = true;
-    pullDelayNs = 500000000;  // 500 ms.
+    pullDelayNs = MillisToNano(5);  // 5 ms.
     pullTimeoutNs = 10000;    // 10 microsseconds.
     int64_t value = 4321;
     int32_t uid = 123;
@@ -196,19 +196,19 @@ TEST_F(StatsCallbackPullerTest, RegisterAndTimeout) {
     vector<shared_ptr<LogEvent>> dataHolder;
     int64_t startTimeNs = getElapsedRealtimeNs();
     // Returns false, since StatsPuller code will evaluate the timeout.
-    EXPECT_FALSE(pullerManager->Pull(pullTagId, {uid}, &dataHolder));
+    EXPECT_FALSE(pullerManager->Pull(pullTagId, {uid}, startTimeNs, &dataHolder));
     int64_t endTimeNs = getElapsedRealtimeNs();
     int64_t actualPullDurationNs = endTimeNs - startTimeNs;
 
     // Pull should take at least the timeout amount of time, but should stop early because the delay
-    // is bigger.
+    // is bigger. Make sure that the time is closer to the timeout, than to the intended delay.
     EXPECT_LT(pullTimeoutNs, actualPullDurationNs);
-    EXPECT_GT(pullDelayNs, actualPullDurationNs);
-    EXPECT_EQ(0, dataHolder.size());
+    EXPECT_GT(pullDelayNs / 5, actualPullDurationNs);
+    ASSERT_EQ(0, dataHolder.size());
 
     // Let the pull return and make sure that the dataHolder is not modified.
     pullThread.join();
-    EXPECT_EQ(0, dataHolder.size());
+    ASSERT_EQ(0, dataHolder.size());
 }
 
 }  // namespace statsd

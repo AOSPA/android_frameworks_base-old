@@ -125,7 +125,7 @@ constructor(
     }
 
     private fun canHandleMotionEvent(): Boolean {
-        return !wakeUpCoordinator.canShowPulsingHuns || qsExpanded || bouncerShowing
+        return wakeUpCoordinator.canShowPulsingHuns && !qsExpanded && !bouncerShowing
     }
 
     private fun startExpansion(event: MotionEvent): Boolean {
@@ -184,7 +184,6 @@ constructor(
         if (!isExpanding || event.actionMasked == MotionEvent.ACTION_DOWN) {
             return startExpansion(event)
         }
-
         velocityTracker!!.addMovement(event)
         val y = event.y
 

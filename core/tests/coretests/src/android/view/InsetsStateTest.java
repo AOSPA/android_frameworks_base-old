@@ -20,11 +20,15 @@ import static android.view.InsetsState.ISIDE_BOTTOM;
 import static android.view.InsetsState.ISIDE_TOP;
 import static android.view.InsetsState.ITYPE_BOTTOM_GESTURES;
 import static android.view.InsetsState.ITYPE_CAPTION_BAR;
+import static android.view.InsetsState.ITYPE_CLIMATE_BAR;
+import static android.view.InsetsState.ITYPE_EXTRA_NAVIGATION_BAR;
 import static android.view.InsetsState.ITYPE_IME;
 import static android.view.InsetsState.ITYPE_NAVIGATION_BAR;
 import static android.view.InsetsState.ITYPE_STATUS_BAR;
 import static android.view.View.SYSTEM_UI_FLAG_LAYOUT_STABLE;
 import static android.view.WindowInsets.Type.ime;
+import static android.view.WindowInsets.Type.navigationBars;
+import static android.view.WindowInsets.Type.statusBars;
 import static android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING;
 import static android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_PAN;
 import static android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE;
@@ -183,6 +187,38 @@ public class InsetsStateTest {
     }
 
     @Test
+    public void testCalculateInsets_extraNavRightStatusTop() throws Exception {
+        try (InsetsModeSession session =
+                     new InsetsModeSession(ViewRootImpl.NEW_INSETS_MODE_FULL)) {
+            mState.getSource(ITYPE_STATUS_BAR).setFrame(new Rect(0, 0, 100, 100));
+            mState.getSource(ITYPE_STATUS_BAR).setVisible(true);
+            mState.getSource(ITYPE_EXTRA_NAVIGATION_BAR).setFrame(new Rect(80, 0, 100, 300));
+            mState.getSource(ITYPE_EXTRA_NAVIGATION_BAR).setVisible(true);
+            WindowInsets insets = mState.calculateInsets(new Rect(0, 0, 100, 300), null, false,
+                    false, DisplayCutout.NO_CUTOUT, 0, 0, null);
+            assertEquals(Insets.of(0, 100, 20, 0), insets.getSystemWindowInsets());
+            assertEquals(Insets.of(0, 100, 0, 0), insets.getInsets(Type.statusBars()));
+            assertEquals(Insets.of(0, 0, 20, 0), insets.getInsets(Type.navigationBars()));
+        }
+    }
+
+    @Test
+    public void testCalculateInsets_navigationRightClimateTop() throws Exception {
+        try (InsetsModeSession session =
+                     new InsetsModeSession(ViewRootImpl.NEW_INSETS_MODE_FULL)) {
+            mState.getSource(ITYPE_CLIMATE_BAR).setFrame(new Rect(0, 0, 100, 100));
+            mState.getSource(ITYPE_CLIMATE_BAR).setVisible(true);
+            mState.getSource(ITYPE_NAVIGATION_BAR).setFrame(new Rect(80, 0, 100, 300));
+            mState.getSource(ITYPE_NAVIGATION_BAR).setVisible(true);
+            WindowInsets insets = mState.calculateInsets(new Rect(0, 0, 100, 300), null, false,
+                    false, DisplayCutout.NO_CUTOUT, 0, 0, null);
+            assertEquals(Insets.of(0, 100, 20, 0), insets.getSystemWindowInsets());
+            assertEquals(Insets.of(0, 100, 0, 0), insets.getInsets(Type.statusBars()));
+            assertEquals(Insets.of(0, 0, 20, 0), insets.getInsets(Type.navigationBars()));
+        }
+    }
+
+    @Test
     public void testStripForDispatch() {
         mState.getSource(ITYPE_STATUS_BAR).setFrame(new Rect(0, 0, 100, 100));
         mState.getSource(ITYPE_STATUS_BAR).setVisible(true);
@@ -304,6 +340,26 @@ public class InsetsStateTest {
             Rect visibleInsets = mState.calculateVisibleInsets(
                     new Rect(0, 0, 100, 300), SOFT_INPUT_ADJUST_NOTHING);
             assertEquals(new Rect(0, 100, 0, 0), visibleInsets);
+        }
+    }
+
+    @Test
+    public void testCalculateUncontrollableInsets() throws Exception {
+        try (InsetsModeSession session = new InsetsModeSession(ViewRootImpl.NEW_INSETS_MODE_FULL)) {
+            mState.getSource(ITYPE_STATUS_BAR).setFrame(new Rect(0, 0, 200, 100));
+            mState.getSource(ITYPE_STATUS_BAR).setVisible(true);
+            mState.getSource(ITYPE_IME).setFrame(new Rect(0, 200, 200, 300));
+            mState.getSource(ITYPE_IME).setVisible(true);
+            mState.getSource(ITYPE_NAVIGATION_BAR).setFrame(new Rect(100, 0, 200, 300));
+            mState.getSource(ITYPE_NAVIGATION_BAR).setVisible(true);
+
+            mState.setDisplayFrame(new Rect(0, 0, 200, 300));
+            assertEquals(0,
+                    mState.calculateUncontrollableInsetsFromFrame(new Rect(0, 0, 200, 300)));
+            assertEquals(statusBars() | ime(),
+                    mState.calculateUncontrollableInsetsFromFrame(new Rect(0, 50, 200, 250)));
+            assertEquals(navigationBars(),
+                    mState.calculateUncontrollableInsetsFromFrame(new Rect(50, 0, 150, 300)));
         }
     }
 

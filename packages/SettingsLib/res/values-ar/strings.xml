@@ -195,7 +195,7 @@
   </string-array>
     <string name="choose_profile" msgid="343803890897657450">"اختيار ملف شخصي"</string>
     <string name="category_personal" msgid="6236798763159385225">"شخصي"</string>
-    <string name="category_work" msgid="4014193632325996115">"العمل"</string>
+    <string name="category_work" msgid="4014193632325996115">"للعمل"</string>
     <string name="development_settings_title" msgid="140296922921597393">"خيارات مطور البرامج"</string>
     <string name="development_settings_enable" msgid="4285094651288242183">"تفعيل خيارات المطورين"</string>
     <string name="development_settings_summary" msgid="8718917813868735095">"تعيين خيارات تطوير التطبيق"</string>
@@ -279,7 +279,7 @@
     <string name="private_dns_mode_off" msgid="7065962499349997041">"غير مفعّل"</string>
     <string name="private_dns_mode_opportunistic" msgid="1947864819060442354">"تلقائي"</string>
     <string name="private_dns_mode_provider" msgid="3619040641762557028">"اسم مضيف مزوّد \"نظام أسماء النطاقات الخاص\""</string>
-    <string name="private_dns_mode_provider_hostname_hint" msgid="6564868953748514595">"يُرجى إدخال اسم مضيف \"مزوّد نظام أسماء النطاقات\""</string>
+    <string name="private_dns_mode_provider_hostname_hint" msgid="6564868953748514595">"‏يُرجى إدخال اسم مضيف DNS"</string>
     <string name="private_dns_mode_provider_failure" msgid="8356259467861515108">"تعذّر الاتصال"</string>
     <string name="wifi_display_certification_summary" msgid="8111151348106907513">"عرض خيارات شهادة عرض شاشة لاسلكي"</string>
     <string name="wifi_verbose_logging_summary" msgid="4993823188807767892">"‏زيادة مستوى تسجيل Wi-Fi، وعرض لكل SSID RSSI في منتقي Wi-Fi"</string>
@@ -318,10 +318,10 @@
     <string name="hdcp_checking_title" msgid="3155692785074095986">"‏التحقق من HDCP"</string>
     <string name="hdcp_checking_dialog_title" msgid="7691060297616217781">"‏تعيين سلوك التحقق من HDCP"</string>
     <string name="debug_debugging_category" msgid="535341063709248842">"تصحيح الأخطاء"</string>
-    <string name="debug_app" msgid="8903350241392391766">"تحديد التطبيق لتصحيحه"</string>
+    <string name="debug_app" msgid="8903350241392391766">"اختيار التطبيق لتصحيحه"</string>
     <string name="debug_app_not_set" msgid="1934083001283807188">"لم يتم تعيين تطبيق لتصحيحه"</string>
     <string name="debug_app_set" msgid="6599535090477753651">"تطبيق التصحيح: <xliff:g id="APP_NAME">%1$s</xliff:g>"</string>
-    <string name="select_application" msgid="2543228890535466325">"تحديد تطبيق"</string>
+    <string name="select_application" msgid="2543228890535466325">"اختيار تطبيق"</string>
     <string name="no_application" msgid="9038334538870247690">"لا شيء"</string>
     <string name="wait_for_debugger" msgid="7461199843335409809">"انتظار برنامج التصحيح"</string>
     <string name="wait_for_debugger_summary" msgid="6846330006113363286">"ينتظر التطبيق قيد التصحيح انضمام برنامج التصحيح قبل التنفيذ"</string>
@@ -388,7 +388,7 @@
     <string name="loading_injected_setting_summary" msgid="8394446285689070348">"جارٍ التحميل…"</string>
   <string-array name="color_mode_names">
     <item msgid="3836559907767149216">"نابض بالحياة (تلقائي)"</item>
-    <item msgid="9112200311983078311">"طبيعي"</item>
+    <item msgid="9112200311983078311">"طبيعية"</item>
     <item msgid="6564241960833766170">"عادي"</item>
   </string-array>
   <string-array name="color_mode_descriptions">
@@ -428,10 +428,10 @@
     <string name="power_discharging_duration_enhanced" msgid="1800465736237672323">"يتبقى <xliff:g id="TIME_REMAINING">%1$s</xliff:g> تقريبًا، بناءً على استخدامك (<xliff:g id="LEVEL">%2$s</xliff:g>)"</string>
     <!-- no translation found for power_remaining_duration_only_short (7438846066602840588) -->
     <skip />
-    <string name="power_discharge_by_enhanced" msgid="563438403581662942">"قد تكفي طاقة البطارية حتى حوالي الساعة <xliff:g id="TIME">%1$s</xliff:g> حسب استخدامك (<xliff:g id="LEVEL">%2$s</xliff:g>)."</string>
-    <string name="power_discharge_by_only_enhanced" msgid="3268796172652988877">"قد تكفي طاقة البطارية حتى حوالي الساعة <xliff:g id="TIME">%1$s</xliff:g> حسب استخدامك."</string>
-    <string name="power_discharge_by" msgid="4113180890060388350">"قد تكفي طاقة البطارية حتى حوالي الساعة <xliff:g id="TIME">%1$s</xliff:g> (<xliff:g id="LEVEL">%2$s</xliff:g>)."</string>
-    <string name="power_discharge_by_only" msgid="92545648425937000">"قد تكفي طاقة البطارية حتى حوالي الساعة <xliff:g id="TIME">%1$s</xliff:g>."</string>
+    <string name="power_discharge_by_enhanced" msgid="563438403581662942">"يُفترض أن تكفي طاقة البطارية حتى حوالي الساعة <xliff:g id="TIME">%1$s</xliff:g> حسب استخدامك (<xliff:g id="LEVEL">%2$s</xliff:g>)."</string>
+    <string name="power_discharge_by_only_enhanced" msgid="3268796172652988877">"يُفترض أن تكفي طاقة البطارية حتى حوالي الساعة <xliff:g id="TIME">%1$s</xliff:g> حسب استخدامك."</string>
+    <string name="power_discharge_by" msgid="4113180890060388350">"يُفترض أن تكفي طاقة البطارية حتى حوالي الساعة <xliff:g id="TIME">%1$s</xliff:g> (<xliff:g id="LEVEL">%2$s</xliff:g>)."</string>
+    <string name="power_discharge_by_only" msgid="92545648425937000">"يُفترض أن تكفي طاقة البطارية حتى حوالي الساعة <xliff:g id="TIME">%1$s</xliff:g>."</string>
     <string name="power_discharge_by_only_short" msgid="5883041507426914446">"حتى <xliff:g id="TIME">%1$s</xliff:g>"</string>
     <string name="power_suggestion_battery_run_out" msgid="6332089307827787087">"قد ينفد شحن البطارية قبل <xliff:g id="TIME">%1$s</xliff:g>."</string>
     <string name="power_remaining_less_than_duration_only" msgid="8956656616031395152">"سيبقى شحن البطارية أقل من <xliff:g id="THRESHOLD">%1$s</xliff:g>."</string>
@@ -553,14 +553,9 @@
     <string name="guest_new_guest" msgid="3482026122932643557">"إضافة ضيف"</string>
     <string name="guest_exit_guest" msgid="5908239569510734136">"إزالة جلسة الضيف"</string>
     <string name="guest_nickname" msgid="6332276931583337261">"ضيف"</string>
-    <!-- no translation found for cached_apps_freezer_device_default (2616594131750144342) -->
-    <skip />
-    <!-- no translation found for cached_apps_freezer_disabled (4816382260660472042) -->
-    <skip />
-    <!-- no translation found for cached_apps_freezer_enabled (8866703500183051546) -->
-    <skip />
-    <!-- no translation found for cached_apps_freezer_reboot_dialog_text (695330563489230096) -->
-    <skip />
-    <!-- no translation found for accessibility_work_profile_app_description (5470883112342119165) -->
-    <skip />
+    <string name="cached_apps_freezer_device_default" msgid="2616594131750144342">"الإعداد التلقائي للجهاز"</string>
+    <string name="cached_apps_freezer_disabled" msgid="4816382260660472042">"غير مفعّل"</string>
+    <string name="cached_apps_freezer_enabled" msgid="8866703500183051546">"مفعّل"</string>
+    <string name="cached_apps_freezer_reboot_dialog_text" msgid="695330563489230096">"يجب إعادة تشغيل جهازك ليتم تطبيق هذا التغيير. يمكنك إعادة التشغيل الآن أو إلغاء التغيير."</string>
+    <string name="media_transfer_wired_usb_device_name" msgid="7699141088423210903">"سمّاعة سلكية"</string>
 </resources>

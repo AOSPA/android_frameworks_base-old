@@ -100,7 +100,7 @@ public final class WifiNetworkSuggestion implements Parcelable {
         /**
          * Whether this network is metered or not.
          */
-        private boolean mIsMetered;
+        private int mMeteredOverride;
         /**
          * Priority of this network among other network suggestions provided by the app.
          * The lower the number, the higher the priority (i.e value of 0 = highest priority).
@@ -156,7 +156,7 @@ public final class WifiNetworkSuggestion implements Parcelable {
             mIsHiddenSSID = false;
             mIsAppInteractionRequired = false;
             mIsUserInteractionRequired = false;
-            mIsMetered = false;
+            mMeteredOverride = WifiConfiguration.METERED_OVERRIDE_NONE;
             mIsSharedWithUser = true;
             mIsSharedWithUserSet = false;
             mIsInitialAutojoinEnabled = true;
@@ -257,28 +257,38 @@ public final class WifiNetworkSuggestion implements Parcelable {
 
         /**
          * Set the associated enterprise configuration for this network. Needed for authenticating
-         * to WPA2-EAP networks. See {@link WifiEnterpriseConfig} for description.
+         * to WPA2 enterprise networks. See {@link WifiEnterpriseConfig} for description.
          *
          * @param enterpriseConfig Instance of {@link WifiEnterpriseConfig}.
          * @return Instance of {@link Builder} to enable chaining of the builder method.
+         * @throws IllegalArgumentException if configuration CA certificate or
+         *                                  AltSubjectMatch/DomainSuffixMatch is not set.
          */
         public @NonNull Builder setWpa2EnterpriseConfig(
                 @NonNull WifiEnterpriseConfig enterpriseConfig) {
             checkNotNull(enterpriseConfig);
+            if (enterpriseConfig.isInsecure()) {
+                throw new IllegalArgumentException("Enterprise configuration is insecure");
+            }
             mWpa2EnterpriseConfig = new WifiEnterpriseConfig(enterpriseConfig);
             return this;
         }
 
         /**
          * Set the associated enterprise configuration for this network. Needed for authenticating
-         * to WPA3-SuiteB networks. See {@link WifiEnterpriseConfig} for description.
+         * to WPA3 enterprise networks. See {@link WifiEnterpriseConfig} for description.
          *
          * @param enterpriseConfig Instance of {@link WifiEnterpriseConfig}.
          * @return Instance of {@link Builder} to enable chaining of the builder method.
+         * @throws IllegalArgumentException if configuration CA certificate or
+         *                                  AltSubjectMatch/DomainSuffixMatch is not set.
          */
         public @NonNull Builder setWpa3EnterpriseConfig(
                 @NonNull WifiEnterpriseConfig enterpriseConfig) {
             checkNotNull(enterpriseConfig);
+            if (enterpriseConfig.isInsecure()) {
+                throw new IllegalArgumentException("Enterprise configuration is insecure");
+            }
             mWpa3EnterpriseConfig = new WifiEnterpriseConfig(enterpriseConfig);
             return this;
         }
@@ -421,14 +431,18 @@ public final class WifiNetworkSuggestion implements Parcelable {
         /**
          * Specifies whether this network is metered.
          * <p>
-         * <li>If not set, defaults to false (i.e not metered).</li>
+         * <li>If not set, defaults to detect automatically.</li>
          *
          * @param isMetered {@code true} to indicate that the network is metered, {@code false}
-         *                  otherwise.
+         *                  for not metered.
          * @return Instance of {@link Builder} to enable chaining of the builder method.
          */
         public @NonNull Builder setIsMetered(boolean isMetered) {
-            mIsMetered = isMetered;
+            if (isMetered) {
+                mMeteredOverride = WifiConfiguration.METERED_OVERRIDE_METERED;
+            } else {
+                mMeteredOverride = WifiConfiguration.METERED_OVERRIDE_NOT_METERED;
+            }
             return this;
         }
 
@@ -541,9 +555,7 @@ public final class WifiNetworkSuggestion implements Parcelable {
 
             wifiConfiguration.hiddenSSID = mIsHiddenSSID;
             wifiConfiguration.priority = mPriority;
-            wifiConfiguration.meteredOverride =
-                    mIsMetered ? WifiConfiguration.METERED_OVERRIDE_METERED
-                            : WifiConfiguration.METERED_OVERRIDE_NOT_METERED;
+            wifiConfiguration.meteredOverride = mMeteredOverride;
             wifiConfiguration.carrierId = mCarrierId;
             wifiConfiguration.trusted = !mIsNetworkUntrusted;
             return wifiConfiguration;
@@ -572,9 +584,7 @@ public final class WifiNetworkSuggestion implements Parcelable {
             wifiConfiguration.FQDN = mPasspointConfiguration.getHomeSp().getFqdn();
             wifiConfiguration.setPasspointUniqueId(mPasspointConfiguration.getUniqueId());
             wifiConfiguration.priority = mPriority;
-            wifiConfiguration.meteredOverride =
-                    mIsMetered ? WifiConfiguration.METERED_OVERRIDE_METERED
-                            : WifiConfiguration.METERED_OVERRIDE_NONE;
+            wifiConfiguration.meteredOverride = mMeteredOverride;
             wifiConfiguration.trusted = !mIsNetworkUntrusted;
             mPasspointConfiguration.setCarrierId(mCarrierId);
             mPasspointConfiguration.setMeteredOverride(wifiConfiguration.meteredOverride);

@@ -142,7 +142,8 @@ public final class AccessibilityUtils {
      */
     public static boolean isAccessibilityServiceEnabled(Context context,
             @NonNull String componentId) {
-        final AccessibilityManager am = context.getSystemService(AccessibilityManager.class);
+        final AccessibilityManager am = (AccessibilityManager) context.getSystemService(
+                Context.ACCESSIBILITY_SERVICE);
         final List<AccessibilityServiceInfo> enabledServices =
                 am.getEnabledAccessibilityServiceList(AccessibilityServiceInfo.FEEDBACK_ALL_MASK);
 
@@ -154,5 +155,17 @@ public final class AccessibilityUtils {
         }
 
         return false;
+    }
+
+    /**
+     * Indicates whether the current user has completed setup via the setup wizard.
+     * {@link android.provider.Settings.Secure#USER_SETUP_COMPLETE}
+     *
+     * @return {@code true} if the setup is completed.
+     */
+    public static boolean isUserSetupCompleted(Context context) {
+        return Settings.Secure.getIntForUser(context.getContentResolver(),
+                Settings.Secure.USER_SETUP_COMPLETE, /* def= */ 0, UserHandle.USER_CURRENT)
+                != /* false */ 0;
     }
 }

@@ -19,8 +19,10 @@ package com.android.systemui.statusbar.notification.collection;
 import static com.android.systemui.statusbar.notification.collection.ListDumper.dumpTree;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyLong;
@@ -33,6 +35,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 
+import android.os.SystemClock;
 import android.testing.AndroidTestingRunner;
 import android.testing.TestableLooper;
 import android.util.ArrayMap;
@@ -41,6 +44,7 @@ import androidx.test.filters.SmallTest;
 
 import com.android.systemui.SysuiTestCase;
 import com.android.systemui.dump.DumpManager;
+import com.android.systemui.statusbar.NotificationInteractionTracker;
 import com.android.systemui.statusbar.notification.collection.ShadeListBuilder.OnRenderListListener;
 import com.android.systemui.statusbar.notification.collection.listbuilder.OnBeforeFinalizeFilterListener;
 import com.android.systemui.statusbar.notification.collection.listbuilder.OnBeforeRenderListListener;
@@ -83,6 +87,7 @@ public class ShadeListBuilderTest extends SysuiTestCase {
 
     @Mock private ShadeListBuilderLogger mLogger;
     @Mock private NotifCollection mNotifCollection;
+    @Mock private NotificationInteractionTracker mInteractionTracker;
     @Spy private OnBeforeTransformGroupsListener mOnBeforeTransformGroupsListener;
     @Spy private OnBeforeSortListener mOnBeforeSortListener;
     @Spy private OnBeforeFinalizeFilterListener mOnBeforeFinalizeFilterListener;
@@ -104,7 +109,8 @@ public class ShadeListBuilderTest extends SysuiTestCase {
         MockitoAnnotations.initMocks(this);
         allowTestableLooperAsMainThread();
 
-        mListBuilder = new ShadeListBuilder(mSystemClock, mLogger, mock(DumpManager.class));
+        mListBuilder = new ShadeListBuilder(
+                mSystemClock, mLogger, mock(DumpManager.class), mInteractionTracker);
         mListBuilder.setOnRenderListListener(mOnRenderListListener);
 
         mListBuilder.attach(mNotifCollection);
@@ -472,6 +478,28 @@ public class ShadeListBuilderTest extends SysuiTestCase {
 
         // THEN each filtered notif records the filter that did it
         assertEquals(filter1, mEntrySet.get(0).getExcludingFilter());
+    }
+
+    @Test
+    public void testFilter_resetsInitalizationTime() {
+        // GIVEN a NotifFilter that filters out a specific package
+        NotifFilter filter1 = spy(new PackageFilter(PACKAGE_1));
+        mListBuilder.addFinalizeFilter(filter1);
+
+        // GIVEN a notification that was initialized 1 second ago that will be filtered out
+        final NotificationEntry entry = new NotificationEntryBuilder()
+                .setPkg(PACKAGE_1)
+                .setId(nextId(PACKAGE_1))
+                .setRank(nextRank())
+                .build();
+        entry.setInitializationTime(SystemClock.elapsedRealtime() - 1000);
+        assertTrue(entry.hasFinishedInitialization());
+
+        // WHEN the pipeline is kicked off
+        mReadyForBuildListener.onBuildList(Arrays.asList(entry));
+
+        // THEN the entry's initialization time is reset
+        assertFalse(entry.hasFinishedInitialization());
     }
 
     @Test
@@ -1255,7 +1283,7 @@ public class ShadeListBuilderTest extends SysuiTestCase {
         } catch (AssertionError err) {
             throw new AssertionError(
                     "List under test failed verification:\n" + dumpTree(mBuiltList,
-                            true, ""), err);
+                            mInteractionTracker, true, ""), err);
         }
     }
 

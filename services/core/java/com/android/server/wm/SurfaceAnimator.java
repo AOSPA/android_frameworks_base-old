@@ -109,7 +109,10 @@ class SurfaceAnimator {
                         animationFinishCallback.onAnimationFinished(type, anim);
                     }
                 };
-                if (!mAnimatable.shouldDeferAnimationFinish(resetAndInvokeFinish)) {
+                // If both the Animatable and AnimationAdapter requests to be deferred, only the
+                // first one will be called.
+                if (!(mAnimatable.shouldDeferAnimationFinish(resetAndInvokeFinish)
+                        || anim.shouldDeferAnimationFinish(resetAndInvokeFinish))) {
                     resetAndInvokeFinish.run();
                 }
             }
@@ -385,18 +388,15 @@ class SurfaceAnimator {
         final SurfaceControl.Builder builder = animatable.makeAnimationLeash()
                 .setParent(animatable.getAnimationLeashParent())
                 .setName(surface + " - animation-leash")
-                .setColorLayer();
+                // TODO(b/151665759) Defer reparent calls
+                // We want the leash to be visible immediately because the transaction which shows
+                // the leash may be deferred but the reparent will not. This will cause the leashed
+                // surface to be invisible until the deferred transaction is applied. If this
+                // doesn't work, you will can see the 2/3 button nav bar flicker during seamless
+                // rotation.
+                .setHidden(hidden)
+                .setEffectLayer();
         final SurfaceControl leash = builder.build();
-        if (!hidden) {
-            // TODO(b/151665759) Defer reparent calls
-            // We want the leash to be visible immediately but we want to set the effects on
-            // the layer. Since the transaction used in this function may be deferred, we apply
-            // another transaction immediately with the correct visibility and effects.
-            // If this doesn't work, you will can see the 2/3 button nav bar flicker during
-            // seamless rotation.
-            transactionFactory.get().unsetColor(leash).show(leash).apply();
-        }
-        t.unsetColor(leash);
         t.setWindowCrop(leash, width, height);
         t.setPosition(leash, x, y);
         t.show(leash);
@@ -428,16 +428,11 @@ class SurfaceAnimator {
 
     void dump(PrintWriter pw, String prefix) {
         pw.print(prefix); pw.print("mLeash="); pw.print(mLeash);
-        if (mAnimationStartDelayed) {
-            pw.print(" mAnimationStartDelayed="); pw.println(mAnimationStartDelayed);
-        } else {
-            pw.println();
-        }
-        pw.print(prefix); pw.println("Animation:");
+        pw.print(" mAnimationType=" + mAnimationType);
+        pw.println(mAnimationStartDelayed ? " mAnimationStartDelayed=true" : "");
+        pw.print(prefix); pw.print("Animation: "); pw.println(mAnimation);
         if (mAnimation != null) {
             mAnimation.dump(pw, prefix + "  ");
-        } else {
-            pw.print(prefix); pw.println("null");
         }
     }
 
@@ -486,6 +481,12 @@ class SurfaceAnimator {
     static final int ANIMATION_TYPE_INSETS_CONTROL = 1 << 5;
 
     /**
+     * Animation when a fixed rotation transform is applied to a window token.
+     * @hide
+     */
+    static final int ANIMATION_TYPE_FIXED_TRANSFORM = 1 << 6;
+
+    /**
      * Bitmask to include all animation types. This is NOT an {@link AnimationType}
      * @hide
      */
@@ -502,7 +503,8 @@ class SurfaceAnimator {
             ANIMATION_TYPE_DIMMER,
             ANIMATION_TYPE_RECENTS,
             ANIMATION_TYPE_WINDOW_ANIMATION,
-            ANIMATION_TYPE_INSETS_CONTROL
+            ANIMATION_TYPE_INSETS_CONTROL,
+            ANIMATION_TYPE_FIXED_TRANSFORM
     })
     @Retention(RetentionPolicy.SOURCE)
     @interface AnimationType {}
@@ -592,6 +594,12 @@ class SurfaceAnimator {
          * Gets called when the animation is about to finish and gives the client the opportunity to
          * defer finishing the animation, i.e. it keeps the leash around until the client calls
          * {@link #cancelAnimation}.
+         * <p>
+         * {@link AnimationAdapter} has a similar method which is called only if this method returns
+         * false. This mean that if both this {@link Animatable} and the {@link AnimationAdapter}
+         * request to be deferred, this method is the sole responsible to call
+         * endDeferFinishCallback. On the other hand, the animation finish might still be deferred
+         * if this method return false and the one from the {@link AnimationAdapter} returns true.
          *
          * @param endDeferFinishCallback The callback to call when defer finishing should be ended.
          * @return Whether the client would like to defer the animation finish.

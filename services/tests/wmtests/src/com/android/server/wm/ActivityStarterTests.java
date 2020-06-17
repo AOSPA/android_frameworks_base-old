@@ -49,6 +49,7 @@ import static com.android.dx.mockito.inline.extended.ExtendedMockito.spy;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.spyOn;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.times;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.verify;
+import static com.android.server.wm.ActivityStackSupervisor.PRESERVE_WINDOWS;
 import static com.android.server.wm.WindowContainer.POSITION_BOTTOM;
 import static com.android.server.wm.WindowContainer.POSITION_TOP;
 
@@ -56,10 +57,10 @@ import static com.google.common.truth.Truth.assertThat;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
-import static org.mockito.ArgumentMatchers.anyObject;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 
@@ -100,7 +101,6 @@ import org.junit.runner.RunWith;
 @Presubmit
 @RunWith(WindowTestRunner.class)
 public class ActivityStarterTests extends ActivityTestsBase {
-    private ActivityStarter mStarter;
     private ActivityStartController mController;
     private ActivityMetricsLogger mActivityMetricsLogger;
     private PackageManagerInternal mMockPackageManager;
@@ -128,8 +128,6 @@ public class ActivityStarterTests extends ActivityTestsBase {
         mController = mock(ActivityStartController.class);
         mActivityMetricsLogger = mock(ActivityMetricsLogger.class);
         clearInvocations(mActivityMetricsLogger);
-        mStarter = new ActivityStarter(mController, mService, mService.mStackSupervisor,
-                mock(ActivityStartInterceptor.class));
     }
 
     @Test
@@ -182,6 +180,7 @@ public class ActivityStarterTests extends ActivityTestsBase {
      * {@link ActivityStarter#execute} based on these preconditions and ensures the result matches
      * the expected. It is important to note that the method also checks side effects of the start,
      * such as ensuring {@link ActivityOptions#abort()} is called in the relevant scenarios.
+     *
      * @param preconditions A bitmask representing the preconditions for the launch
      * @param launchFlags The launch flags to be provided by the launch {@link Intent}.
      * @param expectedResult The expected result from the launch.
@@ -203,7 +202,7 @@ public class ActivityStarterTests extends ActivityTestsBase {
         final WindowProcessController wpc =
                 containsConditions(preconditions, PRECONDITION_NO_CALLER_APP)
                 ? null : new WindowProcessController(service, ai, null, 0, -1, null, listener);
-        doReturn(wpc).when(service).getProcessController(anyObject());
+        doReturn(wpc).when(service).getProcessController(any());
 
         final Intent intent = new Intent();
         intent.setFlags(launchFlags);
@@ -995,7 +994,7 @@ public class ActivityStarterTests extends ActivityTestsBase {
                 .setUserId(10)
                 .build();
 
-        final int result = starter.recycleTask(task, null, null);
+        final int result = starter.recycleTask(task, null, null, null);
         assertThat(result == START_SUCCESS).isTrue();
         assertThat(starter.mAddingToTask).isTrue();
     }
@@ -1038,5 +1037,48 @@ public class ActivityStarterTests extends ActivityTestsBase {
                 .execute();
 
         verify(recentTasks, times(1)).add(any());
+    }
+
+    @Test
+    public void testStartActivityInner_allSplitScreenPrimaryActivitiesVisible() {
+        // Given
+        final ActivityStarter starter = prepareStarter(0, false);
+
+        starter.setReason("testAllSplitScreenPrimaryActivitiesAreResumed");
+
+        final ActivityRecord targetRecord = new ActivityBuilder(mService).build();
+        targetRecord.setFocusable(false);
+        targetRecord.setVisibility(false);
+        final ActivityRecord sourceRecord = new ActivityBuilder(mService).build();
+
+        final ActivityStack stack = spy(
+                mRootWindowContainer.getDefaultTaskDisplayArea()
+                        .createStack(WINDOWING_MODE_SPLIT_SCREEN_PRIMARY, ACTIVITY_TYPE_STANDARD,
+                                /* onTop */true));
+
+        stack.addChild(targetRecord);
+
+        doReturn(stack).when(mRootWindowContainer)
+                .getLaunchStack(any(), any(), any(), anyBoolean(), any(), anyInt(), anyInt());
+
+        starter.mStartActivity = new ActivityBuilder(mService).build();
+
+        // When
+        starter.startActivityInner(
+                /* r */targetRecord,
+                /* sourceRecord */ sourceRecord,
+                /* voiceSession */null,
+                /* voiceInteractor */ null,
+                /* startFlags */ 0,
+                /* doResume */true,
+                /* options */null,
+                /* inTask */null,
+                /* restrictedBgActivity */false,
+                /* intentGrants */null);
+
+        // Then
+        verify(stack).ensureActivitiesVisible(null, 0, !PRESERVE_WINDOWS);
+        verify(targetRecord).makeVisibleIfNeeded(null, true);
+        assertTrue(targetRecord.mVisibleRequested);
     }
 }

@@ -22,7 +22,6 @@ import static android.app.WindowConfiguration.WINDOWING_MODE_SPLIT_SCREEN_PRIMAR
 import static android.hardware.camera2.params.OutputConfiguration.ROTATION_90;
 import static android.view.InsetsState.ITYPE_STATUS_BAR;
 import static android.view.Surface.ROTATION_0;
-import static android.view.ViewRootImpl.NEW_INSETS_MODE_FULL;
 import static android.view.WindowManager.LayoutParams.FIRST_SUB_WINDOW;
 import static android.view.WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM;
 import static android.view.WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE;
@@ -75,17 +74,13 @@ import android.util.Size;
 import android.view.DisplayCutout;
 import android.view.InsetsSource;
 import android.view.SurfaceControl;
-import android.view.ViewRootImpl;
 import android.view.WindowManager;
 
-import androidx.test.filters.FlakyTest;
 import androidx.test.filters.SmallTest;
 
 import com.android.server.wm.utils.WmDisplayCutout;
 
-import org.junit.AfterClass;
 import org.junit.Before;
-import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
@@ -103,21 +98,6 @@ import java.util.List;
 @Presubmit
 @RunWith(WindowTestRunner.class)
 public class WindowStateTests extends WindowTestsBase {
-    private static int sPreviousNewInsetsMode;
-
-    @BeforeClass
-    public static void setUpOnce() {
-        // TODO: Make use of SettingsSession when it becomes feasible for this.
-        sPreviousNewInsetsMode = ViewRootImpl.sNewInsetsMode;
-        // To let the insets provider control the insets visibility, the insets mode has to be
-        // NEW_INSETS_MODE_FULL.
-        ViewRootImpl.sNewInsetsMode = NEW_INSETS_MODE_FULL;
-    }
-
-    @AfterClass
-    public static void tearDownOnce() {
-        ViewRootImpl.sNewInsetsMode = sPreviousNewInsetsMode;
-    }
 
     @Before
     public void setUp() {
@@ -287,6 +267,26 @@ public class WindowStateTests extends WindowTestsBase {
         // Make sure canBeImeTarget is false due to shouldIgnoreInput is true;
         assertFalse(appWindow.canBeImeTarget());
         assertTrue(stack.shouldIgnoreInput());
+    }
+
+    @Test
+    public void testCanWindowWithEmbeddedDisplayBeImeTarget() {
+        final WindowState appWindow = createWindow(null, TYPE_APPLICATION, "appWindow");
+        final WindowState imeWindow = createWindow(null, TYPE_INPUT_METHOD, "imeWindow");
+
+        imeWindow.setHasSurface(true);
+        appWindow.setHasSurface(true);
+
+        appWindow.mAttrs.flags |= FLAG_NOT_FOCUSABLE;
+        assertFalse(appWindow.canBeImeTarget());
+
+        DisplayContent secondDisplay = createNewDisplay();
+        final WindowState embeddedWindow = createWindow(null, TYPE_APPLICATION, secondDisplay,
+                "embeddedWindow");
+        appWindow.addEmbeddedDisplayContent(secondDisplay);
+        embeddedWindow.setHasSurface(true);
+        embeddedWindow.mAttrs.flags &= ~FLAG_NOT_FOCUSABLE;
+        assertTrue(appWindow.canBeImeTarget());
     }
 
     @Test
@@ -600,6 +600,29 @@ public class WindowStateTests extends WindowTestsBase {
         // shouldn't be resized again (which may block unfreeze in real case).
         assertThat(mWm.mResizingWindows).doesNotContain(win);
         assertFalse(win.getOrientationChanging());
+    }
+
+    @Test
+    public void testRequestResizeForBlastSync() {
+        final WindowState win = mChildAppWindowAbove;
+        makeWindowVisible(win, win.getParentWindow());
+        win.mLayoutSeq = win.getDisplayContent().mLayoutSeq;
+        win.reportResized();
+        win.updateResizingWindowIfNeeded();
+        assertThat(mWm.mResizingWindows).doesNotContain(win);
+
+        // Check that the window is in resizing if using blast sync.
+        win.reportResized();
+        win.prepareForSync(mock(BLASTSyncEngine.TransactionReadyListener.class), 1);
+        win.updateResizingWindowIfNeeded();
+        assertThat(mWm.mResizingWindows).contains(win);
+
+        // Don't re-add the window again if it's been reported to the client and still waiting on
+        // the client draw for blast sync.
+        win.reportResized();
+        mWm.mResizingWindows.remove(win);
+        win.updateResizingWindowIfNeeded();
+        assertThat(mWm.mResizingWindows).doesNotContain(win);
     }
 
     @Test

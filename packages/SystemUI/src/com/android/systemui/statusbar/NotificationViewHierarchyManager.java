@@ -42,7 +42,6 @@ import com.android.systemui.statusbar.notification.stack.NotificationListContain
 import com.android.systemui.statusbar.phone.KeyguardBypassController;
 import com.android.systemui.statusbar.phone.NotificationGroupManager;
 import com.android.systemui.util.Assert;
-import com.android.systemui.util.Utils;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -61,7 +60,11 @@ public class NotificationViewHierarchyManager implements DynamicPrivacyControlle
 
     private final Handler mHandler;
 
-    /** Re-usable map of top-level notifications to their sorted children if any.*/
+    /**
+     * Re-usable map of top-level notifications to their sorted children if any.
+     * If the top-level notification doesn't have children, its key will still exist in this map
+     * with its value explicitly set to null.
+     */
     private final HashMap<NotificationEntry, List<NotificationEntry>> mTmpChildOrderMap =
             new HashMap<>();
 
@@ -150,9 +153,7 @@ public class NotificationViewHierarchyManager implements DynamicPrivacyControlle
         final int N = activeNotifications.size();
         for (int i = 0; i < N; i++) {
             NotificationEntry ent = activeNotifications.get(i);
-            boolean hideMedia = Utils.useQsMediaPlayer(mContext);
             if (ent.isRowDismissed() || ent.isRowRemoved()
-                    || (ent.isMediaNotification() && hideMedia)
                     || mBubbleController.isBubbleNotificationSuppressedFromShade(ent)
                     || mFgsSectionController.hasEntry(ent)) {
                 // we don't want to update removed notifications because they could
@@ -186,8 +187,7 @@ public class NotificationViewHierarchyManager implements DynamicPrivacyControlle
 
             boolean groupChangesAllowed =
                     mVisualStabilityManager.areGroupChangesAllowed() // user isn't looking at notifs
-                    || !ent.hasFinishedInitialization() // notif recently added
-                    || !mListContainer.containsView(ent.getRow()); // notif recently unfiltered
+                    || !ent.hasFinishedInitialization(); // notif recently added
 
             NotificationEntry parent = mGroupManager.getGroupSummary(ent.getSbn());
             if (!groupChangesAllowed) {
@@ -195,13 +195,15 @@ public class NotificationViewHierarchyManager implements DynamicPrivacyControlle
                 boolean wasChildInGroup = ent.isChildInGroup();
                 if (isChildInGroup && !wasChildInGroup) {
                     isChildInGroup = wasChildInGroup;
-                    mVisualStabilityManager.addGroupChangesAllowedCallback(mEntryManager);
+                    mVisualStabilityManager.addGroupChangesAllowedCallback(mEntryManager,
+                            false /* persistent */);
                 } else if (!isChildInGroup && wasChildInGroup) {
                     // We allow grouping changes if the group was collapsed
                     if (mGroupManager.isLogicalGroupExpanded(ent.getSbn())) {
                         isChildInGroup = wasChildInGroup;
                         parent = ent.getRow().getNotificationParent().getEntry();
-                        mVisualStabilityManager.addGroupChangesAllowedCallback(mEntryManager);
+                        mVisualStabilityManager.addGroupChangesAllowedCallback(mEntryManager,
+                                false /* persistent */);
                     }
                 }
             }
@@ -214,10 +216,19 @@ public class NotificationViewHierarchyManager implements DynamicPrivacyControlle
                 }
                 orderedChildren.add(ent);
             } else {
-                // Top-level notif
-                mTmpChildOrderMap.put(ent, null);
+                // Top-level notif (either a summary or single notification)
+
+                // A child may have already added its summary to mTmpChildOrderMap with a
+                // list of children. This can happen since there's no guarantee summaries are
+                // sorted before its children.
+                if (!mTmpChildOrderMap.containsKey(ent)) {
+                    // mTmpChildOrderMap's keyset is used to iterate through all entries, so it's
+                    // necessary to add each top-level notif as a key
+                    mTmpChildOrderMap.put(ent, null);
+                }
                 toShow.add(ent.getRow());
             }
+
         }
 
         ArrayList<ExpandableNotificationRow> viewsToRemove = new ArrayList<>();
@@ -286,7 +297,8 @@ public class NotificationViewHierarchyManager implements DynamicPrivacyControlle
                 if (mVisualStabilityManager.canReorderNotification(targetChild)) {
                     mListContainer.changeViewPosition(targetChild, i);
                 } else {
-                    mVisualStabilityManager.addReorderingAllowedCallback(mEntryManager);
+                    mVisualStabilityManager.addReorderingAllowedCallback(mEntryManager,
+                            false  /* persistent */);
                 }
             }
             j++;

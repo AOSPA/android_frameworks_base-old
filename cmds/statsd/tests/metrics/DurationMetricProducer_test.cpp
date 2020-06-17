@@ -70,9 +70,11 @@ TEST(DurationMetricTrackerTest, TestFirstBucket) {
     metric.set_aggregation_type(DurationMetric_AggregationType_SUM);
 
     FieldMatcher dimensions;
-    DurationMetricProducer durationProducer(
-            kConfigKey, metric, -1 /*no condition*/, 1 /* start index */, 2 /* stop index */,
-            3 /* stop_all index */, false /*nesting*/, wizard, dimensions, 5, 600 * NS_PER_SEC + NS_PER_SEC/2);
+
+    DurationMetricProducer durationProducer(kConfigKey, metric, -1 /*no condition*/, {},
+                                            1 /* start index */, 2 /* stop index */,
+                                            3 /* stop_all index */, false /*nesting*/, wizard,
+                                            dimensions, 5, 600 * NS_PER_SEC + NS_PER_SEC / 2);
 
     EXPECT_EQ(600500000000, durationProducer.mCurrentBucketStartTimeNs);
     EXPECT_EQ(10, durationProducer.mCurrentBucketNum);
@@ -96,7 +98,8 @@ TEST(DurationMetricTrackerTest, TestNoCondition) {
     makeLogEvent(&event2, bucketStartTimeNs + bucketSizeNs + 2, tagId);
 
     FieldMatcher dimensions;
-    DurationMetricProducer durationProducer(kConfigKey, metric, -1 /*no condition*/,
+
+    DurationMetricProducer durationProducer(kConfigKey, metric, -1 /*no condition*/, {},
                                             1 /* start index */, 2 /* stop index */,
                                             3 /* stop_all index */, false /*nesting*/, wizard,
                                             dimensions, bucketStartTimeNs, bucketStartTimeNs);
@@ -104,11 +107,11 @@ TEST(DurationMetricTrackerTest, TestNoCondition) {
     durationProducer.onMatchedLogEvent(1 /* start index*/, event1);
     durationProducer.onMatchedLogEvent(2 /* stop index*/, event2);
     durationProducer.flushIfNeededLocked(bucketStartTimeNs + 2 * bucketSizeNs + 1);
-    EXPECT_EQ(1UL, durationProducer.mPastBuckets.size());
+    ASSERT_EQ(1UL, durationProducer.mPastBuckets.size());
     EXPECT_TRUE(durationProducer.mPastBuckets.find(DEFAULT_METRIC_DIMENSION_KEY) !=
                 durationProducer.mPastBuckets.end());
     const auto& buckets = durationProducer.mPastBuckets[DEFAULT_METRIC_DIMENSION_KEY];
-    EXPECT_EQ(2UL, buckets.size());
+    ASSERT_EQ(2UL, buckets.size());
     EXPECT_EQ(bucketStartTimeNs, buckets[0].mBucketStartNs);
     EXPECT_EQ(bucketStartTimeNs + bucketSizeNs, buckets[0].mBucketEndNs);
     EXPECT_EQ(bucketSizeNs - 1LL, buckets[0].mDuration);
@@ -138,10 +141,11 @@ TEST(DurationMetricTrackerTest, TestNonSlicedCondition) {
     makeLogEvent(&event4, bucketStartTimeNs + bucketSizeNs + 3, tagId);
 
     FieldMatcher dimensions;
-    DurationMetricProducer durationProducer(kConfigKey, metric, 0 /* condition index */,
-                                            1 /* start index */, 2 /* stop index */,
-                                            3 /* stop_all index */, false /*nesting*/, wizard,
-                                            dimensions, bucketStartTimeNs, bucketStartTimeNs);
+
+    DurationMetricProducer durationProducer(
+            kConfigKey, metric, 0 /* condition index */, {ConditionState::kUnknown},
+            1 /* start index */, 2 /* stop index */, 3 /* stop_all index */, false /*nesting*/,
+            wizard, dimensions, bucketStartTimeNs, bucketStartTimeNs);
     durationProducer.mCondition = ConditionState::kFalse;
 
     EXPECT_FALSE(durationProducer.mCondition);
@@ -150,17 +154,17 @@ TEST(DurationMetricTrackerTest, TestNonSlicedCondition) {
     durationProducer.onMatchedLogEvent(1 /* start index*/, event1);
     durationProducer.onMatchedLogEvent(2 /* stop index*/, event2);
     durationProducer.flushIfNeededLocked(bucketStartTimeNs + bucketSizeNs + 1);
-    EXPECT_EQ(0UL, durationProducer.mPastBuckets.size());
+    ASSERT_EQ(0UL, durationProducer.mPastBuckets.size());
 
     durationProducer.onMatchedLogEvent(1 /* start index*/, event3);
     durationProducer.onConditionChanged(true /* condition */, bucketStartTimeNs + bucketSizeNs + 2);
     durationProducer.onMatchedLogEvent(2 /* stop index*/, event4);
     durationProducer.flushIfNeededLocked(bucketStartTimeNs + 2 * bucketSizeNs + 1);
-    EXPECT_EQ(1UL, durationProducer.mPastBuckets.size());
+    ASSERT_EQ(1UL, durationProducer.mPastBuckets.size());
     EXPECT_TRUE(durationProducer.mPastBuckets.find(DEFAULT_METRIC_DIMENSION_KEY) !=
                 durationProducer.mPastBuckets.end());
     const auto& buckets2 = durationProducer.mPastBuckets[DEFAULT_METRIC_DIMENSION_KEY];
-    EXPECT_EQ(1UL, buckets2.size());
+    ASSERT_EQ(1UL, buckets2.size());
     EXPECT_EQ(bucketStartTimeNs + bucketSizeNs, buckets2[0].mBucketStartNs);
     EXPECT_EQ(bucketStartTimeNs + 2 * bucketSizeNs, buckets2[0].mBucketEndNs);
     EXPECT_EQ(1LL, buckets2[0].mDuration);
@@ -187,10 +191,11 @@ TEST(DurationMetricTrackerTest, TestNonSlicedConditionUnknownState) {
     makeLogEvent(&event4, bucketStartTimeNs + bucketSizeNs + 3, tagId);
 
     FieldMatcher dimensions;
-    DurationMetricProducer durationProducer(kConfigKey, metric, 0 /* condition index */,
-                                            1 /* start index */, 2 /* stop index */,
-                                            3 /* stop_all index */, false /*nesting*/, wizard,
-                                            dimensions, bucketStartTimeNs, bucketStartTimeNs);
+
+    DurationMetricProducer durationProducer(
+            kConfigKey, metric, 0 /* condition index */, {ConditionState::kUnknown},
+            1 /* start index */, 2 /* stop index */, 3 /* stop_all index */, false /*nesting*/,
+            wizard, dimensions, bucketStartTimeNs, bucketStartTimeNs);
 
     EXPECT_EQ(ConditionState::kUnknown, durationProducer.mCondition);
     EXPECT_FALSE(durationProducer.isConditionSliced());
@@ -198,15 +203,15 @@ TEST(DurationMetricTrackerTest, TestNonSlicedConditionUnknownState) {
     durationProducer.onMatchedLogEvent(1 /* start index*/, event1);
     durationProducer.onMatchedLogEvent(2 /* stop index*/, event2);
     durationProducer.flushIfNeededLocked(bucketStartTimeNs + bucketSizeNs + 1);
-    EXPECT_EQ(0UL, durationProducer.mPastBuckets.size());
+    ASSERT_EQ(0UL, durationProducer.mPastBuckets.size());
 
     durationProducer.onMatchedLogEvent(1 /* start index*/, event3);
     durationProducer.onConditionChanged(true /* condition */, bucketStartTimeNs + bucketSizeNs + 2);
     durationProducer.onMatchedLogEvent(2 /* stop index*/, event4);
     durationProducer.flushIfNeededLocked(bucketStartTimeNs + 2 * bucketSizeNs + 1);
-    EXPECT_EQ(1UL, durationProducer.mPastBuckets.size());
+    ASSERT_EQ(1UL, durationProducer.mPastBuckets.size());
     const auto& buckets2 = durationProducer.mPastBuckets[DEFAULT_METRIC_DIMENSION_KEY];
-    EXPECT_EQ(1UL, buckets2.size());
+    ASSERT_EQ(1UL, buckets2.size());
     EXPECT_EQ(bucketStartTimeNs + bucketSizeNs, buckets2[0].mBucketStartNs);
     EXPECT_EQ(bucketStartTimeNs + 2 * bucketSizeNs, buckets2[0].mBucketEndNs);
     EXPECT_EQ(1LL, buckets2[0].mDuration);
@@ -232,7 +237,8 @@ TEST_P(DurationMetricProducerTest_PartialBucket, TestSumDuration) {
     metric.set_aggregation_type(DurationMetric_AggregationType_SUM);
     sp<MockConditionWizard> wizard = new NaggyMock<MockConditionWizard>();
     FieldMatcher dimensions;
-    DurationMetricProducer durationProducer(kConfigKey, metric, -1 /* no condition */,
+
+    DurationMetricProducer durationProducer(kConfigKey, metric, -1 /* no condition */, {},
                                             1 /* start index */, 2 /* stop index */,
                                             3 /* stop_all index */, false /*nesting*/, wizard,
                                             dimensions, bucketStartTimeNs, bucketStartTimeNs);
@@ -241,7 +247,7 @@ TEST_P(DurationMetricProducerTest_PartialBucket, TestSumDuration) {
     LogEvent event1(/*uid=*/0, /*pid=*/0);
     makeLogEvent(&event1, startTimeNs, tagId);
     durationProducer.onMatchedLogEvent(1 /* start index*/, event1);
-    EXPECT_EQ(0UL, durationProducer.mPastBuckets.size());
+    ASSERT_EQ(0UL, durationProducer.mPastBuckets.size());
     EXPECT_EQ(bucketStartTimeNs, durationProducer.mCurrentBucketStartTimeNs);
 
     int64_t partialBucketSplitTimeNs = bucketStartTimeNs + 15 * NS_PER_SEC;
@@ -253,7 +259,7 @@ TEST_P(DurationMetricProducerTest_PartialBucket, TestSumDuration) {
             durationProducer.onStatsdInitCompleted(partialBucketSplitTimeNs);
             break;
     }
-    EXPECT_EQ(1UL, durationProducer.mPastBuckets[DEFAULT_METRIC_DIMENSION_KEY].size());
+    ASSERT_EQ(1UL, durationProducer.mPastBuckets[DEFAULT_METRIC_DIMENSION_KEY].size());
     std::vector<DurationBucket> buckets =
             durationProducer.mPastBuckets[DEFAULT_METRIC_DIMENSION_KEY];
     EXPECT_EQ(bucketStartTimeNs, buckets[0].mBucketStartNs);
@@ -268,7 +274,7 @@ TEST_P(DurationMetricProducerTest_PartialBucket, TestSumDuration) {
     makeLogEvent(&event2, endTimeNs, tagId);
     durationProducer.onMatchedLogEvent(2 /* stop index*/, event2);
     buckets = durationProducer.mPastBuckets[DEFAULT_METRIC_DIMENSION_KEY];
-    EXPECT_EQ(3UL, buckets.size());
+    ASSERT_EQ(3UL, buckets.size());
     EXPECT_EQ(partialBucketSplitTimeNs, buckets[1].mBucketStartNs);
     EXPECT_EQ(bucketStartTimeNs + bucketSizeNs, buckets[1].mBucketEndNs);
     EXPECT_EQ(bucketStartTimeNs + bucketSizeNs - partialBucketSplitTimeNs, buckets[1].mDuration);
@@ -294,7 +300,8 @@ TEST_P(DurationMetricProducerTest_PartialBucket, TestSumDurationWithSplitInFollo
     metric.set_aggregation_type(DurationMetric_AggregationType_SUM);
     sp<MockConditionWizard> wizard = new NaggyMock<MockConditionWizard>();
     FieldMatcher dimensions;
-    DurationMetricProducer durationProducer(kConfigKey, metric, -1 /* no condition */,
+
+    DurationMetricProducer durationProducer(kConfigKey, metric, -1 /* no condition */, {},
                                             1 /* start index */, 2 /* stop index */,
                                             3 /* stop_all index */, false /*nesting*/, wizard,
                                             dimensions, bucketStartTimeNs, bucketStartTimeNs);
@@ -303,7 +310,7 @@ TEST_P(DurationMetricProducerTest_PartialBucket, TestSumDurationWithSplitInFollo
     LogEvent event1(/*uid=*/0, /*pid=*/0);
     makeLogEvent(&event1, startTimeNs, tagId);
     durationProducer.onMatchedLogEvent(1 /* start index*/, event1);
-    EXPECT_EQ(0UL, durationProducer.mPastBuckets.size());
+    ASSERT_EQ(0UL, durationProducer.mPastBuckets.size());
     EXPECT_EQ(bucketStartTimeNs, durationProducer.mCurrentBucketStartTimeNs);
 
     int64_t partialBucketSplitTimeNs = bucketStartTimeNs + 65 * NS_PER_SEC;
@@ -315,7 +322,7 @@ TEST_P(DurationMetricProducerTest_PartialBucket, TestSumDurationWithSplitInFollo
             durationProducer.onStatsdInitCompleted(partialBucketSplitTimeNs);
             break;
     }
-    EXPECT_EQ(2UL, durationProducer.mPastBuckets[DEFAULT_METRIC_DIMENSION_KEY].size());
+    ASSERT_EQ(2UL, durationProducer.mPastBuckets[DEFAULT_METRIC_DIMENSION_KEY].size());
     std::vector<DurationBucket> buckets =
             durationProducer.mPastBuckets[DEFAULT_METRIC_DIMENSION_KEY];
     EXPECT_EQ(bucketStartTimeNs, buckets[0].mBucketStartNs);
@@ -333,7 +340,7 @@ TEST_P(DurationMetricProducerTest_PartialBucket, TestSumDurationWithSplitInFollo
     makeLogEvent(&event2, endTimeNs, tagId);
     durationProducer.onMatchedLogEvent(2 /* stop index*/, event2);
     buckets = durationProducer.mPastBuckets[DEFAULT_METRIC_DIMENSION_KEY];
-    EXPECT_EQ(3UL, buckets.size());
+    ASSERT_EQ(3UL, buckets.size());
     EXPECT_EQ(partialBucketSplitTimeNs, buckets[2].mBucketStartNs);
     EXPECT_EQ(bucketStartTimeNs + 2 * bucketSizeNs, buckets[2].mBucketEndNs);
     EXPECT_EQ(bucketStartTimeNs + 2 * bucketSizeNs - partialBucketSplitTimeNs,
@@ -357,7 +364,8 @@ TEST_P(DurationMetricProducerTest_PartialBucket, TestSumDurationAnomaly) {
 
     sp<MockConditionWizard> wizard = new NaggyMock<MockConditionWizard>();
     FieldMatcher dimensions;
-    DurationMetricProducer durationProducer(kConfigKey, metric, -1 /* no condition */,
+
+    DurationMetricProducer durationProducer(kConfigKey, metric, -1 /* no condition */, {},
                                             1 /* start index */, 2 /* stop index */,
                                             3 /* stop_all index */, false /*nesting*/, wizard,
                                             dimensions, bucketStartTimeNs, bucketStartTimeNs);
@@ -402,7 +410,8 @@ TEST_P(DurationMetricProducerTest_PartialBucket, TestMaxDuration) {
 
     sp<MockConditionWizard> wizard = new NaggyMock<MockConditionWizard>();
     FieldMatcher dimensions;
-    DurationMetricProducer durationProducer(kConfigKey, metric, -1 /* no condition */,
+
+    DurationMetricProducer durationProducer(kConfigKey, metric, -1 /* no condition */, {},
                                             1 /* start index */, 2 /* stop index */,
                                             3 /* stop_all index */, false /*nesting*/, wizard,
                                             dimensions, bucketStartTimeNs, bucketStartTimeNs);
@@ -411,7 +420,7 @@ TEST_P(DurationMetricProducerTest_PartialBucket, TestMaxDuration) {
     LogEvent event1(/*uid=*/0, /*pid=*/0);
     makeLogEvent(&event1, startTimeNs, tagId);
     durationProducer.onMatchedLogEvent(1 /* start index*/, event1);
-    EXPECT_EQ(0UL, durationProducer.mPastBuckets.size());
+    ASSERT_EQ(0UL, durationProducer.mPastBuckets.size());
     EXPECT_EQ(bucketStartTimeNs, durationProducer.mCurrentBucketStartTimeNs);
 
     int64_t partialBucketSplitTimeNs = bucketStartTimeNs + 15 * NS_PER_SEC;
@@ -423,7 +432,7 @@ TEST_P(DurationMetricProducerTest_PartialBucket, TestMaxDuration) {
             durationProducer.onStatsdInitCompleted(partialBucketSplitTimeNs);
             break;
     }
-    EXPECT_EQ(0UL, durationProducer.mPastBuckets[DEFAULT_METRIC_DIMENSION_KEY].size());
+    ASSERT_EQ(0UL, durationProducer.mPastBuckets[DEFAULT_METRIC_DIMENSION_KEY].size());
     EXPECT_EQ(partialBucketSplitTimeNs, durationProducer.mCurrentBucketStartTimeNs);
     EXPECT_EQ(0, durationProducer.getCurrentBucketNum());
 
@@ -432,12 +441,12 @@ TEST_P(DurationMetricProducerTest_PartialBucket, TestMaxDuration) {
     LogEvent event2(/*uid=*/0, /*pid=*/0);
     makeLogEvent(&event2, endTimeNs, tagId);
     durationProducer.onMatchedLogEvent(2 /* stop index*/, event2);
-    EXPECT_EQ(0UL, durationProducer.mPastBuckets[DEFAULT_METRIC_DIMENSION_KEY].size());
+    ASSERT_EQ(0UL, durationProducer.mPastBuckets[DEFAULT_METRIC_DIMENSION_KEY].size());
 
     durationProducer.flushIfNeededLocked(bucketStartTimeNs + 3 * bucketSizeNs + 1);
     std::vector<DurationBucket> buckets =
             durationProducer.mPastBuckets[DEFAULT_METRIC_DIMENSION_KEY];
-    EXPECT_EQ(1UL, buckets.size());
+    ASSERT_EQ(1UL, buckets.size());
     EXPECT_EQ(bucketStartTimeNs + 2 * bucketSizeNs, buckets[0].mBucketStartNs);
     EXPECT_EQ(bucketStartTimeNs + 3 * bucketSizeNs, buckets[0].mBucketEndNs);
     EXPECT_EQ(endTimeNs - startTimeNs, buckets[0].mDuration);
@@ -455,7 +464,8 @@ TEST_P(DurationMetricProducerTest_PartialBucket, TestMaxDurationWithSplitInNextB
 
     sp<MockConditionWizard> wizard = new NaggyMock<MockConditionWizard>();
     FieldMatcher dimensions;
-    DurationMetricProducer durationProducer(kConfigKey, metric, -1 /* no condition */,
+
+    DurationMetricProducer durationProducer(kConfigKey, metric, -1 /* no condition */, {},
                                             1 /* start index */, 2 /* stop index */,
                                             3 /* stop_all index */, false /*nesting*/, wizard,
                                             dimensions, bucketStartTimeNs, bucketStartTimeNs);
@@ -464,7 +474,7 @@ TEST_P(DurationMetricProducerTest_PartialBucket, TestMaxDurationWithSplitInNextB
     LogEvent event1(/*uid=*/0, /*pid=*/0);
     makeLogEvent(&event1, startTimeNs, tagId);
     durationProducer.onMatchedLogEvent(1 /* start index*/, event1);
-    EXPECT_EQ(0UL, durationProducer.mPastBuckets.size());
+    ASSERT_EQ(0UL, durationProducer.mPastBuckets.size());
     EXPECT_EQ(bucketStartTimeNs, durationProducer.mCurrentBucketStartTimeNs);
 
     int64_t partialBucketSplitTimeNs = bucketStartTimeNs + 65 * NS_PER_SEC;
@@ -476,7 +486,7 @@ TEST_P(DurationMetricProducerTest_PartialBucket, TestMaxDurationWithSplitInNextB
             durationProducer.onStatsdInitCompleted(partialBucketSplitTimeNs);
             break;
     }
-    EXPECT_EQ(0UL, durationProducer.mPastBuckets[DEFAULT_METRIC_DIMENSION_KEY].size());
+    ASSERT_EQ(0UL, durationProducer.mPastBuckets[DEFAULT_METRIC_DIMENSION_KEY].size());
     EXPECT_EQ(partialBucketSplitTimeNs, durationProducer.mCurrentBucketStartTimeNs);
     EXPECT_EQ(1, durationProducer.getCurrentBucketNum());
 
@@ -485,13 +495,13 @@ TEST_P(DurationMetricProducerTest_PartialBucket, TestMaxDurationWithSplitInNextB
     LogEvent event2(/*uid=*/0, /*pid=*/0);
     makeLogEvent(&event2, endTimeNs, tagId);
     durationProducer.onMatchedLogEvent(2 /* stop index*/, event2);
-    EXPECT_EQ(0UL, durationProducer.mPastBuckets[DEFAULT_METRIC_DIMENSION_KEY].size());
+    ASSERT_EQ(0UL, durationProducer.mPastBuckets[DEFAULT_METRIC_DIMENSION_KEY].size());
     EXPECT_EQ(partialBucketSplitTimeNs, durationProducer.mCurrentBucketStartTimeNs);
 
     durationProducer.flushIfNeededLocked(bucketStartTimeNs + 2 * bucketSizeNs + 1);
     std::vector<DurationBucket> buckets =
             durationProducer.mPastBuckets[DEFAULT_METRIC_DIMENSION_KEY];
-    EXPECT_EQ(1UL, buckets.size());
+    ASSERT_EQ(1UL, buckets.size());
     EXPECT_EQ(partialBucketSplitTimeNs, buckets[0].mBucketStartNs);
     EXPECT_EQ(bucketStartTimeNs + 2 * bucketSizeNs, buckets[0].mBucketEndNs);
     EXPECT_EQ(endTimeNs - startTimeNs, buckets[0].mDuration);

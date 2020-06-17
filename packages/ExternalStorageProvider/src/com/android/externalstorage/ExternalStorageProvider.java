@@ -275,6 +275,13 @@ public class ExternalStorageProvider extends FileSystemProvider {
         return projection != null ? projection : DEFAULT_ROOT_PROJECTION;
     }
 
+    @Override
+    public Cursor queryChildDocumentsForManage(
+            String parentDocId, String[] projection, String sortOrder)
+            throws FileNotFoundException {
+        return queryChildDocumentsShowAll(parentDocId, projection, sortOrder);
+    }
+
     /**
      * Check that the directory is the root of storage or blocked file from tree.
      *
@@ -513,9 +520,11 @@ public class ExternalStorageProvider extends FileSystemProvider {
         final RootInfo root = resolvedDocId.first;
         File child = resolvedDocId.second;
 
+        final File rootFile = root.visiblePath != null ? root.visiblePath
+                : root.path;
         final File parent = TextUtils.isEmpty(parentDocId)
-                        ? root.path
-                        : getFileForDocId(parentDocId);
+                ? rootFile
+                : getFileForDocId(parentDocId);
 
         return new Path(parentDocId == null ? root.rootId : null, findDocumentPath(parent, child));
     }

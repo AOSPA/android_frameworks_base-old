@@ -142,8 +142,6 @@
     <integer name="quick_settings_brightness_dialog_short_timeout">2000</integer>
     <integer name="quick_settings_brightness_dialog_long_timeout">4000</integer>
 
-    <!-- Should "LTE"/"4G" be shown instead of "LTE+"/"4G+" when on NETWORK_TYPE_LTE_CA? -->
-    <bool name="config_hideLtePlus">false</bool>
 
     <!-- The number of milliseconds before the heads up notification auto-dismisses. -->
     <integer name="heads_up_notification_decay">5000</integer>
@@ -544,10 +542,10 @@
     <!-- Respect drawable/rounded.xml intrinsic size for multiple radius corner path customization -->
     <bool name="config_roundedCornerMultipleRadius">false</bool>
 
-    <!-- Controls can query a preferred application for limited number of suggested controls.
-         This config value should contain the package name of that preferred application.
+    <!-- Controls can query 2 preferred applications for limited number of suggested controls.
+         This config value should contain a list of package names of thoses preferred applications.
     -->
-    <string translatable="false" name="config_controlsPreferredPackage"></string>
+    <string-array translatable="false" name="config_controlsPreferredPackages" />
 
     <!-- Max number of columns for quick controls area -->
     <integer name="controls_max_columns">2</integer>

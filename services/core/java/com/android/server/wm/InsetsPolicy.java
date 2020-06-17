@@ -60,7 +60,37 @@ class InsetsPolicy {
     private final IntArray mShowingTransientTypes = new IntArray();
 
     /** For resetting visibilities of insets sources. */
-    private final InsetsControlTarget mDummyControlTarget = new InsetsControlTarget() { };
+    private final InsetsControlTarget mDummyControlTarget = new InsetsControlTarget() {
+
+        @Override
+        public void notifyInsetsControlChanged() {
+            boolean hasLeash = false;
+            final InsetsSourceControl[] controls =
+                    mStateController.getControlsForDispatch(this);
+            if (controls == null) {
+                return;
+            }
+            for (InsetsSourceControl control : controls) {
+                final @InternalInsetsType int type = control.getType();
+                if (mShowingTransientTypes.indexOf(type) != -1) {
+                    // The visibilities of transient bars will be handled with animations.
+                    continue;
+                }
+                final SurfaceControl leash = control.getLeash();
+                if (leash != null) {
+                    hasLeash = true;
+
+                    // We use alpha to control the visibility here which aligns the logic at
+                    // SurfaceAnimator.createAnimationLeash
+                    mDisplayContent.getPendingTransaction().setAlpha(
+                            leash, InsetsState.getDefaultVisibility(type) ? 1f : 0f);
+                }
+            }
+            if (hasLeash) {
+                mDisplayContent.scheduleAnimation();
+            }
+        }
+    };
 
     private WindowState mFocusedWin;
     private BarWindow mStatusBar = new BarWindow(StatusBarManager.WINDOW_STATUS_BAR);
@@ -87,13 +117,8 @@ class InsetsPolicy {
         if (ViewRootImpl.sNewInsetsMode != ViewRootImpl.NEW_INSETS_MODE_FULL) {
             return;
         }
-        mStatusBar.setVisible(focusedWin == null
-                || focusedWin != getStatusControlTarget(focusedWin)
-                || focusedWin.getRequestedInsetsState().getSource(ITYPE_STATUS_BAR).isVisible());
-        mNavBar.setVisible(focusedWin == null
-                || focusedWin != getNavControlTarget(focusedWin)
-                || focusedWin.getRequestedInsetsState().getSource(ITYPE_NAVIGATION_BAR)
-                        .isVisible());
+        mStatusBar.updateVisibility(getStatusControlTarget(focusedWin), ITYPE_STATUS_BAR);
+        mNavBar.updateVisibility(getNavControlTarget(focusedWin), ITYPE_NAVIGATION_BAR);
         mPolicy.updateHideNavInputEventReceiver();
     }
 
@@ -185,16 +210,7 @@ class InsetsPolicy {
     void onInsetsModified(WindowState windowState, InsetsState state) {
         mStateController.onInsetsModified(windowState, state);
         checkAbortTransient(windowState, state);
-        if (ViewRootImpl.sNewInsetsMode != ViewRootImpl.NEW_INSETS_MODE_FULL) {
-            return;
-        }
-        if (windowState == getStatusControlTarget(mFocusedWin)) {
-            mStatusBar.setVisible(state.getSource(ITYPE_STATUS_BAR).isVisible());
-        }
-        if (windowState == getNavControlTarget(mFocusedWin)) {
-            mNavBar.setVisible(state.getSource(ITYPE_NAVIGATION_BAR).isVisible());
-        }
-        mPolicy.updateHideNavInputEventReceiver();
+        updateBarControlTarget(mFocusedWin);
     }
 
     /**
@@ -218,7 +234,6 @@ class InsetsPolicy {
             if (abortTypes.size() > 0) {
                 mPolicy.getStatusBarManagerInternal().abortTransient(mDisplayContent.getDisplayId(),
                         abortTypes.toArray());
-                updateBarControlTarget(mFocusedWin);
             }
         }
     }
@@ -258,6 +273,11 @@ class InsetsPolicy {
             // dispatched to the client so that we can keep the layout stable. We will dispatch the
             // fake control to the client, so that it can re-show the bar during this scenario.
             return mDummyControlTarget;
+        }
+        if (mPolicy.topAppHidesStatusBar()) {
+            // Non-fullscreen focused window should not break the state that the top-fullscreen-app
+            // window hides status bar.
+            return mPolicy.getTopFullscreenOpaqueWindow();
         }
         return focusedWin;
     }
@@ -346,6 +366,14 @@ class InsetsPolicy {
 
         BarWindow(int id) {
             mId = id;
+        }
+
+        private void updateVisibility(InsetsControlTarget controlTarget,
+                @InternalInsetsType int type) {
+            final WindowState controllingWin =
+                    controlTarget instanceof WindowState ? (WindowState) controlTarget : null;
+            setVisible(controllingWin == null
+                    || controllingWin.getRequestedInsetsState().getSource(type).isVisible());
         }
 
         private void setVisible(boolean visible) {

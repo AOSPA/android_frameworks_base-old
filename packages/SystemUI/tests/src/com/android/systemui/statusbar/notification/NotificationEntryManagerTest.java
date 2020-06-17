@@ -210,6 +210,28 @@ public class NotificationEntryManagerTest extends SysuiTestCase {
     }
 
     @Test
+    public void testAddNotification_noDuplicateEntriesCreated() {
+        // GIVEN a notification has been added
+        mEntryManager.addNotification(mSbn, mRankingMap);
+
+        // WHEN the same notification is added multiple times before the previous entry (with
+        // the same key) didn't finish inflating
+        mEntryManager.addNotification(mSbn, mRankingMap);
+        mEntryManager.addNotification(mSbn, mRankingMap);
+        mEntryManager.addNotification(mSbn, mRankingMap);
+
+        // THEN getAllNotifs() only contains exactly one notification with this key
+        int count = 0;
+        for (NotificationEntry entry : mEntryManager.getAllNotifs()) {
+            if (entry.getKey().equals(mSbn.getKey())) {
+                count++;
+            }
+        }
+        assertEquals("Should only be one entry with key=" + mSbn.getKey() + " in mAllNotifs. "
+                        + "Instead there are " + count, 1, count);
+    }
+
+    @Test
     public void testAddNotification_setsUserSentiment() {
         mEntryManager.addNotification(mSbn, mRankingMap);
 
@@ -243,7 +265,7 @@ public class NotificationEntryManagerTest extends SysuiTestCase {
         // Ensure that update callbacks happen in correct order
         InOrder order = inOrder(mEntryListener, mPresenter, mEntryListener);
         order.verify(mEntryListener).onPreEntryUpdated(mEntry);
-        order.verify(mPresenter).updateNotificationViews();
+        order.verify(mPresenter).updateNotificationViews(any());
         order.verify(mEntryListener).onPostEntryUpdated(mEntry);
     }
 
@@ -254,7 +276,7 @@ public class NotificationEntryManagerTest extends SysuiTestCase {
 
         mEntryManager.removeNotification(mSbn.getKey(), mRankingMap, UNDEFINED_DISMISS_REASON);
 
-        verify(mPresenter).updateNotificationViews();
+        verify(mPresenter).updateNotificationViews(any());
         verify(mEntryListener).onEntryRemoved(
                 eq(mEntry), any(), eq(false) /* removedByUser */, eq(UNDEFINED_DISMISS_REASON));
         verify(mRow).setRemoved();

@@ -76,7 +76,7 @@
     <string name="learn_more" msgid="4690632085667273811">"Máis información"</string>
     <string name="compat_mode_on" msgid="4963711187149440884">"Ampliar ata ocupar todo"</string>
     <string name="compat_mode_off" msgid="7682459748279487945">"Estirar ata ocupar todo"</string>
-    <string name="global_action_screenshot" msgid="2760267567509131654">"Crear captura"</string>
+    <string name="global_action_screenshot" msgid="2760267567509131654">"Facer captura"</string>
     <string name="remote_input_image_insertion_text" msgid="4850791636452521123">"enviou unha imaxe"</string>
     <string name="screenshot_saving_ticker" msgid="6519186952674544916">"Gardando captura de pantalla…"</string>
     <string name="screenshot_saving_title" msgid="2298349784913287333">"Gardando captura de pantalla…"</string>
@@ -89,8 +89,7 @@
     <string name="screenshot_dismiss_ui_description" msgid="934736855340147968">"Ignora a captura de pantalla"</string>
     <string name="screenshot_preview_description" msgid="7606510140714080474">"Vista previa da captura de pantalla"</string>
     <string name="screenrecord_name" msgid="2596401223859996572">"Gravadora da pantalla"</string>
-    <!-- no translation found for screenrecord_background_processing_label (7244617554884238898) -->
-    <skip />
+    <string name="screenrecord_background_processing_label" msgid="7244617554884238898">"Procesando gravación pantalla"</string>
     <string name="screenrecord_channel_description" msgid="4147077128486138351">"Notificación en curso sobre unha sesión de gravación de pantalla"</string>
     <string name="screenrecord_start_label" msgid="1750350278888217473">"Queres iniciar a gravación?"</string>
     <string name="screenrecord_description" msgid="1123231719680353736">"Durante a gravación, o sistema Android pode captar información confidencial visible na pantalla ou reproducila no dispositivo. Isto inclúe contrasinais, información de pago, fotos, mensaxes e audio."</string>
@@ -382,7 +381,7 @@
     <string name="quick_settings_wifi_on_label" msgid="2489928193654318511">"Wifi activada"</string>
     <string name="quick_settings_wifi_detail_empty_text" msgid="483130889414601732">"Non hai redes wifi dispoñibles"</string>
     <string name="quick_settings_wifi_secondary_label_transient" msgid="7501659015509357887">"Activando…"</string>
-    <string name="quick_settings_cast_title" msgid="2279220930629235211">"Emisión da pantalla"</string>
+    <string name="quick_settings_cast_title" msgid="2279220930629235211">"Emitir pantalla"</string>
     <string name="quick_settings_casting" msgid="1435880708719268055">"Emitindo"</string>
     <string name="quick_settings_cast_device_default_name" msgid="6988469571141331700">"Dispositivo sen nome"</string>
     <string name="quick_settings_cast_device_default_description" msgid="2580520859212250265">"Listo para emitir"</string>
@@ -511,10 +510,9 @@
     <string name="clear_all_notifications_text" msgid="348312370303046130">"Eliminar todas"</string>
     <string name="manage_notifications_text" msgid="6885645344647733116">"Xestionar"</string>
     <string name="manage_notifications_history_text" msgid="57055985396576230">"Historial"</string>
-    <!-- no translation found for notification_section_header_incoming (5295312809341711367) -->
-    <skip />
-    <string name="notification_section_header_gentle" msgid="3044910806569985386">"Notificacións silenciadas"</string>
-    <string name="notification_section_header_alerting" msgid="3168140660646863240">"Notificación de alerta"</string>
+    <string name="notification_section_header_incoming" msgid="5295312809341711367">"Entrantes"</string>
+    <string name="notification_section_header_gentle" msgid="6804099527336337197">"Silencio"</string>
+    <string name="notification_section_header_alerting" msgid="5581175033680477651">"Notificacións"</string>
     <string name="notification_section_header_conversations" msgid="821834744538345661">"Conversas"</string>
     <string name="accessibility_notification_section_header_gentle_clear_all" msgid="6490207897764933919">"Borra todas as notificacións silenciadas"</string>
     <string name="dnd_suppressing_shade_text" msgid="5588252250634464042">"O modo Non molestar puxo en pausa as notificacións"</string>
@@ -594,19 +592,21 @@
     <string name="volume_odi_captions_hint_enable" msgid="2073091194012843195">"activa"</string>
     <string name="volume_odi_captions_hint_disable" msgid="2518846326748183407">"desactiva"</string>
     <string name="accessibility_output_chooser" msgid="7807898688967194183">"Cambia ao dispositivo de saída"</string>
-    <string name="screen_pinning_title" msgid="7357611095909618178">"A pantalla está fixada"</string>
+    <string name="screen_pinning_title" msgid="9058007390337841305">"A aplicación está fixada"</string>
     <string name="screen_pinning_description" msgid="8699395373875667743">"A pantalla manterase visible ata que deixes de fixala. Para facelo, mantén premido Atrás e Visión xeral."</string>
     <string name="screen_pinning_description_recents_invisible" msgid="4564466648700390037">"A pantalla manterase visible ata que deixes de fixala. Para facelo, mantén premido Atrás e Inicio."</string>
     <string name="screen_pinning_description_gestural" msgid="7246323931831232068">"A pantalla manterase visible ata que deixes de fixala. Para facelo, pasa o dedo cara arriba e manteno premido."</string>
     <string name="screen_pinning_description_accessible" msgid="7386449191953535332">"A pantalla manterase visible ata que deixes de fixala. Para facelo, mantén premido Visión xeral."</string>
     <string name="screen_pinning_description_recents_invisible_accessible" msgid="2857071808674481986">"A pantalla manterase visible ata que deixes de fixala. Para facelo, mantén premido Inicio."</string>
-    <string name="screen_pinning_toast" msgid="2083944237147005811">"Para deixar de fixar a pantalla, mantén premidos os botóns Volver e Visión xeral"</string>
-    <string name="screen_pinning_toast_recents_invisible" msgid="6343770487795352573">"Para deixar de fixar a pantalla, mantén premidos os botóns Atrás e Inicio"</string>
-    <string name="screen_pinning_toast_gesture_nav" msgid="2884536903398445645">"Para deixar de fixar esta pantalla, pasa o dedo cara arriba e mantena premida"</string>
+    <string name="screen_pinning_exposes_personal_data" msgid="8189852022981524789">"Pódese acceder aos datos persoais (por exemplo, os contactos e o contido dos correos electrónicos)."</string>
+    <string name="screen_pinning_can_open_other_apps" msgid="7529756813231421455">"As aplicacións fixadas poden abrir outras aplicacións."</string>
+    <string name="screen_pinning_toast" msgid="8177286912533744328">"Para soltar esta aplicación, mantén premidos os botóns Atrás e Visión xeral"</string>
+    <string name="screen_pinning_toast_recents_invisible" msgid="6850978077443052594">"Para soltar esta aplicación, mantén premidos os botóns Atrás e Inicio"</string>
+    <string name="screen_pinning_toast_gesture_nav" msgid="170699893395336705">"Para soltar esta aplicación, pasa o dedo cara arriba e mantena premida"</string>
     <string name="screen_pinning_positive" msgid="3285785989665266984">"De acordo"</string>
     <string name="screen_pinning_negative" msgid="6882816864569211666">"Non, grazas"</string>
-    <string name="screen_pinning_start" msgid="5695091877402422575">"Fixouse a pantalla"</string>
-    <string name="screen_pinning_exit" msgid="5114993350662745840">"Deixouse de fixar a pantalla"</string>
+    <string name="screen_pinning_start" msgid="7483998671383371313">"Fixouse a aplicación"</string>
+    <string name="screen_pinning_exit" msgid="4553787518387346893">"Soltouse a aplicación"</string>
     <string name="quick_settings_reset_confirmation_title" msgid="463533331480997595">"Queres ocultar <xliff:g id="TILE_LABEL">%1$s</xliff:g>?"</string>
     <string name="quick_settings_reset_confirmation_message" msgid="2320586180785674186">"Volverá aparecer a próxima vez que se active na configuración."</string>
     <string name="quick_settings_reset_confirmation_button" msgid="3341477479055016776">"Ocultar"</string>
@@ -709,16 +709,17 @@
     <string name="inline_turn_off_notifications" msgid="8543989584403106071">"Desactivar notificacións"</string>
     <string name="inline_keep_showing_app" msgid="4393429060390649757">"Queres seguir mostrando as notificacións desta aplicación?"</string>
     <string name="notification_silence_title" msgid="8608090968400832335">"Silenciosas"</string>
-    <string name="notification_alert_title" msgid="7629202599338071971">"Con alertas"</string>
+    <string name="notification_alert_title" msgid="3656229781017543655">"Configuración predeterminada"</string>
     <string name="notification_bubble_title" msgid="8330481035191903164">"Burbulla"</string>
-    <string name="notification_channel_summary_low" msgid="7300447764759926720">"Axúdache a centrarte sen son nin vibración."</string>
-    <string name="notification_channel_summary_default" msgid="3539949463907902037">"Chama a túa atención con son ou vibración."</string>
-    <string name="notification_channel_summary_default_with_bubbles" msgid="6298026344552480458">"Chama a túa atención con son ou vibración. Conversas desde a burbulla da aplicación <xliff:g id="APP_NAME">%1$s</xliff:g> de forma predeterminada."</string>
+    <string name="notification_channel_summary_low" msgid="4860617986908931158">"Sen son nin vibración"</string>
+    <string name="notification_conversation_summary_low" msgid="1734433426085468009">"Non soa nin vibra, e aparece máis abaixo na sección de conversas"</string>
+    <string name="notification_channel_summary_default" msgid="3282930979307248890">"Podería soar ou vibrar en función da configuración do teléfono"</string>
+    <string name="notification_channel_summary_default_with_bubbles" msgid="1782419896613644568">"Podería soar ou vibrar en función da configuración do teléfono. Conversas desde a burbulla da aplicación <xliff:g id="APP_NAME">%1$s</xliff:g> de forma predeterminada."</string>
     <string name="notification_channel_summary_bubble" msgid="7235935211580860537">"Mantén a túa atención cun atallo flotante a este contido."</string>
-    <string name="notification_channel_summary_priority" msgid="7415770044553264622">"Móstrase na parte superior da sección da conversa en forma de burbulla."</string>
+    <string name="notification_channel_summary_priority" msgid="7952654515769021553">"Móstrase na parte superior da sección de conversas en forma de burbulla flotante e aparece a imaxe do perfil na pantalla de bloqueo"</string>
     <string name="notification_conversation_channel_settings" msgid="2409977688430606835">"Configuración"</string>
     <string name="notification_priority_title" msgid="2079708866333537093">"Prioridade"</string>
-    <string name="no_shortcut" msgid="7176375126961212514">"<xliff:g id="APP_NAME">%1$s</xliff:g> non admite opcións de configuración específicas para conversas"</string>
+    <string name="no_shortcut" msgid="8257177117568230126">"<xliff:g id="APP_NAME">%1$s</xliff:g> non admite funcións de conversa"</string>
     <string name="bubble_overflow_empty_title" msgid="3120029421991510842">"Non hai burbullas recentes"</string>
     <string name="bubble_overflow_empty_subtitle" msgid="2030874469510497397">"As burbullas recentes e ignoradas aparecerán aquí."</string>
     <string name="notification_unblockable_desc" msgid="2073030886006190804">"Estas notificacións non se poden modificar."</string>
@@ -991,10 +992,8 @@
     <string name="music_controls_no_title" msgid="4166497066552290938">"Sen título"</string>
     <string name="restart_button_description" msgid="6916116576177456480">"Toca o botón para reiniciar esta aplicación e abrila en pantalla completa."</string>
     <string name="bubbles_settings_button_description" msgid="7324245408859877545">"Configuración das burbullas de <xliff:g id="APP_NAME">%1$s</xliff:g>"</string>
-    <!-- no translation found for bubble_overflow_button_content_description (5523744621434300510) -->
-    <skip />
-    <!-- no translation found for bubble_accessibility_action_add_back (6217995665917123890) -->
-    <skip />
+    <string name="bubble_overflow_button_content_description" msgid="5523744621434300510">"Mostrar menú adicional"</string>
+    <string name="bubble_accessibility_action_add_back" msgid="6217995665917123890">"Engadir de novo á pilla"</string>
     <string name="manage_bubbles_text" msgid="6856830436329494850">"Xestionar"</string>
     <string name="bubble_content_description_single" msgid="5175160674436546329">"<xliff:g id="NOTIFICATION_TITLE">%1$s</xliff:g> de <xliff:g id="APP_NAME">%2$s</xliff:g>"</string>
     <string name="bubble_content_description_stack" msgid="7907610717462651870">"<xliff:g id="NOTIFICATION_TITLE">%1$s</xliff:g> de <xliff:g id="APP_NAME">%2$s</xliff:g> e <xliff:g id="BUBBLE_COUNT">%3$d</xliff:g> máis"</string>
@@ -1003,7 +1002,8 @@
     <string name="bubble_accessibility_action_move_top_right" msgid="6916868852433483569">"Mover á parte superior dereita"</string>
     <string name="bubble_accessibility_action_move_bottom_left" msgid="6339015902495504715">"Mover á parte infer. esquerda"</string>
     <string name="bubble_accessibility_action_move_bottom_right" msgid="7471571700628346212">"Mover á parte inferior dereita"</string>
-    <string name="bubble_dismiss_text" msgid="7071770411580452911">"Ignorar"</string>
+    <!-- no translation found for bubble_dismiss_text (1314082410868930066) -->
+    <skip />
     <string name="bubbles_dont_bubble_conversation" msgid="1033040343437428822">"Non mostrar a conversa como burbulla"</string>
     <string name="bubbles_user_education_title" msgid="5547017089271445797">"Chatear usando burbullas"</string>
     <string name="bubbles_user_education_description" msgid="1160281719576715211">"As conversas novas aparecen como iconas flotantes ou burbullas. Toca para abrir a burbulla e arrastra para movela."</string>
@@ -1014,11 +1014,14 @@
     <string name="notification_content_system_nav_changed" msgid="5077913144844684544">"Actualizouse a navegación do sistema. Para facer cambios, vai a Configuración."</string>
     <string name="notification_content_gesture_nav_available" msgid="4431460803004659888">"Para actualizar a navegación do sistema, vai a Configuración"</string>
     <string name="inattentive_sleep_warning_title" msgid="3891371591713990373">"Modo de espera"</string>
+    <string name="priority_onboarding_title" msgid="2893070698479227616">"A conversa definiuse como prioritaria"</string>
+    <string name="priority_onboarding_behavior" msgid="5342816047020432929">"As conversas prioritarias farán o seguinte:"</string>
     <string name="priority_onboarding_show_at_top_text" msgid="1678400241025513541">"Mostrar na parte superior da sección de conversas"</string>
     <string name="priority_onboarding_show_avatar_text" msgid="5756291381124091508">"Mostrar imaxe do perfil na pantalla de bloqueo"</string>
     <string name="priority_onboarding_appear_as_bubble_text" msgid="4227039772250263122">"Mostrar como burbulla flotante sobre outras apps"</string>
     <string name="priority_onboarding_ignores_dnd_text" msgid="2918952762719600529">"Interromper modo Non molestar"</string>
     <string name="priority_onboarding_done_button_title" msgid="4569550984286506007">"Entendido"</string>
+    <string name="priority_onboarding_settings_button_title" msgid="6663601574303585927">"Configuración"</string>
     <string name="magnification_overlay_title" msgid="6584179429612427958">"Ampliación da ventá de superposición"</string>
     <string name="magnification_window_title" msgid="4863914360847258333">"Ventá de superposición"</string>
     <string name="magnification_controls_title" msgid="8421106606708891519">"Controis de ampliación da ventá"</string>
@@ -1031,6 +1034,13 @@
       <item quantity="other">Engadíronse <xliff:g id="NUMBER_1">%s</xliff:g> controis.</item>
       <item quantity="one">Engadiuse <xliff:g id="NUMBER_0">%s</xliff:g> control.</item>
     </plurals>
+    <string name="controls_removed" msgid="3731789252222856959">"Quitouse"</string>
+    <string name="accessibility_control_favorite" msgid="8694362691985545985">"Está entre os controis favoritos"</string>
+    <string name="accessibility_control_favorite_position" msgid="54220258048929221">"Está entre os controis favoritos (posición: <xliff:g id="NUMBER">%d</xliff:g>)"</string>
+    <string name="accessibility_control_not_favorite" msgid="1291760269563092359">"Non está entre os controis favoritos"</string>
+    <string name="accessibility_control_change_favorite" msgid="2943178027582253261">"engadir aos controis favoritos"</string>
+    <string name="accessibility_control_change_unfavorite" msgid="6997408061750740327">"quitar dos controis favoritos"</string>
+    <string name="accessibility_control_move" msgid="8980344493796647792">"Mover á posición <xliff:g id="NUMBER">%d</xliff:g>"</string>
     <string name="controls_favorite_default_title" msgid="967742178688938137">"Controis"</string>
     <string name="controls_favorite_subtitle" msgid="6604402232298443956">"Escolle os controis para acceder desde o menú de acendido"</string>
     <string name="controls_favorite_rearrange" msgid="5616952398043063519">"Para reorganizar os controis, mantenos premidos e arrástraos"</string>
@@ -1053,9 +1063,13 @@
     <string name="controls_structure_tooltip" msgid="4355922222944447867">"Pasar o dedo para ver máis"</string>
     <string name="controls_seeding_in_progress" msgid="3033855341410264148">"Cargando recomendacións"</string>
     <string name="controls_media_close_session" msgid="9023534788828414585">"Pechar esta sesión multimedia"</string>
+    <string name="controls_media_resume" msgid="1933520684481586053">"Retomar"</string>
     <string name="controls_error_timeout" msgid="794197289772728958">"Inactivo. Comproba a app"</string>
     <string name="controls_error_retryable" msgid="864025882878378470">"Erro. Tentando de novo…"</string>
-    <string name="controls_error_removed" msgid="6299213591234723805">"Quitouse o dispositivo"</string>
+    <string name="controls_error_removed" msgid="6675638069846014366">"Non se atopou"</string>
+    <string name="controls_error_removed_title" msgid="1207794911208047818">"O control non está dispoñible"</string>
+    <string name="controls_error_removed_message" msgid="2885911717034750542">"Non se puido acceder a: <xliff:g id="DEVICE">%1$s</xliff:g>. Comproba a aplicación <xliff:g id="APPLICATION">%2$s</xliff:g> para asegurarte de que o control aínda estea dispoñible e que non se modificase a configuración da aplicación."</string>
+    <string name="controls_open_app" msgid="483650971094300141">"Abrir aplicación"</string>
     <string name="controls_error_generic" msgid="352500456918362905">"Non se puido cargar o estado"</string>
     <string name="controls_error_failed" msgid="960228639198558525">"Erro. Téntao de novo"</string>
     <string name="controls_in_progress" msgid="4421080500238215939">"En curso"</string>

@@ -56,6 +56,7 @@ import android.content.ServiceConnection;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.IPackageManager;
 import android.content.pm.PackageManager;
+import android.content.pm.PackageManagerInternal;
 import android.content.pm.ResolveInfo;
 import android.content.pm.ServiceInfo;
 import android.content.res.Configuration;
@@ -67,6 +68,7 @@ import android.graphics.drawable.Drawable;
 import android.hardware.display.DisplayManagerInternal;
 import android.hardware.input.InputManagerInternal;
 import android.inputmethodservice.InputMethodService;
+import android.media.AudioManagerInternal;
 import android.net.Uri;
 import android.os.Binder;
 import android.os.Bundle;
@@ -223,6 +225,8 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
 
     static final int MSG_INLINE_SUGGESTIONS_REQUEST = 6000;
 
+    static final int MSG_NOTIFY_IME_UID_TO_AUDIO_SERVICE = 7000;
+
     static final long TIME_TO_RECONNECT = 3 * 1000;
 
     static final int SECURE_SUGGESTION_SPANS_MAX_SIZE = 20;
@@ -308,6 +312,7 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
     final SettingsObserver mSettingsObserver;
     final IWindowManager mIWindowManager;
     final WindowManagerInternal mWindowManagerInternal;
+    final PackageManagerInternal mPackageManagerInternal;
     final InputManagerInternal mInputManagerInternal;
     private final DisplayManagerInternal mDisplayManagerInternal;
     final HandlerCaller mCaller;
@@ -319,6 +324,16 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
     private final AppOpsManager mAppOpsManager;
     private final UserManager mUserManager;
     private final UserManagerInternal mUserManagerInternal;
+
+    /**
+     * Cache the result of {@code LocalServices.getService(AudioManagerInternal.class)}.
+     *
+     * <p>This field is used only within {@link #handleMessage(Message)} hence synchronization is
+     * not necessary.</p>
+     */
+    @Nullable
+    private AudioManagerInternal mAudioManagerInternal = null;
+
 
     // All known input methods.  mMethodMap also serves as the global
     // lock for this class.
@@ -643,6 +658,11 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
     IInputMethod mCurMethod;
 
     /**
+     * If not {@link Process#INVALID_UID}, then the UID of {@link #mCurIntent}.
+     */
+    int mCurMethodUid = Process.INVALID_UID;
+
+    /**
      * Time that we last initiated a bind to the input method, to determine
      * if we should try to disconnect and reconnect to it.
      */
@@ -800,10 +820,15 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
             final EditorInfo mEditorInfo;
             @NonNull
             final String mRequestWindowName;
+            @Nullable
+            final String mImeControlTargetName;
+            @Nullable
+            final String mImeTargetNameFromWm;
 
             Entry(ClientState client, EditorInfo editorInfo, String focusedWindowName,
                     @SoftInputModeFlags int softInputMode, @SoftInputShowHideReason int reason,
-                    boolean inFullscreenMode, String requestWindowName) {
+                    boolean inFullscreenMode, String requestWindowName,
+                    @Nullable String imeControlTargetName, @Nullable String imeTargetName) {
                 mClientState = client;
                 mEditorInfo = editorInfo;
                 mFocusedWindowName = focusedWindowName;
@@ -813,6 +838,8 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
                 mWallTime = System.currentTimeMillis();
                 mInFullscreenMode = inFullscreenMode;
                 mRequestWindowName = requestWindowName;
+                mImeControlTargetName = imeControlTargetName;
+                mImeTargetNameFromWm = imeTargetName;
             }
         }
 
@@ -851,6 +878,12 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
 
                 pw.print(prefix);
                 pw.println(" requestWindowName=" + entry.mRequestWindowName);
+
+                pw.print(prefix);
+                pw.println(" imeControlTargetName=" + entry.mImeControlTargetName);
+
+                pw.print(prefix);
+                pw.println(" imeTargetNameFromWm=" + entry.mImeTargetNameFromWm);
 
                 pw.print(prefix);
                 pw.print(" editorInfo: ");
@@ -1625,6 +1658,7 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
         mIWindowManager = IWindowManager.Stub.asInterface(
                 ServiceManager.getService(Context.WINDOW_SERVICE));
         mWindowManagerInternal = LocalServices.getService(WindowManagerInternal.class);
+        mPackageManagerInternal = LocalServices.getService(PackageManagerInternal.class);
         mInputManagerInternal = LocalServices.getService(InputManagerInternal.class);
         mDisplayManagerInternal = LocalServices.getService(DisplayManagerInternal.class);
         mImeDisplayValidator = displayId -> mWindowManagerInternal.shouldShowIme(displayId);
@@ -2521,11 +2555,26 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
         return checker.displayCanShowIme(displayId) ? displayId : FALLBACK_DISPLAY_ID;
     }
 
+    @AnyThread
+    private void scheduleNotifyImeUidToAudioService(int uid) {
+        mCaller.removeMessages(MSG_NOTIFY_IME_UID_TO_AUDIO_SERVICE);
+        mCaller.obtainMessageI(MSG_NOTIFY_IME_UID_TO_AUDIO_SERVICE, uid).sendToTarget();
+    }
+
     @Override
     public void onServiceConnected(ComponentName name, IBinder service) {
         synchronized (mMethodMap) {
             if (mCurIntent != null && name.equals(mCurIntent.getComponent())) {
                 mCurMethod = IInputMethod.Stub.asInterface(service);
+                final String curMethodPackage = mCurIntent.getComponent().getPackageName();
+                final int curMethodUid = mPackageManagerInternal.getPackageUidInternal(
+                        curMethodPackage, 0 /* flags */, mSettings.getCurrentUserId());
+                if (curMethodUid < 0) {
+                    Slog.e(TAG, "Failed to get UID for package=" + curMethodPackage);
+                    mCurMethodUid = Process.INVALID_UID;
+                } else {
+                    mCurMethodUid = curMethodUid;
+                }
                 if (mCurToken == null) {
                     Slog.w(TAG, "Service connected without a token!");
                     unbindCurrentMethodLocked();
@@ -2535,6 +2584,7 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
                 // Dispatch display id for InputMethodService to update context display.
                 executeOrSendMessage(mCurMethod, mCaller.obtainMessageIOO(
                         MSG_INITIALIZE_IME, mCurTokenDisplayId, mCurMethod, mCurToken));
+                scheduleNotifyImeUidToAudioService(mCurMethodUid);
                 if (mCurClient != null) {
                     clearClientSessionLocked(mCurClient);
                     requestClientSessionLocked(mCurClient);
@@ -2656,6 +2706,8 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
             finishSessionLocked(mEnabledSession);
             mEnabledSession = null;
             mCurMethod = null;
+            mCurMethodUid = Process.INVALID_UID;
+            scheduleNotifyImeUidToAudioService(mCurMethodUid);
         }
         if (mStatusBar != null) {
             mStatusBar.setIconVisibility(mSlotIme, false);
@@ -4084,7 +4136,11 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
                             mWindowManagerInternal.getWindowName(mCurFocusedWindow),
                             mCurFocusedWindowSoftInputMode, reason, mInFullscreenMode,
                             mWindowManagerInternal.getWindowName(
-                                    mShowRequestWindowMap.get(args.arg3))));
+                                    mShowRequestWindowMap.get(args.arg3)),
+                            mWindowManagerInternal.getImeControlTargetNameForLogging(
+                                    mCurTokenDisplayId),
+                            mWindowManagerInternal.getImeTargetNameForLogging(
+                                    mCurTokenDisplayId)));
                 } catch (RemoteException e) {
                 }
                 args.recycle();
@@ -4103,7 +4159,11 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
                             mWindowManagerInternal.getWindowName(mCurFocusedWindow),
                             mCurFocusedWindowSoftInputMode, reason, mInFullscreenMode,
                             mWindowManagerInternal.getWindowName(
-                                    mHideRequestWindowMap.get(args.arg3))));
+                                    mHideRequestWindowMap.get(args.arg3)),
+                            mWindowManagerInternal.getImeControlTargetNameForLogging(
+                                    mCurTokenDisplayId),
+                            mWindowManagerInternal.getImeTargetNameForLogging(
+                                    mCurTokenDisplayId)));
                 } catch (RemoteException e) {
                 }
                 args.recycle();
@@ -4202,6 +4262,9 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
                             + ((ClientState)msg.obj).uid);
                 }
                 return true;
+            case MSG_SET_INTERACTIVE:
+                handleSetInteractive(msg.arg1 != 0);
+                return true;
             case MSG_REPORT_FULLSCREEN_MODE: {
                 final boolean fullscreen = msg.arg1 != 0;
                 final ClientState clientState = (ClientState)msg.obj;
@@ -4259,7 +4322,7 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
             }
 
             // ---------------------------------------------------------------
-            case MSG_INLINE_SUGGESTIONS_REQUEST:
+            case MSG_INLINE_SUGGESTIONS_REQUEST: {
                 args = (SomeArgs) msg.obj;
                 final InlineSuggestionsRequestInfo requestInfo =
                         (InlineSuggestionsRequestInfo) args.arg2;
@@ -4271,9 +4334,36 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
                 } catch (RemoteException e) {
                     Slog.w(TAG, "RemoteException calling onCreateInlineSuggestionsRequest(): " + e);
                 }
+                args.recycle();
                 return true;
+            }
+
+            // ---------------------------------------------------------------
+            case MSG_NOTIFY_IME_UID_TO_AUDIO_SERVICE: {
+                if (mAudioManagerInternal == null) {
+                    mAudioManagerInternal = LocalServices.getService(AudioManagerInternal.class);
+                }
+                if (mAudioManagerInternal != null) {
+                    mAudioManagerInternal.setInputMethodServiceUid(msg.arg1 /* uid */);
+                }
+                return true;
+            }
         }
         return false;
+    }
+
+    private void handleSetInteractive(final boolean interactive) {
+        synchronized (mMethodMap) {
+            mIsInteractive = interactive;
+            updateSystemUiLocked(interactive ? mImeWindowVis : 0, mBackDisposition);
+
+            // Inform the current client of the change in active status
+            if (mCurClient != null && mCurClient.client != null) {
+                executeOrSendMessage(mCurClient.client, mCaller.obtainMessageIIO(
+                        MSG_SET_ACTIVE, mIsInteractive ? 1 : 0, mInFullscreenMode ? 1 : 0,
+                        mCurClient));
+            }
+        }
     }
 
     private boolean chooseNewDefaultIMELocked() {
@@ -4882,6 +4972,13 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
 
         LocalServiceImpl(@NonNull InputMethodManagerService service) {
             mService = service;
+        }
+
+        @Override
+        public void setInteractive(boolean interactive) {
+            // Do everything in handler so as not to block the caller.
+            mService.mHandler.obtainMessage(MSG_SET_INTERACTIVE, interactive ? 1 : 0, 0)
+                    .sendToTarget();
         }
 
         @Override

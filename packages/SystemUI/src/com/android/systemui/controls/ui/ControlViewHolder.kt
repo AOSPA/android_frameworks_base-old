@@ -18,21 +18,29 @@ package com.android.systemui.controls.ui
 
 import android.animation.Animator
 import android.animation.AnimatorListenerAdapter
+import android.animation.AnimatorSet
+import android.animation.ObjectAnimator
 import android.animation.ValueAnimator
+import android.annotation.ColorRes
 import android.app.Dialog
 import android.content.Context
+import android.content.res.ColorStateList
 import android.graphics.drawable.ClipDrawable
+import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.LayerDrawable
+import android.graphics.drawable.StateListDrawable
 import android.service.controls.Control
 import android.service.controls.DeviceTypes
 import android.service.controls.actions.ControlAction
 import android.service.controls.templates.ControlTemplate
+import android.service.controls.templates.RangeTemplate
 import android.service.controls.templates.StatelessTemplate
 import android.service.controls.templates.TemperatureControlTemplate
 import android.service.controls.templates.ToggleRangeTemplate
 import android.service.controls.templates.ToggleTemplate
 import android.util.MathUtils
+import android.util.TypedValue
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageView
@@ -62,21 +70,43 @@ class ControlViewHolder(
         private const val UPDATE_DELAY_IN_MILLIS = 3000L
         private const val ALPHA_ENABLED = 255
         private const val ALPHA_DISABLED = 0
+        private const val STATUS_ALPHA_ENABLED = 1f
+        private const val STATUS_ALPHA_DIMMED = 0.45f
         private val FORCE_PANEL_DEVICES = setOf(
             DeviceTypes.TYPE_THERMOSTAT,
             DeviceTypes.TYPE_CAMERA
         )
-
+        private val ATTR_ENABLED = intArrayOf(android.R.attr.state_enabled)
+        private val ATTR_DISABLED = intArrayOf(-android.R.attr.state_enabled)
         const val MIN_LEVEL = 0
         const val MAX_LEVEL = 10000
+
+        fun findBehaviorClass(
+            status: Int,
+            template: ControlTemplate,
+            deviceType: Int
+        ): KClass<out Behavior> {
+            return when {
+                status != Control.STATUS_OK -> StatusBehavior::class
+                deviceType == DeviceTypes.TYPE_CAMERA -> TouchBehavior::class
+                template is ToggleTemplate -> ToggleBehavior::class
+                template is StatelessTemplate -> TouchBehavior::class
+                template is ToggleRangeTemplate -> ToggleRangeBehavior::class
+                template is RangeTemplate -> ToggleRangeBehavior::class
+                template is TemperatureControlTemplate -> TemperatureControlBehavior::class
+                else -> DefaultBehavior::class
+            }
+        }
     }
 
     private val toggleBackgroundIntensity: Float = layout.context.resources
             .getFraction(R.fraction.controls_toggle_bg_intensity, 1, 1)
     private var stateAnimator: ValueAnimator? = null
+    private var statusAnimator: Animator? = null
     private val baseLayer: GradientDrawable
     val icon: ImageView = layout.requireViewById(R.id.icon)
-    val status: TextView = layout.requireViewById(R.id.status)
+    private val status: TextView = layout.requireViewById(R.id.status)
+    private var nextStatusText: CharSequence = ""
     val title: TextView = layout.requireViewById(R.id.title)
     val subtitle: TextView = layout.requireViewById(R.id.subtitle)
     val context: Context = layout.getContext()
@@ -85,10 +115,17 @@ class ControlViewHolder(
     var cancelUpdate: Runnable? = null
     var behavior: Behavior? = null
     var lastAction: ControlAction? = null
+    var isLoading = false
+    var visibleDialog: Dialog? = null
     private var lastChallengeDialog: Dialog? = null
+    private val onDialogCancel: () -> Unit = { lastChallengeDialog = null }
 
     val deviceType: Int
-        get() = cws.control?.let { it.getDeviceType() } ?: cws.ci.deviceType
+        get() = cws.control?.let { it.deviceType } ?: cws.ci.deviceType
+    val controlStatus: Int
+        get() = cws.control?.let { it.status } ?: Control.STATUS_UNKNOWN
+    val controlTemplate: ControlTemplate
+        get() = cws.control?.let { it.controlTemplate } ?: ControlTemplate.NO_TEMPLATE
 
     init {
         val ld = layout.getBackground() as LayerDrawable
@@ -105,14 +142,16 @@ class ControlViewHolder(
 
         cancelUpdate?.run()
 
-        val (controlStatus, template) = cws.control?.let {
-            title.setText(it.getTitle())
-            subtitle.setText(it.getSubtitle())
-            Pair(it.status, it.controlTemplate)
-        } ?: run {
+        // For the following statuses only, assume the title/subtitle could not be set properly
+        // by the app and instead use the last known information from favorites
+        if (controlStatus == Control.STATUS_UNKNOWN || controlStatus == Control.STATUS_NOT_FOUND) {
             title.setText(cws.ci.controlTitle)
             subtitle.setText(cws.ci.controlSubtitle)
-            Pair(Control.STATUS_UNKNOWN, ControlTemplate.NO_TEMPLATE)
+        } else {
+            cws.control?.let {
+                title.setText(it.title)
+                subtitle.setText(it.subtitle)
+            }
         }
 
         cws.control?.let {
@@ -121,25 +160,19 @@ class ControlViewHolder(
                 controlActionCoordinator.longPress(this@ControlViewHolder)
                 true
             })
+
+            controlActionCoordinator.runPendingAction(cws.ci.controlId)
         }
 
-        val clazz = findBehavior(controlStatus, template, deviceType)
-        if (behavior == null || behavior!!::class != clazz) {
-            // Behavior changes can signal a change in template from the app or
-            // first time setup
-            behavior = clazz.java.newInstance()
-            behavior?.initialize(this)
-
-            // let behaviors define their own, if necessary, and clear any existing ones
-            layout.setAccessibilityDelegate(null)
-        }
-
-        behavior?.bind(cws)
-
-        layout.setContentDescription("${title.text} ${subtitle.text} ${status.text}")
+        isLoading = false
+        behavior = bindBehavior(behavior,
+            findBehaviorClass(controlStatus, controlTemplate, deviceType))
+        updateContentDescription()
     }
 
     fun actionResponse(@ControlAction.ResponseResult response: Int) {
+        controlActionCoordinator.enableActionOnTouch(cws.ci.controlId)
+
         // OK responses signal normal behavior, and the app will provide control updates
         val failedAttempt = lastChallengeDialog != null
         when (response) {
@@ -154,15 +187,18 @@ class ControlViewHolder(
                 setTransientStatus(context.resources.getString(R.string.controls_error_failed))
             }
             ControlAction.RESPONSE_CHALLENGE_PIN -> {
-                lastChallengeDialog = ChallengeDialogs.createPinDialog(this, false, failedAttempt)
+                lastChallengeDialog = ChallengeDialogs.createPinDialog(
+                    this, false, failedAttempt, onDialogCancel)
                 lastChallengeDialog?.show()
             }
             ControlAction.RESPONSE_CHALLENGE_PASSPHRASE -> {
-                lastChallengeDialog = ChallengeDialogs.createPinDialog(this, true, failedAttempt)
+                lastChallengeDialog = ChallengeDialogs.createPinDialog(
+                    this, false, failedAttempt, onDialogCancel)
                 lastChallengeDialog?.show()
             }
             ControlAction.RESPONSE_CHALLENGE_ACK -> {
-                lastChallengeDialog = ChallengeDialogs.createConfirmationDialog(this)
+                lastChallengeDialog = ChallengeDialogs.createConfirmationDialog(
+                    this, onDialogCancel)
                 lastChallengeDialog?.show()
             }
         }
@@ -171,17 +207,28 @@ class ControlViewHolder(
     fun dismiss() {
         lastChallengeDialog?.dismiss()
         lastChallengeDialog = null
+        visibleDialog?.dismiss()
+        visibleDialog = null
     }
 
     fun setTransientStatus(tempStatus: String) {
         val previousText = status.getText()
 
         cancelUpdate = uiExecutor.executeDelayed({
-                status.setText(previousText)
-            }, UPDATE_DELAY_IN_MILLIS)
+            animateStatusChange(/* animated */ true, {
+                setStatusText(previousText, /* immediately */ true)
+                updateContentDescription()
+            })
+        }, UPDATE_DELAY_IN_MILLIS)
 
-        status.setText(tempStatus)
+        animateStatusChange(/* animated */ true, {
+            setStatusText(tempStatus, /* immediately */ true)
+            updateContentDescription()
+        })
     }
+
+    private fun updateContentDescription() =
+        layout.setContentDescription("${title.text} ${subtitle.text} ${status.text}")
 
     fun action(action: ControlAction) {
         lastAction = action
@@ -190,58 +237,86 @@ class ControlViewHolder(
 
     fun usePanel(): Boolean = deviceType in ControlViewHolder.FORCE_PANEL_DEVICES
 
-    private fun findBehavior(
-        status: Int,
-        template: ControlTemplate,
-        deviceType: Int
-    ): KClass<out Behavior> {
-        return when {
-            status == Control.STATUS_UNKNOWN -> StatusBehavior::class
-            status == Control.STATUS_ERROR -> StatusBehavior::class
-            status == Control.STATUS_NOT_FOUND -> StatusBehavior::class
-            deviceType == DeviceTypes.TYPE_CAMERA -> TouchBehavior::class
-            template is ToggleTemplate -> ToggleBehavior::class
-            template is StatelessTemplate -> TouchBehavior::class
-            template is ToggleRangeTemplate -> ToggleRangeBehavior::class
-            template is TemperatureControlTemplate -> TemperatureControlBehavior::class
-            else -> DefaultBehavior::class
+    fun bindBehavior(
+        existingBehavior: Behavior?,
+        clazz: KClass<out Behavior>,
+        offset: Int = 0
+    ): Behavior {
+        val behavior = if (existingBehavior == null || existingBehavior!!::class != clazz) {
+            // Behavior changes can signal a change in template from the app or
+            // first time setup
+            val newBehavior = clazz.java.newInstance()
+            newBehavior.initialize(this)
+
+            // let behaviors define their own, if necessary, and clear any existing ones
+            layout.setAccessibilityDelegate(null)
+            newBehavior
+        } else {
+            existingBehavior
+        }
+
+        return behavior.also {
+            it.bind(cws, offset)
         }
     }
 
-    internal fun applyRenderInfo(enabled: Boolean, offset: Int = 0, animated: Boolean = true) {
-        setEnabled(enabled)
-
-        val ri = RenderInfo.lookup(context, cws.componentName, deviceType, enabled, offset)
-
+    internal fun applyRenderInfo(enabled: Boolean, offset: Int, animated: Boolean = true) {
+        val deviceTypeOrError = if (controlStatus == Control.STATUS_OK ||
+                controlStatus == Control.STATUS_UNKNOWN) {
+            deviceType
+        } else {
+            RenderInfo.ERROR_ICON
+        }
+        val ri = RenderInfo.lookup(context, cws.componentName, deviceTypeOrError, offset)
         val fg = context.resources.getColorStateList(ri.foreground, context.theme)
+        val newText = nextStatusText
+        nextStatusText = ""
+        val control = cws.control
+
+        var shouldAnimate = animated
+        if (newText == status.text) {
+            shouldAnimate = false
+        }
+        animateStatusChange(shouldAnimate) {
+            updateStatusRow(enabled, newText, ri.icon, fg, control)
+        }
+
+        animateBackgroundChange(shouldAnimate, enabled, ri.enabledBackground)
+    }
+
+    fun getStatusText() = status.text
+
+    fun setStatusTextSize(textSize: Float) =
+        status.setTextSize(TypedValue.COMPLEX_UNIT_PX, textSize)
+
+    fun setStatusText(text: CharSequence, immediately: Boolean = false) {
+        if (immediately) {
+            status.alpha = STATUS_ALPHA_ENABLED
+            status.text = text
+            nextStatusText = ""
+        } else {
+            nextStatusText = text
+        }
+    }
+
+    private fun animateBackgroundChange(
+        animated: Boolean,
+        enabled: Boolean,
+        @ColorRes bgColor: Int
+    ) {
         val bg = context.resources.getColor(R.color.control_default_background, context.theme)
         var (newClipColor, newAlpha) = if (enabled) {
             // allow color overrides for the enabled state only
             val color = cws.control?.getCustomColor()?.let {
                 val state = intArrayOf(android.R.attr.state_enabled)
                 it.getColorForState(state, it.getDefaultColor())
-            } ?: context.resources.getColor(ri.enabledBackground, context.theme)
+            } ?: context.resources.getColor(bgColor, context.theme)
             listOf(color, ALPHA_ENABLED)
         } else {
             listOf(
                 context.resources.getColor(R.color.control_default_background, context.theme),
                 ALPHA_DISABLED
             )
-        }
-
-        status.setTextColor(fg)
-
-        cws.control?.getCustomIcon()?.let {
-            // do not tint custom icons, assume the intended icon color is correct
-            icon.imageTintList = null
-            icon.setImageIcon(it)
-        } ?: run {
-            icon.setImageDrawable(ri.icon)
-
-            // do not color app icons
-            if (deviceType != DeviceTypes.TYPE_ROUTINE) {
-                icon.imageTintList = fg
-            }
         }
 
         (clipLayer.getDrawable() as GradientDrawable).apply {
@@ -277,6 +352,87 @@ class ControlViewHolder(
                 setColor(newClipColor)
                 baseLayer.setColor(newBaseColor)
                 layout.alpha = 1f
+            }
+        }
+    }
+
+    private fun animateStatusChange(animated: Boolean, statusRowUpdater: () -> Unit) {
+        statusAnimator?.cancel()
+
+        if (!animated) {
+            statusRowUpdater.invoke()
+            return
+        }
+
+        if (isLoading) {
+            statusRowUpdater.invoke()
+            statusAnimator = ObjectAnimator.ofFloat(status, "alpha", STATUS_ALPHA_DIMMED).apply {
+                repeatMode = ValueAnimator.REVERSE
+                repeatCount = ValueAnimator.INFINITE
+                duration = 500L
+                interpolator = Interpolators.LINEAR
+                startDelay = 900L
+                start()
+            }
+        } else {
+            val fadeOut = ObjectAnimator.ofFloat(status, "alpha", 0f).apply {
+                duration = 200L
+                interpolator = Interpolators.LINEAR
+                addListener(object : AnimatorListenerAdapter() {
+                    override fun onAnimationEnd(animation: Animator?) {
+                        statusRowUpdater.invoke()
+                    }
+                })
+            }
+            val fadeIn = ObjectAnimator.ofFloat(status, "alpha", STATUS_ALPHA_ENABLED).apply {
+                duration = 200L
+                interpolator = Interpolators.LINEAR
+            }
+            statusAnimator = AnimatorSet().apply {
+                playSequentially(fadeOut, fadeIn)
+                addListener(object : AnimatorListenerAdapter() {
+                    override fun onAnimationEnd(animation: Animator?) {
+                        status.alpha = STATUS_ALPHA_ENABLED
+                        statusAnimator = null
+                    }
+                })
+                start()
+            }
+        }
+    }
+
+    private fun updateStatusRow(
+        enabled: Boolean,
+        text: CharSequence,
+        drawable: Drawable,
+        color: ColorStateList,
+        control: Control?
+    ) {
+        setEnabled(enabled)
+
+        status.text = text
+        status.setTextColor(color)
+
+        control?.getCustomIcon()?.let {
+            // do not tint custom icons, assume the intended icon color is correct
+            icon.imageTintList = null
+            icon.setImageIcon(it)
+        } ?: run {
+            if (drawable is StateListDrawable) {
+                // Only reset the drawable if it is a different resource, as it will interfere
+                // with the image state and animation.
+                if (icon.drawable == null || !(icon.drawable is StateListDrawable)) {
+                    icon.setImageDrawable(drawable)
+                }
+                val state = if (enabled) ATTR_ENABLED else ATTR_DISABLED
+                icon.setImageState(state, true)
+            } else {
+                icon.setImageDrawable(drawable)
+            }
+
+            // do not color app icons
+            if (deviceType != DeviceTypes.TYPE_ROUTINE) {
+                icon.imageTintList = color
             }
         }
     }

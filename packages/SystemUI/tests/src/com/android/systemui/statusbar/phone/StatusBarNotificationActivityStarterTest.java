@@ -48,7 +48,6 @@ import android.testing.TestableLooper;
 import androidx.test.filters.SmallTest;
 
 import com.android.internal.logging.MetricsLogger;
-import com.android.internal.statusbar.IStatusBarService;
 import com.android.internal.statusbar.NotificationVisibility;
 import com.android.internal.widget.LockPatternUtils;
 import com.android.systemui.ActivityIntentHelper;
@@ -59,6 +58,7 @@ import com.android.systemui.plugins.ActivityStarter;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.statusbar.CommandQueue;
 import com.android.systemui.statusbar.FeatureFlags;
+import com.android.systemui.statusbar.NotificationClickNotifier;
 import com.android.systemui.statusbar.NotificationLockscreenUserManager;
 import com.android.systemui.statusbar.NotificationPresenter;
 import com.android.systemui.statusbar.NotificationRemoteInputManager;
@@ -98,7 +98,7 @@ public class StatusBarNotificationActivityStarterTest extends SysuiTestCase {
     @Mock
     private ActivityStarter mActivityStarter;
     @Mock
-    private IStatusBarService mStatusBarService;
+    private NotificationClickNotifier mClickNotifier;
     @Mock
     private StatusBarStateController mStatusBarStateController;
     @Mock
@@ -188,7 +188,7 @@ public class StatusBarNotificationActivityStarterTest extends SysuiTestCase {
                         mNotifCollection,
                         mock(HeadsUpManagerPhone.class),
                         mActivityStarter,
-                        mStatusBarService,
+                        mClickNotifier,
                         mock(StatusBarStateController.class),
                         mStatusBarKeyguardViewManager,
                         mock(KeyguardManager.class),
@@ -263,7 +263,7 @@ public class StatusBarNotificationActivityStarterTest extends SysuiTestCase {
 
         verify(mAssistManager).hideAssist();
 
-        verify(mStatusBarService).onNotificationClick(
+        verify(mClickNotifier).onNotificationClick(
                 eq(sbn.getKey()), any(NotificationVisibility.class));
 
         // Notification is removed due to FLAG_AUTO_CANCEL
@@ -282,14 +282,14 @@ public class StatusBarNotificationActivityStarterTest extends SysuiTestCase {
         mNotificationActivityStarter.onNotificationClicked(sbn, mBubbleNotificationRow);
 
         // Then
-        verify(mBubbleController).expandStackAndSelectBubble(eq(sbn.getKey()));
+        verify(mBubbleController).expandStackAndSelectBubble(eq(mBubbleNotificationRow.getEntry()));
 
         // This is called regardless, and simply short circuits when there is nothing to do.
         verify(mShadeController, atLeastOnce()).collapsePanel();
 
         verify(mAssistManager).hideAssist();
 
-        verify(mStatusBarService).onNotificationClick(
+        verify(mClickNotifier).onNotificationClick(
                 eq(sbn.getKey()), any(NotificationVisibility.class));
 
         // The content intent should NOT be sent on click.
@@ -313,13 +313,13 @@ public class StatusBarNotificationActivityStarterTest extends SysuiTestCase {
         mNotificationActivityStarter.onNotificationClicked(sbn, mBubbleNotificationRow);
 
         // Then
-        verify(mBubbleController).expandStackAndSelectBubble(eq(sbn.getKey()));
+        verify(mBubbleController).expandStackAndSelectBubble(mBubbleNotificationRow.getEntry());
 
         verify(mShadeController, atLeastOnce()).collapsePanel();
 
         verify(mAssistManager).hideAssist();
 
-        verify(mStatusBarService).onNotificationClick(
+        verify(mClickNotifier).onNotificationClick(
                 eq(sbn.getKey()), any(NotificationVisibility.class));
 
         // The content intent should NOT be sent on click.
@@ -343,13 +343,13 @@ public class StatusBarNotificationActivityStarterTest extends SysuiTestCase {
         mNotificationActivityStarter.onNotificationClicked(sbn, mBubbleNotificationRow);
 
         // Then
-        verify(mBubbleController).expandStackAndSelectBubble(eq(sbn.getKey()));
+        verify(mBubbleController).expandStackAndSelectBubble(mBubbleNotificationRow.getEntry());
 
         verify(mShadeController, atLeastOnce()).collapsePanel();
 
         verify(mAssistManager).hideAssist();
 
-        verify(mStatusBarService).onNotificationClick(
+        verify(mClickNotifier).onNotificationClick(
                 eq(sbn.getKey()), any(NotificationVisibility.class));
 
         // The content intent should NOT be sent on click.

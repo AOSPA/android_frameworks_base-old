@@ -316,7 +316,6 @@ public class SettingsBackupTest {
                     Settings.Global.KERNEL_CPU_THREAD_READER,
                     Settings.Global.LANG_ID_UPDATE_CONTENT_URL,
                     Settings.Global.LANG_ID_UPDATE_METADATA_URL,
-                    Settings.Global.LAST_ACTIVE_USER_ID,
                     Settings.Global.LOCATION_BACKGROUND_THROTTLE_INTERVAL_MS,
                     Settings.Global.LOCATION_BACKGROUND_THROTTLE_PROXIMITY_ALERT_INTERVAL_MS,
                     Settings.Global.LOCATION_BACKGROUND_THROTTLE_PACKAGE_WHITELIST,
@@ -391,6 +390,7 @@ public class SettingsBackupTest {
                     Settings.Global.NITZ_UPDATE_DIFF,
                     Settings.Global.NITZ_UPDATE_SPACING,
                     Settings.Global.NOTIFICATION_SNOOZE_OPTIONS,
+                    Settings.Global.NR_NSA_TRACKING_SCREEN_OFF_MODE,
                     Settings.Global.NSD_ON,
                     Settings.Global.NTP_SERVER,
                     Settings.Global.NTP_TIMEOUT,
@@ -588,8 +588,9 @@ public class SettingsBackupTest {
                     Settings.Global.POWER_BUTTON_VERY_LONG_PRESS,
                     Settings.Global.SHOW_MEDIA_ON_QUICK_SETTINGS, // Temporary for R beta
                     Settings.Global.INTEGRITY_CHECK_INCLUDES_RULE_PROVIDER,
-                    Settings.Global.ADVANCED_BATTERY_USAGE_AMOUNT,
-                    Settings.Global.CACHED_APPS_FREEZER_ENABLED);
+                    Settings.Global.CACHED_APPS_FREEZER_ENABLED,
+                    Settings.Global.APP_INTEGRITY_VERIFICATION_TIMEOUT,
+                    Settings.Global.ADVANCED_BATTERY_USAGE_AMOUNT);
 
     private static final Set<String> BACKUP_BLACKLISTED_SECURE_SETTINGS =
              newHashSet(

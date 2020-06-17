@@ -42,6 +42,7 @@ import static java.lang.annotation.ElementType.LOCAL_VARIABLE;
 import static java.lang.annotation.ElementType.PARAMETER;
 import static java.lang.annotation.RetentionPolicy.SOURCE;
 
+import android.annotation.NonNull;
 import android.annotation.UserIdInt;
 import android.app.ActivityManager.RunningTaskInfo;
 import android.app.INotificationManager;
@@ -113,6 +114,7 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.Target;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * Bubbles are a special type of content that can "float" on top of other apps or System UI.
@@ -154,6 +156,7 @@ public class BubbleController implements ConfigurationController.ConfigurationLi
     private final ShadeController mShadeController;
     private final FloatingContentCoordinator mFloatingContentCoordinator;
     private final BubbleDataRepository mDataRepository;
+    private BubbleLogger mLogger = new BubbleLoggerImpl();
 
     private BubbleData mBubbleData;
     private ScrimView mBubbleScrim;
@@ -175,7 +178,7 @@ public class BubbleController implements ConfigurationController.ConfigurationLi
     private INotificationManager mINotificationManager;
 
     // Callback that updates BubbleOverflowActivity on data change.
-    @Nullable private BubbleData.Listener mOverflowListener = null;
+    @Nullable private Runnable mOverflowCallback = null;
 
     private final NotificationInterruptStateProvider mNotificationInterruptStateProvider;
     private IStatusBarService mBarService;
@@ -185,9 +188,10 @@ public class BubbleController implements ConfigurationController.ConfigurationLi
     // Used to post to main UI thread
     private Handler mHandler = new Handler();
 
-    /** LayoutParams used to add the BubbleStackView to the window maanger. */
+    /** LayoutParams used to add the BubbleStackView to the window manager. */
     private WindowManager.LayoutParams mWmLayoutParams;
-
+    /** Whether or not the BubbleStackView has been added to the WindowManager. */
+    private boolean mAddedToWindowManager = false;
 
     // Used for determining view rect for touch interaction
     private Rect mTempRect = new Rect();
@@ -198,10 +202,22 @@ public class BubbleController implements ConfigurationController.ConfigurationLi
     /** Last known orientation, used to detect orientation changes in {@link #onConfigChanged}. */
     private int mOrientation = Configuration.ORIENTATION_UNDEFINED;
 
+    /**
+     * Last known screen density, used to detect display size changes in {@link #onConfigChanged}.
+     */
+    private int mDensityDpi = Configuration.DENSITY_DPI_UNDEFINED;
+
     private boolean mInflateSynchronously;
 
     // TODO (b/145659174): allow for multiple callbacks to support the "shadow" new notif pipeline
     private final List<NotifCallback> mCallbacks = new ArrayList<>();
+
+    /**
+     * Whether the IME is visible, as reported by the BubbleStackView. If it is, we'll make the
+     * Bubbles window NOT_FOCUSABLE so that touches on the Bubbles UI doesn't steal focus from the
+     * ActivityView and hide the IME.
+     */
+    private boolean mImeVisible = false;
 
     /**
      * Listener to find out about stack expansion / collapse events.
@@ -237,13 +253,13 @@ public class BubbleController implements ConfigurationController.ConfigurationLi
          * This can happen when an app cancels a bubbled notification or when the user dismisses a
          * bubble.
          */
-        void removeNotification(NotificationEntry entry, int reason);
+        void removeNotification(@NonNull NotificationEntry entry, int reason);
 
         /**
          * Called when a bubbled notification has changed whether it should be
          * filtered from the shade.
          */
-        void invalidateNotifications(String reason);
+        void invalidateNotifications(@NonNull String reason);
 
         /**
          * Called on a bubbled entry that has been removed when there are no longer
@@ -253,7 +269,7 @@ public class BubbleController implements ConfigurationController.ConfigurationLi
          * removes all remnants of the group's summary from the notification pipeline.
          * TODO: (b/145659174) Only old pipeline needs this - delete post-migration.
          */
-        void maybeCancelSummary(NotificationEntry entry);
+        void maybeCancelSummary(@NonNull NotificationEntry entry);
     }
 
     /**
@@ -280,31 +296,6 @@ public class BubbleController implements ConfigurationController.ConfigurationLi
         }
     }
 
-    public BubbleController(Context context,
-            NotificationShadeWindowController notificationShadeWindowController,
-            StatusBarStateController statusBarStateController,
-            ShadeController shadeController,
-            BubbleData data,
-            ConfigurationController configurationController,
-            NotificationInterruptStateProvider interruptionStateProvider,
-            ZenModeController zenModeController,
-            NotificationLockscreenUserManager notifUserManager,
-            NotificationGroupManager groupManager,
-            NotificationEntryManager entryManager,
-            NotifPipeline notifPipeline,
-            FeatureFlags featureFlags,
-            DumpManager dumpManager,
-            FloatingContentCoordinator floatingContentCoordinator,
-            BubbleDataRepository dataRepository,
-            SysUiState sysUiState,
-            INotificationManager notificationManager) {
-        this(context, notificationShadeWindowController, statusBarStateController, shadeController,
-                data, null /* synchronizer */, configurationController, interruptionStateProvider,
-                zenModeController, notifUserManager, groupManager, entryManager,
-                notifPipeline, featureFlags, dumpManager, floatingContentCoordinator,
-                dataRepository, sysUiState, notificationManager);
-    }
-
     /**
      * Injected constructor. See {@link BubbleModule}.
      */
@@ -326,7 +317,9 @@ public class BubbleController implements ConfigurationController.ConfigurationLi
             FloatingContentCoordinator floatingContentCoordinator,
             BubbleDataRepository dataRepository,
             SysUiState sysUiState,
-            INotificationManager notificationManager) {
+            INotificationManager notificationManager,
+            @Nullable IStatusBarService statusBarService,
+            WindowManager windowManager) {
         dumpManager.registerDumpable(TAG, this);
         mContext = context;
         mShadeController = shadeController;
@@ -395,9 +388,11 @@ public class BubbleController implements ConfigurationController.ConfigurationLi
         }
         mSurfaceSynchronizer = synchronizer;
 
-        mWindowManager = (WindowManager) mContext.getSystemService(Context.WINDOW_SERVICE);
-        mBarService = IStatusBarService.Stub.asInterface(
-                ServiceManager.getService(Context.STATUS_BAR_SERVICE));
+        mWindowManager = windowManager;
+        mBarService = statusBarService == null
+                ? IStatusBarService.Stub.asInterface(
+                        ServiceManager.getService(Context.STATUS_BAR_SERVICE))
+                : statusBarService;
 
         mBubbleScrim = new ScrimView(mContext);
 
@@ -422,6 +417,16 @@ public class BubbleController implements ConfigurationController.ConfigurationLi
      */
     public void addNotifCallback(NotifCallback callback) {
         mCallbacks.add(callback);
+    }
+
+    /**
+     * Dispatches a back press into the expanded Bubble's ActivityView if its IME is visible,
+     * causing it to hide.
+     */
+    public void hideImeFromExpandedBubble() {
+        if (mStackView != null) {
+            mStackView.hideImeFromExpandedBubble();
+        }
     }
 
     private void setupNEM() {
@@ -587,6 +592,18 @@ public class BubbleController implements ConfigurationController.ConfigurationLi
     }
 
     /**
+     * Called when the status bar has become visible or invisible (either permanently or
+     * temporarily).
+     */
+    public void onStatusBarVisibilityChanged(boolean visible) {
+        if (mStackView != null) {
+            // Hide the stack temporarily if the status bar has been made invisible, and the stack
+            // is collapsed. An expanded stack should remain visible until collapsed.
+            mStackView.setTemporarilyInvisible(!visible && !isStackExpanded());
+        }
+    }
+
+    /**
      * Sets whether to perform inflation on the same thread as the caller. This method should only
      * be used in tests, not in production.
      */
@@ -595,8 +612,8 @@ public class BubbleController implements ConfigurationController.ConfigurationLi
         mInflateSynchronously = inflateSynchronously;
     }
 
-    void setOverflowListener(BubbleData.Listener listener) {
-        mOverflowListener = listener;
+    void setOverflowCallback(Runnable updateOverflow) {
+        mOverflowCallback = updateOverflow;
     }
 
     /**
@@ -614,9 +631,9 @@ public class BubbleController implements ConfigurationController.ConfigurationLi
         if (mStackView == null) {
             mStackView = new BubbleStackView(
                     mContext, mBubbleData, mSurfaceSynchronizer, mFloatingContentCoordinator,
-                    mSysUiState, mNotificationShadeWindowController);
+                    mSysUiState, this::onAllBubblesAnimatedOut,
+                    this::onImeVisibilityChanged);
             mStackView.addView(mBubbleScrim);
-            addToWindowManager();
             if (mExpandListener != null) {
                 mStackView.setExpandListener(mExpandListener);
             }
@@ -624,17 +641,24 @@ public class BubbleController implements ConfigurationController.ConfigurationLi
             mStackView.setUnbubbleConversationCallback(notificationEntry ->
                     onUserChangedBubble(notificationEntry, false /* shouldBubble */));
         }
+
+        addToWindowManagerMaybe();
     }
 
-    /** Adds the BubbleStackView to the WindowManager. */
-    private void addToWindowManager() {
+    /** Adds the BubbleStackView to the WindowManager if it's not already there. */
+    private void addToWindowManagerMaybe() {
+        // If the stack is null, or already added, don't add it.
+        if (mStackView == null || mAddedToWindowManager) {
+            return;
+        }
+
         mWmLayoutParams = new WindowManager.LayoutParams(
                 // Fill the screen so we can use translation animations to position the bubble
                 // stack. We'll use touchable regions to ignore touches that are not on the bubbles
                 // themselves.
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT,
-                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+                WindowManager.LayoutParams.TYPE_TRUSTED_APPLICATION_OVERLAY,
                 // Start not focusable - we'll become focusable when expanded so the ActivityView
                 // can use the IME.
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
@@ -648,21 +672,79 @@ public class BubbleController implements ConfigurationController.ConfigurationLi
         mWmLayoutParams.packageName = mContext.getPackageName();
         mWmLayoutParams.layoutInDisplayCutoutMode = LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS;
 
-        mWindowManager.addView(mStackView, mWmLayoutParams);
+        try {
+            mAddedToWindowManager = true;
+            mWindowManager.addView(mStackView, mWmLayoutParams);
+        } catch (IllegalStateException e) {
+            // This means the stack has already been added. This shouldn't happen, since we keep
+            // track of that, but just in case, update the previously added view's layout params.
+            e.printStackTrace();
+            updateWmFlags();
+        }
     }
 
+    private void onImeVisibilityChanged(boolean imeVisible) {
+        mImeVisible = imeVisible;
+        updateWmFlags();
+    }
+
+    /** Removes the BubbleStackView from the WindowManager if it's there. */
+    private void removeFromWindowManagerMaybe() {
+        if (!mAddedToWindowManager) {
+            return;
+        }
+
+        try {
+            mAddedToWindowManager = false;
+            if (mStackView != null) {
+                mWindowManager.removeView(mStackView);
+                mStackView.removeView(mBubbleScrim);
+                mStackView = null;
+            } else {
+                Log.w(TAG, "StackView added to WindowManager, but was null when removing!");
+            }
+        } catch (IllegalArgumentException e) {
+            // This means the stack has already been removed - it shouldn't happen, but ignore if it
+            // does, since we wanted it removed anyway.
+            e.printStackTrace();
+        }
+    }
+
+    /**
+     * Updates the BubbleStackView's WindowManager.LayoutParams, and updates the WindowManager with
+     * the new params if the stack has been added.
+     */
     private void updateWmFlags() {
-        if (isStackExpanded()) {
-            // If we're expanded, we want to be focusable so that the ActivityView can receive focus
-            // and show the IME.
+        if (isStackExpanded() && !mImeVisible) {
+            // If we're expanded, and the IME isn't visible, we want to be focusable. This ensures
+            // that any taps within Bubbles (including on the ActivityView) results in Bubbles
+            // receiving focus and clearing it from any other windows that might have it.
             mWmLayoutParams.flags &= ~WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE;
         } else {
-            // If we're collapsed, we don't want to be able to receive focus. Doing so would
-            // preclude applications from using the IME since we are always above them.
+            // If we're collapsed, we don't want to be focusable since tapping on the stack would
+            // steal focus from apps. We also don't want to be focusable if the IME is visible,
             mWmLayoutParams.flags |= WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE;
         }
 
-        mWindowManager.updateViewLayout(mStackView, mWmLayoutParams);
+        if (mStackView != null && mAddedToWindowManager) {
+            try {
+                mWindowManager.updateViewLayout(mStackView, mWmLayoutParams);
+            } catch (IllegalArgumentException e) {
+                // If the stack is somehow not there, ignore the attempt to update it.
+                e.printStackTrace();
+            }
+        }
+    }
+
+    /**
+     * Called by the BubbleStackView and whenever all bubbles have animated out, and none have been
+     * added in the meantime.
+     */
+    private void onAllBubblesAnimatedOut() {
+        if (mStackView != null) {
+            mStackView.setVisibility(INVISIBLE);
+            removeFromWindowManagerMaybe();
+        }
     }
 
     /**
@@ -695,8 +777,9 @@ public class BubbleController implements ConfigurationController.ConfigurationLi
                 mNotificationEntryManager.getActiveNotificationsForCurrentUser()) {
             if (savedBubbleKeys.contains(e.getKey())
                     && mNotificationInterruptStateProvider.shouldBubbleUp(e)
+                    && e.isBubble()
                     && canLaunchInActivityView(mContext, e)) {
-                updateBubble(e, /* suppressFlyout= */ true);
+                updateBubble(e, true /* suppressFlyout */, false /* showInShade */);
             }
         }
         // Finally, remove the entries for this user now that bubbles are restored.
@@ -720,19 +803,34 @@ public class BubbleController implements ConfigurationController.ConfigurationLi
         mBubbleIconFactory = new BubbleIconFactory(mContext);
         // Reload each bubble
         for (Bubble b: mBubbleData.getBubbles()) {
-            b.inflate(null /* callback */, mContext, mStackView, mBubbleIconFactory);
+            b.inflate(null /* callback */, mContext, mStackView, mBubbleIconFactory,
+                    false /* skipInflation */);
         }
         for (Bubble b: mBubbleData.getOverflowBubbles()) {
-            b.inflate(null /* callback */, mContext, mStackView, mBubbleIconFactory);
+            b.inflate(null /* callback */, mContext, mStackView, mBubbleIconFactory,
+                    false /* skipInflation */);
         }
     }
 
     @Override
     public void onConfigChanged(Configuration newConfig) {
-        if (mStackView != null && newConfig != null && newConfig.orientation != mOrientation) {
-            mOrientation = newConfig.orientation;
-            mStackView.onOrientationChanged(newConfig.orientation);
+        if (mStackView != null && newConfig != null) {
+            if (newConfig.orientation != mOrientation) {
+                mOrientation = newConfig.orientation;
+                mStackView.onOrientationChanged(newConfig.orientation);
+            }
+            if (newConfig.densityDpi != mDensityDpi) {
+                mDensityDpi = newConfig.densityDpi;
+                mBubbleIconFactory = new BubbleIconFactory(mContext);
+                mStackView.onDisplaySizeChanged();
+            }
+
+            mStackView.onLayoutDirectionChanged();
         }
+    }
+
+    boolean inLandscape() {
+        return mOrientation == Configuration.ORIENTATION_LANDSCAPE;
     }
 
     /**
@@ -797,28 +895,48 @@ public class BubbleController implements ConfigurationController.ConfigurationLi
         return (isSummary && isSuppressedSummary) || isSuppressedBubble;
     }
 
+    /**
+     * True if:
+     * (1) The current notification entry same as selected bubble notification entry and the
+     * stack is currently expanded.
+     *
+     * False otherwise.
+     */
+    public boolean isBubbleExpanded(NotificationEntry entry) {
+        return isStackExpanded() && mBubbleData != null && mBubbleData.getSelectedBubble() != null
+                && mBubbleData.getSelectedBubble().getKey().equals(entry.getKey()) ? true : false;
+    }
+
     void promoteBubbleFromOverflow(Bubble bubble) {
+        mLogger.log(bubble, BubbleLogger.Event.BUBBLE_OVERFLOW_REMOVE_BACK_TO_STACK);
         bubble.setInflateSynchronously(mInflateSynchronously);
-        setIsBubble(bubble, /* isBubble */ true);
-        mBubbleData.promoteBubbleFromOverflow(bubble, mStackView, mBubbleIconFactory);
+        bubble.setShouldAutoExpand(true);
+        bubble.markUpdatedAt(System.currentTimeMillis());
+        setIsBubble(bubble, true /* isBubble */);
     }
 
     /**
      * Request the stack expand if needed, then select the specified Bubble as current.
+     * If no bubble exists for this entry, one is created.
      *
-     * @param notificationKey the notification key for the bubble to be selected
+     * @param entry the notification for the bubble to be selected
      */
-    public void expandStackAndSelectBubble(String notificationKey) {
-        Bubble bubble = mBubbleData.getBubbleInStackWithKey(notificationKey);
-        if (bubble == null) {
-            bubble = mBubbleData.getOverflowBubbleWithKey(notificationKey);
-            if (bubble != null) {
-                mBubbleData.promoteBubbleFromOverflow(bubble, mStackView, mBubbleIconFactory);
-            }
-        } else if (bubble.getEntry().isBubble()){
+    public void expandStackAndSelectBubble(NotificationEntry entry) {
+        String key = entry.getKey();
+        Bubble bubble = mBubbleData.getBubbleInStackWithKey(key);
+        if (bubble != null) {
             mBubbleData.setSelectedBubble(bubble);
+            mBubbleData.setExpanded(true);
+        } else {
+            bubble = mBubbleData.getOverflowBubbleWithKey(key);
+            if (bubble != null) {
+                promoteBubbleFromOverflow(bubble);
+            } else if (entry.canBubble()) {
+                // It can bubble but it's not -- it got aged out of the overflow before it
+                // was dismissed or opened, make it a bubble again.
+                setIsBubble(entry, true /* isBubble */, true /* autoExpand */);
+            }
         }
-        mBubbleData.setExpanded(true);
     }
 
     /**
@@ -837,27 +955,47 @@ public class BubbleController implements ConfigurationController.ConfigurationLi
      * @param notif the notification associated with this bubble.
      */
     void updateBubble(NotificationEntry notif) {
-        updateBubble(notif, false /* suppressFlyout */);
+        updateBubble(notif, false /* suppressFlyout */, true /* showInShade */);
     }
 
-    void updateBubble(NotificationEntry notif, boolean suppressFlyout) {
-        updateBubble(notif, suppressFlyout, true /* showInShade */);
+    /**
+     * Fills the overflow bubbles by loading them from disk.
+     */
+    void loadOverflowBubblesFromDisk() {
+        if (!mBubbleData.getOverflowBubbles().isEmpty()) {
+            // we don't need to load overflow bubbles from disk if it is already in memory
+            return;
+        }
+        mDataRepository.loadBubbles((bubbles) -> {
+            bubbles.forEach(bubble -> {
+                if (mBubbleData.getBubbles().contains(bubble)) {
+                    // if the bubble is already active, there's no need to push it to overflow
+                    return;
+                }
+                bubble.inflate((b) -> mBubbleData.overflowBubble(DISMISS_AGED, bubble),
+                        mContext, mStackView, mBubbleIconFactory, true /* skipInflation */);
+            });
+            return null;
+        });
     }
 
     void updateBubble(NotificationEntry notif, boolean suppressFlyout, boolean showInShade) {
-        if (mStackView == null) {
-            // Lazy init stack view when a bubble is created
-            ensureStackViewCreated();
-        }
         // If this is an interruptive notif, mark that it's interrupted
         if (notif.getImportance() >= NotificationManager.IMPORTANCE_HIGH) {
             notif.setInterruption();
         }
-        Bubble bubble = mBubbleData.getOrCreateBubble(notif);
+        Bubble bubble = mBubbleData.getOrCreateBubble(notif, null /* persistedBubble */);
+        inflateAndAdd(bubble, suppressFlyout, showInShade);
+    }
+
+    void inflateAndAdd(Bubble bubble, boolean suppressFlyout, boolean showInShade) {
+        // Lazy init stack view when a bubble is created
+        ensureStackViewCreated();
         bubble.setInflateSynchronously(mInflateSynchronously);
         bubble.inflate(
                 b -> {
-                    mBubbleData.notificationEntryUpdated(b, suppressFlyout, showInShade);
+                    mBubbleData.notificationEntryUpdated(b, suppressFlyout,
+                            showInShade);
                     if (bubble.getBubbleIntent() == null) {
                         return;
                     }
@@ -867,11 +1005,11 @@ public class BubbleController implements ConfigurationController.ConfigurationLi
                             return;
                         }
                         mHandler.post(
-                                () -> removeBubble(bubble.getEntry(),
+                                () -> removeBubble(bubble.getKey(),
                                         BubbleController.DISMISS_INVALID_INTENT));
                     });
                 },
-                mContext, mStackView, mBubbleIconFactory);
+                mContext, mStackView, mBubbleIconFactory, false /* skipInflation */);
     }
 
     /**
@@ -883,7 +1021,10 @@ public class BubbleController implements ConfigurationController.ConfigurationLi
      * @param entry the notification to change bubble state for.
      * @param shouldBubble whether the notification should show as a bubble or not.
      */
-    public void onUserChangedBubble(NotificationEntry entry, boolean shouldBubble) {
+    public void onUserChangedBubble(@Nullable final NotificationEntry entry, boolean shouldBubble) {
+        if (entry == null) {
+            return;
+        }
         NotificationChannel channel = entry.getChannel();
         final String appPkg = entry.getSbn().getPackageName();
         final int appUid = entry.getSbn().getUid();
@@ -894,6 +1035,7 @@ public class BubbleController implements ConfigurationController.ConfigurationLi
         // Update the state in NotificationManagerService
         try {
             int flags = Notification.BubbleMetadata.FLAG_SUPPRESS_NOTIFICATION;
+            flags |= Notification.BubbleMetadata.FLAG_AUTO_EXPAND_BUBBLE;
             mBarService.onNotificationBubbleChanged(entry.getKey(), shouldBubble, flags);
         } catch (RemoteException e) {
         }
@@ -921,31 +1063,33 @@ public class BubbleController implements ConfigurationController.ConfigurationLi
     }
 
     /**
-     * Removes the bubble with the given NotificationEntry.
+     * Removes the bubble with the given key.
      * <p>
      * Must be called from the main thread.
      */
     @MainThread
-    void removeBubble(NotificationEntry entry, int reason) {
-        if (mBubbleData.hasAnyBubbleWithKey(entry.getKey())) {
-            mBubbleData.notificationEntryRemoved(entry, reason);
+    void removeBubble(String key, int reason) {
+        if (mBubbleData.hasAnyBubbleWithKey(key)) {
+            mBubbleData.notificationEntryRemoved(key, reason);
         }
     }
 
     private void onEntryAdded(NotificationEntry entry) {
         if (mNotificationInterruptStateProvider.shouldBubbleUp(entry)
+                && entry.isBubble()
                 && canLaunchInActivityView(mContext, entry)) {
             updateBubble(entry);
         }
     }
 
     private void onEntryUpdated(NotificationEntry entry) {
+        // shouldBubbleUp checks canBubble & for bubble metadata
         boolean shouldBubble = mNotificationInterruptStateProvider.shouldBubbleUp(entry)
                 && canLaunchInActivityView(mContext, entry);
         if (!shouldBubble && mBubbleData.hasAnyBubbleWithKey(entry.getKey())) {
             // It was previously a bubble but no longer a bubble -- lets remove it
-            removeBubble(entry, DISMISS_NO_LONGER_BUBBLE);
-        } else if (shouldBubble) {
+            removeBubble(entry.getKey(), DISMISS_NO_LONGER_BUBBLE);
+        } else if (shouldBubble && entry.isBubble()) {
             updateBubble(entry);
         }
     }
@@ -958,10 +1102,10 @@ public class BubbleController implements ConfigurationController.ConfigurationLi
             // Remove any associated bubble children with the summary
             final List<Bubble> bubbleChildren = mBubbleData.getBubblesInGroup(groupKey);
             for (int i = 0; i < bubbleChildren.size(); i++) {
-                removeBubble(bubbleChildren.get(i).getEntry(), DISMISS_GROUP_CANCELLED);
+                removeBubble(bubbleChildren.get(i).getKey(), DISMISS_GROUP_CANCELLED);
             }
         } else {
-            removeBubble(entry, DISMISS_NOTIF_CANCEL);
+            removeBubble(entry.getKey(), DISMISS_NOTIF_CANCEL);
         }
     }
 
@@ -983,7 +1127,8 @@ public class BubbleController implements ConfigurationController.ConfigurationLi
             rankingMap.getRanking(key, mTmpRanking);
             boolean isActiveBubble = mBubbleData.hasAnyBubbleWithKey(key);
             if (isActiveBubble && !mTmpRanking.canBubble()) {
-                mBubbleData.notificationEntryRemoved(entry, BubbleController.DISMISS_BLOCKED);
+                mBubbleData.notificationEntryRemoved(entry.getKey(),
+                        BubbleController.DISMISS_BLOCKED);
             } else if (entry != null && mTmpRanking.isBubble() && !isActiveBubble) {
                 entry.setFlagBubble(true);
                 onEntryUpdated(entry);
@@ -991,16 +1136,43 @@ public class BubbleController implements ConfigurationController.ConfigurationLi
         }
     }
 
-    private void setIsBubble(Bubble b, boolean isBubble) {
+    private void setIsBubble(@NonNull final NotificationEntry entry, final boolean isBubble,
+            final boolean autoExpand) {
+        Objects.requireNonNull(entry);
         if (isBubble) {
-            b.getEntry().getSbn().getNotification().flags |= FLAG_BUBBLE;
+            entry.getSbn().getNotification().flags |= FLAG_BUBBLE;
         } else {
-            b.getEntry().getSbn().getNotification().flags &= ~FLAG_BUBBLE;
+            entry.getSbn().getNotification().flags &= ~FLAG_BUBBLE;
         }
         try {
-            mBarService.onNotificationBubbleChanged(b.getKey(), isBubble, 0);
+            int flags = 0;
+            if (autoExpand) {
+                flags = Notification.BubbleMetadata.FLAG_SUPPRESS_NOTIFICATION;
+                flags |= Notification.BubbleMetadata.FLAG_AUTO_EXPAND_BUBBLE;
+            }
+            mBarService.onNotificationBubbleChanged(entry.getKey(), isBubble, flags);
         } catch (RemoteException e) {
             // Bad things have happened
+        }
+    }
+
+    private void setIsBubble(@NonNull final Bubble b, final boolean isBubble) {
+        Objects.requireNonNull(b);
+        if (isBubble) {
+            b.enable(FLAG_BUBBLE);
+        } else {
+            b.disable(FLAG_BUBBLE);
+        }
+        if (b.getEntry() != null) {
+            // Updating the entry to be a bubble will trigger our normal update flow
+            setIsBubble(b.getEntry(), isBubble, b.shouldAutoExpand());
+        } else if (isBubble) {
+            // If we have no entry to update, it's a persisted bubble so
+            // we need to add it to the stack ourselves
+            Bubble bubble = mBubbleData.getOrCreateBubble(null, b /* persistedBubble */);
+            inflateAndAdd(bubble, bubble.shouldAutoExpand() /* suppressFlyout */,
+                    !bubble.shouldAutoExpand() /* showInShade */);
+
         }
     }
 
@@ -1009,9 +1181,13 @@ public class BubbleController implements ConfigurationController.ConfigurationLi
 
         @Override
         public void applyUpdate(BubbleData.Update update) {
+            ensureStackViewCreated();
+
+            // Lazy load overflow bubbles from disk
+            loadOverflowBubblesFromDisk();
             // Update bubbles in overflow.
-            if (mOverflowListener != null) {
-                mOverflowListener.applyUpdate(update);
+            if (mOverflowCallback != null) {
+                mOverflowCallback.run();
             }
 
             // Collapsing? Do this first before remaining steps.
@@ -1039,28 +1215,31 @@ public class BubbleController implements ConfigurationController.ConfigurationLi
                     if (!mBubbleData.hasOverflowBubbleWithKey(bubble.getKey())
                         && (!bubble.showInShade()
                             || reason == DISMISS_NOTIF_CANCEL
-                            || reason == DISMISS_GROUP_CANCELLED
-                            || reason == DISMISS_OVERFLOW_MAX_REACHED)) {
+                            || reason == DISMISS_GROUP_CANCELLED)) {
                         // The bubble is now gone & the notification is hidden from the shade, so
                         // time to actually remove it
                         for (NotifCallback cb : mCallbacks) {
-                            cb.removeNotification(bubble.getEntry(), REASON_CANCEL);
+                            if (bubble.getEntry() != null) {
+                                cb.removeNotification(bubble.getEntry(), REASON_CANCEL);
+                            }
                         }
                     } else {
-                        if (bubble.getEntry().isBubble() && bubble.showInShade()) {
-                            setIsBubble(bubble, /* isBubble */ false);
+                        if (bubble.isBubble()) {
+                            setIsBubble(bubble, false /* isBubble */);
                         }
-                        if (bubble.getEntry().getRow() != null) {
+                        if (bubble.getEntry() != null && bubble.getEntry().getRow() != null) {
                             bubble.getEntry().getRow().updateBubbleButton();
                         }
                     }
 
                 }
-                final String groupKey = bubble.getEntry().getSbn().getGroupKey();
-                if (mBubbleData.getBubblesInGroup(groupKey).isEmpty()) {
-                    // Time to potentially remove the summary
-                    for (NotifCallback cb : mCallbacks) {
-                        cb.maybeCancelSummary(bubble.getEntry());
+                if (bubble.getEntry() != null) {
+                    final String groupKey = bubble.getEntry().getSbn().getGroupKey();
+                    if (mBubbleData.getBubblesInGroup(groupKey).isEmpty()) {
+                        // Time to potentially remove the summary
+                        for (NotifCallback cb : mCallbacks) {
+                            cb.maybeCancelSummary(bubble.getEntry());
+                        }
                     }
                 }
             }
@@ -1085,7 +1264,7 @@ public class BubbleController implements ConfigurationController.ConfigurationLi
 
             if (update.selectionChanged) {
                 mStackView.setSelectedBubble(update.selectedBubble);
-                if (update.selectedBubble != null) {
+                if (update.selectedBubble != null && update.selectedBubble.getEntry() != null) {
                     mNotificationGroupManager.updateSuppression(
                             update.selectedBubble.getEntry());
                 }
@@ -1111,6 +1290,9 @@ public class BubbleController implements ConfigurationController.ConfigurationLi
                     Log.d(TAG, BubbleDebugConfig.formatBubblesString(mStackView.getBubblesOnScreen(),
                             mStackView.getExpandedBubble()));
                 }
+                Log.d(TAG, "\n[BubbleData] overflow:");
+                Log.d(TAG, BubbleDebugConfig.formatBubblesString(mBubbleData.getOverflowBubbles(),
+                        null) + "\n");
             }
         }
     };
@@ -1205,11 +1387,15 @@ public class BubbleController implements ConfigurationController.ConfigurationLi
         if (mStackView == null) {
             return;
         }
-        if (mStatusBarStateListener.getCurrentState() == SHADE && hasBubbles()) {
-            // Bubbles only appear in unlocked shade
-            mStackView.setVisibility(hasBubbles() ? VISIBLE : INVISIBLE);
-        } else if (mStackView != null) {
+
+        if (mStatusBarStateListener.getCurrentState() != SHADE) {
+            // Bubbles don't appear over the locked shade.
             mStackView.setVisibility(INVISIBLE);
+        } else if (hasBubbles()) {
+            // If we're unlocked, show the stack if we have bubbles. If we don't have bubbles, the
+            // stack will be set to INVISIBLE in onAllBubblesAnimatedOut after the bubbles animate
+            // out.
+            mStackView.setVisibility(VISIBLE);
         }
 
         mStackView.updateContentDescription();
@@ -1276,7 +1462,8 @@ public class BubbleController implements ConfigurationController.ConfigurationLi
                 boolean clearedTask, boolean wasVisible) {
             for (Bubble b : mBubbleData.getBubbles()) {
                 if (b.getDisplayId() == task.displayId) {
-                    expandStackAndSelectBubble(b.getKey());
+                    mBubbleData.setSelectedBubble(b);
+                    mBubbleData.setExpanded(true);
                     return;
                 }
             }

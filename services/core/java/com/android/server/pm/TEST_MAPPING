@@ -69,6 +69,9 @@
             "exclude-annotation": "androidx.test.filters.Suppress"
         }
       ]
+    },
+    {
+      "name": "PackageManagerServiceHostTests"
     }
   ],
   "postsubmit": [
@@ -118,6 +121,9 @@
         },
         {
           "include-filter": "com.android.server.pm.UserSystemPackageInstallerTest"
+        },
+        {
+          "include-filter": "com.android.server.pm.parsing.SystemPartitionParseTest"
         }
       ]
     }

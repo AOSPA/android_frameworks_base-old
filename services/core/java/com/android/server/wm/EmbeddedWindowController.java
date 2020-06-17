@@ -28,6 +28,7 @@ import android.util.ArrayMap;
 import android.util.Slog;
 import android.view.IWindow;
 import android.view.InputApplicationHandle;
+import android.view.InputChannel;
 
 /**
  * Keeps track of embedded windows.
@@ -95,7 +96,7 @@ class EmbeddedWindowController {
     void remove(IWindow client) {
         for (int i = mWindows.size() - 1; i >= 0; i--) {
             if (mWindows.valueAt(i).mClient.asBinder() == client.asBinder()) {
-                mWindows.removeAt(i);
+                mWindows.removeAt(i).onRemoved();
                 return;
             }
         }
@@ -104,7 +105,7 @@ class EmbeddedWindowController {
     void onWindowRemoved(WindowState host) {
         for (int i = mWindows.size() - 1; i >= 0; i--) {
             if (mWindows.valueAt(i).mHostWindowState == host) {
-                mWindows.removeAt(i);
+                mWindows.removeAt(i).onRemoved();
             }
         }
     }
@@ -132,6 +133,9 @@ class EmbeddedWindowController {
         @Nullable final ActivityRecord mHostActivityRecord;
         final int mOwnerUid;
         final int mOwnerPid;
+        final WindowManagerService mWmService;
+        InputChannel mInputChannel;
+        final int mWindowType;
 
         /**
          * @param clientToken client token used to clean up the map if the embedding process dies
@@ -142,14 +146,16 @@ class EmbeddedWindowController {
          * @param ownerUid  calling uid
          * @param ownerPid  calling pid used for anr blaming
          */
-        EmbeddedWindow(IWindow clientToken, WindowState hostWindowState, int ownerUid,
-                int ownerPid) {
+        EmbeddedWindow(WindowManagerService service, IWindow clientToken,
+                WindowState hostWindowState, int ownerUid, int ownerPid, int windowType) {
+            mWmService = service;
             mClient = clientToken;
             mHostWindowState = hostWindowState;
             mHostActivityRecord = (mHostWindowState != null) ? mHostWindowState.mActivityRecord
                     : null;
             mOwnerUid = ownerUid;
             mOwnerPid = ownerPid;
+            mWindowType = windowType;
         }
 
         String getName() {
@@ -166,6 +172,30 @@ class EmbeddedWindowController {
             }
             return new InputApplicationHandle(
                     mHostWindowState.mInputWindowHandle.inputApplicationHandle);
+        }
+
+        InputChannel openInputChannel() {
+            final String name = getName();
+
+            final InputChannel[] inputChannels = InputChannel.openInputChannelPair(name);
+            mInputChannel = inputChannels[0];
+            final InputChannel clientChannel = inputChannels[1];
+            mWmService.mInputManager.registerInputChannel(mInputChannel);
+
+            if (mInputChannel.getToken() != clientChannel.getToken()) {
+                throw new IllegalStateException("Client and Server tokens are expected to"
+                        + "be the same");
+            }
+
+            return clientChannel;
+        }
+
+        void onRemoved() {
+            if (mInputChannel != null) {
+                mWmService.mInputManager.unregisterInputChannel(mInputChannel);
+                mInputChannel.dispose();
+                mInputChannel = null;
+            }
         }
     }
 }

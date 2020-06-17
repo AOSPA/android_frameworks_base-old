@@ -89,8 +89,7 @@
     <string name="screenshot_dismiss_ui_description" msgid="934736855340147968">"סגירת צילום מסך"</string>
     <string name="screenshot_preview_description" msgid="7606510140714080474">"תצוגה מקדימה של צילום מסך"</string>
     <string name="screenrecord_name" msgid="2596401223859996572">"מקליט המסך"</string>
-    <!-- no translation found for screenrecord_background_processing_label (7244617554884238898) -->
-    <skip />
+    <string name="screenrecord_background_processing_label" msgid="7244617554884238898">"מתבצע עיבוד של הקלטת מסך"</string>
     <string name="screenrecord_channel_description" msgid="4147077128486138351">"התראה מתמשכת לסשן הקלטת מסך"</string>
     <string name="screenrecord_start_label" msgid="1750350278888217473">"להתחיל את ההקלטה?"</string>
     <string name="screenrecord_description" msgid="1123231719680353736">"‏בזמן ההקלטה, מערכת Android יכולה לתעד מידע רגיש שגלוי במסך או מופעל במכשיר שלך. מידע זה כולל סיסמאות, פרטי תשלום, תמונות, הודעות ואודיו."</string>
@@ -517,10 +516,9 @@
     <string name="clear_all_notifications_text" msgid="348312370303046130">"ניקוי הכל"</string>
     <string name="manage_notifications_text" msgid="6885645344647733116">"ניהול"</string>
     <string name="manage_notifications_history_text" msgid="57055985396576230">"היסטוריה"</string>
-    <!-- no translation found for notification_section_header_incoming (5295312809341711367) -->
-    <skip />
-    <string name="notification_section_header_gentle" msgid="3044910806569985386">"התראות שקטות"</string>
-    <string name="notification_section_header_alerting" msgid="3168140660646863240">"התראות עם צלילים או רטט"</string>
+    <string name="notification_section_header_incoming" msgid="5295312809341711367">"התקבלו"</string>
+    <string name="notification_section_header_gentle" msgid="6804099527336337197">"שקט"</string>
+    <string name="notification_section_header_alerting" msgid="5581175033680477651">"התראות"</string>
     <string name="notification_section_header_conversations" msgid="821834744538345661">"שיחות"</string>
     <string name="accessibility_notification_section_header_gentle_clear_all" msgid="6490207897764933919">"ניקוי כל ההתראות השקטות"</string>
     <string name="dnd_suppressing_shade_text" msgid="5588252250634464042">"התראות הושהו על ידי מצב \'נא לא להפריע\'"</string>
@@ -600,19 +598,21 @@
     <string name="volume_odi_captions_hint_enable" msgid="2073091194012843195">"הפעלה"</string>
     <string name="volume_odi_captions_hint_disable" msgid="2518846326748183407">"השבתה"</string>
     <string name="accessibility_output_chooser" msgid="7807898688967194183">"החלפת מכשיר פלט"</string>
-    <string name="screen_pinning_title" msgid="7357611095909618178">"המסך מוצמד"</string>
+    <string name="screen_pinning_title" msgid="9058007390337841305">"האפליקציה מוצמדת"</string>
     <string name="screen_pinning_description" msgid="8699395373875667743">"נשאר בתצוגה עד לביטול ההצמדה. יש ללחוץ לחיצה ארוכה על הלחצנים \'הקודם\' ו\'סקירה\' כדי לבטל את ההצמדה."</string>
     <string name="screen_pinning_description_recents_invisible" msgid="4564466648700390037">"נשאר בתצוגה עד לביטול ההצמדה. יש ללחוץ לחיצה ארוכה על הלחצנים \'הקודם\' ו\'דף הבית\' כדי לבטל את ההצמדה."</string>
     <string name="screen_pinning_description_gestural" msgid="7246323931831232068">"נשאר בתצוגה עד לביטול ההצמדה. יש להחליק למעלה ולהחזיק כדי לבטל הצמדה."</string>
     <string name="screen_pinning_description_accessible" msgid="7386449191953535332">"נשאר בתצוגה עד לביטול ההצמדה. יש ללחוץ לחיצה ארוכה על הלחצן \'סקירה\' כדי לבטל את ההצמדה."</string>
     <string name="screen_pinning_description_recents_invisible_accessible" msgid="2857071808674481986">"נשאר בתצוגה עד לביטול ההצמדה. יש ללחוץ לחיצה ארוכה על הלחצן \'דף הבית\' כדי לבטל את ההצמדה."</string>
-    <string name="screen_pinning_toast" msgid="2083944237147005811">"כדי לבטל את ההצמדה של מסך זה, יש ללחוץ לחיצה ארוכה על הלחצנים \'הקודם\' ו\'סקירה\'"</string>
-    <string name="screen_pinning_toast_recents_invisible" msgid="6343770487795352573">"כדי לבטל את ההצמדה של מסך זה, יש ללחוץ לחיצה ארוכה על הלחצנים \'הקודם\' ו\'דף הבית\'"</string>
-    <string name="screen_pinning_toast_gesture_nav" msgid="2884536903398445645">"לביטול ההצמדה של המסך הזה יש להחליק מעלה ולהחזיק"</string>
+    <string name="screen_pinning_exposes_personal_data" msgid="8189852022981524789">"ייתכן שתתאפשר גישה למידע אישי (כמו אנשי קשר ותוכן מהאימייל)."</string>
+    <string name="screen_pinning_can_open_other_apps" msgid="7529756813231421455">"האפליקציה שהוצמדה עשויה לפתוח אפליקציות אחרות."</string>
+    <string name="screen_pinning_toast" msgid="8177286912533744328">"כדי לבטל את ההצמדה של האפליקציה הזו, יש ללחוץ לחיצה ארוכה על הלחצנים \'הקודם\' ו\'סקירה\'"</string>
+    <string name="screen_pinning_toast_recents_invisible" msgid="6850978077443052594">"כדי לבטל את ההצמדה של האפליקציה הזו, יש ללחוץ לחיצה ארוכה על הלחצן \'הקודם\' והלחצן הראשי"</string>
+    <string name="screen_pinning_toast_gesture_nav" msgid="170699893395336705">"לביטול ההצמדה של האפליקציה הזו, יש להחליק למעלה ולהחזיק"</string>
     <string name="screen_pinning_positive" msgid="3285785989665266984">"הבנתי"</string>
     <string name="screen_pinning_negative" msgid="6882816864569211666">"לא, תודה"</string>
-    <string name="screen_pinning_start" msgid="5695091877402422575">"המסך מוצמד"</string>
-    <string name="screen_pinning_exit" msgid="5114993350662745840">"הצמדת המסך בוטלה"</string>
+    <string name="screen_pinning_start" msgid="7483998671383371313">"האפליקציה הוצמדה"</string>
+    <string name="screen_pinning_exit" msgid="4553787518387346893">"הצמדת האפליקציה בוטלה"</string>
     <string name="quick_settings_reset_confirmation_title" msgid="463533331480997595">"להסתיר<xliff:g id="TILE_LABEL">%1$s</xliff:g>?"</string>
     <string name="quick_settings_reset_confirmation_message" msgid="2320586180785674186">"יופיע מחדש בפעם הבאה שתפעיל את האפשרות בהגדרות."</string>
     <string name="quick_settings_reset_confirmation_button" msgid="3341477479055016776">"הסתר"</string>
@@ -715,16 +715,17 @@
     <string name="inline_turn_off_notifications" msgid="8543989584403106071">"השבתת ההתראות"</string>
     <string name="inline_keep_showing_app" msgid="4393429060390649757">"שנמשיך להציג לך התראות מהאפליקציה הזאת?"</string>
     <string name="notification_silence_title" msgid="8608090968400832335">"שקט"</string>
-    <string name="notification_alert_title" msgid="7629202599338071971">"שליחת התראות"</string>
+    <string name="notification_alert_title" msgid="3656229781017543655">"ברירת מחדל"</string>
     <string name="notification_bubble_title" msgid="8330481035191903164">"בועה"</string>
-    <string name="notification_channel_summary_low" msgid="7300447764759926720">"עוזרת להתרכז ללא צלילים או רטט."</string>
-    <string name="notification_channel_summary_default" msgid="3539949463907902037">"מעוררת תשומת לב באמצעות צלילים או רטט."</string>
-    <string name="notification_channel_summary_default_with_bubbles" msgid="6298026344552480458">"מעוררת תשומת לב באמצעות צלילים או רטט. שיחות מהאפליקציה <xliff:g id="APP_NAME">%1$s</xliff:g> מופיעות בבועות כברירת מחדל."</string>
+    <string name="notification_channel_summary_low" msgid="4860617986908931158">"ללא צליל או רטט"</string>
+    <string name="notification_conversation_summary_low" msgid="1734433426085468009">"ללא צליל או רטט ומופיעה למטה בקטע התראות השיחה"</string>
+    <string name="notification_channel_summary_default" msgid="3282930979307248890">"ייתכן שיופעל צלצול או רטט בהתאם להגדרות הטלפון"</string>
+    <string name="notification_channel_summary_default_with_bubbles" msgid="1782419896613644568">"ייתכן שיופעל צלצול או רטט בהתאם להגדרות הטלפון. שיחות מהאפליקציה <xliff:g id="APP_NAME">%1$s</xliff:g> מופיעות בבועות כברירת מחדל."</string>
     <string name="notification_channel_summary_bubble" msgid="7235935211580860537">"מעוררת תשומת לב באמצעות קיצור דרך צף לתוכן הזה."</string>
-    <string name="notification_channel_summary_priority" msgid="7415770044553264622">"מוצגת בחלק העליון של קטע השיחה ומופיעה כבועה."</string>
+    <string name="notification_channel_summary_priority" msgid="7952654515769021553">"מוצגת בחלק העליון של קטע התראות השיחה, מופיעה בבועה צפה, תוצג תמונת פרופיל במסך הנעילה"</string>
     <string name="notification_conversation_channel_settings" msgid="2409977688430606835">"הגדרות"</string>
     <string name="notification_priority_title" msgid="2079708866333537093">"עדיפות"</string>
-    <string name="no_shortcut" msgid="7176375126961212514">"האפליקציה <xliff:g id="APP_NAME">%1$s</xliff:g> לא תומכת בהגדרות ספציפיות לשיחות"</string>
+    <string name="no_shortcut" msgid="8257177117568230126">"האפליקציה <xliff:g id="APP_NAME">%1$s</xliff:g> לא תומכת בתכונות השיחה"</string>
     <string name="bubble_overflow_empty_title" msgid="3120029421991510842">"אין בועות מהזמן האחרון"</string>
     <string name="bubble_overflow_empty_subtitle" msgid="2030874469510497397">"בועות אחרונות ובועות שנסגרו יופיעו כאן"</string>
     <string name="notification_unblockable_desc" msgid="2073030886006190804">"לא ניתן לשנות את ההתראות האלה."</string>
@@ -1001,10 +1002,8 @@
     <string name="music_controls_no_title" msgid="4166497066552290938">"ללא שם"</string>
     <string name="restart_button_description" msgid="6916116576177456480">"צריך להקיש כדי להפעיל מחדש את האפליקציה הזו ולעבור למסך מלא."</string>
     <string name="bubbles_settings_button_description" msgid="7324245408859877545">"הגדרות בשביל בועות של <xliff:g id="APP_NAME">%1$s</xliff:g>"</string>
-    <!-- no translation found for bubble_overflow_button_content_description (5523744621434300510) -->
-    <skip />
-    <!-- no translation found for bubble_accessibility_action_add_back (6217995665917123890) -->
-    <skip />
+    <string name="bubble_overflow_button_content_description" msgid="5523744621434300510">"גלישה"</string>
+    <string name="bubble_accessibility_action_add_back" msgid="6217995665917123890">"הוספה בחזרה לערימה"</string>
     <string name="manage_bubbles_text" msgid="6856830436329494850">"ניהול"</string>
     <string name="bubble_content_description_single" msgid="5175160674436546329">"<xliff:g id="NOTIFICATION_TITLE">%1$s</xliff:g> מהאפליקציה <xliff:g id="APP_NAME">%2$s</xliff:g>"</string>
     <string name="bubble_content_description_stack" msgid="7907610717462651870">"<xliff:g id="NOTIFICATION_TITLE">%1$s</xliff:g> מ-<xliff:g id="APP_NAME">%2$s</xliff:g> ועוד <xliff:g id="BUBBLE_COUNT">%3$d</xliff:g>"</string>
@@ -1013,7 +1012,8 @@
     <string name="bubble_accessibility_action_move_top_right" msgid="6916868852433483569">"העברה לפינה הימנית העליונה"</string>
     <string name="bubble_accessibility_action_move_bottom_left" msgid="6339015902495504715">"העברה לפינה השמאלית התחתונה"</string>
     <string name="bubble_accessibility_action_move_bottom_right" msgid="7471571700628346212">"העברה לפינה הימנית התחתונה"</string>
-    <string name="bubble_dismiss_text" msgid="7071770411580452911">"סגירה"</string>
+    <!-- no translation found for bubble_dismiss_text (1314082410868930066) -->
+    <skip />
     <string name="bubbles_dont_bubble_conversation" msgid="1033040343437428822">"אין להציג בועות לשיחה"</string>
     <string name="bubbles_user_education_title" msgid="5547017089271445797">"לדבר בצ\'אט באמצעות בועות"</string>
     <string name="bubbles_user_education_description" msgid="1160281719576715211">"שיחות חדשות מופיעות כסמלים צפים, או בועות. יש להקיש כדי לפתוח בועה. יש לגרור כדי להזיז אותה."</string>
@@ -1024,11 +1024,14 @@
     <string name="notification_content_system_nav_changed" msgid="5077913144844684544">"הניווט במערכת עודכן. אפשר לערוך שינויים דרך ההגדרות."</string>
     <string name="notification_content_gesture_nav_available" msgid="4431460803004659888">"יש לעבור להגדרות כדי לעדכן את הניווט במערכת"</string>
     <string name="inattentive_sleep_warning_title" msgid="3891371591713990373">"המתנה"</string>
+    <string name="priority_onboarding_title" msgid="2893070698479227616">"השיחה הוגדרה כבעלת עדיפות גבוהה"</string>
+    <string name="priority_onboarding_behavior" msgid="5342816047020432929">"שיחות בעדיפות גבוהה:"</string>
     <string name="priority_onboarding_show_at_top_text" msgid="1678400241025513541">"מופיעות בחלק העליון של קטע השיחות"</string>
     <string name="priority_onboarding_show_avatar_text" msgid="5756291381124091508">"מציגות תמונת פרופיל במסך הנעילה"</string>
     <string name="priority_onboarding_appear_as_bubble_text" msgid="4227039772250263122">"מופיעות כבועה צפה מעל האפליקציות שלך"</string>
     <string name="priority_onboarding_ignores_dnd_text" msgid="2918952762719600529">"גוברות על ההגדרה \'נא לא להפריע\'"</string>
     <string name="priority_onboarding_done_button_title" msgid="4569550984286506007">"הבנתי"</string>
+    <string name="priority_onboarding_settings_button_title" msgid="6663601574303585927">"הגדרות"</string>
     <string name="magnification_overlay_title" msgid="6584179429612427958">"חלון ליצירת שכבת-על להגדלה"</string>
     <string name="magnification_window_title" msgid="4863914360847258333">"חלון הגדלה"</string>
     <string name="magnification_controls_title" msgid="8421106606708891519">"בקרות של חלון ההגדלה"</string>
@@ -1043,6 +1046,13 @@
       <item quantity="other">נוספו <xliff:g id="NUMBER_1">%s</xliff:g> פקדים.</item>
       <item quantity="one">נוסף פקד אחד (<xliff:g id="NUMBER_0">%s</xliff:g>).</item>
     </plurals>
+    <string name="controls_removed" msgid="3731789252222856959">"הוסר"</string>
+    <string name="accessibility_control_favorite" msgid="8694362691985545985">"סומן כהעדפה"</string>
+    <string name="accessibility_control_favorite_position" msgid="54220258048929221">"סומן כהעדפה, במיקום <xliff:g id="NUMBER">%d</xliff:g>"</string>
+    <string name="accessibility_control_not_favorite" msgid="1291760269563092359">"הוסר מהמועדפים"</string>
+    <string name="accessibility_control_change_favorite" msgid="2943178027582253261">"להוסיף למועדפים"</string>
+    <string name="accessibility_control_change_unfavorite" msgid="6997408061750740327">"להוסיף למועדפים"</string>
+    <string name="accessibility_control_move" msgid="8980344493796647792">"העברה למיקום <xliff:g id="NUMBER">%d</xliff:g>"</string>
     <string name="controls_favorite_default_title" msgid="967742178688938137">"פקדים"</string>
     <string name="controls_favorite_subtitle" msgid="6604402232298443956">"יש לבחור פקדים לגישה מתפריט ההפעלה"</string>
     <string name="controls_favorite_rearrange" msgid="5616952398043063519">"יש ללחוץ לחיצה ארוכה ולגרור כדי לארגן מחדש את הפקדים"</string>
@@ -1065,9 +1075,13 @@
     <string name="controls_structure_tooltip" msgid="4355922222944447867">"יש להחליק כדי להציג עוד פריטים"</string>
     <string name="controls_seeding_in_progress" msgid="3033855341410264148">"בטעינת המלצות"</string>
     <string name="controls_media_close_session" msgid="9023534788828414585">"סגירת הסשן הזה של המדיה"</string>
+    <string name="controls_media_resume" msgid="1933520684481586053">"המשך"</string>
     <string name="controls_error_timeout" msgid="794197289772728958">"לא פעיל, יש לבדוק את האפליקציה"</string>
     <string name="controls_error_retryable" msgid="864025882878378470">"שגיאה, מתבצע ניסיון חוזר…"</string>
-    <string name="controls_error_removed" msgid="6299213591234723805">"המכשיר הוסר"</string>
+    <string name="controls_error_removed" msgid="6675638069846014366">"לא נמצא"</string>
+    <string name="controls_error_removed_title" msgid="1207794911208047818">"הפקד לא זמין"</string>
+    <string name="controls_error_removed_message" msgid="2885911717034750542">"לא ניתן להתחבר אל <xliff:g id="DEVICE">%1$s</xliff:g>. יש לבדוק את האפליקציה <xliff:g id="APPLICATION">%2$s</xliff:g> כדי לוודא שהפקד עדיין זמין ושהגדרות האפליקציה לא השתנו."</string>
+    <string name="controls_open_app" msgid="483650971094300141">"לפתיחת האפליקציה"</string>
     <string name="controls_error_generic" msgid="352500456918362905">"לא ניתן לטעון את הסטטוס"</string>
     <string name="controls_error_failed" msgid="960228639198558525">"שגיאה, יש לנסות שוב"</string>
     <string name="controls_in_progress" msgid="4421080500238215939">"בתהליך"</string>

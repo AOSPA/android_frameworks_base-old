@@ -25,7 +25,7 @@ java_defaults {
     ],
     static_libs: [
         "androidx.annotation_annotation",
-        "netd_aidl_interface-V3-java",
+        "netd_aidl_interface-java",
         "netlink-client",
         "networkstack-aidl-interfaces-java",
         "android.hardware.tetheroffload.config-V1.0-java",
@@ -33,8 +33,8 @@ java_defaults {
         "net-utils-framework-common",
     ],
     libs: [
-        "framework-tethering",
-        "framework-wifi-stubs-systemapi",
+        "framework-tethering.impl",
+        "framework-wifi",
         "unsupportedappusage",
     ],
     plugins: ["java_api_finder"],
@@ -51,6 +51,11 @@ android_library {
 cc_library {
     name: "libtetherutilsjni",
     sdk_version: "current",
+    apex_available: [
+        "//apex_available:platform", // Used by InProcessTethering
+        "com.android.tethering",
+    ],
+    min_sdk_version: "current",
     srcs: [
         "jni/android_net_util_TetheringUtils.cpp",
     ],
@@ -110,6 +115,7 @@ android_app {
     // InProcessTethering is a replacement for Tethering
     overrides: ["Tethering"],
     apex_available: ["com.android.tethering"],
+    min_sdk_version: "current",
 }
 
 // Updatable tethering packaged as an application
@@ -123,4 +129,5 @@ android_app {
     // The permission configuration *must* be included to ensure security of the device
     required: ["NetworkPermissionConfig"],
     apex_available: ["com.android.tethering"],
+    min_sdk_version: "current",
 }

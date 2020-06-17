@@ -1162,7 +1162,7 @@ public interface WindowManager extends ViewManager {
 
         /**
          * Window type: shows directly above the keyguard. The layer is
-         * reserved for screenshot region selection. These windows must not take input focus.
+         * reserved for screenshot animation, region selection and UI.
          * In multiuser systems shows only on the owning user's window.
          * @hide
          */
@@ -1215,6 +1215,14 @@ public interface WindowManager extends ViewManager {
          * @hide
          */
         public static final int TYPE_STATUS_BAR_ADDITIONAL = FIRST_SYSTEM_WINDOW + 41;
+
+        /**
+         * Similar to TYPE_APPLICATION_OVERLAY, but trusted to overlay other windows since it is
+         * is coming from the system.
+         * @hide
+         */
+        // TODO(b/155781676): Remove and replace call points with trustedOverlay when that is ready.
+        public static final int TYPE_TRUSTED_APPLICATION_OVERLAY = FIRST_SYSTEM_WINDOW + 42;
 
         /**
          * End of types of system windows.

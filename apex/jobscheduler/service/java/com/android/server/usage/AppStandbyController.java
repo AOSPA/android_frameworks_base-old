@@ -54,6 +54,7 @@ import static com.android.server.SystemService.PHASE_BOOT_COMPLETED;
 import static com.android.server.SystemService.PHASE_SYSTEM_SERVICES_READY;
 
 import android.annotation.NonNull;
+import android.annotation.Nullable;
 import android.annotation.UserIdInt;
 import android.app.ActivityManager;
 import android.app.AppGlobals;
@@ -92,6 +93,7 @@ import android.os.SystemClock;
 import android.os.UserHandle;
 import android.provider.Settings.Global;
 import android.telephony.TelephonyManager;
+import android.util.ArrayMap;
 import android.util.ArraySet;
 import android.util.KeyValueListParser;
 import android.util.Slog;
@@ -226,6 +228,13 @@ public class AppStandbyController implements AppStandbyInternal {
 
     @GuardedBy("mActiveAdminApps")
     private final SparseArray<Set<String>> mActiveAdminApps = new SparseArray<>();
+
+    /**
+     * Set of system apps that are headless (don't have any declared activities, enabled or
+     * disabled). Presence in this map indicates that the app is a headless system app.
+     */
+    @GuardedBy("mAppIdleLock")
+    private final ArrayMap<String, Boolean> mHeadlessSystemApps = new ArrayMap<>();
 
     private final CountDownLatch mAdminDataAvailableLatch = new CountDownLatch(1);
 
@@ -437,6 +446,8 @@ public class AppStandbyController implements AppStandbyInternal {
             synchronized (mAppIdleLock) {
                 userFileExists = mAppIdleHistory.userFileExists(UserHandle.USER_SYSTEM);
             }
+
+            loadHeadlessSystemAppCache();
 
             if (mPendingInitializeDefaults || !userFileExists) {
                 initializeDefaultsForSystemApps(UserHandle.USER_SYSTEM);
@@ -667,20 +678,22 @@ public class AppStandbyController implements AppStandbyInternal {
                 return;
             }
         }
-        final boolean isSpecial = isAppSpecial(packageName,
+        final int minBucket = getAppMinBucket(packageName,
                 UserHandle.getAppId(uid),
                 userId);
         if (DEBUG) {
-            Slog.d(TAG, "   Checking idle state for " + packageName + " special=" +
-                    isSpecial);
+            Slog.d(TAG, "   Checking idle state for " + packageName
+                    + " minBucket=" + minBucket);
         }
-        if (isSpecial) {
+        if (minBucket <= STANDBY_BUCKET_ACTIVE) {
+            // No extra processing needed for ACTIVE or higher since apps can't drop into lower
+            // buckets.
             synchronized (mAppIdleLock) {
                 mAppIdleHistory.setAppStandbyBucket(packageName, userId, elapsedRealtime,
-                        STANDBY_BUCKET_EXEMPTED, REASON_MAIN_DEFAULT);
+                        minBucket, REASON_MAIN_DEFAULT);
             }
             maybeInformListeners(packageName, userId, elapsedRealtime,
-                    STANDBY_BUCKET_EXEMPTED, REASON_MAIN_DEFAULT, false);
+                    minBucket, REASON_MAIN_DEFAULT, false);
         } else {
             synchronized (mAppIdleLock) {
                 final AppIdleHistory.AppUsageHistory app =
@@ -759,6 +772,14 @@ public class AppStandbyController implements AppStandbyInternal {
                     // Leave the reason alone.
                     if (DEBUG) {
                         Slog.d(TAG, "Bringing up from RESTRICTED to RARE due to off switch");
+                    }
+                }
+                if (newBucket > minBucket) {
+                    newBucket = minBucket;
+                    // Leave the reason alone.
+                    if (DEBUG) {
+                        Slog.d(TAG, "Bringing up from " + newBucket + " to " + minBucket
+                                + " due to min bucketing");
                     }
                 }
                 if (DEBUG) {
@@ -1027,20 +1048,35 @@ public class AppStandbyController implements AppStandbyInternal {
         return isAppIdleFiltered(packageName, getAppId(packageName), userId, elapsedRealtime);
     }
 
-    private boolean isAppSpecial(String packageName, int appId, int userId) {
-        if (packageName == null) return false;
+    @StandbyBuckets
+    private int getAppMinBucket(String packageName, int userId) {
+        try {
+            final int uid = mPackageManager.getPackageUidAsUser(packageName, userId);
+            return getAppMinBucket(packageName, UserHandle.getAppId(uid), userId);
+        } catch (PackageManager.NameNotFoundException e) {
+            // Not a valid package for this user, nothing to do
+            return STANDBY_BUCKET_NEVER;
+        }
+    }
+
+    /**
+     * Return the lowest bucket this app should ever enter.
+     */
+    @StandbyBuckets
+    private int getAppMinBucket(String packageName, int appId, int userId) {
+        if (packageName == null) return STANDBY_BUCKET_NEVER;
         // If not enabled at all, of course nobody is ever idle.
         if (!mAppIdleEnabled) {
-            return true;
+            return STANDBY_BUCKET_EXEMPTED;
         }
         if (appId < Process.FIRST_APPLICATION_UID) {
             // System uids never go idle.
-            return true;
+            return STANDBY_BUCKET_EXEMPTED;
         }
         if (packageName.equals("android")) {
             // Nor does the framework (which should be redundant with the above, but for MR1 we will
             // retain this for safety).
-            return true;
+            return STANDBY_BUCKET_EXEMPTED;
         }
         if (mSystemServicesReady) {
             try {
@@ -1048,42 +1084,50 @@ public class AppStandbyController implements AppStandbyInternal {
                 // for idle mode, because app idle (aka app standby) is really not as big an issue
                 // for controlling who participates vs. doze mode.
                 if (mInjector.isNonIdleWhitelisted(packageName)) {
-                    return true;
+                    return STANDBY_BUCKET_EXEMPTED;
                 }
             } catch (RemoteException re) {
                 throw re.rethrowFromSystemServer();
             }
 
             if (isActiveDeviceAdmin(packageName, userId)) {
-                return true;
+                return STANDBY_BUCKET_EXEMPTED;
             }
 
             if (isActiveNetworkScorer(packageName)) {
-                return true;
+                return STANDBY_BUCKET_EXEMPTED;
             }
 
             if (mAppWidgetManager != null
                     && mInjector.isBoundWidgetPackage(mAppWidgetManager, packageName, userId)) {
-                return true;
+                return STANDBY_BUCKET_ACTIVE;
             }
 
             if (isDeviceProvisioningPackage(packageName)) {
-                return true;
+                return STANDBY_BUCKET_EXEMPTED;
             }
         }
 
         // Check this last, as it can be the most expensive check
         if (isCarrierApp(packageName)) {
-            return true;
+            return STANDBY_BUCKET_EXEMPTED;
         }
 
-        return false;
+        if (isHeadlessSystemApp(packageName)) {
+            return STANDBY_BUCKET_ACTIVE;
+        }
+
+        return STANDBY_BUCKET_NEVER;
+    }
+
+    private boolean isHeadlessSystemApp(String packageName) {
+        return mHeadlessSystemApps.containsKey(packageName);
     }
 
     @Override
     public boolean isAppIdleFiltered(String packageName, int appId, int userId,
             long elapsedRealtime) {
-        if (isAppSpecial(packageName, appId, userId)) {
+        if (getAppMinBucket(packageName, appId, userId) < AppIdleHistory.IDLE_BUCKET_CUTOFF) {
             return false;
         } else {
             synchronized (mAppIdleLock) {
@@ -1280,6 +1324,8 @@ public class AppStandbyController implements AppStandbyInternal {
 
     private void setAppStandbyBucket(String packageName, int userId, @StandbyBuckets int newBucket,
             int reason, long elapsedRealtime, boolean resetTimeout) {
+        if (!mAppIdleEnabled) return;
+
         synchronized (mAppIdleLock) {
             // If the package is not installed, don't allow the bucket to be set.
             if (!mInjector.isPackageInstalled(packageName, 0, userId)) {
@@ -1423,6 +1469,8 @@ public class AppStandbyController implements AppStandbyInternal {
                 }
             }
 
+            // Make sure we don't put the app in a lower bucket than it's supposed to be in.
+            newBucket = Math.min(newBucket, getAppMinBucket(packageName, userId));
             mAppIdleHistory.setAppStandbyBucket(packageName, userId, elapsedRealtime, newBucket,
                     reason, resetTimeout);
         }
@@ -1617,14 +1665,18 @@ public class AppStandbyController implements AppStandbyInternal {
         @Override
         public void onReceive(Context context, Intent intent) {
             final String action = intent.getAction();
+            final String pkgName = intent.getData().getSchemeSpecificPart();
+            final int userId = getSendingUserId();
             if (Intent.ACTION_PACKAGE_ADDED.equals(action)
                     || Intent.ACTION_PACKAGE_CHANGED.equals(action)) {
                 clearCarrierPrivilegedApps();
+                // ACTION_PACKAGE_ADDED is called even for system app downgrades.
+                evaluateSystemAppException(pkgName, userId);
+                mHandler.obtainMessage(MSG_CHECK_PACKAGE_IDLE_STATE, userId, -1, pkgName)
+                    .sendToTarget();
             }
             if ((Intent.ACTION_PACKAGE_REMOVED.equals(action) ||
                     Intent.ACTION_PACKAGE_ADDED.equals(action))) {
-                final String pkgName = intent.getData().getSchemeSpecificPart();
-                final int userId = getSendingUserId();
                 if (intent.getBooleanExtra(Intent.EXTRA_REPLACING, false)) {
                     maybeUnrestrictBuggyApp(pkgName, userId);
                 } else {
@@ -1634,6 +1686,35 @@ public class AppStandbyController implements AppStandbyInternal {
         }
     }
 
+    private void evaluateSystemAppException(String packageName, int userId) {
+        if (!mSystemServicesReady) {
+            // The app will be evaluated in when services are ready.
+            return;
+        }
+        try {
+            PackageInfo pi = mPackageManager.getPackageInfoAsUser(packageName,
+                    PackageManager.GET_ACTIVITIES | PackageManager.MATCH_DISABLED_COMPONENTS,
+                    userId);
+            evaluateSystemAppException(pi);
+        } catch (PackageManager.NameNotFoundException e) {
+            mHeadlessSystemApps.remove(packageName);
+        }
+    }
+
+    private void evaluateSystemAppException(@Nullable PackageInfo pkgInfo) {
+        if (pkgInfo.applicationInfo != null && pkgInfo.applicationInfo.isSystemApp()) {
+            synchronized (mAppIdleLock) {
+                if (pkgInfo.activities == null || pkgInfo.activities.length == 0) {
+                    // Headless system app.
+                    mHeadlessSystemApps.put(pkgInfo.packageName, true);
+                } else {
+                    mHeadlessSystemApps.remove(pkgInfo.packageName);
+                }
+            }
+        }
+    }
+
+    /** Call on a system version update to temporarily reset system app buckets. */
     @Override
     public void initializeDefaultsForSystemApps(int userId) {
         if (!mSystemServicesReady) {
@@ -1662,6 +1743,18 @@ public class AppStandbyController implements AppStandbyInternal {
             }
             // Immediately persist defaults to disk
             mAppIdleHistory.writeAppIdleTimes(userId);
+        }
+    }
+
+    /** Call on a system update to temporarily reset system app buckets. */
+    private void loadHeadlessSystemAppCache() {
+        Slog.d(TAG, "Loading headless system app cache. appIdleEnabled=" + mAppIdleEnabled);
+        final List<PackageInfo> packages = mPackageManager.getInstalledPackagesAsUser(
+                PackageManager.GET_ACTIVITIES | PackageManager.MATCH_DISABLED_COMPONENTS,
+                UserHandle.USER_SYSTEM);
+        final int packageCount = packages.size();
+        for (int i = 0; i < packageCount; i++) {
+            evaluateSystemAppException(packages.get(i));
         }
     }
 
@@ -1756,6 +1849,14 @@ public class AppStandbyController implements AppStandbyInternal {
         pw.println();
         pw.print("mScreenThresholds="); pw.println(Arrays.toString(mAppStandbyScreenThresholds));
         pw.print("mElapsedThresholds="); pw.println(Arrays.toString(mAppStandbyElapsedThresholds));
+        pw.println();
+
+        pw.println("mHeadlessSystemApps=[");
+        for (int i = mHeadlessSystemApps.size() - 1; i >= 0; --i) {
+            pw.print(mHeadlessSystemApps.keyAt(i));
+            pw.println(",");
+        }
+        pw.println("]");
         pw.println();
     }
 

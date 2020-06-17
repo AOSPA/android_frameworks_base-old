@@ -132,13 +132,39 @@ public class CarrierConfigManager {
      *
      * {@code true}: Call forwarding option "When unreachable" is supported.
      * {@code false}: Call forwarding option "When unreachable" is not supported. Option will be
-     * greyed out in the UI.
+     * removed in the UI.
      *
      * By default this value is true.
      * @hide
      */
     public static final String KEY_CALL_FORWARDING_WHEN_UNREACHABLE_SUPPORTED_BOOL =
             "call_forwarding_when_unreachable_supported_bool";
+
+     /**
+      * Boolean indicating if carrier supports call forwarding option "When unanswered".
+      *
+      * {@code true}: Call forwarding option "When unanswered" is supported.
+      * {@code false}: Call forwarding option "When unanswered" is not supported. Option will be
+      * removed in the UI.
+      *
+      * By default this value is true.
+      * @hide
+      */
+    public static final String KEY_CALL_FORWARDING_WHEN_UNANSWERED_SUPPORTED_BOOL =
+            "call_forwarding_when_unanswered_supported_bool";
+
+     /**
+      * Boolean indicating if carrier supports call forwarding option "When busy".
+      *
+      * {@code true}: Call forwarding option "When busy" is supported.
+      * {@code false}: Call forwarding option "When busy" is not supported. Option will be
+      * removed in the UI.
+      *
+      * By default this value is true.
+      * @hide
+      */
+    public static final String KEY_CALL_FORWARDING_WHEN_BUSY_SUPPORTED_BOOL =
+            "call_forwarding_when_busy_supported_bool";
 
     /**
      * Boolean indicating if the "Caller ID" item is visible in the Additional Settings menu.
@@ -1667,7 +1693,13 @@ public class CarrierConfigManager {
     public static final String KEY_CDMA_CW_CF_ENABLED_BOOL = "cdma_cw_cf_enabled_bool";
 
     /**
-     * Boolean to decide whether lte is enabled.
+     * Boolean to decide whether NR is enabled.
+     * @hide
+     */
+    public static final String KEY_NR_ENABLED_BOOL = "nr_enabled_bool";
+
+    /**
+     * Boolean to decide whether LTE is enabled.
      */
     public static final String KEY_LTE_ENABLED_BOOL = "lte_enabled_bool";
 
@@ -3906,6 +3938,8 @@ public class CarrierConfigManager {
         sDefaults.putBoolean(KEY_CALL_BARRING_SUPPORTS_DEACTIVATE_ALL_BOOL, true);
         sDefaults.putBoolean(KEY_CALL_FORWARDING_VISIBILITY_BOOL, true);
         sDefaults.putBoolean(KEY_CALL_FORWARDING_WHEN_UNREACHABLE_SUPPORTED_BOOL, true);
+        sDefaults.putBoolean(KEY_CALL_FORWARDING_WHEN_UNANSWERED_SUPPORTED_BOOL, true);
+        sDefaults.putBoolean(KEY_CALL_FORWARDING_WHEN_BUSY_SUPPORTED_BOOL, true);
         sDefaults.putBoolean(KEY_ADDITIONAL_SETTINGS_CALLER_ID_VISIBILITY_BOOL, true);
         sDefaults.putBoolean(KEY_ADDITIONAL_SETTINGS_CALL_WAITING_VISIBILITY_BOOL, true);
         sDefaults.putBoolean(KEY_DISABLE_SUPPLEMENTARY_SERVICES_IN_AIRPLANE_MODE_BOOL, false);
@@ -4196,6 +4230,7 @@ public class CarrierConfigManager {
         sDefaults.putString(KEY_OPERATOR_NAME_FILTER_PATTERN_STRING, "");
         sDefaults.putString(KEY_SHOW_CARRIER_DATA_ICON_PATTERN_STRING, "");
         sDefaults.putBoolean(KEY_HIDE_LTE_PLUS_DATA_ICON_BOOL, true);
+        sDefaults.putBoolean(KEY_NR_ENABLED_BOOL, true);
         sDefaults.putBoolean(KEY_LTE_ENABLED_BOOL, true);
         sDefaults.putBoolean(KEY_SUPPORT_TDSCDMA_BOOL, false);
         sDefaults.putStringArray(KEY_SUPPORT_TDSCDMA_ROAMING_NETWORKS_STRING_ARRAY, null);
@@ -4263,8 +4298,8 @@ public class CarrierConfigManager {
                 "GPRS:24,24", "EDGE:70,18", "UMTS:115,115", "CDMA-IS95A:14,14", "CDMA-IS95B:14,14",
                 "1xRTT:30,30", "EvDo-rev.0:750,48", "EvDo-rev.A:950,550", "HSDPA:4300,620",
                 "HSUPA:4300,1800", "HSPA:4300,1800", "EvDo-rev.B:1500,550", "eHRPD:750,48",
-                "HSPAP:13000,3400", "TD-SCDMA:115,115", "LTE:30000,15000", "NR_NSA:47000,15000",
-                "NR_NSA_MMWAVE:145000,15000", "NR_SA:145000,15000"});
+                "HSPAP:13000,3400", "TD-SCDMA:115,115", "LTE:30000,15000", "NR_NSA:47000,18000",
+                "NR_NSA_MMWAVE:145000,60000", "NR_SA:145000,60000"});
         sDefaults.putBoolean(KEY_BANDWIDTH_NR_NSA_USE_LTE_VALUE_FOR_UPSTREAM_BOOL, false);
         sDefaults.putString(KEY_WCDMA_DEFAULT_SIGNAL_STRENGTH_MEASUREMENT_STRING, "rssi");
         sDefaults.putBoolean(KEY_CONFIG_SHOW_ORIG_DIAL_STRING_FOR_CDMA_BOOL, false);

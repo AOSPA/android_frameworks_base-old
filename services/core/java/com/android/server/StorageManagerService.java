@@ -42,8 +42,8 @@ import static android.os.storage.OnObbStateChangeListener.ERROR_NOT_MOUNTED;
 import static android.os.storage.OnObbStateChangeListener.ERROR_PERMISSION_DENIED;
 import static android.os.storage.OnObbStateChangeListener.MOUNTED;
 import static android.os.storage.OnObbStateChangeListener.UNMOUNTED;
+import static android.os.storage.StorageManager.PROP_FORCED_SCOPED_STORAGE_WHITELIST;
 import static android.os.storage.StorageManager.PROP_FUSE;
-import static android.os.storage.StorageManager.PROP_LEGACY_OP_STICKY;
 import static android.os.storage.StorageManager.PROP_SETTINGS_FUSE;
 
 import static com.android.internal.util.XmlUtils.readIntAttribute;
@@ -121,6 +121,7 @@ import android.os.storage.StorageVolume;
 import android.os.storage.VolumeInfo;
 import android.os.storage.VolumeRecord;
 import android.provider.DeviceConfig;
+import android.provider.DocumentsContract;
 import android.provider.Downloads;
 import android.provider.MediaStore;
 import android.provider.Settings;
@@ -156,7 +157,6 @@ import com.android.internal.util.IndentingPrintWriter;
 import com.android.internal.util.Preconditions;
 import com.android.internal.widget.LockPatternUtils;
 import com.android.server.pm.Installer;
-import com.android.server.pm.parsing.pkg.AndroidPackage;
 import com.android.server.storage.AppFuseBridge;
 import com.android.server.storage.StorageSessionController;
 import com.android.server.storage.StorageSessionController.ExternalStorageServiceException;
@@ -376,6 +376,7 @@ class StorageManagerService extends IStorageManager.Stub
     private class WatchedLockedUsers {
         private int[] users = EmptyArray.INT;
         public WatchedLockedUsers() {
+            invalidateIsUserUnlockedCache();
         }
         public void append(int userId) {
             users = ArrayUtils.appendInt(users, userId);
@@ -432,6 +433,8 @@ class StorageManagerService extends IStorageManager.Stub
     private volatile int mMediaStoreAuthorityAppId = -1;
 
     private volatile int mDownloadsAuthorityAppId = -1;
+
+    private volatile int mExternalStorageAuthorityAppId = -1;
 
     private volatile int mCurrentUserId = UserHandle.USER_SYSTEM;
 
@@ -912,7 +915,6 @@ class StorageManagerService extends IStorageManager.Stub
                     refreshIsolatedStorageSettings();
                 }
             });
-        updateLegacyStorageOpSticky();
         // For now, simply clone property when it changes
         DeviceConfig.addOnPropertiesChangedListener(DeviceConfig.NAMESPACE_STORAGE_NATIVE_BOOT,
                 mContext.getMainExecutor(), (properties) -> {
@@ -1132,6 +1134,8 @@ class StorageManagerService extends IStorageManager.Stub
         } catch (Exception e) {
             Slog.wtf(TAG, e);
         }
+
+        onKeyguardStateChanged(false);
 
         mHandler.obtainMessage(H_COMPLETE_UNLOCK_USER, userId).sendToTarget();
     }
@@ -1834,13 +1838,6 @@ class StorageManagerService extends IStorageManager.Stub
         }
     }
 
-    private void updateLegacyStorageOpSticky() {
-        final boolean propertyValue = DeviceConfig.getBoolean(
-                DeviceConfig.NAMESPACE_STORAGE_NATIVE_BOOT,
-                "legacy_storage_op_sticky", true);
-        SystemProperties.set(PROP_LEGACY_OP_STICKY, propertyValue ? "true" : "false");
-    }
-
     private void start() {
         connectStoraged();
         connectVold();
@@ -1924,29 +1921,37 @@ class StorageManagerService extends IStorageManager.Stub
         mIAppOpsService = IAppOpsService.Stub.asInterface(
                 ServiceManager.getService(Context.APP_OPS_SERVICE));
 
-        ProviderInfo provider = mPmInternal.resolveContentProvider(
-                MediaStore.AUTHORITY, PackageManager.MATCH_DIRECT_BOOT_AWARE
-                | PackageManager.MATCH_DIRECT_BOOT_UNAWARE,
-                UserHandle.getUserId(UserHandle.USER_SYSTEM));
+        ProviderInfo provider = getProviderInfo(MediaStore.AUTHORITY);
         if (provider != null) {
             mMediaStoreAuthorityAppId = UserHandle.getAppId(provider.applicationInfo.uid);
             sMediaStoreAuthorityProcessName = provider.applicationInfo.processName;
         }
 
-        provider = mPmInternal.resolveContentProvider(
-                Downloads.Impl.AUTHORITY, PackageManager.MATCH_DIRECT_BOOT_AWARE
-                        | PackageManager.MATCH_DIRECT_BOOT_UNAWARE,
-                UserHandle.getUserId(UserHandle.USER_SYSTEM));
-
+        provider = getProviderInfo(Downloads.Impl.AUTHORITY);
         if (provider != null) {
             mDownloadsAuthorityAppId = UserHandle.getAppId(provider.applicationInfo.uid);
         }
 
-        try {
-            mIAppOpsService.startWatchingMode(OP_REQUEST_INSTALL_PACKAGES, null, mAppOpsCallback);
-            mIAppOpsService.startWatchingMode(OP_LEGACY_STORAGE, null, mAppOpsCallback);
-        } catch (RemoteException e) {
+        provider = getProviderInfo(DocumentsContract.EXTERNAL_STORAGE_PROVIDER_AUTHORITY);
+        if (provider != null) {
+            mExternalStorageAuthorityAppId = UserHandle.getAppId(provider.applicationInfo.uid);
         }
+
+        if (!mIsFuseEnabled) {
+            try {
+                mIAppOpsService.startWatchingMode(OP_REQUEST_INSTALL_PACKAGES, null,
+                        mAppOpsCallback);
+                mIAppOpsService.startWatchingMode(OP_LEGACY_STORAGE, null, mAppOpsCallback);
+            } catch (RemoteException e) {
+            }
+        }
+    }
+
+    private ProviderInfo getProviderInfo(String authority) {
+        return mPmInternal.resolveContentProvider(
+                authority, PackageManager.MATCH_DIRECT_BOOT_AWARE
+                        | PackageManager.MATCH_DIRECT_BOOT_UNAWARE,
+                UserHandle.getUserId(UserHandle.USER_SYSTEM));
     }
 
     private void updateLegacyStorageApps(String packageName, int uid, boolean hasLegacy) {
@@ -3352,15 +3357,23 @@ class StorageManagerService extends IStorageManager.Stub
     public void fixupAppDir(String path) {
         final Matcher matcher = KNOWN_APP_DIR_PATHS.matcher(path);
         if (matcher.matches()) {
-            AndroidPackage pkg = mPmInternal.getPackage(matcher.group(3));
-            if (pkg != null) {
+            if (matcher.group(2) == null) {
+                Log.e(TAG, "Asked to fixup an app dir without a userId: " + path);
+                return;
+            }
+            try {
+                int userId = Integer.parseInt(matcher.group(2));
+                String packageName = matcher.group(3);
+                int uid = mContext.getPackageManager().getPackageUidAsUser(packageName, userId);
                 try {
-                    mVold.fixupAppDir(path + "/", pkg.getUid());
+                    mVold.fixupAppDir(path + "/", uid);
                 } catch (RemoteException | ServiceSpecificException e) {
-                    Log.e(TAG, "Failed to fixup app dir for " + pkg.getPackageName(), e);
+                    Log.e(TAG, "Failed to fixup app dir for " + packageName, e);
                 }
-            } else {
-                Log.e(TAG, "Can't find package belonging to " + path);
+            } catch (NumberFormatException e) {
+                Log.e(TAG, "Invalid userId in path: " + path, e);
+            } catch (PackageManager.NameNotFoundException e) {
+                Log.e(TAG, "Couldn't find package to fixup app dir " + path, e);
             }
         } else {
             Log.e(TAG, "Path " + path + " is not a valid application-specific directory");
@@ -4203,9 +4216,11 @@ class StorageManagerService extends IStorageManager.Stub
                 return Zygote.MOUNT_EXTERNAL_PASS_THROUGH;
             }
 
-            if (mIsFuseEnabled && mDownloadsAuthorityAppId == UserHandle.getAppId(uid)) {
+            if (mIsFuseEnabled && (mDownloadsAuthorityAppId == UserHandle.getAppId(uid)
+                    || mExternalStorageAuthorityAppId == UserHandle.getAppId(uid))) {
                 // DownloadManager can write in app-private directories on behalf of apps;
                 // give it write access to Android/
+                // ExternalStorageProvider can access Android/{data,obb} dirs in managed mode
                 return Zygote.MOUNT_EXTERNAL_ANDROID_WRITABLE;
             }
 
@@ -4444,6 +4459,9 @@ class StorageManagerService extends IStorageManager.Stub
             pw.println("Isolated storage, remote feature flag: "
                     + Settings.Global.getInt(cr, Settings.Global.ISOLATED_STORAGE_REMOTE, 0));
             pw.println("Isolated storage, resolved: " + StorageManager.hasIsolatedStorage());
+            pw.println("Forced scoped storage app list: "
+                    + DeviceConfig.getProperty(DeviceConfig.NAMESPACE_STORAGE_NATIVE_BOOT,
+                    PROP_FORCED_SCOPED_STORAGE_WHITELIST));
         }
 
         synchronized (mObbMounts) {
@@ -4661,9 +4679,8 @@ class StorageManagerService extends IStorageManager.Stub
         private void killAppForOpChange(int code, int uid, String packageName) {
             final IActivityManager am = ActivityManager.getService();
             try {
-                am.killApplication(packageName,
-                        UserHandle.getAppId(uid),
-                        UserHandle.USER_ALL, AppOpsManager.opToName(code) + " changed.");
+                am.killUid(UserHandle.getAppId(uid), UserHandle.USER_ALL,
+                        AppOpsManager.opToName(code) + " changed.");
             } catch (RemoteException e) {
             }
         }
@@ -4685,7 +4702,12 @@ class StorageManagerService extends IStorageManager.Stub
                                 // results in a bad UX, especially since the gid only gives access
                                 // to unreliable volumes, USB OTGs that are rarely mounted. The app
                                 // will get the external_storage gid on next organic restart.
-                                killAppForOpChange(code, uid, packageName);
+                                if (packageName != null) {
+                                    killAppForOpChange(code, uid, packageName);
+                                } else {
+                                    // TODO(b/158283222) this can happen, figure out if we need
+                                    // to kill in this case as well.
+                                }
                             }
                             return;
                         case OP_LEGACY_STORAGE:

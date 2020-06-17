@@ -88,9 +88,8 @@
     <string name="screenshot_failed_to_capture_text" msgid="7818288545874407451">"Не удалось сделать скриншот: нет разрешения от приложения или организации."</string>
     <string name="screenshot_dismiss_ui_description" msgid="934736855340147968">"Закрыть скриншот"</string>
     <string name="screenshot_preview_description" msgid="7606510140714080474">"Предварительный просмотр скриншота"</string>
-    <string name="screenrecord_name" msgid="2596401223859996572">"Создание скриншотов"</string>
-    <!-- no translation found for screenrecord_background_processing_label (7244617554884238898) -->
-    <skip />
+    <string name="screenrecord_name" msgid="2596401223859996572">"Запись видео с экрана"</string>
+    <string name="screenrecord_background_processing_label" msgid="7244617554884238898">"Обработка записи с экрана…"</string>
     <string name="screenrecord_channel_description" msgid="4147077128486138351">"Текущее уведомление для записи видео с экрана"</string>
     <string name="screenrecord_start_label" msgid="1750350278888217473">"Начать запись?"</string>
     <string name="screenrecord_description" msgid="1123231719680353736">"Во время записи система Android может получить доступ к конфиденциальной информации, которая видна на экране или воспроизводится на устройстве, в том числе к паролям, сведениям о платежах, фотографиям, сообщениям и аудиозаписям."</string>
@@ -101,7 +100,7 @@
     <string name="screenrecord_device_audio_and_mic_label" msgid="1831323771978646841">"Звук с устройства и микрофон"</string>
     <string name="screenrecord_start" msgid="330991441575775004">"Начать"</string>
     <string name="screenrecord_ongoing_screen_only" msgid="4459670242451527727">"Идет запись видео с экрана."</string>
-    <string name="screenrecord_ongoing_screen_and_audio" msgid="5351133763125180920">"Идет запись видео с экрана и звука."</string>
+    <string name="screenrecord_ongoing_screen_and_audio" msgid="5351133763125180920">"Идет запись видео с экрана и звука"</string>
     <string name="screenrecord_taps_label" msgid="1595690528298857649">"Показывать прикосновения к экрану"</string>
     <string name="screenrecord_stop_text" msgid="6549288689506057686">"Нажмите, чтобы остановить"</string>
     <string name="screenrecord_stop_label" msgid="72699670052087989">"Остановить"</string>
@@ -517,10 +516,9 @@
     <string name="clear_all_notifications_text" msgid="348312370303046130">"Очистить все"</string>
     <string name="manage_notifications_text" msgid="6885645344647733116">"Настроить"</string>
     <string name="manage_notifications_history_text" msgid="57055985396576230">"История"</string>
-    <!-- no translation found for notification_section_header_incoming (5295312809341711367) -->
-    <skip />
-    <string name="notification_section_header_gentle" msgid="3044910806569985386">"Беззвучные уведомления"</string>
-    <string name="notification_section_header_alerting" msgid="3168140660646863240">"Оповещения"</string>
+    <string name="notification_section_header_incoming" msgid="5295312809341711367">"Входящие"</string>
+    <string name="notification_section_header_gentle" msgid="6804099527336337197">"Без звука"</string>
+    <string name="notification_section_header_alerting" msgid="5581175033680477651">"Уведомления"</string>
     <string name="notification_section_header_conversations" msgid="821834744538345661">"Разговоры"</string>
     <string name="accessibility_notification_section_header_gentle_clear_all" msgid="6490207897764933919">"Отклонить все беззвучные уведомления"</string>
     <string name="dnd_suppressing_shade_text" msgid="5588252250634464042">"В режиме \"Не беспокоить\" уведомления заблокированы"</string>
@@ -600,19 +598,21 @@
     <string name="volume_odi_captions_hint_enable" msgid="2073091194012843195">"включить"</string>
     <string name="volume_odi_captions_hint_disable" msgid="2518846326748183407">"отключить"</string>
     <string name="accessibility_output_chooser" msgid="7807898688967194183">"Сменить устройство аудиовыхода"</string>
-    <string name="screen_pinning_title" msgid="7357611095909618178">"Блокировка в приложении включена"</string>
+    <string name="screen_pinning_title" msgid="9058007390337841305">"Приложение закреплено"</string>
     <string name="screen_pinning_description" msgid="8699395373875667743">"Приложение останется активным, пока вы не отмените блокировку, нажав и удерживая кнопки \"Назад\" и \"Обзор\"."</string>
     <string name="screen_pinning_description_recents_invisible" msgid="4564466648700390037">"Приложение останется активным, пока вы не отмените блокировку, нажав и удерживая кнопки \"Назад\" и \"Главный экран\"."</string>
     <string name="screen_pinning_description_gestural" msgid="7246323931831232068">"Экран будет зафиксирован, пока вы не отмените блокировку (для этого нужно провести вверх и удерживать)."</string>
     <string name="screen_pinning_description_accessible" msgid="7386449191953535332">"Приложение останется активным, пока вы не отмените блокировку, нажав и удерживая кнопку \"Обзор\"."</string>
     <string name="screen_pinning_description_recents_invisible_accessible" msgid="2857071808674481986">"Приложение останется активным, пока вы не отмените блокировку, нажав и удерживая кнопку \"Главный экран\"."</string>
-    <string name="screen_pinning_toast" msgid="2083944237147005811">"Чтобы открепить экран, нажмите и удерживайте кнопки \"Назад\" и \"Обзор\"."</string>
-    <string name="screen_pinning_toast_recents_invisible" msgid="6343770487795352573">"Чтобы открепить экран, нажмите и удерживайте кнопки \"Назад\" и \"Главный экран\"."</string>
-    <string name="screen_pinning_toast_gesture_nav" msgid="2884536903398445645">"Чтобы открепить этот экран, проведите по нему вверх и задержите руку в крайнем положении."</string>
+    <string name="screen_pinning_exposes_personal_data" msgid="8189852022981524789">"Может быть получен доступ к персональным данным (например, контактам и содержимому электронных писем)."</string>
+    <string name="screen_pinning_can_open_other_apps" msgid="7529756813231421455">"Закрепленное приложение может открывать другие приложения."</string>
+    <string name="screen_pinning_toast" msgid="8177286912533744328">"Чтобы открепить это приложение, нажмите и удерживайте кнопки \"Назад\" и \"Обзор\"."</string>
+    <string name="screen_pinning_toast_recents_invisible" msgid="6850978077443052594">"Чтобы открепить это приложение, нажмите и удерживайте кнопки \"Назад\" и \"Главный экран\"."</string>
+    <string name="screen_pinning_toast_gesture_nav" msgid="170699893395336705">"Чтобы открепить это приложение, проведите по экрану вверх и задержите палец."</string>
     <string name="screen_pinning_positive" msgid="3285785989665266984">"ОК"</string>
     <string name="screen_pinning_negative" msgid="6882816864569211666">"Нет, спасибо"</string>
-    <string name="screen_pinning_start" msgid="5695091877402422575">"Блокировка включена"</string>
-    <string name="screen_pinning_exit" msgid="5114993350662745840">"Блокировка выключена"</string>
+    <string name="screen_pinning_start" msgid="7483998671383371313">"Приложение закреплено."</string>
+    <string name="screen_pinning_exit" msgid="4553787518387346893">"Приложение откреплено."</string>
     <string name="quick_settings_reset_confirmation_title" msgid="463533331480997595">"Скрыть параметр \"<xliff:g id="TILE_LABEL">%1$s</xliff:g>\"?"</string>
     <string name="quick_settings_reset_confirmation_message" msgid="2320586180785674186">"Этот параметр появится в следующий раз, когда вы включите его."</string>
     <string name="quick_settings_reset_confirmation_button" msgid="3341477479055016776">"Скрыть"</string>
@@ -715,16 +715,17 @@
     <string name="inline_turn_off_notifications" msgid="8543989584403106071">"Выключить уведомления"</string>
     <string name="inline_keep_showing_app" msgid="4393429060390649757">"Показывать уведомления от этого приложения?"</string>
     <string name="notification_silence_title" msgid="8608090968400832335">"Без звука"</string>
-    <string name="notification_alert_title" msgid="7629202599338071971">"Оповещения"</string>
+    <string name="notification_alert_title" msgid="3656229781017543655">"По умолчанию"</string>
     <string name="notification_bubble_title" msgid="8330481035191903164">"Всплывающая подсказка"</string>
-    <string name="notification_channel_summary_low" msgid="7300447764759926720">"Уведомления приходят без звука и вибрации"</string>
-    <string name="notification_channel_summary_default" msgid="3539949463907902037">"Уведомления приходят со звуком или вибрацией"</string>
-    <string name="notification_channel_summary_default_with_bubbles" msgid="6298026344552480458">"Уведомления приходят со звуком или вибрацией. Разговоры из приложения \"<xliff:g id="APP_NAME">%1$s</xliff:g>\" по умолчанию появляются в виде всплывающего чата."</string>
+    <string name="notification_channel_summary_low" msgid="4860617986908931158">"Без звука или вибрации"</string>
+    <string name="notification_conversation_summary_low" msgid="1734433426085468009">"Без звука или вибрации, появляется в нижней части списка разговоров"</string>
+    <string name="notification_channel_summary_default" msgid="3282930979307248890">"Звонок или вибрация в зависимости от настроек телефона"</string>
+    <string name="notification_channel_summary_default_with_bubbles" msgid="1782419896613644568">"Звонок или вибрация в зависимости от настроек телефона. Разговоры из приложения \"<xliff:g id="APP_NAME">%1$s</xliff:g>\" по умолчанию появляются в виде всплывающего чата."</string>
     <string name="notification_channel_summary_bubble" msgid="7235935211580860537">"Привлекает ваше внимание к контенту с помощью плавающего ярлыка"</string>
-    <string name="notification_channel_summary_priority" msgid="7415770044553264622">"Появляется в верхней части списка разговоров и в виде всплывающего чата."</string>
+    <string name="notification_channel_summary_priority" msgid="7952654515769021553">"Появляется в верхней части списка разговоров и как всплывающий чат, а также показывает фото профиля на заблокированном экране"</string>
     <string name="notification_conversation_channel_settings" msgid="2409977688430606835">"Настройки"</string>
     <string name="notification_priority_title" msgid="2079708866333537093">"Приоритет"</string>
-    <string name="no_shortcut" msgid="7176375126961212514">"Приложение \"<xliff:g id="APP_NAME">%1$s</xliff:g>\" не поддерживает настройки разговора."</string>
+    <string name="no_shortcut" msgid="8257177117568230126">"Приложение \"<xliff:g id="APP_NAME">%1$s</xliff:g>\" не поддерживает функции разговоров."</string>
     <string name="bubble_overflow_empty_title" msgid="3120029421991510842">"Нет недавних всплывающих чатов"</string>
     <string name="bubble_overflow_empty_subtitle" msgid="2030874469510497397">"Здесь будут появляться недавние и закрытые всплывающие чаты."</string>
     <string name="notification_unblockable_desc" msgid="2073030886006190804">"Эти уведомления нельзя изменить."</string>
@@ -1001,10 +1002,8 @@
     <string name="music_controls_no_title" msgid="4166497066552290938">"Без названия"</string>
     <string name="restart_button_description" msgid="6916116576177456480">"Нажмите, чтобы перезапустить приложение и перейти в полноэкранный режим."</string>
     <string name="bubbles_settings_button_description" msgid="7324245408859877545">"Настройки всплывающих чатов от приложения \"<xliff:g id="APP_NAME">%1$s</xliff:g>\"."</string>
-    <!-- no translation found for bubble_overflow_button_content_description (5523744621434300510) -->
-    <skip />
-    <!-- no translation found for bubble_accessibility_action_add_back (6217995665917123890) -->
-    <skip />
+    <string name="bubble_overflow_button_content_description" msgid="5523744621434300510">"Дополнительное меню"</string>
+    <string name="bubble_accessibility_action_add_back" msgid="6217995665917123890">"Добавить обратно в стек"</string>
     <string name="manage_bubbles_text" msgid="6856830436329494850">"Настроить"</string>
     <string name="bubble_content_description_single" msgid="5175160674436546329">"<xliff:g id="NOTIFICATION_TITLE">%1$s</xliff:g> из приложения \"<xliff:g id="APP_NAME">%2$s</xliff:g>\""</string>
     <string name="bubble_content_description_stack" msgid="7907610717462651870">"<xliff:g id="NOTIFICATION_TITLE">%1$s</xliff:g> от приложения \"<xliff:g id="APP_NAME">%2$s</xliff:g>\" и ещё <xliff:g id="BUBBLE_COUNT">%3$d</xliff:g>"</string>
@@ -1013,7 +1012,8 @@
     <string name="bubble_accessibility_action_move_top_right" msgid="6916868852433483569">"Перенести в правый верхний угол"</string>
     <string name="bubble_accessibility_action_move_bottom_left" msgid="6339015902495504715">"Перенести в левый нижний угол"</string>
     <string name="bubble_accessibility_action_move_bottom_right" msgid="7471571700628346212">"Перенести в правый нижний угол"</string>
-    <string name="bubble_dismiss_text" msgid="7071770411580452911">"Закрыть"</string>
+    <!-- no translation found for bubble_dismiss_text (1314082410868930066) -->
+    <skip />
     <string name="bubbles_dont_bubble_conversation" msgid="1033040343437428822">"Не показывать всплывающие чаты для разговоров"</string>
     <string name="bubbles_user_education_title" msgid="5547017089271445797">"Всплывающие чаты для разговоров"</string>
     <string name="bubbles_user_education_description" msgid="1160281719576715211">"Новые разговоры будут появляться в виде плавающих значков, или всплывающих чатов. Чтобы открыть чат, нажмите на него, а чтобы переместить – перетащите."</string>
@@ -1024,11 +1024,14 @@
     <string name="notification_content_system_nav_changed" msgid="5077913144844684544">"Параметры навигации в системе обновлены. Чтобы изменить их, перейдите в настройки."</string>
     <string name="notification_content_gesture_nav_available" msgid="4431460803004659888">"Чтобы обновить параметры навигации в системе, перейдите в настройки."</string>
     <string name="inattentive_sleep_warning_title" msgid="3891371591713990373">"Переход в режим ожидания"</string>
+    <string name="priority_onboarding_title" msgid="2893070698479227616">"Разговор помечен как важный"</string>
+    <string name="priority_onboarding_behavior" msgid="5342816047020432929">"Важные разговоры:"</string>
     <string name="priority_onboarding_show_at_top_text" msgid="1678400241025513541">"Показывать в верхней части списка разговоров"</string>
     <string name="priority_onboarding_show_avatar_text" msgid="5756291381124091508">"Показывать фото профиля на заблокированном экране"</string>
     <string name="priority_onboarding_appear_as_bubble_text" msgid="4227039772250263122">"Показывать как всплывающий чат над приложениями"</string>
     <string name="priority_onboarding_ignores_dnd_text" msgid="2918952762719600529">"Показывать в режиме \"Не беспокоить\""</string>
     <string name="priority_onboarding_done_button_title" msgid="4569550984286506007">"ОК"</string>
+    <string name="priority_onboarding_settings_button_title" msgid="6663601574303585927">"Настройки"</string>
     <string name="magnification_overlay_title" msgid="6584179429612427958">"Наложение окна увеличения"</string>
     <string name="magnification_window_title" msgid="4863914360847258333">"Окно увеличения"</string>
     <string name="magnification_controls_title" msgid="8421106606708891519">"Настройки окна увеличения"</string>
@@ -1043,6 +1046,13 @@
       <item quantity="many">Добавлено <xliff:g id="NUMBER_1">%s</xliff:g> элементов управления.</item>
       <item quantity="other">Добавлено <xliff:g id="NUMBER_1">%s</xliff:g> элемента управления.</item>
     </plurals>
+    <string name="controls_removed" msgid="3731789252222856959">"Удалено"</string>
+    <string name="accessibility_control_favorite" msgid="8694362691985545985">"Добавлено в избранное"</string>
+    <string name="accessibility_control_favorite_position" msgid="54220258048929221">"Добавлено в избранное на позицию <xliff:g id="NUMBER">%d</xliff:g>"</string>
+    <string name="accessibility_control_not_favorite" msgid="1291760269563092359">"Не добавлено в избранное"</string>
+    <string name="accessibility_control_change_favorite" msgid="2943178027582253261">"добавить в избранное"</string>
+    <string name="accessibility_control_change_unfavorite" msgid="6997408061750740327">"удалить из избранного"</string>
+    <string name="accessibility_control_move" msgid="8980344493796647792">"Переместить на позицию <xliff:g id="NUMBER">%d</xliff:g>"</string>
     <string name="controls_favorite_default_title" msgid="967742178688938137">"Элементы управления"</string>
     <string name="controls_favorite_subtitle" msgid="6604402232298443956">"Выберите элементы управления, которые будут доступны в меню кнопки питания."</string>
     <string name="controls_favorite_rearrange" msgid="5616952398043063519">"Чтобы изменить порядок элементов управления, перетащите их"</string>
@@ -1065,13 +1075,17 @@
     <string name="controls_structure_tooltip" msgid="4355922222944447867">"Проведите по экрану, чтобы увидеть больше"</string>
     <string name="controls_seeding_in_progress" msgid="3033855341410264148">"Загрузка рекомендаций…"</string>
     <string name="controls_media_close_session" msgid="9023534788828414585">"Закрыть этот мультимедийный сеанс"</string>
+    <string name="controls_media_resume" msgid="1933520684481586053">"Возобновить"</string>
     <string name="controls_error_timeout" msgid="794197289772728958">"Нет ответа. Проверьте приложение."</string>
     <string name="controls_error_retryable" msgid="864025882878378470">"Ошибка. Повторная попытка…"</string>
-    <string name="controls_error_removed" msgid="6299213591234723805">"Устройство удалено."</string>
+    <string name="controls_error_removed" msgid="6675638069846014366">"Не найдено."</string>
+    <string name="controls_error_removed_title" msgid="1207794911208047818">"Управление недоступно"</string>
+    <string name="controls_error_removed_message" msgid="2885911717034750542">"Нет доступа к устройству (<xliff:g id="DEVICE">%1$s</xliff:g>). Проверьте, доступно ли управление в приложении \"<xliff:g id="APPLICATION">%2$s</xliff:g>\" и не изменились ли настройки этого приложения."</string>
+    <string name="controls_open_app" msgid="483650971094300141">"Открыть приложение"</string>
     <string name="controls_error_generic" msgid="352500456918362905">"Не удалось загрузить статус."</string>
     <string name="controls_error_failed" msgid="960228639198558525">"Ошибка. Повторите попытку."</string>
     <string name="controls_in_progress" msgid="4421080500238215939">"Выполняется"</string>
     <string name="controls_added_tooltip" msgid="4842812921719153085">"Удерживайте кнопку питания, чтобы увидеть новые элементы управления"</string>
-    <string name="controls_menu_add" msgid="4447246119229920050">"Добавить элементы управления"</string>
-    <string name="controls_menu_edit" msgid="890623986951347062">"Изменить элементы управления"</string>
+    <string name="controls_menu_add" msgid="4447246119229920050">"Добавить эл-ты управления"</string>
+    <string name="controls_menu_edit" msgid="890623986951347062">"Изменить эл-ты управления"</string>
 </resources>

@@ -63,7 +63,142 @@ StatsdConfig CreateStatsdConfig(bool useCondition = true) {
     return config;
 }
 
+StatsdConfig CreateStatsdConfigWithStates() {
+    StatsdConfig config;
+    config.add_allowed_log_source("AID_ROOT");     // LogEvent defaults to UID of root.
+    config.add_default_pull_packages("AID_ROOT");  // Fake puller is registered with root.
+
+    auto pulledAtomMatcher = CreateSimpleAtomMatcher("TestMatcher", util::SUBSYSTEM_SLEEP_STATE);
+    *config.add_atom_matcher() = pulledAtomMatcher;
+    *config.add_atom_matcher() = CreateScreenTurnedOnAtomMatcher();
+    *config.add_atom_matcher() = CreateScreenTurnedOffAtomMatcher();
+    *config.add_atom_matcher() = CreateBatteryStateNoneMatcher();
+    *config.add_atom_matcher() = CreateBatteryStateUsbMatcher();
+
+    auto screenOnPredicate = CreateScreenIsOnPredicate();
+    *config.add_predicate() = screenOnPredicate;
+
+    auto screenOffPredicate = CreateScreenIsOffPredicate();
+    *config.add_predicate() = screenOffPredicate;
+
+    auto deviceUnpluggedPredicate = CreateDeviceUnpluggedPredicate();
+    *config.add_predicate() = deviceUnpluggedPredicate;
+
+    auto screenOnOnBatteryPredicate = config.add_predicate();
+    screenOnOnBatteryPredicate->set_id(StringToId("screenOnOnBatteryPredicate"));
+    screenOnOnBatteryPredicate->mutable_combination()->set_operation(LogicalOperation::AND);
+    addPredicateToPredicateCombination(screenOnPredicate, screenOnOnBatteryPredicate);
+    addPredicateToPredicateCombination(deviceUnpluggedPredicate, screenOnOnBatteryPredicate);
+
+    auto screenOffOnBatteryPredicate = config.add_predicate();
+    screenOffOnBatteryPredicate->set_id(StringToId("ScreenOffOnBattery"));
+    screenOffOnBatteryPredicate->mutable_combination()->set_operation(LogicalOperation::AND);
+    addPredicateToPredicateCombination(screenOffPredicate, screenOffOnBatteryPredicate);
+    addPredicateToPredicateCombination(deviceUnpluggedPredicate, screenOffOnBatteryPredicate);
+
+    const State screenState =
+            CreateScreenStateWithSimpleOnOffMap(/*screen on id=*/321, /*screen off id=*/123);
+    *config.add_state() = screenState;
+
+    // ValueMetricSubsystemSleepWhileScreenOnOnBattery
+    auto valueMetric1 = config.add_value_metric();
+    valueMetric1->set_id(metricId);
+    valueMetric1->set_what(pulledAtomMatcher.id());
+    valueMetric1->set_condition(screenOnOnBatteryPredicate->id());
+    *valueMetric1->mutable_value_field() =
+            CreateDimensions(util::SUBSYSTEM_SLEEP_STATE, {4 /* time sleeping field */});
+    valueMetric1->set_bucket(FIVE_MINUTES);
+    valueMetric1->set_use_absolute_value_on_reset(true);
+    valueMetric1->set_skip_zero_diff_output(false);
+    valueMetric1->set_max_pull_delay_sec(INT_MAX);
+
+    // ValueMetricSubsystemSleepWhileScreenOffOnBattery
+    ValueMetric* valueMetric2 = config.add_value_metric();
+    valueMetric2->set_id(StringToId("ValueMetricSubsystemSleepWhileScreenOffOnBattery"));
+    valueMetric2->set_what(pulledAtomMatcher.id());
+    valueMetric2->set_condition(screenOffOnBatteryPredicate->id());
+    *valueMetric2->mutable_value_field() =
+            CreateDimensions(util::SUBSYSTEM_SLEEP_STATE, {4 /* time sleeping field */});
+    valueMetric2->set_bucket(FIVE_MINUTES);
+    valueMetric2->set_use_absolute_value_on_reset(true);
+    valueMetric2->set_skip_zero_diff_output(false);
+    valueMetric2->set_max_pull_delay_sec(INT_MAX);
+
+    // ValueMetricSubsystemSleepWhileOnBatterySliceScreen
+    ValueMetric* valueMetric3 = config.add_value_metric();
+    valueMetric3->set_id(StringToId("ValueMetricSubsystemSleepWhileOnBatterySliceScreen"));
+    valueMetric3->set_what(pulledAtomMatcher.id());
+    valueMetric3->set_condition(deviceUnpluggedPredicate.id());
+    *valueMetric3->mutable_value_field() =
+            CreateDimensions(util::SUBSYSTEM_SLEEP_STATE, {4 /* time sleeping field */});
+    valueMetric3->add_slice_by_state(screenState.id());
+    valueMetric3->set_bucket(FIVE_MINUTES);
+    valueMetric3->set_use_absolute_value_on_reset(true);
+    valueMetric3->set_skip_zero_diff_output(false);
+    valueMetric3->set_max_pull_delay_sec(INT_MAX);
+    return config;
+}
+
 }  // namespace
+
+/**
+ * Tests the initial condition and condition after the first log events for
+ * value metrics with either a combination condition or simple condition.
+ *
+ * Metrics should be initialized with condition kUnknown (given that the
+ * predicate is using the default InitialValue of UNKNOWN). The condition should
+ * be updated to either kFalse or kTrue if a condition event is logged for all
+ * children conditions.
+ */
+TEST(ValueMetricE2eTest, TestInitialConditionChanges) {
+    StatsdConfig config = CreateStatsdConfigWithStates();
+    int64_t baseTimeNs = getElapsedRealtimeNs();
+    int64_t configAddedTimeNs = 10 * 60 * NS_PER_SEC + baseTimeNs;
+    int64_t bucketSizeNs = TimeUnitToBucketSizeInMillis(config.value_metric(0).bucket()) * 1000000;
+
+    ConfigKey cfgKey;
+    int32_t tagId = util::SUBSYSTEM_SLEEP_STATE;
+    auto processor =
+            CreateStatsLogProcessor(baseTimeNs, configAddedTimeNs, config, cfgKey,
+                                    SharedRefBase::make<FakeSubsystemSleepCallback>(), tagId);
+
+    EXPECT_EQ(processor->mMetricsManagers.size(), 1u);
+    sp<MetricsManager> metricsManager = processor->mMetricsManagers.begin()->second;
+    EXPECT_TRUE(metricsManager->isConfigValid());
+    EXPECT_EQ(3, metricsManager->mAllMetricProducers.size());
+
+    // Combination condition metric - screen on and device unplugged
+    sp<MetricProducer> metricProducer1 = metricsManager->mAllMetricProducers[0];
+    // Simple condition metric - device unplugged
+    sp<MetricProducer> metricProducer2 = metricsManager->mAllMetricProducers[2];
+
+    EXPECT_EQ(ConditionState::kUnknown, metricProducer1->mCondition);
+    EXPECT_EQ(ConditionState::kUnknown, metricProducer2->mCondition);
+
+    auto screenOnEvent =
+            CreateScreenStateChangedEvent(configAddedTimeNs + 30, android::view::DISPLAY_STATE_ON);
+    processor->OnLogEvent(screenOnEvent.get());
+    EXPECT_EQ(ConditionState::kUnknown, metricProducer1->mCondition);
+    EXPECT_EQ(ConditionState::kUnknown, metricProducer2->mCondition);
+
+    auto screenOffEvent =
+            CreateScreenStateChangedEvent(configAddedTimeNs + 40, android::view::DISPLAY_STATE_OFF);
+    processor->OnLogEvent(screenOffEvent.get());
+    EXPECT_EQ(ConditionState::kUnknown, metricProducer1->mCondition);
+    EXPECT_EQ(ConditionState::kUnknown, metricProducer2->mCondition);
+
+    auto pluggedUsbEvent = CreateBatteryStateChangedEvent(
+            configAddedTimeNs + 50, BatteryPluggedStateEnum::BATTERY_PLUGGED_USB);
+    processor->OnLogEvent(pluggedUsbEvent.get());
+    EXPECT_EQ(ConditionState::kFalse, metricProducer1->mCondition);
+    EXPECT_EQ(ConditionState::kFalse, metricProducer2->mCondition);
+
+    auto pluggedNoneEvent = CreateBatteryStateChangedEvent(
+            configAddedTimeNs + 70, BatteryPluggedStateEnum::BATTERY_PLUGGED_NONE);
+    processor->OnLogEvent(pluggedNoneEvent.get());
+    EXPECT_EQ(ConditionState::kFalse, metricProducer1->mCondition);
+    EXPECT_EQ(ConditionState::kTrue, metricProducer2->mCondition);
+}
 
 TEST(ValueMetricE2eTest, TestPulledEvents) {
     auto config = CreateStatsdConfig();
@@ -75,7 +210,7 @@ TEST(ValueMetricE2eTest, TestPulledEvents) {
     auto processor = CreateStatsLogProcessor(baseTimeNs, configAddedTimeNs, config, cfgKey,
                                              SharedRefBase::make<FakeSubsystemSleepCallback>(),
                                              util::SUBSYSTEM_SLEEP_STATE);
-    EXPECT_EQ(processor->mMetricsManagers.size(), 1u);
+    ASSERT_EQ(processor->mMetricsManagers.size(), 1u);
     EXPECT_TRUE(processor->mMetricsManagers.begin()->second->isConfigValid());
     processor->mPullerManager->ForceClearPullerCache();
 
@@ -86,7 +221,7 @@ TEST(ValueMetricE2eTest, TestPulledEvents) {
 
     // When creating the config, the value metric producer should register the alarm at the
     // end of the current bucket.
-    EXPECT_EQ((size_t)1, processor->mPullerManager->mReceivers.size());
+    ASSERT_EQ((size_t)1, processor->mPullerManager->mReceivers.size());
     EXPECT_EQ(bucketSizeNs,
               processor->mPullerManager->mReceivers.begin()->second.front().intervalNs);
     int64_t& expectedPullTimeNs =
@@ -136,36 +271,36 @@ TEST(ValueMetricE2eTest, TestPulledEvents) {
     backfillDimensionPath(&reports);
     backfillStringInReport(&reports);
     backfillStartEndTimestamp(&reports);
-    EXPECT_EQ(1, reports.reports_size());
-    EXPECT_EQ(1, reports.reports(0).metrics_size());
+    ASSERT_EQ(1, reports.reports_size());
+    ASSERT_EQ(1, reports.reports(0).metrics_size());
     StatsLogReport::ValueMetricDataWrapper valueMetrics;
     sortMetricDataByDimensionsValue(reports.reports(0).metrics(0).value_metrics(), &valueMetrics);
-    EXPECT_GT((int)valueMetrics.data_size(), 1);
+    ASSERT_GT((int)valueMetrics.data_size(), 1);
 
     auto data = valueMetrics.data(0);
     EXPECT_EQ(util::SUBSYSTEM_SLEEP_STATE, data.dimensions_in_what().field());
-    EXPECT_EQ(1, data.dimensions_in_what().value_tuple().dimensions_value_size());
+    ASSERT_EQ(1, data.dimensions_in_what().value_tuple().dimensions_value_size());
     EXPECT_EQ(1 /* subsystem name field */,
               data.dimensions_in_what().value_tuple().dimensions_value(0).field());
     EXPECT_FALSE(data.dimensions_in_what().value_tuple().dimensions_value(0).value_str().empty());
     // We have 4 buckets, the first one was incomplete since the condition was unknown.
-    EXPECT_EQ(4, data.bucket_info_size());
+    ASSERT_EQ(4, data.bucket_info_size());
 
     EXPECT_EQ(baseTimeNs + 3 * bucketSizeNs, data.bucket_info(0).start_bucket_elapsed_nanos());
     EXPECT_EQ(baseTimeNs + 4 * bucketSizeNs, data.bucket_info(0).end_bucket_elapsed_nanos());
-    EXPECT_EQ(1, data.bucket_info(0).values_size());
+    ASSERT_EQ(1, data.bucket_info(0).values_size());
 
     EXPECT_EQ(baseTimeNs + 4 * bucketSizeNs, data.bucket_info(1).start_bucket_elapsed_nanos());
     EXPECT_EQ(baseTimeNs + 5 * bucketSizeNs, data.bucket_info(1).end_bucket_elapsed_nanos());
-    EXPECT_EQ(1, data.bucket_info(1).values_size());
+    ASSERT_EQ(1, data.bucket_info(1).values_size());
 
     EXPECT_EQ(baseTimeNs + 6 * bucketSizeNs, data.bucket_info(2).start_bucket_elapsed_nanos());
     EXPECT_EQ(baseTimeNs + 7 * bucketSizeNs, data.bucket_info(2).end_bucket_elapsed_nanos());
-    EXPECT_EQ(1, data.bucket_info(2).values_size());
+    ASSERT_EQ(1, data.bucket_info(2).values_size());
 
     EXPECT_EQ(baseTimeNs + 7 * bucketSizeNs, data.bucket_info(3).start_bucket_elapsed_nanos());
     EXPECT_EQ(baseTimeNs + 8 * bucketSizeNs, data.bucket_info(3).end_bucket_elapsed_nanos());
-    EXPECT_EQ(1, data.bucket_info(3).values_size());
+    ASSERT_EQ(1, data.bucket_info(3).values_size());
 }
 
 TEST(ValueMetricE2eTest, TestPulledEvents_LateAlarm) {
@@ -179,7 +314,7 @@ TEST(ValueMetricE2eTest, TestPulledEvents_LateAlarm) {
     auto processor = CreateStatsLogProcessor(baseTimeNs, configAddedTimeNs, config, cfgKey,
                                              SharedRefBase::make<FakeSubsystemSleepCallback>(),
                                              util::SUBSYSTEM_SLEEP_STATE);
-    EXPECT_EQ(processor->mMetricsManagers.size(), 1u);
+    ASSERT_EQ(processor->mMetricsManagers.size(), 1u);
     EXPECT_TRUE(processor->mMetricsManagers.begin()->second->isConfigValid());
     processor->mPullerManager->ForceClearPullerCache();
 
@@ -190,7 +325,7 @@ TEST(ValueMetricE2eTest, TestPulledEvents_LateAlarm) {
 
     // When creating the config, the value metric producer should register the alarm at the
     // end of the current bucket.
-    EXPECT_EQ((size_t)1, processor->mPullerManager->mReceivers.size());
+    ASSERT_EQ((size_t)1, processor->mPullerManager->mReceivers.size());
     EXPECT_EQ(bucketSizeNs,
               processor->mPullerManager->mReceivers.begin()->second.front().intervalNs);
     int64_t& expectedPullTimeNs =
@@ -244,31 +379,31 @@ TEST(ValueMetricE2eTest, TestPulledEvents_LateAlarm) {
     backfillDimensionPath(&reports);
     backfillStringInReport(&reports);
     backfillStartEndTimestamp(&reports);
-    EXPECT_EQ(1, reports.reports_size());
-    EXPECT_EQ(1, reports.reports(0).metrics_size());
+    ASSERT_EQ(1, reports.reports_size());
+    ASSERT_EQ(1, reports.reports(0).metrics_size());
     StatsLogReport::ValueMetricDataWrapper valueMetrics;
     sortMetricDataByDimensionsValue(reports.reports(0).metrics(0).value_metrics(), &valueMetrics);
-    EXPECT_GT((int)valueMetrics.data_size(), 1);
+    ASSERT_GT((int)valueMetrics.data_size(), 1);
 
     auto data = valueMetrics.data(0);
     EXPECT_EQ(util::SUBSYSTEM_SLEEP_STATE, data.dimensions_in_what().field());
-    EXPECT_EQ(1, data.dimensions_in_what().value_tuple().dimensions_value_size());
+    ASSERT_EQ(1, data.dimensions_in_what().value_tuple().dimensions_value_size());
     EXPECT_EQ(1 /* subsystem name field */,
               data.dimensions_in_what().value_tuple().dimensions_value(0).field());
     EXPECT_FALSE(data.dimensions_in_what().value_tuple().dimensions_value(0).value_str().empty());
-    EXPECT_EQ(3, data.bucket_info_size());
+    ASSERT_EQ(3, data.bucket_info_size());
 
     EXPECT_EQ(baseTimeNs + 5 * bucketSizeNs, data.bucket_info(0).start_bucket_elapsed_nanos());
     EXPECT_EQ(baseTimeNs + 6 * bucketSizeNs, data.bucket_info(0).end_bucket_elapsed_nanos());
-    EXPECT_EQ(1, data.bucket_info(0).values_size());
+    ASSERT_EQ(1, data.bucket_info(0).values_size());
 
     EXPECT_EQ(baseTimeNs + 8 * bucketSizeNs, data.bucket_info(1).start_bucket_elapsed_nanos());
     EXPECT_EQ(baseTimeNs + 9 * bucketSizeNs, data.bucket_info(1).end_bucket_elapsed_nanos());
-    EXPECT_EQ(1, data.bucket_info(1).values_size());
+    ASSERT_EQ(1, data.bucket_info(1).values_size());
 
     EXPECT_EQ(baseTimeNs + 9 * bucketSizeNs, data.bucket_info(2).start_bucket_elapsed_nanos());
     EXPECT_EQ(baseTimeNs + 10 * bucketSizeNs, data.bucket_info(2).end_bucket_elapsed_nanos());
-    EXPECT_EQ(1, data.bucket_info(2).values_size());
+    ASSERT_EQ(1, data.bucket_info(2).values_size());
 }
 
 TEST(ValueMetricE2eTest, TestPulledEvents_WithActivation) {
@@ -291,7 +426,7 @@ TEST(ValueMetricE2eTest, TestPulledEvents_WithActivation) {
     auto processor = CreateStatsLogProcessor(baseTimeNs, configAddedTimeNs, config, cfgKey,
                                              SharedRefBase::make<FakeSubsystemSleepCallback>(),
                                              util::SUBSYSTEM_SLEEP_STATE);
-    EXPECT_EQ(processor->mMetricsManagers.size(), 1u);
+    ASSERT_EQ(processor->mMetricsManagers.size(), 1u);
     EXPECT_TRUE(processor->mMetricsManagers.begin()->second->isConfigValid());
     processor->mPullerManager->ForceClearPullerCache();
 
@@ -303,7 +438,7 @@ TEST(ValueMetricE2eTest, TestPulledEvents_WithActivation) {
 
     // When creating the config, the value metric producer should register the alarm at the
     // end of the current bucket.
-    EXPECT_EQ((size_t)1, processor->mPullerManager->mReceivers.size());
+    ASSERT_EQ((size_t)1, processor->mPullerManager->mReceivers.size());
     EXPECT_EQ(bucketSizeNs,
               processor->mPullerManager->mReceivers.begin()->second.front().intervalNs);
     int64_t& expectedPullTimeNs =
@@ -347,30 +482,30 @@ TEST(ValueMetricE2eTest, TestPulledEvents_WithActivation) {
     backfillDimensionPath(&reports);
     backfillStringInReport(&reports);
     backfillStartEndTimestamp(&reports);
-    EXPECT_EQ(1, reports.reports_size());
-    EXPECT_EQ(1, reports.reports(0).metrics_size());
+    ASSERT_EQ(1, reports.reports_size());
+    ASSERT_EQ(1, reports.reports(0).metrics_size());
     StatsLogReport::ValueMetricDataWrapper valueMetrics;
     sortMetricDataByDimensionsValue(reports.reports(0).metrics(0).value_metrics(), &valueMetrics);
-    EXPECT_GT((int)valueMetrics.data_size(), 0);
+    ASSERT_GT((int)valueMetrics.data_size(), 0);
 
     auto data = valueMetrics.data(0);
     EXPECT_EQ(util::SUBSYSTEM_SLEEP_STATE, data.dimensions_in_what().field());
-    EXPECT_EQ(1, data.dimensions_in_what().value_tuple().dimensions_value_size());
+    ASSERT_EQ(1, data.dimensions_in_what().value_tuple().dimensions_value_size());
     EXPECT_EQ(1 /* subsystem name field */,
               data.dimensions_in_what().value_tuple().dimensions_value(0).field());
     EXPECT_FALSE(data.dimensions_in_what().value_tuple().dimensions_value(0).value_str().empty());
     // We have 2 full buckets, the two surrounding the activation are dropped.
-    EXPECT_EQ(2, data.bucket_info_size());
+    ASSERT_EQ(2, data.bucket_info_size());
 
     auto bucketInfo = data.bucket_info(0);
     EXPECT_EQ(baseTimeNs + 3 * bucketSizeNs, bucketInfo.start_bucket_elapsed_nanos());
     EXPECT_EQ(baseTimeNs + 4 * bucketSizeNs, bucketInfo.end_bucket_elapsed_nanos());
-    EXPECT_EQ(1, bucketInfo.values_size());
+    ASSERT_EQ(1, bucketInfo.values_size());
 
     bucketInfo = data.bucket_info(1);
     EXPECT_EQ(baseTimeNs + 4 * bucketSizeNs, bucketInfo.start_bucket_elapsed_nanos());
     EXPECT_EQ(baseTimeNs + 5 * bucketSizeNs, bucketInfo.end_bucket_elapsed_nanos());
-    EXPECT_EQ(1, bucketInfo.values_size());
+    ASSERT_EQ(1, bucketInfo.values_size());
 }
 
 /**
@@ -416,14 +551,14 @@ TEST(ValueMetricE2eTest, TestInitWithSlicedState) {
     EXPECT_EQ(1, StateManager::getInstance().getListenersCount(SCREEN_STATE_ATOM_ID));
 
     // Check that ValueMetricProducer was initialized correctly.
-    EXPECT_EQ(1U, processor->mMetricsManagers.size());
+    ASSERT_EQ(1U, processor->mMetricsManagers.size());
     sp<MetricsManager> metricsManager = processor->mMetricsManagers.begin()->second;
     EXPECT_TRUE(metricsManager->isConfigValid());
-    EXPECT_EQ(1, metricsManager->mAllMetricProducers.size());
+    ASSERT_EQ(1, metricsManager->mAllMetricProducers.size());
     sp<MetricProducer> metricProducer = metricsManager->mAllMetricProducers[0];
-    EXPECT_EQ(1, metricProducer->mSlicedStateAtoms.size());
+    ASSERT_EQ(1, metricProducer->mSlicedStateAtoms.size());
     EXPECT_EQ(SCREEN_STATE_ATOM_ID, metricProducer->mSlicedStateAtoms.at(0));
-    EXPECT_EQ(0, metricProducer->mStateGroupMap.size());
+    ASSERT_EQ(0, metricProducer->mStateGroupMap.size());
 }
 
 /**
@@ -476,14 +611,14 @@ TEST(ValueMetricE2eTest, TestInitWithSlicedState_WithDimensions) {
     EXPECT_EQ(1, StateManager::getInstance().getListenersCount(UID_PROCESS_STATE_ATOM_ID));
 
     // Check that ValueMetricProducer was initialized correctly.
-    EXPECT_EQ(1U, processor->mMetricsManagers.size());
+    ASSERT_EQ(1U, processor->mMetricsManagers.size());
     sp<MetricsManager> metricsManager = processor->mMetricsManagers.begin()->second;
     EXPECT_TRUE(metricsManager->isConfigValid());
-    EXPECT_EQ(1, metricsManager->mAllMetricProducers.size());
+    ASSERT_EQ(1, metricsManager->mAllMetricProducers.size());
     sp<MetricProducer> metricProducer = metricsManager->mAllMetricProducers[0];
-    EXPECT_EQ(1, metricProducer->mSlicedStateAtoms.size());
+    ASSERT_EQ(1, metricProducer->mSlicedStateAtoms.size());
     EXPECT_EQ(UID_PROCESS_STATE_ATOM_ID, metricProducer->mSlicedStateAtoms.at(0));
-    EXPECT_EQ(0, metricProducer->mStateGroupMap.size());
+    ASSERT_EQ(0, metricProducer->mStateGroupMap.size());
 }
 
 /**
@@ -532,7 +667,7 @@ TEST(ValueMetricE2eTest, TestInitWithSlicedState_WithIncorrectDimensions) {
     EXPECT_EQ(0, StateManager::getInstance().getStateTrackersCount());
 
     // Config initialization fails.
-    EXPECT_EQ(0, processor->mMetricsManagers.size());
+    ASSERT_EQ(0, processor->mMetricsManagers.size());
 }
 
 #else

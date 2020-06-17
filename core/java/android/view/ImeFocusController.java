@@ -125,6 +125,13 @@ public final class ImeFocusController {
         final View viewForWindowFocus = focusedView != null ? focusedView : mViewRootImpl.mView;
         onViewFocusChanged(viewForWindowFocus, true);
 
+        // Skip starting input when the next focused view is same as served view and the served
+        // input connection still exists.
+        final boolean nextFocusIsServedView = mServedView != null && mServedView == focusedView;
+        if (nextFocusIsServedView && immDelegate.isAcceptingText()) {
+            forceFocus = false;
+        }
+
         immDelegate.startInputAsyncOnWindowFocusGain(viewForWindowFocus,
                 windowAttribute.softInputMode, windowAttribute.flags, forceFocus);
     }
@@ -208,26 +215,6 @@ public final class ImeFocusController {
     }
 
     /**
-     * Called by {@link ViewRootImpl} to feedback the state of the screen for this view.
-     * @param newScreenState The new state of the screen. Can be either
-     *                       {@link View#SCREEN_STATE_ON} or {@link View#SCREEN_STATE_OFF}
-     */
-    @UiThread
-    void onScreenStateChanged(int newScreenState) {
-        if (!getImmDelegate().isCurrentRootView(mViewRootImpl)) {
-            return;
-        }
-        // Close input connection and IME when the screen is turn off for security concern.
-        if (newScreenState == View.SCREEN_STATE_OFF && mServedView != null) {
-            if (DEBUG) {
-                Log.d(TAG, "onScreenStateChanged, disconnect input when screen turned off");
-            }
-            mNextServedView = null;
-            mViewRootImpl.dispatchCheckFocus();
-        }
-    }
-
-    /**
      * @param windowAttribute {@link WindowManager.LayoutParams} to be checked.
      * @return Whether the window is in local focus mode or not.
      */
@@ -267,6 +254,7 @@ public final class ImeFocusController {
         void setCurrentRootView(ViewRootImpl rootView);
         boolean isCurrentRootView(ViewRootImpl rootView);
         boolean isRestartOnNextWindowFocus(boolean reset);
+        boolean isAcceptingText();
     }
 
     public View getServedView() {

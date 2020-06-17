@@ -418,25 +418,25 @@ class WindowStateAnimator {
         if (!mDestroyPreservedSurfaceUponRedraw) {
             return;
         }
-        if (mSurfaceController != null) {
-            if (mPendingDestroySurface != null) {
-                // If we are preserving a surface but we aren't relaunching that means
-                // we are just doing an in-place switch. In that case any SurfaceFlinger side
-                // child layers need to be reparented to the new surface to make this
-                // transparent to the app.
-                if (mWin.mActivityRecord == null || mWin.mActivityRecord.isRelaunching() == false) {
-                    mPostDrawTransaction.reparentChildren(
-                        mPendingDestroySurface.getClientViewRootSurface(),
-                        mSurfaceController.mSurfaceControl).apply();
-                }
-            }
+
+        // If we are preserving a surface but we aren't relaunching that means
+        // we are just doing an in-place switch. In that case any SurfaceFlinger side
+        // child layers need to be reparented to the new surface to make this
+        // transparent to the app.
+        // If the children are detached, we don't want to reparent them to the new surface.
+        // Instead let the children get removed when the old surface is deleted.
+        if (mSurfaceController != null && mPendingDestroySurface != null && !mChildrenDetached
+                && (mWin.mActivityRecord == null || !mWin.mActivityRecord.isRelaunching())) {
+            mPostDrawTransaction.reparentChildren(
+                    mPendingDestroySurface.getClientViewRootSurface(),
+                    mSurfaceController.mSurfaceControl).apply();
         }
 
         destroyDeferredSurfaceLocked();
         mDestroyPreservedSurfaceUponRedraw = false;
     }
 
-    void markPreservedSurfaceForDestroy() {
+    private void markPreservedSurfaceForDestroy() {
         if (mDestroyPreservedSurfaceUponRedraw
                 && !mService.mDestroyPreservedSurface.contains(mWin)) {
             mService.mDestroyPreservedSurface.add(mWin);
@@ -904,8 +904,8 @@ class WindowStateAnimator {
         }
 
         if (shouldConsumeMainWindowSizeTransaction()) {
-            task.getSurfaceControl().deferTransactionUntil(mWin.getClientViewRootSurface(),
-                    mWin.getFrameNumber());
+            task.getMainWindowSizeChangeTask().getSurfaceControl().deferTransactionUntil(
+                    mWin.getClientViewRootSurface(), mWin.getFrameNumber());
             mSurfaceController.deferTransactionUntil(mWin.getClientViewRootSurface(),
                     mWin.getFrameNumber());
             SurfaceControl.mergeToGlobalTransaction(task.getMainWindowSizeChangeTransaction());
@@ -1257,19 +1257,25 @@ class WindowStateAnimator {
         mYOffset = dy;
         mWallpaperScale = scale;
 
-        try {
-            if (SHOW_LIGHT_TRANSACTIONS) Slog.i(TAG, ">>> OPEN TRANSACTION setWallpaperOffset");
-            mService.openSurfaceTransaction();
-            setWallpaperPositionAndScale(dx, dy, scale, false);
-        } catch (RuntimeException e) {
-            Slog.w(TAG, "Error positioning surface of " + mWin
-                    + " pos=(" + dx + "," + dy + ")", e);
-        } finally {
-            mService.closeSurfaceTransaction("setWallpaperOffset");
-            if (SHOW_LIGHT_TRANSACTIONS) Slog.i(TAG,
-                    "<<< CLOSE TRANSACTION setWallpaperOffset");
-            return true;
+        if (mSurfaceController != null) {
+            try {
+                if (SHOW_LIGHT_TRANSACTIONS) {
+                    Slog.i(TAG, ">>> OPEN TRANSACTION setWallpaperOffset");
+                }
+                mService.openSurfaceTransaction();
+                setWallpaperPositionAndScale(dx, dy, scale, false);
+            } catch (RuntimeException e) {
+                Slog.w(TAG, "Error positioning surface of " + mWin
+                        + " pos=(" + dx + "," + dy + ")", e);
+            } finally {
+                mService.closeSurfaceTransaction("setWallpaperOffset");
+                if (SHOW_LIGHT_TRANSACTIONS) {
+                    Slog.i(TAG, "<<< CLOSE TRANSACTION setWallpaperOffset");
+                }
+            }
         }
+
+        return true;
     }
 
     private void setWallpaperPositionAndScale(int dx, int dy, float scale,
@@ -1357,9 +1363,13 @@ class WindowStateAnimator {
         if (mPendingDestroySurface != null && mDestroyPreservedSurfaceUponRedraw) {
             final SurfaceControl pendingSurfaceControl = mPendingDestroySurface.mSurfaceControl;
             mPostDrawTransaction.reparent(pendingSurfaceControl, null);
-            mPostDrawTransaction.reparentChildren(
-                mPendingDestroySurface.getClientViewRootSurface(),
-                mSurfaceController.mSurfaceControl);
+            // If the children are detached, we don't want to reparent them to the new surface.
+            // Instead let the children get removed when the old surface is deleted.
+            if (!mChildrenDetached) {
+                mPostDrawTransaction.reparentChildren(
+                        mPendingDestroySurface.getClientViewRootSurface(),
+                        mSurfaceController.mSurfaceControl);
+            }
         }
 
         SurfaceControl.mergeToGlobalTransaction(mPostDrawTransaction);
@@ -1587,6 +1597,12 @@ class WindowStateAnimator {
             mSurfaceController.detachChildren();
         }
         mChildrenDetached = true;
+        // If the children are detached, it means the app is exiting. We don't want to tear the
+        // content down too early, otherwise we could end up with a flicker. By preserving the
+        // current surface, we ensure the content remains on screen until the window is completely
+        // removed. It also ensures that the old surface is cleaned up when started again since it
+        // forces mSurfaceController to be set to null.
+        preserveSurfaceLocked();
     }
 
     void setOffsetPositionForStackResize(boolean offsetPositionForStackResize) {

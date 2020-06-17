@@ -26,6 +26,7 @@ import android.app.Notification;
 import androidx.test.filters.SmallTest;
 import androidx.test.runner.AndroidJUnit4;
 
+import com.android.systemui.statusbar.NotificationInteractionTracker;
 import com.android.systemui.statusbar.notification.collection.NotificationEntry;
 import com.android.systemui.statusbar.notification.collection.NotificationEntryBuilder;
 import com.android.systemui.util.time.FakeSystemClock;
@@ -33,6 +34,8 @@ import com.android.systemui.util.time.FakeSystemClock;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.mockito.Mock;
+import org.mockito.MockitoAnnotations;
 
 @RunWith(AndroidJUnit4.class)
 @SmallTest
@@ -42,9 +45,13 @@ public class ForegroundServiceNotificationListenerTest extends SysuiTestCase {
     private Notification mNotif;
     private final FakeSystemClock mClock = new FakeSystemClock();
 
+    @Mock
+    private NotificationInteractionTracker mInteractionTracker;
+
     @Before
     public void setup() {
-        mExtender = new ForegroundServiceLifetimeExtender(mClock);
+        MockitoAnnotations.initMocks(this);
+        mExtender = new ForegroundServiceLifetimeExtender(mInteractionTracker, mClock);
 
         mNotif = new Notification.Builder(mContext, "")
                 .setSmallIcon(R.drawable.ic_person)
@@ -86,6 +93,18 @@ public class ForegroundServiceNotificationListenerTest extends SysuiTestCase {
 
         // Entry was created at mClock.uptimeMillis(), advance it MIN_FGS_TIME_MS + 1
         mClock.advanceTime(MIN_FGS_TIME_MS + 1);
+        assertFalse(mExtender.shouldExtendLifetime(mEntry));
+    }
+
+    @Test
+    public void testShouldExtendLifetime_shouldNot_interruped() {
+        // GIVEN a notification that would trigger lifetime extension
+        mNotif.flags |= Notification.FLAG_FOREGROUND_SERVICE;
+
+        // GIVEN the notification has alerted
+        mEntry.setInterruption();
+
+        // THEN the notification does not need to have its lifetime extended by this extender
         assertFalse(mExtender.shouldExtendLifetime(mEntry));
     }
 }

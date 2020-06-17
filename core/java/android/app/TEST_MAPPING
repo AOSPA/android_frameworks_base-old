@@ -20,10 +20,6 @@
         },
         {
             "file_patterns": ["(/|^)AppOpsManager.java"],
-            "name": "UidAtomTests:testAppOps"
-        },
-        {
-            "file_patterns": ["(/|^)AppOpsManager.java"],
             "name": "FrameworksServicesTests",
             "options": [
                 {
@@ -54,7 +50,7 @@
             "file_patterns": ["INotificationManager\\.aidl"]
         },
         {
-            "name": "FrameworksInstantAppResolverTests",
+            "name": "CtsInstantAppTests",
             "file_patterns": ["(/|^)InstantAppResolve[^/]*"]
         }
     ],

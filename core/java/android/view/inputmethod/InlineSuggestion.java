@@ -317,8 +317,24 @@ public final class InlineSuggestion implements Parcelable {
          */
         @MainThread
         private void handleOnSurfacePackage(SurfaceControlViewHost.SurfacePackage surfacePackage) {
+            if (surfacePackage == null) {
+                return;
+            }
+            if (mSurfacePackage != null || mSurfacePackageConsumer == null) {
+                // The surface package is not consumed, release it immediately.
+                surfacePackage.release();
+                try {
+                    mInlineContentProvider.onSurfacePackageReleased();
+                } catch (RemoteException e) {
+                    Slog.w(TAG, "Error calling onSurfacePackageReleased(): " + e);
+                }
+                return;
+            }
             mSurfacePackage = surfacePackage;
-            if (mSurfacePackage != null && mSurfacePackageConsumer != null) {
+            if (mSurfacePackage == null) {
+                return;
+            }
+            if (mSurfacePackageConsumer != null) {
                 mSurfacePackageConsumer.accept(mSurfacePackage);
                 mSurfacePackageConsumer = null;
             }
@@ -326,12 +342,18 @@ public final class InlineSuggestion implements Parcelable {
 
         @MainThread
         private void handleOnSurfacePackageReleased() {
-            mSurfacePackage = null;
-            try {
-                mInlineContentProvider.onSurfacePackageReleased();
-            } catch (RemoteException e) {
-                Slog.w(TAG, "Error calling onSurfacePackageReleased(): " + e);
+            if (mSurfacePackage != null) {
+                try {
+                    mInlineContentProvider.onSurfacePackageReleased();
+                } catch (RemoteException e) {
+                    Slog.w(TAG, "Error calling onSurfacePackageReleased(): " + e);
+                }
+                mSurfacePackage = null;
             }
+            // Clear the pending surface package consumer, if any. This can happen if the IME
+            // attaches the view to window and then quickly detaches it from the window, before
+            // the surface package requested upon attaching to window was returned.
+            mSurfacePackageConsumer = null;
         }
 
         @MainThread
@@ -573,7 +595,7 @@ public final class InlineSuggestion implements Parcelable {
     };
 
     @DataClass.Generated(
-            time = 1588308946517L,
+            time = 1589396017700L,
             codegenVersion = "1.0.15",
             sourceFile = "frameworks/base/core/java/android/view/inputmethod/InlineSuggestion.java",
             inputSignatures = "private static final  java.lang.String TAG\nprivate final @android.annotation.NonNull android.view.inputmethod.InlineSuggestionInfo mInfo\nprivate final @android.annotation.Nullable com.android.internal.view.inline.IInlineContentProvider mContentProvider\nprivate @com.android.internal.util.DataClass.ParcelWith(android.view.inputmethod.InlineSuggestion.InlineContentCallbackImplParceling.class) @android.annotation.Nullable android.view.inputmethod.InlineSuggestion.InlineContentCallbackImpl mInlineContentCallback\npublic static @android.annotation.TestApi @android.annotation.NonNull android.view.inputmethod.InlineSuggestion newInlineSuggestion(android.view.inputmethod.InlineSuggestionInfo)\npublic  void inflate(android.content.Context,android.util.Size,java.util.concurrent.Executor,java.util.function.Consumer<android.widget.inline.InlineContentView>)\nprivate static  boolean isValid(int,int,int)\nprivate synchronized  android.view.inputmethod.InlineSuggestion.InlineContentCallbackImpl getInlineContentCallback(android.content.Context,java.util.concurrent.Executor,java.util.function.Consumer<android.widget.inline.InlineContentView>)\nclass InlineSuggestion extends java.lang.Object implements [android.os.Parcelable]\n@com.android.internal.util.DataClass(genEqualsHashCode=true, genToString=true, genHiddenConstDefs=true, genHiddenConstructor=true)")

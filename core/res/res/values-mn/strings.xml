@@ -202,8 +202,8 @@
     <string name="printing_disabled_by" msgid="3517499806528864633">"<xliff:g id="OWNER_APP">%s</xliff:g> хэвлэх үйлдлийг идэвхгүй болгосон."</string>
     <string name="personal_apps_suspension_title" msgid="7561416677884286600">"Ажлын профайлаа асаах"</string>
     <string name="personal_apps_suspension_text" msgid="6115455688932935597">"Та ажлын профайлыг асаах хүртэл таны хувийн аппуудыг хориглосон"</string>
-    <string name="personal_apps_suspension_tomorrow_text" msgid="6322541302153673994">"Таны хувийн аппуудыг маргааш хориглоно"</string>
-    <string name="personal_apps_suspended_turn_profile_on" msgid="4278188538997940785">"Ажлын профайлыг асаах"</string>
+    <string name="personal_apps_suspension_soon_text" msgid="8123898693479590">"Хувийн аппуудыг <xliff:g id="DATE">%1$s</xliff:g>-н <xliff:g id="TIME">%2$s</xliff:g>-д блоклоно. Таны IT админ таны ажлын профайлыг <xliff:g id="NUMBER">%3$d</xliff:g>-с олон хоног унтраалттай байхыг зөвшөөрдөггүй."</string>
+    <string name="personal_apps_suspended_turn_profile_on" msgid="2758012869627513689">"Асаах"</string>
     <string name="me" msgid="6207584824693813140">"Би"</string>
     <string name="power_dialog" product="tablet" msgid="8333207765671417261">"Таблетын сонголтууд"</string>
     <string name="power_dialog" product="tv" msgid="7792839006640933763">"Android ТВ-н сонголт"</string>
@@ -268,7 +268,7 @@
     <string name="status_bar_notification_info_overflow" msgid="3330152558746563475">"999+"</string>
     <string name="notification_hidden_text" msgid="2835519769868187223">"Шинэ мэдэгдэл"</string>
     <string name="notification_channel_virtual_keyboard" msgid="6465975799223304567">"Виртуал гар"</string>
-    <string name="notification_channel_physical_keyboard" msgid="5417306456125988096">"Бодит гар"</string>
+    <string name="notification_channel_physical_keyboard" msgid="5417306456125988096">"Биет гар"</string>
     <string name="notification_channel_security" msgid="8516754650348238057">"Аюулгүй байдал"</string>
     <string name="notification_channel_car_mode" msgid="2123919247040988436">"Машины горим"</string>
     <string name="notification_channel_account" msgid="6436294521740148173">"Бүртгэлийн төлөв"</string>
@@ -536,7 +536,7 @@
     <string name="permdesc_imagesWrite" msgid="5195054463269193317">"Таны зургийн цуглуулгыг тохируулах зөвшөөрлийг аппад олгодог."</string>
     <string name="permlab_mediaLocation" msgid="7368098373378598066">"медиа цуглуулгаасаа байршлыг унших"</string>
     <string name="permdesc_mediaLocation" msgid="597912899423578138">"Таны медиа цуглуулгаас байршлыг унших зөвшөөрлийг аппад олгодог."</string>
-    <string name="biometric_dialog_default_title" msgid="5284880398508155088">"Өөрийгөө мөн гэдгийг баталгаажуулаарай"</string>
+    <string name="biometric_dialog_default_title" msgid="55026799173208210">"Өөрийгөө мөн гэдгийг баталгаажуулаарай"</string>
     <string name="biometric_error_hw_unavailable" msgid="2494077380540615216">"Биометрийн техник хангамж боломжгүй байна"</string>
     <string name="biometric_error_user_canceled" msgid="6732303949695293730">"Нотолгоог цуцаллаа"</string>
     <string name="biometric_not_recognized" msgid="5106687642694635888">"Таниагүй"</string>
@@ -1327,7 +1327,7 @@
     <string name="share_remote_bugreport_action" msgid="7630880678785123682">"ХУВААЛЦАХ"</string>
     <string name="decline_remote_bugreport_action" msgid="4040894777519784346">"ТАТГАЛЗАХ"</string>
     <string name="select_input_method" msgid="3971267998568587025">"Оруулах аргыг сонгоно уу"</string>
-    <string name="show_ime" msgid="6406112007347443383">"Бодит гар идэвхтэй үед үүнийг дэлгэцэнд харуулна уу"</string>
+    <string name="show_ime" msgid="6406112007347443383">"Биет гар идэвхтэй үед үүнийг дэлгэцэд харуулна уу"</string>
     <string name="hardware" msgid="1800597768237606953">"Хийсвэр гарыг харуулах"</string>
     <string name="select_keyboard_layout_notification_title" msgid="4427643867639774118">"Биет гарыг хэлбэрт оруулах"</string>
     <string name="select_keyboard_layout_notification_message" msgid="8835158247369158154">"Хэл болон бүдүүвчийг сонгохын тулд дарна уу"</string>
@@ -1341,17 +1341,20 @@
     <string name="ext_media_checking_notification_title" msgid="8299199995416510094">"<xliff:g id="NAME">%s</xliff:g>-г шалгаж байна…"</string>
     <string name="ext_media_checking_notification_message" msgid="2231566971425375542">"Одоогийн агуулгыг хянаж байна"</string>
     <string name="ext_media_new_notification_title" msgid="3517407571407687677">"Шинэ <xliff:g id="NAME">%s</xliff:g>"</string>
+    <string name="ext_media_new_notification_title" product="automotive" msgid="9085349544984742727">"<xliff:g id="NAME">%s</xliff:g> ажиллахгүй байна"</string>
     <string name="ext_media_new_notification_message" msgid="6095403121990786986">"Тохируулахын тулд товшино уу"</string>
-    <string name="ext_media_new_notification_message" product="automotive" msgid="8488046026389025694"></string>
+    <string name="ext_media_new_notification_message" product="automotive" msgid="5140127881613227162">"Та төхөөрөмжийг дахин форматлах шаардлагатай байж болзошгүй. Салгахын тулд товшино уу."</string>
     <string name="ext_media_ready_notification_message" msgid="777258143284919261">"Зураг, медиа шилжүүлэхэд зориулсан"</string>
     <string name="ext_media_unmountable_notification_title" msgid="4895444667278979910">"<xliff:g id="NAME">%s</xliff:g> алдаатай байна"</string>
+    <string name="ext_media_unmountable_notification_title" product="automotive" msgid="3142723758949023280">"<xliff:g id="NAME">%s</xliff:g> ажиллахгүй байна"</string>
     <string name="ext_media_unmountable_notification_message" msgid="3256290114063126205">"Засахын тулд товшино уу"</string>
     <string name="ext_media_unmountable_notification_message" product="tv" msgid="3003611129979934633">"<xliff:g id="NAME">%s</xliff:g> эвдэрсэн байна. Засахын тулд сонгоно уу."</string>
-    <string name="ext_media_unmountable_notification_message" product="automotive" msgid="5622514265490819212"></string>
+    <string name="ext_media_unmountable_notification_message" product="automotive" msgid="2274596120715020680">"Та төхөөрөмжийг дахин форматлах шаардлагатай байж болзошгүй. Салгахын тулд товшино уу."</string>
     <string name="ext_media_unsupported_notification_title" msgid="4358280700537030333">"Дэмжээгүй <xliff:g id="NAME">%s</xliff:g>"</string>
+    <string name="ext_media_unsupported_notification_title" product="automotive" msgid="6004193172658722381">"<xliff:g id="NAME">%s</xliff:g> ажиллахгүй байна"</string>
     <string name="ext_media_unsupported_notification_message" msgid="917738524888367560">"Энэ төхөөрөмж нь <xliff:g id="NAME">%s</xliff:g>-г дэмждэггүй. Дэмжигдсэн хэлбэршүүлэлтэд тохируулахын тулд товшино уу."</string>
     <string name="ext_media_unsupported_notification_message" product="tv" msgid="7744945987775645685">"Энэ төхөөрөмж <xliff:g id="NAME">%s</xliff:g>-г дэмждэггүй. Дэмжсэн хэлбэршүүлэлтэд тохируулахын тулд сонгоно уу."</string>
-    <string name="ext_media_unsupported_notification_message" product="automotive" msgid="7657357085538772913">"Тус төхөөрөмж нь энэ <xliff:g id="NAME">%s</xliff:g>-г дэмждэггүй."</string>
+    <string name="ext_media_unsupported_notification_message" product="automotive" msgid="3412494732736336330">"Та төхөөрөмжийг дахин форматлах шаардлагатай байж болзошгүй"</string>
     <string name="ext_media_badremoval_notification_title" msgid="4114625551266196872">"<xliff:g id="NAME">%s</xliff:g>-ыг гэнэт гаргасан байна"</string>
     <string name="ext_media_badremoval_notification_message" msgid="1986514704499809244">"Агуулга алдахаас сэргийлэхийн тулд медиаг төхөөрөмжөөс салгахаасаа өмнө холболтыг салгана уу"</string>
     <string name="ext_media_nomedia_notification_title" msgid="742671636376975890">"<xliff:g id="NAME">%s</xliff:g>-г устгасан"</string>
@@ -1545,9 +1548,7 @@
     <string name="launchBrowserDefault" msgid="6328349989932924119">"Хөтөч ажиллуулах уу?"</string>
     <string name="SetupCallDefault" msgid="5581740063237175247">"Дуудлагыг зөвшөөрөх үү?"</string>
     <string name="activity_resolver_use_always" msgid="5575222334666843269">"Байнга"</string>
-    <string name="activity_resolver_set_always" msgid="4142825808921411476">"Тогтмол нээлттэй гэж тохируулах"</string>
     <string name="activity_resolver_use_once" msgid="948462794469672658">"Нэг удаа"</string>
-    <string name="activity_resolver_app_settings" msgid="6758823206817748026">"Тохиргоо"</string>
     <string name="activity_resolver_work_profiles_support" msgid="4071345609235361269">"%1$s ажлын профайлыг дэмждэггүй"</string>
     <string name="default_audio_route_name" product="tablet" msgid="367936735632195517">"Таблет"</string>
     <string name="default_audio_route_name" product="tv" msgid="4908971385068087367">"Tелевиз"</string>
@@ -1625,8 +1626,6 @@
     <string name="accessibility_shortcut_multiple_service_warning_title" msgid="8417489297036013065">"Хандалтын онцлогуудыг асаах уу?"</string>
     <string name="accessibility_shortcut_multiple_service_warning" msgid="3740723309483706911">"Дууны түвшний түлхүүрийг хэдэн секундийн турш зэрэг дарах нь хандалтын онцлогуудыг асаадаг. Энэ нь таны төхөөрөмжийн ажиллах зарчмыг өөрчилж болзошгүй.\n\nОдоогийн онцлогууд:\n<xliff:g id="SERVICE">%1$s</xliff:g>\nТа сонгосон онцлогуудыг Тохиргоо &gt; Хандалт хэсэгт өөрчлөх боломжтой."</string>
     <string name="accessibility_shortcut_multiple_service_list" msgid="6935581470716541531">"	• <xliff:g id="SERVICE">%1$s</xliff:g>\n"</string>
-    <string name="accessibility_shortcut_talkback_warning_title" msgid="3410100187167382427">"TalkBack-г асаах уу?"</string>
-    <string name="accessibility_shortcut_talkback_warning" msgid="8412954203626349109">"Дууны түвшний түлхүүрийг хэдэн секундийн турш зэрэг дарах нь TalkBack-г асаадаг. Энэ нь хараагүй эсвэл сул хараатай хүмүүст туслах дэлгэц уншигч юм. TalkBack нь таны төхөөрөмжийн ажиллах зарчмыг бүхэлд нь өөрчилдөг.\n\nТа Тохиргоо &gt; Хандалт хэсэгт энэ товчлолыг өөр онцлогт оноож өөрчлөх боломжтой."</string>
     <string name="accessibility_shortcut_single_service_warning_title" msgid="2819109500943271385">"<xliff:g id="SERVICE">%1$s</xliff:g>-г асаах уу?"</string>
     <string name="accessibility_shortcut_single_service_warning" msgid="6363127705112844257">"Дууны түвшний түлхүүрийг хэдэн секундийн турш зэрэг дарах нь хандалтын онцлог болох <xliff:g id="SERVICE">%1$s</xliff:g>-г асаадаг. Энэ нь таны төхөөрөмжийн ажиллах зарчмыг өөрчилж болзошгүй.\n\nТа Тохиргоо &gt; Хандалт хэсэгт энэ товчлолыг өөр онцлогт оноож өөрчлөх боломжтой."</string>
     <string name="accessibility_shortcut_on" msgid="5463618449556111344">"Асаах"</string>
@@ -1787,7 +1786,7 @@
     <string name="managed_profile_label_badge" msgid="6762559569999499495">"Ажлын <xliff:g id="LABEL">%1$s</xliff:g>"</string>
     <string name="managed_profile_label_badge_2" msgid="5673187309555352550">"2 дахь ажил <xliff:g id="LABEL">%1$s</xliff:g>"</string>
     <string name="managed_profile_label_badge_3" msgid="6882151970556391957">"3 дахь ажил <xliff:g id="LABEL">%1$s</xliff:g>"</string>
-    <string name="lock_to_app_unlock_pin" msgid="3890940811866290782">"Тогтоосныг суллахаас өмнө PIN асуух"</string>
+    <string name="lock_to_app_unlock_pin" msgid="3890940811866290782">"Бэхэлснийг болиулахаасаа өмнө PIN асуух"</string>
     <string name="lock_to_app_unlock_pattern" msgid="2694204070499712503">"Тогтоосныг суллахаас өмнө түгжээ тайлах хээ асуух"</string>
     <string name="lock_to_app_unlock_password" msgid="9126722403506560473">"Тогтоосныг суллахаас өмнө нууц үг асуух"</string>
     <string name="package_installed_device_owner" msgid="7035926868974878525">"Таны админ суулгасан"</string>
@@ -1842,7 +1841,7 @@
     <string name="zen_mode_default_weeknights_name" msgid="7902108149994062847">"Ажлын өдрийн шөнө"</string>
     <string name="zen_mode_default_weekends_name" msgid="4707200272709377930">"Амралтын өдөр"</string>
     <string name="zen_mode_default_events_name" msgid="2280682960128512257">"Үйл явдал"</string>
-    <string name="zen_mode_default_every_night_name" msgid="1467765312174275823">"Идэвхгүй"</string>
+    <string name="zen_mode_default_every_night_name" msgid="1467765312174275823">"Унтлагын цаг"</string>
     <string name="muted_by" msgid="91464083490094950">"<xliff:g id="THIRD_PARTY">%1$s</xliff:g> зарим дууны дууг хааж байна"</string>
     <string name="system_error_wipe_data" msgid="5910572292172208493">"Таны төхөөрөмжид дотоод алдаа байна.Та төхөөрөмжөө үйлдвэрээс гарсан төлөвт шилжүүлэх хүртэл таны төхөөрөмж чинь тогтворгүй байж болох юм."</string>
     <string name="system_error_manufacturer" msgid="703545241070116315">"Таны төхөөрөмжид дотоод алдаа байна. Дэлгэрэнгүй мэдээлэл авахыг хүсвэл үйлдвэрлэгчтэйгээ холбоо барина уу."</string>

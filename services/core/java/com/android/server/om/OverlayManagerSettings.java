@@ -400,7 +400,7 @@ final class OverlayManagerSettings {
         private static final String ATTR_VERSION = "version";
 
         @VisibleForTesting
-        static final int CURRENT_VERSION = 3;
+        static final int CURRENT_VERSION = 4;
 
         public static void restore(@NonNull final ArrayList<SettingsItem> table,
                 @NonNull final InputStream is) throws IOException, XmlPullParserException {
@@ -435,6 +435,10 @@ final class OverlayManagerSettings {
                     // Throw an exception which will cause the overlay file to be ignored
                     // and overwritten.
                     throw new XmlPullParserException("old version " + oldVersion + "; ignoring");
+                case 3:
+                    // Upgrading from version 3 to 4 is not a breaking change so do not ignore the
+                    // overlay file.
+                    return;
                 default:
                     throw new XmlPullParserException("unrecognized version " + oldVersion);
             }

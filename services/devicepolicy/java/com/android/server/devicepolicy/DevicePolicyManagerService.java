@@ -247,6 +247,7 @@ import android.stats.devicepolicy.DevicePolicyEnums;
 import android.telephony.TelephonyManager;
 import android.telephony.data.ApnSetting;
 import android.text.TextUtils;
+import android.text.format.DateUtils;
 import android.util.ArrayMap;
 import android.util.ArraySet;
 import android.util.AtomicFile;
@@ -296,6 +297,7 @@ import com.android.server.pm.RestrictionsSet;
 import com.android.server.pm.UserRestrictionsUtils;
 import com.android.server.pm.parsing.pkg.AndroidPackage;
 import com.android.server.storage.DeviceStorageMonitorInternal;
+import com.android.server.uri.NeededUriGrants;
 import com.android.server.uri.UriGrantsManagerInternal;
 import com.android.server.wm.ActivityTaskManagerInternal;
 
@@ -984,6 +986,10 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
                 // (ACTION_DATE_CHANGED), or when manual clock adjustment is made
                 // (ACTION_TIME_CHANGED)
                 updateSystemUpdateFreezePeriodsRecord(/* saveIfChanged */ true);
+                final int userId = getManagedUserId(UserHandle.USER_SYSTEM);
+                if (userId >= 0) {
+                    updatePersonalAppsSuspension(userId, mUserManager.isUserUnlocked(userId));
+                }
             } else if (ACTION_PROFILE_OFF_DEADLINE.equals(action)) {
                 Slog.i(LOG_TAG, "Profile off deadline alarm was triggered");
                 final int userId = getManagedUserId(UserHandle.USER_SYSTEM);
@@ -2610,6 +2616,8 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
         mSetupContentObserver = new SetupContentObserver(mHandler);
 
         mUserManagerInternal.addUserRestrictionsListener(new RestrictionsListener(mContext));
+
+        loadOwners();
     }
 
     /**
@@ -2670,12 +2678,23 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
         }
     }
 
+    /**
+     * Load information about device and profile owners of the device, populating mOwners and
+     * pushing owner info to other system services. This is called at a fairly early stage of
+     * system server initialiation (via DevicePolicyManagerService's ctor), so care should to
+     * be taken to not interact with system services that are initialiated after DPMS.
+     * onLockSettingsReady() is a safer place to do initialization work not critical during
+     * the first boot stage.
+     * Note this only loads the list of owners, and not their actual policy (DevicePolicyData).
+     * The policy is normally loaded lazily when it's first accessed. In several occasions
+     * the list of owners is necessary for providing callers with aggregated policies across
+     * multiple owners, hence the owner list is loaded as part of DPMS's construction here.
+     */
     void loadOwners() {
         synchronized (getLockObject()) {
             mOwners.load();
             setDeviceOwnershipSystemPropertyLocked();
             findOwnerComponentIfNecessaryLocked();
-            migrateUserRestrictionsIfNecessaryLocked();
 
             // TODO PO may not have a class name either due to b/17652534.  Address that too.
             updateDeviceOwnerLocked();
@@ -4098,8 +4117,10 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
     }
 
     private void onLockSettingsReady() {
+        synchronized (getLockObject()) {
+            migrateUserRestrictionsIfNecessaryLocked();
+        }
         getUserData(UserHandle.USER_SYSTEM);
-        loadOwners();
         cleanUpOldUsers();
         maybeSetDefaultProfileOwnerUserRestrictions();
         handleStartUser(UserHandle.USER_SYSTEM);
@@ -7968,6 +7989,9 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
         final int userHandle = UserHandle.getCallingUserId();
         boolean requireAutoTimeChanged = false;
         synchronized (getLockObject()) {
+            if (isManagedProfile(userHandle)) {
+                throw new SecurityException("Managed profile cannot set auto time required");
+            }
             ActiveAdmin admin = getActiveAdminForCallerLocked(who,
                     DeviceAdminInfo.USES_POLICY_PROFILE_OWNER);
             if (admin.requireAutoTime != required) {
@@ -8357,10 +8381,13 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
                 intent.putExtra(DeviceAdminReceiver.EXTRA_BUGREPORT_HASH, bugreportHash);
                 intent.setFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
 
-                LocalServices.getService(UriGrantsManagerInternal.class)
-                        .grantUriPermissionFromIntent(Process.SHELL_UID,
-                                mOwners.getDeviceOwnerComponent().getPackageName(),
-                                intent, mOwners.getDeviceOwnerUserId());
+                final UriGrantsManagerInternal ugm = LocalServices
+                        .getService(UriGrantsManagerInternal.class);
+                final NeededUriGrants needed = ugm.checkGrantUriPermissionFromIntent(intent,
+                        Process.SHELL_UID, mOwners.getDeviceOwnerComponent().getPackageName(),
+                        mOwners.getDeviceOwnerUserId());
+                ugm.grantUriPermissionUncheckedFromIntent(needed, null);
+
                 mContext.sendBroadcastAsUser(intent, UserHandle.of(mOwners.getDeviceOwnerUserId()));
             }
         } catch (FileNotFoundException e) {
@@ -11943,11 +11970,11 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
                     user);
             mInjector.getLocationManager().setLocationEnabledForUser(locationEnabled, user);
 
-            // make a best effort to only show the notification if the admin is actually changing
-            // something. this is subject to race conditions with settings changes, but those are
+            // make a best effort to only show the notification if the admin is actually enabling
+            // location. this is subject to race conditions with settings changes, but those are
             // unlikely to realistically interfere
-            if (wasLocationEnabled != locationEnabled) {
-                showLocationSettingsChangedNotification(user);
+            if (locationEnabled && (wasLocationEnabled != locationEnabled)) {
+                showLocationSettingsEnabledNotification(user);
             }
         });
 
@@ -11960,11 +11987,22 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
                 .write();
     }
 
-    private void showLocationSettingsChangedNotification(UserHandle user) {
+    private void showLocationSettingsEnabledNotification(UserHandle user) {
+        Intent intent = new Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        // Fill the component explicitly to prevent the PendingIntent from being intercepted
+        // and fired with crafted target. b/155183624
+        ActivityInfo targetInfo = intent.resolveActivityInfo(
+                mInjector.getPackageManager(user.getIdentifier()),
+                PackageManager.MATCH_SYSTEM_ONLY);
+        if (targetInfo != null) {
+            intent.setComponent(targetInfo.getComponentName());
+        } else {
+            Slog.wtf(LOG_TAG, "Failed to resolve intent for location settings");
+        }
+
         PendingIntent locationSettingsIntent = mInjector.pendingIntentGetActivityAsUser(mContext, 0,
-                new Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)
-                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK), PendingIntent.FLAG_UPDATE_CURRENT,
-                null, user);
+                intent, PendingIntent.FLAG_UPDATE_CURRENT, null, user);
         Notification notification = new Notification.Builder(mContext,
                 SystemNotificationChannels.DEVICE_ADMIN)
                 .setSmallIcon(R.drawable.ic_info_outline)
@@ -12081,8 +12119,11 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
                     saveSettingsLocked(callingUserId);
                 }
                 mInjector.settingsSecurePutStringForUser(setting, value, callingUserId);
-                if (setting.equals(Settings.Secure.LOCATION_MODE)) {
-                    showLocationSettingsChangedNotification(UserHandle.of(callingUserId));
+                // Notify the user if it's the location mode setting that's been set, to any value
+                // other than 'off'.
+                if (setting.equals(Settings.Secure.LOCATION_MODE)
+                        && (Integer.parseInt(value) != 0)) {
+                    showLocationSettingsEnabledNotification(UserHandle.of(callingUserId));
                 }
             });
         }
@@ -12710,6 +12751,11 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
             } finally {
                 Binder.restoreCallingIdentity(ident);
             }
+        }
+
+        @Override
+        public ComponentName getProfileOwnerAsUser(int userHandle) {
+            return DevicePolicyManagerService.this.getProfileOwnerAsUser(userHandle);
         }
     }
 
@@ -15912,15 +15958,12 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
                     false /* parent */);
             // DO shouldn't be able to use this method.
             enforceProfileOwnerOfOrganizationOwnedDevice(admin);
-            final DevicePolicyData userData =
-                    getUserData(getProfileParentId(mInjector.userHandleGetCallingUserId()));
-            if (!userData.mAppsSuspended) {
-                return PERSONAL_APPS_NOT_SUSPENDED;
-            } else {
-                final long deadline = admin.mProfileOffDeadline;
-                return makeSuspensionReasons(admin.mSuspendPersonalApps,
-                        deadline != 0 && System.currentTimeMillis() > deadline);
-            }
+            final long deadline = admin.mProfileOffDeadline;
+            final int result = makeSuspensionReasons(admin.mSuspendPersonalApps,
+                    deadline != 0 && mInjector.systemCurrentTimeMillis() > deadline);
+            Slog.d(LOG_TAG, String.format("getPersonalAppsSuspendedReasons user: %d; result: %d",
+                    mInjector.userHandleGetCallingUserId(), result));
+            return result;
         }
     }
 
@@ -15993,31 +16036,27 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
     private @PersonalAppsSuspensionReason int updatePersonalAppsSuspension(
             int profileUserId, boolean unlocked) {
         final boolean suspendedExplicitly;
-        final int deadlineState;
-        final String poPackage;
+        final boolean suspendedByTimeout;
         synchronized (getLockObject()) {
             final ActiveAdmin profileOwner = getProfileOwnerAdminLocked(profileUserId);
             if (profileOwner != null) {
-                deadlineState =
+                final int deadlineState =
                         updateProfileOffDeadlineLocked(profileUserId, profileOwner, unlocked);
                 suspendedExplicitly = profileOwner.mSuspendPersonalApps;
-                poPackage = profileOwner.info.getPackageName();
+                suspendedByTimeout = deadlineState == PROFILE_OFF_DEADLINE_REACHED;
+                Slog.d(LOG_TAG, String.format(
+                        "Personal apps suspended explicitly: %b, deadline state: %d",
+                        suspendedExplicitly, deadlineState));
+                final int notificationState =
+                        unlocked ? PROFILE_OFF_DEADLINE_DEFAULT : deadlineState;
+                updateProfileOffDeadlineNotificationLocked(
+                        profileUserId, profileOwner, notificationState);
             } else {
-                poPackage = null;
                 suspendedExplicitly = false;
-                deadlineState = PROFILE_OFF_DEADLINE_DEFAULT;
+                suspendedByTimeout = false;
             }
         }
 
-        Slog.d(LOG_TAG, String.format("Personal apps suspended explicitly: %b, deadline state: %d",
-                suspendedExplicitly, deadlineState));
-
-        if (poPackage != null) {
-            final int notificationState = unlocked ? PROFILE_OFF_DEADLINE_DEFAULT : deadlineState;
-            updateProfileOffDeadlineNotification(profileUserId, poPackage, notificationState);
-        }
-
-        final boolean suspendedByTimeout = deadlineState == PROFILE_OFF_DEADLINE_REACHED;
         final int parentUserId = getProfileParentId(profileUserId);
         suspendPersonalAppsInternal(parentUserId, suspendedExplicitly || suspendedByTimeout);
 
@@ -16033,8 +16072,12 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
             int profileUserId, ActiveAdmin profileOwner, boolean unlocked) {
         final long now = mInjector.systemCurrentTimeMillis();
         if (profileOwner.mProfileOffDeadline != 0 && now > profileOwner.mProfileOffDeadline) {
-            // Profile off deadline is already reached.
-            Slog.i(LOG_TAG, "Profile off deadline has been reached.");
+            Slog.i(LOG_TAG, "Profile off deadline has been reached, unlocked: " + unlocked);
+            if (profileOwner.mProfileOffDeadline != -1) {
+                // Move the deadline far to the past so that it cannot be rolled back by TZ change.
+                profileOwner.mProfileOffDeadline = -1;
+                saveSettingsLocked(profileUserId);
+            }
             return PROFILE_OFF_DEADLINE_REACHED;
         }
         boolean shouldSaveSettings = false;
@@ -16125,9 +16168,9 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
         }
     }
 
-    private void updateProfileOffDeadlineNotification(
-            int profileUserId, String profileOwnerPackage, int notificationState) {
-
+    @GuardedBy("getLockObject()")
+    private void updateProfileOffDeadlineNotificationLocked(
+            int profileUserId, ActiveAdmin profileOwner, int notificationState) {
         if (notificationState == PROFILE_OFF_DEADLINE_DEFAULT) {
             mInjector.getNotificationManager().cancel(SystemMessage.NOTE_PERSONAL_APPS_SUSPENDED);
             return;
@@ -16145,23 +16188,41 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
         final Notification.Action turnProfileOnButton =
                 new Notification.Action.Builder(null /* icon */, buttonText, pendingIntent).build();
 
-        final String text = mContext.getString(
-                notificationState == PROFILE_OFF_DEADLINE_WARNING
-                ? R.string.personal_apps_suspension_tomorrow_text
-                : R.string.personal_apps_suspension_text);
-        final boolean ongoing = notificationState == PROFILE_OFF_DEADLINE_REACHED;
+        final String text;
+        final boolean ongoing;
+        if (notificationState == PROFILE_OFF_DEADLINE_WARNING) {
+            // Round to the closest integer number of days.
+            final int maxDays = (int)
+                    ((profileOwner.mProfileMaximumTimeOffMillis + MS_PER_DAY / 2) / MS_PER_DAY);
+            final String date = DateUtils.formatDateTime(
+                    mContext, profileOwner.mProfileOffDeadline, DateUtils.FORMAT_SHOW_DATE);
+            final String time = DateUtils.formatDateTime(
+                    mContext, profileOwner.mProfileOffDeadline, DateUtils.FORMAT_SHOW_TIME);
+            text = mContext.getString(
+                    R.string.personal_apps_suspension_soon_text, date, time, maxDays);
+            ongoing = false;
+        } else {
+            text = mContext.getString(R.string.personal_apps_suspension_text);
+            ongoing = true;
+        }
+        final int color = mContext.getColor(R.color.personal_apps_suspension_notification_color);
+        final Bundle extras = new Bundle();
+        // TODO: Create a separate string for this.
+        extras.putString(Notification.EXTRA_SUBSTITUTE_APP_NAME,
+                mContext.getString(R.string.notification_work_profile_content_description));
 
         final Notification notification =
                 new Notification.Builder(mContext, SystemNotificationChannels.DEVICE_ADMIN)
-                        .setSmallIcon(android.R.drawable.stat_sys_warning)
+                        .setSmallIcon(R.drawable.ic_corp_badge_no_background)
                         .setOngoing(ongoing)
                         .setAutoCancel(false)
                         .setContentTitle(mContext.getString(
                                 R.string.personal_apps_suspension_title))
                         .setContentText(text)
                         .setStyle(new Notification.BigTextStyle().bigText(text))
-                        .setColor(mContext.getColor(R.color.system_notification_accent_color))
+                        .setColor(color)
                         .addAction(turnProfileOnButton)
+                        .addExtras(extras)
                         .build();
         mInjector.getNotificationManager().notify(
                 SystemMessage.NOTE_PERSONAL_APPS_SUSPENDED, notification);

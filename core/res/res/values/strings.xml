@@ -453,13 +453,17 @@
     <string name="personal_apps_suspension_text">
         Your personal apps are blocked until you turn on your work profile</string>
     <!-- Notification text. This notification lets a user know that their apps will be blocked
-        tomorrow due to a work policy from their IT admin, and that they need to turn on their work
-        profile to prevent the apps from being blocked. [CHAR LIMIT=NONE] -->
-    <string name="personal_apps_suspension_tomorrow_text">
-        Your personal apps will be blocked tomorrow</string>
+        at a particular time due to a work policy from their IT admin, and that they need to turn on
+        their work profile to prevent the apps from being blocked. It also explains for how many
+        days the profile is allowed to be off and this number is at least 3. [CHAR LIMIT=NONE] -->
+    <string name="personal_apps_suspension_soon_text">
+        Personal apps will be blocked on <xliff:g id="date" example="May 29">%1$s</xliff:g> at
+        <xliff:g id="time" example="5:20 PM">%2$s</xliff:g>. Your IT admin doesn\u2019t allow your
+        work profile to stay off for more than <xliff:g id="number" example="3">%3$d</xliff:g> days.
+    </string>
     <!-- Title for the button that turns work profile on. To be used in a notification
         [CHAR LIMIT=NONE] -->
-    <string name="personal_apps_suspended_turn_profile_on">Turn on work profile</string>
+    <string name="personal_apps_suspended_turn_profile_on">Turn on</string>
 
     <!-- Display name for any time a piece of data refers to the owner of the phone. For example, this could be used in place of the phone's phone number. -->
     <string name="me">Me</string>
@@ -1477,7 +1481,7 @@
     <string name="permdesc_mediaLocation">Allows the app to read locations from your media collection.</string>
 
     <!-- Title shown when the system-provided biometric dialog is shown, asking the user to authenticate. [CHAR LIMIT=40] -->
-    <string name="biometric_dialog_default_title">Verify it\u2018s you</string>
+    <string name="biometric_dialog_default_title">Verify it\u2019s you</string>
     <!-- Message shown when biometric hardware is not available [CHAR LIMIT=50] -->
     <string name="biometric_error_hw_unavailable">Biometric hardware unavailable</string>
     <!-- Message shown when biometric authentication was canceled by the user [CHAR LIMIT=50] -->
@@ -1611,15 +1615,15 @@
     <string name="face_error_no_space">Can\u2019t store new face data. Delete an old one first.</string>
     <!-- Generic error message shown when the face operation (e.g. enrollment or authentication) is canceled. Generally not shown to the user. [CHAR LIMIT=50] -->
     <string name="face_error_canceled">Face operation canceled.</string>
-    <!-- Generic error message shown when the face unlock operation is canceled due to user input. Generally not shown to the user [CHAR LIMIT=54] -->
+    <!-- Generic error message shown when the face unlock operation is canceled due to user input. Generally not shown to the user [CHAR LIMIT=68] -->
     <string name="face_error_user_canceled">Face unlock canceled by user.</string>
     <!-- Generic error message shown when the face operation fails because too many attempts have been made. [CHAR LIMIT=50] -->
     <string name="face_error_lockout">Too many attempts. Try again later.</string>
-    <!-- Generic error message shown when the face operation fails because strong authentication is required. [CHAR LIMIT=71] -->
+    <!-- Generic error message shown when the face operation fails because strong authentication is required. [CHAR LIMIT=77] -->
     <string name="face_error_lockout_permanent">Too many attempts. Face unlock disabled.</string>
     <!-- Generic error message shown when the face hardware can't recognize the face. [CHAR LIMIT=50] -->
     <string name="face_error_unable_to_process">Can\u2019t verify face. Try again.</string>
-    <!-- Generic error message shown when the user has no enrolled face. [CHAR LIMIT=52] -->
+    <!-- Generic error message shown when the user has no enrolled face. [CHAR LIMIT=59] -->
     <string name="face_error_not_enrolled">You haven\u2019t set up face unlock.</string>
     <!-- Generic error message shown when the app requests face unlock on a device without a sensor. [CHAR LIMIT=61] -->
     <string name="face_error_hw_not_present">Face unlock is not supported on this device.</string>
@@ -3597,31 +3601,37 @@
 
     <!-- Notification body when new external media is detected [CHAR LIMIT=30] -->
     <string name="ext_media_new_notification_title">New <xliff:g id="name" example="SD card">%s</xliff:g></string>
+    <!-- Automotive specific notification body when new external media is detected [CHAR LIMIT=30] -->
+    <string name="ext_media_new_notification_title" product="automotive"><xliff:g id="name" example="SD card">%s</xliff:g> isn\u2019t working</string>
     <!-- Notification body when new external media is detected [CHAR LIMIT=NONE] -->
     <string name="ext_media_new_notification_message">Tap to set up</string>
-    <!-- Automotive specific notification body when new external media is detected. Empty because there is no fix action (b/151671685) [CHAR LIMIT=NONE] -->
-    <string name="ext_media_new_notification_message" product="automotive"></string>
+    <!-- Automotive specific notification body when new external media is detected. [CHAR LIMIT=NONE] -->
+    <string name="ext_media_new_notification_message" product="automotive">You may need to reformat the device. Tap to eject.</string>
 
     <!-- Notification body when external media is ready for use [CHAR LIMIT=NONE] -->
     <string name="ext_media_ready_notification_message">For transferring photos and media</string>
 
     <!-- Notification title when external media is unmountable (corrupt) [CHAR LIMIT=30] -->
     <string name="ext_media_unmountable_notification_title">Issue with <xliff:g id="name" example="SD card">%s</xliff:g></string>
+    <!-- Automotive specific notification title when external media is unmountable (corrupt) [CHAR LIMIT=30] -->
+    <string name="ext_media_unmountable_notification_title" product="automotive"><xliff:g id="name" example="SD card">%s</xliff:g> isn\u2019t working</string>
     <!-- Notification body when external media is unmountable (corrupt) [CHAR LIMIT=NONE] -->
     <string name="ext_media_unmountable_notification_message">Tap to fix</string>
     <!-- TV-specific notification body when external media is unmountable (corrupt) [CHAR LIMIT=NONE] -->
     <string name="ext_media_unmountable_notification_message" product="tv"><xliff:g id="name" example="SD card">%s</xliff:g> is corrupt. Select to fix.</string>
-    <!-- Automotive specific notification body when external media is unmountable (corrupt). Empty because there is no fix action (b/151671685) [CHAR LIMIT=NONE] -->
-    <string name="ext_media_unmountable_notification_message" product="automotive"></string>
+    <!-- Automotive specific notification body when external media is unmountable (corrupt) [CHAR LIMIT=NONE] -->
+    <string name="ext_media_unmountable_notification_message" product="automotive">You may need to reformat the device. Tap to eject.</string>
 
     <!-- Notification title when external media is unsupported [CHAR LIMIT=30] -->
     <string name="ext_media_unsupported_notification_title">Unsupported <xliff:g id="name" example="SD card">%s</xliff:g></string>
+    <!-- Automotive specific notification title when external media is unsupported [CHAR LIMIT=30] -->
+    <string name="ext_media_unsupported_notification_title" product="automotive"><xliff:g id="name" example="SD card">%s</xliff:g> isn\u2019t working</string>
     <!-- Notification body when external media is unsupported [CHAR LIMIT=NONE] -->
     <string name="ext_media_unsupported_notification_message">This device doesn\u2019t support this <xliff:g id="name" example="SD card">%s</xliff:g>. Tap to set up in a supported format.</string>
     <!-- TV-specific notification body when external media is unsupported [CHAR LIMIT=NONE] -->
     <string name="ext_media_unsupported_notification_message" product="tv">This device doesn\u2019t support this <xliff:g id="name" example="SD card">%s</xliff:g>. Select to set up in a supported format.</string>
-    <!-- Automotive specific notification body when external media is unsupported. No action is specified to fix (b/151671685) [CHAR LIMIT=NONE] -->
-    <string name="ext_media_unsupported_notification_message" product="automotive">This device doesn\u2019t support this <xliff:g id="name" example="SD card">%s</xliff:g>.</string>
+    <!-- Automotive specific notification body when external media is unsupported [CHAR LIMIT=NONE] -->
+    <string name="ext_media_unsupported_notification_message" product="automotive">You may need to reformat the device</string>
 
     <!-- Notification title when external media is unsafely removed [CHAR LIMIT=30] -->
     <string name="ext_media_badremoval_notification_title"><xliff:g id="name" example="SD card">%s</xliff:g> unexpectedly removed</string>
@@ -4130,16 +4140,8 @@
     <string name="activity_resolver_use_always">Always</string>
 
     <!-- Title for a button to choose the currently selected activity
-         as the default in the activity resolver. [CHAR LIMIT=50] -->
-    <string name="activity_resolver_set_always">Set to always open</string>
-
-    <!-- Title for a button to choose the currently selected activity
          from the activity resolver to use just this once. [CHAR LIMIT=25] -->
     <string name="activity_resolver_use_once">Just once</string>
-
-    <!-- Title for a button to choose to go to
-          'Open by Default' app settings. [CHAR LIMIT=25] -->
-    <string name="activity_resolver_app_settings">Settings</string>
 
     <!-- Text for the toast that is shown when the user clicks on a launcher that
          doesn't support the work profile. [CHAR LIMIT=100] -->
@@ -4391,12 +4393,6 @@
 
     <!-- Used in multiple service warning to list current features. [CHAR LIMIT=none] -->
     <string name="accessibility_shortcut_multiple_service_list">\t• <xliff:g id="service" example="TalkBack">%1$s</xliff:g>\n</string>
-
-    <!-- Dialog title for dialog shown when the TalkBack shortcut is activated, and we want to confirm that the user understands what's going to happen. [CHAR LIMIT=none] -->
-    <string name="accessibility_shortcut_talkback_warning_title">Turn on TalkBack?</string>
-
-    <!-- Message shown in dialog when user is in the process of enabling the TalkBack via the volume buttons shortcut for the first time. [CHAR LIMIT=none] -->
-    <string name="accessibility_shortcut_talkback_warning">Holding down both volume keys for a few seconds turns on TalkBack, a screen reader that is helpful for people who are blind or have low vision. TalkBack completely changes how your device works.\n\nYou can change this shortcut to another feature in Settings > Accessibility.</string>
 
     <!-- Dialog title for dialog shown when this accessibility shortcut is activated, and we want to confirm that the user understands what's going to happen. [CHAR LIMIT=none] -->
     <string name="accessibility_shortcut_single_service_warning_title">Turn on <xliff:g id="service" example="TalkBack">%1$s</xliff:g>?</string>

@@ -29,7 +29,7 @@ java_library {
     sdk_version: "core_platform",
     libs: [
         "framework-minus-apex",
-        "framework-tethering",
+        "framework-tethering.impl",
     ],
     visibility: ["//cts/tests/tests/tethering"],
 }
@@ -59,8 +59,8 @@ java_defaults {
         "ext",
         "framework-minus-apex",
         "framework-res",
-        "framework-tethering",
-        "framework-wifi-stubs-module_libs_api",
+        "framework-tethering.impl",
+        "framework-wifi.stubs.module_lib",
     ],
     jni_libs: [
         // For mockito extended
@@ -83,7 +83,7 @@ android_library {
 
 android_test {
     name: "TetheringTests",
-    certificate: "platform",
+    platform_apis: true,
     test_suites: [
         "device-tests",
         "mts",

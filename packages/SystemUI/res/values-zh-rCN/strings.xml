@@ -63,7 +63,7 @@
     <string name="usb_debugging_allow" msgid="1722643858015321328">"允许"</string>
     <string name="usb_debugging_secondary_user_title" msgid="7843050591380107998">"不允许使用 USB 调试功能"</string>
     <string name="usb_debugging_secondary_user_message" msgid="3740347841470403244">"目前已登录此设备的用户无法开启 USB 调试功能。要使用此功能，请切换为主要用户的帐号。"</string>
-    <string name="wifi_debugging_title" msgid="7300007687492186076">"要在此网络上允许无线调试吗？"</string>
+    <string name="wifi_debugging_title" msgid="7300007687492186076">"要允许在此网络上进行无线调试吗？"</string>
     <string name="wifi_debugging_message" msgid="5461204211731802995">"网络名称 (SSID)\n<xliff:g id="SSID_0">%1$s</xliff:g>\n\nWLAN 地址 (BSSID)\n<xliff:g id="BSSID_1">%2$s</xliff:g>"</string>
     <string name="wifi_debugging_always" msgid="2968383799517975155">"在此网络上始终允许"</string>
     <string name="wifi_debugging_allow" msgid="4573224609684957886">"允许"</string>
@@ -89,8 +89,7 @@
     <string name="screenshot_dismiss_ui_description" msgid="934736855340147968">"关闭屏幕截图"</string>
     <string name="screenshot_preview_description" msgid="7606510140714080474">"屏幕截图预览"</string>
     <string name="screenrecord_name" msgid="2596401223859996572">"屏幕录制器"</string>
-    <!-- no translation found for screenrecord_background_processing_label (7244617554884238898) -->
-    <skip />
+    <string name="screenrecord_background_processing_label" msgid="7244617554884238898">"正在处理屏幕录制视频"</string>
     <string name="screenrecord_channel_description" msgid="4147077128486138351">"持续显示屏幕录制会话通知"</string>
     <string name="screenrecord_start_label" msgid="1750350278888217473">"要开始录制吗？"</string>
     <string name="screenrecord_description" msgid="1123231719680353736">"在录制内容时，Android 系统可以捕捉到您屏幕上显示或设备中播放的敏感信息，其中包括密码、付款信息、照片、消息和音频。"</string>
@@ -511,10 +510,9 @@
     <string name="clear_all_notifications_text" msgid="348312370303046130">"全部清除"</string>
     <string name="manage_notifications_text" msgid="6885645344647733116">"管理"</string>
     <string name="manage_notifications_history_text" msgid="57055985396576230">"历史记录"</string>
-    <!-- no translation found for notification_section_header_incoming (5295312809341711367) -->
-    <skip />
-    <string name="notification_section_header_gentle" msgid="3044910806569985386">"无声通知"</string>
-    <string name="notification_section_header_alerting" msgid="3168140660646863240">"提醒通知"</string>
+    <string name="notification_section_header_incoming" msgid="5295312809341711367">"收到的通知"</string>
+    <string name="notification_section_header_gentle" msgid="6804099527336337197">"静音"</string>
+    <string name="notification_section_header_alerting" msgid="5581175033680477651">"通知"</string>
     <string name="notification_section_header_conversations" msgid="821834744538345661">"对话"</string>
     <string name="accessibility_notification_section_header_gentle_clear_all" msgid="6490207897764933919">"清除所有无声通知"</string>
     <string name="dnd_suppressing_shade_text" msgid="5588252250634464042">"勿扰模式暂停的通知"</string>
@@ -594,19 +592,21 @@
     <string name="volume_odi_captions_hint_enable" msgid="2073091194012843195">"启用"</string>
     <string name="volume_odi_captions_hint_disable" msgid="2518846326748183407">"停用"</string>
     <string name="accessibility_output_chooser" msgid="7807898688967194183">"切换输出设备"</string>
-    <string name="screen_pinning_title" msgid="7357611095909618178">"已固定屏幕"</string>
+    <string name="screen_pinning_title" msgid="9058007390337841305">"应用已固定"</string>
     <string name="screen_pinning_description" msgid="8699395373875667743">"这将会固定显示此屏幕，直到您取消固定为止。触摸并按住“返回”和“概览”即可取消固定屏幕。"</string>
     <string name="screen_pinning_description_recents_invisible" msgid="4564466648700390037">"这将会固定显示此屏幕，直到您取消固定为止。触摸并按住“返回”和“主屏幕”即可取消固定屏幕。"</string>
     <string name="screen_pinning_description_gestural" msgid="7246323931831232068">"这会使此屏幕固定显示，直到您取消固定为止。向上滑动并按住即可取消固定。"</string>
     <string name="screen_pinning_description_accessible" msgid="7386449191953535332">"这将会固定显示此屏幕，直到您取消固定为止。触摸并按住“概览”即可取消固定屏幕。"</string>
     <string name="screen_pinning_description_recents_invisible_accessible" msgid="2857071808674481986">"这将会固定显示此屏幕，直到您取消固定为止。触摸并按住“主屏幕”即可取消固定屏幕。"</string>
-    <string name="screen_pinning_toast" msgid="2083944237147005811">"要取消固定此屏幕，请触摸并按住“返回”和“概览”按钮"</string>
-    <string name="screen_pinning_toast_recents_invisible" msgid="6343770487795352573">"要取消固定此屏幕，请触摸并按住“返回”和“主屏幕”按钮"</string>
-    <string name="screen_pinning_toast_gesture_nav" msgid="2884536903398445645">"要取消固定此屏幕，请向上滑动并按住"</string>
+    <string name="screen_pinning_exposes_personal_data" msgid="8189852022981524789">"可访问个人数据（例如通讯录和电子邮件内容）。"</string>
+    <string name="screen_pinning_can_open_other_apps" msgid="7529756813231421455">"固定的应用可打开其他应用。"</string>
+    <string name="screen_pinning_toast" msgid="8177286912533744328">"如需取消固定此应用，请轻触并按住“返回”按钮和“概览”按钮"</string>
+    <string name="screen_pinning_toast_recents_invisible" msgid="6850978077443052594">"如需取消固定此应用，请轻触并按住“返回”按钮和主屏幕按钮"</string>
+    <string name="screen_pinning_toast_gesture_nav" msgid="170699893395336705">"如需取消固定此应用，请向上滑动并按住"</string>
     <string name="screen_pinning_positive" msgid="3285785989665266984">"知道了"</string>
     <string name="screen_pinning_negative" msgid="6882816864569211666">"不用了"</string>
-    <string name="screen_pinning_start" msgid="5695091877402422575">"已固定屏幕"</string>
-    <string name="screen_pinning_exit" msgid="5114993350662745840">"已取消固定屏幕"</string>
+    <string name="screen_pinning_start" msgid="7483998671383371313">"已固定应用"</string>
+    <string name="screen_pinning_exit" msgid="4553787518387346893">"已取消固定应用"</string>
     <string name="quick_settings_reset_confirmation_title" msgid="463533331480997595">"要隐藏“<xliff:g id="TILE_LABEL">%1$s</xliff:g>”吗？"</string>
     <string name="quick_settings_reset_confirmation_message" msgid="2320586180785674186">"下次在设置中将其开启后，此快捷设置条目将会重新显示。"</string>
     <string name="quick_settings_reset_confirmation_button" msgid="3341477479055016776">"隐藏"</string>
@@ -709,16 +709,17 @@
     <string name="inline_turn_off_notifications" msgid="8543989584403106071">"关闭通知"</string>
     <string name="inline_keep_showing_app" msgid="4393429060390649757">"要继续显示来自此应用的通知吗？"</string>
     <string name="notification_silence_title" msgid="8608090968400832335">"静音"</string>
-    <string name="notification_alert_title" msgid="7629202599338071971">"提醒"</string>
+    <string name="notification_alert_title" msgid="3656229781017543655">"默认"</string>
     <string name="notification_bubble_title" msgid="8330481035191903164">"气泡"</string>
-    <string name="notification_channel_summary_low" msgid="7300447764759926720">"不会发出提示音或振动，可帮助您保持专注。"</string>
-    <string name="notification_channel_summary_default" msgid="3539949463907902037">"通过提示音或振动吸引您的注意。"</string>
-    <string name="notification_channel_summary_default_with_bubbles" msgid="6298026344552480458">"通过提示音或振动吸引您的注意。默认情况下，来自<xliff:g id="APP_NAME">%1$s</xliff:g>的对话会以对话泡的形式显示。"</string>
+    <string name="notification_channel_summary_low" msgid="4860617986908931158">"不发出提示音，也不振动"</string>
+    <string name="notification_conversation_summary_low" msgid="1734433426085468009">"不发出提示音，也不振动；显示在对话部分的靠下位置"</string>
+    <string name="notification_channel_summary_default" msgid="3282930979307248890">"可能会响铃或振动（取决于手机设置）"</string>
+    <string name="notification_channel_summary_default_with_bubbles" msgid="1782419896613644568">"可能会响铃或振动（取决于手机设置）。默认情况下，来自<xliff:g id="APP_NAME">%1$s</xliff:g>的对话会以对话泡的形式显示。"</string>
     <string name="notification_channel_summary_bubble" msgid="7235935211580860537">"通过可链接到这项内容的浮动快捷方式吸引您的注意。"</string>
-    <string name="notification_channel_summary_priority" msgid="7415770044553264622">"以对话泡形式显示在对话部分顶部。"</string>
+    <string name="notification_channel_summary_priority" msgid="7952654515769021553">"以悬浮对话泡形式显示在对话部分顶部，如果设备处于锁定状态，在锁定屏幕上显示个人资料照片"</string>
     <string name="notification_conversation_channel_settings" msgid="2409977688430606835">"设置"</string>
-    <string name="notification_priority_title" msgid="2079708866333537093">"优先级"</string>
-    <string name="no_shortcut" msgid="7176375126961212514">"<xliff:g id="APP_NAME">%1$s</xliff:g>不支持对话专用设置"</string>
+    <string name="notification_priority_title" msgid="2079708866333537093">"优先"</string>
+    <string name="no_shortcut" msgid="8257177117568230126">"<xliff:g id="APP_NAME">%1$s</xliff:g>不支持对话功能"</string>
     <string name="bubble_overflow_empty_title" msgid="3120029421991510842">"最近没有对话泡"</string>
     <string name="bubble_overflow_empty_subtitle" msgid="2030874469510497397">"此处会显示最近的对话泡和已关闭的对话泡"</string>
     <string name="notification_unblockable_desc" msgid="2073030886006190804">"无法修改这些通知。"</string>
@@ -991,10 +992,8 @@
     <string name="music_controls_no_title" msgid="4166497066552290938">"无标题"</string>
     <string name="restart_button_description" msgid="6916116576177456480">"点按即可重启此应用并进入全屏模式。"</string>
     <string name="bubbles_settings_button_description" msgid="7324245408859877545">"<xliff:g id="APP_NAME">%1$s</xliff:g>对话泡的设置"</string>
-    <!-- no translation found for bubble_overflow_button_content_description (5523744621434300510) -->
-    <skip />
-    <!-- no translation found for bubble_accessibility_action_add_back (6217995665917123890) -->
-    <skip />
+    <string name="bubble_overflow_button_content_description" msgid="5523744621434300510">"菜单"</string>
+    <string name="bubble_accessibility_action_add_back" msgid="6217995665917123890">"重新加入叠放"</string>
     <string name="manage_bubbles_text" msgid="6856830436329494850">"管理"</string>
     <string name="bubble_content_description_single" msgid="5175160674436546329">"<xliff:g id="APP_NAME">%2$s</xliff:g>：<xliff:g id="NOTIFICATION_TITLE">%1$s</xliff:g>"</string>
     <string name="bubble_content_description_stack" msgid="7907610717462651870">"<xliff:g id="APP_NAME">%2$s</xliff:g>和另外 <xliff:g id="BUBBLE_COUNT">%3$d</xliff:g> 个应用：<xliff:g id="NOTIFICATION_TITLE">%1$s</xliff:g>"</string>
@@ -1003,7 +1002,8 @@
     <string name="bubble_accessibility_action_move_top_right" msgid="6916868852433483569">"移至右上角"</string>
     <string name="bubble_accessibility_action_move_bottom_left" msgid="6339015902495504715">"移至左下角"</string>
     <string name="bubble_accessibility_action_move_bottom_right" msgid="7471571700628346212">"移至右下角"</string>
-    <string name="bubble_dismiss_text" msgid="7071770411580452911">"关闭"</string>
+    <!-- no translation found for bubble_dismiss_text (1314082410868930066) -->
+    <skip />
     <string name="bubbles_dont_bubble_conversation" msgid="1033040343437428822">"不以对话泡形式显示对话"</string>
     <string name="bubbles_user_education_title" msgid="5547017089271445797">"使用对话泡聊天"</string>
     <string name="bubbles_user_education_description" msgid="1160281719576715211">"新对话会以浮动图标或对话泡形式显示。点按即可打开对话泡。拖动即可移动对话泡。"</string>
@@ -1014,23 +1014,33 @@
     <string name="notification_content_system_nav_changed" msgid="5077913144844684544">"系统导航已更新。要进行更改，请转到“设置”。"</string>
     <string name="notification_content_gesture_nav_available" msgid="4431460803004659888">"转到“设置”即可更新系统导航"</string>
     <string name="inattentive_sleep_warning_title" msgid="3891371591713990373">"待机"</string>
+    <string name="priority_onboarding_title" msgid="2893070698479227616">"已设置为优先对话"</string>
+    <string name="priority_onboarding_behavior" msgid="5342816047020432929">"优先对话将："</string>
     <string name="priority_onboarding_show_at_top_text" msgid="1678400241025513541">"显示在对话部分顶部"</string>
     <string name="priority_onboarding_show_avatar_text" msgid="5756291381124091508">"在锁定屏幕上显示个人资料照片"</string>
     <string name="priority_onboarding_appear_as_bubble_text" msgid="4227039772250263122">"以悬浮对话泡的形式显示在应用之上"</string>
-    <string name="priority_onboarding_ignores_dnd_text" msgid="2918952762719600529">"中断“勿扰”模式"</string>
+    <string name="priority_onboarding_ignores_dnd_text" msgid="2918952762719600529">"中断勿扰模式"</string>
     <string name="priority_onboarding_done_button_title" msgid="4569550984286506007">"知道了"</string>
+    <string name="priority_onboarding_settings_button_title" msgid="6663601574303585927">"设置"</string>
     <string name="magnification_overlay_title" msgid="6584179429612427958">"放大叠加窗口"</string>
     <string name="magnification_window_title" msgid="4863914360847258333">"放大窗口"</string>
     <string name="magnification_controls_title" msgid="8421106606708891519">"放大窗口控件"</string>
-    <string name="quick_controls_title" msgid="6839108006171302273">"设备控制器"</string>
+    <string name="quick_controls_title" msgid="6839108006171302273">"设备控件"</string>
     <string name="quick_controls_subtitle" msgid="1667408093326318053">"为您所连接的设备添加控件"</string>
-    <string name="quick_controls_setup_title" msgid="8901436655997849822">"设置设备控制器"</string>
+    <string name="quick_controls_setup_title" msgid="8901436655997849822">"设置设备控件"</string>
     <string name="quick_controls_setup_subtitle" msgid="1681506617879773824">"按住电源按钮即可访问您的控件"</string>
-    <string name="controls_providers_title" msgid="6879775889857085056">"选择应用以添加控件"</string>
+    <string name="controls_providers_title" msgid="6879775889857085056">"选择要添加控制器的应用"</string>
     <plurals name="controls_number_of_favorites" formatted="false" msgid="1057347832073807380">
       <item quantity="other">已添加 <xliff:g id="NUMBER_1">%s</xliff:g> 个控件。</item>
       <item quantity="one">已添加 <xliff:g id="NUMBER_0">%s</xliff:g> 个控件。</item>
     </plurals>
+    <string name="controls_removed" msgid="3731789252222856959">"已移除"</string>
+    <string name="accessibility_control_favorite" msgid="8694362691985545985">"已收藏"</string>
+    <string name="accessibility_control_favorite_position" msgid="54220258048929221">"已收藏，位置：<xliff:g id="NUMBER">%d</xliff:g>"</string>
+    <string name="accessibility_control_not_favorite" msgid="1291760269563092359">"已取消收藏"</string>
+    <string name="accessibility_control_change_favorite" msgid="2943178027582253261">"收藏"</string>
+    <string name="accessibility_control_change_unfavorite" msgid="6997408061750740327">"取消收藏"</string>
+    <string name="accessibility_control_move" msgid="8980344493796647792">"移至位置 <xliff:g id="NUMBER">%d</xliff:g>"</string>
     <string name="controls_favorite_default_title" msgid="967742178688938137">"控件"</string>
     <string name="controls_favorite_subtitle" msgid="6604402232298443956">"选择要从电源菜单访问的控件"</string>
     <string name="controls_favorite_rearrange" msgid="5616952398043063519">"按住并拖动即可重新排列控件"</string>
@@ -1038,7 +1048,7 @@
     <string name="controls_favorite_toast_no_changes" msgid="7094494210840877931">"未保存更改"</string>
     <string name="controls_favorite_load_error" msgid="2533215155804455348">"无法加载所有控件的列表。"</string>
     <string name="controls_favorite_other_zone_header" msgid="9089613266575525252">"其他"</string>
-    <string name="controls_dialog_title" msgid="2343565267424406202">"添加到设备控制器"</string>
+    <string name="controls_dialog_title" msgid="2343565267424406202">"添加到设备控件"</string>
     <string name="controls_dialog_ok" msgid="2770230012857881822">"添加"</string>
     <string name="controls_dialog_message" msgid="342066938390663844">"来自<xliff:g id="APP">%s</xliff:g>的建议"</string>
     <string name="controls_dialog_confirmation" msgid="586517302736263447">"控件已更新"</string>
@@ -1053,9 +1063,13 @@
     <string name="controls_structure_tooltip" msgid="4355922222944447867">"滑动可查看更多结构"</string>
     <string name="controls_seeding_in_progress" msgid="3033855341410264148">"正在加载推荐内容"</string>
     <string name="controls_media_close_session" msgid="9023534788828414585">"关闭此媒体会话"</string>
+    <string name="controls_media_resume" msgid="1933520684481586053">"继续播放"</string>
     <string name="controls_error_timeout" msgid="794197289772728958">"无效，请检查应用"</string>
     <string name="controls_error_retryable" msgid="864025882878378470">"出现错误，正在重试…"</string>
-    <string name="controls_error_removed" msgid="6299213591234723805">"设备已移除"</string>
+    <string name="controls_error_removed" msgid="6675638069846014366">"未找到"</string>
+    <string name="controls_error_removed_title" msgid="1207794911208047818">"控件不可用"</string>
+    <string name="controls_error_removed_message" msgid="2885911717034750542">"无法访问<xliff:g id="DEVICE">%1$s</xliff:g>。请查看<xliff:g id="APPLICATION">%2$s</xliff:g>应用，确保其中仍有该控件，并且应用设置没有更改。"</string>
+    <string name="controls_open_app" msgid="483650971094300141">"打开应用"</string>
     <string name="controls_error_generic" msgid="352500456918362905">"无法加载状态"</string>
     <string name="controls_error_failed" msgid="960228639198558525">"出现错误，请重试"</string>
     <string name="controls_in_progress" msgid="4421080500238215939">"正在进行"</string>

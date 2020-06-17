@@ -25,10 +25,13 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 import android.content.ComponentName;
+import android.content.pm.LauncherApps;
 import android.content.pm.LauncherApps.ShortcutChangeCallback;
 import android.content.pm.LauncherApps.ShortcutQuery;
 import android.content.pm.ShortcutInfo;
 import android.os.test.TestLooper;
+
+import com.android.server.pm.ShortcutService.ConfigConstants;
 
 import org.mockito.ArgumentCaptor;
 
@@ -43,6 +46,9 @@ public class ShortcutManagerTest11 extends BaseShortcutManagerTest {
 
     private static final ShortcutQuery QUERY_MATCH_ALL = createShortcutQuery(
             ShortcutQuery.FLAG_MATCH_ALL_KINDS_WITH_ALL_PINNED);
+
+    private static final int CACHE_OWNER_0 = LauncherApps.FLAG_CACHE_NOTIFICATION_SHORTCUTS;
+    private static final int CACHE_OWNER_1 = LauncherApps.FLAG_CACHE_BUBBLE_SHORTCUTS;
 
     private final TestLooper mTestLooper = new TestLooper();
 
@@ -111,7 +117,8 @@ public class ShortcutManagerTest11 extends BaseShortcutManagerTest {
 
         runWithCaller(LAUNCHER_1, USER_0, () -> {
             mLauncherApps.pinShortcuts(CALLING_PACKAGE_1, list("s1"), HANDLE_USER_0);
-            mLauncherApps.cacheShortcuts(CALLING_PACKAGE_1, list("s2"), HANDLE_USER_0);
+            mLauncherApps.cacheShortcuts(CALLING_PACKAGE_1, list("s2"), HANDLE_USER_0,
+                    CACHE_OWNER_0);
         });
 
         ShortcutChangeCallback callback = mock(ShortcutChangeCallback.class);
@@ -209,7 +216,42 @@ public class ShortcutManagerTest11 extends BaseShortcutManagerTest {
         runWithCaller(LAUNCHER_1, USER_0, () -> {
             mLauncherApps.registerShortcutChangeCallback(callback, QUERY_MATCH_ALL,
                     mTestLooper.getNewExecutor());
-            mLauncherApps.cacheShortcuts(CALLING_PACKAGE_1, list("s1", "s3"), HANDLE_USER_0);
+            mLauncherApps.cacheShortcuts(CALLING_PACKAGE_1, list("s1", "s3"), HANDLE_USER_0,
+                    CACHE_OWNER_0);
+            mLauncherApps.cacheShortcuts(CALLING_PACKAGE_1, list("s1", "s3"), HANDLE_USER_0,
+                    CACHE_OWNER_1);
+        });
+
+        mTestLooper.dispatchAll();
+
+        ArgumentCaptor<List> shortcuts = ArgumentCaptor.forClass(List.class);
+        verify(callback, times(2)).onShortcutsAddedOrUpdated(
+                eq(CALLING_PACKAGE_1), shortcuts.capture(), eq(HANDLE_USER_0));
+        verify(callback, times(0)).onShortcutsRemoved(any(), any(), any());
+
+        assertWith(shortcuts.getValue())
+                .areAllWithKeyFieldsOnly()
+                .haveIds("s1", "s3");
+    }
+
+    public void testShortcutChangeCallback_cacheShortcuts_alreadyCached() {
+        runWithCaller(CALLING_PACKAGE_1, USER_0, () -> {
+            assertTrue(mManager.setDynamicShortcuts(list(makeLongLivedShortcut("s1"),
+                    makeLongLivedShortcut("s2"), makeLongLivedShortcut("s3"))));
+        });
+
+        ShortcutChangeCallback callback = mock(ShortcutChangeCallback.class);
+        runWithCaller(LAUNCHER_1, USER_0, () -> {
+            mLauncherApps.cacheShortcuts(CALLING_PACKAGE_1, list("s1", "s3"), HANDLE_USER_0,
+                    CACHE_OWNER_0);
+            mLauncherApps.registerShortcutChangeCallback(callback, QUERY_MATCH_ALL,
+                    mTestLooper.getNewExecutor());
+            // Should not cause any callback events
+            mLauncherApps.cacheShortcuts(CALLING_PACKAGE_1, list("s1", "s3"), HANDLE_USER_0,
+                    CACHE_OWNER_0);
+            // Should cause a change event
+            mLauncherApps.cacheShortcuts(CALLING_PACKAGE_1, list("s1", "s3"), HANDLE_USER_0,
+                    CACHE_OWNER_1);
         });
 
         mTestLooper.dispatchAll();
@@ -232,10 +274,12 @@ public class ShortcutManagerTest11 extends BaseShortcutManagerTest {
 
         ShortcutChangeCallback callback = mock(ShortcutChangeCallback.class);
         runWithCaller(LAUNCHER_1, USER_0, () -> {
-            mLauncherApps.cacheShortcuts(CALLING_PACKAGE_1, list("s1", "s2"), HANDLE_USER_0);
+            mLauncherApps.cacheShortcuts(CALLING_PACKAGE_1, list("s1", "s2"), HANDLE_USER_0,
+                    CACHE_OWNER_0);
             mLauncherApps.registerShortcutChangeCallback(callback, QUERY_MATCH_ALL,
                     mTestLooper.getNewExecutor());
-            mLauncherApps.uncacheShortcuts(CALLING_PACKAGE_1, list("s2"), HANDLE_USER_0);
+            mLauncherApps.uncacheShortcuts(CALLING_PACKAGE_1, list("s2"), HANDLE_USER_0,
+                    CACHE_OWNER_0);
         });
 
         mTestLooper.dispatchAll();
@@ -257,8 +301,11 @@ public class ShortcutManagerTest11 extends BaseShortcutManagerTest {
         });
 
         runWithCaller(LAUNCHER_1, USER_0, () -> {
-            mLauncherApps.cacheShortcuts(CALLING_PACKAGE_1, list("s2", "s3"), HANDLE_USER_0);
+            mLauncherApps.cacheShortcuts(CALLING_PACKAGE_1, list("s1", "s2", "s3"), HANDLE_USER_0,
+                    CACHE_OWNER_0);
             mLauncherApps.pinShortcuts(CALLING_PACKAGE_1, list("s2"), HANDLE_USER_0);
+            mLauncherApps.cacheShortcuts(CALLING_PACKAGE_1, list("s1"), HANDLE_USER_0,
+                    CACHE_OWNER_1);
         });
 
         runWithCaller(CALLING_PACKAGE_1, USER_0, () -> {
@@ -269,7 +316,8 @@ public class ShortcutManagerTest11 extends BaseShortcutManagerTest {
         runWithCaller(LAUNCHER_1, USER_0, () -> {
             mLauncherApps.registerShortcutChangeCallback(callback, QUERY_MATCH_ALL,
                     mTestLooper.getNewExecutor());
-            mLauncherApps.uncacheShortcuts(CALLING_PACKAGE_1, list("s2", "s3"), HANDLE_USER_0);
+            mLauncherApps.uncacheShortcuts(CALLING_PACKAGE_1, list("s1", "s2", "s3"), HANDLE_USER_0,
+                    CACHE_OWNER_0);
         });
 
         mTestLooper.dispatchAll();
@@ -282,9 +330,10 @@ public class ShortcutManagerTest11 extends BaseShortcutManagerTest {
         verify(callback, times(1)).onShortcutsRemoved(
                 eq(CALLING_PACKAGE_1), removedShortcuts.capture(), eq(HANDLE_USER_0));
 
+        // s1 is still cached for owner1, s2 is pinned.
         assertWith(changedShortcuts.getValue())
                 .areAllWithKeyFieldsOnly()
-                .haveIds("s2");
+                .haveIds("s1", "s2");
 
         assertWith(removedShortcuts.getValue())
                 .areAllWithKeyFieldsOnly()
@@ -372,9 +421,11 @@ public class ShortcutManagerTest11 extends BaseShortcutManagerTest {
     }
 
     public void testShortcutChangeCallback_pushDynamicShortcut_existingId() {
+        // Change the max number of shortcuts.
+        mService.updateConfigurationLocked(ConfigConstants.KEY_MAX_SHORTCUTS + "=3");
+
         runWithCaller(CALLING_PACKAGE_1, USER_0, () -> {
-            assertTrue(mManager.setDynamicShortcuts((makeShortcuts("s1", "s2", "s3", "s4", "s5",
-                    "s6", "s7", "s8", "s9", "s10"))));
+            assertTrue(mManager.setDynamicShortcuts((makeShortcuts("s1", "s2", "s3"))));
         });
 
         ShortcutChangeCallback callback = mock(ShortcutChangeCallback.class);
@@ -384,7 +435,7 @@ public class ShortcutManagerTest11 extends BaseShortcutManagerTest {
         });
 
         runWithCaller(CALLING_PACKAGE_1, USER_0, () -> {
-            mManager.pushDynamicShortcut(makeShortcut("s5"));
+            mManager.pushDynamicShortcut(makeShortcut("s2"));
         });
 
         mTestLooper.dispatchAll();
@@ -396,13 +447,15 @@ public class ShortcutManagerTest11 extends BaseShortcutManagerTest {
 
         assertWith(shortcuts.getValue())
                 .areAllWithKeyFieldsOnly()
-                .haveIds("s5");
+                .haveIds("s2");
     }
 
     public void testShortcutChangeCallback_pushDynamicShortcut_causeDeletion() {
+        // Change the max number of shortcuts.
+        mService.updateConfigurationLocked(ConfigConstants.KEY_MAX_SHORTCUTS + "=3");
+
         runWithCaller(CALLING_PACKAGE_1, USER_0, () -> {
-            assertTrue(mManager.setDynamicShortcuts((makeShortcuts("s1", "s2", "s3", "s4", "s5",
-                    "s6", "s7", "s8", "s9", "s10"))));
+            assertTrue(mManager.setDynamicShortcuts((makeShortcuts("s1", "s2", "s3"))));
         });
 
         ShortcutChangeCallback callback = mock(ShortcutChangeCallback.class);
@@ -412,7 +465,7 @@ public class ShortcutManagerTest11 extends BaseShortcutManagerTest {
         });
 
         runWithCaller(CALLING_PACKAGE_1, USER_0, () -> {
-            mManager.pushDynamicShortcut(makeShortcut("s11"));
+            mManager.pushDynamicShortcut(makeShortcut("s4"));
         });
 
         mTestLooper.dispatchAll();
@@ -427,31 +480,34 @@ public class ShortcutManagerTest11 extends BaseShortcutManagerTest {
 
         assertWith(changedShortcuts.getValue())
                 .areAllWithKeyFieldsOnly()
-                .haveIds("s11");
+                .haveIds("s4");
 
         assertWith(removedShortcuts.getValue())
                 .areAllWithKeyFieldsOnly()
-                .haveIds("s10");
+                .haveIds("s3");
     }
 
     public void testShortcutChangeCallback_pushDynamicShortcut_causeDeletionButCached() {
+        // Change the max number of shortcuts.
+        mService.updateConfigurationLocked(ConfigConstants.KEY_MAX_SHORTCUTS + "=3");
+
         runWithCaller(CALLING_PACKAGE_1, USER_0, () -> {
-            assertTrue(mManager.setDynamicShortcuts((makeShortcuts("s1", "s2", "s3", "s4", "s5",
-                    "s6", "s7", "s8", "s9"))));
-            ShortcutInfo s10 = makeLongLivedShortcut("s10");
-            s10.setRank(10);
-            mManager.pushDynamicShortcut(s10);  // Add a long lived shortcut to the end of the list.
+            assertTrue(mManager.setDynamicShortcuts((makeShortcuts("s1", "s2"))));
+            ShortcutInfo s3 = makeLongLivedShortcut("s3");
+            s3.setRank(3);
+            mManager.pushDynamicShortcut(s3);  // Add a long lived shortcut to the end of the list.
         });
 
         ShortcutChangeCallback callback = mock(ShortcutChangeCallback.class);
         runWithCaller(LAUNCHER_1, USER_0, () -> {
-            mLauncherApps.cacheShortcuts(CALLING_PACKAGE_1, list("s10"), HANDLE_USER_0);
+            mLauncherApps.cacheShortcuts(CALLING_PACKAGE_1, list("s3"), HANDLE_USER_0,
+                    CACHE_OWNER_0);
             mLauncherApps.registerShortcutChangeCallback(callback, QUERY_MATCH_ALL,
                     mTestLooper.getNewExecutor());
         });
 
         runWithCaller(CALLING_PACKAGE_1, USER_0, () -> {
-            mManager.pushDynamicShortcut(makeShortcut("s11"));
+            mManager.pushDynamicShortcut(makeShortcut("s4"));
         });
 
         mTestLooper.dispatchAll();
@@ -463,7 +519,7 @@ public class ShortcutManagerTest11 extends BaseShortcutManagerTest {
 
         assertWith(shortcuts.getValue())
                 .areAllWithKeyFieldsOnly()
-                .haveIds("s10", "s11");
+                .haveIds("s3", "s4");
     }
 
     public void testShortcutChangeCallback_disableShortcuts() {
@@ -503,7 +559,8 @@ public class ShortcutManagerTest11 extends BaseShortcutManagerTest {
 
         ShortcutChangeCallback callback = mock(ShortcutChangeCallback.class);
         runWithCaller(LAUNCHER_1, USER_0, () -> {
-            mLauncherApps.cacheShortcuts(CALLING_PACKAGE_1, list("s2"), HANDLE_USER_0);
+            mLauncherApps.cacheShortcuts(CALLING_PACKAGE_1, list("s2"), HANDLE_USER_0,
+                    CACHE_OWNER_0);
             mLauncherApps.pinShortcuts(CALLING_PACKAGE_1, list("s3"), HANDLE_USER_0);
             mLauncherApps.registerShortcutChangeCallback(callback, QUERY_MATCH_ALL,
                     mTestLooper.getNewExecutor());
@@ -539,7 +596,8 @@ public class ShortcutManagerTest11 extends BaseShortcutManagerTest {
         });
 
         runWithCaller(LAUNCHER_1, USER_0, () -> {
-            mLauncherApps.cacheShortcuts(CALLING_PACKAGE_1, list("s2"), HANDLE_USER_0);
+            mLauncherApps.cacheShortcuts(CALLING_PACKAGE_1, list("s2"), HANDLE_USER_0,
+                    CACHE_OWNER_0);
             mLauncherApps.pinShortcuts(CALLING_PACKAGE_1, list("s3"), HANDLE_USER_0);
         });
 
@@ -606,7 +664,8 @@ public class ShortcutManagerTest11 extends BaseShortcutManagerTest {
 
         ShortcutChangeCallback callback = mock(ShortcutChangeCallback.class);
         runWithCaller(LAUNCHER_1, USER_0, () -> {
-            mLauncherApps.cacheShortcuts(CALLING_PACKAGE_1, list("s2"), HANDLE_USER_0);
+            mLauncherApps.cacheShortcuts(CALLING_PACKAGE_1, list("s2"), HANDLE_USER_0,
+                    CACHE_OWNER_0);
             mLauncherApps.pinShortcuts(CALLING_PACKAGE_1, list("s3"), HANDLE_USER_0);
             mLauncherApps.registerShortcutChangeCallback(callback, QUERY_MATCH_ALL,
                     mTestLooper.getNewExecutor());
@@ -672,7 +731,8 @@ public class ShortcutManagerTest11 extends BaseShortcutManagerTest {
 
         ShortcutChangeCallback callback = mock(ShortcutChangeCallback.class);
         runWithCaller(LAUNCHER_1, USER_0, () -> {
-            mLauncherApps.cacheShortcuts(CALLING_PACKAGE_1, list("s2"), HANDLE_USER_0);
+            mLauncherApps.cacheShortcuts(CALLING_PACKAGE_1, list("s2"), HANDLE_USER_0,
+                    CACHE_OWNER_0);
             mLauncherApps.pinShortcuts(CALLING_PACKAGE_1, list("s3"), HANDLE_USER_0);
             mLauncherApps.registerShortcutChangeCallback(callback, QUERY_MATCH_ALL,
                     mTestLooper.getNewExecutor());
@@ -739,7 +799,8 @@ public class ShortcutManagerTest11 extends BaseShortcutManagerTest {
 
         ShortcutChangeCallback callback = mock(ShortcutChangeCallback.class);
         runWithCaller(LAUNCHER_1, USER_0, () -> {
-            mLauncherApps.cacheShortcuts(CALLING_PACKAGE_1, list("s2"), HANDLE_USER_0);
+            mLauncherApps.cacheShortcuts(CALLING_PACKAGE_1, list("s2"), HANDLE_USER_0,
+                    CACHE_OWNER_0);
             mLauncherApps.pinShortcuts(CALLING_PACKAGE_1, list("s3"), HANDLE_USER_0);
             mLauncherApps.registerShortcutChangeCallback(callback, QUERY_MATCH_ALL,
                     mTestLooper.getNewExecutor());

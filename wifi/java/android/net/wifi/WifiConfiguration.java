@@ -128,7 +128,8 @@ public class WifiConfiguration implements Parcelable {
                 WAPI_PSK,
                 WAPI_CERT,
                 FILS_SHA256,
-                FILS_SHA384})
+                FILS_SHA384,
+                DPP})
         public @interface KeyMgmtScheme {}
 
         /** WPA is not used; plaintext or static WEP could be used. */
@@ -443,10 +444,6 @@ public class WifiConfiguration implements Parcelable {
     public static final int SECURITY_TYPE_WAPI_PSK = 7;
     /** Security type for a WAPI Certificate network. */
     public static final int SECURITY_TYPE_WAPI_CERT = 8;
-    /** @hide */
-    public static final int SECURITY_TYPE_FILS_SHA256 = 9;
-    /** @hide */
-    public static final int SECURITY_TYPE_FILS_SHA384 = 10;
 
     /**
      * Security types we support.
@@ -462,9 +459,7 @@ public class WifiConfiguration implements Parcelable {
             SECURITY_TYPE_EAP_SUITE_B,
             SECURITY_TYPE_OWE,
             SECURITY_TYPE_WAPI_PSK,
-            SECURITY_TYPE_WAPI_CERT,
-            SECURITY_TYPE_FILS_SHA256,
-            SECURITY_TYPE_FILS_SHA384
+            SECURITY_TYPE_WAPI_CERT
     })
     public @interface SecurityType {}
 
@@ -550,12 +545,6 @@ public class WifiConfiguration implements Parcelable {
                 allowedProtocols.set(WifiConfiguration.Protocol.WAPI);
                 allowedPairwiseCiphers.set(WifiConfiguration.PairwiseCipher.SMS4);
                 allowedGroupCiphers.set(WifiConfiguration.GroupCipher.SMS4);
-                break;
-            case SECURITY_TYPE_FILS_SHA256:
-                allowedKeyManagement.set(WifiConfiguration.KeyMgmt.FILS_SHA256);
-                break;
-            case SECURITY_TYPE_FILS_SHA384:
-                allowedKeyManagement.set(WifiConfiguration.KeyMgmt.FILS_SHA384);
                 break;
             default:
                 throw new IllegalArgumentException("unknown security type " + securityType);

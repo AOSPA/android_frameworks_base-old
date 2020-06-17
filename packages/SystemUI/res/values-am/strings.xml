@@ -89,8 +89,7 @@
     <string name="screenshot_dismiss_ui_description" msgid="934736855340147968">"ቅጽበታዊ ገጽ እይታን አሰናብት"</string>
     <string name="screenshot_preview_description" msgid="7606510140714080474">"የቅጽበታዊ ገጽ ዕይታ ቅድመ-ዕይታ"</string>
     <string name="screenrecord_name" msgid="2596401223859996572">"የማያ መቅጃ"</string>
-    <!-- no translation found for screenrecord_background_processing_label (7244617554884238898) -->
-    <skip />
+    <string name="screenrecord_background_processing_label" msgid="7244617554884238898">"የማያ ገጽ ቀረጻን በማሰናዳት ላይ"</string>
     <string name="screenrecord_channel_description" msgid="4147077128486138351">"ለአንድ የማያ ገጽ ቀረጻ ክፍለ-ጊዜ በመካሄድ ያለ ማሳወቂያ"</string>
     <string name="screenrecord_start_label" msgid="1750350278888217473">"መቅረጽ ይጀመር?"</string>
     <string name="screenrecord_description" msgid="1123231719680353736">"እየቀረጹ ሳለ የAndroid ስርዓት በማያ ገጽዎ ላይ የሚታይ ወይም በመሣሪያዎ ላይ የሚጫወት ማንኛውም ሚስጥራዊነት ያለው መረጃን መያዝ ይችላል። ይህ የይለፍ ቃላትን፣ የክፍያ መረጃን፣ ፎቶዎችን፣ መልዕክቶችን እና ኦዲዮን ያካትታል።"</string>
@@ -511,10 +510,9 @@
     <string name="clear_all_notifications_text" msgid="348312370303046130">"ሁሉንም አጽዳ"</string>
     <string name="manage_notifications_text" msgid="6885645344647733116">"ያቀናብሩ"</string>
     <string name="manage_notifications_history_text" msgid="57055985396576230">"ታሪክ"</string>
-    <!-- no translation found for notification_section_header_incoming (5295312809341711367) -->
-    <skip />
-    <string name="notification_section_header_gentle" msgid="3044910806569985386">"ጸጥ ያሉ ማሳወቂያዎች"</string>
-    <string name="notification_section_header_alerting" msgid="3168140660646863240">"የማንቂያ ማሳወቂያዎች"</string>
+    <string name="notification_section_header_incoming" msgid="5295312809341711367">"ገቢ"</string>
+    <string name="notification_section_header_gentle" msgid="6804099527336337197">"ጸጥ ያለ"</string>
+    <string name="notification_section_header_alerting" msgid="5581175033680477651">"ማሳወቂያዎች"</string>
     <string name="notification_section_header_conversations" msgid="821834744538345661">"ውይይቶች"</string>
     <string name="accessibility_notification_section_header_gentle_clear_all" msgid="6490207897764933919">"ሁሉንም ጸጥ ያሉ ማሳወቂያዎችን ያጽዱ"</string>
     <string name="dnd_suppressing_shade_text" msgid="5588252250634464042">"ማሳወቂያዎች በአትረብሽ ባሉበት ቆመዋል"</string>
@@ -594,19 +592,21 @@
     <string name="volume_odi_captions_hint_enable" msgid="2073091194012843195">"አንቃ"</string>
     <string name="volume_odi_captions_hint_disable" msgid="2518846326748183407">"አሰናክል"</string>
     <string name="accessibility_output_chooser" msgid="7807898688967194183">"የውጽዓት መሣሪያን ይቀይሩ"</string>
-    <string name="screen_pinning_title" msgid="7357611095909618178">"ማያ ገጽ ተሰክቷል"</string>
+    <string name="screen_pinning_title" msgid="9058007390337841305">"መተግበሪያ ተሰክቷል"</string>
     <string name="screen_pinning_description" msgid="8699395373875667743">"ይሄ እስኪነቅሉት ድረስ በእይታ ውስጥ ያስቀምጠዋል። ለመንቀል ተመለስ እና አጠቃላይ ዕይታ የሚለውን ይጫኑ እና ይያዙ።"</string>
     <string name="screen_pinning_description_recents_invisible" msgid="4564466648700390037">"ይሄ እስኪነቅሉት ድረስ በእይታ ውስጥ ያስቀምጠዋል። ለመንቀል ተመለስ እና መነሻ የሚለውን ይንኩ እና ይያዙ።"</string>
     <string name="screen_pinning_description_gestural" msgid="7246323931831232068">"እስኪነቅሉት ድረስ ይህ በእይታ ውስጥ ያቆየዋል። ለመንቀል ወደ ላይ ጠረግ አድርገው ይያዙ።"</string>
     <string name="screen_pinning_description_accessible" msgid="7386449191953535332">"ይሄ እስኪነቅሉት ድረስ በእይታ ውስጥ ያስቀምጠዋል። ለመንቀል አጠቃላይ ዕይታ ተጭነው ይያዙ።"</string>
     <string name="screen_pinning_description_recents_invisible_accessible" msgid="2857071808674481986">"ይሄ እስኪነቅሉት ድረስ በእይታ ውስጥ ያስቀምጠዋል። ለመንቀል መነሻ የሚለውን ይንኩ እና ይያዙ።"</string>
-    <string name="screen_pinning_toast" msgid="2083944237147005811">"ይህን ማያ ገጽ ለመንቀል ተመለስ እና አጠቃላይ ዕይታ አዝራሮችን ይንኩ እና ይያዙ"</string>
-    <string name="screen_pinning_toast_recents_invisible" msgid="6343770487795352573">"ይህን ማያ ገጽ ለመንቀል ተመለስ እና መነሻ የሚለውን ይንኩ እና ይያዙ"</string>
-    <string name="screen_pinning_toast_gesture_nav" msgid="2884536903398445645">"ይህን ማያ ገጽ ለመንቀል ወደ ላይ ጠርገው ይያዙ"</string>
+    <string name="screen_pinning_exposes_personal_data" msgid="8189852022981524789">"የግል ውሂብ ተደራሽ ሊሆን ይችላል (እንደ እውቂያዎች እና የኢሜይል ይዘት ያለ)።"</string>
+    <string name="screen_pinning_can_open_other_apps" msgid="7529756813231421455">"የተሰካው መተግበሪያ ሌሎች መተግበሪያዎችን ሊከፍት ይችላል።"</string>
+    <string name="screen_pinning_toast" msgid="8177286912533744328">"ይህን መተግበሪያ ለመንቀል የተመለስ እና አጠቃላይ ዕይታ አዝራሮችን ነክተው ይያዙ"</string>
+    <string name="screen_pinning_toast_recents_invisible" msgid="6850978077443052594">"ይህን መተግበሪያ ለመንቀል የተመለስ እና መነሻ አዝራሮችን ነክተው ይያዙ"</string>
+    <string name="screen_pinning_toast_gesture_nav" msgid="170699893395336705">"ይህን መተግበሪያ ለመንቀል ወደ ላይ ጠርገው ይያዙ"</string>
     <string name="screen_pinning_positive" msgid="3285785989665266984">"ገባኝ"</string>
     <string name="screen_pinning_negative" msgid="6882816864569211666">"አይ፣ አመሰግናለሁ"</string>
-    <string name="screen_pinning_start" msgid="5695091877402422575">"ማያ ገጽ ተሰክቷል"</string>
-    <string name="screen_pinning_exit" msgid="5114993350662745840">"ማያ ገጽ ተነቅሏል"</string>
+    <string name="screen_pinning_start" msgid="7483998671383371313">"መተግበሪያ ተሰክቷል"</string>
+    <string name="screen_pinning_exit" msgid="4553787518387346893">"መተግበሪያ ተነቅሏል"</string>
     <string name="quick_settings_reset_confirmation_title" msgid="463533331480997595">"<xliff:g id="TILE_LABEL">%1$s</xliff:g> ይደበቅ?"</string>
     <string name="quick_settings_reset_confirmation_message" msgid="2320586180785674186">"በቅንብሮች ውስጥ በሚቀጥለው ጊዜ እንዲበራ በሚያደርጉበት ጊዜ ዳግመኛ ብቅ ይላል።"</string>
     <string name="quick_settings_reset_confirmation_button" msgid="3341477479055016776">"ደብቅ"</string>
@@ -709,16 +709,17 @@
     <string name="inline_turn_off_notifications" msgid="8543989584403106071">"ማሳወቂያዎችን አጥፋ"</string>
     <string name="inline_keep_showing_app" msgid="4393429060390649757">"ከዚህ መተግበሪያ ማሳወቂያዎችን ማሳየት ይቀጥል?"</string>
     <string name="notification_silence_title" msgid="8608090968400832335">"ፀጥ ያለ"</string>
-    <string name="notification_alert_title" msgid="7629202599338071971">"ማንቃት"</string>
+    <string name="notification_alert_title" msgid="3656229781017543655">"ነባሪ"</string>
     <string name="notification_bubble_title" msgid="8330481035191903164">"አረፋ"</string>
-    <string name="notification_channel_summary_low" msgid="7300447764759926720">"ያለ ድምፅ ወይም ንዝረት እርስዎ ትኩረት እንዲያደርጉ ያግዛል።"</string>
-    <string name="notification_channel_summary_default" msgid="3539949463907902037">"ከድምፅ ወይም ንዝረት ጋር የእርስዎን ትኩረት ይስባል።"</string>
-    <string name="notification_channel_summary_default_with_bubbles" msgid="6298026344552480458">"በድምጽ ወይም ንዝረት የእርስዎን ትኩረት ይስባል። የ<xliff:g id="APP_NAME">%1$s</xliff:g> አረፋ ውይይቶች በነባሪነት።"</string>
+    <string name="notification_channel_summary_low" msgid="4860617986908931158">"ምንም ድምጽ ወይም ንዝረት የለም"</string>
+    <string name="notification_conversation_summary_low" msgid="1734433426085468009">"ምንም ድምጽ ወይም ንዝረት የለም እና በውይይት ክፍል ላይ አይታይም"</string>
+    <string name="notification_channel_summary_default" msgid="3282930979307248890">"በእርስዎ የስልክ ቅንብሮች የሚወሰን ሆኖ ሊደውል ወይም ሊነዝር ይችላል"</string>
+    <string name="notification_channel_summary_default_with_bubbles" msgid="1782419896613644568">"በእርስዎ የስልክ ቅንብሮች የሚወሰን ሆኖ ሊደውል ወይም ሊነዝር ይችላል። የ<xliff:g id="APP_NAME">%1$s</xliff:g> አረፋ ውይይቶች በነባሪነት።"</string>
     <string name="notification_channel_summary_bubble" msgid="7235935211580860537">"ለዚህ ይዞታ ከተንሳፋፊ አቋራጭ ጋር የእርስዎን ትኩረት ያቆያል።"</string>
-    <string name="notification_channel_summary_priority" msgid="7415770044553264622">"በውይይት ክፍል አናት ላይ ይታያል እና እንደ አረፋ ብቅ ይላል"</string>
+    <string name="notification_channel_summary_priority" msgid="7952654515769021553">"በውይይት ክፍል አናት ላይ ያሳያል፣ እንደ ተንሳፋፊ አረፋ ብቅ ይላል፣ በቆልፍ ማያ ገጽ ላይ የመገለጫ ሥዕልን ያሳያል"</string>
     <string name="notification_conversation_channel_settings" msgid="2409977688430606835">"ቅንብሮች"</string>
     <string name="notification_priority_title" msgid="2079708866333537093">"ቅድሚያ"</string>
-    <string name="no_shortcut" msgid="7176375126961212514">"<xliff:g id="APP_NAME">%1$s</xliff:g> ውይይት-ተኮር ቅንብሮችን አይደግፍም"</string>
+    <string name="no_shortcut" msgid="8257177117568230126">"<xliff:g id="APP_NAME">%1$s</xliff:g> የውይይት ባህሪያትን አይደግፍም"</string>
     <string name="bubble_overflow_empty_title" msgid="3120029421991510842">"ምንም የቅርብ ጊዜ አረፋዎች የሉም"</string>
     <string name="bubble_overflow_empty_subtitle" msgid="2030874469510497397">"የቅርብ ጊዜ አረፋዎች እና የተሰናበቱ አረፋዎች እዚህ ብቅ ይላሉ"</string>
     <string name="notification_unblockable_desc" msgid="2073030886006190804">"እነዚህ ማሳወቂያዎች ሊሻሻሉ አይችሉም።"</string>
@@ -991,10 +992,8 @@
     <string name="music_controls_no_title" msgid="4166497066552290938">"ርዕስ የለም"</string>
     <string name="restart_button_description" msgid="6916116576177456480">"ይህን መተግበሪያ እንደገና ለማስጀመር መታ ያድርጉ እና ወደ ሙሉ ማያ ገጽ ይሂዱ።"</string>
     <string name="bubbles_settings_button_description" msgid="7324245408859877545">"ቅንብሮች ለ <xliff:g id="APP_NAME">%1$s</xliff:g> አረፋዎች"</string>
-    <!-- no translation found for bubble_overflow_button_content_description (5523744621434300510) -->
-    <skip />
-    <!-- no translation found for bubble_accessibility_action_add_back (6217995665917123890) -->
-    <skip />
+    <string name="bubble_overflow_button_content_description" msgid="5523744621434300510">"ትርፍ ፍሰት"</string>
+    <string name="bubble_accessibility_action_add_back" msgid="6217995665917123890">"ወደ ቁልል መልሰው ያክሉ"</string>
     <string name="manage_bubbles_text" msgid="6856830436329494850">"ያቀናብሩ"</string>
     <string name="bubble_content_description_single" msgid="5175160674436546329">"<xliff:g id="NOTIFICATION_TITLE">%1$s</xliff:g> ከ<xliff:g id="APP_NAME">%2$s</xliff:g>"</string>
     <string name="bubble_content_description_stack" msgid="7907610717462651870">"<xliff:g id="NOTIFICATION_TITLE">%1$s</xliff:g> ከ <xliff:g id="APP_NAME">%2$s</xliff:g> እና <xliff:g id="BUBBLE_COUNT">%3$d</xliff:g> ተጨማሪ"</string>
@@ -1003,7 +1002,8 @@
     <string name="bubble_accessibility_action_move_top_right" msgid="6916868852433483569">"ወደ ላይኛው ቀኝ አንቀሳቅስ"</string>
     <string name="bubble_accessibility_action_move_bottom_left" msgid="6339015902495504715">"የግርጌውን ግራ አንቀሳቅስ"</string>
     <string name="bubble_accessibility_action_move_bottom_right" msgid="7471571700628346212">"ታችኛውን ቀኝ ያንቀሳቅሱ"</string>
-    <string name="bubble_dismiss_text" msgid="7071770411580452911">"አሰናብት"</string>
+    <!-- no translation found for bubble_dismiss_text (1314082410868930066) -->
+    <skip />
     <string name="bubbles_dont_bubble_conversation" msgid="1033040343437428822">"ውይይቶችን በአረፋ አታሳይ"</string>
     <string name="bubbles_user_education_title" msgid="5547017089271445797">"አረፋዎችን በመጠቀም ይወያዩ"</string>
     <string name="bubbles_user_education_description" msgid="1160281719576715211">"አዲስ ውይይቶች እንደ ተንሳፋፊ አዶዎች ወይም አረፋዎች ሆነው ይታያሉ። አረፋን ለመክፈት መታ ያድርጉ። ለመውሰድ ይጎትቱት።"</string>
@@ -1014,11 +1014,14 @@
     <string name="notification_content_system_nav_changed" msgid="5077913144844684544">"የስርዓት ዳሰሳ ተዘምኗል። ለውጦችን ለማድረግ ወደ ቅንብሮች ይሂዱ።"</string>
     <string name="notification_content_gesture_nav_available" msgid="4431460803004659888">"የስርዓት ዳሰሳን ለማዘመን ወደ ቅንብሮች ይሂዱ"</string>
     <string name="inattentive_sleep_warning_title" msgid="3891371591713990373">"ተጠባባቂ"</string>
+    <string name="priority_onboarding_title" msgid="2893070698479227616">"ልወጣ ወደ ቅድሚያ ተቀናብሯል"</string>
+    <string name="priority_onboarding_behavior" msgid="5342816047020432929">"ቅድሚያ የሚሰጣቸው ልወጣዎች እነዚህን ያደርጋሉ፦"</string>
     <string name="priority_onboarding_show_at_top_text" msgid="1678400241025513541">"በውይይት ክፍል አናት ላይ አአሳይ"</string>
     <string name="priority_onboarding_show_avatar_text" msgid="5756291381124091508">"የመገለጫ ስዕልን በማያ ገጽ ቁልፍ ላይ አሳይ"</string>
     <string name="priority_onboarding_appear_as_bubble_text" msgid="4227039772250263122">"በመተግበሪያዎች ላይ እንደ ተንሳፋፊ አረፋ ሆኖ ይታያሉ"</string>
     <string name="priority_onboarding_ignores_dnd_text" msgid="2918952762719600529">"አትረብሽን አቋርጥ"</string>
     <string name="priority_onboarding_done_button_title" msgid="4569550984286506007">"ገባኝ"</string>
+    <string name="priority_onboarding_settings_button_title" msgid="6663601574303585927">"ቅንብሮች"</string>
     <string name="magnification_overlay_title" msgid="6584179429612427958">"የማጉያ ንብርብር መስኮት"</string>
     <string name="magnification_window_title" msgid="4863914360847258333">"የማጉያ መስኮት"</string>
     <string name="magnification_controls_title" msgid="8421106606708891519">"የማጉያ መስኮት መቆጣጠሪያዎች"</string>
@@ -1031,6 +1034,13 @@
       <item quantity="one"><xliff:g id="NUMBER_1">%s</xliff:g> ቁጥጥሮች ታክለዋል።</item>
       <item quantity="other"><xliff:g id="NUMBER_1">%s</xliff:g> ቁጥጥሮች ታክለዋል።</item>
     </plurals>
+    <string name="controls_removed" msgid="3731789252222856959">"ተወግዷል"</string>
+    <string name="accessibility_control_favorite" msgid="8694362691985545985">"ተወዳጅ የተደረገ"</string>
+    <string name="accessibility_control_favorite_position" msgid="54220258048929221">"ተወዳጅ ተደርጓል፣ አቋም <xliff:g id="NUMBER">%d</xliff:g>"</string>
+    <string name="accessibility_control_not_favorite" msgid="1291760269563092359">"ተወዳጅ አልተደረገም"</string>
+    <string name="accessibility_control_change_favorite" msgid="2943178027582253261">"ተወዳጅ"</string>
+    <string name="accessibility_control_change_unfavorite" msgid="6997408061750740327">"ተወዳጅ አታድርግ"</string>
+    <string name="accessibility_control_move" msgid="8980344493796647792">"ወደ ቦታ <xliff:g id="NUMBER">%d</xliff:g> ውሰድ"</string>
     <string name="controls_favorite_default_title" msgid="967742178688938137">"መቆጣጠሪያዎች"</string>
     <string name="controls_favorite_subtitle" msgid="6604402232298443956">"ከኃይል ምናሌ ላይ ለመድረስ መቆጣጠሪያዎችን ይምረጡ"</string>
     <string name="controls_favorite_rearrange" msgid="5616952398043063519">"መቆጣጠሪያዎችን ዳግም ለማስተካከል ይያዙ እና ይጎትቱ"</string>
@@ -1053,9 +1063,13 @@
     <string name="controls_structure_tooltip" msgid="4355922222944447867">"ተጨማሪ ለማየት ያንሸራትቱ"</string>
     <string name="controls_seeding_in_progress" msgid="3033855341410264148">"ምክሮችን በመጫን ላይ"</string>
     <string name="controls_media_close_session" msgid="9023534788828414585">"ይህን የሚዲያ ክፍለ-ጊዜ ዝጋ"</string>
+    <string name="controls_media_resume" msgid="1933520684481586053">"ከቆመበት ቀጥል"</string>
     <string name="controls_error_timeout" msgid="794197289772728958">"ንቁ ያልኾነ፣ መተግበሪያን ይፈትሹ"</string>
     <string name="controls_error_retryable" msgid="864025882878378470">"ስህተት፣ እንደገና በመሞከር ላይ…"</string>
-    <string name="controls_error_removed" msgid="6299213591234723805">"መሣሪያ ተወግዷል"</string>
+    <string name="controls_error_removed" msgid="6675638069846014366">"አልተገኘም"</string>
+    <string name="controls_error_removed_title" msgid="1207794911208047818">"መቆጣጠሪያ አይገኝም"</string>
+    <string name="controls_error_removed_message" msgid="2885911717034750542">"<xliff:g id="DEVICE">%1$s</xliff:g>ን መድረስ አልተቻለም። አሁንም ድረስ መቆጣጠሪያው ሊገኝ እንደሚችል እና የመተግበሪያ ቅንብሮቹ እንዳልተለወጡ ለማረጋገጥ <xliff:g id="APPLICATION">%2$s</xliff:g> መተግበሪያን ይፈትሹ።"</string>
+    <string name="controls_open_app" msgid="483650971094300141">"መተግበሪያ ክፈት"</string>
     <string name="controls_error_generic" msgid="352500456918362905">"ሁኔታን መጫን አልተቻልም"</string>
     <string name="controls_error_failed" msgid="960228639198558525">"ስህተት፣ እንደገና ይሞክሩ"</string>
     <string name="controls_in_progress" msgid="4421080500238215939">"በሂደት ላይ"</string>

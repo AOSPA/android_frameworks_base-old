@@ -19,10 +19,11 @@ import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.content.Context;
 import android.content.res.Resources;
-import android.view.ContextThemeWrapper;
+import android.util.LayoutDirection;
 import android.view.View;
 import android.view.View.MeasureSpec;
 import android.view.WindowManager;
+import android.widget.AdapterView;
 import android.widget.ListAdapter;
 import android.widget.ListPopupWindow;
 import android.widget.ListView;
@@ -32,30 +33,32 @@ import com.android.systemui.R;
 /**
  * Customized widget for use in the GlobalActionsDialog. Ensures common positioning and user
  * interactions.
+ *
+ * It should be created with a {@link Context} with the right theme
  */
 public class GlobalActionsPopupMenu extends ListPopupWindow {
     private Context mContext;
     private boolean mIsDropDownMode;
-    private int mMenuHorizontalPadding = 0;
     private int mMenuVerticalPadding = 0;
     private int mGlobalActionsSidePadding = 0;
     private ListAdapter mAdapter;
+    private AdapterView.OnItemLongClickListener mOnItemLongClickListener;
 
     public GlobalActionsPopupMenu(@NonNull Context context, boolean isDropDownMode) {
-        super(new ContextThemeWrapper(context, R.style.Control_ListPopupWindow));
+        super(context);
         mContext = context;
+        Resources res = mContext.getResources();
+        setBackgroundDrawable(
+                res.getDrawable(R.drawable.rounded_bg_full, context.getTheme()));
         mIsDropDownMode = isDropDownMode;
 
         // required to show above the global actions dialog
         setWindowLayoutType(WindowManager.LayoutParams.TYPE_VOLUME_OVERLAY);
         setModal(true);
 
-        Resources res = mContext.getResources();
         mGlobalActionsSidePadding = res.getDimensionPixelSize(R.dimen.global_actions_side_margin);
         if (!isDropDownMode) {
             mMenuVerticalPadding = res.getDimensionPixelSize(R.dimen.control_menu_vertical_padding);
-            mMenuHorizontalPadding =
-                res.getDimensionPixelSize(R.dimen.control_menu_horizontal_padding);
         }
     }
 
@@ -73,6 +76,9 @@ public class GlobalActionsPopupMenu extends ListPopupWindow {
     public void show() {
         // need to call show() first in order to construct the listView
         super.show();
+        if (mOnItemLongClickListener != null) {
+            getListView().setOnItemLongClickListener(mOnItemLongClickListener);
+        }
 
         ListView listView = getListView();
         Resources res = mContext.getResources();
@@ -90,17 +96,28 @@ public class GlobalActionsPopupMenu extends ListPopupWindow {
             int parentWidth = res.getSystem().getDisplayMetrics().widthPixels;
             int widthSpec = MeasureSpec.makeMeasureSpec(
                     (int) (parentWidth * 0.9), MeasureSpec.AT_MOST);
-            View child = mAdapter.getView(0, null, listView);
-            child.measure(widthSpec, MeasureSpec.UNSPECIFIED);
-            int width = Math.max(child.getMeasuredWidth(), (int) (parentWidth * 0.5));
-
-            listView.setPadding(mMenuHorizontalPadding, mMenuVerticalPadding,
-                    mMenuHorizontalPadding, mMenuVerticalPadding);
+            int maxWidth = 0;
+            for (int i = 0; i < mAdapter.getCount(); i++) {
+                View child = mAdapter.getView(i, null, listView);
+                child.measure(widthSpec, MeasureSpec.UNSPECIFIED);
+                int w = child.getMeasuredWidth();
+                maxWidth = Math.max(w, maxWidth);
+            }
+            int width = Math.max(maxWidth, (int) (parentWidth * 0.5));
+            listView.setPadding(0, mMenuVerticalPadding, 0, mMenuVerticalPadding);
 
             setWidth(width);
-            setHorizontalOffset(getAnchorView().getWidth() - mGlobalActionsSidePadding - width);
+            if (getAnchorView().getLayoutDirection() == LayoutDirection.LTR) {
+                setHorizontalOffset(getAnchorView().getWidth() - mGlobalActionsSidePadding - width);
+            } else {
+                setHorizontalOffset(mGlobalActionsSidePadding);
+            }
         }
 
         super.show();
+    }
+
+    public void setOnItemLongClickListener(AdapterView.OnItemLongClickListener listener) {
+        mOnItemLongClickListener = listener;
     }
 }

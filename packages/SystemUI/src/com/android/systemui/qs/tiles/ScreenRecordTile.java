@@ -22,6 +22,7 @@ import android.text.TextUtils;
 import android.util.Log;
 import android.widget.Switch;
 
+import com.android.internal.logging.UiEventLogger;
 import com.android.systemui.R;
 import com.android.systemui.plugins.ActivityStarter;
 import com.android.systemui.plugins.qs.QSTile;
@@ -41,14 +42,16 @@ public class ScreenRecordTile extends QSTileImpl<QSTile.BooleanState>
     private ActivityStarter mActivityStarter;
     private long mMillisUntilFinished = 0;
     private Callback mCallback = new Callback();
+    private UiEventLogger mUiEventLogger;
 
     @Inject
     public ScreenRecordTile(QSHost host, RecordingController controller,
-            ActivityStarter activityStarter) {
+            ActivityStarter activityStarter, UiEventLogger uiEventLogger) {
         super(host);
         mController = controller;
         mController.observe(this, mCallback);
         mActivityStarter = activityStarter;
+        mUiEventLogger = uiEventLogger;
     }
 
     @Override
@@ -79,19 +82,15 @@ public class ScreenRecordTile extends QSTileImpl<QSTile.BooleanState>
         state.value = isRecording || isStarting;
         state.state = (isRecording || isStarting) ? Tile.STATE_ACTIVE : Tile.STATE_INACTIVE;
         state.label = mContext.getString(R.string.quick_settings_screen_record_label);
+        state.icon = ResourceIcon.get(R.drawable.ic_screenrecord);
 
         if (isRecording) {
-            state.icon = ResourceIcon.get(R.drawable.ic_qs_screenrecord);
             state.secondaryLabel = mContext.getString(R.string.quick_settings_screen_record_stop);
         } else if (isStarting) {
             // round, since the timer isn't exact
             int countdown = (int) Math.floorDiv(mMillisUntilFinished + 500, 1000);
-            // TODO update icon
-            state.icon = ResourceIcon.get(R.drawable.ic_qs_screenrecord);
             state.secondaryLabel = String.format("%d...", countdown);
         } else {
-            // TODO update icon
-            state.icon = ResourceIcon.get(R.drawable.ic_qs_screenrecord);
             state.secondaryLabel = mContext.getString(R.string.quick_settings_screen_record_start);
         }
         state.contentDescription = TextUtils.isEmpty(state.secondaryLabel)
@@ -116,7 +115,6 @@ public class ScreenRecordTile extends QSTileImpl<QSTile.BooleanState>
     }
 
     private void startCountdown() {
-        Log.d(TAG, "Starting countdown");
         // Close QS, otherwise the permission dialog appears beneath it
         getHost().collapsePanels();
         Intent intent = mController.getPromptIntent();
@@ -129,7 +127,6 @@ public class ScreenRecordTile extends QSTileImpl<QSTile.BooleanState>
     }
 
     private void stopRecording() {
-        Log.d(TAG, "Stopping recording from tile");
         mController.stopRecording();
     }
 

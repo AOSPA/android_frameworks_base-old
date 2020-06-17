@@ -28,6 +28,7 @@ import android.app.RemoteInput;
 import android.app.RemoteInputHistoryItem;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.UserInfo;
 import android.net.Uri;
 import android.os.Handler;
 import android.os.RemoteException;
@@ -54,7 +55,7 @@ import com.android.systemui.Dumpable;
 import com.android.systemui.R;
 import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
-import com.android.systemui.statusbar.dagger.StatusBarModule;
+import com.android.systemui.statusbar.dagger.StatusBarDependenciesModule;
 import com.android.systemui.statusbar.notification.NotificationEntryListener;
 import com.android.systemui.statusbar.notification.NotificationEntryManager;
 import com.android.systemui.statusbar.notification.collection.NotificationEntry;
@@ -114,6 +115,7 @@ public class NotificationRemoteInputManager implements Dumpable {
     private final SmartReplyController mSmartReplyController;
     private final NotificationEntryManager mEntryManager;
     private final Handler mMainHandler;
+    private final ActionClickLogger mLogger;
 
     private final Lazy<StatusBar> mStatusBarLazy;
 
@@ -122,6 +124,7 @@ public class NotificationRemoteInputManager implements Dumpable {
     private final KeyguardManager mKeyguardManager;
     private final StatusBarStateController mStatusBarStateController;
     private final RemoteInputUriController mRemoteInputUriController;
+    private final NotificationClickNotifier mClickNotifier;
 
     protected RemoteInputController mRemoteInputController;
     protected NotificationLifetimeExtender.NotificationSafeToRemoveCallback
@@ -138,14 +141,18 @@ public class NotificationRemoteInputManager implements Dumpable {
             mStatusBarLazy.get().wakeUpIfDozing(SystemClock.uptimeMillis(), view,
                     "NOTIFICATION_CLICK");
 
+            final NotificationEntry entry = getNotificationForParent(view.getParent());
+            mLogger.logInitialClick(entry, pendingIntent);
+
             if (handleRemoteInput(view, pendingIntent)) {
+                mLogger.logRemoteInputWasHandled(entry);
                 return true;
             }
 
             if (DEBUG) {
                 Log.v(TAG, "Notification click handler invoked for intent: " + pendingIntent);
             }
-            logActionClick(view, pendingIntent);
+            logActionClick(view, entry, pendingIntent);
             // The intent we are sending is for the application, which
             // won't have permission to immediately start an activity after
             // the user switches to home.  We know it is safe to do at this
@@ -158,11 +165,15 @@ public class NotificationRemoteInputManager implements Dumpable {
                 Pair<Intent, ActivityOptions> options = response.getLaunchOptions(view);
                 options.second.setLaunchWindowingMode(
                         WINDOWING_MODE_FULLSCREEN_OR_SPLIT_SCREEN_SECONDARY);
+                mLogger.logStartingIntentWithDefaultHandler(entry, pendingIntent);
                 return RemoteViews.startPendingIntent(view, pendingIntent, options);
             });
         }
 
-        private void logActionClick(View view, PendingIntent actionIntent) {
+        private void logActionClick(
+                View view,
+                NotificationEntry entry,
+                PendingIntent actionIntent) {
             Integer actionIndex = (Integer)
                     view.getTag(com.android.internal.R.id.notification_action_index_tag);
             if (actionIndex == null) {
@@ -170,7 +181,7 @@ public class NotificationRemoteInputManager implements Dumpable {
                 return;
             }
             ViewParent parent = view.getParent();
-            StatusBarNotification statusBarNotification = getNotificationForParent(parent);
+            StatusBarNotification statusBarNotification = entry.getSbn();
             if (statusBarNotification == null) {
                 Log.w(TAG, "Couldn't determine notification for click.");
                 return;
@@ -205,17 +216,13 @@ public class NotificationRemoteInputManager implements Dumpable {
                             mEntryManager.getActiveNotificationUnfiltered(key));
             final NotificationVisibility nv =
                     NotificationVisibility.obtain(key, rank, count, true, location);
-            try {
-                mBarService.onNotificationActionClick(key, buttonIndex, action, nv, false);
-            } catch (RemoteException e) {
-                // Ignore
-            }
+            mClickNotifier.onNotificationActionClick(key, buttonIndex, action, nv, false);
         }
 
-        private StatusBarNotification getNotificationForParent(ViewParent parent) {
+        private NotificationEntry getNotificationForParent(ViewParent parent) {
             while (parent != null) {
                 if (parent instanceof ExpandableNotificationRow) {
-                    return ((ExpandableNotificationRow) parent).getEntry().getSbn();
+                    return ((ExpandableNotificationRow) parent).getEntry();
                 }
                 parent = parent.getParent();
             }
@@ -255,7 +262,7 @@ public class NotificationRemoteInputManager implements Dumpable {
     };
 
     /**
-     * Injected constructor. See {@link StatusBarModule}.
+     * Injected constructor. See {@link StatusBarDependenciesModule}.
      */
     public NotificationRemoteInputManager(
             Context context,
@@ -265,13 +272,16 @@ public class NotificationRemoteInputManager implements Dumpable {
             Lazy<StatusBar> statusBarLazy,
             StatusBarStateController statusBarStateController,
             @Main Handler mainHandler,
-            RemoteInputUriController remoteInputUriController) {
+            RemoteInputUriController remoteInputUriController,
+            NotificationClickNotifier clickNotifier,
+            ActionClickLogger logger) {
         mContext = context;
         mLockscreenUserManager = lockscreenUserManager;
         mSmartReplyController = smartReplyController;
         mEntryManager = notificationEntryManager;
         mStatusBarLazy = statusBarLazy;
         mMainHandler = mainHandler;
+        mLogger = logger;
         mBarService = IStatusBarService.Stub.asInterface(
                 ServiceManager.getService(Context.STATUS_BAR_SERVICE));
         mUserManager = (UserManager) mContext.getSystemService(Context.USER_SERVICE);
@@ -279,6 +289,7 @@ public class NotificationRemoteInputManager implements Dumpable {
         mKeyguardManager = context.getSystemService(KeyguardManager.class);
         mStatusBarStateController = statusBarStateController;
         mRemoteInputUriController = remoteInputUriController;
+        mClickNotifier = clickNotifier;
 
         notificationEntryManager.addNotificationEntryListener(new NotificationEntryListener() {
             @Override
@@ -390,15 +401,35 @@ public class NotificationRemoteInputManager implements Dumpable {
 
         if (!mLockscreenUserManager.shouldAllowLockscreenRemoteInput()) {
             final int userId = pendingIntent.getCreatorUserHandle().getIdentifier();
+
+            final boolean isLockedManagedProfile =
+                    mUserManager.getUserInfo(userId).isManagedProfile()
+                    && mKeyguardManager.isDeviceLocked(userId);
+
+            final boolean isParentUserLocked;
+            if (isLockedManagedProfile) {
+                final UserInfo profileParent = mUserManager.getProfileParent(userId);
+                isParentUserLocked = (profileParent != null)
+                        && mKeyguardManager.isDeviceLocked(profileParent.id);
+            } else {
+                isParentUserLocked = false;
+            }
+
             if (mLockscreenUserManager.isLockscreenPublicMode(userId)
                     || mStatusBarStateController.getState() == StatusBarState.KEYGUARD) {
-                // Even if we don't have security we should go through this flow, otherwise we won't
-                // go to the shade
-                mCallback.onLockedRemoteInput(row, view);
+                // If the parent user is no longer locked, and the user to which the remote input
+                // is destined is a locked, managed profile, then onLockedWorkRemoteInput should be
+                // called to unlock it.
+                if (isLockedManagedProfile && !isParentUserLocked) {
+                    mCallback.onLockedWorkRemoteInput(userId, row, view);
+                } else {
+                    // Even if we don't have security we should go through this flow, otherwise
+                    // we won't go to the shade.
+                    mCallback.onLockedRemoteInput(row, view);
+                }
                 return true;
             }
-            if (mUserManager.getUserInfo(userId).isManagedProfile()
-                    && mKeyguardManager.isDeviceLocked(userId)) {
+            if (isLockedManagedProfile) {
                 mCallback.onLockedWorkRemoteInput(userId, row, view);
                 return true;
             }

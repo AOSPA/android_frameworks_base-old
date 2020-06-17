@@ -31,6 +31,9 @@ import android.content.IntentFilter;
 import android.content.pm.UserInfo;
 import android.database.ContentObserver;
 import android.graphics.Bitmap;
+import android.graphics.ColorFilter;
+import android.graphics.ColorMatrix;
+import android.graphics.ColorMatrixColorFilter;
 import android.graphics.drawable.Drawable;
 import android.os.AsyncTask;
 import android.os.Handler;
@@ -80,6 +83,9 @@ import javax.inject.Singleton;
  */
 @Singleton
 public class UserSwitcherController implements Dumpable {
+
+    public static final float USER_SWITCH_ENABLED_ALPHA = 1.0f;
+    public static final float USER_SWITCH_DISABLED_ALPHA = 0.38f;
 
     private static final String TAG = "UserSwitcherController";
     private static final boolean DEBUG = false;
@@ -409,18 +415,6 @@ public class UserSwitcherController implements Dumpable {
         Log.e(TAG, "Couldn't switch to user, id=" + userId);
     }
 
-    public int getSwitchableUserCount() {
-        int count = 0;
-        final int N = mUsers.size();
-        for (int i = 0; i < N; ++i) {
-            UserRecord record = mUsers.get(i);
-            if (record.info != null && record.info.supportsSwitchToByUser()) {
-                count++;
-            }
-        }
-        return count;
-    }
-
     protected void switchToUserId(int id) {
         try {
             pauseRefreshUsers();
@@ -684,6 +678,12 @@ public class UserSwitcherController implements Dumpable {
             } else {
                 return item.info.name;
             }
+        }
+
+        protected static ColorFilter getDisabledUserAvatarColorFilter() {
+            ColorMatrix matrix = new ColorMatrix();
+            matrix.setSaturation(0f);   // 0 - grayscale
+            return new ColorMatrixColorFilter(matrix);
         }
 
         protected static Drawable getIconDrawable(Context context, UserRecord item) {

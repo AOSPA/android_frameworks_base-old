@@ -62,6 +62,7 @@ public abstract class AbstractMultiProfilePagerAdapter extends PagerAdapter {
     private final Context mContext;
     private int mCurrentPage;
     private OnProfileSelectedListener mOnProfileSelectedListener;
+    private OnSwitchOnWorkSelectedListener mOnSwitchOnWorkSelectedListener;
     private Set<Integer> mLoadedPages;
     private final UserHandle mPersonalProfileUserHandle;
     private final UserHandle mWorkProfileUserHandle;
@@ -124,6 +125,10 @@ public abstract class AbstractMultiProfilePagerAdapter extends PagerAdapter {
         mOnProfileSelectedListener = listener;
     }
 
+    void setOnSwitchOnWorkSelectedListener(OnSwitchOnWorkSelectedListener listener) {
+        mOnSwitchOnWorkSelectedListener = listener;
+    }
+
     Context getContext() {
         return mContext;
     }
@@ -144,6 +149,13 @@ public abstract class AbstractMultiProfilePagerAdapter extends PagerAdapter {
                 }
                 if (mOnProfileSelectedListener != null) {
                     mOnProfileSelectedListener.onProfileSelected(position);
+                }
+            }
+
+            @Override
+            public void onPageScrollStateChanged(int state) {
+                if (mOnProfileSelectedListener != null) {
+                    mOnProfileSelectedListener.onProfilePageStateChanged(state);
                 }
             }
         });
@@ -336,6 +348,30 @@ public abstract class AbstractMultiProfilePagerAdapter extends PagerAdapter {
             ResolverListAdapter activeListAdapter);
 
     /**
+     * Updates padding and visibilities as a result of an orientation change.
+     * <p>They are not updated automatically, because the view is cached when created.
+     * <p>When overridden, make sure to always call the super method.
+     */
+    void updateAfterConfigChange() {
+        for (int i = 0; i < getItemCount(); i++) {
+            ViewGroup emptyStateView = getItem(i).getEmptyStateView();
+            ImageView icon = emptyStateView.findViewById(R.id.resolver_empty_state_icon);
+            updateIconVisibility(icon, emptyStateView);
+        }
+    }
+
+    private void updateIconVisibility(ImageView icon, ViewGroup emptyStateView) {
+        if (isSpinnerShowing(emptyStateView)) {
+            icon.setVisibility(View.INVISIBLE);
+        } else if (mWorkProfileUserHandle != null
+                && !getContext().getResources().getBoolean(R.bool.resolver_landscape_phone)) {
+            icon.setVisibility(View.VISIBLE);
+        } else {
+            icon.setVisibility(View.GONE);
+        }
+    }
+
+    /**
      * The empty state screens are shown according to their priority:
      * <ol>
      * <li>(highest priority) cross-profile disabled by policy (handled in
@@ -397,6 +433,9 @@ public abstract class AbstractMultiProfilePagerAdapter extends PagerAdapter {
                     ProfileDescriptor descriptor = getItem(
                             userHandleToPageIndex(listAdapter.getUserHandle()));
                     showSpinner(descriptor.getEmptyStateView());
+                    if (mOnSwitchOnWorkSelectedListener != null) {
+                        mOnSwitchOnWorkSelectedListener.onSwitchOnWorkSelected();
+                    }
                     mInjector.requestQuietModeEnabled(false, mWorkProfileUserHandle);
                 });
         return true;
@@ -433,7 +472,7 @@ public abstract class AbstractMultiProfilePagerAdapter extends PagerAdapter {
         ProfileDescriptor descriptor = getItem(
                 userHandleToPageIndex(activeListAdapter.getUserHandle()));
         descriptor.rootView.findViewById(R.id.resolver_list).setVisibility(View.GONE);
-        View emptyStateView = descriptor.getEmptyStateView();
+        ViewGroup emptyStateView = descriptor.getEmptyStateView();
         resetViewVisibilitiesForWorkProfileEmptyState(emptyStateView);
         emptyStateView.setVisibility(View.VISIBLE);
 
@@ -456,12 +495,8 @@ public abstract class AbstractMultiProfilePagerAdapter extends PagerAdapter {
         button.setOnClickListener(buttonOnClick);
 
         ImageView icon = emptyStateView.findViewById(R.id.resolver_empty_state_icon);
-        if (!getContext().getResources().getBoolean(R.bool.resolver_landscape_phone)) {
-            icon.setVisibility(View.VISIBLE);
-            icon.setImageResource(iconRes);
-        } else {
-            icon.setVisibility(View.GONE);
-        }
+        icon.setImageResource(iconRes);
+        updateIconVisibility(icon, emptyStateView);
 
         activeListAdapter.markTabLoaded();
     }
@@ -481,6 +516,11 @@ public abstract class AbstractMultiProfilePagerAdapter extends PagerAdapter {
         emptyStateView.setVisibility(View.VISIBLE);
 
         activeListAdapter.markTabLoaded();
+    }
+
+    private boolean isSpinnerShowing(View emptyStateView) {
+        return emptyStateView.findViewById(R.id.resolver_empty_state_progress).getVisibility()
+                == View.VISIBLE;
     }
 
     private void showSpinner(View emptyStateView) {
@@ -573,6 +613,27 @@ public abstract class AbstractMultiProfilePagerAdapter extends PagerAdapter {
          * {@link #PROFILE_WORK} if the work profile was selected.
          */
         void onProfileSelected(int profileIndex);
+
+
+        /**
+         * Callback for when the scroll state changes. Useful for discovering when the user begins
+         * dragging, when the pager is automatically settling to the current page, or when it is
+         * fully stopped/idle.
+         * @param state {@link ViewPager#SCROLL_STATE_IDLE}, {@link ViewPager#SCROLL_STATE_DRAGGING}
+         *              or {@link ViewPager#SCROLL_STATE_SETTLING}
+         * @see ViewPager.OnPageChangeListener#onPageScrollStateChanged
+         */
+        void onProfilePageStateChanged(int state);
+    }
+
+    /**
+     * Listener for when the user switches on the work profile from the work tab.
+     */
+    interface OnSwitchOnWorkSelectedListener {
+        /**
+         * Callback for when the user switches on the work profile from the work tab.
+         */
+        void onSwitchOnWorkSelected();
     }
 
     /**

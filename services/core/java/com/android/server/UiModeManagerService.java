@@ -165,9 +165,11 @@ final class UiModeManagerService extends SystemService {
     }
 
     @VisibleForTesting
-    protected UiModeManagerService(Context context, boolean setupWizardComplete) {
+    protected UiModeManagerService(Context context, boolean setupWizardComplete,
+            TwilightManager tm) {
         this(context);
         mSetupWizardComplete = setupWizardComplete;
+        mTwilightManager = tm;
     }
 
     private static Intent buildHomeIntent(String category) {
@@ -335,9 +337,10 @@ final class UiModeManagerService extends SystemService {
                 mWakeLock = mPowerManager.newWakeLock(PowerManager.FULL_WAKE_LOCK, TAG);
                 mWindowManager = LocalServices.getService(WindowManagerInternal.class);
                 mAlarmManager = (AlarmManager) getContext().getSystemService(Context.ALARM_SERVICE);
+                TwilightManager twilightManager = getLocalService(TwilightManager.class);
+                if (twilightManager != null) mTwilightManager = twilightManager;
                 mLocalPowerManager =
                         LocalServices.getService(PowerManagerInternal.class);
-                mTwilightManager = getLocalService(TwilightManager.class);
                 initPowerSave();
                 mCarModeEnabled = mDockState == Intent.EXTRA_DOCK_STATE_CAR;
                 registerVrStateListener();
@@ -380,7 +383,6 @@ final class UiModeManagerService extends SystemService {
                 com.android.internal.R.bool.config_enableCarDockHomeLaunch);
         mUiModeLocked = res.getBoolean(com.android.internal.R.bool.config_lockUiMode);
         mNightModeLocked = res.getBoolean(com.android.internal.R.bool.config_lockDayNightMode);
-
         final PackageManager pm = context.getPackageManager();
         mTelevision = pm.hasSystemFeature(PackageManager.FEATURE_TELEVISION)
                 || pm.hasSystemFeature(PackageManager.FEATURE_LEANBACK);
@@ -390,6 +392,8 @@ final class UiModeManagerService extends SystemService {
         // Update the initial, static configurations.
         SystemServerInitThreadPool.submit(() -> {
             synchronized (mLock) {
+                TwilightManager twilightManager = getLocalService(TwilightManager.class);
+                if (twilightManager != null) mTwilightManager = twilightManager;
                 updateNightModeFromSettingsLocked(context, res, UserHandle.getCallingUserId());
                 updateSystemProperties();
             }

@@ -28,6 +28,7 @@ import android.app.KeyguardManager;
 import android.app.NotificationManager;
 import android.app.WallpaperManager;
 import android.app.admin.DevicePolicyManager;
+import android.app.role.RoleManager;
 import android.app.trust.TrustManager;
 import android.content.ContentResolver;
 import android.content.Context;
@@ -39,6 +40,7 @@ import android.content.res.Resources;
 import android.hardware.SensorPrivacyManager;
 import android.hardware.display.DisplayManager;
 import android.media.AudioManager;
+import android.media.MediaRouter2Manager;
 import android.net.ConnectivityManager;
 import android.net.NetworkScoreManager;
 import android.net.wifi.WifiManager;
@@ -211,6 +213,11 @@ public class SystemServicesModule {
     }
 
     @Provides
+    static MediaRouter2Manager provideMediaRouter2Manager(Context context) {
+        return MediaRouter2Manager.getInstance(context);
+    }
+
+    @Provides
     @Singleton
     static NetworkScoreManager provideNetworkScoreManager(Context context) {
         return context.getSystemService(NetworkScoreManager.class);
@@ -308,4 +315,9 @@ public class SystemServicesModule {
         return context.getSystemService(WindowManager.class);
     }
 
+    @Provides
+    @Singleton
+    static RoleManager provideRoleManager(Context context) {
+        return context.getSystemService(RoleManager.class);
+    }
 }

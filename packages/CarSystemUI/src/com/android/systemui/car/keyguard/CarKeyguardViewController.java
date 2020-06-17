@@ -188,7 +188,7 @@ public class CarKeyguardViewController extends OverlayViewController implements
         stop();
         getOverlayViewGlobalStateController().setWindowFocusable(/* focusable= */ false);
         mKeyguardStateController.notifyKeyguardDoneFading();
-        mViewMediatorCallback.keyguardGone();
+        mHandler.post(mViewMediatorCallback::keyguardGone);
         notifyKeyguardUpdateMonitor();
     }
 
@@ -203,6 +203,11 @@ public class CarKeyguardViewController extends OverlayViewController implements
             }
             mKeyguardUpdateMonitor.sendKeyguardReset();
             notifyKeyguardUpdateMonitor();
+        } else {
+            // This is necessary in order to address an inconsistency between the keyguard service
+            // and the keyguard views.
+            // TODO: Investigate the source of the inconsistency.
+            show(/* options= */ null);
         }
     }
 
@@ -210,6 +215,14 @@ public class CarKeyguardViewController extends OverlayViewController implements
     public void onFinishedGoingToSleep() {
         if (mBouncer != null) {
             mBouncer.onScreenTurnedOff();
+        }
+    }
+
+    @Override
+    public void setOccluded(boolean occluded, boolean animate) {
+        getOverlayViewGlobalStateController().setOccluded(occluded);
+        if (!occluded) {
+            reset(/* hideBouncerWhenShowing= */ false);
         }
     }
 
@@ -306,11 +319,6 @@ public class CarKeyguardViewController extends OverlayViewController implements
 
     @Override
     public void onScreenTurnedOn() {
-        // no-op
-    }
-
-    @Override
-    public void setOccluded(boolean occluded, boolean animate) {
         // no-op
     }
 

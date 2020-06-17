@@ -193,15 +193,14 @@ class SplitScreenTaskOrganizer extends TaskOrganizer {
                 Log.d(TAG, " at-least one split empty " + mPrimary.topActivityType
                         + "  " + mSecondary.topActivityType);
             }
-            if (mDivider.inSplitMode()) {
+            if (mDivider.isDividerVisible()) {
                 // Was in split-mode, which means we are leaving split, so continue that.
                 // This happens when the stack in the primary-split is dismissed.
                 if (DEBUG) {
                     Log.d(TAG, "    was in split, so this means leave it "
                             + mPrimary.topActivityType + "  " + mSecondary.topActivityType);
                 }
-                WindowManagerProxy.applyDismissSplit(this, true /* dismissOrMaximize */);
-                mDivider.onSplitDismissed();
+                mDivider.startDismissSplit();
             } else if (!primaryIsEmpty && primaryWasEmpty && secondaryWasEmpty) {
                 // Wasn't in split-mode (both were empty), but now that the primary split is
                 // populated, we should fully enter split by moving everything else into secondary.

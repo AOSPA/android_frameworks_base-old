@@ -89,8 +89,7 @@
     <string name="screenshot_dismiss_ui_description" msgid="934736855340147968">"স্ক্ৰীনশ্বট অগ্ৰাহ্য কৰক"</string>
     <string name="screenshot_preview_description" msgid="7606510140714080474">"স্ক্ৰীনশ্বটৰ পূৰ্বদৰ্শন"</string>
     <string name="screenrecord_name" msgid="2596401223859996572">"স্ক্ৰীন ৰেকৰ্ডাৰ"</string>
-    <!-- no translation found for screenrecord_background_processing_label (7244617554884238898) -->
-    <skip />
+    <string name="screenrecord_background_processing_label" msgid="7244617554884238898">"স্ক্রীন ৰেকৰ্ডিঙৰ প্ৰক্ৰিয়াকৰণ হৈ আছে"</string>
     <string name="screenrecord_channel_description" msgid="4147077128486138351">"স্ক্রীণ ৰেকৰ্ডিং ছেশ্বন চলি থকা সময়ত পোৱা জাননী"</string>
     <string name="screenrecord_start_label" msgid="1750350278888217473">"ৰেকৰ্ড কৰা আৰম্ভ কৰিবনে?"</string>
     <string name="screenrecord_description" msgid="1123231719680353736">"ৰেকৰ্ড কৰি থাকোঁতে, Android Systemএ আপোনাৰ স্ক্রীনত দৃশ্যমান হোৱা অথবা আপোনাৰ ডিভাইচত প্লে’ হৈ থকা যিকোনো সংবেনদশীল তথ্য কেপচাৰ কৰিব পাৰে। এইটোত পাছৱর্ড, পৰিশোধৰ তথ্য, ফট’, বার্তাসমূহ আৰু অডিঅ’ অন্তর্ভুক্ত হয়।"</string>
@@ -511,10 +510,9 @@
     <string name="clear_all_notifications_text" msgid="348312370303046130">"সকলো মচক"</string>
     <string name="manage_notifications_text" msgid="6885645344647733116">"পৰিচালনা"</string>
     <string name="manage_notifications_history_text" msgid="57055985396576230">"ইতিহাস"</string>
-    <!-- no translation found for notification_section_header_incoming (5295312809341711367) -->
-    <skip />
-    <string name="notification_section_header_gentle" msgid="3044910806569985386">"নীৰৱ জাননীসমূহ"</string>
-    <string name="notification_section_header_alerting" msgid="3168140660646863240">"সতৰ্কতামূলক জাননীসমূহ"</string>
+    <string name="notification_section_header_incoming" msgid="5295312809341711367">"অন্তৰ্গামী"</string>
+    <string name="notification_section_header_gentle" msgid="6804099527336337197">"নীৰৱ"</string>
+    <string name="notification_section_header_alerting" msgid="5581175033680477651">"জাননীসমূহ"</string>
     <string name="notification_section_header_conversations" msgid="821834744538345661">"বাৰ্তালাপ"</string>
     <string name="accessibility_notification_section_header_gentle_clear_all" msgid="6490207897764933919">"সকলো নীৰৱ জাননী মচক"</string>
     <string name="dnd_suppressing_shade_text" msgid="5588252250634464042">"অসুবিধা নিদিব-ই জাননী পজ কৰিছে"</string>
@@ -594,19 +592,21 @@
     <string name="volume_odi_captions_hint_enable" msgid="2073091194012843195">"সক্ষম কৰক"</string>
     <string name="volume_odi_captions_hint_disable" msgid="2518846326748183407">"অক্ষম কৰক"</string>
     <string name="accessibility_output_chooser" msgid="7807898688967194183">"আউটপুট ডিভাইচ সলনি কৰক"</string>
-    <string name="screen_pinning_title" msgid="7357611095909618178">"স্ক্ৰীণ পিন কৰা হ’ল"</string>
+    <string name="screen_pinning_title" msgid="9058007390337841305">"এপ্‌টো পিন কৰা আছে"</string>
     <string name="screen_pinning_description" msgid="8699395373875667743">"এই কাৰ্যই আপুনি আনপিন নকৰালৈকে ইয়াক দেখা পোৱা অৱস্থাত ৰাখে। আনপিন কৰিবলৈ \'পিছলৈ যাওক\' আৰু \'অৱলোকন\'-ত স্পৰ্শ কৰি থাকক।"</string>
     <string name="screen_pinning_description_recents_invisible" msgid="4564466648700390037">"এই কাৰ্যই আপুনি আনপিন নকৰালৈকে ইয়াক দেখা পোৱা অৱস্থাত ৰাখে। আনপিন কৰিবলৈ পিছলৈ যাওক আৰু হ\'মত স্পৰ্শ কৰি সেঁচি ধৰক।"</string>
     <string name="screen_pinning_description_gestural" msgid="7246323931831232068">"এই কাৰ্যই আপুনি আনপিন নকৰালৈকে ইয়াক দেখা পোৱা অৱস্থাত ৰাখে। আনপিন কৰিবলৈ ওপৰলৈ ছোৱাইপ কৰি ধৰি ৰাখক।"</string>
     <string name="screen_pinning_description_accessible" msgid="7386449191953535332">"এই কাৰ্যই আপুনি আনপিন নকৰালৈকে ইয়াক দেখা পোৱা অৱস্থাত ৰাখে। আনপিন কৰিবলৈ \'অৱলোকন\'-ত স্পৰ্শ কৰি থাকক।"</string>
     <string name="screen_pinning_description_recents_invisible_accessible" msgid="2857071808674481986">"এই কাৰ্যই আপুনি আনপিন নকৰালৈকে ইয়াক দেখা পোৱা অৱস্থাত ৰাখে। আনপিন কৰিবলৈ পিছলৈ যাওক আৰু হ\'মত স্পৰ্শ কৰি সেঁচি ধৰক।"</string>
-    <string name="screen_pinning_toast" msgid="2083944237147005811">"এই স্ক্ৰীণখন আনপিন কৰিবলৈ পিছলৈ যাওক আৰু অৱলোকন বুটামত স্পৰ্শ কৰি হেঁচি ধৰক।"</string>
-    <string name="screen_pinning_toast_recents_invisible" msgid="6343770487795352573">"এই স্ক্ৰীণখন আনপিন কৰিবলৈ পিছলৈ যাওক আৰু হ\'ম বুটামত স্পৰ্শ কৰি হেঁচি ধৰক।"</string>
-    <string name="screen_pinning_toast_gesture_nav" msgid="2884536903398445645">"এই স্ক্রীণখন আনপিন কৰিবলৈ ওপৰলৈ ছোৱাইপ কৰি ধৰি ৰাখক"</string>
+    <string name="screen_pinning_exposes_personal_data" msgid="8189852022981524789">"ব্যক্তিগত ডেটা এক্সেছ কৰিব পৰা যাব পাৰে (যেনে সম্পর্কসমূহ আৰু ইমেইলৰ সমল)।"</string>
+    <string name="screen_pinning_can_open_other_apps" msgid="7529756813231421455">"পিন কৰি ৰখা এপ্‌টোৱে হয়তো অন্য এপ্‌সমূহ খুলিব পাৰে।"</string>
+    <string name="screen_pinning_toast" msgid="8177286912533744328">"এই এপ্‌টো আনপিন কৰিবলৈ, উভতি যাওক আৰু ৰূপৰেখাৰ বুটামসমূহ স্পৰ্শ কৰি ধৰি ৰাখক"</string>
+    <string name="screen_pinning_toast_recents_invisible" msgid="6850978077443052594">"এই এপ্‌টো আনপিন কৰিবলৈ, উভতি যাওক আৰু গৃহপৃষ্ঠাৰ বুটামসমূহ স্পৰ্শ কৰি ধৰি ৰাখক"</string>
+    <string name="screen_pinning_toast_gesture_nav" msgid="170699893395336705">"এই এপ্‌টো আনপিন কৰিবলৈ, ওপৰলৈ ছোৱাইপ কৰক আৰু ধৰি ৰাখক"</string>
     <string name="screen_pinning_positive" msgid="3285785989665266984">"বুজি পালোঁ"</string>
     <string name="screen_pinning_negative" msgid="6882816864569211666">"নালাগে, ধন্যবাদ"</string>
-    <string name="screen_pinning_start" msgid="5695091877402422575">"স্ক্ৰীণ পিন কৰা হ’ল"</string>
-    <string name="screen_pinning_exit" msgid="5114993350662745840">"স্ক্ৰীণ আনপিন কৰা হ’ল"</string>
+    <string name="screen_pinning_start" msgid="7483998671383371313">"এপ্‌টো পিন কৰা হ’ল"</string>
+    <string name="screen_pinning_exit" msgid="4553787518387346893">"এপ্‌টো আনপিন কৰা হ’ল"</string>
     <string name="quick_settings_reset_confirmation_title" msgid="463533331480997595">"<xliff:g id="TILE_LABEL">%1$s</xliff:g> লুকুৱাবনে?"</string>
     <string name="quick_settings_reset_confirmation_message" msgid="2320586180785674186">"আপুনি ইয়াক পৰৱৰ্তী সময়ত ছেটিংসমূহত অন কৰিলে ই পুনৰ প্ৰকট হ\'ব।"</string>
     <string name="quick_settings_reset_confirmation_button" msgid="3341477479055016776">"লুকুৱাওক"</string>
@@ -709,16 +709,17 @@
     <string name="inline_turn_off_notifications" msgid="8543989584403106071">"জাননী অফ কৰক"</string>
     <string name="inline_keep_showing_app" msgid="4393429060390649757">"এই এপটোৰ জাননী দেখুওৱাই থাকিব লাগিবনে?"</string>
     <string name="notification_silence_title" msgid="8608090968400832335">"নীৰৱ"</string>
-    <string name="notification_alert_title" msgid="7629202599338071971">"সতৰ্ক কৰক"</string>
+    <string name="notification_alert_title" msgid="3656229781017543655">"ডিফ’ল্ট"</string>
     <string name="notification_bubble_title" msgid="8330481035191903164">"বাবল"</string>
-    <string name="notification_channel_summary_low" msgid="7300447764759926720">"কোনো ধ্বনি অথবা কম্পন অবিহনে আপোনাক মনোযোগ দিয়াত সহায় কৰে।"</string>
-    <string name="notification_channel_summary_default" msgid="3539949463907902037">"ধ্বনি অথবা কম্পনৰ জৰিয়তে আপোনাৰ মনোযোগ আকৰ্ষণ কৰে।"</string>
-    <string name="notification_channel_summary_default_with_bubbles" msgid="6298026344552480458">"ধ্বনি অথবা কম্পনৰ জৰিয়তে আপোনাৰ মনোযোগ আকৰ্ষণ কৰে। <xliff:g id="APP_NAME">%1$s</xliff:g>ৰ বাৰ্তালাপ ডিফ’ল্ট হিচাপে বাবল হয়।"</string>
+    <string name="notification_channel_summary_low" msgid="4860617986908931158">"কোনো ধ্বনি অথবা কম্পন নাই"</string>
+    <string name="notification_conversation_summary_low" msgid="1734433426085468009">"কোনো ধ্বনি অথবা কম্পন নাই আৰু বাৰ্তালাপ শাখাটোৰ তলৰ অংশত দেখা পোৱা যায়"</string>
+    <string name="notification_channel_summary_default" msgid="3282930979307248890">"ফ’নৰ ছেটিঙৰ ওপৰত নিৰ্ভৰ কৰি ৰিং কৰিব অথবা কম্পন হ’ব পাৰে"</string>
+    <string name="notification_channel_summary_default_with_bubbles" msgid="1782419896613644568">"ফ’নৰ ছেটিঙৰ ওপৰত নিৰ্ভৰ কৰি ৰিং কৰিব অথবা কম্পন হ’ব পাৰে। <xliff:g id="APP_NAME">%1$s</xliff:g>ৰ বাৰ্তালাপ ডিফ’ল্ট হিচাপে বাবল হয়।"</string>
     <string name="notification_channel_summary_bubble" msgid="7235935211580860537">"উপঙি থকা এটা শ্বৰ্টকাটৰ জৰিয়তে এই সমলখিনিৰ প্ৰতি আপোনাক মনোযোগী কৰি ৰাখে।"</string>
-    <string name="notification_channel_summary_priority" msgid="7415770044553264622">"বাৰ্তালাপ শাখাটোৰ শীৰ্ষত দেখুৱায় আৰু এটা বাবল হিচাপে প্ৰদর্শন হয়।"</string>
+    <string name="notification_channel_summary_priority" msgid="7952654515769021553">"বাৰ্তালাপ শাখাটোৰ শীৰ্ষত দেখুৱায়, ওপঙা বাবল হিচাপে দেখা পোৱা যায়, লক স্ক্ৰীনত প্ৰ’ফাইলৰ চিত্ৰ প্ৰদৰ্শন কৰে"</string>
     <string name="notification_conversation_channel_settings" msgid="2409977688430606835">"ছেটিংসমূহ"</string>
     <string name="notification_priority_title" msgid="2079708866333537093">"অগ্ৰাধিকাৰ"</string>
-    <string name="no_shortcut" msgid="7176375126961212514">"<xliff:g id="APP_NAME">%1$s</xliff:g>এ বাৰ্তালাপ নিৰ্দিষ্ট ছেটিংসমূহ সমৰ্থন নকৰে"</string>
+    <string name="no_shortcut" msgid="8257177117568230126">"<xliff:g id="APP_NAME">%1$s</xliff:g>এ বাৰ্তালাপৰ সুবিধাসমূহ সমৰ্থন নকৰে"</string>
     <string name="bubble_overflow_empty_title" msgid="3120029421991510842">"কোনো শেহতীয়া bubbles নাই"</string>
     <string name="bubble_overflow_empty_subtitle" msgid="2030874469510497397">"শেহতীয়া bubbles আৰু অগ্ৰাহ্য কৰা bubbles ইয়াত প্ৰদর্শিত হ\'ব"</string>
     <string name="notification_unblockable_desc" msgid="2073030886006190804">"এই জাননীসমূহ সংশোধন কৰিব নোৱাৰি।"</string>
@@ -991,10 +992,8 @@
     <string name="music_controls_no_title" msgid="4166497066552290938">"কোনো শিৰোনাম নাই"</string>
     <string name="restart_button_description" msgid="6916116576177456480">"এপ্‌টো ৰিষ্টাৰ্ট কৰক আৰু পূৰ্ণ স্ক্ৰীণ ব্যৱহাৰ কৰক।"</string>
     <string name="bubbles_settings_button_description" msgid="7324245408859877545">"<xliff:g id="APP_NAME">%1$s</xliff:g>ৰ bubblesৰ ছেটিংসমূহ"</string>
-    <!-- no translation found for bubble_overflow_button_content_description (5523744621434300510) -->
-    <skip />
-    <!-- no translation found for bubble_accessibility_action_add_back (6217995665917123890) -->
-    <skip />
+    <string name="bubble_overflow_button_content_description" msgid="5523744621434300510">"অভাৰফ্ল’"</string>
+    <string name="bubble_accessibility_action_add_back" msgid="6217995665917123890">"ষ্টেকত পুনৰ যোগ দিয়ক"</string>
     <string name="manage_bubbles_text" msgid="6856830436329494850">"পৰিচালনা কৰক"</string>
     <string name="bubble_content_description_single" msgid="5175160674436546329">"<xliff:g id="APP_NAME">%2$s</xliff:g>ৰ পৰা <xliff:g id="NOTIFICATION_TITLE">%1$s</xliff:g>"</string>
     <string name="bubble_content_description_stack" msgid="7907610717462651870">"<xliff:g id="APP_NAME">%2$s</xliff:g> আৰু<xliff:g id="BUBBLE_COUNT">%3$d</xliff:g>টাৰ পৰা <xliff:g id="NOTIFICATION_TITLE">%1$s</xliff:g>"</string>
@@ -1003,7 +1002,8 @@
     <string name="bubble_accessibility_action_move_top_right" msgid="6916868852433483569">"শীৰ্ষৰ সোঁফালে নিয়ক"</string>
     <string name="bubble_accessibility_action_move_bottom_left" msgid="6339015902495504715">"বুটামটো বাওঁফালে নিয়ক"</string>
     <string name="bubble_accessibility_action_move_bottom_right" msgid="7471571700628346212">"তলৰ সোঁফালে নিয়ক"</string>
-    <string name="bubble_dismiss_text" msgid="7071770411580452911">"অগ্ৰাহ্য কৰক"</string>
+    <!-- no translation found for bubble_dismiss_text (1314082410868930066) -->
+    <skip />
     <string name="bubbles_dont_bubble_conversation" msgid="1033040343437428822">"বাৰ্তালাপ বাবল নকৰিব"</string>
     <string name="bubbles_user_education_title" msgid="5547017089271445797">"Bubbles ব্যৱহাৰ কৰি চাট কৰক"</string>
     <string name="bubbles_user_education_description" msgid="1160281719576715211">"নতুন বাৰ্তালাপ উপঙি থকা চিহ্নসমূহ অথবা bubbles হিচাপে প্ৰদর্শিত হয়। Bubbles খুলিবলৈ টিপক। এইটো স্থানান্তৰ কৰিবলৈ টানি নিয়ক।"</string>
@@ -1014,11 +1014,14 @@
     <string name="notification_content_system_nav_changed" msgid="5077913144844684544">"ছিষ্টেম নেভিগেশ্বন আপডে’ট কৰা হ’ল। সলনি কৰিবলৈ ছেটিংসমূহ-লৈ যাওক।"</string>
     <string name="notification_content_gesture_nav_available" msgid="4431460803004659888">"ছিষ্টেম নেভিগেশ্বন আপডে’ট কৰিবলৈ ছেটিংসমূহ-লৈ যাওক"</string>
     <string name="inattentive_sleep_warning_title" msgid="3891371591713990373">"ষ্টেণ্ডবাই"</string>
+    <string name="priority_onboarding_title" msgid="2893070698479227616">"বাৰ্তালাপসমূহ অগ্ৰাধিকাৰপ্ৰাপ্ত হিচাপে ছেট কৰা হৈছে"</string>
+    <string name="priority_onboarding_behavior" msgid="5342816047020432929">"অগ্ৰাধিকাৰপ্ৰাপ্ত বাৰ্তালাপসমূহে এইসমূহ কৰিব:"</string>
     <string name="priority_onboarding_show_at_top_text" msgid="1678400241025513541">"বাৰ্তালাপ শাখাটোৰ শীৰ্ষত দেখুৱাওক"</string>
     <string name="priority_onboarding_show_avatar_text" msgid="5756291381124091508">"লক স্ক্ৰীনত প্ৰ\'ফাইল-চিত্ৰ দেখুৱাওক"</string>
     <string name="priority_onboarding_appear_as_bubble_text" msgid="4227039772250263122">"এপ্‌সমূহৰ ওপৰত ওপঙা বাবল হিচাপে দেখা পোৱা যাব"</string>
     <string name="priority_onboarding_ignores_dnd_text" msgid="2918952762719600529">"অসুবিধা নিদিব সুবিধাটোত ব্যাঘাত জন্মাওক"</string>
     <string name="priority_onboarding_done_button_title" msgid="4569550984286506007">"বুজি পালোঁ"</string>
+    <string name="priority_onboarding_settings_button_title" msgid="6663601574303585927">"ছেটিংসমূহ"</string>
     <string name="magnification_overlay_title" msgid="6584179429612427958">"বিবৰ্ধন অ’ভাৰলে’ৰ ৱিণ্ড’"</string>
     <string name="magnification_window_title" msgid="4863914360847258333">"বিবৰ্ধন ৱিণ্ড’"</string>
     <string name="magnification_controls_title" msgid="8421106606708891519">"বিবৰ্ধন ৱিণ্ড’ৰ নিয়ন্ত্ৰণসমূহ"</string>
@@ -1031,6 +1034,13 @@
       <item quantity="one"><xliff:g id="NUMBER_1">%s</xliff:g> টা নিয়ন্ত্ৰণ যোগ কৰা হ’ল।</item>
       <item quantity="other"><xliff:g id="NUMBER_1">%s</xliff:g> টা নিয়ন্ত্ৰণ যোগ কৰা হ’ল।</item>
     </plurals>
+    <string name="controls_removed" msgid="3731789252222856959">"আঁতৰোৱা হ’ল"</string>
+    <string name="accessibility_control_favorite" msgid="8694362691985545985">"প্ৰিয় হিচাপে চিহ্নিত কৰা হ’ল"</string>
+    <string name="accessibility_control_favorite_position" msgid="54220258048929221">"প্ৰিয় হিচাপে চিহ্নিত কৰা হ’ল, স্থান <xliff:g id="NUMBER">%d</xliff:g>"</string>
+    <string name="accessibility_control_not_favorite" msgid="1291760269563092359">"অপ্ৰিয় হিচাপে চিহ্নিত কৰা হ’ল"</string>
+    <string name="accessibility_control_change_favorite" msgid="2943178027582253261">"প্ৰিয়"</string>
+    <string name="accessibility_control_change_unfavorite" msgid="6997408061750740327">"অপ্ৰিয়"</string>
+    <string name="accessibility_control_move" msgid="8980344493796647792">"<xliff:g id="NUMBER">%d</xliff:g> নম্বৰ অৱস্থানলৈ স্থানান্তৰিত কৰক"</string>
     <string name="controls_favorite_default_title" msgid="967742178688938137">"নিয়ন্ত্ৰণসমূহ"</string>
     <string name="controls_favorite_subtitle" msgid="6604402232298443956">"পাৱাৰ মেনুখনৰ পৰা এক্সেছ পাবলৈ নিয়ন্ত্ৰণসমূহ বাছনি কৰক"</string>
     <string name="controls_favorite_rearrange" msgid="5616952398043063519">"নিয়ন্ত্ৰণসমূহ পুনৰ সজাবলৈ ধৰি ৰাখক আৰু টানি আনি এৰক"</string>
@@ -1053,9 +1063,13 @@
     <string name="controls_structure_tooltip" msgid="4355922222944447867">"অধিক চাবলৈ ছোৱাইপ কৰক"</string>
     <string name="controls_seeding_in_progress" msgid="3033855341410264148">"চুপাৰিছসমূহ ল’ড কৰি থকা হৈছে"</string>
     <string name="controls_media_close_session" msgid="9023534788828414585">"এই মিডিয়া ছেশ্বনটো বন্ধ কৰক"</string>
+    <string name="controls_media_resume" msgid="1933520684481586053">"পুনৰ আৰম্ভ কৰক"</string>
     <string name="controls_error_timeout" msgid="794197289772728958">"সক্ৰিয় নহয়, এপ্‌টো পৰীক্ষা কৰক"</string>
     <string name="controls_error_retryable" msgid="864025882878378470">"আসোঁৱাহ, পুনৰ চেষ্টা কৰি আছে…"</string>
-    <string name="controls_error_removed" msgid="6299213591234723805">"ডিভাইচটো আঁতৰোৱা হৈছে"</string>
+    <string name="controls_error_removed" msgid="6675638069846014366">"বিচাৰি পোৱা নগ’ল"</string>
+    <string name="controls_error_removed_title" msgid="1207794911208047818">"নিয়ন্ত্ৰণটো উপলব্ধ নহয়"</string>
+    <string name="controls_error_removed_message" msgid="2885911717034750542">"<xliff:g id="DEVICE">%1$s</xliff:g> এক্সেছ কৰিব পৰা নগ’ল। নিয়ন্ত্ৰণটো এতিয়াও উপলব্ধ আৰু এপ্‌টোৰ ছেটিংসমূহ সলনি কৰা হোৱা নাই বুলি নিশ্চিত কৰিবলৈ <xliff:g id="APPLICATION">%2$s</xliff:g> এপ্‌টো পৰীক্ষা কৰক।"</string>
+    <string name="controls_open_app" msgid="483650971094300141">"এপ্‌টো খোলক"</string>
     <string name="controls_error_generic" msgid="352500456918362905">"স্থিতি ল’ড কৰিব নোৱাৰি"</string>
     <string name="controls_error_failed" msgid="960228639198558525">"আসোঁৱাহ হৈছে, আকৌ চেষ্টা কৰক"</string>
     <string name="controls_in_progress" msgid="4421080500238215939">"চলি আছে"</string>

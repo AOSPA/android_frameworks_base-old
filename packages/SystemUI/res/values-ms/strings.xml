@@ -89,8 +89,7 @@
     <string name="screenshot_dismiss_ui_description" msgid="934736855340147968">"Ketepikan tangkapan skrin"</string>
     <string name="screenshot_preview_description" msgid="7606510140714080474">"Pratonton tangkapan skrin"</string>
     <string name="screenrecord_name" msgid="2596401223859996572">"Perakam Skrin"</string>
-    <!-- no translation found for screenrecord_background_processing_label (7244617554884238898) -->
-    <skip />
+    <string name="screenrecord_background_processing_label" msgid="7244617554884238898">"Memproses rakaman skrin"</string>
     <string name="screenrecord_channel_description" msgid="4147077128486138351">"Pemberitahuan breterusan untuk sesi rakaman skrin"</string>
     <string name="screenrecord_start_label" msgid="1750350278888217473">"Mula Merakam?"</string>
     <string name="screenrecord_description" msgid="1123231719680353736">"Semasa merakam, Sistem Android dapat menangkap mana-mana maklumat sensitif yang kelihatan pada skrin anda atau yang dimainkan pada peranti anda. Ini termasuklah kata laluan, maklumat pembayaran, foto, mesej dan audio."</string>
@@ -390,7 +389,7 @@
     <string name="quick_settings_cast_no_wifi" msgid="6980194769795014875">"Wi-Fi tidak disambungkan"</string>
     <string name="quick_settings_brightness_dialog_title" msgid="4980669966716685588">"Kecerahan"</string>
     <string name="quick_settings_brightness_dialog_auto_brightness_label" msgid="2325362583903258677">"AUTO"</string>
-    <string name="quick_settings_inversion_label" msgid="5078769633069667698">"Terbalikkan warna"</string>
+    <string name="quick_settings_inversion_label" msgid="5078769633069667698">"Songsangkan warna"</string>
     <string name="quick_settings_color_space_label" msgid="537528291083575559">"Mod pembetulan warna"</string>
     <string name="quick_settings_more_settings" msgid="2878235926753776694">"Lagi tetapan"</string>
     <string name="quick_settings_done" msgid="2163641301648855793">"Selesai"</string>
@@ -511,10 +510,9 @@
     <string name="clear_all_notifications_text" msgid="348312370303046130">"Kosongkan semua"</string>
     <string name="manage_notifications_text" msgid="6885645344647733116">"Urus"</string>
     <string name="manage_notifications_history_text" msgid="57055985396576230">"Sejarah"</string>
-    <!-- no translation found for notification_section_header_incoming (5295312809341711367) -->
-    <skip />
-    <string name="notification_section_header_gentle" msgid="3044910806569985386">"Pemberitahuan senyap"</string>
-    <string name="notification_section_header_alerting" msgid="3168140660646863240">"Pemberitahuan memaklumi"</string>
+    <string name="notification_section_header_incoming" msgid="5295312809341711367">"Masuk"</string>
+    <string name="notification_section_header_gentle" msgid="6804099527336337197">"Senyap"</string>
+    <string name="notification_section_header_alerting" msgid="5581175033680477651">"Pemberitahuan"</string>
     <string name="notification_section_header_conversations" msgid="821834744538345661">"Perbualan"</string>
     <string name="accessibility_notification_section_header_gentle_clear_all" msgid="6490207897764933919">"Kosongkan semua pemberitahuan senyap"</string>
     <string name="dnd_suppressing_shade_text" msgid="5588252250634464042">"Pemberitahuan dijeda oleh Jangan Ganggu"</string>
@@ -588,25 +586,27 @@
     <string name="accessibility_volume_settings" msgid="1458961116951564784">"Tetapan bunyi"</string>
     <string name="accessibility_volume_expand" msgid="7653070939304433603">"Kembangkan"</string>
     <string name="accessibility_volume_collapse" msgid="2746845391013829996">"Runtuhkan"</string>
-    <string name="volume_odi_captions_tip" msgid="8825655463280990941">"Kapsyen media automatik"</string>
+    <string name="volume_odi_captions_tip" msgid="8825655463280990941">"Sari kata media automatik"</string>
     <string name="accessibility_volume_close_odi_captions_tip" msgid="8924753283621160480">"Petua sari kata"</string>
     <string name="volume_odi_captions_content_description" msgid="4172765742046013630">"Tindanan kapsyen"</string>
     <string name="volume_odi_captions_hint_enable" msgid="2073091194012843195">"dayakan"</string>
     <string name="volume_odi_captions_hint_disable" msgid="2518846326748183407">"lumpuhkan"</string>
     <string name="accessibility_output_chooser" msgid="7807898688967194183">"Tukar peranti output"</string>
-    <string name="screen_pinning_title" msgid="7357611095909618178">"Skrin telah disemat"</string>
+    <string name="screen_pinning_title" msgid="9058007390337841305">"Apl telah disemat"</string>
     <string name="screen_pinning_description" msgid="8699395373875667743">"Tindakan ini memastikan skrin kelihatan sehingga anda menyahsemat. Sentuh &amp; tahan Kembali dan Ikhtisar untuk menyahsemat."</string>
     <string name="screen_pinning_description_recents_invisible" msgid="4564466648700390037">"Tindakan ini memastikan skrin kelihatan sehingga anda menyahsemat. Sentuh &amp; tahan Kembali dan Skrin Utama untuk menyahsemat."</string>
     <string name="screen_pinning_description_gestural" msgid="7246323931831232068">"Tindakan ini memastikan skrin kelihatan sehingga anda menyahsemat. Leret ke atas &amp; tahan untuk menyahsemat."</string>
     <string name="screen_pinning_description_accessible" msgid="7386449191953535332">"Tindakan ini memastikan skrin kelihatan sehingga anda menyahsemat. Sentuh &amp; tahan Ikhtisar untuk menyahsemat."</string>
     <string name="screen_pinning_description_recents_invisible_accessible" msgid="2857071808674481986">"Tindakan ini memastikan skrin kelihatan sehingga anda menyahsemat. Sentuh &amp; tahan Skrin Utama untuk menyahsemat."</string>
-    <string name="screen_pinning_toast" msgid="2083944237147005811">"Untuk menyahsemat skrin ini, sentuh &amp; tahan butang Kembali dan Ikhtisar"</string>
-    <string name="screen_pinning_toast_recents_invisible" msgid="6343770487795352573">"Untuk menyahsemat skrin ini, sentuh &amp; tahan butang Kembali dan Skrin Utama"</string>
-    <string name="screen_pinning_toast_gesture_nav" msgid="2884536903398445645">"Untuk menyahsemat skrin ini, leret ke atas &amp; tahan"</string>
+    <string name="screen_pinning_exposes_personal_data" msgid="8189852022981524789">"Data peribadi mungkin boleh diakses (seperti kenalan dan kandungan e-mel)."</string>
+    <string name="screen_pinning_can_open_other_apps" msgid="7529756813231421455">"Apl yang disematkan boleh membuka aplikasi lain."</string>
+    <string name="screen_pinning_toast" msgid="8177286912533744328">"Untuk menyahsemat apl ini, sentuh &amp; tahan butang Kembali dan Ikhtisar"</string>
+    <string name="screen_pinning_toast_recents_invisible" msgid="6850978077443052594">"Untuk menyahsemat apl ini, sentuh &amp; tahan butang Kembali dan Skrin Utama"</string>
+    <string name="screen_pinning_toast_gesture_nav" msgid="170699893395336705">"Untuk menyahsemat apl ini, leret ke atas &amp; tahan"</string>
     <string name="screen_pinning_positive" msgid="3285785989665266984">"Faham"</string>
     <string name="screen_pinning_negative" msgid="6882816864569211666">"Tidak"</string>
-    <string name="screen_pinning_start" msgid="5695091877402422575">"Skrin disemat"</string>
-    <string name="screen_pinning_exit" msgid="5114993350662745840">"Skrin dinyahsemat"</string>
+    <string name="screen_pinning_start" msgid="7483998671383371313">"Apl disemat"</string>
+    <string name="screen_pinning_exit" msgid="4553787518387346893">"Apl dinyahsemat"</string>
     <string name="quick_settings_reset_confirmation_title" msgid="463533331480997595">"Sembunyikan <xliff:g id="TILE_LABEL">%1$s</xliff:g>?"</string>
     <string name="quick_settings_reset_confirmation_message" msgid="2320586180785674186">"Mesej itu akan terpapar semula pada kali seterusnya anda menghidupkan apl dalam tetapan."</string>
     <string name="quick_settings_reset_confirmation_button" msgid="3341477479055016776">"Sembunyikan"</string>
@@ -704,21 +704,22 @@
     <string name="inline_minimize_button" msgid="1474436209299333445">"Minimumkan"</string>
     <string name="inline_silent_button_silent" msgid="525243786649275816">"Senyap"</string>
     <string name="inline_silent_button_stay_silent" msgid="2129254868305468743">"Kekal senyap"</string>
-    <string name="inline_silent_button_alert" msgid="5705343216858250354">"Memaklumi"</string>
+    <string name="inline_silent_button_alert" msgid="5705343216858250354">"Pemakluman"</string>
     <string name="inline_silent_button_keep_alerting" msgid="6577845442184724992">"Teruskan memberikan makluman"</string>
     <string name="inline_turn_off_notifications" msgid="8543989584403106071">"Matikan pemberitahuan"</string>
     <string name="inline_keep_showing_app" msgid="4393429060390649757">"Terus tunjukkan pemberitahuan daripada apl ini?"</string>
     <string name="notification_silence_title" msgid="8608090968400832335">"Senyap"</string>
-    <string name="notification_alert_title" msgid="7629202599338071971">"Memaklumi"</string>
+    <string name="notification_alert_title" msgid="3656229781017543655">"Lalai"</string>
     <string name="notification_bubble_title" msgid="8330481035191903164">"Gelembung"</string>
-    <string name="notification_channel_summary_low" msgid="7300447764759926720">"Membantu anda fokus tanpa bunyi atau getaran."</string>
-    <string name="notification_channel_summary_default" msgid="3539949463907902037">"Menarik perhatian anda dengan bunyi atau getaran."</string>
-    <string name="notification_channel_summary_default_with_bubbles" msgid="6298026344552480458">"Menarik perhatian anda dengan bunyi atau getaran. Perbualan daripada gelembung <xliff:g id="APP_NAME">%1$s</xliff:g> secara lalai."</string>
+    <string name="notification_channel_summary_low" msgid="4860617986908931158">"Tiada bunyi atau getaran"</string>
+    <string name="notification_conversation_summary_low" msgid="1734433426085468009">"Tiada bunyi atau getaran dan muncul di sebelah bawah dalam bahagian perbualan"</string>
+    <string name="notification_channel_summary_default" msgid="3282930979307248890">"Mungkin berbunyi atau bergetar berdasarkan tetapan telefon"</string>
+    <string name="notification_channel_summary_default_with_bubbles" msgid="1782419896613644568">"Mungkin berbunyi atau bergetar berdasarkan tetapan telefon. Perbualan daripada gelembung <xliff:g id="APP_NAME">%1$s</xliff:g> secara lalai."</string>
     <string name="notification_channel_summary_bubble" msgid="7235935211580860537">"Memastikan anda memberikan perhatian dengan pintasan terapung ke kandungan ini."</string>
-    <string name="notification_channel_summary_priority" msgid="7415770044553264622">"Ditunjukkan di sebelah atas bahagian perbualan dan muncul sebagai gelembung."</string>
+    <string name="notification_channel_summary_priority" msgid="7952654515769021553">"Ditunjukkan di sebelah atas bahagian perbualan, muncul sebagai gelembung terapung, memaparkan gambar profil pada skrin kunci"</string>
     <string name="notification_conversation_channel_settings" msgid="2409977688430606835">"Tetapan"</string>
     <string name="notification_priority_title" msgid="2079708866333537093">"Keutamaan"</string>
-    <string name="no_shortcut" msgid="7176375126961212514">"<xliff:g id="APP_NAME">%1$s</xliff:g> tidak menyokong tetapan khusus perbualan"</string>
+    <string name="no_shortcut" msgid="8257177117568230126">"<xliff:g id="APP_NAME">%1$s</xliff:g> tidak menyokong ciri perbualan"</string>
     <string name="bubble_overflow_empty_title" msgid="3120029421991510842">"Tiada gelembung terbaharu"</string>
     <string name="bubble_overflow_empty_subtitle" msgid="2030874469510497397">"Gelembung baharu dan gelembung yang diketepikan akan dipaparkan di sini"</string>
     <string name="notification_unblockable_desc" msgid="2073030886006190804">"Pemberitahuan ini tidak boleh diubah suai."</string>
@@ -746,7 +747,7 @@
     <string name="notification_conversation_favorite" msgid="1905240206975921907">"Perbualan penting"</string>
     <string name="notification_conversation_unfavorite" msgid="181383708304763807">"Bukan perbualan penting"</string>
     <string name="notification_conversation_mute" msgid="268951550222925548">"Disenyapkan"</string>
-    <string name="notification_conversation_unmute" msgid="2692255619510896710">"Memaklumi"</string>
+    <string name="notification_conversation_unmute" msgid="2692255619510896710">"Pemakluman"</string>
     <string name="notification_conversation_bubble" msgid="2242180995373949022">"Tunjukkan gelembung"</string>
     <string name="notification_conversation_unbubble" msgid="6908427185031099868">"Alih keluar gelembung"</string>
     <string name="notification_conversation_home_screen" msgid="8347136037958438935">"Tambahkan pada skrin utama"</string>
@@ -991,10 +992,8 @@
     <string name="music_controls_no_title" msgid="4166497066552290938">"Tiada tajuk"</string>
     <string name="restart_button_description" msgid="6916116576177456480">"Ketik untuk memulakan semula apl ini dan menggunakan skrin penuh."</string>
     <string name="bubbles_settings_button_description" msgid="7324245408859877545">"Tetapan untuk gelembung <xliff:g id="APP_NAME">%1$s</xliff:g>"</string>
-    <!-- no translation found for bubble_overflow_button_content_description (5523744621434300510) -->
-    <skip />
-    <!-- no translation found for bubble_accessibility_action_add_back (6217995665917123890) -->
-    <skip />
+    <string name="bubble_overflow_button_content_description" msgid="5523744621434300510">"Limpahan"</string>
+    <string name="bubble_accessibility_action_add_back" msgid="6217995665917123890">"Tambah kembali pada tindanan"</string>
     <string name="manage_bubbles_text" msgid="6856830436329494850">"Urus"</string>
     <string name="bubble_content_description_single" msgid="5175160674436546329">"<xliff:g id="NOTIFICATION_TITLE">%1$s</xliff:g> daripada <xliff:g id="APP_NAME">%2$s</xliff:g>"</string>
     <string name="bubble_content_description_stack" msgid="7907610717462651870">"<xliff:g id="NOTIFICATION_TITLE">%1$s</xliff:g> daripada <xliff:g id="APP_NAME">%2$s</xliff:g> dan <xliff:g id="BUBBLE_COUNT">%3$d</xliff:g> lagi"</string>
@@ -1003,7 +1002,8 @@
     <string name="bubble_accessibility_action_move_top_right" msgid="6916868852433483569">"Alihkan ke atas sebelah kanan"</string>
     <string name="bubble_accessibility_action_move_bottom_left" msgid="6339015902495504715">"Alihkan ke bawah sebelah kiri"</string>
     <string name="bubble_accessibility_action_move_bottom_right" msgid="7471571700628346212">"Alihkan ke bawah sebelah kanan"</string>
-    <string name="bubble_dismiss_text" msgid="7071770411580452911">"Ketepikan"</string>
+    <!-- no translation found for bubble_dismiss_text (1314082410868930066) -->
+    <skip />
     <string name="bubbles_dont_bubble_conversation" msgid="1033040343437428822">"Jangan jadikan perbualan dalam bentuk gelembung"</string>
     <string name="bubbles_user_education_title" msgid="5547017089271445797">"Bersembang menggunakan gelembung"</string>
     <string name="bubbles_user_education_description" msgid="1160281719576715211">"Perbualan baharu muncul sebagai ikon terapung atau gelembung. Ketik untuk membuka gelembung. Seret untuk mengalihkan gelembung tersebut."</string>
@@ -1014,11 +1014,14 @@
     <string name="notification_content_system_nav_changed" msgid="5077913144844684544">"Navigasi sistem dikemas kini. Untuk membuat perubahan, pergi ke Tetapan."</string>
     <string name="notification_content_gesture_nav_available" msgid="4431460803004659888">"Pergi ke Tetapan untuk mengemas kini navigasi sistem"</string>
     <string name="inattentive_sleep_warning_title" msgid="3891371591713990373">"Tunggu sedia"</string>
+    <string name="priority_onboarding_title" msgid="2893070698479227616">"Perbualan ditetapkan kepada keutamaan"</string>
+    <string name="priority_onboarding_behavior" msgid="5342816047020432929">"Perbualan keutamaan akan:"</string>
     <string name="priority_onboarding_show_at_top_text" msgid="1678400241025513541">"Tunjukkan di atas bahagian perbualan"</string>
     <string name="priority_onboarding_show_avatar_text" msgid="5756291381124091508">"Tunjukkan gambar profil pada skrin kunci"</string>
     <string name="priority_onboarding_appear_as_bubble_text" msgid="4227039772250263122">"Dipaparkan sebagai gelembung terapung di atas apl"</string>
-    <string name="priority_onboarding_ignores_dnd_text" msgid="2918952762719600529">"Ganggu Ciri Jangan Ganggu"</string>
+    <string name="priority_onboarding_ignores_dnd_text" msgid="2918952762719600529">"Ganggu ciri Jangan Ganggu"</string>
     <string name="priority_onboarding_done_button_title" msgid="4569550984286506007">"OK"</string>
+    <string name="priority_onboarding_settings_button_title" msgid="6663601574303585927">"Tetapan"</string>
     <string name="magnification_overlay_title" msgid="6584179429612427958">"Tetingkap Tindanan Pembesaran"</string>
     <string name="magnification_window_title" msgid="4863914360847258333">"Tetingkap Pembesaran"</string>
     <string name="magnification_controls_title" msgid="8421106606708891519">"Kawalan Tetingkap Pembesaran"</string>
@@ -1031,6 +1034,13 @@
       <item quantity="other"><xliff:g id="NUMBER_1">%s</xliff:g> kawalan ditambah.</item>
       <item quantity="one"><xliff:g id="NUMBER_0">%s</xliff:g> kawalan ditambah.</item>
     </plurals>
+    <string name="controls_removed" msgid="3731789252222856959">"Dialih keluar"</string>
+    <string name="accessibility_control_favorite" msgid="8694362691985545985">"Digemari"</string>
+    <string name="accessibility_control_favorite_position" msgid="54220258048929221">"Digemari, kedudukan <xliff:g id="NUMBER">%d</xliff:g>"</string>
+    <string name="accessibility_control_not_favorite" msgid="1291760269563092359">"Dinyahgemari"</string>
+    <string name="accessibility_control_change_favorite" msgid="2943178027582253261">"gemari"</string>
+    <string name="accessibility_control_change_unfavorite" msgid="6997408061750740327">"nyahgemari"</string>
+    <string name="accessibility_control_move" msgid="8980344493796647792">"Alih ke kedudukan <xliff:g id="NUMBER">%d</xliff:g>"</string>
     <string name="controls_favorite_default_title" msgid="967742178688938137">"Kawalan"</string>
     <string name="controls_favorite_subtitle" msgid="6604402232298443956">"Pilih kawalan untuk diakses daripada menu kuasa"</string>
     <string name="controls_favorite_rearrange" msgid="5616952398043063519">"Tahan &amp; seret untuk mengatur semula kawalan"</string>
@@ -1053,9 +1063,13 @@
     <string name="controls_structure_tooltip" msgid="4355922222944447867">"Leret untuk melihat selanjutnya"</string>
     <string name="controls_seeding_in_progress" msgid="3033855341410264148">"Memuatkan cadangan"</string>
     <string name="controls_media_close_session" msgid="9023534788828414585">"Tutup sesi media ini"</string>
+    <string name="controls_media_resume" msgid="1933520684481586053">"Sambung semula"</string>
     <string name="controls_error_timeout" msgid="794197289772728958">"Tidak aktif, semak apl"</string>
     <string name="controls_error_retryable" msgid="864025882878378470">"Ralat, mencuba semula…"</string>
-    <string name="controls_error_removed" msgid="6299213591234723805">"Peranti dialih keluar"</string>
+    <string name="controls_error_removed" msgid="6675638069846014366">"Tidak ditemui"</string>
+    <string name="controls_error_removed_title" msgid="1207794911208047818">"Kawalan tidak tersedia"</string>
+    <string name="controls_error_removed_message" msgid="2885911717034750542">"Tidak dapat mengakses <xliff:g id="DEVICE">%1$s</xliff:g>. Periksa apl <xliff:g id="APPLICATION">%2$s</xliff:g> untuk memastikan kawalan masih tersedia dan tetapan apl tidak berubah."</string>
+    <string name="controls_open_app" msgid="483650971094300141">"Buka apl"</string>
     <string name="controls_error_generic" msgid="352500456918362905">"Tidak dapat memuatkan status"</string>
     <string name="controls_error_failed" msgid="960228639198558525">"Ralat, cuba lagi"</string>
     <string name="controls_in_progress" msgid="4421080500238215939">"Sedang berlangsung"</string>

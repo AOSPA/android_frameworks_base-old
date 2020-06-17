@@ -1,5 +1,7 @@
 package com.android.settingslib.bluetooth;
 
+import static com.android.settingslib.widget.AdaptiveOutlineDrawable.AdaptiveOutlineIconType.TYPE_ADVANCED;
+
 import android.bluetooth.BluetoothClass;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothProfile;
@@ -7,6 +9,8 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.res.Resources;
 import android.graphics.Bitmap;
+import android.graphics.Canvas;
+import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
 import android.net.Uri;
 import android.provider.MediaStore;
@@ -132,6 +136,44 @@ public class BluetoothUtils {
      */
     public static Pair<Drawable, String> getBtRainbowDrawableWithDescription(Context context,
             CachedBluetoothDevice cachedDevice) {
+        final Resources resources = context.getResources();
+        final Pair<Drawable, String> pair = BluetoothUtils.getBtDrawableWithDescription(context,
+                cachedDevice);
+
+        if (pair.first instanceof BitmapDrawable) {
+            return new Pair<>(new AdaptiveOutlineDrawable(
+                    resources, ((BitmapDrawable) pair.first).getBitmap()), pair.second);
+        }
+
+        return new Pair<>(buildBtRainbowDrawable(context,
+                pair.first, cachedDevice.getAddress().hashCode()), pair.second);
+    }
+
+    /**
+     * Build Bluetooth device icon with rainbow
+     */
+    public static Drawable buildBtRainbowDrawable(Context context, Drawable drawable,
+            int hashCode) {
+        final Resources resources = context.getResources();
+
+        // Deal with normal headset
+        final int[] iconFgColors = resources.getIntArray(R.array.bt_icon_fg_colors);
+        final int[] iconBgColors = resources.getIntArray(R.array.bt_icon_bg_colors);
+
+        // get color index based on mac address
+        final int index = Math.abs(hashCode % iconBgColors.length);
+        drawable.setTint(iconFgColors[index]);
+        final Drawable adaptiveIcon = new AdaptiveIcon(context, drawable);
+        ((AdaptiveIcon) adaptiveIcon).setBackgroundColor(iconBgColors[index]);
+
+        return adaptiveIcon;
+    }
+
+    /**
+     * Get bluetooth icon with description
+     */
+    public static Pair<Drawable, String> getBtDrawableWithDescription(Context context,
+            CachedBluetoothDevice cachedDevice) {
         final Pair<Drawable, String> pair = BluetoothUtils.getBtClassDrawableWithDescription(
                 context, cachedDevice);
         final BluetoothDevice bluetoothDevice = cachedDevice.getDevice();
@@ -159,9 +201,8 @@ public class BluetoothUtils {
                         final Bitmap resizedBitmap = Bitmap.createScaledBitmap(bitmap, iconSize,
                                 iconSize, false);
                         bitmap.recycle();
-                        final AdaptiveOutlineDrawable drawable = new AdaptiveOutlineDrawable(
-                                resources, resizedBitmap);
-                        return new Pair<>(drawable, pair.second);
+                        return new Pair<>(new BitmapDrawable(resources,
+                                resizedBitmap), pair.second);
                     }
                 } catch (IOException e) {
                     Log.e(TAG, "Failed to get drawable for: " + iconUri, e);
@@ -171,28 +212,47 @@ public class BluetoothUtils {
             }
         }
 
-        return new Pair<>(buildBtRainbowDrawable(context,
-                pair.first, cachedDevice.getAddress().hashCode()), pair.second);
+        return new Pair<>(pair.first, pair.second);
     }
 
     /**
-     * Build Bluetooth device icon with rainbow
+     * Build device icon with advanced outline
      */
-    public static Drawable buildBtRainbowDrawable(Context context, Drawable drawable,
-            int hashCode) {
+    public static Drawable buildAdvancedDrawable(Context context, Drawable drawable) {
+        final int iconSize = context.getResources().getDimensionPixelSize(
+                R.dimen.advanced_icon_size);
         final Resources resources = context.getResources();
 
-        // Deal with normal headset
-        final int[] iconFgColors = resources.getIntArray(R.array.bt_icon_fg_colors);
-        final int[] iconBgColors = resources.getIntArray(R.array.bt_icon_bg_colors);
+        Bitmap bitmap = null;
+        if (drawable instanceof BitmapDrawable) {
+            bitmap = ((BitmapDrawable) drawable).getBitmap();
+        } else {
+            final int width = drawable.getIntrinsicWidth();
+            final int height = drawable.getIntrinsicHeight();
+            bitmap = createBitmap(drawable,
+                    width > 0 ? width : 1,
+                    height > 0 ? height : 1);
+        }
 
-        // get color index based on mac address
-        final int index = Math.abs(hashCode % iconBgColors.length);
-        drawable.setTint(iconFgColors[index]);
-        final Drawable adaptiveIcon = new AdaptiveIcon(context, drawable);
-        ((AdaptiveIcon) adaptiveIcon).setBackgroundColor(iconBgColors[index]);
+        if (bitmap != null) {
+            final Bitmap resizedBitmap = Bitmap.createScaledBitmap(bitmap, iconSize,
+                    iconSize, false);
+            bitmap.recycle();
+            return new AdaptiveOutlineDrawable(resources, resizedBitmap, TYPE_ADVANCED);
+        }
 
-        return adaptiveIcon;
+        return drawable;
+    }
+
+    /**
+     * Creates a drawable with specified width and height.
+     */
+    public static Bitmap createBitmap(Drawable drawable, int width, int height) {
+        final Bitmap bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
+        final Canvas canvas = new Canvas(bitmap);
+        drawable.setBounds(0, 0, canvas.getWidth(), canvas.getHeight());
+        drawable.draw(canvas);
+        return bitmap;
     }
 
     /**

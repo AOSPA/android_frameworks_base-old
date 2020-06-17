@@ -623,6 +623,31 @@ public class ActivityManager {
     public static final int PROCESS_CAPABILITY_ALL_IMPLICIT = PROCESS_CAPABILITY_FOREGROUND_CAMERA
             | PROCESS_CAPABILITY_FOREGROUND_MICROPHONE;
 
+    /**
+     * Print capability bits in human-readable form.
+     * @hide
+     */
+    public static void printCapabilitiesSummary(PrintWriter pw, @ProcessCapability int caps) {
+        pw.print((caps & PROCESS_CAPABILITY_FOREGROUND_LOCATION) != 0 ? 'L' : '-');
+        pw.print((caps & PROCESS_CAPABILITY_FOREGROUND_CAMERA) != 0 ? 'C' : '-');
+        pw.print((caps & PROCESS_CAPABILITY_FOREGROUND_MICROPHONE) != 0 ? 'M' : '-');
+    }
+
+    /**
+     * Print capability bits in human-readable form.
+     * @hide
+     */
+    public static void printCapabilitiesFull(PrintWriter pw, @ProcessCapability int caps) {
+        printCapabilitiesSummary(pw, caps);
+        final int remain = caps & ~(PROCESS_CAPABILITY_FOREGROUND_LOCATION
+                | PROCESS_CAPABILITY_FOREGROUND_CAMERA
+                | PROCESS_CAPABILITY_FOREGROUND_MICROPHONE);
+        if (remain != 0) {
+            pw.print('+');
+            pw.print(remain);
+        }
+    }
+
     // NOTE: If PROCESS_STATEs are added, then new fields must be added
     // to frameworks/base/core/proto/android/app/enums.proto and the following method must
     // be updated to correctly map between them.
@@ -2231,7 +2256,8 @@ public class ActivityManager {
         public void writeToParcel(Parcel dest, int flags) {
             dest.writeLong(mId);
             ComponentName.writeToParcel(mTopActivityComponent, dest);
-            dest.writeParcelable(mSnapshot, 0);
+            dest.writeParcelable(mSnapshot != null && !mSnapshot.isDestroyed() ? mSnapshot : null,
+                    0);
             dest.writeInt(mColorSpace.getId());
             dest.writeInt(mOrientation);
             dest.writeInt(mRotation);

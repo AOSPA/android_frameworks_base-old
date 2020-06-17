@@ -89,8 +89,7 @@
     <string name="screenshot_dismiss_ui_description" msgid="934736855340147968">"I-dismiss ang screenshot"</string>
     <string name="screenshot_preview_description" msgid="7606510140714080474">"Preview ng screenshot"</string>
     <string name="screenrecord_name" msgid="2596401223859996572">"Recorder ng Screen"</string>
-    <!-- no translation found for screenrecord_background_processing_label (7244617554884238898) -->
-    <skip />
+    <string name="screenrecord_background_processing_label" msgid="7244617554884238898">"Pinoproseso screen recording"</string>
     <string name="screenrecord_channel_description" msgid="4147077128486138351">"Kasalukuyang notification para sa session ng pag-record ng screen"</string>
     <string name="screenrecord_start_label" msgid="1750350278888217473">"Simulang Mag-record?"</string>
     <string name="screenrecord_description" msgid="1123231719680353736">"Habang nagre-record, puwedeng ma-capture ng Android System ang anumang sensitibong impormasyong nakikita sa iyong screen o nagpe-play sa device mo. Kasama dito ang mga password, impormasyon sa pagbabayad, mga larawan, mensahe, at audio."</string>
@@ -511,10 +510,9 @@
     <string name="clear_all_notifications_text" msgid="348312370303046130">"I-clear lahat"</string>
     <string name="manage_notifications_text" msgid="6885645344647733116">"Pamahalaan"</string>
     <string name="manage_notifications_history_text" msgid="57055985396576230">"History"</string>
-    <!-- no translation found for notification_section_header_incoming (5295312809341711367) -->
-    <skip />
-    <string name="notification_section_header_gentle" msgid="3044910806569985386">"Mga silent na notification"</string>
-    <string name="notification_section_header_alerting" msgid="3168140660646863240">"Mga nag-aalertong notification"</string>
+    <string name="notification_section_header_incoming" msgid="5295312809341711367">"Papasok"</string>
+    <string name="notification_section_header_gentle" msgid="6804099527336337197">"Naka-silent"</string>
+    <string name="notification_section_header_alerting" msgid="5581175033680477651">"Mga Notification"</string>
     <string name="notification_section_header_conversations" msgid="821834744538345661">"Mga Pag-uusap"</string>
     <string name="accessibility_notification_section_header_gentle_clear_all" msgid="6490207897764933919">"I-clear ang lahat ng silent na notification"</string>
     <string name="dnd_suppressing_shade_text" msgid="5588252250634464042">"Mga notification na na-pause ng Huwag Istorbohin"</string>
@@ -594,19 +592,21 @@
     <string name="volume_odi_captions_hint_enable" msgid="2073091194012843195">"i-enable"</string>
     <string name="volume_odi_captions_hint_disable" msgid="2518846326748183407">"i-disable"</string>
     <string name="accessibility_output_chooser" msgid="7807898688967194183">"Lumipat ng output device"</string>
-    <string name="screen_pinning_title" msgid="7357611095909618178">"Naka-pin ang screen"</string>
+    <string name="screen_pinning_title" msgid="9058007390337841305">"Naka-pin ang app"</string>
     <string name="screen_pinning_description" msgid="8699395373875667743">"Pinapanatili nitong nakikita ito hanggang sa mag-unpin ka. Pindutin nang matagal ang Bumalik at Overview upang mag-unpin."</string>
     <string name="screen_pinning_description_recents_invisible" msgid="4564466648700390037">"Pinapanatili nitong nakikita ito hanggang sa mag-unpin ka. Pindutin nang matagal ang Bumalik at Home upang mag-unpin."</string>
     <string name="screen_pinning_description_gestural" msgid="7246323931831232068">"Pinapanatili nitong nakikita ito hanggang sa mag-unpin ka. Mag-swipe pataas at i-hold para i-unpin."</string>
     <string name="screen_pinning_description_accessible" msgid="7386449191953535332">"Pinapanatili nitong nakikita ito hanggang sa mag-unpin ka. Pindutin nang matagal ang Overview upang mag-unpin."</string>
     <string name="screen_pinning_description_recents_invisible_accessible" msgid="2857071808674481986">"Pinapanatili nitong nakikita ito hanggang sa mag-unpin ka. Pindutin nang matagal ang Home upang mag-unpin."</string>
-    <string name="screen_pinning_toast" msgid="2083944237147005811">"Upang i-unpin ang screen na ito, pindutin nang matagal ang mga button na Bumalik at Overview"</string>
-    <string name="screen_pinning_toast_recents_invisible" msgid="6343770487795352573">"Upang i-unpin ang screen na ito, pindutin nang matagal ang mga button na Bumalik at Home"</string>
-    <string name="screen_pinning_toast_gesture_nav" msgid="2884536903398445645">"Para i-unpin ang screen na ito, mag-swipe pataas at pumindot nang matagal"</string>
+    <string name="screen_pinning_exposes_personal_data" msgid="8189852022981524789">"Puwedeng ma-access ang personal na data (tulad ng mga contact at content ng email)."</string>
+    <string name="screen_pinning_can_open_other_apps" msgid="7529756813231421455">"Puwedeng magbukas ng ibang app ang naka-pin na app."</string>
+    <string name="screen_pinning_toast" msgid="8177286912533744328">"Para i-unpin ang app na ito, pindutin nang matagal ang mga button na Bumalik at Overview"</string>
+    <string name="screen_pinning_toast_recents_invisible" msgid="6850978077443052594">"Para i-unpin ang app na ito, pindutin nang matagal ang mga button na Bumalik at Home"</string>
+    <string name="screen_pinning_toast_gesture_nav" msgid="170699893395336705">"Para i-unpin ang app na ito, mag-swipe pataas at pumindot nang matagal"</string>
     <string name="screen_pinning_positive" msgid="3285785989665266984">"Nakuha ko"</string>
     <string name="screen_pinning_negative" msgid="6882816864569211666">"Hindi, salamat na lang"</string>
-    <string name="screen_pinning_start" msgid="5695091877402422575">"Na-pin ang screen"</string>
-    <string name="screen_pinning_exit" msgid="5114993350662745840">"Na-unpin ang screen"</string>
+    <string name="screen_pinning_start" msgid="7483998671383371313">"Na-pin ang app"</string>
+    <string name="screen_pinning_exit" msgid="4553787518387346893">"Na-unpin ang app"</string>
     <string name="quick_settings_reset_confirmation_title" msgid="463533331480997595">"Itago ang <xliff:g id="TILE_LABEL">%1$s</xliff:g>?"</string>
     <string name="quick_settings_reset_confirmation_message" msgid="2320586180785674186">"Lalabas itong muli sa susunod na pagkakataon na i-on mo ito sa mga setting."</string>
     <string name="quick_settings_reset_confirmation_button" msgid="3341477479055016776">"Itago"</string>
@@ -709,16 +709,17 @@
     <string name="inline_turn_off_notifications" msgid="8543989584403106071">"I-off ang mga notification"</string>
     <string name="inline_keep_showing_app" msgid="4393429060390649757">"Patuloy na ipakita ang mga notification mula sa app na ito?"</string>
     <string name="notification_silence_title" msgid="8608090968400832335">"Naka-silent"</string>
-    <string name="notification_alert_title" msgid="7629202599338071971">"Mag-alerto"</string>
+    <string name="notification_alert_title" msgid="3656229781017543655">"Default"</string>
     <string name="notification_bubble_title" msgid="8330481035191903164">"Bubble"</string>
-    <string name="notification_channel_summary_low" msgid="7300447764759926720">"Nakakatulong sa iyong tumuon nang walang tunog o pag-vibrate."</string>
-    <string name="notification_channel_summary_default" msgid="3539949463907902037">"Kinukuha ang iyong atensyon sa pamamagitan ng tunog o pag-vibrate."</string>
-    <string name="notification_channel_summary_default_with_bubbles" msgid="6298026344552480458">"Kinukuha ang iyong atensyon sa pamamagitan ng tunog o pag-vibrate. Mga pag-uusap mula sa <xliff:g id="APP_NAME">%1$s</xliff:g> bubble bilang default."</string>
+    <string name="notification_channel_summary_low" msgid="4860617986908931158">"Walang tunog o pag-vibrate"</string>
+    <string name="notification_conversation_summary_low" msgid="1734433426085468009">"Walang tunog o pag-vibrate at lumalabas nang mas mababa sa seksyon ng pag-uusap"</string>
+    <string name="notification_channel_summary_default" msgid="3282930979307248890">"Puwedeng mag-ring o mag-vibrate batay sa mga setting ng telepono"</string>
+    <string name="notification_channel_summary_default_with_bubbles" msgid="1782419896613644568">"Puwedeng mag-ring o mag-vibrate batay sa mga setting ng telepono. Mga pag-uusap mula sa <xliff:g id="APP_NAME">%1$s</xliff:g> bubble bilang default."</string>
     <string name="notification_channel_summary_bubble" msgid="7235935211580860537">"Pinapanatili ang iyong atensyon sa pamamagitan ng lumulutang na shortcut sa content na ito."</string>
-    <string name="notification_channel_summary_priority" msgid="7415770044553264622">"Lumalabas sa itaas ng seksyon ng pag-uusap at nagpapakita bilang bubble."</string>
+    <string name="notification_channel_summary_priority" msgid="7952654515769021553">"Makikita sa itaas ng seksyon ng pag-uusap, lumalabas bilang floating bubble, ipinapakita sa lock screen ang larawan sa profile"</string>
     <string name="notification_conversation_channel_settings" msgid="2409977688430606835">"Mga Setting"</string>
     <string name="notification_priority_title" msgid="2079708866333537093">"Priyoridad"</string>
-    <string name="no_shortcut" msgid="7176375126961212514">"Hindi sinusuportahan ng <xliff:g id="APP_NAME">%1$s</xliff:g> ang mga setting na partikular sa pag-uusap"</string>
+    <string name="no_shortcut" msgid="8257177117568230126">"Hindi sinusuportahan ng <xliff:g id="APP_NAME">%1$s</xliff:g> ang mga feature ng pag-uusap"</string>
     <string name="bubble_overflow_empty_title" msgid="3120029421991510842">"Walang kamakailang bubble"</string>
     <string name="bubble_overflow_empty_subtitle" msgid="2030874469510497397">"Lalabas dito ang mga kamakailang bubble at na-dismiss na bubble"</string>
     <string name="notification_unblockable_desc" msgid="2073030886006190804">"Hindi puwedeng baguhin ang mga notification na ito."</string>
@@ -991,10 +992,8 @@
     <string name="music_controls_no_title" msgid="4166497066552290938">"Walang pamagat"</string>
     <string name="restart_button_description" msgid="6916116576177456480">"I-tap para i-restart ang app na ito at mag-full screen."</string>
     <string name="bubbles_settings_button_description" msgid="7324245408859877545">"Mga setting para sa mga bubble ng <xliff:g id="APP_NAME">%1$s</xliff:g>"</string>
-    <!-- no translation found for bubble_overflow_button_content_description (5523744621434300510) -->
-    <skip />
-    <!-- no translation found for bubble_accessibility_action_add_back (6217995665917123890) -->
-    <skip />
+    <string name="bubble_overflow_button_content_description" msgid="5523744621434300510">"Overflow"</string>
+    <string name="bubble_accessibility_action_add_back" msgid="6217995665917123890">"Idagdag ulit sa stack"</string>
     <string name="manage_bubbles_text" msgid="6856830436329494850">"Pamahalaan"</string>
     <string name="bubble_content_description_single" msgid="5175160674436546329">"<xliff:g id="NOTIFICATION_TITLE">%1$s</xliff:g> mula sa <xliff:g id="APP_NAME">%2$s</xliff:g>"</string>
     <string name="bubble_content_description_stack" msgid="7907610717462651870">"<xliff:g id="NOTIFICATION_TITLE">%1$s</xliff:g> mula sa <xliff:g id="APP_NAME">%2$s</xliff:g> at <xliff:g id="BUBBLE_COUNT">%3$d</xliff:g> pa"</string>
@@ -1003,7 +1002,8 @@
     <string name="bubble_accessibility_action_move_top_right" msgid="6916868852433483569">"Ilipat sa kanan sa itaas"</string>
     <string name="bubble_accessibility_action_move_bottom_left" msgid="6339015902495504715">"Ilipat sa kaliwa sa ibaba"</string>
     <string name="bubble_accessibility_action_move_bottom_right" msgid="7471571700628346212">"Ilipat sa kanan sa ibaba"</string>
-    <string name="bubble_dismiss_text" msgid="7071770411580452911">"I-dismiss"</string>
+    <!-- no translation found for bubble_dismiss_text (1314082410868930066) -->
+    <skip />
     <string name="bubbles_dont_bubble_conversation" msgid="1033040343437428822">"Huwag ipakita sa bubble ang mga pag-uusap"</string>
     <string name="bubbles_user_education_title" msgid="5547017089271445797">"Makipag-chat gamit ang mga bubble"</string>
     <string name="bubbles_user_education_description" msgid="1160281719576715211">"Lumalabas bilang mga nakalutang na icon o bubble ang mga bagong pag-uusap. I-tap para buksan ang bubble. I-drag para ilipat ito."</string>
@@ -1014,11 +1014,14 @@
     <string name="notification_content_system_nav_changed" msgid="5077913144844684544">"Na-update na ang pag-navigate ng system. Para gumawa ng mga pagbabago, pumunta sa Mga Setting."</string>
     <string name="notification_content_gesture_nav_available" msgid="4431460803004659888">"Pumunta sa Mga Setting para i-update ang pag-navigate sa system"</string>
     <string name="inattentive_sleep_warning_title" msgid="3891371591713990373">"Naka-standby"</string>
+    <string name="priority_onboarding_title" msgid="2893070698479227616">"Ginawang priyoridad ang pag-uusap"</string>
+    <string name="priority_onboarding_behavior" msgid="5342816047020432929">"Ang mga priyoridad na pag-uusap ay:"</string>
     <string name="priority_onboarding_show_at_top_text" msgid="1678400241025513541">"Ipakita sa itaas ng seksyon ng pag-uusap"</string>
     <string name="priority_onboarding_show_avatar_text" msgid="5756291381124091508">"Ipakita ang larawan sa profile sa lock screen"</string>
     <string name="priority_onboarding_appear_as_bubble_text" msgid="4227039772250263122">"Ipakitang floating bubble sa ibabaw ng mga app"</string>
     <string name="priority_onboarding_ignores_dnd_text" msgid="2918952762719600529">"Ihinto ang Huwag Istorbohin"</string>
     <string name="priority_onboarding_done_button_title" msgid="4569550984286506007">"OK"</string>
+    <string name="priority_onboarding_settings_button_title" msgid="6663601574303585927">"Mga Setting"</string>
     <string name="magnification_overlay_title" msgid="6584179429612427958">"Window ng Overlay sa Pag-magnify"</string>
     <string name="magnification_window_title" msgid="4863914360847258333">"Window ng Pag-magnify"</string>
     <string name="magnification_controls_title" msgid="8421106606708891519">"Mga Kontrol sa Pag-magnify ng Window"</string>
@@ -1031,6 +1034,13 @@
       <item quantity="one"><xliff:g id="NUMBER_1">%s</xliff:g> kontrol ang naidagdag.</item>
       <item quantity="other"><xliff:g id="NUMBER_1">%s</xliff:g> na kontrol ang naidagdag.</item>
     </plurals>
+    <string name="controls_removed" msgid="3731789252222856959">"Inalis"</string>
+    <string name="accessibility_control_favorite" msgid="8694362691985545985">"Ginawang paborito"</string>
+    <string name="accessibility_control_favorite_position" msgid="54220258048929221">"Ginawang paborito, posisyon <xliff:g id="NUMBER">%d</xliff:g>"</string>
+    <string name="accessibility_control_not_favorite" msgid="1291760269563092359">"Inalis sa paborito"</string>
+    <string name="accessibility_control_change_favorite" msgid="2943178027582253261">"gawing paborito"</string>
+    <string name="accessibility_control_change_unfavorite" msgid="6997408061750740327">"alisin sa paborito"</string>
+    <string name="accessibility_control_move" msgid="8980344493796647792">"Ilipat sa posisyong <xliff:g id="NUMBER">%d</xliff:g>"</string>
     <string name="controls_favorite_default_title" msgid="967742178688938137">"Mga Kontrol"</string>
     <string name="controls_favorite_subtitle" msgid="6604402232298443956">"Pumili ng mga kontrol na maa-access mula sa power menu"</string>
     <string name="controls_favorite_rearrange" msgid="5616952398043063519">"I-hold at i-drag para baguhin ang pagkakaayos ng mga kontrol"</string>
@@ -1053,9 +1063,13 @@
     <string name="controls_structure_tooltip" msgid="4355922222944447867">"Mag-swipe para tumingin ng higit pa"</string>
     <string name="controls_seeding_in_progress" msgid="3033855341410264148">"Nilo-load ang rekomendasyon"</string>
     <string name="controls_media_close_session" msgid="9023534788828414585">"Isara ang session ng media na ito"</string>
+    <string name="controls_media_resume" msgid="1933520684481586053">"Ituloy"</string>
     <string name="controls_error_timeout" msgid="794197289772728958">"Hindi aktibo, tingnan ang app"</string>
     <string name="controls_error_retryable" msgid="864025882878378470">"Nagka-error, sinusubukan ulit…"</string>
-    <string name="controls_error_removed" msgid="6299213591234723805">"Inalis ang device"</string>
+    <string name="controls_error_removed" msgid="6675638069846014366">"Hindi nahanap"</string>
+    <string name="controls_error_removed_title" msgid="1207794911208047818">"Hindi available ang kontrol"</string>
+    <string name="controls_error_removed_message" msgid="2885911717034750542">"Hindi ma-access ang <xliff:g id="DEVICE">%1$s</xliff:g>. Tingnan ang <xliff:g id="APPLICATION">%2$s</xliff:g> app para matiyak na available pa rin ang kontrol at hindi nabago ang mga setting ng app."</string>
+    <string name="controls_open_app" msgid="483650971094300141">"Buksan ang app"</string>
     <string name="controls_error_generic" msgid="352500456918362905">"Hindi ma-load ang status"</string>
     <string name="controls_error_failed" msgid="960228639198558525">"Nagka-error, subukan ulit"</string>
     <string name="controls_in_progress" msgid="4421080500238215939">"Isinasagawa"</string>

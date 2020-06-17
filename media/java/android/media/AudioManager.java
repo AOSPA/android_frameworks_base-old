@@ -1507,7 +1507,7 @@ public class AudioManager {
         Log.i(TAG, "In setSpeakerphoneOn(), on: " + on + ", calling application: "
                     + mApplicationContext.getOpPackageName());
         try {
-            service.setSpeakerphoneOn(on);
+            service.setSpeakerphoneOn(mICallBack, on);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }

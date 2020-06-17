@@ -43,6 +43,7 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.accessibility.AccessibilityManager;
+import android.view.accessibility.AccessibilityNodeInfo;
 
 import androidx.test.filters.SmallTest;
 
@@ -55,6 +56,7 @@ import com.android.systemui.R;
 import com.android.systemui.SysuiTestCase;
 import com.android.systemui.classifier.FalsingManagerFake;
 import com.android.systemui.doze.DozeLog;
+import com.android.systemui.media.MediaHierarchyManager;
 import com.android.systemui.plugins.FalsingManager;
 import com.android.systemui.statusbar.CommandQueue;
 import com.android.systemui.statusbar.FlingAnimationUtils;
@@ -79,11 +81,13 @@ import com.android.systemui.util.InjectionInflationController;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.mockito.stubbing.Answer;
 
+import java.util.List;
 import java.util.function.Consumer;
 
 @SmallTest
@@ -172,10 +176,15 @@ public class NotificationPanelViewTest extends SysuiTestCase {
     @Mock
     private ConfigurationController mConfigurationController;
     @Mock
+    private MediaHierarchyManager mMediaHiearchyManager;
+    @Mock
     private ConversationNotificationManager mConversationNotificationManager;
+    @Mock
+    private StatusBarKeyguardViewManager mStatusBarKeyguardViewManager;
     private FlingAnimationUtils.Builder mFlingAnimationUtilsBuilder;
 
     private NotificationPanelViewController mNotificationPanelViewController;
+    private View.AccessibilityDelegate mAccessibiltyDelegate;
 
     @Before
     public void setup() {
@@ -228,11 +237,18 @@ public class NotificationPanelViewTest extends SysuiTestCase {
                 mLatencyTracker, mPowerManager, mAccessibilityManager, 0, mUpdateMonitor,
                 mMetricsLogger, mActivityManager, mZenModeController, mConfigurationController,
                 mFlingAnimationUtilsBuilder, mStatusBarTouchableRegionManager,
-                mConversationNotificationManager);
+                mConversationNotificationManager, mMediaHiearchyManager,
+                mStatusBarKeyguardViewManager);
         mNotificationPanelViewController.initDependencies(mStatusBar, mGroupManager,
                 mNotificationShelf, mNotificationAreaController, mScrimController);
         mNotificationPanelViewController.setHeadsUpManager(mHeadsUpManager);
         mNotificationPanelViewController.setBar(mPanelBar);
+
+        ArgumentCaptor<View.AccessibilityDelegate> accessibilityDelegateArgumentCaptor =
+                ArgumentCaptor.forClass(View.AccessibilityDelegate.class);
+        verify(mView)
+                .setAccessibilityDelegate(accessibilityDelegateArgumentCaptor.capture());
+        mAccessibiltyDelegate = accessibilityDelegateArgumentCaptor.getValue();
     }
 
     @Test
@@ -300,6 +316,39 @@ public class NotificationPanelViewTest extends SysuiTestCase {
         mNotificationPanelViewController.mKeyguardUpdateCallback.onBiometricRunningStateChanged(
                 true, BiometricSourceType.FACE);
         verify(mKeyguardStatusBar, never()).setVisibility(View.VISIBLE);
+    }
+
+    @Test
+    public void testA11y_initializeNode() {
+        AccessibilityNodeInfo nodeInfo = new AccessibilityNodeInfo();
+        mAccessibiltyDelegate.onInitializeAccessibilityNodeInfo(mView, nodeInfo);
+
+        List<AccessibilityNodeInfo.AccessibilityAction> actionList = nodeInfo.getActionList();
+        assertThat(actionList).containsAllIn(
+                new AccessibilityNodeInfo.AccessibilityAction[] {
+                        AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_FORWARD,
+                        AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_UP}
+        );
+    }
+
+    @Test
+    public void testA11y_scrollForward() {
+        mAccessibiltyDelegate.performAccessibilityAction(
+                mView,
+                AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_FORWARD.getId(),
+                null);
+
+        verify(mStatusBarKeyguardViewManager).showBouncer(true);
+    }
+
+    @Test
+    public void testA11y_scrollUp() {
+        mAccessibiltyDelegate.performAccessibilityAction(
+                mView,
+                AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_UP.getId(),
+                null);
+
+        verify(mStatusBarKeyguardViewManager).showBouncer(true);
     }
 
     private void onTouchEvent(MotionEvent ev) {

@@ -47,6 +47,7 @@ import com.android.systemui.statusbar.FlingAnimationUtils;
 import com.android.systemui.statusbar.StatusBarState;
 import com.android.systemui.statusbar.SysuiStatusBarStateController;
 import com.android.systemui.statusbar.VibratorHelper;
+import com.android.systemui.statusbar.phone.LockscreenGestureLogger.LockscreenUiEvent;
 import com.android.systemui.statusbar.policy.KeyguardStateController;
 import android.util.BoostFramework;
 
@@ -327,6 +328,8 @@ public abstract class PanelViewController {
 
         mLockscreenGestureLogger.writeAtFractionalPosition(MetricsEvent.ACTION_PANEL_VIEW_EXPAND,
                 (int) (event.getX() / width * 100), (int) (event.getY() / height * 100), rot);
+        mLockscreenGestureLogger
+                .log(LockscreenUiEvent.LOCKSCREEN_UNLOCKED_NOTIFICATION_PANEL_EXPAND);
     }
 
     protected void maybeVibrateOnOpening() {
@@ -386,6 +389,7 @@ public abstract class PanelViewController {
                 int heightDp = (int) Math.abs((y - mInitialTouchY) / displayDensity);
                 int velocityDp = (int) Math.abs(vel / displayDensity);
                 mLockscreenGestureLogger.write(MetricsEvent.ACTION_LS_UNLOCK, heightDp, velocityDp);
+                mLockscreenGestureLogger.log(LockscreenUiEvent.LOCKSCREEN_UNLOCK);
             }
             fling(vel, expand, isFalseTouch(x, y));
             onTrackingStopped(expand);
@@ -540,11 +544,8 @@ public abstract class PanelViewController {
         // Hack to make the expand transition look nice when clear all button is visible - we make
         // the animation only to the last notification, and then jump to the maximum panel height so
         // clear all just fades in and the decelerating motion is towards the last notification.
-        final boolean
-                clearAllExpandHack =
-                expand && fullyExpandedClearAllVisible()
-                        && mExpandedHeight < getMaxPanelHeight() - getClearAllHeight()
-                        && !isClearAllVisible();
+        final boolean clearAllExpandHack = expand &&
+                shouldExpandToTopOfClearAll(getMaxPanelHeight() - getClearAllHeight());
         if (clearAllExpandHack) {
             target = getMaxPanelHeight() - getClearAllHeight();
         }
@@ -617,6 +618,21 @@ public abstract class PanelViewController {
         });
         setAnimator(animator);
         animator.start();
+    }
+
+    /**
+     * When expanding, should we expand to the top of clear all and expand immediately?
+     * This will make sure that the animation will stop smoothly at the end of the last notification
+     * before the clear all affordance.
+     *
+     * @param targetHeight the height that we would animate to, right above clear all
+     *
+     * @return true if we can expand to the top of clear all
+     */
+    protected boolean shouldExpandToTopOfClearAll(float targetHeight) {
+        return fullyExpandedClearAllVisible()
+                && mExpandedHeight < targetHeight
+                && !isClearAllVisible();
     }
 
     protected abstract boolean shouldUseDismissingAnimation();

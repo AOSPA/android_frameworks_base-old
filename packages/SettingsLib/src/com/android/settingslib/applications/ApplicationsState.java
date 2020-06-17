@@ -60,6 +60,7 @@ import androidx.lifecycle.OnLifecycleEvent;
 import com.android.internal.R;
 import com.android.internal.util.ArrayUtils;
 import com.android.settingslib.Utils;
+import com.android.settingslib.utils.ThreadUtils;
 
 import java.io.File;
 import java.io.IOException;
@@ -497,6 +498,20 @@ public class ApplicationsState {
         }
         synchronized (entry) {
             entry.ensureIconLocked(mContext);
+        }
+    }
+
+    /**
+     * To generate and cache the label description.
+     *
+     * @param entry contain the entries of an app
+     */
+    public void ensureLabelDescription(AppEntry entry) {
+        if (entry.labelDescription != null) {
+            return;
+        }
+        synchronized (entry) {
+            entry.ensureLabelDescriptionLocked(mContext);
         }
     }
 
@@ -1524,6 +1539,7 @@ public class ApplicationsState {
         public long size;
         public long internalSize;
         public long externalSize;
+        public String labelDescription;
 
         public boolean mounted;
 
@@ -1573,6 +1589,15 @@ public class ApplicationsState {
             this.size = SIZE_UNKNOWN;
             this.sizeStale = true;
             ensureLabel(context);
+            // Speed up the cache of the icon and label description if they haven't been created.
+            ThreadUtils.postOnBackgroundThread(() -> {
+                if (this.icon == null) {
+                    this.ensureIconLocked(context);
+                }
+                if (this.labelDescription == null) {
+                    this.ensureLabelDescriptionLocked(context);
+                }
+            });
         }
 
         public void ensureLabel(Context context) {
@@ -1614,6 +1639,24 @@ public class ApplicationsState {
                 return context.getPackageManager().getPackageInfo(info.packageName, 0).versionName;
             } catch (PackageManager.NameNotFoundException e) {
                 return "";
+            }
+        }
+
+        /**
+         * Get the label description which distinguishes a personal app from a work app for
+         * accessibility purpose. If the app is in a work profile, then add a "work" prefix to the
+         * app label.
+         *
+         * @param context The application context
+         */
+        public void ensureLabelDescriptionLocked(Context context) {
+            final int userId = UserHandle.getUserId(this.info.uid);
+            if (UserManager.get(context).isManagedProfile(userId)) {
+                this.labelDescription = context.getString(
+                        com.android.settingslib.R.string.accessibility_work_profile_app_description,
+                        this.label);
+            } else {
+                this.labelDescription = this.label;
             }
         }
     }

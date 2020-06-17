@@ -48,6 +48,7 @@
 #include <ui/Region.h>
 
 #include <gui/ISurfaceComposer.h>
+#include <gui/DisplayEventReceiver.h>
 #include <gui/Surface.h>
 #include <gui/SurfaceComposerClient.h>
 
@@ -113,8 +114,8 @@ static constexpr size_t TEXT_POS_LEN_MAX = 16;
 // ---------------------------------------------------------------------------
 
 BootAnimation::BootAnimation(sp<Callbacks> callbacks)
-        : Thread(false), mClockEnabled(true), mTimeIsAccurate(false),
-        mTimeFormat12Hour(false), mTimeCheckThread(nullptr), mCallbacks(callbacks) {
+        : Thread(false), mClockEnabled(true), mTimeIsAccurate(false), mTimeFormat12Hour(false),
+        mTimeCheckThread(nullptr), mCallbacks(callbacks), mLooper(new Looper(false)) {
     mSession = new SurfaceComposerClient();
 
     std::string powerCtl = android::base::GetProperty("sys.powerctl", "");
@@ -154,8 +155,7 @@ sp<SurfaceComposerClient> BootAnimation::session() const {
     return mSession;
 }
 
-void BootAnimation::binderDied(const wp<IBinder>&)
-{
+void BootAnimation::binderDied(const wp<IBinder>&) {
     // woah, surfaceflinger died!
     SLOGD("SurfaceFlinger died, exiting...");
 
@@ -219,8 +219,7 @@ status_t BootAnimation::initTexture(Texture* texture, AssetManager& assets,
     return NO_ERROR;
 }
 
-status_t BootAnimation::initTexture(FileMap* map, int* width, int* height)
-{
+status_t BootAnimation::initTexture(FileMap* map, int* width, int* height) {
     SkBitmap bitmap;
     sk_sp<SkData> data = SkData::MakeWithoutCopy(map->getDataPtr(),
             map->getDataLength());
@@ -278,6 +277,97 @@ status_t BootAnimation::initTexture(FileMap* map, int* width, int* height)
     return NO_ERROR;
 }
 
+class BootAnimation::DisplayEventCallback : public LooperCallback {
+    BootAnimation* mBootAnimation;
+
+public:
+    DisplayEventCallback(BootAnimation* bootAnimation) {
+        mBootAnimation = bootAnimation;
+    }
+
+    int handleEvent(int /* fd */, int events, void* /* data */) {
+        if (events & (Looper::EVENT_ERROR | Looper::EVENT_HANGUP)) {
+            ALOGE("Display event receiver pipe was closed or an error occurred. events=0x%x",
+                    events);
+            return 0; // remove the callback
+        }
+
+        if (!(events & Looper::EVENT_INPUT)) {
+            ALOGW("Received spurious callback for unhandled poll event.  events=0x%x", events);
+            return 1; // keep the callback
+        }
+
+        constexpr int kBufferSize = 100;
+        DisplayEventReceiver::Event buffer[kBufferSize];
+        ssize_t numEvents;
+        do {
+            numEvents = mBootAnimation->mDisplayEventReceiver->getEvents(buffer, kBufferSize);
+            for (size_t i = 0; i < static_cast<size_t>(numEvents); i++) {
+                const auto& event = buffer[i];
+                if (event.header.type == DisplayEventReceiver::DISPLAY_EVENT_HOTPLUG) {
+                    SLOGV("Hotplug received");
+
+                    if (!event.hotplug.connected) {
+                        // ignore hotplug disconnect
+                        continue;
+                    }
+                    auto token = SurfaceComposerClient::getPhysicalDisplayToken(
+                        event.header.displayId);
+
+                    if (token != mBootAnimation->mDisplayToken) {
+                        // ignore hotplug of a secondary display
+                        continue;
+                    }
+
+                    DisplayConfig displayConfig;
+                    const status_t error = SurfaceComposerClient::getActiveDisplayConfig(
+                        mBootAnimation->mDisplayToken, &displayConfig);
+                    if (error != NO_ERROR) {
+                        SLOGE("Can't get active display configuration.");
+                    }
+                    mBootAnimation->resizeSurface(displayConfig.resolution.getWidth(),
+                        displayConfig.resolution.getHeight());
+                }
+            }
+        } while (numEvents > 0);
+
+        return 1;  // keep the callback
+    }
+};
+
+EGLConfig BootAnimation::getEglConfig(const EGLDisplay& display) {
+    const EGLint attribs[] = {
+        EGL_RED_SIZE,   8,
+        EGL_GREEN_SIZE, 8,
+        EGL_BLUE_SIZE,  8,
+        EGL_DEPTH_SIZE, 0,
+        EGL_NONE
+    };
+    EGLint numConfigs;
+    EGLConfig config;
+    eglChooseConfig(display, attribs, &config, 1, &numConfigs);
+    return config;
+}
+
+ui::Size BootAnimation::limitSurfaceSize(int width, int height) const {
+    ui::Size limited(width, height);
+    bool wasLimited = false;
+    const float aspectRatio = float(width) / float(height);
+    if (mMaxWidth != 0 && width > mMaxWidth) {
+        limited.height = mMaxWidth / aspectRatio;
+        limited.width = mMaxWidth;
+        wasLimited = true;
+    }
+    if (mMaxHeight != 0 && limited.height > mMaxHeight) {
+        limited.height = mMaxHeight;
+        limited.width = mMaxHeight * aspectRatio;
+        wasLimited = true;
+    }
+    SLOGV_IF(wasLimited, "Surface size has been limited to [%dx%d] from [%dx%d]",
+             limited.width, limited.height, width, height);
+    return limited;
+}
+
 status_t BootAnimation::readyToRun() {
     mAssets.addDefaultAssets();
 
@@ -291,8 +381,10 @@ status_t BootAnimation::readyToRun() {
     if (error != NO_ERROR)
         return error;
 
-    const ui::Size& resolution = displayConfig.resolution;
-
+    mMaxWidth = android::base::GetIntProperty("ro.surface_flinger.max_graphics_width", 0);
+    mMaxHeight = android::base::GetIntProperty("ro.surface_flinger.max_graphics_height", 0);
+    ui::Size resolution = displayConfig.resolution;
+    resolution = limitSurfaceSize(resolution.width, resolution.height);
     // create the native surface
     sp<SurfaceControl> control = session()->createSurface(String8("BootAnimation"),
             resolution.getWidth(), resolution.getHeight(), PIXEL_FORMAT_RGB_565);
@@ -346,25 +438,12 @@ status_t BootAnimation::readyToRun() {
     sp<Surface> s = control->getSurface();
 
     // initialize opengl and egl
-    const EGLint attribs[] = {
-            EGL_RED_SIZE,   8,
-            EGL_GREEN_SIZE, 8,
-            EGL_BLUE_SIZE,  8,
-            EGL_DEPTH_SIZE, 0,
-            EGL_NONE
-    };
-    EGLint w, h;
-    EGLint numConfigs;
-    EGLConfig config;
-    EGLSurface surface;
-    EGLContext context;
-
     EGLDisplay display = eglGetDisplay(EGL_DEFAULT_DISPLAY);
-
     eglInitialize(display, nullptr, nullptr);
-    eglChooseConfig(display, attribs, &config, 1, &numConfigs);
-    surface = eglCreateWindowSurface(display, config, s.get(), nullptr);
-    context = eglCreateContext(display, config, nullptr, nullptr);
+    EGLConfig config = getEglConfig(display);
+    EGLSurface surface = eglCreateWindowSurface(display, config, s.get(), nullptr);
+    EGLContext context = eglCreateContext(display, config, nullptr, nullptr);
+    EGLint w, h;
     eglQuerySurface(display, surface, EGL_WIDTH, &w);
     eglQuerySurface(display, surface, EGL_HEIGHT, &h);
 
@@ -380,7 +459,45 @@ status_t BootAnimation::readyToRun() {
     mFlingerSurface = s;
     mTargetInset = -1;
 
+    // Register a display event receiver
+    mDisplayEventReceiver = std::make_unique<DisplayEventReceiver>();
+    status_t status = mDisplayEventReceiver->initCheck();
+    SLOGE_IF(status != NO_ERROR, "Initialization of DisplayEventReceiver failed with status: %d",
+            status);
+    mLooper->addFd(mDisplayEventReceiver->getFd(), 0, Looper::EVENT_INPUT,
+            new DisplayEventCallback(this), nullptr);
+
     return NO_ERROR;
+}
+
+void BootAnimation::resizeSurface(int newWidth, int newHeight) {
+    // We assume this function is called on the animation thread.
+    if (newWidth == mWidth && newHeight == mHeight) {
+        return;
+    }
+    SLOGV("Resizing the boot animation surface to %d %d", newWidth, newHeight);
+
+    eglMakeCurrent(mDisplay, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
+    eglDestroySurface(mDisplay, mSurface);
+
+    const auto limitedSize = limitSurfaceSize(newWidth, newHeight);
+    mWidth = limitedSize.width;
+    mHeight = limitedSize.height;
+
+    SurfaceComposerClient::Transaction t;
+    t.setSize(mFlingerSurfaceControl, mWidth, mHeight);
+    t.apply();
+
+    EGLConfig config = getEglConfig(mDisplay);
+    EGLSurface surface = eglCreateWindowSurface(mDisplay, config, mFlingerSurface.get(), nullptr);
+    if (eglMakeCurrent(mDisplay, surface, surface, mContext) == EGL_FALSE) {
+        SLOGE("Can't make the new surface current. Error %d", eglGetError());
+        return;
+    }
+    glViewport(0, 0, mWidth, mHeight);
+    glScissor(0, 0, mWidth, mHeight);
+
+    mSurface = surface;
 }
 
 bool BootAnimation::preloadAnimation() {
@@ -454,15 +571,14 @@ void BootAnimation::findBootAnimationFile() {
     }
 }
 
-bool BootAnimation::threadLoop()
-{
-    bool r;
+bool BootAnimation::threadLoop() {
+    bool result;
     // We have no bootanimation file, so we use the stock android logo
     // animation.
     if (mZipFileName.isEmpty()) {
-        r = android();
+        result = android();
     } else {
-        r = movie();
+        result = movie();
     }
 
     eglMakeCurrent(mDisplay, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
@@ -473,11 +589,10 @@ bool BootAnimation::threadLoop()
     eglTerminate(mDisplay);
     eglReleaseThread();
     IPCThreadState::self()->stopProcess();
-    return r;
+    return result;
 }
 
-bool BootAnimation::android()
-{
+bool BootAnimation::android() {
     SLOGD("%sAnimationShownTiming start time: %" PRId64 "ms", mShuttingDown ? "Shutdown" : "Boot",
             elapsedRealtime());
     initTexture(&mAndroid[0], mAssets, "images/android-logo-mask.png");
@@ -496,19 +611,19 @@ bool BootAnimation::android()
     glEnable(GL_TEXTURE_2D);
     glTexEnvx(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE);
 
-    const GLint xc = (mWidth  - mAndroid[0].w) / 2;
-    const GLint yc = (mHeight - mAndroid[0].h) / 2;
-    const Rect updateRect(xc, yc, xc + mAndroid[0].w, yc + mAndroid[0].h);
-
-    glScissor(updateRect.left, mHeight - updateRect.bottom, updateRect.width(),
-            updateRect.height());
-
     // Blend state
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     glTexEnvx(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE);
 
     const nsecs_t startTime = systemTime();
     do {
+        processDisplayEvents();
+        const GLint xc = (mWidth  - mAndroid[0].w) / 2;
+        const GLint yc = (mHeight - mAndroid[0].h) / 2;
+        const Rect updateRect(xc, yc, xc + mAndroid[0].w, yc + mAndroid[0].h);
+        glScissor(updateRect.left, mHeight - updateRect.bottom, updateRect.width(),
+                updateRect.height());
+
         nsecs_t now = systemTime();
         double time = now - startTime;
         float t = 4.0f * float(time / us2ns(16667)) / mAndroid[1].w;
@@ -623,8 +738,7 @@ static bool parseColor(const char str[7], float color[3]) {
 }
 
 
-static bool readFile(ZipFileRO* zip, const char* name, String8& outString)
-{
+static bool readFile(ZipFileRO* zip, const char* name, String8& outString) {
     ZipEntryRO entry = zip->findEntryByName(name);
     SLOGE_IF(!entry, "couldn't find %s", name);
     if (!entry) {
@@ -745,8 +859,7 @@ void BootAnimation::drawClock(const Font& font, const int xPos, const int yPos) 
     drawText(out, font, false, &x, &y);
 }
 
-bool BootAnimation::parseAnimationDesc(Animation& animation)
-{
+bool BootAnimation::parseAnimationDesc(Animation& animation)  {
     String8 desString;
 
     if (!readFile(animation.zip, "desc.txt", desString)) {
@@ -813,8 +926,7 @@ bool BootAnimation::parseAnimationDesc(Animation& animation)
     return true;
 }
 
-bool BootAnimation::preloadZip(Animation& animation)
-{
+bool BootAnimation::preloadZip(Animation& animation) {
     // read all the data structures
     const size_t pcount = animation.parts.size();
     void *cookie = nullptr;
@@ -911,8 +1023,7 @@ bool BootAnimation::preloadZip(Animation& animation)
     return true;
 }
 
-bool BootAnimation::movie()
-{
+bool BootAnimation::movie() {
     if (mAnimation == nullptr) {
         mAnimation = loadAnimation(mZipFileName);
     }
@@ -998,12 +1109,9 @@ bool BootAnimation::movie()
     return false;
 }
 
-bool BootAnimation::playAnimation(const Animation& animation)
-{
+bool BootAnimation::playAnimation(const Animation& animation) {
     const size_t pcount = animation.parts.size();
     nsecs_t frameDuration = s2ns(1) / animation.fps;
-    const int animationX = (mWidth - animation.width) / 2;
-    const int animationY = (mHeight - animation.height) / 2;
 
     SLOGD("%sAnimationShownTiming start time: %" PRId64 "ms", mShuttingDown ? "Shutdown" : "Boot",
             elapsedRealtime());
@@ -1034,6 +1142,11 @@ bool BootAnimation::playAnimation(const Animation& animation)
                     1.0f);
 
             for (size_t j=0 ; j<fcount && (!exitPending() || part.playUntilComplete) ; j++) {
+                processDisplayEvents();
+
+                const int animationX = (mWidth - animation.width) / 2;
+                const int animationY = (mHeight - animation.height) / 2;
+
                 const Animation::Frame& frame(part.frames[j]);
                 nsecs_t lastFrame = systemTime();
 
@@ -1117,6 +1230,12 @@ bool BootAnimation::playAnimation(const Animation& animation)
     return true;
 }
 
+void BootAnimation::processDisplayEvents() {
+    // This will poll mDisplayEventReceiver and if there are new events it'll call
+    // displayEventCallback synchronously.
+    mLooper->pollOnce(0);
+}
+
 void BootAnimation::handleViewport(nsecs_t timestep) {
     if (mShuttingDown || !mFlingerSurfaceControl || mTargetInset == 0) {
         return;
@@ -1159,8 +1278,7 @@ void BootAnimation::handleViewport(nsecs_t timestep) {
     mCurrentInset += delta;
 }
 
-void BootAnimation::releaseAnimation(Animation* animation) const
-{
+void BootAnimation::releaseAnimation(Animation* animation) const {
     for (Vector<Animation::Part>::iterator it = animation->parts.begin(),
          e = animation->parts.end(); it != e; ++it) {
         if (it->animation)
@@ -1171,8 +1289,7 @@ void BootAnimation::releaseAnimation(Animation* animation) const
     delete animation;
 }
 
-BootAnimation::Animation* BootAnimation::loadAnimation(const String8& fn)
-{
+BootAnimation::Animation* BootAnimation::loadAnimation(const String8& fn) {
     if (mLoadedFiles.indexOf(fn) >= 0) {
         SLOGE("File \"%s\" is already loaded. Cyclic ref is not allowed",
             fn.string());
@@ -1317,7 +1434,7 @@ status_t BootAnimation::TimeCheckThread::readyToRun() {
     if (mSystemWd < 0) {
         close(mInotifyFd);
         mInotifyFd = -1;
-        SLOGE("Could not add watch for %s", SYSTEM_DATA_DIR_PATH);
+        SLOGE("Could not add watch for %s: %s", SYSTEM_DATA_DIR_PATH, strerror(errno));
         return NO_INIT;
     }
 
@@ -1334,5 +1451,4 @@ status_t BootAnimation::TimeCheckThread::readyToRun() {
 
 // ---------------------------------------------------------------------------
 
-}
-; // namespace android
+} // namespace android

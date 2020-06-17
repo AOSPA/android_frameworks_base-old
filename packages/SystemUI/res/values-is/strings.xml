@@ -89,8 +89,7 @@
     <string name="screenshot_dismiss_ui_description" msgid="934736855340147968">"Loka skjámynd"</string>
     <string name="screenshot_preview_description" msgid="7606510140714080474">"Forskoðun skjámyndar"</string>
     <string name="screenrecord_name" msgid="2596401223859996572">"Skjáupptaka"</string>
-    <!-- no translation found for screenrecord_background_processing_label (7244617554884238898) -->
-    <skip />
+    <string name="screenrecord_background_processing_label" msgid="7244617554884238898">"Vinnur úr skjáupptöku"</string>
     <string name="screenrecord_channel_description" msgid="4147077128486138351">"Áframhaldandi tilkynning fyrir skjáupptökulotu"</string>
     <string name="screenrecord_start_label" msgid="1750350278888217473">"Hefja upptöku?"</string>
     <string name="screenrecord_description" msgid="1123231719680353736">"Á meðan tekið er upp getur Android kerfið fangað viðkvæmar upplýsingar sem sjást á skjánum eða spilast í tækinu. Þar á meðal eru upplýsingar á borð við aðgangsorð, greiðsluupplýsingar, myndir, skilaboð og hljóð."</string>
@@ -511,10 +510,9 @@
     <string name="clear_all_notifications_text" msgid="348312370303046130">"Hreinsa allt"</string>
     <string name="manage_notifications_text" msgid="6885645344647733116">"Stjórna"</string>
     <string name="manage_notifications_history_text" msgid="57055985396576230">"Ferill"</string>
-    <!-- no translation found for notification_section_header_incoming (5295312809341711367) -->
-    <skip />
-    <string name="notification_section_header_gentle" msgid="3044910806569985386">"Þöglar tilkynningar"</string>
-    <string name="notification_section_header_alerting" msgid="3168140660646863240">"Viðvörunartilkynningar"</string>
+    <string name="notification_section_header_incoming" msgid="5295312809341711367">"Mótteknar"</string>
+    <string name="notification_section_header_gentle" msgid="6804099527336337197">"Hljóðlaust"</string>
+    <string name="notification_section_header_alerting" msgid="5581175033680477651">"Tilkynningar"</string>
     <string name="notification_section_header_conversations" msgid="821834744538345661">"Samtöl"</string>
     <string name="accessibility_notification_section_header_gentle_clear_all" msgid="6490207897764933919">"Hreinsa allar þöglar tilkynningar"</string>
     <string name="dnd_suppressing_shade_text" msgid="5588252250634464042">"Hlé gert á tilkynningum þar sem stillt er á „Ónáðið ekki“"</string>
@@ -594,19 +592,21 @@
     <string name="volume_odi_captions_hint_enable" msgid="2073091194012843195">"virkja"</string>
     <string name="volume_odi_captions_hint_disable" msgid="2518846326748183407">"slökkva"</string>
     <string name="accessibility_output_chooser" msgid="7807898688967194183">"Skipta um úttakstæki"</string>
-    <string name="screen_pinning_title" msgid="7357611095909618178">"Skjárinn er festur"</string>
+    <string name="screen_pinning_title" msgid="9058007390337841305">"Forrit er fest"</string>
     <string name="screen_pinning_description" msgid="8699395373875667743">"Þetta heldur þessu opnu þangað til þú losar það. Haltu fingri á „Til baka“ og „Yfirlit“ til að losa."</string>
     <string name="screen_pinning_description_recents_invisible" msgid="4564466648700390037">"Þetta heldur þessu opnu þangað til það er losað. Haltu inni bakkhnappinum og heimahnappinum til að losa."</string>
     <string name="screen_pinning_description_gestural" msgid="7246323931831232068">"Þetta heldur þessu opnu þangað til það er losað. Strjúktu upp og haltu inni til að losa."</string>
     <string name="screen_pinning_description_accessible" msgid="7386449191953535332">"Þetta heldur þessu opnu þangað til þú losar það. Haltu fingri á „Yfirlit“ til að losa."</string>
     <string name="screen_pinning_description_recents_invisible_accessible" msgid="2857071808674481986">"Þetta heldur þessu opnu þangað til það er losað. Haltu heimahnappinum inni til að losa."</string>
-    <string name="screen_pinning_toast" msgid="2083944237147005811">"Til að losa þessa skjámynd skaltu halda inni bakkhnappinum og yfirlitshnappinum"</string>
-    <string name="screen_pinning_toast_recents_invisible" msgid="6343770487795352573">"Til að losa þessa skjámynd skaltu halda inni bakkhnappinum og heimahnappinum"</string>
-    <string name="screen_pinning_toast_gesture_nav" msgid="2884536903398445645">"Til að losa þennan skjá skaltu strjúka upp og halda"</string>
+    <string name="screen_pinning_exposes_personal_data" msgid="8189852022981524789">"Persónuupplýsingar gætu verið aðgengilegar (til dæmis tengiliðir og innihald tölvupósts)."</string>
+    <string name="screen_pinning_can_open_other_apps" msgid="7529756813231421455">"Fest forrit getur opnað önnur forrit."</string>
+    <string name="screen_pinning_toast" msgid="8177286912533744328">"Til að losa þetta forrit skaltu halda inni bakkhnappinum og yfirlitshnappinum"</string>
+    <string name="screen_pinning_toast_recents_invisible" msgid="6850978077443052594">"Til að losa þetta forrit skaltu halda inni bakkhnappinum og heimahnappinum"</string>
+    <string name="screen_pinning_toast_gesture_nav" msgid="170699893395336705">"Til að losa þetta forrit skaltu strjúka upp og halda"</string>
     <string name="screen_pinning_positive" msgid="3285785989665266984">"Ég skil"</string>
     <string name="screen_pinning_negative" msgid="6882816864569211666">"Nei, takk"</string>
-    <string name="screen_pinning_start" msgid="5695091877402422575">"Skjámynd fest"</string>
-    <string name="screen_pinning_exit" msgid="5114993350662745840">"Skjámynd losuð"</string>
+    <string name="screen_pinning_start" msgid="7483998671383371313">"Forrit fest"</string>
+    <string name="screen_pinning_exit" msgid="4553787518387346893">"Forrit losað"</string>
     <string name="quick_settings_reset_confirmation_title" msgid="463533331480997595">"Fela <xliff:g id="TILE_LABEL">%1$s</xliff:g>?"</string>
     <string name="quick_settings_reset_confirmation_message" msgid="2320586180785674186">"Þetta birtist aftur næst þegar þú kveikir á því í stillingunum."</string>
     <string name="quick_settings_reset_confirmation_button" msgid="3341477479055016776">"Fela"</string>
@@ -709,16 +709,17 @@
     <string name="inline_turn_off_notifications" msgid="8543989584403106071">"Slökkva á tilkynningum"</string>
     <string name="inline_keep_showing_app" msgid="4393429060390649757">"Sýna áfram tilkynningar frá þessu forriti?"</string>
     <string name="notification_silence_title" msgid="8608090968400832335">"Hljóðlaust"</string>
-    <string name="notification_alert_title" msgid="7629202599338071971">"Viðvörun"</string>
+    <string name="notification_alert_title" msgid="3656229781017543655">"Sjálfgefið"</string>
     <string name="notification_bubble_title" msgid="8330481035191903164">"Blaðra"</string>
-    <string name="notification_channel_summary_low" msgid="7300447764759926720">"Auðveldar þér að einbeita þér án hljóðs eða titrings."</string>
-    <string name="notification_channel_summary_default" msgid="3539949463907902037">"Fangar athygli þína með hljóði eða titringi."</string>
-    <string name="notification_channel_summary_default_with_bubbles" msgid="6298026344552480458">"Fangar athygli þína með hljóði eða titringi. Samtöl á <xliff:g id="APP_NAME">%1$s</xliff:g> birtast sjálfkrafa í blöðru."</string>
+    <string name="notification_channel_summary_low" msgid="4860617986908931158">"Ekkert hljóð eða titringur"</string>
+    <string name="notification_conversation_summary_low" msgid="1734433426085468009">"Ekkert hljóð eða titringur og birtist neðar í samtalshluta"</string>
+    <string name="notification_channel_summary_default" msgid="3282930979307248890">"Gæti hringt eða titrað eftir stillingum símans"</string>
+    <string name="notification_channel_summary_default_with_bubbles" msgid="1782419896613644568">"Gæti hringt eða titrað eftir stillingum símans. Samtöl á <xliff:g id="APP_NAME">%1$s</xliff:g> birtast sjálfkrafa í blöðru."</string>
     <string name="notification_channel_summary_bubble" msgid="7235935211580860537">"Fangar athygli þína með fljótandi flýtileið á þetta efni."</string>
-    <string name="notification_channel_summary_priority" msgid="7415770044553264622">"Sýnt sem blaðra efst í samtali."</string>
+    <string name="notification_channel_summary_priority" msgid="7952654515769021553">"Birtist efst í samtalshluta, birtist sem fljótandi blaðra, birtir prófílmynd á lásskjánum"</string>
     <string name="notification_conversation_channel_settings" msgid="2409977688430606835">"Áfram"</string>
     <string name="notification_priority_title" msgid="2079708866333537093">"Forgangur"</string>
-    <string name="no_shortcut" msgid="7176375126961212514">"<xliff:g id="APP_NAME">%1$s</xliff:g> styður ekki stillingar fyrir einstök samtöl"</string>
+    <string name="no_shortcut" msgid="8257177117568230126">"<xliff:g id="APP_NAME">%1$s</xliff:g> styður ekki samtalseiginleika"</string>
     <string name="bubble_overflow_empty_title" msgid="3120029421991510842">"Engar nýlegar blöðrur"</string>
     <string name="bubble_overflow_empty_subtitle" msgid="2030874469510497397">"Nýlegar blöðrur og blöðrur sem þú hefur lokað birtast hér"</string>
     <string name="notification_unblockable_desc" msgid="2073030886006190804">"Ekki er hægt að breyta þessum tilkynningum."</string>
@@ -991,10 +992,8 @@
     <string name="music_controls_no_title" msgid="4166497066552290938">"Enginn titill"</string>
     <string name="restart_button_description" msgid="6916116576177456480">"Ýttu til að endurræsa forritið og sýna það á öllum skjánum."</string>
     <string name="bubbles_settings_button_description" msgid="7324245408859877545">"Stillingar fyrir blöðrur frá <xliff:g id="APP_NAME">%1$s</xliff:g>"</string>
-    <!-- no translation found for bubble_overflow_button_content_description (5523744621434300510) -->
-    <skip />
-    <!-- no translation found for bubble_accessibility_action_add_back (6217995665917123890) -->
-    <skip />
+    <string name="bubble_overflow_button_content_description" msgid="5523744621434300510">"Yfirflæði"</string>
+    <string name="bubble_accessibility_action_add_back" msgid="6217995665917123890">"Bæta aftur í stafla"</string>
     <string name="manage_bubbles_text" msgid="6856830436329494850">"Stjórna"</string>
     <string name="bubble_content_description_single" msgid="5175160674436546329">"<xliff:g id="NOTIFICATION_TITLE">%1$s</xliff:g> frá <xliff:g id="APP_NAME">%2$s</xliff:g>"</string>
     <string name="bubble_content_description_stack" msgid="7907610717462651870">"„<xliff:g id="NOTIFICATION_TITLE">%1$s</xliff:g>“ frá <xliff:g id="APP_NAME">%2$s</xliff:g> og <xliff:g id="BUBBLE_COUNT">%3$d</xliff:g> í viðbót"</string>
@@ -1003,7 +1002,8 @@
     <string name="bubble_accessibility_action_move_top_right" msgid="6916868852433483569">"Færa efst til hægri"</string>
     <string name="bubble_accessibility_action_move_bottom_left" msgid="6339015902495504715">"Færa neðst til vinstri"</string>
     <string name="bubble_accessibility_action_move_bottom_right" msgid="7471571700628346212">"Færðu neðst til hægri"</string>
-    <string name="bubble_dismiss_text" msgid="7071770411580452911">"Hunsa"</string>
+    <!-- no translation found for bubble_dismiss_text (1314082410868930066) -->
+    <skip />
     <string name="bubbles_dont_bubble_conversation" msgid="1033040343437428822">"Ekki setja samtal í blöðru"</string>
     <string name="bubbles_user_education_title" msgid="5547017089271445797">"Spjalla með blöðrum"</string>
     <string name="bubbles_user_education_description" msgid="1160281719576715211">"Ný samtöl birtast sem fljótandi tákn eða blöðrur. Ýttu til að opna blöðru. Dragðu hana til að færa."</string>
@@ -1014,11 +1014,14 @@
     <string name="notification_content_system_nav_changed" msgid="5077913144844684544">"Kerfisstjórnun uppfærð. Þú getur breytt þessu í stillingunum."</string>
     <string name="notification_content_gesture_nav_available" msgid="4431460803004659888">"Farðu í stillingar til að uppfæra kerfisstjórnun"</string>
     <string name="inattentive_sleep_warning_title" msgid="3891371591713990373">"Biðstaða"</string>
+    <string name="priority_onboarding_title" msgid="2893070698479227616">"Samtal sett í forgang"</string>
+    <string name="priority_onboarding_behavior" msgid="5342816047020432929">"Forgangssamtöl munu:"</string>
     <string name="priority_onboarding_show_at_top_text" msgid="1678400241025513541">"Sýna yfir samtalshluta"</string>
     <string name="priority_onboarding_show_avatar_text" msgid="5756291381124091508">"Sýna prófílmynd á lásskjá"</string>
     <string name="priority_onboarding_appear_as_bubble_text" msgid="4227039772250263122">"Birta sem fljótandi blöðru yfir forritum"</string>
     <string name="priority_onboarding_ignores_dnd_text" msgid="2918952762719600529">"Stöðva „Ónáðið ekki“"</string>
     <string name="priority_onboarding_done_button_title" msgid="4569550984286506007">"Ég skil"</string>
+    <string name="priority_onboarding_settings_button_title" msgid="6663601574303585927">"Stillingar"</string>
     <string name="magnification_overlay_title" msgid="6584179429612427958">"Stækkun yfirglugga"</string>
     <string name="magnification_window_title" msgid="4863914360847258333">"Stækkunargluggi"</string>
     <string name="magnification_controls_title" msgid="8421106606708891519">"Stækkunarstillingar glugga"</string>
@@ -1031,6 +1034,13 @@
       <item quantity="one"><xliff:g id="NUMBER_1">%s</xliff:g> stýringu bætt við.</item>
       <item quantity="other"><xliff:g id="NUMBER_1">%s</xliff:g> stýringum bætt við.</item>
     </plurals>
+    <string name="controls_removed" msgid="3731789252222856959">"Fjarlægt"</string>
+    <string name="accessibility_control_favorite" msgid="8694362691985545985">"Eftirlæti"</string>
+    <string name="accessibility_control_favorite_position" msgid="54220258048929221">"Eftirlæti, staða <xliff:g id="NUMBER">%d</xliff:g>"</string>
+    <string name="accessibility_control_not_favorite" msgid="1291760269563092359">"Fjarlægt úr eftirlæti"</string>
+    <string name="accessibility_control_change_favorite" msgid="2943178027582253261">"setja í eftirlæti"</string>
+    <string name="accessibility_control_change_unfavorite" msgid="6997408061750740327">"fjarlægja úr eftirlæti"</string>
+    <string name="accessibility_control_move" msgid="8980344493796647792">"Færa í stöðu <xliff:g id="NUMBER">%d</xliff:g>"</string>
     <string name="controls_favorite_default_title" msgid="967742178688938137">"Stýringar"</string>
     <string name="controls_favorite_subtitle" msgid="6604402232298443956">"Veldu hvaða stýringar birtast í aflrofavalmyndinni"</string>
     <string name="controls_favorite_rearrange" msgid="5616952398043063519">"Haltu og dragðu til að endurraða stýringum"</string>
@@ -1053,9 +1063,13 @@
     <string name="controls_structure_tooltip" msgid="4355922222944447867">"Strjúktu til að sjá meira"</string>
     <string name="controls_seeding_in_progress" msgid="3033855341410264148">"Hleður tillögum"</string>
     <string name="controls_media_close_session" msgid="9023534788828414585">"Loka þessari efnislotu"</string>
+    <string name="controls_media_resume" msgid="1933520684481586053">"Halda áfram"</string>
     <string name="controls_error_timeout" msgid="794197289772728958">"Óvirkt, athugaðu forrit"</string>
     <string name="controls_error_retryable" msgid="864025882878378470">"Villa, reynir aftur…"</string>
-    <string name="controls_error_removed" msgid="6299213591234723805">"Tæki fjarlægt"</string>
+    <string name="controls_error_removed" msgid="6675638069846014366">"Fannst ekki"</string>
+    <string name="controls_error_removed_title" msgid="1207794911208047818">"Stýring er ekki tiltæk"</string>
+    <string name="controls_error_removed_message" msgid="2885911717034750542">"Ekki tókst að tengjast <xliff:g id="DEVICE">%1$s</xliff:g>. Athugaðu <xliff:g id="APPLICATION">%2$s</xliff:g> forritið til að ganga úr skugga um að stýringin sé enn í boði og að stillingum forritsins hafi ekki verið breytt."</string>
+    <string name="controls_open_app" msgid="483650971094300141">"Opna forrit"</string>
     <string name="controls_error_generic" msgid="352500456918362905">"Ekki er hægt að hlaða stöðu"</string>
     <string name="controls_error_failed" msgid="960228639198558525">"Villa, reyndu aftur"</string>
     <string name="controls_in_progress" msgid="4421080500238215939">"Í gangi"</string>

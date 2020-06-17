@@ -131,14 +131,23 @@ public class ParsingPackageUtils {
     public static final String TAG = ParsingUtils.TAG;
 
     /**
-     * For cases outside of PackageManagerService when an APK needs to be parsed as a one-off
-     * request, without caching the input object and without querying the internal system state
-     * for feature support.
+     * @see #parseDefault(ParseInput, File, int, boolean)
      */
     @NonNull
     public static ParseResult<ParsingPackage> parseDefaultOneTime(File file,
             @PackageParser.ParseFlags int parseFlags, boolean collectCertificates) {
         ParseInput input = ParseTypeImpl.forDefaultParsing().reset();
+        return parseDefault(input, file, parseFlags, collectCertificates);
+    }
+
+    /**
+     * For cases outside of PackageManagerService when an APK needs to be parsed as a one-off
+     * request, without caching the input object and without querying the internal system state
+     * for feature support.
+     */
+    @NonNull
+    public static ParseResult<ParsingPackage> parseDefault(ParseInput input, File file,
+            @PackageParser.ParseFlags int parseFlags, boolean collectCertificates) {
         ParseResult<ParsingPackage> result;
 
         ParsingPackageUtils parser = new ParsingPackageUtils(false, null, null, new Callback() {
@@ -1903,6 +1912,7 @@ public class ParsingPackageUtils {
         // every activity info has had a chance to set it from its attributes.
         setMaxAspectRatio(pkg);
         setMinAspectRatio(pkg);
+        setSupportsSizeChanges(pkg);
 
         pkg.setHasDomainUrls(hasDomainURLs(pkg));
 
@@ -2353,6 +2363,23 @@ public class ParsingPackageUtils {
             ParsedActivity activity = activities.get(index);
             if (activity.getMinAspectRatio() == null) {
                 activity.setMinAspectRatio(activity.getResizeMode(), minAspectRatio);
+            }
+        }
+    }
+
+    private void setSupportsSizeChanges(ParsingPackage pkg) {
+        final Bundle appMetaData = pkg.getMetaData();
+        final boolean supportsSizeChanges = appMetaData != null
+                && appMetaData.getBoolean(PackageParser.METADATA_SUPPORTS_SIZE_CHANGES, false);
+
+        List<ParsedActivity> activities = pkg.getActivities();
+        int activitiesSize = activities.size();
+        for (int index = 0; index < activitiesSize; index++) {
+            ParsedActivity activity = activities.get(index);
+            if (supportsSizeChanges || (activity.getMetaData() != null
+                    && activity.getMetaData().getBoolean(
+                            PackageParser.METADATA_SUPPORTS_SIZE_CHANGES, false))) {
+                activity.setSupportsSizeChanges(true);
             }
         }
     }

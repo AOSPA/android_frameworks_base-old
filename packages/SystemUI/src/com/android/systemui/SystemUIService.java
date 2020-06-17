@@ -27,8 +27,10 @@ import android.os.UserHandle;
 import android.util.Slog;
 
 import com.android.internal.os.BinderInternal;
+import com.android.systemui.broadcast.BroadcastDispatcher;
 import com.android.systemui.dagger.qualifiers.Main;
-import com.android.systemui.dump.DumpManager;
+import com.android.systemui.dump.DumpHandler;
+import com.android.systemui.dump.LogBufferFreezer;
 import com.android.systemui.dump.SystemUIAuxiliaryDumpService;
 
 import java.io.FileDescriptor;
@@ -39,21 +41,32 @@ import javax.inject.Inject;
 public class SystemUIService extends Service {
 
     private final Handler mMainHandler;
-    private final DumpManager mDumpManager;
+    private final DumpHandler mDumpHandler;
+    private final BroadcastDispatcher mBroadcastDispatcher;
+    private final LogBufferFreezer mLogBufferFreezer;
 
     @Inject
     public SystemUIService(
             @Main Handler mainHandler,
-            DumpManager dumpManager) {
+            DumpHandler dumpHandler,
+            BroadcastDispatcher broadcastDispatcher,
+            LogBufferFreezer logBufferFreezer) {
         super();
         mMainHandler = mainHandler;
-        mDumpManager = dumpManager;
+        mDumpHandler = dumpHandler;
+        mBroadcastDispatcher = broadcastDispatcher;
+        mLogBufferFreezer = logBufferFreezer;
     }
 
     @Override
     public void onCreate() {
         super.onCreate();
+
+        // Start all of SystemUI
         ((SystemUIApplication) getApplication()).startServicesIfNeeded();
+
+        // Finish initializing dump logic
+        mLogBufferFreezer.attach(mBroadcastDispatcher);
 
         // For debugging RescueParty
         if (Build.IS_DEBUGGABLE && SystemProperties.getBoolean("debug.crash_sysui", false)) {
@@ -94,10 +107,10 @@ public class SystemUIService extends Service {
         String[] massagedArgs = args;
         if (args.length == 0) {
             massagedArgs = new String[] {
-                    DumpManager.PRIORITY_ARG,
-                    DumpManager.PRIORITY_ARG_CRITICAL};
+                    DumpHandler.PRIORITY_ARG,
+                    DumpHandler.PRIORITY_ARG_CRITICAL};
         }
 
-        mDumpManager.dump(fd, pw, massagedArgs);
+        mDumpHandler.dump(fd, pw, massagedArgs);
     }
 }

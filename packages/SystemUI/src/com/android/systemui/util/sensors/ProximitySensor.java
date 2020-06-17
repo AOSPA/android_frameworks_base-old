@@ -21,16 +21,17 @@ import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
-import android.os.Handler;
 import android.util.Log;
 
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.systemui.R;
 import com.android.systemui.dagger.qualifiers.Main;
+import com.android.systemui.util.concurrency.DelayableExecutor;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 
 import javax.inject.Inject;
@@ -49,8 +50,9 @@ public class ProximitySensor {
     private String mTag = null;
     @VisibleForTesting ProximityEvent mLastEvent;
     private int mSensorDelay = SensorManager.SENSOR_DELAY_NORMAL;
-    private boolean mPaused;
+    @VisibleForTesting protected boolean mPaused;
     private boolean mRegistered;
+    private final AtomicBoolean mAlerting = new AtomicBoolean();
 
     private SensorEventListener mSensorEventListener = new SensorEventListener() {
         @Override
@@ -217,8 +219,14 @@ public class ProximitySensor {
 
     /** Update all listeners with the last value this class received from the sensor. */
     public void alertListeners() {
-        mListeners.forEach(proximitySensorListener ->
+        if (mAlerting.getAndSet(true)) {
+            return;
+        }
+
+        List<ProximitySensorListener> listeners = new ArrayList<>(mListeners);
+        listeners.forEach(proximitySensorListener ->
                 proximitySensorListener.onSensorEvent(mLastEvent));
+        mAlerting.set(false);
     }
 
     private void onSensorEvent(SensorEvent event) {
@@ -239,24 +247,17 @@ public class ProximitySensor {
     public static class ProximityCheck implements Runnable {
 
         private final ProximitySensor mSensor;
-        private final Handler mHandler;
+        private final DelayableExecutor mDelayableExecutor;
         private List<Consumer<Boolean>> mCallbacks = new ArrayList<>();
+        private final ProximitySensor.ProximitySensorListener mListener;
+        private final AtomicBoolean mRegistered = new AtomicBoolean();
 
         @Inject
-        public ProximityCheck(ProximitySensor sensor, Handler handler) {
+        public ProximityCheck(ProximitySensor sensor, DelayableExecutor delayableExecutor) {
             mSensor = sensor;
             mSensor.setTag("prox_check");
-            mHandler = handler;
-            mSensor.pause();
-            ProximitySensorListener listener = proximityEvent -> {
-                mCallbacks.forEach(
-                        booleanConsumer ->
-                                booleanConsumer.accept(
-                                        proximityEvent == null ? null : proximityEvent.getNear()));
-                mCallbacks.clear();
-                mSensor.pause();
-            };
-            mSensor.register(listener);
+            mDelayableExecutor = delayableExecutor;
+            mListener = this::onProximityEvent;
         }
 
         /** Set a descriptive tag for the sensors registration. */
@@ -266,7 +267,7 @@ public class ProximitySensor {
 
         @Override
         public void run() {
-            mSensor.pause();
+            unregister();
             mSensor.alertListeners();
         }
 
@@ -278,10 +279,25 @@ public class ProximitySensor {
                 callback.accept(null);
             }
             mCallbacks.add(callback);
-            if (!mSensor.isRegistered()) {
-                mSensor.resume();
-                mHandler.postDelayed(this, timeoutMs);
+            if (!mRegistered.getAndSet(true)) {
+                mSensor.register(mListener);
+                mDelayableExecutor.executeDelayed(this, timeoutMs);
             }
+        }
+
+        private void unregister() {
+            mSensor.unregister(mListener);
+            mRegistered.set(false);
+        }
+
+        private void onProximityEvent(ProximityEvent proximityEvent) {
+            mCallbacks.forEach(
+                    booleanConsumer ->
+                            booleanConsumer.accept(
+                                    proximityEvent == null ? null : proximityEvent.getNear()));
+            mCallbacks.clear();
+            unregister();
+            mRegistered.set(false);
         }
     }
 

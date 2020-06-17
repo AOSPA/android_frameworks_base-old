@@ -386,7 +386,7 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
             // surface animator such that hierarchy is preserved when animating, i.e.
             // mSurfaceControl stays attached to the leash and we just reparent the leash to the
             // new parent.
-            reparentSurfaceControl(getPendingTransaction(), mParent.mSurfaceControl);
+            reparentSurfaceControl(getSyncTransaction(), mParent.mSurfaceControl);
         }
 
         if (callback != null) {
@@ -399,9 +399,13 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
     }
 
     void createSurfaceControl(boolean force) {
-        setSurfaceControl(makeSurface().build());
-        getPendingTransaction().show(mSurfaceControl);
-        onSurfaceShown(getPendingTransaction());
+        setInitialSurfaceControlProperties(makeSurface());
+    }
+
+    void setInitialSurfaceControlProperties(SurfaceControl.Builder b) {
+        setSurfaceControl(b.build());
+        getSyncTransaction().show(mSurfaceControl);
+        onSurfaceShown(getSyncTransaction());
         updateSurfacePosition();
     }
 
@@ -423,7 +427,16 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         // Clear the last position so the new SurfaceControl will get correct position
         mLastSurfacePosition.set(0, 0);
 
-        createSurfaceControl(false /* force */);
+        final SurfaceControl.Builder b = mWmService.makeSurfaceBuilder(null)
+                .setContainerLayer()
+                .setName(getName());
+
+        setInitialSurfaceControlProperties(b);
+
+        // If parent is null, the layer should be placed offscreen so reparent to null. Otherwise,
+        // set to the available parent.
+        t.reparent(mSurfaceControl, mParent == null ? null : mParent.getSurfaceControl());
+
         if (mLastRelativeToLayer != null) {
             t.setRelativeLayer(mSurfaceControl, mLastRelativeToLayer, mLastLayer);
         } else {
@@ -562,7 +575,7 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
     void removeImmediately() {
         final DisplayContent dc = getDisplayContent();
         if (dc != null) {
-            mSurfaceFreezer.unfreeze(getPendingTransaction());
+            mSurfaceFreezer.unfreeze(getSyncTransaction());
             dc.mChangingContainers.remove(this);
         }
         while (!mChildren.isEmpty()) {
@@ -577,7 +590,7 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         }
 
         if (mSurfaceControl != null) {
-            getPendingTransaction().remove(mSurfaceControl);
+            getSyncTransaction().remove(mSurfaceControl);
             setSurfaceControl(null);
             mLastSurfacePosition.set(0, 0);
             scheduleAnimation();
@@ -989,7 +1002,7 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
     void onChildVisibilityRequested(boolean visible) {
         // If we are changing visibility, then a snapshot isn't necessary and we are no-longer
         // part of a change transition.
-        mSurfaceFreezer.unfreeze(getPendingTransaction());
+        mSurfaceFreezer.unfreeze(getSyncTransaction());
         if (mDisplayContent != null) {
             mDisplayContent.mChangingContainers.remove(this);
         }
@@ -1152,15 +1165,12 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         }
 
         mOrientation = orientation;
-        final int configOrientation = getRequestedConfigurationOrientation();
-        if (getRequestedOverrideConfiguration().orientation != configOrientation) {
-            mTmpConfig.setTo(getRequestedOverrideConfiguration());
-            mTmpConfig.orientation = configOrientation;
-            onRequestedOverrideConfigurationChanged(mTmpConfig);
-        }
-
         final WindowContainer parent = getParent();
         if (parent != null) {
+            if (getConfiguration().orientation != getRequestedConfigurationOrientation()) {
+                // Resolve the requested orientation.
+                onConfigurationChanged(parent.getConfiguration());
+            }
             onDescendantOrientationChanged(freezeDisplayToken, requestingContainer);
         }
     }
@@ -1415,11 +1425,12 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
     }
 
     ActivityRecord getActivity(Predicate<ActivityRecord> callback, boolean traverseTopToBottom,
-            WindowContainer boundary) {
+            ActivityRecord boundary) {
         if (traverseTopToBottom) {
             for (int i = mChildren.size() - 1; i >= 0; --i) {
                 final WindowContainer wc = mChildren.get(i);
-                if (wc == boundary) return null;
+                // TODO(b/156986561): Improve the correctness of the boundary check.
+                if (wc == boundary) return boundary;
 
                 final ActivityRecord r = wc.getActivity(callback, traverseTopToBottom, boundary);
                 if (r != null) {
@@ -1430,7 +1441,8 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
             final int count = mChildren.size();
             for (int i = 0; i < count; i++) {
                 final WindowContainer wc = mChildren.get(i);
-                if (wc == boundary) return null;
+                // TODO(b/156986561): Improve the correctness of the boundary check.
+                if (wc == boundary) return boundary;
 
                 final ActivityRecord r = wc.getActivity(callback, traverseTopToBottom, boundary);
                 if (r != null) {
@@ -1546,6 +1558,15 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
     boolean forAllTasks(Function<Task, Boolean> callback) {
         for (int i = mChildren.size() - 1; i >= 0; --i) {
             if (mChildren.get(i).forAllTasks(callback)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    boolean forAllLeafTasks(Function<Task, Boolean> callback) {
+        for (int i = mChildren.size() - 1; i >= 0; --i) {
+            if (mChildren.get(i).forAllLeafTasks(callback)) {
                 return true;
             }
         }
@@ -1877,7 +1898,7 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
     }
 
     void assignChildLayers() {
-        assignChildLayers(getPendingTransaction());
+        assignChildLayers(getSyncTransaction());
         scheduleAnimation();
     }
 
@@ -2026,12 +2047,23 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         return mSurfaceControl;
     }
 
-    @Override
-    public Transaction getPendingTransaction() {
+    /**
+     * Use this method instead of {@link #getPendingTransaction()} if the Transaction should be
+     * synchronized with the client.
+     *
+     * @return {@link #mBLASTSyncTransaction} if available. Otherwise, returns
+     * {@link #getPendingTransaction()}
+     */
+    public Transaction getSyncTransaction() {
         if (mUsingBLASTSyncTransaction) {
             return mBLASTSyncTransaction;
         }
 
+        return getPendingTransaction();
+    }
+
+    @Override
+    public Transaction getPendingTransaction() {
         final DisplayContent displayContent = getDisplayContent();
         if (displayContent != null && displayContent != this) {
             return displayContent.getPendingTransaction();
@@ -2111,6 +2143,11 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         return getBounds();
     }
 
+    /** Gets the position relative to parent for animation. */
+    void getAnimationPosition(Point outPosition) {
+        getRelativePosition(outPosition);
+    }
+
     /**
      * Applies the app transition animation according the given the layout properties in the
      * window hierarchy.
@@ -2168,10 +2205,11 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         final int appStackClipMode = getDisplayContent().mAppTransition.getAppStackClipMode();
 
         // Separate position and size for use in animators.
-        mTmpRect.set(getAnimationBounds(appStackClipMode));
-        if (sHierarchicalAnimations) {
-            getRelativePosition(mTmpPoint);
-        } else {
+        final Rect screenBounds = getAnimationBounds(appStackClipMode);
+        mTmpRect.set(screenBounds);
+        getAnimationPosition(mTmpPoint);
+        if (!sHierarchicalAnimations) {
+            // Non-hierarchical animation uses position in global coordinates.
             mTmpPoint.set(mTmpRect.left, mTmpRect.top);
         }
         mTmpRect.offsetTo(0, 0);
@@ -2187,7 +2225,7 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
             localBounds.offsetTo(mTmpPoint.x, mTmpPoint.y);
             final RemoteAnimationController.RemoteAnimationRecord adapters =
                     controller.createRemoteAnimationRecord(this, mTmpPoint, localBounds,
-                            mTmpRect, (isChanging ? mSurfaceFreezer.mFreezeBounds : null));
+                            screenBounds, (isChanging ? mSurfaceFreezer.mFreezeBounds : null));
             resultAdapters = new Pair<>(adapters.mAdapter, adapters.mThumbnailAdapter);
         } else if (isChanging) {
             final float durationScale = mWmService.getTransitionAnimationScaleLocked();
@@ -2435,7 +2473,7 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
     }
 
     final void updateSurfacePosition() {
-        updateSurfacePosition(getPendingTransaction());
+        updateSurfacePosition(getSyncTransaction());
     }
 
     void updateSurfacePosition(Transaction t) {
@@ -2600,10 +2638,8 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         return willSync;
     }
 
-    boolean prepareForSync(BLASTSyncEngine.TransactionReadyListener waitingListener,
-            int waitingId) {
-        boolean willSync = true;
-
+    boolean setPendingListener(BLASTSyncEngine.TransactionReadyListener waitingListener,
+        int waitingId) {
         // If we are invisible, no need to sync, likewise if we are already engaged in a sync,
         // we can't support overlapping syncs on a single container yet.
         if (!isVisible() || mWaitingListener != null) {
@@ -2614,6 +2650,15 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         // Make sure to set these before we call setReady in case the sync was a no-op
         mWaitingSyncId = waitingId;
         mWaitingListener = waitingListener;
+        return true;
+    }
+
+    boolean prepareForSync(BLASTSyncEngine.TransactionReadyListener waitingListener,
+            int waitingId) {
+        boolean willSync = setPendingListener(waitingListener, waitingId);
+        if (!willSync) {
+            return false;
+        }
 
         int localId = mBLASTSyncEngine.startSyncSet(this);
         willSync |= addChildrenToSyncSet(localId);

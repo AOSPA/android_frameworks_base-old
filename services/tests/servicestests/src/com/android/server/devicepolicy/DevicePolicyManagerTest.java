@@ -204,7 +204,7 @@ public class DevicePolicyManagerTest extends DpmTestBase {
     // Notification title and text for setManagedProfileMaximumTimeOff tests:
     private static final String PROFILE_OFF_SUSPENSION_TITLE = "suspension_title";
     private static final String PROFILE_OFF_SUSPENSION_TEXT = "suspension_text";
-    private static final String PROFILE_OFF_SUSPENSION_TOMORROW_TEXT = "suspension_tomorrow_text";
+    private static final String PROFILE_OFF_SUSPENSION_SOON_TEXT = "suspension_tomorrow_text";
 
     @Override
     protected void setUp() throws Exception {
@@ -1997,19 +1997,9 @@ public class DevicePolicyManagerTest extends DpmTestBase {
 
     private static final Set<String> PROFILE_OWNER_ORGANIZATION_OWNED_GLOBAL_RESTRICTIONS =
             Sets.newSet(
-                    UserManager.DISALLOW_CONFIG_DATE_TIME,
-                    UserManager.DISALLOW_BLUETOOTH_SHARING,
-                    UserManager.DISALLOW_CONFIG_CELL_BROADCASTS,
-                    UserManager.DISALLOW_CONFIG_MOBILE_NETWORKS,
-                    UserManager.DISALLOW_CONFIG_PRIVATE_DNS,
-                    UserManager.DISALLOW_CONFIG_TETHERING,
-                    UserManager.DISALLOW_DATA_ROAMING,
-                    UserManager.DISALLOW_SAFE_BOOT,
-                    UserManager.DISALLOW_SMS,
-                    UserManager.DISALLOW_USB_FILE_TRANSFER,
                     UserManager.DISALLOW_AIRPLANE_MODE,
-                    UserManager.DISALLOW_MOUNT_PHYSICAL_MEDIA,
-                    UserManager.DISALLOW_UNMUTE_MICROPHONE
+                    UserManager.DISALLOW_CONFIG_DATE_TIME,
+                    UserManager.DISALLOW_CONFIG_PRIVATE_DNS
             );
 
     private static final Set<String> PROFILE_OWNER_ORGANIZATION_OWNED_LOCAL_RESTRICTIONS =
@@ -2021,7 +2011,17 @@ public class DevicePolicyManagerTest extends DpmTestBase {
                     UserManager.DISALLOW_CONTENT_SUGGESTIONS,
                     UserManager.DISALLOW_DEBUGGING_FEATURES,
                     UserManager.DISALLOW_SHARE_LOCATION,
-                    UserManager.DISALLOW_OUTGOING_CALLS
+                    UserManager.DISALLOW_OUTGOING_CALLS,
+                    UserManager.DISALLOW_BLUETOOTH_SHARING,
+                    UserManager.DISALLOW_CONFIG_CELL_BROADCASTS,
+                    UserManager.DISALLOW_CONFIG_MOBILE_NETWORKS,
+                    UserManager.DISALLOW_CONFIG_TETHERING,
+                    UserManager.DISALLOW_DATA_ROAMING,
+                    UserManager.DISALLOW_SAFE_BOOT,
+                    UserManager.DISALLOW_SMS,
+                    UserManager.DISALLOW_USB_FILE_TRANSFER,
+                    UserManager.DISALLOW_MOUNT_PHYSICAL_MEDIA,
+                    UserManager.DISALLOW_UNMUTE_MICROPHONE
             );
 
     public void testSetUserRestriction_asPoOfOrgOwnedDevice() throws Exception {
@@ -2045,8 +2045,9 @@ public class DevicePolicyManagerTest extends DpmTestBase {
         parentDpm.setCameraDisabled(admin1, true);
         verify(getServices().userManagerInternal).setDevicePolicyUserRestrictions(
                 eq(CALLER_USER_HANDLE),
-                MockUtils.checkUserRestrictions(UserManager.DISALLOW_CAMERA),
-                MockUtils.checkUserRestrictions(CALLER_USER_HANDLE),
+                MockUtils.checkUserRestrictions(),
+                MockUtils.checkUserRestrictions(UserHandle.USER_SYSTEM,
+                        UserManager.DISALLOW_CAMERA),
                 eq(false));
         DpmTestUtils.assertRestrictions(
                 DpmTestUtils.newRestrictions(UserManager.DISALLOW_CAMERA),
@@ -6331,7 +6332,7 @@ public class DevicePolicyManagerTest extends DpmTestBase {
         // Now the user should see a warning notification.
         verify(getServices().notificationManager, times(1))
                 .notify(anyInt(), argThat(hasExtra(EXTRA_TITLE, PROFILE_OFF_SUSPENSION_TITLE,
-                        EXTRA_TEXT, PROFILE_OFF_SUSPENSION_TOMORROW_TEXT)));
+                        EXTRA_TEXT, PROFILE_OFF_SUSPENSION_SOON_TEXT)));
         // Apps shouldn't be suspended yet.
         verifyZeroInteractions(getServices().ipackageManager);
         clearInvocations(getServices().alarmManager);
@@ -6441,6 +6442,16 @@ public class DevicePolicyManagerTest extends DpmTestBase {
         verify(mContext.spiedContext).startActivityAsUser(
                 MockUtils.checkIntentAction(ACTION_CHECK_POLICY_COMPLIANCE),
                 MockUtils.checkUserHandle(CALLER_USER_HANDLE));
+
+        // Verify that correct suspension reason is reported to the DPC.
+        mContext.binder.callingUid = DpmMockContext.CALLER_UID;
+        assertThat(dpm.getPersonalAppsSuspendedReasons(admin1))
+                .isEqualTo(DevicePolicyManager.PERSONAL_APPS_SUSPENDED_PROFILE_TIMEOUT);
+
+        // Verify that rolling time back doesn't change the status.
+        dpms.mMockInjector.setSystemCurrentTimeMillis(PROFILE_OFF_START);
+        assertThat(dpm.getPersonalAppsSuspendedReasons(admin1))
+                .isEqualTo(DevicePolicyManager.PERSONAL_APPS_SUSPENDED_PROFILE_TIMEOUT);
     }
 
     private void sendBroadcastWithUser(String action, int userHandle) throws Exception {
@@ -6472,7 +6483,7 @@ public class DevicePolicyManagerTest extends DpmTestBase {
         // To allow creation of Notification via Notification.Builder
         mContext.applicationInfo = mRealTestContext.getApplicationInfo();
 
-        // Setup notification titles.
+        // Setup resources to render notification titles and texts.
         when(mServiceContext.resources
                 .getString(R.string.personal_apps_suspension_title))
                 .thenReturn(PROFILE_OFF_SUSPENSION_TITLE);
@@ -6480,14 +6491,19 @@ public class DevicePolicyManagerTest extends DpmTestBase {
                 .getString(R.string.personal_apps_suspension_text))
                 .thenReturn(PROFILE_OFF_SUSPENSION_TEXT);
         when(mServiceContext.resources
-                .getString(R.string.personal_apps_suspension_tomorrow_text))
-                .thenReturn(PROFILE_OFF_SUSPENSION_TOMORROW_TEXT);
+                .getString(eq(R.string.personal_apps_suspension_soon_text),
+                        anyString(), anyString(), anyInt()))
+                .thenReturn(PROFILE_OFF_SUSPENSION_SOON_TEXT);
+
+        // Make locale available for date formatting:
+        when(mServiceContext.resources.getConfiguration())
+                .thenReturn(mRealTestContext.getResources().getConfiguration());
 
         clearInvocations(getServices().ipackageManager);
     }
 
     private static Matcher<Notification> hasExtra(String... extras) {
-        assertEquals("Odd numebr of extra key-values", 0, extras.length % 2);
+        assertEquals("Odd number of extra key-values", 0, extras.length % 2);
         return new BaseMatcher<Notification>() {
             @Override
             public boolean matches(Object item) {

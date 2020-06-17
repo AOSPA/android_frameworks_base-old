@@ -336,11 +336,7 @@ public class VirtualDisplayTaskEmbedder extends TaskEmbedder {
 
     /** Get density of the hosting display. */
     private int getBaseDisplayDensity() {
-        if (mTmpDisplayMetrics == null) {
-            mTmpDisplayMetrics = new DisplayMetrics();
-        }
-        mContext.getDisplayNoVerify().getRealMetrics(mTmpDisplayMetrics);
-        return mTmpDisplayMetrics.densityDpi;
+        return mContext.getResources().getConfiguration().densityDpi;
     }
 
     /**
@@ -369,8 +365,8 @@ public class VirtualDisplayTaskEmbedder extends TaskEmbedder {
             // Found the topmost stack on target display. Now check if the topmost task's
             // description changed.
             if (taskInfo.taskId == stackInfo.taskIds[stackInfo.taskIds.length - 1]) {
-                mHost.onTaskBackgroundColorChanged(VirtualDisplayTaskEmbedder.this,
-                        taskInfo.taskDescription.getBackgroundColor());
+                mHost.post(()-> mHost.onTaskBackgroundColorChanged(VirtualDisplayTaskEmbedder.this,
+                        taskInfo.taskDescription.getBackgroundColor()));
             }
         }
 

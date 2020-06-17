@@ -89,8 +89,7 @@
     <string name="screenshot_dismiss_ui_description" msgid="934736855340147968">"Képernyőkép elvetése"</string>
     <string name="screenshot_preview_description" msgid="7606510140714080474">"Képernyőkép előnézete"</string>
     <string name="screenrecord_name" msgid="2596401223859996572">"Képernyőrögzítő"</string>
-    <!-- no translation found for screenrecord_background_processing_label (7244617554884238898) -->
-    <skip />
+    <string name="screenrecord_background_processing_label" msgid="7244617554884238898">"Képernyőrögzítés feldolgozása"</string>
     <string name="screenrecord_channel_description" msgid="4147077128486138351">"Folyamatban lévő értesítés képernyőrögzítési munkamenethez"</string>
     <string name="screenrecord_start_label" msgid="1750350278888217473">"Elindítja a felvételt?"</string>
     <string name="screenrecord_description" msgid="1123231719680353736">"A felvétel készítése során az Android rendszer rögzítheti az eszközön lejátszott, illetve a képernyőjén megjelenő bizalmas információkat. Ide tartoznak például a jelszavak, a fizetési információk, a fotók, az üzenetek és az audiotartalmak is."</string>
@@ -511,10 +510,9 @@
     <string name="clear_all_notifications_text" msgid="348312370303046130">"Az összes törlése"</string>
     <string name="manage_notifications_text" msgid="6885645344647733116">"Kezelés"</string>
     <string name="manage_notifications_history_text" msgid="57055985396576230">"Előzmények"</string>
-    <!-- no translation found for notification_section_header_incoming (5295312809341711367) -->
-    <skip />
-    <string name="notification_section_header_gentle" msgid="3044910806569985386">"Néma értesítések"</string>
-    <string name="notification_section_header_alerting" msgid="3168140660646863240">"Figyelemfelkeltő értesítések"</string>
+    <string name="notification_section_header_incoming" msgid="5295312809341711367">"Bejövő"</string>
+    <string name="notification_section_header_gentle" msgid="6804099527336337197">"Néma"</string>
+    <string name="notification_section_header_alerting" msgid="5581175033680477651">"Értesítések"</string>
     <string name="notification_section_header_conversations" msgid="821834744538345661">"Beszélgetések"</string>
     <string name="accessibility_notification_section_header_gentle_clear_all" msgid="6490207897764933919">"Az összes néma értesítés törlése"</string>
     <string name="dnd_suppressing_shade_text" msgid="5588252250634464042">"Ne zavarjanak funkcióval szüneteltetett értesítések"</string>
@@ -594,19 +592,21 @@
     <string name="volume_odi_captions_hint_enable" msgid="2073091194012843195">"engedélyezés"</string>
     <string name="volume_odi_captions_hint_disable" msgid="2518846326748183407">"letiltás"</string>
     <string name="accessibility_output_chooser" msgid="7807898688967194183">"Váltás másik kimeneti eszközre"</string>
-    <string name="screen_pinning_title" msgid="7357611095909618178">"A képernyő rögzítve van"</string>
+    <string name="screen_pinning_title" msgid="9058007390337841305">"Az alkalmazás ki van tűzve"</string>
     <string name="screen_pinning_description" msgid="8699395373875667743">"Megjelenítve tartja addig, amíg Ön fel nem oldja a rögzítést. A feloldáshoz tartsa lenyomva a Vissza és az Áttekintés lehetőséget."</string>
     <string name="screen_pinning_description_recents_invisible" msgid="4564466648700390037">"Megjelenítve tartja addig, amíg Ön fel nem oldja a rögzítést. A feloldáshoz tartsa lenyomva a Vissza és a Kezdőképernyő elemet."</string>
     <string name="screen_pinning_description_gestural" msgid="7246323931831232068">"Megjelenítve tartja addig, amíg Ön fel nem oldja a rögzítést. A feloldáshoz csúsztasson fel, és tartsa ujját a képernyőn."</string>
     <string name="screen_pinning_description_accessible" msgid="7386449191953535332">"Megjelenítve tartja addig, amíg Ön fel nem oldja a rögzítést. A feloldáshoz tartsa lenyomva az Áttekintés lehetőséget."</string>
     <string name="screen_pinning_description_recents_invisible_accessible" msgid="2857071808674481986">"Megjelenítve tartja addig, amíg Ön fel nem oldja a rögzítést. A feloldáshoz tartsa lenyomva a Kezdőképernyő elemet."</string>
-    <string name="screen_pinning_toast" msgid="2083944237147005811">"A képernyő rögzítésének feloldásához tartsa lenyomva a Vissza és az Áttekintés gombot"</string>
-    <string name="screen_pinning_toast_recents_invisible" msgid="6343770487795352573">"A képernyő rögzítésének feloldásához tartsa lenyomva a Vissza és a Kezdőképernyő gombot"</string>
-    <string name="screen_pinning_toast_gesture_nav" msgid="2884536903398445645">"A képernyő rögzítésének feloldásához csúsztassa felfelé ujját, majd tartsa lenyomva"</string>
+    <string name="screen_pinning_exposes_personal_data" msgid="8189852022981524789">"Bizonyos személyes adatok (például a névjegyek és az e-mailek tartalma) hozzáférhetők lehetnek."</string>
+    <string name="screen_pinning_can_open_other_apps" msgid="7529756813231421455">"A kitűzött alkalmazás megnyithat más alkalmazásokat."</string>
+    <string name="screen_pinning_toast" msgid="8177286912533744328">"Az alkalmazás kitűzésének megszüntetéséhez tartsa lenyomva a Vissza és az Áttekintés gombokat"</string>
+    <string name="screen_pinning_toast_recents_invisible" msgid="6850978077443052594">"Az alkalmazás kitűzésének megszüntetéséhez tartsa lenyomva a Vissza és a Kezdőképernyő gombot"</string>
+    <string name="screen_pinning_toast_gesture_nav" msgid="170699893395336705">"Az alkalmazás kitűzésének megszüntetéséhez csúsztassa felfelé ujját, majd tartsa lenyomva"</string>
     <string name="screen_pinning_positive" msgid="3285785989665266984">"Értem"</string>
     <string name="screen_pinning_negative" msgid="6882816864569211666">"Nem, köszönöm"</string>
-    <string name="screen_pinning_start" msgid="5695091877402422575">"Képernyő rögzítve"</string>
-    <string name="screen_pinning_exit" msgid="5114993350662745840">"Képernyő rögzítése feloldva"</string>
+    <string name="screen_pinning_start" msgid="7483998671383371313">"Alkalmazás kitűzve"</string>
+    <string name="screen_pinning_exit" msgid="4553787518387346893">"Alkalmazás kitűzése megszüntetve"</string>
     <string name="quick_settings_reset_confirmation_title" msgid="463533331480997595">"Elrejti ezt: <xliff:g id="TILE_LABEL">%1$s</xliff:g>?"</string>
     <string name="quick_settings_reset_confirmation_message" msgid="2320586180785674186">"Újból megjelenik majd, amikor ismét engedélyezi a beállítások között."</string>
     <string name="quick_settings_reset_confirmation_button" msgid="3341477479055016776">"Elrejtés"</string>
@@ -709,16 +709,17 @@
     <string name="inline_turn_off_notifications" msgid="8543989584403106071">"Az értesítések kikapcsolása"</string>
     <string name="inline_keep_showing_app" msgid="4393429060390649757">"Továbbra is megjelenjenek az alkalmazás értesítései?"</string>
     <string name="notification_silence_title" msgid="8608090968400832335">"Néma"</string>
-    <string name="notification_alert_title" msgid="7629202599338071971">"Figyelemfelkeltő"</string>
+    <string name="notification_alert_title" msgid="3656229781017543655">"Alapértelmezett"</string>
     <string name="notification_bubble_title" msgid="8330481035191903164">"Buborék"</string>
-    <string name="notification_channel_summary_low" msgid="7300447764759926720">"Hangjelzés és rezgés nélkül segít a koncentrálásban."</string>
-    <string name="notification_channel_summary_default" msgid="3539949463907902037">"Figyelemfelkeltő a hangjelzésnek és rezgésnek köszönhetően."</string>
-    <string name="notification_channel_summary_default_with_bubbles" msgid="6298026344552480458">"Figyelemfelkeltő a hangjelzésnek és rezgésnek köszönhetően. A(z) <xliff:g id="APP_NAME">%1$s</xliff:g> alkalmazásban lévő beszélgetések alapértelmezés szerint buborékban jelennek meg."</string>
+    <string name="notification_channel_summary_low" msgid="4860617986908931158">"Nincs hang és rezgés"</string>
+    <string name="notification_conversation_summary_low" msgid="1734433426085468009">"Nincs hang és rezgés, továbbá lejjebb jelenik meg a beszélgetések szakaszában"</string>
+    <string name="notification_channel_summary_default" msgid="3282930979307248890">"A telefonbeállítások alapján csöröghet és rezeghet"</string>
+    <string name="notification_channel_summary_default_with_bubbles" msgid="1782419896613644568">"A telefonbeállítások alapján csöröghet és rezeghet. A(z) <xliff:g id="APP_NAME">%1$s</xliff:g> alkalmazásban lévő beszélgetések alapértelmezés szerint buborékban jelennek meg."</string>
     <string name="notification_channel_summary_bubble" msgid="7235935211580860537">"A tartalomra mutató lebegő parancsikon segítségével tartja fenn az Ön figyelmét."</string>
-    <string name="notification_channel_summary_priority" msgid="7415770044553264622">"A beszélgetések szakaszának tetején, buborékként jelenik meg."</string>
+    <string name="notification_channel_summary_priority" msgid="7952654515769021553">"A beszélgetések szakaszának tetején, lebegő buborékként látható, megjeleníti a profilképet a lezárási képernyőn"</string>
     <string name="notification_conversation_channel_settings" msgid="2409977688430606835">"Beállítások"</string>
     <string name="notification_priority_title" msgid="2079708866333537093">"Prioritás"</string>
-    <string name="no_shortcut" msgid="7176375126961212514">"A(z) <xliff:g id="APP_NAME">%1$s</xliff:g> alkalmazás nem támogatja a beszélgetésspecifikus beállításokat"</string>
+    <string name="no_shortcut" msgid="8257177117568230126">"A(z) <xliff:g id="APP_NAME">%1$s</xliff:g> nem támogatja a beszélgetési funkciókat"</string>
     <string name="bubble_overflow_empty_title" msgid="3120029421991510842">"Nincsenek buborékok a közelmúltból"</string>
     <string name="bubble_overflow_empty_subtitle" msgid="2030874469510497397">"A legutóbbi és az elvetett buborékok itt jelennek majd meg"</string>
     <string name="notification_unblockable_desc" msgid="2073030886006190804">"Ezeket az értesítéseket nem lehet módosítani."</string>
@@ -969,7 +970,7 @@
     <string name="running_foreground_services_title" msgid="5137313173431186685">"A háttérben még futnak alkalmazások"</string>
     <string name="running_foreground_services_msg" msgid="3009459259222695385">"Koppintson az akkumulátor- és adathasználat részleteinek megtekintéséhez"</string>
     <string name="mobile_data_disable_title" msgid="5366476131671617790">"Kikapcsolja a mobiladatokat?"</string>
-    <string name="mobile_data_disable_message" msgid="8604966027899770415">"Nem lesz adat-, illetve internet-hozzáférése a(z) <xliff:g id="CARRIER">%s</xliff:g> szolgáltatón keresztül. Az internethez csak Wi-Fi-n keresztül csatlakozhat."</string>
+    <string name="mobile_data_disable_message" msgid="8604966027899770415">"Nem lesz adat-, illetve internet-hozzáférése a <xliff:g id="CARRIER">%s</xliff:g> szolgáltatón keresztül. Az internethez csak Wi-Fi-n keresztül csatlakozhat."</string>
     <string name="mobile_data_disable_message_default_carrier" msgid="6496033312431658238">"saját mobilszolgáltató"</string>
     <string name="touch_filtered_warning" msgid="8119511393338714836">"Mivel az egyik alkalmazás eltakarja az engedélykérést, a Beállítások alkalmazás nem tudja ellenőrizni az Ön válaszát."</string>
     <string name="slice_permission_title" msgid="3262615140094151017">"Engedélyezi a(z) <xliff:g id="APP_0">%1$s</xliff:g> alkalmazásnak, hogy részleteket mutasson a(z) <xliff:g id="APP_2">%2$s</xliff:g> alkalmazásból?"</string>
@@ -991,10 +992,8 @@
     <string name="music_controls_no_title" msgid="4166497066552290938">"Nincs cím"</string>
     <string name="restart_button_description" msgid="6916116576177456480">"Koppintson az alkalmazás újraindításához és a teljes képernyős mód elindításához."</string>
     <string name="bubbles_settings_button_description" msgid="7324245408859877545">"A(z) <xliff:g id="APP_NAME">%1$s</xliff:g>-buborékok beállításai"</string>
-    <!-- no translation found for bubble_overflow_button_content_description (5523744621434300510) -->
-    <skip />
-    <!-- no translation found for bubble_accessibility_action_add_back (6217995665917123890) -->
-    <skip />
+    <string name="bubble_overflow_button_content_description" msgid="5523744621434300510">"További elemeket tartalmazó menü"</string>
+    <string name="bubble_accessibility_action_add_back" msgid="6217995665917123890">"Visszaküldés a verembe"</string>
     <string name="manage_bubbles_text" msgid="6856830436329494850">"Kezelés"</string>
     <string name="bubble_content_description_single" msgid="5175160674436546329">"<xliff:g id="NOTIFICATION_TITLE">%1$s</xliff:g>, <xliff:g id="APP_NAME">%2$s</xliff:g>"</string>
     <string name="bubble_content_description_stack" msgid="7907610717462651870">"<xliff:g id="NOTIFICATION_TITLE">%1$s</xliff:g> a(z) <xliff:g id="APP_NAME">%2$s</xliff:g> alkalmazásból és <xliff:g id="BUBBLE_COUNT">%3$d</xliff:g> további"</string>
@@ -1003,7 +1002,8 @@
     <string name="bubble_accessibility_action_move_top_right" msgid="6916868852433483569">"Áthelyezés fel és jobbra"</string>
     <string name="bubble_accessibility_action_move_bottom_left" msgid="6339015902495504715">"Áthelyezés le és balra"</string>
     <string name="bubble_accessibility_action_move_bottom_right" msgid="7471571700628346212">"Áthelyezés le és jobbra"</string>
-    <string name="bubble_dismiss_text" msgid="7071770411580452911">"Elvetés"</string>
+    <!-- no translation found for bubble_dismiss_text (1314082410868930066) -->
+    <skip />
     <string name="bubbles_dont_bubble_conversation" msgid="1033040343437428822">"Ne jelenjen meg a beszélgetés buborékban"</string>
     <string name="bubbles_user_education_title" msgid="5547017089271445797">"Buborékokat használó csevegés"</string>
     <string name="bubbles_user_education_description" msgid="1160281719576715211">"Az új beszélgetések lebegő ikonként, vagyis buborékként jelennek meg. A buborék megnyitásához koppintson rá. Áthelyezéshez húzza a kívánt helyre."</string>
@@ -1014,11 +1014,14 @@
     <string name="notification_content_system_nav_changed" msgid="5077913144844684544">"A rendszer-navigáció módja megváltozott. Módosításához nyissa meg a Beállításokat."</string>
     <string name="notification_content_gesture_nav_available" msgid="4431460803004659888">"A rendszer-navigációs lehetőségeket a Beállításokban módosíthatja"</string>
     <string name="inattentive_sleep_warning_title" msgid="3891371591713990373">"Készenléti mód"</string>
+    <string name="priority_onboarding_title" msgid="2893070698479227616">"Fontosnak beállított beszélgetés"</string>
+    <string name="priority_onboarding_behavior" msgid="5342816047020432929">"A fontos beszélgetések:"</string>
     <string name="priority_onboarding_show_at_top_text" msgid="1678400241025513541">"A beszélgetések szakaszának tetején jelennek meg"</string>
     <string name="priority_onboarding_show_avatar_text" msgid="5756291381124091508">"Megjelenítik a profilképet a lezárási képernyőn"</string>
     <string name="priority_onboarding_appear_as_bubble_text" msgid="4227039772250263122">"Buborékként jelennek meg az alkalmazások felett"</string>
     <string name="priority_onboarding_ignores_dnd_text" msgid="2918952762719600529">"Megszakítják a Ne zavarjanak módot"</string>
     <string name="priority_onboarding_done_button_title" msgid="4569550984286506007">"Értem"</string>
+    <string name="priority_onboarding_settings_button_title" msgid="6663601574303585927">"Beállítások"</string>
     <string name="magnification_overlay_title" msgid="6584179429612427958">"Nagyítási fedvény ablaka"</string>
     <string name="magnification_window_title" msgid="4863914360847258333">"Nagyítás ablaka"</string>
     <string name="magnification_controls_title" msgid="8421106606708891519">"Nagyítási vezérlők ablaka"</string>
@@ -1031,6 +1034,13 @@
       <item quantity="other"><xliff:g id="NUMBER_1">%s</xliff:g> vezérlő hozzáadva.</item>
       <item quantity="one"><xliff:g id="NUMBER_0">%s</xliff:g> vezérlő hozzáadva.</item>
     </plurals>
+    <string name="controls_removed" msgid="3731789252222856959">"Eltávolítva"</string>
+    <string name="accessibility_control_favorite" msgid="8694362691985545985">"Hozzáadva a kedvencekhez"</string>
+    <string name="accessibility_control_favorite_position" msgid="54220258048929221">"Hozzáadva a kedvencekhez <xliff:g id="NUMBER">%d</xliff:g>. helyen"</string>
+    <string name="accessibility_control_not_favorite" msgid="1291760269563092359">"Eltávolítva a kedvencek közül"</string>
+    <string name="accessibility_control_change_favorite" msgid="2943178027582253261">"kedvencekhez adás"</string>
+    <string name="accessibility_control_change_unfavorite" msgid="6997408061750740327">"eltávolítás a kedvencek közül"</string>
+    <string name="accessibility_control_move" msgid="8980344493796647792">"Áthelyezés a következő pozícióba: <xliff:g id="NUMBER">%d</xliff:g>"</string>
     <string name="controls_favorite_default_title" msgid="967742178688938137">"Vezérlők"</string>
     <string name="controls_favorite_subtitle" msgid="6604402232298443956">"A bekapcsológomb menüjéből hozzáférhető vezérlők kiválasztása"</string>
     <string name="controls_favorite_rearrange" msgid="5616952398043063519">"Tartsa lenyomva, és húzza a vezérlők átrendezéséhez"</string>
@@ -1047,15 +1057,19 @@
     <string name="controls_pin_wrong" msgid="6162694056042164211">"Helytelen PIN-kód"</string>
     <string name="controls_pin_verifying" msgid="3755045989392131746">"Ellenőrzés…"</string>
     <string name="controls_pin_instructions" msgid="6363309783822475238">"PIN-kód megadása"</string>
-    <string name="controls_pin_instructions_retry" msgid="1566667581012131046">"Próbálkozzon másik PIN-kóddal"</string>
+    <string name="controls_pin_instructions_retry" msgid="1566667581012131046">"Próbálkozzon másik kóddal"</string>
     <string name="controls_confirmation_confirming" msgid="2596071302617310665">"Megerősítés…"</string>
     <string name="controls_confirmation_message" msgid="7744104992609594859">"A(z) <xliff:g id="DEVICE">%s</xliff:g> módosításának megerősítése"</string>
     <string name="controls_structure_tooltip" msgid="4355922222944447867">"Továbbiak megtekintéséhez csúsztasson"</string>
     <string name="controls_seeding_in_progress" msgid="3033855341410264148">"Javaslatok betöltése…"</string>
     <string name="controls_media_close_session" msgid="9023534788828414585">"Médiamunkamenet bezárása"</string>
+    <string name="controls_media_resume" msgid="1933520684481586053">"Folytatás"</string>
     <string name="controls_error_timeout" msgid="794197289772728958">"Inaktív, ellenőrizze az appot"</string>
     <string name="controls_error_retryable" msgid="864025882878378470">"Hiba, újrapróbálkozás…"</string>
-    <string name="controls_error_removed" msgid="6299213591234723805">"Eszköz eltávolítva"</string>
+    <string name="controls_error_removed" msgid="6675638069846014366">"Nem található"</string>
+    <string name="controls_error_removed_title" msgid="1207794911208047818">"Nem hozzáférhető vezérlő"</string>
+    <string name="controls_error_removed_message" msgid="2885911717034750542">"Nem lehet hozzáférni a következőhöz: <xliff:g id="DEVICE">%1$s</xliff:g>. Ellenőrizze a(z) <xliff:g id="APPLICATION">%2$s</xliff:g> alkalmazást, és győződjön meg arról, hogy a vezérlő továbbra is rendelkezésre áll, illetve nem változtak az alkalmazás beállításai."</string>
+    <string name="controls_open_app" msgid="483650971094300141">"App megnyitása"</string>
     <string name="controls_error_generic" msgid="352500456918362905">"Állapot betöltése sikertelen"</string>
     <string name="controls_error_failed" msgid="960228639198558525">"Hiba történt. Próbálja újra."</string>
     <string name="controls_in_progress" msgid="4421080500238215939">"Folyamatban"</string>

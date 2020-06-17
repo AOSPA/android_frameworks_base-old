@@ -40,6 +40,7 @@ import android.hardware.hdmi.HdmiControlManager;
 import android.hardware.hdmi.HdmiDeviceInfo;
 import android.hardware.hdmi.HdmiHotplugEvent;
 import android.hardware.hdmi.HdmiPortInfo;
+import android.hardware.hdmi.IHdmiCecVolumeControlFeatureListener;
 import android.hardware.hdmi.IHdmiControlCallback;
 import android.hardware.hdmi.IHdmiControlService;
 import android.hardware.hdmi.IHdmiControlStatusChangeListener;
@@ -63,6 +64,7 @@ import android.os.HandlerThread;
 import android.os.IBinder;
 import android.os.Looper;
 import android.os.PowerManager;
+import android.os.RemoteCallbackList;
 import android.os.RemoteException;
 import android.os.SystemClock;
 import android.os.SystemProperties;
@@ -267,6 +269,11 @@ public class HdmiControlService extends SystemService {
     @GuardedBy("mLock")
     private final ArrayList<HdmiControlStatusChangeListenerRecord>
             mHdmiControlStatusChangeListenerRecords = new ArrayList<>();
+
+    // List of records for HDMI control volume control status change listener for death monitoring.
+    @GuardedBy("mLock")
+    private final RemoteCallbackList<IHdmiCecVolumeControlFeatureListener>
+            mHdmiCecVolumeControlFeatureListenerRecords = new RemoteCallbackList<>();
 
     // List of records for hotplug event listener to handle the the caller killed in action.
     @GuardedBy("mLock")
@@ -1814,6 +1821,21 @@ public class HdmiControlService extends SystemService {
         }
 
         @Override
+        public void addHdmiCecVolumeControlFeatureListener(
+                final IHdmiCecVolumeControlFeatureListener listener) {
+            enforceAccessPermission();
+            HdmiControlService.this.addHdmiCecVolumeControlFeatureListener(listener);
+        }
+
+        @Override
+        public void removeHdmiCecVolumeControlFeatureListener(
+                final IHdmiCecVolumeControlFeatureListener listener) {
+            enforceAccessPermission();
+            HdmiControlService.this.removeHdmiControlVolumeControlStatusChangeListener(listener);
+        }
+
+
+        @Override
         public void addHotplugEventListener(final IHdmiHotplugEventListener listener) {
             enforceAccessPermission();
             HdmiControlService.this.addHotplugEventListener(listener);
@@ -2207,13 +2229,13 @@ public class HdmiControlService extends SystemService {
         @Override
         public void setHdmiCecVolumeControlEnabled(final boolean isHdmiCecVolumeControlEnabled) {
             enforceAccessPermission();
-            runOnServiceThread(new Runnable() {
-                @Override
-                public void run() {
-                    HdmiControlService.this.setHdmiCecVolumeControlEnabled(
-                            isHdmiCecVolumeControlEnabled);
-                }
-            });
+            long token = Binder.clearCallingIdentity();
+            try {
+                HdmiControlService.this.setHdmiCecVolumeControlEnabled(
+                        isHdmiCecVolumeControlEnabled);
+            } finally {
+                Binder.restoreCallingIdentity(token);
+            }
         }
 
         @Override
@@ -2407,6 +2429,33 @@ public class HdmiControlService extends SystemService {
                 }
             }
         }
+    }
+
+    @VisibleForTesting
+    void addHdmiCecVolumeControlFeatureListener(
+            final IHdmiCecVolumeControlFeatureListener listener) {
+        mHdmiCecVolumeControlFeatureListenerRecords.register(listener);
+
+        runOnServiceThread(new Runnable() {
+            @Override
+            public void run() {
+                // Return the current status of mHdmiCecVolumeControlEnabled;
+                synchronized (mLock) {
+                    try {
+                        listener.onHdmiCecVolumeControlFeature(mHdmiCecVolumeControlEnabled);
+                    } catch (RemoteException e) {
+                        Slog.e(TAG, "Failed to report HdmiControlVolumeControlStatusChange: "
+                                + mHdmiCecVolumeControlEnabled, e);
+                    }
+                }
+            }
+        });
+    }
+
+    @VisibleForTesting
+    void removeHdmiControlVolumeControlStatusChangeListener(
+            final IHdmiCecVolumeControlFeatureListener listener) {
+        mHdmiCecVolumeControlFeatureListenerRecords.unregister(listener);
     }
 
     private void addHotplugEventListener(final IHdmiHotplugEventListener listener) {
@@ -2680,6 +2729,19 @@ public class HdmiControlService extends SystemService {
             Slog.e(TAG, "Failed to report HdmiControlStatusChange: " + isEnabled
                     + " isAvailable: " + false, e);
         }
+    }
+
+    private void announceHdmiCecVolumeControlFeatureChange(boolean isEnabled) {
+        assertRunOnServiceThread();
+        mHdmiCecVolumeControlFeatureListenerRecords.broadcast(listener -> {
+            try {
+                listener.onHdmiCecVolumeControlFeature(isEnabled);
+            } catch (RemoteException e) {
+                Slog.e(TAG,
+                        "Failed to report HdmiControlVolumeControlStatusChange: "
+                                + isEnabled);
+            }
+        });
     }
 
     public HdmiCecLocalDeviceTv tv() {
@@ -3014,7 +3076,6 @@ public class HdmiControlService extends SystemService {
     }
 
     void setHdmiCecVolumeControlEnabled(boolean isHdmiCecVolumeControlEnabled) {
-        assertRunOnServiceThread();
         synchronized (mLock) {
             mHdmiCecVolumeControlEnabled = isHdmiCecVolumeControlEnabled;
 
@@ -3027,10 +3088,10 @@ public class HdmiControlService extends SystemService {
                         isHdmiCecVolumeControlEnabled);
             }
         }
+        announceHdmiCecVolumeControlFeatureChange(isHdmiCecVolumeControlEnabled);
     }
 
     boolean isHdmiCecVolumeControlEnabled() {
-        assertRunOnServiceThread();
         synchronized (mLock) {
             return mHdmiCecVolumeControlEnabled;
         }

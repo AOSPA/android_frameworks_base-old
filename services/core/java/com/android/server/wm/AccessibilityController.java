@@ -50,7 +50,7 @@ import android.util.Slog;
 import android.util.SparseArray;
 import android.util.TypedValue;
 import android.view.Display;
-import android.view.InsetsState;
+import android.view.InsetsSource;
 import android.view.MagnificationSpec;
 import android.view.Surface;
 import android.view.Surface.OutOfResourcesException;
@@ -80,6 +80,7 @@ final class AccessibilityController {
 
     private final WindowManagerService mService;
 
+    private static final Rect EMPTY_RECT = new Rect();
     private static final float[] sTempFloats = new float[9];
 
     public AccessibilityController(WindowManagerService service) {
@@ -897,11 +898,16 @@ final class AccessibilityController {
                         /* ignore */
                     }
                     mSurfaceControl = surfaceControl;
-                    mService.mTransactionFactory.get().setLayer(mSurfaceControl,
-                            mService.mPolicy.getWindowLayerFromTypeLw(TYPE_MAGNIFICATION_OVERLAY)
-                                    * WindowManagerService.TYPE_LAYER_MULTIPLIER)
-                            .setPosition(mSurfaceControl, 0, 0)
-                            .apply();
+
+                    final SurfaceControl.Transaction t = mService.mTransactionFactory.get();
+                    final int layer =
+                            mService.mPolicy.getWindowLayerFromTypeLw(TYPE_MAGNIFICATION_OVERLAY) *
+                                    WindowManagerService.TYPE_LAYER_MULTIPLIER;
+                    t.setLayer(mSurfaceControl, layer).setPosition(mSurfaceControl, 0, 0);
+                    InputMonitor.setTrustedOverlayInputInfo(mSurfaceControl, t,
+                            mDisplayContent.getDisplayId(), "Magnification Overlay");
+                    t.apply();
+
                     mSurface.copyFrom(mSurfaceControl);
 
                     mAnimationController = new AnimationController(context,
@@ -1166,9 +1172,9 @@ final class AccessibilityController {
     }
 
     static Rect getNavBarInsets(DisplayContent displayContent) {
-        final InsetsState insetsState =
-                displayContent.getInsetsStateController().getRawInsetsState();
-        return insetsState.getSource(ITYPE_NAVIGATION_BAR).getFrame();
+        final InsetsSource source = displayContent.getInsetsStateController().getRawInsetsState()
+                .peekSource(ITYPE_NAVIGATION_BAR);
+        return source != null ? source.getFrame() : EMPTY_RECT;
     }
 
     /**

@@ -21,7 +21,6 @@ import static android.app.WindowConfiguration.ACTIVITY_TYPE_STANDARD;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_UNDEFINED;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FREEFORM;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN;
-import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN_OR_SPLIT_SCREEN_SECONDARY;
 import static android.app.WindowConfiguration.WINDOWING_MODE_MULTI_WINDOW;
 import static android.app.WindowConfiguration.WINDOWING_MODE_PINNED;
 import static android.app.WindowConfiguration.WINDOWING_MODE_SPLIT_SCREEN_PRIMARY;
@@ -205,7 +204,7 @@ final class TaskDisplayArea extends DisplayArea<ActivityStack> {
         return mChildren.indexOf(stack);
     }
 
-    ActivityStack getRootHomeTask() {
+    @Nullable ActivityStack getRootHomeTask() {
         return mRootHomeTask;
     }
 
@@ -656,7 +655,7 @@ final class TaskDisplayArea extends DisplayArea<ActivityStack> {
                 mSplitScreenDividerAnchor = makeChildSurface(null)
                         .setName("splitScreenDividerAnchor")
                         .build();
-                getPendingTransaction()
+                getSyncTransaction()
                         .show(mAppAnimationLayer)
                         .show(mBoostedAppAnimationLayer)
                         .show(mHomeAppAnimationLayer)
@@ -773,6 +772,32 @@ final class TaskDisplayArea extends DisplayArea<ActivityStack> {
         }
 
         onStackOrderChanged(stack);
+    }
+
+    /**
+     * Moves/reparents `task` to the back of whatever container the home stack is in. This is for
+     * when we just want to move a task to "the back" vs. a specific place. The primary use-case
+     * is to make sure that moved-to-back apps go into secondary split when in split-screen mode.
+     */
+    void positionTaskBehindHome(ActivityStack task) {
+        final ActivityStack home = getOrCreateRootHomeTask();
+        final WindowContainer homeParent = home.getParent();
+        final Task homeParentTask = homeParent != null ? homeParent.asTask() : null;
+        if (homeParentTask == null) {
+            // reparent throws if parent didn't change...
+            if (task.getParent() == this) {
+                positionStackAtBottom(task);
+            } else {
+                task.reparent(this, false /* onTop */);
+            }
+        } else if (homeParentTask == task.getParent()) {
+            // Apparently reparent early-outs if same stack, so we have to explicitly reorder.
+            ((ActivityStack) homeParentTask).positionChildAtBottom(task);
+        } else {
+            task.reparent((ActivityStack) homeParentTask, false /* toTop */,
+                    Task.REPARENT_LEAVE_STACK_IN_PLACE, false /* animate */,
+                    false /* deferResume */, "positionTaskBehindHome");
+        }
     }
 
     ActivityStack getStack(int rootTaskId) {
@@ -1332,14 +1357,10 @@ final class TaskDisplayArea extends DisplayArea<ActivityStack> {
             return true;
         }
 
-        final int displayWindowingMode = getWindowingMode();
         if (windowingMode == WINDOWING_MODE_SPLIT_SCREEN_PRIMARY
                 || windowingMode == WINDOWING_MODE_SPLIT_SCREEN_SECONDARY) {
             return supportsSplitScreen
-                    && WindowConfiguration.supportSplitScreenWindowingMode(activityType)
-                    // Freeform windows and split-screen windows don't mix well, so prevent
-                    // split windowing modes on freeform displays.
-                    && displayWindowingMode != WINDOWING_MODE_FREEFORM;
+                    && WindowConfiguration.supportSplitScreenWindowingMode(activityType);
         }
 
         if (!supportsFreeform && windowingMode == WINDOWING_MODE_FREEFORM) {
@@ -1389,16 +1410,16 @@ final class TaskDisplayArea extends DisplayArea<ActivityStack> {
     }
 
     /**
-     * Check that the requested windowing-mode is appropriate for the specified task and/or activity
+     * Check if the requested windowing-mode is appropriate for the specified task and/or activity
      * on this display.
      *
      * @param windowingMode The windowing-mode to validate.
      * @param r The {@link ActivityRecord} to check against.
      * @param task The {@link Task} to check against.
      * @param activityType An activity type.
-     * @return The provided windowingMode or the closest valid mode which is appropriate.
+     * @return {@code true} if windowingMode is valid, {@code false} otherwise.
      */
-    int validateWindowingMode(int windowingMode, @Nullable ActivityRecord r, @Nullable Task task,
+    boolean isValidWindowingMode(int windowingMode, @Nullable ActivityRecord r, @Nullable Task task,
             int activityType) {
         // Make sure the windowing mode we are trying to use makes sense for what is supported.
         boolean supportsMultiWindow = mAtmService.mSupportsMultiWindow;
@@ -1418,24 +1439,35 @@ final class TaskDisplayArea extends DisplayArea<ActivityStack> {
             }
         }
 
+        return windowingMode != WINDOWING_MODE_UNDEFINED
+                && isWindowingModeSupported(windowingMode, supportsMultiWindow, supportsSplitScreen,
+                        supportsFreeform, supportsPip, activityType);
+    }
+
+    /**
+     * Check that the requested windowing-mode is appropriate for the specified task and/or activity
+     * on this display.
+     *
+     * @param windowingMode The windowing-mode to validate.
+     * @param r The {@link ActivityRecord} to check against.
+     * @param task The {@link Task} to check against.
+     * @param activityType An activity type.
+     * @return The provided windowingMode or the closest valid mode which is appropriate.
+     */
+    int validateWindowingMode(int windowingMode, @Nullable ActivityRecord r, @Nullable Task task,
+            int activityType) {
         final boolean inSplitScreenMode = isSplitScreenModeActivated();
-        if (!inSplitScreenMode
-                && windowingMode == WINDOWING_MODE_FULLSCREEN_OR_SPLIT_SCREEN_SECONDARY) {
+        if (!inSplitScreenMode && windowingMode == WINDOWING_MODE_SPLIT_SCREEN_SECONDARY) {
             // Switch to the display's windowing mode if we are not in split-screen mode and we are
             // trying to launch in split-screen secondary.
             windowingMode = WINDOWING_MODE_UNDEFINED;
-        } else if (inSplitScreenMode && (windowingMode == WINDOWING_MODE_FULLSCREEN
-                || windowingMode == WINDOWING_MODE_UNDEFINED)
-                && supportsSplitScreen) {
+        } else if (inSplitScreenMode && windowingMode == WINDOWING_MODE_UNDEFINED) {
             windowingMode = WINDOWING_MODE_SPLIT_SCREEN_SECONDARY;
         }
-
-        if (windowingMode != WINDOWING_MODE_UNDEFINED
-                && isWindowingModeSupported(windowingMode, supportsMultiWindow, supportsSplitScreen,
-                supportsFreeform, supportsPip, activityType)) {
-            return windowingMode;
+        if (!isValidWindowingMode(windowingMode, r, task, activityType)) {
+            return WINDOWING_MODE_UNDEFINED;
         }
-        return WINDOWING_MODE_UNDEFINED;
+        return windowingMode;
     }
 
     boolean isTopStack(ActivityStack stack) {
@@ -1507,16 +1539,23 @@ final class TaskDisplayArea extends DisplayArea<ActivityStack> {
         return mChildren.get(index);
     }
 
+    @Nullable
+    ActivityStack getOrCreateRootHomeTask() {
+        return getOrCreateRootHomeTask(false /* onTop */);
+    }
+
     /**
      * Returns the existing home stack or creates and returns a new one if it should exist for the
      * display.
+     * @param onTop Only be used when there is no existing home stack. If true the home stack will
+     *              be created at the top of the display, else at the bottom.
      */
     @Nullable
-    ActivityStack getOrCreateRootHomeTask() {
+    ActivityStack getOrCreateRootHomeTask(boolean onTop) {
         ActivityStack homeTask = getRootHomeTask();
         if (homeTask == null && mDisplayContent.supportsSystemDecorations()
                 && !mDisplayContent.isUntrustedVirtualDisplay()) {
-            homeTask = createStack(WINDOWING_MODE_UNDEFINED, ACTIVITY_TYPE_HOME, false /* onTop */);
+            homeTask = createStack(WINDOWING_MODE_UNDEFINED, ACTIVITY_TYPE_HOME, onTop);
         }
         return homeTask;
     }
@@ -1789,16 +1828,20 @@ final class TaskDisplayArea extends DisplayArea<ActivityStack> {
     @Override
     void dump(PrintWriter pw, String prefix, boolean dumpAll) {
         pw.println(prefix + "TaskDisplayArea " + getName());
+        super.dump(pw, prefix, dumpAll);
         if (mPreferredTopFocusableStack != null) {
             pw.println(prefix + "  mPreferredTopFocusableStack=" + mPreferredTopFocusableStack);
         }
         if (mLastFocusedStack != null) {
             pw.println(prefix + "  mLastFocusedStack=" + mLastFocusedStack);
         }
-        pw.println(prefix + "  Application tokens in top down Z order:");
+        final String doublePrefix = prefix + "  ";
+        final String triplePrefix = doublePrefix + "  ";
+        pw.println(doublePrefix + "Application tokens in top down Z order:");
         for (int stackNdx = getChildCount() - 1; stackNdx >= 0; --stackNdx) {
             final ActivityStack stack = getChildAt(stackNdx);
-            stack.dump(pw, prefix + "    ", dumpAll);
+            pw.println(doublePrefix + "* " + stack);
+            stack.dump(pw, triplePrefix, dumpAll);
         }
     }
 }

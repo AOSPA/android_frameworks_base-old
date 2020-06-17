@@ -33,6 +33,7 @@ import static com.android.systemui.DejankUtils.whitelistIpcs;
 
 import android.annotation.AnyThread;
 import android.annotation.MainThread;
+import android.annotation.NonNull;
 import android.app.ActivityManager;
 import android.app.ActivityTaskManager;
 import android.app.AlarmManager;
@@ -57,6 +58,7 @@ import android.hardware.face.FaceManager;
 import android.hardware.fingerprint.FingerprintManager;
 import android.hardware.fingerprint.FingerprintManager.AuthenticationCallback;
 import android.hardware.fingerprint.FingerprintManager.AuthenticationResult;
+import android.os.Build;
 import android.os.CancellationSignal;
 import android.os.Handler;
 import android.os.IRemoteCallback;
@@ -94,8 +96,10 @@ import com.android.systemui.broadcast.BroadcastDispatcher;
 import com.android.systemui.dagger.qualifiers.Background;
 import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.dump.DumpManager;
+import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.shared.system.ActivityManagerWrapper;
 import com.android.systemui.shared.system.TaskStackChangeListener;
+import com.android.systemui.statusbar.StatusBarState;
 import com.android.systemui.statusbar.phone.KeyguardBypassController;
 import com.android.systemui.util.Assert;
 import com.android.systemui.util.RingerModeTracker;
@@ -106,9 +110,13 @@ import com.google.android.collect.Lists;
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
 import java.lang.ref.WeakReference;
+import java.text.SimpleDateFormat;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.TimeZone;
@@ -129,7 +137,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
     private static final String TAG = "KeyguardUpdateMonitor";
     private static final boolean DEBUG = KeyguardConstants.DEBUG;
     private static final boolean DEBUG_SIM_STATES = KeyguardConstants.DEBUG_SIM_STATES;
-    private static final boolean DEBUG_FACE = true;
+    private static final boolean DEBUG_FACE = Build.IS_DEBUGGABLE;
     private static final boolean DEBUG_SPEW = false;
     private static final int LOW_BATTERY_THRESHOLD = 20;
 
@@ -220,6 +228,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
 
     private final Context mContext;
     private final boolean mIsPrimaryUser;
+    private final StatusBarStateController mStatusBarStateController;
     HashMap<Integer, SimData> mSimDatas = new HashMap<>();
     HashMap<Integer, ServiceState> mServiceStates = new HashMap<Integer, ServiceState>();
 
@@ -245,8 +254,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
     // Battery status
     private BatteryStatus mBatteryStatus;
 
-    @VisibleForTesting
-    protected StrongAuthTracker mStrongAuthTracker;
+    private StrongAuthTracker mStrongAuthTracker;
 
     private final ArrayList<WeakReference<KeyguardUpdateMonitorCallback>>
             mCallbacks = Lists.newArrayList();
@@ -359,6 +367,10 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
     SparseArray<BiometricAuthenticated> mUserFingerprintAuthenticated = new SparseArray<>();
     @VisibleForTesting
     SparseArray<BiometricAuthenticated> mUserFaceAuthenticated = new SparseArray<>();
+
+    // Keep track of recent calls to shouldListenForFace() for debugging.
+    private static final int FACE_LISTEN_CALLS_QUEUE_SIZE = 20;
+    private ArrayDeque<KeyguardFaceListenModel> mFaceListenModels;
 
     private static int sCurrentUser;
     private Runnable mUpdateBiometricListeningState = this::updateBiometricListeningState;
@@ -1510,6 +1522,16 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
         mUserTrustIsUsuallyManaged.delete(userId);
     }
 
+    @VisibleForTesting
+    protected void setStrongAuthTracker(@NonNull StrongAuthTracker tracker) {
+        if (mStrongAuthTracker != null) {
+            mLockPatternUtils.unregisterStrongAuthTracker(mStrongAuthTracker);
+        }
+
+        mStrongAuthTracker = tracker;
+        mLockPatternUtils.registerStrongAuthTracker(mStrongAuthTracker);
+    }
+
     private void registerRingerTracker() {
         mRingerModeTracker.getRingerMode().observeForever(mRingerModeObserver);
     }
@@ -1522,7 +1544,9 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
             BroadcastDispatcher broadcastDispatcher,
             DumpManager dumpManager,
             RingerModeTracker ringerModeTracker,
-            @Background Executor backgroundExecutor) {
+            @Background Executor backgroundExecutor,
+            StatusBarStateController statusBarStateController,
+            LockPatternUtils lockPatternUtils) {
         mContext = context;
         mSubscriptionManager = SubscriptionManager.from(context);
         mDeviceProvisioned = isDeviceProvisionedInSettingsDb();
@@ -1530,6 +1554,8 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
         mBackgroundExecutor = backgroundExecutor;
         mBroadcastDispatcher = broadcastDispatcher;
         mRingerModeTracker = ringerModeTracker;
+        mStatusBarStateController = statusBarStateController;
+        mLockPatternUtils = lockPatternUtils;
         dumpManager.registerDumpable(getClass().getName(), this);
 
         mHandler = new Handler(mainLooper) {
@@ -1698,8 +1724,8 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
 
         mTrustManager = context.getSystemService(TrustManager.class);
         mTrustManager.registerTrustListener(this);
-        mLockPatternUtils = new LockPatternUtils(context);
-        mLockPatternUtils.registerStrongAuthTracker(mStrongAuthTracker);
+
+        setStrongAuthTracker(mStrongAuthTracker);
 
         mDreamManager = IDreamManager.Stub.asInterface(
                 ServiceManager.getService(DreamService.DREAM_SERVICE));
@@ -1856,8 +1882,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
         boolean shouldListenForFace = shouldListenForFace();
         if (mFaceRunningState == BIOMETRIC_STATE_RUNNING && !shouldListenForFace) {
             stopListeningForFace();
-        } else if (mFaceRunningState != BIOMETRIC_STATE_RUNNING
-                && shouldListenForFace) {
+        } else if (mFaceRunningState != BIOMETRIC_STATE_RUNNING && shouldListenForFace) {
             startListeningForFace();
         }
     }
@@ -1895,7 +1920,10 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
      * If face auth is allows to scan on this exact moment.
      */
     public boolean shouldListenForFace() {
-        final boolean awakeKeyguard = mKeyguardIsVisible && mDeviceInteractive && !mGoingToSleep;
+        final boolean statusBarShadeLocked =
+                mStatusBarStateController.getState() == StatusBarState.SHADE_LOCKED;
+        final boolean awakeKeyguard = mKeyguardIsVisible && mDeviceInteractive && !mGoingToSleep
+                && !statusBarShadeLocked;
         final int user = getCurrentUser();
         final int strongAuth = mStrongAuthTracker.getStrongAuthForUser(user);
         final boolean isLockDown =
@@ -1927,25 +1955,48 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
                 && strongAuthAllowsScanning && mIsPrimaryUser
                 && !mSecureCameraLaunched;
 
+        // Aggregate relevant fields for debug logging.
+        if (DEBUG_FACE || DEBUG_SPEW) {
+            final KeyguardFaceListenModel model = new KeyguardFaceListenModel(
+                    System.currentTimeMillis(),
+                    user,
+                    shouldListen,
+                    mBouncer,
+                    mAuthInterruptActive,
+                    awakeKeyguard,
+                    shouldListenForFaceAssistant(),
+                    mSwitchingUser,
+                    isFaceDisabled(user),
+                    becauseCannotSkipBouncer,
+                    mKeyguardGoingAway,
+                    mFaceSettingEnabledForUser.get(user),
+                    mLockIconPressed,
+                    strongAuthAllowsScanning,
+                    mIsPrimaryUser,
+                    mSecureCameraLaunched);
+            maybeLogFaceListenerModelData(model);
+        }
+
+        return shouldListen;
+    }
+
+    private void maybeLogFaceListenerModelData(KeyguardFaceListenModel model) {
         // Too chatty, but very useful when debugging issues.
         if (DEBUG_SPEW) {
-            Log.v(TAG, "shouldListenForFace(" + user + ")=" + shouldListen + "... "
-                    + ", mBouncer: " + mBouncer
-                    + ", mAuthInterruptActive: " + mAuthInterruptActive
-                    + ", awakeKeyguard: " + awakeKeyguard
-                    + ", shouldListenForFaceAssistant: " + shouldListenForFaceAssistant()
-                    + ", mSwitchingUser: " + mSwitchingUser
-                    + ", isFaceDisabled(" + user + "): " + isFaceDisabled(user)
-                    + ", becauseCannotSkipBouncer: " + becauseCannotSkipBouncer
-                    + ", mKeyguardGoingAway: " + mKeyguardGoingAway
-                    + ", mFaceSettingEnabledForUser(" + user + "): "
-                            + mFaceSettingEnabledForUser.get(user)
-                    + ", mLockIconPressed: " + mLockIconPressed
-                    + ", strongAuthAllowsScanning: " + strongAuthAllowsScanning
-                    + ", isPrimaryUser: " + mIsPrimaryUser
-                    + ", mSecureCameraLaunched: " + mSecureCameraLaunched);
+            Log.v(TAG, model.toString());
         }
-        return shouldListen;
+
+        // Add model data to the historical buffer.
+        if (DEBUG_FACE && mFaceRunningState != BIOMETRIC_STATE_RUNNING
+                && model.isListeningForFace()) {
+            if (mFaceListenModels == null) {
+                mFaceListenModels = new ArrayDeque<>(FACE_LISTEN_CALLS_QUEUE_SIZE);
+            }
+            if (mFaceListenModels.size() >= FACE_LISTEN_CALLS_QUEUE_SIZE) {
+                mFaceListenModels.remove();
+            }
+            mFaceListenModels.add(model);
+        }
     }
 
     /**
@@ -2311,13 +2362,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
                 // Even though the subscription is not valid anymore, we need to notify that the
                 // SIM card was removed so we can update the UI.
                 becameAbsent = true;
-                for (SimData data : mSimDatas.values()) {
-                    // Set the SIM state of all SimData associated with that slot to ABSENT se we
-                    // do not move back into PIN/PUK locked and not detect the change below.
-                    if (data.slotId == slotId) {
-                        data.simState = TelephonyManager.SIM_STATE_ABSENT;
-                    }
-                }
+                mSimDatas.clear();
             } else if (state == TelephonyManager.SIM_STATE_CARD_IO_ERROR) {
                 updateTelephonyCapable(true);
             } else {
@@ -2731,8 +2776,9 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
             mSimDatas.put(subId, data);
             changed = true; // no data yet; force update
         } else {
-            changed = data.simState != state;
+            changed = (data.simState != state) || (data.slotId != slotId);
             data.simState = state;
+            data.slotId = slotId;
         }
         return changed;
     }
@@ -2903,6 +2949,9 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
         mBroadcastDispatcher.unregisterReceiver(mBroadcastAllReceiver);
         mRingerModeTracker.getRingerMode().removeObserver(mRingerModeObserver);
 
+        mLockPatternUtils.unregisterStrongAuthTracker(mStrongAuthTracker);
+        mTrustManager.unregisterTrustListener(this);
+
         mHandler.removeCallbacksAndMessages(null);
     }
 
@@ -2959,6 +3008,15 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
             pw.println("    trustManaged=" + getUserTrustIsManaged(userId));
             pw.println("    enabledByUser=" + mFaceSettingEnabledForUser.get(userId));
             pw.println("    mSecureCameraLaunched=" + mSecureCameraLaunched);
+        }
+        if (mFaceListenModels != null && !mFaceListenModels.isEmpty()) {
+            final SimpleDateFormat dateFormat =
+                    new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.US);
+            pw.println("  Face listen results (last " + FACE_LISTEN_CALLS_QUEUE_SIZE + " calls):");
+            for (final KeyguardFaceListenModel model : mFaceListenModels) {
+                final String time = dateFormat.format(new Date(model.getTimeMillis()));
+                pw.println("    " + time + " " + model.toString());
+            }
         }
     }
 }

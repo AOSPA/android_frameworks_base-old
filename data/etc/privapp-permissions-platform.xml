@@ -27,6 +27,11 @@ applications that come with the platform
         <permission name="android.permission.INTERACT_ACROSS_USERS" />
     </privapp-permissions>
 
+    <!-- Needed for Build.getSerial(), which is used to send a unique number for serial, per HUIG. -->
+    <privapp-permissions package="android.car.usb.handler">
+        <permission name="android.permission.READ_PRIVILEGED_PHONE_STATE"/>
+    </privapp-permissions>
+
     <privapp-permissions package="com.android.angle">
         <permission name="android.permission.WRITE_SECURE_SETTINGS"/>
     </privapp-permissions>
@@ -40,7 +45,7 @@ applications that come with the platform
         <permission name="android.permission.CRYPT_KEEPER"/>
     </privapp-permissions>
 
-    <privapp-permissions package="com.android.cellbroadcastreceiver">
+    <privapp-permissions package="com.android.cellbroadcastreceiver.module">
         <permission name="android.permission.INTERACT_ACROSS_USERS"/>
         <permission name="android.permission.MANAGE_USERS"/>
         <permission name="android.permission.MODIFY_PHONE_STATE"/>
@@ -324,6 +329,7 @@ applications that come with the platform
         <permission name="android.permission.MANAGE_ROLLBACKS"/>
         <permission name="android.permission.MANAGE_USB"/>
         <permission name="android.permission.MODIFY_APPWIDGET_BIND_PERMISSIONS"/>
+        <permission name="android.permission.MODIFY_DAY_NIGHT_MODE"/>
         <permission name="android.permission.MODIFY_PHONE_STATE"/>
         <permission name="android.permission.MOUNT_FORMAT_FILESYSTEMS"/>
         <permission name="android.permission.MOUNT_UNMOUNT_FILESYSTEMS"/>
@@ -372,6 +378,9 @@ applications that come with the platform
         <permission name="android.permission.SET_WALLPAPER" />
         <permission name="android.permission.SET_WALLPAPER_COMPONENT" />
         <permission name="android.permission.REQUEST_NOTIFICATION_ASSISTANT_SERVICE" />
+        <!-- Permissions required for Incremental CTS tests -->
+        <permission name="com.android.permission.USE_INSTALLER_V2"/>
+        <permission name="android.permission.LOADER_USAGE_STATS"/>
         <!-- Permission required to test system only camera devices. -->
         <permission name="android.permission.SYSTEM_CAMERA" />
         <!-- Permission required to test ExplicitHealthCheckServiceImpl. -->
@@ -408,6 +417,12 @@ applications that come with the platform
         <permission name="android.permission.ACCESS_TV_DESCRAMBLER" />
         <permission name="android.permission.ACCESS_TV_TUNER" />
         <permission name="android.permission.TUNER_RESOURCE_ACCESS" />
+        <!-- Permissions required for CTS test - TVInputManagerTest -->
+        <permission name="android.permission.TV_INPUT_HARDWARE" />
+        <!-- Permission required for CTS test - PrivilegedLocationPermissionTest -->
+        <permission name="android.permission.LOCATION_HARDWARE" />
+        <!-- Permissions required for GTS test - GtsDialerAudioTestCases -->
+        <permission name="android.permission.CAPTURE_AUDIO_OUTPUT" />
     </privapp-permissions>
 
     <privapp-permissions package="com.android.statementservice">

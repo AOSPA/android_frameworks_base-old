@@ -169,7 +169,7 @@ public class ShortcutService extends IShortcutService.Stub {
     static final int DEFAULT_MAX_UPDATES_PER_INTERVAL = 10;
 
     @VisibleForTesting
-    static final int DEFAULT_MAX_SHORTCUTS_PER_APP = 10;
+    static final int DEFAULT_MAX_SHORTCUTS_PER_ACTIVITY = 15;
 
     @VisibleForTesting
     static final int DEFAULT_MAX_ICON_DIMENSION_DP = 96;
@@ -730,7 +730,7 @@ public class ShortcutService extends IShortcutService.Stub {
                 ConfigConstants.KEY_MAX_UPDATES_PER_INTERVAL, DEFAULT_MAX_UPDATES_PER_INTERVAL));
 
         mMaxShortcuts = Math.max(0, (int) parser.getLong(
-                ConfigConstants.KEY_MAX_SHORTCUTS, DEFAULT_MAX_SHORTCUTS_PER_APP));
+                ConfigConstants.KEY_MAX_SHORTCUTS, DEFAULT_MAX_SHORTCUTS_PER_ACTIVITY));
 
         final int iconDimensionDp = Math.max(1, injectIsLowRamDevice()
                 ? (int) parser.getLong(
@@ -1849,6 +1849,7 @@ public class ShortcutService extends IShortcutService.Stub {
             final ShortcutPackage ps = getPackageShortcutsForPublisherLocked(packageName, userId);
 
             ps.ensureImmutableShortcutsNotIncluded(newShortcuts, /*ignoreInvisible=*/ true);
+            ps.ensureNoBitmapIconIfShortcutIsLongLived(newShortcuts);
 
             fillInDefaultActivity(newShortcuts);
 
@@ -1915,6 +1916,7 @@ public class ShortcutService extends IShortcutService.Stub {
             final ShortcutPackage ps = getPackageShortcutsForPublisherLocked(packageName, userId);
 
             ps.ensureImmutableShortcutsNotIncluded(newShortcuts, /*ignoreInvisible=*/ true);
+            ps.ensureNoBitmapIconIfShortcutIsLongLived(newShortcuts);
 
             // For update, don't fill in the default activity.  Having null activity means
             // "don't update the activity" here.
@@ -2013,6 +2015,7 @@ public class ShortcutService extends IShortcutService.Stub {
             final ShortcutPackage ps = getPackageShortcutsForPublisherLocked(packageName, userId);
 
             ps.ensureImmutableShortcutsNotIncluded(newShortcuts, /*ignoreInvisible=*/ true);
+            ps.ensureNoBitmapIconIfShortcutIsLongLived(newShortcuts);
 
             fillInDefaultActivity(newShortcuts);
 
@@ -2404,7 +2407,7 @@ public class ShortcutService extends IShortcutService.Stub {
             final int shortcutFlags = (matchDynamic ? ShortcutInfo.FLAG_DYNAMIC : 0)
                     | (matchPinned ? ShortcutInfo.FLAG_PINNED : 0)
                     | (matchManifest ? ShortcutInfo.FLAG_MANIFEST : 0)
-                    | (matchCached ? ShortcutInfo.FLAG_CACHED : 0);
+                    | (matchCached ? ShortcutInfo.FLAG_CACHED_ALL : 0);
 
             return getShortcutsWithQueryLocked(
                     packageName, userId, ShortcutInfo.CLONE_REMOVE_FOR_CREATOR,
@@ -2416,6 +2419,9 @@ public class ShortcutService extends IShortcutService.Stub {
     @Override
     public ParceledListSlice<ShortcutManager.ShareShortcutInfo> getShareTargets(String packageName,
             IntentFilter filter, @UserIdInt int userId) {
+        Preconditions.checkStringNotEmpty(packageName, "packageName");
+        Objects.requireNonNull(filter, "intentFilter");
+
         verifyCaller(packageName, userId);
         enforceCallingOrSelfPermission(android.Manifest.permission.MANAGE_APP_PREDICTIONS,
                 "getShareTargets");
@@ -3042,17 +3048,17 @@ public class ShortcutService extends IShortcutService.Stub {
         @Override
         public void cacheShortcuts(int launcherUserId,
                 @NonNull String callingPackage, @NonNull String packageName,
-                @NonNull List<String> shortcutIds, int userId) {
+                @NonNull List<String> shortcutIds, int userId, int cacheFlags) {
             updateCachedShortcutsInternal(launcherUserId, callingPackage, packageName, shortcutIds,
-                    userId, /* doCache= */ true);
+                    userId, cacheFlags, /* doCache= */ true);
         }
 
         @Override
         public void uncacheShortcuts(int launcherUserId,
                 @NonNull String callingPackage, @NonNull String packageName,
-                @NonNull List<String> shortcutIds, int userId) {
+                @NonNull List<String> shortcutIds, int userId, int cacheFlags) {
             updateCachedShortcutsInternal(launcherUserId, callingPackage, packageName, shortcutIds,
-                    userId, /* doCache= */ false);
+                    userId, cacheFlags, /* doCache= */ false);
         }
 
         @Override
@@ -3076,10 +3082,12 @@ public class ShortcutService extends IShortcutService.Stub {
 
         private void updateCachedShortcutsInternal(int launcherUserId,
                 @NonNull String callingPackage, @NonNull String packageName,
-                @NonNull List<String> shortcutIds, int userId, boolean doCache) {
+                @NonNull List<String> shortcutIds, int userId, int cacheFlags, boolean doCache) {
             // Calling permission must be checked by LauncherAppsImpl.
             Preconditions.checkStringNotEmpty(packageName, "packageName");
             Objects.requireNonNull(shortcutIds, "shortcutIds");
+            Preconditions.checkState(
+                    (cacheFlags & ShortcutInfo.FLAG_CACHED_ALL) != 0, "invalid cacheFlags");
 
             List<ShortcutInfo> changedShortcuts = null;
             List<ShortcutInfo> removedShortcuts = null;
@@ -3098,26 +3106,25 @@ public class ShortcutService extends IShortcutService.Stub {
                 for (int i = 0; i < idSize; i++) {
                     final String id = Preconditions.checkStringNotEmpty(shortcutIds.get(i));
                     final ShortcutInfo si = sp.findShortcutById(id);
-                    if (si == null || doCache == si.isCached()) {
+                    if (si == null || doCache == si.hasFlags(cacheFlags)) {
                         continue;
                     }
 
                     if (doCache) {
-                        if (si.isDynamic() && si.isLongLived()) {
-                            si.addFlags(ShortcutInfo.FLAG_CACHED);
+                        if (si.isLongLived()) {
+                            si.addFlags(cacheFlags);
                             if (changedShortcuts == null) {
                                 changedShortcuts = new ArrayList<>(1);
                             }
                             changedShortcuts.add(si);
                         } else {
-                            Log.w(TAG, "Only dynamic long lived shortcuts can get cached. Ignoring"
-                                    + "shortcut " + si.getId());
+                            Log.w(TAG, "Only long lived shortcuts can get cached. Ignoring id "
+                                    + si.getId());
                         }
                     } else {
                         ShortcutInfo removed = null;
-                        if (si.isDynamic()) {
-                            si.clearFlags(ShortcutInfo.FLAG_CACHED);
-                        } else {
+                        si.clearFlags(cacheFlags);
+                        if (!si.isDynamic() && !si.isCached()) {
                             removed = sp.deleteLongLivedWithId(id, /*ignoreInvisible=*/ true);
                         }
                         if (removed != null) {

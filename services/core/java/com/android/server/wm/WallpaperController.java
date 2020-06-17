@@ -106,6 +106,8 @@ class WallpaperController {
     private static final int WALLPAPER_DRAW_TIMEOUT = 2;
     private int mWallpaperDrawState = WALLPAPER_DRAW_NORMAL;
 
+    private boolean mShouldUpdateZoom;
+
     /**
      * Temporary storage for taking a screenshot of the wallpaper.
      * @see #screenshotWallpaperLocked()
@@ -238,23 +240,12 @@ class WallpaperController {
         }
     }
 
-    private final boolean isWallpaperVisible(WindowState wallpaperTarget) {
-        final RecentsAnimationController recentsAnimationController =
-                mService.getRecentsAnimationController();
-        boolean isAnimatingWithRecentsComponent = recentsAnimationController != null
-                && recentsAnimationController.isWallpaperVisible(wallpaperTarget);
-        if (DEBUG_WALLPAPER) Slog.v(TAG, "Wallpaper vis: target " + wallpaperTarget + ", obscured="
-                + (wallpaperTarget != null ? Boolean.toString(wallpaperTarget.mObscured) : "??")
-                + " animating=" + ((wallpaperTarget != null && wallpaperTarget.mActivityRecord != null)
-                ? wallpaperTarget.mActivityRecord.isAnimating(TRANSITION | PARENTS) : null)
-                + " prev=" + mPrevWallpaperTarget
-                + " recentsAnimationWallpaperVisible=" + isAnimatingWithRecentsComponent);
-        return (wallpaperTarget != null
-                && (!wallpaperTarget.mObscured
-                        || isAnimatingWithRecentsComponent
-                        || (wallpaperTarget.mActivityRecord != null
-                        && wallpaperTarget.mActivityRecord.isAnimating(TRANSITION | PARENTS))))
-                || mPrevWallpaperTarget != null;
+    private boolean isWallpaperVisible(WindowState wallpaperTarget) {
+        if (DEBUG_WALLPAPER) {
+            Slog.v(TAG, "Wallpaper vis: target " + wallpaperTarget + " prev="
+                    + mPrevWallpaperTarget);
+        }
+        return wallpaperTarget != null || mPrevWallpaperTarget != null;
     }
 
     boolean isWallpaperTargetAnimating() {
@@ -411,6 +402,7 @@ class WallpaperController {
     void setWallpaperZoomOut(WindowState window, float zoom) {
         if (Float.compare(window.mWallpaperZoomOut, zoom) != 0) {
             window.mWallpaperZoomOut = zoom;
+            mShouldUpdateZoom = true;
             updateWallpaperOffsetLocked(window, false);
         }
     }
@@ -634,9 +626,7 @@ class WallpaperController {
                 mLastWallpaperX = mWallpaperTarget.mWallpaperX;
                 mLastWallpaperXStep = mWallpaperTarget.mWallpaperXStep;
             }
-            if (mWallpaperTarget.mWallpaperZoomOut >= 0) {
-                mLastWallpaperZoomOut = mWallpaperTarget.mWallpaperZoomOut;
-            }
+            computeLastWallpaperZoomOut();
             if (mWallpaperTarget.mWallpaperY >= 0) {
                 mLastWallpaperY = mWallpaperTarget.mWallpaperY;
                 mLastWallpaperYStep = mWallpaperTarget.mWallpaperYStep;
@@ -815,8 +805,11 @@ class WallpaperController {
      * we'll have conflicts and break the "depth system" mental model.
      */
     private void computeLastWallpaperZoomOut() {
-        mLastWallpaperZoomOut = 0;
-        mDisplayContent.forAllWindows(mComputeMaxZoomOutFunction, true);
+        if (mShouldUpdateZoom) {
+            mLastWallpaperZoomOut = 0;
+            mDisplayContent.forAllWindows(mComputeMaxZoomOutFunction, true);
+            mShouldUpdateZoom = false;
+        }
     }
 
     private float zoomOutToScale(float zoom) {

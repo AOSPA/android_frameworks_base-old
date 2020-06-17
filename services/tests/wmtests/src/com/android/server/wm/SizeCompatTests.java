@@ -138,14 +138,15 @@ public class SizeCompatTests extends ActivityTestsBase {
         // Rotation is ignored so because the display size is close to square (700/600<1.333).
         assertTrue(mActivity.mDisplayContent.ignoreRotationForApps());
 
-        final Rect displayBounds = mActivity.mDisplayContent.getBounds();
+        final Rect displayBounds = mActivity.mDisplayContent.getWindowConfiguration().getBounds();
         final float aspectRatio = 1.2f;
         mActivity.info.minAspectRatio = mActivity.info.maxAspectRatio = aspectRatio;
         prepareUnresizable(-1f, SCREEN_ORIENTATION_UNSPECIFIED);
         final Rect appBounds = mActivity.getWindowConfiguration().getAppBounds();
 
         // The parent configuration doesn't change since the first resolved configuration, so the
-        // activity should fit in the parent naturally. (size=583x700).
+        // activity should fit in the parent naturally (size=583x700, appBounds=[9, 100 - 592, 800],
+        // horizontal offset = round((600 - 583) / 2) = 9)).
         assertFitted();
         final int offsetX = (int) ((1f + displayBounds.width() - appBounds.width()) / 2);
         // The bounds must be horizontal centered.
@@ -167,6 +168,15 @@ public class SizeCompatTests extends ActivityTestsBase {
 
         mActivity.setRequestedOrientation(SCREEN_ORIENTATION_PORTRAIT);
         assertFitted();
+
+        // Close-to-square display can rotate without being restricted by the requested orientation.
+        // The notch becomes on the left side. The activity is horizontal centered in 100 ~ 800.
+        // So the bounds and appBounds will be [200, 0 - 700, 600] (500x600) that is still fitted.
+        // Left = 100 + (800 - 100 - 500) / 2 = 200.
+        rotateDisplay(mActivity.mDisplayContent, ROTATION_90);
+        assertFitted();
+        assertEquals(appBounds.left,
+                notchHeight + (displayBounds.width() - notchHeight - appBounds.width()) / 2);
     }
 
     @Test

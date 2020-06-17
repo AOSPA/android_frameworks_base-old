@@ -56,6 +56,7 @@ import android.content.pm.IPackageMoveObserver;
 import android.content.pm.PackageManager;
 import android.content.res.ObbInfo;
 import android.content.res.ObbScanner;
+import android.database.Cursor;
 import android.net.Uri;
 import android.os.Binder;
 import android.os.Environment;
@@ -162,12 +163,9 @@ public class StorageManager {
     /** {@hide} */
     public static final String PROP_SETTINGS_FUSE = FeatureFlagUtils.PERSIST_PREFIX
             + FeatureFlagUtils.SETTINGS_FUSE_FLAG;
-    /**
-     * Property that determines whether {@link OP_LEGACY_STORAGE} is sticky for
-     * legacy apps.
-     * @hide
-     */
-    public static final String PROP_LEGACY_OP_STICKY = "persist.sys.legacy_storage_sticky";
+    /** {@hide} */
+    public static final String PROP_FORCED_SCOPED_STORAGE_WHITELIST =
+            "forced_scoped_storage_whitelist";
 
     /** {@hide} */
     public static final String UUID_PRIVATE_INTERNAL = null;
@@ -226,9 +224,10 @@ public class StorageManager {
      * <p>
      * This intent should be launched using
      * {@link Activity#startActivityForResult(Intent, int)} so that the user
-     * knows which app is requesting to clear cache. The returned result will
-     * be {@link Activity#RESULT_OK} if the activity was launched and the user accepted to clear
-     * cache, or {@link Activity#RESULT_CANCELED} otherwise.
+     * knows which app is requesting to clear cache. The returned result will be:
+     * {@link Activity#RESULT_OK} if the activity was launched and all cache was cleared,
+     * {@link OsConstants#EIO} if an error occurred while clearing the cache or
+     * {@link Activity#RESULT_CANCELED} otherwise.
      */
     @RequiresPermission(android.Manifest.permission.MANAGE_EXTERNAL_STORAGE)
     @SdkConstant(SdkConstant.SdkConstantType.ACTIVITY_INTENT_ACTION)
@@ -1203,7 +1202,19 @@ public class StorageManager {
      * {@link MediaStore} item.
      */
     public @NonNull StorageVolume getStorageVolume(@NonNull Uri uri) {
-        final String volumeName = MediaStore.getVolumeName(uri);
+        String volumeName = MediaStore.getVolumeName(uri);
+
+        // When Uri is pointing at a synthetic volume, we're willing to query to
+        // resolve the actual volume name
+        if (Objects.equals(volumeName, MediaStore.VOLUME_EXTERNAL)) {
+            try (Cursor c = mContext.getContentResolver().query(uri,
+                    new String[] { MediaStore.MediaColumns.VOLUME_NAME }, null, null)) {
+                if (c.moveToFirst()) {
+                    volumeName = c.getString(0);
+                }
+            }
+        }
+
         switch (volumeName) {
             case MediaStore.VOLUME_EXTERNAL_PRIMARY:
                 return getPrimaryStorageVolume();
@@ -1354,6 +1365,7 @@ public class StorageManager {
                 String[] packageNames = ActivityThread.getPackageManager().getPackagesForUid(
                         android.os.Process.myUid());
                 if (packageNames == null || packageNames.length <= 0) {
+                    Log.w(TAG, "Missing package names; no storage volumes available");
                     return new StorageVolume[0];
                 }
                 packageName = packageNames[0];
@@ -1361,6 +1373,7 @@ public class StorageManager {
             final int uid = ActivityThread.getPackageManager().getPackageUid(packageName,
                     PackageManager.MATCH_DEBUG_TRIAGED_MISSING, userId);
             if (uid <= 0) {
+                Log.w(TAG, "Missing UID; no storage volumes available");
                 return new StorageVolume[0];
             }
             return storageManager.getVolumeList(uid, packageName, flags);

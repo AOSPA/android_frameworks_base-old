@@ -44,7 +44,6 @@ import java.util.Objects;
 /**
  * Maintains a connection to a particular {@link MediaRoute2ProviderService}.
  */
-// TODO: Need to revisit the bind/unbind/connect/disconnect logic in this class.
 final class MediaRoute2ProviderServiceProxy extends MediaRoute2Provider
         implements ServiceConnection {
     private static final String TAG = "MR2ProviderSvcProxy";
@@ -60,7 +59,7 @@ final class MediaRoute2ProviderServiceProxy extends MediaRoute2Provider
     private Connection mActiveConnection;
     private boolean mConnectionReady;
 
-    private RouteDiscoveryPreference mPendingDiscoveryPreference = null;
+    private RouteDiscoveryPreference mLastDiscoveryPreference = null;
 
     MediaRoute2ProviderServiceProxy(@NonNull Context context, @NonNull ComponentName componentName,
             int userId) {
@@ -98,11 +97,10 @@ final class MediaRoute2ProviderServiceProxy extends MediaRoute2Provider
 
     @Override
     public void updateDiscoveryPreference(RouteDiscoveryPreference discoveryPreference) {
+        mLastDiscoveryPreference = discoveryPreference;
         if (mConnectionReady) {
             mActiveConnection.updateDiscoveryPreference(discoveryPreference);
             updateBinding();
-        } else {
-            mPendingDiscoveryPreference = discoveryPreference;
         }
     }
 
@@ -266,8 +264,6 @@ final class MediaRoute2ProviderServiceProxy extends MediaRoute2Provider
         if (DEBUG) {
             Slog.d(TAG, this + ": Service binding died");
         }
-        // TODO: Investigate whether it tries to bind endlessly when the service is
-        //       badly implemented.
         if (shouldBind()) {
             unbind();
             bind();
@@ -277,9 +273,8 @@ final class MediaRoute2ProviderServiceProxy extends MediaRoute2Provider
     private void onConnectionReady(Connection connection) {
         if (mActiveConnection == connection) {
             mConnectionReady = true;
-            if (mPendingDiscoveryPreference != null) {
-                updateDiscoveryPreference(mPendingDiscoveryPreference);
-                mPendingDiscoveryPreference = null;
+            if (mLastDiscoveryPreference != null) {
+                updateDiscoveryPreference(mLastDiscoveryPreference);
             }
         }
     }

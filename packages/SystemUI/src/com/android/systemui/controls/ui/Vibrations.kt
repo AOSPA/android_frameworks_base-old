@@ -20,33 +20,8 @@ import android.os.VibrationEffect
 import android.os.VibrationEffect.Composition.PRIMITIVE_TICK
 
 object Vibrations {
-    private const val TOGGLE_TICK_COUNT = 12
-
-    val toggleOnEffect = initToggleOnEffect()
-    val toggleOffEffect = initToggleOffEffect()
     val rangeEdgeEffect = initRangeEdgeEffect()
     val rangeMiddleEffect = initRangeMiddleEffect()
-
-    private fun initToggleOnEffect(): VibrationEffect {
-        val composition = VibrationEffect.startComposition()
-        var i = 0
-        while (i++ < TOGGLE_TICK_COUNT) {
-            composition.addPrimitive(PRIMITIVE_TICK, 0.05f, 0)
-        }
-        composition.addPrimitive(PRIMITIVE_TICK, 0.5f, 100)
-        return composition.compose()
-    }
-
-    private fun initToggleOffEffect(): VibrationEffect {
-        val composition = VibrationEffect.startComposition()
-        composition.addPrimitive(PRIMITIVE_TICK, 0.5f, 0)
-        composition.addPrimitive(PRIMITIVE_TICK, 0.05f, 100)
-        var i = 0
-        while (i++ < TOGGLE_TICK_COUNT) {
-            composition?.addPrimitive(PRIMITIVE_TICK, 0.05f, 0)
-        }
-        return composition.compose()
-    }
 
     private fun initRangeEdgeEffect(): VibrationEffect {
         val composition = VibrationEffect.startComposition()

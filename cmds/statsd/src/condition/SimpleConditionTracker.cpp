@@ -85,12 +85,6 @@ SimpleConditionTracker::SimpleConditionTracker(
         mInitialValue = ConditionState::kUnknown;
     }
 
-    mNonSlicedConditionState = mInitialValue;
-
-    if (!mSliced) {
-        mUnSlicedPart = mInitialValue;
-    }
-
     mInitialized = true;
 }
 
@@ -101,9 +95,11 @@ SimpleConditionTracker::~SimpleConditionTracker() {
 bool SimpleConditionTracker::init(const vector<Predicate>& allConditionConfig,
                                   const vector<sp<ConditionTracker>>& allConditionTrackers,
                                   const unordered_map<int64_t, int>& conditionIdIndexMap,
-                                  vector<bool>& stack) {
+                                  vector<bool>& stack,
+                                  vector<ConditionState>& initialConditionCache) {
     // SimpleConditionTracker does not have dependency on other conditions, thus we just return
     // if the initialization was successful.
+    initialConditionCache[mIndex] = mInitialValue;
     return mInitialized;
 }
 
@@ -141,9 +137,6 @@ void SimpleConditionTracker::handleStopAll(std::vector<ConditionState>& conditio
     mInitialValue = ConditionState::kFalse;
     mSlicedConditionState.clear();
     conditionCache[mIndex] = ConditionState::kFalse;
-    if (!mSliced) {
-        mUnSlicedPart = ConditionState::kFalse;
-    }
 }
 
 bool SimpleConditionTracker::hitGuardRail(const HashableDimensionKey& newKey) {
@@ -305,9 +298,7 @@ void SimpleConditionTracker::evaluateCondition(
                 conditionCache[mIndex] =
                         itr->second > 0 ? ConditionState::kTrue : ConditionState::kFalse;
             }
-            mUnSlicedPart = conditionCache[mIndex];
         }
-
         return;
     }
 
@@ -333,9 +324,6 @@ void SimpleConditionTracker::evaluateCondition(
     }
     conditionCache[mIndex] = overallState;
     conditionChangedCache[mIndex] = overallChanged;
-    if (!mSliced) {
-        mUnSlicedPart = overallState;
-    }
 }
 
 void SimpleConditionTracker::isConditionMet(

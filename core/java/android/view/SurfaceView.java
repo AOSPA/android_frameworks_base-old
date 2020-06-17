@@ -134,6 +134,24 @@ public class SurfaceView extends View implements ViewRootImpl.SurfaceChangedCall
     // we need to preserve the old one until the new one has drawn.
     SurfaceControl mDeferredDestroySurfaceControl;
     SurfaceControl mBackgroundControl;
+    private boolean mDisableBackgroundLayer = false;
+
+    /**
+     * We use this lock in SOME cases when reading or writing SurfaceControl,
+     * but use the following model so that the RenderThread can run locklessly
+     * in the position up-date case.
+     *
+     * 1. UI Thread can read from mSurfaceControl (use in Transactions) without
+     * holding the lock.
+     * 2. UI Thread will hold the lock when writing to mSurfaceControl (calling release
+     * or remove).
+     * 3. Render thread will also hold the lock when writing to mSurfaceControl (e.g.
+     * calling release from positionLost).
+     * 3. RenderNode.PositionUpdateListener::positionChanged will only be called
+     * when the UI thread is paused (blocked on the Render thread).
+     * 4. positionChanged thus will not be required to hold the lock as the
+     * UI thread is blocked, and the other writer is the RT itself.
+     */
     final Object mSurfaceControlLock = new Object();
     final Rect mTmpRect = new Rect();
 
@@ -228,10 +246,17 @@ public class SurfaceView extends View implements ViewRootImpl.SurfaceChangedCall
     }
 
     public SurfaceView(Context context, AttributeSet attrs, int defStyleAttr, int defStyleRes) {
+        this(context, attrs, defStyleAttr, defStyleRes, false);
+    }
+
+    /** @hide */
+    public SurfaceView(@NonNull Context context, @Nullable AttributeSet attrs, int defStyleAttr,
+            int defStyleRes, boolean disableBackgroundLayer) {
         super(context, attrs, defStyleAttr, defStyleRes);
         mRenderNode.addPositionUpdateListener(mPositionListener);
 
         setWillNotDraw(true);
+        mDisableBackgroundLayer = disableBackgroundLayer;
     }
 
     /**
@@ -810,6 +835,26 @@ public class SurfaceView extends View implements ViewRootImpl.SurfaceChangedCall
         }
     }
 
+    /**
+     * Control whether the surface view's content should flow through
+     * protected hardware path to display disallowing access from non-secure
+     * execution environments.
+     *
+     * <p>Note that this must be set before the surface view's containing
+     * window is attached to the window manager.
+     *
+     * @param isProtected True if the surface view is protected.
+     *
+     * @hide
+     */
+    public void setProtected(boolean isProtected) {
+        if (isProtected) {
+            mSurfaceFlags |= SurfaceControl.PROTECTED_APP;
+        } else {
+            mSurfaceFlags &= ~SurfaceControl.PROTECTED_APP;
+        }
+    }
+
     private void updateOpaqueFlag() {
         if (!PixelFormat.formatHasAlpha(mRequestedFormat)) {
             mSurfaceFlags |= SurfaceControl.OPAQUE;
@@ -822,7 +867,8 @@ public class SurfaceView extends View implements ViewRootImpl.SurfaceChangedCall
         if (mBackgroundControl == null) {
             return;
         }
-        if ((mSubLayer < 0) && ((mSurfaceFlags & SurfaceControl.OPAQUE) != 0)) {
+        if ((mSubLayer < 0) && ((mSurfaceFlags & SurfaceControl.OPAQUE) != 0)
+                && !mDisableBackgroundLayer) {
             t.show(mBackgroundControl);
         } else {
             t.hide(mBackgroundControl);
@@ -1183,8 +1229,10 @@ public class SurfaceView extends View implements ViewRootImpl.SurfaceChangedCall
         }
 
         if (mDeferredDestroySurfaceControl != null) {
-            mTmpTransaction.remove(mDeferredDestroySurfaceControl).apply();
-            mDeferredDestroySurfaceControl = null;
+            synchronized (mSurfaceControlLock) {
+                mTmpTransaction.remove(mDeferredDestroySurfaceControl).apply();
+                mDeferredDestroySurfaceControl = null;
+            }
         }
 
         runOnUiThread(this::performDrawFinished);
@@ -1297,15 +1345,19 @@ public class SurfaceView extends View implements ViewRootImpl.SurfaceChangedCall
                 (viewRoot != null ? viewRoot.getBLASTSyncTransaction() : mRtTransaction) :
                 mRtTransaction;
 
-            if (frameNumber > 0 && viewRoot !=  null && !useBLAST) {
-                if (viewRoot.mSurface.isValid()) {
-                    mRtTransaction.deferTransactionUntil(mSurfaceControl,
-                            viewRoot.getRenderSurfaceControl(), frameNumber);
-                }
-            }
-            t.hide(mSurfaceControl);
-
+            /**
+             * positionLost can be called while UI thread is un-paused so we
+             * need to hold the lock here.
+             */
             synchronized (mSurfaceControlLock) {
+                if (frameNumber > 0 && viewRoot !=  null && !useBLAST) {
+                    if (viewRoot.mSurface.isValid()) {
+                        mRtTransaction.deferTransactionUntil(mSurfaceControl,
+                                viewRoot.getRenderSurfaceControl(), frameNumber);
+                    }
+                }
+                t.hide(mSurfaceControl);
+
                 if (mRtReleaseSurfaces) {
                     mRtReleaseSurfaces = false;
                     mRtTransaction.remove(mSurfaceControl);

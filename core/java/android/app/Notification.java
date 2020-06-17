@@ -3614,6 +3614,7 @@ public class Notification implements Parcelable
          * <li>Directional conversations where there is an active speaker and many passive
          * individuals</li>
          * <li>Stream / posting updates from other individuals</li>
+         * <li>Email, document comments, or other conversation types that are not real-time</li>
          * </ul>
          * </p>
          *
@@ -7209,7 +7210,8 @@ public class Notification implements Parcelable
          *
          * <p>Starting in {@link Build.VERSION_CODES#R, this conversation title will be ignored if a
          * valid shortcutId is added via {@link Notification.Builder#setShortcutId(String)}. In this
-         * case, {@link ShortcutInfo#getShortLabel()} will be shown as the conversation title
+         * case, {@link ShortcutInfo#getLongLabel()} (or, if missing,
+         * {@link ShortcutInfo#getShortLabel()}) will be shown as the conversation title
          * instead.
          *
          * <p>This API's behavior was changed in SDK version {@link Build.VERSION_CODES#P}. If your
@@ -7623,9 +7625,7 @@ public class Notification implements Parcelable
             }
             boolean isConversationLayout = mConversationType != CONVERSATION_TYPE_LEGACY;
             boolean isImportantConversation = mConversationType == CONVERSATION_TYPE_IMPORTANT;
-            Icon largeIcon = isConversationLayout && mShortcutIcon != null
-                    ? mShortcutIcon
-                    : mBuilder.mN.mLargeIcon;
+            Icon largeIcon = mBuilder.mN.mLargeIcon;
             TemplateBindResult bindResult = new TemplateBindResult();
             StandardTemplateParams p = mBuilder.mParams.reset()
                     .hasProgress(false)
@@ -7669,6 +7669,8 @@ public class Notification implements Parcelable
             contentView.setCharSequence(R.id.status_bar_latest_event_content,
                     "setConversationTitle", conversationTitle);
             if (isConversationLayout) {
+                contentView.setIcon(R.id.status_bar_latest_event_content,
+                        "setShortcutIcon", mShortcutIcon);
                 contentView.setBoolean(R.id.status_bar_latest_event_content,
                         "setIsImportantConversation", isImportantConversation);
             }

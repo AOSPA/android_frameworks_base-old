@@ -16,11 +16,14 @@
 
 package android.view;
 
+import static android.view.InsetsController.DEBUG;
 import static android.view.SyncRtSurfaceTransactionApplier.applyParams;
 
 import android.annotation.UiThread;
 import android.graphics.Rect;
 import android.os.Handler;
+import android.os.Trace;
+import android.util.Log;
 import android.util.SparseArray;
 import android.view.InsetsController.AnimationType;
 import android.view.SyncRtSurfaceTransactionApplier.SurfaceParams;
@@ -36,6 +39,7 @@ import android.view.animation.Interpolator;
  */
 public class InsetsAnimationThreadControlRunner implements InsetsAnimationControlRunner {
 
+    private static final String TAG = "InsetsAnimThreadRunner";
     private final InsetsAnimationControlImpl mControl;
     private final InsetsAnimationControlCallbacks mOuterCallbacks;
     private final Handler mMainThreadHandler;
@@ -60,6 +64,9 @@ public class InsetsAnimationThreadControlRunner implements InsetsAnimationContro
 
         @Override
         public void notifyFinished(InsetsAnimationControlRunner runner, boolean shown) {
+            Trace.asyncTraceEnd(Trace.TRACE_TAG_VIEW,
+                    "InsetsAsyncAnimation: " + WindowInsets.Type.toString(runner.getTypes()),
+                    runner.getTypes());
             releaseControls(mControl.getControls());
             mMainThreadHandler.post(() ->
                     mOuterCallbacks.notifyFinished(InsetsAnimationThreadControlRunner.this, shown));
@@ -67,6 +74,7 @@ public class InsetsAnimationThreadControlRunner implements InsetsAnimationContro
 
         @Override
         public void applySurfaceParams(SurfaceParams... params) {
+            if (DEBUG) Log.d(TAG, "applySurfaceParams");
             SurfaceControl.Transaction t = new SurfaceControl.Transaction();
             for (int i = params.length - 1; i >= 0; i--) {
                 SyncRtSurfaceTransactionApplier.SurfaceParams surfaceParams = params[i];
@@ -78,6 +86,7 @@ public class InsetsAnimationThreadControlRunner implements InsetsAnimationContro
 
         @Override
         public void releaseSurfaceControlFromRt(SurfaceControl sc) {
+            if (DEBUG) Log.d(TAG, "releaseSurfaceControlFromRt");
             // Since we don't push the SurfaceParams to the RT we can release directly
             sc.release();
         }
@@ -93,22 +102,17 @@ public class InsetsAnimationThreadControlRunner implements InsetsAnimationContro
         mOuterCallbacks = controller;
         mControl = new InsetsAnimationControlImpl(controls, frame, state, listener,
                 types, mCallbacks, durationMs, interpolator, animationType);
-        InsetsAnimationThread.getHandler().post(() -> listener.onReady(mControl, types));
+        InsetsAnimationThread.getHandler().post(() -> {
+            Trace.asyncTraceBegin(Trace.TRACE_TAG_VIEW,
+                    "InsetsAsyncAnimation: " + WindowInsets.Type.toString(types), types);
+            listener.onReady(mControl, types);
+        });
     }
 
     private void releaseControls(SparseArray<InsetsSourceControl> controls) {
         for (int i = controls.size() - 1; i >= 0; i--) {
             controls.valueAt(i).release(SurfaceControl::release);
         }
-    }
-
-    private SparseArray<InsetsSourceControl> copyControls(
-            SparseArray<InsetsSourceControl> controls) {
-        SparseArray<InsetsSourceControl> copy = new SparseArray<>(controls.size());
-        for (int i = 0; i < controls.size(); i++) {
-            copy.append(controls.keyAt(i), new InsetsSourceControl(controls.valueAt(i)));
-        }
-        return copy;
     }
 
     @Override

@@ -113,16 +113,6 @@ public class EdgeBackGestureHandler extends CurrentUserTracker implements Displa
                 }
             };
 
-    private TaskStackChangeListener mTaskStackChangeListener = new TaskStackChangeListener() {
-        @Override
-        public void onRecentTaskListFrozenChanged(boolean frozen) {
-            if (!frozen) {
-                mStartingQuickstepRotation = -1;
-                mDisabledForQuickstep = false;
-            }
-        }
-    };
-
     private final ContentObserver mFixedRotationObserver = new ContentObserver(
             new Handler(Looper.getMainLooper())) {
         @Override
@@ -287,12 +277,8 @@ public class EdgeBackGestureHandler extends CurrentUserTracker implements Displa
 
     private void setRotationCallbacks(boolean enable) {
         if (enable) {
-            ActivityManagerWrapper.getInstance().registerTaskStackListener(
-                    mTaskStackChangeListener);
             mOverviewProxyService.addCallback(mQuickSwitchListener);
         } else {
-            ActivityManagerWrapper.getInstance().unregisterTaskStackListener(
-                    mTaskStackChangeListener);
             mOverviewProxyService.removeCallback(mQuickSwitchListener);
         }
     }
@@ -638,6 +624,7 @@ public class EdgeBackGestureHandler extends CurrentUserTracker implements Displa
         pw.println("  mIsBackGestureAllowed=" + mIsBackGestureAllowed);
         pw.println("  mAllowGesture=" + mAllowGesture);
         pw.println("  mDisabledForQuickstep=" + mDisabledForQuickstep);
+        pw.println("  mStartingQuickstepRotation=" + mStartingQuickstepRotation);
         pw.println("  mInRejectedExclusion" + mInRejectedExclusion);
         pw.println("  mExcludeRegion=" + mExcludeRegion);
         pw.println("  mUnrestrictedExcludeRegion=" + mUnrestrictedExcludeRegion);

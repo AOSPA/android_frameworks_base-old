@@ -113,6 +113,7 @@ import android.os.ServiceSpecificException;
 import android.os.SystemProperties;
 import android.os.UserHandle;
 import android.os.UserManager;
+import android.provider.Settings;
 import android.telephony.PhoneStateListener;
 import android.telephony.TelephonyManager;
 import android.text.TextUtils;
@@ -207,6 +208,7 @@ public class Tethering {
             new SparseArray<>();
 
     // used to synchronize public access to members
+    // TODO(b/153621704): remove mPublicSync to make Tethering lock free
     private final Object mPublicSync;
     private final Context mContext;
     private final ArrayMap<String, TetherState> mTetherStates;
@@ -230,6 +232,9 @@ public class Tethering {
     private final ConnectedClientsTracker mConnectedClientsTracker;
     private final TetheringThreadExecutor mExecutor;
     private final TetheringNotificationUpdater mNotificationUpdater;
+    private final UserManager mUserManager;
+    private final BpfCoordinator mBpfCoordinator;
+    private final PrivateAddressCoordinator mPrivateAddressCoordinator;
     private int mActiveDataSubId = INVALID_SUBSCRIPTION_ID;
     // All the usage of mTetheringEventCallback should run in the same thread.
     private ITetheringEventCallback mTetheringEventCallback = null;
@@ -281,6 +286,8 @@ public class Tethering {
         mUpstreamNetworkMonitor = mDeps.getUpstreamNetworkMonitor(mContext, mTetherMasterSM, mLog,
                 TetherMasterSM.EVENT_UPSTREAM_CALLBACK);
         mForwardedDownstreams = new LinkedHashSet<>();
+        mBpfCoordinator = mDeps.getBpfCoordinator(
+                mHandler, mNetd, mLog, new BpfCoordinator.Dependencies());
 
         IntentFilter filter = new IntentFilter();
         filter.addAction(ACTION_CARRIER_CONFIG_CHANGED);
@@ -307,23 +314,25 @@ public class Tethering {
 
         mStateReceiver = new StateReceiver();
 
-        final UserManager userManager = (UserManager) mContext.getSystemService(
-                Context.USER_SERVICE);
+        mUserManager = (UserManager) mContext.getSystemService(Context.USER_SERVICE);
         mTetheringRestriction = new UserRestrictionActionListener(
-                userManager, this, mNotificationUpdater);
+                mUserManager, this, mNotificationUpdater);
         mExecutor = new TetheringThreadExecutor(mHandler);
         mActiveDataSubIdListener = new ActiveDataSubIdListener(mExecutor);
         mNetdCallback = new NetdCallback();
+        mPrivateAddressCoordinator = new PrivateAddressCoordinator(mContext);
 
         // Load tethering configuration.
         updateConfiguration();
+
+        startStateMachineUpdaters();
     }
 
     /**
      * Start to register callbacks.
      * Call this function when tethering is ready to handle callback events.
      */
-    public void startStateMachineUpdaters() {
+    private void startStateMachineUpdaters() {
         try {
             mNetd.registerUnsolicitedEventListener(mNetdCallback);
         } catch (RemoteException e) {
@@ -522,8 +531,12 @@ public class Tethering {
             }
             mActiveTetheringRequests.put(request.tetheringType, request);
 
-            mEntitlementMgr.startProvisioningIfNeeded(request.tetheringType,
-                    request.showProvisioningUi);
+            if (request.exemptFromEntitlementCheck) {
+                mEntitlementMgr.setExemptedDownstreamType(request.tetheringType);
+            } else {
+                mEntitlementMgr.startProvisioningIfNeeded(request.tetheringType,
+                        request.showProvisioningUi);
+            }
             enableTetheringInternal(request.tetheringType, true /* enabled */, listener);
         });
     }
@@ -781,7 +794,7 @@ public class Tethering {
 
     // TODO: Figure out how to update for local hotspot mode interfaces.
     private void sendTetherStateChangedBroadcast() {
-        if (!mDeps.isTetheringSupported()) return;
+        if (!isTetheringSupported()) return;
 
         final ArrayList<String> availableList = new ArrayList<>();
         final ArrayList<String> tetherList = new ArrayList<>();
@@ -1022,14 +1035,14 @@ public class Tethering {
 
     @VisibleForTesting
     protected static class UserRestrictionActionListener {
-        private final UserManager mUserManager;
+        private final UserManager mUserMgr;
         private final Tethering mWrapper;
         private final TetheringNotificationUpdater mNotificationUpdater;
         public boolean mDisallowTethering;
 
         public UserRestrictionActionListener(@NonNull UserManager um, @NonNull Tethering wrapper,
                 @NonNull TetheringNotificationUpdater updater) {
-            mUserManager = um;
+            mUserMgr = um;
             mWrapper = wrapper;
             mNotificationUpdater = updater;
             mDisallowTethering = false;
@@ -1039,7 +1052,7 @@ public class Tethering {
             // getUserRestrictions gets restriction for this process' user, which is the primary
             // user. This is fine because DISALLOW_CONFIG_TETHERING can only be set on the primary
             // user. See UserManager.DISALLOW_CONFIG_TETHERING.
-            final Bundle restrictions = mUserManager.getUserRestrictions();
+            final Bundle restrictions = mUserMgr.getUserRestrictions();
             final boolean newlyDisallowed =
                     restrictions.getBoolean(UserManager.DISALLOW_CONFIG_TETHERING);
             final boolean prevDisallowed = mDisallowTethering;
@@ -1616,6 +1629,14 @@ public class Tethering {
             }
         }
 
+        private void addUpstreamPrefixes(final UpstreamNetworkState ns) {
+            mPrivateAddressCoordinator.updateUpstreamPrefix(ns.network, ns.linkProperties);
+        }
+
+        private void removeUpstreamPrefixes(final UpstreamNetworkState ns) {
+            mPrivateAddressCoordinator.removeUpstreamPrefix(ns.network);
+        }
+
         @VisibleForTesting
         void handleUpstreamNetworkMonitorCallback(int arg1, Object o) {
             if (arg1 == UpstreamNetworkMonitor.NOTIFY_LOCAL_PREFIXES) {
@@ -1624,6 +1645,14 @@ public class Tethering {
             }
 
             final UpstreamNetworkState ns = (UpstreamNetworkState) o;
+            switch (arg1) {
+                case UpstreamNetworkMonitor.EVENT_ON_LINKPROPERTIES:
+                    addUpstreamPrefixes(ns);
+                    break;
+                case UpstreamNetworkMonitor.EVENT_ON_LOST:
+                    removeUpstreamPrefixes(ns);
+                    break;
+            }
 
             if (ns == null || !pertainsToCurrentUpstream(ns)) {
                 // TODO: In future, this is where upstream evaluation and selection
@@ -1685,6 +1714,9 @@ public class Tethering {
                     chooseUpstreamType(true);
                     mTryCell = false;
                 }
+
+                // TODO: Check the upstream interface if it is managed by BPF offload.
+                mBpfCoordinator.startPolling();
             }
 
             @Override
@@ -1697,6 +1729,7 @@ public class Tethering {
                     mTetherUpstream = null;
                     reportUpstreamChanged(null);
                 }
+                mBpfCoordinator.stopPolling();
             }
 
             private boolean updateUpstreamWanted() {
@@ -1992,7 +2025,7 @@ public class Tethering {
         mHandler.post(() -> {
             mTetheringEventCallbacks.register(callback, new CallbackCookie(hasListPermission));
             final TetheringCallbackStartedParcel parcel = new TetheringCallbackStartedParcel();
-            parcel.tetheringSupported = mDeps.isTetheringSupported();
+            parcel.tetheringSupported = isTetheringSupported();
             parcel.upstreamNetwork = mTetherUpstream;
             parcel.config = mConfig.toStableParcelable();
             parcel.states =
@@ -2115,6 +2148,20 @@ public class Tethering {
         }
     }
 
+    // if ro.tether.denied = true we default to no tethering
+    // gservices could set the secure setting to 1 though to enable it on a build where it
+    // had previously been turned off.
+    boolean isTetheringSupported() {
+        final int defaultVal =
+                SystemProperties.get("ro.tether.denied").equals("true") ? 0 : 1;
+        final boolean tetherSupported = Settings.Global.getInt(mContext.getContentResolver(),
+                Settings.Global.TETHER_SUPPORTED, defaultVal) != 0;
+        final boolean tetherEnabledInSettings = tetherSupported
+                && !mUserManager.hasUserRestriction(UserManager.DISALLOW_CONFIG_TETHERING);
+
+        return tetherEnabledInSettings && hasTetherableConfiguration();
+    }
+
     void dump(@NonNull FileDescriptor fd, @NonNull PrintWriter writer, @Nullable String[] args) {
         // Binder.java closes the resource for us.
         @SuppressWarnings("resource")
@@ -2176,6 +2223,11 @@ public class Tethering {
         mOffloadController.dump(pw);
         pw.decreaseIndent();
 
+        pw.println("Private address coordinator:");
+        pw.increaseIndent();
+        mPrivateAddressCoordinator.dump(pw);
+        pw.decreaseIndent();
+
         pw.println("Log:");
         pw.increaseIndent();
         if (argsContain(args, "--short")) {
@@ -2216,6 +2268,11 @@ public class Tethering {
             @Override
             public void dhcpLeasesChanged() {
                 updateConnectedClients(null /* wifiClients */);
+            }
+
+            @Override
+            public void requestEnableTethering(int tetheringType, boolean enabled) {
+                enableTetheringInternal(tetheringType, enabled, null);
             }
         };
     }
@@ -2298,8 +2355,9 @@ public class Tethering {
 
         mLog.log("adding TetheringInterfaceStateMachine for: " + iface);
         final TetherState tetherState = new TetherState(
-                new IpServer(iface, mLooper, interfaceType, mLog, mNetd,
+                new IpServer(iface, mLooper, interfaceType, mLog, mNetd, mBpfCoordinator,
                              makeControlCallback(), mConfig.enableLegacyDhcpServer,
+                             mConfig.enableBpfOffload, mPrivateAddressCoordinator,
                              mDeps.getIpServerDependencies()));
         mTetherStates.put(iface, tetherState);
         tetherState.ipServer.start();

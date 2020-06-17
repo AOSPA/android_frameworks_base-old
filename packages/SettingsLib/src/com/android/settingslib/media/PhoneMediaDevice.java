@@ -61,11 +61,11 @@ public class PhoneMediaDevice extends MediaDevice {
         switch (mRouteInfo.getType()) {
             case TYPE_WIRED_HEADSET:
             case TYPE_WIRED_HEADPHONES:
-                name = mContext.getString(R.string.media_transfer_wired_device_name);
-                break;
             case TYPE_USB_DEVICE:
             case TYPE_USB_HEADSET:
             case TYPE_USB_ACCESSORY:
+                name = mContext.getString(R.string.media_transfer_wired_usb_device_name);
+                break;
             case TYPE_DOCK:
             case TYPE_HDMI:
                 name = mRouteInfo.getName();
@@ -85,8 +85,14 @@ public class PhoneMediaDevice extends MediaDevice {
 
     @Override
     public Drawable getIcon() {
-        return BluetoothUtils.buildBtRainbowDrawable(mContext,
-                mContext.getDrawable(getDrawableResId()), getId().hashCode());
+        final Drawable drawable = getIconWithoutBackground();
+        setColorFilter(drawable);
+        return BluetoothUtils.buildAdvancedDrawable(mContext, drawable);
+    }
+
+    @Override
+    public Drawable getIconWithoutBackground() {
+        return mContext.getDrawable(getDrawableResId());
     }
 
     @VisibleForTesting
@@ -100,7 +106,7 @@ public class PhoneMediaDevice extends MediaDevice {
             case TYPE_HDMI:
             case TYPE_WIRED_HEADSET:
             case TYPE_WIRED_HEADPHONES:
-                resId = com.android.internal.R.drawable.ic_bt_headphones_a2dp;
+                resId = R.drawable.ic_headphone;
                 break;
             case TYPE_BUILTIN_SPEAKER:
             default:

@@ -430,15 +430,19 @@ public class NotificationShadeWindowViewController {
     }
 
     public void setExpandAnimationPending(boolean pending) {
-        mExpandAnimationPending = pending;
-        mNotificationShadeWindowController
-                .setLaunchingActivity(mExpandAnimationPending | mExpandAnimationRunning);
+        if (mExpandAnimationPending != pending) {
+            mExpandAnimationPending = pending;
+            mNotificationShadeWindowController
+                    .setLaunchingActivity(mExpandAnimationPending | mExpandAnimationRunning);
+        }
     }
 
     public void setExpandAnimationRunning(boolean running) {
-        mExpandAnimationRunning = running;
-        mNotificationShadeWindowController
-                .setLaunchingActivity(mExpandAnimationPending | mExpandAnimationRunning);
+        if (mExpandAnimationRunning != running) {
+            mExpandAnimationRunning = running;
+            mNotificationShadeWindowController
+                    .setLaunchingActivity(mExpandAnimationPending | mExpandAnimationRunning);
+        }
     }
 
     public void cancelExpandHelper() {

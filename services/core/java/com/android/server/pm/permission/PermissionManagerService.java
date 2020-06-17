@@ -26,6 +26,7 @@ import static android.content.pm.ApplicationInfo.AUTO_REVOKE_DISCOURAGED;
 import static android.content.pm.PackageManager.FLAGS_PERMISSION_RESTRICTION_ANY_EXEMPT;
 import static android.content.pm.PackageManager.FLAG_PERMISSION_APPLY_RESTRICTION;
 import static android.content.pm.PackageManager.FLAG_PERMISSION_GRANTED_BY_DEFAULT;
+import static android.content.pm.PackageManager.FLAG_PERMISSION_GRANTED_BY_ROLE;
 import static android.content.pm.PackageManager.FLAG_PERMISSION_ONE_TIME;
 import static android.content.pm.PackageManager.FLAG_PERMISSION_POLICY_FIXED;
 import static android.content.pm.PackageManager.FLAG_PERMISSION_REVIEW_REQUIRED;
@@ -124,6 +125,7 @@ import com.android.internal.logging.MetricsLogger;
 import com.android.internal.logging.nano.MetricsProto.MetricsEvent;
 import com.android.internal.os.RoSystemProperties;
 import com.android.internal.util.ArrayUtils;
+import com.android.internal.util.DumpUtils;
 import com.android.internal.util.IntPair;
 import com.android.internal.util.Preconditions;
 import com.android.internal.util.function.pooled.PooledLambda;
@@ -154,6 +156,7 @@ import java.io.PrintWriter;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
@@ -421,7 +424,11 @@ public class PermissionManagerService extends IPermissionManager.Stub {
 
     @Override
     public void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
-        mContext.getSystemService(PermissionControllerManager.class).dump(fd, pw, args);
+        if (!DumpUtils.checkDumpPermission(mContext, TAG, pw)) {
+            return;
+        }
+
+        mContext.getSystemService(PermissionControllerManager.class).dump(fd, args);
     }
 
     /**
@@ -1798,8 +1805,9 @@ public class PermissionManagerService extends IPermissionManager.Stub {
                 continue;
             }
 
-            // If this permission was granted by default, make sure it is.
-            if ((oldFlags & FLAG_PERMISSION_GRANTED_BY_DEFAULT) != 0) {
+            // If this permission was granted by default or role, make sure it is.
+            if ((oldFlags & FLAG_PERMISSION_GRANTED_BY_DEFAULT) != 0
+                    || (oldFlags & FLAG_PERMISSION_GRANTED_BY_ROLE) != 0) {
                 // PermissionPolicyService will handle the app op for runtime permissions later.
                 grantRuntimePermissionInternal(permName, packageName, false,
                         Process.SYSTEM_UID, userId, delayingPermCallback);
@@ -2473,12 +2481,59 @@ public class PermissionManagerService extends IPermissionManager.Stub {
         }
 
         final PermissionsState permissionsState = ps.getPermissionsState();
-        PermissionsState origPermissions = permissionsState;
 
         final int[] currentUserIds = UserManagerService.getInstance().getUserIds();
 
         boolean runtimePermissionsRevoked = false;
         int[] updatedUserIds = EMPTY_INT_ARRAY;
+
+        for (int userId : currentUserIds) {
+            if (permissionsState.isMissing(userId)) {
+                Collection<String> requestedPermissions;
+                int targetSdkVersion;
+                if (!ps.isSharedUser()) {
+                    requestedPermissions = pkg.getRequestedPermissions();
+                    targetSdkVersion = pkg.getTargetSdkVersion();
+                } else {
+                    requestedPermissions = new ArraySet<>();
+                    targetSdkVersion = Build.VERSION_CODES.CUR_DEVELOPMENT;
+                    List<AndroidPackage> packages = ps.getSharedUser().getPackages();
+                    int packagesSize = packages.size();
+                    for (int i = 0; i < packagesSize; i++) {
+                        AndroidPackage sharedUserPackage = packages.get(i);
+                        requestedPermissions.addAll(sharedUserPackage.getRequestedPermissions());
+                        targetSdkVersion = Math.min(targetSdkVersion,
+                                sharedUserPackage.getTargetSdkVersion());
+                    }
+                }
+
+                for (String permissionName : requestedPermissions) {
+                    BasePermission permission = mSettings.getPermission(permissionName);
+                    if (Objects.equals(permission.getSourcePackageName(), PLATFORM_PACKAGE_NAME)
+                            && permission.isRuntime() && !permission.isRemoved()) {
+                        if (permission.isHardOrSoftRestricted()
+                                || permission.isImmutablyRestricted()) {
+                            permissionsState.updatePermissionFlags(permission, userId,
+                                    PackageManager.FLAG_PERMISSION_RESTRICTION_UPGRADE_EXEMPT,
+                                    PackageManager.FLAG_PERMISSION_RESTRICTION_UPGRADE_EXEMPT);
+                        }
+                        if (targetSdkVersion < Build.VERSION_CODES.M) {
+                            permissionsState.updatePermissionFlags(permission, userId,
+                                    PackageManager.FLAG_PERMISSION_REVIEW_REQUIRED
+                                            | PackageManager.FLAG_PERMISSION_REVOKED_COMPAT,
+                                    PackageManager.FLAG_PERMISSION_REVIEW_REQUIRED
+                                            | PackageManager.FLAG_PERMISSION_REVOKED_COMPAT);
+                            permissionsState.grantRuntimePermission(permission, userId);
+                        }
+                    }
+                }
+
+                permissionsState.setMissing(false, userId);
+                updatedUserIds = ArrayUtils.appendInt(updatedUserIds, userId);
+            }
+        }
+
+        PermissionsState origPermissions = permissionsState;
 
         boolean changedInstallPermission = false;
 
@@ -4893,6 +4948,20 @@ public class PermissionManagerService extends IPermissionManager.Stub {
                 // NOTE: This adds UPDATE_PERMISSIONS_REPLACE_PKG
                 PermissionManagerService.this.updateAllPermissions(
                         StorageManager.UUID_PRIVATE_INTERNAL, true, mDefaultPermissionCallback);
+            }
+        }
+
+        @Override
+        public void retainHardAndSoftRestrictedPermissions(@NonNull List<String> permissions) {
+            synchronized (mLock) {
+                Iterator<String> iterator = permissions.iterator();
+                while (iterator.hasNext()) {
+                    String permission = iterator.next();
+                    BasePermission basePermission = mSettings.mPermissions.get(permission);
+                    if (basePermission == null || !basePermission.isHardOrSoftRestricted()) {
+                        iterator.remove();
+                    }
+                }
             }
         }
     }

@@ -23,8 +23,8 @@ class DefaultBehavior : Behavior {
         this.cvh = cvh
     }
 
-    override fun bind(cws: ControlWithState) {
-        cvh.status.setText(cws.control?.getStatusText() ?: "")
-        cvh.applyRenderInfo(false)
+    override fun bind(cws: ControlWithState, colorOffset: Int) {
+        cvh.setStatusText(cws.control?.getStatusText() ?: "")
+        cvh.applyRenderInfo(false, colorOffset)
     }
 }

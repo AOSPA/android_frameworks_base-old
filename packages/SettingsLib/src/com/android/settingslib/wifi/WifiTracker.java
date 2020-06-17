@@ -77,7 +77,16 @@ import java.util.stream.Collectors;
 
 /**
  * Tracks saved or available wifi networks and their state.
+ *
+ * @deprecated WifiTracker/AccessPoint is no longer supported, and will be removed in a future
+ * release. Clients that need a dynamic list of available wifi networks should migrate to one of the
+ * newer tracker classes,
+ * {@link com.android.wifitrackerlib.WifiPickerTracker},
+ * {@link com.android.wifitrackerlib.SavedNetworkTracker},
+ * {@link com.android.wifitrackerlib.NetworkDetailsTracker},
+ * in conjunction with {@link com.android.wifitrackerlib.WifiEntry} to represent each wifi network.
  */
+@Deprecated
 public class WifiTracker implements LifecycleObserver, OnStart, OnStop, OnDestroy {
     /**
      * Default maximum age in millis of cached scored networks in
@@ -892,9 +901,7 @@ public class WifiTracker implements LifecycleObserver, OnStart, OnStop, OnDestro
                 updateNetworkInfo(info);
                 fetchScansAndConfigsAndUpdateAccessPoints();
             } else if (WifiManager.RSSI_CHANGED_ACTION.equals(action)) {
-                NetworkInfo info =
-                        mConnectivityManager.getNetworkInfo(mWifiManager.getCurrentNetwork());
-                updateNetworkInfo(info);
+                updateNetworkInfo(/* networkInfo= */ null);
             }
         }
     };
@@ -940,7 +947,7 @@ public class WifiTracker implements LifecycleObserver, OnStart, OnStop, OnDestro
                 // We don't send a NetworkInfo object along with this message, because even if we
                 // fetch one from ConnectivityManager, it might be older than the most recent
                 // NetworkInfo message we got via a WIFI_STATE_CHANGED broadcast.
-                updateNetworkInfo(null);
+                updateNetworkInfo(/* networkInfo= */ null);
             }
         }
     }

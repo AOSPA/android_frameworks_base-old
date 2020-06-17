@@ -1391,6 +1391,7 @@ public class WindowManagerService extends IWindowManager.Stub
             DisplayCutout.ParcelableWrapper outDisplayCutout, InputChannel outInputChannel,
             InsetsState outInsetsState, InsetsSourceControl[] outActiveControls,
             int requestUserId) {
+        Arrays.fill(outActiveControls, null);
         int[] appOp = new int[1];
         final boolean isRoundedCornerOverlay = (attrs.privateFlags
                 & PRIVATE_FLAG_IS_ROUNDED_CORNERS_OVERLAY) != 0;
@@ -2137,6 +2138,7 @@ public class WindowManagerService extends IWindowManager.Stub
             SurfaceControl outSurfaceControl, InsetsState outInsetsState,
             InsetsSourceControl[] outActiveControls, Point outSurfaceSize,
             SurfaceControl outBLASTSurfaceControl) {
+        Arrays.fill(outActiveControls, null);
         int result = 0;
         boolean configChanged;
         final int pid = Binder.getCallingPid();
@@ -2263,7 +2265,7 @@ public class WindowManagerService extends IWindowManager.Stub
             win.mRelayoutCalled = true;
             win.mInRelayout = true;
 
-            win.mViewVisibility = viewVisibility;
+            win.setViewVisibility(viewVisibility);
             ProtoLog.i(WM_DEBUG_SCREEN_ON,
                     "Relayout %s: oldVis=%d newVis=%d. %s", win, oldVisibility,
                             viewVisibility, new RuntimeException().fillInStackTrace());
@@ -2474,23 +2476,20 @@ public class WindowManagerService extends IWindowManager.Stub
     }
 
     private void getInsetsSourceControls(WindowState win, InsetsSourceControl[] outControls) {
-        if (outControls != null) {
-            final InsetsSourceControl[] controls =
-                    win.getDisplayContent().getInsetsStateController().getControlsForDispatch(win);
-            Arrays.fill(outControls, null);
-            if (controls != null) {
-                final int length = Math.min(controls.length, outControls.length);
-                for (int i = 0; i < length; i++) {
-                    // We will leave the critical section before returning the leash to the client,
-                    // so we need to copy the leash to prevent others release the one that we are
-                    // about to return.
-                    // TODO: We will have an extra copy if the client is not local.
-                    //       For now, we rely on GC to release it.
-                    //       Maybe we can modify InsetsSourceControl.writeToParcel so it can release
-                    //       the extra leash as soon as possible.
-                    outControls[i] = controls[i] != null
-                            ? new InsetsSourceControl(controls[i]) : null;
-                }
+        final InsetsSourceControl[] controls =
+                win.getDisplayContent().getInsetsStateController().getControlsForDispatch(win);
+        if (controls != null) {
+            final int length = Math.min(controls.length, outControls.length);
+            for (int i = 0; i < length; i++) {
+                // We will leave the critical section before returning the leash to the client,
+                // so we need to copy the leash to prevent others release the one that we are
+                // about to return.
+                // TODO: We will have an extra copy if the client is not local.
+                //       For now, we rely on GC to release it.
+                //       Maybe we can modify InsetsSourceControl.writeToParcel so it can release
+                //       the extra leash as soon as possible.
+                outControls[i] = controls[i] != null
+                        ? new InsetsSourceControl(controls[i]) : null;
             }
         }
     }
@@ -3868,6 +3867,11 @@ public class WindowManagerService extends IWindowManager.Stub
                     Trace.traceBegin(TRACE_TAG_WINDOW_MANAGER, "updateRotation: display");
                     final boolean rotationChanged = displayContent.updateRotationUnchecked();
                     Trace.traceEnd(TRACE_TAG_WINDOW_MANAGER);
+
+                    if (rotationChanged) {
+                        mAtmService.getTaskChangeNotificationController()
+                                .notifyOnActivityRotation(displayContent.mDisplayId);
+                    }
 
                     if (!rotationChanged || forceRelayout) {
                         displayContent.setLayoutNeeded();
@@ -5638,11 +5642,6 @@ public class WindowManagerService extends IWindowManager.Stub
         }
         mExitAnimId = exitAnim;
         mEnterAnimId = enterAnim;
-        ScreenRotationAnimation screenRotationAnimation =
-                displayContent.getRotationAnimation();
-        if (screenRotationAnimation != null) {
-            screenRotationAnimation.kill();
-        }
 
         displayContent.updateDisplayInfo();
         final int originalRotation = overrideOriginalRotation != ROTATION_UNDEFINED
@@ -6221,6 +6220,7 @@ public class WindowManagerService extends IWindowManager.Stub
             final int displayId = dc.getDisplayId();
             final WindowState inputMethodTarget = dc.mInputMethodTarget;
             final WindowState inputMethodInputTarget = dc.mInputMethodInputTarget;
+            final InsetsControlTarget inputMethodControlTarget = dc.mInputMethodControlTarget;
             if (inputMethodTarget != null) {
                 pw.print("  mInputMethodTarget in display# "); pw.print(displayId);
                 pw.print(' '); pw.println(inputMethodTarget);
@@ -6228,6 +6228,10 @@ public class WindowManagerService extends IWindowManager.Stub
             if (inputMethodInputTarget != null) {
                 pw.print("  mInputMethodInputTarget in display# "); pw.print(displayId);
                 pw.print(' '); pw.println(inputMethodInputTarget);
+            }
+            if (inputMethodControlTarget != null) {
+                pw.print("  inputMethodControlTarget in display# "); pw.print(displayId);
+                pw.print(' '); pw.println(inputMethodControlTarget.getWindow());
             }
         });
         pw.print("  mInTouchMode="); pw.println(mInTouchMode);
@@ -7648,8 +7652,12 @@ public class WindowManagerService extends IWindowManager.Stub
                 if (imeTarget == null) {
                     return;
                 }
-                imeTarget = imeTarget.getImeControlTarget();
-                imeTarget.getDisplayContent().getInsetsStateController().getImeSourceProvider()
+                imeTarget = imeTarget.getImeControlTarget().getWindow();
+                // If InsetsControlTarget doesn't have a window, its using remoteControlTarget which
+                // is controlled by default display
+                final DisplayContent dc = imeTarget != null
+                        ? imeTarget.getDisplayContent() : getDefaultDisplayContentLocked();
+                dc.getInsetsStateController().getImeSourceProvider()
                         .scheduleShowImePostLayout(imeTarget);
             }
         }
@@ -7662,7 +7670,9 @@ public class WindowManagerService extends IWindowManager.Stub
                     // The target window no longer exists.
                     return;
                 }
-                final DisplayContent dc = imeTarget.getImeControlTarget().getDisplayContent();
+                imeTarget = imeTarget.getImeControlTarget().getWindow();
+                final DisplayContent dc = imeTarget != null
+                        ? imeTarget.getDisplayContent() : getDefaultDisplayContentLocked();
                 // If there was a pending IME show(), reset it as IME has been
                 // requested to be hidden.
                 dc.getInsetsStateController().getImeSourceProvider().abortShowImePostLayout();
@@ -7778,6 +7788,33 @@ public class WindowManagerService extends IWindowManager.Stub
             synchronized (mGlobalLock) {
                 final WindowState w = mWindowMap.get(binder);
                 return w != null ? w.getName() : null;
+            }
+        }
+
+        @Override
+        public String getImeControlTargetNameForLogging(int displayId) {
+            synchronized (mGlobalLock) {
+                final DisplayContent dc = mRoot.getDisplayContent(displayId);
+                if (dc == null) {
+                    return null;
+                }
+                final InsetsControlTarget target = dc.mInputMethodControlTarget;
+                if (target == null) {
+                    return null;
+                }
+                final WindowState win = target.getWindow();
+                return win != null ? win.getName() : target.toString();
+            }
+        }
+
+        @Override
+        public String getImeTargetNameForLogging(int displayId) {
+            synchronized (mGlobalLock) {
+                final DisplayContent dc = mRoot.getDisplayContent(displayId);
+                if (dc == null) {
+                    return null;
+                }
+                return dc.mInputMethodTarget != null ? dc.mInputMethodTarget.getName() : null;
             }
         }
     }
@@ -7952,18 +7989,23 @@ public class WindowManagerService extends IWindowManager.Stub
 
     @Override
     public void syncInputTransactions() {
-        waitForAnimationsToComplete();
+        long token = Binder.clearCallingIdentity();
+        try {
+            waitForAnimationsToComplete();
 
-        // Collect all input transactions from all displays to make sure we could sync all input
-        // windows at same time.
-        final SurfaceControl.Transaction t = mTransactionFactory.get();
-        synchronized (mGlobalLock) {
-            mWindowPlacerLocked.performSurfacePlacementIfScheduled();
-            mRoot.forAllDisplays(displayContent ->
-                    displayContent.getInputMonitor().updateInputWindowsImmediately(t));
+            // Collect all input transactions from all displays to make sure we could sync all input
+            // windows at same time.
+            final SurfaceControl.Transaction t = mTransactionFactory.get();
+            synchronized (mGlobalLock) {
+                mWindowPlacerLocked.performSurfacePlacementIfScheduled();
+                mRoot.forAllDisplays(displayContent ->
+                        displayContent.getInputMonitor().updateInputWindowsImmediately(t));
+            }
+
+            t.syncInputWindows().apply();
+        } finally {
+            Binder.restoreCallingIdentity(token);
         }
-
-        t.syncInputWindows().apply();
     }
 
     /**
@@ -8056,45 +8098,31 @@ public class WindowManagerService extends IWindowManager.Stub
      * views.
      */
     void grantInputChannel(int callingUid, int callingPid, int displayId, SurfaceControl surface,
-            IWindow window, IBinder hostInputToken, int flags, InputChannel outInputChannel) {
+            IWindow window, IBinder hostInputToken, int flags, int type,
+            InputChannel outInputChannel) {
         final InputApplicationHandle applicationHandle;
         final String name;
-        final InputChannel[] inputChannels;
         final InputChannel clientChannel;
-        final InputChannel serverChannel;
         synchronized (mGlobalLock) {
             EmbeddedWindowController.EmbeddedWindow win =
-                    new EmbeddedWindowController.EmbeddedWindow(window,
-                            mInputToWindowMap.get(hostInputToken), callingUid, callingPid);
-            name = win.getName();
-
-            inputChannels = InputChannel.openInputChannelPair(name);
-            serverChannel = inputChannels[0];
-            clientChannel = inputChannels[1];
-            mInputManager.registerInputChannel(serverChannel);
+                    new EmbeddedWindowController.EmbeddedWindow(this, window,
+                            mInputToWindowMap.get(hostInputToken), callingUid, callingPid, type);
+            clientChannel = win.openInputChannel();
             mEmbeddedWindowController.add(clientChannel.getToken(), win);
-            if (serverChannel.getToken() != clientChannel.getToken()) {
-                throw new IllegalStateException("Client and Server channel are expected to"
-                        + "be the same");
-            }
-
             applicationHandle = win.getApplicationHandle();
+            name = win.getName();
         }
 
         updateInputChannel(clientChannel.getToken(), callingUid, callingPid, displayId, surface,
-                name, applicationHandle, flags, null /* region */);
+                name, applicationHandle, flags, type, null /* region */);
 
         clientChannel.transferTo(outInputChannel);
         clientChannel.dispose();
-        // Prevent the java finalizer from breaking the input channel. But we won't
-        // do any further management so we just release the java ref and let the
-        // InputDispatcher hold the last ref.
-        serverChannel.release();
     }
 
     private void updateInputChannel(IBinder channelToken, int callingUid, int callingPid,
             int displayId, SurfaceControl surface, String name,
-            InputApplicationHandle applicationHandle, int flags, Region region) {
+            InputApplicationHandle applicationHandle, int flags, int type, Region region) {
         InputWindowHandle h = new InputWindowHandle(applicationHandle, displayId);
         h.token = channelToken;
         h.name = name;
@@ -8102,7 +8130,7 @@ public class WindowManagerService extends IWindowManager.Stub
         final int sanitizedFlags = flags & (LayoutParams.FLAG_NOT_TOUCHABLE
                 | LayoutParams.FLAG_SLIPPERY);
         h.layoutParamsFlags = WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL | sanitizedFlags;
-        h.layoutParamsType = 0;
+        h.layoutParamsType = type;
         h.dispatchingTimeoutNanos = DEFAULT_INPUT_DISPATCHING_TIMEOUT_NANOS;
         h.canReceiveKeys = false;
         h.hasFocus = false;
@@ -8126,6 +8154,7 @@ public class WindowManagerService extends IWindowManager.Stub
         t.setInputWindowInfo(surface, h);
         t.apply();
         t.close();
+        surface.release();
     }
 
     /**
@@ -8149,7 +8178,7 @@ public class WindowManagerService extends IWindowManager.Stub
         }
 
         updateInputChannel(channelToken, win.mOwnerUid, win.mOwnerPid, displayId, surface, name,
-                applicationHandle, flags, region);
+                applicationHandle, flags, win.mWindowType, region);
     }
 
     /** Return whether layer tracing is enabled */

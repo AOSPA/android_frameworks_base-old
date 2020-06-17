@@ -131,7 +131,7 @@ message SimplePredicate {
     UNKNOWN = 0;
     FALSE = 1;
   }
-  optional InitialValue initial_value = 5 [default = FALSE];
+  optional InitialValue initial_value = 5 [default = UNKNOWN];
 
   optional FieldMatcher dimensions = 6;
 }
@@ -278,7 +278,7 @@ message GaugeMetric {
 
   optional int64 max_num_gauge_atoms_per_bucket = 11 [default = 10];
 
-  optional int32 max_pull_delay_sec = 13 [default = 10];
+  optional int32 max_pull_delay_sec = 13 [default = 30];
 
   optional bool split_bucket_for_app_upgrade = 14 [default = true];
 }
@@ -328,7 +328,7 @@ message ValueMetric {
 
   optional bool skip_zero_diff_output = 14 [default = true];
 
-  optional int32 max_pull_delay_sec = 16 [default = 10];
+  optional int32 max_pull_delay_sec = 16 [default = 30];
 
   optional bool split_bucket_for_app_upgrade = 17 [default = true];
 
@@ -488,6 +488,8 @@ message StatsdConfig {
   repeated string default_pull_packages = 22;
 
   repeated PullAtomPackages pull_atom_packages = 23;
+
+  repeated int32 whitelisted_atom_ids = 24;
 
   // Field number 1000 is reserved for later use.
   reserved 1000;

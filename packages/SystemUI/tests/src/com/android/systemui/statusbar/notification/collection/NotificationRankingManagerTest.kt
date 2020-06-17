@@ -21,6 +21,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager.IMPORTANCE_DEFAULT
 import android.app.NotificationManager.IMPORTANCE_HIGH
 import android.app.NotificationManager.IMPORTANCE_LOW
+import android.os.SystemClock
 import android.service.notification.NotificationListenerService.RankingMap
 import android.testing.AndroidTestingRunner
 import androidx.test.filters.SmallTest
@@ -36,10 +37,12 @@ import com.android.systemui.statusbar.notification.people.PeopleNotificationIden
 import com.android.systemui.statusbar.notification.people.PeopleNotificationIdentifier.Companion.TYPE_IMPORTANT_PERSON
 import com.android.systemui.statusbar.notification.people.PeopleNotificationIdentifier.Companion.TYPE_PERSON
 import com.android.systemui.statusbar.notification.row.ExpandableNotificationRow
-import com.android.systemui.statusbar.notification.stack.NotificationSectionsManager.BUCKET_ALERTING
-import com.android.systemui.statusbar.notification.stack.NotificationSectionsManager.BUCKET_SILENT
+import com.android.systemui.statusbar.notification.stack.BUCKET_ALERTING
+import com.android.systemui.statusbar.notification.stack.BUCKET_FOREGROUND_SERVICE
+import com.android.systemui.statusbar.notification.stack.BUCKET_SILENT
 import com.android.systemui.statusbar.phone.NotificationGroupManager
 import com.android.systemui.statusbar.policy.HeadsUpManager
+import com.google.common.truth.Truth.assertThat
 import dagger.Lazy
 import junit.framework.Assert.assertEquals
 import org.junit.Before
@@ -58,21 +61,24 @@ class NotificationRankingManagerTest : SysuiTestCase() {
     private lateinit var personNotificationIdentifier: PeopleNotificationIdentifier
     private lateinit var rankingManager: TestableNotificationRankingManager
     private lateinit var sectionsManager: NotificationSectionsFeatureManager
+    private lateinit var notificationFilter: NotificationFilter
 
     @Before
     fun setup() {
         personNotificationIdentifier =
                 mock(PeopleNotificationIdentifier::class.java)
         sectionsManager = mock(NotificationSectionsFeatureManager::class.java)
+        notificationFilter = mock(NotificationFilter::class.java)
         rankingManager = TestableNotificationRankingManager(
                 lazyMedia,
                 mock(NotificationGroupManager::class.java),
                 mock(HeadsUpManager::class.java),
-                mock(NotificationFilter::class.java),
+                notificationFilter,
                 mock(NotificationEntryManagerLogger::class.java),
                 sectionsManager,
                 personNotificationIdentifier,
-                HighPriorityProvider(personNotificationIdentifier)
+                HighPriorityProvider(personNotificationIdentifier,
+                    mock(NotificationGroupManager::class.java))
         )
     }
 
@@ -322,6 +328,84 @@ class NotificationRankingManagerTest : SysuiTestCase() {
 
         rankingManager.updateRanking(RankingMap(arrayOf(e.ranking)), listOf(e), "test")
         assertEquals(e.bucket, BUCKET_SILENT)
+    }
+
+    @Test
+    fun testFilter_resetsInitalizationTime() {
+        // GIVEN an entry that was initialized 1 second ago
+        val notif = Notification.Builder(mContext, "test") .build()
+
+        val e = NotificationEntryBuilder()
+            .setPkg("pkg")
+            .setOpPkg("pkg")
+            .setTag("tag")
+            .setNotification(notif)
+            .setUser(mContext.user)
+            .setChannel(NotificationChannel("test", "", IMPORTANCE_DEFAULT))
+            .setOverrideGroupKey("")
+            .build()
+
+        e.setInitializationTime(SystemClock.elapsedRealtime() - 1000)
+        assertEquals(true, e.hasFinishedInitialization())
+
+        // WHEN we update ranking and filter out the notification entry
+        whenever(notificationFilter.shouldFilterOut(e)).thenReturn(true)
+        rankingManager.updateRanking(RankingMap(arrayOf(e.ranking)), listOf(e), "test")
+
+        // THEN the initialization time for the entry is reset
+        assertEquals(false, e.hasFinishedInitialization())
+    }
+
+    @Test
+    fun testSort_colorizedForegroundService() {
+        whenever(sectionsManager.isFilteringEnabled()).thenReturn(true)
+
+        val a = NotificationEntryBuilder()
+                .setImportance(IMPORTANCE_HIGH)
+                .setPkg("pkg")
+                .setOpPkg("pkg")
+                .setTag("tag")
+                .setNotification(
+                        Notification.Builder(mContext, "test")
+                                .build())
+                .setChannel(NotificationChannel("test", "", IMPORTANCE_DEFAULT))
+                .setUser(mContext.getUser())
+                .setOverrideGroupKey("")
+                .build()
+
+        val b = NotificationEntryBuilder()
+                .setImportance(IMPORTANCE_DEFAULT) // high priority
+                .setPkg("pkg2")
+                .setOpPkg("pkg2")
+                .setTag("tag")
+                .setNotification(mock(Notification::class.java).also { notif ->
+                    whenever(notif.isForegroundService).thenReturn(true)
+                    whenever(notif.isColorized).thenReturn(true)
+                })
+                .setChannel(NotificationChannel("test", "", IMPORTANCE_DEFAULT))
+                .setUser(mContext.getUser())
+                .setOverrideGroupKey("")
+                .build()
+
+        val cN = Notification.Builder(mContext, "test")
+                .setStyle(Notification.MessagingStyle(""))
+                .build()
+        val c = NotificationEntryBuilder()
+                .setImportance(IMPORTANCE_HIGH)
+                .setPkg("pkg")
+                .setOpPkg("pkg")
+                .setTag("tag")
+                .setNotification(cN)
+                .setChannel(NotificationChannel("test", "", IMPORTANCE_DEFAULT))
+                .setUser(mContext.user)
+                .setOverrideGroupKey("")
+                .build()
+        whenever(personNotificationIdentifier.getPeopleNotificationType(a.sbn, a.ranking))
+                .thenReturn(TYPE_IMPORTANT_PERSON)
+
+        assertThat(rankingManager.updateRanking(null, listOf(a, b, c), "test"))
+                .containsExactly(b, c, a)
+        assertThat(b.bucket).isEqualTo(BUCKET_FOREGROUND_SERVICE)
     }
 
     internal class TestableNotificationRankingManager(

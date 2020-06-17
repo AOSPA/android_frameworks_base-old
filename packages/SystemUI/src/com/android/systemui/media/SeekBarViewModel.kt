@@ -27,8 +27,10 @@ import androidx.annotation.AnyThread
 import androidx.annotation.WorkerThread
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.LiveData
-
-import com.android.systemui.util.concurrency.DelayableExecutor
+import com.android.systemui.dagger.qualifiers.Background
+import com.android.systemui.util.concurrency.RepeatableExecutor
+import java.util.concurrent.Executor
+import javax.inject.Inject
 
 private const val POSITION_UPDATE_INTERVAL_MILLIS = 100L
 
@@ -65,9 +67,9 @@ private fun PlaybackState.computePosition(duration: Long): Long {
 }
 
 /** ViewModel for seek bar in QS media player. */
-class SeekBarViewModel(val bgExecutor: DelayableExecutor) {
+class SeekBarViewModel @Inject constructor(@Background private val bgExecutor: RepeatableExecutor) {
 
-    private var _data = Progress(false, false, null, null, null)
+    private var _data = Progress(false, false, null, null)
         set(value) {
             field = value
             _progress.postValue(value)
@@ -78,13 +80,36 @@ class SeekBarViewModel(val bgExecutor: DelayableExecutor) {
     val progress: LiveData<Progress>
         get() = _progress
     private var controller: MediaController? = null
+        set(value) {
+            if (field?.sessionToken != value?.sessionToken) {
+                field?.unregisterCallback(callback)
+                value?.registerCallback(callback)
+                field = value
+            }
+        }
     private var playbackState: PlaybackState? = null
+    private var callback = object : MediaController.Callback() {
+        override fun onPlaybackStateChanged(state: PlaybackState) {
+            playbackState = state
+            if (PlaybackState.STATE_NONE.equals(playbackState)) {
+                clearController()
+            } else {
+                checkIfPollingNeeded()
+            }
+        }
+
+        override fun onSessionDestroyed() {
+            clearController()
+        }
+    }
+    private var cancel: Runnable? = null
 
     /** Listening state (QS open or closed) is used to control polling of progress. */
     var listening = true
-        set(value) {
-            if (value) {
-                checkPlaybackPosition()
+        set(value) = bgExecutor.execute {
+            if (field != value) {
+                field = value
+                checkIfPollingNeeded()
             }
         }
 
@@ -95,15 +120,17 @@ class SeekBarViewModel(val bgExecutor: DelayableExecutor) {
     @WorkerThread
     fun onSeek(position: Long) {
         controller?.transportControls?.seekTo(position)
+        // Invalidate the cached playbackState to avoid the thumb jumping back to the previous
+        // position.
+        playbackState = null
     }
 
     /**
      * Updates media information.
      * @param mediaController controller for media session
-     * @param color foreground color for UI elements
      */
     @WorkerThread
-    fun updateController(mediaController: MediaController?, color: Int) {
+    fun updateController(mediaController: MediaController?) {
         controller = mediaController
         playbackState = controller?.playbackState
         val mediaMetadata = controller?.metadata
@@ -113,10 +140,8 @@ class SeekBarViewModel(val bgExecutor: DelayableExecutor) {
         val enabled = if (playbackState == null ||
                 playbackState?.getState() == PlaybackState.STATE_NONE ||
                 (duration != null && duration <= 0)) false else true
-        _data = Progress(enabled, seekAvailable, position, duration, color)
-        if (shouldPollPlaybackPosition()) {
-            checkPlaybackPosition()
-        }
+        _data = Progress(enabled, seekAvailable, position, duration)
+        checkIfPollingNeeded()
     }
 
     /**
@@ -126,24 +151,45 @@ class SeekBarViewModel(val bgExecutor: DelayableExecutor) {
      */
     @AnyThread
     fun clearController() = bgExecutor.execute {
+        controller = null
+        playbackState = null
+        cancel?.run()
+        cancel = null
         _data = _data.copy(enabled = false)
     }
 
+    /**
+     * Call to clean up any resources.
+     */
     @AnyThread
-    private fun checkPlaybackPosition(): Runnable = bgExecutor.executeDelayed({
-        val duration = _data?.duration ?: -1
+    fun onDestroy() = bgExecutor.execute {
+        controller = null
+        playbackState = null
+        cancel?.run()
+        cancel = null
+    }
+
+    @WorkerThread
+    private fun checkPlaybackPosition() {
+        val duration = _data.duration ?: -1
         val currentPosition = playbackState?.computePosition(duration.toLong())?.toInt()
         if (currentPosition != null && _data.elapsedTime != currentPosition) {
             _data = _data.copy(elapsedTime = currentPosition)
         }
-        if (shouldPollPlaybackPosition()) {
-            checkPlaybackPosition()
-        }
-    }, POSITION_UPDATE_INTERVAL_MILLIS)
+    }
 
     @WorkerThread
-    private fun shouldPollPlaybackPosition(): Boolean {
-        return listening && playbackState?.isInMotion() ?: false
+    private fun checkIfPollingNeeded() {
+        val needed = listening && playbackState?.isInMotion() ?: false
+        if (needed) {
+            if (cancel == null) {
+                cancel = bgExecutor.executeRepeatedly(this::checkPlaybackPosition, 0L,
+                        POSITION_UPDATE_INTERVAL_MILLIS)
+            }
+        } else {
+            cancel?.run()
+            cancel = null
+        }
     }
 
     /** Gets a listener to attach to the seek bar to handle seeking. */
@@ -160,7 +206,7 @@ class SeekBarViewModel(val bgExecutor: DelayableExecutor) {
 
     private class SeekBarChangeListener(
         val viewModel: SeekBarViewModel,
-        val bgExecutor: DelayableExecutor
+        val bgExecutor: Executor
     ) : SeekBar.OnSeekBarChangeListener {
         override fun onProgressChanged(bar: SeekBar, progress: Int, fromUser: Boolean) {
             if (fromUser) {
@@ -191,7 +237,6 @@ class SeekBarViewModel(val bgExecutor: DelayableExecutor) {
         val enabled: Boolean,
         val seekAvailable: Boolean,
         val elapsedTime: Int?,
-        val duration: Int?,
-        val color: Int?
+        val duration: Int?
     )
 }

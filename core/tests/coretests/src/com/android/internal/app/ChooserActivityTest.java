@@ -21,6 +21,7 @@ import static androidx.test.espresso.action.ViewActions.click;
 import static androidx.test.espresso.action.ViewActions.swipeUp;
 import static androidx.test.espresso.assertion.ViewAssertions.doesNotExist;
 import static androidx.test.espresso.assertion.ViewAssertions.matches;
+import static androidx.test.espresso.matcher.ViewMatchers.hasSibling;
 import static androidx.test.espresso.matcher.ViewMatchers.isDisplayed;
 import static androidx.test.espresso.matcher.ViewMatchers.withId;
 import static androidx.test.espresso.matcher.ViewMatchers.withText;
@@ -34,9 +35,11 @@ import static com.android.internal.app.ChooserListAdapter.SHORTCUT_TARGET_SCORE_
 import static com.android.internal.app.ChooserWrapperActivity.sOverrides;
 import static com.android.internal.app.MatcherUtils.first;
 
+import static junit.framework.Assert.assertFalse;
 import static junit.framework.Assert.assertNull;
 import static junit.framework.Assert.assertTrue;
 
+import static org.hamcrest.CoreMatchers.allOf;
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.CoreMatchers.not;
 import static org.hamcrest.CoreMatchers.notNullValue;
@@ -291,6 +294,59 @@ public class ChooserActivityTest {
                 .perform(click());
         waitForIdle();
         assertThat(chosen[0], is(toChoose));
+    }
+
+    @Test
+    public void fourOptionsStackedIntoOneTarget() throws InterruptedException {
+        Intent sendIntent = createSendTextIntent();
+
+        // create just enough targets to ensure the a-z list should be shown
+        List<ResolvedComponentInfo> resolvedComponentInfos = createResolvedComponentsForTest(1);
+
+        // next create 4 targets in a single app that should be stacked into a single target
+        String packageName = "xxx.yyy";
+        String appName = "aaa";
+        ComponentName cn = new ComponentName(packageName, appName);
+        Intent intent = new Intent("fakeIntent");
+        List<ResolvedComponentInfo> infosToStack = new ArrayList<>();
+        for (int i = 0; i < 4; i++) {
+            ResolveInfo resolveInfo = ResolverDataProvider.createResolveInfo(i,
+                    UserHandle.USER_CURRENT);
+            resolveInfo.activityInfo.applicationInfo.name = appName;
+            resolveInfo.activityInfo.applicationInfo.packageName = packageName;
+            resolveInfo.activityInfo.packageName = packageName;
+            resolveInfo.activityInfo.name = "ccc" + i;
+            infosToStack.add(new ResolvedComponentInfo(cn, intent, resolveInfo));
+        }
+        resolvedComponentInfos.addAll(infosToStack);
+
+        when(sOverrides.resolverListController.getResolversForIntent(Mockito.anyBoolean(),
+                Mockito.anyBoolean(),
+                Mockito.isA(List.class))).thenReturn(resolvedComponentInfos);
+
+        final ChooserWrapperActivity activity = mActivityRule
+                .launchActivity(Intent.createChooser(sendIntent, null));
+        waitForIdle();
+
+        // expect 1 unique targets + 1 group + 4 ranked app targets
+        assertThat(activity.getAdapter().getCount(), is(6));
+
+        ResolveInfo[] chosen = new ResolveInfo[1];
+        sOverrides.onSafelyStartCallback = targetInfo -> {
+            chosen[0] = targetInfo.getResolveInfo();
+            return true;
+        };
+
+        onView(allOf(withText(appName), hasSibling(withText("")))).perform(click());
+        waitForIdle();
+
+        // clicking will launch a dialog to choose the activity within the app
+        onView(withText(appName)).check(matches(isDisplayed()));
+        int i = 0;
+        for (ResolvedComponentInfo rci: infosToStack) {
+            onView(withText("ccc" + i)).check(matches(isDisplayed()));
+            ++i;
+        }
     }
 
     @Test
@@ -1273,7 +1329,6 @@ public class ChooserActivityTest {
         assertThat(activity.getWorkListAdapter().getCount(), is(workProfileTargets));
     }
 
-    @Ignore // b/148156663
     @Test
     public void testWorkTab_selectingWorkTabAppOpensAppInWorkProfile() throws InterruptedException {
         // enable the work tab feature flag
@@ -1300,8 +1355,10 @@ public class ChooserActivityTest {
         // wait for the share sheet to expand
         Thread.sleep(ChooserActivity.LIST_VIEW_UPDATE_INTERVAL_IN_MILLIS);
 
-        onView(first(withText(workResolvedComponentInfos.get(0)
-                .getResolveInfoAt(0).activityInfo.applicationInfo.name)))
+        onView(first(allOf(
+                withText(workResolvedComponentInfos.get(0)
+                        .getResolveInfoAt(0).activityInfo.applicationInfo.name),
+                isDisplayed())))
                 .perform(click());
         waitForIdle();
         assertThat(chosen[0], is(workResolvedComponentInfos.get(0).getResolveInfoAt(0)));
@@ -1870,6 +1927,72 @@ public class ChooserActivityTest {
 
         onView(withText(R.string.resolver_no_work_apps_available_resolve))
                 .check(matches(isDisplayed()));
+    }
+
+    @Test
+    public void testDeduplicateCallerTargetRankedTarget() {
+        // Create 4 ranked app targets.
+        List<ResolvedComponentInfo> personalResolvedComponentInfos =
+                createResolvedComponentsForTest(4);
+        when(sOverrides.resolverListController.getResolversForIntent(Mockito.anyBoolean(),
+                Mockito.anyBoolean(),
+                Mockito.isA(List.class)))
+                .thenReturn(new ArrayList<>(personalResolvedComponentInfos));
+        // Create caller target which is duplicate with one of app targets
+        Intent chooserIntent = createChooserIntent(createSendTextIntent(),
+                new Intent[] {new Intent("action.fake")});
+        sOverrides.packageManager = mock(PackageManager.class);
+        ResolveInfo ri = ResolverDataProvider.createResolveInfo(0,
+                UserHandle.USER_CURRENT);
+        when(sOverrides.packageManager.resolveActivity(any(Intent.class), anyInt())).thenReturn(ri);
+        waitForIdle();
+
+        ChooserWrapperActivity activity = mActivityRule.launchActivity(chooserIntent);
+        waitForIdle();
+
+        // Total 4 targets (1 caller target, 3 ranked targets)
+        assertThat(activity.getAdapter().getCount(), is(4));
+        assertThat(activity.getAdapter().getCallerTargetCount(), is(1));
+        assertThat(activity.getAdapter().getRankedTargetCount(), is(3));
+    }
+
+    @Test
+    public void testWorkTab_selectingWorkTabWithPausedWorkProfile_directShareTargetsNotQueried() {
+        // enable the work tab feature flag
+        ResolverActivity.ENABLE_TABBED_VIEW = true;
+        markWorkProfileUserAvailable();
+        List<ResolvedComponentInfo> personalResolvedComponentInfos =
+                createResolvedComponentsForTestWithOtherProfile(3, /* userId */ 10);
+        List<ResolvedComponentInfo> workResolvedComponentInfos =
+                createResolvedComponentsForTest(3);
+        setupResolverControllers(personalResolvedComponentInfos, workResolvedComponentInfos);
+        sOverrides.isQuietModeEnabled = true;
+        boolean[] isQueryDirectShareCalledOnWorkProfile = new boolean[] { false };
+        sOverrides.onQueryDirectShareTargets = chooserListAdapter -> {
+            isQueryDirectShareCalledOnWorkProfile[0] =
+                    (chooserListAdapter.getUserHandle().getIdentifier() == 10);
+            return null;
+        };
+        boolean[] isQueryTargetServicesCalledOnWorkProfile = new boolean[] { false };
+        sOverrides.onQueryTargetServices = chooserListAdapter -> {
+            isQueryTargetServicesCalledOnWorkProfile[0] =
+                    (chooserListAdapter.getUserHandle().getIdentifier() == 10);
+            return null;
+        };
+        Intent sendIntent = createSendTextIntent();
+        sendIntent.setType("TestType");
+
+        mActivityRule.launchActivity(Intent.createChooser(sendIntent, "work tab test"));
+        waitForIdle();
+        onView(withId(R.id.contentPanel))
+                .perform(swipeUp());
+        onView(withText(R.string.resolver_work_tab)).perform(click());
+        waitForIdle();
+
+        assertFalse("Direct share targets were queried on a paused work profile",
+                isQueryDirectShareCalledOnWorkProfile[0]);
+        assertFalse("Target services were queried on a paused work profile",
+                isQueryTargetServicesCalledOnWorkProfile[0]);
     }
 
     private Intent createChooserIntent(Intent intent, Intent[] initialIntents) {

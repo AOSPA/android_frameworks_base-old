@@ -29,6 +29,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.os.RemoteException;
 import android.provider.Settings;
+import android.util.Log;
 import android.view.IRotationWatcher.Stub;
 import android.view.MotionEvent;
 import android.view.Surface;
@@ -36,8 +37,9 @@ import android.view.View;
 import android.view.WindowManagerGlobal;
 import android.view.accessibility.AccessibilityManager;
 
-import com.android.internal.logging.MetricsLogger;
-import com.android.internal.logging.nano.MetricsProto.MetricsEvent;
+import com.android.internal.logging.UiEvent;
+import com.android.internal.logging.UiEventLogger;
+import com.android.internal.logging.UiEventLoggerImpl;
 import com.android.systemui.Dependency;
 import com.android.systemui.Interpolators;
 import com.android.systemui.R;
@@ -53,12 +55,13 @@ import java.util.function.Consumer;
 /** Contains logic that deals with showing a rotate suggestion button with animation. */
 public class RotationButtonController {
 
+    private static final String TAG = "StatusBar/RotationButtonController";
     private static final int BUTTON_FADE_IN_OUT_DURATION_MS = 100;
     private static final int NAVBAR_HIDDEN_PENDING_ICON_TIMEOUT_MS = 20000;
 
     private static final int NUM_ACCEPTED_ROTATION_SUGGESTIONS_FOR_INTRODUCTION = 3;
 
-    private final MetricsLogger mMetricsLogger = Dependency.get(MetricsLogger.class);
+    private final UiEventLogger mUiEventLogger = new UiEventLoggerImpl();
     private final ViewRippler mViewRippler = new ViewRippler();
 
     private @StyleRes int mStyleRes;
@@ -138,6 +141,9 @@ public class RotationButtonController {
         try {
             WindowManagerGlobal.getWindowManagerService()
                     .watchRotation(mRotationWatcher, mContext.getDisplay().getDisplayId());
+        } catch (IllegalArgumentException e) {
+            mListenersRegistered = false;
+            Log.w(TAG, "RegisterListeners for the display failed");
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -318,7 +324,7 @@ public class RotationButtonController {
     }
 
     private void onRotateSuggestionClick(View v) {
-        mMetricsLogger.action(MetricsEvent.ACTION_ROTATION_SUGGESTION_ACCEPTED);
+        mUiEventLogger.log(RotationButtonEvent.ROTATION_SUGGESTION_ACCEPTED);
         incrementNumAcceptedRotationSuggestionsIfNeeded();
         setRotationLockedAtAngle(mLastRotationSuggestion);
     }
@@ -340,7 +346,7 @@ public class RotationButtonController {
     private void showAndLogRotationSuggestion() {
         setRotateSuggestionButtonState(true /* visible */);
         rescheduleRotationTimeout(false /* reasonHover */);
-        mMetricsLogger.visible(MetricsEvent.ROTATION_SUGGESTION_SHOWN);
+        mUiEventLogger.log(RotationButtonEvent.ROTATION_SUGGESTION_SHOWN);
     }
 
     private boolean shouldOverrideUserLockPrefs(final int rotation) {
@@ -468,5 +474,20 @@ public class RotationButtonController {
                 mRoot.setPressed(false /* pressed */);
             }
         };
+    }
+
+    enum RotationButtonEvent implements UiEventLogger.UiEventEnum {
+        @UiEvent(doc = "The rotation button was shown")
+        ROTATION_SUGGESTION_SHOWN(206),
+        @UiEvent(doc = "The rotation button was clicked")
+        ROTATION_SUGGESTION_ACCEPTED(207);
+
+        private final int mId;
+        RotationButtonEvent(int id) {
+            mId = id;
+        }
+        @Override public int getId() {
+            return mId;
+        }
     }
 }

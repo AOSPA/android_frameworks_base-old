@@ -65,7 +65,7 @@
     <string name="usb_debugging_secondary_user_message" msgid="3740347841470403244">"Gailu honetan saioa hasita daukan erabiltzaileak ezin du aktibatu USB bidezko arazketa. Eginbide hori erabiltzeko, aldatu erabiltzaile nagusira."</string>
     <string name="wifi_debugging_title" msgid="7300007687492186076">"Hari gabeko arazketa onartu nahi duzu sare honetan?"</string>
     <string name="wifi_debugging_message" msgid="5461204211731802995">"Sarearen izena (SSID)\n<xliff:g id="SSID_0">%1$s</xliff:g>\n\nWifi-helbidea (BSSID)\n<xliff:g id="BSSID_1">%2$s</xliff:g>"</string>
-    <string name="wifi_debugging_always" msgid="2968383799517975155">"Onartu beti sare honetan"</string>
+    <string name="wifi_debugging_always" msgid="2968383799517975155">"Baimendu beti sare honetan"</string>
     <string name="wifi_debugging_allow" msgid="4573224609684957886">"Baimendu"</string>
     <string name="wifi_debugging_secondary_user_title" msgid="2493201475880517725">"Ez da onartzen hari gabeko arazketa"</string>
     <string name="wifi_debugging_secondary_user_message" msgid="4492383073970079751">"Gailu honetan saioa hasita daukan erabiltzaileak ezin du aktibatu hari gabeko arazketa. Eginbide hori erabiltzeko, aldatu erabiltzaile nagusira."</string>
@@ -511,8 +511,8 @@
     <string name="manage_notifications_text" msgid="6885645344647733116">"Kudeatu"</string>
     <string name="manage_notifications_history_text" msgid="57055985396576230">"Historia"</string>
     <string name="notification_section_header_incoming" msgid="5295312809341711367">"Jasotako azkenak"</string>
-    <string name="notification_section_header_gentle" msgid="3044910806569985386">"Soinurik gabeko jakinarazpenak"</string>
-    <string name="notification_section_header_alerting" msgid="3168140660646863240">"Soinua/Dar-dar egiten duten jakinarazpenak"</string>
+    <string name="notification_section_header_gentle" msgid="6804099527336337197">"Isila"</string>
+    <string name="notification_section_header_alerting" msgid="5581175033680477651">"Jakinarazpenak"</string>
     <string name="notification_section_header_conversations" msgid="821834744538345661">"Elkarrizketak"</string>
     <string name="accessibility_notification_section_header_gentle_clear_all" msgid="6490207897764933919">"Garbitu soinurik gabeko jakinarazpen guztiak"</string>
     <string name="dnd_suppressing_shade_text" msgid="5588252250634464042">"Ez molestatzeko moduak pausatu egin ditu jakinarazpenak"</string>
@@ -592,19 +592,21 @@
     <string name="volume_odi_captions_hint_enable" msgid="2073091194012843195">"gaitu"</string>
     <string name="volume_odi_captions_hint_disable" msgid="2518846326748183407">"desgaitu"</string>
     <string name="accessibility_output_chooser" msgid="7807898688967194183">"Aldatu irteerako gailua"</string>
-    <string name="screen_pinning_title" msgid="7357611095909618178">"Pantaila ainguratuta dago"</string>
+    <string name="screen_pinning_title" msgid="9058007390337841305">"Aplikazioa ainguratuta dago"</string>
     <string name="screen_pinning_description" msgid="8699395373875667743">"Horrela, ikusgai egongo da aingura kendu arte. Aingura kentzeko, eduki sakatuta \"Atzera\" eta \"Ikuspegi orokorra\" botoiak."</string>
     <string name="screen_pinning_description_recents_invisible" msgid="4564466648700390037">"Horrela, ikusgai egongo da aingura kendu arte. Aingura kentzeko, eduki sakatuta Atzera eta Hasiera botoiak."</string>
     <string name="screen_pinning_description_gestural" msgid="7246323931831232068">"Horrela, ikusgai egongo da aingura kendu arte. Aingura kentzeko, eduki sakatuta Hasiera botoia."</string>
     <string name="screen_pinning_description_accessible" msgid="7386449191953535332">"Horrela, ikusgai egongo da aingura kendu arte. Aingura kentzeko, eduki sakatuta \"Ikuspegi orokorra\" botoia."</string>
     <string name="screen_pinning_description_recents_invisible_accessible" msgid="2857071808674481986">"Horrela, ikusgai egongo da aingura kendu arte. Aingura kentzeko, eduki sakatuta Hasiera botoia."</string>
-    <string name="screen_pinning_toast" msgid="2083944237147005811">"Pantailari aingura kentzeko, eduki sakatuta Atzera eta Ikuspegi orokorra botoiak"</string>
-    <string name="screen_pinning_toast_recents_invisible" msgid="6343770487795352573">"Pantailari aingura kentzeko, eduki sakatuta Atzera eta Hasiera botoiak"</string>
-    <string name="screen_pinning_toast_gesture_nav" msgid="2884536903398445645">"Pantailari aingura kentzeko, pasatu hatza gora eta eduki sakatuta"</string>
+    <string name="screen_pinning_exposes_personal_data" msgid="8189852022981524789">"Baliteke datu pertsonalak atzitu ahal izatea (adibidez, kontaktuak eta posta elektronikoko edukia)."</string>
+    <string name="screen_pinning_can_open_other_apps" msgid="7529756813231421455">"Baliteke ainguratutako aplikazioak beste aplikazio batzuk irekitzeko gai izatea."</string>
+    <string name="screen_pinning_toast" msgid="8177286912533744328">"Aplikazioari aingura kentzeko, eduki sakatuta Atzera eta Ikuspegi orokorra botoiak"</string>
+    <string name="screen_pinning_toast_recents_invisible" msgid="6850978077443052594">"Aplikazioari aingura kentzeko, eduki sakatuta Atzera eta Hasiera botoiak"</string>
+    <string name="screen_pinning_toast_gesture_nav" msgid="170699893395336705">"Aplikazioari aingura kentzeko, arrastatu aplikazioa gora eta eduki ezazu sakatuta"</string>
     <string name="screen_pinning_positive" msgid="3285785989665266984">"Ados"</string>
     <string name="screen_pinning_negative" msgid="6882816864569211666">"Ez, eskerrik asko"</string>
-    <string name="screen_pinning_start" msgid="5695091877402422575">"Ainguratu da pantaila"</string>
-    <string name="screen_pinning_exit" msgid="5114993350662745840">"Kendu zaio aingura pantailari"</string>
+    <string name="screen_pinning_start" msgid="7483998671383371313">"Ainguratu da aplikazioa"</string>
+    <string name="screen_pinning_exit" msgid="4553787518387346893">"Kendu da aplikazioaren aingura"</string>
     <string name="quick_settings_reset_confirmation_title" msgid="463533331480997595">"<xliff:g id="TILE_LABEL">%1$s</xliff:g> ezkutatu nahi duzu?"</string>
     <string name="quick_settings_reset_confirmation_message" msgid="2320586180785674186">"Ezarpenetan aktibatzen duzun hurrengoan agertuko da berriro."</string>
     <string name="quick_settings_reset_confirmation_button" msgid="3341477479055016776">"Ezkutatu"</string>
@@ -707,16 +709,17 @@
     <string name="inline_turn_off_notifications" msgid="8543989584403106071">"Desaktibatu jakinarazpenak"</string>
     <string name="inline_keep_showing_app" msgid="4393429060390649757">"Aplikazio honen jakinarazpenak erakusten jarraitzea nahi duzu?"</string>
     <string name="notification_silence_title" msgid="8608090968400832335">"Isila"</string>
-    <string name="notification_alert_title" msgid="7629202599338071971">"Ohartarazlea"</string>
+    <string name="notification_alert_title" msgid="3656229781017543655">"Balio lehenetsia"</string>
     <string name="notification_bubble_title" msgid="8330481035191903164">"Burbuila"</string>
-    <string name="notification_channel_summary_low" msgid="7300447764759926720">"Ez du egiten soinu edo dardararik, arretarik gal ez dezazun."</string>
-    <string name="notification_channel_summary_default" msgid="3539949463907902037">"Arreta erakartzen du soinua eta dardara eginda."</string>
-    <string name="notification_channel_summary_default_with_bubbles" msgid="6298026344552480458">"Arreta erakartzen du soinua eta dardara eginda. Modu lehenetsian, <xliff:g id="APP_NAME">%1$s</xliff:g> aplikazioko elkarrizketak burbuila gisa agertzen dira."</string>
+    <string name="notification_channel_summary_low" msgid="4860617986908931158">"Ez du tonurik jotzen edo dar-dar egiten"</string>
+    <string name="notification_conversation_summary_low" msgid="1734433426085468009">"Ez du tonurik jotzen edo dar-dar egiten, eta elkarrizketaren atalaren behealdean agertzen da"</string>
+    <string name="notification_channel_summary_default" msgid="3282930979307248890">"Tonua jo edo dar-dar egin dezake, telefonoaren ezarpenen arabera"</string>
+    <string name="notification_channel_summary_default_with_bubbles" msgid="1782419896613644568">"Tonua jo edo dar-dar egin dezake, telefonoaren ezarpenen arabera. Modu lehenetsian, <xliff:g id="APP_NAME">%1$s</xliff:g> aplikazioko elkarrizketak burbuila gisa agertzen dira."</string>
     <string name="notification_channel_summary_bubble" msgid="7235935211580860537">"Eduki honetarako lasterbide gainerakor bat eskaintzen dizu, arretarik gal ez dezazun."</string>
-    <string name="notification_channel_summary_priority" msgid="7415770044553264622">"Elkarrizketen atalaren goialdean agertzen da, burbuila gisa."</string>
+    <string name="notification_channel_summary_priority" msgid="7952654515769021553">"Burbuila gisa agertzen da elkarrizketen atalaren goialdean, eta profileko argazkia bistaratzen du pantaila blokeatuta dagoenean"</string>
     <string name="notification_conversation_channel_settings" msgid="2409977688430606835">"Ezarpenak"</string>
     <string name="notification_priority_title" msgid="2079708866333537093">"Lehentasuna"</string>
-    <string name="no_shortcut" msgid="7176375126961212514">"<xliff:g id="APP_NAME">%1$s</xliff:g> aplikazioak ez du onartzen elkarrizketen berariazko ezarpenik"</string>
+    <string name="no_shortcut" msgid="8257177117568230126">"<xliff:g id="APP_NAME">%1$s</xliff:g> aplikazioak ez ditu onartzen elkarrizketetarako eginbideak"</string>
     <string name="bubble_overflow_empty_title" msgid="3120029421991510842">"Ez dago azkenaldiko burbuilarik"</string>
     <string name="bubble_overflow_empty_subtitle" msgid="2030874469510497397">"Azken burbuilak eta baztertutakoak agertuko dira hemen"</string>
     <string name="notification_unblockable_desc" msgid="2073030886006190804">"Jakinarazpen horiek ezin dira aldatu."</string>
@@ -852,8 +855,8 @@
     <string name="right_keycode" msgid="2480715509844798438">"Eskuineko teklaren kodea"</string>
     <string name="left_icon" msgid="5036278531966897006">"Ezkerreko ikonoa"</string>
     <string name="right_icon" msgid="1103955040645237425">"Eskuineko ikonoa"</string>
-    <string name="drag_to_add_tiles" msgid="8933270127508303672">"Lauzak gehitzeko, eduki sakatuta eta arrastatu"</string>
-    <string name="drag_to_rearrange_tiles" msgid="2143204300089638620">"Lauzak antolatzeko, eduki sakatuta eta arrastatu"</string>
+    <string name="drag_to_add_tiles" msgid="8933270127508303672">"Lauzak gehitzeko, eduki itzazu sakatuta, eta arrastatu"</string>
+    <string name="drag_to_rearrange_tiles" msgid="2143204300089638620">"Lauzak antolatzeko, eduki itzazu sakatuta, eta arrastatu"</string>
     <string name="drag_to_remove_tiles" msgid="4682194717573850385">"Kentzeko, arrastatu hona"</string>
     <string name="drag_to_remove_disabled" msgid="933046987838658850">"<xliff:g id="MIN_NUM_TILES">%1$d</xliff:g> lauza behar dituzu gutxienez"</string>
     <string name="qs_edit" msgid="5583565172803472437">"Editatu"</string>
@@ -990,7 +993,7 @@
     <string name="restart_button_description" msgid="6916116576177456480">"Berrabiarazi aplikazio hau eta ezarri pantaila osoko modua."</string>
     <string name="bubbles_settings_button_description" msgid="7324245408859877545">"<xliff:g id="APP_NAME">%1$s</xliff:g> aplikazioaren ezarpenen burbuilak"</string>
     <string name="bubble_overflow_button_content_description" msgid="5523744621434300510">"Gainezkatzea"</string>
-    <string name="bubble_accessibility_action_add_back" msgid="6217995665917123890">"Gehitu berriro sortan"</string>
+    <string name="bubble_accessibility_action_add_back" msgid="6217995665917123890">"Gehitu berriro errenkadan"</string>
     <string name="manage_bubbles_text" msgid="6856830436329494850">"Kudeatu"</string>
     <string name="bubble_content_description_single" msgid="5175160674436546329">"<xliff:g id="NOTIFICATION_TITLE">%1$s</xliff:g> (<xliff:g id="APP_NAME">%2$s</xliff:g>)"</string>
     <string name="bubble_content_description_stack" msgid="7907610717462651870">"<xliff:g id="APP_NAME">%2$s</xliff:g> aplikazioaren \"<xliff:g id="NOTIFICATION_TITLE">%1$s</xliff:g>\" jakinarazpena, eta beste <xliff:g id="BUBBLE_COUNT">%3$d</xliff:g>"</string>
@@ -999,7 +1002,8 @@
     <string name="bubble_accessibility_action_move_top_right" msgid="6916868852433483569">"Eraman goialdera, eskuinetara"</string>
     <string name="bubble_accessibility_action_move_bottom_left" msgid="6339015902495504715">"Eraman behealdera, ezkerretara"</string>
     <string name="bubble_accessibility_action_move_bottom_right" msgid="7471571700628346212">"Eraman behealdera, eskuinetara"</string>
-    <string name="bubble_dismiss_text" msgid="7071770411580452911">"Baztertu"</string>
+    <!-- no translation found for bubble_dismiss_text (1314082410868930066) -->
+    <skip />
     <string name="bubbles_dont_bubble_conversation" msgid="1033040343437428822">"Ez erakutsi elkarrizketak burbuila gisa"</string>
     <string name="bubbles_user_education_title" msgid="5547017089271445797">"Txateatu burbuilen bidez"</string>
     <string name="bubbles_user_education_description" msgid="1160281719576715211">"Elkarrizketa berriak ikono gainerakor edo burbuila gisa agertzen dira. Sakatu burbuila irekitzeko. Arrasta ezazu mugitzeko."</string>
@@ -1010,11 +1014,14 @@
     <string name="notification_content_system_nav_changed" msgid="5077913144844684544">"Eguneratu da sistemaren nabigazioa. Aldaketak egiteko, joan Ezarpenak atalera."</string>
     <string name="notification_content_gesture_nav_available" msgid="4431460803004659888">"Sistemaren nabigazioa eguneratzeko, joan Ezarpenak atalera"</string>
     <string name="inattentive_sleep_warning_title" msgid="3891371591713990373">"Egonean"</string>
+    <string name="priority_onboarding_title" msgid="2893070698479227616">"Lehentasunezko gisa ezarritako elkarrizketa"</string>
+    <string name="priority_onboarding_behavior" msgid="5342816047020432929">"Hau gertatuko da lehentasunezko elkarrizketekin:"</string>
     <string name="priority_onboarding_show_at_top_text" msgid="1678400241025513541">"Erakutsi elkarrizketen atalaren goialdean"</string>
     <string name="priority_onboarding_show_avatar_text" msgid="5756291381124091508">"Erakutsi profileko argazkia pantaila blokeatuan"</string>
     <string name="priority_onboarding_appear_as_bubble_text" msgid="4227039772250263122">"Burbuila gainerakor gisa agertuko da aplikazioen gainean"</string>
     <string name="priority_onboarding_ignores_dnd_text" msgid="2918952762719600529">"Eten ez molestatzeko modua"</string>
     <string name="priority_onboarding_done_button_title" msgid="4569550984286506007">"Ados"</string>
+    <string name="priority_onboarding_settings_button_title" msgid="6663601574303585927">"Ezarpenak"</string>
     <string name="magnification_overlay_title" msgid="6584179429612427958">"Lupa-leiho gainjarria"</string>
     <string name="magnification_window_title" msgid="4863914360847258333">"Lupa-leihoa"</string>
     <string name="magnification_controls_title" msgid="8421106606708891519">"Lupa-leihoaren aukerak"</string>
@@ -1027,10 +1034,17 @@
       <item quantity="other"><xliff:g id="NUMBER_1">%s</xliff:g> kontrol-aukera gehitu dira.</item>
       <item quantity="one"><xliff:g id="NUMBER_0">%s</xliff:g> kontrol-aukera gehitu da.</item>
     </plurals>
+    <string name="controls_removed" msgid="3731789252222856959">"Kenduta"</string>
+    <string name="accessibility_control_favorite" msgid="8694362691985545985">"Gogokoetan dago"</string>
+    <string name="accessibility_control_favorite_position" msgid="54220258048929221">"<xliff:g id="NUMBER">%d</xliff:g>. gogokoa da"</string>
+    <string name="accessibility_control_not_favorite" msgid="1291760269563092359">"Ez dago gogokoetan"</string>
+    <string name="accessibility_control_change_favorite" msgid="2943178027582253261">"gehitu gogokoetan"</string>
+    <string name="accessibility_control_change_unfavorite" msgid="6997408061750740327">"kendu gogokoetatik"</string>
+    <string name="accessibility_control_move" msgid="8980344493796647792">"Eraman <xliff:g id="NUMBER">%d</xliff:g>garren postura"</string>
     <string name="controls_favorite_default_title" msgid="967742178688938137">"Kontrolatzeko aukerak"</string>
     <string name="controls_favorite_subtitle" msgid="6604402232298443956">"Aukeratu itzaltzeko menutik atzitu nahi dituzun kontrolatzeko aukerak"</string>
     <string name="controls_favorite_rearrange" msgid="5616952398043063519">"Kontrolatzeko aukerak antolatzeko, eduki itzazu sakatuta, eta arrastatu"</string>
-    <string name="controls_favorite_removed" msgid="5276978408529217272">"Kontrolatzeko aukera guztiak kendu dira"</string>
+    <string name="controls_favorite_removed" msgid="5276978408529217272">"Kendu dira kontrolatzeko aukera guztiak"</string>
     <string name="controls_favorite_toast_no_changes" msgid="7094494210840877931">"Ez dira gorde aldaketak"</string>
     <string name="controls_favorite_load_error" msgid="2533215155804455348">"Ezin izan da kargatu kontrol guztien zerrenda."</string>
     <string name="controls_favorite_other_zone_header" msgid="9089613266575525252">"Beste bat"</string>
@@ -1043,19 +1057,23 @@
     <string name="controls_pin_wrong" msgid="6162694056042164211">"PIN okerra"</string>
     <string name="controls_pin_verifying" msgid="3755045989392131746">"Egiaztatzen…"</string>
     <string name="controls_pin_instructions" msgid="6363309783822475238">"Idatzi PIN kodea"</string>
-    <string name="controls_pin_instructions_retry" msgid="1566667581012131046">"Saiatu beste PIN kode batekin"</string>
+    <string name="controls_pin_instructions_retry" msgid="1566667581012131046">"Saiatu beste PIN batekin"</string>
     <string name="controls_confirmation_confirming" msgid="2596071302617310665">"Berresten…"</string>
     <string name="controls_confirmation_message" msgid="7744104992609594859">"Berretsi <xliff:g id="DEVICE">%s</xliff:g> gailuaren aldaketa"</string>
     <string name="controls_structure_tooltip" msgid="4355922222944447867">"Pasatu hatza aukera gehiago ikusteko"</string>
     <string name="controls_seeding_in_progress" msgid="3033855341410264148">"Gomendioak kargatzen"</string>
     <string name="controls_media_close_session" msgid="9023534788828414585">"Itxi multimedia-saio hau"</string>
+    <string name="controls_media_resume" msgid="1933520684481586053">"Berrekin"</string>
     <string name="controls_error_timeout" msgid="794197289772728958">"Inaktibo; egiaztatu aplikazioa"</string>
     <string name="controls_error_retryable" msgid="864025882878378470">"Errorea. Berriro saiatzen…"</string>
-    <string name="controls_error_removed" msgid="6299213591234723805">"Gailua kendu da"</string>
+    <string name="controls_error_removed" msgid="6675638069846014366">"Ez da aurkitu"</string>
+    <string name="controls_error_removed_title" msgid="1207794911208047818">"Ez dago erabilgarri kontrolatzeko aukera"</string>
+    <string name="controls_error_removed_message" msgid="2885911717034750542">"Ezin izan da atzitu <xliff:g id="DEVICE">%1$s</xliff:g>. Joan <xliff:g id="APPLICATION">%2$s</xliff:g> aplikaziora, eta ziurtatu kontrolatzeko aukera oraindik ere erabilgarri dagoela eta aplikazioaren ezarpenak ez direla aldatu."</string>
+    <string name="controls_open_app" msgid="483650971094300141">"Ireki aplikazioa"</string>
     <string name="controls_error_generic" msgid="352500456918362905">"Ezin da kargatu egoera"</string>
     <string name="controls_error_failed" msgid="960228639198558525">"Errorea. Saiatu berriro."</string>
     <string name="controls_in_progress" msgid="4421080500238215939">"Abian"</string>
     <string name="controls_added_tooltip" msgid="4842812921719153085">"Eduki sakatuta etengailua kontrolatzeko aukera berriak ikusteko"</string>
-    <string name="controls_menu_add" msgid="4447246119229920050">"Gehitu kontrolatzeko aukerak"</string>
-    <string name="controls_menu_edit" msgid="890623986951347062">"Editatu kontrolatzeko aukerak"</string>
+    <string name="controls_menu_add" msgid="4447246119229920050">"Gehitu aukerak"</string>
+    <string name="controls_menu_edit" msgid="890623986951347062">"Editatu aukerak"</string>
 </resources>

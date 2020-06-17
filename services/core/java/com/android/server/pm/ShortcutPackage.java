@@ -27,12 +27,15 @@ import android.content.pm.PackageInfo;
 import android.content.pm.ShortcutInfo;
 import android.content.pm.ShortcutManager;
 import android.content.res.Resources;
+import android.graphics.drawable.Icon;
 import android.os.PersistableBundle;
 import android.text.format.Formatter;
 import android.util.ArrayMap;
 import android.util.ArraySet;
+import android.util.AtomicFile;
 import android.util.Log;
 import android.util.Slog;
+import android.util.Xml;
 
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.util.ArrayUtils;
@@ -43,15 +46,21 @@ import com.android.server.pm.ShortcutService.DumpFilter;
 import com.android.server.pm.ShortcutService.ShortcutOperation;
 import com.android.server.pm.ShortcutService.Stats;
 
+import libcore.io.IoUtils;
+
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserException;
 import org.xmlpull.v1.XmlSerializer;
 
+import java.io.BufferedInputStream;
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.PrintWriter;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -248,6 +257,28 @@ class ShortcutPackage extends ShortcutPackageItem {
         }
     }
 
+    public void ensureNoBitmapIconIfShortcutIsLongLived(@NonNull List<ShortcutInfo> shortcuts) {
+        for (int i = shortcuts.size() - 1; i >= 0; i--) {
+            final ShortcutInfo si = shortcuts.get(i);
+            if (!si.isLongLived()) {
+                continue;
+            }
+            final Icon icon = si.getIcon();
+            if (icon != null && icon.getType() != Icon.TYPE_BITMAP
+                    && icon.getType() == Icon.TYPE_ADAPTIVE_BITMAP) {
+                continue;
+            }
+            if (icon == null && !si.hasIconFile()) {
+                continue;
+            }
+
+            // TODO: Throw IllegalArgumentException instead.
+            Slog.e(TAG, "Invalid icon type in shortcut " + si.getId() + ". Bitmaps are not allowed"
+                    + " in long-lived shortcuts. Use Resource icons, or Uri-based icons instead.");
+            return;  // Do not spam and return early.
+        }
+    }
+
     /**
      * Delete a shortcut by ID. This will *always* remove it even if it's immutable or invisible.
      */
@@ -256,7 +287,7 @@ class ShortcutPackage extends ShortcutPackageItem {
         if (shortcut != null) {
             mShortcutUser.mService.removeIconLocked(shortcut);
             shortcut.clearFlags(ShortcutInfo.FLAG_DYNAMIC | ShortcutInfo.FLAG_PINNED
-                    | ShortcutInfo.FLAG_MANIFEST | ShortcutInfo.FLAG_CACHED);
+                    | ShortcutInfo.FLAG_MANIFEST | ShortcutInfo.FLAG_CACHED_ALL);
         }
         return shortcut;
     }
@@ -292,36 +323,18 @@ class ShortcutPackage extends ShortcutPackageItem {
         newShortcut.addFlags(ShortcutInfo.FLAG_DYNAMIC);
 
         final ShortcutInfo oldShortcut = mShortcuts.get(newShortcut.getId());
-
-        final boolean replaced;
-
-        final boolean wasPinned;
-        final boolean wasCached;
-
-        if (oldShortcut == null) {
-            replaced = false;
-            wasPinned = false;
-            wasCached = false;
-        } else {
+        if (oldShortcut != null) {
             // It's an update case.
             // Make sure the target is updatable. (i.e. should be mutable.)
             oldShortcut.ensureUpdatableWith(newShortcut, /*isUpdating=*/ false);
-            replaced = true;
 
-            wasPinned = oldShortcut.isPinned();
-            wasCached = oldShortcut.isCached();
-        }
-
-        // If it was originally pinned, the new one should be pinned too.
-        if (wasPinned) {
-            newShortcut.addFlags(ShortcutInfo.FLAG_PINNED);
-        }
-        if (wasCached) {
-            newShortcut.addFlags(ShortcutInfo.FLAG_CACHED);
+            // If it was originally pinned or cached, the new one should be pinned or cached too.
+            newShortcut.addFlags(oldShortcut.getFlags()
+                    & (ShortcutInfo.FLAG_PINNED | ShortcutInfo.FLAG_CACHED_ALL));
         }
 
         forceReplaceShortcutInner(newShortcut);
-        return replaced;
+        return oldShortcut != null;
     }
 
     /**
@@ -342,9 +355,6 @@ class ShortcutPackage extends ShortcutPackageItem {
 
         changedShortcuts.clear();
         final ShortcutInfo oldShortcut = mShortcuts.get(newShortcut.getId());
-        boolean wasPinned = false;
-        boolean wasCached = false;
-
         boolean deleted = false;
 
         if (oldShortcut == null) {
@@ -377,16 +387,9 @@ class ShortcutPackage extends ShortcutPackageItem {
             // Make sure the target is updatable. (i.e. should be mutable.)
             oldShortcut.ensureUpdatableWith(newShortcut, /*isUpdating=*/ false);
 
-            wasPinned = oldShortcut.isPinned();
-            wasCached = oldShortcut.isCached();
-        }
-
-        // If it was originally pinned or cached, the new one should be pinned or cached too.
-        if (wasPinned) {
-            newShortcut.addFlags(ShortcutInfo.FLAG_PINNED);
-        }
-        if (wasCached) {
-            newShortcut.addFlags(ShortcutInfo.FLAG_CACHED);
+            // If it was originally pinned or cached, the new one should be pinned or cached too.
+            newShortcut.addFlags(oldShortcut.getFlags()
+                    & (ShortcutInfo.FLAG_PINNED | ShortcutInfo.FLAG_CACHED_ALL));
         }
 
         forceReplaceShortcutInner(newShortcut);
@@ -480,7 +483,7 @@ class ShortcutPackage extends ShortcutPackageItem {
     public ShortcutInfo deleteLongLivedWithId(@NonNull String shortcutId, boolean ignoreInvisible) {
         final ShortcutInfo shortcut = mShortcuts.get(shortcutId);
         if (shortcut != null) {
-            shortcut.clearFlags(ShortcutInfo.FLAG_CACHED);
+            shortcut.clearFlags(ShortcutInfo.FLAG_CACHED_ALL);
         }
         return deleteOrDisableWithId(
                 shortcutId, /* disable =*/ false, /* overrideImmutable=*/ false, ignoreInvisible,
@@ -1444,10 +1447,6 @@ class ShortcutPackage extends ShortcutPackageItem {
                     // Don't adjust ranks for manifest shortcuts.
                     continue;
                 }
-                if (si.isCached() && !si.isDynamic()) {
-                    // Don't adjust ranks for cached shortcuts that are not dynamic anymore.
-                    continue;
-                }
                 // At this point, it must be dynamic.
                 if (!si.isDynamic()) {
                     s.wtf("Non-dynamic shortcut found.");
@@ -1720,6 +1719,53 @@ class ShortcutPackage extends ShortcutPackageItem {
         out.endTag(null, TAG_SHORTCUT);
     }
 
+    public static ShortcutPackage loadFromFile(ShortcutService s, ShortcutUser shortcutUser,
+            File path, boolean fromBackup) {
+
+        final AtomicFile file = new AtomicFile(path);
+        final FileInputStream in;
+        try {
+            in = file.openRead();
+        } catch (FileNotFoundException e) {
+            if (ShortcutService.DEBUG) {
+                Slog.d(TAG, "Not found " + path);
+            }
+            return null;
+        }
+
+        try {
+            final BufferedInputStream bis = new BufferedInputStream(in);
+
+            ShortcutPackage ret = null;
+            XmlPullParser parser = Xml.newPullParser();
+            parser.setInput(bis, StandardCharsets.UTF_8.name());
+
+            int type;
+            while ((type = parser.next()) != XmlPullParser.END_DOCUMENT) {
+                if (type != XmlPullParser.START_TAG) {
+                    continue;
+                }
+                final int depth = parser.getDepth();
+
+                final String tag = parser.getName();
+                if (ShortcutService.DEBUG_LOAD) {
+                    Slog.d(TAG, String.format("depth=%d type=%d name=%s", depth, type, tag));
+                }
+                if ((depth == 1) && TAG_ROOT.equals(tag)) {
+                    ret = loadFromXml(s, shortcutUser, parser, fromBackup);
+                    continue;
+                }
+                ShortcutService.throwForInvalidTag(depth, tag);
+            }
+            return ret;
+        } catch (IOException | XmlPullParserException e) {
+            Slog.e(TAG, "Failed to read file " + file.getBaseFile(), e);
+            return null;
+        } finally {
+            IoUtils.closeQuietly(in);
+        }
+    }
+
     public static ShortcutPackage loadFromXml(ShortcutService s, ShortcutUser shortcutUser,
             XmlPullParser parser, boolean fromBackup)
             throws IOException, XmlPullParserException {
@@ -1984,7 +2030,7 @@ class ShortcutPackage extends ShortcutPackageItem {
             dynamicList.removeIf((si) -> !si.isDynamic());
 
             final ArrayList<ShortcutInfo> manifestList = new ArrayList<>(list);
-            dynamicList.removeIf((si) -> !si.isManifestShortcut());
+            manifestList.removeIf((si) -> !si.isManifestShortcut());
 
             verifyRanksSequential(dynamicList);
             verifyRanksSequential(manifestList);

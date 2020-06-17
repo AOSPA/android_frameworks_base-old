@@ -49,11 +49,9 @@ public class OverlayManagerServiceImplTests extends OverlayManagerServiceImplTes
     private static final String OVERLAY3 = OVERLAY + "3";
     private static final int USER3 = USER2 + 1;
 
-    // tests: basics
-
     @Test
-    public void testGetOverlayInfo() throws Exception {
-        installOverlayPackage(OVERLAY, TARGET, USER);
+    public void testGetOverlayInfo() {
+        installNewPackage(overlay(OVERLAY, TARGET), USER);
 
         final OverlayManagerServiceImpl impl = getImpl();
         final OverlayInfo oi = impl.getOverlayInfo(OVERLAY, USER);
@@ -64,10 +62,10 @@ public class OverlayManagerServiceImplTests extends OverlayManagerServiceImplTes
     }
 
     @Test
-    public void testGetOverlayInfosForTarget() throws Exception {
-        installOverlayPackage(OVERLAY, TARGET, USER);
-        installOverlayPackage(OVERLAY2, TARGET, USER);
-        installOverlayPackage(OVERLAY3, TARGET, USER2);
+    public void testGetOverlayInfosForTarget() {
+        installNewPackage(overlay(OVERLAY, TARGET), USER);
+        installNewPackage(overlay(OVERLAY2, TARGET), USER);
+        installNewPackage(overlay(OVERLAY3, TARGET), USER2);
 
         final OverlayManagerServiceImpl impl = getImpl();
         final List<OverlayInfo> ois = impl.getOverlayInfosForTarget(TARGET, USER);
@@ -89,11 +87,11 @@ public class OverlayManagerServiceImplTests extends OverlayManagerServiceImplTes
     }
 
     @Test
-    public void testGetOverlayInfosForUser() throws Exception {
-        installTargetPackage(TARGET, USER);
-        installOverlayPackage(OVERLAY, TARGET, USER);
-        installOverlayPackage(OVERLAY2, TARGET, USER);
-        installOverlayPackage(OVERLAY3, TARGET2, USER);
+    public void testGetOverlayInfosForUser() {
+        installNewPackage(target(TARGET), USER);
+        installNewPackage(overlay(OVERLAY, TARGET), USER);
+        installNewPackage(overlay(OVERLAY2, TARGET), USER);
+        installNewPackage(overlay(OVERLAY3, TARGET2), USER);
 
         final OverlayManagerServiceImpl impl = getImpl();
         final Map<String, List<OverlayInfo>> everything = impl.getOverlaysForUser(USER);
@@ -116,91 +114,86 @@ public class OverlayManagerServiceImplTests extends OverlayManagerServiceImplTes
     }
 
     @Test
-    public void testPriority() throws Exception {
-        installOverlayPackage(OVERLAY, TARGET, USER);
-        installOverlayPackage(OVERLAY2, TARGET, USER);
-        installOverlayPackage(OVERLAY3, TARGET, USER);
+    public void testPriority() {
+        installNewPackage(overlay(OVERLAY, TARGET), USER);
+        installNewPackage(overlay(OVERLAY2, TARGET), USER);
+        installNewPackage(overlay(OVERLAY3, TARGET), USER);
 
         final OverlayManagerServiceImpl impl = getImpl();
         final OverlayInfo o1 = impl.getOverlayInfo(OVERLAY, USER);
         final OverlayInfo o2 = impl.getOverlayInfo(OVERLAY2, USER);
         final OverlayInfo o3 = impl.getOverlayInfo(OVERLAY3, USER);
 
-        assertOverlayInfoList(TARGET, USER, o1, o2, o3);
+        assertOverlayInfoForTarget(TARGET, USER, o1, o2, o3);
 
         assertTrue(impl.setLowestPriority(OVERLAY3, USER));
-        assertOverlayInfoList(TARGET, USER, o3, o1, o2);
+        assertOverlayInfoForTarget(TARGET, USER, o3, o1, o2);
 
         assertTrue(impl.setHighestPriority(OVERLAY3, USER));
-        assertOverlayInfoList(TARGET, USER, o1, o2, o3);
+        assertOverlayInfoForTarget(TARGET, USER, o1, o2, o3);
 
         assertTrue(impl.setPriority(OVERLAY, OVERLAY2, USER));
-        assertOverlayInfoList(TARGET, USER, o2, o1, o3);
+        assertOverlayInfoForTarget(TARGET, USER, o2, o1, o3);
     }
 
     @Test
-    public void testOverlayInfoStateTransitions() throws Exception {
+    public void testOverlayInfoStateTransitions() {
         final OverlayManagerServiceImpl impl = getImpl();
         assertNull(impl.getOverlayInfo(OVERLAY, USER));
 
-        installOverlayPackage(OVERLAY, TARGET, USER);
+        installNewPackage(overlay(OVERLAY, TARGET), USER);
         assertState(STATE_MISSING_TARGET, OVERLAY, USER);
 
-        installTargetPackage(TARGET, USER);
+        final DummyDeviceState.PackageBuilder target = target(TARGET);
+        installNewPackage(target, USER);
         assertState(STATE_DISABLED, OVERLAY, USER);
 
         impl.setEnabled(OVERLAY, true, USER);
         assertState(STATE_ENABLED, OVERLAY, USER);
 
         // target upgrades do not change the state of the overlay
-        beginUpgradeTargetPackage(TARGET, USER);
+        upgradePackage(target, USER);
         assertState(STATE_ENABLED, OVERLAY, USER);
 
-        endUpgradeTargetPackage(TARGET, USER);
-        assertState(STATE_ENABLED, OVERLAY, USER);
-
-        uninstallTargetPackage(TARGET, USER);
+        uninstallPackage(TARGET, USER);
         assertState(STATE_MISSING_TARGET, OVERLAY, USER);
 
-        installTargetPackage(TARGET, USER);
+        installNewPackage(target, USER);
         assertState(STATE_ENABLED, OVERLAY, USER);
     }
 
     @Test
-    public void testOnOverlayPackageUpgraded() throws Exception {
-        final OverlayManagerServiceImpl impl = getImpl();
+    public void testOnOverlayPackageUpgraded() {
         final DummyListener listener = getListener();
-        installTargetPackage(TARGET, USER);
-        installOverlayPackage(OVERLAY, TARGET, USER);
-        impl.onOverlayPackageReplacing(OVERLAY, USER);
+        final DummyDeviceState.PackageBuilder target = target(TARGET);
+        final DummyDeviceState.PackageBuilder overlay = overlay(OVERLAY, TARGET);
+        installNewPackage(target, USER);
+        installNewPackage(overlay, USER);
         listener.count = 0;
-        impl.onOverlayPackageReplaced(OVERLAY, USER);
-        assertEquals(1, listener.count);
-
-        // upgrade to a version where the overlay has changed its target
-        beginUpgradeOverlayPackage(OVERLAY, USER);
-        listener.count = 0;
-        endUpgradeOverlayPackage(OVERLAY, "some.other.target", USER);
-        // expect once for the old target package, once for the new target package
+        upgradePackage(overlay, USER);
         assertEquals(2, listener.count);
 
-        beginUpgradeOverlayPackage(OVERLAY, USER);
+        // upgrade to a version where the overlay has changed its target
+        // expect once for the old target package, once for the new target package
         listener.count = 0;
-        endUpgradeOverlayPackage(OVERLAY, "some.other.target", USER);
-        assertEquals(1, listener.count);
+        final DummyDeviceState.PackageBuilder overlay2 = overlay(OVERLAY, "some.other.target");
+        upgradePackage(overlay2, USER);
+        assertEquals(3, listener.count);
+
+        listener.count = 0;
+        upgradePackage(overlay2, USER);
+        assertEquals(2, listener.count);
     }
 
-    // tests: listener interface
-
     @Test
-    public void testListener() throws Exception {
+    public void testListener() {
         final OverlayManagerServiceImpl impl = getImpl();
         final DummyListener listener = getListener();
-        installOverlayPackage(OVERLAY, TARGET, USER);
+        installNewPackage(overlay(OVERLAY, TARGET), USER);
         assertEquals(1, listener.count);
         listener.count = 0;
 
-        installTargetPackage(TARGET, USER);
+        installNewPackage(target(TARGET), USER);
         assertEquals(1, listener.count);
         listener.count = 0;
 

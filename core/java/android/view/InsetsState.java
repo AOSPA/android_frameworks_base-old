@@ -51,6 +51,7 @@ import java.io.PrintWriter;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.util.Objects;
+import java.util.StringJoiner;
 
 /**
  * Holder for state of system windows that cause window insets for all other windows in the system.
@@ -78,7 +79,9 @@ public class InsetsState implements Parcelable {
             ITYPE_TOP_DISPLAY_CUTOUT,
             ITYPE_RIGHT_DISPLAY_CUTOUT,
             ITYPE_BOTTOM_DISPLAY_CUTOUT,
-            ITYPE_IME
+            ITYPE_IME,
+            ITYPE_CLIMATE_BAR,
+            ITYPE_EXTRA_NAVIGATION_BAR
     })
     public @interface InternalInsetsType {}
 
@@ -109,7 +112,11 @@ public class InsetsState implements Parcelable {
     /** Input method window. */
     public static final int ITYPE_IME = 13;
 
-    static final int LAST_TYPE = ITYPE_IME;
+    /** Additional system decorations inset type. */
+    public static final int ITYPE_CLIMATE_BAR = 14;
+    public static final int ITYPE_EXTRA_NAVIGATION_BAR = 15;
+
+    static final int LAST_TYPE = ITYPE_EXTRA_NAVIGATION_BAR;
 
     // Derived types
 
@@ -236,6 +243,44 @@ public class InsetsState implements Parcelable {
             insets = Insets.max(source.calculateVisibleInsets(frame), insets);
         }
         return insets.toRect();
+    }
+
+    /**
+     * Calculate which insets *cannot* be controlled, because the frame does not cover the
+     * respective side of the inset.
+     *
+     * If the frame of our window doesn't cover the entire inset, the control API makes very
+     * little sense, as we don't deal with negative insets.
+     */
+    @InsetsType
+    public int calculateUncontrollableInsetsFromFrame(Rect frame) {
+        int blocked = 0;
+        for (int type = FIRST_TYPE; type <= LAST_TYPE; type++) {
+            InsetsSource source = mSources.get(type);
+            if (source == null) {
+                continue;
+            }
+            if (!canControlSide(frame, getInsetSide(
+                    source.calculateInsets(frame, true /* ignoreVisibility */)))) {
+                blocked |= toPublicType(type);
+            }
+        }
+        return blocked;
+    }
+
+    private boolean canControlSide(Rect frame, int side) {
+        switch (side) {
+            case ISIDE_LEFT:
+            case ISIDE_RIGHT:
+                return frame.left == mDisplayFrame.left && frame.right == mDisplayFrame.right;
+            case ISIDE_TOP:
+            case ISIDE_BOTTOM:
+                return frame.top == mDisplayFrame.top && frame.bottom == mDisplayFrame.bottom;
+            case ISIDE_FLOATING:
+                return true;
+            default:
+                return false;
+        }
     }
 
     private void processSource(InsetsSource source, Rect relativeFrame, boolean ignoreVisibility,
@@ -417,8 +462,10 @@ public class InsetsState implements Parcelable {
     public static @Type.InsetsType int toPublicType(@InternalInsetsType int type) {
         switch (type) {
             case ITYPE_STATUS_BAR:
+            case ITYPE_CLIMATE_BAR:
                 return Type.STATUS_BARS;
             case ITYPE_NAVIGATION_BAR:
+            case ITYPE_EXTRA_NAVIGATION_BAR:
                 return Type.NAVIGATION_BARS;
             case ITYPE_CAPTION_BAR:
                 return Type.CAPTION_BAR;
@@ -497,6 +544,10 @@ public class InsetsState implements Parcelable {
                 return "ITYPE_BOTTOM_DISPLAY_CUTOUT";
             case ITYPE_IME:
                 return "ITYPE_IME";
+            case ITYPE_CLIMATE_BAR:
+                return "ITYPE_CLIMATE_BAR";
+            case ITYPE_EXTRA_NAVIGATION_BAR:
+                return "ITYPE_EXTRA_NAVIGATION_BAR";
             default:
                 return "ITYPE_UNKNOWN_" + type;
         }
@@ -600,10 +651,16 @@ public class InsetsState implements Parcelable {
 
     @Override
     public String toString() {
+        StringJoiner joiner = new StringJoiner(", ");
+        for (InsetsSource source : mSources.values()) {
+            if (source != null) {
+                joiner.add(source.toString());
+            }
+        }
         return "InsetsState: {"
                 + "mDisplayFrame=" + mDisplayFrame
-                + ", mSources=" + mSources
-                + "}";
+                + ", mSources= { " + joiner
+                + " }";
     }
 }
 

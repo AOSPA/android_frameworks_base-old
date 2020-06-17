@@ -26,6 +26,7 @@ import androidx.dynamicanimation.animation.FloatPropertyCompat
 import androidx.dynamicanimation.animation.SpringAnimation
 import androidx.dynamicanimation.animation.SpringForce
 import com.android.systemui.util.animation.PhysicsAnimator.Companion.getInstance
+import java.lang.ref.WeakReference
 import java.util.WeakHashMap
 import kotlin.math.abs
 import kotlin.math.max
@@ -87,7 +88,9 @@ private var verboseLogging = false
  *
  * @param T The type of the object being animated.
  */
-class PhysicsAnimator<T> private constructor (val target: T) {
+class PhysicsAnimator<T> private constructor (target: T) {
+    /** Weak reference to the animation target. */
+    val weakTarget = WeakReference(target)
 
     /** Data class for representing animation frame updates. */
     data class AnimationUpdate(val value: Float, val velocity: Float)
@@ -307,14 +310,34 @@ class PhysicsAnimator<T> private constructor (val target: T) {
         springConfig: SpringConfig,
         flingMustReachMinOrMax: Boolean = false
     ): PhysicsAnimator<T> {
+        val target = weakTarget.get()
+        if (target == null) {
+            Log.w(TAG, "Trying to animate a GC-ed target.")
+            return this
+        }
         val flingConfigCopy = flingConfig.copy()
         val springConfigCopy = springConfig.copy()
         val toAtLeast = if (startVelocity < 0) flingConfig.min else flingConfig.max
 
-        // If the fling needs to reach min/max, calculate the velocity required to do so and use
-        // that if the provided start velocity is not sufficient.
-        if (flingMustReachMinOrMax &&
-                toAtLeast != -Float.MAX_VALUE && toAtLeast != Float.MAX_VALUE) {
+        if (flingMustReachMinOrMax && isValidValue(toAtLeast)) {
+            val currentValue = property.getValue(target)
+            val flingTravelDistance =
+                    startVelocity / (flingConfig.friction * FLING_FRICTION_SCALAR_MULTIPLIER)
+            val projectedFlingEndValue = currentValue + flingTravelDistance
+            val midpoint = (flingConfig.min + flingConfig.max) / 2
+
+            // If fling velocity is too low to push the target past the midpoint between min and
+            // max, then spring back towards the nearest edge, starting with the current velocity.
+            if ((startVelocity < 0 && projectedFlingEndValue > midpoint) ||
+                    (startVelocity > 0 && projectedFlingEndValue < midpoint)) {
+                val toPosition =
+                        if (projectedFlingEndValue < midpoint) flingConfig.min else flingConfig.max
+                if (isValidValue(toPosition)) {
+                    return spring(property, toPosition, startVelocity, springConfig)
+                }
+            }
+
+            // Projected fling end value is past the midpoint, so fling forward.
             val distanceToDestination = toAtLeast - property.getValue(target)
 
             // The minimum velocity required for the fling to end up at the given destination,
@@ -344,6 +367,8 @@ class PhysicsAnimator<T> private constructor (val target: T) {
         springConfigs[property] = springConfigCopy
         return this
     }
+
+    private fun isValidValue(value: Float) = value < Float.MAX_VALUE && value > -Float.MAX_VALUE
 
     /**
      * Adds a listener that will be called whenever any property on the animated object is updated.
@@ -437,6 +462,11 @@ class PhysicsAnimator<T> private constructor (val target: T) {
                     "this message in a test, call PhysicsAnimatorTestUtils#prepareForTest in " +
                     "your test setup.")
         }
+        val target = weakTarget.get()
+        if (target == null) {
+            Log.w(TAG, "Trying to animate a GC-ed object.")
+            return
+        }
 
         // Functions that will actually start the animations. These are run after we build and add
         // the InternalListener, since some animations might update/end immediately and we don't
@@ -472,7 +502,7 @@ class PhysicsAnimator<T> private constructor (val target: T) {
                     cancel(animatedProperty)
 
                     // Apply the configuration and start the animation.
-                    getFlingAnimation(animatedProperty)
+                    getFlingAnimation(animatedProperty, target)
                             .also { flingConfig.applyToAnimation(it) }
                             .start()
                 }
@@ -485,7 +515,7 @@ class PhysicsAnimator<T> private constructor (val target: T) {
                 // If there is no corresponding fling config, we're only springing.
                 if (flingConfig == null) {
                     // Apply the configuration and start the animation.
-                    val springAnim = getSpringAnimation(animatedProperty)
+                    val springAnim = getSpringAnimation(animatedProperty, target)
                     springConfig.applyToAnimation(springAnim)
                     animationStartActions.add(springAnim::start)
                 } else {
@@ -541,7 +571,7 @@ class PhysicsAnimator<T> private constructor (val target: T) {
                                 }
 
                                 // Apply the configuration and start the spring animation.
-                                getSpringAnimation(animatedProperty)
+                                getSpringAnimation(animatedProperty, target)
                                         .also { springConfig.applyToAnimation(it) }
                                         .start()
                             }
@@ -553,6 +583,7 @@ class PhysicsAnimator<T> private constructor (val target: T) {
 
         // Add an internal listener that will dispatch animation events to the provided listeners.
         internalListeners.add(InternalListener(
+                target,
                 getAnimatedProperties(),
                 ArrayList(updateListeners),
                 ArrayList(endListeners),
@@ -577,7 +608,10 @@ class PhysicsAnimator<T> private constructor (val target: T) {
     }
 
     /** Retrieves a spring animation for the given property, building one if needed. */
-    private fun getSpringAnimation(property: FloatPropertyCompat<in T>): SpringAnimation {
+    private fun getSpringAnimation(
+        property: FloatPropertyCompat<in T>,
+        target: T
+    ): SpringAnimation {
         return springAnimations.getOrPut(
                 property,
                 { configureDynamicAnimation(SpringAnimation(target, property), property)
@@ -585,7 +619,7 @@ class PhysicsAnimator<T> private constructor (val target: T) {
     }
 
     /** Retrieves a fling animation for the given property, building one if needed. */
-    private fun getFlingAnimation(property: FloatPropertyCompat<in T>): FlingAnimation {
+    private fun getFlingAnimation(property: FloatPropertyCompat<in T>, target: T): FlingAnimation {
         return flingAnimations.getOrPut(
                 property,
                 { configureDynamicAnimation(FlingAnimation(target, property), property)
@@ -610,6 +644,12 @@ class PhysicsAnimator<T> private constructor (val target: T) {
                 it.onInternalAnimationEnd(
                         property, canceled, value, velocity, anim is FlingAnimation)
             }
+            if (springAnimations[property] == anim) {
+                springAnimations.remove(property)
+            }
+            if (flingAnimations[property] == anim) {
+                flingAnimations.remove(property)
+            }
         }
         return anim
     }
@@ -621,6 +661,7 @@ class PhysicsAnimator<T> private constructor (val target: T) {
      * appropriate value for allEnded to [EndListener.onAnimationEnd].
      */
     internal inner class InternalListener constructor(
+        private val target: T,
         private var properties: Set<FloatPropertyCompat<in T>>,
         private var updateListeners: List<UpdateListener<T>>,
         private var endListeners: List<EndListener<T>>,

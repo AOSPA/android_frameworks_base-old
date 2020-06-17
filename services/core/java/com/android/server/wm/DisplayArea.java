@@ -66,6 +66,7 @@ public class DisplayArea<T extends WindowContainer> extends WindowContainer<T> {
     final int mFeatureId;
     private final DisplayAreaOrganizerController mOrganizerController;
     IDisplayAreaOrganizer mOrganizer;
+    private final Configuration mTmpConfiguration = new Configuration();
 
     DisplayArea(WindowManagerService wms, Type type, String name) {
         this(wms, type, name, FEATURE_UNDEFINED);
@@ -103,6 +104,12 @@ public class DisplayArea<T extends WindowContainer> extends WindowContainer<T> {
                 Type.checkSiblings(Type.typeOf(top), Type.typeOf(bottom));
             }
         }
+    }
+
+    @Override
+    boolean needsZBoost() {
+        // Z Boost should only happen at or below the ActivityStack level.
+        return false;
     }
 
     @Override
@@ -162,8 +169,10 @@ public class DisplayArea<T extends WindowContainer> extends WindowContainer<T> {
 
     @Override
     public void onConfigurationChanged(Configuration newParentConfig) {
+        mTmpConfiguration.setTo(getConfiguration());
         super.onConfigurationChanged(newParentConfig);
-        if (mOrganizer != null) {
+
+        if (mOrganizer != null && getConfiguration().diff(mTmpConfiguration) != 0) {
             mOrganizerController.onDisplayAreaInfoChanged(mOrganizer, this);
         }
     }
@@ -281,7 +290,7 @@ public class DisplayArea<T extends WindowContainer> extends WindowContainer<T> {
                 mDimmer.resetDimStates();
             }
 
-            if (mDimmer.updateDims(getPendingTransaction(), mTmpDimBoundsRect)) {
+            if (mDimmer.updateDims(getSyncTransaction(), mTmpDimBoundsRect)) {
                 scheduleAnimation();
             }
         }

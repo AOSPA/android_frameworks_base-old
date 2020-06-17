@@ -19,7 +19,7 @@
 
 <resources xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
-    <string name="app_label" msgid="4811759950673118541">"ສ່ວນຕິດຕໍ່ຜູ່ໃຊ້ຂອງລະບົບ"</string>
+    <string name="app_label" msgid="4811759950673118541">"ສ່ວນຕິດຕໍ່ຜູ້ໃຊ້ຂອງລະບົບ"</string>
     <string name="status_bar_clear_all_button" msgid="2491321682873657397">"ລຶບ"</string>
     <string name="status_bar_no_notifications_title" msgid="7812479124981107507">"ບໍ່ມີການແຈ້ງເຕືອນ"</string>
     <string name="status_bar_ongoing_events_title" msgid="3986169317496615446">"ດຳເນີນຢູ່"</string>
@@ -511,8 +511,8 @@
     <string name="manage_notifications_text" msgid="6885645344647733116">"ຈັດການ"</string>
     <string name="manage_notifications_history_text" msgid="57055985396576230">"ປະຫວັດ"</string>
     <string name="notification_section_header_incoming" msgid="5295312809341711367">"ຂາເຂົ້າ"</string>
-    <string name="notification_section_header_gentle" msgid="3044910806569985386">"ການແຈ້ງເຕືອນແບບງຽບ"</string>
-    <string name="notification_section_header_alerting" msgid="3168140660646863240">"ການແຈ້ງເຕືອນການເຕືອນ"</string>
+    <string name="notification_section_header_gentle" msgid="6804099527336337197">"ປິດສຽງ"</string>
+    <string name="notification_section_header_alerting" msgid="5581175033680477651">"ການແຈ້ງເຕືອນ"</string>
     <string name="notification_section_header_conversations" msgid="821834744538345661">"ການສົນທະນາ"</string>
     <string name="accessibility_notification_section_header_gentle_clear_all" msgid="6490207897764933919">"ລຶບລ້າງການແຈ້ງເຕືອນແບບງຽບທັງໝົດ"</string>
     <string name="dnd_suppressing_shade_text" msgid="5588252250634464042">"ຢຸດການແຈ້ງເຕືອນໂດຍໂໝດຫ້າມລົບກວນແລ້ວ"</string>
@@ -592,19 +592,21 @@
     <string name="volume_odi_captions_hint_enable" msgid="2073091194012843195">"ເປີດນຳໃຊ້"</string>
     <string name="volume_odi_captions_hint_disable" msgid="2518846326748183407">"ປິດນຳໃຊ້"</string>
     <string name="accessibility_output_chooser" msgid="7807898688967194183">"ສະຫຼັບອຸປະກອນສົ່ງສຽງອອກ"</string>
-    <string name="screen_pinning_title" msgid="7357611095909618178">"ປັກ​ໝຸດໜ້າ​ຈໍ​ແລ້ວ"</string>
+    <string name="screen_pinning_title" msgid="9058007390337841305">"ແອັບຖືກປັກໝຸດແລ້ວ"</string>
     <string name="screen_pinning_description" msgid="8699395373875667743">"ນີ້ຈະສະແດງມັນໃນໜ້າຈໍຈົນກວ່າທ່ານຈະເຊົາປັກມຸດ. ໃຫ້ແຕະປຸ່ມກັບຄືນ ແລະ ປຸ່ມພາບຮວມຄ້າງໄວ້ເພື່ອຍົກເລີກການປັກມຸດ."</string>
     <string name="screen_pinning_description_recents_invisible" msgid="4564466648700390037">"ນີ້ຈະສະແດງມັນໃນໜ້າຈໍຈົນກວ່າທ່ານຈະເຊົາປັກໝຸດ. ໃຫ້ແຕະປຸ່ມກັບຄືນ ແລະ ປຸ່ມພາບຮວມຄ້າງໄວ້ເພື່ອຍົກເລີກການປັກໝຸດ."</string>
     <string name="screen_pinning_description_gestural" msgid="7246323931831232068">"ນີ້ຈະເຮັດໃຫ້ມັນຢູ່ໃນມຸມມອງຈົນກວ່າທ່ານຈະເຊົາປັກໝຸດ. ປັດຂຶ້ນຄ້າງໄວ້ເພື່ອເຊົາປັກໝຸດ."</string>
     <string name="screen_pinning_description_accessible" msgid="7386449191953535332">"ນີ້ຈະສະແດງມັນໃນໜ້າຈໍຈົນກວ່າທ່ານຈະເຊົາປັກມຸດ. ໃຫ້ແຕະປຸ່ມພາບຮວມຄ້າງໄວ້ເພື່ອຍົກເລີກການປັກມຸດ."</string>
     <string name="screen_pinning_description_recents_invisible_accessible" msgid="2857071808674481986">"ນີ້ຈະສະແດງມັນໃນໜ້າຈໍຈົນກວ່າທ່ານຈະເຊົາປັກໝຸດ. ໃຫ້ແຕະປຸ່ມພາບຮວມຄ້າງໄວ້ເພື່ອຍົກເລີກການປັກໝຸດ."</string>
-    <string name="screen_pinning_toast" msgid="2083944237147005811">"ເພື່ອຍົກເລີກການປັກໝຸດໜ້າຈໍນີ້, ໃຫ້ແຕະປຸ່ມກັບຄືນ ແລະ ປຸ່ມພາບຮວມຄ້າງໄວ້"</string>
-    <string name="screen_pinning_toast_recents_invisible" msgid="6343770487795352573">"ເພື່ອຍົກເລີກການປັກໝຸດໜ້າຈໍນີ້, ໃຫ້ແຕະປຸ່ມກັບຄືນ ແລະ ປຸ່ມພາບຮວມຄ້າງໄວ້"</string>
-    <string name="screen_pinning_toast_gesture_nav" msgid="2884536903398445645">"ເພື່ອເຊົາປັກໝຸດໜ້າຈໍນີ້, ໃຫ້ປັດຂຶ້ນຄ້າງໄວ້"</string>
+    <string name="screen_pinning_exposes_personal_data" msgid="8189852022981524789">"ອາດສາມາດເຂົ້າເຖິງຂໍ້ມູນສ່ວນຕົວໄດ້ (ເຊັ່ນ: ລາຍຊື່ຜູ້ຕິດຕໍ່ ແລະ ເນື້ອຫາອີເມວ)"</string>
+    <string name="screen_pinning_can_open_other_apps" msgid="7529756813231421455">"ແອັບທີ່ປັກໝຸດໄວ້ອາດເປີດແອັບອື່ນ."</string>
+    <string name="screen_pinning_toast" msgid="8177286912533744328">"ເພື່ອຍົກເລີກການປັກໝຸດແອັບນີ້, ໃຫ້ແຕະປຸ່ມກັບຄືນ ແລະ ປຸ່ມພາບຮວມຄ້າງໄວ້"</string>
+    <string name="screen_pinning_toast_recents_invisible" msgid="6850978077443052594">"ເພື່ອຍົກເລີກການປັກໝຸດແອັບນີ້, ໃຫ້ແຕະປຸ່ມກັບຄືນ ແລະ ປຸ່ມພາບຮວມຄ້າງໄວ້"</string>
+    <string name="screen_pinning_toast_gesture_nav" msgid="170699893395336705">"ເພື່ອເຊົາປັກໝຸດແອັບນີ້, ໃຫ້ປັດຂຶ້ນຄ້າງໄວ້"</string>
     <string name="screen_pinning_positive" msgid="3285785989665266984">"ເຂົ້າໃຈແລ້ວ"</string>
     <string name="screen_pinning_negative" msgid="6882816864569211666">"ບໍ່, ຂອບໃຈ"</string>
-    <string name="screen_pinning_start" msgid="5695091877402422575">"ປັກໝຸດໜ້າຈໍແລ້ວ"</string>
-    <string name="screen_pinning_exit" msgid="5114993350662745840">"ຍົກເລີກການປັກໝຸດໜ້າຈໍແລ້ວ"</string>
+    <string name="screen_pinning_start" msgid="7483998671383371313">"ປັກໝຸດແອັບແລ້ວ"</string>
+    <string name="screen_pinning_exit" msgid="4553787518387346893">"ເຊົາປັກໝຸດແອັບແລ້ວ"</string>
     <string name="quick_settings_reset_confirmation_title" msgid="463533331480997595">"ເຊື່ອງ <xliff:g id="TILE_LABEL">%1$s</xliff:g> ຫຼື​ບໍ່?"</string>
     <string name="quick_settings_reset_confirmation_message" msgid="2320586180785674186">"​ມັນ​ຈະ​ສະ​ແດງ​ຄືນ​ໃໝ່​ເມື່ອ​ທ່ານ​ເປີດ​ນຳ​ໃຊ້​ມັນ​ໃນ​ການ​ຕັ້ງ​ຄ່າ​ຄັ້ງ​ຕໍ່​ໄປ."</string>
     <string name="quick_settings_reset_confirmation_button" msgid="3341477479055016776">"ເຊື່ອງ"</string>
@@ -707,16 +709,17 @@
     <string name="inline_turn_off_notifications" msgid="8543989584403106071">"ປິດການແຈ້ງເຕືອນ"</string>
     <string name="inline_keep_showing_app" msgid="4393429060390649757">"ສະແດງການແຈ້ງເຕືອນຈາກແອັບນີ້ຕໍ່ໄປບໍ?"</string>
     <string name="notification_silence_title" msgid="8608090968400832335">"ປິດສຽງ"</string>
-    <string name="notification_alert_title" msgid="7629202599338071971">"ການເຕືອນ"</string>
+    <string name="notification_alert_title" msgid="3656229781017543655">"ຄ່າເລີ່ມຕົ້ນ"</string>
     <string name="notification_bubble_title" msgid="8330481035191903164">"ຟອງ"</string>
-    <string name="notification_channel_summary_low" msgid="7300447764759926720">"ຊ່ວຍທ່ານມີສະມາທິໂດຍບໍ່ໃຊ້ສຽງ ຫຼື ການສັ່ນເຕືອນ."</string>
-    <string name="notification_channel_summary_default" msgid="3539949463907902037">"ດຶງຄວາມສົນໃຈຂອງທ່ານດ້ວຍສຽງ ຫຼື ການສັ່ນເຕືອນ."</string>
-    <string name="notification_channel_summary_default_with_bubbles" msgid="6298026344552480458">"ດຶງຄວາມສົນໃຈຂອງທ່ານດ້ວຍສຽງ ຫຼື ການສັ່ນເຕືອນ. ການສົນທະນາຈາກ <xliff:g id="APP_NAME">%1$s</xliff:g> ຈະເປັນ bubble ຕາມຄ່າເລີ່ມຕົ້ນ."</string>
+    <string name="notification_channel_summary_low" msgid="4860617986908931158">"ບໍ່ມີສຽງ ຫຼື ການສັ່ນເຕືອນ"</string>
+    <string name="notification_conversation_summary_low" msgid="1734433426085468009">"ບໍ່ມີສຽງ ຫຼື ການສັ່ນເຕືອນ ແລະ ປາກົດຢູ່ທາງລຸ່ມຂອງພາກສ່ວນການສົນທະນາ"</string>
+    <string name="notification_channel_summary_default" msgid="3282930979307248890">"ອາດສົ່ງສຽງ ຫຼື ສັ່ນເຕືອນໂດຍອ້າງອີງຈາກການຕັ້ງຄ່າໂທລະສັບ"</string>
+    <string name="notification_channel_summary_default_with_bubbles" msgid="1782419896613644568">"ອາດສົ່ງສຽງ ຫຼື ສັ່ນເຕືອນໂດຍອ້າງອີງຈາກການຕັ້ງຄ່າໂທລະສັບ. ການສົນທະນາຈາກ <xliff:g id="APP_NAME">%1$s</xliff:g> ຈະເປັນ bubble ຕາມຄ່າເລີ່ມຕົ້ນ."</string>
     <string name="notification_channel_summary_bubble" msgid="7235935211580860537">"ເອົາໃຈໃສ່ທາງລັດແບບລອຍໄປຫາເນື້ອຫານີ້."</string>
-    <string name="notification_channel_summary_priority" msgid="7415770044553264622">"ສະແດງຢູ່ເທິງສຸດຂອງພາກສ່ວນການສົນທະນາ ແລະ ສະແດງເປັນຟອງ."</string>
+    <string name="notification_channel_summary_priority" msgid="7952654515769021553">"ສະແດງຢູ່ເທິງສຸດຂອງພາກສ່ວນການສົນທະນາ, ປາກົດເປັນ bubble ແບບລອຍ, ສະແດງຮູບໂປຣໄຟລ໌ຢູ່ໜ້າຈໍລັອກ"</string>
     <string name="notification_conversation_channel_settings" msgid="2409977688430606835">"ຕັ້ງຄ່າ"</string>
-    <string name="notification_priority_title" msgid="2079708866333537093">"ຄວາມສຳຄັນ"</string>
-    <string name="no_shortcut" msgid="7176375126961212514">"<xliff:g id="APP_NAME">%1$s</xliff:g> ບໍ່ຮອງຮັບການຕັ້ງຄ່າສະເພາະຂອງການສົນທະນາ"</string>
+    <string name="notification_priority_title" msgid="2079708866333537093">"ສຳຄັນ"</string>
+    <string name="no_shortcut" msgid="8257177117568230126">"<xliff:g id="APP_NAME">%1$s</xliff:g> ບໍ່ຮອງຮັບຄຸນສົມບັດການສົນທະນາ"</string>
     <string name="bubble_overflow_empty_title" msgid="3120029421991510842">"ບໍ່ມີຟອງຫຼ້າສຸດ"</string>
     <string name="bubble_overflow_empty_subtitle" msgid="2030874469510497397">"ຟອງຫຼ້າສຸດ ແລະ ຟອງທີ່ປິດໄປຈະປາກົດຢູ່ບ່ອນນີ້"</string>
     <string name="notification_unblockable_desc" msgid="2073030886006190804">"ບໍ່ສາມາດແກ້ໄຂການແຈ້ງເຕືອນເຫຼົ່ານີ້ໄດ້."</string>
@@ -999,7 +1002,8 @@
     <string name="bubble_accessibility_action_move_top_right" msgid="6916868852433483569">"ຍ້າຍຂວາເທິງ"</string>
     <string name="bubble_accessibility_action_move_bottom_left" msgid="6339015902495504715">"ຍ້າຍຊ້າຍລຸ່ມ"</string>
     <string name="bubble_accessibility_action_move_bottom_right" msgid="7471571700628346212">"ຍ້າຍຂວາລຸ່ມ"</string>
-    <string name="bubble_dismiss_text" msgid="7071770411580452911">"ປິດໄວ້"</string>
+    <!-- no translation found for bubble_dismiss_text (1314082410868930066) -->
+    <skip />
     <string name="bubbles_dont_bubble_conversation" msgid="1033040343437428822">"ຢ່າໃຊ້ຟອງໃນການສົນທະນາ"</string>
     <string name="bubbles_user_education_title" msgid="5547017089271445797">"ສົນທະນາໂດຍໃຊ້ຟອງ"</string>
     <string name="bubbles_user_education_description" msgid="1160281719576715211">"ການສົນທະນາໃໝ່ຈະປາກົດເປັນໄອຄອນ ຫຼື ຟອງແບບລອຍ. ແຕະເພື່ອເປີດຟອງ. ລາກເພື່ອຍ້າຍມັນ."</string>
@@ -1010,11 +1014,14 @@
     <string name="notification_content_system_nav_changed" msgid="5077913144844684544">"ອັບເດດການນຳທາງລະບົບແລ້ວ. ເພື່ອປ່ຽນແປງ, ກະລຸນາໄປທີ່ການຕັ້ງຄ່າ."</string>
     <string name="notification_content_gesture_nav_available" msgid="4431460803004659888">"ໄປທີ່ການຕັ້ງຄ່າເພື່ອອັບເດດການນຳທາງລະບົບ"</string>
     <string name="inattentive_sleep_warning_title" msgid="3891371591713990373">"ສະແຕນບາຍ"</string>
+    <string name="priority_onboarding_title" msgid="2893070698479227616">"ຕັ້ງການສົນທະນາເປັນສຳຄັນແລ້ວ"</string>
+    <string name="priority_onboarding_behavior" msgid="5342816047020432929">"ການສົນທະນາສຳຄັນຈະ:"</string>
     <string name="priority_onboarding_show_at_top_text" msgid="1678400241025513541">"ສະແດງຢູ່ເທິງສຸດຂອງພາກສ່ວນການສົນທະນາ"</string>
     <string name="priority_onboarding_show_avatar_text" msgid="5756291381124091508">"ສະແດງຮູບໂປຣໄຟລ໌ຢູ່ໜ້າຈໍລັອກ"</string>
     <string name="priority_onboarding_appear_as_bubble_text" msgid="4227039772250263122">"ປາກົດເປັນ bubble ລອຍຢູ່ເໜືອແອັບ"</string>
     <string name="priority_onboarding_ignores_dnd_text" msgid="2918952762719600529">"ລົບກວນໂໝດຫ້າມລົບກວນ"</string>
     <string name="priority_onboarding_done_button_title" msgid="4569550984286506007">"ເຂົ້າໃຈແລ້ວ"</string>
+    <string name="priority_onboarding_settings_button_title" msgid="6663601574303585927">"ການຕັ້ງຄ່າ"</string>
     <string name="magnification_overlay_title" msgid="6584179429612427958">"ໜ້າຈໍວາງທັບການຂະຫຍາຍ"</string>
     <string name="magnification_window_title" msgid="4863914360847258333">"ໜ້າຈໍການຂະຫຍາຍ"</string>
     <string name="magnification_controls_title" msgid="8421106606708891519">"ການຄວບຄຸມໜ້າຈໍການຂະຫຍາຍ"</string>
@@ -1027,6 +1034,13 @@
       <item quantity="other">ເພີ່ມ <xliff:g id="NUMBER_1">%s</xliff:g> ການຄວບຄຸມແລ້ວ.</item>
       <item quantity="one">ເພີ່ມ <xliff:g id="NUMBER_0">%s</xliff:g> ການຄວບຄຸມແລ້ວ.</item>
     </plurals>
+    <string name="controls_removed" msgid="3731789252222856959">"ລຶບອອກແລ້ວ"</string>
+    <string name="accessibility_control_favorite" msgid="8694362691985545985">"ເພີ່ມລາຍການທີ່ມັກແລ້ວ"</string>
+    <string name="accessibility_control_favorite_position" msgid="54220258048929221">"ເພີ່ມລາຍການທີ່ມັກແລ້ວ, ຕຳແໜ່ງ <xliff:g id="NUMBER">%d</xliff:g>"</string>
+    <string name="accessibility_control_not_favorite" msgid="1291760269563092359">"ຍົກເລີກລາຍການທີ່ມັກແລ້ວ"</string>
+    <string name="accessibility_control_change_favorite" msgid="2943178027582253261">"ເພີ່ມລາຍການທີ່ມັກ"</string>
+    <string name="accessibility_control_change_unfavorite" msgid="6997408061750740327">"ຍົກເລີກລາຍການທີ່ມັກ"</string>
+    <string name="accessibility_control_move" msgid="8980344493796647792">"ຍ້າຍໄປຕຳແໜ່ງ <xliff:g id="NUMBER">%d</xliff:g>"</string>
     <string name="controls_favorite_default_title" msgid="967742178688938137">"ການຄວບຄຸມ"</string>
     <string name="controls_favorite_subtitle" msgid="6604402232298443956">"ເລືອກການຄວບຄຸມເພື່ອເຂົ້າເຖິງຈາກເມນູເປີດປິດ"</string>
     <string name="controls_favorite_rearrange" msgid="5616952398043063519">"ກົດຄ້າງໄວ້ເພື່ອຈັດຮຽງການຄວບຄຸມຄືນໃໝ່"</string>
@@ -1049,9 +1063,13 @@
     <string name="controls_structure_tooltip" msgid="4355922222944447867">"ປັດເພື່ອເບິ່ງເພີ່ມເຕີມ"</string>
     <string name="controls_seeding_in_progress" msgid="3033855341410264148">"ກຳລັງໂຫຼດຄຳແນະນຳ"</string>
     <string name="controls_media_close_session" msgid="9023534788828414585">"ປິດເຊດຊັນມີເດຍນີ້"</string>
+    <string name="controls_media_resume" msgid="1933520684481586053">"ສືບຕໍ່"</string>
     <string name="controls_error_timeout" msgid="794197289772728958">"ບໍ່ເຮັດວຽກ, ກະລຸນາກວດສອບແອັບ"</string>
     <string name="controls_error_retryable" msgid="864025882878378470">"ຜິດພາດ, ກໍາລັງ​ລອງ​ໃໝ່…"</string>
-    <string name="controls_error_removed" msgid="6299213591234723805">"ລຶບອຸປະກອນອອກແລ້ວ"</string>
+    <string name="controls_error_removed" msgid="6675638069846014366">"ບໍ່ພົບ"</string>
+    <string name="controls_error_removed_title" msgid="1207794911208047818">"ບໍ່ສາມາດໃຊ້ການຄວບຄຸມໄດ້"</string>
+    <string name="controls_error_removed_message" msgid="2885911717034750542">"ບໍ່ສາມາດເຂົ້າເຖິງ <xliff:g id="DEVICE">%1$s</xliff:g> ໄດ້. ກະລຸນາກວດສອບແອັບ <xliff:g id="APPLICATION">%2$s</xliff:g> ເພື່ອເບິ່ງວ່າຍັງສາມາດໃຊ້ການຄວບຄຸມໄດ້ຫຼືບໍ່ ແລະ ຍັງບໍ່ໄດ້ປ່ຽນການຕັ້ງຄ່າແອັບເທື່ອ."</string>
+    <string name="controls_open_app" msgid="483650971094300141">"ເປີດແອັບ"</string>
     <string name="controls_error_generic" msgid="352500456918362905">"ບໍ່ສາມາດໂຫຼດສະຖານະໄດ້"</string>
     <string name="controls_error_failed" msgid="960228639198558525">"​ຜິດ​ພາດ​, ກະລຸນາລອງໃໝ່"</string>
     <string name="controls_in_progress" msgid="4421080500238215939">"ກຳລັງດຳເນີນການຢູ່"</string>

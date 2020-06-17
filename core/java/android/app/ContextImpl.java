@@ -1087,7 +1087,7 @@ class ContextImpl extends Context {
         try {
             String resolvedType = null;
             if (fillInIntent != null) {
-                fillInIntent.migrateExtraStreamToClipData();
+                fillInIntent.migrateExtraStreamToClipData(this);
                 fillInIntent.prepareToLeaveProcess(this);
                 resolvedType = fillInIntent.resolveTypeIfNeeded(getContentResolver());
             }
@@ -2747,6 +2747,7 @@ class ContextImpl extends Context {
             opPackageName = container.mOpPackageName;
             setResources(container.mResources);
             mDisplay = container.mDisplay;
+            mIsAssociatedWithDisplay = container.mIsAssociatedWithDisplay;
             mIsSystemOrSystemUiContext = container.mIsSystemOrSystemUiContext;
         } else {
             mBasePackageName = packageInfo.mPackageName;

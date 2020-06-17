@@ -826,7 +826,7 @@ status_t StatsService::cmd_print_pulled_metrics(int out, const Vector<String8>& 
         uids.push_back(AID_SYSTEM);
     }
     vector<shared_ptr<LogEvent>> stats;
-    if (mPullerManager->Pull(s, uids, &stats)) {
+    if (mPullerManager->Pull(s, uids, getElapsedRealtimeNs(), &stats)) {
         for (const auto& it : stats) {
             dprintf(out, "Pull from %d: %s\n", s, it->ToString().c_str());
         }
@@ -1297,7 +1297,6 @@ Status StatsService::getRegisteredExperimentIds(std::vector<int64_t>* experiment
     }
     return Status::ok();
 }
-
 
 void StatsService::statsCompanionServiceDied(void* cookie) {
     auto thiz = static_cast<StatsService*>(cookie);

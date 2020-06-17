@@ -27,18 +27,20 @@
         android:animateLayoutChanges="true"
         android:orientation="vertical">
 
-        <com.android.keyguard.AlphaOptimizedImageButton
+        <com.android.systemui.statusbar.AlphaOptimizedImageView
             android:id="@+id/car_nav_button_icon_image"
-            android:layout_height="wrap_content"
+            android:layout_height="@dimen/car_navigation_button_icon_height"
             android:layout_width="match_parent"
             android:layout_gravity="center"
             android:animateLayoutChanges="true"
             android:background="@android:color/transparent"
             android:scaleType="fitCenter"
+            android:tintMode="src_in"
+            android:tint="@color/car_nav_icon_fill_color"
             android:clickable="false"
         />
 
-        <com.android.keyguard.AlphaOptimizedImageButton
+        <com.android.systemui.statusbar.AlphaOptimizedImageView
             android:id="@+id/car_nav_button_more_icon"
             android:layout_height="wrap_content"
             android:layout_width="match_parent"
@@ -48,6 +50,7 @@
             android:background="@android:color/transparent"
             android:scaleType="fitCenter"
             android:clickable="false"
+            android:visibility="gone"
         />
 
         <ImageView

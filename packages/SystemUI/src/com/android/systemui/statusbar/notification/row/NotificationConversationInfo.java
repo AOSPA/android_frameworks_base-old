@@ -16,7 +16,6 @@
 
 package com.android.systemui.statusbar.notification.row;
 
-import static android.app.Notification.EXTRA_IS_GROUP_CONVERSATION;
 import static android.app.NotificationManager.BUBBLE_PREFERENCE_ALL;
 import static android.app.NotificationManager.BUBBLE_PREFERENCE_NONE;
 import static android.app.NotificationManager.BUBBLE_PREFERENCE_SELECTED;
@@ -43,10 +42,9 @@ import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.ShortcutInfo;
 import android.content.pm.ShortcutManager;
-import android.graphics.drawable.Icon;
 import android.os.Handler;
-import android.os.Parcelable;
 import android.os.RemoteException;
+import android.os.UserHandle;
 import android.provider.Settings;
 import android.service.notification.StatusBarNotification;
 import android.text.TextUtils;
@@ -65,15 +63,16 @@ import android.widget.TextView;
 
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.settingslib.notification.ConversationIconFactory;
-import com.android.systemui.Dependency;
 import com.android.systemui.Prefs;
 import com.android.systemui.R;
+import com.android.systemui.dagger.qualifiers.Background;
+import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.statusbar.notification.NotificationChannelHelper;
 import com.android.systemui.statusbar.notification.VisualStabilityManager;
 import com.android.systemui.statusbar.notification.collection.NotificationEntry;
+import com.android.systemui.statusbar.notification.stack.StackStateAnimator;
 
 import java.lang.annotation.Retention;
-import java.util.List;
 
 import javax.inject.Provider;
 
@@ -86,10 +85,12 @@ public class NotificationConversationInfo extends LinearLayout implements
 
 
     private INotificationManager mINotificationManager;
-    ShortcutManager mShortcutManager;
+    private ShortcutManager mShortcutManager;
     private PackageManager mPm;
     private ConversationIconFactory mIconFactory;
     private VisualStabilityManager mVisualStabilityManager;
+    private Handler mMainHandler;
+    private Handler mBgHandler;
 
     private String mPackageName;
     private String mAppName;
@@ -97,6 +98,7 @@ public class NotificationConversationInfo extends LinearLayout implements
     private String mDelegatePkg;
     private NotificationChannel mNotificationChannel;
     private ShortcutInfo mShortcutInfo;
+    private NotificationEntry mEntry;
     private StatusBarNotification mSbn;
     @Nullable private Notification.BubbleMetadata mBubbleMetadata;
     private Context mUserContext;
@@ -114,9 +116,11 @@ public class NotificationConversationInfo extends LinearLayout implements
     private OnSnoozeClickListener mOnSnoozeClickListener;
     private OnSettingsClickListener mOnSettingsClickListener;
     private NotificationGuts mGutsContainer;
+    private OnConversationSettingsClickListener mOnConversationSettingsClickListener;
 
     @VisibleForTesting
     boolean mSkipPost = false;
+    private int mActualHeight;
 
     @Retention(SOURCE)
     @IntDef({ACTION_DEFAULT, ACTION_HOME, ACTION_FAVORITE, ACTION_SNOOZE, ACTION_MUTE,
@@ -135,13 +139,13 @@ public class NotificationConversationInfo extends LinearLayout implements
         mSelectedAction = ACTION_HOME;
         mShortcutManager.requestPinShortcut(mShortcutInfo, null);
         mShadeController.animateCollapsePanels();
-        closeControls(v, true);
+        mGutsContainer.closeControls(v, true);
     };
 
     private OnClickListener mOnSnoozeClick = v -> {
         mSelectedAction = ACTION_SNOOZE;
         mOnSnoozeClickListener.onClick(v, 1);
-        closeControls(v, true);
+        mGutsContainer.closeControls(v, true);
     };
     */
 
@@ -162,7 +166,11 @@ public class NotificationConversationInfo extends LinearLayout implements
 
     private OnClickListener mOnDone = v -> {
         mPressedApply = true;
-        closeControls(v, true);
+        // If the user selected Priority, maybe show the priority onboarding
+        if (mSelectedAction == ACTION_FAVORITE && shouldShowPriorityOnboarding()) {
+            showPriorityOnboarding();
+        }
+        mGutsContainer.closeControls(v, true);
     };
 
     public NotificationConversationInfo(Context context, AttributeSet attrs) {
@@ -171,6 +179,10 @@ public class NotificationConversationInfo extends LinearLayout implements
 
     public interface OnSettingsClickListener {
         void onClick(View v, NotificationChannel channel, int appUid);
+    }
+
+    public interface OnConversationSettingsClickListener {
+        void onClick();
     }
 
     public interface OnAppSettingsClickListener {
@@ -188,14 +200,6 @@ public class NotificationConversationInfo extends LinearLayout implements
         }
 
         mSelectedAction = selectedAction;
-        onSelectedActionChanged();
-    }
-
-    private void onSelectedActionChanged() {
-        // If the user selected Priority, maybe show the priority onboarding
-        if (mSelectedAction == ACTION_FAVORITE && shouldShowPriorityOnboarding()) {
-            showPriorityOnboarding();
-        }
     }
 
     public void bindNotification(
@@ -212,11 +216,15 @@ public class NotificationConversationInfo extends LinearLayout implements
             ConversationIconFactory conversationIconFactory,
             Context userContext,
             Provider<PriorityOnboardingDialogController.Builder> builderProvider,
-            boolean isDeviceProvisioned) {
+            boolean isDeviceProvisioned,
+            @Main Handler mainHandler,
+            @Background Handler bgHandler,
+            OnConversationSettingsClickListener onConversationSettingsClickListener) {
         mSelectedAction = -1;
         mINotificationManager = iNotificationManager;
         mVisualStabilityManager = visualStabilityManager;
         mPackageName = pkg;
+        mEntry = entry;
         mSbn = entry.getSbn();
         mPm = pm;
         mAppName = mPackageName;
@@ -226,11 +234,13 @@ public class NotificationConversationInfo extends LinearLayout implements
         mDelegatePkg = mSbn.getOpPkg();
         mIsDeviceProvisioned = isDeviceProvisioned;
         mOnSnoozeClickListener = onSnoozeClickListener;
+        mOnConversationSettingsClickListener = onConversationSettingsClickListener;
         mIconFactory = conversationIconFactory;
         mUserContext = userContext;
         mBubbleMetadata = bubbleMetadata;
         mBuilderProvider = builderProvider;
-
+        mMainHandler = mainHandler;
+        mBgHandler = bgHandler;
         mShortcutManager = shortcutManager;
         mShortcutInfo = entry.getRanking().getShortcutInfo();
         if (mShortcutInfo == null) {
@@ -252,6 +262,7 @@ public class NotificationConversationInfo extends LinearLayout implements
 
         View done = findViewById(R.id.done);
         done.setOnClickListener(mOnDone);
+        done.setAccessibilityDelegate(mGutsContainer.getAccessibilityDelegate());
     }
 
     private void bindActions() {
@@ -316,7 +327,6 @@ public class NotificationConversationInfo extends LinearLayout implements
         ImageView image = findViewById(R.id.conversation_icon);
         image.setImageDrawable(mIconFactory.getConversationDrawable(
                 mShortcutInfo, mPackageName, mAppUid, important));
-
     }
 
     private void bindPackage() {
@@ -362,14 +372,11 @@ public class NotificationConversationInfo extends LinearLayout implements
             }
         }
         TextView groupNameView = findViewById(R.id.group_name);
-        View groupDivider = findViewById(R.id.group_divider);
         if (groupName != null) {
             groupNameView.setText(groupName);
             groupNameView.setVisibility(VISIBLE);
-            groupDivider.setVisibility(VISIBLE);
         } else {
             groupNameView.setVisibility(GONE);
-            groupDivider.setVisibility(GONE);
         }
     }
 
@@ -395,6 +402,11 @@ public class NotificationConversationInfo extends LinearLayout implements
     @Override
     public void onFinishedClosing() {
         // TODO: do we need to do anything here?
+    }
+
+    @Override
+    public boolean needsFalsingProtection() {
+        return true;
     }
 
     @Override
@@ -493,11 +505,13 @@ public class NotificationConversationInfo extends LinearLayout implements
     }
 
     private void updateChannel() {
-        Handler bgHandler = new Handler(Dependency.get(Dependency.BG_LOOPER));
-        bgHandler.post(
+        mBgHandler.post(
                 new UpdateChannelRunnable(mINotificationManager, mPackageName,
                         mAppUid, mSelectedAction, mNotificationChannel));
-        mVisualStabilityManager.temporarilyAllowReordering();
+        mEntry.markForUserTriggeredMovement(true);
+        mMainHandler.postDelayed(
+                mVisualStabilityManager::temporarilyAllowReordering,
+                StackStateAnimator.ANIMATION_DURATION_STANDARD);
     }
 
     private boolean shouldShowPriorityOnboarding() {
@@ -510,9 +524,9 @@ public class NotificationConversationInfo extends LinearLayout implements
 
         boolean ignoreDnd = false;
         try {
-            ignoreDnd = (mINotificationManager
-                    .getConsolidatedNotificationPolicy().priorityConversationSenders
-                    & NotificationManager.Policy.CONVERSATION_SENDERS_IMPORTANT) != 0;
+            ignoreDnd = mINotificationManager
+                    .getConsolidatedNotificationPolicy().priorityConversationSenders ==
+                    NotificationManager.Policy.CONVERSATION_SENDERS_IMPORTANT;
         } catch (RemoteException e) {
             Log.e(TAG, "Could not check conversation senders", e);
         }
@@ -527,29 +541,14 @@ public class NotificationConversationInfo extends LinearLayout implements
                 .setView(onboardingView)
                 .setIgnoresDnd(ignoreDnd)
                 .setShowsAsBubble(showAsBubble)
+                .setIcon(mIconFactory.getBaseIconDrawable(mShortcutInfo))
+                .setBadge(mIconFactory.getAppBadge(
+                        mPackageName, UserHandle.getUserId(mSbn.getUid())))
+                .setOnSettingsClick(mOnConversationSettingsClickListener)
                 .build();
 
         controller.init();
         controller.show();
-    }
-
-    /**
-     * Closes the controls and commits the updated importance values (indirectly).
-     *
-     * <p><b>Note,</b> this will only get called once the view is dismissing. This means that the
-     * user does not have the ability to undo the action anymore.
-     */
-    @VisibleForTesting
-    void closeControls(View v, boolean save) {
-        int[] parentLoc = new int[2];
-        int[] targetLoc = new int[2];
-        mGutsContainer.getLocationOnScreen(parentLoc);
-        v.getLocationOnScreen(targetLoc);
-        final int centerX = v.getWidth() / 2;
-        final int centerY = v.getHeight() / 2;
-        final int x = targetLoc[0] - parentLoc[0] + centerX;
-        final int y = targetLoc[1] - parentLoc[1] + centerY;
-        mGutsContainer.closeControls(x, y, save, false /* force */);
     }
 
     @Override
@@ -582,7 +581,15 @@ public class NotificationConversationInfo extends LinearLayout implements
 
     @Override
     public int getActualHeight() {
-        return getHeight();
+        // Because we're animating the bounds, getHeight will return the small height at the
+        // beginning of the animation. Instead we'd want it to already return the end value
+        return mActualHeight;
+    }
+
+    @Override
+    protected void onLayout(boolean changed, int l, int t, int r, int b) {
+        super.onLayout(changed, l, t, r, b);
+        mActualHeight = getHeight();
     }
 
     @VisibleForTesting
@@ -613,8 +620,7 @@ public class NotificationConversationInfo extends LinearLayout implements
             try {
                 switch (mAction) {
                     case ACTION_FAVORITE:
-                        mChannelToUpdate.setImportantConversation(
-                                !mChannelToUpdate.isImportantConversation());
+                        mChannelToUpdate.setImportantConversation(true);
                         if (mChannelToUpdate.isImportantConversation()) {
                             mChannelToUpdate.setAllowBubbles(true);
                             if (mAppBubble == BUBBLE_PREFERENCE_NONE) {

@@ -75,6 +75,7 @@ public class SmartReplyControllerTest extends SysuiTestCase {
     @Mock private IStatusBarService mIStatusBarService;
     @Mock private StatusBarStateController mStatusBarStateController;
     @Mock private RemoteInputUriController mRemoteInputUriController;
+    @Mock private NotificationClickNotifier mClickNotifier;
 
     @Before
     public void setUp() {
@@ -83,7 +84,7 @@ public class SmartReplyControllerTest extends SysuiTestCase {
                 mNotificationEntryManager);
 
         mSmartReplyController = new SmartReplyController(mNotificationEntryManager,
-                mIStatusBarService);
+                mIStatusBarService, mClickNotifier);
         mDependency.injectTestDependency(SmartReplyController.class,
                 mSmartReplyController);
 
@@ -92,7 +93,9 @@ public class SmartReplyControllerTest extends SysuiTestCase {
                 mNotificationEntryManager, () -> mock(StatusBar.class),
                 mStatusBarStateController,
                 Handler.createAsync(Looper.myLooper()),
-                mRemoteInputUriController);
+                mRemoteInputUriController,
+                mClickNotifier,
+                mock(ActionClickLogger.class));
         mRemoteInputManager.setUpWithCallback(mCallback, mDelegate);
         mNotification = new Notification.Builder(mContext, "")
                 .setSmallIcon(R.drawable.ic_person)

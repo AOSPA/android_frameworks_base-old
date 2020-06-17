@@ -292,13 +292,13 @@ filegroup {
 java_library {
     name: "framework-updatable-stubs-module_libs_api",
     static_libs: [
-        "framework-media-stubs-module_libs_api",
-        "framework-mediaprovider-stubs-module_libs_api",
-        "framework-permission-stubs-module_libs_api",
-        "framework-sdkextensions-stubs-module_libs_api",
-        "framework-statsd-stubs-module_libs_api",
-        "framework-tethering-stubs-module_libs_api",
-        "framework-wifi-stubs-module_libs_api",
+        "framework-media.stubs.module_lib",
+        "framework-mediaprovider.stubs.module_lib",
+        "framework-permission.stubs.module_lib",
+        "framework-sdkextensions.stubs.module_lib",
+        "framework-statsd.stubs.module_lib",
+        "framework-tethering.stubs.module_lib",
+        "framework-wifi.stubs.module_lib",
     ],
     sdk_version: "module_current",
     visibility: [":__pkg__"],
@@ -670,7 +670,7 @@ java_library {
 
 filegroup {
     name: "framework-ike-shared-srcs",
-    visibility: ["//frameworks/opt/net/ike"],
+    visibility: ["//packages/modules/IPsec"],
     srcs: [
         "core/java/android/annotation/StringDef.java",
         "core/java/android/net/annotations/PolicyDirection.java",
@@ -930,6 +930,8 @@ filegroup {
     srcs: [
         "core/java/android/os/incremental/IIncrementalService.aidl",
         "core/java/android/os/incremental/IncrementalNewFileParams.aidl",
+        "core/java/android/os/incremental/IStorageHealthListener.aidl",
+        "core/java/android/os/incremental/StorageHealthCheckParams.aidl",
     ],
     path: "core/java",
 }

@@ -27,7 +27,9 @@ import static java.util.Objects.requireNonNull;
 import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.annotation.SuppressLint;
 import android.annotation.SystemApi;
+import android.annotation.TestApi;
 import android.app.ActivityThread;
 import android.compat.annotation.UnsupportedAppUsage;
 import android.content.Context;
@@ -57,6 +59,7 @@ import java.util.UUID;
  *
  * @hide
  */
+@TestApi
 @SystemApi
 public class SoundTrigger {
     private static final String TAG = "SoundTrigger";
@@ -136,7 +139,9 @@ public class SoundTrigger {
         @AudioCapabilities
         private final int mAudioCapabilities;
 
-        ModuleProperties(int id, @NonNull String implementor, @NonNull String description,
+        /** @hide */
+        @TestApi
+        public ModuleProperties(int id, @NonNull String implementor, @NonNull String description,
                 @NonNull String uuid, int version, @NonNull String supportedModelArch,
                 int maxSoundModels, int maxKeyphrases, int maxUsers,
                 @RecognitionModes int recognitionModes, boolean supportsCaptureTransition,
@@ -289,7 +294,7 @@ public class SoundTrigger {
         }
 
         @Override
-        public void writeToParcel(Parcel dest, int flags) {
+        public void writeToParcel(@SuppressLint("MissingNullability") Parcel dest, int flags) {
             dest.writeInt(getId());
             dest.writeString(getImplementor());
             dest.writeString(getDescription());
@@ -311,6 +316,92 @@ public class SoundTrigger {
         @Override
         public int describeContents() {
             return 0;
+        }
+
+        @Override
+        public boolean equals(@Nullable Object obj) {
+            if (this == obj) {
+                return true;
+            }
+            if (obj == null) {
+                return false;
+            }
+            if (!(obj instanceof ModuleProperties)) {
+                return false;
+            }
+            ModuleProperties other = (ModuleProperties) obj;
+            if (mId != other.mId) {
+                return false;
+            }
+            if (!mImplementor.equals(other.mImplementor)) {
+                return false;
+            }
+            if (!mDescription.equals(other.mDescription)) {
+                return false;
+            }
+            if (!mUuid.equals(other.mUuid)) {
+                return false;
+            }
+            if (mVersion != other.mVersion) {
+                return false;
+            }
+            if (!mSupportedModelArch.equals(other.mSupportedModelArch)) {
+                return false;
+            }
+            if (mMaxSoundModels != other.mMaxSoundModels) {
+                return false;
+            }
+            if (mMaxKeyphrases != other.mMaxKeyphrases) {
+                return false;
+            }
+            if (mMaxUsers != other.mMaxUsers) {
+                return false;
+            }
+            if (mRecognitionModes != other.mRecognitionModes) {
+                return false;
+            }
+            if (mSupportsCaptureTransition != other.mSupportsCaptureTransition) {
+                return false;
+            }
+            if (mMaxBufferMillis != other.mMaxBufferMillis) {
+                return false;
+            }
+            if (mSupportsConcurrentCapture != other.mSupportsConcurrentCapture) {
+                return false;
+            }
+            if (mPowerConsumptionMw != other.mPowerConsumptionMw) {
+                return false;
+            }
+            if (mReturnsTriggerInEvent != other.mReturnsTriggerInEvent) {
+                return false;
+            }
+            if (mAudioCapabilities != other.mAudioCapabilities) {
+                return false;
+            }
+            return true;
+        }
+
+        @Override
+        public int hashCode() {
+            final int prime = 31;
+            int result = 1;
+            result = prime * result + mId;
+            result = prime * result + mImplementor.hashCode();
+            result = prime * result + mDescription.hashCode();
+            result = prime * result + mUuid.hashCode();
+            result = prime * result + mVersion;
+            result = prime * result + mSupportedModelArch.hashCode();
+            result = prime * result + mMaxSoundModels;
+            result = prime * result + mMaxKeyphrases;
+            result = prime * result + mMaxUsers;
+            result = prime * result + mRecognitionModes;
+            result = prime * result + (mSupportsCaptureTransition ? 1 : 0);
+            result = prime * result + mMaxBufferMillis;
+            result = prime * result + (mSupportsConcurrentCapture ? 1 : 0);
+            result = prime * result + mPowerConsumptionMw;
+            result = prime * result + (mReturnsTriggerInEvent ? 1 : 0);
+            result = prime * result + mAudioCapabilities;
+            return result;
         }
 
         @Override
@@ -845,7 +936,9 @@ public class SoundTrigger {
          */
         private final int mEnd;
 
-        ModelParamRange(int start, int end) {
+        /** @hide */
+        @TestApi
+        public ModelParamRange(int start, int end) {
             this.mStart = start;
             this.mEnd = end;
         }
@@ -1073,6 +1166,7 @@ public class SoundTrigger {
         public final byte[] data;
 
         /** @hide */
+        @TestApi
         @UnsupportedAppUsage
         public RecognitionEvent(int status, int soundModelHandle, boolean captureAvailable,
                 int captureSession, int captureDelayMs, int capturePreambleMs,
@@ -1123,6 +1217,7 @@ public class SoundTrigger {
          *
          * @return The data of the event
          */
+        @SuppressLint("MissingNullability")
         public byte[] getData() {
             return data;
         }

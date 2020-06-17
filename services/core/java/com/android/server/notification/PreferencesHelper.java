@@ -85,7 +85,8 @@ public class PreferencesHelper implements RankingConfig {
     private static final int XML_VERSION = 2;
     /** What version to check to do the upgrade for bubbles. */
     private static final int XML_VERSION_BUBBLES_UPGRADE = 1;
-    private static final int UNKNOWN_UID = UserHandle.USER_NULL;
+    @VisibleForTesting
+    static final int UNKNOWN_UID = UserHandle.USER_NULL;
     private static final String NON_BLOCKABLE_CHANNEL_DELIM = ":";
 
     @VisibleForTesting
@@ -116,7 +117,9 @@ public class PreferencesHelper implements RankingConfig {
     private static final String ATT_ENABLED = "enabled";
     private static final String ATT_USER_ALLOWED = "allowed";
     private static final String ATT_HIDE_SILENT = "hide_gentle";
-    private static final String ATT_SENT_MESSAGE = "sent_invalid_msg";
+    private static final String ATT_SENT_INVALID_MESSAGE = "sent_invalid_msg";
+    private static final String ATT_SENT_VALID_MESSAGE = "sent_valid_msg";
+    private static final String ATT_USER_DEMOTED_INVALID_MSG_APP = "user_demote_msg_app";
 
     private static final int DEFAULT_PRIORITY = Notification.PRIORITY_DEFAULT;
     private static final int DEFAULT_VISIBILITY = NotificationManager.VISIBILITY_NO_OVERRIDE;
@@ -137,6 +140,7 @@ public class PreferencesHelper implements RankingConfig {
      * fields.
      */
     private static final int DEFAULT_LOCKED_APP_FIELDS = 0;
+    private final SysUiStatsEvent.BuilderFactory mStatsEventBuilderFactory;
 
     /**
      * All user-lockable fields for a given application.
@@ -168,13 +172,15 @@ public class PreferencesHelper implements RankingConfig {
 
     public PreferencesHelper(Context context, PackageManager pm, RankingHandler rankingHandler,
             ZenModeHelper zenHelper, NotificationChannelLogger notificationChannelLogger,
-            AppOpsManager appOpsManager) {
+            AppOpsManager appOpsManager,
+            SysUiStatsEvent.BuilderFactory statsEventBuilderFactory) {
         mContext = context;
         mZenModeHelper = zenHelper;
         mRankingHandler = rankingHandler;
         mPm = pm;
         mNotificationChannelLogger = notificationChannelLogger;
         mAppOps = appOpsManager;
+        mStatsEventBuilderFactory = statsEventBuilderFactory;
 
         updateBadgingEnabled();
         updateBubblesEnabled();
@@ -222,7 +228,7 @@ public class PreferencesHelper implements RankingConfig {
                             }
                             boolean skipWarningLogged = false;
                             boolean hasSAWPermission = false;
-                            if (upgradeForBubbles) {
+                            if (upgradeForBubbles && uid != UNKNOWN_UID) {
                                 hasSAWPermission = mAppOps.noteOpNoThrow(
                                         OP_SYSTEM_ALERT_WINDOW, uid, name, null,
                                         "check-notif-bubble") == AppOpsManager.MODE_ALLOWED;
@@ -253,8 +259,12 @@ public class PreferencesHelper implements RankingConfig {
                                     parser, ATT_SHOW_BADGE, DEFAULT_SHOW_BADGE);
                             r.lockedAppFields = XmlUtils.readIntAttribute(parser,
                                     ATT_APP_USER_LOCKED_FIELDS, DEFAULT_LOCKED_APP_FIELDS);
-                            r.hasSentMessage = XmlUtils.readBooleanAttribute(
-                                    parser, ATT_SENT_MESSAGE, false);
+                            r.hasSentInvalidMessage = XmlUtils.readBooleanAttribute(
+                                    parser, ATT_SENT_INVALID_MESSAGE, false);
+                            r.hasSentValidMessage = XmlUtils.readBooleanAttribute(
+                                    parser, ATT_SENT_VALID_MESSAGE, false);
+                            r.userDemotedMsgApp = XmlUtils.readBooleanAttribute(
+                                    parser, ATT_USER_DEMOTED_INVALID_MSG_APP, false);
 
                             final int innerDepth = parser.getDepth();
                             while ((type = parser.next()) != XmlPullParser.END_DOCUMENT
@@ -497,7 +507,9 @@ public class PreferencesHelper implements RankingConfig {
                                 || r.groups.size() > 0
                                 || r.delegate != null
                                 || r.bubblePreference != DEFAULT_BUBBLE_PREFERENCE
-                                || r.hasSentMessage;
+                                || r.hasSentInvalidMessage
+                                || r.userDemotedMsgApp
+                                || r.hasSentValidMessage;
                 if (hasNonDefaultSettings) {
                     out.startTag(null, TAG_PACKAGE);
                     out.attribute(null, ATT_NAME, r.pkg);
@@ -516,7 +528,12 @@ public class PreferencesHelper implements RankingConfig {
                     out.attribute(null, ATT_SHOW_BADGE, Boolean.toString(r.showBadge));
                     out.attribute(null, ATT_APP_USER_LOCKED_FIELDS,
                             Integer.toString(r.lockedAppFields));
-                    out.attribute(null, ATT_SENT_MESSAGE, Boolean.toString(r.hasSentMessage));
+                    out.attribute(null, ATT_SENT_INVALID_MESSAGE,
+                            Boolean.toString(r.hasSentInvalidMessage));
+                    out.attribute(null, ATT_SENT_VALID_MESSAGE,
+                            Boolean.toString(r.hasSentValidMessage));
+                    out.attribute(null, ATT_USER_DEMOTED_INVALID_MSG_APP,
+                            Boolean.toString(r.userDemotedMsgApp));
 
                     if (!forBackup) {
                         out.attribute(null, ATT_UID, Integer.toString(r.uid));
@@ -635,15 +652,68 @@ public class PreferencesHelper implements RankingConfig {
         updateConfig();
     }
 
-    public boolean hasSentMessage(String packageName, int uid) {
+    public boolean isInInvalidMsgState(String packageName, int uid) {
         synchronized (mPackagePreferences) {
-            return getOrCreatePackagePreferencesLocked(packageName, uid).hasSentMessage;
+            PackagePreferences r = getOrCreatePackagePreferencesLocked(packageName, uid);
+            return r.hasSentInvalidMessage && !r.hasSentValidMessage;
         }
     }
 
-    public void setMessageSent(String packageName, int uid) {
+    public boolean hasUserDemotedInvalidMsgApp(String packageName, int uid) {
         synchronized (mPackagePreferences) {
-            getOrCreatePackagePreferencesLocked(packageName, uid).hasSentMessage = true;
+            PackagePreferences r = getOrCreatePackagePreferencesLocked(packageName, uid);
+            return isInInvalidMsgState(packageName, uid) ? r.userDemotedMsgApp : false;
+        }
+    }
+
+    public void setInvalidMsgAppDemoted(String packageName, int uid, boolean isDemoted) {
+        synchronized (mPackagePreferences) {
+            PackagePreferences r = getOrCreatePackagePreferencesLocked(packageName, uid);
+            r.userDemotedMsgApp = isDemoted;
+        }
+    }
+
+    public boolean setInvalidMessageSent(String packageName, int uid) {
+        synchronized (mPackagePreferences) {
+            PackagePreferences r = getOrCreatePackagePreferencesLocked(packageName, uid);
+            boolean valueChanged = r.hasSentInvalidMessage == false;
+            r.hasSentInvalidMessage = true;
+
+            return valueChanged;
+        }
+    }
+
+    public boolean setValidMessageSent(String packageName, int uid) {
+        synchronized (mPackagePreferences) {
+            PackagePreferences r = getOrCreatePackagePreferencesLocked(packageName, uid);
+            boolean valueChanged = r.hasSentValidMessage == false;
+            r.hasSentValidMessage = true;
+
+            return valueChanged;
+        }
+    }
+
+    @VisibleForTesting
+    boolean hasSentInvalidMsg(String packageName, int uid) {
+        synchronized (mPackagePreferences) {
+            PackagePreferences r = getOrCreatePackagePreferencesLocked(packageName, uid);
+            return r.hasSentInvalidMessage;
+        }
+    }
+
+    @VisibleForTesting
+    boolean hasSentValidMsg(String packageName, int uid) {
+        synchronized (mPackagePreferences) {
+            PackagePreferences r = getOrCreatePackagePreferencesLocked(packageName, uid);
+            return r.hasSentValidMessage;
+        }
+    }
+
+    @VisibleForTesting
+    boolean didUserEverDemoteInvalidMsgApp(String packageName, int uid) {
+        synchronized (mPackagePreferences) {
+            PackagePreferences r = getOrCreatePackagePreferencesLocked(packageName, uid);
+            return r.userDemotedMsgApp;
         }
     }
 
@@ -1831,7 +1901,7 @@ public class PreferencesHelper implements RankingConfig {
                 if (i > NOTIFICATION_PREFERENCES_PULL_LIMIT) {
                     break;
                 }
-                StatsEvent.Builder event = StatsEvent.newBuilder()
+                SysUiStatsEvent.Builder event = mStatsEventBuilderFactory.newBuilder()
                         .setAtomId(PACKAGE_NOTIFICATION_PREFERENCES);
                 final PackagePreferences r = mPackagePreferences.valueAt(i);
                 event.writeInt(r.uid);
@@ -1860,7 +1930,7 @@ public class PreferencesHelper implements RankingConfig {
                     if (++totalChannelsPulled > NOTIFICATION_CHANNEL_PULL_LIMIT) {
                         break;
                     }
-                    StatsEvent.Builder event = StatsEvent.newBuilder()
+                    SysUiStatsEvent.Builder event = mStatsEventBuilderFactory.newBuilder()
                             .setAtomId(PACKAGE_NOTIFICATION_CHANNEL_PREFERENCES);
                     event.writeInt(r.uid);
                     event.addBooleanAnnotation(ANNOTATION_ID_IS_UID, true);
@@ -1870,6 +1940,9 @@ public class PreferencesHelper implements RankingConfig {
                     event.writeInt(channel.getImportance());
                     event.writeInt(channel.getUserLockedFields());
                     event.writeBoolean(channel.isDeleted());
+                    event.writeBoolean(channel.getConversationId() != null);
+                    event.writeBoolean(channel.isDemoted());
+                    event.writeBoolean(channel.isImportantConversation());
                     events.add(event.build());
                 }
             }
@@ -1892,7 +1965,7 @@ public class PreferencesHelper implements RankingConfig {
                     if (++totalGroupsPulled > NOTIFICATION_CHANNEL_GROUP_PULL_LIMIT) {
                         break;
                     }
-                    StatsEvent.Builder event = StatsEvent.newBuilder()
+                    SysUiStatsEvent.Builder event = mStatsEventBuilderFactory.newBuilder()
                             .setAtomId(PACKAGE_NOTIFICATION_CHANNEL_GROUP_PREFERENCES);
                     event.writeInt(r.uid);
                     event.addBooleanAnnotation(ANNOTATION_ID_IS_UID, true);
@@ -2273,7 +2346,11 @@ public class PreferencesHelper implements RankingConfig {
         boolean oemLockedImportance = DEFAULT_OEM_LOCKED_IMPORTANCE;
         List<String> oemLockedChannels = new ArrayList<>();
         boolean defaultAppLockedImportance = DEFAULT_APP_LOCKED_IMPORTANCE;
-        boolean hasSentMessage = false;
+
+        boolean hasSentInvalidMessage = false;
+        boolean hasSentValidMessage = false;
+        // notE: only valid while hasSentMessage is false and hasSentInvalidMessage is true
+        boolean userDemotedMsgApp = false;
 
         Delegate delegate = null;
         ArrayMap<String, NotificationChannel> channels = new ArrayMap<>();

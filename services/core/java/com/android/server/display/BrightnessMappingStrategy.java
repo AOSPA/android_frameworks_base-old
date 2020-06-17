@@ -51,6 +51,11 @@ public abstract class BrightnessMappingStrategy {
     private static final float MAX_GRAD = 1.0f;
     private static final float SHORT_TERM_MODEL_THRESHOLD_RATIO = 0.6f;
 
+    // Constant that ensures that each step of the curve can increase by up to at least
+    // MIN_PERMISSABLE_INCREASE. Otherwise when the brightness is set to 0, the curve will never
+    // increase and will always be 0.
+    private static final float MIN_PERMISSABLE_INCREASE =  0.004f;
+
     protected boolean mLoggingEnabled;
 
     private static final Plog PLOG = Plog.createSystemPlog(TAG);
@@ -342,6 +347,7 @@ public abstract class BrightnessMappingStrategy {
         }
     }
 
+    // Normalize entire brightness range to 0 - 1.
     protected static float normalizeAbsoluteBrightness(int brightness) {
         return BrightnessSynchronizer.brightnessIntToFloat(brightness,
                 PowerManager.BRIGHTNESS_OFF + 1, PowerManager.BRIGHTNESS_ON,
@@ -400,7 +406,9 @@ public abstract class BrightnessMappingStrategy {
         for (int i = idx+1; i < lux.length; i++) {
             float currLux = lux[i];
             float currBrightness = brightness[i];
-            float maxBrightness = prevBrightness * permissibleRatio(currLux, prevLux);
+            float maxBrightness = MathUtils.max(
+                    prevBrightness * permissibleRatio(currLux, prevLux),
+                    prevBrightness + MIN_PERMISSABLE_INCREASE);
             float newBrightness = MathUtils.constrain(
                     currBrightness, prevBrightness, maxBrightness);
             if (newBrightness == currBrightness) {

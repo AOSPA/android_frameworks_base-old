@@ -16,15 +16,24 @@
 
 package android.content;
 
+import static android.hardware.display.DisplayManager.VIRTUAL_DISPLAY_FLAG_OWN_CONTENT_ONLY;
+import static android.hardware.display.DisplayManager.VIRTUAL_DISPLAY_FLAG_PUBLIC;
 import static android.view.Display.DEFAULT_DISPLAY;
 
 import static com.google.common.truth.Truth.assertThat;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 
 import android.app.ActivityThread;
+import android.content.res.Configuration;
+import android.graphics.PixelFormat;
 import android.hardware.display.DisplayManager;
+import android.hardware.display.VirtualDisplay;
+import android.inputmethodservice.InputMethodService;
+import android.media.ImageReader;
 import android.os.UserHandle;
+import android.view.Display;
 
 import androidx.test.core.app.ApplicationProvider;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
@@ -126,5 +135,49 @@ public class ContextTest {
                 ActivityThread.currentActivityThread().getSystemUiContext();
 
         assertThat(systemUiContext.isUiContext()).isTrue();
+    }
+
+    @Test
+    public void testIsUiContext_InputMethodService_returnsTrue() {
+        final InputMethodService ims = new InputMethodService();
+
+        assertTrue(ims.isUiContext());
+    }
+
+    @Test
+    public void testGetDisplayFromDisplayContextDerivedContextOnPrimaryDisplay() {
+        verifyGetDisplayFromDisplayContextDerivedContext(false /* onSecondaryDisplay */);
+    }
+
+    @Test
+    public void testGetDisplayFromDisplayContextDerivedContextOnSecondaryDisplay() {
+        verifyGetDisplayFromDisplayContextDerivedContext(true /* onSecondaryDisplay */);
+    }
+
+    private static void verifyGetDisplayFromDisplayContextDerivedContext(
+            boolean onSecondaryDisplay) {
+        final Context appContext = ApplicationProvider.getApplicationContext();
+        final DisplayManager displayManager = appContext.getSystemService(DisplayManager.class);
+        final Display display;
+        if (onSecondaryDisplay) {
+            display = getSecondaryDisplay(displayManager);
+        } else {
+            display = displayManager.getDisplay(DEFAULT_DISPLAY);
+        }
+        final Context context = appContext.createDisplayContext(display)
+                .createConfigurationContext(new Configuration());
+        assertEquals(display, context.getDisplay());
+    }
+
+    private static Display getSecondaryDisplay(DisplayManager displayManager) {
+        final int width = 800;
+        final int height = 480;
+        final int density = 160;
+        ImageReader reader = ImageReader.newInstance(width, height, PixelFormat.RGBA_8888,
+                2 /* maxImages */);
+        VirtualDisplay virtualDisplay = displayManager.createVirtualDisplay(
+                ContextTest.class.getName(), width, height, density, reader.getSurface(),
+                VIRTUAL_DISPLAY_FLAG_PUBLIC | VIRTUAL_DISPLAY_FLAG_OWN_CONTENT_ONLY);
+        return virtualDisplay.getDisplay();
     }
 }

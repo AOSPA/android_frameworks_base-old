@@ -37,6 +37,7 @@ import androidx.annotation.VisibleForTesting;
 import com.android.systemui.Interpolators;
 import com.android.systemui.R;
 import com.android.systemui.R.id;
+import com.android.systemui.media.MediaHost;
 import com.android.systemui.plugins.qs.QS;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.qs.customize.QSCustomizer;
@@ -47,6 +48,7 @@ import com.android.systemui.statusbar.phone.NotificationsQuickSettingsContainer;
 import com.android.systemui.statusbar.policy.RemoteInputQuickSettingsDisabler;
 import com.android.systemui.util.InjectionInflationController;
 import com.android.systemui.util.LifecycleFragment;
+import com.android.systemui.util.Utils;
 
 import javax.inject.Inject;
 
@@ -91,6 +93,9 @@ public class QSFragment extends LifecycleFragment implements QS, CommandQueue.Ca
      */
     private int mState;
     private QSContainerImplController mQSContainerImplController;
+    private int[] mTmpLocation = new int[2];
+    private int mLastViewHeight;
+    private float mLastHeaderTranslation;
 
     @Inject
     public QSFragment(RemoteInputQuickSettingsDisabler remoteInputQsDisabler,
@@ -145,6 +150,13 @@ public class QSFragment extends LifecycleFragment implements QS, CommandQueue.Ca
         setHost(mHost);
         mStatusBarStateController.addCallback(this);
         onStateChanged(mStatusBarStateController.getState());
+        view.addOnLayoutChangeListener(
+                (v, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> {
+                    boolean sizeChanged = (oldTop - oldBottom) != (top - bottom);
+                    if (sizeChanged) {
+                        setQsExpansion(mLastQSExpansion, mLastQSExpansion);
+                    }
+                });
     }
 
     @Override
@@ -154,6 +166,7 @@ public class QSFragment extends LifecycleFragment implements QS, CommandQueue.Ca
         if (mListening) {
             setListening(false);
         }
+        mQSCustomizer.setQs(null);
     }
 
     @Override
@@ -370,15 +383,18 @@ public class QSFragment extends LifecycleFragment implements QS, CommandQueue.Ca
                             ? translationScaleY * mHeader.getHeight()
                             : headerTranslation);
         }
-        if (expansion == mLastQSExpansion && mLastKeyguardAndExpanded == onKeyguardAndExpanded) {
+        int currentHeight = getView().getHeight();
+        mLastHeaderTranslation = headerTranslation;
+        if (expansion == mLastQSExpansion && mLastKeyguardAndExpanded == onKeyguardAndExpanded
+                && mLastViewHeight == currentHeight) {
             return;
         }
         mLastQSExpansion = expansion;
         mLastKeyguardAndExpanded = onKeyguardAndExpanded;
+        mLastViewHeight = currentHeight;
 
         boolean fullyExpanded = expansion == 1;
-        int heightDiff = mQSPanel.getBottom() - mHeader.getBottom() + mHeader.getPaddingBottom()
-                + mFooter.getHeight();
+        int heightDiff = mQSPanel.getBottom() - mHeader.getBottom() + mHeader.getPaddingBottom();
         float panelTranslationY = translationScaleY * heightDiff;
 
         // Let the views animate their contents correctly by giving them the necessary context.
@@ -403,6 +419,32 @@ public class QSFragment extends LifecycleFragment implements QS, CommandQueue.Ca
 
         if (mQSAnimator != null) {
             mQSAnimator.setPosition(expansion);
+        }
+        updateMediaPositions();
+    }
+
+    private void updateMediaPositions() {
+        if (Utils.useQsMediaPlayer(getContext())) {
+            mContainer.getLocationOnScreen(mTmpLocation);
+            float absoluteBottomPosition = mTmpLocation[1] + mContainer.getHeight();
+            pinToBottom(absoluteBottomPosition, mQSPanel.getMediaHost());
+            pinToBottom(absoluteBottomPosition - mHeader.getPaddingBottom(),
+                    mHeader.getHeaderQsPanel().getMediaHost());
+        }
+    }
+
+    private void pinToBottom(float absoluteBottomPosition, MediaHost mediaHost) {
+        View hostView = mediaHost.getHostView();
+        if (mLastQSExpansion > 0) {
+            ViewGroup.MarginLayoutParams params =
+                    (ViewGroup.MarginLayoutParams) hostView.getLayoutParams();
+            float targetPosition = absoluteBottomPosition - params.bottomMargin
+                    - hostView.getHeight();
+            float currentPosition = mediaHost.getCurrentBounds().top
+                    - hostView.getTranslationY();
+            hostView.setTranslationY(targetPosition - currentPosition);
+        } else {
+            hostView.setTranslationY(0);
         }
     }
 

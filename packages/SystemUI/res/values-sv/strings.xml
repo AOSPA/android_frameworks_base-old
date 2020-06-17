@@ -89,8 +89,7 @@
     <string name="screenshot_dismiss_ui_description" msgid="934736855340147968">"Stäng skärmdump"</string>
     <string name="screenshot_preview_description" msgid="7606510140714080474">"Förhandsgranskning av skärmdump"</string>
     <string name="screenrecord_name" msgid="2596401223859996572">"Skärminspelare"</string>
-    <!-- no translation found for screenrecord_background_processing_label (7244617554884238898) -->
-    <skip />
+    <string name="screenrecord_background_processing_label" msgid="7244617554884238898">"Behandlar skärminspelning"</string>
     <string name="screenrecord_channel_description" msgid="4147077128486138351">"Avisering om att skärminspelning pågår"</string>
     <string name="screenrecord_start_label" msgid="1750350278888217473">"Vill du starta inspelningen?"</string>
     <string name="screenrecord_description" msgid="1123231719680353736">"När du spelar in kan Android-systemet registrera alla känsliga uppgifter som visas på skärmen eller spelas upp på enheten. Detta omfattar lösenord, betalningsuppgifter, foton, meddelanden och ljud."</string>
@@ -400,7 +399,7 @@
     <string name="quick_settings_tethering_label" msgid="5257299852322475780">"Internetdelning"</string>
     <string name="quick_settings_hotspot_label" msgid="1199196300038363424">"Surfzon"</string>
     <string name="quick_settings_hotspot_secondary_label_transient" msgid="7585604088079160564">"Aktiverar …"</string>
-    <string name="quick_settings_hotspot_secondary_label_data_saver_enabled" msgid="1280433136266439372">"Databesparing är på"</string>
+    <string name="quick_settings_hotspot_secondary_label_data_saver_enabled" msgid="1280433136266439372">"Databesparing på"</string>
     <plurals name="quick_settings_hotspot_secondary_label_num_devices" formatted="false" msgid="3142308865165871976">
       <item quantity="other">%d enheter</item>
       <item quantity="one">%d enhet</item>
@@ -511,10 +510,9 @@
     <string name="clear_all_notifications_text" msgid="348312370303046130">"Rensa alla"</string>
     <string name="manage_notifications_text" msgid="6885645344647733116">"Hantera"</string>
     <string name="manage_notifications_history_text" msgid="57055985396576230">"Historik"</string>
-    <!-- no translation found for notification_section_header_incoming (5295312809341711367) -->
-    <skip />
-    <string name="notification_section_header_gentle" msgid="3044910806569985386">"Ljudlösa aviseringar"</string>
-    <string name="notification_section_header_alerting" msgid="3168140660646863240">"Aviseringar med vibration eller ljud"</string>
+    <string name="notification_section_header_incoming" msgid="5295312809341711367">"Inkommande"</string>
+    <string name="notification_section_header_gentle" msgid="6804099527336337197">"Ljudlöst"</string>
+    <string name="notification_section_header_alerting" msgid="5581175033680477651">"Aviseringar"</string>
     <string name="notification_section_header_conversations" msgid="821834744538345661">"Konversationer"</string>
     <string name="accessibility_notification_section_header_gentle_clear_all" msgid="6490207897764933919">"Rensa alla ljudlösa aviseringar"</string>
     <string name="dnd_suppressing_shade_text" msgid="5588252250634464042">"Aviseringar har pausats via Stör ej"</string>
@@ -594,19 +592,21 @@
     <string name="volume_odi_captions_hint_enable" msgid="2073091194012843195">"aktivera"</string>
     <string name="volume_odi_captions_hint_disable" msgid="2518846326748183407">"inaktivera"</string>
     <string name="accessibility_output_chooser" msgid="7807898688967194183">"Byt enhet för utdata"</string>
-    <string name="screen_pinning_title" msgid="7357611095909618178">"Skärmen har fästs"</string>
+    <string name="screen_pinning_title" msgid="9058007390337841305">"Appen har fästs"</string>
     <string name="screen_pinning_description" msgid="8699395373875667743">"Skärmen visas tills du lossar den. Tryck länge på Tillbaka och Översikt om du vill lossa skärmen."</string>
     <string name="screen_pinning_description_recents_invisible" msgid="4564466648700390037">"Skärmen visas tills du lossar den. Tryck länge på Tillbaka och Startsida om du vill lossa skärmen."</string>
     <string name="screen_pinning_description_gestural" msgid="7246323931831232068">"Skärmen visas tills du lossar den. Svep uppåt och håll kvar fingret om du vill lossa skärmen."</string>
     <string name="screen_pinning_description_accessible" msgid="7386449191953535332">"Skärmen visas tills du lossar den. Tryck länge på Översikt om du vill lossa skärmen."</string>
     <string name="screen_pinning_description_recents_invisible_accessible" msgid="2857071808674481986">"Skärmen visas tills du lossar den. Tryck länge på Startsida om du vill lossa skärmen."</string>
-    <string name="screen_pinning_toast" msgid="2083944237147005811">"Om du vill lossa skärmen trycker du länge på knapparna Tillbaka och Översikt"</string>
-    <string name="screen_pinning_toast_recents_invisible" msgid="6343770487795352573">"Om du vill lossa skärmen trycker du länge på knapparna Tillbaka och Startsida"</string>
-    <string name="screen_pinning_toast_gesture_nav" msgid="2884536903398445645">"Svep uppåt och håll kvar fingret om du vill lossa skärmen"</string>
+    <string name="screen_pinning_exposes_personal_data" msgid="8189852022981524789">"Personliga uppgifter kan bli tillgängliga (t.ex. kontakter och innehåll i e-post)."</string>
+    <string name="screen_pinning_can_open_other_apps" msgid="7529756813231421455">"Det kan gå att öppna andra appar med appen du har fäst."</string>
+    <string name="screen_pinning_toast" msgid="8177286912533744328">"Om du vill lossa appen trycker du länge på knapparna Tillbaka och Översikt"</string>
+    <string name="screen_pinning_toast_recents_invisible" msgid="6850978077443052594">"Om du vill lossa appen trycker du länge på knapparna Tillbaka och Startsida"</string>
+    <string name="screen_pinning_toast_gesture_nav" msgid="170699893395336705">"Svep uppåt och håll kvar fingret om du vill lossa appen"</string>
     <string name="screen_pinning_positive" msgid="3285785989665266984">"OK"</string>
     <string name="screen_pinning_negative" msgid="6882816864569211666">"Nej tack"</string>
-    <string name="screen_pinning_start" msgid="5695091877402422575">"Skärmen är fäst"</string>
-    <string name="screen_pinning_exit" msgid="5114993350662745840">"Skärmen är inte längre fäst"</string>
+    <string name="screen_pinning_start" msgid="7483998671383371313">"Appen är fäst"</string>
+    <string name="screen_pinning_exit" msgid="4553787518387346893">"Appen är inte längre fäst"</string>
     <string name="quick_settings_reset_confirmation_title" msgid="463533331480997595">"Vill du dölja <xliff:g id="TILE_LABEL">%1$s</xliff:g>?"</string>
     <string name="quick_settings_reset_confirmation_message" msgid="2320586180785674186">"Den visas på nytt nästa gång du aktiverar den i inställningarna."</string>
     <string name="quick_settings_reset_confirmation_button" msgid="3341477479055016776">"Dölj"</string>
@@ -709,16 +709,17 @@
     <string name="inline_turn_off_notifications" msgid="8543989584403106071">"Inaktivera aviseringar"</string>
     <string name="inline_keep_showing_app" msgid="4393429060390649757">"Vill du fortsätta visa aviseringar för den här appen?"</string>
     <string name="notification_silence_title" msgid="8608090968400832335">"Tyst"</string>
-    <string name="notification_alert_title" msgid="7629202599338071971">"Påkallar uppmärksamhet"</string>
+    <string name="notification_alert_title" msgid="3656229781017543655">"Standard"</string>
     <string name="notification_bubble_title" msgid="8330481035191903164">"Bubbla"</string>
-    <string name="notification_channel_summary_low" msgid="7300447764759926720">"Inga ljud eller vibrationer som stör koncentrationen."</string>
-    <string name="notification_channel_summary_default" msgid="3539949463907902037">"Påkallar uppmärksamhet med ljud eller vibrationer."</string>
-    <string name="notification_channel_summary_default_with_bubbles" msgid="6298026344552480458">"Påkallar uppmärksamhet med ljud eller vibrationer. Konversationer från <xliff:g id="APP_NAME">%1$s</xliff:g> visas i bubblor som standard."</string>
+    <string name="notification_channel_summary_low" msgid="4860617986908931158">"Inga ljud eller vibrationer"</string>
+    <string name="notification_conversation_summary_low" msgid="1734433426085468009">"Inga ljud eller vibrationer och visas längre ned bland konversationerna"</string>
+    <string name="notification_channel_summary_default" msgid="3282930979307248890">"Kan ringa eller vibrera beroende på inställningarna på telefonen"</string>
+    <string name="notification_channel_summary_default_with_bubbles" msgid="1782419896613644568">"Kan ringa eller vibrera beroende på inställningarna på telefonen. Konversationer från <xliff:g id="APP_NAME">%1$s</xliff:g> visas i bubblor som standard."</string>
     <string name="notification_channel_summary_bubble" msgid="7235935211580860537">"Behåller din uppmärksamhet med en flytande genväg till innehållet."</string>
-    <string name="notification_channel_summary_priority" msgid="7415770044553264622">"Visas högst upp bland konversationerna som en bubbla"</string>
+    <string name="notification_channel_summary_priority" msgid="7952654515769021553">"Visas högst upp bland konversationerna som en flytande bubbla, visar profilbilden på låsskärmen"</string>
     <string name="notification_conversation_channel_settings" msgid="2409977688430606835">"Inställningar"</string>
     <string name="notification_priority_title" msgid="2079708866333537093">"Prioritet"</string>
-    <string name="no_shortcut" msgid="7176375126961212514">"<xliff:g id="APP_NAME">%1$s</xliff:g> har inte stöd för konversationsspecifika inställningar"</string>
+    <string name="no_shortcut" msgid="8257177117568230126">"<xliff:g id="APP_NAME">%1$s</xliff:g> har inte stöd för konversationsfunktioner"</string>
     <string name="bubble_overflow_empty_title" msgid="3120029421991510842">"Inga nya bubblor"</string>
     <string name="bubble_overflow_empty_subtitle" msgid="2030874469510497397">"De senaste bubblorna och ignorerade bubblor visas här"</string>
     <string name="notification_unblockable_desc" msgid="2073030886006190804">"Det går inte att ändra de här aviseringarna."</string>
@@ -991,10 +992,8 @@
     <string name="music_controls_no_title" msgid="4166497066552290938">"Ingen titel"</string>
     <string name="restart_button_description" msgid="6916116576177456480">"Tryck för att starta om appen i helskärmsläge."</string>
     <string name="bubbles_settings_button_description" msgid="7324245408859877545">"Inställningar för <xliff:g id="APP_NAME">%1$s</xliff:g>-bubblor"</string>
-    <!-- no translation found for bubble_overflow_button_content_description (5523744621434300510) -->
-    <skip />
-    <!-- no translation found for bubble_accessibility_action_add_back (6217995665917123890) -->
-    <skip />
+    <string name="bubble_overflow_button_content_description" msgid="5523744621434300510">"Fler menyalternativ"</string>
+    <string name="bubble_accessibility_action_add_back" msgid="6217995665917123890">"Lägg tillbaka på stack"</string>
     <string name="manage_bubbles_text" msgid="6856830436329494850">"Hantera"</string>
     <string name="bubble_content_description_single" msgid="5175160674436546329">"<xliff:g id="NOTIFICATION_TITLE">%1$s</xliff:g> från <xliff:g id="APP_NAME">%2$s</xliff:g>"</string>
     <string name="bubble_content_description_stack" msgid="7907610717462651870">"<xliff:g id="NOTIFICATION_TITLE">%1$s</xliff:g> från <xliff:g id="APP_NAME">%2$s</xliff:g> och <xliff:g id="BUBBLE_COUNT">%3$d</xliff:g> fler"</string>
@@ -1003,7 +1002,8 @@
     <string name="bubble_accessibility_action_move_top_right" msgid="6916868852433483569">"Flytta högst upp till höger"</string>
     <string name="bubble_accessibility_action_move_bottom_left" msgid="6339015902495504715">"Flytta längst ned till vänster"</string>
     <string name="bubble_accessibility_action_move_bottom_right" msgid="7471571700628346212">"Flytta längst ned till höger"</string>
-    <string name="bubble_dismiss_text" msgid="7071770411580452911">"Stäng"</string>
+    <!-- no translation found for bubble_dismiss_text (1314082410868930066) -->
+    <skip />
     <string name="bubbles_dont_bubble_conversation" msgid="1033040343437428822">"Visa inte konversationen i bubblor"</string>
     <string name="bubbles_user_education_title" msgid="5547017089271445797">"Chatta med bubblor"</string>
     <string name="bubbles_user_education_description" msgid="1160281719576715211">"Nya konversationer visas som flytande ikoner, så kallade bubblor. Tryck på bubblan om du vill öppna den. Dra den om du vill flytta den."</string>
@@ -1014,11 +1014,14 @@
     <string name="notification_content_system_nav_changed" msgid="5077913144844684544">"Systemnavigeringen har uppdaterats. Öppna inställningarna om du vill ändra något."</string>
     <string name="notification_content_gesture_nav_available" msgid="4431460803004659888">"Öppna inställningarna och uppdatera systemnavigeringen"</string>
     <string name="inattentive_sleep_warning_title" msgid="3891371591713990373">"Viloläge"</string>
+    <string name="priority_onboarding_title" msgid="2893070698479227616">"Konversationen har angetts som prioriterad"</string>
+    <string name="priority_onboarding_behavior" msgid="5342816047020432929">"Följande gäller för prioriterade konversationer:"</string>
     <string name="priority_onboarding_show_at_top_text" msgid="1678400241025513541">"Visa högst upp bland konversationerna"</string>
     <string name="priority_onboarding_show_avatar_text" msgid="5756291381124091508">"Visa profilbild på låsskärmen"</string>
     <string name="priority_onboarding_appear_as_bubble_text" msgid="4227039772250263122">"Visa som en flytande bubbla ovanpå appar"</string>
     <string name="priority_onboarding_ignores_dnd_text" msgid="2918952762719600529">"Avbryt Stör ej"</string>
     <string name="priority_onboarding_done_button_title" msgid="4569550984286506007">"OK"</string>
+    <string name="priority_onboarding_settings_button_title" msgid="6663601574303585927">"Inställningar"</string>
     <string name="magnification_overlay_title" msgid="6584179429612427958">"Överlagrat förstoringsfönster"</string>
     <string name="magnification_window_title" msgid="4863914360847258333">"Förstoringsfönster"</string>
     <string name="magnification_controls_title" msgid="8421106606708891519">"Inställningar för förstoringsfönster"</string>
@@ -1031,6 +1034,13 @@
       <item quantity="other"><xliff:g id="NUMBER_1">%s</xliff:g> kontroller har lagts till.</item>
       <item quantity="one"><xliff:g id="NUMBER_0">%s</xliff:g> kontroll har lagts till.</item>
     </plurals>
+    <string name="controls_removed" msgid="3731789252222856959">"Har tagits bort"</string>
+    <string name="accessibility_control_favorite" msgid="8694362691985545985">"Har lagts till som favorit"</string>
+    <string name="accessibility_control_favorite_position" msgid="54220258048929221">"Har lagts till som favorit, plats <xliff:g id="NUMBER">%d</xliff:g>"</string>
+    <string name="accessibility_control_not_favorite" msgid="1291760269563092359">"Har tagits bort från favoriter"</string>
+    <string name="accessibility_control_change_favorite" msgid="2943178027582253261">"lägga till som favorit"</string>
+    <string name="accessibility_control_change_unfavorite" msgid="6997408061750740327">"ta bort från favoriter"</string>
+    <string name="accessibility_control_move" msgid="8980344493796647792">"Flytta till position <xliff:g id="NUMBER">%d</xliff:g>"</string>
     <string name="controls_favorite_default_title" msgid="967742178688938137">"Kontroller"</string>
     <string name="controls_favorite_subtitle" msgid="6604402232298443956">"Välj snabbkontroller som ska visas i strömbrytarmenyn"</string>
     <string name="controls_favorite_rearrange" msgid="5616952398043063519">"Ändra ordning på kontrollerna genom att trycka och dra"</string>
@@ -1053,9 +1063,13 @@
     <string name="controls_structure_tooltip" msgid="4355922222944447867">"Svep om du vill se mer"</string>
     <string name="controls_seeding_in_progress" msgid="3033855341410264148">"Rekommendationer läses in"</string>
     <string name="controls_media_close_session" msgid="9023534788828414585">"Stäng den här sessionen"</string>
+    <string name="controls_media_resume" msgid="1933520684481586053">"Återuppta"</string>
     <string name="controls_error_timeout" msgid="794197289772728958">"Inaktiv, kolla appen"</string>
     <string name="controls_error_retryable" msgid="864025882878378470">"Fel, försöker igen …"</string>
-    <string name="controls_error_removed" msgid="6299213591234723805">"Enheten har tagits bort"</string>
+    <string name="controls_error_removed" msgid="6675638069846014366">"Hittades inte"</string>
+    <string name="controls_error_removed_title" msgid="1207794911208047818">"Styrning är inte tillgänglig"</string>
+    <string name="controls_error_removed_message" msgid="2885911717034750542">"Det gick inte att komma åt <xliff:g id="DEVICE">%1$s</xliff:g>. Kontrollera att enheten fortfarande är tillgänglig för styrning och att appinställningarna inte har ändrats i <xliff:g id="APPLICATION">%2$s</xliff:g>-appen."</string>
+    <string name="controls_open_app" msgid="483650971094300141">"Öppna appen"</string>
     <string name="controls_error_generic" msgid="352500456918362905">"Ingen status lästes in"</string>
     <string name="controls_error_failed" msgid="960228639198558525">"Fel, försök igen"</string>
     <string name="controls_in_progress" msgid="4421080500238215939">"Pågår"</string>

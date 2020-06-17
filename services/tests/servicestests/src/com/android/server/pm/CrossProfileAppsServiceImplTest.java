@@ -34,12 +34,14 @@ import android.os.Bundle;
 import android.os.IBinder;
 import android.os.UserHandle;
 import android.os.UserManager;
+import android.permission.PermissionManager;
 import android.platform.test.annotations.Presubmit;
 import android.util.SparseArray;
 
 import com.android.internal.util.FunctionalUtils.ThrowingRunnable;
 import com.android.internal.util.FunctionalUtils.ThrowingSupplier;
 import com.android.server.LocalServices;
+import com.android.server.pm.permission.PermissionManagerService;
 import com.android.server.wm.ActivityTaskManagerInternal;
 
 import org.junit.Before;
@@ -691,6 +693,14 @@ public class CrossProfileAppsServiceImplTest {
         public int checkComponentPermission(
                 String permission, int uid, int owningUid, boolean exported) {
             return ActivityManager.checkComponentPermission(permission, uid, owningUid, exported);
+        }
+
+        @Override
+        public void killUid(int uid) {
+            PermissionManagerService.killUid(
+                    UserHandle.getAppId(uid),
+                    UserHandle.getUserId(uid),
+                    PermissionManager.KILL_APP_REASON_PERMISSIONS_REVOKED);
         }
     }
 }

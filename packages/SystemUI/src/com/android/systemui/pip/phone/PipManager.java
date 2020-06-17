@@ -25,7 +25,6 @@ import android.annotation.Nullable;
 import android.app.ActivityManager;
 import android.app.ActivityTaskManager;
 import android.app.IActivityManager;
-import android.app.IActivityTaskManager;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.pm.ParceledListSlice;
@@ -45,7 +44,6 @@ import com.android.systemui.broadcast.BroadcastDispatcher;
 import com.android.systemui.pip.BasePipManager;
 import com.android.systemui.pip.PipBoundsHandler;
 import com.android.systemui.pip.PipSnapAlgorithm;
-import com.android.systemui.pip.PipSurfaceTransactionHelper;
 import com.android.systemui.pip.PipTaskOrganizer;
 import com.android.systemui.shared.recents.IPinnedStackAnimationListener;
 import com.android.systemui.shared.system.ActivityManagerWrapper;
@@ -53,7 +51,6 @@ import com.android.systemui.shared.system.InputConsumerController;
 import com.android.systemui.shared.system.PinnedStackListenerForwarder.PinnedStackListener;
 import com.android.systemui.shared.system.TaskStackChangeListener;
 import com.android.systemui.shared.system.WindowManagerWrapper;
-import com.android.systemui.stackdivider.Divider;
 import com.android.systemui.util.DeviceConfigProxy;
 import com.android.systemui.util.FloatingContentCoordinator;
 import com.android.systemui.wm.DisplayChangeController;
@@ -82,12 +79,13 @@ public class PipManager implements BasePipManager, PipTaskOrganizer.PipTransitio
 
     private PipBoundsHandler mPipBoundsHandler;
     private InputConsumerController mInputConsumerController;
-    private PipMenuActivityController mMenuController;
     private PipMediaController mMediaController;
     private PipTouchHandler mTouchHandler;
     private PipAppOpsListener mAppOpsListener;
     private IPinnedStackAnimationListener mPinnedStackAnimationRecentsListener;
+    private boolean mIsInFixedRotation;
 
+    protected PipMenuActivityController mMenuController;
     protected PipTaskOrganizer mPipTaskOrganizer;
 
     /**
@@ -96,10 +94,41 @@ public class PipManager implements BasePipManager, PipTaskOrganizer.PipTransitio
     private final DisplayChangeController.OnDisplayChangingListener mRotationController = (
             int displayId, int fromRotation, int toRotation, WindowContainerTransaction t) -> {
         final boolean changed = mPipBoundsHandler.onDisplayRotationChanged(mTmpNormalBounds,
-                displayId, fromRotation, toRotation, t);
+                mPipTaskOrganizer.getLastReportedBounds(), mTmpInsetBounds, displayId, fromRotation,
+                toRotation, t);
         if (changed) {
+            // If the pip was in the offset zone earlier, adjust the new bounds to the bottom of the
+            // movement bounds
+            mTouchHandler.adjustBoundsForRotation(mTmpNormalBounds,
+                    mPipTaskOrganizer.getLastReportedBounds(), mTmpInsetBounds);
+
+            // The bounds are being applied to a specific snap fraction, so reset any known offsets
+            // for the previous orientation before updating the movement bounds.
+            // We perform the resets if and only if this callback is due to screen rotation but
+            // not during the fixed rotation. In fixed rotation case, app is about to enter PiP
+            // and we need the offsets preserved to calculate the destination bounds.
+            if (!mIsInFixedRotation) {
+                mPipBoundsHandler.setShelfHeight(false , 0);
+                mPipBoundsHandler.onImeVisibilityChanged(false, 0);
+                mTouchHandler.onShelfVisibilityChanged(false, 0);
+                mTouchHandler.onImeVisibilityChanged(false, 0);
+            }
+
             updateMovementBounds(mTmpNormalBounds, true /* fromRotation */,
                     false /* fromImeAdjustment */, false /* fromShelfAdjustment */);
+        }
+    };
+
+    private DisplayController.OnDisplaysChangedListener mFixedRotationListener =
+            new DisplayController.OnDisplaysChangedListener() {
+        @Override
+        public void onFixedRotationStarted(int displayId, int newRotation) {
+            mIsInFixedRotation = true;
+        }
+
+        @Override
+        public void onFixedRotationFinished(int displayId) {
+            mIsInFixedRotation = false;
         }
     };
 
@@ -140,7 +169,7 @@ public class PipManager implements BasePipManager, PipTaskOrganizer.PipTransitio
                     != WINDOWING_MODE_PINNED) {
                 return;
             }
-            mTouchHandler.getMotionHelper().expandPip(clearedTask /* skipAnimation */);
+            mTouchHandler.getMotionHelper().expandPipToFullscreen(clearedTask /* skipAnimation */);
         }
     };
 
@@ -200,9 +229,7 @@ public class PipManager implements BasePipManager, PipTaskOrganizer.PipTransitio
             DeviceConfigProxy deviceConfig,
             PipBoundsHandler pipBoundsHandler,
             PipSnapAlgorithm pipSnapAlgorithm,
-            PipTaskOrganizer pipTaskOrganizer,
-            PipSurfaceTransactionHelper surfaceTransactionHelper,
-            Divider divider) {
+            PipTaskOrganizer pipTaskOrganizer) {
         mContext = context;
         mActivityManager = ActivityManager.getService();
 
@@ -214,7 +241,6 @@ public class PipManager implements BasePipManager, PipTaskOrganizer.PipTransitio
         }
         ActivityManagerWrapper.getInstance().registerTaskStackListener(mTaskStackListener);
 
-        final IActivityTaskManager activityTaskManager = ActivityTaskManager.getService();
         mPipBoundsHandler = pipBoundsHandler;
         mPipTaskOrganizer = pipTaskOrganizer;
         mPipTaskOrganizer.registerPipTransitionCallback(this);
@@ -222,12 +248,13 @@ public class PipManager implements BasePipManager, PipTaskOrganizer.PipTransitio
         mMediaController = new PipMediaController(context, mActivityManager, broadcastDispatcher);
         mMenuController = new PipMenuActivityController(context, mMediaController,
                 mInputConsumerController);
-        mTouchHandler = new PipTouchHandler(context, mActivityManager, activityTaskManager,
+        mTouchHandler = new PipTouchHandler(context, mActivityManager,
                 mMenuController, mInputConsumerController, mPipBoundsHandler, mPipTaskOrganizer,
                 floatingContentCoordinator, deviceConfig, pipSnapAlgorithm);
         mAppOpsListener = new PipAppOpsListener(context, mActivityManager,
                 mTouchHandler.getMotionHelper());
         displayController.addDisplayChangingController(mRotationController);
+        displayController.addDisplayWindowListener(mFixedRotationListener);
 
         // Ensure that we have the display info in case we get calls to update the bounds before the
         // listener calls back
@@ -237,7 +264,7 @@ public class PipManager implements BasePipManager, PipTaskOrganizer.PipTransitio
 
         try {
             mPipTaskOrganizer.registerOrganizer(WINDOWING_MODE_PINNED);
-            ActivityManager.StackInfo stackInfo = activityTaskManager.getStackInfo(
+            ActivityManager.StackInfo stackInfo = ActivityTaskManager.getService().getStackInfo(
                     WINDOWING_MODE_PINNED, ACTIVITY_TYPE_UNDEFINED);
             if (stackInfo != null) {
                 // If SystemUI restart, and it already existed a pinned stack,
@@ -261,7 +288,7 @@ public class PipManager implements BasePipManager, PipTaskOrganizer.PipTransitio
      */
     @Override
     public void expandPip() {
-        mTouchHandler.getMotionHelper().expandPip(false /* skipAnimation */);
+        mTouchHandler.getMotionHelper().expandPipToFullscreen(false /* skipAnimation */);
     }
 
     /**
@@ -292,10 +319,11 @@ public class PipManager implements BasePipManager, PipTaskOrganizer.PipTransitio
     @Override
     public void setShelfHeight(boolean visible, int height) {
         mHandler.post(() -> {
-            final boolean changed = mPipBoundsHandler.setShelfHeight(visible, height);
+            final int shelfHeight = visible ? height : 0;
+            final boolean changed = mPipBoundsHandler.setShelfHeight(visible, shelfHeight);
             if (changed) {
-                mTouchHandler.onShelfVisibilityChanged(visible, height);
-                updateMovementBounds(mPipBoundsHandler.getLastDestinationBounds(),
+                mTouchHandler.onShelfVisibilityChanged(visible, shelfHeight);
+                updateMovementBounds(mPipTaskOrganizer.getLastReportedBounds(),
                         false /* fromRotation */, false /* fromImeAdjustment */,
                         true /* fromShelfAdjustment */);
             }
@@ -378,5 +406,6 @@ public class PipManager implements BasePipManager, PipTaskOrganizer.PipTransitio
         mMenuController.dump(pw, innerPrefix);
         mTouchHandler.dump(pw, innerPrefix);
         mPipBoundsHandler.dump(pw, innerPrefix);
+        mPipTaskOrganizer.dump(pw, innerPrefix);
     }
 }

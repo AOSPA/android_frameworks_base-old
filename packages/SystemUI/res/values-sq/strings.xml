@@ -89,8 +89,7 @@
     <string name="screenshot_dismiss_ui_description" msgid="934736855340147968">"Hiq pamjen e ekranit"</string>
     <string name="screenshot_preview_description" msgid="7606510140714080474">"Pamja paraprake e imazhit"</string>
     <string name="screenrecord_name" msgid="2596401223859996572">"Regjistruesi i ekranit"</string>
-    <!-- no translation found for screenrecord_background_processing_label (7244617554884238898) -->
-    <skip />
+    <string name="screenrecord_background_processing_label" msgid="7244617554884238898">"Regjistrimi i ekranit po përpunohet"</string>
     <string name="screenrecord_channel_description" msgid="4147077128486138351">"Njoftim i vazhdueshëm për një seancë regjistrimi të ekranit"</string>
     <string name="screenrecord_start_label" msgid="1750350278888217473">"Të nis regjistrimi?"</string>
     <string name="screenrecord_description" msgid="1123231719680353736">"Gjatë regjistrimit, sistemi Android mund të regjistrojë çdo informacion delikat që është i dukshëm në ekranin tënd ose që luhet në pajisje. Kjo përfshin fjalëkalimet, informacionin e pagesave, fotografitë, mesazhet dhe audion."</string>
@@ -511,10 +510,9 @@
     <string name="clear_all_notifications_text" msgid="348312370303046130">"Pastroji të gjitha"</string>
     <string name="manage_notifications_text" msgid="6885645344647733116">"Menaxho"</string>
     <string name="manage_notifications_history_text" msgid="57055985396576230">"Historiku"</string>
-    <!-- no translation found for notification_section_header_incoming (5295312809341711367) -->
-    <skip />
-    <string name="notification_section_header_gentle" msgid="3044910806569985386">"Njoftimet në heshtje"</string>
-    <string name="notification_section_header_alerting" msgid="3168140660646863240">"Njoftimet sinjalizuese"</string>
+    <string name="notification_section_header_incoming" msgid="5295312809341711367">"Hyrëse"</string>
+    <string name="notification_section_header_gentle" msgid="6804099527336337197">"Në heshtje"</string>
+    <string name="notification_section_header_alerting" msgid="5581175033680477651">"Njoftimet"</string>
     <string name="notification_section_header_conversations" msgid="821834744538345661">"Bisedat"</string>
     <string name="accessibility_notification_section_header_gentle_clear_all" msgid="6490207897764933919">"Pastro të gjitha njoftimet në heshtje"</string>
     <string name="dnd_suppressing_shade_text" msgid="5588252250634464042">"Njoftimet janë vendosur në pauzë nga modaliteti \"Mos shqetëso\""</string>
@@ -594,19 +592,21 @@
     <string name="volume_odi_captions_hint_enable" msgid="2073091194012843195">"aktivizo"</string>
     <string name="volume_odi_captions_hint_disable" msgid="2518846326748183407">"çaktivizo"</string>
     <string name="accessibility_output_chooser" msgid="7807898688967194183">"Ndërro pajisjen e daljes"</string>
-    <string name="screen_pinning_title" msgid="7357611095909618178">"Ekrani u gozhdua"</string>
+    <string name="screen_pinning_title" msgid="9058007390337841305">"Aplikacioni është i gozhduar"</string>
     <string name="screen_pinning_description" msgid="8699395373875667743">"Kjo e ruan në pamje deri sa ta heqësh nga gozhdimi. Prek dhe mbaj të shtypur \"Prapa\" dhe \"Përmbledhje\" për ta hequr nga gozhdimi."</string>
     <string name="screen_pinning_description_recents_invisible" msgid="4564466648700390037">"Kjo e ruan në pamje deri sa ta heqësh nga gozhdimi. Prek dhe mbaj të shtypur \"Prapa\" dhe \"Kreu\" për ta hequr nga gozhdimi."</string>
     <string name="screen_pinning_description_gestural" msgid="7246323931831232068">"Kjo e ruan në pamje deri sa ta zhgozhdosh. Rrëshqit shpejt lart dhe mbaje të shtypur për ta hequr zhgozhduar."</string>
     <string name="screen_pinning_description_accessible" msgid="7386449191953535332">"Kjo e ruan në pamje deri sa ta heqësh nga gozhdimi. Prek dhe mbaj të shtypur \"Përmbledhje\" për ta hequr nga gozhdimi."</string>
     <string name="screen_pinning_description_recents_invisible_accessible" msgid="2857071808674481986">"Kjo e ruan në pamje deri sa ta heqësh nga gozhdimi. Prek dhe mbaj të shtypur \"Kreu\" për ta hequr nga gozhdimi."</string>
-    <string name="screen_pinning_toast" msgid="2083944237147005811">"Për të hequr gozhdimin e këtij ekrani, prek dhe mbaj butonat \"Prapa\" dhe \"Përmbledhja\"."</string>
-    <string name="screen_pinning_toast_recents_invisible" msgid="6343770487795352573">"Për të hequr gozhdimin e këtij ekrani, prek dhe mbaj butonat \"Prapa\" dhe \"Kreu\"."</string>
-    <string name="screen_pinning_toast_gesture_nav" msgid="2884536903398445645">"Për të hequr gozhdimin e këtij ekrani, rrëshqit shpejt lart dhe mbaje të shtypur"</string>
+    <string name="screen_pinning_exposes_personal_data" msgid="8189852022981524789">"Të dhënat personale mund të jenë të qasshme (si kontaktet dhe përmbajtja e email-eve)"</string>
+    <string name="screen_pinning_can_open_other_apps" msgid="7529756813231421455">"Aplikacioni i gozhduar mund të hapë aplikacione të tjera."</string>
+    <string name="screen_pinning_toast" msgid="8177286912533744328">"Për të hequr gozhdimin e këtij aplikacioni, mbaj shtypur butonat \"Prapa\" dhe \"Përmbledhja\"."</string>
+    <string name="screen_pinning_toast_recents_invisible" msgid="6850978077443052594">"Për të hequr gozhdimin e këtij aplikacioni, mbaj shtypur butonat \"Prapa\" dhe \"Kreu\""</string>
+    <string name="screen_pinning_toast_gesture_nav" msgid="170699893395336705">"Për të hequr gozhdimin e këtij aplikacioni, rrëshqit shpejt lart dhe mbaje të shtypur"</string>
     <string name="screen_pinning_positive" msgid="3285785989665266984">"E kuptova"</string>
     <string name="screen_pinning_negative" msgid="6882816864569211666">"Jo, faleminderit!"</string>
-    <string name="screen_pinning_start" msgid="5695091877402422575">"Ekrani u gozhdua"</string>
-    <string name="screen_pinning_exit" msgid="5114993350662745840">"Ekrani u hoq nga gozhdimi"</string>
+    <string name="screen_pinning_start" msgid="7483998671383371313">"Aplikacioni i gozhduar"</string>
+    <string name="screen_pinning_exit" msgid="4553787518387346893">"Aplikacioni i zhgozhduar"</string>
     <string name="quick_settings_reset_confirmation_title" msgid="463533331480997595">"Të fshihet <xliff:g id="TILE_LABEL">%1$s</xliff:g>?"</string>
     <string name="quick_settings_reset_confirmation_message" msgid="2320586180785674186">"Do të rishfaqet herën tjetër kur ta aktivizoni te cilësimet."</string>
     <string name="quick_settings_reset_confirmation_button" msgid="3341477479055016776">"Fshih"</string>
@@ -709,16 +709,17 @@
     <string name="inline_turn_off_notifications" msgid="8543989584403106071">"Çaktivizo njoftimet"</string>
     <string name="inline_keep_showing_app" msgid="4393429060390649757">"Do të vazhdosh t\'i shfaqësh njoftimet nga ky aplikacion?"</string>
     <string name="notification_silence_title" msgid="8608090968400832335">"Në heshtje"</string>
-    <string name="notification_alert_title" msgid="7629202599338071971">"Sinjalizimi"</string>
+    <string name="notification_alert_title" msgid="3656229781017543655">"E parazgjedhur"</string>
     <string name="notification_bubble_title" msgid="8330481035191903164">"Flluskë"</string>
-    <string name="notification_channel_summary_low" msgid="7300447764759926720">"Të ndihmon të fokusohesh pa tinguj ose dridhje."</string>
-    <string name="notification_channel_summary_default" msgid="3539949463907902037">"Të tërheq vëmendjen me tinguj ose dridhje."</string>
-    <string name="notification_channel_summary_default_with_bubbles" msgid="6298026344552480458">"Të tërheq vëmendjen me tinguj ose dridhje. Bisedat nga flluska e <xliff:g id="APP_NAME">%1$s</xliff:g> si parazgjedhje."</string>
+    <string name="notification_channel_summary_low" msgid="4860617986908931158">"Asnjë tingull ose dridhje"</string>
+    <string name="notification_conversation_summary_low" msgid="1734433426085468009">"Asnjë tingull ose dridhje dhe shfaqet më poshtë në seksionin e bisedave"</string>
+    <string name="notification_channel_summary_default" msgid="3282930979307248890">"Mund të bjerë zilja ose të dridhet në bazë të cilësimeve të telefonit"</string>
+    <string name="notification_channel_summary_default_with_bubbles" msgid="1782419896613644568">"Mund të bjerë zilja ose të dridhet në bazë të cilësimeve të telefonit. Bisedat nga flluska e <xliff:g id="APP_NAME">%1$s</xliff:g> si parazgjedhje."</string>
     <string name="notification_channel_summary_bubble" msgid="7235935211580860537">"Mban vëmendjen tënde me një shkurtore pluskuese te kjo përmbajtje."</string>
-    <string name="notification_channel_summary_priority" msgid="7415770044553264622">"Shfaqet në krye të seksionit të bisedës dhe shfaqet si flluskë."</string>
+    <string name="notification_channel_summary_priority" msgid="7952654515769021553">"Shfaqet në krye të seksionit të bisedës dhe shfaqet si flluskë pluskuese, shfaq fotografinë e profilit në ekranin e kyçjes"</string>
     <string name="notification_conversation_channel_settings" msgid="2409977688430606835">"Cilësimet"</string>
     <string name="notification_priority_title" msgid="2079708866333537093">"Përparësia"</string>
-    <string name="no_shortcut" msgid="7176375126961212514">"<xliff:g id="APP_NAME">%1$s</xliff:g> nuk i mbështet cilësimet specifike të bisedës"</string>
+    <string name="no_shortcut" msgid="8257177117568230126">"<xliff:g id="APP_NAME">%1$s</xliff:g> nuk mbështet veçoritë e bisedës"</string>
     <string name="bubble_overflow_empty_title" msgid="3120029421991510842">"Nuk ka flluska të fundit"</string>
     <string name="bubble_overflow_empty_subtitle" msgid="2030874469510497397">"Flluskat e fundit dhe flluskat e hequra do të shfaqen këtu"</string>
     <string name="notification_unblockable_desc" msgid="2073030886006190804">"Këto njoftime nuk mund të modifikohen."</string>
@@ -991,10 +992,8 @@
     <string name="music_controls_no_title" msgid="4166497066552290938">"Pa titull"</string>
     <string name="restart_button_description" msgid="6916116576177456480">"Trokit për ta rinisur këtë aplikacion dhe për të kaluar në ekranin e plotë."</string>
     <string name="bubbles_settings_button_description" msgid="7324245408859877545">"Cilësimet për flluskat e <xliff:g id="APP_NAME">%1$s</xliff:g>"</string>
-    <!-- no translation found for bubble_overflow_button_content_description (5523744621434300510) -->
-    <skip />
-    <!-- no translation found for bubble_accessibility_action_add_back (6217995665917123890) -->
-    <skip />
+    <string name="bubble_overflow_button_content_description" msgid="5523744621434300510">"Tejkalo"</string>
+    <string name="bubble_accessibility_action_add_back" msgid="6217995665917123890">"Shto përsëri te stiva"</string>
     <string name="manage_bubbles_text" msgid="6856830436329494850">"Menaxho"</string>
     <string name="bubble_content_description_single" msgid="5175160674436546329">"<xliff:g id="NOTIFICATION_TITLE">%1$s</xliff:g> nga <xliff:g id="APP_NAME">%2$s</xliff:g>"</string>
     <string name="bubble_content_description_stack" msgid="7907610717462651870">"<xliff:g id="NOTIFICATION_TITLE">%1$s</xliff:g> nga <xliff:g id="APP_NAME">%2$s</xliff:g> dhe <xliff:g id="BUBBLE_COUNT">%3$d</xliff:g> të tjera"</string>
@@ -1003,7 +1002,8 @@
     <string name="bubble_accessibility_action_move_top_right" msgid="6916868852433483569">"Lëviz lart djathtas"</string>
     <string name="bubble_accessibility_action_move_bottom_left" msgid="6339015902495504715">"Zhvendos poshtë majtas"</string>
     <string name="bubble_accessibility_action_move_bottom_right" msgid="7471571700628346212">"Lëvize poshtë djathtas"</string>
-    <string name="bubble_dismiss_text" msgid="7071770411580452911">"Hiq"</string>
+    <!-- no translation found for bubble_dismiss_text (1314082410868930066) -->
+    <skip />
     <string name="bubbles_dont_bubble_conversation" msgid="1033040343437428822">"Mos e vendos bisedën në flluskë"</string>
     <string name="bubbles_user_education_title" msgid="5547017089271445797">"Bisedo duke përdorur flluskat"</string>
     <string name="bubbles_user_education_description" msgid="1160281719576715211">"Bisedat e reja shfaqen si ikona pluskuese ose flluska. Trokit për të hapur flluskën. Zvarrit për ta zhvendosur."</string>
@@ -1014,11 +1014,14 @@
     <string name="notification_content_system_nav_changed" msgid="5077913144844684544">"Navigimi i sistemit u përditësua. Për të bërë ndryshime, shko te \"Cilësimet\"."</string>
     <string name="notification_content_gesture_nav_available" msgid="4431460803004659888">"Shko te \"Cilësimet\" për të përditësuar navigimin e sistemit"</string>
     <string name="inattentive_sleep_warning_title" msgid="3891371591713990373">"Në gatishmëri"</string>
+    <string name="priority_onboarding_title" msgid="2893070698479227616">"Biseda u caktua me përparësi"</string>
+    <string name="priority_onboarding_behavior" msgid="5342816047020432929">"Bisedat me përparësi do të:"</string>
     <string name="priority_onboarding_show_at_top_text" msgid="1678400241025513541">"Shfaq në krye të seksionit të bisedës"</string>
     <string name="priority_onboarding_show_avatar_text" msgid="5756291381124091508">"Shfaq figurën e profilit në ekranin e kyçjes"</string>
     <string name="priority_onboarding_appear_as_bubble_text" msgid="4227039772250263122">"Shfaq si flluskë pluskuese mbi aplikacione"</string>
     <string name="priority_onboarding_ignores_dnd_text" msgid="2918952762719600529">"Ndërprit \"Mos shqetëso\""</string>
     <string name="priority_onboarding_done_button_title" msgid="4569550984286506007">"E kuptova"</string>
+    <string name="priority_onboarding_settings_button_title" msgid="6663601574303585927">"Cilësimet"</string>
     <string name="magnification_overlay_title" msgid="6584179429612427958">"Dritarja e mbivendosjes së zmadhimit"</string>
     <string name="magnification_window_title" msgid="4863914360847258333">"Dritarja e zmadhimit"</string>
     <string name="magnification_controls_title" msgid="8421106606708891519">"Kontrollet e dritares së zmadhimit"</string>
@@ -1031,6 +1034,13 @@
       <item quantity="other">U shtuan <xliff:g id="NUMBER_1">%s</xliff:g> kontrolle.</item>
       <item quantity="one">U shtua <xliff:g id="NUMBER_0">%s</xliff:g> kontroll.</item>
     </plurals>
+    <string name="controls_removed" msgid="3731789252222856959">"E hequr"</string>
+    <string name="accessibility_control_favorite" msgid="8694362691985545985">"E shtuar te të preferuarat"</string>
+    <string name="accessibility_control_favorite_position" msgid="54220258048929221">"E shtuar te të preferuarat, pozicioni <xliff:g id="NUMBER">%d</xliff:g>"</string>
+    <string name="accessibility_control_not_favorite" msgid="1291760269563092359">"E hequr nga të preferuarat"</string>
+    <string name="accessibility_control_change_favorite" msgid="2943178027582253261">"ta shënosh si të preferuar"</string>
+    <string name="accessibility_control_change_unfavorite" msgid="6997408061750740327">"ta heqësh nga të preferuarat"</string>
+    <string name="accessibility_control_move" msgid="8980344493796647792">"Zhvendose te pozicioni <xliff:g id="NUMBER">%d</xliff:g>"</string>
     <string name="controls_favorite_default_title" msgid="967742178688938137">"Kontrollet"</string>
     <string name="controls_favorite_subtitle" msgid="6604402232298443956">"Zgjidh kontrollet për të pasur qasje nga menyja e energjisë"</string>
     <string name="controls_favorite_rearrange" msgid="5616952398043063519">"Mbaje të shtypur dhe zvarrit për të risistemuar kontrollet"</string>
@@ -1053,9 +1063,13 @@
     <string name="controls_structure_tooltip" msgid="4355922222944447867">"Rrëshqit shpejt për të shikuar më shumë"</string>
     <string name="controls_seeding_in_progress" msgid="3033855341410264148">"Po ngarkon rekomandimet"</string>
     <string name="controls_media_close_session" msgid="9023534788828414585">"Mbyll këtë sesion të medias"</string>
+    <string name="controls_media_resume" msgid="1933520684481586053">"Vazhdo"</string>
     <string name="controls_error_timeout" msgid="794197289772728958">"Joaktive, kontrollo aplikacionin"</string>
     <string name="controls_error_retryable" msgid="864025882878378470">"Gabim, po provohet përsëri"</string>
-    <string name="controls_error_removed" msgid="6299213591234723805">"Pajisja u hoq"</string>
+    <string name="controls_error_removed" msgid="6675638069846014366">"Nuk u gjet"</string>
+    <string name="controls_error_removed_title" msgid="1207794911208047818">"Kontrolli është i padisponueshëm"</string>
+    <string name="controls_error_removed_message" msgid="2885911717034750542">"Nuk mundi të qasej te <xliff:g id="DEVICE">%1$s</xliff:g>. Kontrollo aplikacionin <xliff:g id="APPLICATION">%2$s</xliff:g> për t\'u siguruar që kontrolli të jetë ende i disponueshëm dhe që cilësimet e aplikacionit të mos kenë ndryshuar."</string>
+    <string name="controls_open_app" msgid="483650971094300141">"Hap aplikacionin"</string>
     <string name="controls_error_generic" msgid="352500456918362905">"Statusi nuk mund të ngarkohet"</string>
     <string name="controls_error_failed" msgid="960228639198558525">"Gabim, provo sërish"</string>
     <string name="controls_in_progress" msgid="4421080500238215939">"Në vazhdim"</string>

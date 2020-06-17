@@ -1256,13 +1256,13 @@
     <string name="manage_notifications_history_text">History</string>
 
     <!-- Section title for notifications that have recently appeared. [CHAR LIMIT=40] -->
-    <string name="notification_section_header_incoming">Incoming</string>
+    <string name="notification_section_header_incoming">New</string>
 
     <!-- Section title for notifications that do not vibrate or make noise. [CHAR LIMIT=40] -->
-    <string name="notification_section_header_gentle">Silent notifications</string>
+    <string name="notification_section_header_gentle">Silent</string>
 
     <!-- Section title for notifications that vibrate or make noise. [CHAR LIMIT=40] -->
-    <string name="notification_section_header_alerting">Alerting notifications</string>
+    <string name="notification_section_header_alerting">Notifications</string>
 
     <!-- Section title for conversational notifications. [CHAR LIMIT=40] -->
     <string name="notification_section_header_conversations">Conversations</string>
@@ -1512,7 +1512,7 @@
     <string name="accessibility_output_chooser">Switch output device</string>
 
     <!-- Screen pinning dialog title. -->
-    <string name="screen_pinning_title">Screen is pinned</string>
+    <string name="screen_pinning_title">App is pinned</string>
     <!-- Screen pinning dialog description. -->
     <string name="screen_pinning_description">This keeps it in view until you unpin. Touch &amp; hold Back and Overview to unpin.</string>
     <string name="screen_pinning_description_recents_invisible">This keeps it in view until you unpin. Touch &amp; hold Back and Home to unpin.</string>
@@ -1520,20 +1520,24 @@
     <!-- Screen pinning dialog description. -->
     <string name="screen_pinning_description_accessible">This keeps it in view until you unpin. Touch &amp; hold Overview to unpin.</string>
     <string name="screen_pinning_description_recents_invisible_accessible">This keeps it in view until you unpin. Touch &amp; hold Home to unpin.</string>
+    <!-- Screen pinning security warning: personal data, email, contacts may be exposed while screen is pinned. [CHAR LIMIT=NONE] -->
+    <string name="screen_pinning_exposes_personal_data">Personal data may be accessible (such as contacts and email content).</string>
+    <!-- Screen pinning security warning: a pinned app can still launch other apps. [CHAR LIMIT=NONE] -->
+    <string name="screen_pinning_can_open_other_apps">Pinned app may open other apps.</string>
     <!-- Notify use that they are in Lock-to-app -->
-    <string name="screen_pinning_toast">To unpin this screen, touch &amp; hold Back and Overview
+    <string name="screen_pinning_toast">To unpin this app, touch &amp; hold Back and Overview
         buttons</string>
-    <string name="screen_pinning_toast_recents_invisible">To unpin this screen, touch &amp; hold Back
+    <string name="screen_pinning_toast_recents_invisible">To unpin this app, touch &amp; hold Back
         and Home buttons</string>
     <!-- Notify (in toast) user how to unpin screen in gesture navigation mode [CHAR LIMIT=NONE] -->
-    <string name="screen_pinning_toast_gesture_nav">To unpin this screen, swipe up &amp; hold</string>
+    <string name="screen_pinning_toast_gesture_nav">To unpin this app, swipe up &amp; hold</string>
     <!-- Screen pinning positive response. -->
     <string name="screen_pinning_positive">Got it</string>
     <!-- Screen pinning negative response. -->
     <string name="screen_pinning_negative">No thanks</string>
     <!-- Enter/Exiting screen pinning indication. -->
-    <string name="screen_pinning_start">Screen pinned</string>
-    <string name="screen_pinning_exit">Screen unpinned</string>
+    <string name="screen_pinning_start">App pinned</string>
+    <string name="screen_pinning_exit">App unpinned</string>
 
 
     <!-- Hide quick settings tile confirmation title -->
@@ -1829,25 +1833,28 @@
     <string name="notification_silence_title">Silent</string>
 
     <!-- [CHAR LIMIT=100] Notification Importance title -->
-    <string name="notification_alert_title">Alerting</string>
+    <string name="notification_alert_title">Default</string>
 
     <!-- [CHAR LIMIT=100] Notification Importance title -->
     <string name="notification_bubble_title">Bubble</string>
 
     <!-- [CHAR LIMIT=150] Notification Importance title: low importance level summary -->
-    <string name="notification_channel_summary_low">Helps you focus without sound or vibration.</string>
+    <string name="notification_channel_summary_low">No sound or vibration</string>
+
+    <!-- [CHAR LIMIT=150] Notification Importance title: low importance level summary -->
+    <string name="notification_conversation_summary_low">No sound or vibration and appears lower in conversation section</string>
 
     <!-- [CHAR LIMIT=150] Notification Importance title: normal importance level summary -->
-    <string name="notification_channel_summary_default">Gets your attention with sound or vibration.</string>
+    <string name="notification_channel_summary_default">May ring or vibrate based on phone settings</string>
 
     <!-- [CHAR LIMIT=150] Conversation Notification Importance title: normal conversation level, with bubbling summary -->
-    <string name="notification_channel_summary_default_with_bubbles">Gets your attention with sound or vibration. Conversations from <xliff:g id="app_name" example="YouTube">%1$s</xliff:g> bubble by default.</string>
+    <string name="notification_channel_summary_default_with_bubbles">May ring or vibrate based on phone settings. Conversations from <xliff:g id="app_name" example="YouTube">%1$s</xliff:g> bubble by default.</string>
 
     <!-- [CHAR LIMIT=150] Notification Importance title: bubble level summary -->
     <string name="notification_channel_summary_bubble">Keeps your attention with a floating shortcut to this content.</string>
 
     <!-- [CHAR LIMIT=150] Notification Importance title: important conversation level summary -->
-    <string name="notification_channel_summary_priority">Shows at top of conversation section and appears as a bubble.</string>
+    <string name="notification_channel_summary_priority">Shows at top of conversation section, appears as floating bubble, displays profile picture on lock screen</string>
 
     <!--[CHAR LIMIT=30] Linkable text to Settings app -->
     <string name="notification_conversation_channel_settings">Settings</string>
@@ -1856,7 +1863,7 @@
     <string name="notification_priority_title">Priority</string>
 
     <!-- Text shown in notification guts for conversation notifications that don't implement the full feature -->
-    <string name="no_shortcut"><xliff:g id="app_name" example="YouTube">%1$s</xliff:g> does not support conversation specific settings</string>
+    <string name="no_shortcut"><xliff:g id="app_name" example="YouTube">%1$s</xliff:g> doesn\u2019t support conversation features</string>
 
     <!-- [CHAR LIMIT=NONE] Empty overflow title -->
     <string name="bubble_overflow_empty_title">No recent bubbles</string>
@@ -2634,7 +2641,7 @@
     <!-- Action in accessibility menu to move the stack of bubbles to the bottom right of the screen. [CHAR LIMIT=30]-->
     <string name="bubble_accessibility_action_move_bottom_right">Move bottom right</string>
     <!-- Text used for the bubble dismiss area. Bubbles dragged to, or flung towards, this area will go away. [CHAR LIMIT=20] -->
-    <string name="bubble_dismiss_text">Dismiss</string>
+    <string name="bubble_dismiss_text">Dismiss bubble</string>
     <!-- Button text to stop a conversation from bubbling [CHAR LIMIT=60]-->
     <string name="bubbles_dont_bubble_conversation">Don\u2019t bubble conversation</string>
     <!-- Title text for the bubbles feature education cling shown when a bubble is on screen for the first time. [CHAR LIMIT=60]-->
@@ -2660,6 +2667,11 @@
     <string name="inattentive_sleep_warning_title">Standby</string>
 
     <!-- Priority conversation onboarding screen -->
+    <!--  title of priority onboarding [CHAR LIMIT=75]  -->
+    <string name="priority_onboarding_title">Conversation set to priority</string>
+    <!--  Text explaining that the following actions are the behaviors of priority conversations.
+    E.g. priority conversations will show at the top of the conversation section [CHAR LIMIT=75]  -->
+    <string name="priority_onboarding_behavior">Priority conversations will:</string>
     <!--  Text explaining that priority conversations show at the top of the conversation section [CHAR LIMIT=75]  -->
     <string name="priority_onboarding_show_at_top_text">Show at top of conversation section</string>
     <!--  Text explaining that priority conversations show an avatar on the lock screen [CHAR LIMIT=75]  -->
@@ -2670,6 +2682,8 @@
     <string name="priority_onboarding_ignores_dnd_text">Interrupt Do Not Disturb</string>
     <!--  Title for the affirmative button [CHAR LIMIT=50]  -->
     <string name="priority_onboarding_done_button_title">Got it</string>
+    <!--  Title for the settings button button [CHAR LIMIT=50]  -->
+    <string name="priority_onboarding_settings_button_title">Settings</string>
 
     <!-- Window Magnification strings -->
     <!-- Title for Magnification Overlay Window [CHAR LIMIT=NONE] -->
@@ -2697,6 +2711,22 @@
         <item quantity="one"><xliff:g id="number" example="1">%s</xliff:g> control added.</item>
         <item quantity="other"><xliff:g id="number" example="3">%s</xliff:g> controls added.</item>
     </plurals>
+
+    <!-- Removed control in management screen [CHAR LIMIT=20] -->
+    <string name="controls_removed">Removed</string>
+
+    <!-- a11y state description for a control that is currently favorited [CHAR LIMIT=NONE] -->
+    <string name="accessibility_control_favorite">Favorited</string>
+    <!-- a11y state description for a control that is currently favorited with its position [CHAR LIMIT=NONE] -->
+    <string name="accessibility_control_favorite_position">Favorited, position <xliff:g id="number" example="1">%d</xliff:g></string>
+    <!-- a11y state description for a control that is currently not favorited [CHAR LIMIT=NONE] -->
+    <string name="accessibility_control_not_favorite">Unfavorited</string>
+    <!-- a11y action to favorite a control. It will read as "Double-tap to favorite" in screen readers [CHAR LIMIT=NONE] -->
+    <string name="accessibility_control_change_favorite">favorite</string>
+    <!-- a11y action to unfavorite a control. It will read as "Double-tap to unfavorite" in screen readers [CHAR LIMIT=NONE] -->
+    <string name="accessibility_control_change_unfavorite">unfavorite</string>
+    <!-- a11y action to move a control to the position specified by the parameter [CHAR LIMIT=NONE] -->
+    <string name="accessibility_control_move">Move to position <xliff:g id="number" example="1">%d</xliff:g></string>
 
     <!-- Controls management controls screen default title [CHAR LIMIT=30] -->
     <string name="controls_favorite_default_title">Controls</string>
@@ -2751,6 +2781,8 @@
 
     <!-- Close the controls associated with a specific media session [CHAR_LIMIT=NONE] -->
     <string name="controls_media_close_session">Close this media session</string>
+    <!-- Label for button to resume media playback [CHAR_LIMIT=NONE] -->
+    <string name="controls_media_resume">Resume</string>
 
     <!-- Error message indicating that a control timed out while waiting for an update [CHAR_LIMIT=30] -->
     <string name="controls_error_timeout">Inactive, check app</string>
@@ -2758,7 +2790,13 @@
          a retry will be attempted [CHAR LIMIT=30] -->
     <string name="controls_error_retryable">Error, retrying\u2026</string>
     <!-- Error message indicating that the control is no longer available in the application [CHAR LIMIT=30] -->
-    <string name="controls_error_removed">Device removed</string>
+    <string name="controls_error_removed">Not found</string>
+    <!-- Title for dialog indicating that the control is no longer available in the application [CHAR LIMIT=30] -->
+    <string name="controls_error_removed_title">Control is unavailable</string>
+    <!-- Message body for dialog indicating that the control is no longer available in the application [CHAR LIMIT=NONE] -->
+    <string name="controls_error_removed_message">Couldn\u2019t access <xliff:g id="device" example="Backdoor lock">%1$s</xliff:g>. Check the <xliff:g id="application" example="Google Home">%2$s</xliff:g> app to make sure the control is still available and that the app settings haven\u2019t changed.</string>
+    <!-- Text for button to open the corresponding application [CHAR_LIMIT=20] -->
+    <string name="controls_open_app">Open app</string>
     <!-- Error message indicating that an unspecified error occurred while getting the status [CHAR LIMIT=30] -->
     <string name="controls_error_generic">Can\u2019t load status</string>
     <!-- Error message indicating that a control action failed [CHAR_LIMIT=30] -->

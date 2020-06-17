@@ -89,8 +89,7 @@
     <string name="screenshot_dismiss_ui_description" msgid="934736855340147968">"Ekran görüntüsünü kapat"</string>
     <string name="screenshot_preview_description" msgid="7606510140714080474">"Ekran görüntüsü önizlemesi"</string>
     <string name="screenrecord_name" msgid="2596401223859996572">"Ekran Kaydedicisi"</string>
-    <!-- no translation found for screenrecord_background_processing_label (7244617554884238898) -->
-    <skip />
+    <string name="screenrecord_background_processing_label" msgid="7244617554884238898">"Ekran kaydı işleniyor"</string>
     <string name="screenrecord_channel_description" msgid="4147077128486138351">"Ekran kaydı oturumu için devam eden bildirim"</string>
     <string name="screenrecord_start_label" msgid="1750350278888217473">"Kayıt Başlatılsın mı?"</string>
     <string name="screenrecord_description" msgid="1123231719680353736">"Kayıt sırasında Android Sistemi, ekranınızda görünen veya cihazınızda oynatılan hassas bilgileri yakalayabilir. Buna şifreler, ödeme bilgileri, fotoğraflar, mesajlar ve sesler dahildir."</string>
@@ -511,10 +510,9 @@
     <string name="clear_all_notifications_text" msgid="348312370303046130">"Tümünü temizle"</string>
     <string name="manage_notifications_text" msgid="6885645344647733116">"Yönet"</string>
     <string name="manage_notifications_history_text" msgid="57055985396576230">"Geçmiş"</string>
-    <!-- no translation found for notification_section_header_incoming (5295312809341711367) -->
-    <skip />
-    <string name="notification_section_header_gentle" msgid="3044910806569985386">"Sessiz bildirimler"</string>
-    <string name="notification_section_header_alerting" msgid="3168140660646863240">"Uyaran bildirimler"</string>
+    <string name="notification_section_header_incoming" msgid="5295312809341711367">"Gelen"</string>
+    <string name="notification_section_header_gentle" msgid="6804099527336337197">"Sessiz"</string>
+    <string name="notification_section_header_alerting" msgid="5581175033680477651">"Bildirimler"</string>
     <string name="notification_section_header_conversations" msgid="821834744538345661">"Görüşmeler"</string>
     <string name="accessibility_notification_section_header_gentle_clear_all" msgid="6490207897764933919">"Sessiz bildirimlerin tümünü temizle"</string>
     <string name="dnd_suppressing_shade_text" msgid="5588252250634464042">"Bildirimler, Rahatsız Etmeyin özelliği tarafından duraklatıldı"</string>
@@ -594,19 +592,21 @@
     <string name="volume_odi_captions_hint_enable" msgid="2073091194012843195">"etkinleştir"</string>
     <string name="volume_odi_captions_hint_disable" msgid="2518846326748183407">"devre dışı bırak"</string>
     <string name="accessibility_output_chooser" msgid="7807898688967194183">"Çıkış cihazını değiştir"</string>
-    <string name="screen_pinning_title" msgid="7357611095909618178">"Ekran sabitlendi"</string>
+    <string name="screen_pinning_title" msgid="9058007390337841305">"Uygulama sabitlenmiştir"</string>
     <string name="screen_pinning_description" msgid="8699395373875667743">"Bu işlem, siz sabitlemeyi kaldırana kadar ekranı görünür durumda tutar. Sabitlemeyi kaldırmak için Geri\'ye ve Genel Bakış\'a dokunup basılı tutun."</string>
     <string name="screen_pinning_description_recents_invisible" msgid="4564466648700390037">"Bu işlem, siz sabitlemeyi kaldırana kadar ekranı görünür durumda tutar. Sabitlemeyi kaldırmak için Geri\'ye ve Ana sayfaya dokunup basılı tutun."</string>
     <string name="screen_pinning_description_gestural" msgid="7246323931831232068">"Bu, sabitleme kaldırılana kadar öğenin görünmesini sağlar. Sabitlemeyi kaldırmak için yukarı kaydırıp basılı tutun."</string>
     <string name="screen_pinning_description_accessible" msgid="7386449191953535332">"Bu işlem, siz sabitlemeyi kaldırana kadar ekranı görünür durumda tutar. Sabitlemeyi kaldırmak için Genel bakış\'a dokunup basılı tutun."</string>
     <string name="screen_pinning_description_recents_invisible_accessible" msgid="2857071808674481986">"Bu işlem, siz sabitlemeyi kaldırana kadar ekranı görünür durumda tutar. Sabitlemeyi kaldırmak için Ana sayfaya dokunup basılı tutun."</string>
-    <string name="screen_pinning_toast" msgid="2083944237147005811">"Bu ekranın sabitlemesini kaldırmak için Geri ve Genel Bakış düğmelerine dokunup basılı tutun"</string>
-    <string name="screen_pinning_toast_recents_invisible" msgid="6343770487795352573">"Bu ekranın sabitlemesini kaldırmak için Geri ve Ana sayfa düğmelerine dokunup basılı tutun"</string>
-    <string name="screen_pinning_toast_gesture_nav" msgid="2884536903398445645">"Bu ekranın sabitlemesini kaldırmak için hızlıca yukarı kaydırıp tutun"</string>
+    <string name="screen_pinning_exposes_personal_data" msgid="8189852022981524789">"Kişisel verilere erişilebilir (ör. kişiler ve e-posta içerikleri)."</string>
+    <string name="screen_pinning_can_open_other_apps" msgid="7529756813231421455">"Sabitlenmiş uygulama diğer uygulamaları açabilir."</string>
+    <string name="screen_pinning_toast" msgid="8177286912533744328">"Bu uygulamanın sabitlemesini kaldırmak için Geri ve Genel Bakış düğmelerine dokunup basılı tutun"</string>
+    <string name="screen_pinning_toast_recents_invisible" msgid="6850978077443052594">"Bu ekranın sabitlemesini kaldırmak için Geri ve Ana sayfa düğmelerine dokunup basılı tutun"</string>
+    <string name="screen_pinning_toast_gesture_nav" msgid="170699893395336705">"Bu ekranın sabitlemesini kaldırmak için hızlıca yukarı kaydırıp tutun"</string>
     <string name="screen_pinning_positive" msgid="3285785989665266984">"Anladım"</string>
     <string name="screen_pinning_negative" msgid="6882816864569211666">"Hayır, teşekkürler"</string>
-    <string name="screen_pinning_start" msgid="5695091877402422575">"Ekran sabitlendi"</string>
-    <string name="screen_pinning_exit" msgid="5114993350662745840">"Ekran sabitlemesi kaldırıldı"</string>
+    <string name="screen_pinning_start" msgid="7483998671383371313">"Uygulama sabitlendi"</string>
+    <string name="screen_pinning_exit" msgid="4553787518387346893">"Uygulamanın sabitlemesi kaldırıldı"</string>
     <string name="quick_settings_reset_confirmation_title" msgid="463533331480997595">"<xliff:g id="TILE_LABEL">%1$s</xliff:g> gizlensin mi?"</string>
     <string name="quick_settings_reset_confirmation_message" msgid="2320586180785674186">"Ayarlardan etkinleştirdiğiniz bir sonraki sefer tekrar görünür."</string>
     <string name="quick_settings_reset_confirmation_button" msgid="3341477479055016776">"Gizle"</string>
@@ -709,16 +709,17 @@
     <string name="inline_turn_off_notifications" msgid="8543989584403106071">"Bildirimleri kapat"</string>
     <string name="inline_keep_showing_app" msgid="4393429060390649757">"Bu uygulamadan gelen bildirimler gösterilmeye devam edilsin mi?"</string>
     <string name="notification_silence_title" msgid="8608090968400832335">"Sessiz"</string>
-    <string name="notification_alert_title" msgid="7629202599338071971">"Uyarı"</string>
+    <string name="notification_alert_title" msgid="3656229781017543655">"Varsayılan"</string>
     <string name="notification_bubble_title" msgid="8330481035191903164">"Baloncuk"</string>
-    <string name="notification_channel_summary_low" msgid="7300447764759926720">"Ses veya titreşim olmadan odaklanmanıza yardımcı olur."</string>
-    <string name="notification_channel_summary_default" msgid="3539949463907902037">"Ses veya titreşimle dikkatinizi çeker."</string>
-    <string name="notification_channel_summary_default_with_bubbles" msgid="6298026344552480458">"Ses veya titreşimle dikkatinizi çeker. <xliff:g id="APP_NAME">%1$s</xliff:g> adlı uygulamadan görüşmeler varsayılan olarak baloncukla gösterilir."</string>
+    <string name="notification_channel_summary_low" msgid="4860617986908931158">"Sessiz veya titreşim yok"</string>
+    <string name="notification_conversation_summary_low" msgid="1734433426085468009">"Sessizdir veya titreşim yoktur ve görüşme bölümünün altında görünür"</string>
+    <string name="notification_channel_summary_default" msgid="3282930979307248890">"Telefon ayarlarına bağlı olarak zili çalabilir veya titreyebilir"</string>
+    <string name="notification_channel_summary_default_with_bubbles" msgid="1782419896613644568">"Telefon ayarlarına bağlı olarak zili çalabilir veya titreyebilir <xliff:g id="APP_NAME">%1$s</xliff:g> adlı uygulamadan görüşmeler varsayılan olarak baloncukla gösterilir."</string>
     <string name="notification_channel_summary_bubble" msgid="7235935211580860537">"Kayan kısayolla dikkatinizi bu içerik üzerinde tutar."</string>
-    <string name="notification_channel_summary_priority" msgid="7415770044553264622">"Görüşme bölümünün üstünde baloncuk olarak gösterilir."</string>
+    <string name="notification_channel_summary_priority" msgid="7952654515769021553">"Görüşme bölümünün üstünde gösterilir, kayan baloncuk olarak görünür, kilit ekranında profil resmini görüntüler"</string>
     <string name="notification_conversation_channel_settings" msgid="2409977688430606835">"Ayarlar"</string>
     <string name="notification_priority_title" msgid="2079708866333537093">"Öncelik"</string>
-    <string name="no_shortcut" msgid="7176375126961212514">"<xliff:g id="APP_NAME">%1$s</xliff:g>, görüşmeye özgü ayarları desteklemiyor"</string>
+    <string name="no_shortcut" msgid="8257177117568230126">"<xliff:g id="APP_NAME">%1$s</xliff:g>, sohbet özelliklerini desteklemiyor"</string>
     <string name="bubble_overflow_empty_title" msgid="3120029421991510842">"Son kapatılan baloncuk yok"</string>
     <string name="bubble_overflow_empty_subtitle" msgid="2030874469510497397">"Son baloncuklar ve kapattığınız baloncuklar burada görünür"</string>
     <string name="notification_unblockable_desc" msgid="2073030886006190804">"Bu bildirimler değiştirilemez."</string>
@@ -954,7 +955,7 @@
     <string name="instant_apps_message_with_help" msgid="1816952263531203932">"Uygulama yüklenmeden açıldı. Daha fazla bilgi için dokunun."</string>
     <string name="app_info" msgid="5153758994129963243">"Uygulama bilgisi"</string>
     <string name="go_to_web" msgid="636673528981366511">"Tarayıcıya git"</string>
-    <string name="mobile_data" msgid="4564407557775397216">"Mobil veriler"</string>
+    <string name="mobile_data" msgid="4564407557775397216">"Mobil veri"</string>
     <string name="mobile_data_text_format" msgid="6806501540022589786">"<xliff:g id="ID_1">%1$s</xliff:g> — <xliff:g id="ID_2">%2$s</xliff:g>"</string>
     <string name="mobile_carrier_text_format" msgid="8912204177152950766">"<xliff:g id="MOBILE_DATA_TYPE">%2$s</xliff:g>, <xliff:g id="CARRIER_NAME">%1$s</xliff:g>"</string>
     <string name="wifi_is_off" msgid="5389597396308001471">"Kablosuz bağlantı kapalı"</string>
@@ -991,10 +992,8 @@
     <string name="music_controls_no_title" msgid="4166497066552290938">"Başlıksız"</string>
     <string name="restart_button_description" msgid="6916116576177456480">"Bu uygulamayı yeniden başlatmak ve tam ekrana geçmek için dokunun."</string>
     <string name="bubbles_settings_button_description" msgid="7324245408859877545">"<xliff:g id="APP_NAME">%1$s</xliff:g> baloncukları için ayarlar"</string>
-    <!-- no translation found for bubble_overflow_button_content_description (5523744621434300510) -->
-    <skip />
-    <!-- no translation found for bubble_accessibility_action_add_back (6217995665917123890) -->
-    <skip />
+    <string name="bubble_overflow_button_content_description" msgid="5523744621434300510">"Taşma"</string>
+    <string name="bubble_accessibility_action_add_back" msgid="6217995665917123890">"Yığına geri ekle"</string>
     <string name="manage_bubbles_text" msgid="6856830436329494850">"Yönet"</string>
     <string name="bubble_content_description_single" msgid="5175160674436546329">"<xliff:g id="APP_NAME">%2$s</xliff:g> uygulamasından <xliff:g id="NOTIFICATION_TITLE">%1$s</xliff:g>"</string>
     <string name="bubble_content_description_stack" msgid="7907610717462651870">"<xliff:g id="APP_NAME">%2$s</xliff:g> uygulamasından <xliff:g id="NOTIFICATION_TITLE">%1$s</xliff:g> ve diğer <xliff:g id="BUBBLE_COUNT">%3$d</xliff:g>"</string>
@@ -1003,7 +1002,8 @@
     <string name="bubble_accessibility_action_move_top_right" msgid="6916868852433483569">"Sağ üste taşı"</string>
     <string name="bubble_accessibility_action_move_bottom_left" msgid="6339015902495504715">"Sol alta taşı"</string>
     <string name="bubble_accessibility_action_move_bottom_right" msgid="7471571700628346212">"Sağ alta taşı"</string>
-    <string name="bubble_dismiss_text" msgid="7071770411580452911">"Kapat"</string>
+    <!-- no translation found for bubble_dismiss_text (1314082410868930066) -->
+    <skip />
     <string name="bubbles_dont_bubble_conversation" msgid="1033040343437428822">"Görüşmeyi baloncuk olarak görüntüleme"</string>
     <string name="bubbles_user_education_title" msgid="5547017089271445797">"Baloncukları kullanarak sohbet edin"</string>
     <string name="bubbles_user_education_description" msgid="1160281719576715211">"Yeni görüşmeler kayan simgeler veya baloncuk olarak görünür. Açmak için baloncuğa dokunun. Baloncuğu taşımak için sürükleyin."</string>
@@ -1014,11 +1014,14 @@
     <string name="notification_content_system_nav_changed" msgid="5077913144844684544">"Sistemde gezinme yöntemi güncellendi. Değişiklik yapmak için Ayarlar\'a gidin."</string>
     <string name="notification_content_gesture_nav_available" msgid="4431460803004659888">"Sistemde gezinme yöntemini güncellemek için Ayarlar\'a gidin"</string>
     <string name="inattentive_sleep_warning_title" msgid="3891371591713990373">"Beklemeye alınıyor"</string>
+    <string name="priority_onboarding_title" msgid="2893070698479227616">"Görüşme öncelikli olarak ayarlandı"</string>
+    <string name="priority_onboarding_behavior" msgid="5342816047020432929">"Öncelikli görüşmeler:"</string>
     <string name="priority_onboarding_show_at_top_text" msgid="1678400241025513541">"Görüşme bölümünün üstünde gösterilir"</string>
     <string name="priority_onboarding_show_avatar_text" msgid="5756291381124091508">"Kilit ekranında profil resmi gösterilir"</string>
     <string name="priority_onboarding_appear_as_bubble_text" msgid="4227039772250263122">"Uygulamaların üzerinde kayan balon olarak görünür"</string>
     <string name="priority_onboarding_ignores_dnd_text" msgid="2918952762719600529">"Rahatsız Etmeyin\'i keser"</string>
     <string name="priority_onboarding_done_button_title" msgid="4569550984286506007">"Anladım"</string>
+    <string name="priority_onboarding_settings_button_title" msgid="6663601574303585927">"Ayarlar"</string>
     <string name="magnification_overlay_title" msgid="6584179429612427958">"Yer Paylaşımlı Büyütme Penceresi"</string>
     <string name="magnification_window_title" msgid="4863914360847258333">"Büyütme Penceresi"</string>
     <string name="magnification_controls_title" msgid="8421106606708891519">"Büyütme Penceresi Kontrolleri"</string>
@@ -1031,8 +1034,15 @@
       <item quantity="other"><xliff:g id="NUMBER_1">%s</xliff:g> kontrol eklendi.</item>
       <item quantity="one"><xliff:g id="NUMBER_0">%s</xliff:g> kontrol eklendi.</item>
     </plurals>
+    <string name="controls_removed" msgid="3731789252222856959">"Kaldırıldı"</string>
+    <string name="accessibility_control_favorite" msgid="8694362691985545985">"Favoriler listesine eklendi"</string>
+    <string name="accessibility_control_favorite_position" msgid="54220258048929221">"Favorilere eklendi, konum: <xliff:g id="NUMBER">%d</xliff:g>"</string>
+    <string name="accessibility_control_not_favorite" msgid="1291760269563092359">"Favorilerden kaldırıldı"</string>
+    <string name="accessibility_control_change_favorite" msgid="2943178027582253261">"favorilere ekleyin"</string>
+    <string name="accessibility_control_change_unfavorite" msgid="6997408061750740327">"favorilerden kaldırın"</string>
+    <string name="accessibility_control_move" msgid="8980344493796647792">"<xliff:g id="NUMBER">%d</xliff:g>. konuma taşı"</string>
     <string name="controls_favorite_default_title" msgid="967742178688938137">"Kontroller"</string>
-    <string name="controls_favorite_subtitle" msgid="6604402232298443956">"Güç menüsünden erişmek için denetimleri seçin"</string>
+    <string name="controls_favorite_subtitle" msgid="6604402232298443956">"Güç menüsünden erişmek istediğiniz denetimleri seçin"</string>
     <string name="controls_favorite_rearrange" msgid="5616952398043063519">"Kontrolleri yeniden düzenlemek için basılı tutup sürükleyin"</string>
     <string name="controls_favorite_removed" msgid="5276978408529217272">"Tüm kontroller kaldırıldı"</string>
     <string name="controls_favorite_toast_no_changes" msgid="7094494210840877931">"Değişiklikler kaydedilmedi"</string>
@@ -1053,9 +1063,13 @@
     <string name="controls_structure_tooltip" msgid="4355922222944447867">"Diğer öğeleri görmek için hızlıca kaydırın"</string>
     <string name="controls_seeding_in_progress" msgid="3033855341410264148">"Öneriler yükleniyor"</string>
     <string name="controls_media_close_session" msgid="9023534788828414585">"Bu medya oturumunu kapat"</string>
+    <string name="controls_media_resume" msgid="1933520684481586053">"Devam ettir"</string>
     <string name="controls_error_timeout" msgid="794197289772728958">"Devre dışı, uygulamaya bakın"</string>
     <string name="controls_error_retryable" msgid="864025882878378470">"Hata, yeniden deneniyor…"</string>
-    <string name="controls_error_removed" msgid="6299213591234723805">"Cihaz kaldırıldı"</string>
+    <string name="controls_error_removed" msgid="6675638069846014366">"Bulunamadı"</string>
+    <string name="controls_error_removed_title" msgid="1207794911208047818">"Kontrol kullanılamıyor"</string>
+    <string name="controls_error_removed_message" msgid="2885911717034750542">"<xliff:g id="DEVICE">%1$s</xliff:g> cihazına erişilemedi Kontrolün hâlâ kullanılabilir olduğundan ve uygulama ayarlarının değişmediğinden emin olmak için <xliff:g id="APPLICATION">%2$s</xliff:g> uygulamasını kontrol edin."</string>
+    <string name="controls_open_app" msgid="483650971094300141">"Uygulama aç"</string>
     <string name="controls_error_generic" msgid="352500456918362905">"Durum yüklenemiyor"</string>
     <string name="controls_error_failed" msgid="960228639198558525">"Hata, yeniden deneyin"</string>
     <string name="controls_in_progress" msgid="4421080500238215939">"Devam ediyor"</string>

@@ -89,8 +89,7 @@
     <string name="screenshot_dismiss_ui_description" msgid="934736855340147968">"Отфрлете ја сликата од екранот"</string>
     <string name="screenshot_preview_description" msgid="7606510140714080474">"Преглед на слика од екранот"</string>
     <string name="screenrecord_name" msgid="2596401223859996572">"Снимач на екран"</string>
-    <!-- no translation found for screenrecord_background_processing_label (7244617554884238898) -->
-    <skip />
+    <string name="screenrecord_background_processing_label" msgid="7244617554884238898">"Се обработува снимка од екран"</string>
     <string name="screenrecord_channel_description" msgid="4147077128486138351">"Тековно известување за сесија за снимање на екранот"</string>
     <string name="screenrecord_start_label" msgid="1750350278888217473">"Да се започне со снимање?"</string>
     <string name="screenrecord_description" msgid="1123231719680353736">"При снимањето, системот Android може да ги сними сите чувствителни податоци што се видливи на вашиот екран или пуштени на уредот. Ова вклучува лозинки, податоци за плаќање, фотографии, пораки и аудио."</string>
@@ -511,10 +510,9 @@
     <string name="clear_all_notifications_text" msgid="348312370303046130">"Избриши сѐ"</string>
     <string name="manage_notifications_text" msgid="6885645344647733116">"Управувајте"</string>
     <string name="manage_notifications_history_text" msgid="57055985396576230">"Историја"</string>
-    <!-- no translation found for notification_section_header_incoming (5295312809341711367) -->
-    <skip />
-    <string name="notification_section_header_gentle" msgid="3044910806569985386">"Тивки известувања"</string>
-    <string name="notification_section_header_alerting" msgid="3168140660646863240">"Известувања за предупредување"</string>
+    <string name="notification_section_header_incoming" msgid="5295312809341711367">"Дојдовни"</string>
+    <string name="notification_section_header_gentle" msgid="6804099527336337197">"Безгласно"</string>
+    <string name="notification_section_header_alerting" msgid="5581175033680477651">"Известувања"</string>
     <string name="notification_section_header_conversations" msgid="821834744538345661">"Разговори"</string>
     <string name="accessibility_notification_section_header_gentle_clear_all" msgid="6490207897764933919">"Избриши ги сите тивки известувања"</string>
     <string name="dnd_suppressing_shade_text" msgid="5588252250634464042">"Известувањата се паузирани од „Не вознемирувај“"</string>
@@ -594,19 +592,21 @@
     <string name="volume_odi_captions_hint_enable" msgid="2073091194012843195">"овозможи"</string>
     <string name="volume_odi_captions_hint_disable" msgid="2518846326748183407">"оневозможи"</string>
     <string name="accessibility_output_chooser" msgid="7807898688967194183">"Префрлете го излезниот уред"</string>
-    <string name="screen_pinning_title" msgid="7357611095909618178">"Екранот е прикачен"</string>
+    <string name="screen_pinning_title" msgid="9058007390337841305">"Апликацијата е прикачена"</string>
     <string name="screen_pinning_description" msgid="8699395373875667743">"Ќе се гледа сѐ додека не го откачите. Допрете и држете „Назад“ и „Краток преглед“ за откачување."</string>
     <string name="screen_pinning_description_recents_invisible" msgid="4564466648700390037">"Ќе се гледа сѐ додека не го откачите. Допрете и задржете „Назад“ и „Почетен екран“ за откачување."</string>
     <string name="screen_pinning_description_gestural" msgid="7246323931831232068">"Ќе се гледа сѐ додека не го откачите. Лизгајте нагоре и задржете за откачување."</string>
     <string name="screen_pinning_description_accessible" msgid="7386449191953535332">"Ќе се гледа сѐ додека не го откачите. Допрете и држете „Краток преглед“ за откачување."</string>
     <string name="screen_pinning_description_recents_invisible_accessible" msgid="2857071808674481986">"Ќе се гледа сѐ додека не го откачите. Допрете и задржете „Почетен екран“ за откачување."</string>
-    <string name="screen_pinning_toast" msgid="2083944237147005811">"За откачување на екранов, допрете и задржете ги копчињата „Назад“ и „Краток преглед“"</string>
-    <string name="screen_pinning_toast_recents_invisible" msgid="6343770487795352573">"За откачување на екранов, допрете и задржете ги копчињата „Назад“ и „Почетен екран“"</string>
-    <string name="screen_pinning_toast_gesture_nav" msgid="2884536903398445645">"За да го откачите екранов, повлечете нагоре и задржете"</string>
+    <string name="screen_pinning_exposes_personal_data" msgid="8189852022981524789">"Личните податоци може да се пристапни (како контакти и содржини од е-пошта)."</string>
+    <string name="screen_pinning_can_open_other_apps" msgid="7529756813231421455">"Прикачените апликации може да отворат други апликации."</string>
+    <string name="screen_pinning_toast" msgid="8177286912533744328">"За откачување на апликацијава, допрете и држете на копчињата „Назад“ и „Преглед“"</string>
+    <string name="screen_pinning_toast_recents_invisible" msgid="6850978077443052594">"За откачување на апликацијава, допрете и држете на копчињата „Назад“ и „Почетен екран“"</string>
+    <string name="screen_pinning_toast_gesture_nav" msgid="170699893395336705">"За откачување на апликацијава, повлечете нагоре и држете"</string>
     <string name="screen_pinning_positive" msgid="3285785989665266984">"Сфатив"</string>
     <string name="screen_pinning_negative" msgid="6882816864569211666">"Не, фала"</string>
-    <string name="screen_pinning_start" msgid="5695091877402422575">"Екранот е прикачен"</string>
-    <string name="screen_pinning_exit" msgid="5114993350662745840">"Екранот е откачен"</string>
+    <string name="screen_pinning_start" msgid="7483998671383371313">"Апликацијата е прикачена"</string>
+    <string name="screen_pinning_exit" msgid="4553787518387346893">"Апликацијата е откачена"</string>
     <string name="quick_settings_reset_confirmation_title" msgid="463533331480997595">"Сокриј <xliff:g id="TILE_LABEL">%1$s</xliff:g>?"</string>
     <string name="quick_settings_reset_confirmation_message" msgid="2320586180785674186">"Ќе се појави повторно следниот пат кога ќе го вклучите во поставки."</string>
     <string name="quick_settings_reset_confirmation_button" msgid="3341477479055016776">"Сокриј"</string>
@@ -702,23 +702,24 @@
     <string name="inline_block_button" msgid="479892866568378793">"Блокирај"</string>
     <string name="inline_keep_button" msgid="299631874103662170">"Продолжи да ги прикажуваш"</string>
     <string name="inline_minimize_button" msgid="1474436209299333445">"Минимизирај"</string>
-    <string name="inline_silent_button_silent" msgid="525243786649275816">"Тивко"</string>
+    <string name="inline_silent_button_silent" msgid="525243786649275816">"Безгласно"</string>
     <string name="inline_silent_button_stay_silent" msgid="2129254868305468743">"Продолжи со безгласно прикажување"</string>
     <string name="inline_silent_button_alert" msgid="5705343216858250354">"Предупредувај"</string>
     <string name="inline_silent_button_keep_alerting" msgid="6577845442184724992">"Продолжи да ме предупредуваш"</string>
     <string name="inline_turn_off_notifications" msgid="8543989584403106071">"Исклучи известувања"</string>
     <string name="inline_keep_showing_app" msgid="4393429060390649757">"Дали да продолжат да се прикажуваат известувања од апликацијава?"</string>
-    <string name="notification_silence_title" msgid="8608090968400832335">"Тивко"</string>
-    <string name="notification_alert_title" msgid="7629202599338071971">"Предупредувај"</string>
+    <string name="notification_silence_title" msgid="8608090968400832335">"Безгласно"</string>
+    <string name="notification_alert_title" msgid="3656229781017543655">"Стандардно"</string>
     <string name="notification_bubble_title" msgid="8330481035191903164">"Балонче"</string>
-    <string name="notification_channel_summary_low" msgid="7300447764759926720">"Ви помага да се концентрирате без звук или вибрации."</string>
-    <string name="notification_channel_summary_default" msgid="3539949463907902037">"Ви го привлекува вниманието со звук или вибрации."</string>
-    <string name="notification_channel_summary_default_with_bubbles" msgid="6298026344552480458">"Ви го привлекува вниманието со звук или вибрации. Стандардно, разговорите од <xliff:g id="APP_NAME">%1$s</xliff:g> се во балончиња."</string>
+    <string name="notification_channel_summary_low" msgid="4860617986908931158">"Без звук или вибрации"</string>
+    <string name="notification_conversation_summary_low" msgid="1734433426085468009">"Без звук или вибрации и се појавува под делот за разговор"</string>
+    <string name="notification_channel_summary_default" msgid="3282930979307248890">"Може да ѕвони или вибрира во зависност од поставките на телефонот"</string>
+    <string name="notification_channel_summary_default_with_bubbles" msgid="1782419896613644568">"Може да ѕвони или вибрира во зависност од поставките на телефонот Стандардно, разговорите од <xliff:g id="APP_NAME">%1$s</xliff:g> се во балончиња."</string>
     <string name="notification_channel_summary_bubble" msgid="7235935211580860537">"Ви го задржува вниманието со лебдечка кратенка на содржинава."</string>
-    <string name="notification_channel_summary_priority" msgid="7415770044553264622">"Се појавува на горниот дел од разговорот и изгледа како балонче."</string>
+    <string name="notification_channel_summary_priority" msgid="7952654515769021553">"Се појавува на горниот дел од секцијата на разговорот во вид на лебдечко меурче, покажувајќи ја профилната слика на заклучениот екран"</string>
     <string name="notification_conversation_channel_settings" msgid="2409977688430606835">"Поставки"</string>
     <string name="notification_priority_title" msgid="2079708866333537093">"Приоритет"</string>
-    <string name="no_shortcut" msgid="7176375126961212514">"<xliff:g id="APP_NAME">%1$s</xliff:g> не поддржува поставки поврзани со разговорите"</string>
+    <string name="no_shortcut" msgid="8257177117568230126">"<xliff:g id="APP_NAME">%1$s</xliff:g> не поддржува функции за разговор"</string>
     <string name="bubble_overflow_empty_title" msgid="3120029421991510842">"Нема неодамнешни балончиња"</string>
     <string name="bubble_overflow_empty_subtitle" msgid="2030874469510497397">"Неодамнешните и отфрлените балончиња ќе се појавуваат тука"</string>
     <string name="notification_unblockable_desc" msgid="2073030886006190804">"Овие известувања не може да се изменат"</string>
@@ -991,10 +992,8 @@
     <string name="music_controls_no_title" msgid="4166497066552290938">"Без наслов"</string>
     <string name="restart_button_description" msgid="6916116576177456480">"Допрете за да ја рестартирате апликацијава и да ја отворите на цел екран."</string>
     <string name="bubbles_settings_button_description" msgid="7324245408859877545">"Поставки за балончињата за <xliff:g id="APP_NAME">%1$s</xliff:g>"</string>
-    <!-- no translation found for bubble_overflow_button_content_description (5523744621434300510) -->
-    <skip />
-    <!-- no translation found for bubble_accessibility_action_add_back (6217995665917123890) -->
-    <skip />
+    <string name="bubble_overflow_button_content_description" msgid="5523744621434300510">"Прелевање"</string>
+    <string name="bubble_accessibility_action_add_back" msgid="6217995665917123890">"Додајте назад во stack"</string>
     <string name="manage_bubbles_text" msgid="6856830436329494850">"Управување"</string>
     <string name="bubble_content_description_single" msgid="5175160674436546329">"<xliff:g id="NOTIFICATION_TITLE">%1$s</xliff:g> од <xliff:g id="APP_NAME">%2$s</xliff:g>"</string>
     <string name="bubble_content_description_stack" msgid="7907610717462651870">"<xliff:g id="NOTIFICATION_TITLE">%1$s</xliff:g> од <xliff:g id="APP_NAME">%2$s</xliff:g> и уште <xliff:g id="BUBBLE_COUNT">%3$d</xliff:g>"</string>
@@ -1003,7 +1002,8 @@
     <string name="bubble_accessibility_action_move_top_right" msgid="6916868852433483569">"Премести горе десно"</string>
     <string name="bubble_accessibility_action_move_bottom_left" msgid="6339015902495504715">"Премести долу лево"</string>
     <string name="bubble_accessibility_action_move_bottom_right" msgid="7471571700628346212">"Премести долу десно"</string>
-    <string name="bubble_dismiss_text" msgid="7071770411580452911">"Отфрли"</string>
+    <!-- no translation found for bubble_dismiss_text (1314082410868930066) -->
+    <skip />
     <string name="bubbles_dont_bubble_conversation" msgid="1033040343437428822">"Не прикажувај го разговорот во балончиња"</string>
     <string name="bubbles_user_education_title" msgid="5547017089271445797">"Разговор во балончиња"</string>
     <string name="bubbles_user_education_description" msgid="1160281719576715211">"Новите разговори ќе се појавуваат како лебдечки икони или балончиња. Допрете за отворање на балончето. Повлечете за да го преместите."</string>
@@ -1014,11 +1014,14 @@
     <string name="notification_content_system_nav_changed" msgid="5077913144844684544">"Навигацијата на системот е ажурирана. За да извршите промени, одете во „Поставки“."</string>
     <string name="notification_content_gesture_nav_available" msgid="4431460803004659888">"Одете во „Поставки“ за да ја ажурирате навигацијата на системот"</string>
     <string name="inattentive_sleep_warning_title" msgid="3891371591713990373">"Подготвеност"</string>
+    <string name="priority_onboarding_title" msgid="2893070698479227616">"Разговорот е поставен како приоритетен"</string>
+    <string name="priority_onboarding_behavior" msgid="5342816047020432929">"Приорететните разговори ќе:"</string>
     <string name="priority_onboarding_show_at_top_text" msgid="1678400241025513541">"Се прикажува најгоре во делот со разговори"</string>
     <string name="priority_onboarding_show_avatar_text" msgid="5756291381124091508">"Се прикажува профилна слика на заклучен екран"</string>
     <string name="priority_onboarding_appear_as_bubble_text" msgid="4227039772250263122">"Се појавува како лебдечко балонче врз апликациите"</string>
     <string name="priority_onboarding_ignores_dnd_text" msgid="2918952762719600529">"Прекинува „Не вознемирувај“"</string>
     <string name="priority_onboarding_done_button_title" msgid="4569550984286506007">"Сфатив"</string>
+    <string name="priority_onboarding_settings_button_title" msgid="6663601574303585927">"Поставки"</string>
     <string name="magnification_overlay_title" msgid="6584179429612427958">"Прозорец за преклопување на зголемувањето"</string>
     <string name="magnification_window_title" msgid="4863914360847258333">"Прозорец за зголемување"</string>
     <string name="magnification_controls_title" msgid="8421106606708891519">"Контроли на прозорец за зголемување"</string>
@@ -1031,6 +1034,13 @@
       <item quantity="one">Додадена е <xliff:g id="NUMBER_1">%s</xliff:g> контрола.</item>
       <item quantity="other">Додадени се <xliff:g id="NUMBER_1">%s</xliff:g> контроли.</item>
     </plurals>
+    <string name="controls_removed" msgid="3731789252222856959">"Отстранета"</string>
+    <string name="accessibility_control_favorite" msgid="8694362691985545985">"Омилена"</string>
+    <string name="accessibility_control_favorite_position" msgid="54220258048929221">"Омилена, позиција <xliff:g id="NUMBER">%d</xliff:g>"</string>
+    <string name="accessibility_control_not_favorite" msgid="1291760269563092359">"Неомилена"</string>
+    <string name="accessibility_control_change_favorite" msgid="2943178027582253261">"означите како омилена"</string>
+    <string name="accessibility_control_change_unfavorite" msgid="6997408061750740327">"означите како неомилена"</string>
+    <string name="accessibility_control_move" msgid="8980344493796647792">"Преместете на позиција <xliff:g id="NUMBER">%d</xliff:g>"</string>
     <string name="controls_favorite_default_title" msgid="967742178688938137">"Контроли"</string>
     <string name="controls_favorite_subtitle" msgid="6604402232298443956">"Изберете ги контролите до кои ќе пристапувате од менито за вклучување"</string>
     <string name="controls_favorite_rearrange" msgid="5616952398043063519">"Задржете и влечете за да ги преуредите контролите"</string>
@@ -1053,9 +1063,13 @@
     <string name="controls_structure_tooltip" msgid="4355922222944447867">"Повлечете за да видите повеќе"</string>
     <string name="controls_seeding_in_progress" msgid="3033855341410264148">"Се вчитуваат препораки"</string>
     <string name="controls_media_close_session" msgid="9023534788828414585">"Затвори ја аудиовизуелнава сесија"</string>
+    <string name="controls_media_resume" msgid="1933520684481586053">"Продолжи"</string>
     <string name="controls_error_timeout" msgid="794197289772728958">"Неактивна, провери апликација"</string>
     <string name="controls_error_retryable" msgid="864025882878378470">"Грешка, повторен обид…"</string>
-    <string name="controls_error_removed" msgid="6299213591234723805">"Уредот е отстранет"</string>
+    <string name="controls_error_removed" msgid="6675638069846014366">"Не е најдено"</string>
+    <string name="controls_error_removed_title" msgid="1207794911208047818">"Контролата не е достапна"</string>
+    <string name="controls_error_removed_message" msgid="2885911717034750542">"Не може да се пристапи до <xliff:g id="DEVICE">%1$s</xliff:g>. Проверете ја апликацијата <xliff:g id="APPLICATION">%2$s</xliff:g> за да се осигурите дека контролата е сè уште достапна и дека поставките за апликацијата не се сменети."</string>
+    <string name="controls_open_app" msgid="483650971094300141">"Отвори ја апликација"</string>
     <string name="controls_error_generic" msgid="352500456918362905">"Не може да се вчита статусот"</string>
     <string name="controls_error_failed" msgid="960228639198558525">"Грешка, обидете се повторно"</string>
     <string name="controls_in_progress" msgid="4421080500238215939">"Во тек"</string>

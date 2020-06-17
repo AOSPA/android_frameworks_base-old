@@ -24,6 +24,7 @@ import static android.text.TextUtils.makeSafeForPresentation;
 import android.annotation.FloatRange;
 import android.annotation.NonNull;
 import android.annotation.SystemApi;
+import android.app.ActivityThread;
 import android.content.res.XmlResourceParser;
 import android.graphics.drawable.Drawable;
 import android.os.Bundle;
@@ -48,8 +49,16 @@ import java.util.Objects;
  * in the implementation of Parcelable in subclasses.
  */
 public class PackageItemInfo {
-    /** The maximum length of a safe label, in characters */
-    private static final int MAX_SAFE_LABEL_LENGTH = 50000;
+
+    /**
+     * The maximum length of a safe label, in characters
+     *
+     * TODO(b/157997155): It may make sense to expose this publicly so that apps can check for the
+     *  value and truncate the strings/use a different label, without having to hardcode and make
+     *  assumptions about the value.
+     * @hide
+     */
+    public static final int MAX_SAFE_LABEL_LENGTH = 1000;
 
     /** @hide */
     public static final float DEFAULT_MAX_LABEL_SIZE_PX = 500f;
@@ -194,7 +203,7 @@ public class PackageItemInfo {
      * item does not have a label, its name is returned.
      */
     public @NonNull CharSequence loadLabel(@NonNull PackageManager pm) {
-        if (sForceSafeLabels) {
+        if (sForceSafeLabels && !Objects.equals(packageName, ActivityThread.currentPackageName())) {
             return loadSafeLabel(pm, DEFAULT_MAX_LABEL_SIZE_PX, SAFE_STRING_FLAG_TRIM
                     | SAFE_STRING_FLAG_FIRST_LINE);
         } else {

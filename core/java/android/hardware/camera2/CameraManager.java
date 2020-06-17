@@ -35,6 +35,7 @@ import android.hardware.camera2.legacy.LegacyMetadataMapper;
 import android.hardware.camera2.params.SessionConfiguration;
 import android.hardware.camera2.utils.CameraIdAndSessionConfiguration;
 import android.hardware.camera2.utils.ConcurrentCameraIdCombination;
+import android.hardware.display.DisplayManager;
 import android.os.Binder;
 import android.os.DeadObjectException;
 import android.os.Handler;
@@ -50,7 +51,6 @@ import android.util.ArraySet;
 import android.util.Log;
 import android.util.Size;
 import android.view.Display;
-import android.view.WindowManager;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -141,9 +141,24 @@ public final class CameraManager {
      * client camera application. Using these camera devices concurrently by two different
      * applications is not guaranteed to be supported, however.</p>
      *
+     * <p>For concurrent operation, in chronological order :
+     * - Applications must first close any open cameras that have sessions configured, using
+     *   {@link CameraDevice#close}.
+     * - All camera devices intended to be operated concurrently, must be opened using
+     *   {@link #openCamera}, before configuring sessions on any of the camera devices.</p>
+     *
      * <p>Each device in a combination, is guaranteed to support stream combinations which may be
      * obtained by querying {@link #getCameraCharacteristics} for the key
      * {@link android.hardware.camera2.CameraCharacteristics#SCALER_MANDATORY_CONCURRENT_STREAM_COMBINATIONS}.</p>
+     *
+     * <p>For concurrent operation, if a camera device has a non null zoom ratio range as specified
+     * by
+     * {@link android.hardware.camera2.CameraCharacteristics#CONTROL_ZOOM_RATIO_RANGE},
+     * its complete zoom ratio range may not apply. Applications can use
+     * {@link android.hardware.camera2.CaptureRequest#CONTROL_ZOOM_RATIO} >=1 and  <=
+     * {@link android.hardware.camera2.CameraCharacteristics#SCALER_AVAILABLE_MAX_DIGITAL_ZOOM}
+     * during concurrent operation.
+     * <p>
      *
      * <p>The set of combinations may include camera devices that may be in use by other camera API
      * clients.</p>
@@ -337,19 +352,22 @@ public final class CameraManager {
         Size ret = new Size(0, 0);
 
         try {
-            WindowManager windowManager =
-                    (WindowManager) mContext.getSystemService(Context.WINDOW_SERVICE);
-            Display display = windowManager.getDefaultDisplay();
+            DisplayManager displayManager =
+                    (DisplayManager) mContext.getSystemService(Context.DISPLAY_SERVICE);
+            Display display = displayManager.getDisplay(Display.DEFAULT_DISPLAY);
+            if (display != null) {
+                int width = display.getWidth();
+                int height = display.getHeight();
 
-            int width = display.getWidth();
-            int height = display.getHeight();
+                if (height > width) {
+                    height = width;
+                    width = display.getHeight();
+                }
 
-            if (height > width) {
-                height = width;
-                width = display.getHeight();
+                ret = new Size(width, height);
+            } else {
+                Log.e(TAG, "Invalid default display!");
             }
-
-            ret = new Size(width, height);
         } catch (Exception e) {
             Log.e(TAG, "getDisplaySize Failed. " + e.toString());
         }
@@ -364,6 +382,11 @@ public final class CameraManager {
      * <p>From API level 29, this function can also be used to query the capabilities of physical
      * cameras that can only be used as part of logical multi-camera. These cameras cannot be
      * opened directly via {@link #openCamera}</p>
+     *
+     * <p>Also starting with API level 29, while most basic camera information is still available
+     * even without the CAMERA permission, some values are not available to apps that do not hold
+     * that permission. The keys not available are listed by
+     * {@link CameraCharacteristics#getKeysNeedingPermission}.</p>
      *
      * @param cameraId The id of the camera device to query. This could be either a standalone
      * camera ID which can be directly opened by {@link #openCamera}, or a physical camera ID that
@@ -566,12 +589,26 @@ public final class CameraManager {
      * priority when accessing the camera, and this method will succeed even if the camera device is
      * in use by another camera API client. Any lower-priority application that loses control of the
      * camera in this way will receive an
-     * {@link android.hardware.camera2.CameraDevice.StateCallback#onDisconnected} callback.</p>
+     * {@link android.hardware.camera2.CameraDevice.StateCallback#onDisconnected} callback.
+     * Opening the same camera ID twice in the same application will similarly cause the
+     * {@link android.hardware.camera2.CameraDevice.StateCallback#onDisconnected} callback
+     * being fired for the {@link CameraDevice} from the first open call and all ongoing tasks
+     * being droppped.</p>
      *
      * <p>Once the camera is successfully opened, {@link CameraDevice.StateCallback#onOpened} will
      * be invoked with the newly opened {@link CameraDevice}. The camera device can then be set up
      * for operation by calling {@link CameraDevice#createCaptureSession} and
      * {@link CameraDevice#createCaptureRequest}</p>
+     *
+     * <p>Before API level 30, when the application tries to open multiple {@link CameraDevice} of
+     * different IDs and the device does not support opening such combination, either the
+     * {@link #openCamera} will fail and throw a {@link CameraAccessException} or one or more of
+     * already opened {@link CameraDevice} will be disconnected and receive
+     * {@link android.hardware.camera2.CameraDevice.StateCallback#onDisconnected} callback. Which
+     * behavior will happen depends on the device implementation and can vary on different devices.
+     * Starting in API level 30, if the device does not support the combination of cameras being
+     * opened, it is guaranteed the {@link #openCamera} call will fail and none of existing
+     * {@link CameraDevice} will be disconnected.</p>
      *
      * <!--
      * <p>Since the camera device will be opened asynchronously, any asynchronous operations done
@@ -598,7 +635,8 @@ public final class CameraManager {
      *             {@code null} to use the current thread's {@link android.os.Looper looper}.
      *
      * @throws CameraAccessException if the camera is disabled by device policy,
-     * has been disconnected, or is being used by a higher-priority camera API client.
+     * has been disconnected, is being used by a higher-priority camera API client, or the device
+     * has reached its maximal resource and cannot open this camera device.
      *
      * @throws IllegalArgumentException if cameraId or the callback was null,
      * or the cameraId does not match any currently or previously available

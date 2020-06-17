@@ -626,7 +626,7 @@ public final class ActiveServices {
         }
 
         NeededUriGrants neededGrants = mAm.mUgmInternal.checkGrantUriPermissionFromIntent(
-                callingUid, r.packageName, service, service.getFlags(), null, r.userId);
+                service, callingUid, r.packageName, r.userId);
 
         // If permissions need a review before any of the app components can run,
         // we do not start the service and launch a review activity if the calling app
@@ -2543,6 +2543,22 @@ public final class ActiveServices {
                             && mAm.isValidSingletonCall(callingUid, sInfo.applicationInfo.uid)) {
                         userId = 0;
                         smap = getServiceMapLocked(0);
+                        // Bypass INTERACT_ACROSS_USERS permission check
+                        final long token = Binder.clearCallingIdentity();
+                        try {
+                            ResolveInfo rInfoForUserId0 =
+                                    mAm.getPackageManagerInternalLocked().resolveService(service,
+                                            resolvedType, flags, userId, callingUid);
+                            if (rInfoForUserId0 == null) {
+                                Slog.w(TAG_SERVICE,
+                                        "Unable to resolve service " + service + " U=" + userId
+                                                + ": not found");
+                                return null;
+                            }
+                            sInfo = rInfoForUserId0.serviceInfo;
+                        } finally {
+                            Binder.restoreCallingIdentity(token);
+                        }
                     }
                     sInfo = new ServiceInfo(sInfo);
                     sInfo.applicationInfo = mAm.getAppInfoForUser(sInfo.applicationInfo, userId);
@@ -2902,14 +2918,9 @@ public final class ActiveServices {
             return;
         }
         try {
-            /* TODO(b/154865060) - re-enable SERVICE_RESCHEDULE
             if(SERVICE_RESCHEDULE) {
                 boolean shouldDelay = false;
-                ActivityRecord top_rc = null;
-                ActivityStack stack = mAm.mStackSupervisor.mRootWindowContainer.getTopDisplayFocusedStack();
-                if(stack != null) {
-                    top_rc = stack.topRunningActivity();
-                }
+                ActivityRecord top_rc = mAm.mStackSupervisor.getTopResumedActivity();
 
                 boolean isPersistent
                         = !((r.serviceInfo.applicationInfo.flags&ApplicationInfo.FLAG_PERSISTENT) == 0);
@@ -2930,9 +2941,8 @@ public final class ActiveServices {
                     scheduleServiceRestartLocked(r, true);
                 }
             } else {
-            */
                 bringUpServiceLocked(r, r.intent.getIntent().getFlags(), r.createdFromFg, true, false);
-            //}
+            }
         } catch (TransactionTooLargeException e) {
             // Ignore, it's been logged and nothing upstack cares.
         }
@@ -5095,47 +5105,6 @@ public final class ActiveServices {
         if (isDeviceOwner) {
             return true;
         }
-
-        r.mInfoDenyWhileInUsePermissionInFgs =
-                "Background FGS start while-in-use permission restriction [callingPackage: "
-                + callingPackage
-                + "; callingUid: " + callingUid
-                + "; intent: " + intent
-                + "]";
         return false;
-    }
-
-    // TODO: remove this toast after feature development is done
-    void showWhileInUseDebugToastLocked(int uid, int op, int mode) {
-        for (int i = mAm.mProcessList.mLruProcesses.size() - 1; i >= 0; i--) {
-            ProcessRecord pr = mAm.mProcessList.mLruProcesses.get(i);
-            if (pr.uid != uid) {
-                continue;
-            }
-            for (int j = pr.numberOfRunningServices() - 1; j >= 0; j--) {
-                ServiceRecord r = pr.getRunningServiceAt(j);
-                if (!r.isForeground) {
-                    continue;
-                }
-                if (mode == DEBUG_FGS_ALLOW_WHILE_IN_USE) {
-                    if (!r.mAllowWhileInUsePermissionInFgs
-                            && r.mInfoDenyWhileInUsePermissionInFgs != null) {
-                        final String msg = r.mInfoDenyWhileInUsePermissionInFgs
-                                + " affected while-in-use permission:"
-                                + AppOpsManager.opToPublicName(op);
-                        Slog.wtf(TAG, msg);
-                    }
-                } else if (mode == DEBUG_FGS_ENFORCE_TYPE) {
-                    final String msg =
-                            "FGS Missing foregroundServiceType in manifest file [callingPackage: "
-                            + r.mRecentCallingPackage
-                            + "; intent:" + r.intent.getIntent()
-                            + "] affected while-in-use permission:"
-                            + AppOpsManager.opToPublicName(op)
-                            + "; targetSdkVersion:" + r.appInfo.targetSdkVersion;
-                    Slog.wtf(TAG, msg);
-                }
-            }
-        }
     }
 }

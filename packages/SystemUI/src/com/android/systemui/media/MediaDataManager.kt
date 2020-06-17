@@ -1,0 +1,488 @@
+/*
+ * Copyright (C) 2020 The Android Open Source Project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package com.android.systemui.media
+
+import android.app.Notification
+import android.app.PendingIntent
+import android.content.ContentResolver
+import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.ImageDecoder
+import android.graphics.drawable.Drawable
+import android.graphics.drawable.Icon
+import android.media.MediaDescription
+import android.media.MediaMetadata
+import android.media.session.MediaSession
+import android.net.Uri
+import android.service.notification.StatusBarNotification
+import android.text.TextUtils
+import android.util.Log
+import com.android.internal.graphics.ColorUtils
+import com.android.systemui.R
+import com.android.systemui.dagger.qualifiers.Background
+import com.android.systemui.dagger.qualifiers.Main
+import com.android.systemui.statusbar.NotificationMediaManager
+import com.android.systemui.statusbar.notification.MediaNotificationProcessor
+import com.android.systemui.statusbar.notification.NotificationEntryManager
+import com.android.systemui.statusbar.notification.NotificationEntryManager.UNDEFINED_DISMISS_REASON
+import com.android.systemui.statusbar.notification.row.HybridGroupManager
+import com.android.systemui.util.Assert
+import com.android.systemui.util.Utils
+import java.io.IOException
+import java.util.concurrent.Executor
+import javax.inject.Inject
+import javax.inject.Singleton
+
+// URI fields to try loading album art from
+private val ART_URIS = arrayOf(
+        MediaMetadata.METADATA_KEY_ALBUM_ART_URI,
+        MediaMetadata.METADATA_KEY_ART_URI,
+        MediaMetadata.METADATA_KEY_DISPLAY_ICON_URI
+)
+
+private const val TAG = "MediaDataManager"
+private const val DEFAULT_LUMINOSITY = 0.25f
+private const val LUMINOSITY_THRESHOLD = 0.05f
+private const val SATURATION_MULTIPLIER = 0.8f
+
+private val LOADING = MediaData(false, 0, null, null, null, null, null,
+        emptyList(), emptyList(), "INVALID", null, null, null, null)
+
+fun isMediaNotification(sbn: StatusBarNotification): Boolean {
+    if (!sbn.notification.hasMediaSession()) {
+        return false
+    }
+    val notificationStyle = sbn.notification.notificationStyle
+    if (Notification.DecoratedMediaCustomViewStyle::class.java.equals(notificationStyle) ||
+            Notification.MediaStyle::class.java.equals(notificationStyle)) {
+        return true
+    }
+    return false
+}
+
+/**
+ * A class that facilitates management and loading of Media Data, ready for binding.
+ */
+@Singleton
+class MediaDataManager @Inject constructor(
+    private val context: Context,
+    private val mediaControllerFactory: MediaControllerFactory,
+    private val mediaTimeoutListener: MediaTimeoutListener,
+    private val notificationEntryManager: NotificationEntryManager,
+    private val mediaResumeListener: MediaResumeListener,
+    @Background private val backgroundExecutor: Executor,
+    @Main private val foregroundExecutor: Executor
+) {
+
+    private val listeners: MutableSet<Listener> = mutableSetOf()
+    private val mediaEntries: LinkedHashMap<String, MediaData> = LinkedHashMap()
+    private val useMediaResumption: Boolean = Utils.useMediaResumption(context)
+
+    init {
+        mediaTimeoutListener.timeoutCallback = { token: String, timedOut: Boolean ->
+            setTimedOut(token, timedOut) }
+        addListener(mediaTimeoutListener)
+
+        if (useMediaResumption) {
+            mediaResumeListener.addTrackToResumeCallback = { desc: MediaDescription,
+                resumeAction: Runnable, token: MediaSession.Token, appName: String,
+                appIntent: PendingIntent, packageName: String ->
+                addResumptionControls(desc, resumeAction, token, appName, appIntent, packageName)
+            }
+            mediaResumeListener.resumeComponentFoundCallback = { key: String, action: Runnable? ->
+                mediaEntries.get(key)?.resumeAction = action
+                mediaEntries.get(key)?.hasCheckedForResume = true
+            }
+            addListener(mediaResumeListener)
+        }
+    }
+
+    fun onNotificationAdded(key: String, sbn: StatusBarNotification) {
+        if (Utils.useQsMediaPlayer(context) && isMediaNotification(sbn)) {
+            Assert.isMainThread()
+            val oldKey = findExistingEntry(key, sbn.packageName)
+            if (oldKey == null) {
+                val temp = LOADING.copy(packageName = sbn.packageName)
+                mediaEntries.put(key, temp)
+            } else if (oldKey != key) {
+                // Move to new key
+                val oldData = mediaEntries.remove(oldKey)!!
+                mediaEntries.put(key, oldData)
+            }
+            loadMediaData(key, sbn, oldKey)
+        } else {
+            onNotificationRemoved(key)
+        }
+    }
+
+    private fun addResumptionControls(
+        desc: MediaDescription,
+        action: Runnable,
+        token: MediaSession.Token,
+        appName: String,
+        appIntent: PendingIntent,
+        packageName: String
+    ) {
+        // Resume controls don't have a notification key, so store by package name instead
+        if (!mediaEntries.containsKey(packageName)) {
+            val resumeData = LOADING.copy(packageName = packageName, resumeAction = action)
+            mediaEntries.put(packageName, resumeData)
+        }
+        backgroundExecutor.execute {
+            loadMediaDataInBg(desc, action, token, appName, appIntent, packageName)
+        }
+    }
+
+    /**
+     * Check if there is an existing entry that matches the key or package name.
+     * Returns the key that matches, or null if not found.
+     */
+    private fun findExistingEntry(key: String, packageName: String): String? {
+        if (mediaEntries.containsKey(key)) {
+            return key
+        }
+        // Check if we already had a resume player
+        if (mediaEntries.containsKey(packageName)) {
+            return packageName
+        }
+        return null
+    }
+
+    private fun loadMediaData(
+        key: String,
+        sbn: StatusBarNotification,
+        oldKey: String?
+    ) {
+        backgroundExecutor.execute {
+            loadMediaDataInBg(key, sbn, oldKey)
+        }
+    }
+
+    /**
+     * Add a listener for changes in this class
+     */
+    fun addListener(listener: Listener) = listeners.add(listener)
+
+    /**
+     * Remove a listener for changes in this class
+     */
+    fun removeListener(listener: Listener) = listeners.remove(listener)
+
+    private fun setTimedOut(token: String, timedOut: Boolean) {
+        if (!timedOut) {
+            return
+        }
+        mediaEntries[token]?.let {
+            notificationEntryManager.removeNotification(it.notificationKey, null /* ranking */,
+                    UNDEFINED_DISMISS_REASON)
+        }
+    }
+
+    private fun loadMediaDataInBg(
+        desc: MediaDescription,
+        resumeAction: Runnable,
+        token: MediaSession.Token,
+        appName: String,
+        appIntent: PendingIntent,
+        packageName: String
+    ) {
+        if (resumeAction == null) {
+            Log.e(TAG, "Resume action cannot be null")
+            return
+        }
+
+        if (TextUtils.isEmpty(desc.title)) {
+            Log.e(TAG, "Description incomplete")
+            return
+        }
+
+        Log.d(TAG, "adding track from browser: $desc")
+
+        // Album art
+        var artworkBitmap = desc.iconBitmap
+        if (artworkBitmap == null && desc.iconUri != null) {
+            artworkBitmap = loadBitmapFromUri(desc.iconUri!!)
+        }
+        val artworkIcon = if (artworkBitmap != null) {
+            Icon.createWithBitmap(artworkBitmap)
+        } else {
+            null
+        }
+
+        val mediaAction = getResumeMediaAction(resumeAction)
+        foregroundExecutor.execute {
+            onMediaDataLoaded(packageName, null, MediaData(true, Color.DKGRAY, appName,
+                null, desc.subtitle, desc.title, artworkIcon, listOf(mediaAction), listOf(0),
+                packageName, token, appIntent, null, resumeAction, packageName))
+        }
+    }
+
+    private fun loadMediaDataInBg(
+        key: String,
+        sbn: StatusBarNotification,
+        oldKey: String?
+    ) {
+        val token = sbn.notification.extras.getParcelable(Notification.EXTRA_MEDIA_SESSION)
+                as MediaSession.Token?
+        val metadata = mediaControllerFactory.create(token).metadata
+
+        if (metadata == null) {
+            // TODO: handle this better, removing media notification
+            return
+        }
+
+        // Foreground and Background colors computed from album art
+        val notif: Notification = sbn.notification
+        var bgColor = Color.WHITE
+        var artworkBitmap = metadata.getBitmap(MediaMetadata.METADATA_KEY_ART)
+        if (artworkBitmap == null) {
+            artworkBitmap = metadata.getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART)
+        }
+        if (artworkBitmap == null) {
+            artworkBitmap = loadBitmapFromUri(metadata)
+        }
+        val artWorkIcon = if (artworkBitmap == null) {
+            notif.getLargeIcon()
+        } else {
+            Icon.createWithBitmap(artworkBitmap)
+        }
+        if (artWorkIcon != null) {
+            // If we have art, get colors from that
+            if (artworkBitmap == null) {
+                if (artWorkIcon.type == Icon.TYPE_BITMAP ||
+                        artWorkIcon.type == Icon.TYPE_ADAPTIVE_BITMAP) {
+                    artworkBitmap = artWorkIcon.bitmap
+                } else {
+                    val drawable: Drawable = artWorkIcon.loadDrawable(context)
+                    artworkBitmap = Bitmap.createBitmap(
+                            drawable.intrinsicWidth,
+                            drawable.intrinsicHeight,
+                            Bitmap.Config.ARGB_8888)
+                    val canvas = Canvas(artworkBitmap)
+                    drawable.setBounds(0, 0, drawable.intrinsicWidth, drawable.intrinsicHeight)
+                    drawable.draw(canvas)
+                }
+            }
+            val p = MediaNotificationProcessor.generateArtworkPaletteBuilder(artworkBitmap)
+                    .generate()
+            val swatch = MediaNotificationProcessor.findBackgroundSwatch(p)
+            bgColor = swatch.rgb
+        }
+        // Adapt background color, so it's always subdued and text is legible
+        val tmpHsl = floatArrayOf(0f, 0f, 0f)
+        ColorUtils.colorToHSL(bgColor, tmpHsl)
+
+        val l = tmpHsl[2]
+        // Colors with very low luminosity can have any saturation. This means that changing the
+        // luminosity can make a black become red. Let's remove the saturation of very light or
+        // very dark colors to avoid this issue.
+        if (l < LUMINOSITY_THRESHOLD || l > 1f - LUMINOSITY_THRESHOLD) {
+            tmpHsl[1] = 0f
+        }
+        tmpHsl[1] *= SATURATION_MULTIPLIER
+        tmpHsl[2] = DEFAULT_LUMINOSITY
+
+        bgColor = ColorUtils.HSLToColor(tmpHsl)
+
+        // App name
+        val builder = Notification.Builder.recoverBuilder(context, notif)
+        val app = builder.loadHeaderAppName()
+
+        // App Icon
+        val smallIconDrawable: Drawable = sbn.notification.smallIcon.loadDrawable(context)
+
+        // Song name
+        var song: CharSequence? = metadata.getString(MediaMetadata.METADATA_KEY_DISPLAY_TITLE)
+        if (song == null) {
+            song = metadata.getString(MediaMetadata.METADATA_KEY_TITLE)
+        }
+        if (song == null) {
+            song = HybridGroupManager.resolveTitle(notif)
+        }
+
+        // Artist name
+        var artist: CharSequence? = metadata.getString(MediaMetadata.METADATA_KEY_ARTIST)
+        if (artist == null) {
+            artist = HybridGroupManager.resolveText(notif)
+        }
+
+        // Control buttons
+        val actionIcons: MutableList<MediaAction> = ArrayList()
+        val actions = notif.actions
+        val actionsToShowCollapsed = notif.extras.getIntArray(
+                Notification.EXTRA_COMPACT_ACTIONS)?.toMutableList() ?: mutableListOf<Int>()
+        // TODO: b/153736623 look into creating actions when this isn't a media style notification
+
+        val packageContext: Context = sbn.getPackageContext(context)
+        if (actions != null) {
+            for ((index, action) in actions.withIndex()) {
+                if (action.getIcon() == null) {
+                    Log.i(TAG, "No icon for action $index ${action.title}")
+                    actionsToShowCollapsed.remove(index)
+                    continue
+                }
+                val mediaAction = MediaAction(
+                        action.getIcon().loadDrawable(packageContext),
+                        Runnable {
+                            try {
+                                action.actionIntent.send()
+                            } catch (e: PendingIntent.CanceledException) {
+                                Log.d(TAG, "Intent canceled", e)
+                            }
+                        },
+                        action.title)
+                actionIcons.add(mediaAction)
+            }
+        }
+
+        val resumeAction: Runnable? = mediaEntries.get(key)?.resumeAction
+        foregroundExecutor.execute {
+            onMediaDataLoaded(key, oldKey, MediaData(true, bgColor, app, smallIconDrawable, artist,
+                    song, artWorkIcon, actionIcons, actionsToShowCollapsed, sbn.packageName, token,
+                    notif.contentIntent, null, resumeAction, key))
+        }
+    }
+
+    /**
+     * Load a bitmap from the various Art metadata URIs
+     */
+    private fun loadBitmapFromUri(metadata: MediaMetadata): Bitmap? {
+        for (uri in ART_URIS) {
+            val uriString = metadata.getString(uri)
+            if (!TextUtils.isEmpty(uriString)) {
+                val albumArt = loadBitmapFromUri(Uri.parse(uriString))
+                if (albumArt != null) {
+                    Log.d(TAG, "loaded art from $uri")
+                    return albumArt
+                }
+            }
+        }
+        return null
+    }
+
+    /**
+     * Load a bitmap from a URI
+     * @param uri the uri to load
+     * @return bitmap, or null if couldn't be loaded
+     */
+    private fun loadBitmapFromUri(uri: Uri): Bitmap? {
+        // ImageDecoder requires a scheme of the following types
+        if (uri.scheme == null) {
+            return null
+        }
+
+        if (!uri.scheme.equals(ContentResolver.SCHEME_CONTENT) &&
+                !uri.scheme.equals(ContentResolver.SCHEME_ANDROID_RESOURCE) &&
+                !uri.scheme.equals(ContentResolver.SCHEME_FILE)) {
+            return null
+        }
+
+        val source = ImageDecoder.createSource(context.getContentResolver(), uri)
+        return try {
+            ImageDecoder.decodeBitmap(source) {
+                decoder, info, source -> decoder.isMutableRequired = true
+            }
+        } catch (e: IOException) {
+            e.printStackTrace()
+            null
+        }
+    }
+
+    private fun getResumeMediaAction(action: Runnable): MediaAction {
+        return MediaAction(
+            context.getDrawable(R.drawable.lb_ic_play),
+            action,
+            context.getString(R.string.controls_media_resume)
+        )
+    }
+
+    fun onMediaDataLoaded(key: String, oldKey: String?, data: MediaData) {
+        Assert.isMainThread()
+        if (mediaEntries.containsKey(key)) {
+            // Otherwise this was removed already
+            mediaEntries.put(key, data)
+            val listenersCopy = listeners.toSet()
+            listenersCopy.forEach {
+                it.onMediaDataLoaded(key, oldKey, data)
+            }
+        }
+    }
+
+    fun onNotificationRemoved(key: String) {
+        Assert.isMainThread()
+        if (useMediaResumption && mediaEntries.get(key)?.resumeAction != null) {
+            Log.d(TAG, "Not removing $key because resumable")
+            // Move to resume key aka package name
+            val data = mediaEntries.remove(key)!!
+            val resumeAction = getResumeMediaAction(data.resumeAction!!)
+            val updated = data.copy(token = null, actions = listOf(resumeAction),
+                actionsToShowInCompact = listOf(0))
+            mediaEntries.put(data.packageName, updated)
+            // Notify listeners of "new" controls
+            val listenersCopy = listeners.toSet()
+            listenersCopy.forEach {
+                it.onMediaDataLoaded(data.packageName, key, updated)
+            }
+            return
+        }
+        val removed = mediaEntries.remove(key)
+        if (removed != null) {
+            val listenersCopy = listeners.toSet()
+            listenersCopy.forEach {
+                it.onMediaDataRemoved(key)
+            }
+        }
+    }
+
+    /**
+     * Are there any media notifications active?
+     */
+    fun hasActiveMedia() = mediaEntries.any({ isActive(it.value) })
+
+    fun isActive(data: MediaData): Boolean {
+        if (data.token == null) {
+            return false
+        }
+        val controller = mediaControllerFactory.create(data.token)
+        val state = controller?.playbackState?.state
+        return state != null && NotificationMediaManager.isActiveState(state)
+    }
+
+    /**
+     * Are there any media entries, including resume controls?
+     */
+    fun hasAnyMedia() = mediaEntries.isNotEmpty()
+
+    interface Listener {
+
+        /**
+         * Called whenever there's new MediaData Loaded for the consumption in views.
+         *
+         * oldKey is provided to check whether the view has changed keys, which can happen when a
+         * player has gone from resume state (key is package name) to active state (key is
+         * notification key) or vice versa.
+         */
+        fun onMediaDataLoaded(key: String, oldKey: String?, data: MediaData) {}
+
+        /**
+         * Called whenever a previously existing Media notification was removed
+         */
+        fun onMediaDataRemoved(key: String) {}
+    }
+}

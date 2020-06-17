@@ -55,9 +55,14 @@ public class InfoMediaDevice extends MediaDevice {
 
     @Override
     public Drawable getIcon() {
-        //TODO(b/120669861): Return remote device icon uri once api is ready.
-        return BluetoothUtils.buildBtRainbowDrawable(mContext,
-                mContext.getDrawable(getDrawableResId()), getId().hashCode());
+        final Drawable drawable = getIconWithoutBackground();
+        setColorFilter(drawable);
+        return BluetoothUtils.buildAdvancedDrawable(mContext, drawable);
+    }
+
+    @Override
+    public Drawable getIconWithoutBackground() {
+        return mContext.getDrawable(getDrawableResId());
     }
 
     @VisibleForTesting
@@ -68,9 +73,11 @@ public class InfoMediaDevice extends MediaDevice {
                 resId = R.drawable.ic_media_group_device;
                 break;
             case TYPE_REMOTE_TV:
+                resId = R.drawable.ic_media_display_device;
+                break;
             case TYPE_REMOTE_SPEAKER:
             default:
-                resId = R.drawable.ic_media_device;
+                resId = R.drawable.ic_media_speaker_device;
                 break;
         }
         return resId;

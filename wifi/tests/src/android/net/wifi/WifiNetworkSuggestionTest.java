@@ -38,6 +38,7 @@ public class WifiNetworkSuggestionTest {
     private static final String TEST_PRESHARED_KEY = "Test123";
     private static final String TEST_FQDN = "fqdn";
     private static final String TEST_WAPI_CERT_SUITE = "suite";
+    private static final String TEST_DOMAIN_SUFFIX_MATCH = "domainSuffixMatch";
 
     /**
      * Validate correctness of WifiNetworkSuggestion object created by
@@ -56,7 +57,7 @@ public class WifiNetworkSuggestionTest {
                 .get(WifiConfiguration.KeyMgmt.NONE));
         assertTrue(suggestion.isAppInteractionRequired);
         assertFalse(suggestion.isUserInteractionRequired);
-        assertEquals(WifiConfiguration.METERED_OVERRIDE_NOT_METERED,
+        assertEquals(WifiConfiguration.METERED_OVERRIDE_NONE,
                 suggestion.wifiConfiguration.meteredOverride);
         assertEquals(-1, suggestion.wifiConfiguration.priority);
         assertFalse(suggestion.isUserAllowedToManuallyConnect);
@@ -86,7 +87,7 @@ public class WifiNetworkSuggestionTest {
                 suggestion.wifiConfiguration.preSharedKey);
         assertTrue(suggestion.isAppInteractionRequired);
         assertFalse(suggestion.isUserInteractionRequired);
-        assertEquals(WifiConfiguration.METERED_OVERRIDE_NOT_METERED,
+        assertEquals(WifiConfiguration.METERED_OVERRIDE_NONE,
                 suggestion.wifiConfiguration.meteredOverride);
         assertEquals(0, suggestion.wifiConfiguration.priority);
         assertFalse(suggestion.isUserAllowedToManuallyConnect);
@@ -117,6 +118,36 @@ public class WifiNetworkSuggestionTest {
         assertFalse(suggestion.isAppInteractionRequired);
         assertTrue(suggestion.isUserInteractionRequired);
         assertEquals(WifiConfiguration.METERED_OVERRIDE_METERED,
+                suggestion.wifiConfiguration.meteredOverride);
+        assertEquals(-1, suggestion.wifiConfiguration.priority);
+        assertTrue(suggestion.isUserAllowedToManuallyConnect);
+        assertFalse(suggestion.isInitialAutoJoinEnabled);
+    }
+
+    /**
+     * Validate correctness of WifiNetworkSuggestion object created by
+     * {@link WifiNetworkSuggestion.Builder#build()} for WPA_PSK network which requires
+     * user interaction and is not metered.
+     */
+    @Test
+    public void
+            testWifiNetworkSuggestionBuilderForWpa2PskNetworkWithNotMeteredAndReqUserInteraction() {
+        WifiNetworkSuggestion suggestion = new WifiNetworkSuggestion.Builder()
+                .setSsid(TEST_SSID)
+                .setWpa2Passphrase(TEST_PRESHARED_KEY)
+                .setIsUserInteractionRequired(true)
+                .setIsInitialAutojoinEnabled(false)
+                .setIsMetered(false)
+                .build();
+
+        assertEquals("\"" + TEST_SSID + "\"", suggestion.wifiConfiguration.SSID);
+        assertTrue(suggestion.wifiConfiguration.allowedKeyManagement
+                .get(WifiConfiguration.KeyMgmt.WPA_PSK));
+        assertEquals("\"" + TEST_PRESHARED_KEY + "\"",
+                suggestion.wifiConfiguration.preSharedKey);
+        assertFalse(suggestion.isAppInteractionRequired);
+        assertTrue(suggestion.isUserInteractionRequired);
+        assertEquals(WifiConfiguration.METERED_OVERRIDE_NOT_METERED,
                 suggestion.wifiConfiguration.meteredOverride);
         assertEquals(-1, suggestion.wifiConfiguration.priority);
         assertTrue(suggestion.isUserAllowedToManuallyConnect);
@@ -178,6 +209,8 @@ public class WifiNetworkSuggestionTest {
         WifiEnterpriseConfig enterpriseConfig = new WifiEnterpriseConfig();
         enterpriseConfig.setEapMethod(WifiEnterpriseConfig.Eap.TLS);
         enterpriseConfig.setPhase2Method(WifiEnterpriseConfig.Phase2.GTC);
+        enterpriseConfig.setCaCertificate(FakeKeys.CA_CERT0);
+        enterpriseConfig.setDomainSuffixMatch(TEST_DOMAIN_SUFFIX_MATCH);
 
         WifiNetworkSuggestion suggestion = new WifiNetworkSuggestion.Builder()
                 .setSsid(TEST_SSID)
@@ -197,6 +230,40 @@ public class WifiNetworkSuggestionTest {
         // here.
         assertTrue(suggestion.isUserAllowedToManuallyConnect);
         assertTrue(suggestion.isInitialAutoJoinEnabled);
+    }
+
+    /**
+     * Ensure create enterprise suggestion requires CA, when CA certificate is missing, will throw
+     * an exception.
+     */
+    @Test (expected = IllegalArgumentException.class)
+    public void testWifiNetworkSuggestionBuilderForEapNetworkWithoutCa() {
+        WifiEnterpriseConfig enterpriseConfig = new WifiEnterpriseConfig();
+        enterpriseConfig.setEapMethod(WifiEnterpriseConfig.Eap.TLS);
+        enterpriseConfig.setPhase2Method(WifiEnterpriseConfig.Phase2.GTC);
+        enterpriseConfig.setDomainSuffixMatch(TEST_DOMAIN_SUFFIX_MATCH);
+
+        WifiNetworkSuggestion suggestion = new WifiNetworkSuggestion.Builder()
+                .setSsid(TEST_SSID)
+                .setWpa2EnterpriseConfig(enterpriseConfig)
+                .build();
+    }
+
+    /**
+     * Ensure create enterprise suggestion requires CA, when both domain suffix and alt subject
+     * match are missing, will throw an exception.
+     */
+    @Test (expected = IllegalArgumentException.class)
+    public void testWifiNetworkSuggestionBuilderForEapNetworkWithoutMatch() {
+        WifiEnterpriseConfig enterpriseConfig = new WifiEnterpriseConfig();
+        enterpriseConfig.setEapMethod(WifiEnterpriseConfig.Eap.TLS);
+        enterpriseConfig.setPhase2Method(WifiEnterpriseConfig.Phase2.GTC);
+        enterpriseConfig.setCaCertificate(FakeKeys.CA_CERT0);
+
+        WifiNetworkSuggestion suggestion = new WifiNetworkSuggestion.Builder()
+                .setSsid(TEST_SSID)
+                .setWpa3EnterpriseConfig(enterpriseConfig)
+                .build();
     }
 
     /**

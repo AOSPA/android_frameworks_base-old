@@ -330,6 +330,7 @@ public class FingerprintService extends BiometricServiceBase {
         @Override
         public void addLockoutResetCallback(final IBiometricServiceLockoutResetCallback callback)
                 throws RemoteException {
+            checkPermission(USE_BIOMETRIC_INTERNAL);
             FingerprintService.super.addLockoutResetCallback(callback);
         }
 
@@ -411,9 +412,9 @@ public class FingerprintService extends BiometricServiceBase {
         }
 
         @Override // Binder call
-        public long getAuthenticatorId() {
+        public long getAuthenticatorId(int callingUserId) {
             checkPermission(USE_BIOMETRIC_INTERNAL);
-            return FingerprintService.this.getAuthenticatorId();
+            return FingerprintService.this.getAuthenticatorId(callingUserId);
         }
 
         @Override // Binder call

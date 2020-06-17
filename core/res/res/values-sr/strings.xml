@@ -204,8 +204,8 @@
     <string name="printing_disabled_by" msgid="3517499806528864633">"Штампање је онемогућила апликација <xliff:g id="OWNER_APP">%s</xliff:g>."</string>
     <string name="personal_apps_suspension_title" msgid="7561416677884286600">"Укључите пословни профил"</string>
     <string name="personal_apps_suspension_text" msgid="6115455688932935597">"Личне апликације су блокиране док не укључите пословни профил"</string>
-    <string name="personal_apps_suspension_tomorrow_text" msgid="6322541302153673994">"Личне апликације ће бити блокиране сутра"</string>
-    <string name="personal_apps_suspended_turn_profile_on" msgid="4278188538997940785">"Укључи пословни профил"</string>
+    <string name="personal_apps_suspension_soon_text" msgid="8123898693479590">"Личне апликације ће бити блокиране: <xliff:g id="DATE">%1$s</xliff:g> у <xliff:g id="TIME">%2$s</xliff:g>. ИТ администратор не дозвољава да пословни профил буде искључен дуже од <xliff:g id="NUMBER">%3$d</xliff:g> дана."</string>
+    <string name="personal_apps_suspended_turn_profile_on" msgid="2758012869627513689">"Укључи"</string>
     <string name="me" msgid="6207584824693813140">"Ја"</string>
     <string name="power_dialog" product="tablet" msgid="8333207765671417261">"Опције за таблет"</string>
     <string name="power_dialog" product="tv" msgid="7792839006640933763">"Опције Android TV-а"</string>
@@ -539,7 +539,7 @@
     <string name="permdesc_imagesWrite" msgid="5195054463269193317">"Дозвољава апликацији да мења колекцију слика."</string>
     <string name="permlab_mediaLocation" msgid="7368098373378598066">"читање локација из медијске колекције"</string>
     <string name="permdesc_mediaLocation" msgid="597912899423578138">"Дозвољава апликацији да чита локације из медијске колекције."</string>
-    <string name="biometric_dialog_default_title" msgid="5284880398508155088">"Потврдите да сте то ви"</string>
+    <string name="biometric_dialog_default_title" msgid="55026799173208210">"Потврдите свој идентитет"</string>
     <string name="biometric_error_hw_unavailable" msgid="2494077380540615216">"Биометријски хардвер није доступан"</string>
     <string name="biometric_error_user_canceled" msgid="6732303949695293730">"Потврда идентитета је отказана"</string>
     <string name="biometric_not_recognized" msgid="5106687642694635888">"Није препознато"</string>
@@ -1149,7 +1149,7 @@
     <string name="whichViewApplicationNamed" msgid="415164730629690105">"Отворите помоћу апликације %1$s"</string>
     <string name="whichViewApplicationLabel" msgid="7367556735684742409">"Отвори"</string>
     <string name="whichOpenHostLinksWith" msgid="7645631470199397485">"Отварајте <xliff:g id="HOST">%1$s</xliff:g> линкове помоћу"</string>
-    <string name="whichOpenLinksWith" msgid="1120936181362907258">"Отваратеј линкове помоћу"</string>
+    <string name="whichOpenLinksWith" msgid="1120936181362907258">"Отварај линкове помоћу"</string>
     <string name="whichOpenLinksWithApp" msgid="6917864367861910086">"Отварајте линкове помоћу апликације <xliff:g id="APPLICATION">%1$s</xliff:g>"</string>
     <string name="whichOpenHostLinksWithApp" msgid="2401668560768463004">"Отварајте <xliff:g id="HOST">%1$s</xliff:g> линкове помоћу апликације <xliff:g id="APPLICATION">%2$s</xliff:g>"</string>
     <string name="whichGiveAccessToApplicationLabel" msgid="7805857277166106236">"Дозволи приступ"</string>
@@ -1361,17 +1361,20 @@
     <string name="ext_media_checking_notification_title" msgid="8299199995416510094">"Проверава се <xliff:g id="NAME">%s</xliff:g>…"</string>
     <string name="ext_media_checking_notification_message" msgid="2231566971425375542">"Прегледа се актуелни садржај"</string>
     <string name="ext_media_new_notification_title" msgid="3517407571407687677">"Нови/а <xliff:g id="NAME">%s</xliff:g>"</string>
+    <string name="ext_media_new_notification_title" product="automotive" msgid="9085349544984742727">"<xliff:g id="NAME">%s</xliff:g> не ради"</string>
     <string name="ext_media_new_notification_message" msgid="6095403121990786986">"Додирните да бисте подесили"</string>
-    <string name="ext_media_new_notification_message" product="automotive" msgid="8488046026389025694"></string>
+    <string name="ext_media_new_notification_message" product="automotive" msgid="5140127881613227162">"Можда морате да реформатирате уређај. Додирните да бисте избацили."</string>
     <string name="ext_media_ready_notification_message" msgid="777258143284919261">"За пренос слика и медија"</string>
     <string name="ext_media_unmountable_notification_title" msgid="4895444667278979910">"Проблем са: <xliff:g id="NAME">%s</xliff:g>"</string>
+    <string name="ext_media_unmountable_notification_title" product="automotive" msgid="3142723758949023280">"<xliff:g id="NAME">%s</xliff:g> не ради"</string>
     <string name="ext_media_unmountable_notification_message" msgid="3256290114063126205">"Додирните да бисте исправили"</string>
     <string name="ext_media_unmountable_notification_message" product="tv" msgid="3003611129979934633">"Медиј <xliff:g id="NAME">%s</xliff:g> је оштећен. Изаберите да га поправите."</string>
-    <string name="ext_media_unmountable_notification_message" product="automotive" msgid="5622514265490819212"></string>
+    <string name="ext_media_unmountable_notification_message" product="automotive" msgid="2274596120715020680">"Можда морате да реформатирате уређај. Додирните да бисте избацили."</string>
     <string name="ext_media_unsupported_notification_title" msgid="4358280700537030333">"Уређај <xliff:g id="NAME">%s</xliff:g> није подржан"</string>
+    <string name="ext_media_unsupported_notification_title" product="automotive" msgid="6004193172658722381">"<xliff:g id="NAME">%s</xliff:g> не ради"</string>
     <string name="ext_media_unsupported_notification_message" msgid="917738524888367560">"Овај уређај не подржава овај уређај <xliff:g id="NAME">%s</xliff:g>. Додирните да бисте подесили подржани формат."</string>
     <string name="ext_media_unsupported_notification_message" product="tv" msgid="7744945987775645685">"Овај уређај не подржава овај медиј (<xliff:g id="NAME">%s</xliff:g>). Изаберите да га подесите у подржаном формату."</string>
-    <string name="ext_media_unsupported_notification_message" product="automotive" msgid="7657357085538772913">"Овај уређај не подржава: <xliff:g id="NAME">%s</xliff:g>."</string>
+    <string name="ext_media_unsupported_notification_message" product="automotive" msgid="3412494732736336330">"Можда морате да реформатирате уређај"</string>
     <string name="ext_media_badremoval_notification_title" msgid="4114625551266196872">"Уређај <xliff:g id="NAME">%s</xliff:g> је неочекивано уклоњен"</string>
     <string name="ext_media_badremoval_notification_message" msgid="1986514704499809244">"Избаците медијум пре него што га уклоните да не бисте изгубили садржај"</string>
     <string name="ext_media_nomedia_notification_title" msgid="742671636376975890">"<xliff:g id="NAME">%s</xliff:g> је уклоњен/а"</string>
@@ -1566,9 +1569,7 @@
     <string name="launchBrowserDefault" msgid="6328349989932924119">"Желите ли да покренете прегледач?"</string>
     <string name="SetupCallDefault" msgid="5581740063237175247">"Желите ли да прихватите позив?"</string>
     <string name="activity_resolver_use_always" msgid="5575222334666843269">"Увек"</string>
-    <string name="activity_resolver_set_always" msgid="4142825808921411476">"Подеси на „увек отварај“"</string>
     <string name="activity_resolver_use_once" msgid="948462794469672658">"Само једном"</string>
-    <string name="activity_resolver_app_settings" msgid="6758823206817748026">"Подешавања"</string>
     <string name="activity_resolver_work_profiles_support" msgid="4071345609235361269">"%1$s не подржава пословни профил"</string>
     <string name="default_audio_route_name" product="tablet" msgid="367936735632195517">"Таблет"</string>
     <string name="default_audio_route_name" product="tv" msgid="4908971385068087367">"ТВ"</string>
@@ -1647,8 +1648,6 @@
     <string name="accessibility_shortcut_multiple_service_warning_title" msgid="8417489297036013065">"Желите ли да укључите функције приступачности?"</string>
     <string name="accessibility_shortcut_multiple_service_warning" msgid="3740723309483706911">"Ако задржите оба тастера за јачину звука пар секунди, укључиће се функције приступачности. То може да промени начин рада уређаја.\n\nПостојеће функције:\n<xliff:g id="SERVICE">%1$s</xliff:g>\nМожете да промените изабране функције у одељку Подешавања &gt; Приступачност."</string>
     <string name="accessibility_shortcut_multiple_service_list" msgid="6935581470716541531">"	• <xliff:g id="SERVICE">%1$s</xliff:g>\n"</string>
-    <string name="accessibility_shortcut_talkback_warning_title" msgid="3410100187167382427">"Желите ли да укључите TalkBack?"</string>
-    <string name="accessibility_shortcut_talkback_warning" msgid="8412954203626349109">"Ако задржите оба тастера за јачину звука пар секунди, укључује се TalkBack, читач екрана који је користан за слепе и слабовиде особе. TalkBack потпуно мења начин рада уређаја.\n\nМожете да промените функцију на коју се односи ова пречица у одељку Подешавања &gt; Приступачност."</string>
     <string name="accessibility_shortcut_single_service_warning_title" msgid="2819109500943271385">"Желите ли да укључите услугу <xliff:g id="SERVICE">%1$s</xliff:g>?"</string>
     <string name="accessibility_shortcut_single_service_warning" msgid="6363127705112844257">"Ако задржите оба тастера за јачину звука пар секунди, укључује се <xliff:g id="SERVICE">%1$s</xliff:g>, функција приступачности. То може да промени начин рада уређаја.\n\nМожете да промените функцију на коју се односи ова пречица у одељку Подешавања &gt; Приступачност."</string>
     <string name="accessibility_shortcut_on" msgid="5463618449556111344">"Укључи"</string>
@@ -2087,7 +2086,7 @@
     <string name="conversation_title_fallback_group_chat" msgid="456073374993104303">"Групна конверзација"</string>
     <string name="unread_convo_overflow" msgid="920517615597353833">"<xliff:g id="MAX_UNREAD_COUNT">%1$d</xliff:g>+"</string>
     <string name="resolver_personal_tab" msgid="2051260504014442073">"Лично"</string>
-    <string name="resolver_work_tab" msgid="2690019516263167035">"Пословни"</string>
+    <string name="resolver_work_tab" msgid="2690019516263167035">"Пословно"</string>
     <string name="resolver_personal_tab_accessibility" msgid="5739524949153091224">"Лични приказ"</string>
     <string name="resolver_work_tab_accessibility" msgid="4753168230363802734">"Приказ за посао"</string>
     <string name="resolver_cant_share_with_work_apps" msgid="637686613606502219">"Не можете да делите овај садржај помоћу апликација за посао"</string>
@@ -2100,7 +2099,7 @@
     <string name="resolver_cant_access_personal_apps_explanation" msgid="2298773629302296519">"ИТ администратор вам не дозвољава да отворите овај садржај помоћу апликација на личном профилу"</string>
     <string name="resolver_turn_on_work_apps" msgid="884910835250037247">"Пословни профил је паузиран"</string>
     <string name="resolver_switch_on_work" msgid="2873009160846966379">"Укључи"</string>
-    <string name="resolver_no_work_apps_available_share" msgid="7933949011797699505">"Ниједна апликација за посао не може да подржава овај садржај"</string>
+    <string name="resolver_no_work_apps_available_share" msgid="7933949011797699505">"Ниједна апликација за посао не подржава овај садржај"</string>
     <string name="resolver_no_work_apps_available_resolve" msgid="1244844292366099399">"Ниједна апликација за посао не може да отвори овај садржај"</string>
     <string name="resolver_no_personal_apps_available_share" msgid="5639102815174748732">"Ниједна лична апликација не може да подржава овај садржај"</string>
     <string name="resolver_no_personal_apps_available_resolve" msgid="5120671970531446978">"Ниједна лична апликација не може да отвори овај садржај"</string>

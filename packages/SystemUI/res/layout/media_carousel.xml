@@ -16,20 +16,39 @@
   -->
 
 <!-- Carousel for media controls -->
-<HorizontalScrollView
+<FrameLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:padding="@dimen/qs_media_padding"
-    android:scrollbars="none"
-    android:visibility="gone"
+    android:clipChildren="false"
+    android:clipToPadding="false"
     >
-    <LinearLayout
-        android:id="@+id/media_carousel"
+    <com.android.systemui.media.UnboundHorizontalScrollView
+        android:id="@+id/media_carousel_scroller"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="horizontal"
+        android:scrollbars="none"
+        android:clipChildren="false"
+        android:clipToPadding="false"
         >
-        <!-- QSMediaPlayers will be added here dynamically -->
-    </LinearLayout>
-</HorizontalScrollView>
+        <LinearLayout
+            android:id="@+id/media_carousel"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:clipChildren="false"
+            android:clipToPadding="false"
+            >
+            <!-- QSMediaPlayers will be added here dynamically -->
+        </LinearLayout>
+    </com.android.systemui.media.UnboundHorizontalScrollView>
+    <com.android.systemui.qs.PageIndicator
+        android:id="@+id/media_page_indicator"
+        android:layout_width="wrap_content"
+        android:layout_height="48dp"
+        android:layout_marginBottom="4dp"
+        android:layout_gravity="center_horizontal|bottom"
+        android:gravity="center"
+        android:tint="@color/media_primary_text"
+    />
+</FrameLayout>

@@ -246,7 +246,7 @@ public final class OverlayManagerService extends SystemService {
                     new File(Environment.getDataSystemDirectory(), "overlays.xml"), "overlays");
             mPackageManager = new PackageManagerHelperImpl(context);
             mUserManager = UserManagerService.getInstance();
-            IdmapManager im = new IdmapManager(mPackageManager);
+            IdmapManager im = new IdmapManager(IdmapDaemon.getInstance(), mPackageManager);
             mSettings = new OverlayManagerSettings();
             mImpl = new OverlayManagerServiceImpl(mPackageManager, im, mSettings,
                     OverlayConfig.getSystemInstance(), getDefaultOverlayPackages(),

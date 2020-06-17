@@ -68,14 +68,14 @@ const int FIELD_ID_END_BUCKET_ELAPSED_MILLIS = 6;
 
 CountMetricProducer::CountMetricProducer(
         const ConfigKey& key, const CountMetric& metric, const int conditionIndex,
-        const sp<ConditionWizard>& wizard, const int64_t timeBaseNs, const int64_t startTimeNs,
-
+        const vector<ConditionState>& initialConditionCache, const sp<ConditionWizard>& wizard,
+        const int64_t timeBaseNs, const int64_t startTimeNs,
         const unordered_map<int, shared_ptr<Activation>>& eventActivationMap,
         const unordered_map<int, vector<shared_ptr<Activation>>>& eventDeactivationMap,
         const vector<int>& slicedStateAtoms,
         const unordered_map<int, unordered_map<int, int64_t>>& stateGroupMap)
-    : MetricProducer(metric.id(), key, timeBaseNs, conditionIndex, wizard, eventActivationMap,
-                     eventDeactivationMap, slicedStateAtoms, stateGroupMap) {
+    : MetricProducer(metric.id(), key, timeBaseNs, conditionIndex, initialConditionCache, wizard,
+                     eventActivationMap, eventDeactivationMap, slicedStateAtoms, stateGroupMap) {
     if (metric.has_bucket()) {
         mBucketSizeNs =
                 TimeUnitToBucketSizeInMillisGuardrailed(key.GetUid(), metric.bucket()) * 1000000;
@@ -122,11 +122,11 @@ CountMetricProducer::~CountMetricProducer() {
 }
 
 void CountMetricProducer::onStateChanged(const int64_t eventTimeNs, const int32_t atomId,
-                                         const HashableDimensionKey& primaryKey, int oldState,
-                                         int newState) {
+                                         const HashableDimensionKey& primaryKey,
+                                         const FieldValue& oldState, const FieldValue& newState) {
     VLOG("CountMetric %lld onStateChanged time %lld, State%d, key %s, %d -> %d",
          (long long)mMetricId, (long long)eventTimeNs, atomId, primaryKey.toString().c_str(),
-         oldState, newState);
+         oldState.mValue.int_value, newState.mValue.int_value);
 }
 
 void CountMetricProducer::dumpStatesLocked(FILE* out, bool verbose) const {

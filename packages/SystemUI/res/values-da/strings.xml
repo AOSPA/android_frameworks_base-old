@@ -89,8 +89,7 @@
     <string name="screenshot_dismiss_ui_description" msgid="934736855340147968">"Luk screenshot"</string>
     <string name="screenshot_preview_description" msgid="7606510140714080474">"Forhåndsvisning af screenshot"</string>
     <string name="screenrecord_name" msgid="2596401223859996572">"Skærmoptagelse"</string>
-    <!-- no translation found for screenrecord_background_processing_label (7244617554884238898) -->
-    <skip />
+    <string name="screenrecord_background_processing_label" msgid="7244617554884238898">"Behandler skærmoptagelse"</string>
     <string name="screenrecord_channel_description" msgid="4147077128486138351">"Konstant notifikation om skærmoptagelse"</string>
     <string name="screenrecord_start_label" msgid="1750350278888217473">"Vil du starte optagelse?"</string>
     <string name="screenrecord_description" msgid="1123231719680353736">"Når du optager, kan Android-systemet registrere følsomme oplysninger, der er synlige på din skærm, eller som afspilles på din enhed. Dette inkluderer adgangskoder, betalingsoplysninger, fotos, meddelelser og lyd."</string>
@@ -511,10 +510,9 @@
     <string name="clear_all_notifications_text" msgid="348312370303046130">"Ryd alle"</string>
     <string name="manage_notifications_text" msgid="6885645344647733116">"Administrer"</string>
     <string name="manage_notifications_history_text" msgid="57055985396576230">"Historik"</string>
-    <!-- no translation found for notification_section_header_incoming (5295312809341711367) -->
-    <skip />
-    <string name="notification_section_header_gentle" msgid="3044910806569985386">"Lydløse notifikationer"</string>
-    <string name="notification_section_header_alerting" msgid="3168140660646863240">"Notifikationer med vibration eller lyd"</string>
+    <string name="notification_section_header_incoming" msgid="5295312809341711367">"Indgående"</string>
+    <string name="notification_section_header_gentle" msgid="6804099527336337197">"Lydløs"</string>
+    <string name="notification_section_header_alerting" msgid="5581175033680477651">"Notifikationer"</string>
     <string name="notification_section_header_conversations" msgid="821834744538345661">"Samtaler"</string>
     <string name="accessibility_notification_section_header_gentle_clear_all" msgid="6490207897764933919">"Ryd alle lydløse notifikationer"</string>
     <string name="dnd_suppressing_shade_text" msgid="5588252250634464042">"Notifikationer er sat på pause af Forstyr ikke"</string>
@@ -594,19 +592,21 @@
     <string name="volume_odi_captions_hint_enable" msgid="2073091194012843195">"aktivér"</string>
     <string name="volume_odi_captions_hint_disable" msgid="2518846326748183407">"deaktiver"</string>
     <string name="accessibility_output_chooser" msgid="7807898688967194183">"Skift enhed til lydudgang"</string>
-    <string name="screen_pinning_title" msgid="7357611095909618178">"Skærmen er fastgjort"</string>
+    <string name="screen_pinning_title" msgid="9058007390337841305">"Appen er fastgjort"</string>
     <string name="screen_pinning_description" msgid="8699395373875667743">"Dette fastholder skærmen i visningen, indtil du frigør den. Tryk på Tilbage og Overblik, og hold fingeren nede for at frigøre skærmen."</string>
     <string name="screen_pinning_description_recents_invisible" msgid="4564466648700390037">"Dette fastholder skærmen i visningen, indtil du frigør den. Hold Tilbage og Startskærm nede for at frigøre skærmen."</string>
     <string name="screen_pinning_description_gestural" msgid="7246323931831232068">"Dette fastholder skærmen i visningen, indtil du frigør den. Stryg opad, og hold fingeren nede for at frigøre den."</string>
     <string name="screen_pinning_description_accessible" msgid="7386449191953535332">"Dette fastholder skærmen i visningen, indtil du frigør den. Tryk på Tilbage, og hold fingeren nede for at frigøre skærmen."</string>
     <string name="screen_pinning_description_recents_invisible_accessible" msgid="2857071808674481986">"Dette fastholder skærmen i visningen, indtil du frigør den. Hold Startskærm nede for at frigøre skærmen."</string>
-    <string name="screen_pinning_toast" msgid="2083944237147005811">"Hold knapperne Tilbage og Oversigt nede for at frigøre skærmen"</string>
-    <string name="screen_pinning_toast_recents_invisible" msgid="6343770487795352573">"Hold knapperne Tilbage og Hjem nede for at frigøre skærmen"</string>
-    <string name="screen_pinning_toast_gesture_nav" msgid="2884536903398445645">"Stryg opad, og hold fingeren nede for at frigøre denne skærm"</string>
+    <string name="screen_pinning_exposes_personal_data" msgid="8189852022981524789">"Personoplysninger er muligvis tilgængelige (f.eks. kontakter og mailindhold)."</string>
+    <string name="screen_pinning_can_open_other_apps" msgid="7529756813231421455">"En fastgjort app kan åbne andre apps."</string>
+    <string name="screen_pinning_toast" msgid="8177286912533744328">"Du kan frigøre denne app ved at holde knapperne Tilbage og Oversigt nede"</string>
+    <string name="screen_pinning_toast_recents_invisible" msgid="6850978077443052594">"Du kan frigøre denne app ved at holde knapperne Tilbage og Hjem nede"</string>
+    <string name="screen_pinning_toast_gesture_nav" msgid="170699893395336705">"Du kan frigøre denne app ved at stryge opad og holde fingeren nede"</string>
     <string name="screen_pinning_positive" msgid="3285785989665266984">"OK"</string>
     <string name="screen_pinning_negative" msgid="6882816864569211666">"Nej tak"</string>
-    <string name="screen_pinning_start" msgid="5695091877402422575">"Skærmen blev fastgjort"</string>
-    <string name="screen_pinning_exit" msgid="5114993350662745840">"Skærmen blev frigjort"</string>
+    <string name="screen_pinning_start" msgid="7483998671383371313">"Appen er fastgjort"</string>
+    <string name="screen_pinning_exit" msgid="4553787518387346893">"Appen er frigjort"</string>
     <string name="quick_settings_reset_confirmation_title" msgid="463533331480997595">"Vil du skjule <xliff:g id="TILE_LABEL">%1$s</xliff:g>?"</string>
     <string name="quick_settings_reset_confirmation_message" msgid="2320586180785674186">"Den vises igen, næste gang du aktiverer den i indstillingerne."</string>
     <string name="quick_settings_reset_confirmation_button" msgid="3341477479055016776">"Skjul"</string>
@@ -709,16 +709,17 @@
     <string name="inline_turn_off_notifications" msgid="8543989584403106071">"Deaktiver notifikationer"</string>
     <string name="inline_keep_showing_app" msgid="4393429060390649757">"Vil du fortsætte med at se notifikationer fra denne app?"</string>
     <string name="notification_silence_title" msgid="8608090968400832335">"Lydløs"</string>
-    <string name="notification_alert_title" msgid="7629202599338071971">"Underretninger"</string>
+    <string name="notification_alert_title" msgid="3656229781017543655">"Standard"</string>
     <string name="notification_bubble_title" msgid="8330481035191903164">"Boble"</string>
-    <string name="notification_channel_summary_low" msgid="7300447764759926720">"Ingen lyde eller vibrationer, der forstyrrer dig."</string>
-    <string name="notification_channel_summary_default" msgid="3539949463907902037">"Fanger din opmærksomhed med lyd eller vibration."</string>
-    <string name="notification_channel_summary_default_with_bubbles" msgid="6298026344552480458">"Fanger din opmærksomhed med lyd eller vibration. Samtaler fra <xliff:g id="APP_NAME">%1$s</xliff:g> vises som standard i bobler."</string>
+    <string name="notification_channel_summary_low" msgid="4860617986908931158">"Ingen lyd eller vibration"</string>
+    <string name="notification_conversation_summary_low" msgid="1734433426085468009">"Ingen lyd eller vibration, og den vises længere nede i samtalesektionen"</string>
+    <string name="notification_channel_summary_default" msgid="3282930979307248890">"Kan ringe eller vibrere baseret på telefonens indstillinger"</string>
+    <string name="notification_channel_summary_default_with_bubbles" msgid="1782419896613644568">"Kan ringe eller vibrere baseret på telefonens indstillinger. Samtaler fra <xliff:g id="APP_NAME">%1$s</xliff:g> vises som standard i bobler."</string>
     <string name="notification_channel_summary_bubble" msgid="7235935211580860537">"Fastholder din opmærksomhed med en svævende genvej til indholdet."</string>
-    <string name="notification_channel_summary_priority" msgid="7415770044553264622">"Vises som en boble øverst i samtalesektionen."</string>
+    <string name="notification_channel_summary_priority" msgid="7952654515769021553">"Vises øverst i samtalesektionen, som en svævende boble og med profilbillede på låseskærmen"</string>
     <string name="notification_conversation_channel_settings" msgid="2409977688430606835">"Indstillinger"</string>
     <string name="notification_priority_title" msgid="2079708866333537093">"Prioritet"</string>
-    <string name="no_shortcut" msgid="7176375126961212514">"<xliff:g id="APP_NAME">%1$s</xliff:g> understøtter ikke samtalespecifikke indstillinger"</string>
+    <string name="no_shortcut" msgid="8257177117568230126">"<xliff:g id="APP_NAME">%1$s</xliff:g> understøtter ikke samtalefunktioner"</string>
     <string name="bubble_overflow_empty_title" msgid="3120029421991510842">"Ingen seneste bobler"</string>
     <string name="bubble_overflow_empty_subtitle" msgid="2030874469510497397">"Nye bobler og afviste bobler vises her"</string>
     <string name="notification_unblockable_desc" msgid="2073030886006190804">"Disse notifikationer kan ikke redigeres."</string>
@@ -777,7 +778,7 @@
     <string name="keyboard_key_dpad_left" msgid="8329738048908755640">"Venstre"</string>
     <string name="keyboard_key_dpad_right" msgid="6282105433822321767">"Højre"</string>
     <string name="keyboard_key_dpad_center" msgid="4079412840715672825">"Midtertast"</string>
-    <string name="keyboard_key_tab" msgid="4592772350906496730">"Tab-tast"</string>
+    <string name="keyboard_key_tab" msgid="4592772350906496730">"Tab"</string>
     <string name="keyboard_key_space" msgid="6980847564173394012">"Mellemrumstast"</string>
     <string name="keyboard_key_enter" msgid="8633362970109751646">"Enter"</string>
     <string name="keyboard_key_backspace" msgid="4095278312039628074">"Tilbagetast"</string>
@@ -991,10 +992,8 @@
     <string name="music_controls_no_title" msgid="4166497066552290938">"Ingen titel"</string>
     <string name="restart_button_description" msgid="6916116576177456480">"Tryk for at genstarte denne app, og gå til fuld skærm."</string>
     <string name="bubbles_settings_button_description" msgid="7324245408859877545">"Indstillinger for <xliff:g id="APP_NAME">%1$s</xliff:g>-bobler"</string>
-    <!-- no translation found for bubble_overflow_button_content_description (5523744621434300510) -->
-    <skip />
-    <!-- no translation found for bubble_accessibility_action_add_back (6217995665917123890) -->
-    <skip />
+    <string name="bubble_overflow_button_content_description" msgid="5523744621434300510">"Overløb"</string>
+    <string name="bubble_accessibility_action_add_back" msgid="6217995665917123890">"Føj til stak igen"</string>
     <string name="manage_bubbles_text" msgid="6856830436329494850">"Administrer"</string>
     <string name="bubble_content_description_single" msgid="5175160674436546329">"<xliff:g id="NOTIFICATION_TITLE">%1$s</xliff:g> fra <xliff:g id="APP_NAME">%2$s</xliff:g>"</string>
     <string name="bubble_content_description_stack" msgid="7907610717462651870">"<xliff:g id="NOTIFICATION_TITLE">%1$s</xliff:g> fra <xliff:g id="APP_NAME">%2$s</xliff:g> og <xliff:g id="BUBBLE_COUNT">%3$d</xliff:g> andre"</string>
@@ -1003,7 +1002,8 @@
     <string name="bubble_accessibility_action_move_top_right" msgid="6916868852433483569">"Flyt op til højre"</string>
     <string name="bubble_accessibility_action_move_bottom_left" msgid="6339015902495504715">"Flyt ned til venstre"</string>
     <string name="bubble_accessibility_action_move_bottom_right" msgid="7471571700628346212">"Flyt ned til højre"</string>
-    <string name="bubble_dismiss_text" msgid="7071770411580452911">"Afvis"</string>
+    <!-- no translation found for bubble_dismiss_text (1314082410868930066) -->
+    <skip />
     <string name="bubbles_dont_bubble_conversation" msgid="1033040343437428822">"Vis ikke samtaler i bobler"</string>
     <string name="bubbles_user_education_title" msgid="5547017089271445797">"Chat ved hjælp af bobler"</string>
     <string name="bubbles_user_education_description" msgid="1160281719576715211">"Nye samtaler vises som svævende ikoner eller bobler. Tryk for at åbne boblen. Træk for at flytte den."</string>
@@ -1014,23 +1014,33 @@
     <string name="notification_content_system_nav_changed" msgid="5077913144844684544">"Systemnavigationen blev opdateret. Gå til Indstillinger for at foretage ændringer."</string>
     <string name="notification_content_gesture_nav_available" msgid="4431460803004659888">"Gå til Indstillinger for at opdatere systemnavigationen"</string>
     <string name="inattentive_sleep_warning_title" msgid="3891371591713990373">"Standby"</string>
+    <string name="priority_onboarding_title" msgid="2893070698479227616">"Samtalen er angivet som prioritet"</string>
+    <string name="priority_onboarding_behavior" msgid="5342816047020432929">"Følgende gælder for prioriterede samtaler:"</string>
     <string name="priority_onboarding_show_at_top_text" msgid="1678400241025513541">"Vis i toppen af samtalesektionen"</string>
     <string name="priority_onboarding_show_avatar_text" msgid="5756291381124091508">"Vis profilbillede på låseskærm"</string>
     <string name="priority_onboarding_appear_as_bubble_text" msgid="4227039772250263122">"Vis som en boble oven på apps"</string>
     <string name="priority_onboarding_ignores_dnd_text" msgid="2918952762719600529">"Afbryd Forstyr ikke"</string>
     <string name="priority_onboarding_done_button_title" msgid="4569550984286506007">"OK"</string>
+    <string name="priority_onboarding_settings_button_title" msgid="6663601574303585927">"Indstillinger"</string>
     <string name="magnification_overlay_title" msgid="6584179429612427958">"Vindue med overlejret forstørrelse"</string>
     <string name="magnification_window_title" msgid="4863914360847258333">"Vindue med forstørrelse"</string>
     <string name="magnification_controls_title" msgid="8421106606708891519">"Vindue med forstørrelsesstyring"</string>
     <string name="quick_controls_title" msgid="6839108006171302273">"Enhedsstyring"</string>
-    <string name="quick_controls_subtitle" msgid="1667408093326318053">"Tilføj betjeningselementer på dine tilsluttede enheder"</string>
+    <string name="quick_controls_subtitle" msgid="1667408093326318053">"Tilføj styring af dine tilsluttede enheder"</string>
     <string name="quick_controls_setup_title" msgid="8901436655997849822">"Konfigurer enhedsstyring"</string>
     <string name="quick_controls_setup_subtitle" msgid="1681506617879773824">"Hold afbryderknappen nede for at få adgang til dine betjeningselementer"</string>
-    <string name="controls_providers_title" msgid="6879775889857085056">"Vælg en app for at tilføje betjeningselementer"</string>
+    <string name="controls_providers_title" msgid="6879775889857085056">"Vælg en app for at tilføje styring"</string>
     <plurals name="controls_number_of_favorites" formatted="false" msgid="1057347832073807380">
       <item quantity="one"><xliff:g id="NUMBER_1">%s</xliff:g> styringselement er tilføjet.</item>
       <item quantity="other"><xliff:g id="NUMBER_1">%s</xliff:g> styringselementer er tilføjet.</item>
     </plurals>
+    <string name="controls_removed" msgid="3731789252222856959">"Fjernet"</string>
+    <string name="accessibility_control_favorite" msgid="8694362691985545985">"Angivet som favorit"</string>
+    <string name="accessibility_control_favorite_position" msgid="54220258048929221">"Angivet som favorit. Position <xliff:g id="NUMBER">%d</xliff:g>"</string>
+    <string name="accessibility_control_not_favorite" msgid="1291760269563092359">"Fjernet fra favoritter"</string>
+    <string name="accessibility_control_change_favorite" msgid="2943178027582253261">"markér som favorit"</string>
+    <string name="accessibility_control_change_unfavorite" msgid="6997408061750740327">"fjern fra favoritter"</string>
+    <string name="accessibility_control_move" msgid="8980344493796647792">"Flyt til position <xliff:g id="NUMBER">%d</xliff:g>"</string>
     <string name="controls_favorite_default_title" msgid="967742178688938137">"Betjeningselementer"</string>
     <string name="controls_favorite_subtitle" msgid="6604402232298443956">"Vælg, hvilke indstillinger der skal være i menuen for afbryderknappen"</string>
     <string name="controls_favorite_rearrange" msgid="5616952398043063519">"Flyt rundt på styringselementer ved at holde dem nede og trække"</string>
@@ -1053,13 +1063,17 @@
     <string name="controls_structure_tooltip" msgid="4355922222944447867">"Stryg for at se mere"</string>
     <string name="controls_seeding_in_progress" msgid="3033855341410264148">"Indlæser anbefalinger"</string>
     <string name="controls_media_close_session" msgid="9023534788828414585">"Luk denne mediesession"</string>
+    <string name="controls_media_resume" msgid="1933520684481586053">"Genoptag"</string>
     <string name="controls_error_timeout" msgid="794197289772728958">"Inaktiv. Tjek appen"</string>
     <string name="controls_error_retryable" msgid="864025882878378470">"Fejl. Prøver igen…"</string>
-    <string name="controls_error_removed" msgid="6299213591234723805">"Enheden er fjernet"</string>
+    <string name="controls_error_removed" msgid="6675638069846014366">"Ikke fundet"</string>
+    <string name="controls_error_removed_title" msgid="1207794911208047818">"Styringselement ikke tilgængeligt"</string>
+    <string name="controls_error_removed_message" msgid="2885911717034750542">"Der kunne ikke skaffes adgang til <xliff:g id="DEVICE">%1$s</xliff:g>. Tjek <xliff:g id="APPLICATION">%2$s</xliff:g>-appen for at sikre at styringselementet stadig er tilgængeligt, og at appens indstillinger ikke er blevet ændret."</string>
+    <string name="controls_open_app" msgid="483650971094300141">"Åbn app"</string>
     <string name="controls_error_generic" msgid="352500456918362905">"Statussen kan ikke indlæses"</string>
     <string name="controls_error_failed" msgid="960228639198558525">"Der opstod en fejl. Prøv igen"</string>
     <string name="controls_in_progress" msgid="4421080500238215939">"I gang"</string>
     <string name="controls_added_tooltip" msgid="4842812921719153085">"Hold afbryderknappen nede for at se nye betjeningselementer"</string>
-    <string name="controls_menu_add" msgid="4447246119229920050">"Tilføj betjeningselementer"</string>
-    <string name="controls_menu_edit" msgid="890623986951347062">"Rediger betjeningselementer"</string>
+    <string name="controls_menu_add" msgid="4447246119229920050">"Tilføj styring"</string>
+    <string name="controls_menu_edit" msgid="890623986951347062">"Rediger styring"</string>
 </resources>
