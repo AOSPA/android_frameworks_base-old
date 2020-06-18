@@ -57,20 +57,19 @@
                 android:visibility="gone"
             />
         </FrameLayout>
-        <ImageView
-            android:id="@+id/mobile_type"
-            android:layout_height="wrap_content"
-            android:layout_width="wrap_content"
-            android:layout_gravity="center_vertical"
-            android:paddingStart="2.5dp"
-            android:paddingEnd="1dp"
-            android:visibility="gone" />
         <Space
             android:id="@+id/mobile_roaming_space"
             android:layout_height="match_parent"
             android:layout_width="@dimen/roaming_icon_start_padding"
             android:visibility="gone"
         />
+        <ImageView
+            android:id="@+id/mobile_inout"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="right|center|end"
+            android:layout_marginStart="2dp"
+            android:layout_marginEnd="0.5dp" />
         <FrameLayout
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -81,6 +80,10 @@
                 android:layout_width="wrap_content"
                 systemui:hasOverlappingRendering="false"
             />
+            <ImageView
+                android:id="@+id/mobile_type"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content" />
             <ImageView
                 android:id="@+id/mobile_roaming"
                 android:layout_width="wrap_content"
