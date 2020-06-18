@@ -114,6 +114,7 @@ import android.os.Trace;
 import android.os.UserHandle;
 import android.sysprop.DisplayProperties;
 import android.util.AndroidRuntimeException;
+import android.util.BoostFramework.ScrollOptimizer;
 import android.util.DisplayMetrics;
 import android.util.Log;
 import android.util.LongArray;
@@ -8003,6 +8004,7 @@ public final class ViewRootImpl implements ViewParent,
             long eventTime = q.mEvent.getEventTimeNano();
             long oldestEventTime = eventTime;
             if (q.mEvent instanceof MotionEvent) {
+                ScrollOptimizer.setSurface(mSurface);
                 MotionEvent me = (MotionEvent)q.mEvent;
                 if (me.getHistorySize() > 0) {
                     oldestEventTime = me.getHistoricalEventTimeNano(0);
