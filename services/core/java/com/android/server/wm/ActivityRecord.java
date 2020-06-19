@@ -2217,7 +2217,9 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
     }
 
     boolean isResizeable() {
-        return ActivityInfo.isResizeableMode(info.resizeMode) || info.supportsPictureInPicture();
+        return mAtmService.mForceResizableActivities
+                || ActivityInfo.isResizeableMode(info.resizeMode)
+                || info.supportsPictureInPicture();
     }
 
     /** @return whether this activity is non-resizeable or forced to be resizeable */
@@ -6483,14 +6485,15 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
 
     @Override
     public boolean matchParentBounds() {
-        if (super.matchParentBounds() && mCompatDisplayInsets == null) {
+        final Rect overrideBounds = getResolvedOverrideBounds();
+        if (overrideBounds.isEmpty()) {
             return true;
         }
-        // An activity in size compatibility mode may have resolved override bounds, so the exact
-        // bounds should also be checked. Otherwise IME window will show with offset. See
-        // {@link DisplayContent#isImeAttachedToApp}.
+        // An activity in size compatibility mode may have override bounds which equals to its
+        // parent bounds, so the exact bounds should also be checked to allow IME window to attach
+        // to the activity. See {@link DisplayContent#isImeAttachedToApp}.
         final WindowContainer parent = getParent();
-        return parent == null || parent.getBounds().equals(getResolvedOverrideBounds());
+        return parent == null || parent.getBounds().equals(overrideBounds);
     }
 
     @Override

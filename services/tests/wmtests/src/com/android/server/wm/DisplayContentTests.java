@@ -16,6 +16,7 @@
 
 package com.android.server.wm;
 
+import static android.app.WindowConfiguration.ACTIVITY_TYPE_RECENTS;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_STANDARD;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FREEFORM;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN;
@@ -79,6 +80,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doCallRealMethod;
 
 import android.annotation.SuppressLint;
 import android.app.ActivityTaskManager;
@@ -1231,11 +1233,39 @@ public class DisplayContentTests extends WindowTestsBase {
     }
 
     @Test
+    public void testRecentsNotRotatingWithFixedRotation() {
+        final DisplayRotation displayRotation = mDisplayContent.getDisplayRotation();
+        doCallRealMethod().when(displayRotation).updateRotationUnchecked(anyBoolean());
+        // Skip freezing so the unrelated conditions in updateRotationUnchecked won't disturb.
+        doNothing().when(mWm).startFreezingDisplay(anyInt(), anyInt(), any(), anyInt());
+
+        final ActivityRecord recentsActivity = createActivityRecord(mDisplayContent,
+                WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_RECENTS);
+        recentsActivity.setRequestedOrientation(SCREEN_ORIENTATION_PORTRAIT);
+
+        // Do not rotate if the recents animation is animating on top.
+        mDisplayContent.mFixedRotationTransitionListener.onStartRecentsAnimation(recentsActivity);
+        displayRotation.setRotation((displayRotation.getRotation() + 1) % 4);
+        assertFalse(displayRotation.updateRotationUnchecked(false));
+
+        // Rotation can be updated if the recents animation is finished.
+        mDisplayContent.mFixedRotationTransitionListener.onFinishRecentsAnimation(false);
+        assertTrue(displayRotation.updateRotationUnchecked(false));
+
+        // Rotation can be updated if the recents animation is animating but it is not on top, e.g.
+        // switching activities in different orientations by quickstep gesture.
+        mDisplayContent.mFixedRotationTransitionListener.onStartRecentsAnimation(recentsActivity);
+        mDisplayContent.setFixedRotationLaunchingAppUnchecked(mAppWindow.mActivityRecord);
+        displayRotation.setRotation((displayRotation.getRotation() + 1) % 4);
+        assertTrue(displayRotation.updateRotationUnchecked(false));
+    }
+
+    @Test
     public void testRemoteRotation() {
         DisplayContent dc = createNewDisplay();
 
         final DisplayRotation dr = dc.getDisplayRotation();
-        Mockito.doCallRealMethod().when(dr).updateRotationUnchecked(anyBoolean());
+        doCallRealMethod().when(dr).updateRotationUnchecked(anyBoolean());
         Mockito.doReturn(ROTATION_90).when(dr).rotationForOrientation(anyInt(), anyInt());
         final boolean[] continued = new boolean[1];
         // TODO(display-merge): Remove cast
@@ -1287,7 +1317,6 @@ public class DisplayContentTests extends WindowTestsBase {
     public void testGetOrCreateRootHomeTask_supportedSecondaryDisplay() {
         DisplayContent display = createNewDisplay();
         doReturn(true).when(display).supportsSystemDecorations();
-        doReturn(false).when(display).isUntrustedVirtualDisplay();
 
         // Remove the current home stack if it exists so a new one can be created below.
         TaskDisplayArea taskDisplayArea = display.getDefaultTaskDisplayArea();
@@ -1311,10 +1340,10 @@ public class DisplayContentTests extends WindowTestsBase {
     }
 
     @Test
-    public void testGetOrCreateRootHomeTask_untrustedVirtualDisplay() {
+    public void testGetOrCreateRootHomeTask_untrustedDisplay() {
         DisplayContent display = createNewDisplay();
         TaskDisplayArea taskDisplayArea = display.getDefaultTaskDisplayArea();
-        doReturn(true).when(display).isUntrustedVirtualDisplay();
+        doReturn(false).when(display).isTrusted();
 
         assertNull(taskDisplayArea.getRootHomeTask());
         assertNull(taskDisplayArea.getOrCreateRootHomeTask());
