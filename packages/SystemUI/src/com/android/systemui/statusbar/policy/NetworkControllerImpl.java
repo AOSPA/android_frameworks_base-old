@@ -1195,7 +1195,7 @@ public class NetworkControllerImpl extends BroadcastReceiver
                     res.getBoolean(R.bool.config_showRsrpSignalLevelforLTE);
             config.hideNoInternetState = res.getBoolean(R.bool.config_hideNoInternetState);
             config.showVolteIcon = res.getBoolean(R.bool.config_display_volte);
-
+            
             CarrierConfigManager configMgr = (CarrierConfigManager)
                     context.getSystemService(Context.CARRIER_CONFIG_SERVICE);
             // Handle specific carrier config values for the default data SIM

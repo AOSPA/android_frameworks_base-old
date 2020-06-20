@@ -60,6 +60,8 @@ import com.android.systemui.statusbar.policy.NetworkController.IconState;
 import com.android.systemui.statusbar.policy.NetworkController.SignalCallback;
 import com.android.systemui.statusbar.policy.NetworkControllerImpl.Config;
 import com.android.systemui.statusbar.policy.NetworkControllerImpl.SubscriptionDefaults;
+import com.android.systemui.Dependency;
+import com.android.systemui.tuner.TunerService;
 
 import java.io.PrintWriter;
 import java.util.BitSet;
@@ -72,7 +74,7 @@ import org.codeaurora.internal.NrConfigType;
 import org.codeaurora.internal.NrIconType;
 
 public class MobileSignalController extends SignalController<
-        MobileSignalController.MobileState, MobileSignalController.MobileIconGroup> {
+        MobileSignalController.MobileState, MobileSignalController.MobileIconGroup> implements TunerService.Tunable {
 
     // The message to display Nr5G icon gracfully by CarrierConfig timeout
     private static final int MSG_DISPLAY_GRACE = 1;
@@ -121,6 +123,10 @@ public class MobileSignalController extends SignalController<
 
     private ImsManager mImsManager;
     private ImsManager.Connector mImsManagerConnector;
+    
+    //volte status bar icon default state
+    private boolean mVolteIcon = false;
+
 
     // TODO: Reduce number of vars passed in, if we have the NetworkController, probably don't
     // need listener lists anymore.
@@ -143,6 +149,8 @@ public class MobileSignalController extends SignalController<
                 .toString();
         mNetworkNameDefault = getStringIfExists(
                 com.android.internal.R.string.lockscreen_carrier_default).toString();
+        
+        Dependency.get(TunerService.class).addTunable(this, "volte");
 
         mapIconSets();
 
@@ -414,6 +422,20 @@ public class MobileSignalController extends SignalController<
         queryImsState();
     }
 
+
+    @Override
+    public void onTuningChanged(String key, String newValue) {
+        switch (key) {
+            case "volte":
+                     mVolteIcon =
+                        TunerService.parseIntegerSwitch(newValue, false);
+                        notifyListenersIfNecessary();
+            default:
+                break;
+        }
+    }
+
+
     private void queryImsState() {
         TelephonyManager tm = mPhone.createForSubscriptionId(mSubscriptionInfo.getSubscriptionId());
         mCurrentState.voiceCapable = tm.isVolteAvailable();
@@ -489,7 +511,7 @@ public class MobileSignalController extends SignalController<
         showDataIcon &= mCurrentState.isDefault || dataDisabled;
         int typeIcon = (showDataIcon || mConfig.alwaysShowDataRatIcon
                 || mConfig.alwaysShowNetworkTypeIcon) ? icons.mDataType : 0;
-        int volteIcon = mConfig.showVolteIcon && isVolteSwitchOn() ? getVolteResId() : 0;
+        int volteIcon = mConfig.showVolteIcon && isVolteSwitchOn() && mVolteIcon ? getVolteResId() : 0;
         if ( mConfig.enableRatIconEnhancement ) {
             typeIcon = getEnhancementDataRatIcon();
         }
