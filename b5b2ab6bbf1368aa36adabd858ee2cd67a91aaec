@@ -1,0 +1,89 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "4fb70d63_692c7281",
+        "filename": "packages/SystemUI/res/values/pa_strings.xml",
+        "patchSetId": 1
+      },
+      "lineNbr": 84,
+      "author": {
+        "id": 1000012
+      },
+      "writtenOn": "2020-06-20T17:45:35Z",
+      "side": 1,
+      "message": "whitespace",
+      "revId": "b5b2ab6bbf1368aa36adabd858ee2cd67a91aaec",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "c7a30946_6c1cf70e",
+        "filename": "packages/SystemUI/src/com/android/systemui/statusbar/policy/MobileSignalController.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 126,
+      "author": {
+        "id": 1000012
+      },
+      "writtenOn": "2020-06-20T17:45:35Z",
+      "side": 1,
+      "message": "whitespace",
+      "revId": "b5b2ab6bbf1368aa36adabd858ee2cd67a91aaec",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "bd13d252_2987e6d8",
+        "filename": "packages/SystemUI/src/com/android/systemui/statusbar/policy/MobileSignalController.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 152,
+      "author": {
+        "id": 1000012
+      },
+      "writtenOn": "2020-06-20T17:45:35Z",
+      "side": 1,
+      "message": "whitespace",
+      "revId": "b5b2ab6bbf1368aa36adabd858ee2cd67a91aaec",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "4525500b_d48cd7a5",
+        "filename": "packages/SystemUI/src/com/android/systemui/statusbar/policy/NetworkControllerImpl.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 1198,
+      "author": {
+        "id": 1000012
+      },
+      "writtenOn": "2020-06-20T17:45:35Z",
+      "side": 1,
+      "message": "whitespace",
+      "revId": "b5b2ab6bbf1368aa36adabd858ee2cd67a91aaec",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "4b4e43c4_0f63cf1a",
+        "filename": "telephony/java/android/telephony/CarrierConfigManager.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 1470,
+      "author": {
+        "id": 1000012
+      },
+      "writtenOn": "2020-06-20T17:45:35Z",
+      "side": 1,
+      "message": "nothing changes here",
+      "revId": "b5b2ab6bbf1368aa36adabd858ee2cd67a91aaec",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    }
+  ]
+}
