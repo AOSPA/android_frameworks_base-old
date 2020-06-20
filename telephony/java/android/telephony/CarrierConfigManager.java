@@ -1467,7 +1467,7 @@ public class CarrierConfigManager {
      */
     public static final String KEY_SHOW_4G_FOR_3G_DATA_ICON_BOOL =
             "show_4g_for_3g_data_icon_bool";
-
+            
     /**
      * Boolean indicating if lte+ icon should be shown if available
      * @hide

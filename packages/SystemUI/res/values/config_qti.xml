@@ -34,5 +34,5 @@
     <bool name="config_showRsrpSignalLevelforLTE">false</bool>
     <bool name="config_alwaysShowTypeIcon">false</bool>
     <bool name="config_hideNoInternetState">false</bool>
-    <bool name="config_display_volte">false</bool>
+    <bool name="config_display_volte">true</bool>
 </resources>
