@@ -24,8 +24,8 @@ import static android.Manifest.permission.INTERACT_ACROSS_USERS_FULL;
 import static android.Manifest.permission.REMOVE_TASKS;
 import static android.Manifest.permission.START_ACTIVITIES_FROM_BACKGROUND;
 import static android.app.ActivityManager.INSTR_FLAG_DISABLE_HIDDEN_API_CHECKS;
+import static android.app.ActivityManager.INSTR_FLAG_DISABLE_ISOLATED_STORAGE;
 import static android.app.ActivityManager.INSTR_FLAG_DISABLE_TEST_API_CHECKS;
-import static android.app.ActivityManager.INSTR_FLAG_MOUNT_EXTERNAL_STORAGE_FULL;
 import static android.app.ActivityManager.PROCESS_STATE_LAST_ACTIVITY;
 import static android.app.ActivityManager.PROCESS_STATE_NONEXISTENT;
 import static android.app.ActivityManager.PROCESS_STATE_TOP;
@@ -15888,9 +15888,10 @@ public class ActivityManagerService extends IActivityManager.Stub
         }
         if (receivers != null && broadcastWhitelist != null) {
             for (int i = receivers.size() - 1; i >= 0; i--) {
-                final int uid = receivers.get(i).activityInfo.applicationInfo.uid;
-                if (uid >= Process.FIRST_APPLICATION_UID
-                        && Arrays.binarySearch(broadcastWhitelist, UserHandle.getAppId(uid)) < 0) {
+                final int receiverAppId = UserHandle.getAppId(
+                        receivers.get(i).activityInfo.applicationInfo.uid);
+                if (receiverAppId >= Process.FIRST_APPLICATION_UID
+                        && Arrays.binarySearch(broadcastWhitelist, receiverAppId) < 0) {
                     receivers.remove(i);
                 }
             }
@@ -16536,9 +16537,9 @@ public class ActivityManagerService extends IActivityManager.Stub
             // if a uid whitelist was provided, remove anything in the application space that wasn't
             // in it.
             for (int i = registeredReceivers.size() - 1; i >= 0; i--) {
-                final int uid = registeredReceivers.get(i).owningUid;
-                if (uid >= Process.FIRST_APPLICATION_UID
-                        && Arrays.binarySearch(broadcastWhitelist, UserHandle.getAppId(uid)) < 0) {
+                final int owningAppId = UserHandle.getAppId(registeredReceivers.get(i).owningUid);
+                if (owningAppId >= Process.FIRST_APPLICATION_UID
+                        && Arrays.binarySearch(broadcastWhitelist, owningAppId) < 0) {
                     registeredReceivers.remove(i);
                 }
             }
@@ -17011,8 +17012,9 @@ public class ActivityManagerService extends IActivityManager.Stub
                         "disable hidden API checks");
             }
 
+            // TODO(b/158750470): remove
             final boolean mountExtStorageFull = isCallerShell()
-                    && (flags & INSTR_FLAG_MOUNT_EXTERNAL_STORAGE_FULL) != 0;
+                    && (flags & INSTR_FLAG_DISABLE_ISOLATED_STORAGE) != 0;
 
             final long origId = Binder.clearCallingIdentity();
             // Instrumentation can kill and relaunch even persistent processes
@@ -17033,6 +17035,13 @@ public class ActivityManagerService extends IActivityManager.Stub
             activeInstr.mRunningProcesses.add(app);
             if (!mActiveInstrumentation.contains(activeInstr)) {
                 mActiveInstrumentation.add(activeInstr);
+            }
+
+            if ((flags & INSTR_FLAG_DISABLE_ISOLATED_STORAGE) != 0) {
+                // Allow OP_NO_ISOLATED_STORAGE app op for the package running instrumentation with
+                // --no-isolated-storage flag.
+                mAppOpsService.setMode(AppOpsManager.OP_NO_ISOLATED_STORAGE, ai.uid,
+                        ii.packageName, AppOpsManager.MODE_ALLOWED);
             }
             Binder.restoreCallingIdentity(origId);
         }
@@ -17124,6 +17133,9 @@ public class ActivityManagerService extends IActivityManager.Stub
 
             // Can't call out of the system process with a lock held, so post a message.
             if (instr.mUiAutomationConnection != null) {
+                // Go back to the default mode of denying OP_NO_ISOLATED_STORAGE app op.
+                mAppOpsService.setMode(AppOpsManager.OP_NO_ISOLATED_STORAGE, app.uid,
+                        app.info.packageName, AppOpsManager.MODE_ERRORED);
                 mAppOpsService.setAppOpsServiceDelegate(null);
                 getPermissionManagerInternalLocked().setCheckPermissionDelegate(null);
                 mHandler.obtainMessage(SHUTDOWN_UI_AUTOMATION_CONNECTION_MSG,

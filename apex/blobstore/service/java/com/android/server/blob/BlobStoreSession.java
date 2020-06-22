@@ -27,6 +27,8 @@ import static android.system.OsConstants.O_CREAT;
 import static android.system.OsConstants.O_RDONLY;
 import static android.system.OsConstants.O_RDWR;
 import static android.system.OsConstants.SEEK_SET;
+import static android.text.format.Formatter.FLAG_IEC_UNITS;
+import static android.text.format.Formatter.formatFileSize;
 
 import static com.android.server.blob.BlobStoreConfig.TAG;
 import static com.android.server.blob.BlobStoreConfig.XML_VERSION_ADD_SESSION_CREATION_TIME;
@@ -100,7 +102,7 @@ class BlobStoreSession extends IBlobStoreSession.Stub {
     private File mSessionFile;
 
     @GuardedBy("mRevocableFds")
-    private ArrayList<RevocableFileDescriptor> mRevocableFds = new ArrayList<>();
+    private final ArrayList<RevocableFileDescriptor> mRevocableFds = new ArrayList<>();
 
     // This will be accessed from only one thread at any point of time, so no need to grab
     // a lock for this.
@@ -533,6 +535,7 @@ class BlobStoreSession extends IBlobStoreSession.Stub {
             fout.println("ownerUid: " + mOwnerUid);
             fout.println("ownerPkg: " + mOwnerPackageName);
             fout.println("creation time: " + BlobStoreUtils.formatTime(mCreationTimeMs));
+            fout.println("size: " + formatFileSize(mContext, getSize(), FLAG_IEC_UNITS));
 
             fout.println("blobHandle:");
             fout.increaseIndent();

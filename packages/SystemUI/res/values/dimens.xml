@@ -1058,6 +1058,10 @@
     <!-- Shift quick access wallet down in Global Actions when Controls are unavailable -->
     <dimen name="global_actions_wallet_top_margin">40dp</dimen>
 
+    <!-- Shutdown and restart actions are larger in power options dialog -->
+    <dimen name="global_actions_power_dialog_item_height">190dp</dimen>
+    <dimen name="global_actions_power_dialog_item_width">255dp</dimen>
+
     <!-- The maximum offset in either direction that elements are moved horizontally to prevent
          burn-in on AOD. -->
     <dimen name="burn_in_prevention_offset_x">8dp</dimen>
@@ -1325,8 +1329,8 @@
     <dimen name="controls_management_editing_list_margin">48dp</dimen>
     <dimen name="controls_management_editing_divider_margin">24dp</dimen>
     <dimen name="controls_management_apps_extra_side_margin">8dp</dimen>
-    <dimen name="controls_management_apps_top_margin"></dimen>
     <dimen name="controls_management_zone_top_margin">32dp</dimen>
+    <dimen name="controls_management_status_side_margin">16dp</dimen>
     <dimen name="controls_management_page_indicator_height">24dp</dimen>
     <dimen name="controls_management_checkbox_size">25dp</dimen>
     <dimen name="controls_title_size">24sp</dimen>
