@@ -19,6 +19,24 @@
     },
     {
       "key": {
+        "uuid": "8e688f65_dbfefc79",
+        "filename": "packages/SystemUI/res/values/pa_strings.xml",
+        "patchSetId": 1
+      },
+      "lineNbr": 84,
+      "author": {
+        "id": 1000547
+      },
+      "writtenOn": "2020-06-22T03:38:48Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "4fb70d63_692c7281",
+      "revId": "b5b2ab6bbf1368aa36adabd858ee2cd67a91aaec",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
         "uuid": "c7a30946_6c1cf70e",
         "filename": "packages/SystemUI/src/com/android/systemui/statusbar/policy/MobileSignalController.java",
         "patchSetId": 1
@@ -33,6 +51,24 @@
       "revId": "b5b2ab6bbf1368aa36adabd858ee2cd67a91aaec",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
       "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "a198609c_225326ff",
+        "filename": "packages/SystemUI/src/com/android/systemui/statusbar/policy/MobileSignalController.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 126,
+      "author": {
+        "id": 1000547
+      },
+      "writtenOn": "2020-06-22T03:38:48Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "c7a30946_6c1cf70e",
+      "revId": "b5b2ab6bbf1368aa36adabd858ee2cd67a91aaec",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
     },
     {
       "key": {
@@ -53,6 +89,24 @@
     },
     {
       "key": {
+        "uuid": "6c7649b2_72c4aaff",
+        "filename": "packages/SystemUI/src/com/android/systemui/statusbar/policy/MobileSignalController.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 152,
+      "author": {
+        "id": 1000547
+      },
+      "writtenOn": "2020-06-22T03:38:48Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "bd13d252_2987e6d8",
+      "revId": "b5b2ab6bbf1368aa36adabd858ee2cd67a91aaec",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
         "uuid": "4525500b_d48cd7a5",
         "filename": "packages/SystemUI/src/com/android/systemui/statusbar/policy/NetworkControllerImpl.java",
         "patchSetId": 1
@@ -70,6 +124,24 @@
     },
     {
       "key": {
+        "uuid": "513339ce_e91d7594",
+        "filename": "packages/SystemUI/src/com/android/systemui/statusbar/policy/NetworkControllerImpl.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 1198,
+      "author": {
+        "id": 1000547
+      },
+      "writtenOn": "2020-06-22T03:38:48Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "4525500b_d48cd7a5",
+      "revId": "b5b2ab6bbf1368aa36adabd858ee2cd67a91aaec",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
         "uuid": "4b4e43c4_0f63cf1a",
         "filename": "telephony/java/android/telephony/CarrierConfigManager.java",
         "patchSetId": 1
@@ -84,6 +156,24 @@
       "revId": "b5b2ab6bbf1368aa36adabd858ee2cd67a91aaec",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
       "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "a37b7665_43f5fa21",
+        "filename": "telephony/java/android/telephony/CarrierConfigManager.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 1470,
+      "author": {
+        "id": 1000547
+      },
+      "writtenOn": "2020-06-22T03:38:48Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "4b4e43c4_0f63cf1a",
+      "revId": "b5b2ab6bbf1368aa36adabd858ee2cd67a91aaec",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
     }
   ]
 }
