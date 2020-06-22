@@ -6958,8 +6958,12 @@ public class ConnectivityService extends IConnectivityManager.Stub
             updateDataActivityTracking(newDefaultNetwork, oldDefaultNetwork);
             // restore permission to actual value if it becomes the default network again..
             if (newDefaultNetwork != null && !newDefaultNetwork.isVPN()) {
-                updateNetworkPermissions(newDefaultNetwork,
-                        newDefaultNetwork.networkCapabilities);
+                try {
+                    mNMS.setNetworkPermission(newDefaultNetwork.network.netId,
+                            getNetworkPermission(newDefaultNetwork.networkCapabilities));
+                } catch (RemoteException | ServiceSpecificException e) {
+                    loge("Exception in setNetworkPermission: " + e);
+                }
             }
             // Notify system services of the new default.
             makeDefault(newDefaultNetwork);
