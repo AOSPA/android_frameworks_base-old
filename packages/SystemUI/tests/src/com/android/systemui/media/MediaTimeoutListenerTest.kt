@@ -38,6 +38,7 @@ import org.mockito.Mock
 import org.mockito.Mockito
 import org.mockito.Mockito.`when`
 import org.mockito.Mockito.clearInvocations
+import org.mockito.Mockito.mock
 import org.mockito.Mockito.never
 import org.mockito.Mockito.verify
 import org.mockito.junit.MockitoJUnit
@@ -93,11 +94,16 @@ class MediaTimeoutListenerTest : SysuiTestCase() {
         }
         session.setActive(true)
         mediaData = MediaData(true, 0, PACKAGE, null, null, SESSION_TITLE, null,
-            emptyList(), emptyList(), PACKAGE, session.sessionToken, null, null, null)
+            emptyList(), emptyList(), PACKAGE, session.sessionToken, clickIntent = null,
+            device = null, active = true, resumeAction = null)
     }
 
     @Test
     fun testOnMediaDataLoaded_registersPlaybackListener() {
+        val playingState = mock(android.media.session.PlaybackState::class.java)
+        `when`(playingState.state).thenReturn(PlaybackState.STATE_PLAYING)
+
+        `when`(mediaController.playbackState).thenReturn(playingState)
         mediaTimeoutListener.onMediaDataLoaded(KEY, null, mediaData)
         verify(mediaController).registerCallback(capture(mediaCallbackCaptor))
 
@@ -105,6 +111,13 @@ class MediaTimeoutListenerTest : SysuiTestCase() {
         clearInvocations(mediaController)
         mediaTimeoutListener.onMediaDataLoaded(KEY, KEY, mediaData)
         verify(mediaController, never()).registerCallback(anyObject())
+    }
+
+    @Test
+    fun testOnMediaDataLoaded_registersTimeout_whenPaused() {
+        mediaTimeoutListener.onMediaDataLoaded(KEY, null, mediaData)
+        verify(mediaController).registerCallback(capture(mediaCallbackCaptor))
+        verify(executor).executeDelayed(capture(timeoutCaptor), anyLong())
     }
 
     @Test

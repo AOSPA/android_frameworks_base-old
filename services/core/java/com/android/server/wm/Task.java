@@ -939,14 +939,15 @@ class Task extends WindowContainer<WindowContainer> {
 
     /** Sets the original intent, _without_ updating the calling uid or package. */
     private void setIntent(Intent _intent, ActivityInfo info) {
+        final boolean isLeaf = isLeafTask();
         if (intent == null) {
             mNeverRelinquishIdentity =
                     (info.flags & FLAG_RELINQUISH_TASK_IDENTITY) == 0;
-        } else if (mNeverRelinquishIdentity) {
+        } else if (mNeverRelinquishIdentity && isLeaf) {
             return;
         }
 
-        affinity = isLeafTask() ? info.taskAffinity : null;
+        affinity = isLeaf ? info.taskAffinity : null;
         if (intent == null) {
             // If this task already has an intent associated with it, don't set the root
             // affinity -- we don't want it changing after initially set, but the initially
@@ -2927,9 +2928,17 @@ class Task extends WindowContainer<WindowContainer> {
         // Don't crop HOME/RECENTS windows to stack bounds. This is because in split-screen
         // they extend past their stack and sysui uses the stack surface to control cropping.
         // TODO(b/158242495): get rid of this when drag/drop can use surface bounds.
-        final boolean isTopHomeOrRecents = (isActivityTypeHome() || isActivityTypeRecents())
-                && getRootTask().getTopMostTask() == this;
-        return isResizeable() && !isTopHomeOrRecents;
+        if (isActivityTypeHome() || isActivityTypeRecents()) {
+            // Make sure this is the top-most non-organizer root task (if not top-most, it means
+            // another translucent task could be above this, so this needs to stay cropped.
+            final Task rootTask = getRootTask();
+            final Task topNonOrgTask =
+                    rootTask.mCreatedByOrganizer ? rootTask.getTopMostTask() : rootTask;
+            if (isDescendantOf(topNonOrgTask)) {
+                return false;
+            }
+        }
+        return isResizeable();
     }
 
     /**
@@ -3579,6 +3588,7 @@ class Task extends WindowContainer<WindowContainer> {
         final Task top = getTopMostTask();
         info.resizeMode = top != null ? top.mResizeMode : mResizeMode;
         info.topActivityType = top.getActivityType();
+        info.isResizeable = isResizeable();
 
         ActivityRecord rootActivity = top.getRootActivity();
         if (rootActivity == null || rootActivity.pictureInPictureArgs.empty()) {
