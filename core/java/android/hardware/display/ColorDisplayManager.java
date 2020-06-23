@@ -30,6 +30,7 @@ import android.os.IBinder;
 import android.os.RemoteException;
 import android.os.ServiceManager;
 import android.os.ServiceManager.ServiceNotFoundException;
+import android.os.SystemProperties;
 import android.provider.Settings.Secure;
 
 import com.android.internal.R;
@@ -48,6 +49,8 @@ import java.time.LocalTime;
 @SystemApi
 @SystemService(Context.COLOR_DISPLAY_SERVICE)
 public final class ColorDisplayManager {
+
+    static final String COLOR_MODE_PROPERTY = "persist.sys.debug.color_mode";
 
     /**
      * @hide
@@ -344,6 +347,7 @@ public final class ColorDisplayManager {
      * @hide
      */
     public void setColorMode(int colorMode) {
+        SystemProperties.set(COLOR_MODE_PROPERTY, Integer.toString(colorMode));
         mManager.setColorMode(colorMode);
     }
 
@@ -353,6 +357,7 @@ public final class ColorDisplayManager {
      * @hide
      */
     public int getColorMode() {
+        SystemProperties.set(COLOR_MODE_PROPERTY, Integer.toString(mManager.getColorMode()));
         return mManager.getColorMode();
     }
 
