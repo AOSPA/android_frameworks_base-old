@@ -1142,8 +1142,6 @@ class StorageManagerService extends IStorageManager.Stub
             Slog.wtf(TAG, e);
         }
 
-        onKeyguardStateChanged(false);
-
         mHandler.obtainMessage(H_COMPLETE_UNLOCK_USER, userId).sendToTarget();
     }
 
@@ -1154,6 +1152,8 @@ class StorageManagerService extends IStorageManager.Stub
         if (userId == 0) {
             mPmInternal.migrateLegacyObbData();
         }
+
+        onKeyguardStateChanged(false);
 
         // Record user as started so newly mounted volumes kick off events
         // correctly, then synthesize events for any already-mounted volumes.

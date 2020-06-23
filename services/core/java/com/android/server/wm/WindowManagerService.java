@@ -139,7 +139,6 @@ import android.app.IActivityManager;
 import android.app.IActivityTaskManager;
 import android.app.IAssistDataReceiver;
 import android.app.WindowConfiguration;
-import android.app.admin.DevicePolicyCache;
 import android.content.BroadcastReceiver;
 import android.content.ContentResolver;
 import android.content.Context;
@@ -1886,16 +1885,6 @@ public class WindowManagerService extends IWindowManager.Stub
         }
     }
 
-    boolean isSecureLocked(WindowState w) {
-        if ((w.mAttrs.flags&WindowManager.LayoutParams.FLAG_SECURE) != 0) {
-            return true;
-        }
-        if (DevicePolicyCache.getInstance().getScreenCaptureDisabled(w.mShowUserId)) {
-            return true;
-        }
-        return false;
-    }
-
     /**
      * Set whether screen capture is disabled for all windows of a specific user from
      * the device policy cache.
@@ -1909,8 +1898,7 @@ public class WindowManagerService extends IWindowManager.Stub
 
         synchronized (mGlobalLock) {
             // Update secure surface for all windows belonging to this user.
-            mRoot.setSecureSurfaceState(userId,
-                    DevicePolicyCache.getInstance().getScreenCaptureDisabled(userId));
+            mRoot.setSecureSurfaceState(userId);
         }
     }
 
@@ -2260,7 +2248,7 @@ public class WindowManagerService extends IWindowManager.Stub
                     && (win.mAttrs.flags & FLAG_SHOW_WALLPAPER) != 0;
             wallpaperMayMove |= (flagChanges & FLAG_SHOW_WALLPAPER) != 0;
             if ((flagChanges & FLAG_SECURE) != 0 && winAnimator.mSurfaceController != null) {
-                winAnimator.mSurfaceController.setSecure(isSecureLocked(win));
+                winAnimator.mSurfaceController.setSecure(win.isSecureLocked());
             }
 
             win.mRelayoutCalled = true;
@@ -2882,15 +2870,13 @@ public class WindowManagerService extends IWindowManager.Stub
                 aspectRatio);
     }
 
-    public void getStackBounds(int windowingMode, int activityType, Rect bounds) {
-        synchronized (mGlobalLock) {
-            final ActivityStack stack = mRoot.getStack(windowingMode, activityType);
-            if (stack != null) {
-                stack.getBounds(bounds);
-                return;
-            }
-            bounds.setEmpty();
+    void getStackBounds(int windowingMode, int activityType, Rect bounds) {
+        final ActivityStack stack = mRoot.getStack(windowingMode, activityType);
+        if (stack != null) {
+            stack.getBounds(bounds);
+            return;
         }
+        bounds.setEmpty();
     }
 
     /**
