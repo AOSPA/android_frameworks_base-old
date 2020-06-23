@@ -1858,6 +1858,7 @@ public class VolumeDialogImpl implements VolumeDialog, Dumpable,
             // show it additonally to the active row if it is one of the following streams
             if (row.defaultStream || mDefaultRow == row) {
                 return activeRow.stream == STREAM_RING
+                        || activeRow.stream == STREAM_NOTIFICATION
                         || activeRow.stream == STREAM_ALARM
                         || activeRow.stream == STREAM_VOICE_CALL
                         || activeRow.stream == STREAM_MUSIC
