@@ -19,6 +19,9 @@ package android.view.inputmethod;
 import static android.Manifest.permission.INTERACT_ACROSS_USERS_FULL;
 import static android.Manifest.permission.WRITE_SECURE_SETTINGS;
 
+import static com.android.internal.inputmethod.StartInputReason.WINDOW_FOCUS_GAIN_REPORT_WITHOUT_EDITOR;
+import static com.android.internal.inputmethod.StartInputReason.WINDOW_FOCUS_GAIN_REPORT_WITH_SAME_EDITOR;
+
 import android.annotation.DrawableRes;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
@@ -538,6 +541,19 @@ public final class InputMethodManager {
         return servedView.hasWindowFocus() || isAutofillUIShowing(servedView);
     }
 
+    /**
+     * Reports whether the IME is currently perceptible or not, according to the leash applied by
+     * {@link android.view.WindowInsetsController}.
+     * @hide
+     */
+    public void reportPerceptible(IBinder windowToken, boolean perceptible) {
+        try {
+            mService.reportPerceptible(windowToken, perceptible);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
     private final class DelegateImpl implements
             ImeFocusController.InputMethodManagerDelegate {
         /**
@@ -622,8 +638,11 @@ public final class InputMethodManager {
                         Log.v(TAG, "Reporting focus gain, without startInput"
                                 + ", nextFocusIsServedView=" + nextFocusIsServedView);
                     }
+                    final int startInputReason =
+                            nextFocusIsServedView ? WINDOW_FOCUS_GAIN_REPORT_WITH_SAME_EDITOR
+                                    : WINDOW_FOCUS_GAIN_REPORT_WITHOUT_EDITOR;
                     mService.startInputOrWindowGainedFocus(
-                            StartInputReason.WINDOW_FOCUS_GAIN_REPORT_ONLY, mClient,
+                            startInputReason, mClient,
                             focusedView.getWindowToken(), startInputFlags, softInputMode,
                             windowFlags,
                             nextFocusIsServedView ? mCurrentTextBoxAttribute : null,
