@@ -10027,6 +10027,15 @@ public final class Settings {
         public static final String ADD_USERS_WHEN_LOCKED = "add_users_when_locked";
 
         /**
+         * Whether users are allowed to show user icon on lockscreen.
+         * Default: Hidden
+         * <p>
+         * Type: int
+         * @hide
+         */
+        public static final String SHOW_USER_ICON_WHEN_LOCKED = "show_user_icon_when_locked";
+
+        /**
          * Whether applying ramping ringer on incoming phone call ringtone.
          * <p>1 = apply ramping ringer
          * <p>0 = do not apply ramping ringer
