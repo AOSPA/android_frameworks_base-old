@@ -22,9 +22,12 @@ import android.annotation.ColorInt;
 import android.content.Context;
 import android.content.res.Configuration;
 import android.content.res.Resources;
+import android.database.ContentObserver;
 import android.graphics.Color;
 import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
+import android.os.Handler;
+import android.provider.Settings;
 import android.util.AttributeSet;
 import android.util.Pair;
 import android.util.TypedValue;
@@ -76,6 +79,7 @@ public class KeyguardStatusBarView extends RelativeLayout
     private boolean mBatteryCharging;
     private boolean mKeyguardUserSwitcherShowing;
     private boolean mBatteryListening;
+    private boolean mShowUserIconWhenLocked;
 
     private TextView mCarrierLabel;
     private MultiUserSwitch mMultiUserSwitch;
@@ -103,6 +107,12 @@ public class KeyguardStatusBarView extends RelativeLayout
 
     public KeyguardStatusBarView(Context context, AttributeSet attrs) {
         super(context, attrs);
+        mContext = context;
+        mContext.getContentResolver().registerContentObserver(
+                Settings.Global.getUriFor(Settings.Global.SHOW_USER_ICON_WHEN_LOCKED), true,
+                mSettingsObserver);
+        // Fetch initial values.
+        mSettingsObserver.onChange(false);
     }
 
     @Override
@@ -189,7 +199,7 @@ public class KeyguardStatusBarView extends RelativeLayout
             // If we have no keyguard switcher, the screen width is under 600dp. In this case,
             // we only show the multi-user switch if it's enabled through UserManager as well as
             // by the user.
-            if (mMultiUserSwitch.isMultiUserEnabled()) {
+            if (mMultiUserSwitch.isMultiUserEnabled() && mShowUserIconWhenLocked) {
                 mMultiUserSwitch.setVisibility(View.VISIBLE);
             } else {
                 mMultiUserSwitch.setVisibility(View.GONE);
@@ -485,6 +495,13 @@ public class KeyguardStatusBarView extends RelativeLayout
             ((DarkReceiver) v).onDarkChanged(tintArea, intensity, color);
         }
     }
+
+    private final ContentObserver mSettingsObserver = new ContentObserver(new Handler()) {
+        public void onChange(boolean selfChange) {
+            mShowUserIconWhenLocked = Settings.Global.getInt(mContext.getContentResolver(),
+                    Settings.Global.SHOW_USER_ICON_WHEN_LOCKED, 0) != 0;
+        };
+    };
 
     public void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
         pw.println("KeyguardStatusBarView:");
