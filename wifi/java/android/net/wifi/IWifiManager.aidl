@@ -241,6 +241,18 @@ interface IWifiManager
 
     boolean isWifiCoverageExtendFeatureEnabled();
 
+    boolean isSoftApOcvFeatureEnabled();
+
+    boolean isSoftApBeaconProtFeatureEnabled();
+
+    boolean isSoftApOcvFeatureSupported();
+
+    boolean isSoftApBeaconProtFeatureSupported();
+
+    void enableSoftApOcvFeature(boolean enable);
+
+    void enableSoftApBeaconProtFeature(boolean enable);
+
     void enableWifiCoverageExtendFeature(boolean enable);
 
     void registerNetworkRequestMatchCallback(in IBinder binder, in INetworkRequestMatchCallback callback, int callbackIdentifier);
