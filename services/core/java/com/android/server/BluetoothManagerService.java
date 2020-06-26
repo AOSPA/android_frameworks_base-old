@@ -686,6 +686,15 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
 
     @Override
     public boolean isBleScanAlwaysAvailable() {
+        final int callingUid = Binder.getCallingUid();
+        final boolean callerSystem = UserHandle.getAppId(callingUid) == Process.SYSTEM_UID;
+
+        if (!callerSystem && !checkIfCallerIsForegroundUser()) {
+            Slog.w(TAG, "isBleScanAlwaysAvailable():" +
+                    "not allowed for non-active and non system user");
+            return false;
+        }
+
         if (isAirplaneModeOn() && !mEnable) {
             return false;
         }
@@ -2361,6 +2370,7 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
                     Slog.d(TAG, "Bluetooth is complete send Service Down");
                 }
                 sendBluetoothServiceDownCallback();
+                sendBluetoothStateCallback(false);
                 unbindAndFinish();
                 sendBleStateChanged(prevState, newState);
                 if (prevState != BluetoothAdapter.STATE_TURNING_ON) {

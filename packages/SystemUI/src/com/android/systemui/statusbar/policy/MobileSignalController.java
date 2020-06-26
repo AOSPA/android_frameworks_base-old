@@ -492,6 +492,14 @@ public class MobileSignalController extends SignalController<
         if ( mConfig.enableRatIconEnhancement ) {
             typeIcon = getEnhancementDataRatIcon();
         }
+
+        MobileIconGroup vowifiIconGroup = getVowifiIconGroup();
+        if ( mConfig.showVowifiIcon && vowifiIconGroup != null ) {
+            typeIcon = vowifiIconGroup.mDataType;
+            statusIcon = new IconState(true,
+                    mCurrentState.enabled && !mCurrentState.airplaneMode? statusIcon.icon : 0,
+                    statusIcon.contentDescription);
+        }
         if (DEBUG) {
             Log.d(mTag, "notifyListeners mConfig.alwaysShowNetworkTypeIcon="
                     + mConfig.alwaysShowNetworkTypeIcon + "  mDataNetType:" + mDataNetType +
@@ -503,7 +511,8 @@ public class MobileSignalController extends SignalController<
                     + " icons.mDataType=" + icons.mDataType
                     + " mConfig.showVolteIcon=" + mConfig.showVolteIcon
                     + " isVolteSwitchOn=" + isVolteSwitchOn()
-                    + " volteIcon=" + volteIcon);
+                    + " volteIcon=" + volteIcon
+                    + " mConfig.showVowifiIcon=" + mConfig.showVowifiIcon);
         }
         callback.setMobileDataIndicators(statusIcon, qsIcon, typeIcon, qsTypeIcon,
                 activityIn, activityOut, volteIcon, dataContentDescription, dataContentDescriptionHtml,
@@ -993,7 +1002,7 @@ public class MobileSignalController extends SignalController<
 
     private boolean isSideCarSaValid() {
         return mFiveGState.getNrConfigType() == NrConfigType.SA_CONFIGURATION
-                && mFiveGState.getNrIconType() != NrIconType.INVALID;
+                && mFiveGState.isNrIconTypeValid();
     }
 
     private boolean isSideCarNsaValid() {
@@ -1022,15 +1031,33 @@ public class MobileSignalController extends SignalController<
         int ratIcon = 0;
         if ( showDataRatIcon() ) {
             MobileIconGroup iconGroup = mDefaultIcons;
-            int dataNetType = getDataNetworkType();
+            int networkType = getDataNetworkType();
+            if ( networkType == TelephonyManager.NETWORK_TYPE_UNKNOWN ) {
+                networkType = getVoiceNetworkType();
+            }
             if ( isSideCarValid() ) {
                 iconGroup = mFiveGState.getIconGroup();
-            }else if (mNetworkToIconLookup.indexOfKey(dataNetType) >= 0) {
-                iconGroup = mNetworkToIconLookup.get(dataNetType);
+            }else if (mNetworkToIconLookup.indexOfKey(networkType) >= 0) {
+                iconGroup = mNetworkToIconLookup.get(networkType);
             }
             ratIcon = iconGroup.mDataType;
         }
         return ratIcon;
+    }
+
+    private boolean isVowifiAvailable() {
+        return mCurrentState.voiceCapable &&  mCurrentState.imsRegistered
+                && getDataNetworkType() == TelephonyManager.NETWORK_TYPE_IWLAN;
+    }
+
+    private MobileIconGroup getVowifiIconGroup() {
+        if ( isVowifiAvailable() && !isCallIdle() ) {
+            return TelephonyIcons.VOWIFI_CALLING;
+        }else if (isVowifiAvailable()) {
+            return TelephonyIcons.VOWIFI;
+        }else {
+            return null;
+        }
     }
 
     @Override
