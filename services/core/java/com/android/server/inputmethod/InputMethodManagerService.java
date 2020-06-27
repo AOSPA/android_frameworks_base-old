@@ -18,6 +18,8 @@ package com.android.server.inputmethod;
 import static android.view.Display.DEFAULT_DISPLAY;
 import static android.view.Display.INVALID_DISPLAY;
 
+import static com.android.internal.inputmethod.StartInputReason.WINDOW_FOCUS_GAIN_REPORT_WITH_SAME_EDITOR;
+
 import static java.lang.annotation.RetentionPolicy.SOURCE;
 
 import android.Manifest;
@@ -177,6 +179,7 @@ import java.util.Collections;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.WeakHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -591,6 +594,11 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
     private boolean mCurClientInKeyguard;
 
     /**
+     * {@code true} if the IME has not been mostly hidden via {@link android.view.InsetsController}
+     */
+    private boolean mCurPerceptible;
+
+    /**
      * Set to true if our ServiceConnection is currently actively bound to
      * a service (whether or not we have gotten its IBinder back yet).
      */
@@ -709,6 +717,11 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
      * {@link #unbindCurrentMethodLocked()}.</em>
      */
     int mImeWindowVis;
+
+    /**
+     * Checks if the client needs to start input.
+     */
+    private boolean mCurClientNeedStartInput = false;
 
     private AlertDialog.Builder mDialogBuilder;
     private AlertDialog mSwitchingDialog;
@@ -2929,6 +2942,9 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
             if (vis != 0 && isKeyguardLocked() && !mCurClientInKeyguard) {
                 vis = 0;
             }
+            if (!mCurPerceptible) {
+                vis = 0;
+            }
             // mImeWindowVis should be updated before calling shouldShowImeSwitcherLocked().
             final boolean needsToShowImeSwitcher = shouldShowImeSwitcherLocked(vis);
             if (mStatusBar != null) {
@@ -3135,6 +3151,28 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
                 if (DEBUG) Slog.v(TAG, "Client requesting input be shown");
                 return showCurrentInputLocked(windowToken, flags, resultReceiver,
                         SoftInputShowHideReason.SHOW_SOFT_INPUT);
+            } finally {
+                Binder.restoreCallingIdentity(ident);
+            }
+        }
+    }
+
+    @BinderThread
+    @Override
+    public void reportPerceptible(IBinder windowToken, boolean perceptible) {
+        Objects.requireNonNull(windowToken, "windowToken must not be null");
+        int uid = Binder.getCallingUid();
+        synchronized (mMethodMap) {
+            if (!calledFromValidUserLocked()) {
+                return;
+            }
+            final long ident = Binder.clearCallingIdentity();
+            try {
+                if (mCurFocusedWindow == windowToken
+                        && mCurPerceptible != perceptible) {
+                    mCurPerceptible = perceptible;
+                    updateSystemUiLocked(mImeWindowVis, mBackDisposition);
+                }
             } finally {
                 Binder.restoreCallingIdentity(ident);
             }
@@ -3425,10 +3463,18 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
                 Slog.w(TAG, "Window already focused, ignoring focus gain of: " + client
                         + " attribute=" + attribute + ", token = " + windowToken);
             }
-            if (attribute != null) {
+            // Needs to start input when the same window focus gain but not with the same editor,
+            // or when the current client needs to start input (e.g. when focusing the same
+            // window after device turned screen on).
+            if (attribute != null && (startInputReason != WINDOW_FOCUS_GAIN_REPORT_WITH_SAME_EDITOR
+                    || mCurClientNeedStartInput)) {
+                if (mIsInteractive) {
+                    mCurClientNeedStartInput = false;
+                }
                 return startInputUncheckedLocked(cs, inputContext, missingMethods,
                         attribute, startInputFlags, startInputReason);
             }
+
             return new InputBindResult(
                     InputBindResult.ResultCode.SUCCESS_REPORT_WINDOW_FOCUS_ONLY,
                     null, null, null, -1, null);
@@ -3436,6 +3482,7 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
         mCurFocusedWindow = windowToken;
         mCurFocusedWindowSoftInputMode = softInputMode;
         mCurFocusedWindowClient = cs;
+        mCurPerceptible = true;
 
         // Should we auto-show the IME even if the caller has not
         // specified what should be done with it?
@@ -4381,6 +4428,9 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
     private void handleSetInteractive(final boolean interactive) {
         synchronized (mMethodMap) {
             mIsInteractive = interactive;
+            if (!interactive) {
+                mCurClientNeedStartInput = true;
+            }
             updateSystemUiLocked(interactive ? mImeWindowVis : 0, mBackDisposition);
 
             // Inform the current client of the change in active status
@@ -4992,6 +5042,16 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
         return mInputManagerInternal.transferTouchFocus(sourceInputToken, curHostInputToken);
     }
 
+    private void reportImeControl(@Nullable IBinder windowToken) {
+        synchronized (mMethodMap) {
+            if (mCurFocusedWindow != windowToken) {
+                // mCurPerceptible was set by the focused window, but it is no longer in control,
+                // so we reset mCurPerceptible.
+                mCurPerceptible = true;
+            }
+        }
+    }
+
     private static final class LocalServiceImpl extends InputMethodManagerInternal {
         @NonNull
         private final InputMethodManagerService mService;
@@ -5043,6 +5103,11 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
         public boolean transferTouchFocusToImeWindow(@NonNull IBinder sourceInputToken,
                 int displayId) {
             return mService.transferTouchFocusToImeWindow(sourceInputToken, displayId);
+        }
+
+        @Override
+        public void reportImeControl(@Nullable IBinder windowToken) {
+            mService.reportImeControl(windowToken);
         }
     }
 
@@ -5146,6 +5211,7 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
             p.println("  mCurMethodId=" + mCurMethodId);
             client = mCurClient;
             p.println("  mCurClient=" + client + " mCurSeq=" + mCurSeq);
+            p.println("  mCurPerceptible=" + mCurPerceptible);
             p.println("  mCurFocusedWindow=" + mCurFocusedWindow
                     + " softInputMode=" +
                     InputMethodDebug.softInputModeToString(mCurFocusedWindowSoftInputMode)
