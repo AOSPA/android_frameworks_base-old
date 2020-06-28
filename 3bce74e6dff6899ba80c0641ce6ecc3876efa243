@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "17497182_34e7717e",
+        "filename": "packages/SystemUI/src/com/android/systemui/tuner/IconManagerActivity.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 46,
+      "author": {
+        "id": 1000465
+      },
+      "writtenOn": "2020-06-28T15:57:17Z",
+      "side": 1,
+      "message": "What happened to the indent here and wouldn\u0027t be a simple if enough?",
+      "revId": "3bce74e6dff6899ba80c0641ce6ecc3876efa243",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    }
+  ]
+}
