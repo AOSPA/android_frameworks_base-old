@@ -366,11 +366,19 @@ public class BubbleData {
             validShortcutIds.add(info.getId());
         }
 
-        final Predicate<Bubble> invalidBubblesFromPackage = bubble ->
-                packageName.equals(bubble.getPackageName())
-                        && (bubble.getShortcutInfo() == null
-                            || !bubble.getShortcutInfo().isEnabled()
-                            || !validShortcutIds.contains(bubble.getShortcutInfo().getId()));
+        final Predicate<Bubble> invalidBubblesFromPackage = bubble -> {
+            final boolean bubbleIsFromPackage = packageName.equals(bubble.getPackageName());
+            final boolean isShortcutBubble = bubble.hasMetadataShortcutId();
+            if (!bubbleIsFromPackage || !isShortcutBubble) {
+                return false;
+            }
+            final boolean hasShortcutIdAndValidShortcut =
+                    bubble.hasMetadataShortcutId()
+                            && bubble.getShortcutInfo() != null
+                            && bubble.getShortcutInfo().isEnabled()
+                            && validShortcutIds.contains(bubble.getShortcutInfo().getId());
+            return bubbleIsFromPackage && !hasShortcutIdAndValidShortcut;
+        };
 
         final Consumer<Bubble> removeBubble = bubble ->
                 dismissBubbleWithKey(bubble.getKey(), reason);

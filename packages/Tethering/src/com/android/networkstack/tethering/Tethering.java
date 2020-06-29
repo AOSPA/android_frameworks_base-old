@@ -523,6 +523,8 @@ public class Tethering {
                 return TETHERING_WIGIG;
             }
             return TETHERING_WIFI;
+        } else if (cfg.isWigig(iface)) {
+            return TETHERING_WIGIG;
         } else if (cfg.isWifiP2p(iface)) {
             return TETHERING_WIFI_P2P;
         } else if (cfg.isUsb(iface)) {

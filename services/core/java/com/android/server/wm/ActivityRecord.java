@@ -3578,10 +3578,8 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
     WindowState getImeTargetBelowWindow(WindowState w) {
         final int index = mChildren.indexOf(w);
         if (index > 0) {
-            final WindowState target = mChildren.get(index - 1);
-            if (target.canBeImeTarget()) {
-                return target;
-            }
+            return mChildren.get(index - 1)
+                    .getWindow(WindowState::canBeImeTarget);
         }
         return null;
     }
@@ -6027,7 +6025,8 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         ProtoLog.i(WM_DEBUG_APP_TRANSITIONS_ANIM, "Creating animation bounds layer");
         final SurfaceControl.Builder builder = makeAnimationLeash()
                 .setParent(getAnimationLeashParent())
-                .setName(getSurfaceControl() + " - animation-bounds");
+                .setName(getSurfaceControl() + " - animation-bounds")
+                .setCallsite("ActivityRecord.createAnimationBoundsLayer");
         final SurfaceControl boundsLayer = builder.build();
         t.show(boundsLayer);
         return boundsLayer;

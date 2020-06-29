@@ -5162,8 +5162,8 @@ public class WindowManagerService extends IWindowManager.Stub
                 }
                 case WINDOW_STATE_BLAST_SYNC_TIMEOUT: {
                     synchronized (mGlobalLock) {
-                      final WindowState ws = (WindowState) msg.obj;
-                      ws.finishDrawing(null);
+                        final WindowState ws = (WindowState) msg.obj;
+                        ws.immediatelyNotifyBlastSync();
                     }
                     break;
                 }
@@ -8258,7 +8258,7 @@ public class WindowManagerService extends IWindowManager.Stub
         }
 
         final SurfaceControl mirror = SurfaceControl.mirrorSurface(displaySc);
-        outSurfaceControl.copyFrom(mirror);
+        outSurfaceControl.copyFrom(mirror, "WMS.mirrorDisplay");
 
         return true;
     }
