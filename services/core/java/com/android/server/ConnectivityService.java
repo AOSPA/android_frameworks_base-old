@@ -580,8 +580,6 @@ public class ConnectivityService extends IConnectivityManager.Stub
      */
     private static final int PROVISIONING_NOTIFICATION_HIDE = 0;
 
-    private static final int EVENT_UPDATE_TCP_BUFFER_FOR_5G = 160;
-
     /**
      * Used to save the active subscription ID info.
      * arg1 = subId
@@ -2465,10 +2463,6 @@ public class ConnectivityService extends IConnectivityManager.Stub
         }
 
         String tcpBufferSizes = nai.linkProperties.getTcpBufferSizes();
-        if(nai.networkCapabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)){
-            tcpBufferSizes = NetPluginDelegate.get5GTcpBuffers(tcpBufferSizes,
-                nai.networkCapabilities.getNetworkSpecifier());
-        }
         updateTcpBufferSizes(tcpBufferSizes);
     }
 
@@ -4228,7 +4222,6 @@ public class ConnectivityService extends IConnectivityManager.Stub
                 }
                 case EVENT_SYSTEM_READY: {
                     mMultipathPolicyTracker.start();
-                    NetPluginDelegate.registerHandler(mHandler);
                     break;
                 }
                 case EVENT_REVALIDATE_NETWORK: {
@@ -4247,9 +4240,6 @@ public class ConnectivityService extends IConnectivityManager.Stub
                     break;
                 case EVENT_DATA_SAVER_CHANGED:
                     handleRestrictBackgroundChanged(toBool(msg.arg1));
-                    break;
-                case EVENT_UPDATE_TCP_BUFFER_FOR_5G:
-                    handleUpdateTCPBuffersfor5G();
                     break;
                 case EVENT_UPDATE_ACTIVE_DATA_SUBID:
                     handleUpdateActiveDataSubId(msg.arg1);
