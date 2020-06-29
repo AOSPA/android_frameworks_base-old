@@ -81,4 +81,8 @@
 
     <!-- Icon Manager -->
     <string name="icon_manager_title">Icon Manager</string>
+
+    <!-- Name of the volte and vowifi status bar icon. -->
+    <string name="status_bar_volte">VoLTE</string>
+    <string name="status_bar_vowifi">VoWiFi</string>
 </resources>

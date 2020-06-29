@@ -53,6 +53,7 @@ import com.android.settingslib.Utils;
 import com.android.settingslib.graph.SignalDrawable;
 import com.android.settingslib.net.SignalStrengthUtil;
 import com.android.systemui.R;
+import com.android.systemui.Dependency;
 import com.android.systemui.statusbar.policy.FiveGServiceClient;
 import com.android.systemui.statusbar.policy.FiveGServiceClient.FiveGServiceState;
 import com.android.systemui.statusbar.policy.FiveGServiceClient.IFiveGStateListener;
@@ -60,6 +61,7 @@ import com.android.systemui.statusbar.policy.NetworkController.IconState;
 import com.android.systemui.statusbar.policy.NetworkController.SignalCallback;
 import com.android.systemui.statusbar.policy.NetworkControllerImpl.Config;
 import com.android.systemui.statusbar.policy.NetworkControllerImpl.SubscriptionDefaults;
+import com.android.systemui.tuner.TunerService;
 
 import java.io.PrintWriter;
 import java.util.BitSet;
@@ -72,7 +74,10 @@ import org.codeaurora.internal.NrConfigType;
 import org.codeaurora.internal.NrIconType;
 
 public class MobileSignalController extends SignalController<
-        MobileSignalController.MobileState, MobileSignalController.MobileIconGroup> {
+        MobileSignalController.MobileState, MobileSignalController.MobileIconGroup> implements TunerService.Tunable {
+
+    private static final String KEY_VOLTE = "volte";
+    private static final String KEY_VOWIFI = "vowifi";
 
     // The message to display Nr5G icon gracfully by CarrierConfig timeout
     private static final int MSG_DISPLAY_GRACE = 1;
@@ -189,6 +194,8 @@ public class MobileSignalController extends SignalController<
                 }
             }
         };
+
+        Dependency.get(TunerService.class).addTunable(this, KEY_VOLTE, KEY_VOWIFI);
     }
 
     public void setConfiguration(Config config) {
@@ -395,6 +402,16 @@ public class MobileSignalController extends SignalController<
         return resId;
     }
 
+    @Override
+    public void onTuningChanged(String key, String newValue) {
+        if (KEY_VOLTE.equals(key)) {
+            mCurrentState.volteEnabled = TunerService.parseIntegerSwitch(newValue, false);
+        } else if (KEY_VOWIFI.equals(key)) {
+            mCurrentState.vowifiEnabled = TunerService.parseIntegerSwitch(newValue, false);
+        }
+        notifyListenersIfNecessary();
+    }
+
     private void setListeners() {
         if (mImsManager == null) {
             Log.e(mTag, "setListeners mImsManager is null");
@@ -488,13 +505,14 @@ public class MobileSignalController extends SignalController<
         showDataIcon &= mCurrentState.isDefault || dataDisabled;
         int typeIcon = (showDataIcon || mConfig.alwaysShowDataRatIcon
                 || mConfig.alwaysShowNetworkTypeIcon) ? icons.mDataType : 0;
-        int volteIcon = mConfig.showVolteIcon && isVolteSwitchOn() ? getVolteResId() : 0;
+        int volteIcon = mConfig.showVolteIcon && isVolteSwitchOn() && mCurrentState.volteEnabled
+                && !(mCurrentState.vowifiEnabled && isVowifiAvailable()) ? getVolteResId() : 0;
         if ( mConfig.enableRatIconEnhancement ) {
             typeIcon = getEnhancementDataRatIcon();
         }
 
         MobileIconGroup vowifiIconGroup = getVowifiIconGroup();
-        if ( mConfig.showVowifiIcon && vowifiIconGroup != null ) {
+        if ( mConfig.showVowifiIcon && vowifiIconGroup != null && mCurrentState.vowifiEnabled) {
             typeIcon = vowifiIconGroup.mDataType;
             statusIcon = new IconState(true,
                     mCurrentState.enabled && !mCurrentState.airplaneMode? statusIcon.icon : 0,
@@ -1273,6 +1291,8 @@ public class MobileSignalController extends SignalController<
         boolean videoCapable;
         boolean mobileDataEnabled;
         boolean roamingDataEnabled;
+        boolean volteEnabled;
+        boolean vowifiEnabled;
 
         @Override
         public void copyFrom(State s) {
@@ -1294,6 +1314,8 @@ public class MobileSignalController extends SignalController<
             videoCapable = state.videoCapable;
             mobileDataEnabled = state.mobileDataEnabled;
             roamingDataEnabled = state.roamingDataEnabled;
+            volteEnabled = state.volteEnabled;
+            vowifiEnabled = state.vowifiEnabled;
         }
 
         @Override
@@ -1316,7 +1338,9 @@ public class MobileSignalController extends SignalController<
             builder.append("voiceCapable=").append(voiceCapable).append(',');
             builder.append("videoCapable=").append(videoCapable).append(',');
             builder.append("mobileDataEnabled=").append(mobileDataEnabled).append(',');
-            builder.append("roamingDataEnabled=").append(roamingDataEnabled);
+            builder.append("roamingDataEnabled=").append(roamingDataEnabled).append(',');
+            builder.append("volteEnabled=").append(volteEnabled).append(',');
+            builder.append("vowifiEnabled=").append(vowifiEnabled);
         }
 
         @Override
@@ -1337,7 +1361,9 @@ public class MobileSignalController extends SignalController<
                     && ((MobileState) o).voiceCapable == voiceCapable
                     && ((MobileState) o).videoCapable == videoCapable
                     && ((MobileState) o).mobileDataEnabled == mobileDataEnabled
-                    && ((MobileState) o).roamingDataEnabled == roamingDataEnabled;
+                    && ((MobileState) o).roamingDataEnabled == roamingDataEnabled
+                    && ((MobileState) o).volteEnabled == volteEnabled
+                    && ((MobileState) o).vowifiEnabled == vowifiEnabled;
         }
     }
 }
