@@ -53,6 +53,7 @@ import com.android.settingslib.Utils;
 import com.android.settingslib.graph.SignalDrawable;
 import com.android.settingslib.net.SignalStrengthUtil;
 import com.android.systemui.R;
+import com.android.systemui.Dependency;
 import com.android.systemui.statusbar.policy.FiveGServiceClient;
 import com.android.systemui.statusbar.policy.FiveGServiceClient.FiveGServiceState;
 import com.android.systemui.statusbar.policy.FiveGServiceClient.IFiveGStateListener;
@@ -60,6 +61,7 @@ import com.android.systemui.statusbar.policy.NetworkController.IconState;
 import com.android.systemui.statusbar.policy.NetworkController.SignalCallback;
 import com.android.systemui.statusbar.policy.NetworkControllerImpl.Config;
 import com.android.systemui.statusbar.policy.NetworkControllerImpl.SubscriptionDefaults;
+import com.android.systemui.tuner.TunerService;
 
 import java.io.PrintWriter;
 import java.util.BitSet;
@@ -72,7 +74,10 @@ import org.codeaurora.internal.NrConfigType;
 import org.codeaurora.internal.NrIconType;
 
 public class MobileSignalController extends SignalController<
-        MobileSignalController.MobileState, MobileSignalController.MobileIconGroup> {
+        MobileSignalController.MobileState, MobileSignalController.MobileIconGroup> implements TunerService.Tunable {
+
+    private static final String KEY_VOLTE = "volte";
+    private static final String KEY_VOWIFI = "vowifi";
 
     // The message to display Nr5G icon gracfully by CarrierConfig timeout
     private static final int MSG_DISPLAY_GRACE = 1;
@@ -122,6 +127,9 @@ public class MobileSignalController extends SignalController<
     private ImsManager mImsManager;
     private ImsManager.Connector mImsManagerConnector;
 
+    private boolean mShowVolteIcon = false;
+    private boolean mShowVowifiIcon = false;
+
     // TODO: Reduce number of vars passed in, if we have the NetworkController, probably don't
     // need listener lists anymore.
     public MobileSignalController(Context context, Config config, boolean hasMobileData,
@@ -143,6 +151,8 @@ public class MobileSignalController extends SignalController<
                 .toString();
         mNetworkNameDefault = getStringIfExists(
                 com.android.internal.R.string.lockscreen_carrier_default).toString();
+
+        Dependency.get(TunerService.class).addTunable(this, KEY_VOLTE, KEY_VOWIFI);
 
         mapIconSets();
 
@@ -395,6 +405,16 @@ public class MobileSignalController extends SignalController<
         return resId;
     }
 
+    @Override
+    public void onTuningChanged(String key, String newValue) {
+        if (KEY_VOLTE.equals(key)) {
+            mShowVolteIcon = TunerService.parseIntegerSwitch(newValue, false);
+        } else if (KEY_VOWIFI.equals(key)) {
+            mShowVowifiIcon = TunerService.parseIntegerSwitch(newValue, false);
+        }
+        notifyListeners();
+    }
+
     private void setListeners() {
         if (mImsManager == null) {
             Log.e(mTag, "setListeners mImsManager is null");
@@ -488,13 +508,14 @@ public class MobileSignalController extends SignalController<
         showDataIcon &= mCurrentState.isDefault || dataDisabled;
         int typeIcon = (showDataIcon || mConfig.alwaysShowDataRatIcon
                 || mConfig.alwaysShowNetworkTypeIcon) ? icons.mDataType : 0;
-        int volteIcon = mConfig.showVolteIcon && isVolteSwitchOn() ? getVolteResId() : 0;
+        int volteIcon = mConfig.showVolteIcon && isVolteSwitchOn() && mShowVolteIcon
+                && !(mShowVowifiIcon && isVowifiAvailable()) ? getVolteResId() : 0;
         if ( mConfig.enableRatIconEnhancement ) {
             typeIcon = getEnhancementDataRatIcon();
         }
 
         MobileIconGroup vowifiIconGroup = getVowifiIconGroup();
-        if ( mConfig.showVowifiIcon && vowifiIconGroup != null ) {
+        if ( mConfig.showVowifiIcon && vowifiIconGroup != null && mShowVowifiIcon) {
             typeIcon = vowifiIconGroup.mDataType;
             statusIcon = new IconState(true,
                     mCurrentState.enabled && !mCurrentState.airplaneMode? statusIcon.icon : 0,
