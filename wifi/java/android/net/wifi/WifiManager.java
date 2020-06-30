@@ -283,7 +283,7 @@ public class WifiManager {
     *
     * @hide
     **/
-    public static final String  WIFI_DATA_STALL = "com.qualcomm.qti.net.wifi.WIFI_DATA_STALL";
+    public static final String  WIFI_ALERT = "com.qualcomm.qti.net.wifi.WIFI_ALERT";
 
     /**
     *
@@ -294,10 +294,10 @@ public class WifiManager {
 
     /**
     *
-    * see data stall reason code
+    * see alert reason code
     * @hide
     **/
-    public static final String  EXTRA_WIFI_DATA_STALL_REASON = "data_stall_reasoncode";
+    public static final String  EXTRA_WIFI_ALERT_REASON = "alert_reasoncode";
 
     /**
     *
