@@ -339,7 +339,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
     private boolean mDragResizing;
     private boolean mDragResizingChangeReported = true;
     private int mResizeMode;
-    private boolean mResizeForBlastSyncReported;
+    private boolean mRedrawForSyncReported;
 
     /**
      * Special mode that is intended only for the rounded corner overlay: during rotation
@@ -1402,7 +1402,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
                 || configChanged
                 || dragResizingChanged
                 || mReportOrientationChanged
-                || requestResizeForBlastSync()) {
+                || shouldSendRedrawForSync()) {
             ProtoLog.v(WM_DEBUG_RESIZE,
                         "Resize reasons for w=%s:  %s surfaceResized=%b configChanged=%b "
                                 + "dragResizingChanged=%b reportOrientationChanged=%b",
@@ -2192,7 +2192,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
     void removeIfPossible() {
         super.removeIfPossible();
         removeIfPossible(false /*keepVisibleDeadWindow*/);
-        finishDrawing(null);
+        immediatelyNotifyBlastSync();
     }
 
     private void removeIfPossible(boolean keepVisibleDeadWindow) {
@@ -2385,23 +2385,23 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
             return false;
         }
 
-        if (PixelFormat.formatHasAlpha(mAttrs.format)) {
+        if (mAttrs.type == TYPE_APPLICATION_STARTING) {
+            // Ignore mayUseInputMethod for starting window for now.
+            // TODO(b/159911356): Remove this special casing (originally added in commit e75d872).
+        } else if (PixelFormat.formatHasAlpha(mAttrs.format)) {
             // Support legacy use cases where transparent windows can still be ime target with
             // FLAG_NOT_FOCUSABLE and ALT_FOCUSABLE_IM set.
             // Certain apps listen for IME insets using transparent windows and ADJUST_NOTHING to
             // manually synchronize app content to IME animation b/144619551.
             // TODO(b/145812508): remove this once new focus management is complete b/141738570
             final int fl = mAttrs.flags & (FLAG_NOT_FOCUSABLE | FLAG_ALT_FOCUSABLE_IM);
-            final int type = mAttrs.type;
 
             // Can only be an IME target if both FLAG_NOT_FOCUSABLE and FLAG_ALT_FOCUSABLE_IM are
             // set or both are cleared...and not a starting window.
-            if (fl != 0 && fl != (FLAG_NOT_FOCUSABLE | FLAG_ALT_FOCUSABLE_IM)
-                    && type != TYPE_APPLICATION_STARTING) {
+            if (fl != 0 && fl != (FLAG_NOT_FOCUSABLE | FLAG_ALT_FOCUSABLE_IM)) {
                 return false;
             }
-        } else if (!WindowManager.LayoutParams.mayUseInputMethod(mAttrs.flags)
-                || mAttrs.type == TYPE_APPLICATION_STARTING) {
+        } else if (!WindowManager.LayoutParams.mayUseInputMethod(mAttrs.flags)) {
             // Can be an IME target only if:
             // 1. FLAG_NOT_FOCUSABLE is not set
             // 2. FLAG_ALT_FOCUSABLE_IM is not set
@@ -2696,7 +2696,9 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
                             Settings.Global.THEATER_MODE_ON, 0) == 0;
             boolean canTurnScreenOn = mActivityRecord == null || mActivityRecord.currentLaunchCanTurnScreenOn();
 
-            if (allowTheaterMode && canTurnScreenOn && !mPowerManagerWrapper.isInteractive()) {
+            if (allowTheaterMode && canTurnScreenOn
+                        && (mWmService.mAtmInternal.isDreaming()
+                        || !mPowerManagerWrapper.isInteractive())) {
                 if (DEBUG_VISIBILITY || DEBUG_POWER) {
                     Slog.v(TAG, "Relayout window turning screen on: " + this);
                 }
@@ -3562,7 +3564,6 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         mReportOrientationChanged = false;
         mDragResizingChangeReported = true;
         mWinAnimator.mSurfaceResized = false;
-        mResizeForBlastSyncReported = true;
         mWindowFrames.resetInsetsChanged();
 
         final Rect frame = mWindowFrames.mCompatFrame;
@@ -3570,10 +3571,12 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         final Rect visibleInsets = mWindowFrames.mLastVisibleInsets;
         final Rect stableInsets = mWindowFrames.mLastStableInsets;
         final MergedConfiguration mergedConfiguration = mLastReportedConfiguration;
-        final boolean reportDraw = mWinAnimator.mDrawState == DRAW_PENDING || useBLASTSync();
-        final boolean forceRelayout = reportOrientation || isDragResizeChanged();
+        final boolean reportDraw = mWinAnimator.mDrawState == DRAW_PENDING || useBLASTSync() || !mRedrawForSyncReported;
+        final boolean forceRelayout = reportOrientation || isDragResizeChanged() || !mRedrawForSyncReported;
         final int displayId = getDisplayId();
         final DisplayCutout displayCutout = getWmDisplayCutout().getDisplayCutout();
+
+        mRedrawForSyncReported = true;
 
         try {
             mClient.resized(frame, contentInsets, visibleInsets, stableInsets, reportDraw,
@@ -5806,7 +5809,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         // client will not render when visibility is GONE. Therefore, call finishDrawing here to
         // prevent system server from blocking on a window that will not draw.
         if (viewVisibility == View.GONE && mUsingBLASTSyncTransaction) {
-            finishDrawing(null);
+            immediatelyNotifyBlastSync();
         }
     }
 
@@ -5821,7 +5824,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         if (!willSync) {
             return false;
         }
-        mResizeForBlastSyncReported = false;
+        requestRedrawForSync();
 
         mLocalSyncId = mBLASTSyncEngine.startSyncSet(this);
         addChildrenToSyncSet(mLocalSyncId);
@@ -5844,7 +5847,6 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
             return mWinAnimator.finishDrawingLocked(postDrawTransaction);
         }
 
-        mWmService.mH.removeMessages(WINDOW_STATE_BLAST_SYNC_TIMEOUT, this);
         if (postDrawTransaction != null) {
             mBLASTSyncTransaction.merge(postDrawTransaction);
         }
@@ -5853,8 +5855,9 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         return mWinAnimator.finishDrawingLocked(null);
     }
 
-    @VisibleForTesting
-    void notifyBlastSyncTransaction() {
+    private void notifyBlastSyncTransaction() {
+        mWmService.mH.removeMessages(WINDOW_STATE_BLAST_SYNC_TIMEOUT, this);
+
         if (!mNotifyBlastOnSurfacePlacement || mWaitingListener == null) {
             mNotifyBlastOnSurfacePlacement = false;
             return;
@@ -5877,7 +5880,25 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         mNotifyBlastOnSurfacePlacement = false;
     }
 
-    private boolean requestResizeForBlastSync() {
-        return useBLASTSync() && !mResizeForBlastSyncReported;
+    void immediatelyNotifyBlastSync() {
+        finishDrawing(null);
+        notifyBlastSyncTransaction();
+    }
+
+    /**
+     * When using the two WindowOrganizer sync-primitives (BoundsChangeTransaction, BLASTSync)
+     * it can be a little difficult to predict whether your change will actually trigger redrawing
+     * on the client side. To ease the burden on shell developers, we force send MSG_RESIZED
+     * for Windows involved in these Syncs
+     */
+    private boolean shouldSendRedrawForSync() {
+        final Task task = getTask();
+        if (task != null && task.getMainWindowSizeChangeTransaction() != null)
+            return !mRedrawForSyncReported;
+        return useBLASTSync() && !mRedrawForSyncReported;
+    }
+
+    void requestRedrawForSync() {
+        mRedrawForSyncReported = false;
     }
 }

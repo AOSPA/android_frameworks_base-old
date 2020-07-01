@@ -11766,6 +11766,8 @@ public class PackageManagerService extends IPackageManager.Stub
             }
         } else {
             parsedPackage
+                    // Non system apps cannot mark any broadcast as protected
+                    .clearProtectedBroadcasts()
                     // non system apps can't be flagged as core
                     .setCoreApp(false)
                     // clear flags not applicable to regular apps
@@ -11777,7 +11779,6 @@ public class PackageManagerService extends IPackageManager.Stub
         }
         if ((scanFlags & SCAN_AS_PRIVILEGED) == 0) {
             parsedPackage
-                    .clearProtectedBroadcasts()
                     .markNotActivitiesAsNotExportedIfSingleUser();
         }
 
@@ -12401,7 +12402,9 @@ public class PackageManagerService extends IPackageManager.Stub
             ksms.addScannedPackageLPw(pkg);
 
             mComponentResolver.addAllComponents(pkg, chatty);
-            mAppsFilter.addPackage(pkgSetting);
+            final boolean isReplace =
+                    reconciledPkg.prepareResult != null && reconciledPkg.prepareResult.replace;
+            mAppsFilter.addPackage(pkgSetting, isReplace);
 
             // Don't allow ephemeral applications to define new permissions groups.
             if ((scanFlags & SCAN_AS_INSTANT_APP) != 0) {

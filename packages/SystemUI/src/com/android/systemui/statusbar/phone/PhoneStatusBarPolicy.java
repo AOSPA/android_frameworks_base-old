@@ -690,8 +690,8 @@ public class PhoneStatusBarPolicy
         if (DEBUG) Log.d(TAG, "screenrecord: hiding icon during countdown");
         mHandler.post(() -> mIconController.setIconVisibility(mSlotScreenRecord, false));
         // Reset talkback priority
-        mIconController.setIconAccessibilityLiveRegion(mSlotScreenRecord,
-                View.ACCESSIBILITY_LIVE_REGION_NONE);
+        mHandler.post(() -> mIconController.setIconAccessibilityLiveRegion(mSlotScreenRecord,
+                View.ACCESSIBILITY_LIVE_REGION_NONE));
     }
 
     @Override
@@ -700,7 +700,7 @@ public class PhoneStatusBarPolicy
         mIconController.setIcon(mSlotScreenRecord,
                 R.drawable.stat_sys_screen_record,
                 mResources.getString(R.string.screenrecord_ongoing_screen_only));
-        mIconController.setIconVisibility(mSlotScreenRecord, true);
+        mHandler.post(() -> mIconController.setIconVisibility(mSlotScreenRecord, true));
     }
 
     @Override

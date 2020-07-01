@@ -987,7 +987,10 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
         final SurfaceControl.Builder b = mWmService.makeSurfaceBuilder(mSession)
                 .setOpaque(true)
                 .setContainerLayer();
-        mSurfaceControl = b.setName("Root").setContainerLayer().build();
+        mSurfaceControl = b.setName("Root")
+                .setContainerLayer()
+                .setCallsite("DisplayContent")
+                .build();
 
         getPendingTransaction()
                 .setLayer(mSurfaceControl, 0)
@@ -1110,7 +1113,7 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
             return null;
         }
         mShellRoots.put(windowType, root);
-        SurfaceControl out = new SurfaceControl(rootLeash);
+        SurfaceControl out = new SurfaceControl(rootLeash, "DisplayContent.addShellRoot");
         return out;
     }
 
@@ -1185,6 +1188,9 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
         }
 
         activity.onRemovedFromDisplay();
+        if (activity == mFixedRotationLaunchingApp) {
+            setFixedRotationLaunchingAppUnchecked(null);
+        }
     }
 
     @Override
@@ -1467,6 +1473,12 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
         if (r.hasFixedRotationTransform()) {
             // It has been set and not yet finished.
             return true;
+        }
+        if (!r.occludesParent() || r.isVisible()) {
+            // While entering or leaving a translucent or floating activity (e.g. dialog style),
+            // there is a visible activity in the background. Then it still needs rotation animation
+            // to cover the activity configuration change.
+            return false;
         }
         if (checkOpening) {
             if (!mAppTransition.isTransitionSet() || !mOpeningApps.contains(r)) {
@@ -3428,9 +3440,10 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
                 "Proposed new IME target: " + target + " for display: " + getDisplayId());
 
         // Now, a special case -- if the last target's window is in the process of exiting, but
-        // not removed, keep on the last target to avoid IME flicker.
+        // not removed, keep on the last target to avoid IME flicker. The exception is if the
+        // current target is home since we want opening apps to become the IME target right away.
         if (curTarget != null && !curTarget.mRemoved && curTarget.isDisplayedLw()
-                && curTarget.isClosing()) {
+                && curTarget.isClosing() && !curTarget.isActivityTypeHome()) {
             if (DEBUG_INPUT_METHOD) Slog.v(TAG_WM, "Not changing target till current window is"
                     + " closing and not removed");
             return curTarget;
@@ -5636,6 +5649,12 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
          */
         void onStartRecentsAnimation(@NonNull ActivityRecord r) {
             mAnimatingRecents = r;
+            if (r.isVisible() && mFocusedApp != null && !mFocusedApp.occludesParent()) {
+                // The recents activity has shown with the orientation determined by the top
+                // activity, keep its current orientation to avoid flicking by the configuration
+                // change of visible activity.
+                return;
+            }
             rotateInDifferentOrientationIfNeeded(r);
             if (r.hasFixedRotationTransform()) {
                 // Set the record so we can recognize it to continue to update display orientation
@@ -5780,11 +5799,6 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
             } catch (RemoteException e) {
                 Slog.w(TAG, "Failed to deliver showInsets", e);
             }
-        }
-
-        @Override
-        public boolean isClientControlled() {
-            return false;
         }
     }
 
