@@ -207,6 +207,12 @@ public class BubbleController implements ConfigurationController.ConfigurationLi
     /** Whether or not the BubbleStackView has been added to the WindowManager. */
     private boolean mAddedToWindowManager = false;
 
+    /**
+     * Value from {@link NotificationShadeWindowController#getForceHasTopUi()} when we forced top UI
+     * due to expansion. We'll restore this value when the stack collapses.
+     */
+    private boolean mHadTopUi = false;
+
     // Listens to user switch so bubbles can be saved and restored.
     private final NotificationLockscreenUserManager mNotifUserManager;
 
@@ -483,12 +489,13 @@ public class BubbleController implements ConfigurationController.ConfigurationLi
     }
 
     /**
-     * Dispatches a back press into the expanded Bubble's ActivityView if its IME is visible,
-     * causing it to hide.
+     * Hides the current input method, wherever it may be focused, via InputMethodManagerInternal.
      */
-    public void hideImeFromExpandedBubble() {
-        if (mStackView != null) {
-            mStackView.hideImeFromExpandedBubble();
+    public void hideCurrentInputMethod() {
+        try {
+            mBarService.hideCurrentInputMethodForBubbles();
+        } catch (RemoteException e) {
+            e.printStackTrace();
         }
     }
 
@@ -693,8 +700,8 @@ public class BubbleController implements ConfigurationController.ConfigurationLi
         if (mStackView == null) {
             mStackView = new BubbleStackView(
                     mContext, mBubbleData, mSurfaceSynchronizer, mFloatingContentCoordinator,
-                    mSysUiState, this::onAllBubblesAnimatedOut,
-                    this::onImeVisibilityChanged);
+                    mSysUiState, this::onAllBubblesAnimatedOut, this::onImeVisibilityChanged,
+                    this::hideCurrentInputMethod);
             mStackView.addView(mBubbleScrim);
             if (mExpandListener != null) {
                 mStackView.setExpandListener(mExpandListener);
@@ -1290,6 +1297,7 @@ public class BubbleController implements ConfigurationController.ConfigurationLi
             // Collapsing? Do this first before remaining steps.
             if (update.expandedChanged && !update.expanded) {
                 mStackView.setExpanded(false);
+                mNotificationShadeWindowController.setForceHasTopUi(mHadTopUi);
             }
 
             // Do removals, if any.
@@ -1299,7 +1307,10 @@ public class BubbleController implements ConfigurationController.ConfigurationLi
             for (Pair<Bubble, Integer> removed : removedBubbles) {
                 final Bubble bubble = removed.first;
                 @DismissReason final int reason = removed.second;
-                mStackView.removeBubble(bubble);
+
+                if (mStackView != null) {
+                    mStackView.removeBubble(bubble);
+                }
 
                 // If the bubble is removed for user switching, leave the notification in place.
                 if (reason == DISMISS_USER_CHANGED) {
@@ -1376,6 +1387,8 @@ public class BubbleController implements ConfigurationController.ConfigurationLi
             if (update.expandedChanged && update.expanded) {
                 if (mStackView != null) {
                     mStackView.setExpanded(true);
+                    mHadTopUi = mNotificationShadeWindowController.getForceHasTopUi();
+                    mNotificationShadeWindowController.setForceHasTopUi(true);
                 }
             }
 
@@ -1589,7 +1602,11 @@ public class BubbleController implements ConfigurationController.ConfigurationLi
         @Override
         public void onBackPressedOnTaskRoot(RunningTaskInfo taskInfo) {
             if (mStackView != null && taskInfo.displayId == getExpandedDisplayId(mContext)) {
-                mBubbleData.setExpanded(false);
+                if (mImeVisible) {
+                    hideCurrentInputMethod();
+                } else {
+                    mBubbleData.setExpanded(false);
+                }
             }
         }
 

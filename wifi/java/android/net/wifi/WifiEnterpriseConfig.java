@@ -94,6 +94,8 @@ public class WifiEnterpriseConfig implements Parcelable {
     /** @hide */
     public static final String EAP_ERP             = "eap_erp";
     /** @hide */
+    public static final String OCSP                = "ocsp";
+    /** @hide */
     public static final String KEY_SIMNUM          = "sim_num";
 
     /**

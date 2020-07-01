@@ -82,8 +82,6 @@ import static android.os.Process.removeAllProcessGroups;
 import static android.os.Process.sendSignal;
 import static android.os.Process.setThreadPriority;
 import static android.os.Process.setThreadScheduler;
-import static android.permission.PermissionManager.KILL_APP_REASON_GIDS_CHANGED;
-import static android.permission.PermissionManager.KILL_APP_REASON_PERMISSIONS_REVOKED;
 import static android.provider.Settings.Global.ALWAYS_FINISH_ACTIVITIES;
 import static android.provider.Settings.Global.DEBUG_APP;
 import static android.provider.Settings.Global.NETWORK_ACCESS_TIMEOUT_MS;
@@ -1691,12 +1689,6 @@ public class ActivityManagerService extends IActivityManager.Stub
      */
     @Nullable ContentCaptureManagerInternal mContentCaptureService;
 
-    /**
-     * Set of {@link ProcessRecord} that have either {@link ProcessRecord#hasTopUi()} or
-     * {@link ProcessRecord#runningRemoteAnimation} set to {@code true}.
-     */
-    final ArraySet<ProcessRecord> mTopUiOrRunningRemoteAnimApps = new ArraySet<>();
-
     final class UiHandler extends Handler {
         public UiHandler() {
             super(com.android.server.UiThread.get().getLooper(), null, true);
@@ -2565,7 +2557,8 @@ public class ActivityManagerService extends IActivityManager.Stub
         mUiHandler = injector.getUiHandler(null /* service */);
         mUserController = hasHandlerThread ? new UserController(this) : null;
         mPendingIntentController = hasHandlerThread
-                ? new PendingIntentController(handlerThread.getLooper(), mUserController) : null;
+                ? new PendingIntentController(handlerThread.getLooper(), mUserController,
+                        mConstants) : null;
         mProcStartHandlerThread = null;
         mProcStartHandler = null;
         mHiddenApiBlacklist = null;
@@ -2662,7 +2655,7 @@ public class ActivityManagerService extends IActivityManager.Stub
         mUserController = new UserController(this);
 
         mPendingIntentController = new PendingIntentController(
-                mHandlerThread.getLooper(), mUserController);
+                mHandlerThread.getLooper(), mUserController, mConstants);
 
         if (SystemProperties.getInt("sys.use_fifo_ui", 0) != 0) {
             mUseFifoUiScheduling = true;
@@ -8169,6 +8162,12 @@ public class ActivityManagerService extends IActivityManager.Stub
     }
 
     int checkContentProviderUriPermission(Uri uri, int userId, int callingUid, int modeFlags) {
+        if (Thread.holdsLock(mActivityTaskManager.getGlobalLock())) {
+            Slog.wtf(TAG, new IllegalStateException("Unable to check Uri permission"
+                    + " because caller is holding WM lock; assuming permission denied"));
+            return PackageManager.PERMISSION_DENIED;
+        }
+
         final String name = uri.getAuthority();
         final long ident = Binder.clearCallingIdentity();
         ContentProviderHolder holder = null;
@@ -9277,16 +9276,31 @@ public class ActivityManagerService extends IActivityManager.Stub
         synchronized (this) {
             final long identity = Binder.clearCallingIdentity();
             try {
-                boolean permissionChange = KILL_APP_REASON_PERMISSIONS_REVOKED.equals(reason)
-                        || KILL_APP_REASON_GIDS_CHANGED.equals(reason);
                 mProcessList.killPackageProcessesLocked(null /* packageName */, appId, userId,
                         ProcessList.PERSISTENT_PROC_ADJ, false /* callerWillRestart */,
                         true /* callerWillRestart */, true /* doit */, true /* evenPersistent */,
                         false /* setRemoved */,
-                        permissionChange ? ApplicationExitInfo.REASON_PERMISSION_CHANGE
-                        : ApplicationExitInfo.REASON_OTHER,
-                        permissionChange ? ApplicationExitInfo.SUBREASON_UNKNOWN
-                        : ApplicationExitInfo.SUBREASON_KILL_UID,
+                        ApplicationExitInfo.REASON_OTHER,
+                        ApplicationExitInfo.SUBREASON_KILL_UID,
+                        reason != null ? reason : "kill uid");
+            } finally {
+                Binder.restoreCallingIdentity(identity);
+            }
+        }
+    }
+
+    @Override
+    public void killUidForPermissionChange(int appId, int userId, String reason) {
+        enforceCallingPermission(Manifest.permission.KILL_UID, "killUid");
+        synchronized (this) {
+            final long identity = Binder.clearCallingIdentity();
+            try {
+                mProcessList.killPackageProcessesLocked(null /* packageName */, appId, userId,
+                        ProcessList.PERSISTENT_PROC_ADJ, false /* callerWillRestart */,
+                        true /* callerWillRestart */, true /* doit */, true /* evenPersistent */,
+                        false /* setRemoved */,
+                        ApplicationExitInfo.REASON_PERMISSION_CHANGE,
+                        ApplicationExitInfo.SUBREASON_UNKNOWN,
                         reason != null ? reason : "kill uid");
             } finally {
                 Binder.restoreCallingIdentity(identity);
@@ -14782,7 +14796,6 @@ public class ActivityManagerService extends IActivityManager.Stub
 
         mProcessesToGc.remove(app);
         mPendingPssProcesses.remove(app);
-        mTopUiOrRunningRemoteAnimApps.remove(app);
         ProcessList.abortNextPssTime(app.procStateMemTracker);
 
         // Dismiss any open dialogs.
@@ -18605,22 +18618,6 @@ public class ActivityManagerService extends IActivityManager.Stub
         }
 
         return proc;
-    }
-
-    /**
-     * @return {@code true} if {@link #mTopUiOrRunningRemoteAnimApps} set contains {@code app} or when there are no apps
-     *         in this list, an false otherwise.
-     */
-    boolean containsTopUiOrRunningRemoteAnimOrEmptyLocked(ProcessRecord app) {
-        return mTopUiOrRunningRemoteAnimApps.isEmpty() || mTopUiOrRunningRemoteAnimApps.contains(app);
-    }
-
-    void addTopUiOrRunningRemoteAnim(ProcessRecord app) {
-        mTopUiOrRunningRemoteAnimApps.add(app);
-    }
-
-    void removeTopUiOrRunningRemoteAnim(ProcessRecord app) {
-        mTopUiOrRunningRemoteAnimApps.remove(app);
     }
 
     @Override

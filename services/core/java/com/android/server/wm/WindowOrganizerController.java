@@ -428,6 +428,9 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
         try {
             callback.onTransactionReady(mSyncId, mergedTransaction);
         } catch (RemoteException e) {
+            // If there's an exception when trying to send the mergedTransaction to the client, we
+            // should immediately apply it here so the transactions aren't lost.
+            mergedTransaction.apply();
         }
 
         mTransactionCallbacksByPendingSyncId.remove(mSyncId);
@@ -456,6 +459,7 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
                 .setBufferSize(bounds.width(), bounds.height())
                 .setFormat(PixelFormat.TRANSLUCENT)
                 .setParent(wc.getParentSurfaceControl())
+                .setCallsite("WindowOrganizerController.takeScreenshot")
                 .build();
 
         Surface surface = new Surface();
@@ -463,7 +467,7 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
         surface.attachAndQueueBufferWithColorSpace(buffer.getGraphicBuffer(), null);
         surface.release();
 
-        outSurfaceControl.copyFrom(screenshot);
+        outSurfaceControl.copyFrom(screenshot, "WindowOrganizerController.takeScreenshot");
         return true;
     }
 

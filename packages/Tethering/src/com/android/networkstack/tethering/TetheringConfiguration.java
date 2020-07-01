@@ -93,6 +93,7 @@ public class TetheringConfiguration {
 
     public final String[] tetherableUsbRegexs;
     public final String[] tetherableWifiRegexs;
+    public final String[] tetherableWigigRegexs;
     public final String[] tetherableWifiP2pRegexs;
     public final String[] tetherableBluetoothRegexs;
     public final String[] tetherableNcmRegexs;
@@ -131,6 +132,7 @@ public class TetheringConfiguration {
         } else {
             tetherableWifiRegexs = getResourceStringArray(res, R.array.config_tether_wifi_regexs);
         }
+        tetherableWigigRegexs = getResourceStringArray(res, R.array.config_tether_wigig_regexs);
         tetherableWifiP2pRegexs = getResourceStringArray(
                 res, R.array.config_tether_wifi_p2p_regexs);
         tetherableBluetoothRegexs = getResourceStringArray(
@@ -179,6 +181,11 @@ public class TetheringConfiguration {
     /** Check whether input interface belong to wifi.*/
     public boolean isWifi(String iface) {
         return matchesDownstreamRegexs(iface, tetherableWifiRegexs);
+    }
+
+    /** Check whether input interface belong to wigig.*/
+    public boolean isWigig(String iface) {
+        return matchesDownstreamRegexs(iface, tetherableWigigRegexs);
     }
 
     /** Check whether this interface is Wifi P2P interface. */

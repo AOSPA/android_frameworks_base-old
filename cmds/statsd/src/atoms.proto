@@ -4948,6 +4948,8 @@ message BlobCommitted {
         ERROR_DURING_COMMIT = 2;
         // Commit Failed: Digest of the data did not match Blob digest
         DIGEST_MISMATCH = 3;
+        // Commit Failed: Allowed count limit exceeded
+        COUNT_LIMIT_EXCEEDED = 4;
     }
     optional Result result = 4;
 }
@@ -4980,6 +4982,8 @@ message BlobLeased{
         LEASE_EXPIRY_INVALID = 4;
         // Lease Failed: Leasee has exceeded the total data lease limit
         DATA_SIZE_LIMIT_EXCEEDED = 5;
+        // Leasee Failed: Allowed count limit exceeded
+        COUNT_LIMIT_EXCEEDED = 6;
     }
     optional Result result = 4;
 }
@@ -6131,6 +6135,10 @@ message ProcessStatsAvailablePagesProto {
  */
 message ProcStats {
     optional ProcessStatsSectionProto proc_stats_section = 1;
+    // Data pulled from device into this is sometimes sharded across multiple atoms to work around
+    // a size limit. When this happens, this shard ID will contain an increasing 1-indexed integer
+    // with the number of this shard.
+    optional int32 shard_id = 2;
 }
 
 /**
@@ -9690,6 +9698,7 @@ message RuntimeAppOpAccess {
         UNIFORM = 1;
         RARELY_USED = 2;
         BOOT_TIME_SAMPLING = 3;
+        UNIFORM_OPS = 4;
     }
 
     // sampling strategy used to collect this message
