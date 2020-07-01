@@ -560,13 +560,11 @@ public class WifiEnterpriseConfig implements Parcelable {
     }
 
     /** @hide */
-    @SystemApi
     public void setSimNum(int SIMNum) {
          setFieldValue(KEY_SIMNUM, Integer.toString(SIMNum));
     }
 
     /** @hide */
-    @SystemApi
     public @NonNull String getSimNum() {
         return getFieldValue(KEY_SIMNUM);
     }

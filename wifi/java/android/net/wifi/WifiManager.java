@@ -615,7 +615,6 @@ public class WifiManager {
      *
      * @hide
      */
-    @SystemApi
     public static final String EXTRA_WIFI_AP_FAILURE_DESCRIPTION = "wifi_ap_error_description";
     /**
      *  If Wi-Fi AP start failed with SAP_START_FAILURE_NO_CHANNEL reason code and has this
@@ -623,7 +622,6 @@ public class WifiManager {
      *
      *  @hide
      */
-    @SystemApi
     public static final String WIFI_AP_FAILURE_DESC_NO_5GHZ_SUPPORT = "wifi_ap_error_no_5g_support";
     /**
      * The previous Wi-Fi state.
@@ -1195,7 +1193,6 @@ public class WifiManager {
      *
      * @hide
      */
-    @SystemApi
     @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
     public static final String WIFI_COUNTRY_CODE_CHANGED_ACTION =
             "android.net.wifi.COUNTRY_CODE_CHANGED";
@@ -1697,7 +1694,6 @@ public class WifiManager {
       *
       * @hide no intent to publish
       */
-      @SystemApi
       public boolean isExtendingWifi() {
           try {
               return mService.isExtendingWifi();
@@ -1713,7 +1709,6 @@ public class WifiManager {
       *
       * @hide no intent to publish
       */
-      @SystemApi
       public boolean isWifiCoverageExtendFeatureEnabled() {
           try {
               return mService.isWifiCoverageExtendFeatureEnabled();
@@ -1727,7 +1722,6 @@ public class WifiManager {
       *
       * @hide no intent to publish
       */
-      @SystemApi
       public void enableWifiCoverageExtendFeature(boolean enable) {
           try {
               mService.enableWifiCoverageExtendFeature(enable);
@@ -1743,7 +1737,6 @@ public class WifiManager {
       *
       * @hide no intent to publish
       */
-      @SystemApi
       public int getSoftApWifiStandard() {
           try {
               return mService.getSoftApWifiStandard();
@@ -5418,7 +5411,6 @@ public class WifiManager {
      * @return String of capabilities from driver for type capaParameter.
      * {@hide}
      */
-    @SystemApi
     @NonNull
     public String getCapabilities(@NonNull String capaType) {
         try {
@@ -6560,7 +6552,6 @@ public class WifiManager {
       *
       * @hide no intent to publish
       */
-    @SystemApi
     public boolean isVht8ssCapableDevice() {
         try {
             return mService.isVht8ssCapableDevice();

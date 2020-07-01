@@ -1721,7 +1721,6 @@ public class WifiP2pManager {
     }
 
     /** @hide */
-    @SystemApi
     public void setWFDR2Info(
             @NonNull Channel c, @NonNull WifiP2pWfdInfo wfdInfo,
             @Nullable ActionListener listener) {

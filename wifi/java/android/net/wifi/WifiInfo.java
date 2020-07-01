@@ -893,7 +893,6 @@ public class WifiInfo implements Parcelable {
     }
 
     /** @hide */
-    @SystemApi
     public boolean isVhtMax8SpatialStreamsSupported() {
         return mVhtMax8SpatialStreamsSupport;
     }
@@ -904,7 +903,6 @@ public class WifiInfo implements Parcelable {
     }
 
     /** @hide */
-    @SystemApi
     public boolean isHe8ssCapableAp() {
         return mHe8ssCapableAp;
     }
