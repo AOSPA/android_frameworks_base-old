@@ -391,17 +391,18 @@ public class MobileSignalController extends SignalController<
         return mImsManager != null && mImsManager.isEnhanced4gLteModeSettingEnabledByUser();
     }
 
+    private void hasNotch() {
+        int cutoutResId = mContext.getResources().getIdentifier(
+                "config_mainBuiltInDisplayCutout", "string", "android");
+        return !mContext.getResources().getString(cutoutResId).isEmpty();
+    }
+
     private int getVolteResId() {
         int resId = 0;
-        int voiceNetTye = getVoiceNetworkType();
-        if ( (mCurrentState.voiceCapable || mCurrentState.videoCapable)
-                &&  mCurrentState.imsRegistered ) {
-            resId = R.drawable.ic_volte;
-        }else if ( (mDataNetType == TelephonyManager.NETWORK_TYPE_LTE
-                        || mDataNetType == TelephonyManager.NETWORK_TYPE_LTE_CA)
-                    && voiceNetTye  == TelephonyManager.NETWORK_TYPE_UNKNOWN) {
-            resId = R.drawable.ic_volte_no_voice;
-        }
+        if ((mCurrentState.voiceCapable || mCurrentState.videoCapable)
+                && mCurrentState.imsRegistered)
+            resId = hasNotch() ? R.drawable.ic_volte_compact : R.drawable.ic_volte;
+
         return resId;
     }
 
@@ -1072,13 +1073,10 @@ public class MobileSignalController extends SignalController<
     }
 
     private MobileIconGroup getVowifiIconGroup() {
-        if ( isVowifiAvailable() && !isCallIdle() ) {
-            return TelephonyIcons.VOWIFI_CALLING;
-        }else if (isVowifiAvailable()) {
-            return TelephonyIcons.VOWIFI;
-        }else {
-            return null;
-        }
+        if (isVowifiAvailable())
+            return hasNotch() ? TelephonyIcons.VOWIFI_COMPACT : TelephonyIcons.VOWIFI;
+
+        return null;
     }
 
     @Override

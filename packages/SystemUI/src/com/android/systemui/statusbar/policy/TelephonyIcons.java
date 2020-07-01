@@ -23,7 +23,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 class TelephonyIcons {
-    //***** Data connection icons
+    // Data connection icons
     static final int FLIGHT_MODE_ICON = R.drawable.stat_sys_airplane_mode;
 
     static final int ICON_LTE = R.drawable.ic_lte_mobiledata;
@@ -43,7 +43,7 @@ class TelephonyIcons {
     static final int ICON_5G_BASIC = R.drawable.ic_5g_mobiledata;
     static final int ICON_5G_UWB = R.drawable.ic_5g_uwb_mobiledata;
     static final int ICON_VOWIFI = R.drawable.ic_vowifi;
-    static final int ICON_VOWIFI_CALLING = R.drawable.ic_vowifi_calling;
+    static final int ICON_VOWIFI_COMPACT = R.drawable.ic_vowifi_compact;
 
     static final MobileIconGroup CARRIER_NETWORK_CHANGE = new MobileIconGroup(
             "CARRIER_NETWORK_CHANGE",
@@ -345,8 +345,8 @@ class TelephonyIcons {
             TelephonyIcons.ICON_VOWIFI,
             false);
 
-    static final MobileIconGroup VOWIFI_CALLING = new MobileIconGroup(
-            "VoWIFICall",
+    static final MobileIconGroup VOWIFI_COMPACT = new MobileIconGroup(
+            "VoWIFICompat",
             null,
             null,
             AccessibilityContentDescriptions.PHONE_SIGNAL_STRENGTH,
@@ -355,7 +355,7 @@ class TelephonyIcons {
             0,
             AccessibilityContentDescriptions.PHONE_SIGNAL_STRENGTH[0],
             0,
-            TelephonyIcons.ICON_VOWIFI_CALLING,
+            TelephonyIcons.ICON_VOWIFI_COMPACT,
             false);
 
     /** Mapping icon name(lower case) to the icon object. */
