@@ -15206,8 +15206,13 @@ public class PackageManagerService extends IPackageManager.Stub
             idleController.addPowerSaveTempWhitelistAppDirect(Process.myUid(),
                      idleDuration,
                     false, "integrity component");
+            final BroadcastOptions options = BroadcastOptions.makeBasic();
+            options.setTemporaryAppWhitelistDuration(idleDuration);
+
             mContext.sendOrderedBroadcastAsUser(integrityVerification, UserHandle.SYSTEM,
                     /* receiverPermission= */ null,
+                    /* appOp= */ AppOpsManager.OP_NONE,
+                    /* options= */ options.toBundle(),
                     new BroadcastReceiver() {
                         @Override
                         public void onReceive(Context context, Intent intent) {
@@ -15310,6 +15315,8 @@ public class PackageManagerService extends IPackageManager.Stub
                 DeviceIdleInternal idleController =
                         mInjector.getLocalDeviceIdleController();
                 final long idleDuration = getVerificationTimeout();
+                final BroadcastOptions options = BroadcastOptions.makeBasic();
+                options.setTemporaryAppWhitelistDuration(idleDuration);
 
                 /*
                  * If any sufficient verifiers were listed in the package
@@ -15329,7 +15336,9 @@ public class PackageManagerService extends IPackageManager.Stub
 
                             final Intent sufficientIntent = new Intent(verification);
                             sufficientIntent.setComponent(verifierComponent);
-                            mContext.sendBroadcastAsUser(sufficientIntent, verifierUser);
+                            mContext.sendBroadcastAsUser(sufficientIntent, verifierUser,
+                                    /* receiverPermission= */ null,
+                                    options.toBundle());
                         }
                     }
                 }
@@ -15376,6 +15385,8 @@ public class PackageManagerService extends IPackageManager.Stub
                             verifierUser.getIdentifier(), false, "package verifier");
                     mContext.sendOrderedBroadcastAsUser(verification, verifierUser,
                             android.Manifest.permission.PACKAGE_VERIFICATION_AGENT,
+                            /* appOp= */ AppOpsManager.OP_NONE,
+                            /* options= */ options.toBundle(),
                             new BroadcastReceiver() {
                                 @Override
                                 public void onReceive(Context context, Intent intent) {
