@@ -1,0 +1,38 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "4013d60c_0ba309a0",
+        "filename": "packages/SystemUI/res/xml/icon_manager.xml",
+        "patchSetId": 3
+      },
+      "lineNbr": 30,
+      "author": {
+        "id": 1000488
+      },
+      "writtenOn": "2020-07-03T12:46:47Z",
+      "side": 1,
+      "message": "this would be taking up unnecessary extra space imo.",
+      "revId": "847007f961a02840646e5e47c711693ec9d64a1b",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "f4a36cd1_5b3b3400",
+        "filename": "packages/SystemUI/res/xml/icon_manager.xml",
+        "patchSetId": 3
+      },
+      "lineNbr": 62,
+      "author": {
+        "id": 1000488
+      },
+      "writtenOn": "2020-07-03T12:46:47Z",
+      "side": 1,
+      "message": "the name \u0027volume\u0027 is quite confusing. Makes me wanna switch it off and then see what it is about. Can you make this \u0027Ringer\u0027 or something that\u0027s more suitable?",
+      "revId": "847007f961a02840646e5e47c711693ec9d64a1b",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    }
+  ]
+}
