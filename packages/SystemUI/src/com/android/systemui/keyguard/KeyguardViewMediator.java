@@ -602,7 +602,7 @@ public class KeyguardViewMediator extends SystemUI implements Dumpable {
             if (targetUserId != ActivityManager.getCurrentUser()) {
                 return;
             }
-
+            if (DEBUG) Log.d(TAG, "keyguardDone");
             tryKeyguardDone();
         }
 
@@ -621,6 +621,7 @@ public class KeyguardViewMediator extends SystemUI implements Dumpable {
         @Override
         public void keyguardDonePending(boolean strongAuth, int targetUserId) {
             Trace.beginSection("KeyguardViewMediator.mViewMediatorCallback#keyguardDonePending");
+            if (DEBUG) Log.d(TAG, "keyguardDonePending");
             if (targetUserId != ActivityManager.getCurrentUser()) {
                 Trace.endSection();
                 return;
@@ -639,6 +640,7 @@ public class KeyguardViewMediator extends SystemUI implements Dumpable {
         @Override
         public void keyguardGone() {
             Trace.beginSection("KeyguardViewMediator.mViewMediatorCallback#keyguardGone");
+            if (DEBUG) Log.d(TAG, "keyguardGone");
             mKeyguardViewControllerLazy.get().setKeyguardGoingAwayState(false);
             mKeyguardDisplayManager.hide();
             Trace.endSection();
@@ -1707,9 +1709,14 @@ public class KeyguardViewMediator extends SystemUI implements Dumpable {
     };
 
     private void tryKeyguardDone() {
+        if (DEBUG) {
+            Log.d(TAG, "tryKeyguardDone: pending - " + mKeyguardDonePending + ", animRan - "
+                    + mHideAnimationRun + " animRunning - " + mHideAnimationRunning);
+        }
         if (!mKeyguardDonePending && mHideAnimationRun && !mHideAnimationRunning) {
             handleKeyguardDone();
         } else if (!mHideAnimationRun) {
+            if (DEBUG) Log.d(TAG, "tryKeyguardDone: starting pre-hide animation");
             mHideAnimationRun = true;
             mHideAnimationRunning = true;
             mKeyguardViewControllerLazy.get()
@@ -1936,6 +1943,7 @@ public class KeyguardViewMediator extends SystemUI implements Dumpable {
     };
 
     private final Runnable mHideAnimationFinishedRunnable = () -> {
+        Log.e(TAG, "mHideAnimationFinishedRunnable#run");
         mHideAnimationRunning = false;
         tryKeyguardDone();
     };

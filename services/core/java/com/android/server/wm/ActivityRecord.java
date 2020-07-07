@@ -268,6 +268,7 @@ import android.os.storage.StorageManager;
 import android.service.dreams.DreamActivity;
 import android.service.dreams.DreamManagerInternal;
 import android.service.voice.IVoiceInteractionSession;
+import android.text.TextUtils;
 import android.util.BoostFramework;
 import android.util.ArraySet;
 import android.util.EventLog;
@@ -2068,23 +2069,28 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
     }
 
     static boolean canLaunchDreamActivity(String packageName) {
-        final DreamManagerInternal dreamManager =
-                LocalServices.getService(DreamManagerInternal.class);
-
-        // Verify that the package is the current active dream. The getActiveDreamComponent()
-        // call path does not acquire the DreamManager lock and thus is safe to use.
-        final ComponentName activeDream = dreamManager.getActiveDreamComponent(false /* doze */);
-        if (activeDream == null || activeDream.getPackageName() == null
-                || !activeDream.getPackageName().equals(packageName)) {
+        if (packageName == null) {
             return false;
         }
 
-        // Verify that the device is dreaming.
         if (!LocalServices.getService(ActivityTaskManagerInternal.class).isDreaming()) {
             return false;
         }
 
-        return true;
+        final DreamManagerInternal dreamManager =
+                LocalServices.getService(DreamManagerInternal.class);
+
+        // Verify that the package is the current active dream or doze component. The
+        // getActiveDreamComponent() call path does not acquire the DreamManager lock and thus
+        // is safe to use.
+        final ComponentName activeDream = dreamManager.getActiveDreamComponent(false /* doze */);
+        final ComponentName activeDoze = dreamManager.getActiveDreamComponent(true /* doze */);
+        return TextUtils.equals(packageName, getPackageName(activeDream))
+                || TextUtils.equals(packageName, getPackageName(activeDoze));
+    }
+
+    private static String getPackageName(ComponentName componentName) {
+        return componentName != null ? componentName.getPackageName() : null;
     }
 
     private void setActivityType(boolean componentSpecified, int launchedFromUid, Intent intent,
@@ -3168,11 +3174,11 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
     }
 
     @Override
-    boolean checkCompleteDeferredRemoval() {
+    boolean handleCompleteDeferredRemoval() {
         if (mIsExiting) {
             removeIfPossible();
         }
-        return super.checkCompleteDeferredRemoval();
+        return super.handleCompleteDeferredRemoval();
     }
 
     void onRemovedFromDisplay() {

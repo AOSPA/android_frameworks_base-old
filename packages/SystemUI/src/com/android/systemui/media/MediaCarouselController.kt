@@ -39,9 +39,8 @@ class MediaCarouselController @Inject constructor(
     private val mediaHostStatesManager: MediaHostStatesManager,
     private val activityStarter: ActivityStarter,
     @Main executor: DelayableExecutor,
-    mediaManager: MediaDataCombineLatest,
+    mediaManager: MediaDataFilter,
     configurationController: ConfigurationController,
-    mediaDataManager: MediaDataManager,
     falsingManager: FalsingManager
 ) {
     /**
@@ -148,7 +147,7 @@ class MediaCarouselController @Inject constructor(
         mediaCarousel = mediaFrame.requireViewById(R.id.media_carousel_scroller)
         pageIndicator = mediaFrame.requireViewById(R.id.media_page_indicator)
         mediaCarouselScrollHandler = MediaCarouselScrollHandler(mediaCarousel, pageIndicator,
-                executor, mediaDataManager::onSwipeToDismiss, this::updatePageIndicatorLocation,
+                executor, mediaManager::onSwipeToDismiss, this::updatePageIndicatorLocation,
                 falsingManager)
         isRtl = context.resources.configuration.layoutDirection == View.LAYOUT_DIRECTION_RTL
         inflateSettingsButton()
@@ -249,6 +248,7 @@ class MediaCarouselController @Inject constructor(
             val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.WRAP_CONTENT)
             existingPlayer.view?.player?.setLayoutParams(lp)
+            existingPlayer.bind(data)
             existingPlayer.setListening(currentlyExpanded)
             updatePlayerToState(existingPlayer, noAnimation = true)
             if (existingPlayer.isPlaying) {
@@ -256,16 +256,18 @@ class MediaCarouselController @Inject constructor(
             } else {
                 mediaContent.addView(existingPlayer.view?.player)
             }
-        } else if (existingPlayer.isPlaying &&
-                mediaContent.indexOfChild(existingPlayer.view?.player) != 0) {
-            if (visualStabilityManager.isReorderingAllowed) {
-                mediaContent.removeView(existingPlayer.view?.player)
-                mediaContent.addView(existingPlayer.view?.player, 0)
-            } else {
-                needsReordering = true
+        } else {
+            existingPlayer.bind(data)
+            if (existingPlayer.isPlaying &&
+                    mediaContent.indexOfChild(existingPlayer.view?.player) != 0) {
+                if (visualStabilityManager.isReorderingAllowed) {
+                    mediaContent.removeView(existingPlayer.view?.player)
+                    mediaContent.addView(existingPlayer.view?.player, 0)
+                } else {
+                    needsReordering = true
+                }
             }
         }
-        existingPlayer?.bind(data)
         updatePageIndicator()
         mediaCarouselScrollHandler.onPlayersChanged()
         mediaCarousel.requiresRemeasuring = true
@@ -299,6 +301,7 @@ class MediaCarouselController @Inject constructor(
         if (numPages == 1) {
             pageIndicator.setLocation(0f)
         }
+        updatePageIndicatorAlpha()
     }
 
     /**
