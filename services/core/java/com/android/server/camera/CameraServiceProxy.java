@@ -16,6 +16,7 @@
 package com.android.server.camera;
 
 import android.app.AlertDialog;
+import android.app.KeyguardManager;
 import android.annotation.IntDef;
 import android.content.BroadcastReceiver;
 import android.content.Context;
@@ -83,12 +84,10 @@ public class CameraServiceProxy extends SystemService
     private static final int MSG_SWITCH_USER = 1;
     private static final int MSG_CAMERA_CLOSED = 1001;
     private static final int MSG_CAMERA_OPENED = 1002;
-    private static final int MSG_SCREEN_ON = 1003;
 
     private static final int RETRY_DELAY_TIME = 20; //ms
     private static final int RETRY_TIMES = 30;
     private static final int CAMERA_EVENT_DELAY_TIME = 70; //ms
-    private static final int SCREEN_EVENT_DELAY_TIME = 200; //ms
 
     // Maximum entries to keep in usage history before dumping out
     private static final int MAX_USAGE_HISTORY = 100;
@@ -134,8 +133,6 @@ public class CameraServiceProxy extends SystemService
     private final @NfcNotifyState int mNotifyNfc;
     private boolean mLastNfcPollState = true;
 
-    private boolean mScreenOn;
-
     private long mClosedEvent;
 
     private boolean mHasPopupCamera;
@@ -144,6 +141,7 @@ public class CameraServiceProxy extends SystemService
     private final boolean mAllowMediaUid;
 
     private AlertDialog mAlertDialog;
+    private KeyguardManager mKeyguardManager;
 
     /**
      * Structure to track camera usage
@@ -202,13 +200,6 @@ public class CameraServiceProxy extends SystemService
                         if (mEnabledCameraUsers == null) return;
                         switchUserLocked(mLastUser);
                     }
-                    break;
-                case Intent.ACTION_SCREEN_OFF:
-                    mHandler.removeMessages(MSG_SCREEN_ON);
-                    mScreenOn = false;
-                    break;
-                case Intent.ACTION_SCREEN_ON:
-                    mHandler.sendEmptyMessageDelayed(MSG_SCREEN_ON, SCREEN_EVENT_DELAY_TIME);
                     break;
                 default:
                     break; // do nothing
@@ -269,6 +260,7 @@ public class CameraServiceProxy extends SystemService
         mHandlerThread = new ServiceThread(TAG, Process.THREAD_PRIORITY_DISPLAY, /*allowTo*/false);
         mHandlerThread.start();
         mHandler = new Handler(mHandlerThread.getLooper(), this);
+        mKeyguardManager = (KeyguardManager) mContext.getSystemService(Context.KEYGUARD_SERVICE);
 
         int notifyNfc = SystemProperties.getInt(NFC_NOTIFICATION_PROP, 0);
         if (notifyNfc < NFC_NOTIFY_NONE || notifyNfc > NFC_NOTIFY_FRONT) {
@@ -293,34 +285,32 @@ public class CameraServiceProxy extends SystemService
                 }
             } break;
             case MSG_CAMERA_OPENED: {
-                if (mScreenOn || mClientName.equals(FACESENSE_CLIENT_NAME)) {
-                    sendCameraStateIntent("1");
-                } else {
-                    if (mAlertDialog == null) {
-                        mAlertDialog = new AlertDialog.Builder(mContext)
-                            .setMessage(com.android.internal.R.string.popup_camera_dialog_message)
-                            .setNegativeButton(com.android.internal.R.string
-                                    .popup_camera_dialog_no, (dialog, which) -> {
-                                // Go back to home screen
-                                Intent intent = new Intent(Intent.ACTION_MAIN);
-                                intent.addCategory(Intent.CATEGORY_HOME);
-                                intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                                mContext.startActivity(intent);
-                            })
-                            .setPositiveButton(com.android.internal.R.string
-                                    .popup_camera_dialog_raise, (dialog, which) -> {
-                                // Raise the camera
-                                sendCameraStateIntent("1");
-                            })
-                            .create();
-                        mAlertDialog.getWindow().setType(WindowManager.LayoutParams.TYPE_SYSTEM_ERROR);
-                        mAlertDialog.setCanceledOnTouchOutside(false);
-                    }
-                    mAlertDialog.show();
+                if (mAlertDialog == null) {
+                    mAlertDialog = new AlertDialog.Builder(mContext)
+                        .setMessage(com.android.internal.R.string.popup_camera_dialog_message)
+                        .setNegativeButton(com.android.internal.R.string
+                                .popup_camera_dialog_no, (dialog, which) -> {
+                            // Go back to home screen
+                            Intent intent = new Intent(Intent.ACTION_MAIN);
+                            intent.addCategory(Intent.CATEGORY_HOME);
+                            intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                            mContext.startActivity(intent);
+                        })
+                        .setPositiveButton(com.android.internal.R.string
+                                .popup_camera_dialog_raise, (dialog, which) -> {
+                            // Raise the camera
+                            sendCameraStateIntent("1");
+                        })
+                        .create();
+                    mAlertDialog.getWindow().setType(WindowManager.LayoutParams.TYPE_SYSTEM_ERROR);
+                    mAlertDialog.setCanceledOnTouchOutside(false);
                 }
-            } break;
-            case MSG_SCREEN_ON: {
-                mScreenOn = true;
+                if (mKeyguardManager.isKeyguardLocked() && !mClientName
+                        .equals(FACESENSE_CLIENT_NAME)) {
+                    mAlertDialog.show();
+                } else {
+                    sendCameraStateIntent("1");
+                }
             } break;
             default: {
                 Slog.e(TAG, "CameraServiceProxy error, invalid message: " + msg.what);
@@ -347,13 +337,8 @@ public class CameraServiceProxy extends SystemService
         filter.addAction(Intent.ACTION_USER_INFO_CHANGED);
         filter.addAction(Intent.ACTION_MANAGED_PROFILE_ADDED);
         filter.addAction(Intent.ACTION_MANAGED_PROFILE_REMOVED);
-        if(mHasPopupCamera) {
-            filter.addAction(Intent.ACTION_SCREEN_OFF);
-            filter.addAction(Intent.ACTION_SCREEN_ON);
-        }
         mContext.registerReceiver(mIntentReceiver, filter);
 
-        mScreenOn = true;
         publishBinderService(CAMERA_SERVICE_PROXY_BINDER_NAME, mCameraServiceProxy);
         publishLocalService(CameraServiceProxy.class, this);
 
