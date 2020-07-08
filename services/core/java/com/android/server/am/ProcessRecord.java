@@ -953,12 +953,13 @@ class ProcessRecord implements WindowProcessListener {
                 killed = true;
                 killedByAm = true;
             }
-            if (ux_perf != null && !mService.mForceStopKill) {
+            if (ux_perf != null && !mService.mForceStopKill && !mNotResponding && !mCrashing) {
                 ux_perf.perfUXEngine_events(BoostFramework.UXE_EVENT_KILL, 0, this.processName, 0);
-                ux_perf.perfHint(BoostFramework.VENDOR_HINT_KILL, this.processName, pid, 0);
             } else {
                 mService.mForceStopKill = false;
             }
+            if (ux_perf != null)
+                ux_perf.perfHint(BoostFramework.VENDOR_HINT_KILL, this.processName, pid, 0);//sending Kill notification to PreKill iresspective of Kill reason.
             Trace.traceEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER);
         }
     }
@@ -1301,6 +1302,7 @@ class ProcessRecord implements WindowProcessListener {
     void setHasTopUi(boolean hasTopUi) {
         mHasTopUi = hasTopUi;
         mWindowProcessController.setHasTopUi(hasTopUi);
+        updateTopUiOrRunningRemoteAnim();
     }
 
     boolean hasTopUi() {
@@ -1551,7 +1553,16 @@ class ProcessRecord implements WindowProcessListener {
                 Slog.i(TAG, "Setting runningRemoteAnimation=" + runningRemoteAnimation
                         + " for pid=" + pid);
             }
+            updateTopUiOrRunningRemoteAnim();
             mService.updateOomAdjLocked(this, true, OomAdjuster.OOM_ADJ_REASON_UI_VISIBILITY);
+        }
+    }
+
+    void updateTopUiOrRunningRemoteAnim() {
+        if (runningRemoteAnimation || hasTopUi()) {
+            mService.addTopUiOrRunningRemoteAnim(this);
+        } else {
+            mService.removeTopUiOrRunningRemoteAnim(this);
         }
     }
 

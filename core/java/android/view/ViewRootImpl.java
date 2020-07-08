@@ -21,7 +21,7 @@ import static android.view.Display.INVALID_DISPLAY;
 import static android.view.InputDevice.SOURCE_CLASS_NONE;
 import static android.view.InsetsState.ITYPE_NAVIGATION_BAR;
 import static android.view.InsetsState.ITYPE_STATUS_BAR;
-import static android.view.InsetsState.LAST_TYPE;
+import static android.view.InsetsState.SIZE;
 import static android.view.View.PFLAG_DRAW_ANIMATION;
 import static android.view.View.SYSTEM_UI_FLAG_FULLSCREEN;
 import static android.view.View.SYSTEM_UI_FLAG_HIDE_NAVIGATION;
@@ -114,6 +114,7 @@ import android.os.Trace;
 import android.os.UserHandle;
 import android.sysprop.DisplayProperties;
 import android.util.AndroidRuntimeException;
+import android.util.BoostFramework.ScrollOptimizer;
 import android.util.DisplayMetrics;
 import android.util.Log;
 import android.util.LongArray;
@@ -564,7 +565,7 @@ public final class ViewRootImpl implements ViewParent,
             new DisplayCutout.ParcelableWrapper(DisplayCutout.NO_CUTOUT);
     boolean mPendingAlwaysConsumeSystemBars;
     private final InsetsState mTempInsets = new InsetsState();
-    private final InsetsSourceControl[] mTempControls = new InsetsSourceControl[LAST_TYPE + 1];
+    private final InsetsSourceControl[] mTempControls = new InsetsSourceControl[SIZE];
     final ViewTreeObserver.InternalInsetsInfo mLastGivenInsets
             = new ViewTreeObserver.InternalInsetsInfo();
 
@@ -2315,7 +2316,7 @@ public final class ViewRootImpl implements ViewParent,
                 || lp.type == TYPE_VOLUME_OVERLAY;
     }
 
-    private int dipToPx(int dip) {
+    int dipToPx(int dip) {
         final DisplayMetrics displayMetrics = mContext.getResources().getDisplayMetrics();
         return (int) (displayMetrics.density * dip + 0.5f);
     }
@@ -4617,6 +4618,9 @@ public final class ViewRootImpl implements ViewParent,
     }
 
     void dispatchDetachedFromWindow() {
+        // Make sure we free-up insets resources if view never received onWindowFocusLost()
+        // because of a die-signal
+        mInsetsController.onWindowFocusLost();
         mFirstInputStage.onDetachedFromWindow();
         if (mView != null && mView.mAttachInfo != null) {
             mAttachInfo.mTreeObserver.dispatchOnWindowAttachedChange(false);
@@ -8003,6 +8007,7 @@ public final class ViewRootImpl implements ViewParent,
             long eventTime = q.mEvent.getEventTimeNano();
             long oldestEventTime = eventTime;
             if (q.mEvent instanceof MotionEvent) {
+                ScrollOptimizer.setSurface(mSurface);
                 MotionEvent me = (MotionEvent)q.mEvent;
                 if (me.getHistorySize() > 0) {
                     oldestEventTime = me.getHistoricalEventTimeNano(0);

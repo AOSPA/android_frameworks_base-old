@@ -151,7 +151,7 @@ public final class MediaRouter2 {
      *
      * @hide
      */
-    public static boolean checkRouteListContainsRouteId(@NonNull List<MediaRoute2Info> routeList,
+    static boolean checkRouteListContainsRouteId(@NonNull List<MediaRoute2Info> routeList,
             @NonNull String routeId) {
         for (MediaRoute2Info info : routeList) {
             if (TextUtils.equals(routeId, info.getId())) {
@@ -196,7 +196,7 @@ public final class MediaRouter2 {
                 try {
                     mMediaRouterService.setDiscoveryRequestWithRouter2(mStub, mDiscoveryPreference);
                 } catch (RemoteException ex) {
-                    Log.e(TAG, "registerRouteCallback: Unable to set discovery request.");
+                    Log.e(TAG, "registerRouteCallback: Unable to set discovery request.", ex);
                 }
             }
         }
@@ -214,7 +214,7 @@ public final class MediaRouter2 {
 
         if (!mRouteCallbackRecords.remove(
                 new RouteCallbackRecord(null, routeCallback, null))) {
-            Log.w(TAG, "Ignoring unknown callback");
+            Log.w(TAG, "unregisterRouteCallback: Ignoring unknown callback");
             return;
         }
 
@@ -227,7 +227,7 @@ public final class MediaRouter2 {
                     mMediaRouterService.setDiscoveryRequestWithRouter2(
                             mStub, mDiscoveryPreference);
                 } catch (RemoteException ex) {
-                    Log.e(TAG, "unregisterRouteCallback: Unable to set discovery request.");
+                    Log.e(TAG, "unregisterRouteCallback: Unable to set discovery request.", ex);
                 }
             }
             if (mRouteCallbackRecords.isEmpty() && mNonSystemRoutingControllers.isEmpty()) {
@@ -258,8 +258,6 @@ public final class MediaRouter2 {
      * Gets the unmodifiable list of {@link MediaRoute2Info routes} currently
      * known to the media router.
      * <p>
-     * {@link MediaRoute2Info#isSystemRoute() System routes} such as phone speaker,
-     * Bluetooth devices are always included in the list.
      * Please note that the list can be changed before callbacks are invoked.
      * </p>
      *
@@ -274,8 +272,7 @@ public final class MediaRouter2 {
 
                 List<MediaRoute2Info> filteredRoutes = new ArrayList<>();
                 for (MediaRoute2Info route : mRoutes.values()) {
-                    if (route.isSystemRoute()
-                            || route.hasAnyFeatures(mDiscoveryPreference.getPreferredFeatures())) {
+                    if (route.hasAnyFeatures(mDiscoveryPreference.getPreferredFeatures())) {
                         filteredRoutes.add(route);
                     }
                 }
@@ -378,6 +375,7 @@ public final class MediaRouter2 {
      */
     public void transferTo(@NonNull MediaRoute2Info route) {
         Objects.requireNonNull(route, "route must not be null");
+        Log.v(TAG, "Transferring to route: " + route);
         transfer(getCurrentController(), route);
     }
 
@@ -500,7 +498,7 @@ public final class MediaRouter2 {
             try {
                 mMediaRouterService.setRouteVolumeWithRouter2(stub, route, volume);
             } catch (RemoteException ex) {
-                Log.e(TAG, "Unable to send control request.", ex);
+                Log.e(TAG, "Unable to set route volume.", ex);
             }
         }
     }
@@ -525,8 +523,7 @@ public final class MediaRouter2 {
                 if (!currentRoutesIds.contains(routeId)) {
                     // This route is removed while the callback is unregistered.
                     MediaRoute2Info route = mRoutes.get(routeId);
-                    if (route.isSystemRoute()
-                            || route.hasAnyFeatures(mDiscoveryPreference.getPreferredFeatures())) {
+                    if (route.hasAnyFeatures(mDiscoveryPreference.getPreferredFeatures())) {
                         removedRoutes.add(mRoutes.get(routeId));
                     }
                 }
@@ -536,16 +533,14 @@ public final class MediaRouter2 {
                 if (mRoutes.containsKey(route.getId())) {
                     if (!route.equals(mRoutes.get(route.getId()))) {
                         // This route is changed while the callback is unregistered.
-                        if (route.isSystemRoute()
-                                || route.hasAnyFeatures(
+                        if (route.hasAnyFeatures(
                                         mDiscoveryPreference.getPreferredFeatures())) {
                             changedRoutes.add(route);
                         }
                     }
                 } else {
                     // This route is added while the callback is unregistered.
-                    if (route.isSystemRoute()
-                            || route.hasAnyFeatures(mDiscoveryPreference.getPreferredFeatures())) {
+                    if (route.hasAnyFeatures(mDiscoveryPreference.getPreferredFeatures())) {
                         addedRoutes.add(route);
                     }
                 }
@@ -581,8 +576,7 @@ public final class MediaRouter2 {
         synchronized (sRouterLock) {
             for (MediaRoute2Info route : routes) {
                 mRoutes.put(route.getId(), route);
-                if (route.isSystemRoute()
-                        || route.hasAnyFeatures(mDiscoveryPreference.getPreferredFeatures())) {
+                if (route.hasAnyFeatures(mDiscoveryPreference.getPreferredFeatures())) {
                     addedRoutes.add(route);
                 }
             }
@@ -598,8 +592,7 @@ public final class MediaRouter2 {
         synchronized (sRouterLock) {
             for (MediaRoute2Info route : routes) {
                 mRoutes.remove(route.getId());
-                if (route.isSystemRoute()
-                        || route.hasAnyFeatures(mDiscoveryPreference.getPreferredFeatures())) {
+                if (route.hasAnyFeatures(mDiscoveryPreference.getPreferredFeatures())) {
                     removedRoutes.add(route);
                 }
             }
@@ -615,11 +608,11 @@ public final class MediaRouter2 {
         synchronized (sRouterLock) {
             for (MediaRoute2Info route : routes) {
                 mRoutes.put(route.getId(), route);
-                if (route.isSystemRoute()
-                        || route.hasAnyFeatures(mDiscoveryPreference.getPreferredFeatures())) {
+                if (route.hasAnyFeatures(mDiscoveryPreference.getPreferredFeatures())) {
                     changedRoutes.add(route);
                 }
             }
+            mShouldUpdateRoutes = true;
         }
         if (changedRoutes.size() > 0) {
             notifyRoutesChanged(changedRoutes);
@@ -788,7 +781,8 @@ public final class MediaRouter2 {
                 mMediaRouterService.notifySessionHintsForCreatingSession(
                         stub, uniqueRequestId, route, controllerHints);
             } catch (RemoteException ex) {
-                Log.e(TAG, "getSessionHintsOnHandler: Unable to request.", ex);
+                Log.e(TAG, "onGetControllerHintsForCreatingSessionOnHandler: Unable to notify "
+                        + " session hints for creating session.", ex);
             }
         }
     }
@@ -796,8 +790,7 @@ public final class MediaRouter2 {
     private List<MediaRoute2Info> filterRoutes(List<MediaRoute2Info> routes,
             RouteDiscoveryPreference discoveryRequest) {
         return routes.stream()
-                .filter(route -> route.isSystemRoute()
-                        || route.hasAnyFeatures(discoveryRequest.getPreferredFeatures()))
+                .filter(route -> route.hasAnyFeatures(discoveryRequest.getPreferredFeatures()))
                 .collect(Collectors.toList());
     }
 
@@ -1120,7 +1113,7 @@ public final class MediaRouter2 {
             Objects.requireNonNull(route, "route must not be null");
             synchronized (mControllerLock) {
                 if (mIsReleased) {
-                    Log.w(TAG, "selectRoute() called on released controller. Ignoring.");
+                    Log.w(TAG, "selectRoute: Called on released controller. Ignoring.");
                     return;
                 }
             }
@@ -1169,7 +1162,7 @@ public final class MediaRouter2 {
             Objects.requireNonNull(route, "route must not be null");
             synchronized (mControllerLock) {
                 if (mIsReleased) {
-                    Log.w(TAG, "deselectRoute() called on released controller. Ignoring.");
+                    Log.w(TAG, "deselectRoute: called on released controller. Ignoring.");
                     return;
                 }
             }
@@ -1216,7 +1209,7 @@ public final class MediaRouter2 {
             Objects.requireNonNull(route, "route must not be null");
             synchronized (mControllerLock) {
                 if (mIsReleased) {
-                    Log.w(TAG, "transferToRoute() called on released controller. Ignoring.");
+                    Log.w(TAG, "transferToRoute: Called on released controller. Ignoring.");
                     return;
                 }
 
@@ -1254,17 +1247,17 @@ public final class MediaRouter2 {
          */
         public void setVolume(int volume) {
             if (getVolumeHandling() == MediaRoute2Info.PLAYBACK_VOLUME_FIXED) {
-                Log.w(TAG, "setVolume: the routing session has fixed volume. Ignoring.");
+                Log.w(TAG, "setVolume: The routing session has fixed volume. Ignoring.");
                 return;
             }
             if (volume < 0 || volume > getVolumeMax()) {
-                Log.w(TAG, "setVolume: the target volume is out of range. Ignoring");
+                Log.w(TAG, "setVolume: The target volume is out of range. Ignoring");
                 return;
             }
 
             synchronized (mControllerLock) {
                 if (mIsReleased) {
-                    Log.w(TAG, "setVolume is called on released controller. Ignoring.");
+                    Log.w(TAG, "setVolume: Called on released controller. Ignoring.");
                     return;
                 }
             }
@@ -1298,7 +1291,7 @@ public final class MediaRouter2 {
         boolean releaseInternal(boolean shouldReleaseSession, boolean shouldNotifyStop) {
             synchronized (mControllerLock) {
                 if (mIsReleased) {
-                    Log.w(TAG, "releaseInternal() called on released controller. Ignoring.");
+                    Log.w(TAG, "releaseInternal: Called on released controller. Ignoring.");
                     return false;
                 }
                 mIsReleased = true;

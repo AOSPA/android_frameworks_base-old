@@ -49,6 +49,7 @@ import android.os.Build;
 import android.os.IBinder;
 import android.os.Parcel;
 import android.os.Parcelable;
+import android.os.Trace;
 import android.util.ArrayMap;
 import android.util.Log;
 import android.util.SparseIntArray;
@@ -102,6 +103,8 @@ public final class SurfaceControl implements Parcelable {
             long otherTransactionObj);
     private static native void nativeSetAnimationTransaction(long transactionObj);
     private static native void nativeSetEarlyWakeup(long transactionObj);
+    private static native void nativeSetEarlyWakeupStart(long transactionObj);
+    private static native void nativeSetEarlyWakeupEnd(long transactionObj);
 
     private static native void nativeSetLayer(long transactionObj, long nativeObject, int zorder);
     private static native void nativeSetRelativeLayer(long transactionObj, long nativeObject,
@@ -230,7 +233,6 @@ public final class SurfaceControl implements Parcelable {
      */
     public long mNativeObject;
     private long mNativeHandle;
-    private Throwable mReleaseStack = null;
 
     // TODO: Move this to native.
     private final Object mSizeLock = new Object();
@@ -441,17 +443,12 @@ public final class SurfaceControl implements Parcelable {
             release();
         }
         if (nativeObject != 0) {
+            Trace.traceBegin(Trace.TRACE_TAG_WINDOW_MANAGER, "closeGuard");
             mCloseGuard.open("release");
+            Trace.traceEnd(Trace.TRACE_TAG_WINDOW_MANAGER);
         }
         mNativeObject = nativeObject;
         mNativeHandle = mNativeObject != 0 ? nativeGetHandle(nativeObject) : 0;
-        if (mNativeObject == 0) {
-            if (Build.IS_DEBUGGABLE) {
-                mReleaseStack = new Throwable("assigned zero nativeObject here");
-            }
-        } else {
-            mReleaseStack = null;
-        }
     }
 
     /**
@@ -1027,19 +1024,8 @@ public final class SurfaceControl implements Parcelable {
             nativeRelease(mNativeObject);
             mNativeObject = 0;
             mNativeHandle = 0;
-            if (Build.IS_DEBUGGABLE) {
-                mReleaseStack = new Throwable("released here");
-            }
             mCloseGuard.close();
         }
-    }
-
-    /**
-     * Returns the call stack that assigned mNativeObject to zero.
-     * @hide
-     */
-    public Throwable getReleaseStack() {
-        return mReleaseStack;
     }
 
     /**
@@ -1053,11 +1039,8 @@ public final class SurfaceControl implements Parcelable {
     }
 
     private void checkNotReleased() {
-        if (mNativeObject == 0) {
-            Log.wtf(TAG, "Invalid " + this + " caused by:", mReleaseStack);
-            throw new NullPointerException(
-                "mNativeObject of " + this + " is null. Have you called release() already?");
-        }
+        if (mNativeObject == 0) throw new NullPointerException(
+                "Invalid " + this + ", mNativeObject is null. Have you called release() already?");
     }
 
     /**
@@ -2800,6 +2783,8 @@ public final class SurfaceControl implements Parcelable {
         }
 
         /**
+         * @deprecated use {@link Transaction#setEarlyWakeupStart()}
+         *
          * Indicate that SurfaceFlinger should wake up earlier than usual as a result of this
          * transaction. This should be used when the caller thinks that the scene is complex enough
          * that it's likely to hit GL composition, and thus, SurfaceFlinger needs to more time in
@@ -2808,8 +2793,32 @@ public final class SurfaceControl implements Parcelable {
          * Corresponds to setting ISurfaceComposer::eEarlyWakeup
          * @hide
          */
+        @Deprecated
         public Transaction setEarlyWakeup() {
             nativeSetEarlyWakeup(mNativeObject);
+            return this;
+        }
+
+         /**
+          * Provides a hint to SurfaceFlinger to change its offset so that SurfaceFlinger wakes up
+          * earlier to compose surfaces. The caller should use this as a hint to SurfaceFlinger
+          * when the scene is complex enough to use GPU composition. The hint will remain active
+          * until until the client calls {@link Transaction#setEarlyWakeupEnd}.
+          *
+          * @hide
+          */
+        public Transaction setEarlyWakeupStart() {
+            nativeSetEarlyWakeupStart(mNativeObject);
+            return this;
+        }
+
+        /**
+         * Removes the early wake up hint set by {@link Transaction#setEarlyWakeupStart}.
+         *
+         * @hide
+         */
+        public Transaction setEarlyWakeupEnd() {
+            nativeSetEarlyWakeupEnd(mNativeObject);
             return this;
         }
 

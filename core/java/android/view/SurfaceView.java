@@ -640,7 +640,7 @@ public class SurfaceView extends View implements ViewRootImpl.SurfaceChangedCall
                 mTmpRect.set(0, 0, mSurfaceWidth, mSurfaceHeight);
             }
             SyncRtSurfaceTransactionApplier applier = new SyncRtSurfaceTransactionApplier(this);
-            applier.scheduleApply(false /* earlyWakeup */,
+            applier.scheduleApply(
                     new SyncRtSurfaceTransactionApplier.SurfaceParams.Builder(mSurfaceControl)
                             .withWindowCrop(mTmpRect)
                             .build());
@@ -913,12 +913,15 @@ public class SurfaceView extends View implements ViewRootImpl.SurfaceChangedCall
             }
             return;
         }
-        ViewRootImpl viewRoot = getViewRootImpl();
-        if (viewRoot == null || viewRoot.mSurface == null || !viewRoot.mSurface.isValid()) {
-            if (DEBUG) {
-                Log.d(TAG, System.identityHashCode(this)
-                        + " updateSurface: no valid surface");
-            }
+        final ViewRootImpl viewRoot = getViewRootImpl();
+
+        if (viewRoot == null) {
+            return;
+        }
+
+        if (viewRoot.mSurface == null || !viewRoot.mSurface.isValid()) {
+            notifySurfaceDestroyed();
+            releaseSurfaces();
             return;
         }
 
@@ -1129,28 +1132,7 @@ public class SurfaceView extends View implements ViewRootImpl.SurfaceChangedCall
                     final boolean surfaceChanged = creating;
                     if (mSurfaceCreated && (surfaceChanged || (!visible && visibleChanged))) {
                         mSurfaceCreated = false;
-                        if (mSurface.isValid()) {
-                            if (DEBUG) Log.i(TAG, System.identityHashCode(this) + " "
-                                    + "visibleChanged -- surfaceDestroyed");
-                            callbacks = getSurfaceCallbacks();
-                            for (SurfaceHolder.Callback c : callbacks) {
-                                c.surfaceDestroyed(mSurfaceHolder);
-                            }
-                            // Since Android N the same surface may be reused and given to us
-                            // again by the system server at a later point. However
-                            // as we didn't do this in previous releases, clients weren't
-                            // necessarily required to clean up properly in
-                            // surfaceDestroyed. This leads to problems for example when
-                            // clients don't destroy their EGL context, and try
-                            // and create a new one on the same surface following reuse.
-                            // Since there is no valid use of the surface in-between
-                            // surfaceDestroyed and surfaceCreated, we force a disconnect,
-                            // so the next connect will always work if we end up reusing
-                            // the surface.
-                            if (mSurface.isValid()) {
-                                mSurface.forceScopedDisconnect();
-                            }
-                        }
+                        notifySurfaceDestroyed();
                     }
 
                     if (creating) {
@@ -1658,9 +1640,14 @@ public class SurfaceView extends View implements ViewRootImpl.SurfaceChangedCall
     }
 
     private void updateRelativeZ(Transaction t) {
-        SurfaceControl viewRoot = getViewRootImpl().getSurfaceControl();
-        t.setRelativeLayer(mBackgroundControl, viewRoot, Integer.MIN_VALUE);
-        t.setRelativeLayer(mSurfaceControl, viewRoot, mSubLayer);
+        final ViewRootImpl viewRoot = getViewRootImpl();
+        if (viewRoot == null) {
+            // We were just detached.
+            return;
+        }
+        final SurfaceControl viewRootControl = viewRoot.getSurfaceControl();
+        t.setRelativeLayer(mBackgroundControl, viewRootControl, Integer.MIN_VALUE);
+        t.setRelativeLayer(mSurfaceControl, viewRootControl, mSubLayer);
     }
 
     /**
@@ -1803,6 +1790,31 @@ public class SurfaceView extends View implements ViewRootImpl.SurfaceChangedCall
             mScreenMatrixForEmbeddedHierarchy.set(mTmpMatrix);
         } catch (RemoteException e) {
             Log.d(TAG, "Error while setScreenMatrix " + e);
+        }
+    }
+
+    private void notifySurfaceDestroyed() {
+        if (mSurface.isValid()) {
+            if (DEBUG) Log.i(TAG, System.identityHashCode(this) + " "
+                    + "surfaceDestroyed");
+            SurfaceHolder.Callback[] callbacks = getSurfaceCallbacks();
+            for (SurfaceHolder.Callback c : callbacks) {
+                c.surfaceDestroyed(mSurfaceHolder);
+            }
+            // Since Android N the same surface may be reused and given to us
+            // again by the system server at a later point. However
+            // as we didn't do this in previous releases, clients weren't
+            // necessarily required to clean up properly in
+            // surfaceDestroyed. This leads to problems for example when
+            // clients don't destroy their EGL context, and try
+            // and create a new one on the same surface following reuse.
+            // Since there is no valid use of the surface in-between
+            // surfaceDestroyed and surfaceCreated, we force a disconnect,
+            // so the next connect will always work if we end up reusing
+            // the surface.
+            if (mSurface.isValid()) {
+                mSurface.forceScopedDisconnect();
+            }
         }
     }
 

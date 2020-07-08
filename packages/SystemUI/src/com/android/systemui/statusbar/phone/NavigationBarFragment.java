@@ -152,8 +152,6 @@ public class NavigationBarFragment extends LifecycleFragment implements Callback
     private static final String EXTRA_DISABLE2_STATE = "disabled2_state";
     private static final String EXTRA_APPEARANCE = "appearance";
     private static final String EXTRA_TRANSIENT_STATE = "transient_state";
-    private static final String FIXED_ROTATION_TRANSFORM_SETTING_NAME = "fixed_rotation_transform";
-
 
     /** Allow some time inbetween the long press for back and recents. */
     private static final int LOCK_TO_APP_GESTURE_TOLERENCE = 200;
@@ -223,9 +221,8 @@ public class NavigationBarFragment extends LifecycleFragment implements Callback
      */
     private VerticalNavigationHandle mOrientationHandle;
     private WindowManager.LayoutParams mOrientationParams;
-    private int mStartingQuickSwitchRotation;
+    private int mStartingQuickSwitchRotation = -1;
     private int mCurrentRotation;
-    private boolean mFixedRotationEnabled;
     private ViewTreeObserver.OnGlobalLayoutListener mOrientationHandleGlobalLayoutListener;
     private UiEventLogger mUiEventLogger;
 
@@ -323,6 +320,20 @@ public class NavigationBarFragment extends LifecycleFragment implements Callback
                 buttonDispatcher.setAlpha(forceVisible ? 1f : alpha, animate);
             }
         }
+
+        @Override
+        public void onOverviewShown(boolean fromHome) {
+            // If the overview has fixed orientation that may change display to natural rotation,
+            // we don't want the user rotation to be reset. So after user returns to application,
+            // it can keep in the original rotation.
+            mNavigationBarView.getRotationButtonController().setSkipOverrideUserLockPrefsOnce();
+        }
+
+        @Override
+        public void onToggleRecentApps() {
+            // The same case as onOverviewShown but only for 3-button navigation.
+            mNavigationBarView.getRotationButtonController().setSkipOverrideUserLockPrefsOnce();
+        }
     };
 
     private NavigationBarTransitions.DarkIntensityListener mOrientationHandleIntensityListener =
@@ -353,14 +364,6 @@ public class NavigationBarFragment extends LifecycleFragment implements Callback
                 sendAssistantAvailability(available);
                 mAssistantAvailable = available;
             }
-        }
-    };
-
-    private final ContentObserver mFixedRotationObserver = new ContentObserver(
-            new Handler(Looper.getMainLooper())) {
-        @Override
-        public void onChange(boolean selfChange, Uri uri) {
-            updatedFixedRotation();
         }
     };
 
@@ -425,10 +428,6 @@ public class NavigationBarFragment extends LifecycleFragment implements Callback
                 Settings.Secure.getUriFor(Settings.Secure.ASSISTANT),
                 false /* notifyForDescendants */, mAssistContentObserver, UserHandle.USER_ALL);
 
-        mContentResolver.registerContentObserver(
-                Settings.Global.getUriFor(FIXED_ROTATION_TRANSFORM_SETTING_NAME),
-                false /* notifyForDescendants */, mFixedRotationObserver, UserHandle.USER_ALL);
-
         if (savedInstanceState != null) {
             mDisabledFlags1 = savedInstanceState.getInt(EXTRA_DISABLE_STATE, 0);
             mDisabledFlags2 = savedInstanceState.getInt(EXTRA_DISABLE2_STATE, 0);
@@ -454,7 +453,6 @@ public class NavigationBarFragment extends LifecycleFragment implements Callback
         mNavigationModeController.removeListener(this);
         mAccessibilityManagerWrapper.removeCallback(mAccessibilityListener);
         mContentResolver.unregisterContentObserver(mAssistContentObserver);
-        mContentResolver.unregisterContentObserver(mFixedRotationObserver);
 
         DeviceConfig.removeOnPropertiesChangedListener(mOnPropertiesChangedListener);
     }
@@ -485,7 +483,6 @@ public class NavigationBarFragment extends LifecycleFragment implements Callback
         }
         mNavigationBarView.setNavigationIconHints(mNavigationIconHints);
         mNavigationBarView.setWindowVisible(isNavBarWindowVisible());
-        updatedFixedRotation();
 
         prepareNavigationBarView();
         checkNavBarModes();
@@ -628,6 +625,12 @@ public class NavigationBarFragment extends LifecycleFragment implements Callback
             resetSecondaryHandle();
         } else {
             int deltaRotation = deltaRotation(mCurrentRotation, mStartingQuickSwitchRotation);
+            if (mStartingQuickSwitchRotation == -1 || deltaRotation == -1) {
+                // Curious if starting quickswitch can change between the if check and our delta
+                Log.d(TAG, "secondary nav delta rotation: " + deltaRotation
+                        + " current: " + mCurrentRotation
+                        + " starting: " + mStartingQuickSwitchRotation);
+            }
             int height = 0;
             int width = 0;
             Rect dispSize = mWindowManager.getCurrentWindowMetrics().getBounds();
@@ -673,14 +676,6 @@ public class NavigationBarFragment extends LifecycleFragment implements Callback
         return delta;
     }
 
-    private void updatedFixedRotation() {
-        mFixedRotationEnabled = Settings.Global.getInt(mContentResolver,
-                FIXED_ROTATION_TRANSFORM_SETTING_NAME, 0) != 0;
-        if (!canShowSecondaryHandle()) {
-            resetSecondaryHandle();
-        }
-    }
-
     @Override
     public void dump(String prefix, FileDescriptor fd, PrintWriter pw, String[] args) {
         if (mNavigationBarView != null) {
@@ -691,6 +686,8 @@ public class NavigationBarFragment extends LifecycleFragment implements Callback
             dumpBarTransitions(pw, "mNavigationBarView", mNavigationBarView.getBarTransitions());
         }
 
+        pw.print("  mStartingQuickSwitchRotation=" + mStartingQuickSwitchRotation);
+        pw.print("  mCurrentRotation=" + mCurrentRotation);
         pw.print("  mNavigationBarView=");
         if (mNavigationBarView == null) {
             pw.println("null");
@@ -1387,7 +1384,7 @@ public class NavigationBarFragment extends LifecycleFragment implements Callback
     }
 
     private boolean canShowSecondaryHandle() {
-        return mFixedRotationEnabled && mNavBarMode == NAV_BAR_MODE_GESTURAL;
+        return mNavBarMode == NAV_BAR_MODE_GESTURAL;
     }
 
     private final Consumer<Integer> mRotationWatcher = rotation -> {

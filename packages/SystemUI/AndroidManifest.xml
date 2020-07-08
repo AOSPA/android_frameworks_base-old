@@ -263,6 +263,9 @@
     <!-- Restore settings (used by QS) even if they have been modified -->
     <uses-permission android:name="android.permission.MODIFY_SETTINGS_OVERRIDEABLE_BY_RESTORE" />
 
+    <!-- Permission to make accessibility service access Bubbles -->
+    <uses-permission android:name="android.permission.ADD_TRUSTED_DISPLAY" />
+
     <protected-broadcast android:name="com.android.settingslib.action.REGISTER_SLICE_RECEIVER" />
     <protected-broadcast android:name="com.android.settingslib.action.UNREGISTER_SLICE_RECEIVER" />
     <protected-broadcast android:name="com.android.settings.flashlight.action.FLASHLIGHT_CHANGED" />
@@ -404,10 +407,6 @@
 
         <!-- Callback for invoking a smart action from the screenshot notification. -->
         <receiver android:name=".screenshot.GlobalScreenshot$SmartActionsReceiver"
-                  android:exported="false"/>
-
-        <!-- Callback for performing sysui cleanup after screenshot has been taken. -->
-        <receiver android:name=".screenshot.GlobalScreenshot$ScreenshotTakenReceiver"
                   android:exported="false"/>
 
         <!-- started from UsbDeviceSettingsManager -->

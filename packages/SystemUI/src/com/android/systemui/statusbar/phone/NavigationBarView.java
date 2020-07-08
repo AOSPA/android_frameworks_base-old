@@ -74,6 +74,7 @@ import com.android.systemui.recents.RecentsOnboarding;
 import com.android.systemui.shared.plugins.PluginManager;
 import com.android.systemui.shared.system.ActivityManagerWrapper;
 import com.android.systemui.shared.system.QuickStepContract;
+import com.android.systemui.shared.system.SysUiStatsLog;
 import com.android.systemui.shared.system.WindowManagerWrapper;
 import com.android.systemui.stackdivider.Divider;
 import com.android.systemui.statusbar.CommandQueue;
@@ -140,6 +141,7 @@ public class NavigationBarView extends FrameLayout implements
     private boolean mInCarMode = false;
     private boolean mDockedStackExists;
     private boolean mImeVisible;
+    private boolean mScreenOn = true;
 
     private final SparseArray<ButtonDispatcher> mButtonDispatchers = new SparseArray<>();
     private final ContextualButtonGroup mContextualButtonGroup;
@@ -371,6 +373,11 @@ public class NavigationBarView extends FrameLayout implements
 
     @Override
     public boolean onInterceptTouchEvent(MotionEvent event) {
+        if (isGesturalMode(mNavBarMode) && mImeVisible
+                && event.getAction() == MotionEvent.ACTION_DOWN) {
+            SysUiStatsLog.write(SysUiStatsLog.IME_TOUCH_REPORTED,
+                    (int) event.getX(), (int) event.getY());
+        }
         return shouldDeadZoneConsumeTouchEvents(event) || super.onInterceptTouchEvent(event);
     }
 
@@ -573,6 +580,7 @@ public class NavigationBarView extends FrameLayout implements
 
     /** To be called when screen lock/unlock state changes */
     public void onScreenStateChanged(boolean isScreenOn) {
+        mScreenOn = isScreenOn;
         if (isScreenOn) {
             if (isGesturalModeOnDefaultDisplay(getContext(), mNavBarMode)) {
                 mRegionSamplingHelper.start(mSamplingBounds);
@@ -822,7 +830,7 @@ public class NavigationBarView extends FrameLayout implements
      */
     public void updateSlippery() {
         setSlippery(!isQuickStepSwipeUpEnabled() ||
-                (mPanelView.isFullyExpanded() && !mPanelView.isCollapsing()));
+                (mPanelView != null && mPanelView.isFullyExpanded() && !mPanelView.isCollapsing()));
     }
 
     private void setSlippery(boolean slippery) {
@@ -1217,6 +1225,7 @@ public class NavigationBarView extends FrameLayout implements
         dumpButton(pw, "a11y", getAccessibilityButton());
 
         pw.println("    }");
+        pw.println("    mScreenOn: " + mScreenOn);
 
         if (mNavigationInflaterView != null) {
             mNavigationInflaterView.dump(pw);

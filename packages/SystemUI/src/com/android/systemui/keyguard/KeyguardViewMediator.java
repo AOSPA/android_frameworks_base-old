@@ -667,7 +667,7 @@ public class KeyguardViewMediator extends SystemUI implements Dumpable {
         @Override
         public void onBouncerVisiblityChanged(boolean shown) {
             synchronized (KeyguardViewMediator.this) {
-                adjustStatusBarLocked(shown);
+                adjustStatusBarLocked(shown, false);
             }
         }
 
@@ -2020,10 +2020,12 @@ public class KeyguardViewMediator extends SystemUI implements Dumpable {
     }
 
     private void adjustStatusBarLocked() {
-        adjustStatusBarLocked(false /* forceHideHomeRecentsButtons */);
+        adjustStatusBarLocked(false /* forceHideHomeRecentsButtons */,
+                false /* forceClearFlags */);
     }
 
-    private void adjustStatusBarLocked(boolean forceHideHomeRecentsButtons) {
+    private void adjustStatusBarLocked(boolean forceHideHomeRecentsButtons,
+            boolean forceClearFlags) {
         if (mStatusBarManager == null) {
             mStatusBarManager = (StatusBarManager)
                     mContext.getSystemService(Context.STATUS_BAR_SERVICE);
@@ -2035,6 +2037,13 @@ public class KeyguardViewMediator extends SystemUI implements Dumpable {
             // Disable aspects of the system/status/navigation bars that must not be re-enabled by
             // windows that appear on top, ever
             int flags = StatusBarManager.DISABLE_NONE;
+
+            // TODO (b/155663717) After restart, status bar will not properly hide home button
+            //  unless disable is called to show un-hide it once first
+            if (forceClearFlags) {
+                mStatusBarManager.disable(flags);
+            }
+
             if (forceHideHomeRecentsButtons || isShowingAndNotOccluded()) {
                 if (!mShowHomeOverLockscreen || !mInGestureNavigationMode) {
                     flags |= StatusBarManager.DISABLE_HOME;
@@ -2158,6 +2167,7 @@ public class KeyguardViewMediator extends SystemUI implements Dumpable {
     public void onBootCompleted() {
         synchronized (this) {
             mBootCompleted = true;
+            adjustStatusBarLocked(false, true);
             if (mBootSendUserPresent) {
                 sendUserPresentBroadcast();
             }

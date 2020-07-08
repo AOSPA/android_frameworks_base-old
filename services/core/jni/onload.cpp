@@ -63,6 +63,7 @@ int register_com_android_server_soundtrigger_middleware_ExternalCaptureStateTrac
 int register_android_server_com_android_server_pm_PackageManagerShellCommandDataLoader(JNIEnv* env);
 int register_android_server_stats_pull_StatsPullAtomService(JNIEnv* env);
 int register_android_server_AdbDebuggingManager(JNIEnv* env);
+int register_android_server_GpuService(JNIEnv* env);
 int register_android_server_ActivityTriggerService(JNIEnv* env);
 };
 
@@ -120,6 +121,7 @@ extern "C" jint JNI_OnLoad(JavaVM* vm, void* /* reserved */)
     register_android_server_com_android_server_pm_PackageManagerShellCommandDataLoader(env);
     register_android_server_stats_pull_StatsPullAtomService(env);
     register_android_server_AdbDebuggingManager(env);
+    register_android_server_GpuService(env);
     register_android_server_ActivityTriggerService(env);
     return JNI_VERSION_1_4;
 }

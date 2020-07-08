@@ -221,9 +221,10 @@ public class InsetsSourceConsumer {
         final boolean hasControl = mSourceControl != null;
 
         // We still need to let the legacy app know the visibility change even if we don't have the
-        // control.
+        // control. If we don't have the source, we don't change the requested visibility for making
+        // the callback behavior compatible.
         mController.updateCompatSysUiVisibility(
-                mType, hasControl ? mRequestedVisible : isVisible, hasControl);
+                mType, (hasControl || source == null) ? mRequestedVisible : isVisible, hasControl);
 
         // If we don't have control, we are not able to change the visibility.
         if (!hasControl) {
@@ -257,6 +258,15 @@ public class InsetsSourceConsumer {
     @VisibleForTesting
     public @ShowResult int requestShow(boolean fromController) {
         return ShowResult.SHOW_IMMEDIATELY;
+    }
+
+    /**
+     * Reports that this source's perceptibility has changed
+     *
+     * @param perceptible true if the source is perceptible, false otherwise.
+     * @see InsetsAnimationControlCallbacks#reportPerceptible
+     */
+    public void onPerceptible(boolean perceptible) {
     }
 
     /**
@@ -338,5 +348,6 @@ public class InsetsSourceConsumer {
             t.hide(mSourceControl.getLeash());
         }
         t.apply();
+        onPerceptible(mRequestedVisible);
     }
 }

@@ -24,8 +24,8 @@ import static android.Manifest.permission.INTERACT_ACROSS_USERS_FULL;
 import static android.Manifest.permission.REMOVE_TASKS;
 import static android.Manifest.permission.START_ACTIVITIES_FROM_BACKGROUND;
 import static android.app.ActivityManager.INSTR_FLAG_DISABLE_HIDDEN_API_CHECKS;
+import static android.app.ActivityManager.INSTR_FLAG_DISABLE_ISOLATED_STORAGE;
 import static android.app.ActivityManager.INSTR_FLAG_DISABLE_TEST_API_CHECKS;
-import static android.app.ActivityManager.INSTR_FLAG_MOUNT_EXTERNAL_STORAGE_FULL;
 import static android.app.ActivityManager.PROCESS_STATE_LAST_ACTIVITY;
 import static android.app.ActivityManager.PROCESS_STATE_NONEXISTENT;
 import static android.app.ActivityManager.PROCESS_STATE_TOP;
@@ -338,7 +338,7 @@ import com.android.internal.util.FastPrintWriter;
 import com.android.internal.util.FrameworkStatsLog;
 import com.android.internal.util.MemInfoReader;
 import com.android.internal.util.Preconditions;
-import com.android.internal.util.function.HexFunction;
+import com.android.internal.util.function.HeptFunction;
 import com.android.internal.util.function.QuadFunction;
 import com.android.internal.util.function.TriFunction;
 import com.android.server.AlarmManagerInternal;
@@ -410,9 +410,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -1692,6 +1690,12 @@ public class ActivityManagerService extends IActivityManager.Stub
      * Used to notify activity lifecycle events.
      */
     @Nullable ContentCaptureManagerInternal mContentCaptureService;
+
+    /**
+     * Set of {@link ProcessRecord} that have either {@link ProcessRecord#hasTopUi()} or
+     * {@link ProcessRecord#runningRemoteAnimation} set to {@code true}.
+     */
+    final ArraySet<ProcessRecord> mTopUiOrRunningRemoteAnimApps = new ArraySet<>();
 
     final class UiHandler extends Handler {
         public UiHandler() {
@@ -3289,7 +3293,7 @@ public class ActivityManagerService extends IActivityManager.Stub
 
     private boolean hasUsageStatsPermission(String callingPackage) {
         final int mode = mAppOpsService.noteOperation(AppOpsManager.OP_GET_USAGE_STATS,
-                Binder.getCallingUid(), callingPackage, null, false, "");
+                Binder.getCallingUid(), callingPackage, null, false, "", false);
         if (mode == AppOpsManager.MODE_DEFAULT) {
             return checkCallingPermission(Manifest.permission.PACKAGE_USAGE_STATS)
                     == PackageManager.PERMISSION_GRANTED;
@@ -3961,10 +3965,11 @@ public class ActivityManagerService extends IActivityManager.Stub
                 doLowMem = false;
             }
 
-            if (mUxPerf != null && !mForceStopKill) {
+            if (mUxPerf != null && !mForceStopKill && !app.isNotResponding() && !app.isCrashing()) {
                 mUxPerf.perfUXEngine_events(BoostFramework.UXE_EVENT_KILL, 0, app.processName, 0);
-                mUxPerf.perfHint(BoostFramework.VENDOR_HINT_KILL, app.processName, pid, 0);
             }
+            if (mUxPerf != null)
+                mUxPerf.perfHint(BoostFramework.VENDOR_HINT_KILL, app.processName, pid, 0);//sending Kill notification to PreKill iresspective of Kill reason.
 
             EventLogTags.writeAmProcDied(app.userId, app.pid, app.processName, app.setAdj,
                     app.setProcState);
@@ -4944,9 +4949,6 @@ public class ActivityManagerService extends IActivityManager.Stub
                         + " user=" + userId + ": " + reason);
             } else {
                 Slog.i(TAG, "Force stopping u" + userId + ": " + reason);
-            }
-            if (mUxPerf != null) {
-                mUxPerf.perfHint(BoostFramework.VENDOR_HINT_KILL, packageName, appId, 0);
             }
 
             mAppErrors.resetProcessCrashTimeLocked(packageName == null, appId, userId);
@@ -6172,7 +6174,7 @@ public class ActivityManagerService extends IActivityManager.Stub
             // TODO moltmann: Allow to specify featureId
             return mActivityManagerService.mAppOpsService
                     .noteOperation(AppOpsManager.strOpToOp(op), uid, packageName, null,
-                            false, "");
+                            false, "", false);
         }
 
         @Override
@@ -14780,6 +14782,7 @@ public class ActivityManagerService extends IActivityManager.Stub
 
         mProcessesToGc.remove(app);
         mPendingPssProcesses.remove(app);
+        mTopUiOrRunningRemoteAnimApps.remove(app);
         ProcessList.abortNextPssTime(app.procStateMemTracker);
 
         // Dismiss any open dialogs.
@@ -15881,9 +15884,10 @@ public class ActivityManagerService extends IActivityManager.Stub
         }
         if (receivers != null && broadcastWhitelist != null) {
             for (int i = receivers.size() - 1; i >= 0; i--) {
-                final int uid = receivers.get(i).activityInfo.applicationInfo.uid;
-                if (uid >= Process.FIRST_APPLICATION_UID
-                        && Arrays.binarySearch(broadcastWhitelist, UserHandle.getAppId(uid)) < 0) {
+                final int receiverAppId = UserHandle.getAppId(
+                        receivers.get(i).activityInfo.applicationInfo.uid);
+                if (receiverAppId >= Process.FIRST_APPLICATION_UID
+                        && Arrays.binarySearch(broadcastWhitelist, receiverAppId) < 0) {
                     receivers.remove(i);
                 }
             }
@@ -16529,9 +16533,9 @@ public class ActivityManagerService extends IActivityManager.Stub
             // if a uid whitelist was provided, remove anything in the application space that wasn't
             // in it.
             for (int i = registeredReceivers.size() - 1; i >= 0; i--) {
-                final int uid = registeredReceivers.get(i).owningUid;
-                if (uid >= Process.FIRST_APPLICATION_UID
-                        && Arrays.binarySearch(broadcastWhitelist, UserHandle.getAppId(uid)) < 0) {
+                final int owningAppId = UserHandle.getAppId(registeredReceivers.get(i).owningUid);
+                if (owningAppId >= Process.FIRST_APPLICATION_UID
+                        && Arrays.binarySearch(broadcastWhitelist, owningAppId) < 0) {
                     registeredReceivers.remove(i);
                 }
             }
@@ -17004,8 +17008,9 @@ public class ActivityManagerService extends IActivityManager.Stub
                         "disable hidden API checks");
             }
 
+            // TODO(b/158750470): remove
             final boolean mountExtStorageFull = isCallerShell()
-                    && (flags & INSTR_FLAG_MOUNT_EXTERNAL_STORAGE_FULL) != 0;
+                    && (flags & INSTR_FLAG_DISABLE_ISOLATED_STORAGE) != 0;
 
             final long origId = Binder.clearCallingIdentity();
             // Instrumentation can kill and relaunch even persistent processes
@@ -17026,6 +17031,13 @@ public class ActivityManagerService extends IActivityManager.Stub
             activeInstr.mRunningProcesses.add(app);
             if (!mActiveInstrumentation.contains(activeInstr)) {
                 mActiveInstrumentation.add(activeInstr);
+            }
+
+            if ((flags & INSTR_FLAG_DISABLE_ISOLATED_STORAGE) != 0) {
+                // Allow OP_NO_ISOLATED_STORAGE app op for the package running instrumentation with
+                // --no-isolated-storage flag.
+                mAppOpsService.setMode(AppOpsManager.OP_NO_ISOLATED_STORAGE, ai.uid,
+                        ii.packageName, AppOpsManager.MODE_ALLOWED);
             }
             Binder.restoreCallingIdentity(origId);
         }
@@ -17117,6 +17129,9 @@ public class ActivityManagerService extends IActivityManager.Stub
 
             // Can't call out of the system process with a lock held, so post a message.
             if (instr.mUiAutomationConnection != null) {
+                // Go back to the default mode of denying OP_NO_ISOLATED_STORAGE app op.
+                mAppOpsService.setMode(AppOpsManager.OP_NO_ISOLATED_STORAGE, app.uid,
+                        app.info.packageName, AppOpsManager.MODE_ERRORED);
                 mAppOpsService.setAppOpsServiceDelegate(null);
                 getPermissionManagerInternalLocked().setCheckPermissionDelegate(null);
                 mHandler.obtainMessage(SHUTDOWN_UI_AUTOMATION_CONNECTION_MSG,
@@ -18590,6 +18605,22 @@ public class ActivityManagerService extends IActivityManager.Stub
         }
 
         return proc;
+    }
+
+    /**
+     * @return {@code true} if {@link #mTopUiOrRunningRemoteAnimApps} set contains {@code app} or when there are no apps
+     *         in this list, an false otherwise.
+     */
+    boolean containsTopUiOrRunningRemoteAnimOrEmptyLocked(ProcessRecord app) {
+        return mTopUiOrRunningRemoteAnimApps.isEmpty() || mTopUiOrRunningRemoteAnimApps.contains(app);
+    }
+
+    void addTopUiOrRunningRemoteAnim(ProcessRecord app) {
+        mTopUiOrRunningRemoteAnimApps.add(app);
+    }
+
+    void removeTopUiOrRunningRemoteAnim(ProcessRecord app) {
+        mTopUiOrRunningRemoteAnimApps.remove(app);
     }
 
     @Override
@@ -20215,8 +20246,8 @@ public class ActivityManagerService extends IActivityManager.Stub
         private final int mTargetUid;
         private @Nullable String[] mPermissions;
 
-        ShellDelegate(String targetPacakgeName, int targetUid, @Nullable String[] permissions) {
-            mTargetPackageName = targetPacakgeName;
+        ShellDelegate(String targetPackageName, int targetUid, @Nullable String[] permissions) {
+            mTargetPackageName = targetPackageName;
             mTargetUid = targetUid;
             mPermissions = permissions;
         }
@@ -20263,20 +20294,20 @@ public class ActivityManagerService extends IActivityManager.Stub
         @Override
         public int noteOperation(int code, int uid, @Nullable String packageName,
                 @Nullable String featureId, boolean shouldCollectAsyncNotedOp,
-                @Nullable String message,
-                @NonNull HexFunction<Integer, Integer, String, String, Boolean, String, Integer>
-                        superImpl) {
+                @Nullable String message, boolean shouldCollectMessage,
+                @NonNull HeptFunction<Integer, Integer, String, String, Boolean, String, Boolean,
+                        Integer> superImpl) {
             if (uid == mTargetUid && isTargetOp(code)) {
                 final long identity = Binder.clearCallingIdentity();
                 try {
                     return superImpl.apply(code, Process.SHELL_UID, "com.android.shell", featureId,
-                            shouldCollectAsyncNotedOp, message);
+                            shouldCollectAsyncNotedOp, message, shouldCollectMessage);
                 } finally {
                     Binder.restoreCallingIdentity(identity);
                 }
             }
             return superImpl.apply(code, uid, packageName, featureId, shouldCollectAsyncNotedOp,
-                    message);
+                    message, shouldCollectMessage);
         }
 
         @Override

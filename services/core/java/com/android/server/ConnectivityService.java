@@ -69,6 +69,7 @@ import android.app.BroadcastOptions;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.content.BroadcastReceiver;
+import android.content.ComponentName;
 import android.content.ContentResolver;
 import android.content.Context;
 import android.content.Intent;
@@ -578,8 +579,6 @@ public class ConnectivityService extends IConnectivityManager.Stub
      * should be hidden.
      */
     private static final int PROVISIONING_NOTIFICATION_HIDE = 0;
-
-    private static final int EVENT_UPDATE_TCP_BUFFER_FOR_5G = 160;
 
     /**
      * Used to save the active subscription ID info.
@@ -1728,6 +1727,12 @@ public class ConnectivityService extends IConnectivityManager.Stub
             return newNc;
         }
 
+        // Allow VPNs to see ownership of their own VPN networks - not location sensitive.
+        if (nc.hasTransport(TRANSPORT_VPN)) {
+            // Owner UIDs already checked above. No need to re-check.
+            return newNc;
+        }
+
         Binder.withCleanCallingIdentity(
                 () -> {
                     if (!mLocationPermissionChecker.checkLocationPermission(
@@ -2458,10 +2463,6 @@ public class ConnectivityService extends IConnectivityManager.Stub
         }
 
         String tcpBufferSizes = nai.linkProperties.getTcpBufferSizes();
-        if(nai.networkCapabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)){
-            tcpBufferSizes = NetPluginDelegate.get5GTcpBuffers(tcpBufferSizes,
-                nai.networkCapabilities.getNetworkSpecifier());
-        }
         updateTcpBufferSizes(tcpBufferSizes);
     }
 
@@ -2523,10 +2524,12 @@ public class ConnectivityService extends IConnectivityManager.Stub
         final List<NetworkDiagnostics> netDiags = new ArrayList<NetworkDiagnostics>();
         final long DIAG_TIME_MS = 5000;
         for (NetworkAgentInfo nai : networksSortedById()) {
+            PrivateDnsConfig privateDnsCfg = mDnsManager.getPrivateDnsConfig(nai.network);
             // Start gathering diagnostic information.
             netDiags.add(new NetworkDiagnostics(
                     nai.network,
                     new LinkProperties(nai.linkProperties),  // Must be a copy.
+                    privateDnsCfg,
                     DIAG_TIME_MS));
         }
 
@@ -3111,7 +3114,11 @@ public class ConnectivityService extends IConnectivityManager.Stub
             // Only the system server can register notifications with package "android"
             final long token = Binder.clearCallingIdentity();
             try {
-                pendingIntent = PendingIntent.getBroadcast(mContext, 0, intent, 0);
+                pendingIntent = PendingIntent.getBroadcast(
+                        mContext,
+                        0 /* requestCode */,
+                        intent,
+                        PendingIntent.FLAG_IMMUTABLE);
             } finally {
                 Binder.restoreCallingIdentity(token);
             }
@@ -3970,6 +3977,15 @@ public class ConnectivityService extends IConnectivityManager.Stub
         pw.decreaseIndent();
     }
 
+    // TODO: This method is copied from TetheringNotificationUpdater. Should have a utility class to
+    // unify the method.
+    private static @NonNull String getSettingsPackageName(@NonNull final PackageManager pm) {
+        final Intent settingsIntent = new Intent(Settings.ACTION_SETTINGS);
+        final ComponentName settingsComponent = settingsIntent.resolveActivity(pm);
+        return settingsComponent != null
+                ? settingsComponent.getPackageName() : "com.android.settings";
+    }
+
     private void showNetworkNotification(NetworkAgentInfo nai, NotificationType type) {
         final String action;
         final boolean highPriority;
@@ -4004,12 +4020,20 @@ public class ConnectivityService extends IConnectivityManager.Stub
         if (type != NotificationType.PRIVATE_DNS_BROKEN) {
             intent.setData(Uri.fromParts("netId", Integer.toString(nai.network.netId), null));
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            intent.setClassName("com.android.settings",
-                    "com.android.settings.wifi.WifiNoInternetDialog");
+            // Some OEMs have their own Settings package. Thus, need to get the current using
+            // Settings package name instead of just use default name "com.android.settings".
+            final String settingsPkgName = getSettingsPackageName(mContext.getPackageManager());
+            intent.setClassName(settingsPkgName,
+                    settingsPkgName + ".wifi.WifiNoInternetDialog");
         }
 
         PendingIntent pendingIntent = PendingIntent.getActivityAsUser(
-                mContext, 0, intent, PendingIntent.FLAG_CANCEL_CURRENT, null, UserHandle.CURRENT);
+                mContext,
+                0 /* requestCode */,
+                intent,
+                PendingIntent.FLAG_CANCEL_CURRENT | PendingIntent.FLAG_IMMUTABLE,
+                null /* options */,
+                UserHandle.CURRENT);
 
         mNotifier.showNotification(nai.network.netId, type, nai, null, pendingIntent, highPriority);
     }
@@ -4198,7 +4222,6 @@ public class ConnectivityService extends IConnectivityManager.Stub
                 }
                 case EVENT_SYSTEM_READY: {
                     mMultipathPolicyTracker.start();
-                    NetPluginDelegate.registerHandler(mHandler);
                     break;
                 }
                 case EVENT_REVALIDATE_NETWORK: {
@@ -4217,9 +4240,6 @@ public class ConnectivityService extends IConnectivityManager.Stub
                     break;
                 case EVENT_DATA_SAVER_CHANGED:
                     handleRestrictBackgroundChanged(toBool(msg.arg1));
-                    break;
-                case EVENT_UPDATE_TCP_BUFFER_FOR_5G:
-                    handleUpdateTCPBuffersfor5G();
                     break;
                 case EVENT_UPDATE_ACTIVE_DATA_SUBID:
                     handleUpdateActiveDataSubId(msg.arg1);
@@ -6478,7 +6498,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
             final boolean shouldFilter = requiresVpnIsolation(nai, newNc, nai.linkProperties);
             final String iface = nai.linkProperties.getInterfaceName();
             // For VPN uid interface filtering, old ranges need to be removed before new ranges can
-            // be added, due to the range being expanded and stored as invidiual UIDs. For example
+            // be added, due to the range being expanded and stored as individual UIDs. For example
             // the UIDs might be updated from [0, 99999] to ([0, 10012], [10014, 99999]) which means
             // prevRanges = [0, 99999] while newRanges = [0, 10012], [10014, 99999]. If prevRanges
             // were added first and then newRanges got removed later, there would be only one uid

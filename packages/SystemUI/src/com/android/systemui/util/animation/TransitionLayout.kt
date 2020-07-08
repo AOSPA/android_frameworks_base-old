@@ -17,6 +17,8 @@
 package com.android.systemui.util.animation
 
 import android.content.Context
+import android.graphics.Canvas
+import android.graphics.PointF
 import android.graphics.Rect
 import android.util.AttributeSet
 import android.view.View
@@ -36,7 +38,9 @@ class TransitionLayout @JvmOverloads constructor(
     defStyleAttr: Int = 0
 ) : ConstraintLayout(context, attrs, defStyleAttr) {
 
+    private val boundsRect = Rect()
     private val originalGoneChildrenSet: MutableSet<Int> = mutableSetOf()
+    private val originalViewAlphas: MutableMap<Int, Float> = mutableMapOf()
     private var measureAsConstraint: Boolean = false
     private var currentState: TransitionViewState = TransitionViewState()
     private var updateScheduled = false
@@ -67,6 +71,7 @@ class TransitionLayout @JvmOverloads constructor(
             if (child.visibility == GONE) {
                 originalGoneChildrenSet.add(child.id)
             }
+            originalViewAlphas[child.id] = child.alpha
         }
     }
 
@@ -144,11 +149,21 @@ class TransitionLayout @JvmOverloads constructor(
         }
     }
 
+    override fun dispatchDraw(canvas: Canvas?) {
+        canvas?.save()
+        canvas?.clipRect(boundsRect)
+        super.dispatchDraw(canvas)
+        canvas?.restore()
+    }
+
     private fun updateBounds() {
         val layoutLeft = left
         val layoutTop = top
         setLeftTopRightBottom(layoutLeft, layoutTop, layoutLeft + currentState.width,
                 layoutTop + currentState.height)
+        translationX = currentState.translation.x
+        translationY = currentState.translation.y
+        boundsRect.set(0, 0, (width + translationX).toInt(), (height + translationY).toInt())
     }
 
     /**
@@ -198,6 +213,8 @@ class TransitionLayout @JvmOverloads constructor(
             if (originalGoneChildrenSet.contains(child.id)) {
                 child.visibility = View.GONE
             }
+            // Reset the alphas, to only have the alphas present from the constraintset
+            child.alpha = originalViewAlphas[child.id] ?: 1.0f
         }
         // Let's now apply the constraintSet to get the full state
         constraintSet.applyTo(this)
@@ -230,11 +247,13 @@ class TransitionViewState {
     var widgetStates: MutableMap<Int, WidgetState> = mutableMapOf()
     var width: Int = 0
     var height: Int = 0
+    val translation = PointF()
     fun copy(reusedState: TransitionViewState? = null): TransitionViewState {
         // we need a deep copy of this, so we can't use a data class
         val copy = reusedState ?: TransitionViewState()
         copy.width = width
         copy.height = height
+        copy.translation.set(translation.x, translation.y)
         for (entry in widgetStates) {
             copy.widgetStates[entry.key] = entry.value.copy()
         }
@@ -252,6 +271,7 @@ class TransitionViewState {
         }
         width = transitionLayout.measuredWidth
         height = transitionLayout.measuredHeight
+        translation.set(0.0f, 0.0f)
     }
 }
 

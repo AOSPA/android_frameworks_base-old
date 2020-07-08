@@ -35,6 +35,7 @@ import static com.android.systemui.bubbles.BubbleDebugConfig.TAG_BUBBLES;
 import static com.android.systemui.bubbles.BubbleDebugConfig.TAG_WITH_CLASS_NAME;
 
 import android.annotation.SuppressLint;
+import android.app.ActivityManager;
 import android.app.ActivityOptions;
 import android.app.ActivityTaskManager;
 import android.app.ActivityView;
@@ -119,6 +120,8 @@ public class BubbleExpandedView extends LinearLayout {
     private int mPointerWidth;
     private int mPointerHeight;
     private ShapeDrawable mPointerDrawable;
+    private int mExpandedViewPadding;
+
 
     @Nullable private Bubble mBubble;
 
@@ -126,6 +129,7 @@ public class BubbleExpandedView extends LinearLayout {
 
     private BubbleController mBubbleController = Dependency.get(BubbleController.class);
     private WindowManager mWindowManager;
+    private ActivityManager mActivityManager;
 
     private BubbleStackView mStackView;
     private View mVirtualImeView;
@@ -163,8 +167,13 @@ public class BubbleExpandedView extends LinearLayout {
                             Log.d(TAG, "onActivityViewReady: calling startActivity, "
                                     + "bubble=" + getBubbleKey());
                         }
+                        if (mActivityView == null) {
+                            mBubbleController.removeBubble(getBubbleKey(),
+                                    BubbleController.DISMISS_INVALID_INTENT);
+                            return;
+                        }
                         try {
-                            if (!mIsOverflow && mBubble.usingShortcutInfo()) {
+                            if (!mIsOverflow && mBubble.getShortcutInfo() != null) {
                                 options.setApplyActivityFlagsForBubbles(true);
                                 mActivityView.startShortcutActivity(mBubble.getShortcutInfo(),
                                         options, null /* sourceBounds */);
@@ -186,6 +195,10 @@ public class BubbleExpandedView extends LinearLayout {
                         }
                     });
                     mActivityViewStatus = ActivityViewStatus.ACTIVITY_STARTED;
+                    break;
+                case ACTIVITY_STARTED:
+                    post(() -> mActivityManager.moveTaskToFront(mTaskId, 0));
+                    break;
             }
         }
 
@@ -247,6 +260,7 @@ public class BubbleExpandedView extends LinearLayout {
             int defStyleRes) {
         super(context, attrs, defStyleAttr, defStyleRes);
         updateDimensions();
+        mActivityManager = (ActivityManager) mContext.getSystemService(Context.ACTIVITY_SERVICE);
     }
 
     void updateDimensions() {
@@ -333,11 +347,9 @@ public class BubbleExpandedView extends LinearLayout {
             return view.onApplyWindowInsets(insets);
         });
 
-        final int expandedViewPadding =
-                res.getDimensionPixelSize(R.dimen.bubble_expanded_view_padding);
-
-        setPadding(
-                expandedViewPadding, expandedViewPadding, expandedViewPadding, expandedViewPadding);
+        mExpandedViewPadding = res.getDimensionPixelSize(R.dimen.bubble_expanded_view_padding);
+        setPadding(mExpandedViewPadding, mExpandedViewPadding, mExpandedViewPadding,
+                mExpandedViewPadding);
         setOnTouchListener((view, motionEvent) -> {
             if (!usingActivityView()) {
                 return false;
@@ -350,7 +362,10 @@ public class BubbleExpandedView extends LinearLayout {
             // ActivityView's vertical bounds. These events are part of a back gesture, and so they
             // should not collapse the stack (which all other touches on areas around the AV would
             // do).
-            if (motionEvent.getRawY() >= avBounds.top && motionEvent.getRawY() <= avBounds.bottom) {
+            if (motionEvent.getRawY() >= avBounds.top
+                            && motionEvent.getRawY() <= avBounds.bottom
+                            && (motionEvent.getRawX() < avBounds.left
+                                || motionEvent.getRawX() > avBounds.right)) {
                 return true;
             }
 
@@ -429,10 +444,10 @@ public class BubbleExpandedView extends LinearLayout {
                 getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK;
         switch (mode) {
             case Configuration.UI_MODE_NIGHT_NO:
-                mPointerDrawable.setTint(getResources().getColor(R.color.bubbles_pointer_light));
+                mPointerDrawable.setTint(getResources().getColor(R.color.bubbles_light));
                 break;
             case Configuration.UI_MODE_NIGHT_YES:
-                mPointerDrawable.setTint(getResources().getColor(R.color.bubbles_pointer_dark));
+                mPointerDrawable.setTint(getResources().getColor(R.color.bubbles_dark));
                 break;
         }
         mPointerView.setBackground(mPointerDrawable);
@@ -479,6 +494,11 @@ public class BubbleExpandedView extends LinearLayout {
                     + " bubble=" + getBubbleKey());
         }
         final float alpha = visibility ? 1f : 0f;
+
+        if (alpha == mActivityView.getAlpha()) {
+            return;
+        }
+
         mPointerView.setAlpha(alpha);
         if (mActivityView != null) {
             mActivityView.setAlpha(alpha);
@@ -653,7 +673,7 @@ public class BubbleExpandedView extends LinearLayout {
                 desiredHeight = Math.max(mBubble.getDesiredHeight(mContext), mMinHeight);
             }
             float height = Math.min(desiredHeight, getMaxExpandedHeight());
-            height = Math.max(height, mIsOverflow? mOverflowHeight : mMinHeight);
+            height = Math.max(height, mMinHeight);
             ViewGroup.LayoutParams lp = mActivityView.getLayoutParams();
             mNeedsNewHeight = lp.height != height;
             if (!mKeyboardVisible) {
@@ -714,7 +734,7 @@ public class BubbleExpandedView extends LinearLayout {
      */
     public void setPointerPosition(float x) {
         float halfPointerWidth = mPointerWidth / 2f;
-        float pointerLeft = x - halfPointerWidth;
+        float pointerLeft = x - halfPointerWidth - mExpandedViewPadding;
         mPointerView.setTranslationX(pointerLeft);
         mPointerView.setVisibility(VISIBLE);
     }
@@ -738,11 +758,7 @@ public class BubbleExpandedView extends LinearLayout {
         if (mActivityView == null) {
             return;
         }
-        switch (mActivityViewStatus) {
-            case INITIALIZED:
-            case ACTIVITY_STARTED:
-                mActivityView.release();
-        }
+        mActivityView.release();
         if (mTaskId != -1) {
             try {
                 ActivityTaskManager.getService().removeTask(mTaskId);

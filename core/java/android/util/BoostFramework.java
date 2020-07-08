@@ -30,7 +30,11 @@
 package android.util;
 
 import android.content.Context;
+import android.os.SystemProperties;
+import android.view.Surface;
 import android.util.Log;
+
+import dalvik.system.PathClassLoader;
 
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
@@ -83,6 +87,7 @@ public class BoostFramework {
     public static final int VENDOR_HINT_PERFORMANCE_MODE = 0x00001091;
     public static final int VENDOR_HINT_APP_UPDATE = 0x00001092;
     public static final int VENDOR_HINT_KILL = 0x00001093;
+    public static final int VENDOR_HINT_BOOST_RENDERTHREAD = 0x00001095;
     //perf events
     public static final int VENDOR_HINT_FIRST_DRAW = 0x00001042;
     public static final int VENDOR_HINT_TAP_EVENT = 0x00001043;
@@ -411,6 +416,7 @@ public class BoostFramework {
     }
 
 
+/** @hide */
     public String perfGetProp(String prop_name, String def_val) {
         String ret = "";
         try {
@@ -424,5 +430,188 @@ public class BoostFramework {
             Log.e(TAG,"Exception " + e);
         }
         return ret;
+    }
+
+    /** @hide */
+    public static class ScrollOptimizer {
+        /** @hide */
+        public static final int FLING_START = 1;
+        /** @hide */
+        public static final int FLING_END = 0;
+        private static final String SCROLL_OPT_PROP = "ro.vendor.perf.scroll_opt";
+        private static final String QXPERFORMANCE_JAR =
+                "/system/framework/QXPerformance.jar";
+        private static final String SCROLL_OPT_CLASS =
+                "com.qualcomm.qti.QXPerformance.ScrollOptimizer";
+        private static boolean sScrollOptEnable = false;
+        private static boolean sQXIsLoaded = false;
+        private static Class<?> sQXPerfClass = null;
+        private static Method sSetFrameInterval = null;
+        private static Method sSetSurface = null;
+        private static Method sSetMotionType = null;
+        private static Method sSetVsyncTime = null;
+        private static Method sSetUITaskStatus = null;
+        private static Method sSetFlingFlag = null;
+        private static Method sShouldUseVsync = null;
+        private static Method sGetFrameDelay = null;
+        private static Method sGetAdjustedAnimationClock = null;
+
+        private static void initQXPerfFuncs() {
+            if (sQXIsLoaded) return;
+
+            try {
+                sScrollOptEnable = SystemProperties.getBoolean(SCROLL_OPT_PROP, false);
+                if (!sScrollOptEnable) {
+                    sQXIsLoaded = true;
+                    return;
+                }
+
+                PathClassLoader qXPerfClassLoader = new PathClassLoader(
+                        QXPERFORMANCE_JAR, ClassLoader.getSystemClassLoader());
+                sQXPerfClass = qXPerfClassLoader.loadClass(SCROLL_OPT_CLASS);
+                Class[] argClasses = new Class[]{long.class};
+                sSetFrameInterval = sQXPerfClass.getMethod(
+                        "setFrameInterval", argClasses);
+
+                argClasses = new Class[]{Surface.class};
+                sSetSurface = sQXPerfClass.getMethod("setSurface", argClasses);
+
+                argClasses = new Class[]{int.class};
+                sSetMotionType = sQXPerfClass.getMethod("setMotionType", argClasses);
+
+                argClasses = new Class[]{long.class};
+                sSetVsyncTime = sQXPerfClass.getMethod("setVsyncTime", argClasses);
+
+                argClasses = new Class[]{boolean.class};
+                sSetUITaskStatus = sQXPerfClass.getMethod("setUITaskStatus", argClasses);
+
+                argClasses = new Class[]{int.class};
+                sSetFlingFlag = sQXPerfClass.getMethod("setFlingFlag", argClasses);
+
+                sShouldUseVsync = sQXPerfClass.getMethod("shouldUseVsync");
+
+                argClasses = new Class[]{long.class};
+                sGetFrameDelay = sQXPerfClass.getMethod("getFrameDelay", argClasses);
+
+                argClasses = new Class[]{long.class};
+                sGetAdjustedAnimationClock = sQXPerfClass.getMethod(
+                        "getAdjustedAnimationClock", argClasses);
+
+                sQXIsLoaded = true;
+            } catch (Exception e) {
+                Log.e(TAG, "initQXPerfFuncs failed");
+                e.printStackTrace();
+            }
+        }
+
+        /** @hide */
+        public static void setFrameInterval(long frameIntervalNanos) {
+            initQXPerfFuncs();
+            if (sScrollOptEnable && sSetFrameInterval != null) {
+                try {
+                    sSetFrameInterval.invoke(null, frameIntervalNanos);
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            }
+        }
+
+        /** @hide */
+        public static void setSurface(Surface surface) {
+            if (sScrollOptEnable && sSetSurface != null) {
+                try {
+                    sSetSurface.invoke(null, surface);
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            }
+        }
+
+        /** @hide */
+        public static void setMotionType(int eventType) {
+            if (sScrollOptEnable && sSetMotionType != null) {
+                try {
+                    sSetMotionType.invoke(null, eventType);
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            }
+        }
+
+        /** @hide */
+        public static void setVsyncTime(long vsyncTimeNanos) {
+            if (sScrollOptEnable && sSetVsyncTime != null) {
+                try {
+                    sSetVsyncTime.invoke(null, vsyncTimeNanos);
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            }
+        }
+
+        /** @hide */
+        public static void setUITaskStatus(boolean running) {
+            if (sScrollOptEnable && sSetUITaskStatus != null) {
+                try {
+                    sSetUITaskStatus.invoke(null, running);
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            }
+        }
+
+        /** @hide */
+        public static void setFlingFlag(int flag) {
+            if (sScrollOptEnable && sSetFlingFlag != null) {
+                try {
+                    sSetFlingFlag.invoke(null, flag);
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            }
+        }
+
+        /** @hide */
+        public static boolean shouldUseVsync(boolean defaultVsyncFlag) {
+            boolean useVsync = defaultVsyncFlag;
+            if (sScrollOptEnable && sShouldUseVsync != null) {
+                try {
+                    Object retVal = sShouldUseVsync.invoke(null);
+                    useVsync = (boolean)retVal;
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            }
+            return useVsync;
+        }
+
+        /** @hide */
+        public static long getFrameDelay(long defaultDelay, long lastFrameTimeNanos) {
+            long frameDelay = defaultDelay;
+            if (sScrollOptEnable && sGetFrameDelay != null) {
+                try {
+                    Object retVal = sGetFrameDelay.invoke(null, lastFrameTimeNanos);
+                    frameDelay = (long)retVal;
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            }
+            return frameDelay;
+        }
+
+        /** @hide */
+        public static long getAdjustedAnimationClock(long frameTimeNanos) {
+            long newFrameTimeNanos = frameTimeNanos;
+            if (sScrollOptEnable && sGetAdjustedAnimationClock != null) {
+                try {
+                    Object retVal = sGetAdjustedAnimationClock.invoke(null,
+                            frameTimeNanos);
+                    newFrameTimeNanos = (long)retVal;
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            }
+            return newFrameTimeNanos;
+        }
     }
 };

@@ -38,7 +38,7 @@ import static androidx.test.platform.app.InstrumentationRegistry.getInstrumentat
 
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.doCallRealMethod;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.doReturn;
-import static com.android.dx.mockito.inline.extended.ExtendedMockito.mock;
+import static com.android.server.wm.WindowContainer.POSITION_TOP;
 import static com.android.server.wm.WindowStateAnimator.STACK_CLIP_AFTER_ANIM;
 import static com.android.server.wm.WindowStateAnimator.STACK_CLIP_BEFORE_ANIM;
 import static com.android.server.wm.WindowStateAnimator.STACK_CLIP_NONE;
@@ -65,11 +65,11 @@ import android.view.WindowManager;
 import androidx.test.filters.FlakyTest;
 import androidx.test.filters.SmallTest;
 
-import com.android.server.wm.SurfaceAnimator.OnAnimationFinishedCallback;
-
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+
+import java.util.ArrayList;
 
 /**
  * Tests for the {@link ActivityRecord} class.
@@ -406,12 +406,11 @@ public class AppWindowTokenTests extends WindowTestsBase {
         assertHasStartingWindow(activity2);
 
         // Assert that bottom activity is allowed to do animation.
+        ArrayList<WindowContainer> sources = new ArrayList<>();
+        sources.add(activity2);
         doReturn(true).when(activity2).okToAnimate();
         doReturn(true).when(activity2).isAnimating();
-        final OnAnimationFinishedCallback onAnimationFinishedCallback =
-                mock(OnAnimationFinishedCallback.class);
-        assertTrue(activity2.applyAnimation(null, TRANSIT_ACTIVITY_OPEN, true, false,
-                onAnimationFinishedCallback));
+        assertTrue(activity2.applyAnimation(null, TRANSIT_ACTIVITY_OPEN, true, false, sources));
     }
 
     @Test
@@ -452,6 +451,31 @@ public class AppWindowTokenTests extends WindowTestsBase {
         // The activity was visible by mVisibleSetFromTransferredStartingWindow, so after its
         // starting window is transferred, it should restore to invisible.
         assertFalse(middle.isVisible());
+    }
+
+    @Test
+    public void testTransferStartingWindowSetFixedRotation() {
+        final ActivityRecord topActivity = createTestActivityRecordForGivenTask(mTask);
+        mTask.positionChildAt(topActivity, POSITION_TOP);
+        mActivity.addStartingWindow(mPackageName,
+                android.R.style.Theme, null, "Test", 0, 0, 0, 0, null, true, true, false, true,
+                false);
+        waitUntilHandlersIdle();
+
+        // Make activities to have different rotation from it display and set fixed rotation
+        // transform to activity1.
+        int rotation = (mDisplayContent.getRotation() + 1) % 4;
+        mDisplayContent.setFixedRotationLaunchingApp(mActivity, rotation);
+        doReturn(rotation).when(mDisplayContent)
+                .rotationForActivityInDifferentOrientation(topActivity);
+
+        // Make sure the fixed rotation transform linked to activity2 when adding starting window
+        // on activity2.
+        topActivity.addStartingWindow(mPackageName,
+                android.R.style.Theme, null, "Test", 0, 0, 0, 0, mActivity.appToken.asBinder(),
+                false, false, false, true, false);
+        waitUntilHandlersIdle();
+        assertTrue(topActivity.hasFixedRotationTransform());
     }
 
     private ActivityRecord createIsolatedTestActivityRecord() {

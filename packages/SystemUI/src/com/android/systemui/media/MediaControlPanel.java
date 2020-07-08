@@ -20,30 +20,24 @@ import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
 import android.content.res.ColorStateList;
-import android.graphics.Bitmap;
-import android.graphics.Canvas;
-import android.graphics.Color;
+import android.graphics.Outline;
 import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
-import android.graphics.drawable.GradientDrawable;
 import android.graphics.drawable.Icon;
-import android.graphics.drawable.RippleDrawable;
 import android.media.session.MediaController;
 import android.media.session.MediaSession;
 import android.media.session.PlaybackState;
 import android.util.Log;
 import android.view.View;
+import android.view.ViewOutlineProvider;
 import android.widget.ImageButton;
 import android.widget.ImageView;
-import android.widget.SeekBar;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.UiThread;
 import androidx.constraintlayout.widget.ConstraintSet;
-import androidx.core.graphics.drawable.RoundedBitmapDrawable;
-import androidx.core.graphics.drawable.RoundedBitmapDrawableFactory;
 
 import com.android.settingslib.Utils;
 import com.android.settingslib.media.MediaOutputSliceConstants;
@@ -52,8 +46,6 @@ import com.android.systemui.R;
 import com.android.systemui.dagger.qualifiers.Background;
 import com.android.systemui.plugins.ActivityStarter;
 import com.android.systemui.util.animation.TransitionLayout;
-
-import org.jetbrains.annotations.NotNull;
 
 import java.util.List;
 import java.util.concurrent.Executor;
@@ -65,6 +57,7 @@ import javax.inject.Inject;
  */
 public class MediaControlPanel {
     private static final String TAG = "MediaControlPanel";
+    private static final float DISABLED_ALPHA = 0.38f;
 
     // Button IDs for QS controls
     static final int[] ACTION_IDS = {
@@ -88,6 +81,8 @@ public class MediaControlPanel {
     private int mBackgroundColor;
     private int mAlbumArtSize;
     private int mAlbumArtRadius;
+    // This will provide the corners for the album art.
+    private final ViewOutlineProvider mViewOutlineProvider;
 
     /**
      * Initialize a new control panel
@@ -97,14 +92,21 @@ public class MediaControlPanel {
      */
     @Inject
     public MediaControlPanel(Context context, @Background Executor backgroundExecutor,
-            ActivityStarter activityStarter, MediaHostStatesManager mediaHostStatesManager,
+            ActivityStarter activityStarter, MediaViewController mediaViewController,
             SeekBarViewModel seekBarViewModel) {
         mContext = context;
         mBackgroundExecutor = backgroundExecutor;
         mActivityStarter = activityStarter;
         mSeekBarViewModel = seekBarViewModel;
-        mMediaViewController = new MediaViewController(context, mediaHostStatesManager);
+        mMediaViewController = mediaViewController;
         loadDimens();
+
+        mViewOutlineProvider = new ViewOutlineProvider() {
+            @Override
+            public void getOutline(View view, Outline outline) {
+                outline.setRoundRect(0, 0, mAlbumArtSize, mAlbumArtSize, mAlbumArtRadius);
+            }
+        };
     }
 
     public void onDestroy() {
@@ -163,18 +165,21 @@ public class MediaControlPanel {
     public void attach(PlayerViewHolder vh) {
         mViewHolder = vh;
         TransitionLayout player = vh.getPlayer();
+
+        ImageView albumView = vh.getAlbumView();
+        albumView.setOutlineProvider(mViewOutlineProvider);
+        albumView.setClipToOutline(true);
+
         mSeekBarObserver = new SeekBarObserver(vh);
         mSeekBarViewModel.getProgress().observeForever(mSeekBarObserver);
-        SeekBar bar = vh.getSeekBar();
-        bar.setOnSeekBarChangeListener(mSeekBarViewModel.getSeekBarListener());
-        bar.setOnTouchListener(mSeekBarViewModel.getSeekBarTouchListener());
+        mSeekBarViewModel.attachTouchHandlers(vh.getSeekBar());
         mMediaViewController.attach(player);
     }
 
     /**
      * Bind this view based on the data given
      */
-    public void bind(@NotNull MediaData data) {
+    public void bind(@NonNull MediaData data) {
         if (mViewHolder == null) {
             return;
         }
@@ -205,11 +210,9 @@ public class MediaControlPanel {
         }
 
         ImageView albumView = mViewHolder.getAlbumView();
-        // TODO: migrate this to a view with rounded corners instead of baking the rounding
-        // into the bitmap
         boolean hasArtwork = data.getArtwork() != null;
         if (hasArtwork) {
-            Drawable artwork = createRoundedBitmap(data.getArtwork());
+            Drawable artwork = scaleDrawable(data.getArtwork());
             albumView.setImageDrawable(artwork);
         }
         setVisibleAndAlpha(collapsedSet, R.id.album_art, hasArtwork);
@@ -253,26 +256,29 @@ public class MediaControlPanel {
         ImageView iconView = mViewHolder.getSeamlessIcon();
         TextView deviceName = mViewHolder.getSeamlessText();
 
-        // Update the outline color
-        RippleDrawable bkgDrawable = (RippleDrawable) mViewHolder.getSeamless().getForeground();
-        GradientDrawable rect = (GradientDrawable) bkgDrawable.getDrawable(0);
-        rect.setStroke(2, deviceName.getCurrentTextColor());
-        rect.setColor(Color.TRANSPARENT);
-
         final MediaDeviceData device = data.getDevice();
-        if (device != null && !device.getEnabled()) {
-            mViewHolder.getSeamless().setEnabled(false);
-            // TODO(b/156875717): setEnabled should cause the alpha to change.
-            mViewHolder.getSeamless().setAlpha(0.38f);
-            iconView.setImageResource(R.drawable.ic_hardware_speaker);
-            iconView.setVisibility(View.VISIBLE);
-            deviceName.setText(R.string.media_seamless_remote_device);
+        final int seamlessId = mViewHolder.getSeamless().getId();
+        final int seamlessFallbackId = mViewHolder.getSeamlessFallback().getId();
+        final boolean showFallback = device != null && !device.getEnabled();
+        final int seamlessFallbackVisibility = showFallback ? View.VISIBLE : View.GONE;
+        mViewHolder.getSeamlessFallback().setVisibility(seamlessFallbackVisibility);
+        expandedSet.setVisibility(seamlessFallbackId, seamlessFallbackVisibility);
+        collapsedSet.setVisibility(seamlessFallbackId, seamlessFallbackVisibility);
+        final int seamlessVisibility = showFallback ? View.GONE : View.VISIBLE;
+        mViewHolder.getSeamless().setVisibility(seamlessVisibility);
+        expandedSet.setVisibility(seamlessId, seamlessVisibility);
+        collapsedSet.setVisibility(seamlessId, seamlessVisibility);
+        final float seamlessAlpha = data.getResumption() ? DISABLED_ALPHA : 1.0f;
+        expandedSet.setAlpha(seamlessId, seamlessAlpha);
+        collapsedSet.setAlpha(seamlessId, seamlessAlpha);
+        // Disable clicking on output switcher for resumption controls.
+        mViewHolder.getSeamless().setEnabled(!data.getResumption());
+        if (showFallback) {
+            iconView.setImageDrawable(null);
+            deviceName.setText(null);
         } else if (device != null) {
-            mViewHolder.getSeamless().setEnabled(true);
-            mViewHolder.getSeamless().setAlpha(1f);
             Drawable icon = device.getIcon();
             iconView.setVisibility(View.VISIBLE);
-
             if (icon instanceof AdaptiveIcon) {
                 AdaptiveIcon aIcon = (AdaptiveIcon) icon;
                 aIcon.setBackgroundColor(mBackgroundColor);
@@ -284,8 +290,6 @@ public class MediaControlPanel {
         } else {
             // Reset to default
             Log.w(TAG, "device is null. Not binding output chip.");
-            mViewHolder.getSeamless().setEnabled(true);
-            mViewHolder.getSeamless().setAlpha(1f);
             iconView.setVisibility(View.GONE);
             deviceName.setText(com.android.internal.R.string.ext_media_seamless_action);
         }
@@ -302,11 +306,14 @@ public class MediaControlPanel {
             button.setContentDescription(mediaAction.getContentDescription());
             Runnable action = mediaAction.getAction();
 
-            button.setOnClickListener(v -> {
-                if (action != null) {
+            if (action == null) {
+                button.setEnabled(false);
+            } else {
+                button.setEnabled(true);
+                button.setOnClickListener(v -> {
                     action.run();
-                }
-            });
+                });
+            }
             boolean visibleInCompat = actionsWhenCollapsed.contains(i);
             setVisibleAndAlpha(collapsedSet, actionId, visibleInCompat);
             setVisibleAndAlpha(expandedSet, actionId, true /*visible */);
@@ -331,7 +338,7 @@ public class MediaControlPanel {
     }
 
     @UiThread
-    private Drawable createRoundedBitmap(Icon icon) {
+    private Drawable scaleDrawable(Icon icon) {
         if (icon == null) {
             return null;
         }
@@ -352,22 +359,7 @@ public class MediaControlPanel {
             bounds.offset((int) -offsetX,(int) -offsetY);
         }
         drawable.setBounds(bounds);
-        Bitmap scaled = Bitmap.createBitmap(mAlbumArtSize, mAlbumArtSize,
-                Bitmap.Config.ARGB_8888);
-        Canvas canvas = new Canvas(scaled);
-        drawable.draw(canvas);
-        RoundedBitmapDrawable artwork = RoundedBitmapDrawableFactory.create(
-                mContext.getResources(), scaled);
-        artwork.setCornerRadius(mAlbumArtRadius);
-        return artwork;
-    }
-
-    /**
-     * Return the token for the current media session
-     * @return the token
-     */
-    public MediaSession.Token getMediaSessionToken() {
-        return mToken;
+        return drawable;
     }
 
     /**
@@ -376,25 +368,6 @@ public class MediaControlPanel {
      */
     public MediaController getController() {
         return mController;
-    }
-
-    /**
-     * Get the name of the package associated with the current media controller
-     * @return the package name, or null if no controller
-     */
-    public String getMediaPlayerPackage() {
-        if (mController == null) {
-            return null;
-        }
-        return mController.getPackageName();
-    }
-
-    /**
-     * Check whether this player has an attached media session.
-     * @return whether there is a controller with a current media session.
-     */
-    public boolean hasMediaSession() {
-        return mController != null && mController.getPlaybackState() != null;
     }
 
     /**

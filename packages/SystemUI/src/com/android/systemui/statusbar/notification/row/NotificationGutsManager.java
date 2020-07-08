@@ -41,11 +41,13 @@ import android.view.accessibility.AccessibilityManager;
 
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.logging.MetricsLogger;
+import com.android.internal.logging.UiEventLogger;
 import com.android.internal.logging.nano.MetricsProto;
 import com.android.settingslib.notification.ConversationIconFactory;
 import com.android.systemui.Dependency;
 import com.android.systemui.Dumpable;
 import com.android.systemui.R;
+import com.android.systemui.bubbles.BubbleController;
 import com.android.systemui.dagger.qualifiers.Background;
 import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.plugins.statusbar.NotificationMenuRowPlugin;
@@ -113,12 +115,14 @@ public class NotificationGutsManager implements Dumpable, NotificationLifetimeEx
     private final Lazy<StatusBar> mStatusBarLazy;
     private final Handler mMainHandler;
     private final Handler mBgHandler;
+    private final BubbleController mBubbleController;
     private Runnable mOpenRunnable;
     private final INotificationManager mNotificationManager;
     private final LauncherApps mLauncherApps;
     private final ShortcutManager mShortcutManager;
     private final CurrentUserContextTracker mContextTracker;
     private final Provider<PriorityOnboardingDialogController.Builder> mBuilderProvider;
+    private final UiEventLogger mUiEventLogger;
 
     /**
      * Injected constructor. See {@link NotificationsModule}.
@@ -132,7 +136,9 @@ public class NotificationGutsManager implements Dumpable, NotificationLifetimeEx
             ShortcutManager shortcutManager,
             ChannelEditorDialogController channelEditorDialogController,
             CurrentUserContextTracker contextTracker,
-            Provider<PriorityOnboardingDialogController.Builder> builderProvider) {
+            Provider<PriorityOnboardingDialogController.Builder> builderProvider,
+            BubbleController bubbleController,
+            UiEventLogger uiEventLogger) {
         mContext = context;
         mVisualStabilityManager = visualStabilityManager;
         mStatusBarLazy = statusBarLazy;
@@ -146,6 +152,8 @@ public class NotificationGutsManager implements Dumpable, NotificationLifetimeEx
         mContextTracker = contextTracker;
         mBuilderProvider = builderProvider;
         mChannelEditorDialogController = channelEditorDialogController;
+        mBubbleController = bubbleController;
+        mUiEventLogger = uiEventLogger;
     }
 
     public void setUpWithPresenter(NotificationPresenter presenter,
@@ -311,12 +319,16 @@ public class NotificationGutsManager implements Dumpable, NotificationLifetimeEx
 
         AppOpsInfo.OnSettingsClickListener onSettingsClick =
                 (View v, String pkg, int uid, ArraySet<Integer> ops) -> {
-            mMetricsLogger.action(MetricsProto.MetricsEvent.ACTION_OPS_GUTS_SETTINGS);
-            guts.resetFalsingCheck();
-            startAppOpsSettingsActivity(pkg, uid, ops, row);
+                    mUiEventLogger.logWithInstanceId(
+                            NotificationAppOpsEvent.NOTIFICATION_APP_OPS_SETTINGS_CLICK,
+                            sbn.getUid(), sbn.getPackageName(), sbn.getInstanceId());
+                    mMetricsLogger.action(MetricsProto.MetricsEvent.ACTION_OPS_GUTS_SETTINGS);
+                    guts.resetFalsingCheck();
+                    startAppOpsSettingsActivity(pkg, uid, ops, row);
         };
         if (!row.getEntry().mActiveAppOps.isEmpty()) {
-            appOpsInfoView.bindGuts(pmUser, onSettingsClick, sbn, row.getEntry().mActiveAppOps);
+            appOpsInfoView.bindGuts(pmUser, onSettingsClick, sbn, mUiEventLogger,
+                    row.getEntry().mActiveAppOps);
         }
     }
 
@@ -366,6 +378,7 @@ public class NotificationGutsManager implements Dumpable, NotificationLifetimeEx
                 row.getEntry(),
                 onSettingsClick,
                 onAppSettingsClick,
+                mUiEventLogger,
                 mDeviceProvisionedController.isDeviceProvisioned(),
                 row.getIsNonblockable(),
                 mHighPriorityProvider.isHighPriority(row.getEntry()));
@@ -480,7 +493,8 @@ public class NotificationGutsManager implements Dumpable, NotificationLifetimeEx
                 mDeviceProvisionedController.isDeviceProvisioned(),
                 mMainHandler,
                 mBgHandler,
-                onConversationSettingsListener);
+                onConversationSettingsListener,
+                mBubbleController);
     }
 
     /**

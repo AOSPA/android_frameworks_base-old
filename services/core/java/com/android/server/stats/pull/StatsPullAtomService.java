@@ -209,18 +209,10 @@ public class StatsPullAtomService extends SystemService {
     // Random seed stable for StatsPullAtomService life cycle - can be used for stable sampling
     private static final int RANDOM_SEED = new Random().nextInt();
 
-    /**
-     * Lowest available uid for apps.
-     *
-     * <p>Used to quickly discard memory snapshots of the zygote forks from native process
-     * measurements.
-     */
-    private static final int MIN_APP_UID = 10_000;
-
     private static final int DIMENSION_KEY_SIZE_HARD_LIMIT = 800;
     private static final int DIMENSION_KEY_SIZE_SOFT_LIMIT = 500;
     private static final long APP_OPS_SAMPLING_INITIALIZATION_DELAY_MILLIS = 45000;
-    private static final int APP_OPS_SIZE_ESTIMATE = 5000;
+    private static final int APP_OPS_SIZE_ESTIMATE = 2000;
 
     private static final String RESULT_RECEIVER_CONTROLLER_KEY = "controller_activity";
     /**
@@ -243,6 +235,17 @@ public class StatsPullAtomService extends SystemService {
     private static final String APP_OPS_TARGET_COLLECTION_SIZE = "app_ops_target_collection_size";
     private static final String DANGEROUS_PERMISSION_STATE_SAMPLE_RATE =
             "dangerous_permission_state_sample_rate";
+
+    /** Parameters relating to ProcStats data upload. */
+    // Maximum shards to use when generating StatsEvent objects from ProcStats.
+    private static final int MAX_PROCSTATS_SHARDS = 5;
+    // Should match MAX_PAYLOAD_SIZE in StatsEvent, minus a small amount for overhead/metadata.
+    private static final int MAX_PROCSTATS_SHARD_SIZE = 48 * 1024; // 48 KB
+    // In ProcessStats, we measure the size of a raw ProtoOutputStream, before compaction. This
+    // typically runs 35-45% larger than the compacted size that will be written to StatsEvent.
+    // Hence, we can allow a little more room in each shard before moving to the next. Make this
+    // 20% as a conservative estimate.
+    private static final int MAX_PROCSTATS_RAW_SHARD_SIZE = (int) (MAX_PROCSTATS_SHARD_SIZE * 1.20);
 
     private final Object mThermalLock = new Object();
     @GuardedBy("mThermalLock")
@@ -317,8 +320,7 @@ public class StatsPullAtomService extends SystemService {
 
     private StatsPullAtomCallbackImpl mStatsCallbackImpl;
 
-    private final Object mAppOpsSamplingRateLock = new Object();
-    @GuardedBy("mAppOpsSamplingRateLock")
+    @GuardedBy("mAttributedAppOpsLock")
     private int mAppOpsSamplingRate = 0;
     private final Object mDangerousAppOpsListLock = new Object();
     @GuardedBy("mDangerousAppOpsListLock")
@@ -1819,10 +1821,6 @@ public class StatsPullAtomService extends SystemService {
         return StatsManager.PULL_SUCCESS;
     }
 
-    private static boolean isAppUid(int uid) {
-        return uid >= MIN_APP_UID;
-    }
-
     private void registerProcessMemoryHighWaterMark() {
         int tagId = FrameworkStatsLog.PROCESS_MEMORY_HIGH_WATER_MARK;
         mStatsManager.setPullAtomCallback(
@@ -1859,7 +1857,7 @@ public class StatsPullAtomService extends SystemService {
         int size = processCmdlines.size();
         for (int i = 0; i < size; ++i) {
             final MemorySnapshot snapshot = readMemorySnapshotFromProcfs(processCmdlines.keyAt(i));
-            if (snapshot == null || isAppUid(snapshot.uid)) {
+            if (snapshot == null) {
                 continue;
             }
             StatsEvent e = StatsEvent.newBuilder()
@@ -1920,7 +1918,7 @@ public class StatsPullAtomService extends SystemService {
         for (int i = 0; i < size; ++i) {
             int pid = processCmdlines.keyAt(i);
             final MemorySnapshot snapshot = readMemorySnapshotFromProcfs(pid);
-            if (snapshot == null || isAppUid(snapshot.uid)) {
+            if (snapshot == null) {
                 continue;
             }
             StatsEvent e = StatsEvent.newBuilder()
@@ -2566,19 +2564,26 @@ public class StatsPullAtomService extends SystemService {
             long lastHighWaterMark = readProcStatsHighWaterMark(section);
             List<ParcelFileDescriptor> statsFiles = new ArrayList<>();
 
+            ProtoOutputStream[] protoStreams = new ProtoOutputStream[MAX_PROCSTATS_SHARDS];
+            for (int i = 0; i < protoStreams.length; i++) {
+                protoStreams[i] = new ProtoOutputStream();
+            }
+
             ProcessStats procStats = new ProcessStats(false);
+            // Force processStatsService to aggregate all in-storage and in-memory data.
             long highWaterMark = processStatsService.getCommittedStatsMerged(
                     lastHighWaterMark, section, true, statsFiles, procStats);
+            procStats.dumpAggregatedProtoForStatsd(protoStreams, MAX_PROCSTATS_RAW_SHARD_SIZE);
 
-            // aggregate the data together for westworld consumption
-            ProtoOutputStream proto = new ProtoOutputStream();
-            procStats.dumpAggregatedProtoForStatsd(proto);
-
-            StatsEvent e = StatsEvent.newBuilder()
-                    .setAtomId(atomTag)
-                    .writeByteArray(proto.getBytes())
-                    .build();
-            pulledData.add(e);
+            for (ProtoOutputStream proto : protoStreams) {
+                if (proto.getBytes().length > 0) {
+                    StatsEvent e = StatsEvent.newBuilder()
+                            .setAtomId(atomTag)
+                            .writeByteArray(proto.getBytes())
+                            .build();
+                    pulledData.add(e);
+                }
+            }
 
             new File(mBaseDir.getAbsolutePath() + "/" + section + "_" + lastHighWaterMark)
                     .delete();
@@ -3078,7 +3083,7 @@ public class StatsPullAtomService extends SystemService {
     int pullDangerousPermissionStateLocked(int atomTag, List<StatsEvent> pulledData) {
         final long token = Binder.clearCallingIdentity();
         float samplingRate = DeviceConfig.getFloat(DeviceConfig.NAMESPACE_PERMISSIONS,
-                DANGEROUS_PERMISSION_STATE_SAMPLE_RATE, 0.02f);
+                DANGEROUS_PERMISSION_STATE_SAMPLE_RATE, 0.015f);
         Set<Integer> reportedUids = new HashSet<>();
         try {
             PackageManager pm = mContext.getPackageManager();
@@ -3473,23 +3478,21 @@ public class StatsPullAtomService extends SystemService {
             HistoricalOps histOps = ops.get(EXTERNAL_STATS_SYNC_TIMEOUT_MILLIS,
                     TimeUnit.MILLISECONDS);
 
-            synchronized (mAppOpsSamplingRateLock) {
-                if (mAppOpsSamplingRate == 0) {
-                    mContext.getMainThreadHandler().postDelayed(new Runnable() {
-                        @Override
-                        public void run() {
-                            try {
-                                estimateAppOpsSamplingRate();
-                            } catch (Throwable e) {
-                                Slog.e(TAG, "AppOps sampling ratio estimation failed: ", e);
-                                synchronized (mAppOpsSamplingRateLock) {
-                                    mAppOpsSamplingRate = min(mAppOpsSamplingRate, 10);
-                                }
+            if (mAppOpsSamplingRate == 0) {
+                mContext.getMainThreadHandler().postDelayed(new Runnable() {
+                    @Override
+                    public void run() {
+                        try {
+                            estimateAppOpsSamplingRate();
+                        } catch (Throwable e) {
+                            Slog.e(TAG, "AppOps sampling ratio estimation failed: ", e);
+                            synchronized (mAttributedAppOpsLock) {
+                                mAppOpsSamplingRate = min(mAppOpsSamplingRate, 10);
                             }
                         }
-                    }, APP_OPS_SAMPLING_INITIALIZATION_DELAY_MILLIS);
-                    mAppOpsSamplingRate = 100;
-                }
+                    }
+                }, APP_OPS_SAMPLING_INITIALIZATION_DELAY_MILLIS);
+                mAppOpsSamplingRate = 100;
             }
 
             List<AppOpEntry> opsList =
@@ -3497,9 +3500,7 @@ public class StatsPullAtomService extends SystemService {
 
             int newSamplingRate = sampleAppOps(pulledData, opsList, atomTag, mAppOpsSamplingRate);
 
-            synchronized (mAppOpsSamplingRateLock) {
-                mAppOpsSamplingRate = min(mAppOpsSamplingRate, newSamplingRate);
-            }
+            mAppOpsSamplingRate = min(mAppOpsSamplingRate, newSamplingRate);
         } catch (Throwable t) {
             // TODO: catch exceptions at a more granular level
             Slog.e(TAG, "Could not read appops", t);
@@ -3538,7 +3539,7 @@ public class StatsPullAtomService extends SystemService {
         }
         int estimatedSamplingRate = (int) constrain(
                 appOpsTargetCollectionSize * 100 / estimatedSize, 0, 100);
-        synchronized (mAppOpsSamplingRateLock) {
+        synchronized (mAttributedAppOpsLock) {
             mAppOpsSamplingRate = min(mAppOpsSamplingRate, estimatedSamplingRate);
         }
     }
@@ -3577,7 +3578,16 @@ public class StatsPullAtomService extends SystemService {
     private void processHistoricalOp(AppOpsManager.HistoricalOp op,
             List<AppOpEntry> opsList, int uid, int samplingRatio, String packageName,
             @Nullable String attributionTag) {
-        AppOpEntry entry = new AppOpEntry(packageName, attributionTag, op, uid);
+        int firstChar = 0;
+        if (attributionTag != null && attributionTag.startsWith(packageName)) {
+            firstChar = packageName.length();
+            if (firstChar < attributionTag.length() && attributionTag.charAt(firstChar) == '.') {
+                firstChar++;
+            }
+        }
+        AppOpEntry entry = new AppOpEntry(packageName,
+                attributionTag == null ? null : attributionTag.substring(firstChar), op,
+                uid);
         if (entry.mHash < samplingRatio) {
             opsList.add(entry);
         }

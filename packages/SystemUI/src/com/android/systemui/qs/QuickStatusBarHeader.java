@@ -15,6 +15,7 @@
 package com.android.systemui.qs;
 
 import static android.app.StatusBarManager.DISABLE2_QUICK_SETTINGS;
+import static android.view.ViewGroup.LayoutParams.WRAP_CONTENT;
 
 import static com.android.systemui.util.InjectionInflationController.VIEW_CONTEXT;
 
@@ -36,13 +37,14 @@ import android.service.notification.ZenModeConfig;
 import android.text.format.DateUtils;
 import android.util.AttributeSet;
 import android.util.Log;
+import android.util.MathUtils;
 import android.util.Pair;
 import android.view.ContextThemeWrapper;
 import android.view.DisplayCutout;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.WindowInsets;
 import android.widget.ImageView;
-import android.widget.LinearLayout;
 import android.widget.RelativeLayout;
 import android.widget.TextView;
 
@@ -55,6 +57,7 @@ import androidx.lifecycle.LifecycleRegistry;
 import com.android.settingslib.Utils;
 import com.android.systemui.BatteryMeterView;
 import com.android.systemui.DualToneHandler;
+import com.android.systemui.Interpolators;
 import com.android.systemui.R;
 import com.android.systemui.plugins.ActivityStarter;
 import com.android.systemui.plugins.DarkIconDispatcher;
@@ -149,6 +152,8 @@ public class QuickStatusBarHeader extends RelativeLayout implements
     private int mWaterfallTopInset;
     private int mCutOutPaddingLeft;
     private int mCutOutPaddingRight;
+    private float mExpandedHeaderAlpha = 1.0f;
+    private float mKeyguardExpansionFraction;
 
     @Inject
     public QuickStatusBarHeader(@Named(VIEW_CONTEXT) Context context, AttributeSet attrs,
@@ -344,6 +349,15 @@ public class QuickStatusBarHeader extends RelativeLayout implements
                 com.android.internal.R.dimen.quick_qs_offset_height);
         mSystemIconsView.setLayoutParams(mSystemIconsView.getLayoutParams());
 
+        ViewGroup.LayoutParams lp = getLayoutParams();
+        if (mQsDisabled) {
+            lp.height = resources.getDimensionPixelSize(
+                    com.android.internal.R.dimen.quick_qs_offset_height);
+        } else {
+            lp.height = WRAP_CONTENT;
+        }
+        setLayoutParams(lp);
+
         updateStatusIconAlphaAnimator();
         updateHeaderTextContainerAlphaAnimator();
     }
@@ -356,7 +370,7 @@ public class QuickStatusBarHeader extends RelativeLayout implements
 
     private void updateHeaderTextContainerAlphaAnimator() {
         mHeaderTextContainerAlphaAnimator = new TouchAnimator.Builder()
-                .addFloat(mHeaderTextContainerView, "alpha", 0, 0, 1)
+                .addFloat(mHeaderTextContainerView, "alpha", 0, 0, mExpandedHeaderAlpha)
                 .build();
     }
 
@@ -403,6 +417,7 @@ public class QuickStatusBarHeader extends RelativeLayout implements
                 updateResources();
             }
         }
+        mKeyguardExpansionFraction = keyguardExpansionFraction;
     }
 
     public void disable(int state1, int state2, boolean animate) {
@@ -595,5 +610,23 @@ public class QuickStatusBarHeader extends RelativeLayout implements
             }
         }
         updateClockPadding();
+    }
+
+    public void setExpandedScrollAmount(int scrollY) {
+        // The scrolling of the expanded qs has changed. Since the header text isn't part of it,
+        // but would overlap content, we're fading it out.
+        float newAlpha = 1.0f;
+        if (mHeaderTextContainerView.getHeight() > 0) {
+            newAlpha = MathUtils.map(0, mHeaderTextContainerView.getHeight() / 2.0f, 1.0f, 0.0f,
+                    scrollY);
+            newAlpha = Interpolators.ALPHA_OUT.getInterpolation(newAlpha);
+        }
+        mHeaderTextContainerView.setScrollY(scrollY);
+        if (newAlpha != mExpandedHeaderAlpha) {
+            mExpandedHeaderAlpha = newAlpha;
+            mHeaderTextContainerView.setAlpha(MathUtils.lerp(0.0f, mExpandedHeaderAlpha,
+                    mKeyguardExpansionFraction));
+            updateHeaderTextContainerAlphaAnimator();
+        }
     }
 }

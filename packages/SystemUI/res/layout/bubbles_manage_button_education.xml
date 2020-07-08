@@ -31,7 +31,6 @@
         android:layout_marginEnd="24dp"
         android:orientation="vertical"
         android:background="@drawable/bubble_stack_user_education_bg"
-        android:alpha="0.9"
         >
 
         <TextView
@@ -41,7 +40,8 @@
             android:paddingStart="16dp"
             android:paddingBottom="16dp"
             android:fontFamily="@*android:string/config_bodyFontFamilyMedium"
-            android:maxLines="1"
+            android:maxLines="2"
+            android:ellipsize="end"
             android:text="@string/bubbles_user_education_manage_title"
             android:textAppearance="@*android:style/TextAppearance.DeviceDefault.Headline"/>
 
@@ -52,12 +52,15 @@
             android:paddingStart="16dp"
             android:paddingBottom="24dp"
             android:text="@string/bubbles_user_education_manage"
+            android:maxLines="2"
+            android:ellipsize="end"
             android:fontFamily="@*android:string/config_bodyFontFamily"
             android:textAppearance="@*android:style/TextAppearance.DeviceDefault.Body2"/>
 
         <LinearLayout
             android:layout_height="wrap_content"
             android:layout_width="wrap_content"
+            android:id="@+id/button_layout"
             android:orientation="horizontal" >
 
             <com.android.systemui.statusbar.AlphaOptimizedButton
@@ -70,7 +73,6 @@
                 android:clickable="false"
                 android:text="@string/manage_bubbles_text"
                 android:textColor="?attr/wallpaperTextColor"
-                android:alpha="0.89"
                 />
 
             <com.android.systemui.statusbar.AlphaOptimizedButton

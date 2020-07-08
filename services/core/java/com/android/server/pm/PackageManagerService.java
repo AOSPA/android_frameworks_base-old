@@ -2992,7 +2992,7 @@ public class PackageManagerService extends IPackageManager.Stub
             t.traceEnd();
 
             t.traceBegin("read user settings");
-            mFirstBoot = !mSettings.readLPw(mUserManager.getUsers(false));
+            mFirstBoot = !mSettings.readLPw(mInjector.getUserManagerInternal().getUsers(false));
             t.traceEnd();
 
             // Clean up orphaned packages for which the code path doesn't exist
@@ -3179,6 +3179,10 @@ public class PackageManagerService extends IPackageManager.Stub
                         psit.remove();
                         logCriticalInfo(Log.WARN, "System package " + ps.name
                                 + " no longer exists; it's data will be wiped");
+
+                        // Assume package is truly gone and wipe residual permissions.
+                        mPermissionManager.updatePermissions(ps.name, null);
+
                         // Actual deletion of code and data will be handled by later
                         // reconciliation step
                     } else {
@@ -3431,7 +3435,7 @@ public class PackageManagerService extends IPackageManager.Stub
             // boot, then we need to initialize the default preferred apps across
             // all defined users.
             if (!mOnlyCore && (mPromoteSystemApps || mFirstBoot)) {
-                for (UserInfo user : mUserManager.getUsers(true)) {
+                for (UserInfo user : mInjector.getUserManagerInternal().getUsers(true)) {
                     mSettings.applyDefaultPreferredAppsLPw(user.id);
                     primeDomainVerificationsLPw(user.id);
                 }
@@ -12177,15 +12181,17 @@ public class PackageManagerService extends IPackageManager.Stub
                 }
             }
 
-            // Ensure the package is signed with at least the minimum signature scheme version
-            // required for its target SDK.
-            int minSignatureSchemeVersion =
-                    ApkSignatureVerifier.getMinimumSignatureSchemeVersionForTargetSdk(
-                            pkg.getTargetSdkVersion());
-            if (pkg.getSigningDetails().signatureSchemeVersion < minSignatureSchemeVersion) {
-                throw new PackageManagerException(INSTALL_PARSE_FAILED_NO_CERTIFICATES,
-                        "No signature found in package of version " + minSignatureSchemeVersion
-                                + " or newer for package " + pkg.getPackageName());
+            // If the package is not on a system partition ensure it is signed with at least the
+            // minimum signature scheme version required for its target SDK.
+            if ((parseFlags & PackageParser.PARSE_IS_SYSTEM_DIR) == 0) {
+                int minSignatureSchemeVersion =
+                        ApkSignatureVerifier.getMinimumSignatureSchemeVersionForTargetSdk(
+                                pkg.getTargetSdkVersion());
+                if (pkg.getSigningDetails().signatureSchemeVersion < minSignatureSchemeVersion) {
+                    throw new PackageManagerException(INSTALL_PARSE_FAILED_NO_CERTIFICATES,
+                            "No signature found in package of version " + minSignatureSchemeVersion
+                                    + " or newer for package " + pkg.getPackageName());
+                }
             }
         }
     }
@@ -12395,7 +12401,7 @@ public class PackageManagerService extends IPackageManager.Stub
             ksms.addScannedPackageLPw(pkg);
 
             mComponentResolver.addAllComponents(pkg, chatty);
-            mAppsFilter.addPackage(pkgSetting, mSettings.mPackages);
+            mAppsFilter.addPackage(pkgSetting);
 
             // Don't allow ephemeral applications to define new permissions groups.
             if ((scanFlags & SCAN_AS_INSTANT_APP) != 0) {
@@ -12569,8 +12575,6 @@ public class PackageManagerService extends IPackageManager.Stub
 
     void cleanPackageDataStructuresLILPw(AndroidPackage pkg, boolean chatty) {
         mComponentResolver.removeAllComponents(pkg, chatty);
-        mAppsFilter.removePackage(getPackageSetting(pkg.getPackageName()),
-                mInjector.getUserManagerInternal().getUserIds(), mSettings.mPackages);
         mPermissionManager.removeAllPermissions(pkg, chatty);
 
         final int instrumentationSize = ArrayUtils.size(pkg.getInstrumentations());
@@ -13551,6 +13555,17 @@ public class PackageManagerService extends IPackageManager.Stub
         removeSuspensionsBySuspendingPackage(allPackages, suspendingPackage::equals, userId);
     }
 
+    boolean isSuspendingAnyPackages(String suspendingPackage, int userId) {
+        synchronized (mLock) {
+            for (final PackageSetting ps : mSettings.mPackages.values()) {
+                if (ps.isSuspendedBy(suspendingPackage, userId)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
     /**
      * Removes any suspensions on given packages that were added by packages that pass the given
      * predicate.
@@ -14286,7 +14301,7 @@ public class PackageManagerService extends IPackageManager.Stub
             // Okay!
             targetPackageSetting.setInstallerPackageName(installerPackageName);
             mSettings.addInstallerPackageNames(targetPackageSetting.installSource);
-            mAppsFilter.addPackage(targetPackageSetting, mSettings.mPackages);
+            mAppsFilter.addPackage(targetPackageSetting);
             scheduleWriteSettingsLocked();
         }
     }
@@ -18787,6 +18802,7 @@ public class PackageManagerService extends IPackageManager.Stub
                     clearIntentFilterVerificationsLPw(deletedPs.name, UserHandle.USER_ALL, true);
                     clearDefaultBrowserIfNeeded(packageName);
                     mSettings.mKeySetManagerService.removeAppKeySetDataLPw(packageName);
+                    mAppsFilter.removePackage(getPackageSetting(packageName));
                     removedAppId = mSettings.removePackageLPw(packageName);
                     if (outInfo != null) {
                         outInfo.removedAppId = removedAppId;
@@ -22209,7 +22225,7 @@ public class PackageManagerService extends IPackageManager.Stub
         }
         for (String packageName : apkList) {
             setSystemAppHiddenUntilInstalled(packageName, true);
-            for (UserInfo user : mUserManager.getUsers(false)) {
+            for (UserInfo user : mInjector.getUserManagerInternal().getUsers(false)) {
                 setSystemAppInstallState(packageName, false, user.id);
             }
         }
@@ -23548,6 +23564,7 @@ public class PackageManagerService extends IPackageManager.Stub
             scheduleWritePackageRestrictionsLocked(userId);
             scheduleWritePackageListLocked(userId);
             primeDomainVerificationsLPw(userId);
+            mAppsFilter.onUsersChanged();
         }
     }
 
@@ -23997,7 +24014,6 @@ public class PackageManagerService extends IPackageManager.Stub
             return PackageManagerService.this.getInstalledApplicationsListInternal(flags, userId,
                     callingUid);
         }
-
 
         @Override
         public boolean isPlatformSigned(String packageName) {
@@ -25102,6 +25118,16 @@ public class PackageManagerService extends IPackageManager.Stub
                 mSettings.clearBlockUninstallLPw(userId);
                 mSettings.writePackageRestrictionsLPr(userId);
             }
+        }
+
+        @Override
+        public void unsuspendForSuspendingPackage(final String packageName, int affectedUser) {
+            PackageManagerService.this.unsuspendForSuspendingPackage(packageName, affectedUser);
+        }
+
+        @Override
+        public boolean isSuspendingAnyPackages(String suspendingPackage, int userId) {
+            return PackageManagerService.this.isSuspendingAnyPackages(suspendingPackage, userId);
         }
     }
 

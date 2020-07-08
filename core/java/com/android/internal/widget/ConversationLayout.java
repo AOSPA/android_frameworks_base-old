@@ -72,6 +72,7 @@ import com.android.internal.util.ContrastColorUtil;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.function.Consumer;
 import java.util.regex.Pattern;
 
@@ -196,7 +197,6 @@ public class ConversationLayout extends FrameLayout
         super.onFinishInflate();
         mMessagingLinearLayout = findViewById(R.id.notification_messaging);
         mActions = findViewById(R.id.actions);
-        mMessagingLinearLayout.setMessagingLayout(this);
         mImageMessageContainer = findViewById(R.id.conversation_image_message_container);
         // We still want to clip, but only on the top, since views can temporarily out of bounds
         // during transitions.
@@ -232,12 +232,19 @@ public class ConversationLayout extends FrameLayout
             oldVisibility = mImportanceRingView.getVisibility();
             wasGone = oldVisibility == GONE;
             visibility = !mImportantConversation ? GONE : visibility;
-            isGone = visibility == GONE;
-            if (wasGone != isGone) {
+            boolean isRingGone = visibility == GONE;
+            if (wasGone != isRingGone) {
                 // Keep the badge visibility in sync with the icon. This is necessary in cases
                 // Where the icon is being hidden externally like in group children.
                 mImportanceRingView.animate().cancel();
                 mImportanceRingView.setVisibility(visibility);
+            }
+
+            oldVisibility = mConversationIconBadge.getVisibility();
+            wasGone = oldVisibility == GONE;
+            if (wasGone != isGone) {
+                mConversationIconBadge.animate().cancel();
+                mConversationIconBadge.setVisibility(visibility);
             }
         });
         // When the small icon is gone, hide the rest of the badge
@@ -784,8 +791,8 @@ public class ConversationLayout extends FrameLayout
     }
 
     @RemotableViewMethod
-    public void setShortcutIcon(Icon conversationIcon) {
-        mConversationIcon = conversationIcon;
+    public void setShortcutIcon(Icon shortcutIcon) {
+        mShortcutIcon = shortcutIcon;
     }
 
     /**
@@ -795,7 +802,8 @@ public class ConversationLayout extends FrameLayout
      */
     @RemotableViewMethod
     public void setConversationTitle(CharSequence conversationTitle) {
-        mConversationTitle = conversationTitle;
+        // Remove formatting from the title.
+        mConversationTitle = conversationTitle != null ? conversationTitle.toString() : null;
     }
 
     public CharSequence getConversationTitle() {
@@ -1052,6 +1060,9 @@ public class ConversationLayout extends FrameLayout
                 groups.add(currentGroup);
                 if (sender == null) {
                     sender = mUser;
+                } else {
+                    // Remove all formatting from the sender name
+                    sender = sender.toBuilder().setName(Objects.toString(sender.getName())).build();
                 }
                 senders.add(sender);
                 currentSenderKey = key;
@@ -1293,8 +1304,10 @@ public class ConversationLayout extends FrameLayout
         if (expandable) {
             mExpandButtonContainer.setVisibility(VISIBLE);
             mExpandButtonInnerContainer.setOnClickListener(onClickListener);
+            mConversationIconContainer.setOnClickListener(onClickListener);
         } else {
             mExpandButtonContainer.setVisibility(GONE);
+            mConversationIconContainer.setOnClickListener(null);
         }
         updateContentEndPaddings();
     }

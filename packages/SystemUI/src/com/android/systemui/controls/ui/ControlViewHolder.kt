@@ -67,7 +67,6 @@ class ControlViewHolder(
 
     companion object {
         const val STATE_ANIMATION_DURATION = 700L
-        private const val UPDATE_DELAY_IN_MILLIS = 3000L
         private const val ALPHA_ENABLED = 255
         private const val ALPHA_DISABLED = 0
         private const val STATUS_ALPHA_ENABLED = 1f
@@ -89,6 +88,7 @@ class ControlViewHolder(
             return when {
                 status != Control.STATUS_OK -> StatusBehavior::class
                 deviceType == DeviceTypes.TYPE_CAMERA -> TouchBehavior::class
+                template == ControlTemplate.NO_TEMPLATE -> TouchBehavior::class
                 template is ToggleTemplate -> ToggleBehavior::class
                 template is StatelessTemplate -> TouchBehavior::class
                 template is ToggleRangeTemplate -> ToggleRangeBehavior::class
@@ -112,7 +112,6 @@ class ControlViewHolder(
     val context: Context = layout.getContext()
     val clipLayer: ClipDrawable
     lateinit var cws: ControlWithState
-    var cancelUpdate: Runnable? = null
     var behavior: Behavior? = null
     var lastAction: ControlAction? = null
     var isLoading = false
@@ -127,6 +126,8 @@ class ControlViewHolder(
     val controlTemplate: ControlTemplate
         get() = cws.control?.let { it.controlTemplate } ?: ControlTemplate.NO_TEMPLATE
 
+    var userInteractionInProgress = false
+
     init {
         val ld = layout.getBackground() as LayerDrawable
         ld.mutate()
@@ -138,9 +139,12 @@ class ControlViewHolder(
     }
 
     fun bindData(cws: ControlWithState) {
-        this.cws = cws
+        // If an interaction is in progress, the update may visually interfere with the action the
+        // action the user wants to make. Don't apply the update, and instead assume a new update
+        // will coming from when the user interaction is complete.
+        if (userInteractionInProgress) return
 
-        cancelUpdate?.run()
+        this.cws = cws
 
         // For the following statuses only, assume the title/subtitle could not be set properly
         // by the app and instead use the last known information from favorites
@@ -180,20 +184,20 @@ class ControlViewHolder(
                 lastChallengeDialog = null
             ControlAction.RESPONSE_UNKNOWN -> {
                 lastChallengeDialog = null
-                setTransientStatus(context.resources.getString(R.string.controls_error_failed))
+                setErrorStatus()
             }
             ControlAction.RESPONSE_FAIL -> {
                 lastChallengeDialog = null
-                setTransientStatus(context.resources.getString(R.string.controls_error_failed))
+                setErrorStatus()
             }
             ControlAction.RESPONSE_CHALLENGE_PIN -> {
                 lastChallengeDialog = ChallengeDialogs.createPinDialog(
-                    this, false, failedAttempt, onDialogCancel)
+                    this, false /* useAlphanumeric */, failedAttempt, onDialogCancel)
                 lastChallengeDialog?.show()
             }
             ControlAction.RESPONSE_CHALLENGE_PASSPHRASE -> {
                 lastChallengeDialog = ChallengeDialogs.createPinDialog(
-                    this, false, failedAttempt, onDialogCancel)
+                    this, true /* useAlphanumeric */, failedAttempt, onDialogCancel)
                 lastChallengeDialog?.show()
             }
             ControlAction.RESPONSE_CHALLENGE_ACK -> {
@@ -211,19 +215,10 @@ class ControlViewHolder(
         visibleDialog = null
     }
 
-    fun setTransientStatus(tempStatus: String) {
-        val previousText = status.getText()
-
-        cancelUpdate = uiExecutor.executeDelayed({
-            animateStatusChange(/* animated */ true, {
-                setStatusText(previousText, /* immediately */ true)
-                updateContentDescription()
-            })
-        }, UPDATE_DELAY_IN_MILLIS)
-
+    fun setErrorStatus() {
+        val text = context.resources.getString(R.string.controls_error_failed)
         animateStatusChange(/* animated */ true, {
-            setStatusText(tempStatus, /* immediately */ true)
-            updateContentDescription()
+            setStatusText(text, /* immediately */ true)
         })
     }
 
@@ -235,7 +230,10 @@ class ControlViewHolder(
         controlsController.action(cws.componentName, cws.ci, action)
     }
 
-    fun usePanel(): Boolean = deviceType in ControlViewHolder.FORCE_PANEL_DEVICES
+    fun usePanel(): Boolean {
+        return deviceType in ControlViewHolder.FORCE_PANEL_DEVICES ||
+            controlTemplate == ControlTemplate.NO_TEMPLATE
+    }
 
     fun bindBehavior(
         existingBehavior: Behavior?,
@@ -270,7 +268,6 @@ class ControlViewHolder(
         val ri = RenderInfo.lookup(context, cws.componentName, deviceTypeOrError, offset)
         val fg = context.resources.getColorStateList(ri.foreground, context.theme)
         val newText = nextStatusText
-        nextStatusText = ""
         val control = cws.control
 
         var shouldAnimate = animated
@@ -293,10 +290,9 @@ class ControlViewHolder(
         if (immediately) {
             status.alpha = STATUS_ALPHA_ENABLED
             status.text = text
-            nextStatusText = ""
-        } else {
-            nextStatusText = text
+            updateContentDescription()
         }
+        nextStatusText = text
     }
 
     private fun animateBackgroundChange(
@@ -411,11 +407,15 @@ class ControlViewHolder(
         setEnabled(enabled)
 
         status.text = text
+        updateContentDescription()
+
         status.setTextColor(color)
 
         control?.getCustomIcon()?.let {
             // do not tint custom icons, assume the intended icon color is correct
-            icon.imageTintList = null
+            if (icon.imageTintList != null) {
+                icon.imageTintList = null
+            }
             icon.setImageIcon(it)
         } ?: run {
             if (drawable is StateListDrawable) {

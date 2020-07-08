@@ -1,6 +1,8 @@
 package com.android.systemui.media
 
+import android.graphics.PointF
 import android.graphics.Rect
+import android.util.ArraySet
 import android.view.View
 import android.view.View.OnAttachStateChangeListener
 import com.android.systemui.util.animation.MeasurementInput
@@ -19,9 +21,7 @@ class MediaHost @Inject constructor(
     lateinit var hostView: UniqueObjectHostView
     var location: Int = -1
         private set
-    var visibleChangedListener: ((Boolean) -> Unit)? = null
-    var visible: Boolean = false
-        private set
+    private var visibleChangedListeners: ArraySet<(Boolean) -> Unit> = ArraySet()
 
     private val tmpLocationOnScreen: IntArray = intArrayOf(0, 0)
 
@@ -57,6 +57,10 @@ class MediaHost @Inject constructor(
         override fun onMediaDataRemoved(key: String) {
             updateViewVisibility()
         }
+    }
+
+    fun addVisibilityChangeListener(listener: (Boolean) -> Unit) {
+        visibleChangedListeners.add(listener)
     }
 
     /**
@@ -109,16 +113,22 @@ class MediaHost @Inject constructor(
     }
 
     private fun updateViewVisibility() {
-        if (showsOnlyActiveMedia) {
-            visible = mediaDataManager.hasActiveMedia()
+        visible = if (showsOnlyActiveMedia) {
+            mediaDataManager.hasActiveMedia()
         } else {
-            visible = mediaDataManager.hasAnyMedia()
+            mediaDataManager.hasAnyMedia()
         }
-        hostView.visibility = if (visible) View.VISIBLE else View.GONE
-        visibleChangedListener?.invoke(visible)
+        val newVisibility = if (visible) View.VISIBLE else View.GONE
+        if (newVisibility != hostView.visibility) {
+            hostView.visibility = newVisibility
+            visibleChangedListeners.forEach {
+                it.invoke(visible)
+            }
+        }
     }
 
     class MediaHostStateHolder @Inject constructor() : MediaHostState {
+        private var gonePivot: PointF = PointF()
 
         override var measurementInput: MeasurementInput? = null
             set(value) {
@@ -144,6 +154,34 @@ class MediaHost @Inject constructor(
                 }
             }
 
+        override var visible: Boolean = true
+            set(value) {
+                if (field == value) {
+                    return
+                }
+                field = value
+                changedListener?.invoke()
+            }
+
+        override var falsingProtectionNeeded: Boolean = false
+            set(value) {
+                if (field == value) {
+                    return
+                }
+                field = value
+                changedListener?.invoke()
+            }
+
+        override fun getPivotX(): Float = gonePivot.x
+        override fun getPivotY(): Float = gonePivot.y
+        override fun setGonePivot(x: Float, y: Float) {
+            if (gonePivot.equals(x, y)) {
+                return
+            }
+            gonePivot.set(x, y)
+            changedListener?.invoke()
+        }
+
         /**
          * A listener for all changes. This won't be copied over when invoking [copy]
          */
@@ -157,6 +195,9 @@ class MediaHost @Inject constructor(
             mediaHostState.expansion = expansion
             mediaHostState.showsOnlyActiveMedia = showsOnlyActiveMedia
             mediaHostState.measurementInput = measurementInput?.copy()
+            mediaHostState.visible = visible
+            mediaHostState.gonePivot.set(gonePivot)
+            mediaHostState.falsingProtectionNeeded = falsingProtectionNeeded
             return mediaHostState
         }
 
@@ -173,13 +214,25 @@ class MediaHost @Inject constructor(
             if (showsOnlyActiveMedia != other.showsOnlyActiveMedia) {
                 return false
             }
+            if (visible != other.visible) {
+                return false
+            }
+            if (falsingProtectionNeeded != other.falsingProtectionNeeded) {
+                return false
+            }
+            if (!gonePivot.equals(other.getPivotX(), other.getPivotY())) {
+                return false
+            }
             return true
         }
 
         override fun hashCode(): Int {
             var result = measurementInput?.hashCode() ?: 0
             result = 31 * result + expansion.hashCode()
+            result = 31 * result + falsingProtectionNeeded.hashCode()
             result = 31 * result + showsOnlyActiveMedia.hashCode()
+            result = 31 * result + if (visible) 1 else 2
+            result = 31 * result + gonePivot.hashCode()
             return result
         }
     }
@@ -194,7 +247,8 @@ interface MediaHostState {
     var measurementInput: MeasurementInput?
 
     /**
-     * The expansion of the player, 0 for fully collapsed, 1 for fully expanded
+     * The expansion of the player, 0 for fully collapsed (up to 3 actions), 1 for fully expanded
+     * (up to 5 actions.)
      */
     var expansion: Float
 
@@ -202,6 +256,35 @@ interface MediaHostState {
      * Is this host only showing active media or is it showing all of them including resumption?
      */
     var showsOnlyActiveMedia: Boolean
+
+    /**
+     * If the view should be VISIBLE or GONE.
+     */
+    var visible: Boolean
+
+    /**
+     * Does this host need any falsing protection?
+     */
+    var falsingProtectionNeeded: Boolean
+
+    /**
+     * Sets the pivot point when clipping the height or width.
+     * Clipping happens when animating visibility when we're visible in QS but not on QQS,
+     * for example.
+     */
+    fun setGonePivot(x: Float, y: Float)
+
+    /**
+     * x position of pivot, from 0 to 1
+     * @see [setGonePivot]
+     */
+    fun getPivotX(): Float
+
+    /**
+     * y position of pivot, from 0 to 1
+     * @see [setGonePivot]
+     */
+    fun getPivotY(): Float
 
     /**
      * Get a copy of this view state, deepcopying all appropriate members

@@ -121,7 +121,7 @@ public final class MediaRouter2Manager {
 
         CallbackRecord callbackRecord = new CallbackRecord(executor, callback);
         if (!mCallbackRecords.addIfAbsent(callbackRecord)) {
-            Log.w(TAG, "Ignoring to add the same callback twice.");
+            Log.w(TAG, "Ignoring to register the same callback twice.");
             return;
         }
     }
@@ -165,20 +165,8 @@ public final class MediaRouter2Manager {
     public List<MediaRoute2Info> getAvailableRoutes(@NonNull String packageName) {
         Objects.requireNonNull(packageName, "packageName must not be null");
 
-        List<MediaRoute2Info> routes = new ArrayList<>();
-
-        List<String> preferredFeatures = mPreferredFeaturesMap.get(packageName);
-        if (preferredFeatures == null) {
-            preferredFeatures = Collections.emptyList();
-        }
-        synchronized (mRoutesLock) {
-            for (MediaRoute2Info route : mRoutes.values()) {
-                if (route.isSystemRoute() || route.hasAnyFeatures(preferredFeatures)) {
-                    routes.add(route);
-                }
-            }
-        }
-        return routes;
+        List<RoutingSessionInfo> sessions = getRoutingSessions(packageName);
+        return getAvailableRoutesForRoutingSession(sessions.get(sessions.size() - 1));
     }
 
     /**
@@ -202,7 +190,7 @@ public final class MediaRouter2Manager {
         }
         synchronized (mRoutesLock) {
             for (MediaRoute2Info route : mRoutes.values()) {
-                if (route.isSystemRoute() || route.hasAnyFeatures(preferredFeatures)
+                if (route.hasAnyFeatures(preferredFeatures)
                         || sessionInfo.getSelectedRoutes().contains(route.getId())
                         || sessionInfo.getTransferableRoutes().contains(route.getId())) {
                     routes.add(route);
@@ -303,7 +291,7 @@ public final class MediaRouter2Manager {
     }
 
     /**
-     * Gets the list of all discovered routes
+     * Gets the list of all discovered routes.
      */
     @NonNull
     public List<MediaRoute2Info> getAllRoutes() {
@@ -320,6 +308,8 @@ public final class MediaRouter2Manager {
     public void selectRoute(@NonNull String packageName, @NonNull MediaRoute2Info route) {
         Objects.requireNonNull(packageName, "packageName must not be null");
         Objects.requireNonNull(route, "route must not be null");
+
+        Log.v(TAG, "Selecting route. packageName= " + packageName + ", route=" + route);
 
         List<RoutingSessionInfo> sessionInfos = getRoutingSessions(packageName);
         RoutingSessionInfo targetSession = sessionInfos.get(sessionInfos.size() - 1);
@@ -341,6 +331,8 @@ public final class MediaRouter2Manager {
             @NonNull MediaRoute2Info route) {
         Objects.requireNonNull(sessionInfo, "sessionInfo must not be null");
         Objects.requireNonNull(route, "route must not be null");
+
+        Log.v(TAG, "Transferring routing session. session= " + sessionInfo + ", route=" + route);
 
         synchronized (mRoutesLock) {
             if (!mRoutes.containsKey(route.getId())) {
@@ -384,7 +376,7 @@ public final class MediaRouter2Manager {
                 int requestId = mNextRequestId.getAndIncrement();
                 mMediaRouterService.setRouteVolumeWithManager(client, requestId, route, volume);
             } catch (RemoteException ex) {
-                Log.e(TAG, "Unable to send control request.", ex);
+                Log.e(TAG, "Unable to set route volume.", ex);
             }
         }
     }
@@ -414,7 +406,7 @@ public final class MediaRouter2Manager {
                 mMediaRouterService.setSessionVolumeWithManager(
                         client, requestId, sessionInfo.getId(), volume);
             } catch (RemoteException ex) {
-                Log.e(TAG, "Unable to send control request.", ex);
+                Log.e(TAG, "Unable to set session volume.", ex);
             }
         }
     }
@@ -576,6 +568,10 @@ public final class MediaRouter2Manager {
     }
 
     void updatePreferredFeatures(String packageName, List<String> preferredFeatures) {
+        if (preferredFeatures == null) {
+            mPreferredFeaturesMap.remove(packageName);
+            return;
+        }
         List<String> prevFeatures = mPreferredFeaturesMap.put(packageName, preferredFeatures);
         if ((prevFeatures == null && preferredFeatures.size() == 0)
                 || Objects.equals(preferredFeatures, prevFeatures)) {

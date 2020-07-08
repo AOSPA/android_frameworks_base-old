@@ -16,6 +16,7 @@
 
 package com.android.server.wm;
 
+import static android.app.WindowConfiguration.ACTIVITY_TYPE_RECENTS;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_STANDARD;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FREEFORM;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN;
@@ -79,6 +80,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doCallRealMethod;
 
 import android.annotation.SuppressLint;
 import android.app.ActivityTaskManager;
@@ -1065,7 +1067,6 @@ public class DisplayContentTests extends WindowTestsBase {
 
     @Test
     public void testApplyTopFixedRotationTransform() {
-        mWm.mIsFixedRotationTransformEnabled = true;
         final DisplayPolicy displayPolicy = mDisplayContent.getDisplayPolicy();
         // Only non-movable (gesture) navigation bar will be animated by fixed rotation animation.
         doReturn(false).when(displayPolicy).navigationBarCanMove();
@@ -1134,8 +1135,6 @@ public class DisplayContentTests extends WindowTestsBase {
         // Launch another activity before the transition is finished.
         final ActivityRecord app2 = new ActivityTestsBase.StackBuilder(mWm.mRoot)
                 .setDisplay(mDisplayContent).build().getTopMostActivity();
-        mDisplayContent.prepareAppTransition(WindowManager.TRANSIT_ACTIVITY_OPEN,
-                false /* alwaysKeepCurrent */);
         mDisplayContent.mOpeningApps.add(app2);
         app2.setRequestedOrientation(newOrientation);
 
@@ -1144,7 +1143,14 @@ public class DisplayContentTests extends WindowTestsBase {
         assertTrue(app.hasFixedRotationTransform(app2));
         assertTrue(mDisplayContent.isFixedRotationLaunchingApp(app2));
 
+        // The fixed rotation transform can only be finished when all animation finished.
+        doReturn(false).when(app2).isAnimating(anyInt(), anyInt());
+        mDisplayContent.mAppTransition.notifyAppTransitionFinishedLocked(app2.token);
+        assertTrue(app.hasFixedRotationTransform());
+        assertTrue(app2.hasFixedRotationTransform());
+
         // The display should be rotated after the launch is finished.
+        doReturn(false).when(app).isAnimating(anyInt(), anyInt());
         mDisplayContent.mAppTransition.notifyAppTransitionFinishedLocked(app.token);
 
         // The fixed rotation should be cleared and the new rotation is applied to display.
@@ -1152,6 +1158,29 @@ public class DisplayContentTests extends WindowTestsBase {
         assertFalse(app2.hasFixedRotationTransform());
         assertEquals(config90.orientation, mDisplayContent.getConfiguration().orientation);
         assertNull(mDisplayContent.getFixedRotationAnimationController());
+    }
+
+    @Test
+    public void testFinishFixedRotationNoAppTransitioningTask() {
+        final ActivityRecord app = mAppWindow.mActivityRecord;
+        final Task task = app.getTask();
+        final ActivityRecord app2 = new ActivityTestsBase.ActivityBuilder(mWm.mAtmService)
+                .setTask(task).build();
+        mDisplayContent.setFixedRotationLaunchingApp(app2, (mDisplayContent.getRotation() + 1) % 4);
+        doReturn(true).when(task).isAppTransitioning();
+        // If the task is animating transition, this should be no-op.
+        mDisplayContent.mFixedRotationTransitionListener.onAppTransitionFinishedLocked(app.token);
+
+        assertTrue(app2.hasFixedRotationTransform());
+        assertTrue(mDisplayContent.hasTopFixedRotationLaunchingApp());
+
+        doReturn(false).when(task).isAppTransitioning();
+        // Although this notifies app instead of app2 that uses the fixed rotation, app2 should
+        // still finish the transform because there is no more transition event.
+        mDisplayContent.mFixedRotationTransitionListener.onAppTransitionFinishedLocked(app.token);
+
+        assertFalse(app2.hasFixedRotationTransform());
+        assertFalse(mDisplayContent.hasTopFixedRotationLaunchingApp());
     }
 
     @Test
@@ -1174,7 +1203,6 @@ public class DisplayContentTests extends WindowTestsBase {
 
     @Test
     public void testNoFixedRotationWithPip() {
-        mWm.mIsFixedRotationTransformEnabled = true;
         // Make resume-top really update the activity state.
         doReturn(false).when(mWm.mAtmService).isBooting();
         doReturn(true).when(mWm.mAtmService).isBooted();
@@ -1224,11 +1252,39 @@ public class DisplayContentTests extends WindowTestsBase {
     }
 
     @Test
+    public void testRecentsNotRotatingWithFixedRotation() {
+        final DisplayRotation displayRotation = mDisplayContent.getDisplayRotation();
+        doCallRealMethod().when(displayRotation).updateRotationUnchecked(anyBoolean());
+        // Skip freezing so the unrelated conditions in updateRotationUnchecked won't disturb.
+        doNothing().when(mWm).startFreezingDisplay(anyInt(), anyInt(), any(), anyInt());
+
+        final ActivityRecord recentsActivity = createActivityRecord(mDisplayContent,
+                WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_RECENTS);
+        recentsActivity.setRequestedOrientation(SCREEN_ORIENTATION_PORTRAIT);
+
+        // Do not rotate if the recents animation is animating on top.
+        mDisplayContent.mFixedRotationTransitionListener.onStartRecentsAnimation(recentsActivity);
+        displayRotation.setRotation((displayRotation.getRotation() + 1) % 4);
+        assertFalse(displayRotation.updateRotationUnchecked(false));
+
+        // Rotation can be updated if the recents animation is finished.
+        mDisplayContent.mFixedRotationTransitionListener.onFinishRecentsAnimation(false);
+        assertTrue(displayRotation.updateRotationUnchecked(false));
+
+        // Rotation can be updated if the recents animation is animating but it is not on top, e.g.
+        // switching activities in different orientations by quickstep gesture.
+        mDisplayContent.mFixedRotationTransitionListener.onStartRecentsAnimation(recentsActivity);
+        mDisplayContent.setFixedRotationLaunchingAppUnchecked(mAppWindow.mActivityRecord);
+        displayRotation.setRotation((displayRotation.getRotation() + 1) % 4);
+        assertTrue(displayRotation.updateRotationUnchecked(false));
+    }
+
+    @Test
     public void testRemoteRotation() {
         DisplayContent dc = createNewDisplay();
 
         final DisplayRotation dr = dc.getDisplayRotation();
-        Mockito.doCallRealMethod().when(dr).updateRotationUnchecked(anyBoolean());
+        doCallRealMethod().when(dr).updateRotationUnchecked(anyBoolean());
         Mockito.doReturn(ROTATION_90).when(dr).rotationForOrientation(anyInt(), anyInt());
         final boolean[] continued = new boolean[1];
         // TODO(display-merge): Remove cast
@@ -1280,7 +1336,6 @@ public class DisplayContentTests extends WindowTestsBase {
     public void testGetOrCreateRootHomeTask_supportedSecondaryDisplay() {
         DisplayContent display = createNewDisplay();
         doReturn(true).when(display).supportsSystemDecorations();
-        doReturn(false).when(display).isUntrustedVirtualDisplay();
 
         // Remove the current home stack if it exists so a new one can be created below.
         TaskDisplayArea taskDisplayArea = display.getDefaultTaskDisplayArea();
@@ -1304,10 +1359,10 @@ public class DisplayContentTests extends WindowTestsBase {
     }
 
     @Test
-    public void testGetOrCreateRootHomeTask_untrustedVirtualDisplay() {
+    public void testGetOrCreateRootHomeTask_untrustedDisplay() {
         DisplayContent display = createNewDisplay();
         TaskDisplayArea taskDisplayArea = display.getDefaultTaskDisplayArea();
-        doReturn(true).when(display).isUntrustedVirtualDisplay();
+        doReturn(false).when(display).isTrusted();
 
         assertNull(taskDisplayArea.getRootHomeTask());
         assertNull(taskDisplayArea.getOrCreateRootHomeTask());

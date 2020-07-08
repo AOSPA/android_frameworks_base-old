@@ -312,7 +312,6 @@ import com.android.server.uri.UriPermissionOwner;
 import com.android.server.wm.ActivityMetricsLogger.TransitionInfoSnapshot;
 import com.android.server.wm.ActivityStack.ActivityState;
 import com.android.server.wm.SurfaceAnimator.AnimationType;
-import com.android.server.wm.SurfaceAnimator.OnAnimationFinishedCallback;
 import com.android.server.wm.WindowManagerService.H;
 import com.android.server.wm.utils.InsetUtils;
 
@@ -336,6 +335,10 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
 
+import vendor.qti.hardware.servicetracker.V1_2.IServicetracker;
+import vendor.qti.hardware.servicetracker.V1_2.ActivityDetails;
+import vendor.qti.hardware.servicetracker.V1_2.ActivityStats;
+import vendor.qti.hardware.servicetracker.V1_2.ActivityStates;
 /**
  * An entry in the history stack, representing an activity.
  */
@@ -1577,6 +1580,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         resultWho = _resultWho;
         requestCode = _reqCode;
         setState(INITIALIZING, "ActivityRecord ctor");
+        callServiceTrackeronActivityStatechange(INITIALIZING, true);
         launchFailed = false;
         stopped = false;
         delayedResume = false;
@@ -2208,14 +2212,19 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
 
     @Override
     boolean isFocusable() {
+        return super.isFocusable() && (canReceiveKeys() || isAlwaysFocusable());
+    }
+
+    boolean canReceiveKeys() {
         // TODO(156521483): Propagate the state down the hierarchy instead of checking the parent
-        boolean canReceiveKeys = getWindowConfiguration().canReceiveKeys()
-                && getTask().getWindowConfiguration().canReceiveKeys();
-        return super.isFocusable() && (canReceiveKeys || isAlwaysFocusable());
+        return getWindowConfiguration().canReceiveKeys()
+                && (task == null || task.getWindowConfiguration().canReceiveKeys());
     }
 
     boolean isResizeable() {
-        return ActivityInfo.isResizeableMode(info.resizeMode) || info.supportsPictureInPicture();
+        return mAtmService.mForceResizableActivities
+                || ActivityInfo.isResizeableMode(info.resizeMode)
+                || info.supportsPictureInPicture();
     }
 
     /** @return whether this activity is non-resizeable or forced to be resizeable */
@@ -2380,10 +2389,10 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
                 // For the apps below Q, there can be only one app which has the focused window per
                 // process, because legacy apps may not be ready for a multi-focus system.
                 return false;
+
             }
         }
-        return (getWindowConfiguration().canReceiveKeys() || isAlwaysFocusable())
-                && getDisplay() != null;
+        return (canReceiveKeys() || isAlwaysFocusable()) && getDisplay() != null;
     }
 
     /**
@@ -2729,6 +2738,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
             // destroyed when the next activity reports idle.
             addToStopping(false /* scheduleIdle */, false /* idleDelayed */,
                     "completeFinishing");
+            callServiceTrackeronActivityStatechange(STOPPING, true);
             setState(STOPPING, "completeFinishing");
         } else if (addToFinishingAndWaitForIdle()) {
             // We added this activity to the finishing list and something else is becoming resumed.
@@ -2749,6 +2759,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
      * destroying it until the next one starts.
      */
     boolean destroyIfPossible(String reason) {
+        callServiceTrackeronActivityStatechange(FINISHING, true);
         setState(FINISHING, "destroyIfPossible");
 
         // Make sure the record is cleaned out of other places.
@@ -2801,6 +2812,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
     @VisibleForTesting
     boolean addToFinishingAndWaitForIdle() {
         if (DEBUG_STATES) Slog.v(TAG, "Enqueueing pending finish: " + this);
+        callServiceTrackeronActivityStatechange(FINISHING, true);
         setState(FINISHING, "addToFinishingAndWaitForIdle");
         if (!mStackSupervisor.mFinishingActivities.contains(this)) {
             mStackSupervisor.mFinishingActivities.add(this);
@@ -2883,6 +2895,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
                 if (DEBUG_STATES) {
                     Slog.v(TAG_STATES, "Moving to DESTROYING: " + this + " (destroy requested)");
                 }
+                callServiceTrackeronActivityStatechange(DESTROYING, true);
                 setState(DESTROYING,
                         "destroyActivityLocked. finishing and not skipping destroy");
                 mAtmService.mH.postDelayed(mDestroyTimeoutRunnable, DESTROY_TIMEOUT);
@@ -2890,6 +2903,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
                 if (DEBUG_STATES) {
                     Slog.v(TAG_STATES, "Moving to DESTROYED: " + this + " (destroy skipped)");
                 }
+                callServiceTrackeronActivityStatechange(DESTROYED, true);
                 setState(DESTROYED,
                         "destroyActivityLocked. not finishing or skipping destroy");
                 if (DEBUG_APP) Slog.v(TAG_APP, "Clearing app during destroy for activity " + this);
@@ -2902,6 +2916,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
                 removedFromHistory = true;
             } else {
                 if (DEBUG_STATES) Slog.v(TAG_STATES, "Moving to DESTROYED: " + this + " (no app)");
+                callServiceTrackeronActivityStatechange(DESTROYED, true);
                 setState(DESTROYED, "destroyActivityLocked. not finishing and had no app");
             }
         }
@@ -2940,6 +2955,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         if (DEBUG_STATES) {
             Slog.v(TAG_STATES, "Moving to DESTROYED: " + this + " (removed from history)");
         }
+        callServiceTrackeronActivityStatechange(DESTROYED, true);
         setState(DESTROYED, "removeFromHistory");
         if (DEBUG_APP) Slog.v(TAG_APP, "Clearing app during remove for activity " + this);
         app = null;
@@ -2996,6 +3012,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         frozenBeforeDestroy = false;
 
         if (setState) {
+            callServiceTrackeronActivityStatechange(DESTROYED, true);
             setState(DESTROYED, "cleanUp");
             if (DEBUG_APP) Slog.v(TAG_APP, "Clearing app during cleanUp for activity " + this);
             app = null;
@@ -3365,6 +3382,13 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
 
             final long origId = Binder.clearCallingIdentity();
             try {
+                // Link the fixed rotation transform to this activity since we are transferring the
+                // starting window.
+                if (fromActivity.hasFixedRotationTransform()) {
+                    mDisplayContent.handleTopActivityLaunchingInDifferentOrientation(this,
+                            false /* checkOpening */);
+                }
+
                 // Transfer the starting window over to the new token.
                 mStartingData = fromActivity.mStartingData;
                 startingSurface = fromActivity.startingSurface;
@@ -4175,14 +4199,12 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
     }
 
     @Override
-    boolean applyAnimation(WindowManager.LayoutParams lp, int transit, boolean enter,
-            boolean isVoiceInteraction,
-            @Nullable OnAnimationFinishedCallback animationFinishedCallback) {
+    boolean applyAnimation(LayoutParams lp, int transit, boolean enter,
+            boolean isVoiceInteraction, @Nullable ArrayList<WindowContainer> sources) {
         if (mUseTransferredAnimation) {
             return false;
         }
-        return super.applyAnimation(lp, transit, enter, isVoiceInteraction,
-                animationFinishedCallback);
+        return super.applyAnimation(lp, transit, enter, isVoiceInteraction, sources);
     }
 
     /**
@@ -4343,9 +4365,8 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
      *         screenshot.
      */
     boolean shouldUseAppThemeSnapshot() {
-        return mDisablePreviewScreenshots || forAllWindows(w -> {
-                    return mWmService.isSecureLocked(w);
-                }, true /* topToBottom */);
+        return mDisablePreviewScreenshots || forAllWindows(WindowState::isSecureLocked,
+                true /* topToBottom */);
     }
 
     /**
@@ -4382,6 +4403,8 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
 
         mState = state;
 
+        callServiceTrackeronActivityStatechange(state, false);
+
         if (task != null) {
             task.onActivityStateChanged(this, state, reason);
         }
@@ -4409,6 +4432,75 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         } else if (state == DESTROYED) {
             mAtmService.updateActivityUsageStats(this, Event.ACTIVITY_DESTROYED);
         }
+    }
+
+    void callServiceTrackeronActivityStatechange(ActivityState state, boolean early_notify) {
+        IServicetracker mServicetracker;
+        ActivityDetails aDetails = new ActivityDetails();
+        ActivityStats aStats = new ActivityStats();
+        int aState = ActivityStates.UNKNOWN;
+
+        aDetails.launchedFromPid = this.launchedFromPid;
+        aDetails.launchedFromUid = this.launchedFromUid;
+        aDetails.packageName = this.packageName;
+        aDetails.processName = (this.processName!= null)? this.processName:"none";
+        aDetails.intent = this.intent.getComponent().toString();
+        aDetails.className = this.intent.getComponent().getClassName();
+        aDetails.versioncode = this.info.applicationInfo.versionCode;
+
+        aStats.createTime = this.createTime;
+        aStats.lastVisibleTime = this.lastVisibleTime;
+        aStats.launchCount = this.launchCount;
+        aStats.lastLaunchTime = this.lastLaunchTime;
+
+        switch(state) {
+            case INITIALIZING :
+                aState = ActivityStates.INITIALIZING;
+                break;
+            case STARTED :
+                aState = ActivityStates.STARTED;
+                break;
+            case RESUMED :
+                aState = ActivityStates.RESUMED;
+                break;
+            case PAUSING :
+                aState = ActivityStates.PAUSING;
+                break;
+            case PAUSED :
+                aState = ActivityStates.PAUSED;
+                break;
+            case STOPPING :
+                aState = ActivityStates.STOPPING;
+                break;
+            case STOPPED:
+                aState = ActivityStates.STOPPED;
+                break;
+            case FINISHING :
+                aState = ActivityStates.FINISHING;
+                break;
+            case DESTROYING:
+                aState = ActivityStates.DESTROYING;
+                break;
+            case DESTROYED :
+                aState = ActivityStates.DESTROYED;
+                break;
+            case RESTARTING_PROCESS:
+                aState = ActivityStates.RESTARTING_PROCESS;
+                break;
+        }
+
+        Slog.v(TAG, "Calling mServicetracker.OnActivityStateChange with flag " + early_notify + "state" + state);
+        try {
+            mServicetracker = mAtmService.mStackSupervisor.getServicetrackerInstance();
+            if (mServicetracker != null)
+                mServicetracker.OnActivityStateChange(aState, aDetails, aStats, early_notify);
+            else
+                Slog.e(TAG, "Unable to get servicetracker HAL instance");
+        } catch (RemoteException e) {
+                Slog.e(TAG, "Failed to send activity state change details to servicetracker HAL", e);
+                mAtmService.mStackSupervisor.destroyServicetrackerInstance();
+        }
+
     }
 
     ActivityState getState() {
@@ -4704,6 +4796,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
             }
             // An activity must be in the {@link PAUSING} state for the system to validate
             // the move to {@link PAUSED}.
+            callServiceTrackeronActivityStatechange(PAUSING, true);
             setState(PAUSING, "makeActiveIfNeeded");
             try {
                 mAtmService.getLifecycleManager().scheduleTransaction(app.getThread(), appToken,
@@ -4716,6 +4809,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
             if (DEBUG_VISIBILITY) {
                 Slog.v(TAG_VISIBILITY, "Start visible activity, " + this);
             }
+            callServiceTrackeronActivityStatechange(STARTED, true);
             setState(STARTED, "makeActiveIfNeeded");
             try {
                 mAtmService.getLifecycleManager().scheduleTransaction(app.getThread(), appToken,
@@ -4934,6 +5028,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
                         shortComponentName, stack.mPausingActivity != null
                                 ? stack.mPausingActivity.shortComponentName : "(none)");
                 if (isState(PAUSING)) {
+                    callServiceTrackeronActivityStatechange(PAUSED, true);
                     setState(PAUSED, "activityPausedLocked");
                     if (finishing) {
                         if (DEBUG_PAUSE) Slog.v(TAG,
@@ -5008,6 +5103,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
             if (DEBUG_STATES) {
                 Slog.v(TAG_STATES, "Moving to STOPPING: " + this + " (stop requested)");
             }
+            callServiceTrackeronActivityStatechange(STOPPING, true);
             setState(STOPPING, "stopIfPossible");
             getRootTask().onARStopTriggered(this);
             if (DEBUG_VISIBILITY) {
@@ -5029,6 +5125,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
             // Just in case, assume it to be stopped.
             stopped = true;
             if (DEBUG_STATES) Slog.v(TAG_STATES, "Stop failed; moving to STOPPED: " + this);
+            callServiceTrackeronActivityStatechange(STOPPED, true);
             setState(STOPPED, "stopIfPossible");
             if (deferRelaunchUntilPaused) {
                 destroyImmediately(true /* removeFromApp */, "stop-except");
@@ -5063,6 +5160,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
             removeStopTimeout();
             stopped = true;
             if (isStopping) {
+                callServiceTrackeronActivityStatechange(STOPPED, true);
                 setState(STOPPED, "activityStoppedLocked");
             }
 
@@ -6476,14 +6574,15 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
 
     @Override
     public boolean matchParentBounds() {
-        if (super.matchParentBounds() && mCompatDisplayInsets == null) {
+        final Rect overrideBounds = getResolvedOverrideBounds();
+        if (overrideBounds.isEmpty()) {
             return true;
         }
-        // An activity in size compatibility mode may have resolved override bounds, so the exact
-        // bounds should also be checked. Otherwise IME window will show with offset. See
-        // {@link DisplayContent#isImeAttachedToApp}.
+        // An activity in size compatibility mode may have override bounds which equals to its
+        // parent bounds, so the exact bounds should also be checked to allow IME window to attach
+        // to the activity. See {@link DisplayContent#isImeAttachedToApp}.
         final WindowContainer parent = getParent();
-        return parent == null || parent.getBounds().equals(getResolvedOverrideBounds());
+        return parent == null || parent.getBounds().equals(overrideBounds);
     }
 
     @Override
@@ -7219,6 +7318,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
             mAtmService.getAppWarningsLocked().onResumeActivity(this);
         } else {
             removePauseTimeout();
+            callServiceTrackeronActivityStatechange(PAUSED, true);
             setState(PAUSED, "relaunchActivityLocked");
         }
 
@@ -7250,6 +7350,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         }
 
         // The restarting state avoids removing this record when process is died.
+        callServiceTrackeronActivityStatechange(RESTARTING_PROCESS, true);
         setState(RESTARTING_PROCESS, "restartActivityProcess");
 
         if (!mVisibleRequested || mHaveState) {
@@ -7747,24 +7848,25 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
                     outAppBounds.set(outBounds);
                 }
             } else {
-                outBounds.set(0, 0, mWidth, mHeight);
-                getFrameByOrientation(outAppBounds, orientation);
-                if (orientationRequested && !canChangeOrientation
-                        && (outAppBounds.width() > outAppBounds.height()) != (mWidth > mHeight)) {
-                    // The orientation is mismatched but the display cannot rotate. The bounds will
-                    // fit to the short side of display.
-                    if (orientation == ORIENTATION_LANDSCAPE) {
-                        outAppBounds.bottom = (int) ((float) mWidth * mWidth / mHeight);
-                        outAppBounds.right = mWidth;
-                    } else {
-                        outAppBounds.bottom = mHeight;
-                        outAppBounds.right = (int) ((float) mHeight * mHeight / mWidth);
+                if (orientationRequested) {
+                    getFrameByOrientation(outBounds, orientation);
+                    if ((outBounds.width() > outBounds.height()) != (mWidth > mHeight)) {
+                        // The orientation is mismatched but the display cannot rotate. The bounds
+                        // will fit to the short side of display.
+                        if (orientation == ORIENTATION_LANDSCAPE) {
+                            outBounds.bottom = (int) ((float) mWidth * mWidth / mHeight);
+                            outBounds.right = mWidth;
+                        } else {
+                            outBounds.bottom = mHeight;
+                            outBounds.right = (int) ((float) mHeight * mHeight / mWidth);
+                        }
+                        outBounds.offset(
+                                getHorizontalCenterOffset(mWidth, outBounds.width()), 0 /* dy */);
                     }
-                    outAppBounds.offset(getHorizontalCenterOffset(outBounds.width(),
-                            outAppBounds.width()), 0 /* dy */);
                 } else {
-                    outAppBounds.set(outBounds);
+                    outBounds.set(0, 0, mWidth, mHeight);
                 }
+                outAppBounds.set(outBounds);
             }
 
             if (rotation != ROTATION_UNDEFINED) {

@@ -3571,6 +3571,8 @@
          @hide -->
     <permission android:name="android.permission.MEDIA_RESOURCE_OVERRIDE_PID"
          android:protectionLevel="signature" />
+    <uses-permission android:name="android.permission.MEDIA_RESOURCE_OVERRIDE_PID" />
+
 
     <!-- Must be required by a {@link android.media.routing.MediaRouteService}
          to ensure that only the system can interact with it.
@@ -5062,6 +5064,10 @@
          @hide -->
     <permission android:name="android.permission.ACCESS_TV_DESCRAMBLER"
         android:protectionLevel="signature|privileged|vendorPrivileged" />
+
+    <!-- Allows an application to create trusted displays. @hide -->
+    <permission android:name="android.permission.ADD_TRUSTED_DISPLAY"
+                android:protectionLevel="signature" />
 
     <!-- @hide @SystemApi Allows an application to access locusId events in the usage stats. -->
     <permission android:name="android.permission.ACCESS_LOCUS_ID_USAGE_STATS"

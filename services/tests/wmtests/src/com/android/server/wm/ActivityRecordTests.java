@@ -794,6 +794,39 @@ public class ActivityRecordTests extends ActivityTestsBase {
     }
 
     /**
+     * Verify that when top focused activity is on secondary display, when finishing the top focused
+     * activity on default display, the preferred top stack on default display should be changed by
+     * adjusting focus.
+     */
+    @Test
+    public void testFinishActivityIfPossible_PreferredTopStackChanged() {
+        final ActivityRecord topActivityOnNonTopDisplay =
+                createActivityOnDisplay(true /* defaultDisplay */, null /* process */);
+        ActivityStack topRootableTask = topActivityOnNonTopDisplay.getRootTask();
+        topRootableTask.moveToFront("test");
+        assertTrue(topRootableTask.isTopStackInDisplayArea());
+        assertEquals(topRootableTask, topActivityOnNonTopDisplay.getDisplayArea()
+                .mPreferredTopFocusableStack);
+
+        final ActivityRecord secondaryDisplayActivity =
+                createActivityOnDisplay(false /* defaultDisplay */, null /* process */);
+        topRootableTask = secondaryDisplayActivity.getRootTask();
+        topRootableTask.moveToFront("test");
+        assertTrue(topRootableTask.isTopStackInDisplayArea());
+        assertEquals(topRootableTask,
+                secondaryDisplayActivity.getDisplayArea().mPreferredTopFocusableStack);
+
+        // The global top focus activity is on secondary display now.
+        // Finish top activity on default display and verify the next preferred top focusable stack
+        // on default display has changed.
+        topActivityOnNonTopDisplay.setState(RESUMED, "test");
+        topActivityOnNonTopDisplay.finishIfPossible(0 /* resultCode */, null /* resultData */,
+                null /* resultGrants */, "test", false /* oomAdj */);
+        assertEquals(mTask, mStack.getTopMostTask());
+        assertEquals(mStack, mActivity.getDisplayArea().mPreferredTopFocusableStack);
+    }
+
+    /**
      * Verify that resumed activity is paused due to finish request.
      */
     @Test
@@ -1390,7 +1423,6 @@ public class ActivityRecordTests extends ActivityTestsBase {
 
     @Test
     public void testActivityOnCancelFixedRotationTransform() {
-        mService.mWindowManager.mIsFixedRotationTransformEnabled = true;
         final DisplayRotation displayRotation = mActivity.mDisplayContent.getDisplayRotation();
         spyOn(displayRotation);
 
@@ -1447,7 +1479,6 @@ public class ActivityRecordTests extends ActivityTestsBase {
 
     @Test
     public void testIsSnapshotCompatible() {
-        mService.mWindowManager.mIsFixedRotationTransformEnabled = true;
         final TaskSnapshot snapshot = new TaskSnapshotPersisterTestBase.TaskSnapshotBuilder()
                 .setRotation(mActivity.getWindowConfiguration().getRotation())
                 .build();
@@ -1461,7 +1492,6 @@ public class ActivityRecordTests extends ActivityTestsBase {
 
     @Test
     public void testFixedRotationSnapshotStartingWindow() {
-        mService.mWindowManager.mIsFixedRotationTransformEnabled = true;
         // TaskSnapshotSurface requires a fullscreen opaque window.
         final WindowManager.LayoutParams params = new WindowManager.LayoutParams(
                 WindowManager.LayoutParams.TYPE_APPLICATION_STARTING);

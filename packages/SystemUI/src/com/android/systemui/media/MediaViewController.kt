@@ -17,22 +17,31 @@
 package com.android.systemui.media
 
 import android.content.Context
+import android.content.res.Configuration
+import android.graphics.PointF
 import androidx.constraintlayout.widget.ConstraintSet
 import com.android.systemui.R
+import com.android.systemui.statusbar.policy.ConfigurationController
+import com.android.systemui.util.animation.MeasurementOutput
 import com.android.systemui.util.animation.TransitionLayout
 import com.android.systemui.util.animation.TransitionLayoutController
 import com.android.systemui.util.animation.TransitionViewState
-import com.android.systemui.util.animation.MeasurementOutput
+import javax.inject.Inject
 
 /**
  * A class responsible for controlling a single instance of a media player handling interactions
  * with the view instance and keeping the media view states up to date.
  */
-class MediaViewController(
+class MediaViewController @Inject constructor(
     context: Context,
-    val mediaHostStatesManager: MediaHostStatesManager
+    private val configurationController: ConfigurationController,
+    private val mediaHostStatesManager: MediaHostStatesManager
 ) {
 
+    /**
+     * A listener when the current dimensions of the player change
+     */
+    lateinit var sizeChangedListener: () -> Unit
     private var firstRefresh: Boolean = true
     private var transitionLayout: TransitionLayout? = null
     private val layoutController = TransitionLayoutController()
@@ -44,18 +53,20 @@ class MediaViewController(
     /**
      * A map containing all viewStates for all locations of this mediaState
      */
-    private val mViewStates: MutableMap<MediaHostState, TransitionViewState?> = mutableMapOf()
+    private val viewStates: MutableMap<MediaHostState, TransitionViewState?> = mutableMapOf()
 
     /**
      * The ending location of the view where it ends when all animations and transitions have
      * finished
      */
+    @MediaLocation
     private var currentEndLocation: Int = -1
 
     /**
      * The ending location of the view where it ends when all animations and transitions have
      * finished
      */
+    @MediaLocation
     private var currentStartLocation: Int = -1
 
     /**
@@ -69,10 +80,47 @@ class MediaViewController(
     private val tmpState = TransitionViewState()
 
     /**
+     * Temporary variable to avoid unnecessary allocations.
+     */
+    private val tmpPoint = PointF()
+
+    /**
+     * The current width of the player. This might not factor in case the player is animating
+     * to the current state, but represents the end state
+     */
+    var currentWidth: Int = 0
+    /**
+     * The current height of the player. This might not factor in case the player is animating
+     * to the current state, but represents the end state
+     */
+    var currentHeight: Int = 0
+
+    /**
+     * A callback for RTL config changes
+     */
+    private val configurationListener = object : ConfigurationController.ConfigurationListener {
+        override fun onConfigChanged(newConfig: Configuration?) {
+            // Because the TransitionLayout is not always attached (and calculates/caches layout
+            // results regardless of attach state), we have to force the layoutDirection of the view
+            // to the correct value for the user's current locale to ensure correct recalculation
+            // when/after calling refreshState()
+            newConfig?.apply {
+                if (transitionLayout?.rawLayoutDirection != layoutDirection) {
+                    transitionLayout?.layoutDirection = layoutDirection
+                    refreshState()
+                }
+            }
+        }
+    }
+
+    /**
      * A callback for media state changes
      */
     val stateCallback = object : MediaHostStatesManager.Callback {
-        override fun onHostStateChanged(location: Int, mediaHostState: MediaHostState) {
+        override fun onHostStateChanged(
+            @MediaLocation location: Int,
+            mediaHostState: MediaHostState
+        ) {
             if (location == currentEndLocation || location == currentStartLocation) {
                 setCurrentState(currentStartLocation,
                         currentEndLocation,
@@ -98,6 +146,12 @@ class MediaViewController(
         collapsedLayout.load(context, R.xml.media_collapsed)
         expandedLayout.load(context, R.xml.media_expanded)
         mediaHostStatesManager.addController(this)
+        layoutController.sizeChangedListener = { width: Int, height: Int ->
+            currentWidth = width
+            currentHeight = height
+            sizeChangedListener.invoke()
+        }
+        configurationController.addCallback(configurationListener)
     }
 
     /**
@@ -105,6 +159,7 @@ class MediaViewController(
      */
     fun onDestroy() {
         mediaHostStatesManager.removeController(this)
+        configurationController.removeCallback(configurationListener)
     }
 
     private fun ensureAllMeasurements() {
@@ -125,7 +180,7 @@ class MediaViewController(
      * it's not available, it will recreate one by measuring, which may be expensive.
      */
     private fun obtainViewState(state: MediaHostState): TransitionViewState? {
-        val viewState = mViewStates[state]
+        val viewState = viewStates[state]
         if (viewState != null) {
             // we already have cached this measurement, let's continue
             return viewState
@@ -143,7 +198,7 @@ class MediaViewController(
                 // We don't want to cache interpolated or null states as this could quickly fill up
                 // our cache. We only cache the start and the end states since the interpolation
                 // is cheap
-                mViewStates[state.copy()] = result
+                viewStates[state.copy()] = result
             } else {
                 // This is an interpolated state
                 val startState = state.copy().also { it.expansion = 0.0f }
@@ -153,11 +208,13 @@ class MediaViewController(
                 val startViewState = obtainViewState(startState) as TransitionViewState
                 val endState = state.copy().also { it.expansion = 1.0f }
                 val endViewState = obtainViewState(endState) as TransitionViewState
+                tmpPoint.set(startState.getPivotX(), startState.getPivotY())
                 result = TransitionViewState()
                 layoutController.getInterpolatedState(
                         startViewState,
                         endViewState,
                         state.expansion,
+                        tmpPoint,
                         result)
             }
         } else {
@@ -213,11 +270,35 @@ class MediaViewController(
 
         val shouldAnimate = animateNextStateChange && !applyImmediately
 
+        var startHostState = mediaHostStatesManager.mediaHostStates[startLocation]
+        var endHostState = mediaHostStatesManager.mediaHostStates[endLocation]
+        var swappedStartState = false
+        var swappedEndState = false
+
+        // if we're going from or to a non visible state, let's grab the visible one and animate
+        // the view being clipped instead.
+        if (endHostState?.visible != true) {
+            endHostState = startHostState
+            swappedEndState = true
+        }
+        if (startHostState?.visible != true) {
+            startHostState = endHostState
+            swappedStartState = true
+        }
+        if (startHostState == null || endHostState == null) {
+            return
+        }
+
+        var endViewState = obtainViewState(endHostState) ?: return
+        if (swappedEndState) {
+            endViewState = endViewState.copy()
+            endViewState.height = 0
+        }
+
         // Obtain the view state that we'd want to be at the end
         // The view might not be bound yet or has never been measured and in that case will be
         // reset once the state is fully available
-        val endState = obtainViewStateForLocation(endLocation) ?: return
-        layoutController.setMeasureState(endState)
+        layoutController.setMeasureState(endViewState)
 
         // If the view isn't bound, we can drop the animation, otherwise we'll executute it
         animateNextStateChange = false
@@ -225,24 +306,45 @@ class MediaViewController(
             return
         }
 
-        val startState = obtainViewStateForLocation(startLocation)
-        val result: TransitionViewState?
-        if (transitionProgress == 1.0f || startState == null) {
-            result = endState
-        } else if (transitionProgress == 0.0f) {
-            result = startState
-        } else {
-            layoutController.getInterpolatedState(startState, endState, transitionProgress,
-                    tmpState)
-            result = tmpState
+        var startViewState = obtainViewState(startHostState)
+        if (swappedStartState) {
+            startViewState = startViewState?.copy()
+            startViewState?.height = 0
         }
+
+        val result: TransitionViewState?
+        result = if (transitionProgress == 1.0f || startViewState == null) {
+            endViewState
+        } else if (transitionProgress == 0.0f) {
+            startViewState
+        } else {
+            if (swappedEndState || swappedStartState) {
+                tmpPoint.set(startHostState.getPivotX(), startHostState.getPivotY())
+            } else {
+                tmpPoint.set(0.0f, 0.0f)
+            }
+            layoutController.getInterpolatedState(startViewState, endViewState, transitionProgress,
+                    tmpPoint, tmpState)
+            tmpState
+        }
+        currentWidth = result.width
+        currentHeight = result.height
         layoutController.setState(result, applyImmediately, shouldAnimate, animationDuration,
                 animationDelay)
     }
 
-    private fun obtainViewStateForLocation(location: Int): TransitionViewState? {
-        val mediaState = mediaHostStatesManager.mediaHostStates[location] ?: return null
-        return obtainViewState(mediaState)
+    /**
+     * Retrieves the [TransitionViewState] and [MediaHostState] of a [@MediaLocation].
+     * In the event of [location] not being visible, [locationWhenHidden] will be used instead.
+     *
+     * @param location Target
+     * @param locationWhenHidden Location that will be used when the target is not
+     * [MediaHost.visible]
+     * @return State require for executing a transition, and also the respective [MediaHost].
+     */
+    private fun obtainViewStateForLocation(@MediaLocation location: Int): TransitionViewState? {
+        val mediaHostState = mediaHostStatesManager.mediaHostStates[location] ?: return null
+        return obtainViewState(mediaHostState)
     }
 
     /**
@@ -250,8 +352,7 @@ class MediaViewController(
      * This updates the width the view will me measured with.
      */
     fun onLocationPreChange(@MediaLocation newLocation: Int) {
-        val viewState = obtainViewStateForLocation(newLocation)
-        viewState?.let {
+        obtainViewStateForLocation(newLocation)?.let {
             layoutController.setMeasureState(it)
         }
     }
@@ -271,9 +372,9 @@ class MediaViewController(
     fun refreshState() {
         if (!firstRefresh) {
             // Let's clear all of our measurements and recreate them!
-            mViewStates.clear()
+            viewStates.clear()
             setCurrentState(currentStartLocation, currentEndLocation, currentTransitionProgress,
-                    applyImmediately = false)
+                    applyImmediately = true)
         }
         firstRefresh = false
     }

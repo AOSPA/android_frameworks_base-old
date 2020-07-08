@@ -24,6 +24,7 @@ import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
 import android.annotation.SdkConstant;
 import android.annotation.SdkConstant.SdkConstantType;
+import android.annotation.SuppressLint;
 import android.annotation.SystemApi;
 import android.annotation.TestApi;
 import android.annotation.UserIdInt;
@@ -1897,6 +1898,15 @@ public final class Settings {
             "android.settings.ACTION_DEVICE_CONTROLS_SETTINGS";
 
     /**
+     * Activity Action: Show media control settings
+     *
+     * @hide
+     */
+    @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
+    public static final String ACTION_MEDIA_CONTROLS_SETTINGS =
+            "android.settings.ACTION_MEDIA_CONTROLS_SETTINGS";
+
+    /**
      * Activity Action: Show a dialog with disabled by policy message.
      * <p> If an user action is disabled by policy, this dialog can be triggered to let
      * the user know about this.
@@ -1971,6 +1981,10 @@ public final class Settings {
      * Input: Nothing.
      * <p>
      * Output: Nothing.
+     * <p class="note">
+     * In some cases, a matching Activity may not exist, so ensure you
+     * safeguard against this.
+
      */
     @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
     public static final String ACTION_WEBVIEW_SETTINGS = "android.settings.WEBVIEW_SETTINGS";
@@ -6250,6 +6264,8 @@ public final class Settings {
          * determines if the IME should be shown when a hard keyboard is attached.
          * @hide
          */
+        @TestApi
+        @SuppressLint("NoSettingsProvider")
         public static final String SHOW_IME_WITH_HARD_KEYBOARD = "show_ime_with_hard_keyboard";
 
         /**
@@ -8526,14 +8542,15 @@ public final class Settings {
         public static final int VR_DISPLAY_MODE_OFF = 1;
 
         /**
-         * Whether CarrierAppUtils#disableCarrierAppsUntilPrivileged has been executed at least
-         * once.
+         * The latest SDK version that CarrierAppUtils#disableCarrierAppsUntilPrivileged has been
+         * executed for.
          *
          * <p>This is used to ensure that we only take one pass which will disable apps that are not
          * privileged (if any). From then on, we only want to enable apps (when a matching SIM is
          * inserted), to avoid disabling an app that the user might actively be using.
          *
-         * <p>Will be set to 1 once executed.
+         * <p>Will be set to {@link android.os.Build.VERSION#SDK_INT} once executed. Note that older
+         * SDK versions prior to R set 1 for this value.
          *
          * @hide
          */
@@ -8913,6 +8930,15 @@ public final class Settings {
          * @hide
          */
         public static final String PEOPLE_STRIP = "people_strip";
+
+        /**
+         * Whether or not to enable media resumption
+         * When enabled, media controls in quick settings will populate on boot and persist if
+         * resumable via a MediaBrowserService.
+         * @see Settings.Global#SHOW_MEDIA_ON_QUICK_SETTINGS
+         * @hide
+         */
+        public static final String MEDIA_CONTROLS_RESUME = "qs_media_resumption";
 
         /**
          * Controls if window magnification is enabled.
@@ -12006,7 +12032,7 @@ public final class Settings {
          * @see #ENABLE_RESTRICTED_BUCKET
          * @hide
          */
-        public static final int DEFAULT_ENABLE_RESTRICTED_BUCKET = 1;
+        public static final int DEFAULT_ENABLE_RESTRICTED_BUCKET = 0;
 
         /**
          * Whether or not app auto restriction is enabled. When it is enabled, settings app will

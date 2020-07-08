@@ -22,9 +22,9 @@ import static com.android.systemui.bubbles.BubbleDebugConfig.TAG_BUBBLES;
 import static com.android.systemui.bubbles.BubbleDebugConfig.TAG_WITH_CLASS_NAME;
 
 import android.annotation.NonNull;
-import android.app.Notification;
 import android.app.PendingIntent;
 import android.content.Context;
+import android.content.pm.ShortcutInfo;
 import android.util.Log;
 import android.util.Pair;
 import android.view.View;
@@ -34,6 +34,7 @@ import androidx.annotation.Nullable;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.systemui.R;
 import com.android.systemui.bubbles.BubbleController.DismissReason;
+import com.android.systemui.statusbar.notification.NotificationEntryManager;
 import com.android.systemui.statusbar.notification.collection.NotificationEntry;
 
 import java.io.FileDescriptor;
@@ -42,8 +43,12 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
+import java.util.function.Consumer;
+import java.util.function.Predicate;
 
 import javax.inject.Inject;
 import javax.inject.Singleton;
@@ -256,8 +261,7 @@ public class BubbleData {
         }
         mPendingBubbles.remove(bubble.getKey()); // No longer pending once we're here
         Bubble prevBubble = getBubbleInStackWithKey(bubble.getKey());
-        suppressFlyout |= bubble.getEntry() == null
-                || !bubble.getEntry().getRanking().visuallyInterruptive();
+        suppressFlyout |= !bubble.isVisuallyInterruptive();
 
         if (prevBubble == null) {
             // Create a new bubble
@@ -287,9 +291,9 @@ public class BubbleData {
     }
 
     /**
-     * Called when a notification associated with a bubble is removed.
+     * Dismisses the bubble with the matching key, if it exists.
      */
-    public void notificationEntryRemoved(String key, @DismissReason int reason) {
+    public void dismissBubbleWithKey(String key, @DismissReason int reason) {
         if (DEBUG_BUBBLE_DATA) {
             Log.d(TAG, "notificationEntryRemoved: key=" + key + " reason=" + reason);
         }
@@ -335,17 +339,57 @@ public class BubbleData {
      * Retrieves any bubbles that are part of the notification group represented by the provided
      * group key.
      */
-    ArrayList<Bubble> getBubblesInGroup(@Nullable String groupKey) {
+    ArrayList<Bubble> getBubblesInGroup(@Nullable String groupKey, @NonNull
+            NotificationEntryManager nem) {
         ArrayList<Bubble> bubbleChildren = new ArrayList<>();
         if (groupKey == null) {
             return bubbleChildren;
         }
         for (Bubble b : mBubbles) {
-            if (b.getEntry() != null && groupKey.equals(b.getEntry().getSbn().getGroupKey())) {
+            final NotificationEntry entry = nem.getPendingOrActiveNotif(b.getKey());
+            if (entry != null && groupKey.equals(entry.getSbn().getGroupKey())) {
                 bubbleChildren.add(b);
             }
         }
         return bubbleChildren;
+    }
+
+    /**
+     * Removes bubbles from the given package whose shortcut are not in the provided list of valid
+     * shortcuts.
+     */
+    public void removeBubblesWithInvalidShortcuts(
+            String packageName, List<ShortcutInfo> validShortcuts, int reason) {
+
+        final Set<String> validShortcutIds = new HashSet<String>();
+        for (ShortcutInfo info : validShortcuts) {
+            validShortcutIds.add(info.getId());
+        }
+
+        final Predicate<Bubble> invalidBubblesFromPackage = bubble ->
+                packageName.equals(bubble.getPackageName())
+                        && (bubble.getShortcutInfo() == null
+                            || !bubble.getShortcutInfo().isEnabled()
+                            || !validShortcutIds.contains(bubble.getShortcutInfo().getId()));
+
+        final Consumer<Bubble> removeBubble = bubble ->
+                dismissBubbleWithKey(bubble.getKey(), reason);
+
+        performActionOnBubblesMatching(getBubbles(), invalidBubblesFromPackage, removeBubble);
+        performActionOnBubblesMatching(
+                getOverflowBubbles(), invalidBubblesFromPackage, removeBubble);
+    }
+
+    /** Dismisses all bubbles from the given package. */
+    public void removeBubblesWithPackageName(String packageName, int reason) {
+        final Predicate<Bubble> bubbleMatchesPackage = bubble ->
+                bubble.getPackageName().equals(packageName);
+
+        final Consumer<Bubble> removeBubble = bubble ->
+                dismissBubbleWithKey(bubble.getKey(), reason);
+
+        performActionOnBubblesMatching(getBubbles(), bubbleMatchesPackage, removeBubble);
+        performActionOnBubblesMatching(getOverflowBubbles(), bubbleMatchesPackage, removeBubble);
     }
 
     private void doAdd(Bubble bubble) {
@@ -387,6 +431,21 @@ public class BubbleData {
         }
     }
 
+    /** Runs the given action on Bubbles that match the given predicate. */
+    private void performActionOnBubblesMatching(
+            List<Bubble> bubbles, Predicate<Bubble> predicate, Consumer<Bubble> action) {
+        final List<Bubble> matchingBubbles = new ArrayList<>();
+        for (Bubble bubble : bubbles) {
+            if (predicate.test(bubble)) {
+                matchingBubbles.add(bubble);
+            }
+        }
+
+        for (Bubble matchingBubble : matchingBubbles) {
+            action.accept(matchingBubble);
+        }
+    }
+
     private void doRemove(String key, @DismissReason int reason) {
         if (DEBUG_BUBBLE_DATA) {
             Log.d(TAG, "doRemove: " + key);
@@ -399,9 +458,11 @@ public class BubbleData {
         if (indexToRemove == -1) {
             if (hasOverflowBubbleWithKey(key)
                 && (reason == BubbleController.DISMISS_NOTIF_CANCEL
-                || reason == BubbleController.DISMISS_GROUP_CANCELLED
-                || reason == BubbleController.DISMISS_NO_LONGER_BUBBLE
-                || reason == BubbleController.DISMISS_BLOCKED)) {
+                    || reason == BubbleController.DISMISS_GROUP_CANCELLED
+                    || reason == BubbleController.DISMISS_NO_LONGER_BUBBLE
+                    || reason == BubbleController.DISMISS_BLOCKED
+                    || reason == BubbleController.DISMISS_SHORTCUT_REMOVED
+                    || reason == BubbleController.DISMISS_PACKAGE_REMOVED)) {
 
                 Bubble b = getOverflowBubbleWithKey(key);
                 if (DEBUG_BUBBLE_DATA) {
@@ -417,7 +478,8 @@ public class BubbleData {
         if (mBubbles.size() == 1) {
             // Going to become empty, handle specially.
             setExpandedInternal(false);
-            setSelectedBubbleInternal(null);
+            // Don't use setSelectedBubbleInternal because we don't want to trigger an applyUpdate
+            mSelectedBubble = null;
         }
         if (indexToRemove < mBubbles.size() - 1) {
             // Removing anything but the last bubble means positions will change.
@@ -438,9 +500,7 @@ public class BubbleData {
             Bubble newSelected = mBubbles.get(newIndex);
             setSelectedBubbleInternal(newSelected);
         }
-        if (bubbleToRemove.getEntry() != null) {
-            maybeSendDeleteIntent(reason, bubbleToRemove.getEntry());
-        }
+        maybeSendDeleteIntent(reason, bubbleToRemove);
     }
 
     void overflowBubble(@DismissReason int reason, Bubble bubble) {
@@ -610,21 +670,14 @@ public class BubbleData {
         return true;
     }
 
-    private void maybeSendDeleteIntent(@DismissReason int reason,
-            @NonNull final NotificationEntry entry) {
-        if (reason == BubbleController.DISMISS_USER_GESTURE) {
-            Notification.BubbleMetadata bubbleMetadata = entry.getBubbleMetadata();
-            PendingIntent deleteIntent = bubbleMetadata != null
-                    ? bubbleMetadata.getDeleteIntent()
-                    : null;
-            if (deleteIntent != null) {
-                try {
-                    deleteIntent.send();
-                } catch (PendingIntent.CanceledException e) {
-                    Log.w(TAG, "Failed to send delete intent for bubble with key: "
-                            + entry.getKey());
-                }
-            }
+    private void maybeSendDeleteIntent(@DismissReason int reason, @NonNull final Bubble bubble) {
+        if (reason != BubbleController.DISMISS_USER_GESTURE) return;
+        PendingIntent deleteIntent = bubble.getDeleteIntent();
+        if (deleteIntent == null) return;
+        try {
+            deleteIntent.send();
+        } catch (PendingIntent.CanceledException e) {
+            Log.w(TAG, "Failed to send delete intent for bubble with key: " + bubble.getKey());
         }
     }
 

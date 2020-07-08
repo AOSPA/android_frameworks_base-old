@@ -21,6 +21,13 @@ import static com.android.internal.policy.TaskResizingAlgorithm.CTRL_LEFT;
 import static com.android.internal.policy.TaskResizingAlgorithm.CTRL_NONE;
 import static com.android.internal.policy.TaskResizingAlgorithm.CTRL_RIGHT;
 import static com.android.internal.policy.TaskResizingAlgorithm.CTRL_TOP;
+import static com.android.systemui.shared.system.QuickStepContract.SYSUI_STATE_BOUNCER_SHOWING;
+import static com.android.systemui.shared.system.QuickStepContract.SYSUI_STATE_BUBBLES_EXPANDED;
+import static com.android.systemui.shared.system.QuickStepContract.SYSUI_STATE_GLOBAL_ACTIONS_SHOWING;
+import static com.android.systemui.shared.system.QuickStepContract.SYSUI_STATE_NOTIFICATION_PANEL_EXPANDED;
+import static com.android.systemui.shared.system.QuickStepContract.SYSUI_STATE_QUICK_SETTINGS_EXPANDED;
+import static com.android.systemui.shared.system.QuickStepContract.SYSUI_STATE_STATUS_BAR_KEYGUARD_SHOWING;
+import static com.android.systemui.shared.system.QuickStepContract.SYSUI_STATE_STATUS_BAR_KEYGUARD_SHOWING_OCCLUDED;
 
 import android.content.Context;
 import android.content.res.Resources;
@@ -32,6 +39,8 @@ import android.hardware.input.InputManager;
 import android.os.Handler;
 import android.os.Looper;
 import android.provider.DeviceConfig;
+import android.view.BatchedInputEventReceiver;
+import android.view.Choreographer;
 import android.view.InputChannel;
 import android.view.InputEvent;
 import android.view.InputEventReceiver;
@@ -41,6 +50,7 @@ import android.view.ViewConfiguration;
 
 import com.android.internal.policy.TaskResizingAlgorithm;
 import com.android.systemui.R;
+import com.android.systemui.model.SysUiState;
 import com.android.systemui.pip.PipBoundsHandler;
 import com.android.systemui.pip.PipTaskOrganizer;
 import com.android.systemui.util.DeviceConfigProxy;
@@ -56,11 +66,21 @@ public class PipResizeGestureHandler {
 
     private static final String TAG = "PipResizeGestureHandler";
 
+    private static final int INVALID_SYSUI_STATE_MASK =
+            SYSUI_STATE_GLOBAL_ACTIONS_SHOWING
+            | SYSUI_STATE_STATUS_BAR_KEYGUARD_SHOWING
+            | SYSUI_STATE_STATUS_BAR_KEYGUARD_SHOWING_OCCLUDED
+            | SYSUI_STATE_BOUNCER_SHOWING
+            | SYSUI_STATE_NOTIFICATION_PANEL_EXPANDED
+            | SYSUI_STATE_BUBBLES_EXPANDED
+            | SYSUI_STATE_QUICK_SETTINGS_EXPANDED;
+
     private final Context mContext;
     private final PipBoundsHandler mPipBoundsHandler;
     private final PipMotionHelper mMotionHelper;
     private final int mDisplayId;
     private final Executor mMainExecutor;
+    private final SysUiState mSysUiState;
     private final Region mTmpRegion = new Region();
 
     private final PointF mDownPoint = new PointF();
@@ -94,7 +114,7 @@ public class PipResizeGestureHandler {
     public PipResizeGestureHandler(Context context, PipBoundsHandler pipBoundsHandler,
             PipMotionHelper motionHelper, DeviceConfigProxy deviceConfig,
             PipTaskOrganizer pipTaskOrganizer, Supplier<Rect> movementBoundsSupplier,
-            Runnable updateMovementBoundsRunnable) {
+            Runnable updateMovementBoundsRunnable, SysUiState sysUiState) {
         mContext = context;
         mDisplayId = context.getDisplayId();
         mMainExecutor = context.getMainExecutor();
@@ -103,6 +123,7 @@ public class PipResizeGestureHandler {
         mPipTaskOrganizer = pipTaskOrganizer;
         mMovementBoundsSupplier = movementBoundsSupplier;
         mUpdateMovementBoundsRunnable = updateMovementBoundsRunnable;
+        mSysUiState = sysUiState;
 
         context.getDisplay().getRealSize(mMaxSize);
         reloadResources();
@@ -256,14 +277,20 @@ public class PipResizeGestureHandler {
         }
     }
 
+    private boolean isInValidSysUiState() {
+        return (mSysUiState.getFlags() & INVALID_SYSUI_STATE_MASK) == 0;
+    }
+
     private void onMotionEvent(MotionEvent ev) {
         int action = ev.getActionMasked();
+        float x = ev.getX();
+        float y = ev.getY();
         if (action == MotionEvent.ACTION_DOWN) {
             mLastResizeBounds.setEmpty();
-            mAllowGesture = isWithinTouchRegion((int) ev.getX(), (int) ev.getY());
+            mAllowGesture = isInValidSysUiState() && isWithinTouchRegion((int) x, (int) y);
             if (mAllowGesture) {
-                setCtrlType((int) ev.getX(), (int) ev.getY());
-                mDownPoint.set(ev.getX(), ev.getY());
+                setCtrlType((int) x, (int) y);
+                mDownPoint.set(x, y);
                 mLastDownBounds.set(mMotionHelper.getBounds());
             }
 
@@ -275,20 +302,23 @@ public class PipResizeGestureHandler {
                     break;
                 case MotionEvent.ACTION_MOVE:
                     // Capture inputs
-                    float dx = Math.abs(ev.getX() - mDownPoint.x);
-                    float dy = Math.abs(ev.getY() - mDownPoint.y);
-                    if (!mThresholdCrossed && dx > mTouchSlop && dy > mTouchSlop) {
+                    if (!mThresholdCrossed
+                            && Math.hypot(x - mDownPoint.x, y - mDownPoint.y) > mTouchSlop) {
                         mThresholdCrossed = true;
+                        // Reset the down to begin resizing from this point
+                        mDownPoint.set(x, y);
                         mInputMonitor.pilferPointers();
                     }
-                    final Rect currentPipBounds = mMotionHelper.getBounds();
-                    mLastResizeBounds.set(TaskResizingAlgorithm.resizeDrag(ev.getX(), ev.getY(),
-                            mDownPoint.x, mDownPoint.y, currentPipBounds, mCtrlType, mMinSize.x,
-                            mMinSize.y, mMaxSize, true,
-                            mLastDownBounds.width() > mLastDownBounds.height()));
-                    mPipBoundsHandler.transformBoundsToAspectRatio(mLastResizeBounds);
-                    mPipTaskOrganizer.scheduleUserResizePip(mLastDownBounds, mLastResizeBounds,
-                            null);
+                    if (mThresholdCrossed) {
+                        final Rect currentPipBounds = mMotionHelper.getBounds();
+                        mLastResizeBounds.set(TaskResizingAlgorithm.resizeDrag(x, y,
+                                mDownPoint.x, mDownPoint.y, currentPipBounds, mCtrlType, mMinSize.x,
+                                mMinSize.y, mMaxSize, true,
+                                mLastDownBounds.width() > mLastDownBounds.height()));
+                        mPipBoundsHandler.transformBoundsToAspectRatio(mLastResizeBounds);
+                        mPipTaskOrganizer.scheduleUserResizePip(mLastDownBounds, mLastResizeBounds,
+                                null);
+                    }
                     break;
                 case MotionEvent.ACTION_UP:
                 case MotionEvent.ACTION_CANCEL:
@@ -323,9 +353,9 @@ public class PipResizeGestureHandler {
         mMinSize.set(minX, minY);
     }
 
-    class SysUiInputEventReceiver extends InputEventReceiver {
+    class SysUiInputEventReceiver extends BatchedInputEventReceiver {
         SysUiInputEventReceiver(InputChannel channel, Looper looper) {
-            super(channel, looper);
+            super(channel, looper, Choreographer.getSfInstance());
         }
 
         public void onInputEvent(InputEvent event) {

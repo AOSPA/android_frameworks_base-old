@@ -219,6 +219,12 @@ public final class OomAdjuster {
 
     public static BoostFramework mPerf = new BoostFramework();
 
+    //Per Task Boost of top-app renderThread
+    public static BoostFramework mPerfBoost = new BoostFramework();
+    public static int mPerfHandle = -1;
+    public static int mCurRenderThreadTid = -1;
+    public static boolean mIsTopAppRenderThreadBoostEnabled = false;
+
     private final int mNumSlots;
     private ArrayList<ProcessRecord> mTmpProcessList = new ArrayList<ProcessRecord>();
     private ArrayList<UidRecord> mTmpBecameIdle = new ArrayList<UidRecord>();
@@ -258,6 +264,7 @@ public final class OomAdjuster {
             mEnableBServicePropagation = Boolean.parseBoolean(mPerf.perfGetProp("ro.vendor.qti.sys.fw.bservice_enable", "false"));
             mEnableProcessGroupCgroupFollow = Boolean.parseBoolean(mPerf.perfGetProp("ro.vendor.qti.cgroup_follow.enable", "false"));
             mProcessGroupCgroupFollowDex2oatOnly = Boolean.parseBoolean(mPerf.perfGetProp("ro.vendor.qti.cgroup_follow.dex2oat_only", "false"));
+            mIsTopAppRenderThreadBoostEnabled = Boolean.parseBoolean(mPerf.perfGetProp("vendor.perf.topAppRenderThreadBoost.enable", "false"));
         }
 
         mProcessGroupHandler = new Handler(adjusterThread.getLooper(), msg -> {
@@ -1219,8 +1226,17 @@ public final class OomAdjuster {
             // is currently showing UI.
             app.systemNoUi = true;
             if (app == topApp) {
+                // If specific system app has set ProcessRecord.mHasTopUi or is running a remote
+                // animation (ProcessRecord.runningRemoteAnimation), this will prevent topApp
+                // to use SCHED_GROUP_TOP_APP to ensure process with mHasTopUi will have exclusive
+                // access to configured cores.
+                if (mService.containsTopUiOrRunningRemoteAnimOrEmptyLocked(app)) {
+                    app.setCurrentSchedulingGroup(ProcessList.SCHED_GROUP_TOP_APP);
+                } else {
+                    app.setCurrentSchedulingGroup(ProcessList.SCHED_GROUP_DEFAULT);
+                }
                 app.systemNoUi = false;
-                app.setCurrentSchedulingGroup(ProcessList.SCHED_GROUP_TOP_APP);
+
                 app.adjType = "pers-top-activity";
             } else if (app.hasTopUi()) {
                 // sched group/proc state adjustment is below
@@ -1261,12 +1277,40 @@ public final class OomAdjuster {
 
         boolean foregroundActivities = false;
         if (PROCESS_STATE_CUR_TOP == PROCESS_STATE_TOP && app == topApp) {
-            // The last app on the list is the foreground app.
-            adj = ProcessList.FOREGROUND_APP_ADJ;
-            schedGroup = ProcessList.SCHED_GROUP_TOP_APP;
-            app.adjType = "top-activity";
+
+            // If specific system app has set ProcessRecord.mHasTopUi or is running a remote
+            // animation (ProcessRecord.runningRemoteAnimation), this will prevent topApp
+            // to use SCHED_GROUP_TOP_APP to ensure process with mHasTopUi will have exclusive
+            // access to configured cores.
+            if (mService.containsTopUiOrRunningRemoteAnimOrEmptyLocked(app)) {
+                adj = ProcessList.FOREGROUND_APP_ADJ;
+                schedGroup = ProcessList.SCHED_GROUP_TOP_APP;
+                app.adjType = "top-activity";
+            } else {
+                adj = ProcessList.FOREGROUND_APP_ADJ;
+                schedGroup = ProcessList.SCHED_GROUP_DEFAULT;
+                app.adjType = "top-activity-behind-topui";
+            }
             foregroundActivities = true;
             procState = PROCESS_STATE_CUR_TOP;
+            if(mIsTopAppRenderThreadBoostEnabled) {
+                if(mCurRenderThreadTid != app.renderThreadTid && app.renderThreadTid > 0) {
+                    mCurRenderThreadTid = app.renderThreadTid;
+                    if (mPerfBoost != null) {
+                        Slog.d(TAG, "TOP-APP: pid:" + app.pid + ", processName: "
+                               + app.processName + ", renderThreadTid: " + app.renderThreadTid);
+                        if (mPerfHandle >= 0) {
+                            mPerfBoost.perfLockRelease();
+                            mPerfHandle = -1;
+                        }
+                        mPerfHandle = mPerfBoost.perfHint(BoostFramework.VENDOR_HINT_BOOST_RENDERTHREAD,
+                                                          app.processName, app.renderThreadTid, 1);
+                        Slog.d(TAG, "VENDOR_HINT_BOOST_RENDERTHREAD perfHint was called. mPerfHandle: "
+                               + mPerfHandle);
+                    }
+                }
+            }
+
             if (DEBUG_OOM_ADJ_REASON || logUid == appUid) {
                 reportOomAdjMessageLocked(TAG_OOM_ADJ, "Making top: " + app);
             }

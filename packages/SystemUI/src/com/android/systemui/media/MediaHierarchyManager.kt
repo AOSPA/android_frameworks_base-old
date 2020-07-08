@@ -49,7 +49,7 @@ class MediaHierarchyManager @Inject constructor(
     private val statusBarStateController: SysuiStatusBarStateController,
     private val keyguardStateController: KeyguardStateController,
     private val bypassController: KeyguardBypassController,
-    private val mediaViewManager: MediaViewManager,
+    private val mediaCarouselController: MediaCarouselController,
     private val notifLockscreenUserManager: NotificationLockscreenUserManager,
     wakefulnessLifecycle: WakefulnessLifecycle
 ) {
@@ -65,7 +65,7 @@ class MediaHierarchyManager @Inject constructor(
     private var animationStartBounds: Rect = Rect()
     private var targetBounds: Rect = Rect()
     private val mediaFrame
-        get() = mediaViewManager.mediaFrame
+        get() = mediaCarouselController.mediaFrame
     private var statusbarState: Int = statusBarStateController.state
     private var animator = ValueAnimator.ofFloat(0.0f, 1.0f).apply {
         interpolator = Interpolators.FAST_OUT_SLOW_IN
@@ -140,6 +140,18 @@ class MediaHierarchyManager @Inject constructor(
         }
 
     /**
+     * Is the shade currently collapsing from the expanded qs? If we're on the lockscreen and in qs,
+     * we wouldn't want to transition in that case.
+     */
+    var collapsingShadeFromQS: Boolean = false
+        set(value) {
+            if (field != value) {
+                field = value
+                updateDesiredLocation(forceNoAnimation = true)
+            }
+        }
+
+    /**
      * Are location changes currently blocked?
      */
     private val blockLocationChanges: Boolean
@@ -156,6 +168,19 @@ class MediaHierarchyManager @Inject constructor(
                 field = value
                 if (!value) {
                     updateDesiredLocation()
+                }
+            }
+        }
+
+    /**
+     * Are we currently fullyAwake
+     */
+    private var fullyAwake: Boolean = false
+        set(value) {
+            if (field != value) {
+                field = value
+                if (value) {
+                    updateDesiredLocation(forceNoAnimation = true)
                 }
             }
         }
@@ -193,6 +218,8 @@ class MediaHierarchyManager @Inject constructor(
             override fun onDozingChanged(isDozing: Boolean) {
                 if (!isDozing) {
                     dozeAnimationRunning = false
+                } else {
+                    updateDesiredLocation()
                 }
             }
         })
@@ -204,10 +231,12 @@ class MediaHierarchyManager @Inject constructor(
 
             override fun onStartedGoingToSleep() {
                 goingToSleep = true
+                fullyAwake = false
             }
 
             override fun onFinishedWakingUp() {
                 goingToSleep = false
+                fullyAwake = true
             }
 
             override fun onStartedWakingUp() {
@@ -225,6 +254,10 @@ class MediaHierarchyManager @Inject constructor(
     fun register(mediaObject: MediaHost): UniqueObjectHostView {
         val viewHost = createUniqueObjectHost()
         mediaObject.hostView = viewHost
+        mediaObject.addVisibilityChangeListener {
+            // Never animate because of a visibility change, only state changes should do that
+            updateDesiredLocation(forceNoAnimation = true)
+        }
         mediaHosts[mediaObject.location] = mediaObject
         if (mediaObject.location == desiredLocation) {
             // In case we are overriding a view that is already visible, make sure we attach it
@@ -258,8 +291,10 @@ class MediaHierarchyManager @Inject constructor(
     /**
      * Updates the location that the view should be in. If it changes, an animation may be triggered
      * going from the old desired location to the new one.
+     *
+     * @param forceNoAnimation optional parameter telling the system not to animate
      */
-    private fun updateDesiredLocation() {
+    private fun updateDesiredLocation(forceNoAnimation: Boolean = false) {
         val desiredLocation = calculateLocation()
         if (desiredLocation != this.desiredLocation) {
             if (this.desiredLocation >= 0) {
@@ -268,11 +303,12 @@ class MediaHierarchyManager @Inject constructor(
             val isNewView = this.desiredLocation == -1
             this.desiredLocation = desiredLocation
             // Let's perform a transition
-            val animate = shouldAnimateTransition(desiredLocation, previousLocation)
+            val animate = !forceNoAnimation &&
+                    shouldAnimateTransition(desiredLocation, previousLocation)
             val (animDuration, delay) = getAnimationParams(previousLocation, desiredLocation)
             val host = getHost(desiredLocation)
-            mediaViewManager.onDesiredLocationChanged(desiredLocation, host, animate, animDuration,
-                    delay)
+            mediaCarouselController.onDesiredLocationChanged(desiredLocation, host, animate,
+                    animDuration, delay)
             performTransitionToNewLocation(isNewView, animate)
         }
     }
@@ -455,7 +491,7 @@ class MediaHierarchyManager @Inject constructor(
         val startLocation = if (currentlyInGuidedTransformation) previousLocation else -1
         val progress = if (currentlyInGuidedTransformation) getTransformationProgress() else 1.0f
         val endLocation = desiredLocation
-        mediaViewManager.setCurrentState(startLocation, endLocation, progress, immediately)
+        mediaCarouselController.setCurrentState(startLocation, endLocation, progress, immediately)
         updateHostAttachment()
         if (currentAttachmentLocation == IN_OVERLAY) {
             mediaFrame.setLeftTopRightBottom(
@@ -480,7 +516,17 @@ class MediaHierarchyManager @Inject constructor(
             if (inOverlay) {
                 rootOverlay!!.add(mediaFrame)
             } else {
+                // When adding back to the host, let's make sure to reset the bounds.
+                // Usually adding the view will trigger a layout that does this automatically,
+                // but we sometimes suppress this.
                 targetHost.addView(mediaFrame)
+                val left = targetHost.paddingLeft
+                val top = targetHost.paddingTop
+                mediaFrame.setLeftTopRightBottom(
+                        left,
+                        top,
+                        left + currentBounds.width(),
+                        top + currentBounds.height())
             }
         }
     }
@@ -500,12 +546,31 @@ class MediaHierarchyManager @Inject constructor(
                 (statusbarState == StatusBarState.KEYGUARD ||
                         statusbarState == StatusBarState.FULLSCREEN_USER_SWITCHER))
         val allowedOnLockscreen = notifLockscreenUserManager.shouldShowLockscreenNotifications()
-        return when {
+        val location = when {
             qsExpansion > 0.0f && !onLockscreen -> LOCATION_QS
             qsExpansion > 0.4f && onLockscreen -> LOCATION_QS
             onLockscreen && allowedOnLockscreen -> LOCATION_LOCKSCREEN
             else -> LOCATION_QQS
         }
+        // When we're on lock screen and the player is not active, we should keep it in QS.
+        // Otherwise it will try to animate a transition that doesn't make sense.
+        if (location == LOCATION_LOCKSCREEN && getHost(location)?.visible != true &&
+                !statusBarStateController.isDozing) {
+            return LOCATION_QS
+        }
+        if (location == LOCATION_LOCKSCREEN && desiredLocation == LOCATION_QS &&
+                collapsingShadeFromQS) {
+            // When collapsing on the lockscreen, we want to remain in QS
+            return LOCATION_QS
+        }
+        if (location != LOCATION_LOCKSCREEN && desiredLocation == LOCATION_LOCKSCREEN
+                && !fullyAwake) {
+            // When unlocking from dozing / while waking up, the media shouldn't be transitioning
+            // in an animated way. Let's keep it in the lockscreen until we're fully awake and
+            // reattach it without an animation
+            return LOCATION_LOCKSCREEN
+        }
+        return location
     }
 
     companion object {
