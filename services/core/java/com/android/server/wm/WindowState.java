@@ -26,6 +26,7 @@ import static android.app.WindowConfiguration.isSplitScreenWindowingMode;
 import static android.content.res.Configuration.ORIENTATION_LANDSCAPE;
 import static android.os.PowerManager.DRAW_WAKE_LOCK;
 import static android.os.Trace.TRACE_TAG_WINDOW_MANAGER;
+import static android.view.InsetsState.ITYPE_IME;
 import static android.view.SurfaceControl.Transaction;
 import static android.view.View.SYSTEM_UI_FLAG_HIDE_NAVIGATION;
 import static android.view.View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY;
@@ -755,6 +756,12 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
 
         if (mPendingSeamlessRotate != null) {
             oldRotation = mPendingSeamlessRotate.getOldRotation();
+        }
+
+        // Skip performing seamless rotation when the controlled insets is IME with visible state.
+        if (mControllableInsetProvider != null
+                && mControllableInsetProvider.getSource().getType() == ITYPE_IME) {
+            return;
         }
 
         if (mForceSeamlesslyRotate || requested) {
@@ -2394,12 +2401,15 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         if (mAttrs.type == TYPE_APPLICATION_STARTING) {
             // Ignore mayUseInputMethod for starting window for now.
             // TODO(b/159911356): Remove this special casing (originally added in commit e75d872).
-        } else if (PixelFormat.formatHasAlpha(mAttrs.format)) {
-            // Support legacy use cases where transparent windows can still be ime target with
-            // FLAG_NOT_FOCUSABLE and ALT_FOCUSABLE_IM set.
-            // Certain apps listen for IME insets using transparent windows and ADJUST_NOTHING to
-            // manually synchronize app content to IME animation b/144619551.
-            // TODO(b/145812508): remove this once new focus management is complete b/141738570
+        } else {
+            // TODO(b/145812508): Clean this up in S, may depend on b/141738570
+            //  The current logic lets windows become the "ime target" even though they are
+            //  not-focusable and can thus never actually start input.
+            //  Ideally, this would reject windows where mayUseInputMethod() == false, but this
+            //  also impacts Z-ordering of and delivery of IME insets to child windows, which means
+            //  that simply disallowing non-focusable windows would break apps.
+            //  See b/159438771, b/144619551.
+
             final int fl = mAttrs.flags & (FLAG_NOT_FOCUSABLE | FLAG_ALT_FOCUSABLE_IM);
 
             // Can only be an IME target if both FLAG_NOT_FOCUSABLE and FLAG_ALT_FOCUSABLE_IM are
@@ -2407,12 +2417,6 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
             if (fl != 0 && fl != (FLAG_NOT_FOCUSABLE | FLAG_ALT_FOCUSABLE_IM)) {
                 return false;
             }
-        } else if (!WindowManager.LayoutParams.mayUseInputMethod(mAttrs.flags)) {
-            // Can be an IME target only if:
-            // 1. FLAG_NOT_FOCUSABLE is not set
-            // 2. FLAG_ALT_FOCUSABLE_IM is not set
-            // 3. not a starting window.
-            return false;
         }
 
         if (DEBUG_INPUT_METHOD) {

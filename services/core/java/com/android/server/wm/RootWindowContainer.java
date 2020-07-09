@@ -990,9 +990,7 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
         }
 
         // Remove all deferred displays stacks, tasks, and activities.
-        for (int displayNdx = mChildren.size() - 1; displayNdx >= 0; --displayNdx) {
-            mChildren.get(displayNdx).checkCompleteDeferredRemoval();
-        }
+        handleCompleteDeferredRemoval();
 
         forAllDisplays(dc -> {
             dc.getInputMonitor().updateInputWindowsLw(true /*force*/);
