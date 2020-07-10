@@ -2580,7 +2580,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
             if (mayAdjustTop && ((ActivityStack) task).topRunningActivity(true /* focusableOnly */)
                     == null) {
                 task.adjustFocusToNextFocusableTask("finish-top", false /* allowFocusSelf */,
-                        shouldAdjustGlobalFocus);
+                            shouldAdjustGlobalFocus);
             }
 
             finishActivityResults(resultCode, resultData, resultGrants);
@@ -2600,7 +2600,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
                 if (DEBUG_VISIBILITY || DEBUG_TRANSITION) {
                     Slog.v(TAG_TRANSITION, "Prepare close transition: finishing " + this);
                 }
-                getDisplay().mDisplayContent.prepareAppTransition(transit, false);
+                mDisplayContent.prepareAppTransition(transit, false);
 
                 // When finishing the activity preemptively take the snapshot before the app window
                 // is marked as hidden and any configuration changes take place
@@ -2625,6 +2625,13 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
 
                 if (endTask) {
                     mAtmService.getLockTaskController().clearLockedTask(task);
+                    // This activity was in the top focused stack and this is the last activity in
+                    // that task, give this activity a higher layer so it can stay on top before the
+                    // closing task transition be executed.
+                    if (mayAdjustTop) {
+                        mNeedsZBoost = true;
+                        mDisplayContent.assignWindowLayers(false /* setLayoutNeeded */);
+                    }
                 }
             } else if (!isState(PAUSING)) {
                 if (mVisibleRequested) {
@@ -6228,7 +6235,6 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         Trace.traceBegin(TRACE_TAG_WINDOW_MANAGER, "AR#onAnimationFinished");
         mTransit = TRANSIT_UNSET;
         mTransitFlags = 0;
-        mNeedsZBoost = false;
         mNeedsAnimationBoundsLayer = false;
 
         setAppLayoutChanges(FINISH_LAYOUT_REDO_ANIM | FINISH_LAYOUT_REDO_WALLPAPER,

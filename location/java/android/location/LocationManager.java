@@ -1969,7 +1969,8 @@ public class LocationManager {
         }
 
         try {
-            return mGnssStatusListenerManager.addListener(listener, Runnable::run);
+            return mGnssStatusListenerManager.addListener(listener,
+                    new HandlerExecutor(new Handler()));
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -2105,7 +2106,7 @@ public class LocationManager {
     @Deprecated
     @RequiresPermission(ACCESS_FINE_LOCATION)
     public boolean addNmeaListener(@NonNull OnNmeaMessageListener listener) {
-        return addNmeaListener(Runnable::run, listener);
+        return addNmeaListener(listener, null);
     }
 
     /**
