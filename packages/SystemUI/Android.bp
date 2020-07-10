@@ -104,6 +104,9 @@ android_library {
     manifest: "tests/AndroidManifest-base.xml",
     additional_manifests: ["tests/AndroidManifest.xml"],
 
+    defaults: [
+       "framework-wifi-vendor-hide-access-defaults",
+    ],
     resource_dirs: [
         "tests/res",
         "res-product",
