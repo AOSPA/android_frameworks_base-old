@@ -1,0 +1,89 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "a7a078e5_4b4b437c",
+        "filename": "core/java/android/view/Window.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 640,
+      "author": {
+        "id": 1000002
+      },
+      "writtenOn": "2020-07-14T03:57:56Z",
+      "side": 1,
+      "message": "Needs comment describing the functionality.",
+      "revId": "0f81d46bf2c7bab5d022f3a9651e5dc9510fea12",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "d13c9cb3_cae3bba6",
+        "filename": "core/java/com/android/internal/policy/DecorView.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 2198,
+      "author": {
+        "id": 1000002
+      },
+      "writtenOn": "2020-07-14T03:57:56Z",
+      "side": 1,
+      "message": "tabs :(",
+      "revId": "0f81d46bf2c7bab5d022f3a9651e5dc9510fea12",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "26adbb17_589d098c",
+        "filename": "core/java/com/android/internal/policy/DecorView.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 2209,
+      "author": {
+        "id": 1000002
+      },
+      "writtenOn": "2020-07-14T03:57:56Z",
+      "side": 1,
+      "message": "tabs",
+      "revId": "0f81d46bf2c7bab5d022f3a9651e5dc9510fea12",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "da2c3cc9_8186693e",
+        "filename": "core/java/com/android/internal/widget/DecorCaptionView.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 374,
+      "author": {
+        "id": 1000002
+      },
+      "writtenOn": "2020-07-14T03:57:56Z",
+      "side": 1,
+      "message": "tabs and spacing all throughout this diff block",
+      "revId": "0f81d46bf2c7bab5d022f3a9651e5dc9510fea12",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "012effce_13ccd41a",
+        "filename": "core/res/res/values/strings.xml",
+        "patchSetId": 1
+      },
+      "lineNbr": 4999,
+      "author": {
+        "id": 1000002
+      },
+      "writtenOn": "2020-07-14T03:57:56Z",
+      "side": 1,
+      "message": "\"In\" should be lower case",
+      "revId": "0f81d46bf2c7bab5d022f3a9651e5dc9510fea12",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    }
+  ]
+}
