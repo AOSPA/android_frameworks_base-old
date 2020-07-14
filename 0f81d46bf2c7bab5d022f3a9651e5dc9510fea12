@@ -19,6 +19,24 @@
     },
     {
       "key": {
+        "uuid": "6cc18604_239d7b50",
+        "filename": "core/java/android/view/Window.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 640,
+      "author": {
+        "id": 1000002
+      },
+      "writtenOn": "2020-07-14T13:43:48Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "a7a078e5_4b4b437c",
+      "revId": "0f81d46bf2c7bab5d022f3a9651e5dc9510fea12",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
         "uuid": "d13c9cb3_cae3bba6",
         "filename": "core/java/com/android/internal/policy/DecorView.java",
         "patchSetId": 1
@@ -33,6 +51,24 @@
       "revId": "0f81d46bf2c7bab5d022f3a9651e5dc9510fea12",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
       "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "47b58c48_4c1c151e",
+        "filename": "core/java/com/android/internal/policy/DecorView.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 2198,
+      "author": {
+        "id": 1000002
+      },
+      "writtenOn": "2020-07-14T13:43:48Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "d13c9cb3_cae3bba6",
+      "revId": "0f81d46bf2c7bab5d022f3a9651e5dc9510fea12",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
     },
     {
       "key": {
@@ -70,6 +106,24 @@
     },
     {
       "key": {
+        "uuid": "e9eeae21_ac0b13f1",
+        "filename": "core/java/com/android/internal/widget/DecorCaptionView.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 344,
+      "author": {
+        "id": 1000002
+      },
+      "writtenOn": "2020-07-14T13:43:48Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "d993202e_4bb894ab",
+      "revId": "0f81d46bf2c7bab5d022f3a9651e5dc9510fea12",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
         "uuid": "da2c3cc9_8186693e",
         "filename": "core/java/com/android/internal/widget/DecorCaptionView.java",
         "patchSetId": 1
@@ -84,6 +138,24 @@
       "revId": "0f81d46bf2c7bab5d022f3a9651e5dc9510fea12",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
       "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "73274bcd_3cbe2c30",
+        "filename": "core/java/com/android/internal/widget/DecorCaptionView.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 374,
+      "author": {
+        "id": 1000002
+      },
+      "writtenOn": "2020-07-14T13:43:48Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "da2c3cc9_8186693e",
+      "revId": "0f81d46bf2c7bab5d022f3a9651e5dc9510fea12",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
     },
     {
       "key": {
@@ -104,6 +176,24 @@
     },
     {
       "key": {
+        "uuid": "0c6c3061_8381f330",
+        "filename": "core/res/res/drawable/decor_shade_button_dark.xml",
+        "patchSetId": 1
+      },
+      "lineNbr": 21,
+      "author": {
+        "id": 1000002
+      },
+      "writtenOn": "2020-07-14T13:43:48Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "709c9275_ff65f262",
+      "revId": "0f81d46bf2c7bab5d022f3a9651e5dc9510fea12",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
         "uuid": "d6b6e912_3ab7b0aa",
         "filename": "core/res/res/drawable/decor_shade_button_light.xml",
         "patchSetId": 1
@@ -121,6 +211,24 @@
     },
     {
       "key": {
+        "uuid": "7fc5058c_f579ea8b",
+        "filename": "core/res/res/drawable/decor_shade_button_light.xml",
+        "patchSetId": 1
+      },
+      "lineNbr": 21,
+      "author": {
+        "id": 1000002
+      },
+      "writtenOn": "2020-07-14T13:43:48Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "d6b6e912_3ab7b0aa",
+      "revId": "0f81d46bf2c7bab5d022f3a9651e5dc9510fea12",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
         "uuid": "012effce_13ccd41a",
         "filename": "core/res/res/values/strings.xml",
         "patchSetId": 1
@@ -132,6 +240,24 @@
       "writtenOn": "2020-07-14T03:57:56Z",
       "side": 1,
       "message": "\"In\" should be lower case",
+      "revId": "0f81d46bf2c7bab5d022f3a9651e5dc9510fea12",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "792a8e2f_c2ca8b32",
+        "filename": "core/res/res/values/strings.xml",
+        "patchSetId": 1
+      },
+      "lineNbr": 4999,
+      "author": {
+        "id": 1000002
+      },
+      "writtenOn": "2020-07-14T13:43:48Z",
+      "side": 1,
+      "message": "This still needs to be addressed",
+      "parentUuid": "012effce_13ccd41a",
       "revId": "0f81d46bf2c7bab5d022f3a9651e5dc9510fea12",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
       "unresolved": true
