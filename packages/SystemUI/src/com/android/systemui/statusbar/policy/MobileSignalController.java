@@ -112,7 +112,6 @@ public class MobileSignalController extends SignalController<
     @VisibleForTesting
     FiveGServiceState mFiveGState;
     private FiveGServiceClient mClient;
-    private CellSignalStrengthNr mCellSignalStrengthNr;
     /**********************************************************/
 
     private ImsManager mImsManager;
@@ -745,34 +744,10 @@ public class MobileSignalController extends SignalController<
             mCurrentState.iconGroup = mDefaultIcons;
         }
 
-        if ( mTelephonyDisplayInfo.getNetworkType() == TelephonyManager.NETWORK_TYPE_NR ) {
-            if (mFiveGState.isNrIconTypeValid()) {
-                mCurrentState.iconGroup = mFiveGState.getIconGroup();
-                if (DEBUG) {
-                    Log.d(mTag,"get 5G SA icon from side-car");
-                }
-            }
-            int nrLevel = getNrLevel();
-            if (nrLevel > mFiveGState.getSignalLevel()) {
-                mCurrentState.level = nrLevel;
-                if (DEBUG) {
-                    Log.d(mTag,"get 5G SA sinal strength from AOSP");
-                }
-            }else{
-                mCurrentState.level = mFiveGState.getSignalLevel();
-                if (DEBUG) {
-                    Log.d(mTag,"get 5G SA sinal strength from side-car");
-                }
-            }
-
-        }
         //Modem has centralized logic to display 5G icon based on carrier requirements
         //For 5G icon display, only query NrIconType reported by modem
-        if ( isSideCarValid() ) {
+        if ( mFiveGState.isNrIconTypeValid() ) {
             mCurrentState.iconGroup = mFiveGState.getIconGroup();
-            if ( mFiveGState.getSignalLevel() > mCurrentState.level ) {
-                mCurrentState.level = mFiveGState.getSignalLevel();
-            }
         }else {
             mCurrentState.iconGroup = getNetworkTypeIconGroup();
         }
@@ -809,7 +784,7 @@ public class MobileSignalController extends SignalController<
 
 
         if ( mConfig.alwaysShowNetworkTypeIcon ) {
-            if ( isSideCarValid() ) {
+            if ( mFiveGState.isNrIconTypeValid() ) {
                 mCurrentState.iconGroup = mFiveGState.getIconGroup();
             }else {
                 int iconType = TelephonyManager.NETWORK_TYPE_UNKNOWN;
@@ -932,37 +907,6 @@ public class MobileSignalController extends SignalController<
         client.unregisterListener(phoneId);
     }
 
-    private boolean isDataRegisteredOnLte() {
-        boolean registered = false;
-        int dataType = getDataNetworkType();
-        if (dataType == TelephonyManager.NETWORK_TYPE_LTE ||
-                dataType == TelephonyManager.NETWORK_TYPE_LTE_CA) {
-            registered = true;
-        }
-        return registered;
-    }
-
-    private boolean isSideCarValid() {
-        return isSideCarSaValid() || isSideCarNsaValid();
-    }
-
-    private boolean isSideCarSaValid() {
-        return mFiveGState.getNrConfigType() == NrConfigType.SA_CONFIGURATION
-                && mFiveGState.isNrIconTypeValid();
-    }
-
-    private boolean isSideCarNsaValid() {
-        return  mFiveGState.isNrIconTypeValid() && isDataRegisteredOnLte();
-    }
-
-    private boolean isCellSignalStrengthNrValid() {
-        return ( mCellSignalStrengthNr != null && mCellSignalStrengthNr.isValid());
-    }
-
-    private int getNrLevel() {
-        return mCellSignalStrengthNr != null ? mCellSignalStrengthNr.getLevel() : 0;
-    }
-
     private MobileIconGroup getNetworkTypeIconGroup() {
         MobileIconGroup iconGroup = mDefaultIcons;
         int overrideNetworkType = mTelephonyDisplayInfo.getOverrideNetworkType();
@@ -996,7 +940,7 @@ public class MobileSignalController extends SignalController<
         int ratIcon = 0;
         if ( showDataRatIcon() ) {
             MobileIconGroup iconGroup = mDefaultIcons;
-            if ( isSideCarValid() ) {
+            if ( mFiveGState.isNrIconTypeValid() ) {
                 iconGroup = mFiveGState.getIconGroup();
             }else {
                 iconGroup = getNetworkTypeIconGroup();
@@ -1046,28 +990,7 @@ public class MobileSignalController extends SignalController<
                         ((signalStrength == null) ? "" : (" level=" + signalStrength.getLevel())));
             }
             mSignalStrength = signalStrength;
-            updateCellSignalStrengthNr(signalStrength);
             updateTelephony();
-        }
-
-        private void updateCellSignalStrengthNr(SignalStrength signalStrength) {
-            if ( signalStrength != null ) {
-                List<CellSignalStrengthNr> ssNrList =
-                        mSignalStrength.getCellSignalStrengths(CellSignalStrengthNr.class);
-                if (ssNrList != null && ssNrList.size() > 0) {
-                    mCellSignalStrengthNr = ssNrList.get(0);
-                }else {
-                    mCellSignalStrengthNr = null;
-                }
-            }else {
-                mCellSignalStrengthNr = null;
-            }
-
-            if ( mTelephonyDisplayInfo.getNetworkType() == TelephonyManager.NETWORK_TYPE_NR
-                    && !isCellSignalStrengthNrValid()
-                    && mClient != null){
-                mClient.queryNrSignalStrength(mSubscriptionInfo.getSimSlotIndex());
-            }
         }
 
         @Override
