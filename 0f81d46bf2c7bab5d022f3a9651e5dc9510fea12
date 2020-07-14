@@ -279,6 +279,24 @@
       "revId": "0f81d46bf2c7bab5d022f3a9651e5dc9510fea12",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
       "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "a9bbe074_f231bdba",
+        "filename": "core/res/res/values/strings.xml",
+        "patchSetId": 1
+      },
+      "lineNbr": 4999,
+      "author": {
+        "id": 1000002
+      },
+      "writtenOn": "2020-07-14T14:12:43Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "792a8e2f_c2ca8b32",
+      "revId": "0f81d46bf2c7bab5d022f3a9651e5dc9510fea12",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
     }
   ]
 }
