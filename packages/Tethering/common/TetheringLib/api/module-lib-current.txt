@@ -61,7 +61,6 @@ package android.net {
     field public static final int TETHERING_USB = 1; // 0x1
     field public static final int TETHERING_WIFI = 0; // 0x0
     field public static final int TETHERING_WIFI_P2P = 3; // 0x3
-    field public static final int TETHERING_WIGIG = 6; // 0x6
     field public static final int TETHER_ERROR_DHCPSERVER_ERROR = 12; // 0xc
     field public static final int TETHER_ERROR_DISABLE_FORWARDING_ERROR = 9; // 0x9
     field public static final int TETHER_ERROR_ENABLE_FORWARDING_ERROR = 8; // 0x8
