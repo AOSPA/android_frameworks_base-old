@@ -15,6 +15,7 @@ import com.android.systemui.broadcast.BroadcastDispatcher
 import com.android.systemui.dump.DumpManager
 import com.android.systemui.statusbar.SbnBuilder
 import com.android.systemui.util.concurrency.FakeExecutor
+import com.android.systemui.util.mockito.eq
 import com.android.systemui.util.time.FakeSystemClock
 import com.google.common.truth.Truth.assertThat
 import org.junit.After
@@ -26,16 +27,17 @@ import org.mockito.Mock
 import org.mockito.Mockito
 import org.mockito.Mockito.mock
 import org.mockito.Mockito.verify
-import org.mockito.Mockito.`when` as whenever
 import org.mockito.junit.MockitoJUnit
+import org.mockito.Mockito.`when` as whenever
 
 private const val KEY = "KEY"
+private const val KEY_2 = "KEY_2"
 private const val PACKAGE_NAME = "com.android.systemui"
 private const val APP_NAME = "SystemUI"
 private const val SESSION_ARTIST = "artist"
 private const val SESSION_TITLE = "title"
+private const val USER_ID = 0
 
-private fun <T> eq(value: T): T = Mockito.eq(value) ?: value
 private fun <T> anyObject(): T {
     return Mockito.anyObject<T>()
 }
@@ -91,16 +93,16 @@ class MediaDataManagerTest : SysuiTestCase() {
     }
 
     @Test
-    fun testHasActiveMedia() {
-        assertThat(mediaDataManager.hasActiveMedia()).isFalse()
-        val data = mock(MediaData::class.java)
-
+    fun testSetTimedOut_deactivatesMedia() {
+        val data = MediaData(userId = USER_ID, initialized = true, backgroundColor = 0, app = null,
+                appIcon = null, artist = null, song = null, artwork = null, actions = emptyList(),
+                actionsToShowInCompact = emptyList(), packageName = "INVALID", token = null,
+                clickIntent = null, device = null, active = true, resumeAction = null)
         mediaDataManager.onNotificationAdded(KEY, mediaNotification)
         mediaDataManager.onMediaDataLoaded(KEY, oldKey = null, data = data)
-        assertThat(mediaDataManager.hasActiveMedia()).isFalse()
 
-        whenever(data.active).thenReturn(true)
-        assertThat(mediaDataManager.hasActiveMedia()).isTrue()
+        mediaDataManager.setTimedOut(KEY, timedOut = true)
+        assertThat(data.active).isFalse()
     }
 
     @Test
@@ -119,22 +121,15 @@ class MediaDataManagerTest : SysuiTestCase() {
     }
 
     @Test
-    fun testHasAnyMedia_whenAddingMedia() {
-        assertThat(mediaDataManager.hasAnyMedia()).isFalse()
-        val data = mock(MediaData::class.java)
-
+    fun testOnMetaDataLoaded_conservesActiveFlag() {
+        val listener = TestListener()
+        whenever(mediaControllerFactory.create(anyObject())).thenReturn(controller)
+        whenever(controller.metadata).thenReturn(metadataBuilder.build())
+        mediaDataManager.addListener(listener)
         mediaDataManager.onNotificationAdded(KEY, mediaNotification)
-        mediaDataManager.onMediaDataLoaded(KEY, oldKey = null, data = data)
-        assertThat(mediaDataManager.hasAnyMedia()).isTrue()
-    }
-
-    @Test
-    fun testOnNotificationRemoved_doesntHaveMedia() {
-        val data = mock(MediaData::class.java)
-        mediaDataManager.onNotificationAdded(KEY, mediaNotification)
-        mediaDataManager.onMediaDataLoaded(KEY, oldKey = null, data = data)
-        mediaDataManager.onNotificationRemoved(KEY)
-        assertThat(mediaDataManager.hasAnyMedia()).isFalse()
+        assertThat(backgroundExecutor.runAllReady()).isEqualTo(1)
+        assertThat(foregroundExecutor.runAllReady()).isEqualTo(1)
+        assertThat(listener.data!!.active).isTrue()
     }
 
     @Test
@@ -162,8 +157,43 @@ class MediaDataManagerTest : SysuiTestCase() {
         mediaDataManager.onMediaDataLoaded(KEY, null, data.copy(resumeAction = Runnable {}))
         // WHEN the notification is removed
         mediaDataManager.onNotificationRemoved(KEY)
-        // THEN the media data indicates that it is
+        // THEN the media data indicates that it is for resumption
         assertThat(listener.data!!.resumption).isTrue()
+        // AND the new key is the package name
+        assertThat(listener.key!!).isEqualTo(PACKAGE_NAME)
+        assertThat(listener.oldKey!!).isEqualTo(KEY)
+        assertThat(listener.removedKey).isNull()
+    }
+
+    @Test
+    fun testOnNotificationRemoved_twoWithResumption() {
+        // GIVEN that the manager has two notifications with resume actions
+        val listener = TestListener()
+        mediaDataManager.addListener(listener)
+        whenever(controller.metadata).thenReturn(metadataBuilder.build())
+        mediaDataManager.onNotificationAdded(KEY, mediaNotification)
+        mediaDataManager.onNotificationAdded(KEY_2, mediaNotification)
+        assertThat(backgroundExecutor.runAllReady()).isEqualTo(2)
+        assertThat(foregroundExecutor.runAllReady()).isEqualTo(2)
+        val data = listener.data!!
+        assertThat(data.resumption).isFalse()
+        val resumableData = data.copy(resumeAction = Runnable {})
+        mediaDataManager.onMediaDataLoaded(KEY, null, resumableData)
+        mediaDataManager.onMediaDataLoaded(KEY_2, null, resumableData)
+        // WHEN the first is removed
+        mediaDataManager.onNotificationRemoved(KEY)
+        // THEN the data is for resumption and the key is migrated to the package name
+        assertThat(listener.data!!.resumption).isTrue()
+        assertThat(listener.key!!).isEqualTo(PACKAGE_NAME)
+        assertThat(listener.oldKey!!).isEqualTo(KEY)
+        assertThat(listener.removedKey).isNull()
+        // WHEN the second is removed
+        mediaDataManager.onNotificationRemoved(KEY_2)
+        // THEN the data is for resumption and the second key is removed
+        assertThat(listener.data!!.resumption).isTrue()
+        assertThat(listener.key!!).isEqualTo(PACKAGE_NAME)
+        assertThat(listener.oldKey!!).isEqualTo(PACKAGE_NAME)
+        assertThat(listener.removedKey!!).isEqualTo(KEY_2)
     }
 
     @Test
@@ -175,8 +205,8 @@ class MediaDataManagerTest : SysuiTestCase() {
             setTitle(SESSION_TITLE)
             build()
         }
-        mediaDataManager.addResumptionControls(desc, Runnable {}, session.sessionToken, APP_NAME,
-                pendingIntent, PACKAGE_NAME)
+        mediaDataManager.addResumptionControls(USER_ID, desc, Runnable {}, session.sessionToken,
+                APP_NAME, pendingIntent, PACKAGE_NAME)
         assertThat(backgroundExecutor.runAllReady()).isEqualTo(1)
         assertThat(foregroundExecutor.runAllReady()).isEqualTo(1)
         // THEN the media data indicates that it is for resumption
@@ -196,6 +226,7 @@ class MediaDataManagerTest : SysuiTestCase() {
         var data: MediaData? = null
         var key: String? = null
         var oldKey: String? = null
+        var removedKey: String? = null
 
         override fun onMediaDataLoaded(key: String, oldKey: String?, data: MediaData) {
             this.key = key
@@ -204,9 +235,7 @@ class MediaDataManagerTest : SysuiTestCase() {
         }
 
         override fun onMediaDataRemoved(key: String) {
-            this.key = key
-            oldKey = null
-            data = null
+            removedKey = key
         }
     }
 }

@@ -40,6 +40,28 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
+ * Similarly to isShown but also excludes views that have 0 alpha
+ */
+val View.isShownNotFaded: Boolean
+    get() {
+        var current: View = this
+        while (true) {
+            if (current.visibility != View.VISIBLE) {
+                return false
+            }
+            if (current.alpha == 0.0f) {
+                return false
+            }
+            val parent = current.parent ?: return false // We are not attached to the view root
+            if (parent !is View) {
+                // we reached the viewroot, hurray
+                return true
+            }
+            current = parent
+        }
+    }
+
+/**
  * This manager is responsible for placement of the unique media view between the different hosts
  * and animate the positions of the views to achieve seamless transitions.
  */
@@ -329,7 +351,7 @@ class MediaHierarchyManager @Inject constructor(
             applyTargetStateIfNotAnimating()
         } else if (animate) {
             animator.cancel()
-            if (currentAttachmentLocation == IN_OVERLAY ||
+            if (currentAttachmentLocation != previousLocation ||
                     !previousHost.hostView.isAttachedToWindow) {
                 // Let's animate to the new position, starting from the current position
                 // We also go in here in case the view was detached, since the bounds wouldn't
@@ -341,10 +363,12 @@ class MediaHierarchyManager @Inject constructor(
                 animationStartBounds.set(previousHost.currentBounds)
             }
             adjustAnimatorForTransition(desiredLocation, previousLocation)
-            rootView?.let {
-                // Let's delay the animation start until we finished laying out
-                animationPending = true
-                it.postOnAnimation(startAnimation)
+            if (!animationPending) {
+                rootView?.let {
+                    // Let's delay the animation start until we finished laying out
+                    animationPending = true
+                    it.postOnAnimation(startAnimation)
+                }
             }
         } else {
             cancelAnimationAndApplyDesiredState()
@@ -366,7 +390,7 @@ class MediaHierarchyManager @Inject constructor(
             // non-trivial reattaching logic happening that will make the view not-shown earlier
             return true
         }
-        return mediaFrame.isShown || animator.isRunning || animationPending
+        return mediaFrame.isShownNotFaded || animator.isRunning || animationPending
     }
 
     private fun adjustAnimatorForTransition(desiredLocation: Int, previousLocation: Int) {
@@ -403,15 +427,23 @@ class MediaHierarchyManager @Inject constructor(
     }
 
     /**
-     * Updates the state that the view wants to be in at the end of the animation.
+     * Updates the bounds that the view wants to be in at the end of the animation.
      */
     private fun updateTargetState() {
         if (isCurrentlyInGuidedTransformation()) {
             val progress = getTransformationProgress()
-            val currentHost = getHost(desiredLocation)!!
-            val previousHost = getHost(previousLocation)!!
-            val newBounds = currentHost.currentBounds
-            val previousBounds = previousHost.currentBounds
+            var endHost = getHost(desiredLocation)!!
+            var starthost = getHost(previousLocation)!!
+            // If either of the hosts are invisible, let's keep them at the other host location to
+            // have a nicer disappear animation. Otherwise the currentBounds of the state might
+            // be undefined
+            if (!endHost.visible) {
+                endHost = starthost
+            } else if (!starthost.visible) {
+                starthost = endHost
+            }
+            val newBounds = endHost.currentBounds
+            val previousBounds = starthost.currentBounds
             targetBounds = interpolateBounds(previousBounds, newBounds, progress)
         } else {
             val bounds = getHost(desiredLocation)?.currentBounds ?: return
@@ -462,7 +494,9 @@ class MediaHierarchyManager @Inject constructor(
         val previousHost = getHost(previousLocation)
         if (currentHost?.location == LOCATION_QS) {
             if (previousHost?.location == LOCATION_QQS) {
-                return qsExpansion
+                if (previousHost.visible || statusbarState != StatusBarState.KEYGUARD) {
+                    return qsExpansion
+                }
             }
         }
         return -1.0f

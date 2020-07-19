@@ -11116,6 +11116,21 @@ public class PackageManagerService extends IPackageManager.Stub
             pkgSetting.forceQueryableOverride = true;
         }
 
+        // If this is part of a standard install, set the initiating package name, else rely on
+        // previous device state.
+        if (reconciledPkg.installArgs != null) {
+            InstallSource installSource = reconciledPkg.installArgs.installSource;
+            if (installSource.initiatingPackageName != null) {
+                final PackageSetting ips = mSettings.mPackages.get(
+                        installSource.initiatingPackageName);
+                if (ips != null) {
+                    installSource = installSource.setInitiatingPackageSignatures(
+                            ips.signatures);
+                }
+            }
+            pkgSetting.setInstallSource(installSource);
+        }
+
         // TODO(toddke): Consider a method specifically for modifying the Package object
         // post scan; or, moving this stuff out of the Package object since it has nothing
         // to do with the package on disk.
@@ -11766,6 +11781,8 @@ public class PackageManagerService extends IPackageManager.Stub
             }
         } else {
             parsedPackage
+                    // Non system apps cannot mark any broadcast as protected
+                    .clearProtectedBroadcasts()
                     // non system apps can't be flagged as core
                     .setCoreApp(false)
                     // clear flags not applicable to regular apps
@@ -11777,7 +11794,6 @@ public class PackageManagerService extends IPackageManager.Stub
         }
         if ((scanFlags & SCAN_AS_PRIVILEGED) == 0) {
             parsedPackage
-                    .clearProtectedBroadcasts()
                     .markNotActivitiesAsNotExportedIfSingleUser();
         }
 
@@ -12401,7 +12417,9 @@ public class PackageManagerService extends IPackageManager.Stub
             ksms.addScannedPackageLPw(pkg);
 
             mComponentResolver.addAllComponents(pkg, chatty);
-            mAppsFilter.addPackage(pkgSetting);
+            final boolean isReplace =
+                    reconciledPkg.prepareResult != null && reconciledPkg.prepareResult.replace;
+            mAppsFilter.addPackage(pkgSetting, isReplace);
 
             // Don't allow ephemeral applications to define new permissions groups.
             if ((scanFlags & SCAN_AS_INSTANT_APP) != 0) {
@@ -15203,8 +15221,13 @@ public class PackageManagerService extends IPackageManager.Stub
             idleController.addPowerSaveTempWhitelistAppDirect(Process.myUid(),
                      idleDuration,
                     false, "integrity component");
+            final BroadcastOptions options = BroadcastOptions.makeBasic();
+            options.setTemporaryAppWhitelistDuration(idleDuration);
+
             mContext.sendOrderedBroadcastAsUser(integrityVerification, UserHandle.SYSTEM,
                     /* receiverPermission= */ null,
+                    /* appOp= */ AppOpsManager.OP_NONE,
+                    /* options= */ options.toBundle(),
                     new BroadcastReceiver() {
                         @Override
                         public void onReceive(Context context, Intent intent) {
@@ -15307,6 +15330,8 @@ public class PackageManagerService extends IPackageManager.Stub
                 DeviceIdleInternal idleController =
                         mInjector.getLocalDeviceIdleController();
                 final long idleDuration = getVerificationTimeout();
+                final BroadcastOptions options = BroadcastOptions.makeBasic();
+                options.setTemporaryAppWhitelistDuration(idleDuration);
 
                 /*
                  * If any sufficient verifiers were listed in the package
@@ -15326,7 +15351,9 @@ public class PackageManagerService extends IPackageManager.Stub
 
                             final Intent sufficientIntent = new Intent(verification);
                             sufficientIntent.setComponent(verifierComponent);
-                            mContext.sendBroadcastAsUser(sufficientIntent, verifierUser);
+                            mContext.sendBroadcastAsUser(sufficientIntent, verifierUser,
+                                    /* receiverPermission= */ null,
+                                    options.toBundle());
                         }
                     }
                 }
@@ -15373,6 +15400,8 @@ public class PackageManagerService extends IPackageManager.Stub
                             verifierUser.getIdentifier(), false, "package verifier");
                     mContext.sendOrderedBroadcastAsUser(verification, verifierUser,
                             android.Manifest.permission.PACKAGE_VERIFICATION_AGENT,
+                            /* appOp= */ AppOpsManager.OP_NONE,
+                            /* options= */ options.toBundle(),
                             new BroadcastReceiver() {
                                 @Override
                                 public void onReceive(Context context, Intent intent) {
@@ -16141,16 +16170,7 @@ public class PackageManagerService extends IPackageManager.Stub
                     ps.setEnabled(COMPONENT_ENABLED_STATE_DEFAULT, userId, installerPackageName);
                 }
 
-                if (installSource.initiatingPackageName != null) {
-                    final PackageSetting ips = mSettings.mPackages.get(
-                            installSource.initiatingPackageName);
-                    if (ips != null) {
-                        installSource = installSource.setInitiatingPackageSignatures(
-                                ips.signatures);
-                    }
-                }
-                ps.setInstallSource(installSource);
-                mSettings.addInstallerPackageNames(installSource);
+                mSettings.addInstallerPackageNames(ps.installSource);
 
                 // When replacing an existing package, preserve the original install reason for all
                 // users that had the package installed before. Similarly for uninstall reasons.
@@ -19226,9 +19246,7 @@ public class PackageManagerService extends IPackageManager.Stub
         final boolean systemApp = isSystemApp(ps);
 
         final int userId = user == null ? UserHandle.USER_ALL : user.getIdentifier();
-        if (ps.getPermissionsState().hasPermission(Manifest.permission.SUSPEND_APPS, userId)) {
-            unsuspendForSuspendingPackage(packageName, userId);
-        }
+
         if ((!systemApp || (flags & PackageManager.DELETE_SYSTEM_APP) != 0)
                 && userId != UserHandle.USER_ALL) {
             // The caller is asking that the package only be deleted for a single
@@ -19284,6 +19302,20 @@ public class PackageManagerService extends IPackageManager.Stub
             if (DEBUG_REMOVE) Slog.d(TAG, "Removing non-system package: " + ps.name);
             deleteInstalledPackageLIF(ps, deleteCodeAndResources, flags, allUserHandles,
                     outInfo, writeSettings);
+        }
+
+        // If the package removed had SUSPEND_APPS, unset any restrictions that might have been in
+        // place for all affected users.
+        int[] affectedUserIds = (outInfo != null) ? outInfo.removedUsers : null;
+        if (affectedUserIds == null) {
+            affectedUserIds = resolveUserIds(userId);
+        }
+        for (final int affectedUserId : affectedUserIds) {
+            if (ps.getPermissionsState().hasPermission(Manifest.permission.SUSPEND_APPS,
+                    affectedUserId)) {
+                unsuspendForSuspendingPackage(packageName, affectedUserId);
+                removeAllDistractingPackageRestrictions(affectedUserId);
+            }
         }
 
         // Take a note whether we deleted the package for all users

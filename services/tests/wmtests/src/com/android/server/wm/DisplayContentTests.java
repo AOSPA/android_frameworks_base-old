@@ -43,6 +43,7 @@ import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_NO_MOVE_ANIMA
 import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION;
 import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION_ATTACHED_DIALOG;
 import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY;
+import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION_STARTING;
 import static android.view.WindowManager.LayoutParams.TYPE_BASE_APPLICATION;
 import static android.view.WindowManager.LayoutParams.TYPE_NOTIFICATION_SHADE;
 import static android.view.WindowManager.LayoutParams.TYPE_SCREENSHOT;
@@ -265,6 +266,38 @@ public class DisplayContentTests extends WindowTestsBase {
         appWin.mHidden = false;
 
         // Verify that an child window can be an ime target.
+        final WindowState childWin = createWindow(appWin,
+                TYPE_APPLICATION_ATTACHED_DIALOG, "childWin");
+        childWin.setHasSurface(true);
+        assertTrue(childWin.canBeImeTarget());
+        imeTarget = mDisplayContent.computeImeTarget(false /* updateImeTarget */);
+        assertEquals(childWin, imeTarget);
+    }
+
+    @Test
+    public void testComputeImeTarget_startingWindow() {
+        ActivityRecord activity = createActivityRecord(mDisplayContent,
+                WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_STANDARD);
+
+        final WindowState startingWin = createWindow(null, TYPE_APPLICATION_STARTING, activity,
+                "startingWin");
+        startingWin.setHasSurface(true);
+        assertTrue(startingWin.canBeImeTarget());
+
+        WindowState imeTarget = mDisplayContent.computeImeTarget(false /* updateImeTarget */);
+        assertEquals(startingWin, imeTarget);
+        startingWin.mHidden = false;
+
+        // Verify that an app window launching behind the starting window becomes the target
+        final WindowState appWin = createWindow(null, TYPE_BASE_APPLICATION, activity, "appWin");
+        appWin.setHasSurface(true);
+        assertTrue(appWin.canBeImeTarget());
+
+        imeTarget = mDisplayContent.computeImeTarget(false /* updateImeTarget */);
+        assertEquals(appWin, imeTarget);
+        appWin.mHidden = false;
+
+        // Verify that an child window can be an ime target even behind a launching app window
         final WindowState childWin = createWindow(appWin,
                 TYPE_APPLICATION_ATTACHED_DIALOG, "childWin");
         childWin.setHasSurface(true);
@@ -1070,6 +1103,7 @@ public class DisplayContentTests extends WindowTestsBase {
         mDisplayContent.onRequestedOverrideConfigurationChanged(config);
 
         final ActivityRecord app = mAppWindow.mActivityRecord;
+        app.setVisible(false);
         mDisplayContent.prepareAppTransition(WindowManager.TRANSIT_ACTIVITY_OPEN,
                 false /* alwaysKeepCurrent */);
         mDisplayContent.mOpeningApps.add(app);
@@ -1124,6 +1158,7 @@ public class DisplayContentTests extends WindowTestsBase {
         // Launch another activity before the transition is finished.
         final ActivityRecord app2 = new ActivityTestsBase.StackBuilder(mWm.mRoot)
                 .setDisplay(mDisplayContent).build().getTopMostActivity();
+        app2.setVisible(false);
         mDisplayContent.mOpeningApps.add(app2);
         app2.setRequestedOrientation(newOrientation);
 
@@ -1193,8 +1228,7 @@ public class DisplayContentTests extends WindowTestsBase {
     @Test
     public void testNoFixedRotationWithPip() {
         // Make resume-top really update the activity state.
-        doReturn(false).when(mWm.mAtmService).isBooting();
-        doReturn(true).when(mWm.mAtmService).isBooted();
+        setBooted(mWm.mAtmService);
         // Speed up the test by a few seconds.
         mWm.mAtmService.deferWindowLayout();
         doNothing().when(mWm).startFreezingDisplay(anyInt(), anyInt(), any(), anyInt());
@@ -1266,6 +1300,14 @@ public class DisplayContentTests extends WindowTestsBase {
         mDisplayContent.setFixedRotationLaunchingAppUnchecked(mAppWindow.mActivityRecord);
         displayRotation.setRotation((displayRotation.getRotation() + 1) % 4);
         assertTrue(displayRotation.updateRotationUnchecked(false));
+
+        // The recents activity should not apply fixed rotation if the top activity is not opaque.
+        mDisplayContent.mFocusedApp = mAppWindow.mActivityRecord;
+        doReturn(false).when(mDisplayContent.mFocusedApp).occludesParent();
+        doReturn(ROTATION_90).when(mDisplayContent).rotationForActivityInDifferentOrientation(
+                eq(recentsActivity));
+        mDisplayContent.mFixedRotationTransitionListener.onStartRecentsAnimation(recentsActivity);
+        assertFalse(recentsActivity.hasFixedRotationTransform());
     }
 
     @Test
@@ -1274,9 +1316,10 @@ public class DisplayContentTests extends WindowTestsBase {
 
         final DisplayRotation dr = dc.getDisplayRotation();
         doCallRealMethod().when(dr).updateRotationUnchecked(anyBoolean());
-        Mockito.doReturn(ROTATION_90).when(dr).rotationForOrientation(anyInt(), anyInt());
+        // Rotate 180 degree so the display doesn't have configuration change. This condition is
+        // used for the later verification of stop-freezing (without setting mWaitingForConfig).
+        doReturn((dr.getRotation() + 2) % 4).when(dr).rotationForOrientation(anyInt(), anyInt());
         final boolean[] continued = new boolean[1];
-        // TODO(display-merge): Remove cast
         doAnswer(
                 invocation -> {
                     continued[0] = true;
@@ -1302,9 +1345,16 @@ public class DisplayContentTests extends WindowTestsBase {
         dc.setRotationAnimation(null);
 
         mWm.updateRotation(true /* alwaysSendConfiguration */, false /* forceRelayout */);
+        // If remote rotation is not finished, the display should not be able to unfreeze.
+        mWm.stopFreezingDisplayLocked();
+        assertTrue(mWm.mDisplayFrozen);
+
         assertTrue(called[0]);
         waitUntilHandlersIdle();
         assertTrue(continued[0]);
+
+        mWm.stopFreezingDisplayLocked();
+        assertFalse(mWm.mDisplayFrozen);
     }
 
     @Test

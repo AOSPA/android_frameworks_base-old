@@ -280,11 +280,15 @@ public class AppsFilter {
 
         @Override
         public void onCompatChange(String packageName) {
-            updateEnabledState(mPmInternal.getPackage(packageName));
+            AndroidPackage pkg = mPmInternal.getPackage(packageName);
+            if (pkg == null) {
+                return;
+            }
+            updateEnabledState(pkg);
             mAppsFilter.updateShouldFilterCacheForPackage(packageName);
         }
 
-        private void updateEnabledState(AndroidPackage pkg) {
+        private void updateEnabledState(@NonNull AndroidPackage pkg) {
             // TODO(b/135203078): Do not use toAppInfo
             final boolean enabled = mInjector.getCompatibility().isChangeEnabledInternal(
                     PackageManager.FILTER_APPLICATION_QUERY, pkg.toAppInfoWithoutState());
@@ -297,12 +301,12 @@ public class AppsFilter {
 
         @Override
         public void updatePackageState(PackageSetting setting, boolean removed) {
-            final boolean enableLogging =
+            final boolean enableLogging = setting.pkg != null &&
                     !removed && (setting.pkg.isTestOnly() || setting.pkg.isDebuggable());
             enableLogging(setting.appId, enableLogging);
             if (removed) {
-                mDisabledPackages.remove(setting.pkg.getPackageName());
-            } else {
+                mDisabledPackages.remove(setting.name);
+            } else if (setting.pkg != null) {
                 updateEnabledState(setting.pkg);
             }
         }
@@ -495,10 +499,15 @@ public class AppsFilter {
      * Adds a package that should be considered when filtering visibility between apps.
      *
      * @param newPkgSetting the new setting being added
+     * @param isReplace if the package is being replaced and may need extra cleanup.
      */
-    public void addPackage(PackageSetting newPkgSetting) {
+    public void addPackage(PackageSetting newPkgSetting, boolean isReplace) {
         Trace.traceBegin(TRACE_TAG_PACKAGE_MANAGER, "filter.addPackage");
         try {
+            if (isReplace) {
+                // let's first remove any prior rules for this package
+                removePackage(newPkgSetting);
+            }
             mStateProvider.runWithState((settings, users) -> {
                 addPackageInternal(newPkgSetting, settings);
                 if (mShouldFilterCache != null) {
@@ -578,8 +587,9 @@ public class AppsFilter {
                 }
             }
             // if either package instruments the other, mark both as visible to one another
-            if (pkgInstruments(newPkgSetting, existingSetting)
-                    || pkgInstruments(existingSetting, newPkgSetting)) {
+            if (newPkgSetting.pkg != null && existingSetting.pkg != null
+                    && (pkgInstruments(newPkgSetting.pkg, existingSetting.pkg)
+                    || pkgInstruments(existingSetting.pkg, newPkgSetting.pkg))) {
                 mQueriesViaPackage.add(newPkgSetting.appId, existingSetting.appId);
                 mQueriesViaPackage.add(existingSetting.appId, newPkgSetting.appId);
             }
@@ -698,12 +708,15 @@ public class AppsFilter {
         return ret;
     }
 
+    /**
+     * This method recomputes all component / intent-based visibility and is intended to match the
+     * relevant logic of {@link #addPackageInternal(PackageSetting, ArrayMap)}
+     */
     private void recomputeComponentVisibility(ArrayMap<String, PackageSetting> existingSettings) {
         mQueriesViaComponent.clear();
         for (int i = existingSettings.size() - 1; i >= 0; i--) {
             PackageSetting setting = existingSettings.valueAt(i);
-            if (setting.pkg == null
-                    || mForceQueryable.contains(setting.appId)) {
+            if (setting.pkg == null || requestsQueryAllPackages(setting.pkg)) {
                 continue;
             }
             for (int j = existingSettings.size() - 1; j >= 0; j--) {
@@ -711,7 +724,7 @@ public class AppsFilter {
                     continue;
                 }
                 final PackageSetting otherSetting = existingSettings.valueAt(j);
-                if (otherSetting.pkg == null) {
+                if (otherSetting.pkg == null || mForceQueryable.contains(otherSetting.appId)) {
                     continue;
                 }
                 if (canQueryViaComponents(setting.pkg, otherSetting.pkg, mProtectedBroadcasts)) {
@@ -777,12 +790,20 @@ public class AppsFilter {
     }
 
     /**
+     * Equivalent to calling {@link #addPackage(PackageSetting, boolean)} with {@code isReplace}
+     * equal to {@code false}.
+     * @see AppsFilter#addPackage(PackageSetting, boolean)
+     */
+    public void addPackage(PackageSetting newPkgSetting) {
+        addPackage(newPkgSetting, false /* isReplace */);
+    }
+
+    /**
      * Removes a package for consideration when filtering visibility between apps.
      *
      * @param setting the setting of the package being removed.
      */
     public void removePackage(PackageSetting setting) {
-        removeAppIdFromVisibilityCache(setting.appId);
         mStateProvider.runWithState((settings, users) -> {
             final int userCount = users.length;
             for (int u = 0; u < userCount; u++) {
@@ -805,17 +826,7 @@ public class AppsFilter {
                 mQueriesViaPackage.remove(mQueriesViaPackage.keyAt(i), setting.appId);
             }
 
-            // re-add other shared user members to re-establish visibility between them and other
-            // packages
-            if (setting.sharedUser != null) {
-                for (int i = setting.sharedUser.packages.size() - 1; i >= 0; i--) {
-                    if (setting.sharedUser.packages.valueAt(i) == setting) {
-                        continue;
-                    }
-                    addPackageInternal(
-                            setting.sharedUser.packages.valueAt(i), settings);
-                }
-            }
+            mForceQueryable.remove(setting.appId);
 
             if (setting.pkg != null && !setting.pkg.getProtectedBroadcasts().isEmpty()) {
                 final String removingPackageName = setting.pkg.getPackageName();
@@ -829,6 +840,21 @@ public class AppsFilter {
             mOverlayReferenceMapper.removePkg(setting.name);
             mFeatureConfig.updatePackageState(setting, true /*removed*/);
 
+            // After removing all traces of the package, if it's part of a shared user, re-add other
+            // shared user members to re-establish visibility between them and other packages.
+            // NOTE: this must come after all removals from data structures but before we update the
+            //       cache
+            if (setting.sharedUser != null) {
+                for (int i = setting.sharedUser.packages.size() - 1; i >= 0; i--) {
+                    if (setting.sharedUser.packages.valueAt(i) == setting) {
+                        continue;
+                    }
+                    addPackageInternal(
+                            setting.sharedUser.packages.valueAt(i), settings);
+                }
+            }
+
+            removeAppIdFromVisibilityCache(setting.appId);
             if (mShouldFilterCache != null && setting.sharedUser != null) {
                 for (int i = setting.sharedUser.packages.size() - 1; i >= 0; i--) {
                     PackageSetting siblingSetting = setting.sharedUser.packages.valueAt(i);
@@ -840,9 +866,6 @@ public class AppsFilter {
                 }
             }
         });
-        mForceQueryable.remove(setting.appId);
-
-
     }
 
     /**
@@ -1091,16 +1114,14 @@ public class AppsFilter {
     }
 
     /** Returns {@code true} if the source package instruments the target package. */
-    private static boolean pkgInstruments(PackageSetting source, PackageSetting target) {
+    private static boolean pkgInstruments(
+            @NonNull AndroidPackage source, @NonNull AndroidPackage target) {
         try {
             Trace.traceBegin(TRACE_TAG_PACKAGE_MANAGER, "pkgInstruments");
-            final String packageName = target.pkg.getPackageName();
-            final List<ParsedInstrumentation> inst = source.pkg.getInstrumentations();
+            final String packageName = target.getPackageName();
+            final List<ParsedInstrumentation> inst = source.getInstrumentations();
             for (int i = ArrayUtils.size(inst) - 1; i >= 0; i--) {
                 if (Objects.equals(inst.get(i).getTargetPackage(), packageName)) {
-                    if (DEBUG_LOGGING) {
-                        log(source, target, "instrumentation");
-                    }
                     return true;
                 }
             }

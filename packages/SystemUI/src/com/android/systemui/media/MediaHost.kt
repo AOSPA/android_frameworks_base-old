@@ -1,10 +1,10 @@
 package com.android.systemui.media
 
-import android.graphics.PointF
 import android.graphics.Rect
 import android.util.ArraySet
 import android.view.View
 import android.view.View.OnAttachStateChangeListener
+import com.android.systemui.util.animation.DisappearParameters
 import com.android.systemui.util.animation.MeasurementInput
 import com.android.systemui.util.animation.MeasurementOutput
 import com.android.systemui.util.animation.UniqueObjectHostView
@@ -14,8 +14,7 @@ import javax.inject.Inject
 class MediaHost @Inject constructor(
     private val state: MediaHostStateHolder,
     private val mediaHierarchyManager: MediaHierarchyManager,
-    private val mediaDataManager: MediaDataManager,
-    private val mediaDataManagerCombineLatest: MediaDataCombineLatest,
+    private val mediaDataFilter: MediaDataFilter,
     private val mediaHostStatesManager: MediaHostStatesManager
 ) : MediaHostState by state {
     lateinit var hostView: UniqueObjectHostView
@@ -80,12 +79,12 @@ class MediaHost @Inject constructor(
                 // be a delay until the views and the controllers are initialized, leaving us
                 // with either a blank view or the controllers not yet initialized and the
                 // measuring wrong
-                mediaDataManagerCombineLatest.addListener(listener)
+                mediaDataFilter.addListener(listener)
                 updateViewVisibility()
             }
 
             override fun onViewDetachedFromWindow(v: View?) {
-                mediaDataManagerCombineLatest.removeListener(listener)
+                mediaDataFilter.removeListener(listener)
             }
         })
 
@@ -100,7 +99,7 @@ class MediaHost @Inject constructor(
                 }
                 // This will trigger a state change that ensures that we now have a state available
                 state.measurementInput = input
-                return mediaHostStatesManager.getPlayerDimensions(state)
+                return mediaHostStatesManager.updateCarouselDimensions(location, state)
             }
         }
 
@@ -114,9 +113,9 @@ class MediaHost @Inject constructor(
 
     private fun updateViewVisibility() {
         visible = if (showsOnlyActiveMedia) {
-            mediaDataManager.hasActiveMedia()
+            mediaDataFilter.hasActiveMedia()
         } else {
-            mediaDataManager.hasAnyMedia()
+            mediaDataFilter.hasAnyMedia()
         }
         val newVisibility = if (visible) View.VISIBLE else View.GONE
         if (newVisibility != hostView.visibility) {
@@ -128,8 +127,6 @@ class MediaHost @Inject constructor(
     }
 
     class MediaHostStateHolder @Inject constructor() : MediaHostState {
-        private var gonePivot: PointF = PointF()
-
         override var measurementInput: MeasurementInput? = null
             set(value) {
                 if (value?.equals(field) != true) {
@@ -172,15 +169,18 @@ class MediaHost @Inject constructor(
                 changedListener?.invoke()
             }
 
-        override fun getPivotX(): Float = gonePivot.x
-        override fun getPivotY(): Float = gonePivot.y
-        override fun setGonePivot(x: Float, y: Float) {
-            if (gonePivot.equals(x, y)) {
-                return
+        override var disappearParameters: DisappearParameters = DisappearParameters()
+            set(value) {
+                val newHash = value.hashCode()
+                if (lastDisappearHash.equals(newHash)) {
+                    return
+                }
+                field = value
+                lastDisappearHash = newHash
+                changedListener?.invoke()
             }
-            gonePivot.set(x, y)
-            changedListener?.invoke()
-        }
+
+        private var lastDisappearHash = disappearParameters.hashCode()
 
         /**
          * A listener for all changes. This won't be copied over when invoking [copy]
@@ -196,7 +196,7 @@ class MediaHost @Inject constructor(
             mediaHostState.showsOnlyActiveMedia = showsOnlyActiveMedia
             mediaHostState.measurementInput = measurementInput?.copy()
             mediaHostState.visible = visible
-            mediaHostState.gonePivot.set(gonePivot)
+            mediaHostState.disappearParameters = disappearParameters.deepCopy()
             mediaHostState.falsingProtectionNeeded = falsingProtectionNeeded
             return mediaHostState
         }
@@ -220,7 +220,7 @@ class MediaHost @Inject constructor(
             if (falsingProtectionNeeded != other.falsingProtectionNeeded) {
                 return false
             }
-            if (!gonePivot.equals(other.getPivotX(), other.getPivotY())) {
+            if (!disappearParameters.equals(other.disappearParameters)) {
                 return false
             }
             return true
@@ -232,12 +232,23 @@ class MediaHost @Inject constructor(
             result = 31 * result + falsingProtectionNeeded.hashCode()
             result = 31 * result + showsOnlyActiveMedia.hashCode()
             result = 31 * result + if (visible) 1 else 2
-            result = 31 * result + gonePivot.hashCode()
+            result = 31 * result + disappearParameters.hashCode()
             return result
         }
     }
 }
 
+/**
+ * A description of a media host state that describes the behavior whenever the media carousel
+ * is hosted. The HostState notifies the media players of changes to their properties, who
+ * in turn will create view states from it.
+ * When adding a new property to this, make sure to update the listener and notify them
+ * about the changes.
+ * In case you need to have a different rendering based on the state, you can add a new
+ * constraintState to the [MediaViewController]. Otherwise, similar host states will resolve
+ * to the same viewstate, a behavior that is described in [CacheKey]. Make sure to only update
+ * that key if the underlying view needs to have a different measurement.
+ */
 interface MediaHostState {
 
     /**
@@ -268,23 +279,11 @@ interface MediaHostState {
     var falsingProtectionNeeded: Boolean
 
     /**
-     * Sets the pivot point when clipping the height or width.
-     * Clipping happens when animating visibility when we're visible in QS but not on QQS,
-     * for example.
+     * The parameters how the view disappears from this location when going to a host that's not
+     * visible. If modified, make sure to set this value again on the host to ensure the values
+     * are propagated
      */
-    fun setGonePivot(x: Float, y: Float)
-
-    /**
-     * x position of pivot, from 0 to 1
-     * @see [setGonePivot]
-     */
-    fun getPivotX(): Float
-
-    /**
-     * y position of pivot, from 0 to 1
-     * @see [setGonePivot]
-     */
-    fun getPivotY(): Float
+    var disappearParameters: DisappearParameters
 
     /**
      * Get a copy of this view state, deepcopying all appropriate members

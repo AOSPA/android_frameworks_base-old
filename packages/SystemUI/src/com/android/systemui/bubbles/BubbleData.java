@@ -59,7 +59,7 @@ import javax.inject.Singleton;
 @Singleton
 public class BubbleData {
 
-    BubbleLogger mLogger = new BubbleLoggerImpl();
+    private BubbleLogger mLogger = new BubbleLoggerImpl();
 
     private static final String TAG = TAG_WITH_CLASS_NAME ? "BubbleData" : TAG_BUBBLES;
 
@@ -137,6 +137,7 @@ public class BubbleData {
 
     @Nullable
     private BubbleController.NotificationSuppressionChangedListener mSuppressionListener;
+    private BubbleController.PendingIntentCanceledListener mCancelledListener;
 
     /**
      * We track groups with summaries that aren't visibly displayed but still kept around because
@@ -165,6 +166,11 @@ public class BubbleData {
     public void setSuppressionChangedListener(
             BubbleController.NotificationSuppressionChangedListener listener) {
         mSuppressionListener = listener;
+    }
+
+    public void setPendingIntentCancelledListener(
+            BubbleController.PendingIntentCanceledListener listener) {
+        mCancelledListener = listener;
     }
 
     public boolean hasBubbles() {
@@ -236,7 +242,7 @@ public class BubbleData {
                 bubbleToReturn = mPendingBubbles.get(key);
             } else if (entry != null) {
                 // New bubble
-                bubbleToReturn = new Bubble(entry, mSuppressionListener);
+                bubbleToReturn = new Bubble(entry, mSuppressionListener, mCancelledListener);
             } else {
                 // Persisted bubble being promoted
                 bubbleToReturn = persistedBubble;
@@ -366,11 +372,19 @@ public class BubbleData {
             validShortcutIds.add(info.getId());
         }
 
-        final Predicate<Bubble> invalidBubblesFromPackage = bubble ->
-                packageName.equals(bubble.getPackageName())
-                        && (bubble.getShortcutInfo() == null
-                            || !bubble.getShortcutInfo().isEnabled()
-                            || !validShortcutIds.contains(bubble.getShortcutInfo().getId()));
+        final Predicate<Bubble> invalidBubblesFromPackage = bubble -> {
+            final boolean bubbleIsFromPackage = packageName.equals(bubble.getPackageName());
+            final boolean isShortcutBubble = bubble.hasMetadataShortcutId();
+            if (!bubbleIsFromPackage || !isShortcutBubble) {
+                return false;
+            }
+            final boolean hasShortcutIdAndValidShortcut =
+                    bubble.hasMetadataShortcutId()
+                            && bubble.getShortcutInfo() != null
+                            && bubble.getShortcutInfo().isEnabled()
+                            && validShortcutIds.contains(bubble.getShortcutInfo().getId());
+            return bubbleIsFromPackage && !hasShortcutIdAndValidShortcut;
+        };
 
         final Consumer<Bubble> removeBubble = bubble ->
                 dismissBubbleWithKey(bubble.getKey(), reason);
@@ -468,6 +482,9 @@ public class BubbleData {
                 if (DEBUG_BUBBLE_DATA) {
                     Log.d(TAG, "Cancel overflow bubble: " + b);
                 }
+                if (b != null) {
+                    b.stopInflation();
+                }
                 mLogger.logOverflowRemove(b, reason);
                 mStateChange.bubbleRemoved(b, reason);
                 mOverflowBubbles.remove(b);
@@ -475,6 +492,7 @@ public class BubbleData {
             return;
         }
         Bubble bubbleToRemove = mBubbles.get(indexToRemove);
+        bubbleToRemove.stopInflation();
         if (mBubbles.size() == 1) {
             // Going to become empty, handle specially.
             setExpandedInternal(false);

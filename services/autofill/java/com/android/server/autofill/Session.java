@@ -73,6 +73,7 @@ import android.service.autofill.FieldClassificationUserData;
 import android.service.autofill.FillContext;
 import android.service.autofill.FillRequest;
 import android.service.autofill.FillResponse;
+import android.service.autofill.InlinePresentation;
 import android.service.autofill.InternalSanitizer;
 import android.service.autofill.InternalValidator;
 import android.service.autofill.SaveInfo;
@@ -154,6 +155,9 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
      * <p>It's always a positive number, to make it easier to embed it in a long.
      */
     public final int id;
+
+    /** userId the session belongs to */
+    public final int userId;
 
     /** uid the session is for */
     public final int uid;
@@ -823,6 +827,7 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
         }
         id = sessionId;
         mFlags = flags;
+        this.userId = userId;
         this.taskId = taskId;
         this.uid = uid;
         mStartTime = SystemClock.elapsedRealtime();
@@ -1433,7 +1438,10 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
                     mClientState = newClientState;
                 }
                 final Dataset dataset = (Dataset) result;
-                authenticatedResponse.getDatasets().set(datasetIdx, dataset);
+                final Dataset oldDataset = authenticatedResponse.getDatasets().get(datasetIdx);
+                if (!isPinnedDataset(oldDataset)) {
+                    authenticatedResponse.getDatasets().set(datasetIdx, dataset);
+                }
                 autoFill(requestId, datasetIdx, dataset, false);
             } else {
                 Slog.w(TAG, "invalid index (" + datasetIdx + ") for authentication id "
@@ -1449,6 +1457,27 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
                     MetricsEvent.AUTOFILL_INVALID_AUTHENTICATION);
             processNullResponseLocked(requestId, 0);
         }
+    }
+
+    /**
+     * A dataset can potentially have multiple fields, and it's possible that some of the fields'
+     * has inline presentation and some don't. It's also possible that some of the fields'
+     * inline presentation is pinned and some isn't. So the concept of whether a dataset is
+     * pinned or not is ill-defined. Here we say a dataset is pinned if any of the field has a
+     * pinned inline presentation in the dataset. It's not ideal but hopefully it is sufficient
+     * for most of the cases.
+     */
+    private static boolean isPinnedDataset(@Nullable Dataset dataset) {
+        if (dataset != null && dataset.getFieldIds() != null) {
+            final int numOfFields = dataset.getFieldIds().size();
+            for (int i = 0; i < numOfFields; i++) {
+                final InlinePresentation inlinePresentation = dataset.getFieldInlinePresentation(i);
+                if (inlinePresentation != null && inlinePresentation.isPinned()) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     @GuardedBy("mLock")
@@ -2986,7 +3015,7 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
                         mInlineSessionController.setInlineFillUiLocked(
                                 InlineFillUi.emptyUi(focusedId));
                     }
-                }, remoteRenderService);
+                }, remoteRenderService, userId, id);
         return mInlineSessionController.setInlineFillUiLocked(inlineFillUi);
     }
 
@@ -3296,7 +3325,7 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
                                         mInlineSessionController.setInlineFillUiLocked(
                                                 InlineFillUi.emptyUi(mCurrentViewId));
                                     }
-                                }, mService.getRemoteInlineSuggestionRenderServiceLocked());
+                                }, mService.getRemoteInlineSuggestionRenderServiceLocked(), userId);
                     }
                 };
 
@@ -3796,6 +3825,12 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
         if (mCurrentViewId != null) {
             mInlineSessionController.destroyLocked(mCurrentViewId);
         }
+        final RemoteInlineSuggestionRenderService remoteRenderService =
+                mService.getRemoteInlineSuggestionRenderServiceLocked();
+        if (remoteRenderService != null) {
+            remoteRenderService.destroySuggestionViews(userId, id);
+        }
+
         mDestroyed = true;
 
         // Log metrics

@@ -4365,9 +4365,11 @@ public class ConnectivityService extends IConnectivityManager.Stub
         enforceInternetPermission();
         final int uid = Binder.getCallingUid();
         final int connectivityInfo = encodeBool(hasConnectivity);
-        mHandler.sendMessage(
-                mHandler.obtainMessage(EVENT_REVALIDATE_NETWORK, uid, connectivityInfo, network));
 
+        // Handle ConnectivityDiagnostics event before attempting to revalidate the network. This
+        // forces an ordering of ConnectivityDiagnostics events in the case where hasConnectivity
+        // does not match the known connectivity of the network - this causes NetworkMonitor to
+        // revalidate the network and generate a ConnectivityDiagnostics ConnectivityReport event.
         final NetworkAgentInfo nai;
         if (network == null) {
             nai = getDefaultNetwork();
@@ -4380,6 +4382,9 @@ public class ConnectivityService extends IConnectivityManager.Stub
                             ConnectivityDiagnosticsHandler.EVENT_NETWORK_CONNECTIVITY_REPORTED,
                             connectivityInfo, 0, nai));
         }
+
+        mHandler.sendMessage(
+                mHandler.obtainMessage(EVENT_REVALIDATE_NETWORK, uid, connectivityInfo, network));
     }
 
     private void handleReportNetworkConnectivity(
@@ -6979,8 +6984,12 @@ public class ConnectivityService extends IConnectivityManager.Stub
             updateDataActivityTracking(newDefaultNetwork, oldDefaultNetwork);
             // restore permission to actual value if it becomes the default network again..
             if (newDefaultNetwork != null && !newDefaultNetwork.isVPN()) {
-                updateNetworkPermissions(newDefaultNetwork,
-                        newDefaultNetwork.networkCapabilities);
+                try {
+                    mNMS.setNetworkPermission(newDefaultNetwork.network.netId,
+                            getNetworkPermission(newDefaultNetwork.networkCapabilities));
+                } catch (RemoteException | ServiceSpecificException e) {
+                    loge("Exception in setNetworkPermission: " + e);
+                }
             }
             // Notify system services of the new default.
             makeDefault(newDefaultNetwork);

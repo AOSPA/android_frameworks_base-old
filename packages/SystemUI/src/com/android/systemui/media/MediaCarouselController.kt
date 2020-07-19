@@ -2,8 +2,11 @@ package com.android.systemui.media
 
 import android.content.Context
 import android.content.Intent
+import android.content.res.Configuration
 import android.graphics.Color
 import android.provider.Settings.ACTION_MEDIA_CONTROLS_SETTINGS
+import android.util.Log
+import android.util.MathUtils
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -23,6 +26,7 @@ import javax.inject.Inject
 import javax.inject.Provider
 import javax.inject.Singleton
 
+private const val TAG = "MediaCarouselController"
 private val settingsIntent = Intent().setAction(ACTION_MEDIA_CONTROLS_SETTINGS)
 
 /**
@@ -37,9 +41,8 @@ class MediaCarouselController @Inject constructor(
     private val mediaHostStatesManager: MediaHostStatesManager,
     private val activityStarter: ActivityStarter,
     @Main executor: DelayableExecutor,
-    mediaManager: MediaDataCombineLatest,
+    mediaManager: MediaDataFilter,
     configurationController: ConfigurationController,
-    mediaDataManager: MediaDataManager,
     falsingManager: FalsingManager
 ) {
     /**
@@ -96,7 +99,6 @@ class MediaCarouselController @Inject constructor(
      * The measured height of the carousel
      */
     private var carouselMeasureHeight: Int = 0
-    private var playerWidthPlusPadding: Int = 0
     private var desiredHostState: MediaHostState? = null
     private val mediaCarousel: MediaScrollView
     private val mediaCarouselScrollHandler: MediaCarouselScrollHandler
@@ -108,6 +110,15 @@ class MediaCarouselController @Inject constructor(
     private val pageIndicator: PageIndicator
     private val visualStabilityCallback: VisualStabilityManager.Callback
     private var needsReordering: Boolean = false
+    private var isRtl: Boolean = false
+        set(value) {
+            if (value != field) {
+                field = value
+                mediaFrame.layoutDirection =
+                        if (value) View.LAYOUT_DIRECTION_RTL else View.LAYOUT_DIRECTION_LTR
+                mediaCarouselScrollHandler.scrollToStart()
+            }
+        }
     private var currentlyExpanded = true
         set(value) {
             if (field != value) {
@@ -126,6 +137,11 @@ class MediaCarouselController @Inject constructor(
         override fun onOverlayChanged() {
             inflateSettingsButton()
         }
+
+        override fun onConfigChanged(newConfig: Configuration?) {
+            if (newConfig == null) return
+            isRtl = newConfig.layoutDirection == View.LAYOUT_DIRECTION_RTL
+        }
     }
 
     init {
@@ -133,8 +149,9 @@ class MediaCarouselController @Inject constructor(
         mediaCarousel = mediaFrame.requireViewById(R.id.media_carousel_scroller)
         pageIndicator = mediaFrame.requireViewById(R.id.media_page_indicator)
         mediaCarouselScrollHandler = MediaCarouselScrollHandler(mediaCarousel, pageIndicator,
-                executor, mediaDataManager::onSwipeToDismiss, this::updatePageIndicatorLocation,
+                executor, mediaManager::onSwipeToDismiss, this::updatePageIndicatorLocation,
                 falsingManager)
+        isRtl = context.resources.configuration.layoutDirection == View.LAYOUT_DIRECTION_RTL
         inflateSettingsButton()
         mediaContent = mediaCarousel.requireViewById(R.id.media_carousel)
         configurationController.addCallback(configListener)
@@ -144,7 +161,7 @@ class MediaCarouselController @Inject constructor(
                 reorderAllPlayers()
             }
             // Let's reset our scroll position
-            mediaCarousel.scrollX = 0
+            mediaCarouselScrollHandler.scrollToStart()
         }
         visualStabilityManager.addReorderingAllowedCallback(visualStabilityCallback,
                 true /* persistent */)
@@ -196,8 +213,13 @@ class MediaCarouselController @Inject constructor(
     }
 
     private fun inflateMediaCarousel(): ViewGroup {
-        return LayoutInflater.from(context).inflate(R.layout.media_carousel,
+        val mediaCarousel = LayoutInflater.from(context).inflate(R.layout.media_carousel,
                 UniqueObjectHostView(context), false) as ViewGroup
+        // Because this is inflated when not attached to the true view hierarchy, it resolves some
+        // potential issues to force that the layout direction is defined by the locale
+        // (rather than inherited from the parent, which would resolve to LTR when unattached).
+        mediaCarousel.layoutDirection = View.LAYOUT_DIRECTION_LOCALE
+        return mediaCarousel
     }
 
     private fun reorderAllPlayers() {
@@ -216,7 +238,9 @@ class MediaCarouselController @Inject constructor(
         val oldData = mediaPlayers[oldKey]
         if (oldData != null) {
             val oldData = mediaPlayers.remove(oldKey)
-            mediaPlayers.put(key, oldData!!)
+            mediaPlayers.put(key, oldData!!)?.let {
+                Log.wtf(TAG, "new key $key already exists when migrating from $oldKey")
+            }
         }
         var existingPlayer = mediaPlayers[key]
         if (existingPlayer == null) {
@@ -228,6 +252,7 @@ class MediaCarouselController @Inject constructor(
             val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.WRAP_CONTENT)
             existingPlayer.view?.player?.setLayoutParams(lp)
+            existingPlayer.bind(data)
             existingPlayer.setListening(currentlyExpanded)
             updatePlayerToState(existingPlayer, noAnimation = true)
             if (existingPlayer.isPlaying) {
@@ -235,19 +260,26 @@ class MediaCarouselController @Inject constructor(
             } else {
                 mediaContent.addView(existingPlayer.view?.player)
             }
-        } else if (existingPlayer.isPlaying &&
-                mediaContent.indexOfChild(existingPlayer.view?.player) != 0) {
-            if (visualStabilityManager.isReorderingAllowed) {
-                mediaContent.removeView(existingPlayer.view?.player)
-                mediaContent.addView(existingPlayer.view?.player, 0)
-            } else {
-                needsReordering = true
+        } else {
+            existingPlayer.bind(data)
+            if (existingPlayer.isPlaying &&
+                    mediaContent.indexOfChild(existingPlayer.view?.player) != 0) {
+                if (visualStabilityManager.isReorderingAllowed) {
+                    mediaContent.removeView(existingPlayer.view?.player)
+                    mediaContent.addView(existingPlayer.view?.player, 0)
+                } else {
+                    needsReordering = true
+                }
             }
         }
-        existingPlayer?.bind(data)
         updatePageIndicator()
         mediaCarouselScrollHandler.onPlayersChanged()
         mediaCarousel.requiresRemeasuring = true
+        // Check postcondition: mediaContent should have the same number of children as there are
+        // elements in mediaPlayers.
+        if (mediaPlayers.size != mediaContent.childCount) {
+            Log.wtf(TAG, "Size of players list and number of views in carousel are out of sync")
+        }
     }
 
     private fun removePlayer(key: String) {
@@ -278,6 +310,7 @@ class MediaCarouselController @Inject constructor(
         if (numPages == 1) {
             pageIndicator.setLocation(0f)
         }
+        updatePageIndicatorAlpha()
     }
 
     /**
@@ -308,13 +341,40 @@ class MediaCarouselController @Inject constructor(
                 updatePlayerToState(mediaPlayer, immediately)
             }
             maybeResetSettingsCog()
+            updatePageIndicatorAlpha()
         }
+    }
+
+    private fun updatePageIndicatorAlpha() {
+        val hostStates = mediaHostStatesManager.mediaHostStates
+        val endIsVisible = hostStates[currentEndLocation]?.visible ?: false
+        val startIsVisible = hostStates[currentStartLocation]?.visible ?: false
+        val startAlpha = if (startIsVisible) 1.0f else 0.0f
+        val endAlpha = if (endIsVisible) 1.0f else 0.0f
+        var alpha = 1.0f
+        if (!endIsVisible || !startIsVisible) {
+            var progress = currentTransitionProgress
+            if (!endIsVisible) {
+                progress = 1.0f - progress
+            }
+            // Let's fade in quickly at the end where the view is visible
+            progress = MathUtils.constrain(
+                    MathUtils.map(0.95f, 1.0f, 0.0f, 1.0f, progress),
+                    0.0f,
+                    1.0f)
+            alpha = MathUtils.lerp(startAlpha, endAlpha, progress)
+        }
+        pageIndicator.alpha = alpha
     }
 
     private fun updatePageIndicatorLocation() {
         // Update the location of the page indicator, carousel clipping
-        pageIndicator.translationX = (currentCarouselWidth - pageIndicator.width) / 2.0f +
-                mediaCarouselScrollHandler.contentTranslation
+        val translationX = if (isRtl) {
+            (pageIndicator.width - currentCarouselWidth) / 2.0f
+        } else {
+            (currentCarouselWidth - pageIndicator.width) / 2.0f
+        }
+        pageIndicator.translationX = translationX + mediaCarouselScrollHandler.contentTranslation
         val layoutParams = pageIndicator.layoutParams as ViewGroup.MarginLayoutParams
         pageIndicator.translationY = (currentCarouselHeight - pageIndicator.height -
                 layoutParams.bottomMargin).toFloat()
@@ -328,13 +388,16 @@ class MediaCarouselController @Inject constructor(
         var height = 0
         for (mediaPlayer in mediaPlayers.values) {
             val controller = mediaPlayer.mediaViewController
-            width = Math.max(width, controller.currentWidth)
-            height = Math.max(height, controller.currentHeight)
+            // When transitioning the view to gone, the view gets smaller, but the translation
+            // Doesn't, let's add the translation
+            width = Math.max(width, controller.currentWidth + controller.translationX.toInt())
+            height = Math.max(height, controller.currentHeight + controller.translationY.toInt())
         }
         if (width != currentCarouselWidth || height != currentCarouselHeight) {
             currentCarouselWidth = width
             currentCarouselHeight = height
-            mediaCarouselScrollHandler.setCarouselBounds(currentCarouselWidth, currentCarouselHeight)
+            mediaCarouselScrollHandler.setCarouselBounds(
+                    currentCarouselWidth, currentCarouselHeight)
             updatePageIndicatorLocation()
         }
     }
@@ -348,7 +411,7 @@ class MediaCarouselController @Inject constructor(
         if (currentlyShowingOnlyActive != endShowsActive ||
                 ((currentTransitionProgress != 1.0f && currentTransitionProgress != 0.0f) &&
                             startShowsActive != endShowsActive)) {
-            /// Whenever we're transitioning from between differing states or the endstate differs
+            // Whenever we're transitioning from between differing states or the endstate differs
             // we reset the translation
             currentlyShowingOnlyActive = endShowsActive
             mediaCarouselScrollHandler.resetTranslation(animate = true)
@@ -413,17 +476,18 @@ class MediaCarouselController @Inject constructor(
         val width = desiredHostState?.measurementInput?.width ?: 0
         val height = desiredHostState?.measurementInput?.height ?: 0
         if (width != carouselMeasureWidth && width != 0 ||
-                height != carouselMeasureWidth && height != 0) {
+                height != carouselMeasureHeight && height != 0) {
             carouselMeasureWidth = width
             carouselMeasureHeight = height
-            playerWidthPlusPadding = carouselMeasureWidth + context.resources.getDimensionPixelSize(
-                    R.dimen.qs_media_padding)
-            mediaCarouselScrollHandler.playerWidthPlusPadding = playerWidthPlusPadding
+            val playerWidthPlusPadding = carouselMeasureWidth +
+                    context.resources.getDimensionPixelSize(R.dimen.qs_media_padding)
             // Let's remeasure the carousel
             val widthSpec = desiredHostState?.measurementInput?.widthMeasureSpec ?: 0
             val heightSpec = desiredHostState?.measurementInput?.heightMeasureSpec ?: 0
             mediaCarousel.measure(widthSpec, heightSpec)
             mediaCarousel.layout(0, 0, width, mediaCarousel.measuredHeight)
+            // Update the padding after layout; view widths are used in RTL to calculate scrollX
+            mediaCarouselScrollHandler.playerWidthPlusPadding = playerWidthPlusPadding
         }
     }
 }

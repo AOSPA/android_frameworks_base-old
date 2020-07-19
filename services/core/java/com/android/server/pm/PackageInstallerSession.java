@@ -409,6 +409,7 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
 
     private boolean mDataLoaderFinished = false;
 
+    // TODO(b/159663586): should be protected by mLock
     private IncrementalFileStorages mIncrementalFileStorages;
 
     private static final FileFilter sAddedApkFilter = new FileFilter() {
@@ -1373,7 +1374,7 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
     private boolean markAsSealed(@NonNull IntentSender statusReceiver, boolean forTransfer) {
         Objects.requireNonNull(statusReceiver);
 
-        List<PackageInstallerSession> childSessions = getChildSessions();
+        List<PackageInstallerSession> childSessions = getChildSessionsNotLocked();
 
         synchronized (mLock) {
             assertCallerIsOwnerOrRootLocked();
@@ -1456,7 +1457,11 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
      *
      * <p> This method is handy to prevent potential deadlocks (b/123391593)
      */
-    private @Nullable List<PackageInstallerSession> getChildSessions() {
+    private @Nullable List<PackageInstallerSession> getChildSessionsNotLocked() {
+        if (Thread.holdsLock(mLock)) {
+            Slog.wtf(TAG, "Calling thread " + Thread.currentThread().getName()
+                    + " is holding mLock", new Throwable());
+        }
         List<PackageInstallerSession> childSessions = null;
         if (isMultiPackage()) {
             final int[] childSessionIds = getChildSessionIds();
@@ -1625,7 +1630,7 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
                 return;
             }
         }
-        List<PackageInstallerSession> childSessions = getChildSessions();
+        List<PackageInstallerSession> childSessions = getChildSessionsNotLocked();
         synchronized (mLock) {
             try {
                 sealLocked(childSessions);
@@ -1669,7 +1674,7 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
             throw new SecurityException("Can only transfer sessions that use public options");
         }
 
-        List<PackageInstallerSession> childSessions = getChildSessions();
+        List<PackageInstallerSession> childSessions = getChildSessionsNotLocked();
 
         synchronized (mLock) {
             assertCallerIsOwnerOrRootLocked();
@@ -1721,7 +1726,7 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
         // outside of the lock, because reading the child
         // sessions with the lock held could lead to deadlock
         // (b/123391593).
-        List<PackageInstallerSession> childSessions = getChildSessions();
+        List<PackageInstallerSession> childSessions = getChildSessionsNotLocked();
 
         try {
             synchronized (mLock) {
@@ -2626,6 +2631,8 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
                     "Session " + sessionId + " is a child of multi-package session "
                             + mParentSessionId +  " and may not be abandoned directly.");
         }
+
+        List<PackageInstallerSession> childSessions = getChildSessionsNotLocked();
         synchronized (mLock) {
             if (params.isStaged && mDestroyed) {
                 // If a user abandons staged session in an unsafe state, then system will try to
@@ -2649,7 +2656,7 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
                     mCallback.onStagedSessionChanged(this);
                     return;
                 }
-                cleanStageDir();
+                cleanStageDir(childSessions);
             }
 
             if (mRelinquished) {
@@ -3079,7 +3086,7 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
             mStagedSessionErrorMessage = errorMessage;
             Slog.d(TAG, "Marking session " + sessionId + " as failed: " + errorMessage);
         }
-        cleanStageDir();
+        cleanStageDirNotLocked();
         mCallback.onStagedSessionChanged(this);
     }
 
@@ -3094,7 +3101,7 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
             mStagedSessionErrorMessage = "";
             Slog.d(TAG, "Marking session " + sessionId + " as applied");
         }
-        cleanStageDir();
+        cleanStageDirNotLocked();
         mCallback.onStagedSessionChanged(this);
     }
 
@@ -3152,20 +3159,37 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
         }
     }
 
-    private void cleanStageDir() {
-        if (isMultiPackage()) {
-            for (int childSessionId : getChildSessionIds()) {
-                mSessionProvider.getSession(childSessionId).cleanStageDir();
+    /**
+     * <b>must not hold {@link #mLock}</b>
+     */
+    private void cleanStageDirNotLocked() {
+        if (Thread.holdsLock(mLock)) {
+            Slog.wtf(TAG, "Calling thread " + Thread.currentThread().getName()
+                    + " is holding mLock", new Throwable());
+        }
+        cleanStageDir(getChildSessionsNotLocked());
+    }
+
+    private void cleanStageDir(List<PackageInstallerSession> childSessions) {
+        if (childSessions != null) {
+            for (PackageInstallerSession childSession : childSessions) {
+                if (childSession != null) {
+                    childSession.cleanStageDir();
+                }
             }
         } else {
-            if (mIncrementalFileStorages != null) {
-                mIncrementalFileStorages.cleanUp();
-                mIncrementalFileStorages = null;
-            }
-            try {
-                mPm.mInstaller.rmPackageDir(stageDir.getAbsolutePath());
-            } catch (InstallerException ignored) {
-            }
+            cleanStageDir();
+        }
+    }
+
+    private void cleanStageDir() {
+        if (mIncrementalFileStorages != null) {
+            mIncrementalFileStorages.cleanUp();
+            mIncrementalFileStorages = null;
+        }
+        try {
+            mPm.mInstaller.rmPackageDir(stageDir.getAbsolutePath());
+        } catch (InstallerException ignored) {
         }
     }
 

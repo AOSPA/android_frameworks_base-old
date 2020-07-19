@@ -413,7 +413,7 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
     }
 
     void setInitialSurfaceControlProperties(SurfaceControl.Builder b) {
-        setSurfaceControl(b.build());
+        setSurfaceControl(b.setCallsite("WindowContainer.setInitialSurfaceControlProperties").build());
         getSyncTransaction().show(mSurfaceControl);
         onSurfaceShown(getSyncTransaction());
         updateSurfacePosition();
@@ -1044,13 +1044,25 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         return mChildren.peekLast();
     }
 
-    /** Returns true if there is still a removal being deferred */
-    boolean checkCompleteDeferredRemoval() {
+    /**
+     * Removes the containers which were deferred.
+     *
+     * @return {@code true} if there is still a removal being deferred.
+     */
+    boolean handleCompleteDeferredRemoval() {
         boolean stillDeferringRemoval = false;
 
         for (int i = mChildren.size() - 1; i >= 0; --i) {
             final WindowContainer wc = mChildren.get(i);
-            stillDeferringRemoval |= wc.checkCompleteDeferredRemoval();
+            stillDeferringRemoval |= wc.handleCompleteDeferredRemoval();
+            if (!hasChild()) {
+                // All child containers of current level could be removed from a removal of
+                // descendant. E.g. if a display is pending to be removed because it contains an
+                // activity with {@link ActivityRecord#mIsExiting} is true, the display may be
+                // removed when completing the removal of the last activity from
+                // {@link ActivityRecord#checkCompleteDeferredRemoval}.
+                return false;
+            }
         }
 
         return stillDeferringRemoval;
@@ -2428,6 +2440,7 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
     protected void onAnimationFinished(@AnimationType int type, AnimationAdapter anim) {
         doAnimationFinished(type, anim);
         mWmService.onAnimationFinished();
+        mNeedsZBoost = false;
     }
 
     /**
@@ -2541,6 +2554,9 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         if (mSurfaceAnimator.isAnimating()) {
             pw.print(prefix); pw.println("ContainerAnimator:");
             mSurfaceAnimator.dump(pw, prefix + "  ");
+        }
+        if (mLastOrientationSource != null) {
+            pw.println(prefix + "mLastOrientationSource=" + mLastOrientationSource);
         }
     }
 

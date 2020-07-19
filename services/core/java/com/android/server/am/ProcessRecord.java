@@ -1302,7 +1302,6 @@ class ProcessRecord implements WindowProcessListener {
     void setHasTopUi(boolean hasTopUi) {
         mHasTopUi = hasTopUi;
         mWindowProcessController.setHasTopUi(hasTopUi);
-        updateTopUiOrRunningRemoteAnim();
     }
 
     boolean hasTopUi() {
@@ -1553,16 +1552,7 @@ class ProcessRecord implements WindowProcessListener {
                 Slog.i(TAG, "Setting runningRemoteAnimation=" + runningRemoteAnimation
                         + " for pid=" + pid);
             }
-            updateTopUiOrRunningRemoteAnim();
             mService.updateOomAdjLocked(this, true, OomAdjuster.OOM_ADJ_REASON_UI_VISIBILITY);
-        }
-    }
-
-    void updateTopUiOrRunningRemoteAnim() {
-        if (runningRemoteAnimation || hasTopUi()) {
-            mService.addTopUiOrRunningRemoteAnim(this);
-        } else {
-            mService.removeTopUiOrRunningRemoteAnim(this);
         }
     }
 

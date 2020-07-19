@@ -855,8 +855,7 @@ final class AccessibilityController {
                 mTempLayer = 0;
                 mDisplayContent.forAllWindows((w) -> {
                     if (w.isOnScreen() && w.isVisibleLw()
-                            && (w.mAttrs.alpha != 0)
-                            && !w.mWinAnimator.mEnterAnimationPending) {
+                            && (w.mAttrs.alpha != 0)) {
                         mTempLayer++;
                         outWindows.put(mTempLayer, w);
                     }
@@ -893,6 +892,7 @@ final class AccessibilityController {
                                 .setName(SURFACE_TITLE)
                                 .setBufferSize(mTempPoint.x, mTempPoint.y) // not a typo
                                 .setFormat(PixelFormat.TRANSLUCENT)
+                                .setCallsite("ViewportWindow")
                                 .build();
                     } catch (OutOfResourcesException oore) {
                         /* ignore */

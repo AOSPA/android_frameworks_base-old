@@ -90,6 +90,7 @@ import static com.android.server.wm.ProtoLogGroup.WM_DEBUG_ADD_REMOVE;
 import static com.android.server.wm.ProtoLogGroup.WM_DEBUG_BOOT;
 import static com.android.server.wm.ProtoLogGroup.WM_DEBUG_FOCUS;
 import static com.android.server.wm.ProtoLogGroup.WM_DEBUG_FOCUS_LIGHT;
+import static com.android.server.wm.ProtoLogGroup.WM_DEBUG_IME;
 import static com.android.server.wm.ProtoLogGroup.WM_DEBUG_KEEP_SCREEN_ON;
 import static com.android.server.wm.ProtoLogGroup.WM_DEBUG_ORIENTATION;
 import static com.android.server.wm.ProtoLogGroup.WM_DEBUG_SCREEN_ON;
@@ -5162,8 +5163,8 @@ public class WindowManagerService extends IWindowManager.Stub
                 }
                 case WINDOW_STATE_BLAST_SYNC_TIMEOUT: {
                     synchronized (mGlobalLock) {
-                      final WindowState ws = (WindowState) msg.obj;
-                      ws.finishDrawing(null);
+                        final WindowState ws = (WindowState) msg.obj;
+                        ws.immediatelyNotifyBlastSync();
                     }
                     break;
                 }
@@ -5632,17 +5633,28 @@ public class WindowManagerService extends IWindowManager.Stub
         }
 
         final DisplayContent displayContent = mRoot.getDisplayContent(mFrozenDisplayId);
-        final boolean waitingForConfig = displayContent != null && displayContent.mWaitingForConfig;
-        final int numOpeningApps = displayContent != null ? displayContent.mOpeningApps.size() : 0;
-        if (waitingForConfig || mAppsFreezingScreen > 0
+        final int numOpeningApps;
+        final boolean waitingForConfig;
+        final boolean waitingForRemoteRotation;
+        if (displayContent != null) {
+            numOpeningApps = displayContent.mOpeningApps.size();
+            waitingForConfig = displayContent.mWaitingForConfig;
+            waitingForRemoteRotation =
+                    displayContent.getDisplayRotation().isWaitingForRemoteRotation();
+        } else {
+            waitingForConfig = waitingForRemoteRotation = false;
+            numOpeningApps = 0;
+        }
+        if (waitingForConfig || waitingForRemoteRotation || mAppsFreezingScreen > 0
                 || mWindowsFreezingScreen == WINDOWS_FREEZING_SCREENS_ACTIVE
                 || mClientFreezingScreen || numOpeningApps > 0) {
-            ProtoLog.d(WM_DEBUG_ORIENTATION,
-                                "stopFreezingDisplayLocked: Returning mWaitingForConfig=%b, "
-                                        + "mAppsFreezingScreen=%d, mWindowsFreezingScreen=%d, "
-                                        + "mClientFreezingScreen=%b, mOpeningApps.size()=%d",
-                                waitingForConfig, mAppsFreezingScreen, mWindowsFreezingScreen,
-                                mClientFreezingScreen, numOpeningApps);
+            ProtoLog.d(WM_DEBUG_ORIENTATION, "stopFreezingDisplayLocked: Returning "
+                    + "waitingForConfig=%b, waitingForRemoteRotation=%b, "
+                    + "mAppsFreezingScreen=%d, mWindowsFreezingScreen=%d, "
+                    + "mClientFreezingScreen=%b, mOpeningApps.size()=%d",
+                    waitingForConfig, waitingForRemoteRotation,
+                    mAppsFreezingScreen, mWindowsFreezingScreen,
+                    mClientFreezingScreen, numOpeningApps);
             return;
         }
 
@@ -5653,7 +5665,6 @@ public class WindowManagerService extends IWindowManager.Stub
         // We must make a local copy of the displayId as it can be potentially overwritten later on
         // in this method. For example, {@link startFreezingDisplayLocked} may be called as a result
         // of update rotation, but we reference the frozen display after that call in this method.
-        final int displayId = mFrozenDisplayId;
         mFrozenDisplayId = INVALID_DISPLAY;
         mDisplayFrozen = false;
         mInputManagerCallback.thawInputDispatchingLw();
@@ -7635,24 +7646,26 @@ public class WindowManagerService extends IWindowManager.Stub
         }
 
         @Override
-        public void hideIme(IBinder imeTargetWindowToken) {
+        public void hideIme(IBinder imeTargetWindowToken, int displayId) {
             synchronized (mGlobalLock) {
                 WindowState imeTarget = mWindowMap.get(imeTargetWindowToken);
-                if (imeTarget == null) {
-                    // The target window no longer exists.
-                    return;
+                ProtoLog.d(WM_DEBUG_IME, "hideIme target: %s ", imeTarget);
+                DisplayContent dc = mRoot.getDisplayContent(displayId);
+                if (imeTarget != null) {
+                    imeTarget = imeTarget.getImeControlTarget().getWindow();
+                    if (imeTarget != null) {
+                        dc = imeTarget.getDisplayContent();
+                    }
+                    // If there was a pending IME show(), reset it as IME has been
+                    // requested to be hidden.
+                    dc.getInsetsStateController().getImeSourceProvider().abortShowImePostLayout();
                 }
-                imeTarget = imeTarget.getImeControlTarget().getWindow();
-                final DisplayContent dc = imeTarget != null
-                        ? imeTarget.getDisplayContent() : getDefaultDisplayContentLocked();
-                // If there was a pending IME show(), reset it as IME has been
-                // requested to be hidden.
-                dc.getInsetsStateController().getImeSourceProvider().abortShowImePostLayout();
-                if (dc.mInputMethodControlTarget == null) {
-                    return;
+                if (dc != null && dc.mInputMethodControlTarget != null) {
+                    ProtoLog.d(WM_DEBUG_IME, "hideIme Control target: %s ",
+                            dc.mInputMethodControlTarget);
+                    dc.mInputMethodControlTarget.hideInsets(
+                            WindowInsets.Type.ime(), true /* fromIme */);
                 }
-                dc.mInputMethodControlTarget.hideInsets(
-                        WindowInsets.Type.ime(), true /* fromIme */);
             }
         }
 
@@ -8258,7 +8271,7 @@ public class WindowManagerService extends IWindowManager.Stub
         }
 
         final SurfaceControl mirror = SurfaceControl.mirrorSurface(displaySc);
-        outSurfaceControl.copyFrom(mirror);
+        outSurfaceControl.copyFrom(mirror, "WMS.mirrorDisplay");
 
         return true;
     }

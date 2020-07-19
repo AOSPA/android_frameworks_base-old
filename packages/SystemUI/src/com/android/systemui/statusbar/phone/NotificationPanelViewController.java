@@ -166,6 +166,7 @@ public class NotificationPanelViewController extends PanelViewController {
     private final ConfigurationListener mConfigurationListener = new ConfigurationListener();
     private final StatusBarStateListener mStatusBarStateListener = new StatusBarStateListener();
     private final ExpansionCallback mExpansionCallback = new ExpansionCallback();
+    private final BiometricUnlockController mBiometricUnlockController;
     private final NotificationPanelView mView;
     private final MetricsLogger mMetricsLogger;
     private final ActivityManager mActivityManager;
@@ -227,7 +228,8 @@ public class NotificationPanelViewController extends PanelViewController {
                             mBarState == StatusBarState.KEYGUARD
                                     || mBarState == StatusBarState.SHADE_LOCKED;
                     if (!running && mFirstBypassAttempt && keyguardOrShadeLocked && !mDozing
-                            && !mDelayShowingKeyguardStatusBar) {
+                            && !mDelayShowingKeyguardStatusBar
+                            && !mBiometricUnlockController.isBiometricUnlock()) {
                         mFirstBypassAttempt = false;
                         animateKeyguardStatusBarIn(StackStateAnimator.ANIMATION_DURATION_STANDARD);
                     }
@@ -433,6 +435,11 @@ public class NotificationPanelViewController extends PanelViewController {
     private Runnable mExpandAfterLayoutRunnable;
 
     /**
+     * Is this a collapse that started on the panel where we should allow the panel to intercept
+     */
+    private boolean mIsPanelCollapseOnQQS;
+
+    /**
      * If face auth with bypass is running for the first time after you turn on the screen.
      * (From aod or screen off)
      */
@@ -487,6 +494,7 @@ public class NotificationPanelViewController extends PanelViewController {
             StatusBarTouchableRegionManager statusBarTouchableRegionManager,
             ConversationNotificationManager conversationNotificationManager,
             MediaHierarchyManager mediaHierarchyManager,
+            BiometricUnlockController biometricUnlockController,
             StatusBarKeyguardViewManager statusBarKeyguardViewManager) {
         super(view, falsingManager, dozeLog, keyguardStateController,
                 (SysuiStatusBarStateController) statusBarStateController, vibratorHelper,
@@ -511,6 +519,7 @@ public class NotificationPanelViewController extends PanelViewController {
         mDisplayId = displayId;
         mPulseExpansionHandler = pulseExpansionHandler;
         mDozeParameters = dozeParameters;
+        mBiometricUnlockController = biometricUnlockController;
         pulseExpansionHandler.setPulseExpandAbortListener(() -> {
             if (mQs != null) {
                 mQs.animateHeaderSlidingOut();
@@ -1060,7 +1069,11 @@ public class NotificationPanelViewController extends PanelViewController {
                 mInitialTouchX = x;
                 initVelocityTracker();
                 trackMovement(event);
-                if (shouldQuickSettingsIntercept(mInitialTouchX, mInitialTouchY, 0)) {
+                if (mKeyguardShowing
+                        && shouldQuickSettingsIntercept(mInitialTouchX, mInitialTouchY, 0)) {
+                    // Dragging down on the lockscreen statusbar should prohibit other interactions
+                    // immediately, otherwise we'll wait on the touchslop. This is to allow
+                    // dragging down to expanded quick settings directly on the lockscreen.
                     mView.getParent().requestDisallowInterceptTouchEvent(true);
                 }
                 if (mQsExpansionAnimator != null) {
@@ -1093,9 +1106,10 @@ public class NotificationPanelViewController extends PanelViewController {
                     trackMovement(event);
                     return true;
                 }
-                if (Math.abs(h) > getTouchSlop(event)
+                if ((h > getTouchSlop(event) || (h < -getTouchSlop(event) && mQsExpanded))
                         && Math.abs(h) > Math.abs(x - mInitialTouchX)
                         && shouldQuickSettingsIntercept(mInitialTouchX, mInitialTouchY, h)) {
+                    mView.getParent().requestDisallowInterceptTouchEvent(true);
                     mQsTracking = true;
                     onQsExpansionStarted();
                     notifyExpandingFinished();
@@ -1135,6 +1149,7 @@ public class NotificationPanelViewController extends PanelViewController {
             mDownX = event.getX();
             mDownY = event.getY();
             mCollapsedOnDown = isFullyCollapsed();
+            mIsPanelCollapseOnQQS = canPanelCollapseOnQQS(mDownX, mDownY);
             mListenForHeadsUp = mCollapsedOnDown && mHeadsUpManager.hasPinnedHeadsUp();
             mAllowExpandForSmallExpansion = mExpectingSynthesizedDown;
             mTouchSlopExceededBeforeDown = mExpectingSynthesizedDown;
@@ -1148,6 +1163,24 @@ public class NotificationPanelViewController extends PanelViewController {
             // not down event at all.
             mLastEventSynthesizedDown = false;
         }
+    }
+
+    /**
+     * Can the panel collapse in this motion because it was started on QQS?
+     *
+     * @param downX the x location where the touch started
+     * @param downY the y location where the touch started
+     *
+     * @return true if the panel could be collapsed because it stared on QQS
+     */
+    private boolean canPanelCollapseOnQQS(float downX, float downY) {
+        if (mCollapsedOnDown || mKeyguardShowing || mQsExpanded) {
+            return false;
+        }
+        View header = mQs == null ? mKeyguardStatusBar : mQs.getHeader();
+        return downX >= mQsFrame.getX() && downX <= mQsFrame.getX() + mQsFrame.getWidth()
+                        && downY <= header.getBottom();
+
     }
 
     private void flingQsWithCurrentVelocity(float y, boolean isCancelMotionEvent) {
@@ -1899,10 +1932,11 @@ public class NotificationPanelViewController extends PanelViewController {
     }
 
     @Override
-    protected boolean isScrolledToBottom() {
+    protected boolean canCollapsePanelOnTouch() {
         if (!isInSettings()) {
             return mBarState == StatusBarState.KEYGUARD
-                    || mNotificationStackScroller.isScrolledToBottom();
+                    || mNotificationStackScroller.isScrolledToBottom()
+                    || mIsPanelCollapseOnQQS;
         } else {
             return true;
         }

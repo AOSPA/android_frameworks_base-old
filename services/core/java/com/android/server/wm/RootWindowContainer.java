@@ -990,9 +990,7 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
         }
 
         // Remove all deferred displays stacks, tasks, and activities.
-        for (int displayNdx = mChildren.size() - 1; displayNdx >= 0; --displayNdx) {
-            mChildren.get(displayNdx).checkCompleteDeferredRemoval();
-        }
+        handleCompleteDeferredRemoval();
 
         forAllDisplays(dc -> {
             dc.getInputMonitor().updateInputWindowsLw(true /*force*/);
@@ -2377,7 +2375,8 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
                         // triggered after contents are drawn on the display.
                         if (display.isSingleTaskInstance()) {
                             display.mDisplayContent.prepareAppTransition(
-                                    TRANSIT_SHOW_SINGLE_TASK_DISPLAY, false);
+                                    TRANSIT_SHOW_SINGLE_TASK_DISPLAY, false,
+                                    0 /* flags */, true /* forceOverride*/);
                         }
                         stack.awakeFromSleepingLocked();
                         if (display.isSingleTaskInstance()) {
@@ -2393,6 +2392,12 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
                             // activity here.
                             resumeFocusedStacksTopActivities();
                         }
+                        // The visibility update must not be called before resuming the top, so the
+                        // display orientation can be updated first if needed. Otherwise there may
+                        // have redundant configuration changes due to apply outdated display
+                        // orientation (from keyguard) to activity.
+                        stack.ensureActivitiesVisible(null /* starting */, 0 /* configChanges */,
+                                false /* preserveWindows */);
                     }
                 }
             }

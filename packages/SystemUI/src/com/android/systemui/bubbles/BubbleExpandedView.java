@@ -173,7 +173,8 @@ public class BubbleExpandedView extends LinearLayout {
                             return;
                         }
                         try {
-                            if (!mIsOverflow && mBubble.getShortcutInfo() != null) {
+                            if (!mIsOverflow && mBubble.hasMetadataShortcutId()
+                                    && mBubble.getShortcutInfo() != null) {
                                 options.setApplyActivityFlagsForBubbles(true);
                                 mActivityView.startShortcutActivity(mBubble.getShortcutInfo(),
                                         options, null /* sourceBounds */);
@@ -182,6 +183,9 @@ public class BubbleExpandedView extends LinearLayout {
                                 // Apply flags to make behaviour match documentLaunchMode=always.
                                 fillInIntent.addFlags(FLAG_ACTIVITY_NEW_DOCUMENT);
                                 fillInIntent.addFlags(FLAG_ACTIVITY_MULTIPLE_TASK);
+                                if (mBubble != null) {
+                                    mBubble.setIntentActive();
+                                }
                                 mActivityView.startActivity(mPendingIntent, fillInIntent, options);
                             }
                         } catch (RuntimeException e) {
@@ -465,7 +469,6 @@ public class BubbleExpandedView extends LinearLayout {
     @Override
     protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();
-        hideImeIfVisible();
         mKeyboardVisible = false;
         mNeedsNewHeight = false;
         if (mActivityView != null) {
@@ -495,15 +498,20 @@ public class BubbleExpandedView extends LinearLayout {
         }
         final float alpha = visibility ? 1f : 0f;
 
-        if (alpha == mActivityView.getAlpha()) {
-            return;
-        }
-
         mPointerView.setAlpha(alpha);
-        if (mActivityView != null) {
+
+        if (mActivityView != null && alpha != mActivityView.getAlpha()) {
             mActivityView.setAlpha(alpha);
             mActivityView.bringToFront();
         }
+    }
+
+    @Nullable ActivityView getActivityView() {
+        return mActivityView;
+    }
+
+    int getTaskId() {
+        return mTaskId;
     }
 
     /**
@@ -616,7 +624,7 @@ public class BubbleExpandedView extends LinearLayout {
 
             if (isNew) {
                 mPendingIntent = mBubble.getBubbleIntent();
-                if (mPendingIntent != null || mBubble.getShortcutInfo() != null) {
+                if (mPendingIntent != null || mBubble.hasMetadataShortcutId()) {
                     setContentVisibility(false);
                     mActivityView.setVisibility(VISIBLE);
                 }
@@ -788,7 +796,7 @@ public class BubbleExpandedView extends LinearLayout {
     }
 
     private boolean usingActivityView() {
-        return (mPendingIntent != null || mBubble.getShortcutInfo() != null)
+        return (mPendingIntent != null || mBubble.hasMetadataShortcutId())
                 && mActivityView != null;
     }
 

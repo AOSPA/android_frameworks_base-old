@@ -44,7 +44,6 @@ import android.os.SystemClock;
 import android.util.AttributeSet;
 import android.util.Log;
 import android.view.SurfaceControl.Transaction;
-import android.view.SurfaceControlViewHost;
 import android.view.accessibility.AccessibilityNodeInfo;
 import android.view.accessibility.IAccessibilityEmbeddedConnection;
 
@@ -472,6 +471,13 @@ public class SurfaceView extends View implements ViewRootImpl.SurfaceChangedCall
     }
 
     private void performDrawFinished() {
+        if (mDeferredDestroySurfaceControl != null) {
+            synchronized (mSurfaceControlLock) {
+                mTmpTransaction.remove(mDeferredDestroySurfaceControl).apply();
+                mDeferredDestroySurfaceControl = null;
+            }
+        }
+
         if (mPendingReportDraws > 0) {
             mDrawFinished = true;
             if (mAttachedToWindow) {
@@ -1008,17 +1014,21 @@ public class SurfaceView extends View implements ViewRootImpl.SurfaceChangedCall
 
                     mSurfaceControl = new SurfaceControl.Builder(mSurfaceSession)
                         .setName(name)
+                        .setLocalOwnerView(this)
                         .setOpaque((mSurfaceFlags & SurfaceControl.OPAQUE) != 0)
                         .setBufferSize(mSurfaceWidth, mSurfaceHeight)
                         .setFormat(mFormat)
                         .setParent(viewRoot.getBoundsLayer())
                         .setFlags(mSurfaceFlags)
+                        .setCallsite("SurfaceView.updateSurface")
                         .build();
                     mBackgroundControl = new SurfaceControl.Builder(mSurfaceSession)
                         .setName("Background for -" + name)
+                        .setLocalOwnerView(this)
                         .setOpaque(true)
                         .setColorLayer()
                         .setParent(mSurfaceControl)
+                        .setCallsite("SurfaceView.updateSurface")
                         .build();
 
                 } else if (mSurfaceControl == null) {
@@ -1071,11 +1081,12 @@ public class SurfaceView extends View implements ViewRootImpl.SurfaceChangedCall
                     // we still need to latch a buffer).
                     // b/28866173
                     if (sizeChanged || creating || !mRtHandlingPositionUpdates) {
-                        mTmpTransaction.setPosition(mSurfaceControl, mScreenRect.left,
-                                mScreenRect.top);
-                        mTmpTransaction.setMatrix(mSurfaceControl,
-                                mScreenRect.width() / (float) mSurfaceWidth, 0.0f, 0.0f,
-                                mScreenRect.height() / (float) mSurfaceHeight);
+                        onSetSurfacePositionAndScaleRT(mTmpTransaction, mSurfaceControl,
+                                mScreenRect.left, /*positionLeft*/
+                                mScreenRect.top /*positionTop*/ ,
+                                mScreenRect.width() / (float) mSurfaceWidth /*postScaleX*/,
+                                mScreenRect.height() / (float) mSurfaceHeight /*postScaleY*/);
+
                         // Set a window crop when creating the surface or changing its size to
                         // crop the buffer to the surface size since the buffer producer may
                         // use SCALING_MODE_SCALE and submit a larger size than the surface
@@ -1210,13 +1221,6 @@ public class SurfaceView extends View implements ViewRootImpl.SurfaceChangedCall
                     + "finishedDrawing");
         }
 
-        if (mDeferredDestroySurfaceControl != null) {
-            synchronized (mSurfaceControlLock) {
-                mTmpTransaction.remove(mDeferredDestroySurfaceControl).apply();
-                mDeferredDestroySurfaceControl = null;
-            }
-        }
-
         runOnUiThread(this::performDrawFinished);
     }
 
@@ -1231,6 +1235,40 @@ public class SurfaceView extends View implements ViewRootImpl.SurfaceChangedCall
             Surface viewRootSurface, long nextViewRootFrameNumber) {
     }
 
+    /**
+     * Sets the surface position and scale. Can be called on
+     * the UI thread as well as on the renderer thread.
+     *
+     * @param transaction Transaction in which to execute.
+     * @param surface Surface whose location to set.
+     * @param positionLeft The left position to set.
+     * @param positionTop The top position to set.
+     * @param postScaleX The X axis post scale
+     * @param postScaleY The Y axis post scale
+     *
+     * @hide
+     */
+    protected void onSetSurfacePositionAndScaleRT(@NonNull Transaction transaction,
+            @NonNull SurfaceControl surface, int positionLeft, int positionTop,
+            float postScaleX, float postScaleY) {
+        transaction.setPosition(surface, positionLeft, positionTop);
+        transaction.setMatrix(surface, postScaleX /*dsdx*/, 0f /*dtdx*/,
+                0f /*dtdy*/, postScaleY /*dsdy*/);
+    }
+
+    /** @hide */
+    public void requestUpdateSurfacePositionAndScale() {
+        if (mSurfaceControl == null) {
+            return;
+        }
+        onSetSurfacePositionAndScaleRT(mTmpTransaction, mSurfaceControl,
+                mScreenRect.left, /*positionLeft*/
+                mScreenRect.top/*positionTop*/ ,
+                mScreenRect.width() / (float) mSurfaceWidth /*postScaleX*/,
+                mScreenRect.height() / (float) mSurfaceHeight /*postScaleY*/);
+        mTmpTransaction.apply();
+    }
+
     private void applySurfaceTransforms(SurfaceControl surface, SurfaceControl.Transaction t,
             Rect position, long frameNumber) {
         final ViewRootImpl viewRoot = getViewRootImpl();
@@ -1239,14 +1277,24 @@ public class SurfaceView extends View implements ViewRootImpl.SurfaceChangedCall
                     frameNumber);
         }
 
-        t.setPosition(surface, position.left, position.top);
-        t.setMatrix(surface,
-                position.width() / (float) mSurfaceWidth,
-                0.0f, 0.0f,
-                position.height() / (float) mSurfaceHeight);
+        onSetSurfacePositionAndScaleRT(t, surface,
+                position.left /*positionLeft*/,
+                position.top /*positionTop*/,
+                position.width() / (float) mSurfaceWidth /*postScaleX*/,
+                position.height() / (float) mSurfaceHeight /*postScaleY*/);
+
         if (mViewVisibility) {
             t.show(surface);
         }
+    }
+
+    /**
+     * @return The last render position of the backing surface or an empty rect.
+     *
+     * @hide
+     */
+    public @NonNull Rect getSurfaceRenderPosition() {
+        return mRTLastReportedPosition;
     }
 
     private void setParentSpaceRectangle(Rect position, long frameNumber) {

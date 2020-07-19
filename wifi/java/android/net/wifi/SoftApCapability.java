@@ -75,7 +75,6 @@ public final class SoftApCapability implements Parcelable {
      * flag when {@link config_wifi_softap_owe_supported)} is true.
      * @hide
      */
-    @SystemApi
     public static final long SOFTAP_FEATURE_WPA3_OWE = 1 << 3;
 
 

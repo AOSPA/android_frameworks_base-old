@@ -94,9 +94,18 @@ public class PipManager implements BasePipManager, PipTaskOrganizer.PipTransitio
      */
     private final DisplayChangeController.OnDisplayChangingListener mRotationController = (
             int displayId, int fromRotation, int toRotation, WindowContainerTransaction t) -> {
+        if (!mPipTaskOrganizer.isInPip() || mPipTaskOrganizer.isDeferringEnterPipAnimation()) {
+            // Skip if we aren't in PIP or haven't actually entered PIP yet. We still need to update
+            // the display layout in the bounds handler in this case.
+            mPipBoundsHandler.onDisplayRotationChangedNotInPip(toRotation);
+            return;
+        }
+        // If there is an animation running (ie. from a shelf offset), then ensure that we calculate
+        // the bounds for the next orientation using the destination bounds of the animation
+        // TODO: Techincally this should account for movement animation bounds as well
+        Rect currentBounds = mPipTaskOrganizer.getCurrentOrAnimatingBounds();
         final boolean changed = mPipBoundsHandler.onDisplayRotationChanged(mTmpNormalBounds,
-                mPipTaskOrganizer.getLastReportedBounds(), mTmpInsetBounds, displayId, fromRotation,
-                toRotation, t);
+                currentBounds, mTmpInsetBounds, displayId, fromRotation, toRotation, t);
         if (changed) {
             // If the pip was in the offset zone earlier, adjust the new bounds to the bottom of the
             // movement bounds
@@ -116,7 +125,7 @@ public class PipManager implements BasePipManager, PipTaskOrganizer.PipTransitio
             }
 
             updateMovementBounds(mTmpNormalBounds, true /* fromRotation */,
-                    false /* fromImeAdjustment */, false /* fromShelfAdjustment */);
+                    false /* fromImeAdjustment */, false /* fromShelfAdjustment */, t);
         }
     };
 
@@ -166,7 +175,7 @@ public class PipManager implements BasePipManager, PipTaskOrganizer.PipTransitio
         @Override
         public void onActivityRestartAttempt(ActivityManager.RunningTaskInfo task,
                 boolean homeTaskVisible, boolean clearedTask, boolean wasVisible) {
-            if (!wasVisible || task.configuration.windowConfiguration.getWindowingMode()
+            if (task.configuration.windowConfiguration.getWindowingMode()
                     != WINDOWING_MODE_PINNED) {
                 return;
             }
@@ -194,7 +203,8 @@ public class PipManager implements BasePipManager, PipTaskOrganizer.PipTransitio
         @Override
         public void onMovementBoundsChanged(boolean fromImeAdjustment) {
             mHandler.post(() -> updateMovementBounds(null /* toBounds */,
-                    false /* fromRotation */, fromImeAdjustment, false /* fromShelfAdjustment */));
+                    false /* fromRotation */, fromImeAdjustment, false /* fromShelfAdjustment */,
+                    null /* windowContainerTransaction */));
         }
 
         @Override
@@ -327,7 +337,7 @@ public class PipManager implements BasePipManager, PipTaskOrganizer.PipTransitio
                 mTouchHandler.onShelfVisibilityChanged(visible, shelfHeight);
                 updateMovementBounds(mPipTaskOrganizer.getLastReportedBounds(),
                         false /* fromRotation */, false /* fromImeAdjustment */,
-                        true /* fromShelfAdjustment */);
+                        true /* fromShelfAdjustment */, null /* windowContainerTransaction */);
             }
         });
     }
@@ -387,15 +397,16 @@ public class PipManager implements BasePipManager, PipTaskOrganizer.PipTransitio
     }
 
     private void updateMovementBounds(@Nullable Rect toBounds, boolean fromRotation,
-            boolean fromImeAdjustment, boolean fromShelfAdjustment) {
+            boolean fromImeAdjustment, boolean fromShelfAdjustment,
+            WindowContainerTransaction wct) {
         // Populate inset / normal bounds and DisplayInfo from mPipBoundsHandler before
         // passing to mTouchHandler/mPipTaskOrganizer
         final Rect outBounds = new Rect(toBounds);
         mPipBoundsHandler.onMovementBoundsChanged(mTmpInsetBounds, mTmpNormalBounds,
                 outBounds, mTmpDisplayInfo);
         // mTouchHandler would rely on the bounds populated from mPipTaskOrganizer
-        mPipTaskOrganizer.onMovementBoundsChanged(outBounds, fromRotation,
-                fromImeAdjustment, fromShelfAdjustment);
+        mPipTaskOrganizer.onMovementBoundsChanged(outBounds, fromRotation, fromImeAdjustment,
+                fromShelfAdjustment, wct);
         mTouchHandler.onMovementBoundsChanged(mTmpInsetBounds, mTmpNormalBounds,
                 outBounds, fromImeAdjustment, fromShelfAdjustment,
                 mTmpDisplayInfo.rotation);

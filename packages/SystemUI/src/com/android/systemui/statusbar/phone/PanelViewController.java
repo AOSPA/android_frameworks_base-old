@@ -379,12 +379,26 @@ public abstract class PanelViewController {
             float vectorVel = (float) Math.hypot(
                     mVelocityTracker.getXVelocity(), mVelocityTracker.getYVelocity());
 
-            boolean expand = flingExpands(vel, vectorVel, x, y)
-                    || event.getActionMasked() == MotionEvent.ACTION_CANCEL || forceCancel;
+            final boolean onKeyguard =
+                    mStatusBarStateController.getState() == StatusBarState.KEYGUARD;
+
+            final boolean expand;
+            if (event.getActionMasked() == MotionEvent.ACTION_CANCEL || forceCancel) {
+                // If we get a cancel, put the shade back to the state it was in when the gesture
+                // started
+                if (onKeyguard) {
+                    expand = true;
+                } else {
+                    expand = !mPanelClosedOnDown;
+                }
+            } else {
+                expand = flingExpands(vel, vectorVel, x, y);
+            }
+
             mDozeLog.traceFling(expand, mTouchAboveFalsingThreshold,
                     mStatusBar.isFalsingThresholdNeeded(), mStatusBar.isWakeUpComingFromTouch());
             // Log collapse gesture if on lock screen.
-            if (!expand && mStatusBarStateController.getState() == StatusBarState.KEYGUARD) {
+            if (!expand && onKeyguard) {
                 float displayDensity = mStatusBar.getDisplayDensity();
                 int heightDp = (int) Math.abs((y - mInitialTouchY) / displayDensity);
                 int velocityDp = (int) Math.abs(vel / displayDensity);
@@ -468,7 +482,7 @@ public abstract class PanelViewController {
         }
     }
 
-    protected boolean isScrolledToBottom() {
+    protected boolean canCollapsePanelOnTouch() {
         return true;
     }
 
@@ -1099,7 +1113,7 @@ public abstract class PanelViewController {
              * upwards. This allows closing the shade from anywhere inside the panel.
              *
              * We only do this if the current content is scrolled to the bottom,
-             * i.e isScrolledToBottom() is true and therefore there is no conflicting scrolling
+             * i.e canCollapsePanelOnTouch() is true and therefore there is no conflicting scrolling
              * gesture
              * possible.
              */
@@ -1110,7 +1124,7 @@ public abstract class PanelViewController {
             }
             final float x = event.getX(pointerIndex);
             final float y = event.getY(pointerIndex);
-            boolean scrolledToBottom = isScrolledToBottom();
+            boolean canCollapsePanel = canCollapsePanelOnTouch();
 
             switch (event.getActionMasked()) {
                 case MotionEvent.ACTION_DOWN:
@@ -1157,7 +1171,7 @@ public abstract class PanelViewController {
                 case MotionEvent.ACTION_MOVE:
                     final float h = y - mInitialTouchY;
                     addMovement(event);
-                    if (scrolledToBottom || mTouchStartedInEmptyArea || mAnimatingOnDown) {
+                    if (canCollapsePanel || mTouchStartedInEmptyArea || mAnimatingOnDown) {
                         float hAbs = Math.abs(h);
                         float touchSlop = getTouchSlop(event);
                         if ((h < -touchSlop || (mAnimatingOnDown && hAbs > touchSlop))

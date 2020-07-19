@@ -207,6 +207,12 @@ public class BubbleController implements ConfigurationController.ConfigurationLi
     /** Whether or not the BubbleStackView has been added to the WindowManager. */
     private boolean mAddedToWindowManager = false;
 
+    /**
+     * Value from {@link NotificationShadeWindowController#getForceHasTopUi()} when we forced top UI
+     * due to expansion. We'll restore this value when the stack collapses.
+     */
+    private boolean mHadTopUi = false;
+
     // Listens to user switch so bubbles can be saved and restored.
     private final NotificationLockscreenUserManager mNotifUserManager;
 
@@ -254,6 +260,16 @@ public class BubbleController implements ConfigurationController.ConfigurationLi
          * Called when the notification suppression state of a bubble changes.
          */
         void onBubbleNotificationSuppressionChange(Bubble bubble);
+    }
+
+    /**
+     * Listener to be notified when a pending intent has been canceled for a bubble.
+     */
+    public interface PendingIntentCanceledListener {
+        /**
+         * Called when the pending intent for a bubble has been canceled.
+         */
+        void onPendingIntentCanceled(Bubble bubble);
     }
 
     /**
@@ -384,6 +400,18 @@ public class BubbleController implements ConfigurationController.ConfigurationLi
                 }
             }
         });
+        mBubbleData.setPendingIntentCancelledListener(bubble -> {
+            if (bubble.getBubbleIntent() == null) {
+                return;
+            }
+            if (bubble.isIntentActive()) {
+                bubble.setPendingIntentCanceled();
+                return;
+            }
+            mHandler.post(
+                    () -> removeBubble(bubble.getKey(),
+                            BubbleController.DISMISS_INVALID_INTENT));
+        });
 
         mNotificationEntryManager = entryManager;
         mNotificationGroupManager = groupManager;
@@ -483,12 +511,13 @@ public class BubbleController implements ConfigurationController.ConfigurationLi
     }
 
     /**
-     * Dispatches a back press into the expanded Bubble's ActivityView if its IME is visible,
-     * causing it to hide.
+     * Hides the current input method, wherever it may be focused, via InputMethodManagerInternal.
      */
-    public void hideImeFromExpandedBubble() {
-        if (mStackView != null) {
-            mStackView.hideImeFromExpandedBubble();
+    public void hideCurrentInputMethod() {
+        try {
+            mBarService.hideCurrentInputMethodForBubbles();
+        } catch (RemoteException e) {
+            e.printStackTrace();
         }
     }
 
@@ -693,8 +722,8 @@ public class BubbleController implements ConfigurationController.ConfigurationLi
         if (mStackView == null) {
             mStackView = new BubbleStackView(
                     mContext, mBubbleData, mSurfaceSynchronizer, mFloatingContentCoordinator,
-                    mSysUiState, this::onAllBubblesAnimatedOut,
-                    this::onImeVisibilityChanged);
+                    mSysUiState, this::onAllBubblesAnimatedOut, this::onImeVisibilityChanged,
+                    this::hideCurrentInputMethod);
             mStackView.addView(mBubbleScrim);
             if (mExpandListener != null) {
                 mStackView.setExpandListener(mExpandListener);
@@ -1094,23 +1123,7 @@ public class BubbleController implements ConfigurationController.ConfigurationLi
         // Lazy init stack view when a bubble is created
         ensureStackViewCreated();
         bubble.setInflateSynchronously(mInflateSynchronously);
-        bubble.inflate(
-                b -> {
-                    mBubbleData.notificationEntryUpdated(b, suppressFlyout,
-                            showInShade);
-                    if (bubble.getBubbleIntent() == null) {
-                        return;
-                    }
-                    bubble.getBubbleIntent().registerCancelListener(pendingIntent -> {
-                        if (bubble.getWasAccessed()) {
-                            bubble.setPendingIntentCanceled();
-                            return;
-                        }
-                        mHandler.post(
-                                () -> removeBubble(bubble.getKey(),
-                                        BubbleController.DISMISS_INVALID_INTENT));
-                    });
-                },
+        bubble.inflate(b -> mBubbleData.notificationEntryUpdated(b, suppressFlyout, showInShade),
                 mContext, mStackView, mBubbleIconFactory, false /* skipInflation */);
     }
 
@@ -1290,6 +1303,7 @@ public class BubbleController implements ConfigurationController.ConfigurationLi
             // Collapsing? Do this first before remaining steps.
             if (update.expandedChanged && !update.expanded) {
                 mStackView.setExpanded(false);
+                mNotificationShadeWindowController.setForceHasTopUi(mHadTopUi);
             }
 
             // Do removals, if any.
@@ -1299,7 +1313,10 @@ public class BubbleController implements ConfigurationController.ConfigurationLi
             for (Pair<Bubble, Integer> removed : removedBubbles) {
                 final Bubble bubble = removed.first;
                 @DismissReason final int reason = removed.second;
-                mStackView.removeBubble(bubble);
+
+                if (mStackView != null) {
+                    mStackView.removeBubble(bubble);
+                }
 
                 // If the bubble is removed for user switching, leave the notification in place.
                 if (reason == DISMISS_USER_CHANGED) {
@@ -1376,6 +1393,8 @@ public class BubbleController implements ConfigurationController.ConfigurationLi
             if (update.expandedChanged && update.expanded) {
                 if (mStackView != null) {
                     mStackView.setExpanded(true);
+                    mHadTopUi = mNotificationShadeWindowController.getForceHasTopUi();
+                    mNotificationShadeWindowController.setForceHasTopUi(true);
                 }
             }
 
@@ -1589,7 +1608,11 @@ public class BubbleController implements ConfigurationController.ConfigurationLi
         @Override
         public void onBackPressedOnTaskRoot(RunningTaskInfo taskInfo) {
             if (mStackView != null && taskInfo.displayId == getExpandedDisplayId(mContext)) {
-                mBubbleData.setExpanded(false);
+                if (mImeVisible) {
+                    hideCurrentInputMethod();
+                } else {
+                    mBubbleData.setExpanded(false);
+                }
             }
         }
 
