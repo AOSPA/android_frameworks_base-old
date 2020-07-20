@@ -1,0 +1,55 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "5d10137e_9773403f",
+        "filename": "packages/SystemUI/res/values/config.xml",
+        "patchSetId": 1
+      },
+      "lineNbr": 119,
+      "author": {
+        "id": 1000468
+      },
+      "writtenOn": "2020-07-20T10:49:01Z",
+      "side": 1,
+      "message": "Don\u0027t modify this,\nUse \"quick_settings_tiles_extra\" one which is in pa_config.xml (maybe)",
+      "revId": "72fe546874958f3909cd8f77b658e3383affa91d",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "5b2791be_9c1fcc44",
+        "filename": "packages/SystemUI/src/com/android/systemui/qs/tiles/RebootTile.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 57,
+      "author": {
+        "id": 1000468
+      },
+      "writtenOn": "2020-07-20T10:49:01Z",
+      "side": 1,
+      "message": "Lambda expression please?\n(If possible)",
+      "revId": "72fe546874958f3909cd8f77b658e3383affa91d",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "3bc21995_d6b30bd7",
+        "filename": "packages/SystemUI/src/com/android/systemui/qs/tiles/RebootTile.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 78,
+      "author": {
+        "id": 1000468
+      },
+      "writtenOn": "2020-07-20T10:49:01Z",
+      "side": 1,
+      "message": "Use .QS_CUSTOM",
+      "revId": "72fe546874958f3909cd8f77b658e3383affa91d",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    }
+  ]
+}
