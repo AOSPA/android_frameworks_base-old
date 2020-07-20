@@ -3018,6 +3018,10 @@
          empty string is passed in -->
     <string name="config_ims_package"/>
 
+    <!-- Boolean indicating USSD over IMS is allowed.
+     If it is not supported due to modem limitations, USSD send over the CS pipe instead.-->
+    <bool name="config_allow_ussd_over_ims">false</bool>
+
     <!-- String array containing numbers that shouldn't be logged. Country-specific. -->
     <string-array name="unloggable_phone_numbers" />
 
@@ -4308,6 +4312,13 @@
          check after reboot or airplane mode toggling -->
     <bool translatable="false" name="reset_geo_fencing_check_after_boot_or_apm">false</bool>
 
+    <!-- Boolean indicating that the system will use autoSuspend. If set to false, autoSuspend
+         is not used and the system will only suspend upon an explicit request. -->
+    <bool translatable="false" name="config_enableAutoSuspend">true</bool>
+
+    <!-- Class name of the custom country detector to be used. -->
+    <string name="config_customCountryDetector" translatable="false">com.android.server.location.ComprehensiveCountryDetector</string>
+
     <!-- Flag to enable/disable shutdown animation. -->
     <bool name="config_shutdownAnimationEnabled">false</bool>
 
@@ -4326,10 +4337,4 @@
     <string name="service_not_subscribed"></string>
     <string name="multi_conn_to_same_pdn_not_allowed"></string>
 
-    <!-- Boolean indicating that the system will use autoSuspend. If set to false, autoSuspend
-         is not used and the system will only suspend upon an explicit request. -->
-    <bool translatable="false" name="config_enableAutoSuspend">true</bool>
-
-    <!-- Class name of the custom country detector to be used. -->
-    <string name="config_customCountryDetector" translatable="false">com.android.server.location.ComprehensiveCountryDetector</string>
 </resources>

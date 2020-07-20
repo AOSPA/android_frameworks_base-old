@@ -3771,6 +3771,7 @@ public class CarrierConfigManager {
         sDefaults.putBoolean(KEY_SUPPORT_WPS_OVER_IMS_BOOL, true);
         sDefaults.putStringArray(KEY_CARRIER_CERTIFICATE_STRING_ARRAY, null);
         sDefaults.putLong(KEY_DATA_SWITCH_VALIDATION_TIMEOUT_LONG, 2000);
+        sDefaults.putLong(KEY_DATA_SWITCH_VALIDATION_MIN_GAP_LONG, 0);
         sDefaults.putBoolean(KEY_CARRIER_SUPPORTS_MULTIANCHOR_CONFERENCE, false);
         sDefaults.putInt(KEY_DEFAULT_RTT_MODE_INT, 0);
         sDefaults.putLong(KEY_DATA_SWITCH_VALIDATION_MIN_GAP_LONG, 0);
