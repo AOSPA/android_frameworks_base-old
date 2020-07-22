@@ -39,6 +39,7 @@ import com.android.systemui.qs.tiles.DataSaverTile;
 import com.android.systemui.qs.tiles.DataSwitchTile;
 import com.android.systemui.qs.tiles.DndTile;
 import com.android.systemui.qs.tiles.FlashlightTile;
+import com.android.systemui.qs.tiles.FPSInfoTile;
 import com.android.systemui.qs.tiles.HeadsUpTile;
 import com.android.systemui.qs.tiles.HotspotTile;
 import com.android.systemui.qs.tiles.IntentTile;
@@ -88,6 +89,7 @@ public class QSFactoryImpl implements QSFactory {
     private final Provider<DataSwitchTile> mDataSwitchTileProvider;
     private final Provider<HeadsUpTile> mHeadsUpTileProvider;
     private final Provider<CPUInfoTile> mCPUInfoTileProvider;
+    private final Provider<FPSInfoTile> mFPSInfoTileProvider;
 
     private QSTileHost mHost;
 
@@ -116,7 +118,8 @@ public class QSFactoryImpl implements QSFactory {
             Provider<ScreenRecordTile> screenRecordTileProvider,
             Provider<DataSwitchTile> dataSwitchTileProvider,
             Provider<HeadsUpTile> headsUpTileProvider,
-            Provider<CPUInfoTile> CPUInfoTileProvider) {
+            Provider<CPUInfoTile> CPUInfoTileProvider,
+            Provider<FPSInfoTile> fpsInfoTileProvider) {
         mWifiTileProvider = wifiTileProvider;
         mBluetoothTileProvider = bluetoothTileProvider;
         mCellularTileProvider = cellularTileProvider;
@@ -142,6 +145,7 @@ public class QSFactoryImpl implements QSFactory {
         mDataSwitchTileProvider = dataSwitchTileProvider;
         mHeadsUpTileProvider = headsUpTileProvider;
         mCPUInfoTileProvider = CPUInfoTileProvider;
+        mFPSInfoTileProvider = fpsInfoTileProvider;
     }
 
     public void setHost(QSTileHost host) {
@@ -207,6 +211,8 @@ public class QSFactoryImpl implements QSFactory {
                 return mHeadsUpTileProvider.get();
             case "cpuinfo":
                 return mCPUInfoTileProvider.get();
+            case "fpsinfo":
+                return mFPSInfoTileProvider.get();
         }
 
         // Intent tiles.
