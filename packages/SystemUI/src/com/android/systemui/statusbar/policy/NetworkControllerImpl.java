@@ -165,9 +165,6 @@ public class NetworkControllerImpl extends BroadcastReceiver
     private boolean mUserSetup;
     private boolean mSimDetected;
 
-    @VisibleForTesting
-    FiveGServiceClient mFiveGServiceClient;
-
     private ConfigurationController.ConfigurationListener mConfigurationListener =
             new ConfigurationController.ConfigurationListener() {
                 @Override
@@ -176,6 +173,10 @@ public class NetworkControllerImpl extends BroadcastReceiver
                     mReceiverHandler.post(() -> handleConfigurationChanged());
                 }
             };
+
+    @VisibleForTesting
+    FiveGServiceClient mFiveGServiceClient;
+
     /**
      * Construct this controller object and register for updates.
      */
