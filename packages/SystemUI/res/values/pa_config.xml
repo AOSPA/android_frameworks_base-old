@@ -41,7 +41,7 @@
 
     <!-- Additional QS Tiles. Order should match "quick_settings_tiles_extra_default" -->
     <string name="quick_settings_tiles_extra" translatable="false">
-        caffeine,screenstabilization,screen_record,dataswitch,heads_up,cpuinfo
+        caffeine,screenstabilization,screen_record,dataswitch,heads_up,cpuinfo,fpsinfo
     </string>
 
     <!-- Allow devices to use a lower screenrecording bitrate because of old hardware -->
@@ -49,5 +49,9 @@
 
     <!-- CPUInfoService temperature sysfs path -->
     <string name="config_cpuinfoSysTemp" translatable="false">
+    </string>
+
+    <!-- FPSInfoService FPS node file path -->
+    <string name="config_fpsInfoSysNode" translatable="false">
     </string>
 </resources>
