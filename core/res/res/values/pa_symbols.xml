@@ -54,4 +54,6 @@
     <!-- Horizon Light -->
     <java-symbol type="integer" name="config_AmbientPulseLightColor" />
 
+    <!-- DC Dimming -->
+    <java-symbol type="string" name="config_deviceDcDimmingSysfsNode" />
 </resources>
