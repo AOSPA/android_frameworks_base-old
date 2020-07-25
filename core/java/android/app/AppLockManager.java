@@ -88,6 +88,22 @@ public class AppLockManager {
         }
     }
 
+    public boolean getAppNotificationHide(String packageName) {
+        try {
+            return mService.getAppNotificationHide(packageName);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    public void setAppNotificationHide(String packageName, boolean hide) {
+        try {
+            mService.setAppNotificationHide(packageName, hide);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
     public void addAppLockCallback(IAppLockCallback c) {
         try {
             mService.addAppLockCallback(c);
@@ -106,6 +122,6 @@ public class AppLockManager {
 
     public abstract static class AppLockCallback extends IAppLockCallback.Stub {
         @Override
-        public abstract void onAppStateChanged(String pkg, boolean opened);
+        public abstract void onAppStateChanged(String pkg);
     };
 }

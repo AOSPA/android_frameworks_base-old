@@ -33,6 +33,10 @@ interface IAppLockService {
 
     List<String> getLockedPackages();
 
+    boolean getAppNotificationHide(in String packageName);
+
+    void setAppNotificationHide(in String packageName, in boolean hide);
+
     void addAppLockCallback(IAppLockCallback callback);
 
     void removeAppLockCallback(IAppLockCallback callback);
