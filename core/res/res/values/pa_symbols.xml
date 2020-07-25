@@ -145,4 +145,7 @@
 
     <!-- Battery Leds -->
     <java-symbol type="bool" name="config_intrusiveBatteryLed" />
+
+    <!-- DC Dimming -->
+    <java-symbol type="string" name="config_deviceDcDimmingSysfsNode" />
 </resources>
