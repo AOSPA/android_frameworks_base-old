@@ -42,7 +42,7 @@
 
     <!-- Additional QS Tiles. Order should match "quick_settings_tiles_extra_default" -->
     <string name="quick_settings_tiles_extra" translatable="false">
-        caffeine,screenstabilization,screen_record,dataswitch,heads_up
+        caffeine,screenstabilization,screen_record,dataswitch,heads_up,dc_dimming
     </string>
 
     <!-- Allow devices to use a lower screenrecording bitrate because of old hardware -->
