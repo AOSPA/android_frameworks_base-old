@@ -143,4 +143,6 @@
     <java-symbol type="integer" name="config_pressOnAssistBehaviorHwkeys" />
     <java-symbol type="integer" name="config_longPressOnAssistBehaviorHwkeys" />
 
+    <!-- DC Dimming -->
+    <java-symbol type="string" name="config_deviceDcDimmingSysfsNode" />
 </resources>
