@@ -4958,6 +4958,16 @@ public final class Settings {
         public static final String SCREENRECORD_AUDIO_SOURCE = "screenrecord_audio_source";
 
         /**
+         * whether to enable or disable vibration on succesful fingerprint auth
+         *
+         * @hide
+         */
+        public static final String AUTHENTICATION_SUCCESS_VIB = "authentication_success_vib";
+        /** @hide */
+        private static final Validator AUTHENTICATION_SUCCESS_VIB_VALIDATOR =
+                BOOLEAN_VALIDATOR;
+
+        /**
          * Settings to backup. This is here so that it's in the same place as the settings
          * keys and easy to update.
          *
@@ -5028,6 +5038,7 @@ public final class Settings {
             NOTIFICATION_LIGHT_PULSE,
             NAVIGATION_HANDLE_WIDTH,
             BACK_GESTURE_HEIGHT,
+            AUTHENTICATION_SUCCESS_VIB,
         };
 
         /**
@@ -5187,6 +5198,7 @@ public final class Settings {
             PRIVATE_SETTINGS.add(ASSIST_WAKE_SCREEN);
             PRIVATE_SETTINGS.add(APP_SWITCH_WAKE_SCREEN);
             PRIVATE_SETTINGS.add(BACK_GESTURE_HEIGHT);
+            PRIVATE_SETTINGS.add(AUTHENTICATION_SUCCESS_VIB);
         }
 
         /**
@@ -5305,6 +5317,7 @@ public final class Settings {
             VALIDATORS.put(ASSIST_WAKE_SCREEN, ASSIST_WAKE_SCREEN_VALIDATOR);
             VALIDATORS.put(APP_SWITCH_WAKE_SCREEN, APP_SWITCH_WAKE_SCREEN_VALIDATOR);
             VALIDATORS.put(BACK_GESTURE_HEIGHT, BACK_GESTURE_HEIGHT_VALIDATOR);
+            VALIDATORS.put(AUTHENTICATION_SUCCESS_VIB, AUTHENTICATION_SUCCESS_VIB_VALIDATOR);
         }
 
         /**
