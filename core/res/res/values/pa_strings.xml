@@ -16,14 +16,7 @@
 -->
 <resources>
 
-    <!-- Whether to cleanup fingerprints upon connection to the daemon and when user switches -->
-    <java-symbol type="bool" name="config_cleanupUnusedFingerprints" />
-
-    <!-- The list of vendor package signatures that should also be considered
-         platform signatures, specifically for use on devices with a vendor partition. -->
-    <java-symbol type="array" name="config_vendorPlatformSignatures" />
-
     <!-- Cycle through ringer modes -->
-    <java-symbol type="string" name="volume_dialog_ringer_guidance_normal" />
+    <string name="volume_dialog_ringer_guidance_normal">Calls and notifications will ring</string>
 
 </resources>
