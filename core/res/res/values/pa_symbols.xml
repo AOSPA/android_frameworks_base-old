@@ -143,4 +143,5 @@
     <java-symbol type="integer" name="config_pressOnAssistBehaviorHwkeys" />
     <java-symbol type="integer" name="config_longPressOnAssistBehaviorHwkeys" />
 
+    <java-symbol type="string" name="volume_dialog_ringer_guidance_normal" />
 </resources>
