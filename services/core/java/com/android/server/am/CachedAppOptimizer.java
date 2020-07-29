@@ -16,8 +16,6 @@
 
 package com.android.server.am;
 
-import static android.os.Process.THREAD_PRIORITY_FOREGROUND;
-
 import static com.android.server.am.ActivityManagerDebugConfig.DEBUG_COMPACTION;
 import static com.android.server.am.ActivityManagerDebugConfig.DEBUG_FREEZER;
 import static com.android.server.am.ActivityManagerDebugConfig.TAG_AM;
@@ -259,7 +257,7 @@ public final class CachedAppOptimizer {
             ProcessDependencies processDependencies) {
         mAm = am;
         mCachedAppOptimizerThread = new ServiceThread("CachedAppOptimizerThread",
-            THREAD_PRIORITY_FOREGROUND, true);
+            Process.THREAD_GROUP_SYSTEM, true);
         mProcStateThrottle = new HashSet<>();
         mProcessDependencies = processDependencies;
         mTestCallback = callback;
@@ -283,8 +281,6 @@ public final class CachedAppOptimizer {
             updateProcStateThrottle();
             updateUseFreezer();
         }
-        Process.setThreadGroupAndCpuset(mCachedAppOptimizerThread.getThreadId(),
-                Process.THREAD_GROUP_SYSTEM);
         setAppCompactProperties();
     }
 
@@ -491,12 +487,15 @@ public final class CachedAppOptimizer {
         mUseCompaction = DeviceConfig.getBoolean(DeviceConfig.NAMESPACE_ACTIVITY_MANAGER,
                     KEY_USE_COMPACTION, DEFAULT_USE_COMPACTION);
 
-        if (mUseCompaction) {
+        if (mUseCompaction && mCompactionHandler == null) {
             if (!mCachedAppOptimizerThread.isAlive()) {
                 mCachedAppOptimizerThread.start();
             }
 
             mCompactionHandler = new MemCompactionHandler();
+
+            Process.setThreadGroupAndCpuset(mCachedAppOptimizerThread.getThreadId(),
+                    Process.THREAD_GROUP_SYSTEM);
         }
     }
 
@@ -550,13 +549,16 @@ public final class CachedAppOptimizer {
             mUseFreezer = isFreezerSupported();
         }
 
-        if (mUseFreezer) {
+        if (mUseFreezer && mFreezeHandler == null) {
             Slog.d(TAG_AM, "Freezer enabled");
             if (!mCachedAppOptimizerThread.isAlive()) {
                 mCachedAppOptimizerThread.start();
             }
 
             mFreezeHandler = new FreezeHandler();
+
+            Process.setThreadGroupAndCpuset(mCachedAppOptimizerThread.getThreadId(),
+                    Process.THREAD_GROUP_SYSTEM);
         }
     }
 
