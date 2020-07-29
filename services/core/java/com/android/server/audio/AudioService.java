@@ -1734,7 +1734,7 @@ public class AudioService extends IAudioService.Stub
                 + ", flags=" + flags + ", caller=" + caller);
 
         /* If MirrorLink audio is playing, then disable volume changes */
-        String value = SystemProperties.get("vendor.mls.audio.session.status", "default");
+        String value = SystemProperties.get("audio.sys.mls.session.status", "default");
         if (true == value.equals("started")){
             Log.e(TAG, "adjustStreamVolume() Ignore volume change during MirrorLink session");
             return;
@@ -2316,7 +2316,7 @@ public class AudioService extends IAudioService.Stub
         }
 
         /* If MirrorLink audio is playing, then disable volume changes */
-        String value = SystemProperties.get("vendor.mls.audio.session.status", "default");
+        String value = SystemProperties.get("audio.sys.mls.session.status", "default");
         if (true == value.equals("started")){
             Log.e(TAG, "setStreamVolume() Ignore volume change during MirrorLink session");
             return;
