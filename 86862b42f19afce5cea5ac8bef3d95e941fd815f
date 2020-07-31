@@ -16,6 +16,24 @@
       "revId": "86862b42f19afce5cea5ac8bef3d95e941fd815f",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
       "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "dd1635c7_8ab4b6e8",
+        "filename": "packages/SystemUI/src/com/android/keyguard/clock/TypeClockController.java",
+        "patchSetId": 3
+      },
+      "lineNbr": 175,
+      "author": {
+        "id": 1000463
+      },
+      "writtenOn": "2020-07-31T17:52:52Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "d1a2b3e4_6d57854c",
+      "revId": "86862b42f19afce5cea5ac8bef3d95e941fd815f",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
     }
   ]
 }
