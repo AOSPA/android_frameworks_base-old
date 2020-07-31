@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "d1a2b3e4_6d57854c",
+        "filename": "packages/SystemUI/src/com/android/keyguard/clock/TypeClockController.java",
+        "patchSetId": 3
+      },
+      "lineNbr": 175,
+      "author": {
+        "id": 1000312
+      },
+      "writtenOn": "2020-07-31T01:34:22Z",
+      "side": 1,
+      "message": "Can you try after removing mTypeClock.getHeight() from this line?",
+      "revId": "86862b42f19afce5cea5ac8bef3d95e941fd815f",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    }
+  ]
+}
