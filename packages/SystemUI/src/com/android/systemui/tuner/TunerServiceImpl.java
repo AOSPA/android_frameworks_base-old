@@ -121,6 +121,7 @@ public class TunerServiceImpl extends TunerService {
 
                 iconBlacklist.add("rotate");
                 iconBlacklist.add("headset");
+                iconBlacklist.add("network_speed");
 
                 Settings.Secure.putStringForUser(mContentResolver,
                         StatusBarIconController.ICON_BLACKLIST,

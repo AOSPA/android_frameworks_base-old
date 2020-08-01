@@ -88,4 +88,10 @@
     <string name="accessibility_quick_settings_heads_up_on">Heads up on.</string>
     <string name="accessibility_quick_settings_heads_up_changed_off">Heads up turned off.</string>
     <string name="accessibility_quick_settings_heads_up_changed_on">Heads up turned on.</string>
+
+    <!-- StatusBar Network Speed -->
+    <string name="status_bar_network_speed">Network speed</string>
+    <string name="status_bar_network_speed_byte">%s B/s</string>
+    <string name="status_bar_network_speed_kbyte">%s KB/s</string>
+    <string name="status_bar_network_speed_mbyte">%s MB/s</string>
 </resources>

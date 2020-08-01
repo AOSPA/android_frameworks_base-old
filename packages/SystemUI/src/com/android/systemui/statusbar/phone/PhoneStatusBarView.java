@@ -73,6 +73,8 @@ public class PhoneStatusBarView extends PanelBar {
         }
     };
     private DarkReceiver mBattery;
+    private DarkReceiver mNetworkSpeed;
+
     private int mLastOrientation;
     private int mRotationOrientation;
     @Nullable
@@ -106,6 +108,7 @@ public class PhoneStatusBarView extends PanelBar {
     public void onFinishInflate() {
         mBattery = findViewById(R.id.battery);
         mCutoutSpace = findViewById(R.id.cutout_space_view);
+        mNetworkSpeed = findViewById(R.id.network_speed_view);
         mCenterIconSpace = findViewById(R.id.centered_icon_area);
 
         updateResources();
@@ -116,6 +119,7 @@ public class PhoneStatusBarView extends PanelBar {
         super.onAttachedToWindow();
         // Always have Battery meters in the status bar observe the dark/light modes.
         Dependency.get(DarkIconDispatcher.class).addDarkReceiver(mBattery);
+        Dependency.get(DarkIconDispatcher.class).addDarkReceiver(mNetworkSpeed);
         if (updateOrientationAndCutout(getResources().getConfiguration().orientation)) {
             updateLayoutForCutout();
         }
@@ -125,6 +129,7 @@ public class PhoneStatusBarView extends PanelBar {
     protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();
         Dependency.get(DarkIconDispatcher.class).removeDarkReceiver(mBattery);
+        Dependency.get(DarkIconDispatcher.class).removeDarkReceiver(mNetworkSpeed);
         mDisplayCutout = null;
     }
 

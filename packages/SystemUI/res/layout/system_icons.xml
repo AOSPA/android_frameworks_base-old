@@ -21,6 +21,14 @@
     android:layout_height="match_parent"
     android:gravity="center_vertical">
 
+    <com.android.systemui.statusbar.phone.NetworkSpeedView android:id="@+id/network_speed_view"
+        android:layout_width="wrap_content"
+        android:layout_height="match_parent"
+        android:paddingEnd="@dimen/network_speed_padding_end"
+        android:visibility="gone"
+        android:gravity="center_vertical"
+        android:textAppearance="@style/TextAppearance.StatusBar.Clock" />
+
     <com.android.systemui.statusbar.phone.StatusIconContainer android:id="@+id/statusIcons"
         android:layout_width="0dp"
         android:layout_weight="1"

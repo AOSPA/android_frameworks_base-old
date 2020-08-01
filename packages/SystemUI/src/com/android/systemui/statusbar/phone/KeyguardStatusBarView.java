@@ -81,6 +81,7 @@ public class KeyguardStatusBarView extends RelativeLayout
     private MultiUserSwitch mMultiUserSwitch;
     private ImageView mMultiUserAvatar;
     private BatteryMeterView mBatteryView;
+    private NetworkSpeedView mNetworkSpeedView;
     private StatusIconContainer mStatusIconContainer;
 
     private BatteryController mBatteryController;
@@ -113,6 +114,7 @@ public class KeyguardStatusBarView extends RelativeLayout
         mMultiUserAvatar = findViewById(R.id.multi_user_avatar);
         mCarrierLabel = findViewById(R.id.keyguard_carrier_text);
         mBatteryView = mSystemIconsContainer.findViewById(R.id.battery);
+        mNetworkSpeedView = mSystemIconsContainer.findViewById(R.id.network_speed_view);
         mCutoutSpace = findViewById(R.id.cutout_space_view);
         mStatusIconArea = findViewById(R.id.status_icon_area);
         mStatusIconContainer = findViewById(R.id.statusIcons);
@@ -444,6 +446,7 @@ public class KeyguardStatusBarView extends RelativeLayout
 
     public void onThemeChanged() {
         mBatteryView.setColorsFromContext(mContext);
+        mNetworkSpeedView.setColorsFromContext(mContext);
         updateIconsAndTextColors();
         // Reload user avatar
         ((UserInfoControllerImpl) Dependency.get(UserInfoController.class))
@@ -461,6 +464,7 @@ public class KeyguardStatusBarView extends RelativeLayout
                 Utils.getThemeAttr(mContext, com.android.internal.R.attr.textAppearanceSmall));
         onThemeChanged();
         mBatteryView.updatePercentView();
+        mNetworkSpeedView.updateNetworkSpeedView();
     }
 
     private void updateIconsAndTextColors() {
@@ -477,6 +481,7 @@ public class KeyguardStatusBarView extends RelativeLayout
 
         applyDarkness(R.id.battery, mEmptyRect, intensity, iconColor);
         applyDarkness(R.id.clock, mEmptyRect, intensity, iconColor);
+        applyDarkness(R.id.network_speed_view, mEmptyRect, intensity, iconColor);
     }
 
     private void applyDarkness(int id, Rect tintArea, float intensity, int color) {
