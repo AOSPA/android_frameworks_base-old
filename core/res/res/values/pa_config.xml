@@ -296,4 +296,6 @@
     -->
     <integer name="config_longPressOnAssistBehaviorHwkeys">4</integer>
 
+    <!-- Smart charging battery percentage -->
+    <integer name="config_smartChargingBatteryLevel">80</integer>
 </resources>

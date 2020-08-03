@@ -45,6 +45,7 @@ import android.os.BatteryManager;
 import android.os.BatteryManagerInternal;
 import android.os.BatterySaverPolicyConfig;
 import android.os.Binder;
+import android.os.FileUtils;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.IPowerManager;
@@ -102,6 +103,7 @@ import com.android.server.power.batterysaver.BatterySaverStateMachine;
 import com.android.server.power.batterysaver.BatterySavingStats;
 
 import java.io.FileDescriptor;
+import java.io.IOException;
 import java.io.PrintWriter;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -218,6 +220,10 @@ public final class PowerManagerService extends SystemService
 
     // property for last reboot reason
     private static final String REBOOT_PROPERTY = "sys.boot.reason";
+
+    // Smart charging: sysfs node of charger
+    private static final String POWER_INTPUT_SUSPEND_NODE =
+            "/sys/class/power_supply/battery/input_suspend";
 
     private static final int DEFAULT_BUTTON_ON_DURATION = 5 * 1000;
 
@@ -649,6 +655,12 @@ public final class PowerManagerService extends SystemService
         }
     }
 
+    // Smart charging
+    private boolean mSmartChargingEnabled;
+    private boolean mPowerInputSuspended = false;
+    private int mSmartChargingLevel;
+    private int mSmartChargingLevelDefaultConfig;
+
     /**
      * All times are in milliseconds. These constants are kept synchronized with the system
      * global Settings. Any access to this class or its fields should be done while
@@ -1062,6 +1074,12 @@ public final class PowerManagerService extends SystemService
         resolver.registerContentObserver(Settings.System.getUriFor(
                 Settings.System.NAVIGATION_BAR_SHOW),
                 false, mSettingsObserver, UserHandle.USER_ALL);
+        resolver.registerContentObserver(Settings.System.getUriFor(
+                Settings.System.SMART_CHARGING),
+                false, mSettingsObserver, UserHandle.USER_ALL);
+        resolver.registerContentObserver(Settings.System.getUriFor(
+                Settings.System.SMART_CHARGING_LEVEL),
+                false, mSettingsObserver, UserHandle.USER_ALL);
 
         IVrManager vrManager = IVrManager.Stub.asInterface(getBinderService(Context.VR_SERVICE));
         if (vrManager != null) {
@@ -1162,6 +1180,8 @@ public final class PowerManagerService extends SystemService
                 com.android.internal.R.integer.config_oneFingerSwipeLeftKeyCode) > 0;
         mSupportsTwoFingerSwipeConfig = resources.getInteger(
                 com.android.internal.R.integer.config_twoFingerSwipeKeyCode) > 0;
+        mSmartChargingLevelDefaultConfig = resources.getInteger(
+                com.android.internal.R.integer.config_smartChargingBatteryLevel);
     }
 
     private void updateSettingsLocked() {
@@ -1190,6 +1210,11 @@ public final class PowerManagerService extends SystemService
         mTheaterModeEnabled = Settings.Global.getInt(mContext.getContentResolver(),
                 Settings.Global.THEATER_MODE_ON, 0) == 1;
         mAlwaysOnEnabled = mAmbientDisplayConfiguration.alwaysOnEnabled(UserHandle.USER_CURRENT);
+        mSmartChargingEnabled = Settings.System.getInt(resolver,
+                Settings.System.SMART_CHARGING, 0) == 1;
+        mSmartChargingLevel = Settings.System.getInt(resolver,
+                Settings.System.SMART_CHARGING_LEVEL,
+                mSmartChargingLevelDefaultConfig);
 
         boolean gesturesEnabled = Settings.System.getIntForUser(resolver,
                 Settings.System.GESTURES_ENABLED, 1, UserHandle.USER_CURRENT) != 0;
@@ -1400,6 +1425,7 @@ public final class PowerManagerService extends SystemService
     private void handleSettingsChangedLocked() {
         updateSettingsLocked();
         updatePowerStateLocked();
+        updateSmartChargingStatus();
     }
 
     private void acquireWakeLockInternal(IBinder lock, int flags, String tag, String packageName,
@@ -2169,6 +2195,29 @@ public final class PowerManagerService extends SystemService
             }
 
             mBatterySaverStateMachine.setBatteryStatus(mIsPowered, mBatteryLevel, mBatteryLevelLow);
+            updateSmartChargingStatus();
+        }
+    }
+
+    private void updateSmartChargingStatus() {
+        if (mPowerInputSuspended && (mBatteryLevel < mSmartChargingLevel) ||
+            (mPowerInputSuspended && !mSmartChargingEnabled)) {
+            try {
+                FileUtils.stringToFile(POWER_INTPUT_SUSPEND_NODE, "0");
+                mPowerInputSuspended = false;
+            } catch (IOException e) {
+                Slog.e(TAG, "failed to write to " + POWER_INTPUT_SUSPEND_NODE);
+            }
+            return;
+        }
+
+        if (mSmartChargingEnabled && !mPowerInputSuspended && (mBatteryLevel >= mSmartChargingLevel)) {
+            try {
+                FileUtils.stringToFile(POWER_INTPUT_SUSPEND_NODE, "1");
+                mPowerInputSuspended = true;
+            } catch (IOException e) {
+                    Slog.e(TAG, "failed to write to " + POWER_INTPUT_SUSPEND_NODE);
+            }
         }
     }
 

@@ -143,4 +143,6 @@
     <java-symbol type="integer" name="config_pressOnAssistBehaviorHwkeys" />
     <java-symbol type="integer" name="config_longPressOnAssistBehaviorHwkeys" />
 
+    <!-- Smart charging battery percentage -->
+    <java-symbol type="integer" name="config_smartChargingBatteryLevel" />
 </resources>
