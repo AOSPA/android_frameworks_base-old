@@ -1,0 +1,84 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "763230ca_9831cc91",
+        "filename": "services/core/java/com/android/server/power/PowerManagerService.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 2208,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2020-08-03T22:44:31Z",
+      "side": 1,
+      "message": "!mUseCharger",
+      "range": {
+        "startLine": 2208,
+        "startChar": 26,
+        "endLine": 2208,
+        "endChar": 48
+      },
+      "revId": "8e76df3e90919904757564fe065477fbad842929",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "1bdce70b_717fc4c8",
+        "filename": "services/core/java/com/android/server/power/PowerManagerService.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 2209,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2020-08-03T22:44:31Z",
+      "side": 1,
+      "message": "allowBatteryCharging \u003d !isValidSmartChargeState",
+      "revId": "8e76df3e90919904757564fe065477fbad842929",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "944915a9_aa9b2a12",
+        "filename": "services/core/java/com/android/server/power/PowerManagerService.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 2210,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2020-08-03T22:44:31Z",
+      "side": 1,
+      "message": "allowCharger \u003d isValidSmartChargeState \u0026\u0026 mBatteryLevel \u003e mSmartChargingLevel",
+      "revId": "8e76df3e90919904757564fe065477fbad842929",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "5f0d75a7_8136d9e4",
+        "filename": "services/core/java/com/android/server/power/PowerManagerService.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 2217,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2020-08-03T22:44:31Z",
+      "side": 1,
+      "message": "move this if statement to a new variable. e.g boolean isValidSmartChargeState \u003d mSmartChargingEnabled \u0026\u0026 mBatteryLevel \u003e\u003d mSmartChargingLevel and get rid of the code inside the if block",
+      "range": {
+        "startLine": 2211,
+        "startChar": 1,
+        "endLine": 2217,
+        "endChar": 0
+      },
+      "revId": "8e76df3e90919904757564fe065477fbad842929",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    }
+  ]
+}
