@@ -65,12 +65,12 @@ public class KeyguardSecurityModel {
     public SecurityMode getSecurityMode(int userId) {
         KeyguardUpdateMonitor monitor = Dependency.get(KeyguardUpdateMonitor.class);
 
-        int subId = monitor.getUnlockedSubIdForState(TelephonyManager.SIM_STATE_PUK_REQUIRED);
-        if (mIsPukScreenAvailable && SubscriptionManager.isValidSubscriptionId(subId)){
+        if (mIsPukScreenAvailable && SubscriptionManager.isValidSubscriptionId(
+                monitor.getNextSubIdForState(TelephonyManager.SIM_STATE_PUK_REQUIRED))) {
             return SecurityMode.SimPuk;
         }
 
-        subId = monitor.getUnlockedSubIdForState(TelephonyManager.SIM_STATE_PIN_REQUIRED);
+        int subId = monitor.getUnlockedSubIdForState(TelephonyManager.SIM_STATE_PIN_REQUIRED);
         if (SubscriptionManager.isValidSubscriptionId((subId))){
             return SecurityMode.SimPin;
         }

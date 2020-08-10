@@ -30,32 +30,20 @@
 package com.android.systemui.statusbar.policy;
 
 import android.os.RemoteException;
-import android.telephony.SubscriptionInfo;
 import android.util.Log;
 import android.test.suitebuilder.annotation.SmallTest;
 import android.testing.AndroidTestingRunner;
 import android.testing.TestableLooper.RunWithLooper;
 
-import java.util.ArrayList;
-import java.util.List;
-
-import org.codeaurora.internal.IExtTelephony;
 import org.codeaurora.internal.INetworkCallback;
-import org.codeaurora.internal.NrConfigType;
 import org.codeaurora.internal.NrIconType;
-import org.codeaurora.internal.ServiceUtil;
 import org.codeaurora.internal.Status;
 import org.codeaurora.internal.Token;
-import org.codeaurora.internal.UpperLayerIndInfo;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.mockito.Mockito;
 
 import static junit.framework.Assert.assertEquals;
-import static junit.framework.Assert.assertNotNull;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
 
 import com.android.systemui.statusbar.policy.FiveGServiceClient;
 import com.android.systemui.statusbar.policy.FiveGServiceClient.FiveGServiceState;
@@ -86,42 +74,6 @@ public class FiveGServiceClientTest extends NetworkControllerBaseTest {
     }
 
     @Test
-    public void testSignalStrength() {
-        int rsrp = -50;
-        int level = 3;
-        //Success status case
-        org.codeaurora.internal.SignalStrength signalStrength =
-                new org.codeaurora.internal.SignalStrength(rsrp, rsrp);
-        updateSignalStrength(mPhoneId, mToken, mSuccessStatus, signalStrength);
-
-        FiveGServiceState fiveGState = mFiveGServiceClient.getCurrentServiceState(mPhoneId);
-        assertEquals(fiveGState.getSignalLevel(), level);
-
-        //Failure status case
-        rsrp = org.codeaurora.internal.SignalStrength.INVALID;
-        signalStrength =
-                new org.codeaurora.internal.SignalStrength(rsrp, rsrp);
-        updateSignalStrength(mPhoneId, mToken, mFailStatus, signalStrength);
-        fiveGState = mFiveGServiceClient.getCurrentServiceState(mPhoneId);
-        assertEquals(fiveGState.getSignalLevel(), level);
-    }
-
-    @Test
-    public void test5gConfigInfo() {
-        //Success status case
-        NrConfigType type = new NrConfigType(NrConfigType.SA_CONFIGURATION);
-        update5gConfigInfo(mPhoneId, mToken, mSuccessStatus, type);
-        FiveGServiceState fiveGState = mFiveGServiceClient.getCurrentServiceState(mPhoneId);
-        assertEquals(fiveGState.getNrConfigType(), NrConfigType.SA_CONFIGURATION);
-
-        //Failure status case
-        type = new NrConfigType(NrConfigType.NSA_CONFIGURATION);
-        update5gConfigInfo(mPhoneId, mToken, mFailStatus, type);
-        fiveGState = mFiveGServiceClient.getCurrentServiceState(mPhoneId);
-        assertEquals(fiveGState.getNrConfigType(), NrConfigType.SA_CONFIGURATION);
-    }
-
-    @Test
     public void testNrIconType() {
         //Success status case
         NrIconType nrIconType = new NrIconType(NrIconType.TYPE_5G_BASIC);
@@ -138,12 +90,8 @@ public class FiveGServiceClientTest extends NetworkControllerBaseTest {
 
     @Test
     public void test5GBasicIcon() {
-        NrConfigType configType = new NrConfigType(NrConfigType.NSA_CONFIGURATION);
-        update5gConfigInfo(mPhoneId, mToken, mSuccessStatus, configType);
-
         /**
          * Verify that 5G Basic icon is shown when
-         * NrConfigType is NSA_CONFIGURATION and
          * NrIconType is TYPE_5G_BASIC
          */
         NrIconType nrIconType = new NrIconType(NrIconType.TYPE_5G_BASIC);
@@ -152,7 +100,6 @@ public class FiveGServiceClientTest extends NetworkControllerBaseTest {
 
         /**
          * Verify that 5G Basic icon is not shown when
-         * NrConfigType is NSA_CONFIGURATION and
          * NrIconType is TYPE_NONE
          */
         nrIconType = new NrIconType(NrIconType.TYPE_NONE);
@@ -162,12 +109,8 @@ public class FiveGServiceClientTest extends NetworkControllerBaseTest {
 
     @Test
     public void test5GUWBIcon() {
-        NrConfigType configType = new NrConfigType(NrConfigType.NSA_CONFIGURATION);
-        update5gConfigInfo(mPhoneId, mToken, mSuccessStatus, configType);
-
         /**
          * Verify that 5G UWB icon is shown when
-         * NrConfigType is NSA_CONFIGURATION and
          * NrIconType is TYPE_5G_UWB
          */
         NrIconType nrIconType = new NrIconType(NrIconType.TYPE_5G_UWB);
@@ -176,32 +119,11 @@ public class FiveGServiceClientTest extends NetworkControllerBaseTest {
 
         /**
          * Verify that 5G UWB icon is not shown when
-         * NrConfigType is NSA_CONFIGURATION and
          * NrIconType is TYPE_NONE
          */
         nrIconType = new NrIconType(NrIconType.TYPE_NONE);
         updateNrIconType(mPhoneId, mToken, mSuccessStatus, nrIconType);
         verifyIcon(0);
-    }
-
-    public void updateSignalStrength(int phoneId, Token token, Status status,
-                                     org.codeaurora.internal.SignalStrength signalStrength) {
-        Log.d(TAG, "Sending SignalStrength");
-        try {
-            mCallback.onSignalStrength(phoneId, token, status, signalStrength);
-        } catch (RemoteException e) {
-            e.printStackTrace();
-        }
-    }
-
-    public void update5gConfigInfo(int phoneId, Token token, Status status,
-                                   NrConfigType nrConfigType) {
-        Log.d(TAG, "Sending 5gConfigInfo");
-        try {
-            mCallback.on5gConfigInfo(phoneId, token, status, nrConfigType);
-        } catch (RemoteException e) {
-            e.printStackTrace();
-        }
     }
 
     public void updateNrIconType(int phoneId, Token token, Status status, NrIconType nrIconType) {

@@ -29,12 +29,6 @@
 
 package com.android.systemui.statusbar.policy;
 
-import static android.telephony.CellSignalStrength.SIGNAL_STRENGTH_NONE_OR_UNKNOWN;
-import static android.telephony.CellSignalStrength.SIGNAL_STRENGTH_POOR;
-import static android.telephony.CellSignalStrength.SIGNAL_STRENGTH_MODERATE;
-import static android.telephony.CellSignalStrength.SIGNAL_STRENGTH_GOOD;
-import static android.telephony.CellSignalStrength.SIGNAL_STRENGTH_GREAT;
-
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.ServiceConnection;
@@ -44,10 +38,6 @@ import android.os.IBinder;
 import android.os.Message;
 import android.os.DeadObjectException;
 import android.os.RemoteException;
-import android.provider.Settings;
-import android.telephony.CellInfo;
-import android.telephony.SubscriptionManager;
-import android.telephony.TelephonyManager;
 import android.util.Log;
 import android.util.SparseArray;
 
@@ -62,13 +52,10 @@ import org.codeaurora.internal.Client;
 import org.codeaurora.internal.IExtTelephony;
 import org.codeaurora.internal.INetworkCallback;
 import org.codeaurora.internal.NetworkCallbackBase;
-import org.codeaurora.internal.NrConfigType;
 import org.codeaurora.internal.NrIconType;
 import org.codeaurora.internal.ServiceUtil;
-import org.codeaurora.internal.SignalStrength;
 import org.codeaurora.internal.Status;
 import org.codeaurora.internal.Token;
-import org.codeaurora.internal.NetworkCallbackBase;
 
 import com.android.keyguard.KeyguardUpdateMonitorCallback;
 import com.android.systemui.R;
@@ -83,13 +70,6 @@ public class FiveGServiceClient {
     private static final int MAX_RETRY = 4;
     private static final int DELAY_MILLISECOND = 3000;
     private static final int DELAY_INCREMENT = 2000;
-
-    /**
-     * These threshold values are copied from CellSignalStrengthNr.
-     */
-    private static final int SIGNAL_GREAT_THRESHOLD = -95;
-    private static final int SIGNAL_GOOD_THRESHOLD = -105;
-    private static final int SIGNAL_MODERATE_THRESHOLD = -115;
 
     private static FiveGServiceClient sInstance;
     private final ArrayList<WeakReference<KeyguardUpdateMonitorCallback>>
@@ -108,14 +88,10 @@ public class FiveGServiceClient {
     private int mInitRetryTimes = 0;
 
     public static class FiveGServiceState{
-        private int mLevel;
-        private int mNrConfigType;
         private int mNrIconType;
         private MobileIconGroup mIconGroup;
 
         public FiveGServiceState(){
-            mLevel = 0;
-            mNrConfigType = NrConfigType.NSA_CONFIGURATION;
             mNrIconType = NrIconType.INVALID;
             mIconGroup = TelephonyIcons.UNKNOWN;
         }
@@ -130,39 +106,23 @@ public class FiveGServiceClient {
         }
 
         @VisibleForTesting
-        public int getSignalLevel() {
-            return mLevel;
-        }
-
-        @VisibleForTesting
-        int getNrConfigType() {
-            return mNrConfigType;
-        }
-
-        @VisibleForTesting
         int getNrIconType() {
             return mNrIconType;
         }
 
         public void copyFrom(FiveGServiceState state) {
-            this.mLevel = state.mLevel;
-            this.mNrConfigType = state.mNrConfigType;
             this.mIconGroup = state.mIconGroup;
             this.mNrIconType = state.mNrIconType;
         }
 
         public boolean equals(FiveGServiceState state) {
-            return this.mLevel == state.mLevel
-                    && this.mNrConfigType == state.mNrConfigType
-                    && this.mIconGroup == state.mIconGroup
+            return this.mIconGroup == state.mIconGroup
                     && this.mNrIconType == state.mNrIconType;
         }
         @Override
         public String toString() {
             StringBuilder builder = new StringBuilder();
-            builder.append("mLevel=").append(mLevel).append(", ").
-                    append("mNrConfigType=").append(mNrConfigType).append(", ").
-                    append("mNrIconType=").append(mNrIconType).append(", ").
+            builder.append("mNrIconType=").append(mNrIconType).append(", ").
                     append("mIconGroup=").append(mIconGroup);
 
             return builder.toString();
@@ -273,12 +233,7 @@ public class FiveGServiceClient {
         if ( mNetworkService != null && mClient != null) {
             Log.d(TAG, "query 5G service state for phoneId " + phoneId);
             try {
-                queryNrSignalStrength(phoneId);
-
-                Token token = mNetworkService.query5gConfigInfo(phoneId, mClient);
-                Log.d(TAG, "query5gConfigInfo result:" + token);
-
-                token = mNetworkService.queryNrIconType(phoneId, mClient);
+                Token token = mNetworkService.queryNrIconType(phoneId, mClient);
                 Log.d(TAG, "queryNrIconType result:" + token);
             }catch(DeadObjectException e) {
                 Log.e(TAG, "initFiveGServiceState: Exception = " + e);
@@ -299,37 +254,9 @@ public class FiveGServiceClient {
         }
     }
 
-    public void queryNrSignalStrength(int phoneId) {
-        if ( mNetworkService != null && mClient != null) {
-            Log.d(TAG, "query queryNrSignalStrength for phoneId " + phoneId);
-            try {
-                Token token = mNetworkService.queryNrSignalStrength(phoneId, mClient);
-                Log.d(TAG, "queryNrSignalStrength result:" + token);
-            }catch (Exception e) {
-                Log.e(TAG, "queryNrSignalStrength", e);
-            }
-        }else {
-            Log.e(TAG, "query queryNrSignalStrength for phoneId " + phoneId);
-        }
-    }
-
     @VisibleForTesting
     void update5GIcon(FiveGServiceState state,int phoneId) {
         state.mIconGroup = getNrIconGroup(state.mNrIconType, phoneId);
-    }
-
-    private void updateLevel(int ssRsrp, FiveGServiceState state) {
-        if (ssRsrp == CellInfo.UNAVAILABLE) {
-            state.mLevel = SIGNAL_STRENGTH_NONE_OR_UNKNOWN;
-        } else if (ssRsrp >= SIGNAL_GREAT_THRESHOLD) {
-            state.mLevel = SIGNAL_STRENGTH_GREAT;
-        } else if (ssRsrp >= SIGNAL_GOOD_THRESHOLD) {
-            state.mLevel = SIGNAL_STRENGTH_GOOD;
-        } else if (ssRsrp >= SIGNAL_MODERATE_THRESHOLD) {
-            state.mLevel = SIGNAL_STRENGTH_MODERATE;
-        } else {
-            state.mLevel = SIGNAL_STRENGTH_POOR;
-        }
     }
 
     private MobileIconGroup getNrIconGroup(int nrIconType , int phoneId) {
@@ -418,35 +345,6 @@ public class FiveGServiceClient {
 
     @VisibleForTesting
     protected INetworkCallback mCallback = new NetworkCallbackBase() {
-        @Override
-        public void onSignalStrength(int slotId, Token token, Status status,
-                                     org.codeaurora.internal.SignalStrength
-                                             signalStrength) throws RemoteException {
-            if ( DEBUG ) {
-                Log.d(TAG, "onSignalStrength: slotId=" + slotId + " token=" + token
-                        + " status=" + status + " signalStrength=" + signalStrength);
-            }
-
-            if (status.get() == Status.SUCCESS && signalStrength != null) {
-                FiveGServiceState state = getCurrentServiceState(slotId);
-                updateLevel(signalStrength.getRsrp(), state);
-                notifyListenersIfNecessary(slotId);
-            }
-        }
-
-        @Override
-        public void on5gConfigInfo(int slotId, Token token, Status status, NrConfigType
-                nrConfigType) throws RemoteException {
-            Log.d(TAG,
-                    "on5gConfigInfo: slotId = " + slotId + " token = " + token + " " + "status"
-                            + status + " NrConfigType = " + nrConfigType);
-            if (status.get() == Status.SUCCESS) {
-                FiveGServiceState state = getCurrentServiceState(slotId);
-                state.mNrConfigType = nrConfigType.get();
-                notifyListenersIfNecessary(slotId);
-            }
-        }
-
         @Override
         public void onNrIconType(int slotId, Token token, Status status, NrIconType
                 nrIconType) throws RemoteException {

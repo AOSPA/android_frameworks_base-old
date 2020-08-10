@@ -152,7 +152,11 @@ public final class CellIdentityLte extends CellIdentity {
         this(cid.base.base.ci, cid.base.base.pci, cid.base.base.tac, cid.base.base.earfcn,
                 cid.bands.stream().mapToInt(Integer::intValue).toArray(), cid.base.bandwidth,
                 cid.base.base.mcc, cid.base.base.mnc, cid.base.operatorNames.alphaLong,
-                cid.base.operatorNames.alphaShort, cid.additionalPlmns, null);
+                cid.base.operatorNames.alphaShort, cid.additionalPlmns,
+                cid.optionalCsgInfo.getDiscriminator()
+                        == android.hardware.radio.V1_5.OptionalCsgInfo.hidl_discriminator.csgInfo
+                                ? new ClosedSubscriberGroupInfo(cid.optionalCsgInfo.csgInfo())
+                                        : null);
     }
 
     private CellIdentityLte(@NonNull CellIdentityLte cid) {
