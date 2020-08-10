@@ -26,6 +26,7 @@ import android.content.Context;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.content.res.Configuration;
+import android.content.res.TypedArray;
 import android.graphics.PixelFormat;
 import android.graphics.PorterDuff;
 import android.graphics.drawable.Drawable;
@@ -180,9 +181,13 @@ public abstract class BiometricDialogView extends LinearLayout {
         mPackageManager = mContext.getPackageManager();
         mAnimationTranslationOffset = getResources()
                 .getDimension(R.dimen.biometric_dialog_animation_translation_offset);
-        mErrorColor = getResources().getColor(R.color.biometric_dialog_error);
-        mTextColor = getResources().getColor(R.color.biometric_dialog_gray);
         mHasFod = mPackageManager.hasSystemFeature(FOD);
+
+        TypedArray array = getContext().obtainStyledAttributes(
+                new int[]{android.R.attr.colorError, android.R.attr.textColorSecondary});
+        mErrorColor = array.getColor(0, 0);
+        mTextColor = array.getColor(1, 0);
+        array.recycle();
 
         DisplayMetrics metrics = new DisplayMetrics();
         mWindowManager.getDefaultDisplay().getMetrics(metrics);
