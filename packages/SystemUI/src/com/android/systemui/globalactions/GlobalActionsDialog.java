@@ -157,6 +157,7 @@ import java.util.Set;
 import java.util.concurrent.Executor;
 
 import javax.inject.Inject;
+import javax.inject.Provider;
 
 /**
  * Helper to show the global actions dialog.  Each item is an {@link Action} that may show depending
@@ -422,7 +423,7 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
                         if (mDialog != null) {
                             if (!mDialog.isShowingControls() && shouldShowControls()) {
                                 mDialog.showControls(mControlsUiControllerOptional.get());
-                            } else if (shouldShowLockMessage()) {
+                            } else if (shouldShowLockMessage(mDialog)) {
                                 mDialog.showLockMessage();
                             }
                         }
@@ -798,19 +799,17 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
         mPowerAdapter = new MyPowerOptionsAdapter();
 
         mDepthController.setShowingHomeControls(true);
-        GlobalActionsPanelPlugin.PanelViewController walletViewController =
-                getWalletViewController();
         ControlsUiController uiController = null;
         if (mControlsUiControllerOptional.isPresent() && shouldShowControls()) {
             uiController = mControlsUiControllerOptional.get();
         }
         ActionsDialog dialog = new ActionsDialog(mContext, mAdapter, mOverflowAdapter,
-                walletViewController, mDepthController, mSysuiColorExtractor,
+                this::getWalletViewController, mDepthController, mSysuiColorExtractor,
                 mStatusBarService, mNotificationShadeWindowController,
                 controlsAvailable(), uiController,
                 mSysUiState, this::onRotate, mKeyguardShowing, mPowerAdapter);
 
-        if (shouldShowLockMessage()) {
+        if (shouldShowLockMessage(dialog)) {
             dialog.showLockMessage();
         }
         dialog.setCanceledOnTouchOutside(false); // Handled by the custom class.
@@ -2313,7 +2312,8 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
         private MultiListLayout mGlobalActionsLayout;
         private Drawable mBackgroundDrawable;
         private final SysuiColorExtractor mColorExtractor;
-        private final GlobalActionsPanelPlugin.PanelViewController mWalletViewController;
+        private final Provider<GlobalActionsPanelPlugin.PanelViewController> mWalletFactory;
+        @Nullable private GlobalActionsPanelPlugin.PanelViewController mWalletViewController;
         private boolean mKeyguardShowing;
         private boolean mShowing;
         private float mScrimAlpha;
@@ -2333,7 +2333,7 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
         private TextView mLockMessage;
 
         ActionsDialog(Context context, MyAdapter adapter, MyOverflowAdapter overflowAdapter,
-                GlobalActionsPanelPlugin.PanelViewController walletViewController,
+                Provider<GlobalActionsPanelPlugin.PanelViewController> walletFactory,
                 NotificationShadeDepthController depthController,
                 SysuiColorExtractor sysuiColorExtractor, IStatusBarService statusBarService,
                 NotificationShadeWindowController notificationShadeWindowController,
@@ -2354,6 +2354,7 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
             mSysUiState = sysuiState;
             mOnRotateCallback = onRotateCallback;
             mKeyguardShowing = keyguardShowing;
+            mWalletFactory = walletFactory;
 
             // Window initialization
             Window window = getWindow();
@@ -2376,7 +2377,6 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
             window.getAttributes().setFitInsetsTypes(0 /* types */);
             setTitle(R.string.global_actions);
 
-            mWalletViewController = walletViewController;
             initializeLayout();
         }
 
@@ -2389,8 +2389,13 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
             mControlsUiController.show(mControlsView, this::dismissForControlsActivity);
         }
 
+        private boolean isWalletViewAvailable() {
+            return mWalletViewController != null && mWalletViewController.getPanelContent() != null;
+        }
+
         private void initializeWalletView() {
-            if (mWalletViewController == null || mWalletViewController.getPanelContent() == null) {
+            mWalletViewController = mWalletFactory.get();
+            if (!isWalletViewAvailable()) {
                 return;
             }
 
@@ -2699,6 +2704,8 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
         private void dismissWallet() {
             if (mWalletViewController != null) {
                 mWalletViewController.onDismissed();
+                // The wallet controller should not be re-used after being dismissed.
+                mWalletViewController = null;
             }
         }
 
@@ -2840,18 +2847,12 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
                 && !mControlsServiceInfos.isEmpty();
     }
 
-    private boolean walletViewAvailable() {
-        GlobalActionsPanelPlugin.PanelViewController walletViewController =
-                getWalletViewController();
-        return walletViewController != null && walletViewController.getPanelContent() != null;
-    }
-
-    private boolean shouldShowLockMessage() {
+    private boolean shouldShowLockMessage(ActionsDialog dialog) {
         boolean isLockedAfterBoot = mLockPatternUtils.getStrongAuthForUser(getCurrentUser().id)
                 == STRONG_AUTH_REQUIRED_AFTER_BOOT;
         return !mKeyguardStateController.isUnlocked()
                 && (!mShowLockScreenCardsAndControls || isLockedAfterBoot)
-                && (controlsAvailable() || walletViewAvailable());
+                && (controlsAvailable() || dialog.isWalletViewAvailable());
     }
 
     private void onPowerMenuLockScreenSettingsChanged() {
