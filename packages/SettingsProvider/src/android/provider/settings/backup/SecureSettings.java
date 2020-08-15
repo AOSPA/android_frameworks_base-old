@@ -168,6 +168,7 @@ public class SecureSettings {
         Settings.Secure.MEDIA_CONTROLS_RESUME_BLOCKED,
         Settings.Secure.ACCESSIBILITY_MAGNIFICATION_MODE,
         Settings.Secure.ACCESSIBILITY_BUTTON_TARGETS,
-        Settings.Secure.TORCH_POWER_BUTTON_GESTURE
+        Settings.Secure.TORCH_POWER_BUTTON_GESTURE,
+        Settings.Secure.ADAPTIVE_CONNECTIVITY_ENABLED
     };
 }
