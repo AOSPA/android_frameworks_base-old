@@ -4829,6 +4829,15 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
             }
             callServiceTrackeronActivityStatechange(STARTED, true);
             setState(STARTED, "makeActiveIfNeeded");
+
+            // Update process info while making an activity from invisible to visible, to make
+            // sure the process state is updated to foreground.
+            if (app != null) {
+                app.updateProcessInfo(false /* updateServiceConnectionActivities */,
+                        true /* activityChange */, true /* updateOomAdj */,
+                        true /* addPendingTopUid */);
+            }
+
             try {
                 mAtmService.getLifecycleManager().scheduleTransaction(app.getThread(), appToken,
                         StartActivityItem.obtain());
