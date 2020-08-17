@@ -86,11 +86,7 @@
   </array>
 
   <!-- Current when CPU is idle -->
-  <item name="cpu.active">8.5</item>
-  <!-- Current when CPU is idle -->
   <item name="cpu.idle">0.1</item>
-  <!-- Current when CPU is suspend -->
-  <item name="cpu.suspend">0</item>
 
   <!-- Memory bandwidth power values in mA at the rail. There must be one value
        for each bucket defined in the device tree. -->
