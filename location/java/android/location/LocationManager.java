@@ -3058,7 +3058,7 @@ public class LocationManager {
         protected GnssRequest merge(@NonNull List<GnssRequest> requests) {
             Preconditions.checkArgument(!requests.isEmpty());
             for (GnssRequest request : requests) {
-                if (request.isFullTracking()) {
+                if (request != null && request.isFullTracking()) {
                     return request;
                 }
             }
