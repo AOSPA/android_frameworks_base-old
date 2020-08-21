@@ -283,14 +283,36 @@ public class WifiManager {
     *
     * @hide
     **/
-    public static final String  WIFI_DATA_STALL = "com.qualcomm.qti.net.wifi.WIFI_DATA_STALL";
+    public static final String  WIFI_ALERT = "com.qualcomm.qti.net.wifi.WIFI_ALERT";
 
     /**
     *
-    * see data stall reason code
+    *
     * @hide
     **/
-    public static final String  EXTRA_WIFI_DATA_STALL_REASON = "data_stall_reasoncode";
+    public static final String  WIFI_NETWORK_DISCONNECTION = "com.qualcomm.qti.net.wifi.WIFI_NETWORK_DISCONNECTION";
+
+    /**
+    *
+    * see alert reason code
+    * @hide
+    **/
+    public static final String  EXTRA_WIFI_ALERT_REASON = "alert_reasoncode";
+
+    /**
+    *
+    * see wifi network disconnection arg 1
+    * @hide
+    **/
+    public static final String  EXTRA_WIFI_NETWORK_DISCONNECTION_ARG1 = "network_disconnection_arg1";
+
+    /**
+    *
+    * see wifi network disconnection arg 2
+    * @hide
+    **/
+    public static final String  EXTRA_WIFI_NETWORK_DISCONNECTION_ARG2 = "network_disconnection_arg2";
+
     /**
      * Broadcast intent action indicating that the credential of a Wi-Fi network
      * has been changed. One extra provides the ssid of the network. Another
@@ -6555,6 +6577,19 @@ public class WifiManager {
     public boolean isVht8ssCapableDevice() {
         try {
             return mService.isVht8ssCapableDevice();
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Run driver command from user space
+     * @hide
+     */
+    public String doDriverCmd(String command)
+    {
+        try {
+            return mService.doDriverCmd(command);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
