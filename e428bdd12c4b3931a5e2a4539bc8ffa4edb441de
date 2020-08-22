@@ -1,0 +1,55 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "fb7311ca_5dcb3c49",
+        "filename": "packages/SystemUI/src/com/android/systemui/power/EnhancedEstimatesImpl.java",
+        "patchSetId": 4
+      },
+      "lineNbr": 21,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2020-08-22T16:09:42Z",
+      "side": 1,
+      "message": "Make this private. Also the tag is usually just the class name or does Google add the power prefix to all power related classes?",
+      "revId": "e428bdd12c4b3931a5e2a4539bc8ffa4edb441de",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "be6e9045_408face1",
+        "filename": "packages/SystemUI/src/com/android/systemui/power/EnhancedEstimatesImpl.java",
+        "patchSetId": 4
+      },
+      "lineNbr": 38,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2020-08-22T16:09:42Z",
+      "side": 1,
+      "message": "I wouldn\u0027t think every call in this try catch is throwing an exception. Please only put the code in the try catch is throwing an exception",
+      "revId": "e428bdd12c4b3931a5e2a4539bc8ffa4edb441de",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "f754ba2a_1f71ec71",
+        "filename": "packages/SystemUI/src/com/android/systemui/power/EnhancedEstimatesImpl.java",
+        "patchSetId": 4
+      },
+      "lineNbr": 39,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2020-08-22T16:09:42Z",
+      "side": 1,
+      "message": "There is no point in casting if you\u0027re passing null anyway",
+      "revId": "e428bdd12c4b3931a5e2a4539bc8ffa4edb441de",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    }
+  ]
+}
