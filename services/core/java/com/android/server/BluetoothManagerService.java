@@ -1712,23 +1712,46 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
                    BLUETOOTH_PRIVILEGED_PERM, "Need BLUETOOTH PRIVILEGED permission");
         }
         persistBluetoothSetting(BLUETOOTH_ON_BLUETOOTH);
+        // Wait for stable state if bluetooth is temporary state.
+        int state = getState();
+        if (state == BluetoothAdapter.STATE_BLE_TURNING_ON
+                || state == BluetoothAdapter.STATE_TURNING_ON
+                || state == BluetoothAdapter.STATE_TURNING_OFF) {
+            if (!waitForState(new HashSet<Integer>(Arrays.asList(BluetoothAdapter.STATE_BLE_ON,
+                      BluetoothAdapter.STATE_ON)))) {
+                return false;
+            }
+        }
         // Clear registered LE apps to force shut-off
         clearBleApps();
+        state = getState();
         try {
+            mBluetoothLock.writeLock().lock();
             if (mBluetooth == null) {
                 mEnable = true;
                 handleEnable(mQuietEnable);
-            } else if (mBluetooth != null &&
-                       (mBluetooth.getState() == BluetoothAdapter.STATE_OFF)) {
+            } else if (state == BluetoothAdapter.STATE_OFF) {
                 mEnable = true;
                 mBluetooth.factoryReset();
                 handleEnable(mQuietEnable);
-            } else if (mBluetooth != null){
+            } else if (state == BluetoothAdapter.STATE_BLE_ON) {
+                addActiveLog(
+                BluetoothProtoEnums.ENABLE_DISABLE_REASON_FACTORY_RESET,
+                mContext.getPackageName(), false);
+                mBluetooth.onBrEdrDown();
+                return mBluetooth.factoryReset();
+            } else if (state == BluetoothAdapter.STATE_ON) {
+                addActiveLog(
+                BluetoothProtoEnums.ENABLE_DISABLE_REASON_FACTORY_RESET,
+                mContext.getPackageName(), false);
+                mBluetooth.disable();
                 return mBluetooth.factoryReset();
             }
         } catch (RemoteException e) {
             Slog.e(TAG, "factoryReset(): Unable to do factoryReset.", e);
             return false;
+        } finally {
+            mBluetoothLock.writeLock().unlock();
         }
         return true;
     }
