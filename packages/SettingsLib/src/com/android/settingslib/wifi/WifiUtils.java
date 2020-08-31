@@ -124,7 +124,7 @@ public class WifiUtils {
         int num5 = 0; // number of scanned BSSID on 5GHz band
         int num24 = 0; // number of scanned BSSID on 2.4Ghz band
         int num60 = 0; // number of scanned BSSID on 60Ghz band
-        int numBlackListed = 0;
+        int numBlockListed = 0;
 
         // TODO: sort list by RSSI or age
         long nowMs = SystemClock.elapsedRealtime();
@@ -217,8 +217,8 @@ public class WifiUtils {
             }
             visibility.append(scans6GHz.toString());
         }
-        if (numBlackListed > 0) {
-            visibility.append("!").append(numBlackListed);
+        if (numBlockListed > 0) {
+            visibility.append("!").append(numBlockListed);
         }
         visibility.append("]");
 

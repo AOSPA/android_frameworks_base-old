@@ -43,6 +43,7 @@ import androidx.test.filters.SmallTest;
 import com.android.internal.util.NotificationMessagingUtil;
 import com.android.systemui.R;
 import com.android.systemui.SysuiTestCase;
+import com.android.systemui.media.MediaFeatureFlag;
 import com.android.systemui.plugins.FalsingManager;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.shared.plugins.PluginManager;
@@ -86,6 +87,7 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.mockito.Answers;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.Mockito;
@@ -120,8 +122,8 @@ public class NotificationEntryManagerInflationTest extends SysuiTestCase {
     @Mock private NotificationGutsManager mGutsManager;
     @Mock private NotificationRemoteInputManager mRemoteInputManager;
     @Mock private NotificationMediaManager mNotificationMediaManager;
-    @Mock private ExpandableNotificationRowComponent.Builder
-            mExpandableNotificationRowComponentBuilder;
+    @Mock(answer = Answers.RETURNS_SELF)
+    private ExpandableNotificationRowComponent.Builder mExpandableNotificationRowComponentBuilder;
     @Mock private ExpandableNotificationRowComponent mExpandableNotificationRowComponent;
     @Mock private FalsingManager mFalsingManager;
     @Mock private KeyguardBypassController mKeyguardBypassController;
@@ -182,7 +184,9 @@ public class NotificationEntryManagerInflationTest extends SysuiTestCase {
                 () -> mRowBinder,
                 () -> mRemoteInputManager,
                 mLeakDetector,
-                mock(ForegroundServiceDismissalFeatureController.class)
+                mock(ForegroundServiceDismissalFeatureController.class),
+                mock(HeadsUpManager.class),
+                mock(StatusBarStateController.class)
         );
 
         NotifRemoteViewCache cache = new NotifRemoteViewCacheImpl(mEntryManager);
@@ -197,6 +201,7 @@ public class NotificationEntryManagerInflationTest extends SysuiTestCase {
                 () -> mock(SmartReplyConstants.class),
                 () -> mock(SmartReplyController.class),
                 mock(ConversationNotificationProcessor.class),
+                mock(MediaFeatureFlag.class),
                 mBgExecutor);
         mRowContentBindStage = new RowContentBindStage(
                 binder,
@@ -209,21 +214,9 @@ public class NotificationEntryManagerInflationTest extends SysuiTestCase {
         when(mExpandableNotificationRowComponentBuilder
                 .expandableNotificationRow(viewCaptor.capture()))
                 .thenReturn(mExpandableNotificationRowComponentBuilder);
-        when(mExpandableNotificationRowComponentBuilder
-                .notificationEntry(any()))
-                .thenReturn(mExpandableNotificationRowComponentBuilder);
-        when(mExpandableNotificationRowComponentBuilder
-                .onDismissRunnable(any()))
-                .thenReturn(mExpandableNotificationRowComponentBuilder);
-        when(mExpandableNotificationRowComponentBuilder
-                .rowContentBindStage(any()))
-                .thenReturn(mExpandableNotificationRowComponentBuilder);
-        when(mExpandableNotificationRowComponentBuilder
-                .onExpandClickListener(any()))
-                .thenReturn(mExpandableNotificationRowComponentBuilder);
-
         when(mExpandableNotificationRowComponentBuilder.build())
                 .thenReturn(mExpandableNotificationRowComponent);
+
         when(mExpandableNotificationRowComponent.getExpandableNotificationRowController())
                 .thenAnswer((Answer<ExpandableNotificationRowController>) invocation ->
                         new ExpandableNotificationRowController(
@@ -298,7 +291,9 @@ public class NotificationEntryManagerInflationTest extends SysuiTestCase {
                 false,
                 false,
                 null,
-                false);
+                0,
+                false
+            );
         mRankingMap = new NotificationListenerService.RankingMap(new Ranking[] {ranking});
 
         TestableLooper.get(this).processAllMessages();

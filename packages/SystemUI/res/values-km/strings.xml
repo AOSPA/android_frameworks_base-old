@@ -711,11 +711,13 @@
     <string name="notification_silence_title" msgid="8608090968400832335">"ស្ងាត់"</string>
     <string name="notification_alert_title" msgid="3656229781017543655">"លំនាំដើម"</string>
     <string name="notification_bubble_title" msgid="8330481035191903164">"ពពុះ"</string>
+    <string name="notification_automatic_title" msgid="3745465364578762652">"ស្វ័យប្រវត្តិ"</string>
     <string name="notification_channel_summary_low" msgid="4860617986908931158">"គ្មាន​សំឡេង ឬការញ័រទេ"</string>
     <string name="notification_conversation_summary_low" msgid="1734433426085468009">"គ្មានសំឡេង ឬការញ័រ និងការបង្ហាញ​កម្រិតទាបជាង​នេះនៅក្នុង​ផ្នែកសន្ទនាទេ"</string>
     <string name="notification_channel_summary_default" msgid="3282930979307248890">"អាចរោទ៍ ឬញ័រ ដោយផ្អែកលើ​ការកំណត់​ទូរសព្ទ"</string>
     <string name="notification_channel_summary_default_with_bubbles" msgid="1782419896613644568">"អាចរោទ៍ ឬញ័រ ដោយផ្អែកលើ​ការកំណត់​ទូរសព្ទ។ ការសន្ទនា​ពី​ពពុះ <xliff:g id="APP_NAME">%1$s</xliff:g> តាម​លំនាំដើម​។"</string>
     <string name="notification_channel_summary_bubble" msgid="7235935211580860537">"ធ្វើឱ្យអ្នក​ចាប់អារម្មណ៍​ដោយប្រើ​ផ្លូវកាត់​អណ្ដែត​សម្រាប់ខ្លឹមសារនេះ។"</string>
+    <string name="notification_channel_summary_automatic" msgid="5813109268050235275">"ឱ្យប្រព័ន្ធកំណត់ថាតើ​ការជូនដំណឹងនេះ​គួរតែបន្លឺសំឡេង ឬញ័រ"</string>
     <string name="notification_channel_summary_priority" msgid="7952654515769021553">"បង្ហាញនៅខាងលើ​ផ្នែកសន្ទនា បង្ហាញជា​ពពុះអណ្ដែត បង្ហាញ​រូបភាព​កម្រងព័ត៌មាន​នៅលើ​អេក្រង់ចាក់សោ"</string>
     <string name="notification_conversation_channel_settings" msgid="2409977688430606835">"ការកំណត់"</string>
     <string name="notification_priority_title" msgid="2079708866333537093">"អាទិភាព"</string>
@@ -736,6 +738,12 @@
     <string name="appops_camera_mic_overlay" msgid="5584311236445644095">"កម្មវិធីនេះ​កំពុងបង្ហាញ​ពីលើកម្មវិធី​ផ្សេងទៀត​នៅលើអេក្រង់​របស់អ្នក និងកំពុងប្រើ​មីក្រូហ្វូន ក៏​ដូចជា​​កាមេរ៉ា។"</string>
     <string name="notification_appops_settings" msgid="5208974858340445174">"ការកំណត់"</string>
     <string name="notification_appops_ok" msgid="2177609375872784124">"យល់ព្រម"</string>
+    <string name="feedback_silenced" msgid="5382212321253328247">"ការជូនដំណឹងនេះ​ត្រូវបានបិទសំឡេង​ដោយប្រព័ន្ធ។"</string>
+    <string name="feedback_promoted" msgid="8075757485407091976">"ការជូនដំណឹងនេះ​ត្រូវបាន​ដំឡើងតំណែង​ដោយប្រព័ន្ធ។"</string>
+    <string name="feedback_demoted" msgid="5848066008939031913">"ការជូនដំណឹងនេះ​ត្រូវបានបន្ទាបតំណែងដោយប្រព័ន្ធ។"</string>
+    <string name="feedback_prompt" msgid="2278631214125128281">"តើវា​ត្រឹមត្រូវទេ?"</string>
+    <string name="feedback_response" msgid="4671729244976641339">"សូមអរគុណចំពោះ​មតិកែលម្អ​របស់អ្នក!"</string>
+    <string name="feedback_ok" msgid="6481426753298857144">"យល់ព្រម"</string>
     <string name="notification_channel_controls_opened_accessibility" msgid="6111817750774381094">"ការគ្រប់គ្រងការជូនដំណឹងសម្រាប់ <xliff:g id="APP_NAME">%1$s</xliff:g> បានបើក"</string>
     <string name="notification_channel_controls_closed_accessibility" msgid="1561909368876911701">"ការគ្រប់គ្រងការជូនដំណឹងសម្រាប់ <xliff:g id="APP_NAME">%1$s</xliff:g> បានបិទ"</string>
     <string name="notification_channel_switch_accessibility" msgid="8979885820432540252">"អនុញ្ញាតឲ្យមានការជូនដំណឹងពីប៉ុស្តិ៍នេះ"</string>
@@ -908,25 +916,14 @@
     <string name="accessibility_quick_settings_edit" msgid="1523745183383815910">"កែលំដាប់ការកំណត់"</string>
     <string name="accessibility_quick_settings_page" msgid="7506322631645550961">"ទំព័រ <xliff:g id="ID_1">%1$d</xliff:g> នៃ <xliff:g id="ID_2">%2$d</xliff:g>"</string>
     <string name="tuner_lock_screen" msgid="2267383813241144544">"អេក្រង់​ចាក់សោ"</string>
-    <string name="pip_phone_expand" msgid="1424988917240616212">"ពង្រីក"</string>
-    <string name="pip_phone_minimize" msgid="9057117033655996059">"បង្រួម"</string>
-    <string name="pip_phone_close" msgid="8801864042095341824">"បិទ"</string>
-    <string name="pip_phone_settings" msgid="5687538631925004341">"ការកំណត់"</string>
-    <string name="pip_phone_dismiss_hint" msgid="5825740708095316710">"អូស​ចុះក្រោម​ដើម្បី​បដិសេធ"</string>
-    <string name="pip_menu_title" msgid="6365909306215631910">"ម៉ឺនុយ"</string>
-    <string name="pip_notification_title" msgid="8661573026059630525">"<xliff:g id="NAME">%s</xliff:g> ស្ថិតក្នុងមុខងាររូបក្នុងរូប"</string>
-    <string name="pip_notification_message" msgid="4991831338795022227">"ប្រសិនបើ​អ្នក​មិន​ចង់​ឲ្យ <xliff:g id="NAME">%s</xliff:g> ប្រើ​មុខងារ​នេះ​ សូមចុច​​បើក​ការកំណត់ រួច​បិទ​វា។"</string>
-    <string name="pip_play" msgid="333995977693142810">"លេង"</string>
-    <string name="pip_pause" msgid="1139598607050555845">"ផ្អាក"</string>
-    <string name="pip_skip_to_next" msgid="3864212650579956062">"រំលងទៅបន្ទាប់"</string>
-    <string name="pip_skip_to_prev" msgid="3742589641443049237">"រំលងទៅក្រោយ"</string>
-    <string name="accessibility_action_pip_resize" msgid="8237306972921160456">"ប្ដូរ​ទំហំ"</string>
     <string name="thermal_shutdown_title" msgid="2702966892682930264">"ទូរសព្ទ​បាន​បិទដោយសារ​វា​ឡើងកម្តៅ"</string>
-    <string name="thermal_shutdown_message" msgid="7432744214105003895">"ឥឡូវនេះ​ទូរសព្ទ​របស់អ្នក​កំពុង​ដំណើរការ​ធម្មតា"</string>
+    <string name="thermal_shutdown_message" msgid="6142269839066172984">"ឥឡូវនេះ ទូរសព្ទ​របស់អ្នក​កំពុងដំណើរការ​ជាធម្មតា។\nសូមចុច​ដើម្បីទទួលបាន​ព័ត៌មានបន្ថែម"</string>
     <string name="thermal_shutdown_dialog_message" msgid="6745684238183492031">"ទូរសព្ទ​របស់អ្នក​ក្តៅពេក ដូច្នេះ​វាបាន​បិទ​ដើម្បី​បន្ថយ​កម្តៅ។ ឥឡូវនេះ ​ទូរសព្ទ​របស់អ្នក​កំពុង​ដំណើរការ​ធម្មតា។\n\nទូរសព្ទ​របស់អ្នក​អាចនឹង​ឡើង​កម្តៅ​ខ្លាំងជ្រុល ប្រសិន​បើអ្នក៖\n	• ប្រើប្រាស់​កម្មវិធី​ដែល​ប្រើប្រាស់ទិន្នន័យច្រើនក្នុងរយៈពេលខ្លី (ដូចជាហ្គេម វីដេអូ ឬកម្មវិធីរុករក)\n	• ទាញយក ឬ​បង្ហោះ​ឯកសារដែលមានទំហំធំ\n	• ប្រើប្រាស់​ទូរសព្ទ​របស់អ្នក​នៅកន្លែង​មានសីតុណ្ហភាព​ខ្ពស់"</string>
+    <string name="thermal_shutdown_dialog_help_text" msgid="6413474593462902901">"មើលជំហាន​ថែទាំ"</string>
     <string name="high_temp_title" msgid="2218333576838496100">"ទូរសព្ទ​នេះ​កំពុង​កើន​កម្តៅ"</string>
-    <string name="high_temp_notif_message" msgid="163928048626045592">"មុខងារ​មួយ​ចំនួន​នឹង​មិន​អាច​ប្រើ​បាន​ពេញលេញ​នោះ​ទេ ខណៈពេល​ដែល​ទូរសព្ទ​កំពុង​បញ្ចុះ​កម្តៅ"</string>
+    <string name="high_temp_notif_message" msgid="1277346543068257549">"មុខងារ​មួយចំនួន​នឹងមិនអាច​ប្រើបានពេញលេញ​នោះទេ ខណៈពេល​ដែលទូរសព្ទ​កំពុងបញ្ចុះកម្ដៅ។\nសូមចុច​ដើម្បីទទួលបាន​ព័ត៌មានបន្ថែម"</string>
     <string name="high_temp_dialog_message" msgid="3793606072661253968">"ទូរសព្ទ​របស់អ្នក​នឹង​ព្យាយាម​បញ្ចុះ​កម្តៅ​ដោយ​ស្វ័យប្រវត្តិ។ អ្នក​នៅតែ​អាច​ប្រើ​ទូរសព្ទ​របស់អ្នក​បាន​ដដែល​ ប៉ុន្តែ​វា​នឹង​ដំណើរ​ការ​យឺត​ជាង​មុន។\n\nបន្ទាប់​ពី​ទូរសព្ទ​របស់អ្នក​ត្រជាក់​ជាង​មុន​ហើយ វា​នឹង​ដំណើរការ​ដូច​ធម្មតា។"</string>
+    <string name="high_temp_dialog_help_text" msgid="7380171287943345858">"មើលជំហាន​ថែទាំ"</string>
     <string name="high_temp_alarm_title" msgid="2359958549570161495">"ផ្ដាច់ឆ្នាំងសាក"</string>
     <string name="high_temp_alarm_notify_message" msgid="7186272817783835089">"មាន​បញ្ហា​ក្នុងការសាកថ្ម​ឧបករណ៍​នេះ។ សូមផ្ដាច់​ឆ្នាំងសាក ហើយ​ប្រុងប្រយ័ត្ន ដោយសារ​ខ្សែ​អាចមាន​កម្ដៅ​ក្ដៅ។"</string>
     <string name="high_temp_alarm_help_care_steps" msgid="5017002218341329566">"មើលជំហាន​ថែទាំ"</string>
@@ -1022,7 +1019,6 @@
     <string name="priority_onboarding_ignores_dnd_text" msgid="2918952762719600529">"ផ្អាក​មុខងារកុំរំខាន"</string>
     <string name="priority_onboarding_done_button_title" msgid="4569550984286506007">"យល់ហើយ"</string>
     <string name="priority_onboarding_settings_button_title" msgid="6663601574303585927">"ការកំណត់"</string>
-    <string name="magnification_overlay_title" msgid="6584179429612427958">"វិនដូ​ត្រួតគ្នា​លើ​ការពង្រីក"</string>
     <string name="magnification_window_title" msgid="4863914360847258333">"វិនដូ​ការពង្រីក"</string>
     <string name="magnification_controls_title" msgid="8421106606708891519">"វិនដូគ្រប់គ្រង​​ការពង្រីក"</string>
     <string name="quick_controls_title" msgid="6839108006171302273">"ផ្ទាំងគ្រប់គ្រងឧបករណ៍"</string>

@@ -49,10 +49,12 @@ import libcore.io.IoUtils;
 import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserException;
 
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -70,14 +72,19 @@ public class SystemConfig {
     static SystemConfig sInstance;
 
     // permission flag, determines which types of configuration are allowed to be read
-    private static final int ALLOW_FEATURES = 0x01;
-    private static final int ALLOW_LIBS = 0x02;
-    private static final int ALLOW_PERMISSIONS = 0x04;
-    private static final int ALLOW_APP_CONFIGS = 0x08;
-    private static final int ALLOW_PRIVAPP_PERMISSIONS = 0x10;
-    private static final int ALLOW_OEM_PERMISSIONS = 0x20;
-    private static final int ALLOW_HIDDENAPI_WHITELISTING = 0x40;
-    private static final int ALLOW_ASSOCIATIONS = 0x80;
+    private static final int ALLOW_FEATURES = 0x001;
+    private static final int ALLOW_LIBS = 0x002;
+    private static final int ALLOW_PERMISSIONS = 0x004;
+    private static final int ALLOW_APP_CONFIGS = 0x008;
+    private static final int ALLOW_PRIVAPP_PERMISSIONS = 0x010;
+    private static final int ALLOW_OEM_PERMISSIONS = 0x020;
+    private static final int ALLOW_HIDDENAPI_WHITELISTING = 0x040;
+    private static final int ALLOW_ASSOCIATIONS = 0x080;
+    // ALLOW_OVERRIDE_APP_RESTRICTIONS allows to use "allow-in-power-save-except-idle",
+    // "allow-in-power-save", "allow-in-data-usage-save", "allow-unthrottled-location",
+    // and "allow-ignore-location-settings".
+    private static final int ALLOW_OVERRIDE_APP_RESTRICTIONS = 0x100;
+    private static final int ALLOW_IMPLICIT_BROADCASTS = 0x200;
     private static final int ALLOW_ALL = ~0;
 
     // property for runtime configuration differentiation
@@ -99,11 +106,17 @@ public class SystemConfig {
         public final String name;
         public final String filename;
         public final String[] dependencies;
+        public final boolean isNative;
 
         SharedLibraryEntry(String name, String filename, String[] dependencies) {
+            this(name, filename, dependencies, false /* isNative */);
+        }
+
+        SharedLibraryEntry(String name, String filename, String[] dependencies, boolean isNative) {
             this.name = name;
             this.filename = filename;
             this.dependencies = dependencies;
+            this.isNative = isNative;
         }
     }
 
@@ -164,12 +177,6 @@ public class SystemConfig {
     // These are the package names of apps which should be in the 'always'
     // URL-handling state upon factory reset.
     final ArraySet<String> mLinkedApps = new ArraySet<>();
-
-    // These are the packages that are whitelisted to be able to run as system user
-    final ArraySet<String> mSystemUserWhitelistedApps = new ArraySet<>();
-
-    // These are the packages that should not run under system user
-    final ArraySet<String> mSystemUserBlacklistedApps = new ArraySet<>();
 
     // These are the components that are enabled by default as VR mode listener services.
     final ArraySet<ComponentName> mDefaultVrComponents = new ArraySet<>();
@@ -302,14 +309,6 @@ public class SystemConfig {
 
     public ArraySet<String> getLinkedApps() {
         return mLinkedApps;
-    }
-
-    public ArraySet<String> getSystemUserWhitelistedApps() {
-        return mSystemUserWhitelistedApps;
-    }
-
-    public ArraySet<String> getSystemUserBlacklistedApps() {
-        return mSystemUserBlacklistedApps;
     }
 
     public ArraySet<String> getHiddenApiWhitelistedApps() {
@@ -452,6 +451,7 @@ public class SystemConfig {
         log.traceBegin("readAllPermissions");
         try {
             readAllPermissions();
+            readPublicNativeLibrariesList();
         } finally {
             log.traceEnd();
         }
@@ -515,11 +515,21 @@ public class SystemConfig {
         readPermissions(Environment.buildPath(
                 Environment.getOemDirectory(), "etc", "permissions"), oemPermissionFlag);
 
-        // Allow Product to customize all system configs
+        // Allow Product to customize these configs
+        // TODO(b/157203468): ALLOW_HIDDENAPI_WHITELISTING must be removed because we prohibited
+        // the use of hidden APIs from the product partition.
+        int productPermissionFlag = ALLOW_FEATURES | ALLOW_LIBS | ALLOW_PERMISSIONS
+                | ALLOW_APP_CONFIGS | ALLOW_PRIVAPP_PERMISSIONS | ALLOW_HIDDENAPI_WHITELISTING
+                | ALLOW_ASSOCIATIONS | ALLOW_OVERRIDE_APP_RESTRICTIONS | ALLOW_IMPLICIT_BROADCASTS;
+        if (Build.VERSION.FIRST_SDK_INT <= Build.VERSION_CODES.R) {
+            // TODO(b/157393157): This must check product interface enforcement instead of
+            // FIRST_SDK_VERSION for the devices without product interface enforcement.
+            productPermissionFlag = ALLOW_ALL;
+        }
         readPermissions(Environment.buildPath(
-                Environment.getProductDirectory(), "etc", "sysconfig"), ALLOW_ALL);
+                Environment.getProductDirectory(), "etc", "sysconfig"), productPermissionFlag);
         readPermissions(Environment.buildPath(
-                Environment.getProductDirectory(), "etc", "permissions"), ALLOW_ALL);
+                Environment.getProductDirectory(), "etc", "permissions"), productPermissionFlag);
 
         // Allow /system_ext to customize all system configs
         readPermissions(Environment.buildPath(
@@ -633,6 +643,10 @@ public class SystemConfig {
             final boolean allowApiWhitelisting = (permissionFlag & ALLOW_HIDDENAPI_WHITELISTING)
                     != 0;
             final boolean allowAssociations = (permissionFlag & ALLOW_ASSOCIATIONS) != 0;
+            final boolean allowOverrideAppRestrictions =
+                    (permissionFlag & ALLOW_OVERRIDE_APP_RESTRICTIONS) != 0;
+            final boolean allowImplicitBroadcasts = (permissionFlag & ALLOW_IMPLICIT_BROADCASTS)
+                    != 0;
             while (true) {
                 XmlUtils.nextElement(parser);
                 if (parser.getEventType() == XmlPullParser.END_DOCUMENT) {
@@ -779,7 +793,7 @@ public class SystemConfig {
                         XmlUtils.skipCurrentTag(parser);
                     } break;
                     case "allow-in-power-save-except-idle": {
-                        if (allowAll) {
+                        if (allowOverrideAppRestrictions) {
                             String pkgname = parser.getAttributeValue(null, "package");
                             if (pkgname == null) {
                                 Slog.w(TAG, "<" + name + "> without package in "
@@ -793,7 +807,7 @@ public class SystemConfig {
                         XmlUtils.skipCurrentTag(parser);
                     } break;
                     case "allow-in-power-save": {
-                        if (allowAll) {
+                        if (allowOverrideAppRestrictions) {
                             String pkgname = parser.getAttributeValue(null, "package");
                             if (pkgname == null) {
                                 Slog.w(TAG, "<" + name + "> without package in "
@@ -807,7 +821,7 @@ public class SystemConfig {
                         XmlUtils.skipCurrentTag(parser);
                     } break;
                     case "allow-in-data-usage-save": {
-                        if (allowAll) {
+                        if (allowOverrideAppRestrictions) {
                             String pkgname = parser.getAttributeValue(null, "package");
                             if (pkgname == null) {
                                 Slog.w(TAG, "<" + name + "> without package in "
@@ -821,7 +835,7 @@ public class SystemConfig {
                         XmlUtils.skipCurrentTag(parser);
                     } break;
                     case "allow-unthrottled-location": {
-                        if (allowAll) {
+                        if (allowOverrideAppRestrictions) {
                             String pkgname = parser.getAttributeValue(null, "package");
                             if (pkgname == null) {
                                 Slog.w(TAG, "<" + name + "> without package in "
@@ -835,7 +849,7 @@ public class SystemConfig {
                         XmlUtils.skipCurrentTag(parser);
                     } break;
                     case "allow-ignore-location-settings": {
-                        if (allowAll) {
+                        if (allowOverrideAppRestrictions) {
                             String pkgname = parser.getAttributeValue(null, "package");
                             if (pkgname == null) {
                                 Slog.w(TAG, "<" + name + "> without package in "
@@ -849,7 +863,7 @@ public class SystemConfig {
                         XmlUtils.skipCurrentTag(parser);
                     } break;
                     case "allow-implicit-broadcast": {
-                        if (allowAll) {
+                        if (allowImplicitBroadcasts) {
                             String action = parser.getAttributeValue(null, "action");
                             if (action == null) {
                                 Slog.w(TAG, "<" + name + "> without action in "
@@ -870,34 +884,6 @@ public class SystemConfig {
                                         + " at " + parser.getPositionDescription());
                             } else {
                                 mLinkedApps.add(pkgname);
-                            }
-                        } else {
-                            logNotAllowedInPartition(name, permFile, parser);
-                        }
-                        XmlUtils.skipCurrentTag(parser);
-                    } break;
-                    case "system-user-whitelisted-app": {
-                        if (allowAppConfigs) {
-                            String pkgname = parser.getAttributeValue(null, "package");
-                            if (pkgname == null) {
-                                Slog.w(TAG, "<" + name + "> without package in "
-                                        + permFile + " at " + parser.getPositionDescription());
-                            } else {
-                                mSystemUserWhitelistedApps.add(pkgname);
-                            }
-                        } else {
-                            logNotAllowedInPartition(name, permFile, parser);
-                        }
-                        XmlUtils.skipCurrentTag(parser);
-                    } break;
-                    case "system-user-blacklisted-app": {
-                        if (allowAppConfigs) {
-                            String pkgname = parser.getAttributeValue(null, "package");
-                            if (pkgname == null) {
-                                Slog.w(TAG, "<" + name + "> without package in "
-                                        + permFile + " at " + parser.getPositionDescription());
-                            } else {
-                                mSystemUserBlacklistedApps.add(pkgname);
                             }
                         } else {
                             logNotAllowedInPartition(name, permFile, parser);
@@ -1491,6 +1477,37 @@ public class SystemConfig {
 
                 componentEnabledStates.put(clsname, !"false".equals(enabled));
             }
+        }
+    }
+
+    private void readPublicNativeLibrariesList() {
+        readPublicLibrariesListFile(new File("/vendor/etc/public.libraries.txt"));
+        String[] dirs = {"/system/etc", "/system_ext/etc", "/product/etc"};
+        for (String dir : dirs) {
+            for (File f : (new File(dir)).listFiles()) {
+                String name = f.getName();
+                if (name.startsWith("public.libraries-") && name.endsWith(".txt")) {
+                    readPublicLibrariesListFile(f);
+                }
+            }
+        }
+    }
+
+    private void readPublicLibrariesListFile(File listFile) {
+        try (BufferedReader br = new BufferedReader(new FileReader(listFile))) {
+            String line;
+            while ((line = br.readLine()) != null) {
+                if (line.isEmpty() || line.startsWith("#")) {
+                    continue;
+                }
+                // Line format is <soname> [abi]. We take the soname part.
+                String soname = line.trim().split(" ")[0];
+                SharedLibraryEntry entry = new SharedLibraryEntry(
+                        soname, soname, new String[0], true);
+                mSharedLibraries.put(entry.name, entry);
+            }
+        } catch (IOException e) {
+            Slog.w(TAG, "Failed to read public libraries file " + listFile, e);
         }
     }
 

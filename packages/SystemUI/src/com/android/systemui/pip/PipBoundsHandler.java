@@ -34,12 +34,13 @@ import android.util.DisplayMetrics;
 import android.util.Log;
 import android.util.Size;
 import android.util.TypedValue;
+import android.view.Display;
 import android.view.DisplayInfo;
 import android.view.Gravity;
 import android.window.WindowContainerTransaction;
 
-import com.android.systemui.wm.DisplayController;
-import com.android.systemui.wm.DisplayLayout;
+import com.android.wm.shell.common.DisplayController;
+import com.android.wm.shell.common.DisplayLayout;
 
 import java.io.PrintWriter;
 
@@ -60,7 +61,7 @@ public class PipBoundsHandler {
     private final PipSnapAlgorithm mSnapAlgorithm;
     private final DisplayInfo mDisplayInfo = new DisplayInfo();
     private final DisplayController mDisplayController;
-    private final DisplayLayout mDisplayLayout;
+    private DisplayLayout mDisplayLayout;
 
     private ComponentName mLastPipComponentName;
     private float mReentrySnapFraction = INVALID_SNAP_FRACTION;
@@ -177,7 +178,7 @@ public class PipBoundsHandler {
         }
         if (isValidPictureInPictureAspectRatio(mAspectRatio)) {
             transformBoundsToAspectRatio(normalBounds, mAspectRatio,
-                    false /* useCurrentMinEdgeSize */);
+                    false /* useCurrentMinEdgeSize */, false /* useCurrentSize */);
         }
         displayInfo.copyFrom(mDisplayInfo);
     }
@@ -278,7 +279,9 @@ public class PipBoundsHandler {
             destinationBounds = new Rect(bounds);
         }
         if (isValidPictureInPictureAspectRatio(aspectRatio)) {
-            transformBoundsToAspectRatio(destinationBounds, aspectRatio, useCurrentMinEdgeSize);
+            boolean useCurrentSize = bounds == null && mReentrySize != null;
+            transformBoundsToAspectRatio(destinationBounds, aspectRatio, useCurrentMinEdgeSize,
+                    useCurrentSize);
         }
         mAspectRatio = aspectRatio;
         return destinationBounds;
@@ -286,6 +289,10 @@ public class PipBoundsHandler {
 
     float getDefaultAspectRatio() {
         return mDefaultAspectRatio;
+    }
+
+    public void onOverlayChanged(Context context, Display display) {
+        mDisplayLayout = new DisplayLayout(context, display);
     }
 
     /**
@@ -384,7 +391,8 @@ public class PipBoundsHandler {
      * @param stackBounds
      */
     public void transformBoundsToAspectRatio(Rect stackBounds) {
-        transformBoundsToAspectRatio(stackBounds, mAspectRatio, true);
+        transformBoundsToAspectRatio(stackBounds, mAspectRatio, true /* useCurrentMinEdgeSize */,
+                true /* useCurrentSize */);
     }
 
     /**
@@ -392,18 +400,16 @@ public class PipBoundsHandler {
      * specified aspect ratio.
      */
     private void transformBoundsToAspectRatio(Rect stackBounds, float aspectRatio,
-            boolean useCurrentMinEdgeSize) {
+            boolean useCurrentMinEdgeSize, boolean useCurrentSize) {
         // Save the snap fraction and adjust the size based on the new aspect ratio.
         final float snapFraction = mSnapAlgorithm.getSnapFraction(stackBounds,
                 getMovementBounds(stackBounds));
-        final int minEdgeSize;
+        final int minEdgeSize = useCurrentMinEdgeSize ? mCurrentMinSize : mDefaultMinSize;
         final Size size;
-        if (useCurrentMinEdgeSize) {
-            minEdgeSize = mCurrentMinSize;
+        if (useCurrentMinEdgeSize || useCurrentSize) {
             size = mSnapAlgorithm.getSizeForAspectRatio(
                     new Size(stackBounds.width(), stackBounds.height()), aspectRatio, minEdgeSize);
         } else {
-            minEdgeSize = mDefaultMinSize;
             size = mSnapAlgorithm.getSizeForAspectRatio(aspectRatio, minEdgeSize,
                     mDisplayInfo.logicalWidth, mDisplayInfo.logicalHeight);
         }

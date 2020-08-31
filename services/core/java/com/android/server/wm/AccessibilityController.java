@@ -18,6 +18,7 @@ package com.android.server.wm;
 
 import static android.view.InsetsState.ITYPE_NAVIGATION_BAR;
 import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_IS_ROUNDED_CORNERS_OVERLAY;
+import static android.view.WindowManager.LayoutParams.TYPE_ACCESSIBILITY_MAGNIFICATION_OVERLAY;
 import static android.view.WindowManager.LayoutParams.TYPE_DOCK_DIVIDER;
 import static android.view.WindowManager.LayoutParams.TYPE_MAGNIFICATION_OVERLAY;
 
@@ -682,7 +683,9 @@ final class AccessibilityController {
                 final int visibleWindowCount = visibleWindows.size();
                 for (int i = visibleWindowCount - 1; i >= 0; i--) {
                     WindowState windowState = visibleWindows.valueAt(i);
-                    if ((windowState.mAttrs.type == TYPE_MAGNIFICATION_OVERLAY)
+                    final int windowType = windowState.mAttrs.type;
+                    if ((windowType == TYPE_MAGNIFICATION_OVERLAY
+                            || windowType == TYPE_ACCESSIBILITY_MAGNIFICATION_OVERLAY)
                             || ((windowState.mAttrs.privateFlags
                             & PRIVATE_FLAG_IS_ROUNDED_CORNERS_OVERLAY) != 0)) {
                         continue;
@@ -1354,7 +1357,12 @@ final class AccessibilityController {
                 addedWindows.clear();
 
                 // Gets the top focused display Id and window token for supporting multi-display.
-                topFocusedDisplayId = mService.mRoot.getTopFocusedDisplayContent().getDisplayId();
+                // If this top focused display is an embedded one, using its parent display as the
+                // top focused display.
+                final DisplayContent topFocusedDisplayContent =
+                        mService.mRoot.getTopFocusedDisplayContent();
+                topFocusedDisplayId = isEmbeddedDisplay(topFocusedDisplayContent) ? mDisplayId
+                        : topFocusedDisplayContent.getDisplayId();
                 topFocusedWindowToken = topFocusedWindowState.mClient.asBinder();
             }
             mCallback.onWindowsForAccessibilityChanged(forceSend, topFocusedDisplayId,

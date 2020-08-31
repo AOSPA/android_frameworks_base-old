@@ -1392,8 +1392,7 @@ public final class Telephony {
                 Object[] messages;
                 try {
                     messages = (Object[]) intent.getSerializableExtra("pdus");
-                }
-                catch (ClassCastException e) {
+                } catch (ClassCastException e) {
                     Rlog.e(TAG, "getMessagesFromIntent: " + e);
                     return null;
                 }
@@ -1405,9 +1404,12 @@ public final class Telephony {
 
                 String format = intent.getStringExtra("format");
                 int subId = intent.getIntExtra(SubscriptionManager.EXTRA_SUBSCRIPTION_INDEX,
-                        SubscriptionManager.getDefaultSmsSubscriptionId());
-
-                Rlog.v(TAG, " getMessagesFromIntent sub_id : " + subId);
+                        SubscriptionManager.INVALID_SUBSCRIPTION_ID);
+                if (subId != SubscriptionManager.INVALID_SUBSCRIPTION_ID) {
+                    Rlog.v(TAG, "getMessagesFromIntent with valid subId : " + subId);
+                } else {
+                    Rlog.v(TAG, "getMessagesFromIntent");
+                }
 
                 int pduCount = messages.length;
                 SmsMessage[] msgs = new SmsMessage[pduCount];
@@ -3997,8 +3999,7 @@ public final class Telephony {
 
         /**
          * The APN set id. When the user manually selects an APN or the framework sets an APN as
-         * preferred, all APNs with the same set id as the selected APN should be prioritized over
-         * APNs in other sets.
+         * preferred, the device can only use APNs with the same set id as the selected APN.
          * <p>Type: INTEGER</p>
          * @hide
          */
@@ -4376,11 +4377,13 @@ public final class Telephony {
         public static final String ETWS_WARNING_TYPE = "etws_warning_type";
 
         /**
-         * ETWS (Earthquake and Tsunami Warning System) primary message or not (ETWS alerts only).
+         * ETWS (Earthquake and Tsunami Warning System, Japan only) primary message or not. The
+         * primary message is sent as soon as the emergency occurs. It does not provide any
+         * information except the emergency type (e.g. earthquake, tsunami). The ETWS secondary
+         * message is sent afterwards and provides the details of the emergency.
+         *
          * <p>See {@link android.telephony.SmsCbEtwsInfo}</p>
          * <P>Type: BOOLEAN</P>
-         *
-         * @hide        // TODO: Unhide this for S.
          */
         public static final String ETWS_IS_PRIMARY = "etws_is_primary";
 

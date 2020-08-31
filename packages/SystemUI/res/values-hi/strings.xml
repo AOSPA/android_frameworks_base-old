@@ -713,11 +713,13 @@
     <string name="notification_silence_title" msgid="8608090968400832335">"आवाज़ के बिना सूचनाएं दिखाएं"</string>
     <string name="notification_alert_title" msgid="3656229781017543655">"डिफ़ॉल्ट"</string>
     <string name="notification_bubble_title" msgid="8330481035191903164">"बबल"</string>
+    <string name="notification_automatic_title" msgid="3745465364578762652">"अपने-आप"</string>
     <string name="notification_channel_summary_low" msgid="4860617986908931158">"किसी तरह की आवाज़ या वाइब्रेशन न हो"</string>
     <string name="notification_conversation_summary_low" msgid="1734433426085468009">"इससे किसी तरह की आवाज़ या वाइब्रेशन नहीं होता और \'बातचीत\', सेक्शन में सबसे नीचे दिखती है"</string>
     <string name="notification_channel_summary_default" msgid="3282930979307248890">"फ़ोन की सेटिंग के आधार पर, सूचना आने पर घंटी बज सकती है या वाइब्रेशन हो सकता है"</string>
     <string name="notification_channel_summary_default_with_bubbles" msgid="1782419896613644568">"फ़ोन की सेटिंग के आधार पर, सूचना आने पर घंटी बज सकती है या वाइब्रेशन हो सकता है. <xliff:g id="APP_NAME">%1$s</xliff:g> में होने वाली बातचीत, डिफ़ॉल्ट रूप से बबल के तौर पर दिखती है."</string>
     <string name="notification_channel_summary_bubble" msgid="7235935211580860537">"फ़्लोट करने वाले शॉर्टकट की मदद से इस सामग्री पर आपका ध्यान बना रहता है."</string>
+    <string name="notification_channel_summary_automatic" msgid="5813109268050235275">"सिस्टम को यह तय करने की अनुमति दें कि इस सूचना के मिलने पर आवाज़ हो या वाइब्रेशन हो"</string>
     <string name="notification_channel_summary_priority" msgid="7952654515769021553">"इससे बातचीत की सुविधा, सेक्शन में सबसे ऊपर और फ़्लोटिंग बबल के तौर पर दिखती है. साथ ही, लॉक स्क्रीन पर प्रोफ़ाइल फ़ोटो दिखती है"</string>
     <string name="notification_conversation_channel_settings" msgid="2409977688430606835">"सेटिंग"</string>
     <string name="notification_priority_title" msgid="2079708866333537093">"प्राथमिकता"</string>
@@ -738,6 +740,12 @@
     <string name="appops_camera_mic_overlay" msgid="5584311236445644095">"यह ऐप्लिकेशन आपकी स्क्रीन पर इस्तेमाल हो रहे दूसरे ऐप्लिकेशन के ऊपर दिखाया जा रहा है. इसके साथ ही यह माइक्रोफ़ोन और कैमरे का भी इस्तेमाल कर रहा है."</string>
     <string name="notification_appops_settings" msgid="5208974858340445174">"सेटिंग"</string>
     <string name="notification_appops_ok" msgid="2177609375872784124">"ठीक है"</string>
+    <string name="feedback_silenced" msgid="5382212321253328247">"सिस्टम ने उपयोगकर्ता के इस्तेमाल के आधार पर, इस सूचना के मिलने पर होने वाली आवाज़ बंद कर दी है."</string>
+    <string name="feedback_promoted" msgid="8075757485407091976">"सिस्टम ने उपयोगकर्ता के इस्तेमाल के आधार पर यह तय किया है कि कोई सूचना, खोज के क्रम में एकदम नीचे दिखेगी या फिर बिना आवाज़ किए मिलेगी."</string>
+    <string name="feedback_demoted" msgid="5848066008939031913">"सिस्टम ने उपयोगकर्ता के इस्तेमाल के आधार पर यह तय किया है कि कोई सूचना, खोज के क्रम में एकदम नीचे दिखेगी या फिर बिना आवाज़ किए मिलेगी."</string>
+    <string name="feedback_prompt" msgid="2278631214125128281">"आपको यह सुविधा कैसी लगी?"</string>
+    <string name="feedback_response" msgid="4671729244976641339">"सुझाव या शिकायत के लिए धन्यवाद!"</string>
+    <string name="feedback_ok" msgid="6481426753298857144">"ठीक है"</string>
     <string name="notification_channel_controls_opened_accessibility" msgid="6111817750774381094">"<xliff:g id="APP_NAME">%1$s</xliff:g> के लिए सूचना नियंत्रण चालू हैं"</string>
     <string name="notification_channel_controls_closed_accessibility" msgid="1561909368876911701">"<xliff:g id="APP_NAME">%1$s</xliff:g> के लिए सूचना नियंत्रण बंद हैं"</string>
     <string name="notification_channel_switch_accessibility" msgid="8979885820432540252">"इस चैनल से सूचना की पाने की मंज़ूरी दें"</string>
@@ -910,25 +918,14 @@
     <string name="accessibility_quick_settings_edit" msgid="1523745183383815910">"सेटिंग के क्रम को बदलें"</string>
     <string name="accessibility_quick_settings_page" msgid="7506322631645550961">"पेज <xliff:g id="ID_2">%2$d</xliff:g> में से <xliff:g id="ID_1">%1$d</xliff:g>"</string>
     <string name="tuner_lock_screen" msgid="2267383813241144544">"लॉक स्‍क्रीन"</string>
-    <string name="pip_phone_expand" msgid="1424988917240616212">"विस्तार करें"</string>
-    <string name="pip_phone_minimize" msgid="9057117033655996059">"छोटा करें"</string>
-    <string name="pip_phone_close" msgid="8801864042095341824">"बंद करें"</string>
-    <string name="pip_phone_settings" msgid="5687538631925004341">"सेटिंग"</string>
-    <string name="pip_phone_dismiss_hint" msgid="5825740708095316710">"खारिज करने के लिए नीचे खींचें और छोड़ें"</string>
-    <string name="pip_menu_title" msgid="6365909306215631910">"मेन्यू"</string>
-    <string name="pip_notification_title" msgid="8661573026059630525">"<xliff:g id="NAME">%s</xliff:g> \"पिक्चर में पिक्चर\" के अंदर है"</string>
-    <string name="pip_notification_message" msgid="4991831338795022227">"अगर आप नहीं चाहते कि <xliff:g id="NAME">%s</xliff:g> इस सुविधा का उपयोग करे, तो सेटिंग खोलने के लिए टैप करें और उसे बंद करें ."</string>
-    <string name="pip_play" msgid="333995977693142810">"चलाएं"</string>
-    <string name="pip_pause" msgid="1139598607050555845">"रोकें"</string>
-    <string name="pip_skip_to_next" msgid="3864212650579956062">"अगले पर जाएं"</string>
-    <string name="pip_skip_to_prev" msgid="3742589641443049237">"पिछले पर जाएं"</string>
-    <string name="accessibility_action_pip_resize" msgid="8237306972921160456">"आकार बदलें"</string>
     <string name="thermal_shutdown_title" msgid="2702966892682930264">"गर्म होने की वजह से फ़ोन बंद हुआ"</string>
-    <string name="thermal_shutdown_message" msgid="7432744214105003895">"आपका फ़ोन अब सामान्य रूप से चल रहा है"</string>
+    <string name="thermal_shutdown_message" msgid="6142269839066172984">"आपका फ़ोन सामान्य रूप से काम कर रहा है.\nज़्यादा जानकारी के लिए टैप करें"</string>
     <string name="thermal_shutdown_dialog_message" msgid="6745684238183492031">"फ़ोन बहुत गर्म हो गया था, इसलिए ठंडा होने के लिए बंद हो गया. फ़ोन अब अच्छे से चल रहा है.\n\nफ़ोन तब बहुत गर्म हो सकता है जब आप:\n	• ज़्यादा रिसॉर्स का इस्तेमाल करने वाले ऐप्लिकेशन चलाते हैं (जैसे गेमिंग, वीडियो या नेविगेशन ऐप्लिकेशन)\n	• बड़ी फ़ाइलें डाउनलोड या अपलोड करते हैं\n	• ज़्यादा तापमान में फ़ोन का इस्तेमाल करते हैं"</string>
+    <string name="thermal_shutdown_dialog_help_text" msgid="6413474593462902901">"डिवाइस के रखरखाव के तरीके देखें"</string>
     <string name="high_temp_title" msgid="2218333576838496100">"फ़ोन गर्म हो रहा है"</string>
-    <string name="high_temp_notif_message" msgid="163928048626045592">"फ़ोन के ठंडा होने के दौरान कुछ सुविधाएं सीमित होती हैं"</string>
+    <string name="high_temp_notif_message" msgid="1277346543068257549">"फ़ोन के ठंडा होने तक कुछ सुविधाएं काम नहीं करतीं.\nज़्यादा जानकारी के लिए टैप करें"</string>
     <string name="high_temp_dialog_message" msgid="3793606072661253968">"आपका फ़ोन अपने आप ठंडा होने की कोशिश करेगा. आप अब भी अपने फ़ोन का उपयोग कर सकते हैं, लेकिन हो सकता है कि यह धीमी गति से चले.\n\nठंडा हो जाने पर आपका फ़ोन सामान्य रूप से चलेगा."</string>
+    <string name="high_temp_dialog_help_text" msgid="7380171287943345858">"डिवाइस के रखरखाव के तरीके देखें"</string>
     <string name="high_temp_alarm_title" msgid="2359958549570161495">"चार्जर निकालें"</string>
     <string name="high_temp_alarm_notify_message" msgid="7186272817783835089">"इस डिवाइस को चार्ज करने में समस्या हुई. पावर अडैप्टर का प्लग निकालें. ऐसा करते समय सावधानी बरतें क्योंकि तार गर्म हो सकता है."</string>
     <string name="high_temp_alarm_help_care_steps" msgid="5017002218341329566">"प्रबंधन से जुड़े चरण देखें"</string>
@@ -1024,7 +1021,6 @@
     <string name="priority_onboarding_ignores_dnd_text" msgid="2918952762719600529">"\'परेशान न करें\' मोड में रुकावट"</string>
     <string name="priority_onboarding_done_button_title" msgid="4569550984286506007">"ठीक है"</string>
     <string name="priority_onboarding_settings_button_title" msgid="6663601574303585927">"सेटिंग"</string>
-    <string name="magnification_overlay_title" msgid="6584179429612427958">"Magnification Overlay Window"</string>
     <string name="magnification_window_title" msgid="4863914360847258333">"स्क्रीन को बड़ा करके दिखाने वाली विंडो"</string>
     <string name="magnification_controls_title" msgid="8421106606708891519">"स्क्रीन को बड़ा करके दिखाने वाली विंडो के नियंत्रण"</string>
     <string name="quick_controls_title" msgid="6839108006171302273">"डिवाइस कंट्रोल"</string>

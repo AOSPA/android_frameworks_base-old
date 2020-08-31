@@ -137,9 +137,6 @@ public class WallpaperManagerService extends IWallpaperManager.Stub
     private static final boolean DEBUG = false;
     private static final boolean DEBUG_LIVE = true;
 
-    // This 100MB limitation is defined in RecordingCanvas.
-    private static final int MAX_BITMAP_SIZE = 100 * 1024 * 1024;
-
     public static class Lifecycle extends SystemService {
         private IWallpaperManagerService mService;
 
@@ -657,14 +654,7 @@ public class WallpaperManagerService extends IWallpaperManager.Stub
                 //  may be we can try to remove this optimized way in the future,
                 //  that means, we will always go into the 'else' block.
 
-                // This is just a quick estimation, may be smaller than it is.
-                long estimateSize = options.outWidth * options.outHeight * 4;
-
-                // A bitmap over than MAX_BITMAP_SIZE will make drawBitmap() fail.
-                // Please see: RecordingCanvas#throwIfCannotDraw.
-                if (estimateSize < MAX_BITMAP_SIZE) {
-                    success = FileUtils.copyFile(wallpaper.wallpaperFile, wallpaper.cropFile);
-                }
+                success = FileUtils.copyFile(wallpaper.wallpaperFile, wallpaper.cropFile);
 
                 if (!success) {
                     wallpaper.cropFile.delete();
@@ -672,6 +662,8 @@ public class WallpaperManagerService extends IWallpaperManager.Stub
                 }
 
                 if (DEBUG) {
+                    // This is just a quick estimation, may be smaller than it is.
+                    long estimateSize = options.outWidth * options.outHeight * 4;
                     Slog.v(TAG, "Null crop of new wallpaper, estimate size="
                             + estimateSize + ", success=" + success);
                 }
@@ -751,13 +743,6 @@ public class WallpaperManagerService extends IWallpaperManager.Stub
                                     + " h=" + wpData.mHeight);
                             Slog.v(TAG, "  out: w=" + finalCrop.getWidth()
                                     + " h=" + finalCrop.getHeight());
-                        }
-
-                        // A bitmap over than MAX_BITMAP_SIZE will make drawBitmap() fail.
-                        // Please see: RecordingCanvas#throwIfCannotDraw.
-                        if (finalCrop.getByteCount() > MAX_BITMAP_SIZE) {
-                            throw new RuntimeException(
-                                    "Too large bitmap, limit=" + MAX_BITMAP_SIZE);
                         }
 
                         f = new FileOutputStream(wallpaper.cropFile);
@@ -1175,9 +1160,7 @@ public class WallpaperManagerService extends IWallpaperManager.Stub
             }
         };
 
-        private Runnable mTryToRebindRunnable = () -> {
-            tryToRebind();
-        };
+        private Runnable mTryToRebindRunnable = this::tryToRebind;
 
         WallpaperConnection(WallpaperInfo info, WallpaperData wallpaper, int clientUid) {
             mInfo = info;
@@ -1310,14 +1293,14 @@ public class WallpaperManagerService extends IWallpaperManager.Stub
                     // a short time in the future, specifically to allow any pending package
                     // update message on this same looper thread to be processed.
                     if (!mWallpaper.wallpaperUpdating) {
-                        mContext.getMainThreadHandler().postDelayed(() -> processDisconnect(this),
+                        mContext.getMainThreadHandler().postDelayed(mDisconnectRunnable,
                                 1000);
                     }
                 }
             }
         }
 
-        public void scheduleTimeoutLocked() {
+        private void scheduleTimeoutLocked() {
             // If we didn't reset it right away, do so after we couldn't connect to
             // it for an extended amount of time to avoid having a black wallpaper.
             final Handler fgHandler = FgThread.getHandler();
@@ -1357,11 +1340,11 @@ public class WallpaperManagerService extends IWallpaperManager.Stub
             }
         }
 
-        private void processDisconnect(final ServiceConnection connection) {
+        private Runnable mDisconnectRunnable = () -> {
             synchronized (mLock) {
                 // The wallpaper disappeared.  If this isn't a system-default one, track
                 // crashes and fall back to default if it continues to misbehave.
-                if (connection == mWallpaper.connection) {
+                if (this == mWallpaper.connection) {
                     final ComponentName wpService = mWallpaper.wallpaperComponent;
                     if (!mWallpaper.wallpaperUpdating
                             && mWallpaper.userId == mCurrentUserId
@@ -1389,7 +1372,7 @@ public class WallpaperManagerService extends IWallpaperManager.Stub
                     }
                 }
             }
-        }
+        };
 
         /**
          * Called by a live wallpaper if its colors have changed.
@@ -2801,6 +2784,13 @@ public class WallpaperManagerService extends IWallpaperManager.Stub
                     WallpaperConnection.DisplayConnector::disconnectLocked);
             wallpaper.connection.mService = null;
             wallpaper.connection.mDisplayConnector.clear();
+
+            FgThread.getHandler().removeCallbacks(wallpaper.connection.mResetRunnable);
+            mContext.getMainThreadHandler().removeCallbacks(
+                    wallpaper.connection.mDisconnectRunnable);
+            mContext.getMainThreadHandler().removeCallbacks(
+                    wallpaper.connection.mTryToRebindRunnable);
+
             wallpaper.connection = null;
             if (wallpaper == mLastWallpaper) mLastWallpaper = null;
         }

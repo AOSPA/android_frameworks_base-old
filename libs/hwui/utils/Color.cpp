@@ -16,8 +16,8 @@
 
 #include "Color.h"
 
-#include <utils/Log.h>
 #include <ui/ColorSpace.h>
+#include <utils/Log.h>
 
 #ifdef __ANDROID__ // Layoutlib does not support hardware buffers or native windows
 #include <android/hardware_buffer.h>
@@ -72,46 +72,34 @@ SkImageInfo BufferDescriptionToImageInfo(const AHardwareBuffer_Desc& bufferDesc,
                                          sk_sp<SkColorSpace> colorSpace) {
     return createImageInfo(bufferDesc.width, bufferDesc.height, bufferDesc.format, colorSpace);
 }
-#endif
 
-android::PixelFormat ColorTypeToPixelFormat(SkColorType colorType) {
+uint32_t ColorTypeToBufferFormat(SkColorType colorType) {
     switch (colorType) {
         case kRGBA_8888_SkColorType:
-            return PIXEL_FORMAT_RGBA_8888;
+            return AHARDWAREBUFFER_FORMAT_R8G8B8A8_UNORM;
         case kRGBA_F16_SkColorType:
-            return PIXEL_FORMAT_RGBA_FP16;
+            return AHARDWAREBUFFER_FORMAT_R16G16B16A16_FLOAT;
         case kRGB_565_SkColorType:
-            return PIXEL_FORMAT_RGB_565;
+            return AHARDWAREBUFFER_FORMAT_R5G6B5_UNORM;
         case kRGB_888x_SkColorType:
-            return PIXEL_FORMAT_RGBX_8888;
+            return AHARDWAREBUFFER_FORMAT_R8G8B8X8_UNORM;
         case kRGBA_1010102_SkColorType:
-            return PIXEL_FORMAT_RGBA_1010102;
+            return AHARDWAREBUFFER_FORMAT_R10G10B10A2_UNORM;
         case kARGB_4444_SkColorType:
-            return PIXEL_FORMAT_RGBA_4444;
+            // Hardcoding the value from android::PixelFormat
+            static constexpr uint64_t kRGBA4444 = 7;
+            return kRGBA4444;
         default:
             ALOGV("Unsupported colorType: %d, return RGBA_8888 by default", (int)colorType);
-            return PIXEL_FORMAT_RGBA_8888;
+            return AHARDWAREBUFFER_FORMAT_R8G8B8A8_UNORM;
     }
 }
-
-SkColorType PixelFormatToColorType(android::PixelFormat format) {
-    switch (format) {
-        case PIXEL_FORMAT_RGBX_8888:    return kRGB_888x_SkColorType;
-        case PIXEL_FORMAT_RGBA_8888:    return kRGBA_8888_SkColorType;
-        case PIXEL_FORMAT_RGBA_FP16:    return kRGBA_F16_SkColorType;
-        case PIXEL_FORMAT_RGB_565:      return kRGB_565_SkColorType;
-        case PIXEL_FORMAT_RGBA_1010102: return kRGBA_1010102_SkColorType;
-        case PIXEL_FORMAT_RGBA_4444:    return kARGB_4444_SkColorType;
-        default:
-            ALOGV("Unsupported PixelFormat: %d, return kUnknown_SkColorType by default", format);
-            return kUnknown_SkColorType;
-    }
-}
+#endif
 
 namespace {
 static constexpr skcms_TransferFunction k2Dot6 = {2.6f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f};
 
-// Skia's SkNamedGamut::kDCIP3 is based on a white point of D65. This gamut
+// Skia's SkNamedGamut::kDisplayP3 is based on a white point of D65. This gamut
 // matches the white point used by ColorSpace.Named.DCIP3.
 static constexpr skcms_Matrix3x3 kDCIP3 = {{
         {0.486143, 0.323835, 0.154234},
@@ -180,7 +168,7 @@ android_dataspace ColorSpaceToADataSpace(SkColorSpace* colorSpace, SkColorType c
         }
     }
 
-    if (nearlyEqual(fn, SkNamedTransferFn::kSRGB) && nearlyEqual(gamut, SkNamedGamut::kDCIP3)) {
+    if (nearlyEqual(fn, SkNamedTransferFn::kSRGB) && nearlyEqual(gamut, SkNamedGamut::kDisplayP3)) {
         return HAL_DATASPACE_DISPLAY_P3;
     }
 
@@ -221,7 +209,7 @@ sk_sp<SkColorSpace> DataSpaceToColorSpace(android_dataspace dataspace) {
             gamut = SkNamedGamut::kRec2020;
             break;
         case HAL_DATASPACE_STANDARD_DCI_P3:
-            gamut = SkNamedGamut::kDCIP3;
+            gamut = SkNamedGamut::kDisplayP3;
             break;
         case HAL_DATASPACE_STANDARD_ADOBE_RGB:
             gamut = SkNamedGamut::kAdobeRGB;

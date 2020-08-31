@@ -18,7 +18,7 @@ package com.android.server;
 import static android.app.usage.UsageStatsManager.REASON_MAIN_DEFAULT;
 import static android.app.usage.UsageStatsManager.REASON_MAIN_USAGE;
 
-import static com.android.server.AppStateTracker.TARGET_OP;
+import static com.android.server.AppStateTrackerImpl.TARGET_OP;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -57,6 +57,7 @@ import android.os.PowerSaveState;
 import android.os.Process;
 import android.os.RemoteException;
 import android.os.UserHandle;
+import android.platform.test.annotations.Presubmit;
 import android.provider.Settings.Global;
 import android.test.mock.MockContentResolver;
 import android.util.ArraySet;
@@ -67,7 +68,7 @@ import androidx.test.runner.AndroidJUnit4;
 
 import com.android.internal.app.IAppOpsCallback;
 import com.android.internal.app.IAppOpsService;
-import com.android.server.AppStateTracker.Listener;
+import com.android.server.AppStateTrackerImpl.Listener;
 import com.android.server.usage.AppStandbyInternal;
 import com.android.server.usage.AppStandbyInternal.AppIdleStateChangeListener;
 
@@ -90,15 +91,16 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
 /**
- * Tests for {@link AppStateTracker}
+ * Tests for {@link AppStateTrackerImpl}
  *
  * Run with: atest com.android.server.AppStateTrackerTest
  */
+@Presubmit
 @SmallTest
 @RunWith(AndroidJUnit4.class)
 public class AppStateTrackerTest {
 
-    private class AppStateTrackerTestable extends AppStateTracker {
+    private class AppStateTrackerTestable extends AppStateTrackerImpl {
         AppStateTrackerTestable() {
             super(mMockContext, Looper.getMainLooper());
         }
@@ -130,6 +132,7 @@ public class AppStateTrackerTest {
 
         @Override
         AppStandbyInternal injectAppStandbyInternal() {
+            when(mMockAppStandbyInternal.isAppIdleEnabled()).thenReturn(true);
             return mMockAppStandbyInternal;
         }
 
@@ -141,7 +144,9 @@ public class AppStateTrackerTest {
         }
 
         @Override
-        boolean isSmallBatteryDevice() { return mIsSmallBatteryDevice; };
+        boolean isSmallBatteryDevice() {
+            return mIsSmallBatteryDevice;
+        }
     }
 
     private static final int UID_1 = Process.FIRST_APPLICATION_UID + 1;
@@ -201,6 +206,13 @@ public class AppStateTrackerTest {
         mMainHandler = new Handler(Looper.getMainLooper());
     }
 
+    /**
+     * Enqueues a message and waits for it to complete. This ensures that any messages posted until
+     * now have been executed.
+     *
+     * Note that these messages may have enqueued more messages, which may or may not have executed
+     * when this method returns.
+     */
     private void waitUntilMainHandlerDrain() throws Exception {
         final CountDownLatch l = new CountDownLatch(1);
         mMainHandler.post(() -> {
@@ -362,6 +374,7 @@ public class AppStateTrackerTest {
 
         mIUidObserver.onUidActive(UID_1);
         waitUntilMainHandlerDrain();
+        waitUntilMainHandlerDrain();
         areRestricted(instance, UID_1, PACKAGE_1, NONE);
         areRestricted(instance, UID_2, PACKAGE_2, JOBS_AND_ALARMS);
         areRestricted(instance, Process.SYSTEM_UID, PACKAGE_SYSTEM, NONE);
@@ -369,6 +382,7 @@ public class AppStateTrackerTest {
         assertFalse(instance.isUidActive(UID_2));
 
         mIUidObserver.onUidGone(UID_1, /*disable=*/ false);
+        waitUntilMainHandlerDrain();
         waitUntilMainHandlerDrain();
         areRestricted(instance, UID_1, PACKAGE_1, JOBS_AND_ALARMS);
         areRestricted(instance, UID_2, PACKAGE_2, JOBS_AND_ALARMS);
@@ -378,11 +392,13 @@ public class AppStateTrackerTest {
 
         mIUidObserver.onUidActive(UID_1);
         waitUntilMainHandlerDrain();
+        waitUntilMainHandlerDrain();
         areRestricted(instance, UID_1, PACKAGE_1, NONE);
         areRestricted(instance, UID_2, PACKAGE_2, JOBS_AND_ALARMS);
         areRestricted(instance, Process.SYSTEM_UID, PACKAGE_SYSTEM, NONE);
 
         mIUidObserver.onUidIdle(UID_1, /*disable=*/ false);
+        waitUntilMainHandlerDrain();
         waitUntilMainHandlerDrain();
         areRestricted(instance, UID_1, PACKAGE_1, JOBS_AND_ALARMS);
         areRestricted(instance, UID_2, PACKAGE_2, JOBS_AND_ALARMS);
@@ -499,6 +515,8 @@ public class AppStateTrackerTest {
         mIUidObserver.onUidActive(UID_1);
 
         waitUntilMainHandlerDrain();
+        waitUntilMainHandlerDrain();
+
         assertTrue(instance.isUidActive(UID_1));
         assertFalse(instance.isUidActive(UID_2));
         assertTrue(instance.isUidActive(Process.SYSTEM_UID));
@@ -517,6 +535,8 @@ public class AppStateTrackerTest {
                 ActivityManager.PROCESS_CAPABILITY_NONE);
 
         waitUntilMainHandlerDrain();
+        waitUntilMainHandlerDrain();
+
         assertTrue(instance.isUidActive(UID_1));
         assertFalse(instance.isUidActive(UID_2));
         assertTrue(instance.isUidActive(Process.SYSTEM_UID));
@@ -535,6 +555,8 @@ public class AppStateTrackerTest {
                 ActivityManager.PROCESS_CAPABILITY_NONE);
 
         waitUntilMainHandlerDrain();
+        waitUntilMainHandlerDrain();
+
         assertTrue(instance.isUidActive(UID_1));
         assertFalse(instance.isUidActive(UID_2));
         assertTrue(instance.isUidActive(Process.SYSTEM_UID));
@@ -546,6 +568,8 @@ public class AppStateTrackerTest {
         mIUidObserver.onUidGone(UID_1, true);
 
         waitUntilMainHandlerDrain();
+        waitUntilMainHandlerDrain();
+
         assertFalse(instance.isUidActive(UID_1));
         assertFalse(instance.isUidActive(UID_2));
         assertTrue(instance.isUidActive(Process.SYSTEM_UID));
@@ -557,6 +581,8 @@ public class AppStateTrackerTest {
         mIUidObserver.onUidIdle(UID_2, true);
 
         waitUntilMainHandlerDrain();
+        waitUntilMainHandlerDrain();
+
         assertFalse(instance.isUidActive(UID_1));
         assertFalse(instance.isUidActive(UID_2));
         assertTrue(instance.isUidActive(Process.SYSTEM_UID));
@@ -570,6 +596,8 @@ public class AppStateTrackerTest {
                 ActivityManager.PROCESS_CAPABILITY_NONE);
 
         waitUntilMainHandlerDrain();
+        waitUntilMainHandlerDrain();
+
         assertFalse(instance.isUidActive(UID_1));
         assertFalse(instance.isUidActive(UID_2));
         assertTrue(instance.isUidActive(Process.SYSTEM_UID));
@@ -583,6 +611,8 @@ public class AppStateTrackerTest {
                 ActivityManager.PROCESS_CAPABILITY_NONE);
 
         waitUntilMainHandlerDrain();
+        waitUntilMainHandlerDrain();
+
         assertFalse(instance.isUidActive(UID_1));
         assertFalse(instance.isUidActive(UID_2));
         assertTrue(instance.isUidActive(Process.SYSTEM_UID));
@@ -692,7 +722,7 @@ public class AppStateTrackerTest {
                 AppOpsManager.MODE_IGNORED,
                 Collections.emptyMap()));
         entries.add(new OpEntry(
-                AppStateTracker.TARGET_OP,
+                AppStateTrackerImpl.TARGET_OP,
                 AppOpsManager.MODE_IGNORED,
                 Collections.emptyMap()));
 
@@ -701,7 +731,7 @@ public class AppStateTrackerTest {
         //--------------------------------------------------
         entries = new ArrayList<>();
         entries.add(new OpEntry(
-                AppStateTracker.TARGET_OP,
+                AppStateTrackerImpl.TARGET_OP,
                 AppOpsManager.MODE_IGNORED,
                 Collections.emptyMap()));
 
@@ -710,7 +740,7 @@ public class AppStateTrackerTest {
         //--------------------------------------------------
         entries = new ArrayList<>();
         entries.add(new OpEntry(
-                AppStateTracker.TARGET_OP,
+                AppStateTrackerImpl.TARGET_OP,
                 AppOpsManager.MODE_ALLOWED,
                 Collections.emptyMap()));
 
@@ -719,7 +749,7 @@ public class AppStateTrackerTest {
         //--------------------------------------------------
         entries = new ArrayList<>();
         entries.add(new OpEntry(
-                AppStateTracker.TARGET_OP,
+                AppStateTrackerImpl.TARGET_OP,
                 AppOpsManager.MODE_IGNORED,
                 Collections.emptyMap()));
         entries.add(new OpEntry(
@@ -1007,6 +1037,7 @@ public class AppStateTrackerTest {
         mIUidObserver.onUidActive(UID_10_1);
 
         waitUntilMainHandlerDrain();
+        waitUntilMainHandlerDrain();
         verify(l, times(0)).updateAllJobs();
         verify(l, times(1)).updateJobsForUid(eq(UID_10_1), anyBoolean());
         verify(l, times(0)).updateJobsForUidPackage(anyInt(), anyString(), anyBoolean());
@@ -1018,6 +1049,7 @@ public class AppStateTrackerTest {
 
         mIUidObserver.onUidGone(UID_10_1, true);
 
+        waitUntilMainHandlerDrain();
         waitUntilMainHandlerDrain();
         verify(l, times(0)).updateAllJobs();
         verify(l, times(1)).updateJobsForUid(eq(UID_10_1), anyBoolean());
@@ -1031,6 +1063,7 @@ public class AppStateTrackerTest {
         mIUidObserver.onUidActive(UID_10_1);
 
         waitUntilMainHandlerDrain();
+        waitUntilMainHandlerDrain();
         verify(l, times(0)).updateAllJobs();
         verify(l, times(1)).updateJobsForUid(eq(UID_10_1), anyBoolean());
         verify(l, times(0)).updateJobsForUidPackage(anyInt(), anyString(), anyBoolean());
@@ -1042,6 +1075,7 @@ public class AppStateTrackerTest {
 
         mIUidObserver.onUidIdle(UID_10_1, true);
 
+        waitUntilMainHandlerDrain();
         waitUntilMainHandlerDrain();
         verify(l, times(0)).updateAllJobs();
         verify(l, times(1)).updateJobsForUid(eq(UID_10_1), anyBoolean());
@@ -1069,6 +1103,7 @@ public class AppStateTrackerTest {
         mIUidObserver.onUidActive(UID_10_1);
 
         waitUntilMainHandlerDrain();
+        waitUntilMainHandlerDrain();
         verify(l, times(0)).updateAllJobs();
         verify(l, times(1)).updateJobsForUid(eq(UID_10_1), anyBoolean());
         verify(l, times(0)).updateJobsForUidPackage(anyInt(), anyString(), anyBoolean());
@@ -1080,6 +1115,7 @@ public class AppStateTrackerTest {
 
         mIUidObserver.onUidGone(UID_10_1, true);
 
+        waitUntilMainHandlerDrain();
         waitUntilMainHandlerDrain();
         verify(l, times(0)).updateAllJobs();
         verify(l, times(1)).updateJobsForUid(eq(UID_10_1), anyBoolean());
@@ -1093,6 +1129,7 @@ public class AppStateTrackerTest {
         mIUidObserver.onUidActive(UID_10_1);
 
         waitUntilMainHandlerDrain();
+        waitUntilMainHandlerDrain();
         verify(l, times(0)).updateAllJobs();
         verify(l, times(1)).updateJobsForUid(eq(UID_10_1), anyBoolean());
         verify(l, times(0)).updateJobsForUidPackage(anyInt(), anyString(), anyBoolean());
@@ -1104,6 +1141,7 @@ public class AppStateTrackerTest {
 
         mIUidObserver.onUidIdle(UID_10_1, true);
 
+        waitUntilMainHandlerDrain();
         waitUntilMainHandlerDrain();
         verify(l, times(0)).updateAllJobs();
         verify(l, times(1)).updateJobsForUid(eq(UID_10_1), anyBoolean());
@@ -1123,6 +1161,7 @@ public class AppStateTrackerTest {
         mIUidObserver.onUidActive(UID_1);
         mIUidObserver.onUidActive(UID_10_1);
 
+        waitUntilMainHandlerDrain();
         waitUntilMainHandlerDrain();
 
         setAppOps(UID_2, PACKAGE_2, true);
@@ -1227,7 +1266,7 @@ public class AppStateTrackerTest {
 
     private void checkAnyAppIdUnwhitelisted(int[] prevArray, int[] newArray, boolean expected) {
         assertEquals("Input: " + Arrays.toString(prevArray) + " " + Arrays.toString(newArray),
-                expected, AppStateTracker.isAnyAppIdUnwhitelisted(prevArray, newArray));
+                expected, AppStateTrackerImpl.isAnyAppIdUnwhitelisted(prevArray, newArray));
 
         // Also test isAnyAppIdUnwhitelistedSlow.
         assertEquals("Input: " + Arrays.toString(prevArray) + " " + Arrays.toString(newArray),
@@ -1259,7 +1298,7 @@ public class AppStateTrackerTest {
             final int[] array2 = makeRandomArray();
 
             final boolean expected = isAnyAppIdUnwhitelistedSlow(array1, array2);
-            final boolean actual = AppStateTracker.isAnyAppIdUnwhitelisted(array1, array2);
+            final boolean actual = AppStateTrackerImpl.isAnyAppIdUnwhitelisted(array1, array2);
 
             assertEquals("Input: " + Arrays.toString(array1) + " " + Arrays.toString(array2),
                     expected, actual);

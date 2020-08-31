@@ -59,6 +59,7 @@ import static android.view.WindowManager.LayoutParams.INPUT_FEATURE_NO_INPUT_CHA
 import static android.view.WindowManager.LayoutParams.LAST_APPLICATION_WINDOW;
 import static android.view.WindowManager.LayoutParams.LAST_SUB_WINDOW;
 import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_IS_ROUNDED_CORNERS_OVERLAY;
+import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_TRUSTED_OVERLAY;
 import static android.view.WindowManager.LayoutParams.SYSTEM_FLAG_HIDE_NON_SYSTEM_OVERLAY_WINDOWS;
 import static android.view.WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY;
 import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION_STARTING;
@@ -649,8 +650,9 @@ public class WindowManagerService extends IWindowManager.Stub
     boolean mSystemBooted = false;
     boolean mForceDisplayEnabled = false;
     boolean mShowingBootMessages = false;
-    boolean mBootAnimationStopped = false;
     boolean mSystemReady = false;
+    boolean mBootAnimationStopped = false;
+    long mBootWaitForWindowsStartTime = -1;
 
     // Following variables are for debugging screen wakelock only.
     WindowState mLastWakeLockHoldingWindow = null;
@@ -934,7 +936,7 @@ public class WindowManagerService extends IWindowManager.Stub
 
     private void setShadowRenderer() {
         mRenderShadowsInCompositor = Settings.Global.getInt(mContext.getContentResolver(),
-                DEVELOPMENT_RENDER_SHADOWS_IN_COMPOSITOR, 1) != 0;
+                DEVELOPMENT_RENDER_SHADOWS_IN_COMPOSITOR, 0) != 0;
     }
 
     PowerManager mPowerManager;
@@ -1480,9 +1482,14 @@ public class WindowManagerService extends IWindowManager.Stub
                         rootType, attrs.token, attrs.packageName)) {
                     return WindowManagerGlobal.ADD_BAD_APP_TOKEN;
                 }
-                final IBinder binder = attrs.token != null ? attrs.token : client.asBinder();
-                token = new WindowToken(this, binder, type, false, displayContent,
-                        session.mCanAddInternalSystemWindow, isRoundedCornerOverlay);
+                if (hasParent) {
+                    // Use existing parent window token for child windows.
+                    token = parentWindow.mToken;
+                } else {
+                    final IBinder binder = attrs.token != null ? attrs.token : client.asBinder();
+                    token = new WindowToken(this, binder, type, false, displayContent,
+                            session.mCanAddInternalSystemWindow, isRoundedCornerOverlay);
+                }
             } else if (rootType >= FIRST_APPLICATION_WINDOW
                     && rootType <= LAST_APPLICATION_WINDOW) {
                 activity = token.asActivityRecord();
@@ -1947,7 +1954,7 @@ public class WindowManagerService extends IWindowManager.Stub
                 // re-factor.
                 activity.firstWindowDrawn = false;
                 activity.clearAllDrawn();
-                final ActivityStack stack = activity.getStack();
+                final Task stack = activity.getStack();
                 if (stack != null) {
                     stack.mExitingActivities.remove(activity);
                 }
@@ -2166,6 +2173,10 @@ public class WindowManagerService extends IWindowManager.Stub
                 if (win.mAttrs.type != attrs.type) {
                     throw new IllegalArgumentException(
                             "Window type can not be changed after the window is added.");
+                }
+                if (!Arrays.equals(win.mAttrs.providesInsetsTypes, attrs.providesInsetsTypes)) {
+                    throw new IllegalArgumentException(
+                            "Insets types can not be changed after the window is added.");
                 }
 
                 // Odd choice but less odd than embedding in copyFrom()
@@ -2672,10 +2683,11 @@ public class WindowManagerService extends IWindowManager.Stub
                 }
                 // TODO(window-container): Clean up dead tokens
                 if (type == TYPE_WALLPAPER) {
-                    new WallpaperWindowToken(this, binder, true, dc, callerCanManageAppTokens);
+                    new WallpaperWindowToken(this, binder, true, dc, callerCanManageAppTokens,
+                            options);
                 } else {
                     new WindowToken(this, binder, type, true, dc, callerCanManageAppTokens,
-                            callingUid, false /* roundedCornerOverlay */, fromClientToken);
+                            callingUid, false /* roundedCornerOverlay */, fromClientToken, options);
                 }
             }
         } finally {
@@ -2860,7 +2872,7 @@ public class WindowManagerService extends IWindowManager.Stub
     }
 
     void getStackBounds(int windowingMode, int activityType, Rect bounds) {
-        final ActivityStack stack = mRoot.getStack(windowingMode, activityType);
+        final Task stack = mRoot.getStack(windowingMode, activityType);
         if (stack != null) {
             stack.getBounds(bounds);
             return;
@@ -3441,10 +3453,21 @@ public class WindowManagerService extends IWindowManager.Stub
 
             // Don't enable the screen until all existing windows have been drawn.
             if (!mForceDisplayEnabled) {
+                if (mBootWaitForWindowsStartTime < 0) {
+                    // First time we will start waiting for all windows to be drawn.
+                    mBootWaitForWindowsStartTime = SystemClock.elapsedRealtime();
+                }
                 for (int i = mRoot.getChildCount() - 1; i >= 0; i--) {
                     if (mRoot.getChildAt(i).shouldWaitForSystemDecorWindowsOnBoot()) {
                         return;
                     }
+                }
+                long waitTime = SystemClock.elapsedRealtime() - mBootWaitForWindowsStartTime;
+                mBootWaitForWindowsStartTime = -1;
+                if (waitTime > 10) {
+                    ProtoLog.i(WM_DEBUG_BOOT,
+                            "performEnableScreen: Waited %dms for all windows to be drawn",
+                            waitTime);
                 }
             }
 
@@ -3667,7 +3690,7 @@ public class WindowManagerService extends IWindowManager.Stub
                 }
                 bm = null;
             } else {
-                bm = displayContent.screenshotDisplayLocked(Bitmap.Config.ARGB_8888);
+                bm = displayContent.screenshotDisplayLocked();
             }
         }
 
@@ -4589,7 +4612,7 @@ public class WindowManagerService extends IWindowManager.Stub
         return mRoot.getTopFocusedDisplayContent().mCurrentFocus;
     }
 
-    ActivityStack getImeFocusStackLocked() {
+    Task getImeFocusStackLocked() {
         // Don't use mCurrentFocus.getStack() because it returns home stack for system windows.
         // Also don't use mInputMethodTarget's stack, because some window with FLAG_NOT_FOCUSABLE
         // and FLAG_ALT_FOCUSABLE_IM flags both set might be set to IME target so they're moved
@@ -4598,7 +4621,7 @@ public class WindowManagerService extends IWindowManager.Stub
         final DisplayContent topFocusedDisplay = mRoot.getTopFocusedDisplayContent();
         final ActivityRecord focusedApp = topFocusedDisplay.mFocusedApp;
         return (focusedApp != null && focusedApp.getTask() != null)
-                ? focusedApp.getTask().getStack() : null;
+                ? focusedApp.getTask().getRootTask() : null;
     }
 
     public boolean detectSafeMode() {
@@ -5853,27 +5876,6 @@ public class WindowManagerService extends IWindowManager.Stub
             } else {
                 Slog.w(TAG, "hideTransientBars with invalid displayId=" + displayId);
             }
-        }
-    }
-
-    @Override
-    public void setForceShowSystemBars(boolean show) {
-        boolean isAutomotive = mContext.getPackageManager().hasSystemFeature(
-                PackageManager.FEATURE_AUTOMOTIVE);
-        if (!isAutomotive) {
-            throw new UnsupportedOperationException("Force showing system bars is only supported"
-                    + "for Automotive use cases.");
-        }
-        if (mContext.checkCallingOrSelfPermission(android.Manifest.permission.STATUS_BAR)
-                != PackageManager.PERMISSION_GRANTED) {
-            throw new SecurityException("Caller does not hold permission "
-                    + android.Manifest.permission.STATUS_BAR);
-        }
-        synchronized (mGlobalLock) {
-            final PooledConsumer c = PooledLambda.obtainConsumer(
-                    DisplayPolicy::setForceShowSystemBars, PooledLambda.__(), show);
-            mRoot.forAllDisplayPolicies(c);
-            c.recycle();
         }
     }
 
@@ -8084,7 +8086,7 @@ public class WindowManagerService extends IWindowManager.Stub
      * views.
      */
     void grantInputChannel(int callingUid, int callingPid, int displayId, SurfaceControl surface,
-            IWindow window, IBinder hostInputToken, int flags, int type,
+            IWindow window, IBinder hostInputToken, int flags, int privateFlags, int type,
             InputChannel outInputChannel) {
         final InputApplicationHandle applicationHandle;
         final String name;
@@ -8100,7 +8102,7 @@ public class WindowManagerService extends IWindowManager.Stub
         }
 
         updateInputChannel(clientChannel.getToken(), callingUid, callingPid, displayId, surface,
-                name, applicationHandle, flags, type, null /* region */);
+                name, applicationHandle, flags, privateFlags, type, null /* region */);
 
         clientChannel.transferTo(outInputChannel);
         clientChannel.dispose();
@@ -8108,7 +8110,8 @@ public class WindowManagerService extends IWindowManager.Stub
 
     private void updateInputChannel(IBinder channelToken, int callingUid, int callingPid,
             int displayId, SurfaceControl surface, String name,
-            InputApplicationHandle applicationHandle, int flags, int type, Region region) {
+            InputApplicationHandle applicationHandle, int flags, int privateFlags, int type,
+            Region region) {
         InputWindowHandle h = new InputWindowHandle(applicationHandle, displayId);
         h.token = channelToken;
         h.name = name;
@@ -8136,6 +8139,9 @@ public class WindowManagerService extends IWindowManager.Stub
             h.setTouchableRegionCrop(surface);
         }
 
+        //  Check private trusted overlay flag to set trustedOverlay field of input window handle.
+        h.trustedOverlay = (privateFlags & PRIVATE_FLAG_TRUSTED_OVERLAY) != 0;
+
         SurfaceControl.Transaction t = mTransactionFactory.get();
         t.setInputWindowInfo(surface, h);
         t.apply();
@@ -8149,7 +8155,7 @@ public class WindowManagerService extends IWindowManager.Stub
      * is undefined.
      */
     void updateInputChannel(IBinder channelToken, int displayId, SurfaceControl surface,
-            int flags, Region region) {
+            int flags, int privateFlags, Region region) {
         final InputApplicationHandle applicationHandle;
         final String name;
         final EmbeddedWindowController.EmbeddedWindow win;
@@ -8164,7 +8170,7 @@ public class WindowManagerService extends IWindowManager.Stub
         }
 
         updateInputChannel(channelToken, win.mOwnerUid, win.mOwnerPid, displayId, surface, name,
-                applicationHandle, flags, win.mWindowType, region);
+                applicationHandle, flags, privateFlags, win.mWindowType, region);
     }
 
     /** Return whether layer tracing is enabled */

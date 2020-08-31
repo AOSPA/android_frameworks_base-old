@@ -446,9 +446,12 @@ static bool DeserializePackageFromPb(const pb::Package& pb_package, const ResStr
     }
 
     for (const pb::Entry& pb_entry : pb_type.entry()) {
-      ResourceEntry* entry = type->FindOrCreateEntry(pb_entry.name());
+      ResourceEntry* entry;
       if (pb_entry.has_entry_id()) {
-        entry->id = static_cast<uint16_t>(pb_entry.entry_id().id());
+        auto entry_id = static_cast<uint16_t>(pb_entry.entry_id().id());
+        entry = type->FindOrCreateEntry(pb_entry.name(), entry_id);
+      } else {
+        entry = type->FindOrCreateEntry(pb_entry.name());
       }
 
       // Deserialize the symbol status (public/private with source and comments).
@@ -487,8 +490,10 @@ static bool DeserializePackageFromPb(const pb::Package& pb_package, const ResStr
         // Find the overlayable to which this item belongs
         pb::OverlayableItem pb_overlayable_item = pb_entry.overlayable_item();
         if (pb_overlayable_item.overlayable_idx() >= overlayables.size()) {
-          *out_error = android::base::StringPrintf("invalid overlayable_idx value %d",
-                                                   pb_overlayable_item.overlayable_idx());
+          *out_error =
+              android::base::StringPrintf("invalid overlayable_idx value %d for entry %s/%s",
+                                          pb_overlayable_item.overlayable_idx(),
+                                          pb_type.name().c_str(), pb_entry.name().c_str());
           return false;
         }
 

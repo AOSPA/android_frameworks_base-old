@@ -17,13 +17,9 @@
 package android.graphics;
 
 import android.annotation.NonNull;
-import android.annotation.Nullable;
 import android.util.Pools.SynchronizedPool;
-import android.view.DisplayListCanvas;
-import android.view.TextureLayer;
 
 import dalvik.annotation.optimization.CriticalNative;
-import dalvik.annotation.optimization.FastNative;
 
 /**
  * A Canvas implementation that records view system drawing operations for deferred rendering.
@@ -35,13 +31,12 @@ import dalvik.annotation.optimization.FastNative;
  * {@link RenderNode#endRecording()} is called. It must not be retained beyond that as it is
  * internally reused.
  */
-public final class RecordingCanvas extends DisplayListCanvas {
+public final class RecordingCanvas extends BaseRecordingCanvas {
     // The recording canvas pool should be large enough to handle a deeply nested
     // view hierarchy because display lists are generated recursively.
     private static final int POOL_LIMIT = 25;
 
-    /** @hide */
-    public static final int MAX_BITMAP_SIZE = 100 * 1024 * 1024; // 100 MB
+    private static final int MAX_BITMAP_SIZE = 100 * 1024 * 1024; // 100 MB
 
     private static final SynchronizedPool<RecordingCanvas> sPool =
             new SynchronizedPool<>(POOL_LIMIT);
@@ -53,7 +48,7 @@ public final class RecordingCanvas extends DisplayListCanvas {
     private int mWidth;
     private int mHeight;
 
-    /** @hide */
+    /*package*/
     static RecordingCanvas obtain(@NonNull RenderNode node, int width, int height) {
         if (node == null) throw new IllegalArgumentException("node cannot be null");
         RecordingCanvas canvas = sPool.acquire();
@@ -69,29 +64,22 @@ public final class RecordingCanvas extends DisplayListCanvas {
         return canvas;
     }
 
-    /** @hide */
+    /*package*/
     void recycle() {
         mNode = null;
         sPool.release(this);
     }
 
-    /** @hide */
+    /*package*/
     long finishRecording() {
         return nFinishRecording(mNativeCanvasWrapper);
-    }
-
-    /** @hide */
-    @Override
-    public boolean isRecordingFor(Object o) {
-        return o == mNode;
     }
 
     ///////////////////////////////////////////////////////////////////////////
     // Constructors
     ///////////////////////////////////////////////////////////////////////////
 
-    /** @hide */
-    protected RecordingCanvas(@NonNull RenderNode node, int width, int height) {
+    private RecordingCanvas(@NonNull RenderNode node, int width, int height) {
         super(nCreateDisplayListCanvas(node.mNativeRenderNode, width, height));
         mDensity = 0; // disable bitmap density scaling
     }
@@ -147,51 +135,17 @@ public final class RecordingCanvas extends DisplayListCanvas {
 
     @Override
     public void enableZ() {
-        nInsertReorderBarrier(mNativeCanvasWrapper, true);
+        nEnableZ(mNativeCanvasWrapper, true);
     }
 
     @Override
     public void disableZ() {
-        nInsertReorderBarrier(mNativeCanvasWrapper, false);
+        nEnableZ(mNativeCanvasWrapper, false);
     }
 
     ///////////////////////////////////////////////////////////////////////////
-    // Functor
+    // WebView
     ///////////////////////////////////////////////////////////////////////////
-
-    /**
-     * Records the functor specified with the drawGLFunction function pointer. This is
-     * functionality used by webview for calling into their renderer from our display lists.
-     *
-     * @param drawGLFunction A native function pointer
-     *
-     * @hide
-     * @deprecated Use {@link #drawWebViewFunctor(int)}
-     */
-    @Deprecated
-    public void callDrawGLFunction2(long drawGLFunction) {
-        nCallDrawGLFunction(mNativeCanvasWrapper, drawGLFunction, null);
-    }
-
-    /**
-     * Records the functor specified with the drawGLFunction function pointer. This is
-     * functionality used by webview for calling into their renderer from our display lists.
-     *
-     * @param drawGLFunctor A native function pointer
-     * @param releasedCallback Called when the display list is destroyed, and thus
-     * the functor is no longer referenced by this canvas's display list.
-     *
-     * NOTE: The callback does *not* necessarily mean that there are no longer
-     * any references to the functor, just that the reference from this specific
-     * canvas's display list has been released.
-     *
-     * @hide
-     * @deprecated Use {@link #drawWebViewFunctor(int)}
-     */
-    @Deprecated
-    public void drawGLFunctor2(long drawGLFunctor, @Nullable Runnable releasedCallback) {
-        nCallDrawGLFunction(mNativeCanvasWrapper, drawGLFunctor, releasedCallback);
-    }
 
     /**
      * Calls the provided functor that was created via WebViewFunctor_create()
@@ -223,9 +177,9 @@ public final class RecordingCanvas extends DisplayListCanvas {
      * Draws the specified layer onto this canvas.
      *
      * @param layer The layer to composite on this canvas
-     * @hide
+     * @hide TODO: Make this a SystemApi for b/155905258
      */
-    public void drawTextureLayer(TextureLayer layer) {
+    public void drawTextureLayer(@NonNull TextureLayer layer) {
         nDrawTextureLayer(mNativeCanvasWrapper, layer.getLayerHandle());
     }
 
@@ -283,13 +237,6 @@ public final class RecordingCanvas extends DisplayListCanvas {
     }
 
 
-    // ------------------ Fast JNI ------------------------
-
-    @FastNative
-    private static native void nCallDrawGLFunction(long renderer,
-            long drawGLFunction, Runnable releasedCallback);
-
-
     // ------------------ Critical JNI ------------------------
 
     @CriticalNative
@@ -302,7 +249,7 @@ public final class RecordingCanvas extends DisplayListCanvas {
     @CriticalNative
     private static native int nGetMaximumTextureHeight();
     @CriticalNative
-    private static native void nInsertReorderBarrier(long renderer, boolean enableReorder);
+    private static native void nEnableZ(long renderer, boolean enableZ);
     @CriticalNative
     private static native long nFinishRecording(long renderer);
     @CriticalNative

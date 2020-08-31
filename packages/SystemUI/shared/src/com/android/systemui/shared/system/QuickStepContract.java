@@ -88,6 +88,8 @@ public class QuickStepContract {
     public static final int SYSUI_STATE_BUBBLES_EXPANDED = 1 << 14;
     // The global actions dialog is showing
     public static final int SYSUI_STATE_GLOBAL_ACTIONS_SHOWING = 1 << 15;
+    // The one-handed mode is active
+    public static final int SYSUI_STATE_ONE_HANDED_ACTIVE = 1 << 16;
 
     @Retention(RetentionPolicy.SOURCE)
     @IntDef({SYSUI_STATE_SCREEN_PINNING,
@@ -105,6 +107,7 @@ public class QuickStepContract {
             SYSUI_STATE_TRACING_ENABLED,
             SYSUI_STATE_ASSIST_GESTURE_CONSTRAINED,
             SYSUI_STATE_BUBBLES_EXPANDED,
+            SYSUI_STATE_ONE_HANDED_ACTIVE,
             SYSUI_STATE_GLOBAL_ACTIONS_SHOWING
     })
     public @interface SystemUiStateFlags {}
@@ -129,6 +132,7 @@ public class QuickStepContract {
         str.add((flags & SYSUI_STATE_ASSIST_GESTURE_CONSTRAINED) != 0
                 ? "asst_gesture_constrain" : "");
         str.add((flags & SYSUI_STATE_BUBBLES_EXPANDED) != 0 ? "bubbles_expanded" : "");
+        str.add((flags & SYSUI_STATE_ONE_HANDED_ACTIVE) != 0 ? "one_handed_active" : "");
         return str.toString();
     }
 

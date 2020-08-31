@@ -48,6 +48,7 @@ import android.os.Bundle;
 import android.util.AttributeSet;
 import android.util.Log;
 import android.util.SparseArray;
+import android.view.ContextThemeWrapper;
 import android.view.Display;
 import android.view.MotionEvent;
 import android.view.Surface;
@@ -63,6 +64,7 @@ import android.view.inputmethod.InputMethodManager;
 import android.widget.FrameLayout;
 
 import com.android.internal.annotations.VisibleForTesting;
+import com.android.settingslib.Utils;
 import com.android.systemui.Dependency;
 import com.android.systemui.Interpolators;
 import com.android.systemui.R;
@@ -113,17 +115,16 @@ public class NavigationBarView extends FrameLayout implements
     int mNavigationIconHints = 0;
     private int mNavBarMode;
 
-    private Rect mHomeButtonBounds = new Rect();
-    private Rect mBackButtonBounds = new Rect();
-    private Rect mRecentsButtonBounds = new Rect();
-    private Rect mRotationButtonBounds = new Rect();
     private final Region mActiveRegion = new Region();
-    private int[] mTmpPosition = new int[2];
+    private Rect mTmpBounds = new Rect();
 
     private KeyButtonDrawable mBackIcon;
     private KeyButtonDrawable mHomeDefaultIcon;
     private KeyButtonDrawable mRecentIcon;
     private KeyButtonDrawable mDockedIcon;
+    private Context mLightContext;
+    private int mLightIconColor;
+    private int mDarkIconColor;
 
     private EdgeBackGestureHandler mEdgeBackGestureHandler;
     private final DeadZone mDeadZone;
@@ -278,6 +279,12 @@ public class NavigationBarView extends FrameLayout implements
     public NavigationBarView(Context context, AttributeSet attrs) {
         super(context, attrs);
 
+        final Context darkContext = new ContextThemeWrapper(context,
+                Utils.getThemeAttr(context, R.attr.darkIconTheme));
+        mLightContext = new ContextThemeWrapper(context,
+                Utils.getThemeAttr(context, R.attr.lightIconTheme));
+        mLightIconColor = Utils.getColorAttrDefaultColor(mLightContext, R.attr.singleToneColor);
+        mDarkIconColor = Utils.getColorAttrDefaultColor(darkContext, R.attr.singleToneColor);
         mIsVertical = false;
         mLongClickableAccessibilityButton = false;
         mNavBarMode = Dependency.get(NavigationModeController.class).addListener(this);
@@ -290,7 +297,7 @@ public class NavigationBarView extends FrameLayout implements
         final ContextualButton imeSwitcherButton = new ContextualButton(R.id.ime_switcher,
                 R.drawable.ic_ime_switcher_default);
         final RotationContextButton rotateSuggestionButton = new RotationContextButton(
-                R.id.rotate_suggestion, R.drawable.ic_sysbar_rotate_button);
+                R.id.rotate_suggestion, R.drawable.ic_sysbar_rotate_button_ccw_start_0);
         final ContextualButton accessibilityButton =
                 new ContextualButton(R.id.accessibility_button,
                         R.drawable.ic_sysbar_accessibility_button);
@@ -303,8 +310,8 @@ public class NavigationBarView extends FrameLayout implements
         mOverviewProxyService = Dependency.get(OverviewProxyService.class);
         mRecentsOnboarding = new RecentsOnboarding(context, mOverviewProxyService);
         mFloatingRotationButton = new FloatingRotationButton(context);
-        mRotationButtonController = new RotationButtonController(context,
-                R.style.RotateButtonCCWStart90,
+        mRotationButtonController = new RotationButtonController(mLightContext,
+                mLightIconColor, mDarkIconColor,
                 isGesturalMode ? mFloatingRotationButton : rotateSuggestionButton);
 
         mConfiguration = new Configuration();
@@ -501,7 +508,7 @@ public class NavigationBarView extends FrameLayout implements
         }
         if (densityChange || dirChange) {
             mRecentIcon = getDrawable(R.drawable.ic_sysbar_recent);
-            mContextualButtonGroup.updateIcons();
+            mContextualButtonGroup.updateIcons(mLightIconColor, mDarkIconColor);
         }
         if (orientationChange || densityChange || dirChange) {
             mBackIcon = getBackDrawable();
@@ -559,11 +566,6 @@ public class NavigationBarView extends FrameLayout implements
         drawable.setRotation(mIsVertical ? 90 : 0);
     }
 
-    private KeyButtonDrawable chooseNavigationIconDrawable(@DrawableRes int icon,
-            @DrawableRes int quickStepIcon) {
-        return getDrawable(chooseNavigationIconDrawableRes(icon, quickStepIcon));
-    }
-
     private @DrawableRes int chooseNavigationIconDrawableRes(@DrawableRes int icon,
             @DrawableRes int quickStepIcon) {
         final boolean quickStepEnabled = mOverviewProxyService.shouldShowSwipeUpUI();
@@ -571,11 +573,8 @@ public class NavigationBarView extends FrameLayout implements
     }
 
     private KeyButtonDrawable getDrawable(@DrawableRes int icon) {
-        return KeyButtonDrawable.create(mContext, icon, true /* hasShadow */);
-    }
-
-    private KeyButtonDrawable getDrawable(@DrawableRes int icon, boolean hasShadow) {
-        return KeyButtonDrawable.create(mContext, icon, hasShadow);
+        return KeyButtonDrawable.create(mLightContext, mLightIconColor, mDarkIconColor, icon,
+                true /* hasShadow */, null /* ovalBackgroundColor */);
     }
 
     /** To be called when screen lock/unlock state changes */
@@ -709,6 +708,7 @@ public class NavigationBarView extends FrameLayout implements
         getHomeButton().setVisibility(disableHome       ? View.INVISIBLE : View.VISIBLE);
         getRecentsButton().setVisibility(disableRecent  ? View.INVISIBLE : View.VISIBLE);
         getHomeHandle().setVisibility(disableHomeHandle ? View.INVISIBLE : View.VISIBLE);
+        notifyActiveTouchRegions();
     }
 
     @VisibleForTesting
@@ -861,7 +861,6 @@ public class NavigationBarView extends FrameLayout implements
         mBarTransitions.onNavigationModeChanged(mNavBarMode);
         mEdgeBackGestureHandler.onNavigationModeChanged(mNavBarMode);
         mRecentsOnboarding.onNavigationModeChanged(mNavBarMode);
-        getRotateSuggestionButton().onNavigationModeChanged(mNavBarMode);
 
         if (isGesturalMode(mNavBarMode)) {
             mRegionSamplingHelper.start(mSamplingBounds);
@@ -927,42 +926,30 @@ public class NavigationBarView extends FrameLayout implements
     protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
         super.onLayout(changed, left, top, right, bottom);
 
-        mActiveRegion.setEmpty();
-        updateButtonLocation(getBackButton(), mBackButtonBounds, true);
-        updateButtonLocation(getHomeButton(), mHomeButtonBounds, false);
-        updateButtonLocation(getRecentsButton(), mRecentsButtonBounds, false);
-        updateButtonLocation(getRotateSuggestionButton(), mRotationButtonBounds, true);
-        // TODO: Handle button visibility changes
-        mOverviewProxyService.onActiveNavBarRegionChanges(mActiveRegion);
+        notifyActiveTouchRegions();
         mRecentsOnboarding.setNavBarHeight(getMeasuredHeight());
     }
 
-    private void updateButtonLocation(ButtonDispatcher button, Rect buttonBounds,
-            boolean isActive) {
+    /**
+     * Notifies the overview service of the active touch regions.
+     */
+    public void notifyActiveTouchRegions() {
+        mActiveRegion.setEmpty();
+        updateButtonLocation(getBackButton());
+        updateButtonLocation(getHomeButton());
+        updateButtonLocation(getRecentsButton());
+        updateButtonLocation(getRotateSuggestionButton());
+        mOverviewProxyService.onActiveNavBarRegionChanges(mActiveRegion);
+    }
+
+    private void updateButtonLocation(ButtonDispatcher button) {
         View view = button.getCurrentView();
-        if (view == null) {
-            buttonBounds.setEmpty();
+        if (view == null || !button.isVisible()) {
             return;
         }
-        // Temporarily reset the translation back to origin to get the position in window
-        final float posX = view.getTranslationX();
-        final float posY = view.getTranslationY();
-        view.setTranslationX(0);
-        view.setTranslationY(0);
 
-        if (isActive) {
-            view.getLocationOnScreen(mTmpPosition);
-            buttonBounds.set(mTmpPosition[0], mTmpPosition[1],
-                    mTmpPosition[0] + view.getMeasuredWidth(),
-                    mTmpPosition[1] + view.getMeasuredHeight());
-            mActiveRegion.op(buttonBounds, Op.UNION);
-        }
-        view.getLocationInWindow(mTmpPosition);
-        buttonBounds.set(mTmpPosition[0], mTmpPosition[1],
-                mTmpPosition[0] + view.getMeasuredWidth(),
-                mTmpPosition[1] + view.getMeasuredHeight());
-        view.setTranslationX(posX);
-        view.setTranslationY(posY);
+        view.getBoundsOnScreen(mTmpBounds);
+        mActiveRegion.op(mTmpBounds, Op.UNION);
     }
 
     private void updateOrientationViews() {

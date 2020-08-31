@@ -16,10 +16,8 @@
 
 package com.android.server.wm;
 
-import static android.app.WindowConfiguration.WINDOWING_MODE_FREEFORM;
-
-import static com.android.server.wm.ActivityStack.TAG_VISIBILITY;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.DEBUG_VISIBILITY;
+import static com.android.server.wm.Task.TAG_VISIBILITY;
 
 import android.annotation.Nullable;
 import android.util.Slog;
@@ -29,7 +27,7 @@ import com.android.internal.util.function.pooled.PooledLambda;
 
 /** Helper class to ensure activities are in the right visible state for a container. */
 class EnsureActivitiesVisibleHelper {
-    private final ActivityStack mContiner;
+    private final Task mContiner;
     private ActivityRecord mTop;
     private ActivityRecord mStarting;
     private boolean mAboveTop;
@@ -39,7 +37,7 @@ class EnsureActivitiesVisibleHelper {
     private boolean mPreserveWindows;
     private boolean mNotifyClients;
 
-    EnsureActivitiesVisibleHelper(ActivityStack container) {
+    EnsureActivitiesVisibleHelper(Task container) {
         mContiner = container;
     }
 
@@ -69,7 +67,7 @@ class EnsureActivitiesVisibleHelper {
 
     /**
      * Ensure visibility with an option to also update the configuration of visible activities.
-     * @see ActivityStack#ensureActivitiesVisible(ActivityRecord, int, boolean)
+     * @see Task#ensureActivitiesVisible(ActivityRecord, int, boolean)
      * @see RootWindowContainer#ensureActivitiesVisible(ActivityRecord, int, boolean)
      * @param starting The top most activity in the task.
      *                 The activity is either starting or resuming.
@@ -174,12 +172,7 @@ class EnsureActivitiesVisibleHelper {
         }
 
         final int windowingMode = mContiner.getWindowingMode();
-        if (windowingMode == WINDOWING_MODE_FREEFORM) {
-            // The visibility of tasks and the activities they contain in freeform stack are
-            // determined individually unlike other stacks where the visibility or fullscreen
-            // status of an activity in a previous task affects other.
-            mBehindFullscreenActivity = !mContainerShouldBeVisible;
-        } else if (!mBehindFullscreenActivity && mContiner.isActivityTypeHome()
+        if (!mBehindFullscreenActivity && mContiner.isActivityTypeHome()
                 && r.isRootOfTask()) {
             if (DEBUG_VISIBILITY) Slog.v(TAG_VISIBILITY, "Home task: at " + mContiner
                     + " stackShouldBeVisible=" + mContainerShouldBeVisible

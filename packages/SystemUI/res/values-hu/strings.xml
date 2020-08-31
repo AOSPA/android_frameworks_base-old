@@ -711,11 +711,13 @@
     <string name="notification_silence_title" msgid="8608090968400832335">"Néma"</string>
     <string name="notification_alert_title" msgid="3656229781017543655">"Alapértelmezett"</string>
     <string name="notification_bubble_title" msgid="8330481035191903164">"Buborék"</string>
+    <string name="notification_automatic_title" msgid="3745465364578762652">"Automatikus"</string>
     <string name="notification_channel_summary_low" msgid="4860617986908931158">"Nincs hang és rezgés"</string>
     <string name="notification_conversation_summary_low" msgid="1734433426085468009">"Nincs hang és rezgés, továbbá lejjebb jelenik meg a beszélgetések szakaszában"</string>
     <string name="notification_channel_summary_default" msgid="3282930979307248890">"A telefonbeállítások alapján csöröghet és rezeghet"</string>
     <string name="notification_channel_summary_default_with_bubbles" msgid="1782419896613644568">"A telefonbeállítások alapján csöröghet és rezeghet. A(z) <xliff:g id="APP_NAME">%1$s</xliff:g> alkalmazásban lévő beszélgetések alapértelmezés szerint buborékban jelennek meg."</string>
     <string name="notification_channel_summary_bubble" msgid="7235935211580860537">"A tartalomra mutató lebegő parancsikon segítségével tartja fenn az Ön figyelmét."</string>
+    <string name="notification_channel_summary_automatic" msgid="5813109268050235275">"A rendszer határozza meg, hogy ez az értesítés adjon-e ki hangot, illetve rezegjen-e"</string>
     <string name="notification_channel_summary_priority" msgid="7952654515769021553">"A beszélgetések szakaszának tetején, lebegő buborékként látható, megjeleníti a profilképet a lezárási képernyőn"</string>
     <string name="notification_conversation_channel_settings" msgid="2409977688430606835">"Beállítások"</string>
     <string name="notification_priority_title" msgid="2079708866333537093">"Prioritás"</string>
@@ -736,6 +738,12 @@
     <string name="appops_camera_mic_overlay" msgid="5584311236445644095">"Ez az alkalmazás a képernyőn lévő egyéb alkalmazások előtt jelenik meg, és használja a mikrofont és a kamerát."</string>
     <string name="notification_appops_settings" msgid="5208974858340445174">"Beállítások"</string>
     <string name="notification_appops_ok" msgid="2177609375872784124">"OK"</string>
+    <string name="feedback_silenced" msgid="5382212321253328247">"Ezt az értesítést lenémította a rendszer."</string>
+    <string name="feedback_promoted" msgid="8075757485407091976">"Ezt az értesítést magasabb prioritásra állította a rendszer."</string>
+    <string name="feedback_demoted" msgid="5848066008939031913">"Ezt az értesítést alacsonyabb prioritásra állította a rendszer."</string>
+    <string name="feedback_prompt" msgid="2278631214125128281">"Megfelelő ez így?"</string>
+    <string name="feedback_response" msgid="4671729244976641339">"Köszönjük a visszajelzést!"</string>
+    <string name="feedback_ok" msgid="6481426753298857144">"OK"</string>
     <string name="notification_channel_controls_opened_accessibility" msgid="6111817750774381094">"A(z) <xliff:g id="APP_NAME">%1$s</xliff:g> értesítésvezérlői megnyitva"</string>
     <string name="notification_channel_controls_closed_accessibility" msgid="1561909368876911701">"A(z) <xliff:g id="APP_NAME">%1$s</xliff:g> értesítésvezérlői kikapcsolva"</string>
     <string name="notification_channel_switch_accessibility" msgid="8979885820432540252">"Értesítések engedélyezése erről a csatornáról"</string>
@@ -908,25 +916,14 @@
     <string name="accessibility_quick_settings_edit" msgid="1523745183383815910">"Beállítások sorrendjének szerkesztése."</string>
     <string name="accessibility_quick_settings_page" msgid="7506322631645550961">"<xliff:g id="ID_1">%1$d</xliff:g>. oldal, összesen: <xliff:g id="ID_2">%2$d</xliff:g>"</string>
     <string name="tuner_lock_screen" msgid="2267383813241144544">"Lezárási képernyő"</string>
-    <string name="pip_phone_expand" msgid="1424988917240616212">"Kibontás"</string>
-    <string name="pip_phone_minimize" msgid="9057117033655996059">"Kis méret"</string>
-    <string name="pip_phone_close" msgid="8801864042095341824">"Bezárás"</string>
-    <string name="pip_phone_settings" msgid="5687538631925004341">"Beállítások"</string>
-    <string name="pip_phone_dismiss_hint" msgid="5825740708095316710">"Elvetéshez húzza lefelé"</string>
-    <string name="pip_menu_title" msgid="6365909306215631910">"Menü"</string>
-    <string name="pip_notification_title" msgid="8661573026059630525">"A(z) <xliff:g id="NAME">%s</xliff:g> kép a képben funkciót használ"</string>
-    <string name="pip_notification_message" msgid="4991831338795022227">"Ha nem szeretné, hogy a(z) <xliff:g id="NAME">%s</xliff:g> használja ezt a funkciót, koppintson a beállítások megnyitásához, és kapcsolja ki."</string>
-    <string name="pip_play" msgid="333995977693142810">"Lejátszás"</string>
-    <string name="pip_pause" msgid="1139598607050555845">"Szüneteltetés"</string>
-    <string name="pip_skip_to_next" msgid="3864212650579956062">"Ugrás a következőre"</string>
-    <string name="pip_skip_to_prev" msgid="3742589641443049237">"Ugrás az előzőre"</string>
-    <string name="accessibility_action_pip_resize" msgid="8237306972921160456">"Átméretezés"</string>
     <string name="thermal_shutdown_title" msgid="2702966892682930264">"A meleg miatt kikapcsolt"</string>
-    <string name="thermal_shutdown_message" msgid="7432744214105003895">"A telefon most már megfelelően működik"</string>
+    <string name="thermal_shutdown_message" msgid="6142269839066172984">"Telefonja most már megfelelően működik.\nKoppintson, ha további információra van szüksége."</string>
     <string name="thermal_shutdown_dialog_message" msgid="6745684238183492031">"Telefonja túlmelegedett, így kikapcsolt, hogy lehűlhessen. Most már megfelelően működik.\n\nA telefon akkor melegedhet túl, ha Ön:\n	• Energiaigényes alkalmazásokat használ (például játékokat, videókat vagy navigációs alkalmazásokat)\n	• Nagy fájlokat tölt le vagy fel\n	• Melegben használja a telefonját"</string>
+    <string name="thermal_shutdown_dialog_help_text" msgid="6413474593462902901">"Olvassa el a kímélő használat lépéseit"</string>
     <string name="high_temp_title" msgid="2218333576838496100">"A telefon melegszik"</string>
-    <string name="high_temp_notif_message" msgid="163928048626045592">"Bizonyos funkciók korlátozottan működnek a telefon hűlése közben"</string>
+    <string name="high_temp_notif_message" msgid="1277346543068257549">"Bizonyos funkciók korlátozottan működnek a telefon lehűlése közben.\nKoppintson, ha további információra van szüksége."</string>
     <string name="high_temp_dialog_message" msgid="3793606072661253968">"A telefon automatikusan megpróbál lehűlni. Továbbra is tudja használni a telefont, de elképzelhető, hogy működése lelassul.\n\nAmint a telefon lehűl, újra a szokásos módon működik majd."</string>
+    <string name="high_temp_dialog_help_text" msgid="7380171287943345858">"Olvassa el a kímélő használat lépéseit"</string>
     <string name="high_temp_alarm_title" msgid="2359958549570161495">"Húzza ki a töltőt"</string>
     <string name="high_temp_alarm_notify_message" msgid="7186272817783835089">"Probléma adódott az eszköz töltése során. Húzza ki a hálózati adaptert. Vigyázzon, a kábel forró lehet."</string>
     <string name="high_temp_alarm_help_care_steps" msgid="5017002218341329566">"Olvassa el a megfelelő használat lépéseit"</string>
@@ -1022,7 +1019,6 @@
     <string name="priority_onboarding_ignores_dnd_text" msgid="2918952762719600529">"Megszakítják a Ne zavarjanak módot"</string>
     <string name="priority_onboarding_done_button_title" msgid="4569550984286506007">"Értem"</string>
     <string name="priority_onboarding_settings_button_title" msgid="6663601574303585927">"Beállítások"</string>
-    <string name="magnification_overlay_title" msgid="6584179429612427958">"Nagyítási fedvény ablaka"</string>
     <string name="magnification_window_title" msgid="4863914360847258333">"Nagyítás ablaka"</string>
     <string name="magnification_controls_title" msgid="8421106606708891519">"Nagyítási vezérlők ablaka"</string>
     <string name="quick_controls_title" msgid="6839108006171302273">"Eszközvezérlők"</string>

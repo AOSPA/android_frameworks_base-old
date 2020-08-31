@@ -717,11 +717,13 @@
     <string name="notification_silence_title" msgid="8608090968400832335">"Tiché"</string>
     <string name="notification_alert_title" msgid="3656229781017543655">"Predvolené"</string>
     <string name="notification_bubble_title" msgid="8330481035191903164">"Bublina"</string>
+    <string name="notification_automatic_title" msgid="3745465364578762652">"Automaticky"</string>
     <string name="notification_channel_summary_low" msgid="4860617986908931158">"Žiadny zvuk ani vibrácie"</string>
     <string name="notification_conversation_summary_low" msgid="1734433426085468009">"Žiadny zvuk ani vibrácie a zobrazuje sa nižšie v sekcii konverzácií"</string>
     <string name="notification_channel_summary_default" msgid="3282930979307248890">"Zvoní či vibruje podľa nastavení telefónu"</string>
     <string name="notification_channel_summary_default_with_bubbles" msgid="1782419896613644568">"Môže zvoniť alebo vibrovať podľa nastavení telefónu. Predvolene sa zobrazia konverzácie z bubliny <xliff:g id="APP_NAME">%1$s</xliff:g>."</string>
     <string name="notification_channel_summary_bubble" msgid="7235935211580860537">"Upúta vás plávajúcim odkazom na tento obsah."</string>
+    <string name="notification_channel_summary_automatic" msgid="5813109268050235275">"Nechajte systém určiť, či má toto upozornenie vydávať zvuk alebo vibrovať"</string>
     <string name="notification_channel_summary_priority" msgid="7952654515769021553">"Nájdete ju hore v sekcii konverzácií ako plávajúcu bublinu, zobrazuje profilovú fotku na uzamknutej obrazovke"</string>
     <string name="notification_conversation_channel_settings" msgid="2409977688430606835">"Nastavenia"</string>
     <string name="notification_priority_title" msgid="2079708866333537093">"Priorita"</string>
@@ -742,6 +744,12 @@
     <string name="appops_camera_mic_overlay" msgid="5584311236445644095">"Táto aplikácia sa zobrazuje cez ďalšie aplikácie na obrazovke a používa mikrofón aj fotoaparát."</string>
     <string name="notification_appops_settings" msgid="5208974858340445174">"Nastavenia"</string>
     <string name="notification_appops_ok" msgid="2177609375872784124">"OK"</string>
+    <string name="feedback_silenced" msgid="5382212321253328247">"Zvuk tohto upozornenia bol vypnutý systémom."</string>
+    <string name="feedback_promoted" msgid="8075757485407091976">"Toto upozornenie bolo povýšené systémom."</string>
+    <string name="feedback_demoted" msgid="5848066008939031913">"Toto upozornenie bolo systémom preradené nižšie."</string>
+    <string name="feedback_prompt" msgid="2278631214125128281">"Bolo toto správne?"</string>
+    <string name="feedback_response" msgid="4671729244976641339">"Ďakujeme za váš názor."</string>
+    <string name="feedback_ok" msgid="6481426753298857144">"OK"</string>
     <string name="notification_channel_controls_opened_accessibility" msgid="6111817750774381094">"Ovládanie upozornení pre aplikáciu <xliff:g id="APP_NAME">%1$s</xliff:g> je otvorené"</string>
     <string name="notification_channel_controls_closed_accessibility" msgid="1561909368876911701">"Ovládanie upozornení pre aplikáciu <xliff:g id="APP_NAME">%1$s</xliff:g> je zatvorené"</string>
     <string name="notification_channel_switch_accessibility" msgid="8979885820432540252">"Povoliť upozornenia z tohto kanála"</string>
@@ -918,25 +926,14 @@
     <string name="accessibility_quick_settings_edit" msgid="1523745183383815910">"Upraviť poradie nastavení"</string>
     <string name="accessibility_quick_settings_page" msgid="7506322631645550961">"Strana <xliff:g id="ID_1">%1$d</xliff:g> z <xliff:g id="ID_2">%2$d</xliff:g>"</string>
     <string name="tuner_lock_screen" msgid="2267383813241144544">"Uzamknutá obrazovka"</string>
-    <string name="pip_phone_expand" msgid="1424988917240616212">"Rozbaliť"</string>
-    <string name="pip_phone_minimize" msgid="9057117033655996059">"Minimalizovať"</string>
-    <string name="pip_phone_close" msgid="8801864042095341824">"Zavrieť"</string>
-    <string name="pip_phone_settings" msgid="5687538631925004341">"Nastavenia"</string>
-    <string name="pip_phone_dismiss_hint" msgid="5825740708095316710">"Zrušíte presunutím nadol"</string>
-    <string name="pip_menu_title" msgid="6365909306215631910">"Ponuka"</string>
-    <string name="pip_notification_title" msgid="8661573026059630525">"<xliff:g id="NAME">%s</xliff:g> je v režime obraz v obraze"</string>
-    <string name="pip_notification_message" msgid="4991831338795022227">"Ak nechcete, aby aplikácia <xliff:g id="NAME">%s</xliff:g> používala túto funkciu, klepnutím otvorte nastavenia a vypnite ju."</string>
-    <string name="pip_play" msgid="333995977693142810">"Prehrať"</string>
-    <string name="pip_pause" msgid="1139598607050555845">"Pozastaviť"</string>
-    <string name="pip_skip_to_next" msgid="3864212650579956062">"Preskočiť na ďalšie"</string>
-    <string name="pip_skip_to_prev" msgid="3742589641443049237">"Preskočiť na predchádzajúce"</string>
-    <string name="accessibility_action_pip_resize" msgid="8237306972921160456">"Zmeniť veľkosť"</string>
     <string name="thermal_shutdown_title" msgid="2702966892682930264">"Telefón sa vypol z dôvodu prehriatia"</string>
-    <string name="thermal_shutdown_message" msgid="7432744214105003895">"Teraz telefón funguje ako obvykle"</string>
+    <string name="thermal_shutdown_message" msgid="6142269839066172984">"Teraz telefón funguje ako obvykle.\nViac sa dozviete po klepnutí."</string>
     <string name="thermal_shutdown_dialog_message" msgid="6745684238183492031">"Telefón bol príliš horúci, preto sa vypol, aby vychladol. Teraz funguje ako obvykle.\n\nTelefón sa môže príliš zahriať v týchto prípadoch:\n	• používanie náročných aplikácií (napr. hier, videí alebo navigácie);\n	• sťahovanie alebo nahrávanie veľkých súborov;\n	• používanie telefónu pri vysokých teplotách."</string>
+    <string name="thermal_shutdown_dialog_help_text" msgid="6413474593462902901">"Zobraziť opatrenia"</string>
     <string name="high_temp_title" msgid="2218333576838496100">"Teplota telefónu stúpa"</string>
-    <string name="high_temp_notif_message" msgid="163928048626045592">"Niektoré funkcie budú obmedzené, dokým neklesne teplota telefónu"</string>
+    <string name="high_temp_notif_message" msgid="1277346543068257549">"Niektoré funkcie budú obmedzené, dokým neklesne teplota telefónu.\nViac sa dozviete po klepnutí."</string>
     <string name="high_temp_dialog_message" msgid="3793606072661253968">"Váš telefón sa automaticky pokúsi schladiť. Môžete ho naďalej používať, ale môže fungovať pomalšie.\n\nPo poklese teploty bude telefón fungovať ako normálne."</string>
+    <string name="high_temp_dialog_help_text" msgid="7380171287943345858">"Zobraziť opatrenia"</string>
     <string name="high_temp_alarm_title" msgid="2359958549570161495">"Odpojte nabíjačku"</string>
     <string name="high_temp_alarm_notify_message" msgid="7186272817783835089">"Vyskytol sa problém s nabíjaním tohto zariadenia. Odpojte nabíjačku a postupujte opatrne, pretože kábel môže byť horúci."</string>
     <string name="high_temp_alarm_help_care_steps" msgid="5017002218341329566">"Zobraziť opatrenia"</string>
@@ -1032,7 +1029,6 @@
     <string name="priority_onboarding_ignores_dnd_text" msgid="2918952762719600529">"Prerušovať režim bez vyrušení"</string>
     <string name="priority_onboarding_done_button_title" msgid="4569550984286506007">"Dobre"</string>
     <string name="priority_onboarding_settings_button_title" msgid="6663601574303585927">"Nastavenia"</string>
-    <string name="magnification_overlay_title" msgid="6584179429612427958">"Okno prekrytia priblíženia"</string>
     <string name="magnification_window_title" msgid="4863914360847258333">"Okno priblíženia"</string>
     <string name="magnification_controls_title" msgid="8421106606708891519">"Ovládacie prvky okna priblíženia"</string>
     <string name="quick_controls_title" msgid="6839108006171302273">"Ovládanie zariadení"</string>

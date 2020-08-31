@@ -714,11 +714,13 @@
     <string name="notification_silence_title" msgid="8608090968400832335">"Нечујно"</string>
     <string name="notification_alert_title" msgid="3656229781017543655">"Подразумевано"</string>
     <string name="notification_bubble_title" msgid="8330481035191903164">"Облачић"</string>
+    <string name="notification_automatic_title" msgid="3745465364578762652">"Аутоматска"</string>
     <string name="notification_channel_summary_low" msgid="4860617986908931158">"Без звука и вибрирања"</string>
     <string name="notification_conversation_summary_low" msgid="1734433426085468009">"Без звука и вибрирања и приказује се у наставку одељка за конверзације"</string>
     <string name="notification_channel_summary_default" msgid="3282930979307248890">"Може да звони или вибрира у зависности од подешавања телефона"</string>
     <string name="notification_channel_summary_default_with_bubbles" msgid="1782419896613644568">"Може да звони или вибрира у зависности од подешавања телефона. Конверзације из апликације <xliff:g id="APP_NAME">%1$s</xliff:g> се подразумевано приказују у облачићима."</string>
     <string name="notification_channel_summary_bubble" msgid="7235935211580860537">"Привлачи вам пажњу помоћу плутајуће пречице до овог садржаја."</string>
+    <string name="notification_channel_summary_automatic" msgid="5813109268050235275">"Нека систем утврди да ли ово обавештење треба да емитује звук или да вибрира"</string>
     <string name="notification_channel_summary_priority" msgid="7952654515769021553">"Приказује се у врху одељка за конверзације као плутајући облачић, приказује слику профила на закључаном екрану"</string>
     <string name="notification_conversation_channel_settings" msgid="2409977688430606835">"Подешавања"</string>
     <string name="notification_priority_title" msgid="2079708866333537093">"Приоритет"</string>
@@ -739,6 +741,12 @@
     <string name="appops_camera_mic_overlay" msgid="5584311236445644095">"Ова апликација се приказује преко других апликација на екрану и користи микрофон и камеру."</string>
     <string name="notification_appops_settings" msgid="5208974858340445174">"Подешавања"</string>
     <string name="notification_appops_ok" msgid="2177609375872784124">"Потврди"</string>
+    <string name="feedback_silenced" msgid="5382212321253328247">"Систем је искључио ово обавештење."</string>
+    <string name="feedback_promoted" msgid="8075757485407091976">"Систем је промовисао ово обавештење."</string>
+    <string name="feedback_demoted" msgid="5848066008939031913">"Систем је поставио ово обавештење на дно."</string>
+    <string name="feedback_prompt" msgid="2278631214125128281">"Да ли је то тачно?"</string>
+    <string name="feedback_response" msgid="4671729244976641339">"Хвала вам на повратним информацијама!"</string>
+    <string name="feedback_ok" msgid="6481426753298857144">"Потврди"</string>
     <string name="notification_channel_controls_opened_accessibility" msgid="6111817750774381094">"Контроле обавештења за отварање апликације <xliff:g id="APP_NAME">%1$s</xliff:g>"</string>
     <string name="notification_channel_controls_closed_accessibility" msgid="1561909368876911701">"Контроле обавештења за затварање апликације <xliff:g id="APP_NAME">%1$s</xliff:g>"</string>
     <string name="notification_channel_switch_accessibility" msgid="8979885820432540252">"Дозволи обавештења са овог канала"</string>
@@ -913,25 +921,14 @@
     <string name="accessibility_quick_settings_edit" msgid="1523745183383815910">"Измени редослед подешавања."</string>
     <string name="accessibility_quick_settings_page" msgid="7506322631645550961">"<xliff:g id="ID_1">%1$d</xliff:g>. страна од <xliff:g id="ID_2">%2$d</xliff:g>"</string>
     <string name="tuner_lock_screen" msgid="2267383813241144544">"Закључан екран"</string>
-    <string name="pip_phone_expand" msgid="1424988917240616212">"Прошири"</string>
-    <string name="pip_phone_minimize" msgid="9057117033655996059">"Умањи"</string>
-    <string name="pip_phone_close" msgid="8801864042095341824">"Затвори"</string>
-    <string name="pip_phone_settings" msgid="5687538631925004341">"Подешавања"</string>
-    <string name="pip_phone_dismiss_hint" msgid="5825740708095316710">"Превуците надоле да бисте одбили"</string>
-    <string name="pip_menu_title" msgid="6365909306215631910">"Мени"</string>
-    <string name="pip_notification_title" msgid="8661573026059630525">"<xliff:g id="NAME">%s</xliff:g> је слика у слици"</string>
-    <string name="pip_notification_message" msgid="4991831338795022227">"Ако не желите да <xliff:g id="NAME">%s</xliff:g> користи ову функцију, додирните да бисте отворили подешавања и искључили је."</string>
-    <string name="pip_play" msgid="333995977693142810">"Пусти"</string>
-    <string name="pip_pause" msgid="1139598607050555845">"Паузирај"</string>
-    <string name="pip_skip_to_next" msgid="3864212650579956062">"Пређи на следеће"</string>
-    <string name="pip_skip_to_prev" msgid="3742589641443049237">"Пређи на претходно"</string>
-    <string name="accessibility_action_pip_resize" msgid="8237306972921160456">"Промените величину"</string>
     <string name="thermal_shutdown_title" msgid="2702966892682930264">"Телефон се искључио због топлоте"</string>
-    <string name="thermal_shutdown_message" msgid="7432744214105003895">"Телефон сада нормално ради"</string>
+    <string name="thermal_shutdown_message" msgid="6142269839066172984">"Телефон сада нормално ради.\nДодирните за више информација"</string>
     <string name="thermal_shutdown_dialog_message" msgid="6745684238183492031">"Телефон је био преврућ, па се искључио да се охлади. Сада ради нормално.\n\nТелефон може превише да се угреје ако:\n	• Користите апликације које захтевају пуно ресурса (нпр. видео игре, видео или апликације за навигацију)\n	• Преузимате/отпремате велике датотеке\n	• Користите телефон на високој температури"</string>
+    <string name="thermal_shutdown_dialog_help_text" msgid="6413474593462902901">"Погледајте упозорења"</string>
     <string name="high_temp_title" msgid="2218333576838496100">"Телефон се загрејао"</string>
-    <string name="high_temp_notif_message" msgid="163928048626045592">"Неке функције су ограничене док се телефон не охлади"</string>
+    <string name="high_temp_notif_message" msgid="1277346543068257549">"Неке функције су ограничене док се телефон не охлади.\nДодирните за више информација"</string>
     <string name="high_temp_dialog_message" msgid="3793606072661253968">"Телефон ће аутоматски покушати да се охлади. И даље ћете моћи да користите телефон, али ће спорије реаговати.\n\nКада се телефон охлади, нормално ће радити."</string>
+    <string name="high_temp_dialog_help_text" msgid="7380171287943345858">"Погледајте упозорења"</string>
     <string name="high_temp_alarm_title" msgid="2359958549570161495">"Искључите пуњач из напајања"</string>
     <string name="high_temp_alarm_notify_message" msgid="7186272817783835089">"Дошло је до проблема са пуњењем овог уређаја. Искључите адаптер из напајања и будите пажљиви јер кабл може да буде топао."</string>
     <string name="high_temp_alarm_help_care_steps" msgid="5017002218341329566">"Погледајте упозорења"</string>
@@ -1027,7 +1024,6 @@
     <string name="priority_onboarding_ignores_dnd_text" msgid="2918952762719600529">"Омета подешавање Не узнемиравај"</string>
     <string name="priority_onboarding_done_button_title" msgid="4569550984286506007">"Важи"</string>
     <string name="priority_onboarding_settings_button_title" msgid="6663601574303585927">"Подешавања"</string>
-    <string name="magnification_overlay_title" msgid="6584179429612427958">"Преклопни прозор за увећање"</string>
     <string name="magnification_window_title" msgid="4863914360847258333">"Прозор за увећање"</string>
     <string name="magnification_controls_title" msgid="8421106606708891519">"Контроле прозора за увећање"</string>
     <string name="quick_controls_title" msgid="6839108006171302273">"Контроле уређаја"</string>

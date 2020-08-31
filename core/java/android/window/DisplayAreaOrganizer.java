@@ -30,18 +30,59 @@ import android.view.SurfaceControl;
 @TestApi
 public class DisplayAreaOrganizer extends WindowOrganizer {
 
+    /**
+     * The value in display area indicating that no value has been set.
+     */
     public static final int FEATURE_UNDEFINED = -1;
+
+    /**
+     * The Root display area on a display
+     */
     public static final int FEATURE_SYSTEM_FIRST = 0;
-    // The Root display area on a display
+
+    /**
+     * The Root display area on a display
+     */
     public static final int FEATURE_ROOT = FEATURE_SYSTEM_FIRST;
-    // Display area hosting the default task container.
+
+    /**
+     * Display area hosting the default task container.
+     */
     public static final int FEATURE_DEFAULT_TASK_CONTAINER = FEATURE_SYSTEM_FIRST + 1;
-    // Display area hosting non-activity window tokens.
+
+    /**
+     * Display area hosting non-activity window tokens.
+     */
     public static final int FEATURE_WINDOW_TOKENS = FEATURE_SYSTEM_FIRST + 2;
 
+    /**
+     * Display area for one handed feature
+     */
+    public static final int FEATURE_ONE_HANDED = FEATURE_SYSTEM_FIRST + 3;
+
+    /**
+     * Display area that can be magnified in
+     * {@link Settings.Secure.ACCESSIBILITY_MAGNIFICATION_MODE_WINDOW}. It contains all windows
+     * below {@link WindowManager.LayoutParams#TYPE_ACCESSIBILITY_MAGNIFICATION_OVERLAY}.
+     */
+    public static final int FEATURE_WINDOWED_MAGNIFICATION = FEATURE_SYSTEM_FIRST + 4;
+
+    /**
+     * Display area that can be magnified in
+     * {@link Settings.Secure.ACCESSIBILITY_MAGNIFICATION_MODE_FULLSCREEN}. This is different from
+     * {@link #FEATURE_WINDOWED_MAGNIFICATION} that the whole display will be magnified.
+     * @hide
+     */
+    public static final int FEATURE_FULLSCREEN_MAGNIFICATION = FEATURE_SYSTEM_FIRST + 5;
+
+    /**
+     * The last boundary of display area for system features
+     */
     public static final int FEATURE_SYSTEM_LAST = 10_000;
 
-    // Vendor specific display area definition can start with this value.
+    /**
+     * Vendor specific display area definition can start with this value.
+     */
     public static final int FEATURE_VENDOR_FIRST = FEATURE_SYSTEM_LAST + 1;
 
     @RequiresPermission(android.Manifest.permission.MANAGE_ACTIVITY_STACKS)

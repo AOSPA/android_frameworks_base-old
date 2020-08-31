@@ -1542,6 +1542,29 @@ public abstract class NotificationListenerService extends Service {
         @Retention(RetentionPolicy.SOURCE)
         public @interface UserSentiment {}
 
+        /**
+         * Notification was demoted in shade
+         * @hide
+         */
+        public static final int RANKING_DEMOTED = -1;
+        /**
+         * Notification was unchanged
+         * @hide
+         */
+        public static final int RANKING_UNCHANGED = 0;
+        /**
+         * Notification was promoted in shade
+         * @hide
+         */
+        public static final int RANKING_PROMOTED = 1;
+
+        /** @hide */
+        @IntDef(prefix = { "RANKING_" }, value = {
+                RANKING_PROMOTED, RANKING_DEMOTED, RANKING_UNCHANGED
+        })
+        @Retention(RetentionPolicy.SOURCE)
+        public @interface RankingAdjustment {}
+
         private @NonNull String mKey;
         private int mRank = -1;
         private boolean mIsAmbient;
@@ -1569,6 +1592,7 @@ public abstract class NotificationListenerService extends Service {
         private boolean mVisuallyInterruptive;
         private boolean mIsConversation;
         private ShortcutInfo mShortcutInfo;
+        private @RankingAdjustment int mRankingAdjustment;
         private boolean mIsBubble;
 
         private static final int PARCEL_VERSION = 2;
@@ -1604,6 +1628,7 @@ public abstract class NotificationListenerService extends Service {
             out.writeBoolean(mVisuallyInterruptive);
             out.writeBoolean(mIsConversation);
             out.writeParcelable(mShortcutInfo, flags);
+            out.writeInt(mRankingAdjustment);
             out.writeBoolean(mIsBubble);
         }
 
@@ -1640,6 +1665,7 @@ public abstract class NotificationListenerService extends Service {
             mVisuallyInterruptive = in.readBoolean();
             mIsConversation = in.readBoolean();
             mShortcutInfo = in.readParcelable(cl);
+            mRankingAdjustment = in.readInt();
             mIsBubble = in.readBoolean();
         }
 
@@ -1861,6 +1887,14 @@ public abstract class NotificationListenerService extends Service {
         }
 
         /**
+         * Returns the intended transition to ranking passed by {@link NotificationAssistantService}
+         * @hide
+         */
+        public @RankingAdjustment int getRankingAdjustment() {
+            return mRankingAdjustment;
+        }
+
+        /**
          * @hide
          */
         @VisibleForTesting
@@ -1873,7 +1907,7 @@ public abstract class NotificationListenerService extends Service {
                 boolean noisy, ArrayList<Notification.Action> smartActions,
                 ArrayList<CharSequence> smartReplies, boolean canBubble,
                 boolean visuallyInterruptive, boolean isConversation, ShortcutInfo shortcutInfo,
-                boolean isBubble) {
+                int rankingAdjustment, boolean isBubble) {
             mKey = key;
             mRank = rank;
             mIsAmbient = importance < NotificationManager.IMPORTANCE_LOW;
@@ -1897,7 +1931,19 @@ public abstract class NotificationListenerService extends Service {
             mVisuallyInterruptive = visuallyInterruptive;
             mIsConversation = isConversation;
             mShortcutInfo = shortcutInfo;
+            mRankingAdjustment = rankingAdjustment;
             mIsBubble = isBubble;
+        }
+
+        /**
+         * @hide
+         */
+        public @NonNull Ranking withAudiblyAlertedInfo(@Nullable Ranking previous) {
+            if (previous != null && previous.mLastAudiblyAlertedMs > 0
+                    && this.mLastAudiblyAlertedMs <= 0) {
+                this.mLastAudiblyAlertedMs = previous.mLastAudiblyAlertedMs;
+            }
+            return this;
         }
 
         /**
@@ -1926,6 +1972,7 @@ public abstract class NotificationListenerService extends Service {
                     other.mVisuallyInterruptive,
                     other.mIsConversation,
                     other.mShortcutInfo,
+                    other.mRankingAdjustment,
                     other.mIsBubble);
         }
 
@@ -1984,6 +2031,7 @@ public abstract class NotificationListenerService extends Service {
                     // Shortcutinfo doesn't have equals either; use id
                     &&  Objects.equals((mShortcutInfo == null ? 0 : mShortcutInfo.getId()),
                     (other.mShortcutInfo == null ? 0 : other.mShortcutInfo.getId()))
+                    && Objects.equals(mRankingAdjustment, other.mRankingAdjustment)
                     && Objects.equals(mIsBubble, other.mIsBubble);
         }
     }

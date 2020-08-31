@@ -711,11 +711,13 @@
     <string name="notification_silence_title" msgid="8608090968400832335">"ປິດສຽງ"</string>
     <string name="notification_alert_title" msgid="3656229781017543655">"ຄ່າເລີ່ມຕົ້ນ"</string>
     <string name="notification_bubble_title" msgid="8330481035191903164">"ຟອງ"</string>
+    <string name="notification_automatic_title" msgid="3745465364578762652">"ອັດຕະໂນມັດ"</string>
     <string name="notification_channel_summary_low" msgid="4860617986908931158">"ບໍ່ມີສຽງ ຫຼື ການສັ່ນເຕືອນ"</string>
     <string name="notification_conversation_summary_low" msgid="1734433426085468009">"ບໍ່ມີສຽງ ຫຼື ການສັ່ນເຕືອນ ແລະ ປາກົດຢູ່ທາງລຸ່ມຂອງພາກສ່ວນການສົນທະນາ"</string>
     <string name="notification_channel_summary_default" msgid="3282930979307248890">"ອາດສົ່ງສຽງ ຫຼື ສັ່ນເຕືອນໂດຍອ້າງອີງຈາກການຕັ້ງຄ່າໂທລະສັບ"</string>
     <string name="notification_channel_summary_default_with_bubbles" msgid="1782419896613644568">"ອາດສົ່ງສຽງ ຫຼື ສັ່ນເຕືອນໂດຍອ້າງອີງຈາກການຕັ້ງຄ່າໂທລະສັບ. ການສົນທະນາຈາກ <xliff:g id="APP_NAME">%1$s</xliff:g> ຈະເປັນ bubble ຕາມຄ່າເລີ່ມຕົ້ນ."</string>
     <string name="notification_channel_summary_bubble" msgid="7235935211580860537">"ເອົາໃຈໃສ່ທາງລັດແບບລອຍໄປຫາເນື້ອຫານີ້."</string>
+    <string name="notification_channel_summary_automatic" msgid="5813109268050235275">"ໃຫ້ລະບົບກຳນົດວ່າການແຈ້ງເຕືອນນິ້ຄວນມີສຽງ ຫຼື ສັ່ນເຕືອນຫຼືບໍ່"</string>
     <string name="notification_channel_summary_priority" msgid="7952654515769021553">"ສະແດງຢູ່ເທິງສຸດຂອງພາກສ່ວນການສົນທະນາ, ປາກົດເປັນ bubble ແບບລອຍ, ສະແດງຮູບໂປຣໄຟລ໌ຢູ່ໜ້າຈໍລັອກ"</string>
     <string name="notification_conversation_channel_settings" msgid="2409977688430606835">"ຕັ້ງຄ່າ"</string>
     <string name="notification_priority_title" msgid="2079708866333537093">"ສຳຄັນ"</string>
@@ -736,6 +738,12 @@
     <string name="appops_camera_mic_overlay" msgid="5584311236445644095">"ແອັບນີ້ກຳລັງສະແດງຜົນບັງແອັບອື່ນຢູ່ໜ້າຈໍຂອງທ່ານ ແລະ ກຳລັງໃຊ້ໄມໂຄຣໂຟນ ແລະ ກ້ອງຖ່າຍຮູບຢູ່."</string>
     <string name="notification_appops_settings" msgid="5208974858340445174">"ການຕັ້ງຄ່າ"</string>
     <string name="notification_appops_ok" msgid="2177609375872784124">"ຕົກລົງ"</string>
+    <string name="feedback_silenced" msgid="5382212321253328247">"ການແຈ້ງເຕືອນນີ້ຖືກປີດສຽງໂດຍລະບົບແລ້ວ."</string>
+    <string name="feedback_promoted" msgid="8075757485407091976">"ການແຈ້ງເຕືອນນີ້ຖືກຍົກລະດັບໂດຍລະບົບແລ້ວ."</string>
+    <string name="feedback_demoted" msgid="5848066008939031913">"ການແຈ້ງເຕືອນນີ້ຖືກຫຼຸດລະດັບໂດຍລະບົບແລ້ວ."</string>
+    <string name="feedback_prompt" msgid="2278631214125128281">"ສິ່ງນີ້ບໍ່ຖືກຕ້ອງບໍ?"</string>
+    <string name="feedback_response" msgid="4671729244976641339">"ຂອບໃຈສຳລັບຄຳເຫັນຂອງທ່ານ!"</string>
+    <string name="feedback_ok" msgid="6481426753298857144">"ຕົກລົງ"</string>
     <string name="notification_channel_controls_opened_accessibility" msgid="6111817750774381094">"ເປີດຕົວຄວບຄຸມການແຈ້ງເຕືອນສຳລັບ <xliff:g id="APP_NAME">%1$s</xliff:g> ແລ້ວ"</string>
     <string name="notification_channel_controls_closed_accessibility" msgid="1561909368876911701">"ປິດຕົວຄວບຄຸມການແຈ້ງເຕືອນສຳລັບ <xliff:g id="APP_NAME">%1$s</xliff:g> ແລ້ວ"</string>
     <string name="notification_channel_switch_accessibility" msgid="8979885820432540252">"ອະນຸຍາດການແຈ້ງເຕືອນຈາກຊ່ອງນີ້"</string>
@@ -908,25 +916,14 @@
     <string name="accessibility_quick_settings_edit" msgid="1523745183383815910">"ແກ້ໄຂລຳດັບການຕັ້ງຄ່າ."</string>
     <string name="accessibility_quick_settings_page" msgid="7506322631645550961">"<xliff:g id="ID_1">%1$d</xliff:g> ຈາກທັງໝົດ <xliff:g id="ID_2">%2$d</xliff:g>"</string>
     <string name="tuner_lock_screen" msgid="2267383813241144544">"ໜ້າຈໍລັອກ"</string>
-    <string name="pip_phone_expand" msgid="1424988917240616212">"ຂະຫຍາຍ"</string>
-    <string name="pip_phone_minimize" msgid="9057117033655996059">"ຫຍໍ້"</string>
-    <string name="pip_phone_close" msgid="8801864042095341824">"ປິດ"</string>
-    <string name="pip_phone_settings" msgid="5687538631925004341">"ການຕັ້ງຄ່າ"</string>
-    <string name="pip_phone_dismiss_hint" msgid="5825740708095316710">"ລາກລົງເພື່ອປິດໄວ້"</string>
-    <string name="pip_menu_title" msgid="6365909306215631910">"ເມນູ"</string>
-    <string name="pip_notification_title" msgid="8661573026059630525">"<xliff:g id="NAME">%s</xliff:g> ແມ່ນເປັນການສະແດງຜົນຫຼາຍຢ່າງພ້ອມກັນ"</string>
-    <string name="pip_notification_message" msgid="4991831338795022227">"ຫາກທ່ານບໍ່ຕ້ອງການ <xliff:g id="NAME">%s</xliff:g> ໃຫ້ໃຊ້ຄຸນສົມບັດນີ້, ໃຫ້ແຕະເພື່ອເປີດການຕັ້ງຄ່າ ແລ້ວປິດມັນໄວ້."</string>
-    <string name="pip_play" msgid="333995977693142810">"ຫຼິ້ນ"</string>
-    <string name="pip_pause" msgid="1139598607050555845">"ຢຸດຊົ່ວຄາວ"</string>
-    <string name="pip_skip_to_next" msgid="3864212650579956062">"ຂ້າມໄປລາຍການໜ້າ"</string>
-    <string name="pip_skip_to_prev" msgid="3742589641443049237">"ຂ້າມໄປລາຍການກ່ອນນີ້"</string>
-    <string name="accessibility_action_pip_resize" msgid="8237306972921160456">"ປ່ຽນຂະໜາດ"</string>
     <string name="thermal_shutdown_title" msgid="2702966892682930264">"ປິດໂທລະສັບເນື່ອງຈາກຮ້ອນເກີນໄປ"</string>
-    <string name="thermal_shutdown_message" msgid="7432744214105003895">"ໂທລະສັບຂອງທ່ານຕອນນີ້ເຮັດວຽກປົກກະຕິແລ້ວ"</string>
+    <string name="thermal_shutdown_message" msgid="6142269839066172984">"ໂທລະສັບຂອງທ່ານຕອນນີ້ເຮັດວຽກປົກກະຕິແລ້ວ.\nແຕະເພື່ອເບິ່ງຂໍ້ມູນເພີ່ມເຕີມ"</string>
     <string name="thermal_shutdown_dialog_message" msgid="6745684238183492031">"ໂທລະສັບຂອງທ່ານຮ້ອນເກີນໄປ, ດັ່ງນັ້ນມັນຈຶ່ງຖືກປິດໄວ້ເພື່ອໃຫ້ເຢັນກ່ອນ. ໂທລະສັບຂອງທ່ານຕອນນີ້ເຮັດວຽກປົກກະຕິແລ້ວ.\n\nໂທລະສັບຂອງທ່ານອາດຮ້ອນຫາກວ່າທ່ານ:\n	• ໃຊ້ແອັບທີ່ກິນຊັບພະຍາກອນຫຼາຍ (ເຊັ່ນ: ເກມ, ວິດີໂອ ຫຼື ແອັບການນຳທາງ)\n	• ດາວໂຫລດ ຫຼື ອັບໂຫລດຮູບພາບຂະໜາດໃຫຍ່\n	• ໃຊ້ໂທລະສັບຂອງທ່ານໃນບ່ອນທີ່ມີອຸນຫະພູມສູງ"</string>
+    <string name="thermal_shutdown_dialog_help_text" msgid="6413474593462902901">"ເບິ່ງຂັ້ນຕອນການເບິ່ງແຍງ"</string>
     <string name="high_temp_title" msgid="2218333576838496100">"ໂທລະສັບກຳລັງຮ້ອນຂຶ້ນ"</string>
-    <string name="high_temp_notif_message" msgid="163928048626045592">"ຄຸນສົມບັດບາງຢ່າງຖືກຈຳກັດໄວ້ເນື່ອງໃນເວລາຫຼຸດອຸນຫະພູມຂອງໂທລະສັບ"</string>
+    <string name="high_temp_notif_message" msgid="1277346543068257549">"ຄຸນສົມບັດບາງຢ່າງຖືກຈຳກັດໄວ້ໃນເວລາຫຼຸດອຸນຫະພູມຂອງໂທລະສັບ.\nແຕະເພື່ອເບິ່ງຂໍ້ມູນເພີ່ມເຕີມ"</string>
     <string name="high_temp_dialog_message" msgid="3793606072661253968">"ໂທລະສັບຂອງທ່ານຈະພະຍາຍາມລົດອຸນຫະພູມລົງ. ທ່ານຍັງຄົງສາມາດໃຊ້ໂທລະສັບຂອງທ່ານໄດ້ຢູ່, ແຕ່ມັນຈະເຮັດວຽກຊ້າລົງ.\n\nເມື່ອໂທລະສັບຂອງທ່ານບໍ່ຮ້ອນຫຼາຍແລ້ວ, ມັນຈະກັບມາເຮັດວຽກຕາມປົກກະຕິ."</string>
+    <string name="high_temp_dialog_help_text" msgid="7380171287943345858">"ເບິ່ງຂັ້ນຕອນການເບິ່ງແຍງ"</string>
     <string name="high_temp_alarm_title" msgid="2359958549570161495">"ຖອດສາຍສາກອອກ"</string>
     <string name="high_temp_alarm_notify_message" msgid="7186272817783835089">"ເກີດບັນຫາໃນການສາກໄຟອຸປະກອນນີ້. ກະລຸນາຖອດສາຍສາກອອກ ແລະ ລະວັງເນື່ອງຈາກສາຍອາດຈະຍັງອຸ່ນຢູ່."</string>
     <string name="high_temp_alarm_help_care_steps" msgid="5017002218341329566">"ເບິ່ງຂັ້ນຕອນການເບິ່ງແຍງ"</string>
@@ -1022,7 +1019,6 @@
     <string name="priority_onboarding_ignores_dnd_text" msgid="2918952762719600529">"ລົບກວນໂໝດຫ້າມລົບກວນ"</string>
     <string name="priority_onboarding_done_button_title" msgid="4569550984286506007">"ເຂົ້າໃຈແລ້ວ"</string>
     <string name="priority_onboarding_settings_button_title" msgid="6663601574303585927">"ການຕັ້ງຄ່າ"</string>
-    <string name="magnification_overlay_title" msgid="6584179429612427958">"ໜ້າຈໍວາງທັບການຂະຫຍາຍ"</string>
     <string name="magnification_window_title" msgid="4863914360847258333">"ໜ້າຈໍການຂະຫຍາຍ"</string>
     <string name="magnification_controls_title" msgid="8421106606708891519">"ການຄວບຄຸມໜ້າຈໍການຂະຫຍາຍ"</string>
     <string name="quick_controls_title" msgid="6839108006171302273">"ການຄວບຄຸມອຸປະກອນ"</string>

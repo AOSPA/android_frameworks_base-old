@@ -63,6 +63,7 @@ import android.os.UserHandle;
 import android.os.UserManager;
 import android.os.UserManagerInternal;
 import android.os.UserManagerInternal.UserRestrictionsListener;
+import android.provider.DeviceConfig;
 import android.provider.Settings;
 import android.provider.Settings.SettingNotFoundException;
 import android.text.TextUtils;
@@ -115,6 +116,7 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
     private static final int ADD_PROXY_DELAY_MS = 100;
     // Delay for retrying enable and disable in msec
     private static final int ENABLE_DISABLE_DELAY_MS = 300;
+    private static final int DELAY_BEFORE_RESTART_DUE_TO_INIT_FLAGS_CHANGED_MS = 300;
 
     private static final int MESSAGE_ENABLE = 1;
     private static final int MESSAGE_DISABLE = 2;
@@ -135,6 +137,7 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
     private static final int MESSAGE_ADD_PROXY_DELAYED = 400;
     private static final int MESSAGE_BIND_PROFILE_SERVICE = 401;
     private static final int MESSAGE_RESTORE_USER_SETTING = 500;
+    private static final int MESSAGE_INIT_FLAGS_CHANGED = 600;
 
     private static final int RESTORE_SETTING_TO_ON = 1;
     private static final int RESTORE_SETTING_TO_OFF = 0;
@@ -278,6 +281,30 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
                                     UserManager.DISALLOW_BLUETOOTH_SHARING));
                         }
                     }
+                }
+            };
+
+    private final DeviceConfig.OnPropertiesChangedListener mDeviceConfigChangedListener =
+            new DeviceConfig.OnPropertiesChangedListener() {
+                @Override
+                public void onPropertiesChanged(DeviceConfig.Properties properties) {
+                    if (!properties.getNamespace().equals(DeviceConfig.NAMESPACE_BLUETOOTH)) {
+                        return;
+                    }
+                    boolean foundInit = false;
+                    for (String name : properties.getKeyset()) {
+                        if (name.startsWith("INIT_")) {
+                            foundInit = true;
+                            break;
+                        }
+                    }
+                    if (!foundInit) {
+                        return;
+                    }
+                    mHandler.removeMessages(MESSAGE_INIT_FLAGS_CHANGED);
+                    mHandler.sendEmptyMessageDelayed(
+                            MESSAGE_INIT_FLAGS_CHANGED,
+                            DELAY_BEFORE_RESTART_DUE_TO_INIT_FLAGS_CHANGED_MS);
                 }
             };
 
@@ -512,6 +539,10 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
             Slog.w(TAG, "Unable to resolve SystemUI's UID.");
         }
         mSystemUiUid = systemUiUid;
+        DeviceConfig.addOnPropertiesChangedListener(
+                DeviceConfig.NAMESPACE_BLUETOOTH,
+                (Runnable r) -> r.run(),
+                mDeviceConfigChangedListener);
     }
 
     /**
@@ -2367,104 +2398,7 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
 
                     /* disable and enable BT when detect a user switch */
                     if (mBluetooth != null && isEnabled()) {
-                        try {
-                            mBluetoothLock.readLock().lock();
-                            if (mBluetooth != null) {
-                                mBluetooth.unregisterCallback(mBluetoothCallback);
-                            }
-                        } catch (RemoteException re) {
-                            Slog.e(TAG, "Unable to unregister", re);
-                        } finally {
-                            mBluetoothLock.readLock().unlock();
-                        }
-
-                        if (mState == BluetoothAdapter.STATE_TURNING_OFF) {
-                            // MESSAGE_USER_SWITCHED happened right after MESSAGE_ENABLE
-                            bluetoothStateChangeHandler(mState, BluetoothAdapter.STATE_OFF);
-                            mState = BluetoothAdapter.STATE_OFF;
-                        }
-                        if (mState == BluetoothAdapter.STATE_OFF) {
-                            bluetoothStateChangeHandler(mState, BluetoothAdapter.STATE_TURNING_ON);
-                            mState = BluetoothAdapter.STATE_TURNING_ON;
-                        }
-
-                        /* wait for stable state BLE_ON or ON */
-                        waitForState(Set.of(BluetoothAdapter.STATE_BLE_ON,
-                                            BluetoothAdapter.STATE_ON));
-
-                        if (mState == BluetoothAdapter.STATE_TURNING_ON) {
-                            bluetoothStateChangeHandler(mState, BluetoothAdapter.STATE_ON);
-                        }
-
-                        unbindAllBluetoothProfileServices();
-                        // disable
-                        addActiveLog(BluetoothProtoEnums.ENABLE_DISABLE_REASON_USER_SWITCH,
-                                mContext.getPackageName(), false);
-
-                        clearBleApps();
-
-                        handleDisable();
-                        // Pbap service need receive STATE_TURNING_OFF intent to close
-                        bluetoothStateChangeHandler(BluetoothAdapter.STATE_ON,
-                                BluetoothAdapter.STATE_TURNING_OFF);
-
-                        /* wait for BLE_ON or OFF state. If its BLE ON state
-                         * post BLE ON state to bluetoothStateChangeHandler
-                         * to continue off and wait for off state
-                         */
-                        boolean didDisableTimeout =
-                        !waitForState(Set.of(BluetoothAdapter.STATE_BLE_ON,
-                                             BluetoothAdapter.STATE_OFF));
-
-                        if(!didDisableTimeout) {
-                           int state = getState();
-
-                           if (state == BluetoothAdapter.STATE_BLE_ON) {
-                               bluetoothStateChangeHandler(BluetoothAdapter.STATE_TURNING_OFF,
-                                                        BluetoothAdapter.STATE_BLE_ON);
-                           }
-
-                           didDisableTimeout =
-                                !waitForState(Set.of(BluetoothAdapter.STATE_OFF));
-                        }
-                        bluetoothStateChangeHandler(BluetoothAdapter.STATE_TURNING_OFF,
-                                BluetoothAdapter.STATE_OFF);
-                        sendBluetoothServiceDownCallback();
-
-                        if(!didDisableTimeout) {
-                            try {
-                                mBluetoothLock.writeLock().lock();
-                                if (mBluetooth != null) {
-                                    mBluetooth = null;
-                                    // Unbind
-                                    mContext.unbindService(mConnection);
-                                }
-                                mBluetoothGatt = null;
-                            } finally {
-                                mBluetoothLock.writeLock().unlock();
-                            }
-                        }
-
-                        //
-                        // If disabling Bluetooth times out, wait for an
-                        // additional amount of time to ensure the process is
-                        // shut down completely before attempting to restart.
-                        //
-                        if (didDisableTimeout) {
-                            SystemClock.sleep(3000);
-                            mHandler.removeMessages(MESSAGE_BLUETOOTH_SERVICE_DISCONNECTED);
-                        } else {
-                            SystemClock.sleep(100);
-                        }
-
-                        mHandler.removeMessages(MESSAGE_BLUETOOTH_STATE_CHANGE);
-                        mState = BluetoothAdapter.STATE_OFF;
-                        // enable
-                        addActiveLog(BluetoothProtoEnums.ENABLE_DISABLE_REASON_USER_SWITCH,
-                                mContext.getPackageName(), true);
-                        // mEnable flag could have been reset on disableBLE. Reenable it.
-                        mEnable = true;
-                        handleEnable(mQuietEnable);
+                        restartForReason(BluetoothProtoEnums.ENABLE_DISABLE_REASON_USER_SWITCH);
                     } else if (mBinding || mBluetooth != null) {
                         Message userMsg = mHandler.obtainMessage(MESSAGE_USER_SWITCHED);
                         userMsg.arg2 = 1 + msg.arg2;
@@ -2491,8 +2425,119 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
                         }
                         handleEnable(mQuietEnable);
                     }
+                    break;
+                }
+                case MESSAGE_INIT_FLAGS_CHANGED: {
+                    if (DBG) {
+                        Slog.d(TAG, "MESSAGE_INIT_FLAGS_CHANGED");
+                    }
+                    mHandler.removeMessages(MESSAGE_INIT_FLAGS_CHANGED);
+                    if (mBluetooth != null && isEnabled()) {
+                        restartForReason(
+                                BluetoothProtoEnums.ENABLE_DISABLE_REASON_INIT_FLAGS_CHANGED);
+                    }
+                    break;
                 }
             }
+        }
+
+        private void restartForReason(int reason) {
+            try {
+                mBluetoothLock.readLock().lock();
+                if (mBluetooth != null) {
+                    mBluetooth.unregisterCallback(mBluetoothCallback);
+                }
+            } catch (RemoteException re) {
+                Slog.e(TAG, "Unable to unregister", re);
+            } finally {
+                mBluetoothLock.readLock().unlock();
+            }
+
+            if (mState == BluetoothAdapter.STATE_TURNING_OFF) {
+                // MESSAGE_USER_SWITCHED happened right after MESSAGE_ENABLE
+                bluetoothStateChangeHandler(mState, BluetoothAdapter.STATE_OFF);
+                mState = BluetoothAdapter.STATE_OFF;
+            }
+            if (mState == BluetoothAdapter.STATE_OFF) {
+                bluetoothStateChangeHandler(mState, BluetoothAdapter.STATE_TURNING_ON);
+                mState = BluetoothAdapter.STATE_TURNING_ON;
+            }
+
+            /* wait for stable state BLE_ON or ON */
+            waitForState(Set.of(BluetoothAdapter.STATE_BLE_ON,
+                                BluetoothAdapter.STATE_ON));
+
+            if (mState == BluetoothAdapter.STATE_TURNING_ON) {
+                bluetoothStateChangeHandler(mState, BluetoothAdapter.STATE_ON);
+            }
+
+            unbindAllBluetoothProfileServices();
+            // disable
+            addActiveLog(reason, mContext.getPackageName(), false);
+
+            clearBleApps();
+
+            handleDisable();
+            // Pbap service need receive STATE_TURNING_OFF intent to close
+            bluetoothStateChangeHandler(BluetoothAdapter.STATE_ON,
+                    BluetoothAdapter.STATE_TURNING_OFF);
+
+            /* wait for BLE_ON or OFF state. If its BLE ON state
+             * post BLE ON state to bluetoothStateChangeHandler
+             * to continue off and wait for off state
+             */
+            boolean didDisableTimeout =
+            !waitForState(Set.of(BluetoothAdapter.STATE_BLE_ON,
+                                 BluetoothAdapter.STATE_OFF));
+
+            if(!didDisableTimeout) {
+               int state = getState();
+
+               if (state == BluetoothAdapter.STATE_BLE_ON) {
+                   bluetoothStateChangeHandler(BluetoothAdapter.STATE_TURNING_OFF,
+                                            BluetoothAdapter.STATE_BLE_ON);
+               }
+
+               didDisableTimeout =
+                    !waitForState(Set.of(BluetoothAdapter.STATE_OFF));
+            }
+            bluetoothStateChangeHandler(BluetoothAdapter.STATE_TURNING_OFF,
+                    BluetoothAdapter.STATE_OFF);
+            sendBluetoothServiceDownCallback();
+
+            if(!didDisableTimeout) {
+                try {
+                    mBluetoothLock.writeLock().lock();
+                    if (mBluetooth != null) {
+                        mBluetooth = null;
+                        // Unbind
+                        mContext.unbindService(mConnection);
+                    }
+                    mBluetoothGatt = null;
+                } finally {
+                    mBluetoothLock.writeLock().unlock();
+                }
+            }
+
+            //
+            // If disabling Bluetooth times out, wait for an
+            // additional amount of time to ensure the process is
+            // shut down completely before attempting to restart.
+            //
+            if (didDisableTimeout) {
+                SystemClock.sleep(3000);
+                mHandler.removeMessages(MESSAGE_BLUETOOTH_SERVICE_DISCONNECTED);
+            } else {
+                SystemClock.sleep(100);
+            }
+
+            mHandler.removeMessages(MESSAGE_BLUETOOTH_STATE_CHANGE);
+            mState = BluetoothAdapter.STATE_OFF;
+            // enable
+            addActiveLog(reason, mContext.getPackageName(), true);
+            // mEnable flag could have been reset on disableBLE. Reenable it.
+            mEnable = true;
+            handleEnable(mQuietEnable);
         }
     }
 
@@ -2986,6 +3031,8 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
                 return "RESTORE_USER_SETTING";
             case BluetoothProtoEnums.ENABLE_DISABLE_REASON_FACTORY_RESET:
                 return "FACTORY_RESET";
+            case BluetoothProtoEnums.ENABLE_DISABLE_REASON_INIT_FLAGS_CHANGED:
+                return "INIT_FLAGS_CHANGED";
             case BluetoothProtoEnums.ENABLE_DISABLE_REASON_UNSPECIFIED:
             default: return "UNKNOWN[" + reason + "]";
         }

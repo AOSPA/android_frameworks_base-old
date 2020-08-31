@@ -931,10 +931,7 @@ public class TextToSpeech {
      * @return Code indicating success or failure. See {@link #ERROR} and {@link #SUCCESS}.
      */
     public int addSpeech(String text, String packagename, @RawRes int resourceId) {
-        synchronized (mStartLock) {
-            mUtterances.put(text, makeResourceUri(packagename, resourceId));
-            return SUCCESS;
-        }
+        return addSpeech(text, makeResourceUri(packagename, resourceId));
     }
 
     /**
@@ -965,10 +962,7 @@ public class TextToSpeech {
      * @return Code indicating success or failure. See {@link #ERROR} and {@link #SUCCESS}.
      */
     public int addSpeech(CharSequence text, String packagename, @RawRes int resourceId) {
-        synchronized (mStartLock) {
-            mUtterances.put(text, makeResourceUri(packagename, resourceId));
-            return SUCCESS;
-        }
+        return addSpeech(text, makeResourceUri(packagename, resourceId));
     }
 
     /**
@@ -986,14 +980,11 @@ public class TextToSpeech {
      * @return Code indicating success or failure. See {@link #ERROR} and {@link #SUCCESS}.
      */
     public int addSpeech(String text, String filename) {
-        synchronized (mStartLock) {
-            mUtterances.put(text, Uri.parse(filename));
-            return SUCCESS;
-        }
+        return addSpeech(text, Uri.parse(filename));
     }
 
     /**
-     * Adds a mapping between a CharSequence (may be spanned with TtsSpans and a sound file.
+     * Adds a mapping between a CharSequence (may be spanned with TtsSpans) and a sound file.
      * Using this, it is possible to add custom pronounciations for a string of text. After a call
      * to this method, subsequent calls to {@link #speak(CharSequence, int, Bundle, String)}
      * will play the specified sound resource if it is available, or synthesize the text it is
@@ -1007,8 +998,26 @@ public class TextToSpeech {
      * @return Code indicating success or failure. See {@link #ERROR} and {@link #SUCCESS}.
      */
     public int addSpeech(CharSequence text, File file) {
+        return addSpeech(text, Uri.fromFile(file));
+    }
+
+     /**
+     * Adds a mapping between a CharSequence (may be spanned with TtsSpans) and a sound file.
+     * Using this, it is possible to add custom pronounciations for a string of text. After a call
+     * to this method, subsequent calls to {@link #speak(CharSequence, int, Bundle, String)}
+     * will play the specified sound resource if it is available, or synthesize the text it is
+     * missing.
+     *
+     * @param text
+     *            The string of text. Example: <code>"south_south_east"</code>
+     * @param uri
+     *            Uri object pointing to the sound file.
+     *
+     * @return Code indicating success or failure. See {@link #ERROR} and {@link #SUCCESS}.
+     */
+    public int addSpeech(@NonNull CharSequence text, @NonNull Uri uri) {
         synchronized (mStartLock) {
-            mUtterances.put(text, Uri.fromFile(file));
+            mUtterances.put(text, uri);
             return SUCCESS;
         }
     }
@@ -1039,10 +1048,7 @@ public class TextToSpeech {
      * @return Code indicating success or failure. See {@link #ERROR} and {@link #SUCCESS}.
      */
     public int addEarcon(String earcon, String packagename, @RawRes int resourceId) {
-        synchronized(mStartLock) {
-            mEarcons.put(earcon, makeResourceUri(packagename, resourceId));
-            return SUCCESS;
-        }
+        return addEarcon(earcon, makeResourceUri(packagename, resourceId));
     }
 
     /**
@@ -1065,10 +1071,7 @@ public class TextToSpeech {
      */
     @Deprecated
     public int addEarcon(String earcon, String filename) {
-        synchronized(mStartLock) {
-            mEarcons.put(earcon, Uri.parse(filename));
-            return SUCCESS;
-        }
+        return addEarcon(earcon, Uri.parse(filename));
     }
 
     /**
@@ -1086,8 +1089,26 @@ public class TextToSpeech {
      * @return Code indicating success or failure. See {@link #ERROR} and {@link #SUCCESS}.
      */
     public int addEarcon(String earcon, File file) {
+        return addEarcon(earcon, Uri.fromFile(file));
+    }
+
+    /**
+     * Adds a mapping between a string of text and a sound file.
+     * Use this to add custom earcons.
+     *
+     * @see #playEarcon(String, int, HashMap)
+     *
+     * @param earcon
+     *            The name of the earcon.
+     *            Example: <code>"[tick]"</code>
+     * @param uri
+     *            Uri object pointing to the sound file.
+     *
+     * @return Code indicating success or failure. See {@link #ERROR} and {@link #SUCCESS}.
+     */
+    public int addEarcon(@NonNull String earcon, @NonNull Uri uri) {
         synchronized(mStartLock) {
-            mEarcons.put(earcon, Uri.fromFile(file));
+            mEarcons.put(earcon, uri);
             return SUCCESS;
         }
     }
@@ -2136,7 +2157,7 @@ public class TextToSpeech {
                     public void onError(String utteranceId, int errorCode) {
                         UtteranceProgressListener listener = mUtteranceProgressListener;
                         if (listener != null) {
-                            listener.onError(utteranceId);
+                            listener.onError(utteranceId, errorCode);
                         }
                     }
 

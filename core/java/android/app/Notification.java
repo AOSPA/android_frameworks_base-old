@@ -4801,7 +4801,6 @@ public class Notification implements Parcelable
             contentView.setViewVisibility(R.id.time, View.GONE);
             contentView.setImageViewIcon(R.id.profile_badge, null);
             contentView.setViewVisibility(R.id.profile_badge, View.GONE);
-            contentView.setViewVisibility(R.id.alerted_icon, View.GONE);
             mN.mUsesStandardHeader = false;
         }
 
@@ -5153,6 +5152,7 @@ public class Notification implements Parcelable
             bindProfileBadge(contentView, p);
             bindAlertedIcon(contentView, p);
             bindActivePermissions(contentView, p);
+            bindFeedbackIcon(contentView, p);
             bindExpandButton(contentView, p);
             mN.mUsesStandardHeader = true;
         }
@@ -5162,6 +5162,11 @@ public class Notification implements Parcelable
             contentView.setDrawableTint(R.id.camera, false, color, PorterDuff.Mode.SRC_ATOP);
             contentView.setDrawableTint(R.id.mic, false, color, PorterDuff.Mode.SRC_ATOP);
             contentView.setDrawableTint(R.id.overlay, false, color, PorterDuff.Mode.SRC_ATOP);
+        }
+
+        private void bindFeedbackIcon(RemoteViews contentView, StandardTemplateParams p) {
+            int color = getNeutralColor(p);
+            contentView.setDrawableTint(R.id.feedback, false, color, PorterDuff.Mode.SRC_ATOP);
         }
 
         private void bindExpandButton(RemoteViews contentView, StandardTemplateParams p) {
@@ -6775,7 +6780,7 @@ public class Notification implements Parcelable
             if (mPicture != null &&
                 mPicture.isMutable() &&
                 mPicture.getAllocationByteCount() >= MIN_ASHMEM_BITMAP_SIZE) {
-                mPicture = mPicture.createAshmemBitmap();
+                mPicture = mPicture.asShared();
             }
             if (mBigLargeIcon != null) {
                 mBigLargeIcon.convertToAshmem();

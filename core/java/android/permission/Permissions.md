@@ -209,7 +209,7 @@ permission grant flow it is recommended to grant the runtime permissions during 
 
 #### Checking a runtime permission
 
-For runtime permissions defined by a 3rd party apps it is fine to check a runtime
+For runtime permissions defined by 3rd party apps it is fine to check a runtime
 permission like an install time permission. For system defined permissions you need to check all
 runtime permissions by using the `PermissionChecker` utility. It is good practice to use the tool
 anywhere possible.
@@ -268,7 +268,7 @@ A secondary use case of the `AppOpsManager.noteOp` calls is to
 
 In `dumpsys package my.package.name` the runtime permissions are listed per uid. I.e. different
 users might have different runtime permission grants and shared uids share a grant-set. If a runtime
-permission is listed as requested but not in the runtime permission section it is in it’s initial
+permission is listed as requested but not in the runtime permission section it is in its initial
 state, i.e. not granted.
 
 ```
@@ -403,12 +403,12 @@ class MyActivity : Activity {
 #### Restricted permissions
 
 Some runtime permissions are restricted. They are annotated in the platforms `AndroidManifest.xml`
-has `hardRestricted` or `softRestricted`.
+as `hardRestricted` or `softRestricted`.
 
 Restricted permissions behave uncommon when not whitelisted. When whitelisted the permissions
 behave normally. What uncommon means depends on the whether they are hard or soft restricted.
 
-They can either be whitelisted during upgrade P->Q, but the system or need to be whitelisted by the
+They can either be whitelisted during upgrade P->Q by the system or need to be whitelisted by the
 installer via `PackageInstaller.SessionParams.setWhitelistedRestrictedPermissions`. If this method
 is not used all permissions will be whitelisted.
 
@@ -464,7 +464,7 @@ granting the `ACCESS_BACKGROUND_LOCATION` modifier runtime permission.
 
 ##### Microphone and Camera
 
-Currently these only allow access while in the app is in foreground. There is a manual whitelist
+Currently these only allow access while the app is in foreground. There is a manual whitelist
 for e.g. the voice interaction service.
 
 This is currently (Mar 2020) reworked and will behave like [location](#location) soon.
@@ -476,7 +476,7 @@ As described [above](#runtime-permissions-and-app-ops) the app-op mode for grant
 
 The important case is the case where the permission is granted and the app-op is `MODE_IGNORED`. In
 the case of location this state causes the `LocationManagerService` to stop delivering locations to
-the app. This is not a breaking behavior as the same scenarios happens if e.g. no satellites
+the app. This is not a breaking behavior as the same scenario happens if e.g. no satellites
 could be found.
 
 This behavior is used to implement the foregound/background behavior for location. If the app is
@@ -558,8 +558,8 @@ Hence all permission management UI needs to be integrated with AOSP.
 #### Pre granting
 
 Runtime permissions protect user private data. It is a violation of user trust to give the data
-to an app without explicit user consent (i.e. the user [granting](#granting) the permission
-). Still the user expects certain functionality (e.g. receiving a phone call) to work out of the
+to an app without explicit user consent (i.e. the user [granting](#granting) the permission).
+Still the user expects certain functionality (e.g. receiving a phone call) to work out of the
 box.
 
 Hence the `DefaultPermissionGrantPolicy` and roles allow to grant permission without the user
@@ -568,7 +568,7 @@ Hence the `DefaultPermissionGrantPolicy` and roles allow to grant permission wit
  the platform
 - Apps that are in certain predefined categories, e.g. the browser and the SMS app. This is
  meant for the most basic phone functionality, not for all pre-installed apps.
-- Apps that are explicitly mentioned as a pre-grant-exceptions. This is meant to be used for setup
+- Apps that are explicitly mentioned as pre-grant-exceptions. This is meant to be used for setup
  and other highly critical use cases, not to improve the user experience. The exceptions are listed
  in xml files in `etc/` and follow the following syntax
 ```xml
@@ -770,11 +770,12 @@ The permission's grant state is only considered if the app-op's mode is `MODE_DE
 allows to have default grants while still being overridden by the app-op.
 
 The permission is then granted by setting the app-op mode. This is usually done via dedicated APIs
-for each use cases. Similarly whether and how an app can request the permission is different for
+for each use case. Similarly whether and how an app can request the permission is different for
 each app-op permission.
 
-When implementing a new app-op permission, make sure to set the app-op mode using `AppOpsManager
-.setUidMode` to make sure the permission is granted on the uid as this is the security domain.
+When implementing a new app-op permission, make sure to set the app-op mode using
+`AppOpsManager.setUidMode` to make sure the permission is granted on the uid as this is the
+security domain.
 
 During development app-ops can be grated to app via the `appops set` shell command. E.g.
 
@@ -804,7 +805,7 @@ the platform's certificate. As this is a very tight restriction this is recommen
 permissions that are only used by apps built out of AOSP which are signed with the platform
 certificate.
 
-Please note that OEMs sign their platform them self. I.e. OEMs can implement new apps using these
+Please note that OEMs sign their platform themselves. I.e. OEMs can implement new apps using these
 permissions. It is unlikely that 3rd party apps will be able to use APIs protected by signature
 permissions as they are usually not signed with the platform certificate.
 
@@ -823,8 +824,8 @@ Such permissions are defined and checked like an install time permission.
 ### Privileged permissions
 
 This means that the app has to be pre-installed and in the `system/priv` directory in the
-filesystem. There is no restriction what apps are in this directory on a particular device
-install there. Hence it can be really any app including 3rd party apps.
+filesystem. There is no restriction what apps are in this directory on a particular device.
+Hence it can be really any app including 3rd party apps.
 
 An app is only ever granted privileged permissions requested by the pre-installed apk. I.e.
 privileged permissions added in updates will never be granted.
@@ -862,8 +863,8 @@ fun onlySomeAppsAreAllowedToHavePermissionGranted() {
 #### Whitelist
 
 As mentioned above it is not suggested, but still common practice to install 3rd party apps as
-privilidged. To verify and restrict which privilidged permissions those apps get granted all
-privilidged permissions need to be explicitly whitelisted in a file `/etc`.
+privileged. To verify and restrict which privileged permissions those apps get granted all
+privileged permissions need to be explicitly whitelisted in a file `/etc`.
 
 ```xml
 <permissions>
@@ -877,7 +878,7 @@ privilidged permissions need to be explicitly whitelisted in a file `/etc`.
 </permissions>
 ```
 
-If the pre-installed apk of app requests a privileged permission that is not mentioned in any
+If the pre-installed apk of an app requests a privileged permission that is not mentioned in any
 whitelist or that is not denied the system will refuse to boot. As mentioned above privileged
 permissions added in updates to the pre-installed app will never be granted.
 

@@ -43,6 +43,7 @@ android_test {
         "platformprotosnano",
         "hamcrest-library",
         "servicestests-utils",
+        "service-appsearch",
         "service-jobscheduler",
         "service-permission.impl",
         // TODO: remove once Android migrates to JUnit 4.12,
@@ -56,8 +57,10 @@ android_test {
     },
 
     libs: [
-        "android.hidl.manager-V1.0-java",
+        "android.hardware.power-java",
         "android.hardware.tv.cec-V1.0-java",
+        "android.hardware.vibrator-java",
+        "android.hidl.manager-V1.0-java",
         "android.test.mock",
         "android.test.base",
         "android.test.runner",

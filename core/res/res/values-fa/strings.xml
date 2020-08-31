@@ -193,8 +193,10 @@
     <string name="network_logging_notification_text" msgid="1327373071132562512">"سازمانتان این دستگاه را مدیریت می‌کند و ممکن است ترافیک شبکه را پایش کند. برای اطلاع از جزئیات، ضربه بزنید."</string>
     <string name="location_changed_notification_title" msgid="3620158742816699316">"برنامه‌ها می‌توانند به مکانتان دسترسی پیدا کنند"</string>
     <string name="location_changed_notification_text" msgid="7158423339982706912">"برای کسب اطلاعات بیشتر با سرپرست فناوری اطلاعات تماس بگیرید"</string>
+    <string name="geofencing_service" msgid="3826902410740315456">"سرویس حصارکشی جغرافیایی"</string>
     <string name="country_detector" msgid="7023275114706088854">"کشوریاب"</string>
     <string name="location_service" msgid="2439187616018455546">"خدمات مکان"</string>
+    <string name="gnss_service" msgid="8907781262179951385">"‏سرویس GNSS"</string>
     <string name="sensor_notification_service" msgid="7474531979178682676">"سرویس اعلان حسگر"</string>
     <string name="twilight_service" msgid="8964898045693187224">"‏سرویس Twilight"</string>
     <string name="factory_reset_warning" msgid="6858705527798047809">"دستگاهتان پاک خواهد شد"</string>
@@ -542,6 +544,7 @@
     <string name="biometric_not_recognized" msgid="5106687642694635888">"شناسایی نشد"</string>
     <string name="biometric_error_canceled" msgid="8266582404844179778">"احراز هویت لغو شد"</string>
     <string name="biometric_error_device_not_secured" msgid="3129845065043995924">"پین، الگو یا گذرواژه‌ای تنظیم نشده است"</string>
+    <string name="biometric_error_generic" msgid="6784371929985434439">"خطا هنگام احراز هویت"</string>
     <string name="fingerprint_acquired_partial" msgid="8532380671091299342">"بخشی از اثر انگشت شناسایی شد. لطفاً دوباره امتحان کنید."</string>
     <string name="fingerprint_acquired_insufficient" msgid="2545149524031515411">"اثرانگشت پردازش نشد. لطفاً دوباره امتحان کنید."</string>
     <string name="fingerprint_acquired_imager_dirty" msgid="4694800187151533990">"حسگر اثر انگشت کثیف است. لطفاً آن را تمیز کنید و دوباره امتحان نمایید."</string>
@@ -829,7 +832,8 @@
     <string name="lockscreen_instructions_when_pattern_enabled" msgid="7982445492532123308">"برای بازگشایی قفل یا انجام تماس اضطراری روی منو فشار دهید."</string>
     <string name="lockscreen_instructions_when_pattern_disabled" msgid="7434061749374801753">"برای بازگشایی قفل روی منو فشار دهید."</string>
     <string name="lockscreen_pattern_instructions" msgid="3169991838169244941">"الگو را بکشید تا قفل آن باز شود"</string>
-    <string name="lockscreen_emergency_call" msgid="7500692654885445299">"اضطراری"</string>
+    <!-- no translation found for lockscreen_emergency_call (7549683825868928636) -->
+    <skip />
     <string name="lockscreen_return_to_call" msgid="3156883574692006382">"بازگشت به تماس"</string>
     <string name="lockscreen_pattern_correct" msgid="8050630103651508582">"صحیح است!"</string>
     <string name="lockscreen_pattern_wrong" msgid="2940138714468358458">"دوباره امتحان کنید"</string>
@@ -1122,8 +1126,8 @@
     <string name="capital_off" msgid="7443704171014626777">"خاموش"</string>
     <string name="checked" msgid="9179896827054513119">"علامت‌زده‌شده"</string>
     <string name="not_checked" msgid="7972320087569023342">"بدون علامت"</string>
-    <string name="whichApplication" msgid="5432266899591255759">"تکمیل عملکرد با استفاده از"</string>
-    <string name="whichApplicationNamed" msgid="6969946041713975681">"‏تکمیل عملکرد با استفاده از %1$s"</string>
+    <string name="whichApplication" msgid="5432266899591255759">"تکمیل کنش بااستفاده از"</string>
+    <string name="whichApplicationNamed" msgid="6969946041713975681">"‏تکمیل کنش بااستفاده از %1$s"</string>
     <string name="whichApplicationLabel" msgid="7852182961472531728">"تکمیل عملکرد"</string>
     <string name="whichViewApplication" msgid="5733194231473132945">"باز کردن با"</string>
     <string name="whichViewApplicationNamed" msgid="415164730629690105">"‏باز کردن با %1$s"</string>
@@ -1460,9 +1464,6 @@
     <string name="gpsNotifMessage" msgid="7346649122793758032">"درخواست‌کننده <xliff:g id="NAME">%1$s</xliff:g> (<xliff:g id="SERVICE">%2$s</xliff:g>)"</string>
     <string name="gpsVerifYes" msgid="3719843080744112940">"بله"</string>
     <string name="gpsVerifNo" msgid="1671201856091564741">"نه"</string>
-    <string name="gnss_nfw_notification_title" msgid="5004493772059563423">"از دسترسی به مکان اضطراری استفاده شد"</string>
-    <string name="gnss_nfw_notification_message_oem" msgid="3683958907027107969">"سازنده دستگاهتان درحین یکی از جلسه‌های اضطراری اخیر به مکانتان دسترسی پیدا کرد"</string>
-    <string name="gnss_nfw_notification_message_carrier" msgid="815888995791562151">"شرکت مخابراتی‌تان درحین یکی از جلسه‌های اضطراری اخیر به مکانتان دسترسی پیدا کرد"</string>
     <string name="sync_too_many_deletes" msgid="6999440774578705300">"از حد مجاز حذف فراتر رفت"</string>
     <string name="sync_too_many_deletes_desc" msgid="7409327940303504440">"‏<xliff:g id="NUMBER_OF_DELETED_ITEMS">%1$d</xliff:g> مورد حذف‌شده برای <xliff:g id="TYPE_OF_SYNC">%2$s</xliff:g>، حساب <xliff:g id="ACCOUNT_NAME">%3$s</xliff:g> وجود دارد. می‎خواهید چه کار بکنید؟"</string>
     <string name="sync_really_delete" msgid="5657871730315579051">"حذف موارد"</string>
@@ -1792,8 +1793,8 @@
     <string name="package_updated_device_owner" msgid="7560272363805506941">"توسط سرپرست سیستم به‌روزرسانی شد"</string>
     <string name="package_deleted_device_owner" msgid="2292335928930293023">"توسط سرپرست سیستم حذف شد"</string>
     <string name="confirm_battery_saver" msgid="5247976246208245754">"تأیید"</string>
-    <string name="battery_saver_description_with_learn_more" msgid="5997766757551917769">"‏برای افزایش عمر باتری، «بهینه‌سازی باتری»:\n\n•«طرح زمینه تیره» را روشن می‌کند\n•فعالیت پس‌زمینه، برخی جلوه‌های بصری، و دیگر ویژگی‌ها مانند «Ok Google» را خاموش یا محدود می‌کند\n\n"<annotation id="url">"بیشتر بدانید"</annotation></string>
-    <string name="battery_saver_description" msgid="8587408568232177204">"‏برای افزایش عمر باتری، «بهینه‌سازی باتری»:\n\n•«طرح زمینه تیره» را روشن می‌کند\n•فعالیت پس‌زمینه، برخی جلوه‌های بصری، و دیگر ویژگی‌ها مانند «Ok Google» را خاموش یا محدود می‌کند"</string>
+    <string name="battery_saver_description_with_learn_more" msgid="4424488535318105801">"‏برای افزایش عمر باتری، «بهینه‌سازی باتری»:\n\n• «طرح زمینه تیره» را روشن می‌کند\n• فعالیت پس‌زمینه، برخی جلوه‌های بصری، و دیگر ویژگی‌ها مانند «Ok Google» را خاموش یا محدود می‌کند\n\n"<annotation id="url">"بیشتر بدانید"</annotation></string>
+    <string name="battery_saver_description" msgid="6794188153647295212">"‏برای افزایش عمر باتری، «بهینه‌سازی باتری»:\n\n• «طرح زمینه تیره» را روشن می‌کند\n• فعالیت پس‌زمینه، برخی جلوه‌های بصری، و دیگر ویژگی‌ها مثل «Ok Google» را خاموش یا محدود می‌کند"</string>
     <string name="data_saver_description" msgid="4995164271550590517">"«صرفه‌جویی داده»، برای کمک به کاهش مصرف داده، از ارسال و دریافت داده در پس‌زمینه ازطرف بعضی برنامه‌ها جلوگیری می‌کند. برنامه‌ای که درحال‌حاضر استفاده می‌کنید می‌تواند به داده‌ها دسترسی داشته باشد اما دفعات دسترسی آن محدود است.این یعنی، برای مثال، تصاویر تازمانی‌که روی آن‌ها ضربه نزنید نشان داده نمی‌شوند."</string>
     <string name="data_saver_enable_title" msgid="7080620065745260137">"«صرفه‌جویی داده» روشن شود؟"</string>
     <string name="data_saver_enable_button" msgid="4399405762586419726">"روشن کردن"</string>
@@ -1997,6 +1998,7 @@
     <string name="notification_appops_camera_active" msgid="8177643089272352083">"دوربین"</string>
     <string name="notification_appops_microphone_active" msgid="581333393214739332">"میکروفون"</string>
     <string name="notification_appops_overlay_active" msgid="5571732753262836481">"نمایش روی برنامه‌های دیگر در صفحه‌نمایش"</string>
+    <string name="notification_feedback_indicator" msgid="663476517711323016">"ارائه بازخورد"</string>
     <string name="dynamic_mode_notification_channel_name" msgid="2986926422100223328">"اعلان اطلاعات حالت روال معمول"</string>
     <string name="dynamic_mode_notification_title" msgid="9205715501274608016">"ممکن است شارژ باتری قبل از شارژ معمول تمام شود"</string>
     <string name="dynamic_mode_notification_summary" msgid="4141614604437372157">"جهت افزایش عمر باتری، «بهینه‌سازی باتری» فعال شد"</string>

@@ -22,6 +22,8 @@ import android.os.Parcel;
 import android.os.Parcelable;
 import android.util.Slog;
 
+import libcore.util.NativeAllocationRegistry;
+
 /**
  * An input channel specifies the file descriptors used to send input events to
  * a window in another process.  It is Parcelable so that it can be sent
@@ -33,6 +35,10 @@ public final class InputChannel implements Parcelable {
     private static final String TAG = "InputChannel";
 
     private static final boolean DEBUG = false;
+    private static final NativeAllocationRegistry sRegistry =
+            NativeAllocationRegistry.createMalloced(
+                    InputChannel.class.getClassLoader(),
+                    nativeGetFinalizer());
 
     @UnsupportedAppUsage
     public static final @android.annotation.NonNull Parcelable.Creator<InputChannel> CREATOR
@@ -48,21 +54,19 @@ public final class InputChannel implements Parcelable {
         }
     };
 
-    @SuppressWarnings("unused")
     @UnsupportedAppUsage
     private long mPtr; // used by native code
 
-    private static native InputChannel[] nativeOpenInputChannelPair(String name);
+    private static native long[] nativeOpenInputChannelPair(String name);
 
-    private native void nativeDispose(boolean finalized);
-    private native void nativeRelease();
-    private native void nativeTransferTo(InputChannel other);
-    private native void nativeReadFromParcel(Parcel parcel);
-    private native void nativeWriteToParcel(Parcel parcel);
-    private native void nativeDup(InputChannel target);
-    private native IBinder nativeGetToken();
+    private static native long nativeGetFinalizer();
+    private native void nativeDispose(long channel);
+    private native long nativeReadFromParcel(Parcel parcel);
+    private native void nativeWriteToParcel(Parcel parcel, long channel);
+    private native long nativeDup(long channel);
+    private native IBinder nativeGetToken(long channel);
 
-    private native String nativeGetName();
+    private native String nativeGetName(long channel);
 
     /**
      * Creates an uninitialized input channel.
@@ -73,13 +77,24 @@ public final class InputChannel implements Parcelable {
     public InputChannel() {
     }
 
-    @Override
-    protected void finalize() throws Throwable {
-        try {
-            nativeDispose(true);
-        } finally {
-            super.finalize();
+    /**
+     *  Set Native input channel object from native space.
+     *  @param nativeChannel the native channel object.
+     *
+     *  @hide
+     */
+    public void setNativeInputChannel(long nativeChannel) {
+        if (nativeChannel == 0) {
+            throw new IllegalArgumentException("Attempting to set native input channel to null.");
         }
+        if (mPtr != 0) {
+            throw new IllegalArgumentException("Already has native input channel.");
+        }
+        if (DEBUG) {
+            Slog.d(TAG, "setNativeInputChannel : " +  String.format("%x", nativeChannel));
+        }
+        sRegistry.registerNativeAllocation(this, nativeChannel);
+        mPtr = nativeChannel;
     }
 
     /**
@@ -98,7 +113,13 @@ public final class InputChannel implements Parcelable {
         if (DEBUG) {
             Slog.d(TAG, "Opening input channel pair '" + name + "'");
         }
-        return nativeOpenInputChannelPair(name);
+        InputChannel channels[] = new InputChannel[2];
+        long[] nativeChannels = nativeOpenInputChannelPair(name);
+        for (int i = 0; i< 2; i++) {
+            channels[i] = new InputChannel();
+            channels[i].setNativeInputChannel(nativeChannels[i]);
+        }
+        return channels;
     }
 
     /**
@@ -106,7 +127,7 @@ public final class InputChannel implements Parcelable {
      * @return The input channel name.
      */
     public String getName() {
-        String name = nativeGetName();
+        String name = nativeGetName(mPtr);
         return name != null ? name : "uninitialized";
     }
 
@@ -116,7 +137,7 @@ public final class InputChannel implements Parcelable {
      * When all references are released, the input channel will be closed.
      */
     public void dispose() {
-        nativeDispose(false);
+        nativeDispose(mPtr);
     }
 
     /**
@@ -124,7 +145,6 @@ public final class InputChannel implements Parcelable {
      * still exist in native-land, then the channel may continue to exist.
      */
     public void release() {
-        nativeRelease();
     }
 
     /**
@@ -137,8 +157,10 @@ public final class InputChannel implements Parcelable {
         if (outParameter == null) {
             throw new IllegalArgumentException("outParameter must not be null");
         }
-
-        nativeTransferTo(outParameter);
+        if (outParameter.mPtr != 0) {
+            throw new IllegalArgumentException("Other object already has a native input channel.");
+        }
+        outParameter.setNativeInputChannel(nativeDup(mPtr));
     }
 
     /**
@@ -146,7 +168,7 @@ public final class InputChannel implements Parcelable {
      */
     public InputChannel dup() {
         InputChannel target = new InputChannel();
-        nativeDup(target);
+        target.setNativeInputChannel(nativeDup(mPtr));
         return target;
     }
 
@@ -159,8 +181,10 @@ public final class InputChannel implements Parcelable {
         if (in == null) {
             throw new IllegalArgumentException("in must not be null");
         }
-
-        nativeReadFromParcel(in);
+        long nativeIn = nativeReadFromParcel(in);
+        if (nativeIn != 0) {
+            setNativeInputChannel(nativeIn);
+        }
     }
 
     @Override
@@ -169,7 +193,7 @@ public final class InputChannel implements Parcelable {
             throw new IllegalArgumentException("out must not be null");
         }
 
-        nativeWriteToParcel(out);
+        nativeWriteToParcel(out, mPtr);
 
         if ((flags & PARCELABLE_WRITE_RETURN_VALUE) != 0) {
             dispose();
@@ -182,6 +206,6 @@ public final class InputChannel implements Parcelable {
     }
 
     public IBinder getToken() {
-        return nativeGetToken();
+        return nativeGetToken(mPtr);
     }
 }

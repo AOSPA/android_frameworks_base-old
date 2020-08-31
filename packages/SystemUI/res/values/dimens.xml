@@ -496,6 +496,7 @@
     -->
     <dimen name="qs_customize_header_min_height">46dp</dimen>
     <dimen name="qs_tile_margin_top">18dp</dimen>
+    <dimen name="qs_tile_icon_background_stroke_width">-1dp</dimen>
     <dimen name="qs_tile_background_size">44dp</dimen>
     <dimen name="qs_quick_tile_size">48dp</dimen>
     <dimen name="qs_quick_tile_padding">12dp</dimen>
@@ -973,46 +974,7 @@
     <!-- The start margin of quick scrub onboarding toast. -->
     <dimen name="recents_quick_scrub_onboarding_margin_start">8dp</dimen>
 
-    <!-- The height of the gradient indicating the dismiss edge when moving a PIP. -->
-    <dimen name="floating_dismiss_gradient_height">250dp</dimen>
-
     <dimen name="floating_dismiss_bottom_margin">50dp</dimen>
-
-    <!-- The bottom margin of the PIP drag to dismiss info text shown when moving a PIP. -->
-    <dimen name="pip_dismiss_text_bottom_margin">24dp</dimen>
-
-    <!-- The shortest-edge size of the expanded PiP. -->
-    <dimen name="pip_expanded_shortest_edge_size">160dp</dimen>
-
-    <!-- The additional offset to apply to the IME animation to account for the input field. -->
-    <dimen name="pip_ime_offset">48dp</dimen>
-
-    <!-- The padding between actions in the PiP in landscape  Note that the PiP does not reflect
-         the configuration of the device, so we can't use -land resources. -->
-    <dimen name="pip_between_action_padding_land">8dp</dimen>
-
-    <!-- The height of the PiP actions container in which the actions are vertically centered. -->
-    <dimen name="pip_action_size">48dp</dimen>
-
-    <!-- The padding around a PiP actions. -->
-    <dimen name="pip_action_padding">12dp</dimen>
-
-    <!-- The bottom margin of the expand container when there are actions.
-         Equal to pip_action_size - pip_action_padding. -->
-    <dimen name="pip_expand_container_edge_margin">30dp</dimen>
-
-    <!-- The touchable/draggable edge size for PIP resize. -->
-    <dimen name="pip_resize_edge_size">48dp</dimen>
-
-    <!-- PIP Resize handle size and margin. -->
-    <dimen name="pip_resize_handle_size">12dp</dimen>
-    <dimen name="pip_resize_handle_margin">4dp</dimen>
-
-    <!-- The corner radius for PiP window. -->
-    <dimen name="pip_corner_radius">8dp</dimen>
-
-    <!-- The buffer to use when calculating whether the pip is in an adjust zone. -->
-    <dimen name="pip_bottom_offset_buffer">1dp</dimen>
 
     <dimen name="default_gear_space">18dp</dimen>
     <dimen name="cell_overlay_padding">18dp</dimen>
@@ -1175,6 +1137,23 @@
 
     <!-- How much into a DisplayCutout's bounds we can go, on each side -->
     <dimen name="display_cutout_margin_consumption">0px</dimen>
+
+    <!-- Height of the Ongoing App Ops chip -->
+    <dimen name="ongoing_appops_chip_height">32dp</dimen>
+    <!-- Padding between background of Ongoing App Ops chip and content -->
+    <dimen name="ongoing_appops_chip_bg_padding">8dp</dimen>
+    <!-- Side padding between background of Ongoing App Ops chip and content -->
+    <dimen name="ongoing_appops_chip_side_padding">8dp</dimen>
+    <!-- Margin between icons of Ongoing App Ops chip when QQS-->
+    <dimen name="ongoing_appops_chip_icon_margin_collapsed">0dp</dimen>
+    <!-- Margin between icons of Ongoing App Ops chip when QS-->
+    <dimen name="ongoing_appops_chip_icon_margin_expanded">2dp</dimen>
+    <!-- Icon size of Ongoing App Ops chip -->
+    <dimen name="ongoing_appops_chip_icon_size">@dimen/status_bar_icon_drawing_size</dimen>
+    <!-- Radius of Ongoing App Ops chip corners -->
+    <dimen name="ongoing_appops_chip_bg_corner_radius">16dp</dimen>
+
+
     <!-- How much each bubble is elevated. -->
     <dimen name="bubble_elevation">1dp</dimen>
     <!-- How much the bubble flyout text container is elevated. -->
@@ -1248,7 +1227,6 @@
     <dimen name="bubble_dismiss_target_padding_y">20dp</dimen>
     <dimen name="bubble_manage_menu_elevation">4dp</dimen>
 
-    <dimen name="dismiss_circle_size">52dp</dimen>
     <dimen name="dismiss_target_x_size">24dp</dimen>
 
     <!-- Bubbles user education views -->
@@ -1279,12 +1257,17 @@
     <dimen name="qs_media_disabled_seekbar_height">1dp</dimen>
     <dimen name="qs_media_enabled_seekbar_height">3dp</dimen>
 
-    <dimen name="magnification_border_size">5dp</dimen>
+    <!-- Window magnification -->
+    <dimen name="magnification_border_drag_size">35dp</dimen>
+    <dimen name="magnification_outer_border_margin">15dp</dimen>
+    <dimen name="magnification_inner_border_margin">17dp</dimen>
+    <dimen name="magnification_mirror_surface_margin">20dp</dimen>
     <dimen name="magnification_frame_move_short">5dp</dimen>
     <dimen name="magnification_frame_move_long">25dp</dimen>
-    <dimen name="magnification_drag_view_width">100dp</dimen>
-    <dimen name="magnification_drag_view_height">35dp</dimen>
+    <dimen name="magnification_drag_view_size">38dp</dimen>
     <dimen name="magnification_controls_size">90dp</dimen>
+    <dimen name="magnification_switch_button_size">32dp</dimen>
+    <dimen name="magnification_switch_button_padding">8dp</dimen>
     <dimen name="magnifier_left_right_controls_width">35dp</dimen>
     <dimen name="magnifier_left_right_controls_height">45dp</dimen>
     <dimen name="magnifier_up_down_controls_width">45dp</dimen>
@@ -1378,4 +1361,8 @@
     <dimen name="config_rounded_mask_size">@*android:dimen/rounded_corner_radius</dimen>
     <dimen name="config_rounded_mask_size_top">@*android:dimen/rounded_corner_radius_top</dimen>
     <dimen name="config_rounded_mask_size_bottom">@*android:dimen/rounded_corner_radius_bottom</dimen>
+
+    <!-- One-Handed Mode -->
+    <!-- Threshold for dragging distance to enable one-handed mode -->
+    <dimen name="gestures_onehanded_drag_threshold">20dp</dimen>
 </resources>

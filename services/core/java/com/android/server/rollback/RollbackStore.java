@@ -16,8 +16,6 @@
 
 package com.android.server.rollback;
 
-import static android.os.UserHandle.USER_SYSTEM;
-
 import static com.android.server.rollback.Rollback.rollbackStateFromString;
 
 import android.annotation.NonNull;
@@ -26,12 +24,10 @@ import android.content.pm.VersionedPackage;
 import android.content.rollback.PackageRollbackInfo;
 import android.content.rollback.PackageRollbackInfo.RestoreInfo;
 import android.content.rollback.RollbackInfo;
-import android.util.IntArray;
+import android.os.UserHandle;
 import android.util.Slog;
 import android.util.SparseIntArray;
-import android.util.SparseLongArray;
 
-import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
 
 import libcore.io.IoUtils;
@@ -98,29 +94,25 @@ class RollbackStore {
     }
 
     /**
-     * Converts an {@code JSONArray} of integers to an {@code IntArray}.
+     * Converts a {@code JSONArray} of integers to a {@code List<Integer>}.
      */
-    private static @NonNull IntArray convertToIntArray(@NonNull JSONArray jsonArray)
+    private static @NonNull List<Integer> toIntList(@NonNull JSONArray jsonArray)
             throws JSONException {
-        if (jsonArray.length() == 0) {
-            return new IntArray();
+        final List<Integer> ret = new ArrayList<>();
+        for (int i = 0; i < jsonArray.length(); ++i) {
+            ret.add(jsonArray.getInt(i));
         }
 
-        final int[] ret = new int[jsonArray.length()];
-        for (int i = 0; i < ret.length; ++i) {
-            ret[i] = jsonArray.getInt(i);
-        }
-
-        return IntArray.wrap(ret);
+        return ret;
     }
 
     /**
-     * Converts an {@code IntArray} into an {@code JSONArray} of integers.
+     * Converts a {@code List<Integer>} into a {@code JSONArray} of integers.
      */
-    private static @NonNull JSONArray convertToJsonArray(@NonNull IntArray intArray) {
+    private static @NonNull JSONArray fromIntList(@NonNull List<Integer> list) {
         JSONArray jsonArray = new JSONArray();
-        for (int i = 0; i < intArray.size(); ++i) {
-            jsonArray.put(intArray.get(i));
+        for (int i = 0; i < list.size(); ++i) {
+            jsonArray.put(list.get(i));
         }
 
         return jsonArray;
@@ -153,28 +145,6 @@ class RollbackStore {
         }
 
         return restoreInfos;
-    }
-
-    private static @NonNull JSONArray ceSnapshotInodesToJson(
-            @NonNull SparseLongArray ceSnapshotInodes) throws JSONException {
-        JSONArray array = new JSONArray();
-        for (int i = 0; i < ceSnapshotInodes.size(); i++) {
-            JSONObject entryJson = new JSONObject();
-            entryJson.put("userId", ceSnapshotInodes.keyAt(i));
-            entryJson.put("ceSnapshotInode", ceSnapshotInodes.valueAt(i));
-            array.put(entryJson);
-        }
-        return array;
-    }
-
-    private static @NonNull SparseLongArray ceSnapshotInodesFromJson(JSONArray json)
-            throws JSONException {
-        SparseLongArray ceSnapshotInodes = new SparseLongArray(json.length());
-        for (int i = 0; i < json.length(); i++) {
-            JSONObject entry = json.getJSONObject(i);
-            ceSnapshotInodes.append(entry.getInt("userId"), entry.getLong("ceSnapshotInode"));
-        }
-        return ceSnapshotInodes;
     }
 
     private static @NonNull JSONArray extensionVersionsToJson(
@@ -288,7 +258,6 @@ class RollbackStore {
     /**
      * Saves the given rollback to persistent storage.
      */
-    @GuardedBy("rollback.mLock")
     static void saveRollback(Rollback rollback) {
         try {
             JSONObject dataJson = new JSONObject();
@@ -345,7 +314,7 @@ class RollbackStore {
                 rollbackStateFromString(dataJson.getString("state")),
                 dataJson.getInt("apkSessionId"),
                 dataJson.getBoolean("restoreUserDataInProgress"),
-                dataJson.optInt("userId", USER_SYSTEM),
+                dataJson.optInt("userId", UserHandle.SYSTEM.getIdentifier()),
                 dataJson.optString("installerPackageName", ""),
                 extensionVersionsFromJson(dataJson.optJSONArray("extensionVersions")));
     }
@@ -368,18 +337,17 @@ class RollbackStore {
         json.put("versionRolledBackFrom", toJson(info.getVersionRolledBackFrom()));
         json.put("versionRolledBackTo", toJson(info.getVersionRolledBackTo()));
 
-        IntArray pendingBackups = info.getPendingBackups();
+        List<Integer> pendingBackups = info.getPendingBackups();
         List<RestoreInfo> pendingRestores = info.getPendingRestores();
-        IntArray snapshottedUsers = info.getSnapshottedUsers();
-        json.put("pendingBackups", convertToJsonArray(pendingBackups));
+        List<Integer> snapshottedUsers = info.getSnapshottedUsers();
+        json.put("pendingBackups", fromIntList(pendingBackups));
         json.put("pendingRestores", convertToJsonArray(pendingRestores));
 
         json.put("isApex", info.isApex());
         json.put("isApkInApex", info.isApkInApex());
 
         // Field is named 'installedUsers' for legacy reasons.
-        json.put("installedUsers", convertToJsonArray(snapshottedUsers));
-        json.put("ceSnapshotInodes", ceSnapshotInodesToJson(info.getCeSnapshotInodes()));
+        json.put("installedUsers", fromIntList(snapshottedUsers));
 
         json.put("rollbackDataPolicy", info.getRollbackDataPolicy());
 
@@ -393,7 +361,7 @@ class RollbackStore {
         VersionedPackage versionRolledBackTo = versionedPackageFromJson(
                 json.getJSONObject("versionRolledBackTo"));
 
-        final IntArray pendingBackups = convertToIntArray(
+        final List<Integer> pendingBackups = toIntList(
                 json.getJSONArray("pendingBackups"));
         final ArrayList<RestoreInfo> pendingRestores = convertToRestoreInfoArray(
                 json.getJSONArray("pendingRestores"));
@@ -402,9 +370,7 @@ class RollbackStore {
         final boolean isApkInApex = json.getBoolean("isApkInApex");
 
         // Field is named 'installedUsers' for legacy reasons.
-        final IntArray snapshottedUsers = convertToIntArray(json.getJSONArray("installedUsers"));
-        final SparseLongArray ceSnapshotInodes = ceSnapshotInodesFromJson(
-                json.getJSONArray("ceSnapshotInodes"));
+        final List<Integer> snapshottedUsers = toIntList(json.getJSONArray("installedUsers"));
 
         // Backward compatibility: no such field for old versions.
         final int rollbackDataPolicy = json.optInt("rollbackDataPolicy",
@@ -412,7 +378,7 @@ class RollbackStore {
 
         return new PackageRollbackInfo(versionRolledBackFrom, versionRolledBackTo,
                 pendingBackups, pendingRestores, isApex, isApkInApex, snapshottedUsers,
-                ceSnapshotInodes, rollbackDataPolicy);
+                rollbackDataPolicy);
     }
 
     private static JSONArray versionedPackagesToJson(List<VersionedPackage> packages)

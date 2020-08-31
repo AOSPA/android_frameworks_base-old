@@ -17,6 +17,7 @@
 package android.security.keystore;
 
 import android.annotation.Nullable;
+import android.os.Build;
 import android.security.Credentials;
 import android.security.KeyPairGeneratorSpec;
 import android.security.KeyStore;
@@ -30,7 +31,6 @@ import com.android.org.bouncycastle.asn1.ASN1InputStream;
 import com.android.org.bouncycastle.asn1.ASN1Integer;
 import com.android.org.bouncycastle.asn1.ASN1ObjectIdentifier;
 import com.android.org.bouncycastle.asn1.DERBitString;
-import com.android.org.bouncycastle.asn1.DERInteger;
 import com.android.org.bouncycastle.asn1.DERNull;
 import com.android.org.bouncycastle.asn1.DERSequence;
 import com.android.org.bouncycastle.asn1.pkcs.PKCSObjectIdentifiers;
@@ -50,6 +50,7 @@ import libcore.util.EmptyArray;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.math.BigInteger;
+import java.nio.charset.StandardCharsets;
 import java.security.InvalidAlgorithmParameterException;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
@@ -495,6 +496,20 @@ public abstract class AndroidKeyStoreKeyPairGeneratorSpi extends KeyPairGenerato
         if (challenge != null) {
             KeymasterArguments args = new KeymasterArguments();
             args.addBytes(KeymasterDefs.KM_TAG_ATTESTATION_CHALLENGE, challenge);
+
+            if (mSpec.isDevicePropertiesAttestationIncluded()) {
+                args.addBytes(KeymasterDefs.KM_TAG_ATTESTATION_ID_BRAND,
+                        Build.BRAND.getBytes(StandardCharsets.UTF_8));
+                args.addBytes(KeymasterDefs.KM_TAG_ATTESTATION_ID_DEVICE,
+                        Build.DEVICE.getBytes(StandardCharsets.UTF_8));
+                args.addBytes(KeymasterDefs.KM_TAG_ATTESTATION_ID_PRODUCT,
+                        Build.PRODUCT.getBytes(StandardCharsets.UTF_8));
+                args.addBytes(KeymasterDefs.KM_TAG_ATTESTATION_ID_MANUFACTURER,
+                        Build.MANUFACTURER.getBytes(StandardCharsets.UTF_8));
+                args.addBytes(KeymasterDefs.KM_TAG_ATTESTATION_ID_MODEL,
+                        Build.MODEL.getBytes(StandardCharsets.UTF_8));
+            }
+
             return getAttestationChain(privateKeyAlias, keyPair, args);
         }
 
@@ -604,8 +619,14 @@ public abstract class AndroidKeyStoreKeyPairGeneratorSpi extends KeyPairGenerato
     private Iterable<byte[]> getAttestationChain(String privateKeyAlias,
             KeyPair keyPair, KeymasterArguments args)
                     throws ProviderException {
-        KeymasterCertificateChain outChain = new KeymasterCertificateChain();
-        int errorCode = mKeyStore.attestKey(privateKeyAlias, args, outChain);
+        final KeymasterCertificateChain outChain = new KeymasterCertificateChain();
+        final int errorCode;
+        if (mSpec.isDevicePropertiesAttestationIncluded()
+                && mSpec.getAttestationChallenge() == null) {
+            throw new ProviderException("An attestation challenge must be provided when requesting "
+                    + "device properties attestation.");
+        }
+        errorCode = mKeyStore.attestKey(privateKeyAlias, args, outChain);
         if (errorCode != KeyStore.NO_ERROR) {
             throw new ProviderException("Failed to generate attestation certificate chain",
                     KeyStore.getKeyStoreException(errorCode));
@@ -680,8 +701,8 @@ public abstract class AndroidKeyStoreKeyPairGeneratorSpi extends KeyPairGenerato
                 sigAlgOid = X9ObjectIdentifiers.ecdsa_with_SHA256;
                 sigAlgId = new AlgorithmIdentifier(sigAlgOid);
                 ASN1EncodableVector v = new ASN1EncodableVector();
-                v.add(new DERInteger(0));
-                v.add(new DERInteger(0));
+                v.add(new ASN1Integer(BigInteger.valueOf(0)));
+                v.add(new ASN1Integer(BigInteger.valueOf(0)));
                 signature = new DERSequence().getEncoded();
                 break;
             case KeymasterDefs.KM_ALGORITHM_RSA:

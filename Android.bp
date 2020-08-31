@@ -35,22 +35,96 @@ filegroup {
 }
 
 // These are subset of framework-core-sources that are needed by the
-// android.test.mock library. Ideally, the library should use public APIs only,
-// but unfortunately its API signature has some references to these private APIs.
+// android.test.mock library. The implementation of android.test.mock references
+// private members of various components to allow mocking of classes that cannot
+// be mocked without access to those internal implementation details.
 filegroup {
     name: "framework-core-sources-for-test-mock",
     srcs: [
+        "core/java/android/accounts/AccountManagerCallback.java",
+        "core/java/android/accounts/AccountManagerFuture.java",
+        "core/java/android/accounts/AccountManager.java",
+        "core/java/android/accounts/AccountsException.java",
+        "core/java/android/accounts/AuthenticatorException.java",
+        "core/java/android/accounts/OperationCanceledException.java",
+        "core/java/android/annotation/AnimatorRes.java",
+        "core/java/android/annotation/AnimRes.java",
+        "core/java/android/annotation/AnyRes.java",
+        "core/java/android/annotation/ArrayRes.java",
+        "core/java/android/annotation/AttrRes.java",
+        "core/java/android/annotation/BoolRes.java",
+        "core/java/android/annotation/BroadcastBehavior.java",
+        "core/java/android/annotation/CallbackExecutor.java",
+        "core/java/android/annotation/CallSuper.java",
+        "core/java/android/annotation/CheckResult.java",
+        "core/java/android/annotation/ColorInt.java",
+        "core/java/android/annotation/ColorRes.java",
+        "core/java/android/annotation/DimenRes.java",
+        "core/java/android/annotation/DrawableRes.java",
+        "core/java/android/annotation/FontRes.java",
+        "core/java/android/annotation/FractionRes.java",
+        "core/java/android/annotation/IntDef.java",
+        "core/java/android/annotation/IntegerRes.java",
+        "core/java/android/annotation/IntRange.java",
+        "core/java/android/annotation/LayoutRes.java",
+        "core/java/android/annotation/NonNull.java",
+        "core/java/android/annotation/Nullable.java",
+        "core/java/android/annotation/PluralsRes.java",
+        "core/java/android/annotation/RawRes.java",
+        "core/java/android/annotation/RequiresPermission.java",
+        "core/java/android/annotation/SdkConstant.java",
+        "core/java/android/annotation/Size.java",
+        "core/java/android/annotation/StringDef.java",
+        "core/java/android/annotation/StringRes.java",
+        "core/java/android/annotation/StyleableRes.java",
+        "core/java/android/annotation/StyleRes.java",
+        "core/java/android/annotation/SuppressLint.java",
+        "core/java/android/annotation/SystemApi.java",
+        "core/java/android/annotation/SystemService.java",
+        "core/java/android/annotation/TestApi.java",
+        "core/java/android/annotation/UserIdInt.java",
+        "core/java/android/annotation/XmlRes.java",
+        "core/java/android/app/Application.java",
         "core/java/android/app/IApplicationThread.aidl",
         "core/java/android/app/IServiceConnection.aidl",
+        "core/java/android/app/PackageDeleteObserver.java",
+        "core/java/android/content/ComponentCallbacks2.java",
+        "core/java/android/content/ComponentCallbacks.java",
+        "core/java/android/content/ContentInterface.java",
+        "core/java/android/content/ContentProvider.java",
+        "core/java/android/content/ContentProviderNative.java",
+        "core/java/android/content/ContentResolver.java",
+        "core/java/android/content/Context.java",
+        "core/java/android/content/ContextWrapper.java",
+        "core/java/android/content/DialogInterface.java",
         "core/java/android/content/IContentProvider.java",
-        "core/java/android/content/pm/IPackageDataObserver.aidl",
+        "core/java/android/content/Intent.java",
+        "core/java/android/content/IntentSender.java",
+        "core/java/android/content/OperationApplicationException.java",
+        "core/java/android/content/pm/ActivityInfo.java",
+        "core/java/android/content/pm/ApplicationInfo.java",
         "core/java/android/content/pm/InstantAppInfo.java",
+        "core/java/android/content/pm/IPackageDataObserver.aidl",
         "core/java/android/content/pm/KeySet.java",
         "core/java/android/content/pm/PackageManager.java",
         "core/java/android/content/pm/VerifierDeviceIdentity.java",
         "core/java/android/content/res/Resources.java",
+        "core/java/android/database/CrossProcessCursor.java",
+        "core/java/android/database/CrossProcessCursorWrapper.java",
+        "core/java/android/database/Cursor.java",
+        "core/java/android/database/CursorWrapper.java",
+        "core/java/android/os/Binder.java",
+        "core/java/android/os/Bundle.java",
+        "core/java/android/os/IBinder.java",
+        "core/java/android/os/IInterface.java",
+        "core/java/android/os/Parcelable.java",
+        "core/java/android/os/ParcelFileDescriptor.java",
+        "core/java/android/os/RemoteException.java",
         "core/java/android/os/storage/VolumeInfo.java",
+        "core/java/android/util/AndroidException.java",
         "core/java/android/view/DisplayAdjustments.java",
+        "core/java/android/view/ViewDebug.java",
+        "core/java/com/android/internal/annotations/VisibleForTesting.java",
     ],
     path: "core/java",
     visibility: ["//frameworks/base/test-mock"],
@@ -65,7 +139,7 @@ filegroup {
 }
 
 filegroup {
-    name: "framework-graphics-sources",
+    name: "framework-graphics-nonupdatable-sources",
     srcs: [
         "graphics/java/**/*.java",
         "graphics/java/**/*.aidl",
@@ -223,7 +297,7 @@ filegroup {
         ":framework-blobstore-sources",
         ":framework-core-sources",
         ":framework-drm-sources",
-        ":framework-graphics-sources",
+        ":framework-graphics-nonupdatable-sources",
         ":framework-jobscheduler-sources", // jobscheduler is not a module for R
         ":framework-keystore-sources",
         ":framework-identity-sources",
@@ -274,12 +348,17 @@ filegroup {
         // etc.
         ":framework-javastream-protos",
         ":statslog-framework-java-gen", // FrameworkStatsLog.java
+
+        // telephony annotations
+        ":framework-telephony-annotations",
     ],
 }
 
 filegroup {
     name: "framework-updatable-sources",
     srcs: [
+        ":framework-appsearch-sources",
+        ":framework-graphics-srcs",
         ":framework-mediaprovider-sources",
         ":framework-permission-sources",
         ":framework-sdkextensions-sources",
@@ -293,6 +372,8 @@ filegroup {
 java_library {
     name: "framework-updatable-stubs-module_libs_api",
     static_libs: [
+        "framework-appsearch-stubs", // TODO: Update to module_libs_api when there is one.
+        "framework-graphics.stubs.module_lib",
         "framework-media.stubs.module_lib",
         "framework-mediaprovider.stubs.module_lib",
         "framework-permission.stubs.module_lib",
@@ -429,6 +510,7 @@ java_defaults {
     plugins: [
         "view-inspector-annotation-processor",
         "staledataclass-annotation-processor",
+        "error_prone_android_framework",
     ],
 
     required: [
@@ -470,6 +552,7 @@ filegroup {
         "core/java/android/os/IThermalEventListener.aidl",
         "core/java/android/os/IThermalStatusListener.aidl",
         "core/java/android/os/IThermalService.aidl",
+        "core/java/android/os/IPowerManager.aidl",
     ],
     path: "core/java",
 }
@@ -485,12 +568,14 @@ java_library {
         "libcore-platform-compat-config",
         "services-platform-compat-config",
         "documents-ui-compat-config",
+        "calendar-provider-compat-config",
     ],
     libs: ["framework-updatable-stubs-module_libs_api"],
     static_libs: [
         // If MimeMap ever becomes its own APEX, then this dependency would need to be removed
         // in favor of an API stubs dependency in java_library "framework" below.
         "mimemap",
+        "mediatranscoding_aidl_interface-java",
     ],
     // For backwards compatibility.
     stem: "framework",
@@ -498,6 +583,7 @@ java_library {
     visibility: [
         "//frameworks/base",
         // TODO(b/147128803) remove the below lines
+        "//frameworks/base/apex/appsearch/framework",
         "//frameworks/base/apex/blobstore/framework",
         "//frameworks/base/apex/jobscheduler/framework",
         "//frameworks/base/packages/Tethering/tests/unit",
@@ -520,6 +606,8 @@ java_library {
     static_libs: [
         "app-compat-annotations",
         "framework-minus-apex",
+        // TODO(b/146218515): should be removed
+        "framework-appsearch",
         "framework-updatable-stubs-module_libs_api",
     ],
     sdk_version: "core_platform",
@@ -534,9 +622,15 @@ java_library {
     static_libs: [
         "exoplayer2-extractor",
         "android.hardware.wifi-V1.0-java-constants",
+        "mediatranscoding_aidl_interface-java",
+
         // Additional dependencies needed to build the ike API classes.
         "ike-internals",
     ],
+    plugins: [
+        "intdef-annotation-processor",
+    ],
+    libs: ["icing-java-proto-lite"],
     apex_available: ["//apex_available:platform"],
     visibility: [
         // DO NOT ADD ANY MORE ENTRIES TO THIS LIST
@@ -547,8 +641,8 @@ java_library {
 }
 
 platform_compat_config {
-    name: "framework-platform-compat-config",
-    src: ":framework-minus-apex",
+   name: "framework-platform-compat-config",
+   src: ":framework-minus-apex",
 }
 
 // A temporary build target that is conditionally included on the bootclasspath if
@@ -691,6 +785,7 @@ filegroup {
         // TODO: remove these annotations as soon as we can use andoid.support.annotations.*
         ":framework-annotations",
         "core/java/android/net/DhcpResults.java",
+        "core/java/android/util/IndentingPrintWriter.java",
         "core/java/android/util/LocalLog.java",
         "core/java/com/android/internal/util/HexDump.java",
         "core/java/com/android/internal/util/IndentingPrintWriter.java",
@@ -719,6 +814,7 @@ filegroup {
 filegroup {
     name: "framework-tethering-shared-srcs",
     srcs: [
+        "core/java/android/util/IndentingPrintWriter.java",
         "core/java/android/util/LocalLog.java",
         "core/java/com/android/internal/util/IndentingPrintWriter.java",
         "core/java/com/android/internal/util/IState.java",
@@ -726,6 +822,27 @@ filegroup {
         "core/java/com/android/internal/util/State.java",
         "core/java/com/android/internal/util/StateMachine.java",
         "core/java/com/android/internal/util/TrafficStatsConstants.java",
+    ],
+}
+
+// keep these files in sync with the apex/jobscheduler/service jarjar-rules.txt for
+// the jobscheduler module.
+filegroup {
+    name: "framework-jobscheduler-shared-srcs",
+    srcs: [
+        "core/java/com/android/internal/util/ArrayUtils.java",
+        "core/java/com/android/internal/util/BitUtils.java",
+        "core/java/com/android/internal/util/CollectionUtils.java",
+        "core/java/com/android/internal/util/ConcurrentUtils.java",
+        "core/java/com/android/internal/util/DumpUtils.java",
+        "core/java/com/android/internal/util/FastPrintWriter.java",
+        "core/java/com/android/internal/util/FastXmlSerializer.java",
+        "core/java/com/android/internal/util/FunctionalUtils.java",
+        "core/java/com/android/internal/util/ParseUtils.java",
+        "core/java/com/android/internal/util/Preconditions.java",
+        "core/java/com/android/internal/util/RingBufferIndices.java",
+        "core/java/com/android/internal/util/StatLogger.java",
+        "core/java/com/android/internal/util/XmlUtils.java",
     ],
 }
 
@@ -773,6 +890,7 @@ java_library {
     exclude_srcs: [
         "core/proto/android/privacy.proto",
         "core/proto/android/section.proto",
+        "core/proto/android/typedef.proto",
     ],
     sdk_version: "9",
     srcs: [
@@ -798,6 +916,7 @@ java_library {
     exclude_srcs: [
         "core/proto/android/privacy.proto",
         "core/proto/android/section.proto",
+        "core/proto/android/typedef.proto",
     ],
     sdk_version: "core_current",
     // Protos have lots of MissingOverride and similar.
@@ -1036,12 +1155,12 @@ python_defaults {
     name: "base_default",
     version: {
         py2: {
-            enabled: true,
-            embedded_launcher: true,
-        },
-        py3: {
             enabled: false,
             embedded_launcher: false,
+        },
+        py3: {
+            enabled: true,
+            embedded_launcher: true,
         },
     },
 }
@@ -1097,6 +1216,7 @@ filegroup {
         "core/java/android/os/BasicShellCommandHandler.java",
         "core/java/android/os/RegistrantList.java",
         "core/java/android/os/Registrant.java",
+        "core/java/android/util/IndentingPrintWriter.java",
         "core/java/android/util/LocalLog.java",
         "core/java/android/util/TimeUtils.java",
         "core/java/com/android/internal/os/SomeArgs.java",
@@ -1119,6 +1239,7 @@ filegroup {
 filegroup {
     name: "framework-telephony-shared-srcs",
     srcs: [
+        "core/java/android/util/IndentingPrintWriter.java",
         "core/java/android/util/RecurrenceRule.java",
         "core/java/com/android/internal/os/SomeArgs.java",
         "core/java/com/android/internal/util/BitwiseInputStream.java",
@@ -1215,6 +1336,7 @@ metalava_framework_docs_args = "--manifest $(location core/res/AndroidManifest.x
     "--hide MissingPermission --hide BroadcastBehavior " +
     "--hide HiddenSuperclass --hide DeprecationMismatch --hide UnavailableSymbol " +
     "--hide SdkConstant --hide HiddenTypeParameter --hide Todo --hide Typo " +
+    "--error NoSettingsProvider " +
     "--force-convert-to-warning-nullability-annotations +*:-android.*:+android.icu.*:-dalvik.* " +
     "--api-lint-ignore-prefix android.icu. " +
     "--api-lint-ignore-prefix java. " +
@@ -1225,3 +1347,70 @@ build = [
     "StubLibraries.bp",
     "ApiDocs.bp",
 ]
+
+// TODO(b/147699819): move to frameworks/base/telephony/ folder
+droidstubs {
+    name: "framework-telephony-stubs-srcs",
+    srcs: [
+        ":framework-telephony-sources",
+        ":framework_native_aidl",
+        ":framework-javastream-protos",
+    ],
+    aidl: {
+        local_include_dirs: [
+            "core/java",
+            "telecomm/java"
+        ],
+    },
+    libs: [
+        "framework-annotations-lib",
+        "android.hardware.radio-V1.5-java",
+    ],
+    check_api: {
+        current: {
+            // TODO(b/147699819): remove telephony prefix when moved
+            api_file: "telephony/api/system-current.txt",
+            removed_api_file: "telephony/api/system-removed.txt",
+        },
+    },
+    // TODO: make telephony inherit the shared stubs and remove this
+    args: "--show-annotation android.annotation.SystemApi\\(" +
+            "client=android.annotation.SystemApi.Client.PRIVILEGED_APPS" +
+        "\\) " +
+        "--error UnhiddenSystemApi " +
+        "--hide BroadcastBehavior " +
+        "--hide DeprecationMismatch " +
+        "--hide HiddenSuperclass " +
+        "--hide HiddenTypedefConstant " +
+        "--hide HiddenTypeParameter " +
+        "--hide MissingPermission " +
+        "--hide RequiresPermission " +
+        "--hide SdkConstant " +
+        "--hide Todo " +
+        "--hide Typo " +
+        "--hide UnavailableSymbol ",
+    filter_packages: ["android.telephony"],
+    sdk_version: "system_current",
+}
+
+java_library {
+    name: "framework-telephony-stubs",
+    srcs: [":framework-telephony-stubs-srcs"],
+    // TODO(b/147699819): move public aidls to a separate folder and potentially remove
+    // below aidl exports.
+    aidl: {
+        export_include_dirs: ["telephony/java"],
+    },
+    sdk_version: "module_current",
+}
+
+filegroup {
+    // TODO (b/147690217): move to frameworks/base/telephony/common.
+    name: "framework-telephony-annotations",
+    srcs: ["telephony/java/android/telephony/Annotation.java"],
+}
+
+filegroup {
+    name: "framework-telephony-jarjar-rules",
+    srcs: ["telephony/framework-telephony-jarjar-rules.txt"],
+}

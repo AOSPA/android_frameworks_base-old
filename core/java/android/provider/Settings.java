@@ -50,6 +50,7 @@ import android.content.res.Configuration;
 import android.content.res.Resources;
 import android.database.Cursor;
 import android.database.SQLException;
+import android.location.ILocationManager;
 import android.location.LocationManager;
 import android.net.ConnectivityManager;
 import android.net.NetworkScoreManager;
@@ -93,6 +94,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 /**
@@ -7623,6 +7625,8 @@ public final class Settings {
          * @hide
          */
         @UnsupportedAppUsage
+        @TestApi
+        @SuppressLint("NoSettingsProvider")
         public static final String ANR_SHOW_BACKGROUND = "anr_show_background";
 
         /**
@@ -7630,6 +7634,8 @@ public final class Settings {
          * Otherwise, the process will be silently killed.
          * @hide
          */
+        @TestApi
+        @SuppressLint("NoSettingsProvider")
         public static final String SHOW_FIRST_CRASH_DIALOG_DEV_OPTION =
                 "show_first_crash_dialog_dev_option";
 
@@ -7890,6 +7896,31 @@ public final class Settings {
          * @hide
          */
         public static final String AWARE_TAP_PAUSE_TOUCH_COUNT = "aware_tap_pause_touch_count";
+
+        /**
+         * For user preference if swipe bottom to expand notification gesture enabled.
+         * @hide
+         */
+        public static final String SWIPE_BOTTOM_TO_NOTIFICATION_ENABLED =
+                "swipe_bottom_to_notification_enabled";
+
+        /**
+         * For user preference if One-Handed Mode enabled.
+         * @hide
+         */
+        public static final String ONE_HANDED_MODE_ENABLED = "one_handed_mode_enabled";
+
+        /**
+         * For user preference if One-Handed Mode timeout.
+         * @hide
+         */
+        public static final String ONE_HANDED_MODE_TIMEOUT = "one_handed_mode_timeout";
+
+        /**
+         * For user taps app to exit One-Handed Mode.
+         * @hide
+         */
+        public static final String TAPS_APP_TO_EXIT = "taps_app_to_exit";
 
         /**
          * The current night mode that has been selected by the user.  Owned
@@ -8280,6 +8311,13 @@ public final class Settings {
          * @hide
          */
         public static final String CAMERA_GESTURE_DISABLED = "camera_gesture_disabled";
+
+        /**
+         * Whether the panic button (emergency sos) gesture should be enabled.
+         *
+         * @hide
+         */
+        public static final String PANIC_GESTURE_ENABLED = "panic_gesture_enabled";
 
         /**
          * Whether the camera launch gesture to double tap the power button when the screen is off
@@ -8701,6 +8739,16 @@ public final class Settings {
                 = "bubble_important_conversations";
 
         /**
+         * When enabled, notifications the notification assistant service has modified will show an
+         * indicator. When tapped, this indicator will describe the adjustment made and solicit
+         * feedback. This flag will also add a "automatic" option to the long press menu.
+         *
+         * The value 1 - enable, 0 - disable
+         * @hide
+         */
+        public static final String NOTIFICATION_FEEDBACK_ENABLED = "notification_feedback_enabled";
+
+        /**
          * Whether notifications are dismissed by a right-to-left swipe (instead of a left-to-right
          * swipe).
          *
@@ -8946,8 +8994,8 @@ public final class Settings {
         public static final String WINDOW_MAGNIFICATION = "window_magnification";
 
         /**
-         * Controls magnification mode when magnification is enabled via a system-wide
-         * triple tap gesture or the accessibility shortcut.
+         * Controls magnification mode when magnification is enabled via a system-wide triple tap
+         * gesture or the accessibility shortcut.
          *
          * @see#ACCESSIBILITY_MAGNIFICATION_MODE_FULLSCREEN
          * @see#ACCESSIBILITY_MAGNIFICATION_MODE_WINDOW
@@ -8967,6 +9015,25 @@ public final class Settings {
          * @hide
          */
         public static final int ACCESSIBILITY_MAGNIFICATION_MODE_WINDOW = 0x2;
+
+        /**
+         * Magnification mode value that is capable of magnifying whole display and particular
+         * region in a window.
+         * @hide
+         */
+        public static final int ACCESSIBILITY_MAGNIFICATION_MODE_ALL = 0x3;
+
+        /**
+         * Controls magnification capability. Accessibility magnification is capable of at least one
+         * of the magnification modes.
+         *
+         * @see#ACCESSIBILITY_MAGNIFICATION_MODE_FULLSCREEN
+         * @see#ACCESSIBILITY_MAGNIFICATION_MODE_WINDOW
+         * @see#ACCESSIBILITY_MAGNIFICATION_MODE_ALL
+         * @hide
+         */
+        public static final String ACCESSIBILITY_MAGNIFICATION_CAPABILITY =
+                "accessibility_magnification_capability";
 
         /**
          * Keys we no longer back up under the current schema, but want to continue to
@@ -8997,7 +9064,6 @@ public final class Settings {
             CLONE_TO_MANAGED_PROFILE.add(ENABLED_ACCESSIBILITY_SERVICES);
             CLONE_TO_MANAGED_PROFILE.add(LOCATION_CHANGER);
             CLONE_TO_MANAGED_PROFILE.add(LOCATION_MODE);
-            CLONE_TO_MANAGED_PROFILE.add(LOCATION_PROVIDERS_ALLOWED);
             CLONE_TO_MANAGED_PROFILE.add(SHOW_IME_WITH_HARD_KEYBOARD);
         }
 
@@ -9050,9 +9116,13 @@ public final class Settings {
          */
         @Deprecated
         public static boolean isLocationProviderEnabled(ContentResolver cr, String provider) {
-            String allowedProviders = Settings.Secure.getStringForUser(cr,
-                    LOCATION_PROVIDERS_ALLOWED, cr.getUserId());
-            return TextUtils.delimitedStringContains(allowedProviders, ',', provider);
+            IBinder binder = ServiceManager.getService(Context.LOCATION_SERVICE);
+            ILocationManager lm = Objects.requireNonNull(ILocationManager.Stub.asInterface(binder));
+            try {
+                return lm.isProviderEnabledForUser(provider, cr.getUserId());
+            } catch (RemoteException e) {
+                throw e.rethrowFromSystemServer();
+            }
         }
 
         /**
@@ -11631,17 +11701,6 @@ public final class Settings {
         public static final String ALWAYS_ON_DISPLAY_CONSTANTS = "always_on_display_constants";
 
         /**
-        * System VDSO global setting. This links to the "sys.vdso" system property.
-        * The following values are supported:
-        * false  -> both 32 and 64 bit vdso disabled
-        * 32     -> 32 bit vdso enabled
-        * 64     -> 64 bit vdso enabled
-        * Any other value defaults to both 32 bit and 64 bit true.
-        * @hide
-        */
-        public static final String SYS_VDSO = "sys_vdso";
-
-        /**
         * UidCpuPower global setting. This links the sys.uidcpupower system property.
         * The following values are supported:
         * 0 -> /proc/uid_cpupower/* are disabled
@@ -11818,21 +11877,6 @@ public final class Settings {
          */
         public static final String JOB_SCHEDULER_QUOTA_CONTROLLER_CONSTANTS =
                 "job_scheduler_quota_controller_constants";
-
-        /**
-         * Job scheduler TimeController specific settings.
-         * This is encoded as a key=value list, separated by commas. Ex:
-         *
-         * "skip_not_ready_jobs=true5,other_key=2"
-         *
-         * <p>
-         * Type: string
-         *
-         * @hide
-         * @see com.android.server.job.JobSchedulerService.Constants
-         */
-        public static final String JOB_SCHEDULER_TIME_CONTROLLER_CONSTANTS =
-                "job_scheduler_time_controller_constants";
 
         /**
          * ShortcutManager specific settings.
@@ -14161,6 +14205,8 @@ public final class Settings {
          * Otherwise, the process will be silently killed.
          * @hide
          */
+        @TestApi
+        @SuppressLint("NoSettingsProvider")
         public static final String SHOW_FIRST_CRASH_DIALOG = "show_first_crash_dialog";
 
         /**
@@ -15062,8 +15108,23 @@ public final class Settings {
     public static boolean isCallingPackageAllowedToWriteSettings(Context context, int uid,
             String callingPackage, boolean throwException) {
         return isCallingPackageAllowedToPerformAppOpsProtectedOperation(context, uid,
-                callingPackage, throwException, AppOpsManager.OP_WRITE_SETTINGS,
-                PM_WRITE_SETTINGS, false);
+                callingPackage, null /*attribution not needed when not making note */,
+                throwException, AppOpsManager.OP_WRITE_SETTINGS, PM_WRITE_SETTINGS,
+                false);
+    }
+
+    /**
+     * @deprecated Use {@link #checkAndNoteWriteSettingsOperation(Context, int, String, String,
+     * boolean)} instead.
+     *
+     * @hide
+     */
+    @Deprecated
+    @SystemApi
+    public static boolean checkAndNoteWriteSettingsOperation(@NonNull Context context, int uid,
+            @NonNull String callingPackage, boolean throwException) {
+        return checkAndNoteWriteSettingsOperation(context, uid, callingPackage, null,
+                throwException);
     }
 
     /**
@@ -15079,10 +15140,11 @@ public final class Settings {
      */
     @SystemApi
     public static boolean checkAndNoteWriteSettingsOperation(@NonNull Context context, int uid,
-            @NonNull String callingPackage, boolean throwException) {
+            @NonNull String callingPackage, @Nullable String callingAttributionTag,
+            boolean throwException) {
         return isCallingPackageAllowedToPerformAppOpsProtectedOperation(context, uid,
-                callingPackage, throwException, AppOpsManager.OP_WRITE_SETTINGS,
-                PM_WRITE_SETTINGS, true);
+                callingPackage, callingAttributionTag, throwException,
+                AppOpsManager.OP_WRITE_SETTINGS, PM_WRITE_SETTINGS, true);
     }
 
     /**
@@ -15099,14 +15161,14 @@ public final class Settings {
      * @hide
      */
     public static boolean checkAndNoteChangeNetworkStateOperation(Context context, int uid,
-            String callingPackage, boolean throwException) {
+            String callingPackage, String callingAttributionTag, boolean throwException) {
         if (context.checkCallingOrSelfPermission(android.Manifest.permission.CHANGE_NETWORK_STATE)
                 == PackageManager.PERMISSION_GRANTED) {
             return true;
         }
         return isCallingPackageAllowedToPerformAppOpsProtectedOperation(context, uid,
-                callingPackage, throwException, AppOpsManager.OP_WRITE_SETTINGS,
-                PM_CHANGE_NETWORK_STATE, true);
+                callingPackage, callingAttributionTag, throwException,
+                AppOpsManager.OP_WRITE_SETTINGS, PM_CHANGE_NETWORK_STATE, true);
     }
 
     /**
@@ -15120,8 +15182,9 @@ public final class Settings {
     public static boolean isCallingPackageAllowedToDrawOverlays(Context context, int uid,
             String callingPackage, boolean throwException) {
         return isCallingPackageAllowedToPerformAppOpsProtectedOperation(context, uid,
-                callingPackage, throwException, AppOpsManager.OP_SYSTEM_ALERT_WINDOW,
-                PM_SYSTEM_ALERT_WINDOW, false);
+                callingPackage, null /*attribution not needed when not making note */,
+                throwException, AppOpsManager.OP_SYSTEM_ALERT_WINDOW, PM_SYSTEM_ALERT_WINDOW,
+                false);
     }
 
     /**
@@ -15134,11 +15197,26 @@ public final class Settings {
      * current time.
      * @hide
      */
-    public static boolean checkAndNoteDrawOverlaysOperation(Context context, int uid, String
-            callingPackage, boolean throwException) {
+    public static boolean checkAndNoteDrawOverlaysOperation(Context context, int uid,
+            String callingPackage, String callingAttributionTag, boolean throwException) {
         return isCallingPackageAllowedToPerformAppOpsProtectedOperation(context, uid,
-                callingPackage, throwException, AppOpsManager.OP_SYSTEM_ALERT_WINDOW,
-                PM_SYSTEM_ALERT_WINDOW, true);
+                callingPackage, callingAttributionTag, throwException,
+                AppOpsManager.OP_SYSTEM_ALERT_WINDOW, PM_SYSTEM_ALERT_WINDOW, true);
+    }
+
+    /**
+     * @deprecated Use {@link #isCallingPackageAllowedToPerformAppOpsProtectedOperation(Context,
+     * int, String, String, boolean, int, String[], boolean)} instead.
+     *
+     * @hide
+     */
+    @Deprecated
+    @UnsupportedAppUsage
+    public static boolean isCallingPackageAllowedToPerformAppOpsProtectedOperation(Context context,
+            int uid, String callingPackage, boolean throwException, int appOpsOpCode,
+            String[] permissions, boolean makeNote) {
+        return isCallingPackageAllowedToPerformAppOpsProtectedOperation(context, uid,
+                callingPackage, null, throwException, appOpsOpCode, permissions, makeNote);
     }
 
     /**
@@ -15147,10 +15225,9 @@ public final class Settings {
      * OP_WRITE_SETTINGS
      * @hide
      */
-    @UnsupportedAppUsage
     public static boolean isCallingPackageAllowedToPerformAppOpsProtectedOperation(Context context,
-            int uid, String callingPackage, boolean throwException, int appOpsOpCode, String[]
-            permissions, boolean makeNote) {
+            int uid, String callingPackage, String callingAttributionTag, boolean throwException,
+            int appOpsOpCode, String[] permissions, boolean makeNote) {
         if (callingPackage == null) {
             return false;
         }
@@ -15158,7 +15235,8 @@ public final class Settings {
         AppOpsManager appOpsMgr = (AppOpsManager)context.getSystemService(Context.APP_OPS_SERVICE);
         int mode = AppOpsManager.MODE_DEFAULT;
         if (makeNote) {
-            mode = appOpsMgr.noteOpNoThrow(appOpsOpCode, uid, callingPackage);
+            mode = appOpsMgr.noteOpNoThrow(appOpsOpCode, uid, callingPackage, callingAttributionTag,
+                    null);
         } else {
             mode = appOpsMgr.checkOpNoThrow(appOpsOpCode, uid, callingPackage);
         }

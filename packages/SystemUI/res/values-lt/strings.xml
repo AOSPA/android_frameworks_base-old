@@ -717,11 +717,13 @@
     <string name="notification_silence_title" msgid="8608090968400832335">"Tylūs"</string>
     <string name="notification_alert_title" msgid="3656229781017543655">"Numatytasis"</string>
     <string name="notification_bubble_title" msgid="8330481035191903164">"Debesėlis"</string>
+    <string name="notification_automatic_title" msgid="3745465364578762652">"Automatinis"</string>
     <string name="notification_channel_summary_low" msgid="4860617986908931158">"Neskamba ir nevibruoja"</string>
     <string name="notification_conversation_summary_low" msgid="1734433426085468009">"Neskamba, nevibruoja ir rodoma apatinėje pokalbių skilties dalyje"</string>
     <string name="notification_channel_summary_default" msgid="3282930979307248890">"Gali skambėti arba vibruoti, atsižvelgiant į telefono nustatymus"</string>
     <string name="notification_channel_summary_default_with_bubbles" msgid="1782419896613644568">"Gali skambėti arba vibruoti, atsižvelgiant į telefono nustatymus. Pokalbiai iš „<xliff:g id="APP_NAME">%1$s</xliff:g>“ debesėlio pagal numatytuosius nustatymus."</string>
     <string name="notification_channel_summary_bubble" msgid="7235935211580860537">"Naudojant slankųjį spartųjį klavišą lengviau sutelkti dėmesį į šį turinį."</string>
+    <string name="notification_channel_summary_automatic" msgid="5813109268050235275">"Nustatykite, kad sistema aptiktų, ar šis pranešimas turi skambėti, ar vibruoti"</string>
     <string name="notification_channel_summary_priority" msgid="7952654515769021553">"Rodoma pokalbių skilties viršuje, rodoma kaip slankusis burbulas, pateikiama profilio nuotrauka užrakinimo ekrane"</string>
     <string name="notification_conversation_channel_settings" msgid="2409977688430606835">"Nustatymai"</string>
     <string name="notification_priority_title" msgid="2079708866333537093">"Prioritetiniai"</string>
@@ -742,6 +744,12 @@
     <string name="appops_camera_mic_overlay" msgid="5584311236445644095">"Ši programa rodoma ekrane virš kitų programų, ji naudoja mikrofoną ir fotoaparatą."</string>
     <string name="notification_appops_settings" msgid="5208974858340445174">"Nustatymai"</string>
     <string name="notification_appops_ok" msgid="2177609375872784124">"Gerai"</string>
+    <string name="feedback_silenced" msgid="5382212321253328247">"Sistema nutildė šį pranešimą."</string>
+    <string name="feedback_promoted" msgid="8075757485407091976">"Sistema paaukštino šį pranešimą."</string>
+    <string name="feedback_demoted" msgid="5848066008939031913">"Sistema pažemino šį pranešimą."</string>
+    <string name="feedback_prompt" msgid="2278631214125128281">"Ar tai teisinga?"</string>
+    <string name="feedback_response" msgid="4671729244976641339">"Dėkojame už atsiliepimą!"</string>
+    <string name="feedback_ok" msgid="6481426753298857144">"Gerai"</string>
     <string name="notification_channel_controls_opened_accessibility" msgid="6111817750774381094">"„<xliff:g id="APP_NAME">%1$s</xliff:g>“ pranešimų valdikliai atidaryti"</string>
     <string name="notification_channel_controls_closed_accessibility" msgid="1561909368876911701">"„<xliff:g id="APP_NAME">%1$s</xliff:g>“ pranešimų valdikliai uždaryti"</string>
     <string name="notification_channel_switch_accessibility" msgid="8979885820432540252">"Leisti pranešimus iš šio kanalo"</string>
@@ -918,25 +926,14 @@
     <string name="accessibility_quick_settings_edit" msgid="1523745183383815910">"Redaguoti nustatymų tvarką."</string>
     <string name="accessibility_quick_settings_page" msgid="7506322631645550961">"<xliff:g id="ID_1">%1$d</xliff:g> psl. iš <xliff:g id="ID_2">%2$d</xliff:g>"</string>
     <string name="tuner_lock_screen" msgid="2267383813241144544">"Užrakinimo ekranas"</string>
-    <string name="pip_phone_expand" msgid="1424988917240616212">"Išskleisti"</string>
-    <string name="pip_phone_minimize" msgid="9057117033655996059">"Sumažinti"</string>
-    <string name="pip_phone_close" msgid="8801864042095341824">"Uždaryti"</string>
-    <string name="pip_phone_settings" msgid="5687538631925004341">"Nustatymai"</string>
-    <string name="pip_phone_dismiss_hint" msgid="5825740708095316710">"Nuvilkite žemyn, kad atsisakytumėte"</string>
-    <string name="pip_menu_title" msgid="6365909306215631910">"Meniu"</string>
-    <string name="pip_notification_title" msgid="8661573026059630525">"<xliff:g id="NAME">%s</xliff:g> rodom. vaizdo vaizde"</string>
-    <string name="pip_notification_message" msgid="4991831338795022227">"Jei nenorite, kad „<xliff:g id="NAME">%s</xliff:g>“ naudotų šią funkciją, palietę atidarykite nustatymus ir išjunkite ją."</string>
-    <string name="pip_play" msgid="333995977693142810">"Leisti"</string>
-    <string name="pip_pause" msgid="1139598607050555845">"Pristabdyti"</string>
-    <string name="pip_skip_to_next" msgid="3864212650579956062">"Praleisti ir eiti į kitą"</string>
-    <string name="pip_skip_to_prev" msgid="3742589641443049237">"Praleisti ir eiti į ankstesnį"</string>
-    <string name="accessibility_action_pip_resize" msgid="8237306972921160456">"Pakeisti dydį"</string>
     <string name="thermal_shutdown_title" msgid="2702966892682930264">"Telefonas išjungt., nes įkaito"</string>
-    <string name="thermal_shutdown_message" msgid="7432744214105003895">"Dabar telefonas veikia įprastai"</string>
+    <string name="thermal_shutdown_message" msgid="6142269839066172984">"Telefonas dabar veikia normaliai.\nPalietę gausite daugiau informacijos"</string>
     <string name="thermal_shutdown_dialog_message" msgid="6745684238183492031">"Telefonas per daug įkaito, todėl buvo išj., kad atvėstų. Dabar telefonas veikia įprastai.\n\nTelefonas gali per daug įkaisti, jei:\n	• esate įjungę daug išteklių naudoj. progr. (pvz., žaidimų, vaizdo įr. arba navig. progr.);\n	• atsis. arba įkeliate didelius failus;\n	• telefoną naudojate aukštoje temper."</string>
+    <string name="thermal_shutdown_dialog_help_text" msgid="6413474593462902901">"Žr. priežiūros veiksmus"</string>
     <string name="high_temp_title" msgid="2218333576838496100">"Telefonas kaista"</string>
-    <string name="high_temp_notif_message" msgid="163928048626045592">"Kai kurios funkcijos gali neveikti, kol telefonas vėsta"</string>
+    <string name="high_temp_notif_message" msgid="1277346543068257549">"Kai kurios funkcijos gali neveikti, kol telefonas vėsta.\nPalietę gausite daugiau informacijos"</string>
     <string name="high_temp_dialog_message" msgid="3793606072661253968">"Telefonas automatiškai bandys atvėsti. Telefoną vis tiek galėsite naudoti, tačiau jis gali veikti lėčiau.\n\nKai telefonas atvės, jis veiks įprastai."</string>
+    <string name="high_temp_dialog_help_text" msgid="7380171287943345858">"Žr. priežiūros veiksmus"</string>
     <string name="high_temp_alarm_title" msgid="2359958549570161495">"Atjunkite kroviklį"</string>
     <string name="high_temp_alarm_notify_message" msgid="7186272817783835089">"Įkraunant šį įrenginį iškilo problema. Atjunkite maitinimo adapterį. Būkite atsargūs, nes laidas gali būti įkaitęs."</string>
     <string name="high_temp_alarm_help_care_steps" msgid="5017002218341329566">"Žr. priežiūros veiksmus"</string>
@@ -1032,7 +1029,6 @@
     <string name="priority_onboarding_ignores_dnd_text" msgid="2918952762719600529">"Pertraukti netrukdymo režimą"</string>
     <string name="priority_onboarding_done_button_title" msgid="4569550984286506007">"Supratau"</string>
     <string name="priority_onboarding_settings_button_title" msgid="6663601574303585927">"Nustatymai"</string>
-    <string name="magnification_overlay_title" msgid="6584179429612427958">"Didinimo perdangos langas"</string>
     <string name="magnification_window_title" msgid="4863914360847258333">"Didinimo langas"</string>
     <string name="magnification_controls_title" msgid="8421106606708891519">"Didinimo lango valdikliai"</string>
     <string name="quick_controls_title" msgid="6839108006171302273">"Įrenginio valdikliai"</string>

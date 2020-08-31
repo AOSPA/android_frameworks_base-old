@@ -596,7 +596,7 @@ public final class Zygote {
     static Runnable forkUsap(LocalServerSocket usapPoolSocket,
                              int[] sessionSocketRawFDs,
                              boolean isPriorityFork) {
-        FileDescriptor[] pipeFDs = null;
+        FileDescriptor[] pipeFDs;
 
         try {
             pipeFDs = Os.pipe2(O_CLOEXEC);
@@ -1090,6 +1090,11 @@ public final class Zygote {
      */
     @FastNative
     public static native int nativeParseSigChld(byte[] in, int length, int[] out);
+
+    /**
+     * Returns whether the hardware supports memory tagging (ARM MTE).
+     */
+    public static native boolean nativeSupportsMemoryTagging();
 
     /**
      * Returns whether the kernel supports tagged pointers. Present in the

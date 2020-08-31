@@ -27,9 +27,9 @@ import android.annotation.IntRange;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.Px;
+import android.annotation.SystemApi;
 import android.annotation.TestApi;
 import android.annotation.WorkerThread;
-import android.compat.annotation.UnsupportedAppUsage;
 import android.content.ContentResolver;
 import android.content.res.AssetFileDescriptor;
 import android.content.res.AssetManager;
@@ -171,9 +171,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
  *  </pre>
  */
 public final class ImageDecoder implements AutoCloseable {
-    /** @hide **/
-    public static int sApiLevel;
-
     /**
      *  Source of encoded image data.
      *
@@ -195,14 +192,11 @@ public final class ImageDecoder implements AutoCloseable {
     public static abstract class Source {
         private Source() {}
 
-        /* @hide */
         @Nullable
         Resources getResources() { return null; }
 
-        /* @hide */
         int getDensity() { return Bitmap.DENSITY_NONE; }
 
-        /* @hide */
         final int computeDstDensity() {
             Resources res = getResources();
             if (res == null) {
@@ -212,7 +206,6 @@ public final class ImageDecoder implements AutoCloseable {
             return res.getDisplayMetrics().densityDpi;
         }
 
-        /* @hide */
         @NonNull
         abstract ImageDecoder createImageDecoder(boolean preferAnimation) throws IOException;
     };
@@ -923,8 +916,12 @@ public final class ImageDecoder implements AutoCloseable {
     /**
      * Provide Resources for density scaling.
      *
+     * This is a SystemApi to enable legacy behavior, so there is no need to
+     * make it public like the version above, which does not have a Resources
+     * parameter.
      * @hide
      */
+    @SystemApi(client = SystemApi.Client.MODULE_LIBRARIES)
     @AnyThread
     @NonNull
     public static Source createSource(@NonNull ContentResolver cr,
@@ -944,6 +941,12 @@ public final class ImageDecoder implements AutoCloseable {
     /**
      * Create a new {@link Source Source} from a byte array.
      *
+     * <p>Note: If this {@code Source} is passed to {@link #decodeDrawable decodeDrawable},
+     * and the encoded image is animated, the returned {@link AnimatedImageDrawable}
+     * will continue reading from {@code data}, so its contents must not
+     * be modified, even after the {@code AnimatedImageDrawable} is returned.
+     * {@code data}'s contents should never be modified during decode.</p>
+     *
      * @param data byte array of compressed image data.
      * @param offset offset into data for where the decoder should begin
      *      parsing.
@@ -954,7 +957,6 @@ public final class ImageDecoder implements AutoCloseable {
      * @throws NullPointerException if data is null.
      * @throws ArrayIndexOutOfBoundsException if offset and length are
      *      not within data.
-     * @hide
      */
     @AnyThread
     @NonNull
@@ -972,8 +974,19 @@ public final class ImageDecoder implements AutoCloseable {
     }
 
     /**
-     * See {@link #createSource(byte[], int, int).
-     * @hide
+     * Create a new {@link Source Source} from a byte array.
+     *
+     * <p>Note: If this {@code Source} is passed to {@link #decodeDrawable decodeDrawable},
+     * and the encoded image is animated, the returned {@link AnimatedImageDrawable}
+     * will continue reading from {@code data}, so its contents must not
+     * be modified, even after the {@code AnimatedImageDrawable} is returned.
+     * {@code data}'s contents should never be modified during decode.</p>
+     *
+     * @param data byte array of compressed image data.
+     * @return a new Source object, which can be passed to
+     *      {@link #decodeDrawable decodeDrawable} or
+     *      {@link #decodeBitmap decodeBitmap}.
+     * @throws NullPointerException if data is null.
      */
     @AnyThread
     @NonNull
@@ -1081,11 +1094,9 @@ public final class ImageDecoder implements AutoCloseable {
      *  @param sampleSize Sampling rate of the encoded image.
      *  @return {@link android.util.Size} of the width and height after
      *      sampling.
-     *
-     *  @hide
      */
     @NonNull
-    public Size getSampledSize(int sampleSize) {
+    private Size getSampledSize(int sampleSize) {
         if (sampleSize <= 0) {
             throw new IllegalArgumentException("sampleSize must be positive! "
                     + "provided " + sampleSize);
@@ -1417,6 +1428,8 @@ public final class ImageDecoder implements AutoCloseable {
      *  {@link OnHeaderDecodedListener#onHeaderDecoded onHeaderDecoded}.</p>
      *
      *  @hide
+     *  Must be public for access from android.graphics.drawable,
+     *  but must not be called from outside the UI module.
      */
     public void setOutPaddingRect(@NonNull Rect outPadding) {
         mOutPaddingRect = outPadding;
@@ -1921,7 +1934,8 @@ public final class ImageDecoder implements AutoCloseable {
 
         // For P and above, only resize if it would be a downscale. Scale up prior
         // to P in case the app relies on the Bitmap's size without considering density.
-        if (srcDensity < dstDensity && sApiLevel >= Build.VERSION_CODES.P) {
+        if (srcDensity < dstDensity
+                && Compatibility.getTargetSdkVersion() >= Build.VERSION_CODES.P) {
             return srcDensity;
         }
 
@@ -1964,7 +1978,6 @@ public final class ImageDecoder implements AutoCloseable {
      * Private method called by JNI.
      */
     @SuppressWarnings("unused")
-    @UnsupportedAppUsage
     private int postProcessAndRelease(@NonNull Canvas canvas) {
         try {
             return mPostProcessor.onPostProcess(canvas);

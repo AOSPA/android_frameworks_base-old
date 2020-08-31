@@ -1839,6 +1839,16 @@
             <!-- No longer used -->
             <enum name="disallowed" value="2" />
         </attr>
+
+        <!-- Declare the policy to deal with user data when rollback is committed. -->
+        <attr name="rollbackDataPolicy">
+            <!-- User data will be restored during rollback. -->
+            <enum name="restore" value="0" />
+            <!-- User data will be wiped out during rollback. -->
+            <enum name="wipe" value="1" />
+            <!-- User data will remain unchanged during rollback. -->
+            <enum name="retain" value="2" />
+        </attr>
     </declare-styleable>
 
     <!-- An attribution is a logical part of an app and is identified by a tag.
@@ -1852,8 +1862,6 @@
     <p>In case this attribution inherits from another attribution, this tag can contain one or
     multiple {@link #AndroidManifestAttributionInheritFrom inherit-from} tags. -->
     <declare-styleable name="AndroidManifestAttribution" parent="AndroidManifest">
-        <!-- TODO moltmann: Remove -->
-        <attr name="featureId" format="string" />
         <!-- Required identifier for a attribution. Can be passed to
         {@link android.content.Context#createAttributionContext} to create a context tagged with
         this attribution
@@ -1863,7 +1871,7 @@
         <attr name="label" format="string" />
     </declare-styleable>
 
-    <!-- Declares previously declared features this feature inherits from. -->
+    <!-- Declares previously declared attributions this attribution inherits from. -->
     <declare-styleable name="AndroidManifestAttributionInheritFrom"
                        parent="AndroidManifestAttribution">
         <!-- Identifier of the attribution this attribution inherits from -->
@@ -2159,6 +2167,29 @@
               The default is true, meaning the application requires the
               library, and does not want to be installed on devices that
               don't support it.  If you set this to false, then this will
+              allow the application to be installed even if the library
+              doesn't exist, and you will need to check for its presence
+              dynamically at runtime. -->
+        <attr name="required" />
+    </declare-styleable>
+
+    <!-- The <code>uses-native-library</code> specifies a native shared library that this
+         package requires to be linked against.  Specifying this flag tells the
+         system to make the native library to be available to your app.
+
+         <p>On devices running R or lower, this is ignored and the app has access to all
+         the public native shared libraries that are exported from the platform. This is
+         also ignored if the app is targeting R or lower.
+
+         <p>This appears as a child tag of the
+         {@link #AndroidManifestApplication application} tag. -->
+    <declare-styleable name="AndroidManifestUsesNativeLibrary" parent="AndroidManifestApplication">
+        <!-- Required name of the library you use. -->
+        <attr name="name" />
+        <!--  Specify whether this native library is required for the application.
+              The default is true, meaning the application requires the
+              library, and does not want to be installed on devices that
+              don't support it. If you set this to false, then this will
               allow the application to be installed even if the library
               doesn't exist, and you will need to check for its presence
               dynamically at runtime. -->

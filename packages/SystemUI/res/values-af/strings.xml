@@ -711,11 +711,13 @@
     <string name="notification_silence_title" msgid="8608090968400832335">"Stil"</string>
     <string name="notification_alert_title" msgid="3656229781017543655">"Verstek"</string>
     <string name="notification_bubble_title" msgid="8330481035191903164">"Borrel"</string>
+    <string name="notification_automatic_title" msgid="3745465364578762652">"Outomaties"</string>
     <string name="notification_channel_summary_low" msgid="4860617986908931158">"Geen klank of vibrasie nie"</string>
     <string name="notification_conversation_summary_low" msgid="1734433426085468009">"Geen klank of vibrasie nie en verskyn laer in gespreksafdeling"</string>
     <string name="notification_channel_summary_default" msgid="3282930979307248890">"Kan lui of vibreer op grond van fooninstellings"</string>
     <string name="notification_channel_summary_default_with_bubbles" msgid="1782419896613644568">"Kan lui of vibreer op grond van fooninstellings. Gesprekke van <xliff:g id="APP_NAME">%1$s</xliff:g> af verskyn by verstek in \'n borrel."</string>
     <string name="notification_channel_summary_bubble" msgid="7235935211580860537">"Hou jou aandag met \'n swewende kortpad na hierdie inhoud toe."</string>
+    <string name="notification_channel_summary_automatic" msgid="5813109268050235275">"Laat die stelsel bepaal of hierdie kennisgewing \'n klank moet maak of vibreer"</string>
     <string name="notification_channel_summary_priority" msgid="7952654515769021553">"Wys boaan die gespreksafdeling, verskyn as \'n swewende borrel, wys profielfoto op sluitskerm"</string>
     <string name="notification_conversation_channel_settings" msgid="2409977688430606835">"Instellings"</string>
     <string name="notification_priority_title" msgid="2079708866333537093">"Prioriteit"</string>
@@ -736,6 +738,12 @@
     <string name="appops_camera_mic_overlay" msgid="5584311236445644095">"Hierdie program wys tans bo-oor ander programme op jou skerm en gebruik die mikrofoon en kamera."</string>
     <string name="notification_appops_settings" msgid="5208974858340445174">"Instellings"</string>
     <string name="notification_appops_ok" msgid="2177609375872784124">"OK"</string>
+    <string name="feedback_silenced" msgid="5382212321253328247">"Die stelsel het hierdie kennisgewing stilgemaak."</string>
+    <string name="feedback_promoted" msgid="8075757485407091976">"Die stelsel het hierdie kennisgewing bevorder."</string>
+    <string name="feedback_demoted" msgid="5848066008939031913">"Die stelsel het hierdie kennisgewing gedegradeer."</string>
+    <string name="feedback_prompt" msgid="2278631214125128281">"Is dit korrek?"</string>
+    <string name="feedback_response" msgid="4671729244976641339">"Dankie vir jou terugvoer!"</string>
+    <string name="feedback_ok" msgid="6481426753298857144">"OK"</string>
     <string name="notification_channel_controls_opened_accessibility" msgid="6111817750774381094">"Kennisgewingkontroles vir <xliff:g id="APP_NAME">%1$s</xliff:g> is oopgemaak"</string>
     <string name="notification_channel_controls_closed_accessibility" msgid="1561909368876911701">"Kennisgewingkontroles vir <xliff:g id="APP_NAME">%1$s</xliff:g> is toegemaak"</string>
     <string name="notification_channel_switch_accessibility" msgid="8979885820432540252">"Laat kennisgewings van hierdie kanaal af toe"</string>
@@ -908,25 +916,14 @@
     <string name="accessibility_quick_settings_edit" msgid="1523745183383815910">"Wysig volgorde van instellings."</string>
     <string name="accessibility_quick_settings_page" msgid="7506322631645550961">"Bladsy <xliff:g id="ID_1">%1$d</xliff:g> van <xliff:g id="ID_2">%2$d</xliff:g>"</string>
     <string name="tuner_lock_screen" msgid="2267383813241144544">"Sluitskerm"</string>
-    <string name="pip_phone_expand" msgid="1424988917240616212">"Vou uit"</string>
-    <string name="pip_phone_minimize" msgid="9057117033655996059">"Minimeer"</string>
-    <string name="pip_phone_close" msgid="8801864042095341824">"Maak toe"</string>
-    <string name="pip_phone_settings" msgid="5687538631925004341">"Instellings"</string>
-    <string name="pip_phone_dismiss_hint" msgid="5825740708095316710">"Swiep af om toe te maak"</string>
-    <string name="pip_menu_title" msgid="6365909306215631910">"Kieslys"</string>
-    <string name="pip_notification_title" msgid="8661573026059630525">"<xliff:g id="NAME">%s</xliff:g> is in beeld-in-beeld"</string>
-    <string name="pip_notification_message" msgid="4991831338795022227">"As jy nie wil hê dat <xliff:g id="NAME">%s</xliff:g> hierdie kenmerk moet gebruik nie, tik om instellings oop te maak en skakel dit af."</string>
-    <string name="pip_play" msgid="333995977693142810">"Speel"</string>
-    <string name="pip_pause" msgid="1139598607050555845">"Laat wag"</string>
-    <string name="pip_skip_to_next" msgid="3864212650579956062">"Slaan oor na volgende"</string>
-    <string name="pip_skip_to_prev" msgid="3742589641443049237">"Slaan oor na vorige"</string>
-    <string name="accessibility_action_pip_resize" msgid="8237306972921160456">"Verander grootte"</string>
     <string name="thermal_shutdown_title" msgid="2702966892682930264">"Foon afgeskakel weens hitte"</string>
-    <string name="thermal_shutdown_message" msgid="7432744214105003895">"Jou foon werk nou normaal"</string>
+    <string name="thermal_shutdown_message" msgid="6142269839066172984">"Jou foon werk nou normaal.\nTik vir meer inligting"</string>
     <string name="thermal_shutdown_dialog_message" msgid="6745684238183492031">"Jou foon was te warm en dit het afgeskakel om af te koel. Jou foon werk nou normaal.\n\nJou foon kan dalk te warm word as jy:\n	• Hulpbron-intensiewe programme (soos dobbel-, video- of navigasieprogramme) gebruik\n	• Groot lêers af- of oplaai\n	• Jou foon in hoë temperature gebruik"</string>
+    <string name="thermal_shutdown_dialog_help_text" msgid="6413474593462902901">"Sien versorgingstappe"</string>
     <string name="high_temp_title" msgid="2218333576838496100">"Foon raak warm"</string>
-    <string name="high_temp_notif_message" msgid="163928048626045592">"Sommige kenmerke is beperk terwyl foon afkoel"</string>
+    <string name="high_temp_notif_message" msgid="1277346543068257549">"Sommige kenmerke is beperk terwyl foon afkoel.\nTik vir meer inligting"</string>
     <string name="high_temp_dialog_message" msgid="3793606072661253968">"Jou foon sal outomaties probeer om af te koel. Jy kan steeds jou foon gebruik, maar dit sal dalk stadiger wees.\n\nJou foon sal normaalweg werk nadat dit afgekoel het."</string>
+    <string name="high_temp_dialog_help_text" msgid="7380171287943345858">"Sien versorgingstappe"</string>
     <string name="high_temp_alarm_title" msgid="2359958549570161495">"Trek laaier uit"</string>
     <string name="high_temp_alarm_notify_message" msgid="7186272817783835089">"Kan nie hierdie toestel laai nie. Trek die kragprop uit, en wees versigtig, want die kabel kan warm wees."</string>
     <string name="high_temp_alarm_help_care_steps" msgid="5017002218341329566">"Sien versorgingstappe"</string>
@@ -1022,7 +1019,6 @@
     <string name="priority_onboarding_ignores_dnd_text" msgid="2918952762719600529">"Onderbreek Moenie Steur Nie"</string>
     <string name="priority_onboarding_done_button_title" msgid="4569550984286506007">"Het dit"</string>
     <string name="priority_onboarding_settings_button_title" msgid="6663601574303585927">"Instellings"</string>
-    <string name="magnification_overlay_title" msgid="6584179429612427958">"Vergrotingoorleggervenster"</string>
     <string name="magnification_window_title" msgid="4863914360847258333">"Vergrotingvenster"</string>
     <string name="magnification_controls_title" msgid="8421106606708891519">"Vergrotingvensterkontroles"</string>
     <string name="quick_controls_title" msgid="6839108006171302273">"Toestelkontroles"</string>

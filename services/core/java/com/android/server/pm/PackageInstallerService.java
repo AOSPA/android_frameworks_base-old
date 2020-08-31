@@ -84,6 +84,8 @@ import com.android.internal.util.IndentingPrintWriter;
 import com.android.server.IoThread;
 import com.android.server.LocalServices;
 import com.android.server.SystemConfig;
+import com.android.server.SystemService;
+import com.android.server.SystemServiceManager;
 import com.android.server.pm.parsing.PackageParser2;
 import com.android.server.pm.permission.PermissionManagerServiceInternal;
 
@@ -201,6 +203,27 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
         }
     };
 
+    private static final class Lifecycle extends SystemService {
+        private final PackageInstallerService mPackageInstallerService;
+
+        Lifecycle(Context context, PackageInstallerService service) {
+            super(context);
+            mPackageInstallerService = service;
+        }
+
+        @Override
+        public void onStart() {
+            // no-op
+        }
+
+        @Override
+        public void onBootPhase(int phase) {
+            if (phase == SystemService.PHASE_ACTIVITY_MANAGER_READY) {
+                mPackageInstallerService.onBroadcastReady();
+            }
+        }
+    }
+
     public PackageInstallerService(Context context, PackageManagerService pm,
             Supplier<PackageParser2> apexParserSupplier) {
         mContext = context;
@@ -222,6 +245,9 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
 
         mApexManager = ApexManager.getInstance();
         mStagingManager = new StagingManager(this, context, apexParserSupplier);
+
+        LocalServices.getService(SystemServiceManager.class).startService(
+                new Lifecycle(context, this));
     }
 
     boolean okToSendBroadcasts()  {
@@ -259,6 +285,13 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
         }
     }
 
+    private void onBroadcastReady() {
+        // Broadcasts are not sent while we restore sessions on boot, since no processes would be
+        // ready to listen to them. From now on, it is safe to send broadcasts which otherwise will
+        // be rejected by ActivityManagerService if its systemReady() is not completed.
+        mOkToSendBroadcasts = true;
+    }
+
     void restoreAndApplyStagedSessionIfNeeded() {
         List<PackageInstallerSession> stagedSessionsToRestore = new ArrayList<>();
         synchronized (mSessions) {
@@ -281,16 +314,6 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
             }
             mStagingManager.restoreSession(session, isDeviceUpgrading);
         }
-        // Broadcasts are not sent while we restore sessions on boot, since no processes would be
-        // ready to listen to them. From now on, we greedily assume that broadcasts requests are
-        // safe to send out. The worst that can happen is that a broadcast is attempted before
-        // ActivityManagerService completes its own systemReady(), in which case it will be rejected
-        // with an otherwise harmless exception.
-        // A more appropriate way to do this would be to wait until the correct  boot phase is
-        // reached, but since we are not a SystemService we can't override onBootPhase.
-        // Waiting on the BOOT_COMPLETED broadcast can take several minutes, so that's not a viable
-        // way either.
-        mOkToSendBroadcasts = true;
     }
 
     @GuardedBy("mSessions")
@@ -480,15 +503,18 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
     }
 
     @Override
-    public int createSession(SessionParams params, String installerPackageName, int userId) {
+    public int createSession(SessionParams params, String installerPackageName,
+            String callingAttributionTag, int userId) {
         try {
-            return createSessionInternal(params, installerPackageName, userId);
+            return createSessionInternal(params, installerPackageName, callingAttributionTag,
+                    userId);
         } catch (IOException e) {
             throw ExceptionUtils.wrap(e);
         }
     }
 
-    private int createSessionInternal(SessionParams params, String installerPackageName, int userId)
+    private int createSessionInternal(SessionParams params, String installerPackageName,
+            String installerAttributionTag, int userId)
             throws IOException {
         android.util.SeempLog.record(90);
         final int callingUid = Binder.getCallingUid();
@@ -700,7 +726,8 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
             }
         }
         InstallSource installSource = InstallSource.create(installerPackageName,
-                originatingPackageName, requestedInstallerPackageName);
+                originatingPackageName, requestedInstallerPackageName,
+                installerAttributionTag);
         session = new PackageInstallerSession(mInternalCallback, mContext, mPm, this,
                 mInstallThread.getLooper(), mStagingManager, sessionId, userId, callingUid,
                 installSource, params, createdMillis,

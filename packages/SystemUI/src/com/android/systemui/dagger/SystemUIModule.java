@@ -24,6 +24,7 @@ import com.android.keyguard.KeyguardUpdateMonitor;
 import com.android.systemui.BootCompleteCache;
 import com.android.systemui.BootCompleteCacheImpl;
 import com.android.systemui.assist.AssistModule;
+import com.android.systemui.doze.dagger.DozeComponent;
 import com.android.systemui.dump.DumpManager;
 import com.android.systemui.log.dagger.LogModule;
 import com.android.systemui.model.SysUiState;
@@ -43,6 +44,8 @@ import com.android.systemui.statusbar.phone.dagger.StatusBarComponent;
 import com.android.systemui.statusbar.policy.HeadsUpManager;
 import com.android.systemui.util.concurrency.ConcurrencyModule;
 import com.android.systemui.util.sensors.AsyncSensorManager;
+import com.android.systemui.util.sensors.SensorModule;
+import com.android.systemui.util.settings.SettingsUtilModule;
 import com.android.systemui.util.time.SystemClock;
 import com.android.systemui.util.time.SystemClockImpl;
 
@@ -62,10 +65,13 @@ import dagger.Provides;
             ConcurrencyModule.class,
             LogModule.class,
             PeopleHubModule.class,
-            SettingsModule.class
+            SensorModule.class,
+            SettingsModule.class,
+            SettingsUtilModule.class
         },
         subcomponents = {StatusBarComponent.class,
                 NotificationRowComponent.class,
+                DozeComponent.class,
                 ExpandableNotificationRowComponent.class})
 public abstract class SystemUIModule {
 

@@ -24,6 +24,7 @@ import android.annotation.SystemApi;
 import android.app.ContextImpl.ServiceInitializationState;
 import android.app.admin.DevicePolicyManager;
 import android.app.admin.IDevicePolicyManager;
+import android.app.appsearch.AppSearchManagerFrameworkInitializer;
 import android.app.blob.BlobStoreManagerFrameworkInitializer;
 import android.app.contentsuggestions.ContentSuggestionsManager;
 import android.app.contentsuggestions.IContentSuggestionsManager;
@@ -67,8 +68,7 @@ import android.content.pm.LauncherApps;
 import android.content.pm.PackageManager;
 import android.content.pm.ShortcutManager;
 import android.content.res.Resources;
-import android.content.rollback.IRollbackManager;
-import android.content.rollback.RollbackManager;
+import android.content.rollback.RollbackManagerFrameworkInitializer;
 import android.debug.AdbManager;
 import android.debug.IAdbManager;
 import android.hardware.ConsumerIrManager;
@@ -101,11 +101,11 @@ import android.location.ICountryDetector;
 import android.location.ILocationManager;
 import android.location.LocationManager;
 import android.media.AudioManager;
+import android.media.MediaFrameworkInitializer;
 import android.media.MediaRouter;
 import android.media.midi.IMidiManager;
 import android.media.midi.MidiManager;
 import android.media.projection.MediaProjectionManager;
-import android.media.session.MediaSessionManager;
 import android.media.soundtrigger.SoundTriggerManager;
 import android.media.tv.ITvInputManager;
 import android.media.tv.TvInputManager;
@@ -855,13 +855,6 @@ public final class SystemServiceRegistry {
                 return new ConsumerIrManager(ctx);
             }});
 
-        registerService(Context.MEDIA_SESSION_SERVICE, MediaSessionManager.class,
-                new CachedServiceFetcher<MediaSessionManager>() {
-            @Override
-            public MediaSessionManager createService(ContextImpl ctx) {
-                return new MediaSessionManager(ctx);
-            }});
-
         registerService(Context.TRUST_SERVICE, TrustManager.class,
                 new StaticServiceFetcher<TrustManager>() {
             @Override
@@ -1248,16 +1241,6 @@ public final class SystemServiceRegistry {
                         return new RoleControllerManager(ctx.getOuterContext());
                     }});
 
-        registerService(Context.ROLLBACK_SERVICE, RollbackManager.class,
-                new CachedServiceFetcher<RollbackManager>() {
-                    @Override
-                    public RollbackManager createService(ContextImpl ctx)
-                            throws ServiceNotFoundException {
-                        IBinder b = ServiceManager.getServiceOrThrow(Context.ROLLBACK_SERVICE);
-                        return new RollbackManager(ctx.getOuterContext(),
-                                IRollbackManager.Stub.asInterface(b));
-                    }});
-
         registerService(Context.DYNAMIC_SYSTEM_SERVICE, DynamicSystemManager.class,
                 new CachedServiceFetcher<DynamicSystemManager>() {
                     @Override
@@ -1341,8 +1324,11 @@ public final class SystemServiceRegistry {
             JobSchedulerFrameworkInitializer.registerServiceWrappers();
             BlobStoreManagerFrameworkInitializer.initialize();
             TelephonyFrameworkInitializer.registerServiceWrappers();
+            AppSearchManagerFrameworkInitializer.initialize();
             WifiFrameworkInitializer.registerServiceWrappers();
             StatsFrameworkInitializer.registerServiceWrappers();
+            RollbackManagerFrameworkInitializer.initialize();
+            MediaFrameworkInitializer.registerServiceWrappers();
         } finally {
             // If any of the above code throws, we're in a pretty bad shape and the process
             // will likely crash, but we'll reset it just in case there's an exception handler...

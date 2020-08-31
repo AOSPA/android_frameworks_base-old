@@ -39,6 +39,7 @@ public interface StatusBarStateController {
      */
     boolean isDozing();
 
+
     /**
      * Is device pulsing.
      */

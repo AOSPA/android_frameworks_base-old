@@ -81,21 +81,6 @@ public:
                             const SkPaint*) {
         ADD_FAILURE() << "onDrawImageLattice not expected in this test";
     }
-    void onDrawBitmap(const SkBitmap&, SkScalar dx, SkScalar dy, const SkPaint*) {
-        ADD_FAILURE() << "onDrawBitmap not expected in this test";
-    }
-    void onDrawBitmapRect(const SkBitmap&, const SkRect*, const SkRect&, const SkPaint*,
-                          SrcRectConstraint) {
-        ADD_FAILURE() << "onDrawBitmapRect not expected in this test";
-    }
-    void onDrawBitmapNine(const SkBitmap&, const SkIRect& center, const SkRect& dst,
-                          const SkPaint*) {
-        ADD_FAILURE() << "onDrawBitmapNine not expected in this test";
-    }
-    void onDrawBitmapLattice(const SkBitmap&, const Lattice& lattice, const SkRect& dst,
-                             const SkPaint*) {
-        ADD_FAILURE() << "onDrawBitmapLattice not expected in this test";
-    }
     void onClipRRect(const SkRRect& rrect, SkClipOp, ClipEdgeStyle) {
         ADD_FAILURE() << "onClipRRect not expected in this test";
     }

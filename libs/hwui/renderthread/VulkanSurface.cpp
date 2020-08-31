@@ -200,16 +200,16 @@ bool VulkanSurface::InitializeWindowInfoStruct(ANativeWindow* window, ColorMode 
                             "Could not get gamut matrix from color space");
         if (memcmp(&surfaceGamut, &SkNamedGamut::kSRGB, sizeof(surfaceGamut)) == 0) {
             outWindowInfo->dataspace = HAL_DATASPACE_V0_SCRGB;
-        } else if (memcmp(&surfaceGamut, &SkNamedGamut::kDCIP3, sizeof(surfaceGamut)) == 0) {
+        } else if (memcmp(&surfaceGamut, &SkNamedGamut::kDisplayP3, sizeof(surfaceGamut)) == 0) {
             outWindowInfo->dataspace = HAL_DATASPACE_DISPLAY_P3;
         } else {
             LOG_ALWAYS_FATAL("Unreachable: unsupported wide color space.");
         }
     }
 
-    outWindowInfo->pixelFormat = ColorTypeToPixelFormat(colorType);
+    outWindowInfo->bufferFormat = ColorTypeToBufferFormat(colorType);
     VkFormat vkPixelFormat = VK_FORMAT_R8G8B8A8_UNORM;
-    if (outWindowInfo->pixelFormat == PIXEL_FORMAT_RGBA_FP16) {
+    if (outWindowInfo->bufferFormat == AHARDWAREBUFFER_FORMAT_R16G16B16A16_FLOAT) {
         vkPixelFormat = VK_FORMAT_R16G16B16A16_SFLOAT;
     }
 
@@ -263,10 +263,10 @@ bool VulkanSurface::InitializeWindowInfoStruct(ANativeWindow* window, ColorMode 
 bool VulkanSurface::UpdateWindow(ANativeWindow* window, const WindowInfo& windowInfo) {
     ATRACE_CALL();
 
-    int err = native_window_set_buffers_format(window, windowInfo.pixelFormat);
+    int err = native_window_set_buffers_format(window, windowInfo.bufferFormat);
     if (err != 0) {
         ALOGE("VulkanSurface::UpdateWindow() native_window_set_buffers_format(%d) failed: %s (%d)",
-              windowInfo.pixelFormat, strerror(-err), err);
+              windowInfo.bufferFormat, strerror(-err), err);
         return false;
     }
 

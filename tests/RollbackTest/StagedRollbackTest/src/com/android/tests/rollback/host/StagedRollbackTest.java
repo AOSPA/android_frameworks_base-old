@@ -34,6 +34,7 @@ import com.android.tradefed.util.CommandStatus;
 
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
@@ -86,6 +87,9 @@ public class StagedRollbackTest extends BaseHostJUnit4Test {
     private static final String ROLLBACK_SUCCESS = "ROLLBACK_SUCCESS";
 
     private WatchdogEventLogger mLogger = new WatchdogEventLogger();
+
+    @Rule
+    public AbandonSessionsRule mHostTestRule = new AbandonSessionsRule(this);
 
     @Before
     public void setUp() throws Exception {
@@ -256,11 +260,19 @@ public class StagedRollbackTest extends BaseHostJUnit4Test {
 
     @Test
     public void testRollbackDataPolicy() throws Exception {
+        List<String> before = getSnapshotDirectories("/data/misc_ce/0/rollback");
+
         runPhase("testRollbackDataPolicy_Phase1");
         getDevice().reboot();
         runPhase("testRollbackDataPolicy_Phase2");
         getDevice().reboot();
         runPhase("testRollbackDataPolicy_Phase3");
+
+        // Verify snapshots are deleted after restoration
+        List<String> after = getSnapshotDirectories("/data/misc_ce/0/rollback");
+        // Only check directories newly created during the test
+        after.removeAll(before);
+        after.forEach(dir -> assertDirectoryIsEmpty(dir));
     }
 
     /**
@@ -439,6 +451,32 @@ public class StagedRollbackTest extends BaseHostJUnit4Test {
         // Only check directories newly created during the test
         after.removeAll(before);
         after.forEach(dir -> assertDirectoryIsEmpty(dir));
+    }
+
+    @Test
+    public void testExpireApexRollback() throws Exception {
+        List<String> before = getSnapshotDirectories("/data/misc_ce/0/apexrollback");
+        pushTestApex();
+
+        // Push files to apex data directory
+        String oldFilePath1 = apexDataDirCe(APK_IN_APEX_TESTAPEX_NAME, 0) + "/" + TEST_FILENAME_1;
+        String oldFilePath2 =
+                apexDataDirCe(APK_IN_APEX_TESTAPEX_NAME, 0) + TEST_SUBDIR + TEST_FILENAME_2;
+        assertTrue(getDevice().pushString(TEST_STRING_1, oldFilePath1));
+        assertTrue(getDevice().pushString(TEST_STRING_2, oldFilePath2));
+
+        // Install new version of the APEX with rollback enabled
+        runPhase("testRollbackApexDataDirectories_Phase1");
+        getDevice().reboot();
+
+        List<String> after = getSnapshotDirectories("/data/misc_ce/0/apexrollback");
+        // Only check directories newly created during the test
+        after.removeAll(before);
+        // Expire all rollbacks and check CE snapshot directories are deleted
+        runPhase("testCleanUp");
+        for (String dir : after) {
+            assertNull(getDevice().getFileEntry(dir));
+        }
     }
 
     private void pushTestApex() throws Exception {

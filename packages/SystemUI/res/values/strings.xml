@@ -1838,6 +1838,9 @@
     <!-- [CHAR LIMIT=100] Notification Importance title -->
     <string name="notification_bubble_title">Bubble</string>
 
+    <!-- [CHAR LIMIT=100] Notification Importance title -->
+    <string name="notification_automatic_title">Automatic</string>
+
     <!-- [CHAR LIMIT=150] Notification Importance title: low importance level summary -->
     <string name="notification_channel_summary_low">No sound or vibration</string>
 
@@ -1852,6 +1855,9 @@
 
     <!-- [CHAR LIMIT=150] Notification Importance title: bubble level summary -->
     <string name="notification_channel_summary_bubble">Keeps your attention with a floating shortcut to this content.</string>
+
+    <!-- [CHAR LIMIT=150] Notification Importance title: automatic importance level summary -->
+    <string name="notification_channel_summary_automatic">Have the system determine if this notification should make sound or vibration</string>
 
     <!-- [CHAR LIMIT=150] Notification Importance title: important conversation level summary -->
     <string name="notification_channel_summary_priority">Shows at top of conversation section, appears as floating bubble, displays profile picture on lock screen</string>
@@ -1903,6 +1909,18 @@
 
     <string name="notification_appops_settings">Settings</string>
     <string name="notification_appops_ok">OK</string>
+
+    <!-- Notification Inline controls: describes how the notification was adjusted [CHAR_LIMIT=NONE] -->
+    <string name="feedback_silenced">This notification was silenced by the system.</string>
+    <!-- Notification Inline controls: describes how the notification was adjusted [CHAR_LIMIT=NONE] -->
+    <string name="feedback_promoted">This notification was promoted by the system.</string>
+    <!-- Notification Inline controls: describes how the notification was adjusted [CHAR_LIMIT=NONE] -->
+    <string name="feedback_demoted">This notification was demoted by the system.</string>
+    <!-- Notification Inline controls: prompts the user for feedback [CHAR_LIMIT=NONE] -->
+    <string name="feedback_prompt">Was this correct?</string>
+    <!-- Notification Inline controls: responds to user provided feedback [CHAR_LIMIT=NONE] -->
+    <string name="feedback_response">Thanks for your feedback!</string>
+    <string name="feedback_ok">OK</string>
 
     <!-- Notification: Control panel: Accessibility description for expanded inline controls view, used
         to control settings about notifications related to the current notification.  -->
@@ -2356,45 +2374,6 @@
     <!-- SysUI Tuner: Section to customize lockscreen shortcuts [CHAR LIMIT=60] -->
     <string name="tuner_lock_screen">Lock screen</string>
 
-    <!-- Making the PIP fullscreen [CHAR LIMIT=25] -->
-    <string name="pip_phone_expand">Expand</string>
-
-    <!-- Label for PIP action to Minimize the PIP [CHAR LIMIT=25] -->
-    <string name="pip_phone_minimize">Minimize</string>
-
-    <!-- Label for PIP close button [CHAR LIMIT=NONE]-->
-    <string name="pip_phone_close">Close</string>
-
-    <!-- Label for PIP settings button [CHAR LIMIT=NONE]-->
-    <string name="pip_phone_settings">Settings</string>
-
-    <!-- Label for PIP the drag to dismiss hint [CHAR LIMIT=NONE]-->
-    <string name="pip_phone_dismiss_hint">Drag down to dismiss</string>
-
-    <!-- Title of menu shown over picture-in-picture. Used for accessibility. -->
-    <string name="pip_menu_title">Menu</string>
-
-    <!-- PiP BTW notification title. [CHAR LIMIT=50] -->
-    <string name="pip_notification_title"><xliff:g id="name" example="Google Maps">%s</xliff:g> is in picture-in-picture</string>
-
-    <!-- PiP BTW notification description. [CHAR LIMIT=NONE] -->
-    <string name="pip_notification_message">If you don\'t want <xliff:g id="name" example="Google Maps">%s</xliff:g> to use this feature, tap to open settings and turn it off.</string>
-
-    <!-- Button to play the current media on picture-in-picture (PIP) [CHAR LIMIT=30] -->
-    <string name="pip_play">Play</string>
-
-    <!-- Button to pause the current media on picture-in-picture (PIP) [CHAR LIMIT=30] -->
-    <string name="pip_pause">Pause</string>
-
-    <!-- Button to skip to the next media on picture-in-picture (PIP) [CHAR LIMIT=30] -->
-    <string name="pip_skip_to_next">Skip to next</string>
-
-    <!-- Button to skip to the prev media on picture-in-picture (PIP) [CHAR LIMIT=30] -->
-    <string name="pip_skip_to_prev">Skip to previous</string>
-
-    <!-- Accessibility action for resizing PIP [CHAR LIMIT=NONE] -->
-    <string name="accessibility_action_pip_resize">Resize</string>
-
     <!-- Tuner string -->
     <string name="change_theme_reboot" translatable="false">Changing the theme requires a restart.</string>
     <!-- Tuner string -->
@@ -2404,17 +2383,26 @@
 
     <!-- Title for notification & dialog that the user's phone last shut down because it got too hot. [CHAR LIMIT=40] -->
     <string name="thermal_shutdown_title">Phone turned off due to heat</string>
-    <!-- Message body for notification that user's phone last shut down because it got too hot. [CHAR LIMIT=100] -->
-    <string name="thermal_shutdown_message">Your phone is now running normally</string>
-    <!-- Text body for dialog alerting user that their phone last shut down because it got too hot. [CHAR LIMIT=450] -->
+    <!-- Message body for notification that user's phone last shut down because it got too hot. [CHAR LIMIT=120] -->
+    <string name="thermal_shutdown_message">Your phone is now running normally.\nTap for more info</string>
+    <!-- Text body for dialog alerting user that their phone last shut down because it got too hot. [CHAR LIMIT=500] -->
     <string name="thermal_shutdown_dialog_message">Your phone was too hot, so it turned off to cool down. Your phone is now running normally.\n\nYour phone may get too hot if you:\n\t&#8226; Use resource-intensive apps (such as gaming, video, or navigation apps)\n\t&#8226; Download or upload large files\n\t&#8226; Use your phone in high temperatures</string>
+    <!-- Text help link for care instructions for overheating devices [CHAR LIMIT=40] -->
+    <string name="thermal_shutdown_dialog_help_text">See care steps</string>
+    <!-- URL for care instructions for overheating devices -->
+    <string name="thermal_shutdown_dialog_help_url" translatable="false"></string>
 
     <!-- Title for notification (and dialog) that user's phone has reached a certain temperature and may start to slow down in order to cool down. [CHAR LIMIT=30] -->
     <string name="high_temp_title">Phone is getting warm</string>
-    <!-- Message body for notification that user's phone has reached a certain temperature and may start to slow down in order to cool down. [CHAR LIMIT=100] -->
-    <string name="high_temp_notif_message">Some features limited while phone cools down</string>
-    <!-- Text body for dialog alerting user that their phone has reached a certain temperature and may start to slow down in order to cool down. [CHAR LIMIT=300] -->
+    <!-- Message body for notification that user's phone has reached a certain temperature and may start to slow down in order to cool down. [CHAR LIMIT=120] -->
+    <string name="high_temp_notif_message">Some features limited while phone cools down.\nTap for more info</string>
+    <!-- Text body for dialog alerting user that their phone has reached a certain temperature and may start to slow down in order to cool down. [CHAR LIMIT=350] -->
     <string name="high_temp_dialog_message">Your phone will automatically try to cool down. You can still use your phone, but it may run slower.\n\nOnce your phone has cooled down, it will run normally.</string>
+    <!-- Text help link for care instructions for overheating devices [CHAR LIMIT=40] -->
+    <string name="high_temp_dialog_help_text">See care steps</string>
+    <!-- URL for care instructions for overheating devices -->
+    <string name="high_temp_dialog_help_url" translatable="false"></string>
+
     <!-- Title for alarm dialog alerting user the usb adapter has reached a certain temperature that should disconnect charging cable immediately. [CHAR LIMIT=30] -->
     <string name="high_temp_alarm_title">Unplug charger</string>
     <!-- Text body for dialog alerting user the usb adapter has reached a certain temperature that should disconnect charging cable immediately. [CHAR LIMIT=300] -->
@@ -2608,6 +2596,27 @@
          app for debugging. Will not be seen by users. [CHAR LIMIT=20] -->
     <string name="heap_dump_tile_name">Dump SysUI Heap</string>
 
+    <!-- Content description for ongoing privacy chip. Use with a single app [CHAR LIMIT=NONE]-->
+    <string name="ongoing_privacy_chip_content_single_app"><xliff:g id="app" example="Example App">%1$s</xliff:g> is using your <xliff:g id="types_list" example="camera, location">%2$s</xliff:g>.</string>
+
+    <!-- Content description for ongoing privacy chip. Use with multiple apps [CHAR LIMIT=NONE]-->
+    <string name="ongoing_privacy_chip_content_multiple_apps">Applications are using your <xliff:g id="types_list" example="camera, location">%s</xliff:g>.</string>
+
+    <!-- Separator for types. Include spaces before and after if needed [CHAR LIMIT=10] -->
+    <string name="ongoing_privacy_dialog_separator">,\u0020</string>
+
+    <!-- Separator for types, before last type. Include spaces before and after if needed [CHAR LIMIT=10] -->
+    <string name="ongoing_privacy_dialog_last_separator">\u0020and\u0020</string>
+
+    <!-- Text for camera app op [CHAR LIMIT=20]-->
+    <string name="privacy_type_camera">camera</string>
+
+    <!-- Text for location app op [CHAR LIMIT=20]-->
+    <string name="privacy_type_location">location</string>
+
+    <!-- Text for microphone app op [CHAR LIMIT=20]-->
+    <string name="privacy_type_microphone">microphone</string>
+
     <!-- Text for the quick setting tile for sensor privacy [CHAR LIMIT=30] -->
     <string name="sensor_privacy_mode">Sensors off</string>
 
@@ -2689,8 +2698,6 @@
     <string name="priority_onboarding_settings_button_title">Settings</string>
 
     <!-- Window Magnification strings -->
-    <!-- Title for Magnification Overlay Window [CHAR LIMIT=NONE] -->
-    <string name="magnification_overlay_title">Magnification Overlay Window</string>
     <!-- Title for Magnification Window [CHAR LIMIT=NONE] -->
     <string name="magnification_window_title">Magnification Window</string>
     <!-- Title for Magnification Controls Window [CHAR LIMIT=NONE] -->
@@ -2824,4 +2831,11 @@
     <string name="controls_menu_add">Add controls</string>
     <!-- Controls menu, edit [CHAR_LIMIT=30] -->
     <string name="controls_menu_edit">Edit controls</string>
+
+    <!-- Device-specific path to the node for enabling/disabling the high-brightness mode -->
+    <string name="udfps_hbm_sysfs_path" translatable="false"></string>
+    <!-- Device-specific payload for enabling the high-brightness mode -->
+    <string name="udfps_hbm_enable_command" translatable="false"></string>
+    <!-- Device-specific payload for disabling the high-brightness mode -->
+    <string name="udfps_hbm_disable_command" translatable="false"></string>
 </resources>

@@ -711,11 +711,13 @@
     <string name="notification_silence_title" msgid="8608090968400832335">"무음"</string>
     <string name="notification_alert_title" msgid="3656229781017543655">"기본값"</string>
     <string name="notification_bubble_title" msgid="8330481035191903164">"버블"</string>
+    <string name="notification_automatic_title" msgid="3745465364578762652">"자동"</string>
     <string name="notification_channel_summary_low" msgid="4860617986908931158">"소리 또는 진동 없음"</string>
     <string name="notification_conversation_summary_low" msgid="1734433426085468009">"소리나 진동이 울리지 않으며 대화 섹션 하단에 표시됨"</string>
     <string name="notification_channel_summary_default" msgid="3282930979307248890">"휴대전화 설정에 따라 벨소리나 진동이 울릴 수 있음"</string>
     <string name="notification_channel_summary_default_with_bubbles" msgid="1782419896613644568">"휴대전화 설정에 따라 벨소리나 진동이 울릴 수 있습니다. 기본적으로 <xliff:g id="APP_NAME">%1$s</xliff:g>의 대화는 대화창으로 표시됩니다."</string>
     <string name="notification_channel_summary_bubble" msgid="7235935211580860537">"이 콘텐츠로 연결되는 플로팅 바로가기로 사용자의 주의를 끕니다."</string>
+    <string name="notification_channel_summary_automatic" msgid="5813109268050235275">"시스템에서 알림 시 소리 또는 진동을 사용할지 결정하도록 허용합니다."</string>
     <string name="notification_channel_summary_priority" msgid="7952654515769021553">"대화 섹션 상단에 표시, 플로팅 대화창으로 표시, 그리고 잠금 화면에 프로필 사진이 표시됩니다."</string>
     <string name="notification_conversation_channel_settings" msgid="2409977688430606835">"설정"</string>
     <string name="notification_priority_title" msgid="2079708866333537093">"우선순위"</string>
@@ -736,6 +738,12 @@
     <string name="appops_camera_mic_overlay" msgid="5584311236445644095">"앱이 화면의 다른 앱 위에 표시되고 있으며, 마이크와 카메라를 사용 중입니다.."</string>
     <string name="notification_appops_settings" msgid="5208974858340445174">"설정"</string>
     <string name="notification_appops_ok" msgid="2177609375872784124">"확인"</string>
+    <string name="feedback_silenced" msgid="5382212321253328247">"시스템에서 이 알림을 숨겼습니다."</string>
+    <string name="feedback_promoted" msgid="8075757485407091976">"시스템에서 이 알림의 순위를 올렸습니다."</string>
+    <string name="feedback_demoted" msgid="5848066008939031913">"시스템에서 이 알림의 순위를 내렸습니다."</string>
+    <string name="feedback_prompt" msgid="2278631214125128281">"맞나요?"</string>
+    <string name="feedback_response" msgid="4671729244976641339">"의견을 보내 주셔서 감사합니다."</string>
+    <string name="feedback_ok" msgid="6481426753298857144">"확인"</string>
     <string name="notification_channel_controls_opened_accessibility" msgid="6111817750774381094">"<xliff:g id="APP_NAME">%1$s</xliff:g> 알림 컨트롤을 열었습니다."</string>
     <string name="notification_channel_controls_closed_accessibility" msgid="1561909368876911701">"<xliff:g id="APP_NAME">%1$s</xliff:g> 알림 컨트롤을 닫았습니다."</string>
     <string name="notification_channel_switch_accessibility" msgid="8979885820432540252">"이 채널의 알림을 허용합니다."</string>
@@ -908,25 +916,14 @@
     <string name="accessibility_quick_settings_edit" msgid="1523745183383815910">"설정 순서 수정"</string>
     <string name="accessibility_quick_settings_page" msgid="7506322631645550961">"<xliff:g id="ID_2">%2$d</xliff:g>페이지 중 <xliff:g id="ID_1">%1$d</xliff:g>페이지"</string>
     <string name="tuner_lock_screen" msgid="2267383813241144544">"잠금 화면"</string>
-    <string name="pip_phone_expand" msgid="1424988917240616212">"펼치기"</string>
-    <string name="pip_phone_minimize" msgid="9057117033655996059">"최소화"</string>
-    <string name="pip_phone_close" msgid="8801864042095341824">"닫기"</string>
-    <string name="pip_phone_settings" msgid="5687538631925004341">"설정"</string>
-    <string name="pip_phone_dismiss_hint" msgid="5825740708095316710">"아래로 드래그하여 닫기"</string>
-    <string name="pip_menu_title" msgid="6365909306215631910">"메뉴"</string>
-    <string name="pip_notification_title" msgid="8661573026059630525">"<xliff:g id="NAME">%s</xliff:g>에서 PIP 사용 중"</string>
-    <string name="pip_notification_message" msgid="4991831338795022227">"<xliff:g id="NAME">%s</xliff:g>에서 이 기능이 사용되는 것을 원하지 않는 경우 탭하여 설정을 열고 기능을 사용 중지하세요."</string>
-    <string name="pip_play" msgid="333995977693142810">"재생"</string>
-    <string name="pip_pause" msgid="1139598607050555845">"일시중지"</string>
-    <string name="pip_skip_to_next" msgid="3864212650579956062">"다음으로 건너뛰기"</string>
-    <string name="pip_skip_to_prev" msgid="3742589641443049237">"이전으로 건너뛰기"</string>
-    <string name="accessibility_action_pip_resize" msgid="8237306972921160456">"크기 조절"</string>
     <string name="thermal_shutdown_title" msgid="2702966892682930264">"발열로 인해 휴대전화 전원이 종료됨"</string>
-    <string name="thermal_shutdown_message" msgid="7432744214105003895">"휴대전화가 정상적으로 실행 중입니다."</string>
+    <string name="thermal_shutdown_message" msgid="6142269839066172984">"이제 휴대전화가 정상적으로 작동합니다.\n자세히 알아보려면 탭하세요."</string>
     <string name="thermal_shutdown_dialog_message" msgid="6745684238183492031">"휴대전화가 과열되어 온도를 낮추기 위해 전원이 종료되었습니다. 지금은 휴대전화가 정상적으로 실행 중입니다.\n\n휴대전화가 과열되는 이유는 다음과 같습니다.\n	• 리소스를 많이 사용하는 앱 사용(예: 게임, 동영상 또는 내비게이션 앱)\n	• 대용량 파일을 다운로드 또는 업로드\n	• 온도가 높은 곳에서 휴대폰 사용"</string>
+    <string name="thermal_shutdown_dialog_help_text" msgid="6413474593462902901">"해결 방법 확인하기"</string>
     <string name="high_temp_title" msgid="2218333576838496100">"휴대전화 온도가 높음"</string>
-    <string name="high_temp_notif_message" msgid="163928048626045592">"휴대전화 온도를 낮추는 동안 일부 기능이 제한됩니다."</string>
+    <string name="high_temp_notif_message" msgid="1277346543068257549">"휴대전화 온도를 낮추는 동안 일부 기능이 제한됩니다.\n자세히 알아보려면 탭하세요."</string>
     <string name="high_temp_dialog_message" msgid="3793606072661253968">"휴대전화 온도를 자동으로 낮추려고 시도합니다. 휴대전화를 계속 사용할 수는 있지만 작동이 느려질 수도 있습니다.\n\n휴대전화 온도가 낮아지면 정상적으로 작동됩니다."</string>
+    <string name="high_temp_dialog_help_text" msgid="7380171287943345858">"해결 방법 확인하기"</string>
     <string name="high_temp_alarm_title" msgid="2359958549570161495">"충전기를 연결 해제하세요"</string>
     <string name="high_temp_alarm_notify_message" msgid="7186272817783835089">"기기를 충전하는 중에 문제가 발생했습니다. 케이블이 뜨거울 수 있으므로 주의하여 전원 어댑터를 분리하세요."</string>
     <string name="high_temp_alarm_help_care_steps" msgid="5017002218341329566">"취해야 할 조치 확인"</string>
@@ -1022,7 +1019,6 @@
     <string name="priority_onboarding_ignores_dnd_text" msgid="2918952762719600529">"방해 금지 모드 무시"</string>
     <string name="priority_onboarding_done_button_title" msgid="4569550984286506007">"확인"</string>
     <string name="priority_onboarding_settings_button_title" msgid="6663601574303585927">"설정"</string>
-    <string name="magnification_overlay_title" msgid="6584179429612427958">"확대 오버레이 창"</string>
     <string name="magnification_window_title" msgid="4863914360847258333">"확대 창"</string>
     <string name="magnification_controls_title" msgid="8421106606708891519">"확대 창 컨트롤"</string>
     <string name="quick_controls_title" msgid="6839108006171302273">"기기 컨트롤"</string>

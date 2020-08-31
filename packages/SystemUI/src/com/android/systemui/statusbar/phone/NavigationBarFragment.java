@@ -120,6 +120,7 @@ import com.android.systemui.stackdivider.Divider;
 import com.android.systemui.statusbar.AutoHideUiElement;
 import com.android.systemui.statusbar.CommandQueue;
 import com.android.systemui.statusbar.CommandQueue.Callbacks;
+import com.android.systemui.statusbar.NavigationBarController;
 import com.android.systemui.statusbar.NotificationRemoteInputManager;
 import com.android.systemui.statusbar.StatusBarState;
 import com.android.systemui.statusbar.notification.stack.StackStateAnimator;
@@ -131,6 +132,7 @@ import com.android.systemui.util.LifecycleFragment;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
+import java.lang.ref.WeakReference;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
@@ -354,6 +356,7 @@ public class NavigationBarFragment extends LifecycleFragment implements Callback
             // If the button will actually become visible and the navbar is about to hide,
             // tell the statusbar to keep it around for longer
             mAutoHideController.touchAutoHide();
+            mNavigationBarView.notifyActiveTouchRegions();
         }
     };
 
@@ -550,6 +553,9 @@ public class NavigationBarFragment extends LifecycleFragment implements Callback
             mOrientationHandle.getViewTreeObserver().removeOnGlobalLayoutListener(
                     mOrientationHandleGlobalLayoutListener);
         }
+        mHandler.removeCallbacks(mAutoDim);
+        mNavigationBarView = null;
+        mOrientationHandle = null;
     }
 
     @Override
@@ -591,6 +597,7 @@ public class NavigationBarFragment extends LifecycleFragment implements Callback
                 .registerDisplayListener(this, new Handler(Looper.getMainLooper()));
 
         mOrientationHandle = new QuickswitchOrientedNavHandle(getContext());
+        mOrientationHandle.setId(R.id.secondary_home_handle);
 
         getBarTransitions().addDarkIntensityListener(mOrientationHandleIntensityListener);
         mOrientationParams = new WindowManager.LayoutParams(0, 0,
@@ -962,13 +969,22 @@ public class NavigationBarFragment extends LifecycleFragment implements Callback
         }
 
         // Change the cancel pin gesture to home and back if recents button is invisible
-        boolean recentsVisible = mNavigationBarView.isRecentsButtonVisible();
+        boolean pinningActive = ActivityManagerWrapper.getInstance().isScreenPinningActive();
         ButtonDispatcher backButton = mNavigationBarView.getBackButton();
-        if (recentsVisible) {
-            backButton.setOnLongClickListener(this::onLongPressBackRecents);
+        ButtonDispatcher recentsButton = mNavigationBarView.getRecentsButton();
+        if (pinningActive) {
+            boolean recentsVisible = mNavigationBarView.isRecentsButtonVisible();
+            backButton.setOnLongClickListener(recentsVisible
+                    ? this::onLongPressBackRecents
+                    : this::onLongPressBackHome);
+            recentsButton.setOnLongClickListener(this::onLongPressBackRecents);
         } else {
-            backButton.setOnLongClickListener(this::onLongPressBackHome);
+            backButton.setOnLongClickListener(null);
+            recentsButton.setOnLongClickListener(null);
         }
+        // Note, this needs to be set after even if we're setting the listener to null
+        backButton.setLongClickable(pinningActive);
+        recentsButton.setLongClickable(pinningActive);
     }
 
     private void notifyNavigationBarScreenOn() {
@@ -981,11 +997,6 @@ public class NavigationBarFragment extends LifecycleFragment implements Callback
         ButtonDispatcher recentsButton = mNavigationBarView.getRecentsButton();
         recentsButton.setOnClickListener(this::onRecentsClick);
         recentsButton.setOnTouchListener(this::onRecentsTouch);
-        recentsButton.setLongClickable(true);
-        recentsButton.setOnLongClickListener(this::onLongPressBackRecents);
-
-        ButtonDispatcher backButton = mNavigationBarView.getBackButton();
-        backButton.setLongClickable(true);
 
         ButtonDispatcher homeButton = mNavigationBarView.getHomeButton();
         homeButton.setOnTouchListener(this::onHomeTouch);
@@ -1092,6 +1103,7 @@ public class NavigationBarFragment extends LifecycleFragment implements Callback
     private boolean onLongPressBackRecents(View v) {
         return onLongPressNavigationButtons(v, R.id.back, R.id.recent_apps);
     }
+
 
     /**
      * This handles long-press of both back and recents/home. Back is the common button with
@@ -1452,11 +1464,11 @@ public class NavigationBarFragment extends LifecycleFragment implements Callback
         if (DEBUG) Log.v(TAG, "addNavigationBar: about to add " + navigationBarView);
         if (navigationBarView == null) return null;
 
-        final NavigationBarFragment fragment = FragmentHostManager.get(navigationBarView)
-                .create(NavigationBarFragment.class);
         navigationBarView.addOnAttachStateChangeListener(new View.OnAttachStateChangeListener() {
             @Override
             public void onViewAttachedToWindow(View v) {
+                final NavigationBarFragment fragment =
+                        FragmentHostManager.get(v).create(NavigationBarFragment.class);
                 final FragmentHostManager fragmentHost = FragmentHostManager.get(v);
                 fragmentHost.getFragmentManager().beginTransaction()
                         .replace(R.id.navigation_bar_frame, fragment, TAG)
@@ -1466,6 +1478,8 @@ public class NavigationBarFragment extends LifecycleFragment implements Callback
 
             @Override
             public void onViewDetachedFromWindow(View v) {
+                final FragmentHostManager fragmentHost = FragmentHostManager.get(v);
+                fragmentHost.removeTagListener(TAG, listener);
                 FragmentHostManager.removeAndDestroy(v);
                 navigationBarView.removeOnAttachStateChangeListener(this);
             }

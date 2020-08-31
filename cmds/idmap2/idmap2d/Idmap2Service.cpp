@@ -169,7 +169,7 @@ Status Idmap2Service::createIdmap(const std::string& target_apk_path,
                                   aidl::nullable<std::string>* _aidl_return) {
   assert(_aidl_return);
   SYSTRACE << "Idmap2Service::createIdmap " << target_apk_path << " " << overlay_apk_path;
-  _aidl_return->reset(nullptr);
+  _aidl_return->reset();
 
   const PolicyBitmask policy_bitmask = ConvertAidlArgToPolicyBitmask(fulfilled_policies);
 

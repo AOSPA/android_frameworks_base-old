@@ -31,6 +31,7 @@ import static junit.framework.Assert.assertTrue;
 
 import android.hardware.hdmi.HdmiControlManager;
 import android.os.test.TestLooper;
+import android.platform.test.annotations.Presubmit;
 
 import androidx.test.InstrumentationRegistry;
 import androidx.test.filters.SmallTest;
@@ -43,6 +44,7 @@ import org.junit.runners.JUnit4;
 import java.util.Arrays;
 
 @SmallTest
+@Presubmit
 @RunWith(JUnit4.class)
 /** Tests for {@link HdmiCecLocalDevice} class. */
 public class HdmiCecLocalDeviceTest {

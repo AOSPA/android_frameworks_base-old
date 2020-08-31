@@ -23,8 +23,37 @@ import com.android.server.accessibility.BaseEventStreamTransformation;
  */
 public abstract class MagnificationGestureHandler extends BaseEventStreamTransformation {
 
+    protected final ScaleChangedListener mListener;
+
+    protected MagnificationGestureHandler(ScaleChangedListener listener) {
+        mListener = listener;
+    }
+
+    /**
+     * Interface for listening to the magnification scaling gesture.
+     */
+    public interface ScaleChangedListener {
+        /**
+         * Called when the magnification scale is changed by users.
+         *
+         * @param displayId The logical display id
+         * @param mode  The magnification mode
+         */
+        void onMagnificationScaleChanged(int displayId, int mode);
+    }
+
     /**
      * Called when the shortcut target is magnification.
      */
     public abstract void notifyShortcutTriggered();
+
+    /**
+     * Indicates the magnification mode.
+     *
+     * @return the magnification mode of the handler
+     *
+     * @see android.provider.Settings.Secure#ACCESSIBILITY_MAGNIFICATION_MODE_FULLSCREEN
+     * @see android.provider.Settings.Secure#ACCESSIBILITY_MAGNIFICATION_MODE_WINDOW
+     */
+    public abstract int getMode();
 }

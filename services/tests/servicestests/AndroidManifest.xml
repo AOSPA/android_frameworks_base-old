@@ -81,6 +81,9 @@
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS"/>
     <uses-permission android:name="android.permission.MODIFY_DAY_NIGHT_MODE"/>
     <uses-permission android:name="android.permission.MEDIA_RESOURCE_OVERRIDE_PID"/>
+    <uses-permission android:name="android.permission.VIBRATE"/>
+    <uses-permission android:name="android.permission.ACCESS_VIBRATOR_STATE"/>
+    <uses-permission android:name="android.permission.VIBRATE_ALWAYS_ON"/>
 
     <!-- Uses API introduced in O (26) -->
     <uses-sdk android:minSdkVersion="1"
@@ -108,7 +111,8 @@
         </service>
 
         <receiver android:name="com.android.server.devicepolicy.ApplicationRestrictionsTest$AdminReceiver"
-             android:permission="android.permission.BIND_DEVICE_ADMIN">
+             android:permission="android.permission.BIND_DEVICE_ADMIN"
+             android:exported="true">
             <meta-data android:name="android.app.device_admin"
                  android:resource="@xml/device_admin_sample"/>
             <intent-filter>
@@ -117,7 +121,8 @@
         </receiver>
 
         <receiver android:name="com.android.server.devicepolicy.DummyDeviceAdmins$Admin1"
-             android:permission="android.permission.BIND_DEVICE_ADMIN">
+             android:permission="android.permission.BIND_DEVICE_ADMIN"
+             android:exported="true">
             <meta-data android:name="android.app.device_admin"
                  android:resource="@xml/device_admin_sample"/>
             <intent-filter>
@@ -126,7 +131,8 @@
         </receiver>
 
         <receiver android:name="com.android.server.devicepolicy.DummyDeviceAdmins$Admin2"
-             android:permission="android.permission.BIND_DEVICE_ADMIN">
+             android:permission="android.permission.BIND_DEVICE_ADMIN"
+             android:exported="true">
             <meta-data android:name="android.app.device_admin"
                  android:resource="@xml/device_admin_sample"/>
             <intent-filter>
@@ -135,7 +141,8 @@
         </receiver>
 
         <receiver android:name="com.android.server.devicepolicy.DummyDeviceAdmins$Admin3"
-             android:permission="android.permission.BIND_DEVICE_ADMIN">
+             android:permission="android.permission.BIND_DEVICE_ADMIN"
+             android:exported="true">
             <meta-data android:name="android.app.device_admin"
                  android:resource="@xml/device_admin_sample"/>
             <intent-filter>
@@ -143,7 +150,8 @@
             </intent-filter>
         </receiver>
 
-        <receiver android:name="com.android.server.devicepolicy.DummyDeviceAdmins$AdminNoPerm">
+        <receiver android:name="com.android.server.devicepolicy.DummyDeviceAdmins$AdminNoPerm"
+             android:exported="true">
             <meta-data android:name="android.app.device_admin"
                  android:resource="@xml/device_admin_sample"/>
             <intent-filter>
@@ -164,7 +172,8 @@
 
         <activity android:name="com.android.server.pm.SuspendedDetailsActivity"
              android:enabled="true"
-             android:permission="android.permission.SEND_SHOW_SUSPENDED_APP_DETAILS">
+             android:permission="android.permission.SEND_SHOW_SUSPENDED_APP_DETAILS"
+             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.SHOW_SUSPENDED_APP_DETAILS"/>
                 <category android:name="android.intent.category.DEFAULT"/>
@@ -229,7 +238,8 @@
             </intent-filter>
         </activity-alias>
 
-        <receiver android:name="com.android.server.appwidget.DummyAppWidget">
+        <receiver android:name="com.android.server.appwidget.DummyAppWidget"
+             android:exported="true">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE"/>
             </intent-filter>

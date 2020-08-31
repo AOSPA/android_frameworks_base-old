@@ -207,12 +207,6 @@ public class BubbleController implements ConfigurationController.ConfigurationLi
     /** Whether or not the BubbleStackView has been added to the WindowManager. */
     private boolean mAddedToWindowManager = false;
 
-    /**
-     * Value from {@link NotificationShadeWindowController#getForceHasTopUi()} when we forced top UI
-     * due to expansion. We'll restore this value when the stack collapses.
-     */
-    private boolean mHadTopUi = false;
-
     // Listens to user switch so bubbles can be saved and restored.
     private final NotificationLockscreenUserManager mNotifUserManager;
 
@@ -754,13 +748,14 @@ public class BubbleController implements ConfigurationController.ConfigurationLi
                 // themselves.
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT,
-                WindowManager.LayoutParams.TYPE_TRUSTED_APPLICATION_OVERLAY,
+                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
                 // Start not focusable - we'll become focusable when expanded so the ActivityView
                 // can use the IME.
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
                     | WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED,
                 PixelFormat.TRANSLUCENT);
 
+        mWmLayoutParams.setTrustedOverlay();
         mWmLayoutParams.setFitInsetsTypes(0);
         mWmLayoutParams.softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE;
         mWmLayoutParams.token = new Binder();
@@ -1303,7 +1298,7 @@ public class BubbleController implements ConfigurationController.ConfigurationLi
             // Collapsing? Do this first before remaining steps.
             if (update.expandedChanged && !update.expanded) {
                 mStackView.setExpanded(false);
-                mNotificationShadeWindowController.setForceHasTopUi(mHadTopUi);
+                mNotificationShadeWindowController.setRequestTopUi(false, TAG);
             }
 
             // Do removals, if any.
@@ -1393,8 +1388,7 @@ public class BubbleController implements ConfigurationController.ConfigurationLi
             if (update.expandedChanged && update.expanded) {
                 if (mStackView != null) {
                     mStackView.setExpanded(true);
-                    mHadTopUi = mNotificationShadeWindowController.getForceHasTopUi();
-                    mNotificationShadeWindowController.setForceHasTopUi(true);
+                    mNotificationShadeWindowController.setRequestTopUi(true, TAG);
                 }
             }
 

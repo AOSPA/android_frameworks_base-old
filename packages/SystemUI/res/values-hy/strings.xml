@@ -711,11 +711,13 @@
     <string name="notification_silence_title" msgid="8608090968400832335">"Անձայն"</string>
     <string name="notification_alert_title" msgid="3656229781017543655">"Կանխադրված"</string>
     <string name="notification_bubble_title" msgid="8330481035191903164">"Պղպջակ"</string>
+    <string name="notification_automatic_title" msgid="3745465364578762652">"Ավտոմատ"</string>
     <string name="notification_channel_summary_low" msgid="4860617986908931158">"Առանց ձայնի կամ թրթռոցի"</string>
     <string name="notification_conversation_summary_low" msgid="1734433426085468009">"Հայտնվում է զրույցների ցանկի ներքևում, առանց ձայնի և թրթռոցի"</string>
     <string name="notification_channel_summary_default" msgid="3282930979307248890">"Կարող է զնգալ կամ թրթռալ (հեռախոսի կարգավորումներից կախված)"</string>
     <string name="notification_channel_summary_default_with_bubbles" msgid="1782419896613644568">"Կարող է զնգալ կամ թրթռալ (հեռախոսի կարգավորումներից կախված)։ <xliff:g id="APP_NAME">%1$s</xliff:g>-ի զրույցներն ըստ կանխադրման հայտնվում են ամպիկների տեսքով։"</string>
     <string name="notification_channel_summary_bubble" msgid="7235935211580860537">"Լողացող դյուրանցման միջոցով ձեր ուշադրությունն է գրավում բովանդակության նկատմամբ"</string>
+    <string name="notification_channel_summary_automatic" msgid="5813109268050235275">"Թող համակարգն ավտոմատ որոշի՝ արդյոք այս ծանուցումը ձայնով, թե թրթռոցով է պետք մատուցել"</string>
     <string name="notification_channel_summary_priority" msgid="7952654515769021553">"Ցուցադրվում է զրույցների ցանկի վերևում, հայտնվում է լողացող ամպիկի տեսքով, ցուցադրում է պրոֆիլի նկարը կողպէկրանին"</string>
     <string name="notification_conversation_channel_settings" msgid="2409977688430606835">"Կարգավորումներ"</string>
     <string name="notification_priority_title" msgid="2079708866333537093">"Կարևոր"</string>
@@ -736,6 +738,12 @@
     <string name="appops_camera_mic_overlay" msgid="5584311236445644095">"Այս հավելվածը ցուցադրվում է մյուս հավելվածների վրայից և օգտագործում է խոսափողն ու տեսախցիկը:"</string>
     <string name="notification_appops_settings" msgid="5208974858340445174">"Կարգավորումներ"</string>
     <string name="notification_appops_ok" msgid="2177609375872784124">"Եղավ"</string>
+    <string name="feedback_silenced" msgid="5382212321253328247">"Այս ծանուցման ձայնն անջատվել է համակարգի կողմից։"</string>
+    <string name="feedback_promoted" msgid="8075757485407091976">"Այս ծանուցման կարևորության մակարդակը բարձրացվել է համակարգի կողմից։"</string>
+    <string name="feedback_demoted" msgid="5848066008939031913">"Այս ծանուցման կարևորության մակարդակը իջեցվել է համակարգի կողմից։"</string>
+    <string name="feedback_prompt" msgid="2278631214125128281">"Սա ճի՞շտ էր"</string>
+    <string name="feedback_response" msgid="4671729244976641339">"Շնորհակալություն արձագանքելու համար"</string>
+    <string name="feedback_ok" msgid="6481426753298857144">"Եղավ"</string>
     <string name="notification_channel_controls_opened_accessibility" msgid="6111817750774381094">"<xliff:g id="APP_NAME">%1$s</xliff:g> հավելվածի ծանուցումների կառավարումը բաց է"</string>
     <string name="notification_channel_controls_closed_accessibility" msgid="1561909368876911701">"<xliff:g id="APP_NAME">%1$s</xliff:g> հավելվածի ծանուցումների կառավարումը փակ է"</string>
     <string name="notification_channel_switch_accessibility" msgid="8979885820432540252">"Թույլ տալ ծանուցումներ այս ալիքից"</string>
@@ -908,25 +916,14 @@
     <string name="accessibility_quick_settings_edit" msgid="1523745183383815910">"Խմբագրել կարգավորումների հերթականությունը:"</string>
     <string name="accessibility_quick_settings_page" msgid="7506322631645550961">"Էջ <xliff:g id="ID_1">%1$d</xliff:g> / <xliff:g id="ID_2">%2$d</xliff:g>"</string>
     <string name="tuner_lock_screen" msgid="2267383813241144544">"Կողպէկրան"</string>
-    <string name="pip_phone_expand" msgid="1424988917240616212">"Ընդարձակել"</string>
-    <string name="pip_phone_minimize" msgid="9057117033655996059">"Ծալել"</string>
-    <string name="pip_phone_close" msgid="8801864042095341824">"Փակել"</string>
-    <string name="pip_phone_settings" msgid="5687538631925004341">"Կարգավորումներ"</string>
-    <string name="pip_phone_dismiss_hint" msgid="5825740708095316710">"Քաշեք վար՝ փակելու համար"</string>
-    <string name="pip_menu_title" msgid="6365909306215631910">"Ընտրացանկ"</string>
-    <string name="pip_notification_title" msgid="8661573026059630525">"<xliff:g id="NAME">%s</xliff:g>-ը «Նկար նկարի մեջ» ռեժիմում է"</string>
-    <string name="pip_notification_message" msgid="4991831338795022227">"Եթե չեք ցանկանում, որ <xliff:g id="NAME">%s</xliff:g>-ն օգտագործի այս գործառույթը, հպեք՝ կարգավորումները բացելու և այն անջատելու համար։"</string>
-    <string name="pip_play" msgid="333995977693142810">"Նվագարկել"</string>
-    <string name="pip_pause" msgid="1139598607050555845">"Դադարեցնել"</string>
-    <string name="pip_skip_to_next" msgid="3864212650579956062">"Անցնել հաջորդին"</string>
-    <string name="pip_skip_to_prev" msgid="3742589641443049237">"Վերադառնալ նախորդին"</string>
-    <string name="accessibility_action_pip_resize" msgid="8237306972921160456">"Փոխել չափը"</string>
     <string name="thermal_shutdown_title" msgid="2702966892682930264">"Հեռախոսն անջատվել է տաքանալու պատճառով"</string>
-    <string name="thermal_shutdown_message" msgid="7432744214105003895">"Հեռախոսն այժմ նորմալ աշխատում է"</string>
+    <string name="thermal_shutdown_message" msgid="6142269839066172984">"Հեռախոսն այժմ նորմալ է աշխատում։\nՀպեք՝ ավելին իմանալու համար։"</string>
     <string name="thermal_shutdown_dialog_message" msgid="6745684238183492031">"Ձեր հեռախոսը չափազանց տաք էր, այդ պատճառով այն անջատվել է՝ հովանալու համար: Հեռախոսն այժմ նորմալ աշխատում է:\n\nՀեռախոսը կարող է տաքանալ, եթե՝\n	• Օգտագործում եք ռեսուրսատար հավելվածներ (օրինակ՝ խաղեր, տեսանյութեր կամ նավարկման հավելվածներ)\n	• Ներբեռնում կամ վերբեռնում եք ծանր ֆայլեր\n	• Օգտագործում եք ձեր հեռախոսը բարձր ջերմային պայմաններում"</string>
+    <string name="thermal_shutdown_dialog_help_text" msgid="6413474593462902901">"Քայլեր գերտաքացման ահազանգի դեպքում"</string>
     <string name="high_temp_title" msgid="2218333576838496100">"Հեռախոսը տաքանում է"</string>
-    <string name="high_temp_notif_message" msgid="163928048626045592">"Հովանալու ընթացքում հեռախոսի որոշ գործառույթներ սահմանափակ են"</string>
+    <string name="high_temp_notif_message" msgid="1277346543068257549">"Հովանալու ընթացքում հեռախոսի որոշ գործառույթներ սահմանափակ են։\nՀպեք՝ ավելին իմանալու համար։"</string>
     <string name="high_temp_dialog_message" msgid="3793606072661253968">"Ձեր հեռախոսն ավտոմատ կերպով կփորձի hովանալ: Կարող եք շարունակել օգտագործել հեռախոսը, սակայն հնարավոր է, որ այն ավելի դանդաղ աշխատի:\n\nՀովանալուց հետո հեռախոսը կաշխատի կանոնավոր կերպով:"</string>
+    <string name="high_temp_dialog_help_text" msgid="7380171287943345858">"Քայլեր գերտաքացման ահազանգի դեպքում"</string>
     <string name="high_temp_alarm_title" msgid="2359958549570161495">"Անջատեք լիցքավորիչը հոսանքից"</string>
     <string name="high_temp_alarm_notify_message" msgid="7186272817783835089">"Չհաջողվեց լիցքավորել սարքը: Անջատեք հոսանքի ադապտերը և ուշադիր եղեք՝ մալուխը կարող է տաքացած լինել:"</string>
     <string name="high_temp_alarm_help_care_steps" msgid="5017002218341329566">"Քայլեր գերտաքացման ահազանգի դեպքում"</string>
@@ -1022,7 +1019,6 @@
     <string name="priority_onboarding_ignores_dnd_text" msgid="2918952762719600529">"Ընդհատել «Չանհանգստացնել» ռեժիմը"</string>
     <string name="priority_onboarding_done_button_title" msgid="4569550984286506007">"Եղավ"</string>
     <string name="priority_onboarding_settings_button_title" msgid="6663601574303585927">"Կարգավորումներ"</string>
-    <string name="magnification_overlay_title" msgid="6584179429612427958">"Խոշորացման պատուհանի վրադրում"</string>
     <string name="magnification_window_title" msgid="4863914360847258333">"Խոշորացման պատուհան"</string>
     <string name="magnification_controls_title" msgid="8421106606708891519">"Խոշորացման պատուհանի կառավարման տարրեր"</string>
     <string name="quick_controls_title" msgid="6839108006171302273">"Սարքերի կառավարման տարրեր"</string>

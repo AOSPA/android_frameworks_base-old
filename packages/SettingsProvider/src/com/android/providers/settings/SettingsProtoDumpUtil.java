@@ -866,9 +866,6 @@ class SettingsProtoDumpUtil {
                 Settings.Global.JOB_SCHEDULER_QUOTA_CONTROLLER_CONSTANTS,
                 GlobalSettingsProto.JOB_SCHEDULER_QUOTA_CONTROLLER_CONSTANTS);
         dumpSetting(s, p,
-                Settings.Global.JOB_SCHEDULER_TIME_CONTROLLER_CONSTANTS,
-                GlobalSettingsProto.JOB_SCHEDULER_TIME_CONTROLLER_CONSTANTS);
-        dumpSetting(s, p,
                 Settings.Global.KEEP_PROFILE_IN_BACKGROUND,
                 GlobalSettingsProto.KEEP_PROFILE_IN_BACKGROUND);
 
@@ -1416,9 +1413,6 @@ class SettingsProtoDumpUtil {
                 Settings.Global.SYS_STORAGE_CACHE_MAX_BYTES,
                 GlobalSettingsProto.Sys.STORAGE_CACHE_MAX_BYTES);
         dumpSetting(s, p,
-                Settings.Global.SYS_VDSO,
-                GlobalSettingsProto.Sys.VDSO);
-        dumpSetting(s, p,
                 Settings.Global.SYS_UIDCPUPOWER,
                 GlobalSettingsProto.Sys.UIDCPUPOWER);
         p.end(sysToken);
@@ -1823,6 +1817,9 @@ class SettingsProtoDumpUtil {
         dumpSetting(s, p,
                 Settings.Secure.ACCESSIBILITY_BUTTON_TARGETS,
                 SecureSettingsProto.Accessibility.BUTTON_TARGETS);
+        dumpSetting(s, p,
+                Settings.Secure.ACCESSIBILITY_MAGNIFICATION_CAPABILITY,
+                SecureSettingsProto.Accessibility.ACCESSIBILITY_MAGNIFICATION_CAPABILITY);
         p.end(accessibilityToken);
 
         final long adaptiveSleepToken = p.start(SecureSettingsProto.ADAPTIVE_SLEEP);
@@ -2029,6 +2026,13 @@ class SettingsProtoDumpUtil {
         dumpSetting(s, p,
                 Settings.Secure.EMERGENCY_ASSISTANCE_APPLICATION,
                 SecureSettingsProto.EMERGENCY_ASSISTANCE_APPLICATION);
+
+        final long emergencyResponseToken = p.start(SecureSettingsProto.EMERGENCY_RESPONSE);
+        dumpSetting(s, p,
+                Settings.Secure.PANIC_GESTURE_ENABLED,
+                SecureSettingsProto.EmergencyResponse.PANIC_GESTURE_ENABLED);
+        p.end(emergencyResponseToken);
+
         dumpSetting(s, p,
                 Settings.Secure.ENHANCED_VOICE_PRIVACY_ENABLED,
                 SecureSettingsProto.ENHANCED_VOICE_PRIVACY_ENABLED);
@@ -2563,6 +2567,22 @@ class SettingsProtoDumpUtil {
                 Settings.Secure.ZEN_SETTINGS_SUGGESTION_VIEWED,
                 SecureSettingsProto.Zen.SETTINGS_SUGGESTION_VIEWED);
         p.end(zenToken);
+
+        dumpSetting(s, p,
+                Settings.Secure.ONE_HANDED_MODE_ENABLED,
+                SecureSettingsProto.OneHanded.ONE_HANDED_MODE_ENABLED);
+
+        dumpSetting(s, p,
+                Settings.Secure.ONE_HANDED_MODE_TIMEOUT,
+                SecureSettingsProto.OneHanded.ONE_HANDED_MODE_TIMEOUT);
+
+        dumpSetting(s, p,
+                Settings.Secure.TAPS_APP_TO_EXIT,
+                SecureSettingsProto.OneHanded.TAPS_APP_TO_EXIT);
+
+        dumpSetting(s, p,
+                Settings.Secure.SWIPE_BOTTOM_TO_NOTIFICATION_ENABLED,
+                SecureSettingsProto.SWIPE_BOTTOM_TO_NOTIFICATION_ENABLED);
 
         // Please insert new settings using the same order as in SecureSettingsProto.
         p.end(token);

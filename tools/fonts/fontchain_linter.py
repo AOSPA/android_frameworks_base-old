@@ -286,7 +286,7 @@ def parse_fonts_xml(fonts_xml_path):
 
             if not fallback_for:
                 if not name or name == 'sans-serif':
-                    for _, fallback in _fallback_chains.iteritems():
+                    for _, fallback in _fallback_chains.items():
                         fallback.append(record)
                 else:
                     _fallback_chains[name].append(record)
@@ -316,20 +316,25 @@ def get_emoji_font():
 
 def check_emoji_font_coverage(emoji_font, all_emoji, equivalent_emoji):
     coverage = get_emoji_map(emoji_font)
+
+    errors = []
+
     for sequence in all_emoji:
-        assert sequence in coverage, (
-            '%s is not supported in the emoji font.' % printable(sequence))
+        if not sequence in coverage:
+          errors.append('%s is not supported in the emoji font.' % printable(sequence))
 
     for sequence in coverage:
         if sequence in {0x0000, 0x000D, 0x0020}:
             # The font needs to support a few extra characters, which is OK
             continue
-        assert sequence in all_emoji, (
-            'Emoji font should not support %s.' % printable(sequence))
+        if sequence not in all_emoji:
+          errors.append('%s support unexpected in the emoji font.' % printable(sequence))
 
-    for first, second in sorted(equivalent_emoji.items()):
-        assert coverage[first] == coverage[second], (
-            '%s and %s should map to the same glyph.' % (
+    for first, second in equivalent_emoji.items():
+        if first not in coverage or second not in coverage:
+            continue  # sequence will be reported missing
+        if coverage[first] != coverage[second]:
+            errors.append('%s and %s should map to the same glyph.' % (
                 printable(first),
                 printable(second)))
 
@@ -344,15 +349,17 @@ def check_emoji_font_coverage(emoji_font, all_emoji, equivalent_emoji):
                 while equivalent_seq in equivalent_emoji:
                     equivalent_seq = equivalent_emoji[equivalent_seq]
                 equivalent_seqs.add(equivalent_seq)
-            assert len(equivalent_seqs) == 1, (
-                'The sequences %s should not result in the same glyph %s' % (
+            if len(equivalent_seqs) != 1:
+                errors.append('The sequences %s should not result in the same glyph %s' % (
                     printable(equivalent_seqs),
                     glyph))
+
+    assert not errors, '%d emoji font errors:\n%s\n%d emoji font coverage errors' % (len(errors), '\n'.join(errors), len(errors))
 
 
 def check_emoji_defaults(default_emoji):
     missing_text_chars = _emoji_properties['Emoji'] - default_emoji
-    for name, fallback_chain in _fallback_chains.iteritems():
+    for name, fallback_chain in _fallback_chains.items():
         emoji_font_seen = False
         for record in fallback_chain:
             if 'Zsye' in record.scripts:
@@ -369,7 +376,7 @@ def check_emoji_defaults(default_emoji):
                 continue
 
             # Check default emoji-style characters
-            assert_font_supports_none_of_chars(record.font, sorted(default_emoji), name)
+            assert_font_supports_none_of_chars(record.font, default_emoji, name)
 
             # Mark default text-style characters appearing in fonts above the emoji
             # font as seen
@@ -412,7 +419,7 @@ def parse_unicode_datafile(file_path, reverse=False):
                 char_start, char_end = chars.split('..')
                 char_start = int(char_start, 16)
                 char_end = int(char_end, 16)
-                additions = xrange(char_start, char_end+1)
+                additions = range(char_start, char_end+1)
             else:  # singe character
                 additions = [int(chars, 16)]
             if reverse:
@@ -478,7 +485,7 @@ def parse_ucd(ucd_path):
     # Unicode 12.0 adds Basic_Emoji in emoji-sequences.txt. We ignore them here since we are already
     # checking the emoji presentations with emoji-variation-sequences.txt.
     # Please refer to http://unicode.org/reports/tr51/#def_basic_emoji_set .
-    _emoji_sequences = {k: v for k, v in _emoji_sequences.iteritems() if not v == 'Basic_Emoji' }
+    _emoji_sequences = {k: v for k, v in _emoji_sequences.items() if not v == 'Basic_Emoji' }
 
 
 def remove_emoji_variation_exclude(source, items):
@@ -551,7 +558,7 @@ def reverse_emoji(seq):
     rev = list(reversed(seq))
     # if there are fitzpatrick modifiers in the sequence, keep them after
     # the emoji they modify
-    for i in xrange(1, len(rev)):
+    for i in range(1, len(rev)):
         if is_fitzpatrick_modifier(rev[i-1]):
             rev[i], rev[i-1] = rev[i-1], rev[i]
     return tuple(rev)
@@ -620,7 +627,7 @@ def compute_expected_emoji():
 
 
 def check_compact_only_fallback():
-    for name, fallback_chain in _fallback_chains.iteritems():
+    for name, fallback_chain in _fallback_chains.items():
         for record in fallback_chain:
             if record.variant == 'compact':
                 same_script_elegants = [x for x in fallback_chain
@@ -650,7 +657,7 @@ def check_vertical_metrics():
 def check_cjk_punctuation():
     cjk_scripts = {'Hans', 'Hant', 'Jpan', 'Kore'}
     cjk_punctuation = range(0x3000, 0x301F + 1)
-    for name, fallback_chain in _fallback_chains.iteritems():
+    for name, fallback_chain in _fallback_chains.items():
         for record in fallback_chain:
             if record.scripts.intersection(cjk_scripts):
                 # CJK font seen. Stop checking the rest of the fonts.

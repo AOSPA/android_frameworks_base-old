@@ -143,11 +143,6 @@ public class LocalTransport extends BackupTransport {
         return null;
     }
 
-    /** @removed Replaced with dataManagementIntentLabel in the API */
-    public String dataManagementLabel() {
-        return TRANSPORT_DATA_MANAGEMENT_LABEL;
-    }
-
     @Override
     @Nullable
     public CharSequence dataManagementIntentLabel() {
@@ -333,7 +328,7 @@ public class LocalTransport extends BackupTransport {
                 try (FileOutputStream out = new FileOutputStream(element)) {
                     out.write(op.value, 0, op.value.length);
                 } catch (IOException e) {
-                    Log.e(TAG, "Unable to update key file " + element);
+                    Log.e(TAG, "Unable to update key file " + element, e);
                     return TRANSPORT_ERROR;
                 }
             }

@@ -193,8 +193,10 @@
     <string name="network_logging_notification_text" msgid="1327373071132562512">"Tashkilotingiz bu qurilmani boshqaradi va tarmoq trafigini nazorat qilishi mumkin. Tafsilotlar uchun bosing."</string>
     <string name="location_changed_notification_title" msgid="3620158742816699316">"Ilovalar joylashuv axborotidan foydalana oladi"</string>
     <string name="location_changed_notification_text" msgid="7158423339982706912">"Batafsil axborot olish uchun AT administratoringizga murojaat qiling"</string>
+    <string name="geofencing_service" msgid="3826902410740315456">"Geografik chegara xizmati"</string>
     <string name="country_detector" msgid="7023275114706088854">"Mamlakatni aniqlash"</string>
     <string name="location_service" msgid="2439187616018455546">"Joylashuvni aniqlash xizmati"</string>
+    <string name="gnss_service" msgid="8907781262179951385">"GNSS xizmati"</string>
     <string name="sensor_notification_service" msgid="7474531979178682676">"Sensorli bildirishnoma xizmati"</string>
     <string name="twilight_service" msgid="8964898045693187224">"Twilight xizmati"</string>
     <string name="factory_reset_warning" msgid="6858705527798047809">"Qurilmangizdagi ma’lumotlar o‘chirib tashlanadi"</string>
@@ -542,6 +544,7 @@
     <string name="biometric_not_recognized" msgid="5106687642694635888">"Aniqlanmadi"</string>
     <string name="biometric_error_canceled" msgid="8266582404844179778">"Autentifikatsiya bekor qilindi"</string>
     <string name="biometric_error_device_not_secured" msgid="3129845065043995924">"PIN kod, grafik kalit yoki parol sozlanmagan"</string>
+    <string name="biometric_error_generic" msgid="6784371929985434439">"Autentifikatsiya amalga oshmadi"</string>
     <string name="fingerprint_acquired_partial" msgid="8532380671091299342">"Barmoq izi qisman aniqlandi. Qayta urinib ko‘ring."</string>
     <string name="fingerprint_acquired_insufficient" msgid="2545149524031515411">"Barmoq izi aniqlanmadi. Qaytadan urining."</string>
     <string name="fingerprint_acquired_imager_dirty" msgid="4694800187151533990">"Barmoq izi skanerini tozalab, keyin qaytadan urining."</string>
@@ -829,7 +832,8 @@
     <string name="lockscreen_instructions_when_pattern_enabled" msgid="7982445492532123308">"Qulfdan chiqarish yoki favqulodda qo‘ng‘iroqni amalga oshirish uchun \"Menyu\"ni bosing."</string>
     <string name="lockscreen_instructions_when_pattern_disabled" msgid="7434061749374801753">"Qulfni ochish uchun \"Menyu\"ga bosing."</string>
     <string name="lockscreen_pattern_instructions" msgid="3169991838169244941">"Qulfni ochish uchun grafik kalitni chizing"</string>
-    <string name="lockscreen_emergency_call" msgid="7500692654885445299">"Favqulodda chaqiruv"</string>
+    <!-- no translation found for lockscreen_emergency_call (7549683825868928636) -->
+    <skip />
     <string name="lockscreen_return_to_call" msgid="3156883574692006382">"Qo‘ng‘iroqni qaytarish"</string>
     <string name="lockscreen_pattern_correct" msgid="8050630103651508582">"To‘g‘ri!"</string>
     <string name="lockscreen_pattern_wrong" msgid="2940138714468358458">"Qaytadan urining"</string>
@@ -1122,7 +1126,7 @@
     <string name="capital_off" msgid="7443704171014626777">"O"</string>
     <string name="checked" msgid="9179896827054513119">"belgilandi"</string>
     <string name="not_checked" msgid="7972320087569023342">"belgilanmadi"</string>
-    <string name="whichApplication" msgid="5432266899591255759">"Ilovani tanlang"</string>
+    <string name="whichApplication" msgid="5432266899591255759">"Nima ishlatilsin?"</string>
     <string name="whichApplicationNamed" msgid="6969946041713975681">"“%1$s” bilan ochish"</string>
     <string name="whichApplicationLabel" msgid="7852182961472531728">"Amalni bajarish"</string>
     <string name="whichViewApplication" msgid="5733194231473132945">"Ochish…"</string>
@@ -1460,9 +1464,6 @@
     <string name="gpsNotifMessage" msgid="7346649122793758032">"<xliff:g id="NAME">%1$s</xliff:g> (<xliff:g id="SERVICE">%2$s</xliff:g>) tomonidan so‘raldi"</string>
     <string name="gpsVerifYes" msgid="3719843080744112940">"Ha"</string>
     <string name="gpsVerifNo" msgid="1671201856091564741">"Yo‘q"</string>
-    <string name="gnss_nfw_notification_title" msgid="5004493772059563423">"Joylashuv axborotingizga ruxsat berildi"</string>
-    <string name="gnss_nfw_notification_message_oem" msgid="3683958907027107969">"Qurilmangiz ishlab chiqaruvchisi oxirgi favqulodda holat seansi davomida joylashuvingiz axborotidan foydalandi"</string>
-    <string name="gnss_nfw_notification_message_carrier" msgid="815888995791562151">"Aloqa operatoringiz oxirgi favqulodda holat seansi davomida joylashuvingiz axborotidan foydalandi"</string>
     <string name="sync_too_many_deletes" msgid="6999440774578705300">"Cheklovdan oshganlarini o‘chirish"</string>
     <string name="sync_too_many_deletes_desc" msgid="7409327940303504440">"<xliff:g id="ACCOUNT_NAME">%3$s</xliff:g> hisobi <xliff:g id="TYPE_OF_SYNC">%2$s</xliff:g> uchun  <xliff:g id="NUMBER_OF_DELETED_ITEMS">%1$d</xliff:g>ta o‘chirilgan elementlar bor. Nima qilmoqchisiz?"</string>
     <string name="sync_really_delete" msgid="5657871730315579051">"Elementlarni o‘chirish"</string>
@@ -1548,7 +1549,7 @@
     <string name="launchBrowserDefault" msgid="6328349989932924119">"Brauzer ishga tushirilsinmi?"</string>
     <string name="SetupCallDefault" msgid="5581740063237175247">"Qo‘ng‘iroqni qabul qilasizmi?"</string>
     <string name="activity_resolver_use_always" msgid="5575222334666843269">"Har doim"</string>
-    <string name="activity_resolver_use_once" msgid="948462794469672658">"Faqat hozir"</string>
+    <string name="activity_resolver_use_once" msgid="948462794469672658">"Faqat shu safar"</string>
     <string name="activity_resolver_work_profiles_support" msgid="4071345609235361269">"“%1$s” ishchi profilni qo‘llab-quvvatlamaydi"</string>
     <string name="default_audio_route_name" product="tablet" msgid="367936735632195517">"Planshet"</string>
     <string name="default_audio_route_name" product="tv" msgid="4908971385068087367">"TV"</string>
@@ -1792,8 +1793,8 @@
     <string name="package_updated_device_owner" msgid="7560272363805506941">"Administrator tomonidan yangilangan"</string>
     <string name="package_deleted_device_owner" msgid="2292335928930293023">"Administrator tomonidan o‘chirilgan"</string>
     <string name="confirm_battery_saver" msgid="5247976246208245754">"OK"</string>
-    <string name="battery_saver_description_with_learn_more" msgid="5997766757551917769">"Batareya quvvatini uzaytirish uchun Quvvat tejash funksiyasi:\n\n•Tungi mavzuni yoqadi\n•Fondagi harakatlar, vizual effektlar va “Hey Google” kabi boshqa funksiyalarni faolsizlantiradi\n\n"<annotation id="url">"Batafsil"</annotation></string>
-    <string name="battery_saver_description" msgid="8587408568232177204">"Batareya quvvatini uzaytirish uchun Quvvat tejash funksiyasi:\n\n•Tungi mavzuni yoqadi\n•Fondagi harakatlar, vizual effektlar va “Hey Google” kabi boshqa funksiyalarni faolsizlantiradi"</string>
+    <string name="battery_saver_description_with_learn_more" msgid="4424488535318105801">"Batareya quvvatini uzaytirish uchun Quvvat tejash funksiyasi:\n\n• Tungi mavzuni yoqadi\n• Fondagi harakatlar, vizual effektlar va “Hey Google” kabi boshqa funksiyalarni faolsizlantiradi\n\n"<annotation id="url">"Batafsil"</annotation></string>
+    <string name="battery_saver_description" msgid="6794188153647295212">"Batareya quvvatini uzaytirish uchun Quvvat tejash funksiyasi:\n\n• Tungi mavzuni yoqadi\n• Fondagi harakatlar, vizual effektlar va “Hey Google” kabi boshqa funksiyalarni faolsizlantiradi"</string>
     <string name="data_saver_description" msgid="4995164271550590517">"Trafik tejash rejimida ayrim ilovalar uchun orqa fonda internetdan foydalanish imkoniyati cheklanadi. Siz ishlatayotgan ilova zaruratga qarab internet-trafik sarflashi mumkin, biroq cheklangan miqdorda. Masalan, rasmlar ustiga bosmaguningizcha ular yuklanmaydi."</string>
     <string name="data_saver_enable_title" msgid="7080620065745260137">"Trafik tejash yoqilsinmi?"</string>
     <string name="data_saver_enable_button" msgid="4399405762586419726">"Yoqish"</string>
@@ -1997,6 +1998,7 @@
     <string name="notification_appops_camera_active" msgid="8177643089272352083">"Kamera"</string>
     <string name="notification_appops_microphone_active" msgid="581333393214739332">"Mikrofon"</string>
     <string name="notification_appops_overlay_active" msgid="5571732753262836481">"ekranda boshqa ilovalar ustidan ochiladi"</string>
+    <string name="notification_feedback_indicator" msgid="663476517711323016">"Fikr-mulohaza yuborish"</string>
     <string name="dynamic_mode_notification_channel_name" msgid="2986926422100223328">"Kun tartibi rejimi haqidagi bildirishnoma"</string>
     <string name="dynamic_mode_notification_title" msgid="9205715501274608016">"Batareya quvvati odatdagidan ertaroq tugashi mumkin"</string>
     <string name="dynamic_mode_notification_summary" msgid="4141614604437372157">"Batareya quvvati uzoqroq ishlashi uchun Tejamkor rejim yoqildi"</string>

@@ -193,8 +193,10 @@
     <string name="network_logging_notification_text" msgid="1327373071132562512">"このデバイスは組織によって管理され、ネットワーク トラフィックが監視される場合があります。詳しくはタップしてください。"</string>
     <string name="location_changed_notification_title" msgid="3620158742816699316">"アプリに位置情報へのアクセスを許可しました"</string>
     <string name="location_changed_notification_text" msgid="7158423339982706912">"詳しくは IT 管理者にお問い合わせください"</string>
+    <string name="geofencing_service" msgid="3826902410740315456">"ジオフェンス サービス"</string>
     <string name="country_detector" msgid="7023275114706088854">"国の検出"</string>
     <string name="location_service" msgid="2439187616018455546">"位置情報サービス"</string>
+    <string name="gnss_service" msgid="8907781262179951385">"GNSS サービス"</string>
     <string name="sensor_notification_service" msgid="7474531979178682676">"センサー通知サービス"</string>
     <string name="twilight_service" msgid="8964898045693187224">"トワイライト サービス"</string>
     <string name="factory_reset_warning" msgid="6858705527798047809">"デバイスのデータが消去されます"</string>
@@ -542,6 +544,7 @@
     <string name="biometric_not_recognized" msgid="5106687642694635888">"認識されませんでした"</string>
     <string name="biometric_error_canceled" msgid="8266582404844179778">"認証をキャンセルしました"</string>
     <string name="biometric_error_device_not_secured" msgid="3129845065043995924">"PIN、パターン、パスワードが設定されていません"</string>
+    <string name="biometric_error_generic" msgid="6784371929985434439">"エラー認証"</string>
     <string name="fingerprint_acquired_partial" msgid="8532380671091299342">"指紋を一部しか検出できませんでした。もう一度お試しください。"</string>
     <string name="fingerprint_acquired_insufficient" msgid="2545149524031515411">"指紋を処理できませんでした。もう一度お試しください。"</string>
     <string name="fingerprint_acquired_imager_dirty" msgid="4694800187151533990">"指紋認証センサーに汚れがあります。汚れを落としてもう一度お試しください。"</string>
@@ -829,7 +832,8 @@
     <string name="lockscreen_instructions_when_pattern_enabled" msgid="7982445492532123308">"MENUキーでロック解除(または緊急通報)"</string>
     <string name="lockscreen_instructions_when_pattern_disabled" msgid="7434061749374801753">"MENUキーでロック解除"</string>
     <string name="lockscreen_pattern_instructions" msgid="3169991838169244941">"パターンを入力"</string>
-    <string name="lockscreen_emergency_call" msgid="7500692654885445299">"緊急通報"</string>
+    <!-- no translation found for lockscreen_emergency_call (7549683825868928636) -->
+    <skip />
     <string name="lockscreen_return_to_call" msgid="3156883574692006382">"通話に戻る"</string>
     <string name="lockscreen_pattern_correct" msgid="8050630103651508582">"一致しました"</string>
     <string name="lockscreen_pattern_wrong" msgid="2940138714468358458">"もう一度お試しください"</string>
@@ -1460,9 +1464,6 @@
     <string name="gpsNotifMessage" msgid="7346649122793758032">"<xliff:g id="NAME">%1$s</xliff:g>さん（<xliff:g id="SERVICE">%2$s</xliff:g>）からのリクエスト"</string>
     <string name="gpsVerifYes" msgid="3719843080744112940">"はい"</string>
     <string name="gpsVerifNo" msgid="1671201856091564741">"いいえ"</string>
-    <string name="gnss_nfw_notification_title" msgid="5004493772059563423">"緊急対応時に位置情報にアクセスされました"</string>
-    <string name="gnss_nfw_notification_message_oem" msgid="3683958907027107969">"最近の緊急対応時にデバイス メーカーが位置情報にアクセスしました"</string>
-    <string name="gnss_nfw_notification_message_carrier" msgid="815888995791562151">"最近の緊急対応時に携帯通信会社が位置情報にアクセスしました"</string>
     <string name="sync_too_many_deletes" msgid="6999440774578705300">"削除の制限を超えました"</string>
     <string name="sync_too_many_deletes_desc" msgid="7409327940303504440">"<xliff:g id="ACCOUNT_NAME">%3$s</xliff:g>アカウントの<xliff:g id="TYPE_OF_SYNC">%2$s</xliff:g>で<xliff:g id="NUMBER_OF_DELETED_ITEMS">%1$d</xliff:g>件の削除があります。操作を選択してください。"</string>
     <string name="sync_really_delete" msgid="5657871730315579051">"アイテムを削除する"</string>
@@ -1792,8 +1793,8 @@
     <string name="package_updated_device_owner" msgid="7560272363805506941">"管理者により更新されています"</string>
     <string name="package_deleted_device_owner" msgid="2292335928930293023">"管理者により削除されています"</string>
     <string name="confirm_battery_saver" msgid="5247976246208245754">"OK"</string>
-    <string name="battery_saver_description_with_learn_more" msgid="5997766757551917769">"電池を長持ちさせるためにバッテリー セーバーが行う操作:\n\n•ダークテーマをオンにする\n•バックグラウンド アクティビティ、一部の視覚効果や、「OK Google」などの機能をオフにする、または制限する\n\n"<annotation id="url">"詳細"</annotation></string>
-    <string name="battery_saver_description" msgid="8587408568232177204">"電池を長持ちさせるためにバッテリー セーバーが行う操作:\n\n•ダークテーマをオンにする\n•バックグラウンド アクティビティ、一部の視覚効果や、「OK Google」などの機能をオフにする、または制限する"</string>
+    <string name="battery_saver_description_with_learn_more" msgid="4424488535318105801">"電池を長持ちさせるためにバッテリー セーバーが行う操作:\n\n• ダークテーマを ON にする\n• バックグラウンド アクティビティ、一部の視覚効果や、「OK Google」などの機能を OFF にする、または制限する\n\n"<annotation id="url">"詳細"</annotation></string>
+    <string name="battery_saver_description" msgid="6794188153647295212">"電池を長持ちさせるためにバッテリー セーバーが行う操作:\n\n• ダークテーマを ON にする\n• バックグラウンド アクティビティ、一部の視覚効果や、「OK Google」などの機能を OFF にする、または制限する"</string>
     <string name="data_saver_description" msgid="4995164271550590517">"データセーバーは、一部のアプリによるバックグラウンドでのデータ送受信を停止することでデータ使用量を抑制します。使用中のアプリからデータを送受信することはできますが、その頻度は低くなる場合があります。この影響として、たとえば画像はタップしないと表示されないようになります。"</string>
     <string name="data_saver_enable_title" msgid="7080620065745260137">"データセーバーを ON にしますか？"</string>
     <string name="data_saver_enable_button" msgid="4399405762586419726">"ON にする"</string>
@@ -1997,6 +1998,7 @@
     <string name="notification_appops_camera_active" msgid="8177643089272352083">"カメラ"</string>
     <string name="notification_appops_microphone_active" msgid="581333393214739332">"マイク"</string>
     <string name="notification_appops_overlay_active" msgid="5571732753262836481">"画面の他のアプリの上に重ねて表示"</string>
+    <string name="notification_feedback_indicator" msgid="663476517711323016">"フィードバックを送信"</string>
     <string name="dynamic_mode_notification_channel_name" msgid="2986926422100223328">"ルーティン モード情報の通知"</string>
     <string name="dynamic_mode_notification_title" msgid="9205715501274608016">"通常の充電を行う前に電池が切れる可能性があります"</string>
     <string name="dynamic_mode_notification_summary" msgid="4141614604437372157">"電池を長持ちさせるため、バッテリー セーバーが有効になりました"</string>

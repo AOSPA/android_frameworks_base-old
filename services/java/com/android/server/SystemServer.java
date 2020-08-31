@@ -81,6 +81,7 @@ import android.util.Pair;
 import android.util.Slog;
 import android.view.contentcapture.ContentCaptureManager;
 
+import com.android.i18n.timezone.ZoneInfoDb;
 import com.android.internal.R;
 import com.android.internal.notification.SystemNotificationChannels;
 import com.android.internal.os.BinderInternal;
@@ -95,9 +96,9 @@ import com.android.server.attention.AttentionManagerService;
 import com.android.server.audio.AudioService;
 import com.android.server.biometrics.AuthService;
 import com.android.server.biometrics.BiometricService;
-import com.android.server.biometrics.face.FaceService;
-import com.android.server.biometrics.fingerprint.FingerprintService;
-import com.android.server.biometrics.iris.IrisService;
+import com.android.server.biometrics.sensors.face.FaceService;
+import com.android.server.biometrics.sensors.fingerprint.FingerprintService;
+import com.android.server.biometrics.sensors.iris.IrisService;
 import com.android.server.broadcastradio.BroadcastRadioService;
 import com.android.server.camera.CameraServiceProxy;
 import com.android.server.clipboard.ClipboardService;
@@ -203,12 +204,6 @@ public final class SystemServer {
     private static final String ENCRYPTING_STATE = "trigger_restart_min_framework";
     private static final String ENCRYPTED_STATE = "1";
 
-    private static final long SNAPSHOT_INTERVAL = 60 * 60 * 1000; // 1hr
-
-    // The earliest supported time.  We pick one day into 1970, to
-    // give any timezone code room without going into negative time.
-    private static final long EARLIEST_SUPPORTED_TIME = 86400 * 1000;
-
     private static final long SLOW_DISPATCH_THRESHOLD_MS = 100;
     private static final long SLOW_DELIVERY_THRESHOLD_MS = 200;
 
@@ -236,8 +231,14 @@ public final class SystemServer {
             "com.android.server.usb.UsbService$Lifecycle";
     private static final String MIDI_SERVICE_CLASS =
             "com.android.server.midi.MidiService$Lifecycle";
+    private static final String WIFI_APEX_SERVICE_JAR_PATH =
+            "/apex/com.android.wifi/javalib/service-wifi.jar";
     private static final String WIFI_SERVICE_CLASS =
             "com.android.server.wifi.WifiService";
+    private static final String WIFI_SCANNING_SERVICE_CLASS =
+            "com.android.server.wifi.scanner.WifiScanningService";
+    private static final String WIFI_RTT_SERVICE_CLASS =
+            "com.android.server.wifi.rtt.RttService";
     private static final String WIFI_AWARE_SERVICE_CLASS =
             "com.android.server.wifi.aware.WifiAwareService";
     private static final String WIFI_P2P_SERVICE_CLASS =
@@ -308,8 +309,12 @@ public final class SystemServer {
             "com.android.server.DeviceIdleController";
     private static final String BLOB_STORE_MANAGER_SERVICE_CLASS =
             "com.android.server.blob.BlobStoreManagerService";
+    private static final String APP_SEARCH_MANAGER_SERVICE_CLASS =
+            "com.android.server.appsearch.AppSearchManagerService";
     private static final String ROLLBACK_MANAGER_SERVICE_CLASS =
             "com.android.server.rollback.RollbackManagerService";
+    private static final String ALARM_MANAGER_SERVICE_CLASS =
+            "com.android.server.alarm.AlarmManagerService";
 
     private static final String TETHERING_CONNECTOR_CLASS = "android.net.ITetheringConnector";
 
@@ -448,8 +453,9 @@ public final class SystemServer {
             // Default the timezone property to GMT if not set.
             //
             String timezoneProperty = SystemProperties.get("persist.sys.timezone");
-            if (timezoneProperty == null || timezoneProperty.isEmpty()) {
-                Slog.w(TAG, "Timezone not set; setting to GMT.");
+            if (!isValidTimeZoneId(timezoneProperty)) {
+                Slog.w(TAG, "persist.sys.timezone is not valid (" + timezoneProperty
+                        + "); setting to GMT.");
                 SystemProperties.set("persist.sys.timezone", "GMT");
             }
 
@@ -616,15 +622,15 @@ public final class SystemServer {
             }
         }
 
-        // Diagnostic to ensure that the system is in a base healthy state. Done here as a common
-        // non-zygote process.
-        if (!VMRuntime.hasBootImageSpaces()) {
-            Slog.wtf(TAG, "Runtime is not running with a boot image!");
-        }
-
         // Loop forever.
         Looper.loop();
         throw new RuntimeException("Main thread loop unexpectedly exited");
+    }
+
+    private static boolean isValidTimeZoneId(String timezoneProperty) {
+        return timezoneProperty != null
+                && !timezoneProperty.isEmpty()
+                && ZoneInfoDb.getInstance().hasTimeZone(timezoneProperty);
     }
 
     private boolean isFirstBootOrUpgrade() {
@@ -1150,7 +1156,7 @@ public final class SystemServer {
             }
 
             t.traceBegin("StartAlarmManagerService");
-            mSystemServiceManager.startService(new AlarmManagerService(context));
+            mSystemServiceManager.startService(ALARM_MANAGER_SERVICE_CLASS);
             t.traceEnd();
 
             t.traceBegin("StartInputManagerService");
@@ -1492,33 +1498,36 @@ public final class SystemServer {
                     PackageManager.FEATURE_WIFI)) {
                 // Wifi Service must be started first for wifi-related services.
                 t.traceBegin("StartWifi");
-                mSystemServiceManager.startService(WIFI_SERVICE_CLASS);
+                mSystemServiceManager.startServiceFromJar(
+                        WIFI_SERVICE_CLASS, WIFI_APEX_SERVICE_JAR_PATH);
                 t.traceEnd();
                 t.traceBegin("StartWifiScanning");
-                mSystemServiceManager.startService(
-                        "com.android.server.wifi.scanner.WifiScanningService");
+                mSystemServiceManager.startServiceFromJar(
+                        WIFI_SCANNING_SERVICE_CLASS, WIFI_APEX_SERVICE_JAR_PATH);
                 t.traceEnd();
             }
 
             if (context.getPackageManager().hasSystemFeature(
                     PackageManager.FEATURE_WIFI_RTT)) {
                 t.traceBegin("StartRttService");
-                mSystemServiceManager.startService(
-                        "com.android.server.wifi.rtt.RttService");
+                mSystemServiceManager.startServiceFromJar(
+                        WIFI_RTT_SERVICE_CLASS, WIFI_APEX_SERVICE_JAR_PATH);
                 t.traceEnd();
             }
 
             if (context.getPackageManager().hasSystemFeature(
                     PackageManager.FEATURE_WIFI_AWARE)) {
                 t.traceBegin("StartWifiAware");
-                mSystemServiceManager.startService(WIFI_AWARE_SERVICE_CLASS);
+                mSystemServiceManager.startServiceFromJar(
+                        WIFI_AWARE_SERVICE_CLASS, WIFI_APEX_SERVICE_JAR_PATH);
                 t.traceEnd();
             }
 
             if (context.getPackageManager().hasSystemFeature(
                     PackageManager.FEATURE_WIFI_DIRECT)) {
                 t.traceBegin("StartWifiP2P");
-                mSystemServiceManager.startService(WIFI_P2P_SERVICE_CLASS);
+                mSystemServiceManager.startServiceFromJar(
+                        WIFI_P2P_SERVICE_CLASS, WIFI_APEX_SERVICE_JAR_PATH);
                 t.traceEnd();
             }
 
@@ -2261,6 +2270,10 @@ public final class SystemServer {
 
         t.traceBegin("StartBootPhaseDeviceSpecificServicesReady");
         mSystemServiceManager.startBootPhase(t, SystemService.PHASE_DEVICE_SPECIFIC_SERVICES_READY);
+        t.traceEnd();
+
+        t.traceBegin("AppSearchManagerService");
+        mSystemServiceManager.startService(APP_SEARCH_MANAGER_SERVICE_CLASS);
         t.traceEnd();
 
         ConcurrentUtils.waitForFutureNoInterrupt(mBlobStoreServiceStart,

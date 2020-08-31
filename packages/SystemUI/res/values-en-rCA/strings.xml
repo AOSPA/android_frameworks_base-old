@@ -711,11 +711,13 @@
     <string name="notification_silence_title" msgid="8608090968400832335">"Silent"</string>
     <string name="notification_alert_title" msgid="3656229781017543655">"Default"</string>
     <string name="notification_bubble_title" msgid="8330481035191903164">"Bubble"</string>
+    <string name="notification_automatic_title" msgid="3745465364578762652">"Automatic"</string>
     <string name="notification_channel_summary_low" msgid="4860617986908931158">"No sound or vibration"</string>
     <string name="notification_conversation_summary_low" msgid="1734433426085468009">"No sound or vibration and appears lower in conversation section"</string>
     <string name="notification_channel_summary_default" msgid="3282930979307248890">"May ring or vibrate based on phone settings"</string>
     <string name="notification_channel_summary_default_with_bubbles" msgid="1782419896613644568">"May ring or vibrate based on phone settings. Conversations from <xliff:g id="APP_NAME">%1$s</xliff:g> bubble by default."</string>
     <string name="notification_channel_summary_bubble" msgid="7235935211580860537">"Keeps your attention with a floating shortcut to this content."</string>
+    <string name="notification_channel_summary_automatic" msgid="5813109268050235275">"Have the system determine if this notification should make sound or vibration"</string>
     <string name="notification_channel_summary_priority" msgid="7952654515769021553">"Shows at top of conversation section, appears as floating bubble, displays profile picture on lock screen"</string>
     <string name="notification_conversation_channel_settings" msgid="2409977688430606835">"Settings"</string>
     <string name="notification_priority_title" msgid="2079708866333537093">"Priority"</string>
@@ -736,6 +738,12 @@
     <string name="appops_camera_mic_overlay" msgid="5584311236445644095">"This app is displaying over other apps on your screen and using the microphone and camera."</string>
     <string name="notification_appops_settings" msgid="5208974858340445174">"Settings"</string>
     <string name="notification_appops_ok" msgid="2177609375872784124">"OK"</string>
+    <string name="feedback_silenced" msgid="5382212321253328247">"This notification was silenced by the system."</string>
+    <string name="feedback_promoted" msgid="8075757485407091976">"This notification was promoted by the system."</string>
+    <string name="feedback_demoted" msgid="5848066008939031913">"This notification was demoted by the system."</string>
+    <string name="feedback_prompt" msgid="2278631214125128281">"Was this correct?"</string>
+    <string name="feedback_response" msgid="4671729244976641339">"Thanks for your feedback!"</string>
+    <string name="feedback_ok" msgid="6481426753298857144">"OK"</string>
     <string name="notification_channel_controls_opened_accessibility" msgid="6111817750774381094">"Notification controls for <xliff:g id="APP_NAME">%1$s</xliff:g> opened"</string>
     <string name="notification_channel_controls_closed_accessibility" msgid="1561909368876911701">"Notification controls for <xliff:g id="APP_NAME">%1$s</xliff:g> closed"</string>
     <string name="notification_channel_switch_accessibility" msgid="8979885820432540252">"Allow notifications from this channel"</string>
@@ -908,25 +916,14 @@
     <string name="accessibility_quick_settings_edit" msgid="1523745183383815910">"Edit order of settings."</string>
     <string name="accessibility_quick_settings_page" msgid="7506322631645550961">"Page <xliff:g id="ID_1">%1$d</xliff:g> of <xliff:g id="ID_2">%2$d</xliff:g>"</string>
     <string name="tuner_lock_screen" msgid="2267383813241144544">"Lock screen"</string>
-    <string name="pip_phone_expand" msgid="1424988917240616212">"Expand"</string>
-    <string name="pip_phone_minimize" msgid="9057117033655996059">"Minimise"</string>
-    <string name="pip_phone_close" msgid="8801864042095341824">"Close"</string>
-    <string name="pip_phone_settings" msgid="5687538631925004341">"Settings"</string>
-    <string name="pip_phone_dismiss_hint" msgid="5825740708095316710">"Drag down to dismiss"</string>
-    <string name="pip_menu_title" msgid="6365909306215631910">"Menu"</string>
-    <string name="pip_notification_title" msgid="8661573026059630525">"<xliff:g id="NAME">%s</xliff:g> is in picture-in-picture"</string>
-    <string name="pip_notification_message" msgid="4991831338795022227">"If you don\'t want <xliff:g id="NAME">%s</xliff:g> to use this feature, tap to open settings and turn it off."</string>
-    <string name="pip_play" msgid="333995977693142810">"Play"</string>
-    <string name="pip_pause" msgid="1139598607050555845">"Pause"</string>
-    <string name="pip_skip_to_next" msgid="3864212650579956062">"Skip to next"</string>
-    <string name="pip_skip_to_prev" msgid="3742589641443049237">"Skip to previous"</string>
-    <string name="accessibility_action_pip_resize" msgid="8237306972921160456">"Resize"</string>
     <string name="thermal_shutdown_title" msgid="2702966892682930264">"Phone turned off due to heat"</string>
-    <string name="thermal_shutdown_message" msgid="7432744214105003895">"Your phone is now running normally"</string>
+    <string name="thermal_shutdown_message" msgid="6142269839066172984">"Your phone is now running normally.\nTap for more info"</string>
     <string name="thermal_shutdown_dialog_message" msgid="6745684238183492031">"Your phone was too hot, so it turned off to cool down. Your phone is now running normally.\n\nYour phone may get too hot if you:\n	• Use resource-intensive apps (such as gaming, video or navigation apps)\n	• Download or upload large files\n	• Use your phone in high temperatures"</string>
+    <string name="thermal_shutdown_dialog_help_text" msgid="6413474593462902901">"See care steps"</string>
     <string name="high_temp_title" msgid="2218333576838496100">"Phone is getting warm"</string>
-    <string name="high_temp_notif_message" msgid="163928048626045592">"Some features limited while phone cools down"</string>
+    <string name="high_temp_notif_message" msgid="1277346543068257549">"Some features are limited while phone cools down.\nTap for more info"</string>
     <string name="high_temp_dialog_message" msgid="3793606072661253968">"Your phone will automatically try to cool down. You can still use your phone, but it may run more slowly.\n\nOnce your phone has cooled down, it will run normally."</string>
+    <string name="high_temp_dialog_help_text" msgid="7380171287943345858">"See care steps"</string>
     <string name="high_temp_alarm_title" msgid="2359958549570161495">"Unplug charger"</string>
     <string name="high_temp_alarm_notify_message" msgid="7186272817783835089">"There’s an issue charging this device. Unplug the power adaptor, and take care as the cable may be warm."</string>
     <string name="high_temp_alarm_help_care_steps" msgid="5017002218341329566">"See care steps"</string>
@@ -1022,7 +1019,6 @@
     <string name="priority_onboarding_ignores_dnd_text" msgid="2918952762719600529">"Interrupt Do Not Disturb"</string>
     <string name="priority_onboarding_done_button_title" msgid="4569550984286506007">"OK"</string>
     <string name="priority_onboarding_settings_button_title" msgid="6663601574303585927">"Settings"</string>
-    <string name="magnification_overlay_title" msgid="6584179429612427958">"Magnification overlay window"</string>
     <string name="magnification_window_title" msgid="4863914360847258333">"Magnification window"</string>
     <string name="magnification_controls_title" msgid="8421106606708891519">"Magnification window controls"</string>
     <string name="quick_controls_title" msgid="6839108006171302273">"Device controls"</string>

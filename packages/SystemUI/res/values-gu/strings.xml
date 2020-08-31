@@ -711,11 +711,13 @@
     <string name="notification_silence_title" msgid="8608090968400832335">"સાઇલન્ટ"</string>
     <string name="notification_alert_title" msgid="3656229781017543655">"ડિફૉલ્ટ"</string>
     <string name="notification_bubble_title" msgid="8330481035191903164">"બબલ"</string>
+    <string name="notification_automatic_title" msgid="3745465364578762652">"ઑટોમૅટિક રીતે"</string>
     <string name="notification_channel_summary_low" msgid="4860617986908931158">"કોઈપણ સાઉન્ડ અથવા વાઇબ્રેશન નથી"</string>
     <string name="notification_conversation_summary_low" msgid="1734433426085468009">"કોઈપણ સાઉન્ડ અથવા વાઇબ્રેશન નથી અને વાતચીત વિભાગમાં તે વધુ નીચેની દિશાએ દેખાય છે"</string>
     <string name="notification_channel_summary_default" msgid="3282930979307248890">"ફોન સેટિંગના આધારે રિંગ અથવા વાઇબ્રેટ થઈ શકે છે"</string>
     <string name="notification_channel_summary_default_with_bubbles" msgid="1782419896613644568">"ફોન સેટિંગના આધારે રિંગ અથવા વાઇબ્રેટ થઈ શકે છે. ડિફૉલ્ટ તરીકે <xliff:g id="APP_NAME">%1$s</xliff:g> બબલની વાતચીત."</string>
     <string name="notification_channel_summary_bubble" msgid="7235935211580860537">"ફ્લોટિંગ શૉર્ટકટથી આ કન્ટેન્ટ પર તમારું ધ્યાન દોરી રાખે છે."</string>
+    <string name="notification_channel_summary_automatic" msgid="5813109268050235275">"આ નોટિફિકેશન સાઉન્ડ અથવા વાઇબ્રેટ કરી શકશે કે નહીં તે સિસ્ટમને નક્કી કરવા દો"</string>
     <string name="notification_channel_summary_priority" msgid="7952654515769021553">"એને વાતચીત વિભાગની ટોચ પર બતાવે છે, તરતા બબલ તરીકે દેખાય છે, લૉક સ્ક્રીન પર પ્રોફાઇલ ફોટા તરીકે બતાવે છે"</string>
     <string name="notification_conversation_channel_settings" msgid="2409977688430606835">"સેટિંગ"</string>
     <string name="notification_priority_title" msgid="2079708866333537093">"પ્રાધાન્યતા"</string>
@@ -736,6 +738,12 @@
     <string name="appops_camera_mic_overlay" msgid="5584311236445644095">"આ ઍપ તમારી સ્ક્રીન પરની અન્ય ઍપની ઉપર પ્રદર્શિત થઈ રહી છે અને માઇક્રોફોન અને કૅમેરાનો ઉપયોગ કરી રહી છે."</string>
     <string name="notification_appops_settings" msgid="5208974858340445174">"સેટિંગ"</string>
     <string name="notification_appops_ok" msgid="2177609375872784124">"ઓકે"</string>
+    <string name="feedback_silenced" msgid="5382212321253328247">"આ નોટિફિકેશનને સિસ્ટમ દ્વારા સાઇલન્ટ કરવામાં આવ્યું હતું."</string>
+    <string name="feedback_promoted" msgid="8075757485407091976">"આ નોટિફિકેશનને સિસ્ટમ દ્વારા બઢતી આપવામાં આવી હતી."</string>
+    <string name="feedback_demoted" msgid="5848066008939031913">"આ નોટિફિકેશનને સિસ્ટમ દ્વારા ડિમોટ કરવામાં આવ્યું હતું."</string>
+    <string name="feedback_prompt" msgid="2278631214125128281">"શું આ યોગ્ય હતું?"</string>
+    <string name="feedback_response" msgid="4671729244976641339">"તમારા પ્રતિસાદ બદલ આભાર!"</string>
+    <string name="feedback_ok" msgid="6481426753298857144">"ઓકે"</string>
     <string name="notification_channel_controls_opened_accessibility" msgid="6111817750774381094">"<xliff:g id="APP_NAME">%1$s</xliff:g> માટે સૂચના નિયંત્રણો ચાલુ છે"</string>
     <string name="notification_channel_controls_closed_accessibility" msgid="1561909368876911701">"<xliff:g id="APP_NAME">%1$s</xliff:g> માટે સૂચના નિયંત્રણો બંધ છે"</string>
     <string name="notification_channel_switch_accessibility" msgid="8979885820432540252">"આ ચૅનલની સૂચનાઓને મંજૂરી આપો"</string>
@@ -908,25 +916,14 @@
     <string name="accessibility_quick_settings_edit" msgid="1523745183383815910">"સેટિંગ્સનો ક્રમ સંપાદિત કરો."</string>
     <string name="accessibility_quick_settings_page" msgid="7506322631645550961">"<xliff:g id="ID_2">%2$d</xliff:g> માંથી <xliff:g id="ID_1">%1$d</xliff:g> પૃષ્ઠ"</string>
     <string name="tuner_lock_screen" msgid="2267383813241144544">"લૉક સ્ક્રીન"</string>
-    <string name="pip_phone_expand" msgid="1424988917240616212">"વિસ્તૃત કરો"</string>
-    <string name="pip_phone_minimize" msgid="9057117033655996059">"નાનું કરો"</string>
-    <string name="pip_phone_close" msgid="8801864042095341824">"બંધ કરો"</string>
-    <string name="pip_phone_settings" msgid="5687538631925004341">"સેટિંગ"</string>
-    <string name="pip_phone_dismiss_hint" msgid="5825740708095316710">"છોડી દેવા માટે નીચે ખેંચો"</string>
-    <string name="pip_menu_title" msgid="6365909306215631910">"મેનૂ"</string>
-    <string name="pip_notification_title" msgid="8661573026059630525">"<xliff:g id="NAME">%s</xliff:g> ચિત્રમાં-ચિત્રની અંદર છે"</string>
-    <string name="pip_notification_message" msgid="4991831338795022227">"જો તમે નથી ઇચ્છતા કે <xliff:g id="NAME">%s</xliff:g> આ સુવિધાનો ઉપયોગ કરે, તો સેટિંગ ખોલવા માટે ટૅપ કરો અને તેને બંધ કરો."</string>
-    <string name="pip_play" msgid="333995977693142810">"ચલાવો"</string>
-    <string name="pip_pause" msgid="1139598607050555845">"થોભાવો"</string>
-    <string name="pip_skip_to_next" msgid="3864212650579956062">"આગલા પર જાઓ"</string>
-    <string name="pip_skip_to_prev" msgid="3742589641443049237">"પહેલાંના પર જાઓ"</string>
-    <string name="accessibility_action_pip_resize" msgid="8237306972921160456">"કદ બદલો"</string>
     <string name="thermal_shutdown_title" msgid="2702966892682930264">"ફોન વધુ પડતી ગરમીને લીધે બંધ થઇ ગયો છે"</string>
-    <string name="thermal_shutdown_message" msgid="7432744214105003895">"તમારો ફોન હવે સામાન્યપણે કાર્ય કરી રહ્યો છે"</string>
+    <string name="thermal_shutdown_message" msgid="6142269839066172984">"તમારો ફોન હવે સામાન્યપણે કાર્ય કરી રહ્યો છે.\nવધુ માહિતી માટે ટૅપ કરો"</string>
     <string name="thermal_shutdown_dialog_message" msgid="6745684238183492031">"તમારો ફોન અત્યંત ગરમ હતો, તેથી તે ઠંડો થવા આપમેળે બંધ થઇ ગયો છે. તમારો ફોન હવે સામાન્યપણે કાર્ય કરી રહ્યો છે.\n\nતમારો ફોન અત્યંત ગરમ થઇ શકે છે, જો તમે:\n • એવી ઍપ્લિકેશન વાપરતા હો જે સંસાધન સઘન રીતે વાપરતી હોય (જેમ કે ગેમિંગ, વીડિઓ, અથવા નેવિગેટ કરતી ઍપ્લિકેશનો)\n • મોટી ફાઇલો અપલોડ અથવા ડાઉનલોડ કરતા હો\n • તમારા ફોનનો ઉપયોગ ઉચ્ચ તાપમાનમાં કરતા હો"</string>
+    <string name="thermal_shutdown_dialog_help_text" msgid="6413474593462902901">"સારસંભાળના પગલાં જુઓ"</string>
     <string name="high_temp_title" msgid="2218333576838496100">"ફોન ગરમ થઈ રહ્યો છે"</string>
-    <string name="high_temp_notif_message" msgid="163928048626045592">"ફોન ઠંડો થાય ત્યાં સુધી કેટલીક સુવિધાઓ મર્યાદિત હોય છે"</string>
+    <string name="high_temp_notif_message" msgid="1277346543068257549">"ફોન ઠંડો થાય ત્યાં સુધી અમુક સુવિધાઓ મર્યાદિત હોય છે.\nવધુ માહિતી માટે ટૅપ કરો"</string>
     <string name="high_temp_dialog_message" msgid="3793606072661253968">"તમારો ફોન આપમેળે ઠંડો થવાનો પ્રયાસ કરશે. તમે હજી પણ તમારા ફોનનો ઉપયોગ કરી શકો છો, પરંતુ તે કદાચ થોડો ધીમો ચાલે.\n\nતમારો ફોન ઠંડો થઈ જવા પર, તે સામાન્ય રીતે ચાલશે."</string>
+    <string name="high_temp_dialog_help_text" msgid="7380171287943345858">"સારસંભાળના પગલાં જુઓ"</string>
     <string name="high_temp_alarm_title" msgid="2359958549570161495">"ચાર્જરને અનપ્લગ કરો"</string>
     <string name="high_temp_alarm_notify_message" msgid="7186272817783835089">"આ ડિવાઇસને ચાર્જ કરવામાં કોઈ સમસ્યા છે. પાવર અડૅપ્ટર અનપ્લગ કરો અને કાળજી લેજો કદાચ કેબલ થોડો ગરમ થયો હોઈ શકે છે."</string>
     <string name="high_temp_alarm_help_care_steps" msgid="5017002218341329566">"સારસંભાળના પગલાં જુઓ"</string>
@@ -1022,7 +1019,6 @@
     <string name="priority_onboarding_ignores_dnd_text" msgid="2918952762719600529">"ખલેલ પાડશો નહીં સેટિંગમાં હસ્તક્ષેપ કરી શકે છે"</string>
     <string name="priority_onboarding_done_button_title" msgid="4569550984286506007">"સમજાઈ ગયું"</string>
     <string name="priority_onboarding_settings_button_title" msgid="6663601574303585927">"સેટિંગ"</string>
-    <string name="magnification_overlay_title" msgid="6584179429612427958">"વિસ્તૃતીકરણ ઓવરલે વિંડો"</string>
     <string name="magnification_window_title" msgid="4863914360847258333">"વિસ્તૃતીકરણ વિંડો"</string>
     <string name="magnification_controls_title" msgid="8421106606708891519">"વિસ્તૃતીકરણ વિંડોના નિયંત્રણો"</string>
     <string name="quick_controls_title" msgid="6839108006171302273">"ડિવાઇસનાં નિયંત્રણો"</string>

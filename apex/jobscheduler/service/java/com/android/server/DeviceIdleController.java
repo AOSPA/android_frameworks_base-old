@@ -79,7 +79,6 @@ import android.util.Xml;
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.app.IBatteryStats;
-import com.android.internal.os.BackgroundThread;
 import com.android.internal.util.DumpUtils;
 import com.android.internal.util.FastXmlSerializer;
 import com.android.internal.util.XmlUtils;
@@ -287,7 +286,7 @@ public class DeviceIdleController extends SystemService
     private Intent mIdleIntent;
     private Intent mLightIdleIntent;
     private AnyMotionDetector mAnyMotionDetector;
-    private final AppStateTracker mAppStateTracker;
+    private final AppStateTrackerImpl mAppStateTracker;
     private boolean mLightEnabled;
     private boolean mDeepEnabled;
     private boolean mQuickDozeActivated;
@@ -1595,7 +1594,10 @@ public class DeviceIdleController extends SystemService
                     null);
             long ident = Binder.clearCallingIdentity();
             try {
-                removePowerSaveWhitelistAppInternal(name);
+                if (!removePowerSaveWhitelistAppInternal(name)
+                        && mPowerSaveWhitelistAppsExceptIdle.containsKey(name)) {
+                    throw new UnsupportedOperationException("Cannot remove system whitelisted app");
+                }
             } finally {
                 Binder.restoreCallingIdentity(ident);
             }
@@ -1857,8 +1859,8 @@ public class DeviceIdleController extends SystemService
             return new AnyMotionDetector(getPowerManager(), handler, sm, callback, angleThreshold);
         }
 
-        AppStateTracker getAppStateTracker(Context ctx, Looper looper) {
-            return new AppStateTracker(ctx, looper);
+        AppStateTrackerImpl getAppStateTracker(Context ctx, Looper looper) {
+            return new AppStateTrackerImpl(ctx, looper);
         }
 
         ConnectivityManager getConnectivityManager() {
@@ -1890,7 +1892,7 @@ public class DeviceIdleController extends SystemService
         }
 
         MyHandler getHandler(DeviceIdleController controller) {
-            return controller.new MyHandler(BackgroundThread.getHandler().getLooper());
+            return controller.new MyHandler(JobSchedulerBackgroundThread.getHandler().getLooper());
         }
 
         Sensor getMotionSensor() {
@@ -1957,7 +1959,8 @@ public class DeviceIdleController extends SystemService
         mInjector = injector;
         mConfigFile = new AtomicFile(new File(getSystemDir(), "deviceidle.xml"));
         mHandler = mInjector.getHandler(this);
-        mAppStateTracker = mInjector.getAppStateTracker(context, FgThread.get().getLooper());
+        mAppStateTracker = mInjector.getAppStateTracker(context,
+                JobSchedulerBackgroundThread.get().getLooper());
         LocalServices.addService(AppStateTracker.class, mAppStateTracker);
         mUseMotionSensor = mInjector.useMotionSensor();
     }

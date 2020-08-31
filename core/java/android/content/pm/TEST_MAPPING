@@ -14,6 +14,9 @@
     {
       "name": "CtsInstantAppTests",
       "file_patterns": ["(/|^)InstantApp[^/]*"]
+    },
+    {
+      "name": "CarrierAppIntegrationTestCases"
     }
   ],
   "postsubmit": [

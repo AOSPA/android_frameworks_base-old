@@ -197,8 +197,10 @@
     <string name="network_logging_notification_text" msgid="1327373071132562512">"Twoja organizacja zarządza tym urządzeniem i może monitorować ruch w sieci. Kliknij, by dowiedzieć się więcej."</string>
     <string name="location_changed_notification_title" msgid="3620158742816699316">"Aplikacje mogą mieć dostęp do Twojej lokalizacji"</string>
     <string name="location_changed_notification_text" msgid="7158423339982706912">"Więcej informacji udzieli Ci administrator IT"</string>
+    <string name="geofencing_service" msgid="3826902410740315456">"Usługa geofencingu"</string>
     <string name="country_detector" msgid="7023275114706088854">"Wykrywanie kraju"</string>
     <string name="location_service" msgid="2439187616018455546">"Usługa lokalizacyjna"</string>
+    <string name="gnss_service" msgid="8907781262179951385">"Usługa GNSS"</string>
     <string name="sensor_notification_service" msgid="7474531979178682676">"Usługa powiadomień czujnika"</string>
     <string name="twilight_service" msgid="8964898045693187224">"Usługa Zmierzch"</string>
     <string name="factory_reset_warning" msgid="6858705527798047809">"Twoje urządzenie zostanie wyczyszczone"</string>
@@ -548,6 +550,7 @@
     <string name="biometric_not_recognized" msgid="5106687642694635888">"Nie rozpoznano"</string>
     <string name="biometric_error_canceled" msgid="8266582404844179778">"Anulowano uwierzytelnianie"</string>
     <string name="biometric_error_device_not_secured" msgid="3129845065043995924">"Nie ustawiono kodu PIN, wzoru ani hasła"</string>
+    <string name="biometric_error_generic" msgid="6784371929985434439">"Podczas uwierzytelniania wystąpił błąd"</string>
     <string name="fingerprint_acquired_partial" msgid="8532380671091299342">"Odcisk palca został odczytany tylko częściowo. Spróbuj ponownie."</string>
     <string name="fingerprint_acquired_insufficient" msgid="2545149524031515411">"Nie udało się przetworzyć odcisku palca. Spróbuj ponownie."</string>
     <string name="fingerprint_acquired_imager_dirty" msgid="4694800187151533990">"Czytnik linii papilarnych jest zabrudzony. Wyczyść go i spróbuj ponownie."</string>
@@ -835,7 +838,8 @@
     <string name="lockscreen_instructions_when_pattern_enabled" msgid="7982445492532123308">"Naciśnij Menu, aby odblokować lub wykonać połączenie alarmowe."</string>
     <string name="lockscreen_instructions_when_pattern_disabled" msgid="7434061749374801753">"Naciśnij Menu, aby odblokować."</string>
     <string name="lockscreen_pattern_instructions" msgid="3169991838169244941">"Narysuj wzór, aby odblokować"</string>
-    <string name="lockscreen_emergency_call" msgid="7500692654885445299">"Alarmowe"</string>
+    <!-- no translation found for lockscreen_emergency_call (7549683825868928636) -->
+    <skip />
     <string name="lockscreen_return_to_call" msgid="3156883574692006382">"Powrót do połączenia"</string>
     <string name="lockscreen_pattern_correct" msgid="8050630103651508582">"Poprawnie!"</string>
     <string name="lockscreen_pattern_wrong" msgid="2940138714468358458">"Spróbuj ponownie."</string>
@@ -1502,9 +1506,6 @@
     <string name="gpsNotifMessage" msgid="7346649122793758032">"Żądane przez <xliff:g id="NAME">%1$s</xliff:g> (<xliff:g id="SERVICE">%2$s</xliff:g>)"</string>
     <string name="gpsVerifYes" msgid="3719843080744112940">"Tak"</string>
     <string name="gpsVerifNo" msgid="1671201856091564741">"Nie"</string>
-    <string name="gnss_nfw_notification_title" msgid="5004493772059563423">"Uzyskano alarmowy dostęp do lokalizacji"</string>
-    <string name="gnss_nfw_notification_message_oem" msgid="3683958907027107969">"Producent Twojego urządzenia uzyskał dostęp do Twojej lokalizacji podczas ostatniej sytuacji alarmowej"</string>
-    <string name="gnss_nfw_notification_message_carrier" msgid="815888995791562151">"Twój operator uzyskał dostęp do Twojej lokalizacji podczas ostatniej sytuacji alarmowej"</string>
     <string name="sync_too_many_deletes" msgid="6999440774578705300">"Przekroczono limit usuwania"</string>
     <string name="sync_too_many_deletes_desc" msgid="7409327940303504440">"Usuwasz <xliff:g id="NUMBER_OF_DELETED_ITEMS">%1$d</xliff:g> elementy(ów) przez: <xliff:g id="TYPE_OF_SYNC">%2$s</xliff:g> (konto: <xliff:g id="ACCOUNT_NAME">%3$s</xliff:g>). Co chcesz zrobić?"</string>
     <string name="sync_really_delete" msgid="5657871730315579051">"Usuń elementy."</string>
@@ -1838,8 +1839,8 @@
     <string name="package_updated_device_owner" msgid="7560272363805506941">"Zaktualizowany przez administratora"</string>
     <string name="package_deleted_device_owner" msgid="2292335928930293023">"Usunięty przez administratora"</string>
     <string name="confirm_battery_saver" msgid="5247976246208245754">"OK"</string>
-    <string name="battery_saver_description_with_learn_more" msgid="5997766757551917769">"Aby wydłużyć czas pracy na baterii, funkcja Oszczędzanie baterii:\n\n•włącza tryb ciemny\n•wyłącza lub ogranicza aktywność w tle, niektóre efekty wizualne oraz inne funkcje, np. „OK Google”\n\n"<annotation id="url">"Więcej informacji"</annotation></string>
-    <string name="battery_saver_description" msgid="8587408568232177204">"Aby wydłużyć czas pracy na baterii, funkcja Oszczędzanie baterii:\n\n•włącza tryb ciemny\n•wyłącza lub ogranicza aktywność w tle, niektóre efekty wizualne oraz inne funkcje, np. „OK Google”"</string>
+    <string name="battery_saver_description_with_learn_more" msgid="4424488535318105801">"Aby wydłużyć czas pracy na baterii, funkcja Oszczędzanie baterii:\n\n•włącza tryb ciemny,\n• wyłącza lub ogranicza aktywność w tle, niektóre efekty wizualne oraz inne funkcje, np. „OK Google”.\n\n"<annotation id="url">"Więcej informacji"</annotation></string>
+    <string name="battery_saver_description" msgid="6794188153647295212">"Aby wydłużyć czas pracy na baterii, Oszczędzanie baterii:\n\n• włącza tryb ciemny,\n• wyłącza lub ogranicza aktywność w tle, niektóre efekty wizualne oraz inne funkcje, np. „OK Google”."</string>
     <string name="data_saver_description" msgid="4995164271550590517">"Oszczędzanie danych uniemożliwia niektórym aplikacjom wysyłanie i odbieranie danych w tle, zmniejszając w ten sposób ich użycie. Aplikacja, z której w tej chwili korzystasz, może uzyskiwać dostęp do danych, ale rzadziej. Może to powodować, że obrazy będą się wyświetlać dopiero po kliknięciu."</string>
     <string name="data_saver_enable_title" msgid="7080620065745260137">"Włączyć Oszczędzanie danych?"</string>
     <string name="data_saver_enable_button" msgid="4399405762586419726">"Włącz"</string>
@@ -2063,6 +2064,7 @@
     <string name="notification_appops_camera_active" msgid="8177643089272352083">"Aparat"</string>
     <string name="notification_appops_microphone_active" msgid="581333393214739332">"Mikrofon"</string>
     <string name="notification_appops_overlay_active" msgid="5571732753262836481">"wyświetla się nad innymi aplikacjami na ekranie"</string>
+    <string name="notification_feedback_indicator" msgid="663476517711323016">"Prześlij opinię"</string>
     <string name="dynamic_mode_notification_channel_name" msgid="2986926422100223328">"Powiadomienie z informacją o trybie rutynowym"</string>
     <string name="dynamic_mode_notification_title" msgid="9205715501274608016">"Bateria może się wyczerpać przed zwykłą porą ładowania"</string>
     <string name="dynamic_mode_notification_summary" msgid="4141614604437372157">"Włączono Oszczędzanie baterii, by wydłużyć czas pracy na baterii"</string>

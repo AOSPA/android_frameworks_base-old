@@ -25,8 +25,10 @@ import android.app.timedetector.TelephonyTimeSuggestion;
 import android.content.ContentResolver;
 import android.content.Context;
 import android.database.ContentObserver;
+import android.os.Binder;
 import android.os.Handler;
 import android.provider.Settings;
+import android.util.IndentingPrintWriter;
 
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.util.DumpUtils;
@@ -39,6 +41,11 @@ import java.util.Objects;
 
 /**
  * The implementation of ITimeDetectorService.aidl.
+ *
+ * <p>This service is implemented as a wrapper around {@link TimeDetectorStrategy}. It handles
+ * interaction with Android framework classes, enforcing caller permissions, capturing user identity
+ * and making calls async, leaving the (consequently more testable) {@link TimeDetectorStrategy}
+ * implementation to deal with the logic around time detection.
  */
 public final class TimeDetectorService extends ITimeDetectorService.Stub {
     private static final String TAG = "TimeDetectorService";
@@ -102,11 +109,16 @@ public final class TimeDetectorService extends ITimeDetectorService.Stub {
     }
 
     @Override
-    public void suggestManualTime(@NonNull ManualTimeSuggestion timeSignal) {
+    public boolean suggestManualTime(@NonNull ManualTimeSuggestion timeSignal) {
         enforceSuggestManualTimePermission();
         Objects.requireNonNull(timeSignal);
 
-        mHandler.post(() -> mTimeDetectorStrategy.suggestManualTime(timeSignal));
+        long token = Binder.clearCallingIdentity();
+        try {
+            return mTimeDetectorStrategy.suggestManualTime(timeSignal);
+        } finally {
+            Binder.restoreCallingIdentity(token);
+        }
     }
 
     @Override
@@ -128,7 +140,9 @@ public final class TimeDetectorService extends ITimeDetectorService.Stub {
             @Nullable String[] args) {
         if (!DumpUtils.checkDumpPermission(mContext, TAG, pw)) return;
 
-        mTimeDetectorStrategy.dump(pw, args);
+        IndentingPrintWriter ipw = new IndentingPrintWriter(pw);
+        mTimeDetectorStrategy.dump(ipw, args);
+        ipw.flush();
     }
 
     private void enforceSuggestTelephonyTimePermission() {

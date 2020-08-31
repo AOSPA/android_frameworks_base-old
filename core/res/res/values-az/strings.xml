@@ -193,8 +193,10 @@
     <string name="network_logging_notification_text" msgid="1327373071132562512">"Təşkilat bu cihazı idarə edir və şəbəkənin ötürülməsinə nəzarət edə bilər. Detallar üçün klikləyin."</string>
     <string name="location_changed_notification_title" msgid="3620158742816699316">"Tətbiqlər məkanınıza daxil ola bilər"</string>
     <string name="location_changed_notification_text" msgid="7158423339982706912">"Ətraflı məlumat üçün İT admininiz ilə əlaqə saxlayın"</string>
+    <string name="geofencing_service" msgid="3826902410740315456">"Geozona Xidməti"</string>
     <string name="country_detector" msgid="7023275114706088854">"Ölkə Aşkarlayıcısı"</string>
     <string name="location_service" msgid="2439187616018455546">"Məkan Xidməti"</string>
+    <string name="gnss_service" msgid="8907781262179951385">"GNSS Xidməti"</string>
     <string name="sensor_notification_service" msgid="7474531979178682676">"Sensor Bildiriş Xidməti"</string>
     <string name="twilight_service" msgid="8964898045693187224">"Alaqaranlıq Xidməti"</string>
     <string name="factory_reset_warning" msgid="6858705527798047809">"Cihazınız təmizlənəcəkdir"</string>
@@ -542,6 +544,7 @@
     <string name="biometric_not_recognized" msgid="5106687642694635888">"Tanınmır"</string>
     <string name="biometric_error_canceled" msgid="8266582404844179778">"Doğrulama ləğv edildi"</string>
     <string name="biometric_error_device_not_secured" msgid="3129845065043995924">"Pin, nümunə və ya parol ayarlanmayıb"</string>
+    <string name="biometric_error_generic" msgid="6784371929985434439">"Doğrulama zamanı xəta baş verdi"</string>
     <string name="fingerprint_acquired_partial" msgid="8532380671091299342">"Barmaq izi yarımçıq müəyyən olundu. Lütfən, yenidən cəhd edin."</string>
     <string name="fingerprint_acquired_insufficient" msgid="2545149524031515411">"Barmaq izi tanınmadı. Lütfən, yenidən cəhd edin."</string>
     <string name="fingerprint_acquired_imager_dirty" msgid="4694800187151533990">"Barmaq izi sensoru çirklidir. Lütfən, təmizləyin və yenidən cəhd edin."</string>
@@ -829,7 +832,8 @@
     <string name="lockscreen_instructions_when_pattern_enabled" msgid="7982445492532123308">"Təcili zəng kilidini açmaq və ya yerləşdirmək üçün Menyu düyməsinə basın."</string>
     <string name="lockscreen_instructions_when_pattern_disabled" msgid="7434061749374801753">"Kilidi açmaq üçün Menyu düyməsinə basın."</string>
     <string name="lockscreen_pattern_instructions" msgid="3169991838169244941">"Kilidi açmaq üçün model çəkin"</string>
-    <string name="lockscreen_emergency_call" msgid="7500692654885445299">"Təcili"</string>
+    <!-- no translation found for lockscreen_emergency_call (7549683825868928636) -->
+    <skip />
     <string name="lockscreen_return_to_call" msgid="3156883574692006382">"Zəngə qayıt"</string>
     <string name="lockscreen_pattern_correct" msgid="8050630103651508582">"Düzdür!"</string>
     <string name="lockscreen_pattern_wrong" msgid="2940138714468358458">"Bir də cəhd edin"</string>
@@ -1460,9 +1464,6 @@
     <string name="gpsNotifMessage" msgid="7346649122793758032">"<xliff:g id="NAME">%1$s</xliff:g> (<xliff:g id="SERVICE">%2$s</xliff:g>) tərəfindən tələb edilib"</string>
     <string name="gpsVerifYes" msgid="3719843080744112940">"Bəli"</string>
     <string name="gpsVerifNo" msgid="1671201856091564741">"Xeyr"</string>
-    <string name="gnss_nfw_notification_title" msgid="5004493772059563423">"Fövqəladə sessiyada məkana giriş edilib"</string>
-    <string name="gnss_nfw_notification_message_oem" msgid="3683958907027107969">"Son fövqəladə sessiya zamanı cihaz istehsalçısı məkanınıza giriş edib"</string>
-    <string name="gnss_nfw_notification_message_carrier" msgid="815888995791562151">"Son fövqəladə sessiya zamanı operator məkanınıza giriş edib"</string>
     <string name="sync_too_many_deletes" msgid="6999440774578705300">"Limiti keçəni silin"</string>
     <string name="sync_too_many_deletes_desc" msgid="7409327940303504440">"<xliff:g id="TYPE_OF_SYNC">%2$s</xliff:g> üçün <xliff:g id="NUMBER_OF_DELETED_ITEMS">%1$d</xliff:g> silinmiş fayl var, <xliff:g id="ACCOUNT_NAME">%3$s</xliff:g> hesabı. Nə etmək istəyirsiniz?"</string>
     <string name="sync_really_delete" msgid="5657871730315579051">"Elementləri sil"</string>
@@ -1792,8 +1793,8 @@
     <string name="package_updated_device_owner" msgid="7560272363805506941">"Admin tərəfindən yeniləndi"</string>
     <string name="package_deleted_device_owner" msgid="2292335928930293023">"Admin tərəfindən silindi"</string>
     <string name="confirm_battery_saver" msgid="5247976246208245754">"OK"</string>
-    <string name="battery_saver_description_with_learn_more" msgid="5997766757551917769">"Batareyanın ömrünü artırmaq üçün Enerjiyə Qənaət funksiyası:\n\n•Qaranlıq temanı aktiv edir\n•Arxa fondakı fəaliyyəti, bəzi vizual effektləri və “Hey Google” kimi digər funksiyaları deaktiv edir və ya məhdudlaşdırır\n\n"<annotation id="url">"Ətraflı məlumat"</annotation></string>
-    <string name="battery_saver_description" msgid="8587408568232177204">"Batareyanın ömrünü artırmaq üçün Enerjiyə Qənaət funksiyası:\n\n•Qaranlıq temanı aktiv edir\n•Arxa fondakı fəaliyyəti, bəzi vizual effektləri və “Hey Google” kimi digər funksiyaları deaktiv edir və ya məhdudlaşdırır"</string>
+    <string name="battery_saver_description_with_learn_more" msgid="4424488535318105801">"Batareyanın ömrünü artırmaq üçün Enerjiyə Qənaət funksiyası:\n\n• Qaranlıq temanı aktiv edir\n• Arxa fondakı fəaliyyəti, bəzi vizual effektləri və “Hey Google” kimi digər funksiyaları deaktiv edir və ya məhdudlaşdırır\n\n"<annotation id="url">"Ətraflı məlumat"</annotation></string>
+    <string name="battery_saver_description" msgid="6794188153647295212">"Batareyanın ömrünü artırmaq üçün Enerjiyə Qənaət funksiyası:\n\n• Qaranlıq temanı aktiv edir\n• Arxa fondakı fəaliyyəti, bəzi vizual effektləri və “Hey Google” kimi digər funksiyaları deaktiv edir və ya məhdudlaşdırır"</string>
     <string name="data_saver_description" msgid="4995164271550590517">"Data istifadəsini azalatmaq üçün, Data Qanaəti bəzi tətbiqlərin arxafonda data göndərməsinin və qəbulunun qarşısını alır. Hazırda işlətdiyiniz tətbiq dataya daxil ola bilər, ancaq bunu tez-tez edə bilməz. Bu o deməkdir ki, məsələn, Siz üzərinə tıklamadıqca o şəkillər göstərilməyəcək."</string>
     <string name="data_saver_enable_title" msgid="7080620065745260137">"Data Qənaəti aktiv edilsin?"</string>
     <string name="data_saver_enable_button" msgid="4399405762586419726">"Aktivləşdirin"</string>
@@ -1997,6 +1998,7 @@
     <string name="notification_appops_camera_active" msgid="8177643089272352083">"Kamera"</string>
     <string name="notification_appops_microphone_active" msgid="581333393214739332">"Mikrofon"</string>
     <string name="notification_appops_overlay_active" msgid="5571732753262836481">"ekrandakı digər tətbiqlərdə göstərin"</string>
+    <string name="notification_feedback_indicator" msgid="663476517711323016">"Rəy bildirin"</string>
     <string name="dynamic_mode_notification_channel_name" msgid="2986926422100223328">"Rejim üçün məlumat bildirişi"</string>
     <string name="dynamic_mode_notification_title" msgid="9205715501274608016">"Batareya həmişəki vaxtdan əvvəl bitə bilər"</string>
     <string name="dynamic_mode_notification_summary" msgid="4141614604437372157">"Enerjiyə Qənaət rejimi batareya istifadəsinin müddətini artırmaq üçün aktiv edilir"</string>

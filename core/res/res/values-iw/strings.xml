@@ -197,8 +197,10 @@
     <string name="network_logging_notification_text" msgid="1327373071132562512">"הארגון שלך מנהל מכשיר זה ועשוי לנטר את התנועה ברשת. הקש לקבלת פרטים."</string>
     <string name="location_changed_notification_title" msgid="3620158742816699316">"לאפליקציות יש הרשאת גישה למיקום שלך"</string>
     <string name="location_changed_notification_text" msgid="7158423339982706912">"‏יש לפנות למנהל ה-IT כדי לקבל מידע נוסף"</string>
+    <string name="geofencing_service" msgid="3826902410740315456">"שירות להגדרת גבולות וירטואליים"</string>
     <string name="country_detector" msgid="7023275114706088854">"גלאי מדינה"</string>
     <string name="location_service" msgid="2439187616018455546">"שירות מיקום"</string>
+    <string name="gnss_service" msgid="8907781262179951385">"‏שירות GNSS"</string>
     <string name="sensor_notification_service" msgid="7474531979178682676">"שירות להתראות מחיישנים"</string>
     <string name="twilight_service" msgid="8964898045693187224">"שירות דמדומים"</string>
     <string name="factory_reset_warning" msgid="6858705527798047809">"תתבצע מחיקה של המכשיר"</string>
@@ -548,6 +550,7 @@
     <string name="biometric_not_recognized" msgid="5106687642694635888">"לא זוהתה"</string>
     <string name="biometric_error_canceled" msgid="8266582404844179778">"האימות בוטל"</string>
     <string name="biometric_error_device_not_secured" msgid="3129845065043995924">"עוד לא הוגדרו קוד גישה, קו ביטול נעילה או סיסמה"</string>
+    <string name="biometric_error_generic" msgid="6784371929985434439">"שגיאה באימות"</string>
     <string name="fingerprint_acquired_partial" msgid="8532380671091299342">"זוהתה טביעת אצבע חלקית. אפשר לנסות שוב."</string>
     <string name="fingerprint_acquired_insufficient" msgid="2545149524031515411">"לא ניתן היה לעבד את טביעת האצבע. נסה שוב."</string>
     <string name="fingerprint_acquired_imager_dirty" msgid="4694800187151533990">"החיישן של טביעות האצבעות מלוכלך. צריך לנקות אותו ולנסות שוב."</string>
@@ -1502,9 +1505,6 @@
     <string name="gpsNotifMessage" msgid="7346649122793758032">"מבוקש על ידי <xliff:g id="NAME">%1$s</xliff:g> (<xliff:g id="SERVICE">%2$s</xliff:g>)"</string>
     <string name="gpsVerifYes" msgid="3719843080744112940">"כן"</string>
     <string name="gpsVerifNo" msgid="1671201856091564741">"לא"</string>
-    <string name="gnss_nfw_notification_title" msgid="5004493772059563423">"בוצעה גישה למיקום בזמן מקרה חירום"</string>
-    <string name="gnss_nfw_notification_message_oem" msgid="3683958907027107969">"יצרן המכשיר שלך ניגש לנתוני המיקום שלך במהלך פעילות במקרה חירום לאחרונה"</string>
-    <string name="gnss_nfw_notification_message_carrier" msgid="815888995791562151">"הספק שלך ניגש לנתוני המיקום שלך במהלך פעילות במקרה חירום לאחרונה"</string>
     <string name="sync_too_many_deletes" msgid="6999440774578705300">"חרגת ממגבלת המחיקה"</string>
     <string name="sync_too_many_deletes_desc" msgid="7409327940303504440">"יש <xliff:g id="NUMBER_OF_DELETED_ITEMS">%1$d</xliff:g> פריטים שנמחקו עבור <xliff:g id="TYPE_OF_SYNC">%2$s</xliff:g> , בחשבון <xliff:g id="ACCOUNT_NAME">%3$s</xliff:g>. איזו פעולה ברצונך לבצע?"</string>
     <string name="sync_really_delete" msgid="5657871730315579051">"מחק את הפריטים"</string>
@@ -1838,8 +1838,8 @@
     <string name="package_updated_device_owner" msgid="7560272363805506941">"עודכנה על ידי מנהל המערכת"</string>
     <string name="package_deleted_device_owner" msgid="2292335928930293023">"נמחקה על ידי מנהל המערכת"</string>
     <string name="confirm_battery_saver" msgid="5247976246208245754">"אישור"</string>
-    <string name="battery_saver_description_with_learn_more" msgid="5997766757551917769">"‏כדי להאריך את חיי הסוללה, התכונה \'חיסכון בסוללה\':\n\n•מפעילה עיצוב כהה\n•מכבה או מגבילה פעילות ברקע, חלק מהאפקטים החזותיים ותכונות אחרות כמו Ok Google\n\n"<annotation id="url">"מידע נוסף"</annotation></string>
-    <string name="battery_saver_description" msgid="8587408568232177204">"‏כדי להאריך את חיי הסוללה, התכונה \'חיסכון בסוללה\':\n\n•מפעילה עיצוב כהה\n•מכבה או מגבילה פעילות ברקע, חלק מהאפקטים החזותיים ותכונות אחרות כמו Ok Google"</string>
+    <string name="battery_saver_description_with_learn_more" msgid="4424488535318105801">"‏כדי להאריך את חיי הסוללה, התכונה \'חיסכון בסוללה\':\n\n• מפעילה עיצוב כהה\n• מכבה או מגבילה פעילות ברקע, חלק מהאפקטים החזותיים ותכונות אחרות כמו Ok Google\n\n"<annotation id="url">"למידע נוסף"</annotation></string>
+    <string name="battery_saver_description" msgid="6794188153647295212">"‏כדי להאריך את חיי הסוללה, התכונה \'חיסכון בסוללה\':\n\n• מפעילה עיצוב כהה\n• מכבה או מגבילה פעילות ברקע, חלק מהאפקטים החזותיים ותכונות אחרות כמו Ok Google"</string>
     <string name="data_saver_description" msgid="4995164271550590517">"‏כדי לסייע בהפחתת השימוש בנתונים, חוסך הנתונים (Data Saver) מונע מאפליקציות מסוימות שליחה או קבלה של נתונים ברקע. אפליקציה שבה נעשה שימוש כרגע יכולה לגשת לנתונים, אבל בתדירות נמוכה יותר. המשמעות היא, למשל, שתמונות יוצגו רק לאחר שמקישים עליהן."</string>
     <string name="data_saver_enable_title" msgid="7080620065745260137">"להפעיל את חוסך הנתונים?"</string>
     <string name="data_saver_enable_button" msgid="4399405762586419726">"הפעל"</string>
@@ -2063,6 +2063,7 @@
     <string name="notification_appops_camera_active" msgid="8177643089272352083">"מצלמה"</string>
     <string name="notification_appops_microphone_active" msgid="581333393214739332">"מיקרופון"</string>
     <string name="notification_appops_overlay_active" msgid="5571732753262836481">"תצוגה מעל אפליקציות אחרות במסך"</string>
+    <string name="notification_feedback_indicator" msgid="663476517711323016">"שליחת משוב"</string>
     <string name="dynamic_mode_notification_channel_name" msgid="2986926422100223328">"התראת מידע לגבי מצב שגרתי"</string>
     <string name="dynamic_mode_notification_title" msgid="9205715501274608016">"הסוללה עלולה להתרוקן לפני המועד הרגיל של הטעינה"</string>
     <string name="dynamic_mode_notification_summary" msgid="4141614604437372157">"תכונת החיסכון בסוללה הופעלה כדי להאריך את חיי הסוללה"</string>

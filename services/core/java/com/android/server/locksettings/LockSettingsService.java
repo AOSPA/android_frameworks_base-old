@@ -1456,8 +1456,7 @@ public class LockSettingsService extends ILockSettings.Stub {
                 final BiometricManager bm = mContext.getSystemService(BiometricManager.class);
                 final PackageManager pm = mContext.getPackageManager();
                 for (int i = 0; i < resetLockouts.size(); i++) {
-                    bm.setActiveUser(resetLockouts.get(i).mUserId);
-                    bm.resetLockout(resetLockouts.get(i).mHAT);
+                    bm.resetLockout(resetLockouts.get(i).mUserId, resetLockouts.get(i).mHAT);
                 }
                 if (challengeType == CHALLENGE_INTERNAL
                         && pm.hasSystemFeature(PackageManager.FEATURE_FACE)) {
@@ -2749,7 +2748,7 @@ public class LockSettingsService extends ILockSettings.Stub {
             // If there are multiple profiles in the same account, ensure we only generate the
             // challenge once.
             challengeType = CHALLENGE_INTERNAL;
-            challenge = mContext.getSystemService(FaceManager.class).generateChallenge();
+            challenge = mContext.getSystemService(FaceManager.class).generateChallengeBlocking();
         }
 
         final AuthenticationResult authResult;
@@ -2915,7 +2914,6 @@ public class LockSettingsService extends ILockSettings.Stub {
         FingerprintManager mFingerprintManager = mInjector.getFingerprintManager();
         if (mFingerprintManager != null && mFingerprintManager.isHardwareDetected()) {
             if (mFingerprintManager.hasEnrolledFingerprints(userId)) {
-                mFingerprintManager.setActiveUser(userId);
                 CountDownLatch latch = new CountDownLatch(1);
                 // For the purposes of M and N, groupId is the same as userId.
                 Fingerprint finger = new Fingerprint(null, userId, 0, 0);
@@ -2934,7 +2932,6 @@ public class LockSettingsService extends ILockSettings.Stub {
         FaceManager mFaceManager = mInjector.getFaceManager();
         if (mFaceManager != null && mFaceManager.isHardwareDetected()) {
             if (mFaceManager.hasEnrolledTemplates(userId)) {
-                mFaceManager.setActiveUser(userId);
                 CountDownLatch latch = new CountDownLatch(1);
                 Face face = new Face(null, 0, 0);
                 mFaceManager.remove(face, userId, faceManagerRemovalCallback(latch));

@@ -133,11 +133,6 @@
         <attr name="buttonStrokeWidth" format="dimension" />
     </declare-styleable>
 
-    <!-- Used to style rotate suggestion button AVD animations -->
-    <attr name="rotateButtonStartAngle" format="float" />
-    <attr name="rotateButtonEndAngle" format="float" />
-    <attr name="rotateButtonScaleX" format="float" />
-
     <!-- Used to style charging animation AVD animation -->
     <attr name="chargingAnimColor" format="color" />
 
@@ -160,6 +155,13 @@
         <attr name="cornerRadius" format="dimension" />
         <attr name="rippleMinSize" format="dimension" />
         <attr name="rippleMaxSize" format="dimension" />
+    </declare-styleable>
+
+    <declare-styleable name="UdfpsView">
+        <attr name="sensorRadius" format="dimension"/>
+        <attr name="sensorMarginBottom" format="dimension"/>
+        <attr name="sensorPressureCoefficient" format="float"/>
+        <attr name="sensorTouchAreaCoefficient" format="float"/>
     </declare-styleable>
 </resources>
 

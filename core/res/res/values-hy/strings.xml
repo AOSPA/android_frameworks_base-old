@@ -193,8 +193,10 @@
     <string name="network_logging_notification_text" msgid="1327373071132562512">"Ձեր կազմակերպությունը կառավարում է այս սարքը և կարող է վերահսկել ցանցի թրաֆիկը: Հպեք՝ մանրամասները դիտելու համար:"</string>
     <string name="location_changed_notification_title" msgid="3620158742816699316">"Հավելվածներին հասանելի է ձեր տեղադրությունը"</string>
     <string name="location_changed_notification_text" msgid="7158423339982706912">"Մանրամասներն իմացեք ՏՏ ադմինիստրատորից"</string>
+    <string name="geofencing_service" msgid="3826902410740315456">"Աշխարհագրական գոտեվորման ծառայություն"</string>
     <string name="country_detector" msgid="7023275114706088854">"Երկրի որոշում"</string>
     <string name="location_service" msgid="2439187616018455546">"Տեղորոշման ծառայություն"</string>
+    <string name="gnss_service" msgid="8907781262179951385">"GNSS ծառայություն"</string>
     <string name="sensor_notification_service" msgid="7474531979178682676">"Տվիչների ծանուցումների մշակման ծառայություն"</string>
     <string name="twilight_service" msgid="8964898045693187224">"Մթնշաղի սկիզբը որոշող ծառայություն"</string>
     <string name="factory_reset_warning" msgid="6858705527798047809">"Ձեր սարքը ջնջվելու է"</string>
@@ -542,6 +544,7 @@
     <string name="biometric_not_recognized" msgid="5106687642694635888">"Չհաջողվեց ճանաչել"</string>
     <string name="biometric_error_canceled" msgid="8266582404844179778">"Նույնականացումը չեղարկվեց"</string>
     <string name="biometric_error_device_not_secured" msgid="3129845065043995924">"Ավելացրեք PIN կոդ, նախշ կամ գաղտնաբառ։"</string>
+    <string name="biometric_error_generic" msgid="6784371929985434439">"Չհաջողվեց նույնականացնել"</string>
     <string name="fingerprint_acquired_partial" msgid="8532380671091299342">"Մատնահետքն ամբողջությամբ չի սկանավորվել: Փորձեք նորից:"</string>
     <string name="fingerprint_acquired_insufficient" msgid="2545149524031515411">"Չհաջողվեց մշակել մատնահետքը: Նորից փորձեք:"</string>
     <string name="fingerprint_acquired_imager_dirty" msgid="4694800187151533990">"Մատնահետքերի սենսորն աղտոտված է: Մաքրեք այն և փորձեք նորից:"</string>
@@ -829,7 +832,8 @@
     <string name="lockscreen_instructions_when_pattern_enabled" msgid="7982445492532123308">"Ապակողպելու կամ շտապ կանչ անելու համար սեղմեք «Ընտրացանկ»"</string>
     <string name="lockscreen_instructions_when_pattern_disabled" msgid="7434061749374801753">"Ապակողպելու համար սեղմեք Ցանկը:"</string>
     <string name="lockscreen_pattern_instructions" msgid="3169991838169244941">"Հավաքեք սխեման` ապակողպելու համար"</string>
-    <string name="lockscreen_emergency_call" msgid="7500692654885445299">"Շտապ կանչ"</string>
+    <!-- no translation found for lockscreen_emergency_call (7549683825868928636) -->
+    <skip />
     <string name="lockscreen_return_to_call" msgid="3156883574692006382">"Վերադառնալ զանգին"</string>
     <string name="lockscreen_pattern_correct" msgid="8050630103651508582">"Ճիշտ է:"</string>
     <string name="lockscreen_pattern_wrong" msgid="2940138714468358458">"Կրկին փորձեք"</string>
@@ -1460,9 +1464,6 @@
     <string name="gpsNotifMessage" msgid="7346649122793758032">"<xliff:g id="NAME">%1$s</xliff:g> (<xliff:g id="SERVICE">%2$s</xliff:g>)-ի հարցումով"</string>
     <string name="gpsVerifYes" msgid="3719843080744112940">"Այո"</string>
     <string name="gpsVerifNo" msgid="1671201856091564741">"Ոչ"</string>
-    <string name="gnss_nfw_notification_title" msgid="5004493772059563423">"Օգտագործվել են տեղադրության տվյալները"</string>
-    <string name="gnss_nfw_notification_message_oem" msgid="3683958907027107969">"Ձեր սարքի արտադրողը վերջին շտապ կանչի ժամանակ օգտագործել է ձեր տեղադրության մասին տվյալները"</string>
-    <string name="gnss_nfw_notification_message_carrier" msgid="815888995791562151">"Ձեր օպերատորը վերջին շտապ կանչի ժամանակ օգտագործել է ձեր տեղադրության մասին տվյալները"</string>
     <string name="sync_too_many_deletes" msgid="6999440774578705300">"Ջնջելու սահմանը գերազանցվել է"</string>
     <string name="sync_too_many_deletes_desc" msgid="7409327940303504440">"<xliff:g id="NUMBER_OF_DELETED_ITEMS">%1$d</xliff:g> ջնջված տարր կա <xliff:g id="TYPE_OF_SYNC">%2$s</xliff:g>-ի համար, <xliff:g id="ACCOUNT_NAME">%3$s</xliff:g>-ի հաշիվ: Ի՞նչ եք ցանկանում անել:"</string>
     <string name="sync_really_delete" msgid="5657871730315579051">"Ջնջել տարրերը"</string>
@@ -1792,8 +1793,8 @@
     <string name="package_updated_device_owner" msgid="7560272363805506941">"Թարմացվել է ձեր ադմինիստրատորի կողմից"</string>
     <string name="package_deleted_device_owner" msgid="2292335928930293023">"Ջնջվել է ձեր ադմինիստրատորի կողմից"</string>
     <string name="confirm_battery_saver" msgid="5247976246208245754">"Եղավ"</string>
-    <string name="battery_saver_description_with_learn_more" msgid="5997766757551917769">"Մարտկոցի աշխատաժամանակը երկարացնելու համար «Մարտկոցի տնտեսում» գործառույթը.\n\n•Միացնում է մուգ թեման։\n•Անջատում կամ սահմանափակում է աշխատանքը ֆոնային ռեժիմում, որոշ վիզուալ էֆեկտներ և այլ գործառույթներ, օրինակ՝ «Ok Google» հրահանգը։\n\n"<annotation id="url">"Իմանալ ավելին"</annotation></string>
-    <string name="battery_saver_description" msgid="8587408568232177204">"Մարտկոցի աշխատաժամանակը երկարացնելու համար «Մարտկոցի տնտեսում» գործառույթը.\n\n•Միացնում է մուգ թեման։\n•Անջատում կամ սահմանափակում է աշխատանքը ֆոնային ռեժիմում, որոշ վիզուալ էֆեկտներ և այլ գործառույթներ, օրինակ՝ «Ok Google» հրահանգը:"</string>
+    <string name="battery_saver_description_with_learn_more" msgid="4424488535318105801">"Մարտկոցի աշխատաժամանակը երկարացնելու համար «Մարտկոցի տնտեսում» գործառույթը՝\n\n• Միացնում է մուգ թեման։\n• Անջատում կամ սահմանափակում է աշխատանքը ֆոնային ռեժիմում, որոշ վիզուալ էֆեկտներ և այլ գործառույթներ, օրինակ՝ «Ok Google» հրահանգը։\n\n"<annotation id="url">"Իմանալ ավելին"</annotation></string>
+    <string name="battery_saver_description" msgid="6794188153647295212">"Մարտկոցի աշխատաժամանակը երկարացնելու համար «Մարտկոցի տնտեսում» գործառույթը՝\n\n• Միացնում է մուգ թեման։\n• Անջատում կամ սահմանափակում է աշխատանքը ֆոնային ռեժիմում, որոշ վիզուալ էֆեկտներ և այլ գործառույթներ, օրինակ՝ «Ok Google» հրահանգը։"</string>
     <string name="data_saver_description" msgid="4995164271550590517">"Թրաֆիկի տնտեսման ռեժիմում որոշ հավելվածների համար տվյալների ֆոնային փոխանցումն անջատված է։ Հավելվածը, որն օգտագործում եք, կարող է տվյալներ փոխանցել և ստանալ, սակայն ոչ այնքան հաճախ: Օրինակ՝ պատկերները կցուցադրվեն միայն դրանց վրա սեղմելուց հետո։"</string>
     <string name="data_saver_enable_title" msgid="7080620065745260137">"Միացնե՞լ թրաֆիկի տնտեսումը"</string>
     <string name="data_saver_enable_button" msgid="4399405762586419726">"Միացնել"</string>
@@ -1997,6 +1998,7 @@
     <string name="notification_appops_camera_active" msgid="8177643089272352083">"Տեսախցիկ"</string>
     <string name="notification_appops_microphone_active" msgid="581333393214739332">"Խոսափող"</string>
     <string name="notification_appops_overlay_active" msgid="5571732753262836481">"ցուցադրվում է մյուս հավելվածների վրայից"</string>
+    <string name="notification_feedback_indicator" msgid="663476517711323016">"Կարծիք հայտնել"</string>
     <string name="dynamic_mode_notification_channel_name" msgid="2986926422100223328">"Ծանուցում լիցքավորման մասին"</string>
     <string name="dynamic_mode_notification_title" msgid="9205715501274608016">"Մարտկոցը կարող է սովորականից շուտ սպառվել"</string>
     <string name="dynamic_mode_notification_summary" msgid="4141614604437372157">"Մարտկոցի կյանքը երկարացնելու համար ակտիվացվել է մարտկոցի տնտեսման ռեժիմը"</string>

@@ -40,6 +40,7 @@
 #include <SkShader.h>
 #include <SkTemplates.h>
 #include <SkTextBlob.h>
+#include <SkVertices.h>
 
 #include <memory>
 #include <optional>
@@ -840,11 +841,6 @@ void SkiaCanvas::drawLayer(uirenderer::DeferredLayerUpdater* layerUpdater) {
 
 void SkiaCanvas::drawRenderNode(uirenderer::RenderNode* renderNode) {
     LOG_ALWAYS_FATAL("SkiaCanvas can't directly draw RenderNodes");
-}
-
-void SkiaCanvas::callDrawGLFunction(Functor* functor,
-                                    uirenderer::GlFunctorLifecycleListener* listener) {
-    LOG_ALWAYS_FATAL("SkiaCanvas can't directly draw GL Content");
 }
 
 }  // namespace android

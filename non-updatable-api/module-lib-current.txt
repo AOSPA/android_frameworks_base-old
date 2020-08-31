@@ -1,5 +1,41 @@
 // Signature format: 2.0
+package android.app {
+
+  public class AppOpsManager {
+    field public static final String OPSTR_NO_ISOLATED_STORAGE = "android:no_isolated_storage";
+  }
+
+  public class NotificationManager {
+    method public boolean hasEnabledNotificationListener(@NonNull String, @NonNull android.os.UserHandle);
+  }
+
+}
+
+package android.content.rollback {
+
+  public class RollbackManagerFrameworkInitializer {
+    method public static void initialize();
+  }
+
+}
+
+package android.graphics {
+
+  public final class Compatibility {
+    method public static void setTargetSdkVersion(int);
+  }
+
+  public final class ImageDecoder implements java.lang.AutoCloseable {
+    method @AnyThread @NonNull public static android.graphics.ImageDecoder.Source createSource(@NonNull android.content.ContentResolver, @NonNull android.net.Uri, @Nullable android.content.res.Resources);
+  }
+
+}
+
 package android.os {
+
+  public class Binder implements android.os.IBinder {
+    method public final void markVintfStability();
+  }
 
   public class StatsServiceManager {
     method @NonNull public android.os.StatsServiceManager.ServiceRegisterer getStatsCompanionServiceRegisterer();
@@ -20,8 +56,17 @@ package android.os {
 
 package android.util {
 
+  public class AtomicFile {
+    ctor public AtomicFile(@NonNull java.io.File, @Nullable android.util.SystemConfigFileCommitEventLogger);
+  }
+
   public final class Log {
     method public static int logToRadioBuffer(int, @Nullable String, @Nullable String);
+  }
+
+  public class SystemConfigFileCommitEventLogger {
+    ctor public SystemConfigFileCommitEventLogger(@NonNull String);
+    method public void setStartTime(long);
   }
 
 }

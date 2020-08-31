@@ -116,6 +116,7 @@ import android.sysprop.DisplayProperties;
 import android.util.AndroidRuntimeException;
 import android.util.BoostFramework.ScrollOptimizer;
 import android.util.DisplayMetrics;
+import android.util.EventLog;
 import android.util.Log;
 import android.util.LongArray;
 import android.util.MergedConfiguration;
@@ -1228,28 +1229,19 @@ public final class ViewRootImpl implements ViewParent,
         }
     }
 
-    @UnsupportedAppUsage
-    public void detachFunctor(long functor) {
-        if (mAttachInfo.mThreadedRenderer != null) {
-            // Fence so that any pending invokeFunctor() messages will be processed
-            // before we return from detachFunctor.
-            mAttachInfo.mThreadedRenderer.stopDrawing();
-        }
-    }
+    /**
+     * Does nothing; Here only because of @UnsupportedAppUsage
+     */
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R,
+            publicAlternatives = "Use {@link android.webkit.WebView} instead")
+    public void detachFunctor(long functor) { }
 
     /**
-     * Schedules the functor for execution in either kModeProcess or
-     * kModeProcessNoContext, depending on whether or not there is an EGLContext.
-     *
-     * @param functor The native functor to invoke
-     * @param waitForCompletion If true, this will not return until the functor
-     *                          has invoked. If false, the functor may be invoked
-     *                          asynchronously.
+     * Does nothing; Here only because of @UnsupportedAppUsage
      */
-    @UnsupportedAppUsage
-    public static void invokeFunctor(long functor, boolean waitForCompletion) {
-        ThreadedRenderer.invokeFunctor(functor, waitForCompletion);
-    }
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R,
+            publicAlternatives = "Use {@link android.webkit.WebView} instead")
+    public static void invokeFunctor(long functor, boolean waitForCompletion) { }
 
     /**
      * @param animator animator to register with the hardware renderer
@@ -7979,6 +7971,19 @@ public final class ViewRootImpl implements ViewParent,
             InputEventReceiver receiver, int flags, boolean processImmediately) {
         QueuedInputEvent q = obtainQueuedInputEvent(event, receiver, flags);
 
+        if (event instanceof MotionEvent) {
+            MotionEvent me = (MotionEvent) event;
+            if (me.getAction() == MotionEvent.ACTION_CANCEL) {
+                EventLog.writeEvent(EventLogTags.VIEW_ENQUEUE_INPUT_EVENT, "Motion - Cancel",
+                        getTitle());
+            }
+        } else if (event instanceof KeyEvent) {
+            KeyEvent ke = (KeyEvent) event;
+            if (ke.isCanceled()) {
+                EventLog.writeEvent(EventLogTags.VIEW_ENQUEUE_INPUT_EVENT, "Key - Cancel",
+                        getTitle());
+            }
+        }
         // Always enqueue the input event in order, regardless of its time stamp.
         // We do this because the application or the IME may inject key events
         // in response to touch events and we want to ensure that the injected keys

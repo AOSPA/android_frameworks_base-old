@@ -711,11 +711,13 @@
     <string name="notification_silence_title" msgid="8608090968400832335">"নীৰৱ"</string>
     <string name="notification_alert_title" msgid="3656229781017543655">"ডিফ’ল্ট"</string>
     <string name="notification_bubble_title" msgid="8330481035191903164">"বাবল"</string>
+    <string name="notification_automatic_title" msgid="3745465364578762652">"স্বয়ংক্ৰিয়"</string>
     <string name="notification_channel_summary_low" msgid="4860617986908931158">"কোনো ধ্বনি অথবা কম্পন নাই"</string>
     <string name="notification_conversation_summary_low" msgid="1734433426085468009">"কোনো ধ্বনি অথবা কম্পন নাই আৰু বাৰ্তালাপ শাখাটোৰ তলৰ অংশত দেখা পোৱা যায়"</string>
     <string name="notification_channel_summary_default" msgid="3282930979307248890">"ফ’নৰ ছেটিঙৰ ওপৰত নিৰ্ভৰ কৰি ৰিং কৰিব অথবা কম্পন হ’ব পাৰে"</string>
     <string name="notification_channel_summary_default_with_bubbles" msgid="1782419896613644568">"ফ’নৰ ছেটিঙৰ ওপৰত নিৰ্ভৰ কৰি ৰিং কৰিব অথবা কম্পন হ’ব পাৰে। <xliff:g id="APP_NAME">%1$s</xliff:g>ৰ বাৰ্তালাপ ডিফ’ল্ট হিচাপে বাবল হয়।"</string>
     <string name="notification_channel_summary_bubble" msgid="7235935211580860537">"উপঙি থকা এটা শ্বৰ্টকাটৰ জৰিয়তে এই সমলখিনিৰ প্ৰতি আপোনাক মনোযোগী কৰি ৰাখে।"</string>
+    <string name="notification_channel_summary_automatic" msgid="5813109268050235275">"এই জাননীটোৱে ধ্বনি নে কম্পন সৃষ্টি কৰিব সেয়া ছিষ্টেমটোক নিৰ্ধাৰণ কৰিবলৈ দিয়ক"</string>
     <string name="notification_channel_summary_priority" msgid="7952654515769021553">"বাৰ্তালাপ শাখাটোৰ শীৰ্ষত দেখুৱায়, ওপঙা বাবল হিচাপে দেখা পোৱা যায়, লক স্ক্ৰীনত প্ৰ’ফাইলৰ চিত্ৰ প্ৰদৰ্শন কৰে"</string>
     <string name="notification_conversation_channel_settings" msgid="2409977688430606835">"ছেটিংসমূহ"</string>
     <string name="notification_priority_title" msgid="2079708866333537093">"অগ্ৰাধিকাৰ"</string>
@@ -736,6 +738,12 @@
     <string name="appops_camera_mic_overlay" msgid="5584311236445644095">"এই এপে আপোনাৰ স্ক্ৰীণত থকা অন্য় এপৰ ওপৰত প্ৰদৰ্শিত হৈ মাইক্ৰ\'ফ\'ন আৰু কেমেৰা ব্য়ৱহাৰ কৰি আছে।"</string>
     <string name="notification_appops_settings" msgid="5208974858340445174">"ছেটিংসমূহ"</string>
     <string name="notification_appops_ok" msgid="2177609375872784124">"ঠিক আছে"</string>
+    <string name="feedback_silenced" msgid="5382212321253328247">"ছিষ্টেমটোৱে এই জাননীক নীৰৱ কৰিছে।"</string>
+    <string name="feedback_promoted" msgid="8075757485407091976">"ছিষ্টেমটোৱে এই জাননীটোৰ ক্ষেত্ৰত দিয়া গুৰুত্ব বৃদ্ধি কৰিছে।"</string>
+    <string name="feedback_demoted" msgid="5848066008939031913">"ছিষ্টেমটোৱে এই জাননীটোৰ ক্ষেত্ৰত দিয়া গুৰুত্ব হ্ৰাস কৰিছে।"</string>
+    <string name="feedback_prompt" msgid="2278631214125128281">"এইটো শুদ্ধ আছিলনে?"</string>
+    <string name="feedback_response" msgid="4671729244976641339">"আপোনাৰ মতামতৰ বাবে ধন্যবাদ!"</string>
+    <string name="feedback_ok" msgid="6481426753298857144">"ঠিক আছে"</string>
     <string name="notification_channel_controls_opened_accessibility" msgid="6111817750774381094">"<xliff:g id="APP_NAME">%1$s</xliff:g>ৰ জাননী নিয়ন্ত্ৰণসমূহ খোলা অৱস্থাত আছে"</string>
     <string name="notification_channel_controls_closed_accessibility" msgid="1561909368876911701">"<xliff:g id="APP_NAME">%1$s</xliff:g>ৰ জাননী নিয়ন্ত্ৰণসমূহ বন্ধ অৱস্থাত আছে"</string>
     <string name="notification_channel_switch_accessibility" msgid="8979885820432540252">"এই চ্চেনেলৰ পৰা জাননী দিবলৈ অনুমতি দিয়ক"</string>
@@ -908,25 +916,14 @@
     <string name="accessibility_quick_settings_edit" msgid="1523745183383815910">"ছেটিংসমূহৰ ক্ৰম সম্পাদনা কৰক।"</string>
     <string name="accessibility_quick_settings_page" msgid="7506322631645550961">"<xliff:g id="ID_2">%2$d</xliff:g>ৰ পৃষ্ঠা <xliff:g id="ID_1">%1$d</xliff:g>"</string>
     <string name="tuner_lock_screen" msgid="2267383813241144544">"লক স্ক্ৰীণ"</string>
-    <string name="pip_phone_expand" msgid="1424988917240616212">"বিস্তাৰ কৰক"</string>
-    <string name="pip_phone_minimize" msgid="9057117033655996059">"সৰু কৰক"</string>
-    <string name="pip_phone_close" msgid="8801864042095341824">"বন্ধ কৰক"</string>
-    <string name="pip_phone_settings" msgid="5687538631925004341">"ছেটিংসমূহ"</string>
-    <string name="pip_phone_dismiss_hint" msgid="5825740708095316710">"অগ্ৰাহ্য কৰিবলৈ তললৈ টানক"</string>
-    <string name="pip_menu_title" msgid="6365909306215631910">"মেনু"</string>
-    <string name="pip_notification_title" msgid="8661573026059630525">"<xliff:g id="NAME">%s</xliff:g> চিত্ৰৰ ভিতৰৰ চিত্ৰত আছে"</string>
-    <string name="pip_notification_message" msgid="4991831338795022227">"আপুনি যদি <xliff:g id="NAME">%s</xliff:g> সুবিধাটো ব্যৱহাৰ কৰিব নোখোজে, তেন্তে ছেটিংসমূহ খুলিবলৈ টিপক আৰু তালৈ গৈ ইয়াক অফ কৰক।"</string>
-    <string name="pip_play" msgid="333995977693142810">"প্লে কৰক"</string>
-    <string name="pip_pause" msgid="1139598607050555845">"পজ কৰক"</string>
-    <string name="pip_skip_to_next" msgid="3864212650579956062">"পৰৱৰ্তী মিডিয়ালৈ যাওক"</string>
-    <string name="pip_skip_to_prev" msgid="3742589641443049237">"আগৰটো মিডিয়ালৈ যাওক"</string>
-    <string name="accessibility_action_pip_resize" msgid="8237306972921160456">"আকাৰ সলনি কৰক"</string>
     <string name="thermal_shutdown_title" msgid="2702966892682930264">"আপোনাৰ ফ\'নটো গৰম হোৱাৰ কাৰণে অফ কৰা হৈছিল"</string>
-    <string name="thermal_shutdown_message" msgid="7432744214105003895">"আপোনাৰ ফ\'নটো এতিয়া স্বাভাৱিকভাৱে চলি আছে"</string>
+    <string name="thermal_shutdown_message" msgid="6142269839066172984">"আপোনাৰ ফ’নটো এতিয়া স্বাভাৱিকভাৱে চলি আছে।\nঅধিক তথ্যৰ বাবে টিপক"</string>
     <string name="thermal_shutdown_dialog_message" msgid="6745684238183492031">"আপোনাৰ ফ\'নটো অত্যধিক গৰম হোৱাৰ বাবে ইয়াক ঠাণ্ডা কৰিবলৈ অফ কৰা হৈছিল। আপোনাৰ ফ\'নটো এতিয়া স্বাভাৱিকভাৱে চলি আছে।\n\nআপোনাৰ ফ\'নটো গৰম হ\'ব পাৰে, যদিহে আপুনি:\n	• ফ\'নটোৰ হাৰ্ডৱেৰ অত্যধিক মাত্ৰাত ব্যৱহাৰ কৰা এপসমূহ চলালে (যেনে, ভিডিঅ\' গেইম, ভিডিঅ\', দিক্-নিৰ্দেশনা এপসমূহ)\n	• খুউব ডাঙৰ আকাৰৰ ফাইল আপল\'ড বা ডাউনল’ড কৰিলে\n	• আপোনাৰ ফ\'নটো উচ্চ তাপমাত্ৰাৰ পৰিৱেশত ব্যৱহাৰ কৰিলে"</string>
+    <string name="thermal_shutdown_dialog_help_text" msgid="6413474593462902901">"যত্ন লোৱাৰ পদক্ষেপসমূহ চাওক"</string>
     <string name="high_temp_title" msgid="2218333576838496100">"ফ\'নটো গৰম হ\'বলৈ ধৰিছে"</string>
-    <string name="high_temp_notif_message" msgid="163928048626045592">"ফ\'নটো ঠাণ্ডা হৈ থকা সময়ত কিছুমান সুবিধা উপলব্ধ নহ’ব"</string>
+    <string name="high_temp_notif_message" msgid="1277346543068257549">"ফ’নটো ঠাণ্ডা হৈ থকাৰ সময়ত কিছুমান সুবিধা উপলব্ধ নহয়।\nঅধিক তথ্যৰ বাবে টিপক"</string>
     <string name="high_temp_dialog_message" msgid="3793606072661253968">"আপোনাৰ ফ\'নটোৱে নিজে নিজে ঠাণ্ডা হ\'বলৈ স্বয়ংক্ৰিয়ভাৱে চেষ্টা কৰিব। আপুনি ফ\'নটো ব্যৱহাৰ কৰি থাকিব পাৰে কিন্তু ই লাহে লাহে চলিব পাৰে।\n\nফ\'নটো সম্পূৰ্ণভাৱে ঠাণ্ডা হোৱাৰ পিছত ই আগৰ নিচিনাকৈয়েই চলিব।"</string>
+    <string name="high_temp_dialog_help_text" msgid="7380171287943345858">"যত্ন লোৱাৰ পদক্ষেপসমূহ চাওক"</string>
     <string name="high_temp_alarm_title" msgid="2359958549570161495">"চ্চার্জাৰ আনপ্লাগ কৰক"</string>
     <string name="high_temp_alarm_notify_message" msgid="7186272817783835089">"এই ডিভাইচটো চ্চার্জ কৰোঁতে কিবা সমস্যা হৈছে। পাৱাৰ এডাপ্টাৰটো আনপ্লাগ কৰক, কেব’লডাল গৰম হ’ব পাৰে গতিকে সাবধান হ’ব।"</string>
     <string name="high_temp_alarm_help_care_steps" msgid="5017002218341329566">"যত্ন লোৱাৰ পদক্ষেপসমূহ চাওক"</string>
@@ -1022,7 +1019,6 @@
     <string name="priority_onboarding_ignores_dnd_text" msgid="2918952762719600529">"অসুবিধা নিদিব সুবিধাটোত ব্যাঘাত জন্মাওক"</string>
     <string name="priority_onboarding_done_button_title" msgid="4569550984286506007">"বুজি পালোঁ"</string>
     <string name="priority_onboarding_settings_button_title" msgid="6663601574303585927">"ছেটিংসমূহ"</string>
-    <string name="magnification_overlay_title" msgid="6584179429612427958">"বিবৰ্ধন অ’ভাৰলে’ৰ ৱিণ্ড’"</string>
     <string name="magnification_window_title" msgid="4863914360847258333">"বিবৰ্ধন ৱিণ্ড’"</string>
     <string name="magnification_controls_title" msgid="8421106606708891519">"বিবৰ্ধন ৱিণ্ড’ৰ নিয়ন্ত্ৰণসমূহ"</string>
     <string name="quick_controls_title" msgid="6839108006171302273">"ডিভাইচৰ নিয়ন্ত্ৰণসমূহ"</string>

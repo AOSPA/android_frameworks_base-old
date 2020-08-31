@@ -231,6 +231,8 @@ public class MbmsDownloadSession implements AutoCloseable {
 
     private static final String DESTINATION_SANITY_CHECK_FILE_NAME = "destinationSanityCheckFile";
 
+    private static final int MAX_SERVICE_ANNOUNCEMENT_SIZE = 10 * 1024; // 10KB
+
     private static AtomicBoolean sIsInitialized = new AtomicBoolean(false);
 
     private final Context mContext;
@@ -316,6 +318,16 @@ public class MbmsDownloadSession implements AutoCloseable {
             return null;
         }
         return session;
+    }
+
+    /**
+     * Returns the maximum size of the service announcement descriptor that can be provided via
+     * {@link #addServiceAnnouncement}
+     * @return The maximum length of the byte array passed as an argument to
+     *         {@link #addServiceAnnouncement}.
+     */
+    public static int getMaximumServiceAnnouncementSize() {
+        return MAX_SERVICE_ANNOUNCEMENT_SIZE;
     }
 
     private int bindAndInitialize() {
@@ -407,6 +419,61 @@ public class MbmsDownloadSession implements AutoCloseable {
         }
         try {
             int returnCode = downloadService.requestUpdateFileServices(mSubscriptionId, classList);
+            if (returnCode == MbmsErrors.UNKNOWN) {
+                // Unbind and throw an obvious error
+                close();
+                throw new IllegalStateException("Middleware must not return an unknown error code");
+            }
+            if (returnCode != MbmsErrors.SUCCESS) {
+                sendErrorToApp(returnCode, null);
+            }
+        } catch (RemoteException e) {
+            Log.w(LOG_TAG, "Remote process died");
+            mService.set(null);
+            sIsInitialized.set(false);
+            sendErrorToApp(MbmsErrors.ERROR_MIDDLEWARE_LOST, null);
+        }
+    }
+
+    /**
+     * Inform the middleware of a service announcement descriptor received from a group
+     * communication server.
+     *
+     * When participating in a group call via the {@link MbmsGroupCallSession} API, applications may
+     * receive a service announcement descriptor from the group call server that informs them of
+     * files that may be relevant to users communicating on the group call.
+     *
+     * After supplying the service announcement descriptor received from the server to the
+     * middleware via this API, applications will receive information on the available files via
+     * {@link MbmsDownloadSessionCallback#onFileServicesUpdated}, and the available files will be
+     * downloadable via {@link MbmsDownloadSession#download} like other files published via
+     * {@link MbmsDownloadSessionCallback#onFileServicesUpdated}.
+     *
+     * Asynchronous error codes via the {@link MbmsDownloadSessionCallback#onError(int, String)}
+     * callback may include any of the errors that are not specific to the streaming use-case.
+     *
+     * May throw an {@link IllegalStateException} when the middleware has not yet been bound,
+     * or an {@link IllegalArgumentException} if the byte array is too large, or an
+     * {@link UnsupportedOperationException} if the middleware has not implemented this method.
+     *
+     * @param contents The contents of the service announcement descriptor received from the
+     *                     group call server. If the size of this array is greater than the value of
+     *                     {@link #getMaximumServiceAnnouncementSize()}, an
+     *                     {@link IllegalArgumentException} will be thrown.
+     */
+    public void addServiceAnnouncement(@NonNull byte[] contents) {
+        IMbmsDownloadService downloadService = mService.get();
+        if (downloadService == null) {
+            throw new IllegalStateException("Middleware not yet bound");
+        }
+
+        if (contents.length > MAX_SERVICE_ANNOUNCEMENT_SIZE) {
+            throw new IllegalArgumentException("File too large");
+        }
+
+        try {
+            int returnCode = downloadService.addServiceAnnouncement(
+                    mSubscriptionId, contents);
             if (returnCode == MbmsErrors.UNKNOWN) {
                 // Unbind and throw an obvious error
                 close();

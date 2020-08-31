@@ -121,7 +121,7 @@ public class GnssCapabilitiesProvider {
         }
     }
 
-    private static  boolean hasCapability(int halCapabilities, int capability) {
+    private static boolean hasCapability(int halCapabilities, int capability) {
         return (halCapabilities & capability) != 0;
     }
 }

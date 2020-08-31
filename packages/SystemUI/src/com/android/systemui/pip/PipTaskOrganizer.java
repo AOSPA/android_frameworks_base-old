@@ -24,6 +24,7 @@ import static android.app.WindowConfiguration.WINDOWING_MODE_UNDEFINED;
 import static com.android.systemui.pip.PipAnimationController.ANIM_TYPE_ALPHA;
 import static com.android.systemui.pip.PipAnimationController.ANIM_TYPE_BOUNDS;
 import static com.android.systemui.pip.PipAnimationController.TRANSITION_DIRECTION_NONE;
+import static com.android.systemui.pip.PipAnimationController.TRANSITION_DIRECTION_REMOVE_STACK;
 import static com.android.systemui.pip.PipAnimationController.TRANSITION_DIRECTION_SAME;
 import static com.android.systemui.pip.PipAnimationController.TRANSITION_DIRECTION_TO_FULLSCREEN;
 import static com.android.systemui.pip.PipAnimationController.TRANSITION_DIRECTION_TO_PIP;
@@ -55,10 +56,10 @@ import android.window.WindowContainerTransactionCallback;
 import android.window.WindowOrganizer;
 
 import com.android.internal.os.SomeArgs;
-import com.android.systemui.R;
 import com.android.systemui.pip.phone.PipUpdateThread;
 import com.android.systemui.stackdivider.Divider;
-import com.android.systemui.wm.DisplayController;
+import com.android.wm.shell.R;
+import com.android.wm.shell.common.DisplayController;
 
 import java.io.PrintWriter;
 import java.util.ArrayList;
@@ -177,6 +178,9 @@ public class PipTaskOrganizer extends TaskOrganizer implements
                 Rect startBounds = (Rect) args.arg2;
                 Rect toBounds = (Rect) args.arg3;
                 userResizePip(startBounds, toBounds);
+                if (updateBoundsCallback != null) {
+                    updateBoundsCallback.accept(toBounds);
+                }
                 break;
             }
         }
@@ -337,21 +341,30 @@ public class PipTaskOrganizer extends TaskOrganizer implements
                     + " mInPip=" + mInPip + " mExitingPip=" + mExitingPip + " mToken=" + mToken);
             return;
         }
-        getUpdateHandler().post(() -> {
-            try {
-                // Reset the task bounds first to ensure the activity configuration is reset as well
-                final WindowContainerTransaction wct = new WindowContainerTransaction();
-                wct.setBounds(mToken, null);
-                WindowOrganizer.applyTransaction(wct);
 
-                ActivityTaskManager.getService().removeStacksInWindowingModes(
-                        new int[]{ WINDOWING_MODE_PINNED });
-            } catch (RemoteException e) {
-                Log.e(TAG, "Failed to remove PiP", e);
-            }
-        });
+        // removePipImmediately is expected when the following animation finishes.
+        mUpdateHandler.post(() -> mPipAnimationController
+                .getAnimator(mLeash, mLastReportedBounds, 1f, 0f)
+                .setTransitionDirection(TRANSITION_DIRECTION_REMOVE_STACK)
+                .setPipAnimationCallback(mPipAnimationCallback)
+                .setDuration(mEnterExitAnimationDuration)
+                .start());
         mInitialState.remove(mToken.asBinder());
         mExitingPip = true;
+    }
+
+    private void removePipImmediately() {
+        try {
+            // Reset the task bounds first to ensure the activity configuration is reset as well
+            final WindowContainerTransaction wct = new WindowContainerTransaction();
+            wct.setBounds(mToken, null);
+            WindowOrganizer.applyTransaction(wct);
+
+            ActivityTaskManager.getService().removeStacksInWindowingModes(
+                    new int[]{ WINDOWING_MODE_PINNED });
+        } catch (RemoteException e) {
+            Log.e(TAG, "Failed to remove PiP", e);
+        }
     }
 
     @Override
@@ -803,7 +816,10 @@ public class PipTaskOrganizer extends TaskOrganizer implements
                     + "directly");
         }
         mLastReportedBounds.set(destinationBounds);
-        if (isInPipDirection(direction) && type == ANIM_TYPE_ALPHA) {
+        if (direction == TRANSITION_DIRECTION_REMOVE_STACK) {
+            removePipImmediately();
+            return;
+        } else if (isInPipDirection(direction) && type == ANIM_TYPE_ALPHA) {
             return;
         }
 

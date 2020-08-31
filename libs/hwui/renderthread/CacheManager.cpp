@@ -101,7 +101,7 @@ void CacheManager::trimMemory(TrimMemoryMode mode) {
         return;
     }
 
-    mGrContext->flush();
+    mGrContext->flushAndSubmit();
 
     switch (mode) {
         case TrimMemoryMode::Complete:
@@ -122,14 +122,15 @@ void CacheManager::trimMemory(TrimMemoryMode mode) {
 
     // We must sync the cpu to make sure deletions of resources still queued up on the GPU actually
     // happen.
-    mGrContext->flush(kSyncCpu_GrFlushFlag, 0, nullptr);
+    mGrContext->flush({});
+    mGrContext->submit(true);
 }
 
 void CacheManager::trimStaleResources() {
     if (!mGrContext) {
         return;
     }
-    mGrContext->flush();
+    mGrContext->flushAndSubmit();
     mGrContext->purgeResourcesNotUsedInMs(std::chrono::seconds(30));
 }
 

@@ -16,11 +16,28 @@
 
 package com.android.server.accessibility.gestures;
 
+import static android.view.MotionEvent.ACTION_CANCEL;
+import static android.view.MotionEvent.ACTION_DOWN;
+import static android.view.MotionEvent.ACTION_HOVER_ENTER;
+import static android.view.MotionEvent.ACTION_HOVER_EXIT;
+import static android.view.MotionEvent.ACTION_HOVER_MOVE;
+import static android.view.MotionEvent.ACTION_MOVE;
+import static android.view.MotionEvent.ACTION_POINTER_DOWN;
+import static android.view.MotionEvent.ACTION_POINTER_UP;
+import static android.view.MotionEvent.ACTION_UP;
 import static android.view.MotionEvent.INVALID_POINTER_ID;
+import static android.view.accessibility.AccessibilityEvent.TYPE_GESTURE_DETECTION_END;
+import static android.view.accessibility.AccessibilityEvent.TYPE_GESTURE_DETECTION_START;
+import static android.view.accessibility.AccessibilityEvent.TYPE_TOUCH_EXPLORATION_GESTURE_END;
+import static android.view.accessibility.AccessibilityEvent.TYPE_TOUCH_EXPLORATION_GESTURE_START;
+import static android.view.accessibility.AccessibilityEvent.TYPE_TOUCH_INTERACTION_END;
+import static android.view.accessibility.AccessibilityEvent.TYPE_TOUCH_INTERACTION_START;
+import static android.view.accessibility.AccessibilityEvent.TYPE_VIEW_HOVER_EXIT;
 
 import static com.android.server.accessibility.gestures.TouchState.ALL_POINTER_ID_BITS;
 
 import android.accessibilityservice.AccessibilityGestureEvent;
+import android.annotation.NonNull;
 import android.content.Context;
 import android.graphics.Region;
 import android.os.Handler;
@@ -31,6 +48,7 @@ import android.view.ViewConfiguration;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
 
+import com.android.internal.annotations.VisibleForTesting;
 import com.android.server.accessibility.AccessibilityManagerService;
 import com.android.server.accessibility.BaseEventStreamTransformation;
 import com.android.server.accessibility.EventStreamTransformation;
@@ -85,7 +103,6 @@ public class TouchExplorer extends BaseEventStreamTransformation
     // The ID of the pointer used for dragging.
     private int mDraggingPointerId;
 
-
     // Handler for performing asynchronous operations.
     private final Handler mHandler;
 
@@ -138,12 +155,18 @@ public class TouchExplorer extends BaseEventStreamTransformation
      *
      * @param context A context handle for accessing resources.
      * @param service The service to notify touch interaction and gesture completed and to perform
-     *                action.
+     *     action.
      * @param detector The gesture detector to handle accessibility touch event. If null the default
-     *                one created in place, or for testing purpose.
+     *     one created in place, or for testing purpose.
      */
-    public TouchExplorer(Context context, AccessibilityManagerService service,
-            GestureManifold detector) {
+    public TouchExplorer(
+            Context context, AccessibilityManagerService service, GestureManifold detector) {
+        this(context, service, detector, new Handler(context.getMainLooper()));
+    }
+
+    @VisibleForTesting
+    TouchExplorer(Context context, AccessibilityManagerService service, GestureManifold detector,
+            @NonNull Handler mainHandler) {
         mContext = context;
         mAms = service;
         mState = new TouchState();
@@ -151,16 +174,16 @@ public class TouchExplorer extends BaseEventStreamTransformation
         mDispatcher = new EventDispatcher(context, mAms, super.getNext(), mState);
         mDetermineUserIntentTimeout = ViewConfiguration.getDoubleTapTimeout();
         mDoubleTapSlop = ViewConfiguration.get(context).getScaledDoubleTapSlop();
-        mHandler = new Handler(context.getMainLooper());
+        mHandler = mainHandler;
         mExitGestureDetectionModeDelayed = new ExitGestureDetectionModeDelayed();
         mSendHoverEnterAndMoveDelayed = new SendHoverEnterAndMoveDelayed();
         mSendHoverExitDelayed = new SendHoverExitDelayed();
-        mSendTouchExplorationEndDelayed = new SendAccessibilityEventDelayed(
-                AccessibilityEvent.TYPE_TOUCH_EXPLORATION_GESTURE_END,
-                mDetermineUserIntentTimeout);
-        mSendTouchInteractionEndDelayed = new SendAccessibilityEventDelayed(
-                AccessibilityEvent.TYPE_TOUCH_INTERACTION_END,
-                mDetermineUserIntentTimeout);
+        mSendTouchExplorationEndDelayed =
+                new SendAccessibilityEventDelayed(
+                        TYPE_TOUCH_EXPLORATION_GESTURE_END, mDetermineUserIntentTimeout);
+        mSendTouchInteractionEndDelayed =
+                new SendAccessibilityEventDelayed(
+                        TYPE_TOUCH_INTERACTION_END, mDetermineUserIntentTimeout);
         if (detector == null) {
             mGestureDetector = new GestureManifold(context, this, mState);
         } else {
@@ -240,7 +263,7 @@ public class TouchExplorer extends BaseEventStreamTransformation
             }
         }
 
-        if (event.getActionMasked() == MotionEvent.ACTION_CANCEL) {
+        if (event.getActionMasked() == ACTION_CANCEL) {
             clear(event, policyFlags);
             return;
         }
@@ -272,8 +295,8 @@ public class TouchExplorer extends BaseEventStreamTransformation
     public void onAccessibilityEvent(AccessibilityEvent event) {
         final int eventType = event.getEventType();
 
-        if (eventType == AccessibilityEvent.TYPE_VIEW_HOVER_EXIT) {
-            sendsPendingA11yEventsIfNeed();
+        if (eventType == TYPE_VIEW_HOVER_EXIT) {
+            sendsPendingA11yEventsIfNeeded();
         }
         mState.onReceivedAccessibilityEvent(event);
         super.onAccessibilityEvent(event);
@@ -284,7 +307,7 @@ public class TouchExplorer extends BaseEventStreamTransformation
      * AccessibilityEvent#TYPE_TOUCH_EXPLORATION_GESTURE_END}} after receiving last hover exit
      * event.
      */
-    private void sendsPendingA11yEventsIfNeed() {
+    private void sendsPendingA11yEventsIfNeeded() {
         // The last hover exit A11y event should be sent by view after receiving hover exit motion
         // event. In some view hierarchy, the ViewGroup transforms hover move motion event to hover
         // exit motion event and than dispatch to itself. It causes unexpected A11y exit events.
@@ -295,15 +318,14 @@ public class TouchExplorer extends BaseEventStreamTransformation
         // last hover exit event.
         if (mSendTouchExplorationEndDelayed.isPending()) {
             mSendTouchExplorationEndDelayed.cancel();
-            mDispatcher.sendAccessibilityEvent(
-                    AccessibilityEvent.TYPE_TOUCH_EXPLORATION_GESTURE_END);
+            mDispatcher.sendAccessibilityEvent(TYPE_TOUCH_EXPLORATION_GESTURE_END);
         }
 
         // The event for touch interaction end should be strictly after the
         // last hover exit and the touch exploration gesture end events.
         if (mSendTouchInteractionEndDelayed.isPending()) {
             mSendTouchInteractionEndDelayed.cancel();
-            mDispatcher.sendAccessibilityEvent(AccessibilityEvent.TYPE_TOUCH_INTERACTION_END);
+            mDispatcher.sendAccessibilityEvent(TYPE_TOUCH_INTERACTION_END);
         }
     }
 
@@ -327,7 +349,7 @@ public class TouchExplorer extends BaseEventStreamTransformation
         }
 
         // Announce the end of a new touch interaction.
-        mDispatcher.sendAccessibilityEvent(AccessibilityEvent.TYPE_TOUCH_INTERACTION_END);
+        mDispatcher.sendAccessibilityEvent(TYPE_TOUCH_INTERACTION_END);
         mSendTouchInteractionEndDelayed.cancel();
         // Try to use the standard accessibility API to click
         if (!mAms.performActionOnAccessibilityFocusedItem(
@@ -350,7 +372,7 @@ public class TouchExplorer extends BaseEventStreamTransformation
         mExitGestureDetectionModeDelayed.post();
         // Send accessibility event to announce the start
         // of gesture recognition.
-        mDispatcher.sendAccessibilityEvent(AccessibilityEvent.TYPE_GESTURE_DETECTION_START);
+        mDispatcher.sendAccessibilityEvent(TYPE_GESTURE_DETECTION_START);
         return false;
     }
 
@@ -366,11 +388,11 @@ public class TouchExplorer extends BaseEventStreamTransformation
     @Override
     public boolean onGestureCancelled(MotionEvent event, MotionEvent rawEvent, int policyFlags) {
         if (mState.isGestureDetecting()) {
-            endGestureDetection(event.getActionMasked() == MotionEvent.ACTION_UP);
+            endGestureDetection(event.getActionMasked() == ACTION_UP);
             return true;
         } else if (mState.isTouchExploring()) {
             // If the finger is still moving, pass the event on.
-            if (event.getActionMasked() == MotionEvent.ACTION_MOVE) {
+            if (event.getActionMasked() == ACTION_MOVE) {
                 final int pointerId = mReceivedPointerTracker.getPrimaryPointerId();
                 final int pointerIdBits = (1 << pointerId);
 
@@ -381,7 +403,7 @@ public class TouchExplorer extends BaseEventStreamTransformation
                 mSendHoverExitDelayed.cancel();
                 mDispatcher.sendMotionEvent(
                         event,
-                        MotionEvent.ACTION_HOVER_MOVE,
+                        ACTION_HOVER_MOVE,
                         mState.getLastReceivedEvent(),
                         pointerIdBits,
                         policyFlags);
@@ -398,7 +420,7 @@ public class TouchExplorer extends BaseEventStreamTransformation
             MotionEvent event, MotionEvent rawEvent, int policyFlags) {
         switch (event.getActionMasked()) {
             // The only way to leave the clear state is for a pointer to go down.
-            case MotionEvent.ACTION_DOWN:
+            case ACTION_DOWN:
                 handleActionDown(event, rawEvent, policyFlags);
                 break;
             default:
@@ -439,7 +461,7 @@ public class TouchExplorer extends BaseEventStreamTransformation
             }
             mSendTouchExplorationEndDelayed.forceSendAndRemove();
             mSendTouchInteractionEndDelayed.forceSendAndRemove();
-            mDispatcher.sendAccessibilityEvent(AccessibilityEvent.TYPE_TOUCH_INTERACTION_START);
+            mDispatcher.sendAccessibilityEvent(TYPE_TOUCH_INTERACTION_START);
             if (mTouchExplorationPassthroughRegion.contains(
                     (int) event.getX(), (int) event.getY())) {
                 // The touch exploration passthrough overrides the gesture detection passthrough in
@@ -471,18 +493,18 @@ public class TouchExplorer extends BaseEventStreamTransformation
     private void handleMotionEventStateTouchInteracting(
             MotionEvent event, MotionEvent rawEvent, int policyFlags) {
         switch (event.getActionMasked()) {
-            case MotionEvent.ACTION_DOWN:
+            case ACTION_DOWN:
                 // Continue the previous interaction.
                 mSendTouchInteractionEndDelayed.cancel();
                 handleActionDown(event, rawEvent, policyFlags);
                 break;
-            case MotionEvent.ACTION_POINTER_DOWN:
+            case ACTION_POINTER_DOWN:
                 handleActionPointerDown(event, rawEvent, policyFlags);
                 break;
-            case MotionEvent.ACTION_MOVE:
+            case ACTION_MOVE:
                 handleActionMoveStateTouchInteracting(event, rawEvent, policyFlags);
                 break;
-            case MotionEvent.ACTION_UP:
+            case ACTION_UP:
                 handleActionUp(event, rawEvent, policyFlags);
                 break;
         }
@@ -498,16 +520,16 @@ public class TouchExplorer extends BaseEventStreamTransformation
     private void handleMotionEventStateTouchExploring(
             MotionEvent event, MotionEvent rawEvent, int policyFlags) {
         switch (event.getActionMasked()) {
-            case MotionEvent.ACTION_DOWN:
+            case ACTION_DOWN:
                 // We should have already received ACTION_DOWN. Ignore.
                 break;
-            case MotionEvent.ACTION_POINTER_DOWN:
+            case ACTION_POINTER_DOWN:
                 handleActionPointerDown(event, rawEvent, policyFlags);
                 break;
-            case MotionEvent.ACTION_MOVE:
+            case ACTION_MOVE:
                 handleActionMoveStateTouchExploring(event, rawEvent, policyFlags);
                 break;
-            case MotionEvent.ACTION_UP:
+            case ACTION_UP:
                 handleActionUp(event, rawEvent, policyFlags);
                 break;
             default:
@@ -570,7 +592,7 @@ public class TouchExplorer extends BaseEventStreamTransformation
                     adjustEventLocationForDrag(event);
                     event.setEdgeFlags(mReceivedPointerTracker.getLastReceivedDownEdgeFlags());
                     mDispatcher.sendMotionEvent(
-                            event, MotionEvent.ACTION_DOWN, rawEvent, pointerIdBits, policyFlags);
+                            event, ACTION_DOWN, rawEvent, pointerIdBits, policyFlags);
                 } else {
                     // Two pointers moving arbitrary are delegated to the view hierarchy.
                     mState.startDelegating();
@@ -623,7 +645,7 @@ public class TouchExplorer extends BaseEventStreamTransformation
             // Touch exploration.
                 sendTouchExplorationGestureStartAndHoverEnterIfNeeded(policyFlags);
                 mDispatcher.sendMotionEvent(
-                        event, MotionEvent.ACTION_HOVER_MOVE, rawEvent, pointerIdBits, policyFlags);
+                        event, ACTION_HOVER_MOVE, rawEvent, pointerIdBits, policyFlags);
                 break;
             case 2:
                 if (mGestureDetector.isMultiFingerGesturesEnabled()) {
@@ -688,48 +710,48 @@ public class TouchExplorer extends BaseEventStreamTransformation
         int pointerIdBits = 0;
         // Clear the dragging pointer id if it's no longer valid.
         if (event.findPointerIndex(mDraggingPointerId) == -1) {
-            Slog.e(LOG_TAG, "mDraggingPointerId doesn't match any pointers on current event. " +
-                    "mDraggingPointerId: " + Integer.toString(mDraggingPointerId) +
-                    ", Event: " + event);
+            Slog.e(
+                    LOG_TAG,
+                    "mDraggingPointerId doesn't match any pointers on current event. "
+                            + "mDraggingPointerId: "
+                            + Integer.toString(mDraggingPointerId)
+                            + ", Event: "
+                            + event);
             mDraggingPointerId = INVALID_POINTER_ID;
         } else {
             pointerIdBits = (1 << mDraggingPointerId);
         }
         switch (event.getActionMasked()) {
-            case MotionEvent.ACTION_DOWN: {
-                Slog.e(LOG_TAG, "Dragging state can be reached only if two "
-                        + "pointers are already down");
+            case ACTION_DOWN:
+                Slog.e(
+                        LOG_TAG,
+                        "Dragging state can be reached only if two " + "pointers are already down");
                 clear(event, policyFlags);
                 return;
-            }
-            case MotionEvent.ACTION_POINTER_DOWN: {
+            case ACTION_POINTER_DOWN:
                 // We are in dragging state so we have two pointers and another one
                 // goes down => delegate the three pointers to the view hierarchy
                 mState.startDelegating();
                 if (mDraggingPointerId != INVALID_POINTER_ID) {
                     mDispatcher.sendMotionEvent(
-                            event, MotionEvent.ACTION_UP, rawEvent, pointerIdBits, policyFlags);
+                            event, ACTION_UP, rawEvent, pointerIdBits, policyFlags);
                 }
                 mDispatcher.sendDownForAllNotInjectedPointers(event, policyFlags);
-            } break;
-            case MotionEvent.ACTION_MOVE: {
+                break;
+            case ACTION_MOVE:
                 if (mDraggingPointerId == INVALID_POINTER_ID) {
                     break;
                 }
                 switch (event.getPointerCount()) {
-                    case 1: {
+                    case 1:
                         // do nothing
-                    } break;
-                    case 2: {
+                        break;
+                    case 2:
                         if (isDraggingGesture(event)) {
                             // If still dragging send a drag event.
                             adjustEventLocationForDrag(event);
                             mDispatcher.sendMotionEvent(
-                                    event,
-                                    MotionEvent.ACTION_MOVE,
-                                    rawEvent,
-                                    pointerIdBits,
-                                    policyFlags);
+                                    event, ACTION_MOVE, rawEvent, pointerIdBits, policyFlags);
                         } else {
                             // The two pointers are moving either in different directions or
                             // no close enough => delegate the gesture to the view hierarchy.
@@ -738,52 +760,40 @@ public class TouchExplorer extends BaseEventStreamTransformation
                             event = MotionEvent.obtainNoHistory(event);
                             // Send an event to the end of the drag gesture.
                             mDispatcher.sendMotionEvent(
-                                    event,
-                                    MotionEvent.ACTION_UP,
-                                    rawEvent,
-                                    pointerIdBits,
-                                    policyFlags);
+                                    event, ACTION_UP, rawEvent, pointerIdBits, policyFlags);
                             // Deliver all pointers to the view hierarchy.
                             mDispatcher.sendDownForAllNotInjectedPointers(event, policyFlags);
                         }
-                    } break;
-                    default: {
+                        break;
+                    default:
                         mState.startDelegating();
                         event = MotionEvent.obtainNoHistory(event);
                         // Send an event to the end of the drag gesture.
                         mDispatcher.sendMotionEvent(
-                                event,
-                                MotionEvent.ACTION_UP,
-                                rawEvent,
-                                pointerIdBits,
-                                policyFlags);
+                                event, ACTION_UP, rawEvent, pointerIdBits, policyFlags);
                         // Deliver all pointers to the view hierarchy.
                         mDispatcher.sendDownForAllNotInjectedPointers(event, policyFlags);
-                    }
                 }
-            } break;
-            case MotionEvent.ACTION_POINTER_UP: {
-                 final int pointerId = event.getPointerId(event.getActionIndex());
-                 if (pointerId == mDraggingPointerId) {
-                    mDraggingPointerId = INVALID_POINTER_ID;
-                        // Send an event to the end of the drag gesture.
-                    mDispatcher.sendMotionEvent(
-                            event, MotionEvent.ACTION_UP, rawEvent, pointerIdBits, policyFlags);
-                 }
-            } break;
-            case MotionEvent.ACTION_UP: {
-                mAms.onTouchInteractionEnd();
-                // Announce the end of a new touch interaction.
-                mDispatcher.sendAccessibilityEvent(
-                        AccessibilityEvent.TYPE_TOUCH_INTERACTION_END);
-                final int pointerId = event.getPointerId(event.getActionIndex());
-                if (pointerId == mDraggingPointerId) {
+                break;
+            case ACTION_POINTER_UP:
+                if (event.getPointerId(GestureUtils.getActionIndex(event)) == mDraggingPointerId) {
                     mDraggingPointerId = INVALID_POINTER_ID;
                     // Send an event to the end of the drag gesture.
                     mDispatcher.sendMotionEvent(
-                            event, MotionEvent.ACTION_UP, rawEvent, pointerIdBits, policyFlags);
+                            event, ACTION_UP, rawEvent, pointerIdBits, policyFlags);
                 }
-            } break;
+                break;
+            case ACTION_UP:
+                mAms.onTouchInteractionEnd();
+                // Announce the end of a new touch interaction.
+                mDispatcher.sendAccessibilityEvent(TYPE_TOUCH_INTERACTION_END);
+                if (event.getPointerId(GestureUtils.getActionIndex(event)) == mDraggingPointerId) {
+                    mDraggingPointerId = INVALID_POINTER_ID;
+                    // Send an event to the end of the drag gesture.
+                    mDispatcher.sendMotionEvent(
+                            event, ACTION_UP, rawEvent, pointerIdBits, policyFlags);
+                }
+                break;
         }
     }
 
@@ -796,13 +806,13 @@ public class TouchExplorer extends BaseEventStreamTransformation
     private void handleMotionEventStateDelegating(
             MotionEvent event, MotionEvent rawEvent, int policyFlags) {
         switch (event.getActionMasked()) {
-            case MotionEvent.ACTION_DOWN: {
+            case ACTION_DOWN: {
                 Slog.e(LOG_TAG, "Delegating state can only be reached if "
                         + "there is at least one pointer down!");
                 clear(event, policyFlags);
                 return;
             }
-            case MotionEvent.ACTION_UP: {
+            case ACTION_UP: {
                 // Deliver the event.
                 mDispatcher.sendMotionEvent(
                         event, event.getAction(), rawEvent, ALL_POINTER_ID_BITS, policyFlags);
@@ -810,7 +820,7 @@ public class TouchExplorer extends BaseEventStreamTransformation
                 // Announce the end of a the touch interaction.
                 mAms.onTouchInteractionEnd();
                 mDispatcher.clear();
-                mDispatcher.sendAccessibilityEvent(AccessibilityEvent.TYPE_TOUCH_INTERACTION_END);
+                mDispatcher.sendAccessibilityEvent(TYPE_TOUCH_INTERACTION_END);
 
             } break;
             default: {
@@ -825,10 +835,10 @@ public class TouchExplorer extends BaseEventStreamTransformation
         mAms.onTouchInteractionEnd();
 
         // Announce the end of the gesture recognition.
-        mDispatcher.sendAccessibilityEvent(AccessibilityEvent.TYPE_GESTURE_DETECTION_END);
+        mDispatcher.sendAccessibilityEvent(TYPE_GESTURE_DETECTION_END);
         // Don't announce the end of a the touch interaction if users didn't lift their fingers.
         if (interactionEnd) {
-            mDispatcher.sendAccessibilityEvent(AccessibilityEvent.TYPE_TOUCH_INTERACTION_END);
+            mDispatcher.sendAccessibilityEvent(TYPE_TOUCH_INTERACTION_END);
         }
 
         mExitGestureDetectionModeDelayed.cancel();
@@ -843,14 +853,14 @@ public class TouchExplorer extends BaseEventStreamTransformation
      */
     private void sendHoverExitAndTouchExplorationGestureEndIfNeeded(int policyFlags) {
         MotionEvent event = mState.getLastInjectedHoverEvent();
-        if (event != null && event.getActionMasked() != MotionEvent.ACTION_HOVER_EXIT) {
+        if (event != null && event.getActionMasked() != ACTION_HOVER_EXIT) {
             final int pointerIdBits = event.getPointerIdBits();
             if (!mSendTouchExplorationEndDelayed.isPending()) {
                 mSendTouchExplorationEndDelayed.post();
             }
             mDispatcher.sendMotionEvent(
                     event,
-                    MotionEvent.ACTION_HOVER_EXIT,
+                    ACTION_HOVER_EXIT,
                     mState.getLastReceivedEvent(),
                     pointerIdBits,
                     policyFlags);
@@ -865,11 +875,11 @@ public class TouchExplorer extends BaseEventStreamTransformation
      */
     private void sendTouchExplorationGestureStartAndHoverEnterIfNeeded(int policyFlags) {
         MotionEvent event = mState.getLastInjectedHoverEvent();
-        if (event != null && event.getActionMasked() == MotionEvent.ACTION_HOVER_EXIT) {
+        if (event != null && event.getActionMasked() == ACTION_HOVER_EXIT) {
             final int pointerIdBits = event.getPointerIdBits();
             mDispatcher.sendMotionEvent(
                     event,
-                    MotionEvent.ACTION_HOVER_ENTER,
+                    ACTION_HOVER_ENTER,
                     mState.getLastReceivedEvent(),
                     pointerIdBits,
                     policyFlags);
@@ -956,7 +966,7 @@ public class TouchExplorer extends BaseEventStreamTransformation
         if (mState.isDelegating()) {
             return false;
         }
-        if (event.getActionMasked() == MotionEvent.ACTION_DOWN) {
+        if (event.getActionMasked() == ACTION_DOWN) {
             final int x = (int) event.getX();
             final int y = (int) event.getY();
             if (mTouchExplorationPassthroughRegion.contains(x, y)
@@ -983,7 +993,7 @@ public class TouchExplorer extends BaseEventStreamTransformation
         @Override
         public void run() {
             // Announce the end of gesture recognition.
-            mDispatcher.sendAccessibilityEvent(AccessibilityEvent.TYPE_GESTURE_DETECTION_END);
+            mDispatcher.sendAccessibilityEvent(TYPE_GESTURE_DETECTION_END);
             clear();
         }
     }
@@ -1047,12 +1057,11 @@ public class TouchExplorer extends BaseEventStreamTransformation
 
         public void run() {
             // Send an accessibility event to announce the touch exploration start.
-            mDispatcher.sendAccessibilityEvent(
-                    AccessibilityEvent.TYPE_TOUCH_EXPLORATION_GESTURE_START);
+            mDispatcher.sendAccessibilityEvent(TYPE_TOUCH_EXPLORATION_GESTURE_START);
 
             if (!mEvents.isEmpty() && !mRawEvents.isEmpty()) {
                 // Deliver a down event.
-                mDispatcher.sendMotionEvent(mEvents.get(0), MotionEvent.ACTION_HOVER_ENTER,
+                mDispatcher.sendMotionEvent(mEvents.get(0), ACTION_HOVER_ENTER,
                         mRawEvents.get(0), mPointerIdBits, mPolicyFlags);
                 if (DEBUG) {
                     Slog.d(LOG_TAG_SEND_HOVER_DELAYED,
@@ -1062,7 +1071,7 @@ public class TouchExplorer extends BaseEventStreamTransformation
                 // Deliver move events.
                 final int eventCount = mEvents.size();
                 for (int i = 1; i < eventCount; i++) {
-                    mDispatcher.sendMotionEvent(mEvents.get(i), MotionEvent.ACTION_HOVER_MOVE,
+                    mDispatcher.sendMotionEvent(mEvents.get(i), ACTION_HOVER_MOVE,
                             mRawEvents.get(i), mPointerIdBits, mPolicyFlags);
                     if (DEBUG) {
                         Slog.d(LOG_TAG_SEND_HOVER_DELAYED,
@@ -1133,7 +1142,7 @@ public class TouchExplorer extends BaseEventStreamTransformation
             }
             mDispatcher.sendMotionEvent(
                     mPrototype,
-                    MotionEvent.ACTION_HOVER_EXIT,
+                    ACTION_HOVER_EXIT,
                     mRawEvent,
                     mPointerIdBits,
                     mPolicyFlags);

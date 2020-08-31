@@ -17,7 +17,7 @@
 package com.android.internal.telephony.cdma;
 
 import android.compat.annotation.UnsupportedAppUsage;
-import android.content.res.Resources;
+import android.os.Build;
 import android.sysprop.TelephonyProperties;
 import android.telephony.PhoneNumberUtils;
 import android.telephony.SmsCbLocation;
@@ -27,7 +27,6 @@ import android.text.TextUtils;
 import android.util.Log;
 
 import com.android.internal.telephony.GsmAlphabet.TextEncodingDetails;
-import com.android.internal.telephony.Sms7BitEncodingTranslator;
 import com.android.internal.telephony.SmsAddress;
 import com.android.internal.telephony.SmsConstants;
 import com.android.internal.telephony.SmsHeader;
@@ -156,7 +155,8 @@ public class SmsMessage extends SmsMessageBase {
      *
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.Q, publicAlternatives = "Use {@link "
+            + "android.telephony.SmsMessage} API instead")
     public static SmsMessage createFromEfRecord(int index, byte[] data) {
         try {
             SmsMessage msg = new SmsMessage();
@@ -414,15 +414,7 @@ public class SmsMessage extends SmsMessageBase {
     @UnsupportedAppUsage
     public static TextEncodingDetails calculateLength(CharSequence messageBody,
             boolean use7bitOnly, boolean isEntireMsg) {
-        CharSequence newMsgBody = null;
-        Resources r = Resources.getSystem();
-        if (r.getBoolean(com.android.internal.R.bool.config_sms_force_7bit_encoding)) {
-            newMsgBody = Sms7BitEncodingTranslator.translate(messageBody, true /* isCdmaFormat */);
-        }
-        if (TextUtils.isEmpty(newMsgBody)) {
-            newMsgBody = messageBody;
-        }
-        return BearerData.calcTextEncodingDetails(newMsgBody, use7bitOnly, isEntireMsg);
+        return BearerData.calcTextEncodingDetails(messageBody, use7bitOnly, isEntireMsg);
     }
 
     /**

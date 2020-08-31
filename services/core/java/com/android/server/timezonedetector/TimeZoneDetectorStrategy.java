@@ -16,10 +16,12 @@
 package com.android.server.timezonedetector;
 
 import android.annotation.NonNull;
+import android.annotation.UserIdInt;
 import android.app.timezonedetector.ManualTimeZoneSuggestion;
 import android.app.timezonedetector.TelephonyTimeZoneSuggestion;
-
-import java.io.PrintWriter;
+import android.app.timezonedetector.TimeZoneCapabilities;
+import android.app.timezonedetector.TimeZoneConfiguration;
+import android.util.IndentingPrintWriter;
 
 /**
  * The interface for the class that implements the time detection algorithm used by the
@@ -29,17 +31,51 @@ import java.io.PrintWriter;
  * and what to set it to.
  *
  * <p>Most calls will be handled by a single thread but that is not true for all calls. For example
- * {@link #dump(PrintWriter, String[])}) may be called on a different thread so implementations must
- * handle thread safety.
+ * {@link #dump(IndentingPrintWriter, String[])}) may be called on a different thread so
+ * implementations mustvhandle thread safety.
  *
  * @hide
  */
-public interface TimeZoneDetectorStrategy {
+public interface TimeZoneDetectorStrategy extends Dumpable, Dumpable.Container {
+
+    /** A listener for strategy events. */
+    interface StrategyListener {
+        /**
+         * Invoked when configuration has been changed.
+         */
+        void onConfigurationChanged();
+    }
+
+    /** Sets the listener that enables the strategy to communicate with the surrounding service. */
+    void setStrategyListener(@NonNull StrategyListener listener);
+
+    /** Returns the user's time zone capabilities. */
+    @NonNull
+    TimeZoneCapabilities getCapabilities(@UserIdInt int userId);
+
+    /**
+     * Returns the configuration that controls time zone detector behavior.
+     */
+    @NonNull
+    TimeZoneConfiguration getConfiguration(@UserIdInt int userId);
+
+    /**
+     * Updates the configuration settings that control time zone detector behavior.
+     */
+    boolean updateConfiguration(
+            @UserIdInt int userId, @NonNull TimeZoneConfiguration configuration);
+
+    /**
+     * Suggests zero, one or more time zones for the device, or withdraws a previous suggestion if
+     * {@link GeolocationTimeZoneSuggestion#getZoneIds()} is {@code null}.
+     */
+    void suggestGeolocationTimeZone(@NonNull GeolocationTimeZoneSuggestion suggestion);
 
     /**
      * Suggests a time zone for the device using manually-entered (i.e. user sourced) information.
      */
-    void suggestManualTimeZone(@NonNull ManualTimeZoneSuggestion suggestion);
+    boolean suggestManualTimeZone(
+            @UserIdInt int userId, @NonNull ManualTimeZoneSuggestion suggestion);
 
     /**
      * Suggests a time zone for the device, or withdraws a previous suggestion if
@@ -51,12 +87,7 @@ public interface TimeZoneDetectorStrategy {
     void suggestTelephonyTimeZone(@NonNull TelephonyTimeZoneSuggestion suggestion);
 
     /**
-     * Called when there has been a change to the automatic time zone detection setting.
+     * Called when there has been a change to the automatic time zone detection configuration.
      */
-    void handleAutoTimeZoneDetectionChanged();
-
-    /**
-     * Dumps internal state such as field values.
-     */
-    void dump(PrintWriter pw, String[] args);
+    void handleAutoTimeZoneConfigChanged();
 }

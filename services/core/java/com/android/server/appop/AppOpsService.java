@@ -44,6 +44,8 @@ import static android.app.AppOpsManager.RestrictionBypass;
 import static android.app.AppOpsManager.SAMPLING_STRATEGY_BOOT_TIME_SAMPLING;
 import static android.app.AppOpsManager.SAMPLING_STRATEGY_RARELY_USED;
 import static android.app.AppOpsManager.SAMPLING_STRATEGY_UNIFORM;
+import static android.app.AppOpsManager.SAMPLING_STRATEGY_UNIFORM_OPS;
+import static android.app.AppOpsManager.SECURITY_EXCEPTION_ON_INVALID_ATTRIBUTION_TAG_CHANGE;
 import static android.app.AppOpsManager.UID_STATE_BACKGROUND;
 import static android.app.AppOpsManager.UID_STATE_CACHED;
 import static android.app.AppOpsManager.UID_STATE_FOREGROUND;
@@ -74,6 +76,7 @@ import android.Manifest;
 import android.annotation.IntRange;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.annotation.UserIdInt;
 import android.app.ActivityManager;
 import android.app.ActivityManagerInternal;
 import android.app.AppGlobals;
@@ -146,6 +149,7 @@ import com.android.internal.app.IAppOpsNotedCallback;
 import com.android.internal.app.IAppOpsService;
 import com.android.internal.app.IAppOpsStartedCallback;
 import com.android.internal.app.MessageSamplingConfig;
+import com.android.internal.compat.IPlatformCompat;
 import com.android.internal.os.Zygote;
 import com.android.internal.util.ArrayUtils;
 import com.android.internal.util.DumpUtils;
@@ -270,6 +274,9 @@ public class AppOpsService extends IAppOpsService.Stub {
     private final AppOpsManagerInternalImpl mAppOpsManagerInternal
             = new AppOpsManagerInternalImpl();
 
+    private final IPlatformCompat mPlatformCompat = IPlatformCompat.Stub.asInterface(
+            ServiceManager.getService(Context.PLATFORM_COMPAT_SERVICE));
+
     /**
      * Registered callbacks, called from {@link #collectAsyncNotedOp}.
      *
@@ -367,6 +374,10 @@ public class AppOpsService extends IAppOpsService.Stub {
     /** Last runtime permission access message collected and ready for reporting */
     @GuardedBy("this")
     private RuntimeAppOpAccessMessage mCollectedRuntimePermissionMessage;
+
+    /** Package Manager internal. Access via {@link #getPackageManagerInternal()} */
+    private @Nullable PackageManagerInternal mPackageManagerInternal;
+
     /**
      * An unsynchronized pool of {@link OpEventProxyInfo} objects.
      */
@@ -1517,8 +1528,7 @@ public class AppOpsService extends IAppOpsService.Stub {
                     }
                 }
             } else if (action.equals(Intent.ACTION_PACKAGE_REPLACED)) {
-                AndroidPackage pkg = LocalServices.getService(
-                        PackageManagerInternal.class).getPackage(pkgName);
+                AndroidPackage pkg = getPackageManagerInternal().getPackage(pkgName);
                 if (pkg == null) {
                     return;
                 }
@@ -1676,8 +1686,7 @@ public class AppOpsService extends IAppOpsService.Stub {
                 final Uri data = intent.getData();
 
                 final String packageName = data.getSchemeSpecificPart();
-                PackageInfo pi = LocalServices.getService(
-                        PackageManagerInternal.class).getPackageInfo(packageName,
+                PackageInfo pi = getPackageManagerInternal().getPackageInfo(packageName,
                         PackageManager.GET_PERMISSIONS, Process.myUid(), mContext.getUserId());
                 if (isSamplingTarget(pi)) {
                     synchronized (this) {
@@ -1695,9 +1704,7 @@ public class AppOpsService extends IAppOpsService.Stub {
             }
         }, RARELY_USED_PACKAGES_INITIALIZATION_DELAY_MILLIS);
 
-        PackageManagerInternal packageManagerInternal = LocalServices.getService(
-                PackageManagerInternal.class);
-        packageManagerInternal.setExternalSourcesPolicy(
+        getPackageManagerInternal().setExternalSourcesPolicy(
                 new PackageManagerInternal.ExternalSourcesPolicy() {
                     @Override
                     public int getPackageTrustedToInstallApps(String packageName, int uid) {
@@ -2052,6 +2059,8 @@ public class AppOpsService extends IAppOpsService.Stub {
     public void getHistoricalOps(int uid, String packageName, String attributionTag,
             List<String> opNames, int filter, long beginTimeMillis, long endTimeMillis,
             int flags, RemoteCallback callback) {
+        PackageManager pm = mContext.getPackageManager();
+
         ensureHistoricalOpRequestIsValid(uid, packageName, attributionTag, opNames, filter,
                 beginTimeMillis, endTimeMillis, flags);
         Objects.requireNonNull(callback, "callback cannot be null");
@@ -2059,8 +2068,16 @@ public class AppOpsService extends IAppOpsService.Stub {
         ActivityManagerInternal ami = LocalServices.getService(ActivityManagerInternal.class);
         boolean isCallerInstrumented = ami.isUidCurrentlyInstrumented(Binder.getCallingUid());
         boolean isCallerSystem = Binder.getCallingPid() == Process.myPid();
+        boolean isCallerPermissionController;
+        try {
+            isCallerPermissionController = pm.getPackageUid(
+                    mContext.getPackageManager().getPermissionControllerPackageName(), 0)
+                    == Binder.getCallingUid();
+        } catch (PackageManager.NameNotFoundException doesNotHappen) {
+            return;
+        }
 
-        if (!isCallerSystem && !isCallerInstrumented) {
+        if (!isCallerSystem && !isCallerInstrumented && !isCallerPermissionController) {
             mHandler.post(() -> callback.sendResult(new Bundle()));
             return;
         }
@@ -2349,10 +2366,8 @@ public class AppOpsService extends IAppOpsService.Stub {
                 continue;
             }
 
-            PackageManagerInternal packageManagerInternal = LocalServices.getService(
-                    PackageManagerInternal.class);
-            boolean supportsRuntimePermissions = packageManagerInternal.getUidTargetSdkVersion(uid)
-                    >= Build.VERSION_CODES.M;
+            boolean supportsRuntimePermissions = getPackageManagerInternal()
+                    .getUidTargetSdkVersion(uid) >= Build.VERSION_CODES.M;
 
             UserHandle user = UserHandle.getUserHandleForUid(uid);
             boolean isRevokedCompat;
@@ -2429,6 +2444,8 @@ public class AppOpsService extends IAppOpsService.Stub {
             @Nullable IAppOpsCallback permissionPolicyCallback) {
         enforceManageAppOpsModes(Binder.getCallingPid(), Binder.getCallingUid(), uid);
         verifyIncomingOp(code);
+        verifyIncomingPackage(packageName, UserHandle.getUserId(uid));
+
         ArraySet<ModeCallback> repCbs = null;
         code = AppOpsManager.opToSwitch(code);
 
@@ -2841,6 +2858,8 @@ public class AppOpsService extends IAppOpsService.Stub {
     private int checkOperationImpl(int code, int uid, String packageName,
                 boolean raw) {
         verifyIncomingOp(code);
+        verifyIncomingPackage(packageName, UserHandle.getUserId(uid));
+
         String resolvedPackageName = resolvePackageName(uid, packageName);
         if (resolvedPackageName == null) {
             return AppOpsManager.MODE_IGNORED;
@@ -2960,6 +2979,8 @@ public class AppOpsService extends IAppOpsService.Stub {
             boolean shouldCollectMessage) {
         verifyIncomingUid(proxyUid);
         verifyIncomingOp(code);
+        verifyIncomingPackage(proxiedPackageName, UserHandle.getUserId(proxiedUid));
+        verifyIncomingPackage(proxyPackageName, UserHandle.getUserId(proxyUid));
 
         String resolveProxyPackageName = resolvePackageName(proxyUid, proxyPackageName);
         if (resolveProxyPackageName == null) {
@@ -3011,6 +3032,8 @@ public class AppOpsService extends IAppOpsService.Stub {
             @Nullable String message, boolean shouldCollectMessage) {
         verifyIncomingUid(uid);
         verifyIncomingOp(code);
+        verifyIncomingPackage(packageName, UserHandle.getUserId(uid));
+
         String resolvedPackageName = resolvePackageName(uid, packageName);
         if (resolvedPackageName == null) {
             return AppOpsManager.MODE_IGNORED;
@@ -3388,6 +3411,8 @@ public class AppOpsService extends IAppOpsService.Stub {
             String message, boolean shouldCollectMessage) {
         verifyIncomingUid(uid);
         verifyIncomingOp(code);
+        verifyIncomingPackage(packageName, UserHandle.getUserId(uid));
+
         String resolvedPackageName = resolvePackageName(uid, packageName);
         if (resolvedPackageName == null) {
             return  AppOpsManager.MODE_IGNORED;
@@ -3468,6 +3493,8 @@ public class AppOpsService extends IAppOpsService.Stub {
             String attributionTag) {
         verifyIncomingUid(uid);
         verifyIncomingOp(code);
+        verifyIncomingPackage(packageName, UserHandle.getUserId(uid));
+
         String resolvedPackageName = resolvePackageName(uid, packageName);
         if (resolvedPackageName == null) {
             return;
@@ -3687,6 +3714,14 @@ public class AppOpsService extends IAppOpsService.Stub {
         throw new IllegalArgumentException("Bad operation #" + op);
     }
 
+    private void verifyIncomingPackage(@Nullable String packageName, @UserIdInt int userId) {
+        if (packageName != null && getPackageManagerInternal().filterAppAccess(packageName,
+                Binder.getCallingUid(), userId)) {
+            throw new IllegalArgumentException(
+                    packageName + " not found from " + Binder.getCallingUid());
+        }
+    }
+
     private @Nullable UidState getUidStateLocked(int uid, boolean edit) {
         UidState uidState = mUidStates.get(uid);
         if (uidState == null) {
@@ -3793,6 +3828,17 @@ public class AppOpsService extends IAppOpsService.Stub {
     }
 
     /**
+     * @return {@link PackageManagerInternal}
+     */
+    private @NonNull PackageManagerInternal getPackageManagerInternal() {
+        if (mPackageManagerInternal == null) {
+            mPackageManagerInternal = LocalServices.getService(PackageManagerInternal.class);
+        }
+
+        return mPackageManagerInternal;
+    }
+
+    /**
      * Create a restriction description matching the properties of the package.
      *
      * @param context A context to use
@@ -3836,6 +3882,9 @@ public class AppOpsService extends IAppOpsService.Stub {
             }
         }
 
+        int callingUid = Binder.getCallingUid();
+        int userId = UserHandle.getUserId(uid);
+
         RestrictionBypass bypass = null;
         final long ident = Binder.clearCallingIdentity();
         try {
@@ -3858,8 +3907,7 @@ public class AppOpsService extends IAppOpsService.Stub {
                     }
                 }
 
-                pkgUid = UserHandle.getUid(
-                        UserHandle.getUserId(uid), UserHandle.getAppId(pkg.getUid()));
+                pkgUid = UserHandle.getUid(userId, UserHandle.getAppId(pkg.getUid()));
                 bypass = getBypassforPackage(pkg);
             } else {
                 // Allow any attribution tag for resolvable uids
@@ -3876,9 +3924,19 @@ public class AppOpsService extends IAppOpsService.Stub {
             }
 
             if (!isAttributionTagValid) {
-                // TODO moltmann: Switch from logging to enforcement
-                Slog.e(TAG, "attributionTag " + attributionTag + " not declared in manifest of "
-                        + packageName);
+                String msg = "attributionTag " + attributionTag + " not declared in"
+                        + "manifest of " + packageName;
+                try {
+                    if (mPlatformCompat.isChangeEnabledByPackageName(
+                            SECURITY_EXCEPTION_ON_INVALID_ATTRIBUTION_TAG_CHANGE, packageName,
+                            userId) && mPlatformCompat.isChangeEnabledByUid(
+                            SECURITY_EXCEPTION_ON_INVALID_ATTRIBUTION_TAG_CHANGE, callingUid)) {
+                        throw new SecurityException(msg);
+                    } else {
+                        Slog.e(TAG, msg);
+                    }
+                } catch (RemoteException neverHappens) {
+                }
             }
         } finally {
             Binder.restoreCallingIdentity(ident);
@@ -5744,6 +5802,8 @@ public class AppOpsService extends IAppOpsService.Stub {
             }
         }
         verifyIncomingOp(code);
+        verifyIncomingPackage(packageName, UserHandle.getUserId(uid));
+
         final String resolvedPackageName = resolvePackageName(uid, packageName);
         if (resolvedPackageName == null) {
             return false;
@@ -5887,11 +5947,13 @@ public class AppOpsService extends IAppOpsService.Stub {
         int newLeftDistance = AppOpsManager.leftCircularDistance(opCode,
                 mSampledAppOpCode, _NUM_OP);
 
-        if (mAcceptableLeftDistance < newLeftDistance) {
+        if (mAcceptableLeftDistance < newLeftDistance
+                && mSamplingStrategy != SAMPLING_STRATEGY_UNIFORM_OPS) {
             return;
         }
 
-        if (mAcceptableLeftDistance > newLeftDistance) {
+        if (mAcceptableLeftDistance > newLeftDistance
+                && mSamplingStrategy != SAMPLING_STRATEGY_UNIFORM_OPS) {
             mAcceptableLeftDistance = newLeftDistance;
             mMessagesCollectedCount = 0.0f;
         }
@@ -5929,13 +5991,13 @@ public class AppOpsService extends IAppOpsService.Stub {
         if (mSampledPackage == null) {
             if (ThreadLocalRandom.current().nextFloat() < 0.5f) {
                 mSamplingStrategy = SAMPLING_STRATEGY_BOOT_TIME_SAMPLING;
-                resampleAppOpForPackageLocked(packageName);
+                resampleAppOpForPackageLocked(packageName, true);
             }
         } else if (mRarelyUsedPackages.contains(packageName)) {
             mRarelyUsedPackages.remove(packageName);
             if (ThreadLocalRandom.current().nextFloat() < 0.5f) {
                 mSamplingStrategy = SAMPLING_STRATEGY_RARELY_USED;
-                resampleAppOpForPackageLocked(packageName);
+                resampleAppOpForPackageLocked(packageName, true);
             }
         }
     }
@@ -5952,17 +6014,23 @@ public class AppOpsService extends IAppOpsService.Stub {
     /** Resamples package and appop to watch from the list provided. */
     private void resamplePackageAndAppOpLocked(@NonNull List<String> packageNames) {
         if (!packageNames.isEmpty()) {
-            mSamplingStrategy = SAMPLING_STRATEGY_UNIFORM;
-            resampleAppOpForPackageLocked(packageNames.get(
-                    ThreadLocalRandom.current().nextInt(packageNames.size())));
+            if (ThreadLocalRandom.current().nextFloat() < 0.5f) {
+                mSamplingStrategy = SAMPLING_STRATEGY_UNIFORM;
+                resampleAppOpForPackageLocked(packageNames.get(
+                        ThreadLocalRandom.current().nextInt(packageNames.size())), true);
+            } else {
+                mSamplingStrategy = SAMPLING_STRATEGY_UNIFORM_OPS;
+                resampleAppOpForPackageLocked(packageNames.get(
+                        ThreadLocalRandom.current().nextInt(packageNames.size())), false);
+            }
         }
     }
 
     /** Resamples appop for the chosen package and initializes sampling state */
-    private void resampleAppOpForPackageLocked(@NonNull String packageName) {
+    private void resampleAppOpForPackageLocked(@NonNull String packageName, boolean pickOp) {
         mMessagesCollectedCount = 0.0f;
-        mSampledAppOpCode = ThreadLocalRandom.current().nextInt(_NUM_OP);
-        mAcceptableLeftDistance = _NUM_OP;
+        mSampledAppOpCode = pickOp ? ThreadLocalRandom.current().nextInt(_NUM_OP) : OP_NONE;
+        mAcceptableLeftDistance = _NUM_OP - 1;
         mSampledPackage = packageName;
     }
 
@@ -6102,6 +6170,7 @@ public class AppOpsService extends IAppOpsService.Stub {
             case "root":
                 return Process.ROOT_UID;
             case "shell":
+            case "dumpstate":
                 return Process.SHELL_UID;
             case "media":
                 return Process.MEDIA_UID;

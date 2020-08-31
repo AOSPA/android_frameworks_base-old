@@ -114,6 +114,9 @@ public class Environment {
     private static final long DEFAULT_SCOPED_STORAGE = 149924527L;
 
     /**
+     * See definition in com.android.providers.media.LocalCallingIdentity
+     */
+    /**
      * Setting this flag strictly enforces Scoped Storage regardless of:
      * <ul>
      * <li>The value of Target Sdk</li>
@@ -1310,6 +1313,16 @@ public class Environment {
                 uid, context.getOpPackageName()) == AppOpsManager.MODE_ALLOWED;
     }
 
+    private static boolean isScopedStorageEnforced(boolean defaultScopedStorage,
+            boolean forceEnableScopedStorage) {
+        return defaultScopedStorage && forceEnableScopedStorage;
+    }
+
+    private static boolean isScopedStorageDisabled(boolean defaultScopedStorage,
+            boolean forceEnableScopedStorage) {
+        return !defaultScopedStorage && !forceEnableScopedStorage;
+    }
+
     /**
      * Returns whether the calling app has All Files Access on the primary shared/external storage
      * media.
@@ -1352,16 +1365,6 @@ public class Environment {
             default:
                 throw new IllegalStateException("Unknown AppOpsManager mode " + opMode);
         }
-    }
-
-    private static boolean isScopedStorageEnforced(boolean defaultScopedStorage,
-            boolean forceEnableScopedStorage) {
-        return defaultScopedStorage && forceEnableScopedStorage;
-    }
-
-    private static boolean isScopedStorageDisabled(boolean defaultScopedStorage,
-            boolean forceEnableScopedStorage) {
-        return !defaultScopedStorage && !forceEnableScopedStorage;
     }
 
     static File getDirectory(String variableName, String defaultPath) {

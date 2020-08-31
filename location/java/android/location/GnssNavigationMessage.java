@@ -17,6 +17,7 @@
 package android.location;
 
 import android.annotation.IntDef;
+import android.annotation.IntRange;
 import android.annotation.NonNull;
 import android.annotation.TestApi;
 import android.os.Parcel;
@@ -75,6 +76,14 @@ public final class GnssNavigationMessage implements Parcelable {
     public static final int TYPE_GAL_F = 0x0602;
     /** IRNSS L5 C/A message contained in the structure. */
     public static final int TYPE_IRN_L5CA = 0x0701;
+
+    /**
+     * The status of the GNSS Navigation Message
+     * @hide
+     */
+    @Retention(RetentionPolicy.SOURCE)
+    @IntDef({STATUS_UNKNOWN, STATUS_PARITY_PASSED, STATUS_PARITY_REBUILT})
+    public @interface GnssNavigationMessageStatus {}
 
     /**
      * The Navigation Message Status is 'unknown'.
@@ -240,6 +249,7 @@ public final class GnssNavigationMessage implements Parcelable {
      *
      * <p>Range varies by constellation.  See definition at {@code GnssStatus#getSvid(int)}
      */
+    @IntRange(from = 1, to = 200)
     public int getSvid() {
         return mSvid;
     }
@@ -249,7 +259,7 @@ public final class GnssNavigationMessage implements Parcelable {
      * @hide
      */
     @TestApi
-    public void setSvid(int value) {
+    public void setSvid(@IntRange(from = 1, to = 200) int value) {
         mSvid = value;
     }
 
@@ -282,6 +292,7 @@ public final class GnssNavigationMessage implements Parcelable {
      * id and this value can be set to -1.)</li>
      * </ul>
      */
+    @IntRange(from = -1, to = 120)
     public int getMessageId() {
         return mMessageId;
     }
@@ -291,7 +302,7 @@ public final class GnssNavigationMessage implements Parcelable {
      * @hide
      */
     @TestApi
-    public void setMessageId(int value) {
+    public void setMessageId(@IntRange(from = -1, to = 120) int value) {
         mMessageId = value;
     }
 
@@ -316,6 +327,7 @@ public final class GnssNavigationMessage implements Parcelable {
      * navigation message, in the range of 1-4.</li>
      * </ul>
      */
+    @IntRange(from = 1)
     public int getSubmessageId() {
         return mSubmessageId;
     }
@@ -325,7 +337,7 @@ public final class GnssNavigationMessage implements Parcelable {
      * @hide
      */
     @TestApi
-    public void setSubmessageId(int value) {
+    public void setSubmessageId(@IntRange(from = 1) int value) {
         mSubmessageId = value;
     }
 
@@ -378,6 +390,7 @@ public final class GnssNavigationMessage implements Parcelable {
     /**
      * Gets the Status of the navigation message contained in the object.
      */
+    @GnssNavigationMessageStatus
     public int getStatus() {
         return mStatus;
     }
@@ -387,7 +400,7 @@ public final class GnssNavigationMessage implements Parcelable {
      * @hide
      */
     @TestApi
-    public void setStatus(int value) {
+    public void setStatus(@GnssNavigationMessageStatus int value) {
         mStatus = value;
     }
 

@@ -16,185 +16,183 @@
 
 package com.android.server.location.gnss;
 
-import android.content.Context;
+import static com.android.server.location.gnss.GnssManagerService.D;
+import static com.android.server.location.gnss.GnssManagerService.TAG;
+
+import android.app.AppOpsManager;
 import android.location.GnssMeasurementsEvent;
 import android.location.GnssRequest;
 import android.location.IGnssMeasurementsListener;
-import android.os.Handler;
-import android.os.RemoteException;
-import android.provider.Settings;
+import android.location.util.identity.CallerIdentity;
+import android.os.IBinder;
+import android.stats.location.LocationStatsEnums;
 import android.util.Log;
 
 import com.android.internal.annotations.VisibleForTesting;
-import com.android.server.location.CallerIdentity;
-import com.android.server.location.RemoteListenerHelper;
+import com.android.internal.util.Preconditions;
+import com.android.server.location.util.AppOpsHelper;
+import com.android.server.location.util.Injector;
+import com.android.server.location.util.LocationUsageLogger;
+import com.android.server.location.util.SettingsHelper;
+
+import java.util.Collection;
+import java.util.Objects;
 
 /**
- * An base implementation for GPS measurements provider. It abstracts out the responsibility of
+ * An base implementation for GNSS measurements provider. It abstracts out the responsibility of
  * handling listeners, while still allowing technology specific implementations to be built.
  *
  * @hide
  */
-public abstract class GnssMeasurementsProvider
-        extends RemoteListenerHelper<GnssRequest, IGnssMeasurementsListener> {
-    private static final String TAG = "GnssMeasProvider";
-    private static final boolean DEBUG = Log.isLoggable(TAG, Log.DEBUG);
+public class GnssMeasurementsProvider extends
+        GnssListenerMultiplexer<GnssRequest, IGnssMeasurementsListener, Boolean> implements
+        SettingsHelper.GlobalSettingChangedListener {
 
+    private final AppOpsHelper mAppOpsHelper;
+    private final LocationUsageLogger mLogger;
     private final GnssMeasurementProviderNative mNative;
 
-    private boolean mStartedCollection;
-    private boolean mStartedFullTracking;
-
-    protected GnssMeasurementsProvider(Context context, Handler handler) {
-        this(context, handler, new GnssMeasurementProviderNative());
+    public GnssMeasurementsProvider(Injector injector) {
+        this(injector, new GnssMeasurementProviderNative());
     }
 
     @VisibleForTesting
-    public GnssMeasurementsProvider(
-            Context context, Handler handler, GnssMeasurementProviderNative aNative) {
-        super(context, handler, TAG);
+    public GnssMeasurementsProvider(Injector injector, GnssMeasurementProviderNative aNative) {
+        super(injector);
+        mAppOpsHelper = injector.getAppOpsHelper();
+        mLogger = injector.getLocationUsageLogger();
         mNative = aNative;
     }
 
-    void resumeIfStarted() {
-        if (DEBUG) {
-            Log.d(TAG, "resumeIfStarted");
-        }
-        if (mStartedCollection) {
-            mNative.startMeasurementCollection(mStartedFullTracking);
+    @Override
+    protected boolean isServiceSupported() {
+        return mNative.isMeasurementSupported();
+    }
+
+    @Override
+    public void addListener(GnssRequest request, CallerIdentity identity,
+            IGnssMeasurementsListener listener) {
+        super.addListener(request, identity, listener);
+    }
+
+    @Override
+    protected boolean registerWithService(Boolean fullTrackingRequest) {
+        Preconditions.checkState(mNative.isMeasurementSupported());
+
+        if (mNative.startMeasurementCollection(fullTrackingRequest)) {
+            if (D) {
+                Log.d(TAG, "starting gnss measurements (" + fullTrackingRequest + ")");
+            }
+            return true;
+        } else {
+
+            Log.e(TAG, "error starting gnss measurements");
+            return false;
         }
     }
 
     @Override
-    public boolean isAvailableInPlatform() {
-        return mNative.isMeasurementSupported();
+    protected void unregisterWithService() {
+        if (mNative.isMeasurementSupported()) {
+            if (mNative.stopMeasurementCollection()) {
+                if (D) {
+                    Log.d(TAG, "stopping gnss measurements");
+                }
+            } else {
+                Log.e(TAG, "error stopping gnss measurements");
+            }
+        }
     }
 
-    private boolean getMergedFullTracking() {
-        int devOptions = Settings.Secure.getInt(mContext.getContentResolver(),
-                Settings.Global.DEVELOPMENT_SETTINGS_ENABLED, 0);
-        int enableFullTracking = Settings.Global.getInt(mContext.getContentResolver(),
-                Settings.Global.ENABLE_GNSS_RAW_MEAS_FULL_TRACKING, 0);
-        boolean enableFullTrackingBySetting = (devOptions == 1 /* Developer Mode enabled */)
-                && (enableFullTracking == 1 /* Raw Measurements Full Tracking enabled */);
-        if (enableFullTrackingBySetting) {
+    @Override
+    protected void onActive() {
+        mSettingsHelper.addOnGnssMeasurementsFullTrackingEnabledChangedListener(this);
+    }
+
+    @Override
+    protected void onInactive() {
+        mSettingsHelper.removeOnGnssMeasurementsFullTrackingEnabledChangedListener(this);
+    }
+
+    @Override
+    public void onSettingChanged() {
+        // GNSS Measurements Full Tracking dev setting changed
+        updateService();
+    }
+
+    @Override
+    protected Boolean mergeRequests(Collection<GnssListenerRegistration> registrations) {
+        if (mSettingsHelper.isGnssMeasurementsFullTrackingEnabled()) {
             return true;
         }
 
-        synchronized (mListenerMap) {
-            for (IdentifiedListener identifiedListener : mListenerMap.values()) {
-                GnssRequest request = identifiedListener.getRequest();
-                if (request != null && request.isFullTracking()) {
-                    return true;
-                }
+        for (GnssListenerRegistration registration : registrations) {
+            if (Objects.requireNonNull(registration.getRequest()).isFullTracking()) {
+                return true;
             }
         }
+
         return false;
     }
 
     @Override
-    protected int registerWithService() {
-        boolean enableFullTracking = getMergedFullTracking();
-        boolean result = mNative.startMeasurementCollection(enableFullTracking);
-        if (result) {
-            mStartedCollection = true;
-            mStartedFullTracking = enableFullTracking;
-            return RemoteListenerHelper.RESULT_SUCCESS;
-        } else {
-            return RemoteListenerHelper.RESULT_INTERNAL_ERROR;
-        }
+    protected void onRegistrationAdded(IBinder key, GnssListenerRegistration registration) {
+        mLogger.logLocationApiUsage(
+                LocationStatsEnums.USAGE_STARTED,
+                LocationStatsEnums.API_ADD_GNSS_MEASUREMENTS_LISTENER,
+                registration.getIdentity().getPackageName(),
+                /* LocationRequest= */ null,
+                /* hasListener= */ true,
+                /* hasIntent= */ false,
+                /* geofence= */ null,
+                registration.isForeground());
     }
 
     @Override
-    protected void unregisterFromService() {
-        boolean stopped = mNative.stopMeasurementCollection();
-        if (stopped) {
-            mStartedCollection = false;
-        }
+    protected void onRegistrationRemoved(IBinder key, GnssListenerRegistration registration) {
+        mLogger.logLocationApiUsage(
+                LocationStatsEnums.USAGE_ENDED,
+                LocationStatsEnums.API_ADD_GNSS_MEASUREMENTS_LISTENER,
+                registration.getIdentity().getPackageName(),
+                /* LocationRequest= */ null,
+                /* hasListener= */ true,
+                /* hasIntent= */ false,
+                /* geofence= */ null,
+                registration.isForeground());
     }
 
-    public void onMeasurementsAvailable(final GnssMeasurementsEvent event) {
-        foreach((IGnssMeasurementsListener listener, CallerIdentity callerIdentity) -> {
-            if (!hasPermission(mContext, callerIdentity)) {
-                logPermissionDisabledEventNotReported(
-                        TAG, callerIdentity.packageName, "GNSS measurements");
-                return;
+    /**
+     * Called by GnssLocationProvider.
+     */
+    public void onMeasurementsAvailable(GnssMeasurementsEvent event) {
+        deliverToListeners(registration -> {
+            if (mAppOpsHelper.noteOpNoThrow(AppOpsManager.OP_FINE_LOCATION,
+                    registration.getIdentity())) {
+                return listener -> listener.onGnssMeasurementsReceived(event);
+            } else {
+                return null;
             }
-            listener.onGnssMeasurementsReceived(event);
         });
     }
 
-    /** Handle GNSS capabilities update from the GNSS HAL implementation. */
-    public void onCapabilitiesUpdated(boolean isGnssMeasurementsSupported) {
-        setSupported(isGnssMeasurementsSupported);
-        updateResult();
-    }
-
-    public void onGpsEnabledChanged() {
-        tryUpdateRegistrationWithService();
-        updateResult();
-    }
-
-    @Override
-    protected ListenerOperation<IGnssMeasurementsListener> getHandlerOperation(int result) {
-        int status;
-        switch (result) {
-            case RESULT_SUCCESS:
-                status = GnssMeasurementsEvent.Callback.STATUS_READY;
-                break;
-            case RESULT_NOT_AVAILABLE:
-            case RESULT_NOT_SUPPORTED:
-            case RESULT_INTERNAL_ERROR:
-                status = GnssMeasurementsEvent.Callback.STATUS_NOT_SUPPORTED;
-                break;
-            case RESULT_NOT_ALLOWED:
-                status = GnssMeasurementsEvent.Callback.STATUS_NOT_ALLOWED;
-                break;
-            case RESULT_GPS_LOCATION_DISABLED:
-                status = GnssMeasurementsEvent.Callback.STATUS_LOCATION_DISABLED;
-                break;
-            case RESULT_UNKNOWN:
-                return null;
-            default:
-                Log.v(TAG, "Unhandled addListener result: " + result);
-                return null;
-        }
-        return new StatusChangedOperation(status);
-    }
-
-    private static class StatusChangedOperation
-            implements ListenerOperation<IGnssMeasurementsListener> {
-        private final int mStatus;
-
-        public StatusChangedOperation(int status) {
-            mStatus = status;
-        }
-
-        @Override
-        public void execute(IGnssMeasurementsListener listener,
-                CallerIdentity callerIdentity) throws RemoteException {
-            listener.onStatusChanged(mStatus);
-        }
-    }
-
     @VisibleForTesting
-    public static class GnssMeasurementProviderNative {
-        public boolean isMeasurementSupported() {
+    static class GnssMeasurementProviderNative {
+        boolean isMeasurementSupported() {
             return native_is_measurement_supported();
         }
 
-        public boolean startMeasurementCollection(boolean enableFullTracking) {
+        boolean startMeasurementCollection(boolean enableFullTracking) {
             return native_start_measurement_collection(enableFullTracking);
         }
 
-        public boolean stopMeasurementCollection() {
+        boolean stopMeasurementCollection() {
             return native_stop_measurement_collection();
         }
     }
 
-    private static native boolean native_is_measurement_supported();
+    static native boolean native_is_measurement_supported();
 
-    private static native boolean native_start_measurement_collection(boolean enableFullTracking);
+    static native boolean native_start_measurement_collection(boolean enableFullTracking);
 
-    private static native boolean native_stop_measurement_collection();
+    static native boolean native_stop_measurement_collection();
 }

@@ -376,10 +376,6 @@ bool ManifestFixer::BuildRules(xml::XmlActionExecutor* executor,
   });
   manifest_action["instrumentation"]["meta-data"] = meta_data_action;
 
-  // TODO moltmann: Remove
-  manifest_action["feature"];
-  manifest_action["feature"]["inherit-from"];
-
   manifest_action["attribution"];
   manifest_action["attribution"]["inherit-from"];
   manifest_action["original-package"];
@@ -426,6 +422,7 @@ bool ManifestFixer::BuildRules(xml::XmlActionExecutor* executor,
   application_action.Action(OptionalNameIsJavaClassName);
 
   application_action["uses-library"].Action(RequiredNameIsNotEmpty);
+  application_action["uses-native-library"].Action(RequiredNameIsNotEmpty);
   application_action["library"].Action(RequiredNameIsNotEmpty);
   application_action["profileable"];
 

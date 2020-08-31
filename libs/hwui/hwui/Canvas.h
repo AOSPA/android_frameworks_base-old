@@ -20,7 +20,6 @@
 #include <utils/Functor.h>
 
 #include <androidfw/ResourceTypes.h>
-#include "GlFunctorLifecycleListener.h"
 #include "Properties.h"
 #include "utils/Macros.h"
 
@@ -144,7 +143,7 @@ public:
     virtual void resetRecording(int width, int height,
                                 uirenderer::RenderNode* renderNode = nullptr) = 0;
     virtual uirenderer::DisplayList* finishRecording() = 0;
-    virtual void insertReorderBarrier(bool enableReorder) = 0;
+    virtual void enableZ(bool enableZ) = 0;
 
     bool isHighContrastText() const { return uirenderer::Properties::enableHighContrastText; }
 
@@ -162,8 +161,7 @@ public:
 
     virtual void drawLayer(uirenderer::DeferredLayerUpdater* layerHandle) = 0;
     virtual void drawRenderNode(uirenderer::RenderNode* renderNode) = 0;
-    virtual void callDrawGLFunction(Functor* functor,
-                                    uirenderer::GlFunctorLifecycleListener* listener) = 0;
+
     virtual void drawWebViewFunctor(int /*functor*/) {
         LOG_ALWAYS_FATAL("Not supported");
     }

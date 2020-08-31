@@ -27,9 +27,7 @@ import android.hardware.tv.cec.V1_0.SendMessageResult;
 import android.os.Handler;
 import android.os.IHwBinder;
 import android.os.Looper;
-import android.os.MessageQueue;
 import android.os.RemoteException;
-import android.os.SystemProperties;
 import android.util.Slog;
 import android.util.SparseArray;
 
@@ -125,18 +123,10 @@ final class HdmiCecController {
 
     private final NativeWrapper mNativeWrapperImpl;
 
-    /** List of logical addresses that should not be assigned to the current device.
-     *
-     * <p>Parsed from {@link Constants#PROPERTY_HDMI_CEC_NEVER_ASSIGN_LOGICAL_ADDRESSES}
-     */
-    private final List<Integer> mNeverAssignLogicalAddresses;
-
     // Private constructor.  Use HdmiCecController.create().
     private HdmiCecController(HdmiControlService service, NativeWrapper nativeWrapper) {
         mService = service;
         mNativeWrapperImpl = nativeWrapper;
-        mNeverAssignLogicalAddresses = mService.getIntList(SystemProperties.get(
-            Constants.PROPERTY_HDMI_CEC_NEVER_ASSIGN_LOGICAL_ADDRESSES));
     }
 
     /**
@@ -227,8 +217,7 @@ final class HdmiCecController {
         for (int i = 0; i < NUM_LOGICAL_ADDRESS; ++i) {
             int curAddress = (startAddress + i) % NUM_LOGICAL_ADDRESS;
             if (curAddress != Constants.ADDR_UNREGISTERED
-                    && deviceType == HdmiUtils.getTypeFromAddress(curAddress)
-                    && !mNeverAssignLogicalAddresses.contains(curAddress)) {
+                    && deviceType == HdmiUtils.getTypeFromAddress(curAddress)) {
                 boolean acked = false;
                 for (int j = 0; j < HdmiConfig.ADDRESS_ALLOCATION_RETRY; ++j) {
                     if (sendPollMessage(curAddress, curAddress, 1)) {
@@ -730,21 +719,6 @@ final class HdmiCecController {
         void nativeEnableAudioReturnChannel(int port, boolean flag);
         boolean nativeIsConnected(int port);
     }
-
-    private static native long nativeInit(HdmiCecController handler, MessageQueue messageQueue);
-    private static native int nativeSendCecCommand(long controllerPtr, int srcAddress,
-        int dstAddress, byte[] body);
-    private static native int nativeAddLogicalAddress(long controllerPtr, int logicalAddress);
-    private static native void nativeClearLogicalAddress(long controllerPtr);
-    private static native int nativeGetPhysicalAddress(long controllerPtr);
-    private static native int nativeGetVersion(long controllerPtr);
-    private static native int nativeGetVendorId(long controllerPtr);
-    private static native HdmiPortInfo[] nativeGetPortInfos(long controllerPtr);
-    private static native void nativeSetOption(long controllerPtr, int flag, boolean enabled);
-    private static native void nativeSetLanguage(long controllerPtr, String language);
-    private static native void nativeEnableAudioReturnChannel(long controllerPtr,
-        int port, boolean flag);
-    private static native boolean nativeIsConnected(long controllerPtr, int port);
 
     private static final class NativeWrapperImpl implements NativeWrapper,
             IHwBinder.DeathRecipient, getPhysicalAddressCallback {

@@ -222,40 +222,27 @@ interface ITelephony {
     boolean setRadioPower(boolean turnOn);
 
     /**
-     * Request to update location information in service state
+     * This method has been removed due to security and stability issues.
      */
     @UnsupportedAppUsage
     void updateServiceLocation();
 
     /**
-     * Request to update location information for a subscrition in service state
-     * @param subId user preferred subId.
+     * Version of updateServiceLocation that records the caller and validates permissions.
      */
-    void updateServiceLocationForSubscriber(int subId);
+    void updateServiceLocationWithPackageName(String callingPkg);
 
     /**
-     * Enable location update notifications.
+     * This method has been removed due to security and stability issues.
      */
     @UnsupportedAppUsage
     void enableLocationUpdates();
 
     /**
-     * Enable location update notifications.
-     * @param subId user preferred subId.
-     */
-    void enableLocationUpdatesForSubscriber(int subId);
-
-    /**
-     * Disable location update notifications.
+     * This method has been removed due to security and stability issues.
      */
     @UnsupportedAppUsage
     void disableLocationUpdates();
-
-    /**
-     * Disable location update notifications.
-     * @param subId user preferred subId.
-     */
-    void disableLocationUpdatesForSubscriber(int subId);
 
     /**
      * Allow mobile data connections.
@@ -995,13 +982,6 @@ interface ITelephony {
     boolean setPreferredNetworkType(int subId, int networkType);
 
     /**
-     * User enable/disable Mobile Data.
-     *
-     * @param enable true to turn on, else false
-     */
-    void setUserDataEnabled(int subId, boolean enable);
-
-    /**
      * Get the user enabled state of Mobile Data.
      *
      * TODO: remove and use isUserDataEnabled.
@@ -1022,11 +1002,28 @@ interface ITelephony {
     boolean isUserDataEnabled(int subId);
 
     /**
-     * Get the overall enabled state of Mobile Data.
-     *
+     * Check if data is enabled on the device. It can be disabled by
+     * user, carrier, policy or thermal.
      * @return true on enabled
      */
     boolean isDataEnabled(int subId);
+
+    /**
+     * Control of data connection and provide the reason triggering the data connection control.
+     *
+     * @param subId user preferred subId.
+     * @param reason the reason the data enable change is taking place
+     * @param enable true to turn on, else false
+     */
+     void setDataEnabledWithReason(int subId, int reason, boolean enable);
+
+    /**
+     * Return whether data is enabled for certain reason
+     * @param subId user preferred subId.       .
+     * @param reason the reason the data enable change is taking place
+     * @return true on enabled
+    */
+    boolean isDataEnabledWithReason(int subId, int reason);
 
      /**
      * Checks if manual network selection is allowed.
@@ -1625,15 +1622,6 @@ interface ITelephony {
     int getCarrierIdFromMccMnc(int slotIndex, String mccmnc, boolean isSubscriptionMccMnc);
 
     /**
-     * Action set from carrier signalling broadcast receivers to enable/disable metered apns
-     * Permissions android.Manifest.permission.MODIFY_PHONE_STATE is required
-     * @param subId the subscription ID that this action applies to.
-     * @param enabled control enable or disable metered apns.
-     * @hide
-     */
-    void carrierActionSetMeteredApnsEnabled(int subId, boolean visible);
-
-    /**
      * Action set from carrier signalling broadcast receivers to enable/disable radio
      * Permissions android.Manifest.permission.MODIFY_PHONE_STATE is required
      * @param subId the subscription ID that this action applies to.
@@ -1732,14 +1720,6 @@ interface ITelephony {
      * @hide
      */
     boolean setCallWaitingStatus(int subId, boolean isEnable);
-
-    /**
-     * Policy control of data connection. Usually used when data limit is passed.
-     * @param enabled True if enabling the data, otherwise disabling.
-     * @param subId Subscription index
-     * @hide
-     */
-    void setPolicyDataEnabled(boolean enabled, int subId);
 
     /**
      * Get Client request stats which will contain statistical information
@@ -2299,7 +2279,7 @@ interface ITelephony {
 
     /**
      * Get the user manual network selection.
-     * Return empty string if in automatic selection.
+     * Return null if inactive or phone process is down.
      *
      * @param subId the id of the subscription
      * @return operatorinfo on success

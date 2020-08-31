@@ -32,6 +32,7 @@ import java.util.concurrent.Executors;
 
 import javax.inject.Singleton;
 
+import dagger.Binds;
 import dagger.Module;
 import dagger.Provides;
 
@@ -89,15 +90,6 @@ public abstract class ConcurrencyModule {
     @Main
     public static Handler provideMainHandler(@Main Looper mainLooper) {
         return new Handler(mainLooper);
-    }
-
-    /**
-     * @deprecated Please specify @Main or @Background when injecting a Handler or use an Executor.
-     */
-    @Deprecated
-    @Provides
-    public static Handler provideHandler() {
-        return new Handler();
     }
 
     /**
@@ -208,4 +200,10 @@ public abstract class ConcurrencyModule {
     public static Executor provideUiBackgroundExecutor() {
         return Executors.newSingleThreadExecutor();
     }
+
+    /**
+     * Binds {@link ThreadFactoryImpl} to {@link ThreadFactory}.
+     */
+    @Binds
+    public abstract ThreadFactory bindExecutorFactory(ThreadFactoryImpl impl);
 }

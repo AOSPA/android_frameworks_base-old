@@ -28,6 +28,8 @@ cc_binary {
     name: "bootanimation",
     defaults: ["bootanimation_defaults"],
 
+    header_libs: ["jni_headers"],
+
     shared_libs: [
         "libOpenSLES",
         "libbootanimation",
@@ -58,7 +60,7 @@ cc_library_shared {
 
     shared_libs: [
         "libui",
-        "libhwui",
+        "libjnigraphics",
         "libEGL",
         "libGLESv1_CM",
         "libgui",

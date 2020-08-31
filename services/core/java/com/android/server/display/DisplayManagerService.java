@@ -1395,7 +1395,7 @@ public final class DisplayManagerService extends SystemService {
         return null;
     }
 
-    private SurfaceControl.ScreenshotGraphicBuffer systemScreenshotInternal(int displayId) {
+    private SurfaceControl.ScreenshotHardwareBuffer systemScreenshotInternal(int displayId) {
         synchronized (mSyncRoot) {
             final IBinder token = getDisplayToken(displayId);
             if (token == null) {
@@ -1413,7 +1413,7 @@ public final class DisplayManagerService extends SystemService {
         }
     }
 
-    private SurfaceControl.ScreenshotGraphicBuffer userScreenshotInternal(int displayId) {
+    private SurfaceControl.ScreenshotHardwareBuffer userScreenshotInternal(int displayId) {
         synchronized (mSyncRoot) {
             final IBinder token = getDisplayToken(displayId);
             if (token == null) {
@@ -2576,12 +2576,12 @@ public final class DisplayManagerService extends SystemService {
         }
 
         @Override
-        public SurfaceControl.ScreenshotGraphicBuffer systemScreenshot(int displayId) {
+        public SurfaceControl.ScreenshotHardwareBuffer systemScreenshot(int displayId) {
             return systemScreenshotInternal(displayId);
         }
 
         @Override
-        public SurfaceControl.ScreenshotGraphicBuffer userScreenshot(int displayId) {
+        public SurfaceControl.ScreenshotHardwareBuffer userScreenshot(int displayId) {
             return userScreenshotInternal(displayId);
         }
 

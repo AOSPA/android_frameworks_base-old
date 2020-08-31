@@ -28,26 +28,30 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import android.app.AppOpsManager;
 import android.content.Context;
 import android.content.pm.PackageManager;
 import android.hardware.biometrics.IBiometricEnabledOnKeyguardCallback;
 import android.hardware.biometrics.IBiometricService;
 import android.hardware.biometrics.IBiometricServiceReceiver;
+import android.hardware.biometrics.PromptInfo;
 import android.hardware.face.IFaceService;
 import android.hardware.fingerprint.IFingerprintService;
 import android.hardware.iris.IIrisService;
 import android.os.Binder;
-import android.os.Bundle;
 import android.os.UserHandle;
+import android.platform.test.annotations.Presubmit;
 
 import androidx.test.InstrumentationRegistry;
 import androidx.test.filters.SmallTest;
 
 import org.junit.Before;
 import org.junit.Test;
+import org.mockito.AdditionalMatchers;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
+@Presubmit
 @SmallTest
 public class AuthServiceTest {
 
@@ -72,6 +76,8 @@ public class AuthServiceTest {
     IIrisService mIrisService;
     @Mock
     IFaceService mFaceService;
+    @Mock
+    AppOpsManager mAppOpsManager;
 
     @Before
     public void setUp() {
@@ -90,6 +96,7 @@ public class AuthServiceTest {
         when(mInjector.getFingerprintService()).thenReturn(mFingerprintService);
         when(mInjector.getFaceService()).thenReturn(mFaceService);
         when(mInjector.getIrisService()).thenReturn(mIrisService);
+        when(mInjector.getAppOps(any())).thenReturn(mAppOpsManager);
     }
 
     @Test
@@ -112,7 +119,7 @@ public class AuthServiceTest {
     }
 
     @Test
-    public void testRegisterAuthenticator_callsInitConfiguredStrength() throws Exception {
+    public void testRegisterAuthenticator_initializesConfiguration() throws Exception {
 
         final String[] config = {
                 "0:2:15", // ID0:Fingerprint:Strong
@@ -125,24 +132,26 @@ public class AuthServiceTest {
         mAuthService = new AuthService(mContext, mInjector);
         mAuthService.onStart();
 
-        final int fingerprintStrength = 15;
-        final int irisStrength = 255;
-        final int faceStrength = 4095;
+        final int fingerprintId = 0;
+        final int irisId = 1;
+        final int faceId = 2;
 
-        verify(mFingerprintService).initConfiguredStrength(eq(fingerprintStrength));
-        verify(mIrisService).initConfiguredStrength(eq(irisStrength));
-        verify(mFaceService).initConfiguredStrength(eq(faceStrength));
+        verify(mFingerprintService).initializeConfiguration(eq(fingerprintId));
+        verify(mIrisService).initializeConfiguration(eq(irisId));
+        verify(mFaceService).initializeConfiguration(eq(faceId));
     }
 
 
     // TODO(b/141025588): Check that an exception is thrown when the userId != callingUserId
     @Test
-    public void testAuthenticate_callsBiometricServiceAuthenticate() throws Exception {
+    public void testAuthenticate_appOpsOk_callsBiometricServiceAuthenticate() throws Exception {
+        when(mAppOpsManager.noteOp(eq(AppOpsManager.OP_USE_BIOMETRIC), anyInt(), any(), any(),
+                any())).thenReturn(AppOpsManager.MODE_ALLOWED);
         mAuthService = new AuthService(mContext, mInjector);
         mAuthService.onStart();
 
         final Binder token = new Binder();
-        final Bundle bundle = new Bundle();
+        final PromptInfo promptInfo = new PromptInfo();
         final long sessionId = 0;
         final int userId = 0;
 
@@ -152,7 +161,7 @@ public class AuthServiceTest {
                 userId,
                 mReceiver,
                 TEST_OP_PACKAGE_NAME,
-                bundle);
+                promptInfo);
         waitForIdle();
         verify(mBiometricService).authenticate(
                 eq(token),
@@ -160,7 +169,39 @@ public class AuthServiceTest {
                 eq(userId),
                 eq(mReceiver),
                 eq(TEST_OP_PACKAGE_NAME),
-                eq(bundle),
+                eq(promptInfo),
+                eq(Binder.getCallingUid()),
+                eq(Binder.getCallingPid()),
+                eq(UserHandle.getCallingUserId()));
+    }
+
+    @Test
+    public void testAuthenticate_appOpsDenied_doesNotCallBiometricService() throws Exception {
+        when(mAppOpsManager.noteOp(eq(AppOpsManager.OP_USE_BIOMETRIC), anyInt(), any(), any(),
+                any())).thenReturn(AppOpsManager.MODE_ERRORED);
+        mAuthService = new AuthService(mContext, mInjector);
+        mAuthService.onStart();
+
+        final Binder token = new Binder();
+        final PromptInfo promptInfo = new PromptInfo();
+        final long sessionId = 0;
+        final int userId = 0;
+
+        mAuthService.mImpl.authenticate(
+                token,
+                sessionId,
+                userId,
+                mReceiver,
+                TEST_OP_PACKAGE_NAME,
+                promptInfo);
+        waitForIdle();
+        verify(mBiometricService, never()).authenticate(
+                eq(token),
+                eq(sessionId),
+                eq(userId),
+                eq(mReceiver),
+                eq(TEST_OP_PACKAGE_NAME),
+                eq(promptInfo),
                 eq(Binder.getCallingUid()),
                 eq(Binder.getCallingPid()),
                 eq(UserHandle.getCallingUserId()));
@@ -229,31 +270,18 @@ public class AuthServiceTest {
     }
 
     @Test
-    public void testSetActiveUser_callsBiometricServiceSetActiveUser() throws
-            Exception {
-        mAuthService = new AuthService(mContext, mInjector);
-        mAuthService.onStart();
-
-        final int userId = 0;
-
-        mAuthService.mImpl.setActiveUser(userId);
-
-        waitForIdle();
-        verify(mBiometricService).setActiveUser(eq(userId));
-    }
-
-    @Test
     public void testResetLockout_callsBiometricServiceResetLockout() throws
             Exception {
         mAuthService = new AuthService(mContext, mInjector);
         mAuthService.onStart();
 
+        final int userId = 100;
         final byte[] token = new byte[0];
 
-        mAuthService.mImpl.resetLockout(token);
+        mAuthService.mImpl.resetLockout(userId, token);
 
         waitForIdle();
-        verify(mBiometricService).resetLockout(token);
+        verify(mBiometricService).resetLockout(eq(userId), AdditionalMatchers.aryEq(token));
     }
 
     private static void waitForIdle() {

@@ -30,6 +30,72 @@ import android.content.Context;
 public interface TimeZoneDetector {
 
     /**
+     * Returns the current user's time zone capabilities. See {@link TimeZoneCapabilities}.
+     */
+    @RequiresPermission(android.Manifest.permission.WRITE_SECURE_SETTINGS)
+    @NonNull
+    TimeZoneCapabilities getCapabilities();
+
+    /**
+     * Returns the current user's complete time zone configuration. See {@link
+     * TimeZoneConfiguration}.
+     */
+    @RequiresPermission(android.Manifest.permission.WRITE_SECURE_SETTINGS)
+    @NonNull
+    TimeZoneConfiguration getConfiguration();
+
+    /**
+     * Modifies the time zone detection configuration.
+     *
+     * <p>Configuration properties vary in scope: some may be device-wide, others may be specific to
+     * the current user.
+     *
+     * <p>The ability to modify configuration properties can be subject to restrictions. For
+     * example, they may be determined by device hardware, general policy (i.e. only the primary
+     * user can set them), or by a managed device policy. See {@link #getCapabilities()} to obtain
+     * information at runtime about the user's capabilities.
+     *
+     * <p>Attempts to set configuration with capabilities that are {@link
+     * TimeZoneCapabilities#CAPABILITY_NOT_SUPPORTED} or {@link
+     * TimeZoneCapabilities#CAPABILITY_NOT_ALLOWED} will have no effect and a {@code false}
+     * will be returned. Setting configuration with capabilities that are {@link
+     * TimeZoneCapabilities#CAPABILITY_NOT_APPLICABLE} or {@link
+     * TimeZoneCapabilities#CAPABILITY_POSSESSED} will succeed. See {@link
+     * TimeZoneCapabilities} for further details.
+     *
+     * <p>If the configuration is not "complete", then only the specified properties will be
+     * updated (where the user's capabilities allow) and other settings will be left unchanged. See
+     * {@link TimeZoneConfiguration#isComplete()}.
+     *
+     * @return {@code true} if all the configuration properties specified have been set to the
+     *   new values, {@code false} if none have
+     */
+    @RequiresPermission(android.Manifest.permission.WRITE_SECURE_SETTINGS)
+    boolean updateConfiguration(@NonNull TimeZoneConfiguration configuration);
+
+    /**
+     * An interface that can be used to listen for changes to the time zone detector configuration.
+     */
+    interface TimeZoneConfigurationListener {
+        /** Called when the configuration changes. There are no guarantees about the thread used. */
+        void onChange(@NonNull TimeZoneConfiguration configuration);
+    }
+
+    /**
+     * Registers a listener that will be informed when the configuration changes. The complete
+     * configuration is passed to the listener, not just the properties that have changed.
+     */
+    @RequiresPermission(android.Manifest.permission.WRITE_SECURE_SETTINGS)
+    void addConfigurationListener(@NonNull TimeZoneConfigurationListener listener);
+
+    /**
+     * Removes a listener previously passed to
+     * {@link #addConfigurationListener(ITimeZoneConfigurationListener)}
+     */
+    @RequiresPermission(android.Manifest.permission.WRITE_SECURE_SETTINGS)
+    void removeConfigurationListener(@NonNull TimeZoneConfigurationListener listener);
+
+    /**
      * A shared utility method to create a {@link ManualTimeZoneSuggestion}.
      *
      * @hide
@@ -41,13 +107,17 @@ public interface TimeZoneDetector {
     }
 
     /**
-     * Suggests the current time zone, determined using the user's manually entered information, to
-     * the detector. The detector may ignore the signal based on system settings.
+     * Suggests the current time zone, determined from the user's manually entered information, to
+     * the detector. Returns {@code false} if the suggestion was invalid, or the device
+     * configuration / user capabilities prevents the suggestion being used (even if it is the same
+     * as the current device time zone), {@code true} if the suggestion was accepted. A suggestion
+     * that is valid but does not change the time zone because it matches the current device time
+     * zone is considered accepted.
      *
      * @hide
      */
     @RequiresPermission(android.Manifest.permission.SUGGEST_MANUAL_TIME_AND_ZONE)
-    void suggestManualTimeZone(@NonNull ManualTimeZoneSuggestion timeZoneSuggestion);
+    boolean suggestManualTimeZone(@NonNull ManualTimeZoneSuggestion timeZoneSuggestion);
 
     /**
      * Suggests the current time zone, determined using telephony signals, to the detector. The

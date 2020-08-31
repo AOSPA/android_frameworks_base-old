@@ -19,7 +19,8 @@ package com.android.internal.statusbar;
 import android.app.ITransientNotificationCallback;
 import android.content.ComponentName;
 import android.graphics.Rect;
-import android.hardware.biometrics.IBiometricServiceReceiverInternal;
+import android.hardware.biometrics.IBiometricSysuiReceiver;
+import android.hardware.biometrics.PromptInfo;
 import android.os.Bundle;
 import android.service.notification.StatusBarNotification;
 
@@ -135,9 +136,9 @@ oneway interface IStatusBar
     void showShutdownUi(boolean isReboot, String reason);
 
     // Used to show the authentication dialog (Biometrics, Device Credential)
-    void showAuthenticationDialog(in Bundle bundle, IBiometricServiceReceiverInternal receiver,
+    void showAuthenticationDialog(in PromptInfo promptInfo, IBiometricSysuiReceiver sysuiReceiver,
             int biometricModality, boolean requireConfirmation, int userId, String opPackageName,
-            long operationId, int sysUiSessionId);
+            long operationId);
     // Used to notify the authentication dialog that a biometric has been authenticated
     void onBiometricAuthenticated();
     // Used to set a temporary message, e.g. fingerprint not recognized, finger moved too fast, etc
@@ -227,4 +228,12 @@ oneway interface IStatusBar
      * display.
      */
     void suppressAmbientDisplay(boolean suppress);
+
+    /**
+     * Requests {@link WindowMagnification} to set window magnification connection through
+     * {@link AccessibilityManager#setWindowMagnificationConnection(IWindowMagnificationConnection)}
+     *
+     * @param connect {@code true} if needs connection, otherwise set the connection to null.
+     */
+    void requestWindowMagnificationConnection(boolean connect);
 }

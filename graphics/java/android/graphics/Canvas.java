@@ -34,8 +34,6 @@ import libcore.util.NativeAllocationRegistry;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 
-import javax.microedition.khronos.opengles.GL;
-
 /**
  * The Canvas class holds the "draw" calls. To draw something, you need
  * 4 basic components: A Bitmap to hold the pixels, a Canvas to host
@@ -51,19 +49,14 @@ import javax.microedition.khronos.opengles.GL;
  */
 public class Canvas extends BaseCanvas {
     private static int sCompatiblityVersion = 0;
-    /** @hide */
-    public static boolean sCompatibilityRestore = false;
-    /** @hide */
-    public static boolean sCompatibilitySetBitmap = false;
+    private static boolean sCompatibilityRestore = false;
+    private static boolean sCompatibilitySetBitmap = false;
 
     /** @hide */
     @UnsupportedAppUsage
     public long getNativeCanvasWrapper() {
         return mNativeCanvasWrapper;
     }
-
-    /** @hide */
-    public boolean isRecordingFor(Object o) { return false; }
 
     // may be null
     @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 117521088)
@@ -124,8 +117,10 @@ public class Canvas extends BaseCanvas {
         mDensity = bitmap.mDensity;
     }
 
-    /** @hide */
-    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
+    /**
+     *  @hide Needed by android.graphics.pdf.PdfDocument, but should not be called from
+     *  outside the UI rendering module.
+     */
     public Canvas(long nativeCanvas) {
         if (nativeCanvas == 0) {
             throw new IllegalStateException();
@@ -134,19 +129,6 @@ public class Canvas extends BaseCanvas {
         mFinalizer = NoImagePreloadHolder.sRegistry.registerNativeAllocation(
                 this, mNativeCanvasWrapper);
         mDensity = Bitmap.getDefaultDensity();
-    }
-
-    /**
-     * Returns null.
-     *
-     * @deprecated This method is not supported and should not be invoked.
-     *
-     * @hide
-     */
-    @Deprecated
-    @UnsupportedAppUsage
-    protected GL getGL() {
-        return null;
     }
 
     /**
@@ -202,22 +184,6 @@ public class Canvas extends BaseCanvas {
         }
 
         mBitmap = bitmap;
-    }
-
-    /**
-     * @deprecated use {@link #enableZ()} instead
-     * @hide */
-    @Deprecated
-    public void insertReorderBarrier() {
-        enableZ();
-    }
-
-    /**
-     * @deprecated use {@link #disableZ()} instead
-     * @hide */
-    @Deprecated
-    public void insertInorderBarrier() {
-        disableZ();
     }
 
     /**
@@ -793,7 +759,7 @@ public class Canvas extends BaseCanvas {
      * @param matrix The matrix to preconcatenate with the current matrix
      */
     public void concat(@Nullable Matrix matrix) {
-        if (matrix != null) nConcat(mNativeCanvasWrapper, matrix.native_instance);
+        if (matrix != null) nConcat(mNativeCanvasWrapper, matrix.ni());
     }
 
     /**
@@ -811,7 +777,7 @@ public class Canvas extends BaseCanvas {
      */
     public void setMatrix(@Nullable Matrix matrix) {
         nSetMatrix(mNativeCanvasWrapper,
-                         matrix == null ? 0 : matrix.native_instance);
+                         matrix == null ? 0 : matrix.ni());
     }
 
     /**
@@ -826,7 +792,7 @@ public class Canvas extends BaseCanvas {
      */
     @Deprecated
     public void getMatrix(@NonNull Matrix ctm) {
-        nGetMatrix(mNativeCanvasWrapper, ctm.native_instance);
+        nGetMatrix(mNativeCanvasWrapper, ctm.ni());
     }
 
     /**
@@ -1169,21 +1135,12 @@ public class Canvas extends BaseCanvas {
         /**
          * Black-and-White: Treat edges by just rounding to nearest pixel boundary
          */
-        BW(0),  //!< treat edges by just rounding to nearest pixel boundary
+        BW,
 
         /**
          * Antialiased: Treat edges by rounding-out, since they may be antialiased
          */
-        AA(1);
-
-        EdgeType(int nativeInt) {
-            this.nativeInt = nativeInt;
-        }
-
-        /**
-         * @hide
-         */
-        public final int nativeInt;
+        AA;
     }
 
     /**
@@ -1386,10 +1343,7 @@ public class Canvas extends BaseCanvas {
             this.nativeInt = nativeInt;
         }
 
-        /**
-         * @hide
-         */
-        public final int nativeInt;
+        /*package*/ final int nativeInt;
     }
 
     /**
@@ -1426,9 +1380,10 @@ public class Canvas extends BaseCanvas {
         nFreeTextLayoutCaches();
     }
 
-    /** @hide */
-    public static void setCompatibilityVersion(int apiLevel) {
+    /*package*/ static void setCompatibilityVersion(int apiLevel) {
         sCompatiblityVersion = apiLevel;
+        sCompatibilityRestore = apiLevel < Build.VERSION_CODES.M;
+        sCompatibilitySetBitmap = apiLevel < Build.VERSION_CODES.O;
         nSetCompatibilityVersion(apiLevel);
     }
 
@@ -1874,24 +1829,22 @@ public class Canvas extends BaseCanvas {
     }
 
     /**
-     * Draws the specified bitmap as an N-patch (most often, a 9-patches.)
+     * Draws the specified bitmap as an N-patch (most often, a 9-patch.)
      *
      * @param patch The ninepatch object to render
      * @param dst The destination rectangle.
      * @param paint The paint to draw the bitmap with. may be null
-     * @hide
      */
     public void drawPatch(@NonNull NinePatch patch, @NonNull Rect dst, @Nullable Paint paint) {
         super.drawPatch(patch, dst, paint);
     }
 
     /**
-     * Draws the specified bitmap as an N-patch (most often, a 9-patches.)
+     * Draws the specified bitmap as an N-patch (most often, a 9-patch.)
      *
      * @param patch The ninepatch object to render
      * @param dst The destination rectangle.
      * @param paint The paint to draw the bitmap with. may be null
-     * @hide
      */
     public void drawPatch(@NonNull NinePatch patch, @NonNull RectF dst, @Nullable Paint paint) {
         super.drawPatch(patch, dst, paint);

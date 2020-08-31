@@ -21,6 +21,7 @@ import android.hardware.soundtrigger.V2_1.ISoundTriggerHwCallback;
 import android.hardware.soundtrigger.V2_3.ModelParameterRange;
 import android.hardware.soundtrigger.V2_3.Properties;
 import android.hardware.soundtrigger.V2_3.RecognitionConfig;
+import android.os.DeadObjectException;
 import android.os.IHwBinder;
 import android.os.RemoteException;
 import android.os.SystemProperties;
@@ -191,8 +192,13 @@ public class SoundTriggerHw2Enforcer implements ISoundTriggerHw2 {
     }
 
     private static RuntimeException handleException(RuntimeException e) {
-        Log.e(TAG, "Exception caught from HAL, rebooting HAL");
-        rebootHal();
+        if (e.getCause() instanceof DeadObjectException) {
+            // Server is dead, no need to reboot.
+            Log.e(TAG, "HAL died");
+        } else {
+            Log.e(TAG, "Exception caught from HAL, rebooting HAL");
+            rebootHal();
+        }
         throw e;
     }
 

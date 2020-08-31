@@ -163,4 +163,16 @@
     <keyboard-layout android:name="keyboard_layout_polish"
             android:label="@string/keyboard_layout_polish"
             android:keyboardLayout="@raw/keyboard_layout_polish" />
+
+    <keyboard-layout android:name="keyboard_layout_belarusian"
+            android:label="@string/keyboard_layout_belarusian"
+            android:keyboardLayout="@raw/keyboard_layout_belarusian" />
+
+    <keyboard-layout android:name="keyboard_layout_mongolian"
+            android:label="@string/keyboard_layout_mongolian"
+            android:keyboardLayout="@raw/keyboard_layout_mongolian" />
+
+    <keyboard-layout android:name="keyboard_layout_georgian"
+            android:label="@string/keyboard_layout_georgian"
+            android:keyboardLayout="@raw/keyboard_layout_georgian" />
 </keyboard-layouts>

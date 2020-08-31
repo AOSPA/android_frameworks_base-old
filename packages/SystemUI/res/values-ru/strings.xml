@@ -717,11 +717,13 @@
     <string name="notification_silence_title" msgid="8608090968400832335">"Без звука"</string>
     <string name="notification_alert_title" msgid="3656229781017543655">"По умолчанию"</string>
     <string name="notification_bubble_title" msgid="8330481035191903164">"Всплывающая подсказка"</string>
+    <string name="notification_automatic_title" msgid="3745465364578762652">"Автоматически"</string>
     <string name="notification_channel_summary_low" msgid="4860617986908931158">"Без звука или вибрации"</string>
     <string name="notification_conversation_summary_low" msgid="1734433426085468009">"Без звука или вибрации, появляется в нижней части списка разговоров"</string>
     <string name="notification_channel_summary_default" msgid="3282930979307248890">"Звонок или вибрация в зависимости от настроек телефона"</string>
     <string name="notification_channel_summary_default_with_bubbles" msgid="1782419896613644568">"Звонок или вибрация в зависимости от настроек телефона. Разговоры из приложения \"<xliff:g id="APP_NAME">%1$s</xliff:g>\" по умолчанию появляются в виде всплывающего чата."</string>
     <string name="notification_channel_summary_bubble" msgid="7235935211580860537">"Привлекает ваше внимание к контенту с помощью плавающего ярлыка"</string>
+    <string name="notification_channel_summary_automatic" msgid="5813109268050235275">"Система будет сама определять, включать ли звуковой сигнал или вибрацию для уведомления"</string>
     <string name="notification_channel_summary_priority" msgid="7952654515769021553">"Появляется в верхней части списка разговоров и как всплывающий чат, а также показывает фото профиля на заблокированном экране"</string>
     <string name="notification_conversation_channel_settings" msgid="2409977688430606835">"Настройки"</string>
     <string name="notification_priority_title" msgid="2079708866333537093">"Приоритет"</string>
@@ -742,6 +744,12 @@
     <string name="appops_camera_mic_overlay" msgid="5584311236445644095">"Это приложение располагается поверх других приложений, а также использует микрофон и камеру."</string>
     <string name="notification_appops_settings" msgid="5208974858340445174">"Настройки"</string>
     <string name="notification_appops_ok" msgid="2177609375872784124">"ОК"</string>
+    <string name="feedback_silenced" msgid="5382212321253328247">"Это уведомление отключено системой."</string>
+    <string name="feedback_promoted" msgid="8075757485407091976">"Статус этого уведомления повышен системой."</string>
+    <string name="feedback_demoted" msgid="5848066008939031913">"Статус этого уведомления понижен системой."</string>
+    <string name="feedback_prompt" msgid="2278631214125128281">"Все верно?"</string>
+    <string name="feedback_response" msgid="4671729244976641339">"Спасибо!"</string>
+    <string name="feedback_ok" msgid="6481426753298857144">"ОК"</string>
     <string name="notification_channel_controls_opened_accessibility" msgid="6111817750774381094">"Настройки уведомлений для приложения <xliff:g id="APP_NAME">%1$s</xliff:g> открыты"</string>
     <string name="notification_channel_controls_closed_accessibility" msgid="1561909368876911701">"Настройки уведомлений для приложения <xliff:g id="APP_NAME">%1$s</xliff:g> закрыты"</string>
     <string name="notification_channel_switch_accessibility" msgid="8979885820432540252">"Показывать уведомления с этого канала"</string>
@@ -918,25 +926,14 @@
     <string name="accessibility_quick_settings_edit" msgid="1523745183383815910">"Изменить порядок быстрых настроек."</string>
     <string name="accessibility_quick_settings_page" msgid="7506322631645550961">"Страница <xliff:g id="ID_1">%1$d</xliff:g> из <xliff:g id="ID_2">%2$d</xliff:g>"</string>
     <string name="tuner_lock_screen" msgid="2267383813241144544">"Заблокированный экран"</string>
-    <string name="pip_phone_expand" msgid="1424988917240616212">"Развернуть"</string>
-    <string name="pip_phone_minimize" msgid="9057117033655996059">"Свернуть"</string>
-    <string name="pip_phone_close" msgid="8801864042095341824">"Закрыть"</string>
-    <string name="pip_phone_settings" msgid="5687538631925004341">"Настройки"</string>
-    <string name="pip_phone_dismiss_hint" msgid="5825740708095316710">"Чтобы закрыть, потяните вниз"</string>
-    <string name="pip_menu_title" msgid="6365909306215631910">"Меню"</string>
-    <string name="pip_notification_title" msgid="8661573026059630525">"<xliff:g id="NAME">%s</xliff:g> находится в режиме \"Картинка в картинке\""</string>
-    <string name="pip_notification_message" msgid="4991831338795022227">"Чтобы отключить эту функцию для приложения \"<xliff:g id="NAME">%s</xliff:g>\", перейдите в настройки."</string>
-    <string name="pip_play" msgid="333995977693142810">"Воспроизвести"</string>
-    <string name="pip_pause" msgid="1139598607050555845">"Приостановить"</string>
-    <string name="pip_skip_to_next" msgid="3864212650579956062">"Перейти к следующему"</string>
-    <string name="pip_skip_to_prev" msgid="3742589641443049237">"Перейти к предыдущему"</string>
-    <string name="accessibility_action_pip_resize" msgid="8237306972921160456">"Изменить размер"</string>
     <string name="thermal_shutdown_title" msgid="2702966892682930264">"Телефон выключился из-за перегрева"</string>
-    <string name="thermal_shutdown_message" msgid="7432744214105003895">"Сейчас телефон работает нормально"</string>
+    <string name="thermal_shutdown_message" msgid="6142269839066172984">"Сейчас телефон работает нормально.\nНажмите, чтобы получить дополнительную информацию"</string>
     <string name="thermal_shutdown_dialog_message" msgid="6745684238183492031">"Ваш телефон выключился из-за перегрева. Сейчас он работает нормально.\n\nВозможные причины перегрева телефона:\n	• использование ресурсоемких игр и приложений, связанных с видео или навигацией);\n	• скачивание или загрузка больших файлов;\n	• высокая температура окружающей среды."</string>
+    <string name="thermal_shutdown_dialog_help_text" msgid="6413474593462902901">"Подробнее о действиях при перегреве…"</string>
     <string name="high_temp_title" msgid="2218333576838496100">"Телефон нагревается"</string>
-    <string name="high_temp_notif_message" msgid="163928048626045592">"Пока телефон не остынет, некоторые функции могут быть недоступны."</string>
+    <string name="high_temp_notif_message" msgid="1277346543068257549">"Пока телефон не остынет, некоторые функции могут быть недоступны.\nНажмите, чтобы получить дополнительную информацию"</string>
     <string name="high_temp_dialog_message" msgid="3793606072661253968">"Ваш телефон остынет автоматически.\n\nОбратите внимание, что до тех пор он может работать медленнее, чем обычно."</string>
+    <string name="high_temp_dialog_help_text" msgid="7380171287943345858">"Подробнее о действиях при перегреве…"</string>
     <string name="high_temp_alarm_title" msgid="2359958549570161495">"Отключите зарядное устройство"</string>
     <string name="high_temp_alarm_notify_message" msgid="7186272817783835089">"Во время зарядки возникла проблема. Отключите адаптер питания. Будьте осторожны, кабель может быть горячим."</string>
     <string name="high_temp_alarm_help_care_steps" msgid="5017002218341329566">"Подробнее о действиях при перегреве…"</string>
@@ -1032,7 +1029,6 @@
     <string name="priority_onboarding_ignores_dnd_text" msgid="2918952762719600529">"Показывать в режиме \"Не беспокоить\""</string>
     <string name="priority_onboarding_done_button_title" msgid="4569550984286506007">"ОК"</string>
     <string name="priority_onboarding_settings_button_title" msgid="6663601574303585927">"Настройки"</string>
-    <string name="magnification_overlay_title" msgid="6584179429612427958">"Наложение окна увеличения"</string>
     <string name="magnification_window_title" msgid="4863914360847258333">"Окно увеличения"</string>
     <string name="magnification_controls_title" msgid="8421106606708891519">"Настройки окна увеличения"</string>
     <string name="quick_controls_title" msgid="6839108006171302273">"Управление устройствами"</string>

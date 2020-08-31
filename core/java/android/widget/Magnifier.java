@@ -140,8 +140,6 @@ public final class Magnifier {
     // Lock to synchronize between the UI thread and the thread that handles pixel copy results.
     // Only sync mWindow writes from UI thread with mWindow reads from sPixelCopyHandlerThread.
     private final Object mLock = new Object();
-    // The lock used to synchronize the UI and render threads when a #dismiss is performed.
-    private final Object mDestroyLock = new Object();
 
     // Members for new styled magnifier (Eloquent style).
 
@@ -1144,7 +1142,7 @@ public final class Magnifier {
             bitmapRenderNode.setOutline(outline);
             bitmapRenderNode.setClipToOutline(true);
 
-            // Create a dummy draw, which will be replaced later with real drawing.
+            // Create a placeholder draw, which will be replaced later with real drawing.
             final RecordingCanvas canvas = bitmapRenderNode.beginRecording(
                     mContentWidth, mContentHeight);
             try {

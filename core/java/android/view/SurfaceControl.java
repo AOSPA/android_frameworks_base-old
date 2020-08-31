@@ -36,12 +36,12 @@ import android.annotation.TestApi;
 import android.compat.annotation.UnsupportedAppUsage;
 import android.graphics.Bitmap;
 import android.graphics.ColorSpace;
-import android.graphics.GraphicBuffer;
 import android.graphics.Matrix;
 import android.graphics.PixelFormat;
 import android.graphics.Point;
 import android.graphics.Rect;
 import android.graphics.Region;
+import android.hardware.HardwareBuffer;
 import android.hardware.display.DeviceProductInfo;
 import android.hardware.display.DisplayedContentSample;
 import android.hardware.display.DisplayedContentSamplingAttributes;
@@ -49,7 +49,6 @@ import android.os.Build;
 import android.os.IBinder;
 import android.os.Parcel;
 import android.os.Parcelable;
-import android.os.Trace;
 import android.util.ArrayMap;
 import android.util.Log;
 import android.util.SparseIntArray;
@@ -91,10 +90,10 @@ public final class SurfaceControl implements Parcelable {
     private static native void nativeRelease(long nativeObject);
     private static native void nativeDisconnect(long nativeObject);
 
-    private static native ScreenshotGraphicBuffer nativeScreenshot(IBinder displayToken,
+    private static native ScreenshotHardwareBuffer nativeScreenshot(IBinder displayToken,
             Rect sourceCrop, int width, int height, boolean useIdentityTransform, int rotation,
             boolean captureSecureLayers);
-    private static native ScreenshotGraphicBuffer nativeCaptureLayers(IBinder displayToken,
+    private static native ScreenshotHardwareBuffer nativeCaptureLayers(IBinder displayToken,
             long layerObject, Rect sourceCrop, float frameScale, long[] excludeLayerObjects,
             int format);
     private static native long nativeMirrorSurface(long mirrorOfObject);
@@ -555,48 +554,42 @@ public final class SurfaceControl implements Parcelable {
     public static final int METADATA_ACCESSIBILITY_ID = 5;
 
     /**
-     * A wrapper around GraphicBuffer that contains extra information about how to
-     * interpret the screenshot GraphicBuffer.
+     * A wrapper around HardwareBuffer that contains extra information about how to
+     * interpret the screenshot HardwareBuffer.
+     *
      * @hide
      */
-    public static class ScreenshotGraphicBuffer {
-        private final GraphicBuffer mGraphicBuffer;
+    public static class ScreenshotHardwareBuffer {
+        private final HardwareBuffer mHardwareBuffer;
         private final ColorSpace mColorSpace;
         private final boolean mContainsSecureLayers;
 
-        public ScreenshotGraphicBuffer(GraphicBuffer graphicBuffer, ColorSpace colorSpace,
+        public ScreenshotHardwareBuffer(HardwareBuffer hardwareBuffer, ColorSpace colorSpace,
                 boolean containsSecureLayers) {
-            mGraphicBuffer = graphicBuffer;
+            mHardwareBuffer = hardwareBuffer;
             mColorSpace = colorSpace;
             mContainsSecureLayers = containsSecureLayers;
         }
 
        /**
-        * Create ScreenshotGraphicBuffer from existing native GraphicBuffer object.
-        * @param width The width in pixels of the buffer
-        * @param height The height in pixels of the buffer
-        * @param format The format of each pixel as specified in {@link PixelFormat}
-        * @param usage Hint indicating how the buffer will be used
-        * @param unwrappedNativeObject The native object of GraphicBuffer
+        * Create ScreenshotHardwareBuffer from an existing HardwareBuffer object.
+        * @param hardwareBuffer The existing HardwareBuffer object
         * @param namedColorSpace Integer value of a named color space {@link ColorSpace.Named}
         * @param containsSecureLayer Indicates whether this graphic buffer contains captured contents
         *        of secure layers, in which case the screenshot should not be persisted.
         */
-        private static ScreenshotGraphicBuffer createFromNative(int width, int height, int format,
-                int usage, long unwrappedNativeObject, int namedColorSpace,
-                boolean containsSecureLayers) {
-            GraphicBuffer graphicBuffer = GraphicBuffer.createFromExisting(width, height, format,
-                    usage, unwrappedNativeObject);
+        private static ScreenshotHardwareBuffer createFromNative(HardwareBuffer hardwareBuffer,
+                int namedColorSpace, boolean containsSecureLayers) {
             ColorSpace colorSpace = ColorSpace.get(ColorSpace.Named.values()[namedColorSpace]);
-            return new ScreenshotGraphicBuffer(graphicBuffer, colorSpace, containsSecureLayers);
+            return new ScreenshotHardwareBuffer(hardwareBuffer, colorSpace, containsSecureLayers);
         }
 
         public ColorSpace getColorSpace() {
             return mColorSpace;
         }
 
-        public GraphicBuffer getGraphicBuffer() {
-            return mGraphicBuffer;
+        public HardwareBuffer getHardwareBuffer() {
+            return mHardwareBuffer;
         }
 
         public boolean containsSecureLayers() {
@@ -1464,6 +1457,22 @@ public final class SurfaceControl implements Parcelable {
                     + ", secure=" + secure
                     + ", deviceProductInfo=" + deviceProductInfo + "}";
         }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            DisplayInfo that = (DisplayInfo) o;
+            return isInternal == that.isInternal
+                    && density == that.density
+                    && secure == that.secure
+                    && Objects.equals(deviceProductInfo, that.deviceProductInfo);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(isInternal, density, secure, deviceProductInfo);
+        }
     }
 
     /**
@@ -1983,10 +1992,10 @@ public final class SurfaceControl implements Parcelable {
             throw new IllegalArgumentException("consumer must not be null");
         }
 
-        final ScreenshotGraphicBuffer buffer = screenshotToBuffer(display, sourceCrop, width,
+        final ScreenshotHardwareBuffer buffer = screenshotToBuffer(display, sourceCrop, width,
                 height, useIdentityTransform, rotation);
         try {
-            consumer.attachAndQueueBufferWithColorSpace(buffer.getGraphicBuffer(),
+            consumer.attachAndQueueBufferWithColorSpace(buffer.getHardwareBuffer(),
                     buffer.getColorSpace());
         } catch (RuntimeException e) {
             Log.w(TAG, "Failed to take screenshot - " + e.getMessage());
@@ -2009,7 +2018,7 @@ public final class SurfaceControl implements Parcelable {
      *
      * CAVEAT: Versions of screenshot that return a {@link Bitmap} can be extremely slow; avoid use
      * unless absolutely necessary; prefer the versions that use a {@link Surface} such as
-     * {@link SurfaceControl#screenshot(IBinder, Surface)} or {@link GraphicBuffer} such as
+     * {@link SurfaceControl#screenshot(IBinder, Surface)} or {@link HardwareBuffer} such as
      * {@link SurfaceControl#screenshotToBuffer(IBinder, Rect, int, int, boolean, int)}.
      *
      * @see SurfaceControl#screenshotToBuffer(IBinder, Rect, int, int, boolean, int)}
@@ -2030,18 +2039,18 @@ public final class SurfaceControl implements Parcelable {
         }
 
         SurfaceControl.rotateCropForSF(sourceCrop, rotation);
-        final ScreenshotGraphicBuffer buffer = screenshotToBuffer(displayToken, sourceCrop, width,
+        final ScreenshotHardwareBuffer buffer = screenshotToBuffer(displayToken, sourceCrop, width,
                 height, useIdentityTransform, rotation);
 
         if (buffer == null) {
             Log.w(TAG, "Failed to take screenshot");
             return null;
         }
-        return Bitmap.wrapHardwareBuffer(buffer.getGraphicBuffer(), buffer.getColorSpace());
+        return Bitmap.wrapHardwareBuffer(buffer.getHardwareBuffer(), buffer.getColorSpace());
     }
 
     /**
-     * Captures all the surfaces in a display and returns a {@link GraphicBuffer} with the content.
+     * Captures all the surfaces in a display and returns a {@link HardwareBuffer} with the content.
      *
      * @param display              The display to take the screenshot of.
      * @param sourceCrop           The portion of the screen to capture into the Bitmap; caller may
@@ -2060,10 +2069,10 @@ public final class SurfaceControl implements Parcelable {
      *                             screenshots in its native portrait orientation by default, so
      *                             this is useful for returning screenshots that are independent of
      *                             device orientation.
-     * @return Returns a GraphicBuffer that contains the captured content.
+     * @return Returns a HardwareBuffer that contains the captured content.
      * @hide
      */
-    public static ScreenshotGraphicBuffer screenshotToBuffer(IBinder display, Rect sourceCrop,
+    public static ScreenshotHardwareBuffer screenshotToBuffer(IBinder display, Rect sourceCrop,
             int width, int height, boolean useIdentityTransform, int rotation) {
         if (display == null) {
             throw new IllegalArgumentException("displayToken must not be null");
@@ -2083,7 +2092,7 @@ public final class SurfaceControl implements Parcelable {
      *
      * @hide
      */
-    public static ScreenshotGraphicBuffer screenshotToBufferWithSecureLayersUnsafe(IBinder display,
+    public static ScreenshotHardwareBuffer screenshotToBufferWithSecureLayersUnsafe(IBinder display,
             Rect sourceCrop, int width, int height, boolean useIdentityTransform,
             int rotation) {
         if (display == null) {
@@ -2106,7 +2115,7 @@ public final class SurfaceControl implements Parcelable {
     }
 
     /**
-     * Captures a layer and its children and returns a {@link GraphicBuffer} with the content.
+     * Captures a layer and its children and returns a {@link HardwareBuffer} with the content.
      *
      * @param layer            The root layer to capture.
      * @param sourceCrop       The portion of the root surface to capture; caller may pass in 'new
@@ -2116,16 +2125,16 @@ public final class SurfaceControl implements Parcelable {
      * @param frameScale       The desired scale of the returned buffer; the raw
      *                         screen will be scaled up/down.
      *
-     * @return Returns a GraphicBuffer that contains the layer capture.
+     * @return Returns a HardwareBuffer that contains the layer capture.
      * @hide
      */
-    public static ScreenshotGraphicBuffer captureLayers(SurfaceControl layer, Rect sourceCrop,
+    public static ScreenshotHardwareBuffer captureLayers(SurfaceControl layer, Rect sourceCrop,
             float frameScale) {
         return captureLayers(layer, sourceCrop, frameScale, PixelFormat.RGBA_8888);
     }
 
     /**
-     * Captures a layer and its children and returns a {@link GraphicBuffer} with the content.
+     * Captures a layer and its children and returns a {@link HardwareBuffer} with the content.
      *
      * @param layer            The root layer to capture.
      * @param sourceCrop       The portion of the root surface to capture; caller may pass in 'new
@@ -2136,10 +2145,10 @@ public final class SurfaceControl implements Parcelable {
      *                         screen will be scaled up/down.
      * @param format           The desired pixel format of the returned buffer.
      *
-     * @return Returns a GraphicBuffer that contains the layer capture.
+     * @return Returns a HardwareBuffer that contains the layer capture.
      * @hide
      */
-    public static ScreenshotGraphicBuffer captureLayers(SurfaceControl layer, Rect sourceCrop,
+    public static ScreenshotHardwareBuffer captureLayers(SurfaceControl layer, Rect sourceCrop,
             float frameScale, int format) {
         final IBinder displayToken = SurfaceControl.getInternalDisplayToken();
         return nativeCaptureLayers(displayToken, layer.mNativeObject, sourceCrop, frameScale, null,
@@ -2150,8 +2159,8 @@ public final class SurfaceControl implements Parcelable {
      * Like {@link captureLayers} but with an array of layer handles to exclude.
      * @hide
      */
-    public static ScreenshotGraphicBuffer captureLayersExcluding(SurfaceControl layer,
-          Rect sourceCrop, float frameScale, int format, SurfaceControl[] exclude) {
+    public static ScreenshotHardwareBuffer captureLayersExcluding(SurfaceControl layer,
+            Rect sourceCrop, float frameScale, int format, SurfaceControl[] exclude) {
         final IBinder displayToken = SurfaceControl.getInternalDisplayToken();
         long[] nativeExcludeObjects = new long[exclude.length];
         for (int i = 0; i < exclude.length; i++) {
@@ -2562,7 +2571,7 @@ public final class SurfaceControl implements Parcelable {
         }
 
         /**
-         * Specify how the buffer assosciated with this Surface is mapped in to the
+         * Specify how the buffer associated with this Surface is mapped in to the
          * parent coordinate space. The source frame will be scaled to fit the destination
          * frame, after being rotated according to the orientation parameter.
          *

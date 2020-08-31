@@ -143,6 +143,9 @@ applications that come with the platform
         <permission name="android.permission.SUBSTITUTE_NOTIFICATION_APP_NAME" />
         <permission name="android.permission.PACKAGE_USAGE_STATS" />
         <permission name="android.permission.CHANGE_COMPONENT_ENABLED_STATE" />
+
+        <!-- For permission hub 2 debugging only -->
+        <permission name="android.permission.GET_ACCOUNTS_PRIVILEGED"/>
     </privapp-permissions>
 
     <privapp-permissions package="com.android.phone">
@@ -160,6 +163,7 @@ applications that come with the platform
         <permission name="android.permission.CONNECTIVITY_USE_RESTRICTED_NETWORKS"/>
         <permission name="android.permission.CONTROL_INCALL_EXPERIENCE"/>
         <permission name="android.permission.DUMP"/>
+        <permission name="android.permission.HANDLE_CAR_MODE_CHANGES"/>
         <permission name="android.permission.INTERACT_ACROSS_USERS"/>
         <permission name="android.permission.LOCAL_MAC_ADDRESS"/>
         <permission name="android.permission.MANAGE_USERS"/>
@@ -198,6 +202,8 @@ applications that come with the platform
         <permission name="android.permission.MANAGE_USERS" />
         <permission name="android.permission.UPDATE_APP_OPS_STATS"/>
         <permission name="android.permission.USE_RESERVED_DISK"/>
+        <permission name="android.permission.LOG_COMPAT_CHANGE" />
+        <permission name="android.permission.READ_COMPAT_CHANGE_CONFIG" />
     </privapp-permissions>
 
     <privapp-permissions package="com.android.providers.contacts">
@@ -426,6 +432,10 @@ applications that come with the platform
         <permission name="android.permission.CAPTURE_AUDIO_OUTPUT" />
         <!-- Permissions required for CTS test - AdbManagerTest -->
         <permission name="android.permission.MANAGE_DEBUGGING" />
+        <!-- Permissions required for ATS tests - AtsCarHostTestCases, AtsCarDeviceApp -->
+        <permission name="android.car.permission.CAR_DRIVING_STATE" />
+        <!-- Permissions required for ATS tests - AtsDeviceInfo, AtsAudioDeviceTestCases -->
+        <permission name="android.car.permission.CAR_CONTROL_AUDIO_VOLUME" />
     </privapp-permissions>
 
     <privapp-permissions package="com.android.statementservice">

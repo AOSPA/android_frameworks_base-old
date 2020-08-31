@@ -51,6 +51,9 @@ public class GnssGeofenceProviderTest {
     private GnssGeofenceProvider.GnssGeofenceProviderNative mMockNative;
     private GnssGeofenceProvider mTestProvider;
 
+    /**
+     * Mocks native methods and adds a geofence to the GnssGeofenceProvider.
+     */
     @Before
     public void setUp() {
         MockitoAnnotations.initMocks(this);
@@ -66,6 +69,9 @@ public class GnssGeofenceProviderTest {
                 UNKNOWN_TIMER);
     }
 
+    /**
+     * Verify native add geofence method is called.
+     */
     @Test
     public void addGeofence_nativeAdded() {
         verify(mMockNative).addGeofence(eq(GEOFENCE_ID), eq(LATITUDE), eq(LONGITUDE),
@@ -74,18 +80,28 @@ public class GnssGeofenceProviderTest {
                 eq(UNKNOWN_TIMER));
     }
 
+    /**
+     * Verify pauseHardwareGeofence calls native pauseGeofence method.
+     */
     @Test
     public void pauseGeofence_nativePaused() {
         mTestProvider.pauseHardwareGeofence(GEOFENCE_ID);
         verify(mMockNative).pauseGeofence(eq(GEOFENCE_ID));
     }
 
+    /**
+     * Verify removeHardwareGeofence calls native removeGeofence method.
+     */
     @Test
     public void removeGeofence_nativeRemoved() {
         mTestProvider.removeHardwareGeofence(GEOFENCE_ID);
         verify(mMockNative).removeGeofence(eq(GEOFENCE_ID));
     }
 
+    /**
+     * Verify resumeHardwareGeofence, called after pauseHardwareGeofence, will call native
+     * resumeGeofence method.
+     */
     @Test
     public void resumeGeofence_nativeResumed() {
         mTestProvider.pauseHardwareGeofence(GEOFENCE_ID);
@@ -93,6 +109,9 @@ public class GnssGeofenceProviderTest {
         verify(mMockNative).resumeGeofence(eq(GEOFENCE_ID), eq(MONITOR_TRANSITIONS));
     }
 
+    /**
+     * Verify resumeIfStarted method will re-add previously added geofences.
+     */
     @Test
     public void addGeofence_restart_added() throws RemoteException {
         mTestProvider.resumeIfStarted();
@@ -103,6 +122,10 @@ public class GnssGeofenceProviderTest {
                 eq(UNKNOWN_TIMER));
     }
 
+    /**
+     * Verify resumeIfStarted method will not re-add previously added geofences if they have been
+     * removed.
+     */
     @Test
     public void removeGeofence_restart_notAdded() throws RemoteException {
         mTestProvider.removeHardwareGeofence(GEOFENCE_ID);
@@ -114,6 +137,10 @@ public class GnssGeofenceProviderTest {
                 eq(UNKNOWN_TIMER));
     }
 
+    /**
+     * Verify resumeIfStarted, called after pauseHardwareGeofence, will re-add previously added
+     * geofences, and re-pause geofencing.
+     */
     @Test
     public void pauseGeofence_restart_paused() throws RemoteException {
         mTestProvider.pauseHardwareGeofence(GEOFENCE_ID);

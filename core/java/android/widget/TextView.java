@@ -22,6 +22,7 @@ import static android.view.accessibility.AccessibilityNodeInfo.EXTRA_DATA_TEXT_C
 import static android.view.accessibility.AccessibilityNodeInfo.EXTRA_DATA_TEXT_CHARACTER_LOCATION_ARG_START_INDEX;
 import static android.view.accessibility.AccessibilityNodeInfo.EXTRA_DATA_TEXT_CHARACTER_LOCATION_KEY;
 import static android.view.inputmethod.CursorAnchorInfo.FLAG_HAS_VISIBLE_REGION;
+import static android.widget.RichContentReceiver.SOURCE_PROCESS_TEXT;
 
 import android.R;
 import android.annotation.CallSuper;
@@ -394,6 +395,10 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
     private static final int LINES = 1;
     private static final int EMS = LINES;
     private static final int PIXELS = 2;
+
+    // Maximum text length for single line input.
+    private static final int MAX_LENGTH_FOR_SINGLE_LINE_EDIT_TEXT = 5000;
+    private InputFilter.LengthFilter mSingleLineLengthFilter = null;
 
     private static final RectF TEMP_RECTF = new RectF();
 
@@ -874,6 +879,15 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
      */
     @UnsupportedAppUsage
     private Editor mEditor;
+
+    /**
+     * The default content insertion callback used by {@link TextView}. See
+     * {@link #setRichContentReceiver} for more info.
+     */
+    public static final @NonNull RichContentReceiver<TextView> DEFAULT_RICH_CONTENT_RECEIVER =
+            TextViewRichContentReceiver.INSTANCE;
+
+    private RichContentReceiver<TextView> mRichContentReceiver = DEFAULT_RICH_CONTENT_RECEIVER;
 
     private static final int DEVICE_PROVISIONED_UNKNOWN = 0;
     private static final int DEVICE_PROVISIONED_NO = 1;
@@ -1589,7 +1603,11 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
         // Same as setSingleLine(), but make sure the transformation method and the maximum number
         // of lines of height are unchanged for multi-line TextViews.
         setInputTypeSingleLine(singleLine);
-        applySingleLine(singleLine, singleLine, singleLine);
+        applySingleLine(singleLine, singleLine, singleLine,
+                // Does not apply automated max length filter since length filter will be resolved
+                // later in this function.
+                false
+        );
 
         if (singleLine && getKeyListener() == null && ellipsize == ELLIPSIZE_NOT_SET) {
             ellipsize = ELLIPSIZE_END;
@@ -1633,7 +1651,16 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
             setTransformationMethod(PasswordTransformationMethod.getInstance());
         }
 
-        if (maxlength >= 0) {
+        // For addressing b/145128646
+        // For the performance reason, we limit characters for single line text field.
+        if (bufferType == BufferType.EDITABLE && singleLine && maxlength == -1) {
+            mSingleLineLengthFilter = new InputFilter.LengthFilter(
+                MAX_LENGTH_FOR_SINGLE_LINE_EDIT_TEXT);
+        }
+
+        if (mSingleLineLengthFilter != null) {
+            setFilters(new InputFilter[] { mSingleLineLengthFilter });
+        } else if (maxlength >= 0) {
             setFilters(new InputFilter[] { new InputFilter.LengthFilter(maxlength) });
         } else {
             setFilters(NO_FILTERS);
@@ -2118,7 +2145,8 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
                 CharSequence result = data.getCharSequenceExtra(Intent.EXTRA_PROCESS_TEXT);
                 if (result != null) {
                     if (isTextEditable()) {
-                        replaceSelectionWithText(result);
+                        ClipData clip = ClipData.newPlainText("", result);
+                        mRichContentReceiver.onReceive(this, clip, SOURCE_PROCESS_TEXT, 0);
                         if (mEditor != null) {
                             mEditor.refreshTextActionMode();
                         }
@@ -6590,7 +6618,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
         if (mSingleLine != singleLine || forceUpdate) {
             // Change single line mode, but only change the transformation if
             // we are not in password mode.
-            applySingleLine(singleLine, !isPassword, true);
+            applySingleLine(singleLine, !isPassword, true, true);
         }
 
         if (!isSuggestionsEnabled()) {
@@ -8694,6 +8722,11 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
                 outAttrs.initialSelEnd = getSelectionEnd();
                 outAttrs.initialCapsMode = ic.getCursorCapsMode(getInputType());
                 outAttrs.setInitialSurroundingText(mText);
+                int targetSdkVersion = mContext.getApplicationInfo().targetSdkVersion;
+                if (targetSdkVersion > Build.VERSION_CODES.R) {
+                    outAttrs.contentMimeTypes = mRichContentReceiver.getSupportedMimeTypes()
+                            .toArray(new String[0]);
+                }
                 return ic;
             }
         }
@@ -10229,6 +10262,9 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
      * Note that the default conditions are not necessarily those that were in effect prior this
      * method, and you may want to reset these properties to your custom values.
      *
+     * Note that due to performance reasons, by setting single line for the EditText, the maximum
+     * text length is set to 5000 if no other character limitation are applied.
+     *
      * @attr ref android.R.styleable#TextView_singleLine
      */
     @android.view.RemotableViewMethod
@@ -10236,7 +10272,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
         // Could be used, but may break backward compatibility.
         // if (mSingleLine == singleLine) return;
         setInputTypeSingleLine(singleLine);
-        applySingleLine(singleLine, true, true);
+        applySingleLine(singleLine, true, true, true);
     }
 
     /**
@@ -10256,14 +10292,40 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
     }
 
     private void applySingleLine(boolean singleLine, boolean applyTransformation,
-            boolean changeMaxLines) {
+            boolean changeMaxLines, boolean changeMaxLength) {
         mSingleLine = singleLine;
+
         if (singleLine) {
             setLines(1);
             setHorizontallyScrolling(true);
             if (applyTransformation) {
                 setTransformationMethod(SingleLineTransformationMethod.getInstance());
             }
+
+            if (!changeMaxLength) return;
+
+            // Single line length filter is only applicable editable text.
+            if (mBufferType != BufferType.EDITABLE) return;
+
+            final InputFilter[] prevFilters = getFilters();
+            for (InputFilter filter: getFilters()) {
+                // We don't add LengthFilter if already there.
+                if (filter instanceof InputFilter.LengthFilter) return;
+            }
+
+            if (mSingleLineLengthFilter == null) {
+                mSingleLineLengthFilter = new InputFilter.LengthFilter(
+                    MAX_LENGTH_FOR_SINGLE_LINE_EDIT_TEXT);
+            }
+
+            final InputFilter[] newFilters = new InputFilter[prevFilters.length + 1];
+            System.arraycopy(prevFilters, 0, newFilters, 0, prevFilters.length);
+            newFilters[prevFilters.length] = mSingleLineLengthFilter;
+
+            setFilters(newFilters);
+
+            // Since filter doesn't apply to existing text, trigger filter by setting text.
+            setText(getText());
         } else {
             if (changeMaxLines) {
                 setMaxLines(Integer.MAX_VALUE);
@@ -10272,6 +10334,47 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
             if (applyTransformation) {
                 setTransformationMethod(null);
             }
+
+            if (!changeMaxLength) return;
+
+            // Single line length filter is only applicable editable text.
+            if (mBufferType != BufferType.EDITABLE) return;
+
+            final InputFilter[] prevFilters = getFilters();
+            if (prevFilters.length == 0) return;
+
+            // Short Circuit: if mSingleLineLengthFilter is not allocated, nobody sets automated
+            // single line char limit filter.
+            if (mSingleLineLengthFilter == null) return;
+
+            // If we need to remove mSingleLineLengthFilter, we need to allocate another array.
+            // Since filter list is expected to be small and want to avoid unnecessary array
+            // allocation, check if there is mSingleLengthFilter first.
+            int targetIndex = -1;
+            for (int i = 0; i < prevFilters.length; ++i) {
+                if (prevFilters[i] == mSingleLineLengthFilter) {
+                    targetIndex = i;
+                    break;
+                }
+            }
+            if (targetIndex == -1) return;  // not found. Do nothing.
+
+            if (prevFilters.length == 1) {
+                setFilters(NO_FILTERS);
+                return;
+            }
+
+            // Create new array which doesn't include mSingleLengthFilter.
+            final InputFilter[] newFilters = new InputFilter[prevFilters.length - 1];
+            System.arraycopy(prevFilters, 0, newFilters, 0, targetIndex);
+            System.arraycopy(
+                    prevFilters,
+                    targetIndex + 1,
+                    newFilters,
+                    targetIndex,
+                    prevFilters.length - targetIndex - 1);
+            setFilters(newFilters);
+            mSingleLineLengthFilter = null;
         }
     }
 
@@ -11720,26 +11823,36 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
 
     @Override
     public void autofill(AutofillValue value) {
-        if (!value.isText() || !isTextEditable()) {
-            Log.w(LOG_TAG, value + " could not be autofilled into " + this);
+        if (!isTextEditable()) {
+            Log.w(LOG_TAG, "cannot autofill non-editable TextView: " + this);
             return;
         }
-
-        final CharSequence autofilledValue = value.getTextValue();
-
-        // First autofill it...
-        setText(autofilledValue, mBufferType, true, 0);
-
-        // ...then move cursor to the end.
-        final CharSequence text = getText();
-        if ((text instanceof Spannable)) {
-            Selection.setSelection((Spannable) text, text.length());
+        ClipData clip;
+        if (value.isRichContent()) {
+            clip = value.getRichContentValue();
+        } else if (value.isText()) {
+            clip = ClipData.newPlainText("", value.getTextValue());
+        } else {
+            Log.w(LOG_TAG, "value of type " + value.describeContents()
+                    + " cannot be autofilled into " + this);
+            return;
         }
+        mRichContentReceiver.onReceive(this, clip, RichContentReceiver.SOURCE_AUTOFILL, 0);
     }
 
     @Override
     public @AutofillType int getAutofillType() {
-        return isTextEditable() ? AUTOFILL_TYPE_TEXT : AUTOFILL_TYPE_NONE;
+        if (!isTextEditable()) {
+            return AUTOFILL_TYPE_NONE;
+        }
+        final int targetSdkVersion = getContext().getApplicationInfo().targetSdkVersion;
+        if (targetSdkVersion <= Build.VERSION_CODES.R) {
+            return AUTOFILL_TYPE_TEXT;
+        }
+        // TODO(b/147301047): Update autofill framework code to check the target SDK of the autofill
+        //  provider and force the type AUTOFILL_TYPE_TEXT for providers that target older SDKs.
+        return mRichContentReceiver.supportsNonTextContent() ? AUTOFILL_TYPE_RICH_CONTENT
+                : AUTOFILL_TYPE_TEXT;
     }
 
     /**
@@ -12317,11 +12430,11 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
                 return true;  // Returns true even if nothing was undone.
 
             case ID_PASTE:
-                paste(min, max, true /* withFormatting */);
+                paste(true /* withFormatting */);
                 return true;
 
             case ID_PASTE_AS_PLAIN_TEXT:
-                paste(min, max, false /* withFormatting */);
+                paste(false /* withFormatting */);
                 return true;
 
             case ID_CUT:
@@ -12794,40 +12907,15 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
         return length > 0;
     }
 
-    void replaceSelectionWithText(CharSequence text) {
-        ((Editable) mText).replace(getSelectionStart(), getSelectionEnd(), text);
-    }
-
-    /**
-     * Paste clipboard content between min and max positions.
-     */
-    private void paste(int min, int max, boolean withFormatting) {
+    private void paste(boolean withFormatting) {
         ClipboardManager clipboard = getClipboardManagerForUser();
         ClipData clip = clipboard.getPrimaryClip();
-        if (clip != null) {
-            boolean didFirst = false;
-            for (int i = 0; i < clip.getItemCount(); i++) {
-                final CharSequence paste;
-                if (withFormatting) {
-                    paste = clip.getItemAt(i).coerceToStyledText(getContext());
-                } else {
-                    // Get an item as text and remove all spans by toString().
-                    final CharSequence text = clip.getItemAt(i).coerceToText(getContext());
-                    paste = (text instanceof Spanned) ? text.toString() : text;
-                }
-                if (paste != null) {
-                    if (!didFirst) {
-                        Selection.setSelection(mSpannable, max);
-                        ((Editable) mText).replace(min, max, paste);
-                        didFirst = true;
-                    } else {
-                        ((Editable) mText).insert(getSelectionEnd(), "\n");
-                        ((Editable) mText).insert(getSelectionEnd(), paste);
-                    }
-                }
-            }
-            sLastCutCopyOrTextChangedTime = 0;
+        if (clip == null) {
+            return;
         }
+        int flags = withFormatting ? 0 : RichContentReceiver.FLAG_CONVERT_TO_PLAIN_TEXT;
+        mRichContentReceiver.onReceive(this, clip, RichContentReceiver.SOURCE_CLIPBOARD, flags);
+        sLastCutCopyOrTextChangedTime = 0;
     }
 
     private void shareSelectedText() {
@@ -13606,6 +13694,46 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
             }
             TextView.this.spanChange(buf, what, s, -1, e, -1);
         }
+    }
+
+    /**
+     * Returns the callback that handles insertion of content into this view (e.g. pasting from
+     * the clipboard). See {@link #setRichContentReceiver} for more info.
+     *
+     * @return The callback that this view is using to handle insertion of content. Returns
+     * {@link #DEFAULT_RICH_CONTENT_RECEIVER} if no custom callback has been
+     * {@link #setRichContentReceiver set}.
+     */
+    @NonNull
+    public RichContentReceiver<TextView> getRichContentReceiver() {
+        return mRichContentReceiver;
+    }
+
+    /**
+     * Sets the callback to handle insertion of content into this view.
+     *
+     * <p>"Content" and "rich content" here refers to both text and non-text: plain text, styled
+     * text, HTML, images, videos, audio files, etc.
+     *
+     * <p>The callback configured here should typically wrap {@link #DEFAULT_RICH_CONTENT_RECEIVER}
+     * to provide consistent behavior for text content.
+     *
+     * <p>This callback will be invoked for the following scenarios:
+     * <ol>
+     *     <li>Paste from the clipboard (e.g. "Paste" or "Paste as plain text" action in the
+     *     insertion/selection menu)
+     *     <li>Content insertion from the keyboard ({@link InputConnection#commitContent})
+     *     <li>Drag and drop ({@link View#onDragEvent})
+     *     <li>Autofill, when the type for the field is
+     *     {@link android.view.View.AutofillType#AUTOFILL_TYPE_RICH_CONTENT}
+     * </ol>
+     *
+     * @param receiver The callback to use. This can be {@link #DEFAULT_RICH_CONTENT_RECEIVER} to
+     * reset to the default behavior.
+     */
+    public void setRichContentReceiver(@NonNull RichContentReceiver<TextView> receiver) {
+        mRichContentReceiver = Objects.requireNonNull(receiver,
+                "RichContentReceiver should not be null.");
     }
 
     private static void logCursor(String location, @Nullable String msgFormat, Object ... msgArgs) {

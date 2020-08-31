@@ -20,12 +20,11 @@ import android.annotation.ColorInt;
 import android.annotation.ColorLong;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
-import android.compat.annotation.UnsupportedAppUsage;
 
 import libcore.util.NativeAllocationRegistry;
 
 /**
- * Shader is the based class for objects that return horizontal spans of colors
+ * Shader is the base class for objects that return horizontal spans of colors
  * during drawing. A subclass of Shader is installed in a Paint calling
  * paint.setShader(shader). After that any object (other than a bitmap) that is
  * drawn with that paint will get its color(s) from the shader.
@@ -47,9 +46,9 @@ public class Shader {
     }
 
     /**
-     * @hide
+     * @hide Only to be used by subclasses in android.graphics.
      */
-    public Shader(ColorSpace colorSpace) {
+    protected Shader(ColorSpace colorSpace) {
         mColorSpace = colorSpace;
         if (colorSpace == null) {
             throw new IllegalArgumentException(
@@ -63,7 +62,7 @@ public class Shader {
     private final ColorSpace mColorSpace;
 
     /**
-     * @hide
+     * @hide Only to be used by subclasses in android.graphics.
      */
     protected ColorSpace colorSpace() {
         return mColorSpace;
@@ -97,11 +96,10 @@ public class Shader {
          * mirror images so that adjacent images always seam
          */
         MIRROR  (2);
-    
+
         TileMode(int nativeInt) {
             this.nativeInt = nativeInt;
         }
-        @UnsupportedAppUsage
         final int nativeInt;
     }
 
@@ -142,12 +140,22 @@ public class Shader {
         }
     }
 
-    long createNativeInstance(long nativeMatrix) {
+    /**
+     *  @hide Only to be used by subclasses in the graphics package.
+     */
+    protected long createNativeInstance(long nativeMatrix) {
         return 0;
     }
 
-    /** @hide */
-    protected final void discardNativeInstance() {
+    /**
+     *  @hide Only to be used by subclasses in the graphics package.
+     */
+    protected synchronized final void discardNativeInstance() {
+        discardNativeInstanceLocked();
+    }
+
+    // For calling inside a synchronized method.
+    private void discardNativeInstanceLocked() {
         if (mNativeInstance != 0) {
             mCleaner.run();
             mCleaner = null;
@@ -156,24 +164,27 @@ public class Shader {
     }
 
     /**
-     * Callback for subclasses to call {@link #discardNativeInstance()} if the most recently
-     * constructed native instance is no longer valid.
-     * @hide
+     * Callback for subclasses to specify whether the most recently
+     * constructed native instance is still valid.
+     *  @hide Only to be used by subclasses in the graphics package.
      */
-    protected void verifyNativeInstance() {
+    protected boolean shouldDiscardNativeInstance() {
+        return false;
     }
 
 
     /**
-     * @hide
+     * @hide so it can be called by android.graphics.drawable but must not be called from outside
+     * the module.
      */
-    public final long getNativeInstance() {
-        // verify mNativeInstance is valid
-        verifyNativeInstance();
+    public synchronized final long getNativeInstance() {
+        if (shouldDiscardNativeInstance()) {
+            discardNativeInstanceLocked();
+        }
 
         if (mNativeInstance == 0) {
             mNativeInstance = createNativeInstance(mLocalMatrix == null
-                    ? 0 : mLocalMatrix.native_instance);
+                    ? 0 : mLocalMatrix.ni());
             if (mNativeInstance != 0) {
                 mCleaner = NoImagePreloadHolder.sRegistry.registerNativeAllocation(
                         this, mNativeInstance);
@@ -183,9 +194,9 @@ public class Shader {
     }
 
     /**
-     * @hide
+     * @hide Only to be called by subclasses in the android.graphics package.
      */
-    public static @ColorLong long[] convertColors(@NonNull @ColorInt int[] colors) {
+    protected static @ColorLong long[] convertColors(@NonNull @ColorInt int[] colors) {
         if (colors.length < 2) {
             throw new IllegalArgumentException("needs >= 2 number of colors");
         }
@@ -204,9 +215,9 @@ public class Shader {
      * @throws IllegalArgumentException if the colors do not all share the same,
      *      valid ColorSpace, or if there are less than 2 colors.
      *
-     * @hide
+     * @hide Only to be called by subclasses in the android.graphics package.
      */
-    public static ColorSpace detectColorSpace(@NonNull @ColorLong long[] colors) {
+    protected static ColorSpace detectColorSpace(@NonNull @ColorLong long[] colors) {
         if (colors.length < 2) {
             throw new IllegalArgumentException("needs >= 2 number of colors");
         }

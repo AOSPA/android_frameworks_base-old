@@ -22,14 +22,13 @@ import static com.android.systemui.Dependency.LEAK_REPORT_EMAIL_NAME;
 import android.content.Context;
 import android.os.Handler;
 import android.os.PowerManager;
+import android.view.IWindowManager;
 
 import com.android.keyguard.KeyguardViewController;
 import com.android.systemui.broadcast.BroadcastDispatcher;
 import com.android.systemui.car.CarDeviceProvisionedController;
 import com.android.systemui.car.CarDeviceProvisionedControllerImpl;
 import com.android.systemui.car.keyguard.CarKeyguardViewController;
-import com.android.systemui.car.statusbar.CarStatusBar;
-import com.android.systemui.car.statusbar.CarStatusBarKeyguardViewManager;
 import com.android.systemui.car.statusbar.DozeServiceHost;
 import com.android.systemui.car.statusbar.DummyNotificationShadeWindowController;
 import com.android.systemui.car.volume.CarVolumeDialogComponent;
@@ -43,6 +42,7 @@ import com.android.systemui.plugins.qs.QSFactory;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.power.EnhancedEstimates;
 import com.android.systemui.power.EnhancedEstimatesImpl;
+import com.android.systemui.qs.dagger.QSModule;
 import com.android.systemui.qs.tileimpl.QSFactoryImpl;
 import com.android.systemui.recents.Recents;
 import com.android.systemui.recents.RecentsImplementation;
@@ -58,14 +58,17 @@ import com.android.systemui.statusbar.phone.NotificationGroupManager;
 import com.android.systemui.statusbar.phone.NotificationShadeWindowController;
 import com.android.systemui.statusbar.phone.ShadeController;
 import com.android.systemui.statusbar.phone.ShadeControllerImpl;
-import com.android.systemui.statusbar.phone.StatusBar;
-import com.android.systemui.statusbar.phone.StatusBarKeyguardViewManager;
 import com.android.systemui.statusbar.policy.BatteryController;
 import com.android.systemui.statusbar.policy.BatteryControllerImpl;
 import com.android.systemui.statusbar.policy.ConfigurationController;
 import com.android.systemui.statusbar.policy.DeviceProvisionedController;
 import com.android.systemui.statusbar.policy.HeadsUpManager;
 import com.android.systemui.volume.VolumeDialogComponent;
+import com.android.systemui.wm.DisplaySystemBarsController;
+import com.android.wm.shell.common.DisplayController;
+import com.android.wm.shell.common.DisplayImeController;
+import com.android.wm.shell.common.SystemWindows;
+import com.android.wm.shell.common.TransactionPool;
 
 import javax.inject.Named;
 import javax.inject.Singleton;
@@ -74,7 +77,7 @@ import dagger.Binds;
 import dagger.Module;
 import dagger.Provides;
 
-@Module(includes = {DividerModule.class})
+@Module(includes = {DividerModule.class, QSModule.class})
 public abstract class CarSystemUIModule {
 
     @Singleton
@@ -110,6 +113,31 @@ public abstract class CarSystemUIModule {
         return new Recents(context, recentsImplementation, commandQueue);
     }
 
+    @Singleton
+    @Provides
+    static TransactionPool provideTransactionPool() {
+        return new TransactionPool();
+    }
+
+    @Singleton
+    @Provides
+    static DisplayController providerDisplayController(Context context, @Main Handler handler,
+            IWindowManager wmService) {
+        return new DisplayController(context, handler, wmService);
+    }
+
+    @Singleton
+    @Provides
+    static SystemWindows provideSystemWindows(DisplayController displayController,
+            IWindowManager wmService) {
+        return new SystemWindows(displayController, wmService);
+    }
+
+    @Singleton
+    @Binds
+    abstract DisplayImeController bindDisplayImeController(
+            DisplaySystemBarsController displaySystemBarsController);
+
     @Binds
     abstract HeadsUpManager bindHeadsUpManagerPhone(HeadsUpManagerPhone headsUpManagerPhone);
 
@@ -134,7 +162,7 @@ public abstract class CarSystemUIModule {
 
     @Binds
     @Singleton
-    public abstract QSFactory provideQSFactory(QSFactoryImpl qsFactoryImpl);
+    public abstract QSFactory bindQSFactory(QSFactoryImpl qsFactoryImpl);
 
     @Binds
     abstract DockManager bindDockManager(DockManagerImpl dockManager);
@@ -151,15 +179,8 @@ public abstract class CarSystemUIModule {
             CarSystemUIRootComponent systemUIRootComponent);
 
     @Binds
-    public abstract StatusBar bindStatusBar(CarStatusBar statusBar);
-
-    @Binds
     abstract VolumeDialogComponent bindVolumeDialogComponent(
             CarVolumeDialogComponent carVolumeDialogComponent);
-
-    @Binds
-    abstract StatusBarKeyguardViewManager bindStatusBarKeyguardViewManager(
-            CarStatusBarKeyguardViewManager keyguardViewManager);
 
     @Binds
     abstract KeyguardViewController bindKeyguardViewController(

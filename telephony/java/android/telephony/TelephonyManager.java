@@ -113,8 +113,6 @@ import com.android.internal.telephony.RILConstants;
 import com.android.internal.telephony.SmsApplication;
 import com.android.telephony.Rlog;
 
-import java.io.FileInputStream;
-import java.io.IOException;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.util.ArrayList;
@@ -127,8 +125,6 @@ import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.Executor;
 import java.util.function.Consumer;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /**
  * Provides access to information about the telephony services on
@@ -2343,58 +2339,6 @@ public class TelephonyManager {
     }
 
     /**
-     * Enables location update notifications.  {@link PhoneStateListener#onCellLocationChanged
-     * PhoneStateListener.onCellLocationChanged} will be called on location updates.
-     *
-     * @hide
-     */
-    @RequiresPermission(android.Manifest.permission.CONTROL_LOCATION_UPDATES)
-    public void enableLocationUpdates() {
-        enableLocationUpdates(getSubId());
-    }
-
-    /**
-     * Enables location update notifications for a subscription.
-     * {@link PhoneStateListener#onCellLocationChanged
-     * PhoneStateListener.onCellLocationChanged} will be called on location updates.
-     *
-     * @param subId for which the location updates are enabled
-     * @hide
-     */
-    @RequiresPermission(android.Manifest.permission.CONTROL_LOCATION_UPDATES)
-    public void enableLocationUpdates(int subId) {
-        try {
-            ITelephony telephony = getITelephony();
-            if (telephony != null)
-                telephony.enableLocationUpdatesForSubscriber(subId);
-        } catch (RemoteException ex) {
-        } catch (NullPointerException ex) {
-        }
-    }
-
-    /**
-     * Disables location update notifications.  {@link PhoneStateListener#onCellLocationChanged
-     * PhoneStateListener.onCellLocationChanged} will be called on location updates.
-     *
-     * @hide
-     */
-    @RequiresPermission(android.Manifest.permission.CONTROL_LOCATION_UPDATES)
-    public void disableLocationUpdates() {
-        disableLocationUpdates(getSubId());
-    }
-
-    /** @hide */
-    public void disableLocationUpdates(int subId) {
-        try {
-            ITelephony telephony = getITelephony();
-            if (telephony != null)
-                telephony.disableLocationUpdatesForSubscriber(subId);
-        } catch (RemoteException ex) {
-        } catch (NullPointerException ex) {
-        }
-    }
-
-    /**
      * Returns the neighboring cell information of the device.
      *
      * @return List of NeighboringCellInfo or null if info unavailable.
@@ -2595,7 +2539,8 @@ public class TelephonyManager {
             return PhoneConstants.PHONE_TYPE_CDMA;
 
         case RILConstants.NETWORK_MODE_LTE_ONLY:
-            if (getLteOnCdmaModeStatic() == PhoneConstants.LTE_ON_CDMA_TRUE) {
+            if (TelephonyProperties.lte_on_cdma_device().orElse(
+                    PhoneConstants.LTE_ON_CDMA_FALSE) == PhoneConstants.LTE_ON_CDMA_TRUE) {
                 return PhoneConstants.PHONE_TYPE_CDMA;
             } else {
                 return PhoneConstants.PHONE_TYPE_GSM;
@@ -2606,91 +2551,12 @@ public class TelephonyManager {
     }
 
     /**
-     * The contents of the /proc/cmdline file
-     */
-    @UnsupportedAppUsage
-    private static String getProcCmdLine()
-    {
-        String cmdline = "";
-        FileInputStream is = null;
-        try {
-            is = new FileInputStream("/proc/cmdline");
-            byte [] buffer = new byte[2048];
-            int count = is.read(buffer);
-            if (count > 0) {
-                cmdline = new String(buffer, 0, count);
-            }
-        } catch (IOException e) {
-            Rlog.d(TAG, "No /proc/cmdline exception=" + e);
-        } finally {
-            if (is != null) {
-                try {
-                    is.close();
-                } catch (IOException e) {
-                }
-            }
-        }
-        Rlog.d(TAG, "/proc/cmdline=" + cmdline);
-        return cmdline;
-    }
-
-    /**
      * @return The max value for the timeout passed in {@link #requestNumberVerification}.
      * @hide
      */
     @SystemApi
     public static long getMaxNumberVerificationTimeoutMillis() {
         return MAX_NUMBER_VERIFICATION_TIMEOUT_MILLIS;
-    }
-
-    /** Kernel command line */
-    private static final String sKernelCmdLine = getProcCmdLine();
-
-    /** Pattern for selecting the product type from the kernel command line */
-    private static final Pattern sProductTypePattern =
-        Pattern.compile("\\sproduct_type\\s*=\\s*(\\w+)");
-
-    /** The ProductType used for LTE on CDMA devices */
-    private static final String sLteOnCdmaProductType =
-            TelephonyProperties.lte_on_cdma_product_type().orElse("");
-
-    /**
-     * Return if the current radio is LTE on CDMA. This
-     * is a tri-state return value as for a period of time
-     * the mode may be unknown.
-     *
-     * @return {@link PhoneConstants#LTE_ON_CDMA_UNKNOWN}, {@link PhoneConstants#LTE_ON_CDMA_FALSE}
-     * or {@link PhoneConstants#LTE_ON_CDMA_TRUE}
-     *
-     * @hide
-     */
-    @UnsupportedAppUsage
-    public static int getLteOnCdmaModeStatic() {
-        int retVal;
-        int curVal;
-        String productType = "";
-
-        curVal = TelephonyProperties.lte_on_cdma_device().orElse(
-            PhoneConstants.LTE_ON_CDMA_UNKNOWN);
-        retVal = curVal;
-        if (retVal == PhoneConstants.LTE_ON_CDMA_UNKNOWN) {
-            Matcher matcher = sProductTypePattern.matcher(sKernelCmdLine);
-            if (matcher.find()) {
-                productType = matcher.group(1);
-                if (sLteOnCdmaProductType.equals(productType)) {
-                    retVal = PhoneConstants.LTE_ON_CDMA_TRUE;
-                } else {
-                    retVal = PhoneConstants.LTE_ON_CDMA_FALSE;
-                }
-            } else {
-                retVal = PhoneConstants.LTE_ON_CDMA_FALSE;
-            }
-        }
-
-        Rlog.d(TAG, "getLteOnCdmaMode=" + retVal + " curVal=" + curVal +
-                " product_type='" + productType +
-                "' lteOnCdmaProductType='" + sLteOnCdmaProductType + "'");
-        return retVal;
     }
 
     //
@@ -5639,23 +5505,6 @@ public class TelephonyManager {
         }
     }
 
-    /**
-     * Convert data state to string
-     *
-     * @return The data state in string format.
-     * @hide
-     */
-    public static String dataStateToString(@DataState int state) {
-        switch (state) {
-            case DATA_DISCONNECTED: return "DISCONNECTED";
-            case DATA_CONNECTING: return "CONNECTING";
-            case DATA_CONNECTED: return "CONNECTED";
-            case DATA_SUSPENDED: return "SUSPENDED";
-            case DATA_DISCONNECTING: return "DISCONNECTING";
-        }
-        return "UNKNOWN(" + state + ")";
-    }
-
    /**
     * @hide
     */
@@ -8188,13 +8037,13 @@ public class TelephonyManager {
 
     /**
      * Get the PLMN chosen for Manual Network Selection if active.
-     * Return empty string if in automatic selection.
+     * Return null string if in automatic selection.
      *
      * <p>Requires Permission: {@link android.Manifest.permission#READ_PRECISE_PHONE_STATE
      * READ_PRECISE_PHONE_STATE} or that the calling app has carrier privileges
      * (see {@link #hasCarrierPrivileges})
      *
-     * @return manually selected network info on success or empty string on failure
+     * @return manually selected network info on success or null string on failure
      */
     @SuppressAutoDoc // No support carrier privileges (b/72967236).
     @RequiresPermission(android.Manifest.permission.READ_PRECISE_PHONE_STATE)
@@ -8207,7 +8056,7 @@ public class TelephonyManager {
         } catch (RemoteException ex) {
             Rlog.e(TAG, "getManualNetworkSelectionPlmn RemoteException", ex);
         }
-        return "";
+        return null;
     }
 
     /**
@@ -9313,17 +9162,14 @@ public class TelephonyManager {
         return RADIO_POWER_UNAVAILABLE;
     }
 
-    /** @hide */
+    /**
+     * This method should not be used due to privacy and stability concerns.
+     *
+     * @hide
+     */
     @SystemApi
-    @SuppressLint("Doclava125")
     public void updateServiceLocation() {
-        try {
-            ITelephony telephony = getITelephony();
-            if (telephony != null)
-                telephony.updateServiceLocation();
-        } catch (RemoteException e) {
-            Log.e(TAG, "Error calling ITelephony#updateServiceLocation", e);
-        }
+        Log.e(TAG, "Do not call TelephonyManager#updateServiceLocation()");
     }
 
     /** @hide */
@@ -9391,8 +9237,10 @@ public class TelephonyManager {
      * app has carrier privileges (see {@link #hasCarrierPrivileges}).
      *
      * @param enable Whether to enable mobile data.
+     * @deprecated use setDataEnabledWithReason with reason DATA_ENABLED_REASON_USER instead.
      *
      */
+    @Deprecated
     @SuppressAutoDoc // Blocked by b/72967236 - no support for carrier privileges
     @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE)
     public void setDataEnabled(boolean enable) {
@@ -9401,19 +9249,16 @@ public class TelephonyManager {
 
     /**
      * @hide
-     * @deprecated use {@link #setDataEnabled(boolean)} instead.
+     * @deprecated use {@link #setDataEnabledWithReason(int, boolean)} instead.
     */
     @SystemApi
     @Deprecated
     @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE)
     public void setDataEnabled(int subId, boolean enable) {
         try {
-            Log.d(TAG, "setDataEnabled: enabled=" + enable);
-            ITelephony telephony = getITelephony();
-            if (telephony != null)
-                telephony.setUserDataEnabled(subId, enable);
-        } catch (RemoteException e) {
-            Log.e(TAG, "Error calling ITelephony#setUserDataEnabled", e);
+            setDataEnabledWithReason(subId, DATA_ENABLED_REASON_USER, enable);
+        } catch (RuntimeException e) {
+            Log.e(TAG, "Error calling setDataEnabledWithReason e:" + e);
         }
     }
 
@@ -9621,15 +9466,12 @@ public class TelephonyManager {
     @Deprecated
     @SystemApi
     public boolean getDataEnabled(int subId) {
-        boolean retVal = false;
         try {
-            ITelephony telephony = getITelephony();
-            if (telephony != null)
-                retVal = telephony.isUserDataEnabled(subId);
-        } catch (RemoteException | NullPointerException e) {
-            Log.e(TAG, "Error calling ITelephony#isUserDataEnabled", e);
+            return isDataEnabledWithReason(DATA_ENABLED_REASON_USER);
+        } catch (RuntimeException e) {
+            Log.e(TAG, "Error calling isDataEnabledWithReason e:" + e);
         }
-        return retVal;
+        return false;
     }
 
     /**
@@ -11180,19 +11022,18 @@ public class TelephonyManager {
      *
      * @param enabled control enable or disable carrier data.
      * @see #resetAllCarrierActions()
+     * @deprecated use {@link #setDataEnabledWithReason(int, boolean) with
+     * reason {@link #DATA_ENABLED_REASON_CARRIER}} instead.
      * @hide
      */
+    @Deprecated
     @SystemApi
     @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE)
     public void setCarrierDataEnabled(boolean enabled) {
         try {
-            ITelephony service = getITelephony();
-            if (service != null) {
-                service.carrierActionSetMeteredApnsEnabled(
-                        getSubId(SubscriptionManager.getDefaultDataSubscriptionId()), enabled);
-            }
-        } catch (RemoteException e) {
-            Log.e(TAG, "Error calling ITelephony#setCarrierDataEnabled", e);
+            setDataEnabledWithReason(DATA_ENABLED_REASON_CARRIER, enabled);
+        } catch (RuntimeException e) {
+            Log.e(TAG, "Error calling setDataEnabledWithReason e:" + e);
         }
     }
 
@@ -11278,18 +11119,151 @@ public class TelephonyManager {
     /**
      * Policy control of data connection. Usually used when data limit is passed.
      * @param enabled True if enabling the data, otherwise disabling.
+     * @deprecated use {@link #setDataEnabledWithReason(int, boolean) with
+     * reason {@link #DATA_ENABLED_REASON_POLICY}} instead.
      * @hide
      */
+    @Deprecated
     @RequiresPermission(Manifest.permission.MODIFY_PHONE_STATE)
     public void setPolicyDataEnabled(boolean enabled) {
         try {
+            setDataEnabledWithReason(DATA_ENABLED_REASON_POLICY, enabled);
+        } catch (RuntimeException e) {
+            Log.e(TAG, "Error calling setDataEnabledWithReason e:" + e);
+        }
+    }
+
+    /** @hide */
+    @IntDef({
+            DATA_ENABLED_REASON_USER,
+            DATA_ENABLED_REASON_POLICY,
+            DATA_ENABLED_REASON_CARRIER,
+            DATA_ENABLED_REASON_THERMAL
+    })
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface DataEnabledReason{}
+
+    /**
+     * To indicate that user enabled or disabled data.
+     * @hide
+     */
+    @SystemApi
+    public static final int DATA_ENABLED_REASON_USER = 0;
+
+    /**
+     * To indicate that data control due to policy. Usually used when data limit is passed.
+     * Policy data on/off won't affect user settings but will bypass the
+     * settings and turns off data internally if set to {@code false}.
+     * @hide
+     */
+    @SystemApi
+    public static final int DATA_ENABLED_REASON_POLICY = 1;
+
+    /**
+     * To indicate enable or disable carrier data by the system based on carrier signalling or
+     * carrier privileged apps. Carrier data on/off won't affect user settings but will bypass the
+     * settings and turns off data internally if set to {@code false}.
+     * @hide
+     */
+    @SystemApi
+    public static final int DATA_ENABLED_REASON_CARRIER = 2;
+
+    /**
+     * To indicate enable or disable data by thermal service.
+     * Thermal data on/off won't affect user settings but will bypass the
+     * settings and turns off data internally if set to {@code false}.
+     * @hide
+     */
+    @SystemApi
+    public static final int DATA_ENABLED_REASON_THERMAL = 3;
+
+    /**
+     * Control of data connection and provide the reason triggering the data connection control.
+     * This can be called for following reasons
+     * <ol>
+     * <li>data limit is passed {@link #DATA_ENABLED_REASON_POLICY}
+     * <li>data disabled by carrier {@link #DATA_ENABLED_REASON_CARRIER}
+     * <li>data disabled by user {@link #DATA_ENABLED_REASON_USER}
+     * <li>data disabled due to thermal {@link #DATA_ENABLED_REASON_THERMAL}
+     * </ol>
+     * If any of the reason is off, then it will result in
+     * bypassing user preference and result in data to be turned off.
+     *
+     * <p>If this object has been created with {@link #createForSubscriptionId}, applies
+     *      to the given subId. Otherwise, applies to
+     * {@link SubscriptionManager#getDefaultDataSubscriptionId()}
+     *
+     *
+     * @param reason the reason the data enable change is taking place
+     * @param enabled True if enabling the data, otherwise disabling.
+     *
+     * <p>Requires Permission:
+     * The calling app has carrier privileges (see {@link #hasCarrierPrivileges}) if the reason is
+     * {@link #DATA_ENABLED_REASON_USER} or {@link #DATA_ENABLED_REASON_CARRIER} or the call app
+     * has {@link android.Manifest.permission#MODIFY_PHONE_STATE MODIFY_PHONE_STATE} irrespective of
+     * the reason.
+     * @throws IllegalStateException if the Telephony process is not currently available.
+     * @hide
+     */
+    @RequiresPermission(Manifest.permission.MODIFY_PHONE_STATE)
+    @SystemApi
+    public void setDataEnabledWithReason(@DataEnabledReason int reason, boolean enabled) {
+        setDataEnabledWithReason(getSubId(), reason, enabled);
+    }
+
+    private void setDataEnabledWithReason(int subId, @DataEnabledReason int reason,
+            boolean enabled) {
+        try {
             ITelephony service = getITelephony();
             if (service != null) {
-                service.setPolicyDataEnabled(enabled, getSubId());
+                service.setDataEnabledWithReason(subId, reason, enabled);
+            } else {
+                throw new IllegalStateException("telephony service is null.");
             }
-        } catch (RemoteException e) {
-            Log.e(TAG, "Error calling ITelephony#setPolicyDataEnabled", e);
+        } catch (RemoteException ex) {
+            Log.e(TAG, "Telephony#setDataEnabledWithReason RemoteException", ex);
+            ex.rethrowFromSystemServer();
         }
+    }
+
+    /**
+     * Return whether data is enabled for certain reason .
+     *
+     * If {@link #isDataEnabledWithReason} returns false, it means in data enablement for a
+     * specific reason is turned off. If any of the reason is off, then it will result in
+     * bypassing user preference and result in data to be turned off.
+     *
+     * <p>If this object has been created with {@link #createForSubscriptionId}, applies
+     *      to the given subId. Otherwise, applies to
+     * {@link SubscriptionManager#getDefaultDataSubscriptionId()}
+     *
+     * @param reason the reason the data enable change is taking place
+     * @return whether data is enabled for a reason.
+     * <p>Requires Permission:
+     * {@link android.Manifest.permission#READ_PHONE_STATE READ_PHONE_STATE}
+     * @throws IllegalStateException if the Telephony process is not currently available.
+     * @hide
+     */
+    @RequiresPermission(anyOf = {android.Manifest.permission.ACCESS_NETWORK_STATE,
+            android.Manifest.permission.READ_PHONE_STATE})
+    @SystemApi
+    public boolean isDataEnabledWithReason(@DataEnabledReason int reason) {
+        return isDataEnabledWithReason(getSubId(), reason);
+    }
+
+    private boolean isDataEnabledWithReason(int subId, @DataEnabledReason int reason) {
+        try {
+            ITelephony service = getITelephony();
+            if (service != null) {
+                return service.isDataEnabledWithReason(subId, reason);
+            } else {
+                throw new IllegalStateException("telephony service is null.");
+            }
+        } catch (RemoteException ex) {
+            Log.e(TAG, "Telephony#isDataEnabledWithReason RemoteException", ex);
+            ex.rethrowFromSystemServer();
+        }
+        return false;
     }
 
     /**
@@ -11984,6 +11958,7 @@ public class TelephonyManager {
      * @hide
      */
     @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE)
+    @SuppressWarnings("AndroidFrameworkClientSidePermissionCheck")
     @SystemApi
     public boolean isEmergencyAssistanceEnabled() {
         mContext.enforceCallingOrSelfPermission(

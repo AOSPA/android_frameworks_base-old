@@ -2465,6 +2465,7 @@ package android.hardware.hdmi {
 
   public final class HdmiControlManager {
     method @RequiresPermission(android.Manifest.permission.HDMI_CEC) public void addHotplugEventListener(android.hardware.hdmi.HdmiControlManager.HotplugEventListener);
+    method @RequiresPermission(android.Manifest.permission.HDMI_CEC) public void addHotplugEventListener(@NonNull java.util.concurrent.Executor, @NonNull android.hardware.hdmi.HdmiControlManager.HotplugEventListener);
     method @Nullable public android.hardware.hdmi.HdmiClient getClient(int);
     method @NonNull public java.util.List<android.hardware.hdmi.HdmiDeviceInfo> getConnectedDevices();
     method public int getPhysicalAddress();
@@ -3613,8 +3614,13 @@ package android.hardware.usb {
     method @RequiresPermission(android.Manifest.permission.MANAGE_USB) public void grantPermission(android.hardware.usb.UsbDevice, String);
     method @RequiresPermission(android.Manifest.permission.MANAGE_USB) public void resetUsbGadget();
     method @RequiresPermission(android.Manifest.permission.MANAGE_USB) public void setCurrentFunctions(long);
+    field @RequiresPermission(android.Manifest.permission.MANAGE_USB) public static final String ACTION_USB_ACCESSORY_HANDSHAKE = "android.hardware.usb.action.USB_ACCESSORY_HANDSHAKE";
     field @RequiresPermission(android.Manifest.permission.MANAGE_USB) public static final String ACTION_USB_PORT_CHANGED = "android.hardware.usb.action.USB_PORT_CHANGED";
     field public static final String ACTION_USB_STATE = "android.hardware.usb.action.USB_STATE";
+    field public static final String EXTRA_ACCESSORY_HANDSHAKE_END = "android.hardware.usb.extra.ACCESSORY_HANDSHAKE_END";
+    field public static final String EXTRA_ACCESSORY_START = "android.hardware.usb.extra.ACCESSORY_START";
+    field public static final String EXTRA_ACCESSORY_STRING_COUNT = "android.hardware.usb.extra.ACCESSORY_STRING_COUNT";
+    field public static final String EXTRA_ACCESSORY_UEVENT_TIME = "android.hardware.usb.extra.ACCESSORY_UEVENT_TIME";
     field public static final long FUNCTION_ACCESSORY = 2L; // 0x2L
     field public static final long FUNCTION_ADB = 1L; // 0x1L
     field public static final long FUNCTION_AUDIO_SOURCE = 64L; // 0x40L
@@ -4012,7 +4018,8 @@ package android.location {
     method public boolean isExtraLocationControllerPackageEnabled();
     method public boolean isLocationEnabledForUser(@NonNull android.os.UserHandle);
     method public boolean isProviderEnabledForUser(@NonNull String, @NonNull android.os.UserHandle);
-    method @RequiresPermission(android.Manifest.permission.READ_DEVICE_CONFIG) public boolean isProviderPackage(@NonNull String);
+    method @Deprecated @RequiresPermission(android.Manifest.permission.READ_DEVICE_CONFIG) public boolean isProviderPackage(@NonNull String);
+    method @RequiresPermission(android.Manifest.permission.READ_DEVICE_CONFIG) public boolean isProviderPackage(@Nullable String, @NonNull String);
     method @RequiresPermission(android.Manifest.permission.LOCATION_HARDWARE) public boolean registerGnssBatchedLocationCallback(long, boolean, @NonNull android.location.BatchedLocationCallback, @Nullable android.os.Handler);
     method @RequiresPermission(allOf={android.Manifest.permission.ACCESS_FINE_LOCATION, android.Manifest.permission.LOCATION_HARDWARE}) public boolean registerGnssMeasurementsCallback(@NonNull android.location.GnssRequest, @NonNull java.util.concurrent.Executor, @NonNull android.location.GnssMeasurementsEvent.Callback);
     method @RequiresPermission(anyOf={android.Manifest.permission.ACCESS_COARSE_LOCATION, android.Manifest.permission.ACCESS_FINE_LOCATION}) public void requestLocationUpdates(@Nullable android.location.LocationRequest, @NonNull android.location.LocationListener, @Nullable android.os.Looper);
@@ -4103,10 +4110,6 @@ package android.media {
     field @NonNull public static final android.os.Parcelable.Creator<android.media.AudioDeviceAttributes> CREATOR;
     field public static final int ROLE_INPUT = 1; // 0x1
     field public static final int ROLE_OUTPUT = 2; // 0x2
-  }
-
-  public final class AudioDeviceInfo {
-    field public static final int TYPE_REMOTE_SUBMIX = 25; // 0x19
   }
 
   public final class AudioFocusInfo implements android.os.Parcelable {
@@ -7032,6 +7035,10 @@ package android.os {
     field public static final String EXTRA_VERSION = "android.os.extra.VERSION";
   }
 
+  public class DeviceIdleManager {
+    method @RequiresPermission(android.Manifest.permission.DEVICE_POWER) public void endIdle(@NonNull String);
+  }
+
   public class Environment {
     method @NonNull public static java.util.Collection<java.io.File> getInternalMediaDirectories();
     method @NonNull public static java.io.File getOdmDirectory();
@@ -7293,6 +7300,7 @@ package android.os {
   public class PowerWhitelistManager {
     method @RequiresPermission(android.Manifest.permission.DEVICE_POWER) public void addToWhitelist(@NonNull String);
     method @RequiresPermission(android.Manifest.permission.DEVICE_POWER) public void addToWhitelist(@NonNull java.util.List<java.lang.String>);
+    method @RequiresPermission(android.Manifest.permission.DEVICE_POWER) public void removeFromWhitelist(@NonNull String);
     method @RequiresPermission(android.Manifest.permission.CHANGE_DEVICE_IDLE_TEMP_WHITELIST) public void whitelistAppTemporarily(@NonNull String, long);
     method @RequiresPermission(android.Manifest.permission.CHANGE_DEVICE_IDLE_TEMP_WHITELIST) public long whitelistAppTemporarilyForEvent(@NonNull String, int, @NonNull String);
     field public static final int EVENT_MMS = 2; // 0x2
@@ -7849,6 +7857,7 @@ package android.provider {
     field public static final String NAMESPACE_AUTOFILL = "autofill";
     field public static final String NAMESPACE_BIOMETRICS = "biometrics";
     field public static final String NAMESPACE_BLOBSTORE = "blobstore";
+    field public static final String NAMESPACE_BLUETOOTH = "bluetooth";
     field public static final String NAMESPACE_CONNECTIVITY = "connectivity";
     field public static final String NAMESPACE_CONTENT_CAPTURE = "content_capture";
     field @Deprecated public static final String NAMESPACE_DEX_BOOT = "dex_boot";
@@ -8034,7 +8043,8 @@ package android.provider {
   }
 
   public final class Settings {
-    method public static boolean checkAndNoteWriteSettingsOperation(@NonNull android.content.Context, int, @NonNull String, boolean);
+    method @Deprecated public static boolean checkAndNoteWriteSettingsOperation(@NonNull android.content.Context, int, @NonNull String, boolean);
+    method public static boolean checkAndNoteWriteSettingsOperation(@NonNull android.content.Context, int, @NonNull String, @Nullable String, boolean);
     field public static final String ACTION_ACCESSIBILITY_DETAILS_SETTINGS = "android.settings.ACCESSIBILITY_DETAILS_SETTINGS";
     field public static final String ACTION_BUGREPORT_HANDLER_SETTINGS = "android.settings.BUGREPORT_HANDLER_SETTINGS";
     field public static final String ACTION_ENTERPRISE_PRIVACY_SETTINGS = "android.settings.ENTERPRISE_PRIVACY_SETTINGS";
@@ -8148,6 +8158,7 @@ package android.provider {
     field public static final String DATA_CODING_SCHEME = "dcs";
     field public static final String DEFAULT_SORT_ORDER = "date DESC";
     field public static final String DELIVERY_TIME = "date";
+    field public static final String ETWS_IS_PRIMARY = "etws_is_primary";
     field public static final String ETWS_WARNING_TYPE = "etws_warning_type";
     field public static final String GEOGRAPHICAL_SCOPE = "geo_scope";
     field public static final String GEOMETRIES = "geometries";
@@ -8648,7 +8659,7 @@ package android.service.euicc {
   public abstract class EuiccService extends android.app.Service {
     ctor public EuiccService();
     method public void dump(@NonNull java.io.PrintWriter);
-    method public int encodeSmdxSubjectAndReasonCode(@Nullable String, @Nullable String) throws java.lang.IllegalArgumentException, java.lang.NumberFormatException, java.lang.UnsupportedOperationException;
+    method public int encodeSmdxSubjectAndReasonCode(@Nullable String, @Nullable String);
     method @CallSuper public android.os.IBinder onBind(android.content.Intent);
     method public abstract int onDeleteSubscription(int, String);
     method public android.service.euicc.DownloadSubscriptionResult onDownloadSubscription(int, @NonNull android.telephony.euicc.DownloadableSubscription, boolean, boolean, @Nullable android.os.Bundle);
@@ -9085,7 +9096,7 @@ package android.telecom {
   }
 
   public static class CallScreeningService.CallResponse.Builder {
-    method @NonNull public android.telecom.CallScreeningService.CallResponse.Builder setShouldScreenCallViaAudioProcessing(boolean);
+    method @NonNull @RequiresPermission(android.Manifest.permission.CAPTURE_AUDIO_OUTPUT) public android.telecom.CallScreeningService.CallResponse.Builder setShouldScreenCallViaAudioProcessing(boolean);
   }
 
   public abstract class Conference extends android.telecom.Conferenceable {
@@ -9539,85 +9550,6 @@ package android.telephony {
     method @NonNull public android.telephony.LteVopsSupportInfo getLteVopsSupportInfo();
     method public void writeToParcel(android.os.Parcel, int);
     field @NonNull public static final android.os.Parcelable.Creator<android.telephony.DataSpecificRegistrationInfo> CREATOR;
-  }
-
-  public final class DisconnectCause {
-    field public static final int ALREADY_DIALING = 72; // 0x48
-    field public static final int ANSWERED_ELSEWHERE = 52; // 0x34
-    field public static final int BUSY = 4; // 0x4
-    field public static final int CALLING_DISABLED = 74; // 0x4a
-    field public static final int CALL_BARRED = 20; // 0x14
-    field public static final int CALL_PULLED = 51; // 0x33
-    field public static final int CANT_CALL_WHILE_RINGING = 73; // 0x49
-    field public static final int CDMA_ACCESS_BLOCKED = 35; // 0x23
-    field public static final int CDMA_ACCESS_FAILURE = 32; // 0x20
-    field public static final int CDMA_ALREADY_ACTIVATED = 49; // 0x31
-    field public static final int CDMA_DROP = 27; // 0x1b
-    field public static final int CDMA_INTERCEPT = 28; // 0x1c
-    field public static final int CDMA_LOCKED_UNTIL_POWER_CYCLE = 26; // 0x1a
-    field public static final int CDMA_NOT_EMERGENCY = 34; // 0x22
-    field public static final int CDMA_PREEMPTED = 33; // 0x21
-    field public static final int CDMA_REORDER = 29; // 0x1d
-    field public static final int CDMA_RETRY_ORDER = 31; // 0x1f
-    field public static final int CDMA_SO_REJECT = 30; // 0x1e
-    field public static final int CONGESTION = 5; // 0x5
-    field public static final int CS_RESTRICTED = 22; // 0x16
-    field public static final int CS_RESTRICTED_EMERGENCY = 24; // 0x18
-    field public static final int CS_RESTRICTED_NORMAL = 23; // 0x17
-    field public static final int DATA_DISABLED = 54; // 0x36
-    field public static final int DATA_LIMIT_REACHED = 55; // 0x37
-    field public static final int DIALED_CALL_FORWARDING_WHILE_ROAMING = 57; // 0x39
-    field public static final int DIALED_MMI = 39; // 0x27
-    field public static final int DIAL_LOW_BATTERY = 62; // 0x3e
-    field public static final int DIAL_MODIFIED_TO_DIAL = 48; // 0x30
-    field public static final int DIAL_MODIFIED_TO_DIAL_VIDEO = 66; // 0x42
-    field public static final int DIAL_MODIFIED_TO_SS = 47; // 0x2f
-    field public static final int DIAL_MODIFIED_TO_USSD = 46; // 0x2e
-    field public static final int DIAL_VIDEO_MODIFIED_TO_DIAL = 69; // 0x45
-    field public static final int DIAL_VIDEO_MODIFIED_TO_DIAL_VIDEO = 70; // 0x46
-    field public static final int DIAL_VIDEO_MODIFIED_TO_SS = 67; // 0x43
-    field public static final int DIAL_VIDEO_MODIFIED_TO_USSD = 68; // 0x44
-    field public static final int EMERGENCY_PERM_FAILURE = 64; // 0x40
-    field public static final int EMERGENCY_TEMP_FAILURE = 63; // 0x3f
-    field public static final int ERROR_UNSPECIFIED = 36; // 0x24
-    field public static final int FDN_BLOCKED = 21; // 0x15
-    field public static final int ICC_ERROR = 19; // 0x13
-    field public static final int IMEI_NOT_ACCEPTED = 58; // 0x3a
-    field public static final int IMS_ACCESS_BLOCKED = 60; // 0x3c
-    field public static final int IMS_MERGED_SUCCESSFULLY = 45; // 0x2d
-    field public static final int IMS_SIP_ALTERNATE_EMERGENCY_CALL = 71; // 0x47
-    field public static final int INCOMING_AUTO_REJECTED = 81; // 0x51
-    field public static final int INCOMING_MISSED = 1; // 0x1
-    field public static final int INCOMING_REJECTED = 16; // 0x10
-    field public static final int INVALID_CREDENTIALS = 10; // 0xa
-    field public static final int INVALID_NUMBER = 7; // 0x7
-    field public static final int LIMIT_EXCEEDED = 15; // 0xf
-    field public static final int LOCAL = 3; // 0x3
-    field public static final int LOST_SIGNAL = 14; // 0xe
-    field public static final int LOW_BATTERY = 61; // 0x3d
-    field public static final int MAXIMUM_NUMBER_OF_CALLS_REACHED = 53; // 0x35
-    field public static final int MMI = 6; // 0x6
-    field public static final int NORMAL = 2; // 0x2
-    field public static final int NORMAL_UNSPECIFIED = 65; // 0x41
-    field public static final int NOT_DISCONNECTED = 0; // 0x0
-    field public static final int NOT_VALID = -1; // 0xffffffff
-    field public static final int NO_PHONE_NUMBER_SUPPLIED = 38; // 0x26
-    field public static final int NUMBER_UNREACHABLE = 8; // 0x8
-    field public static final int OTASP_PROVISIONING_IN_PROCESS = 76; // 0x4c
-    field public static final int OUTGOING_CANCELED = 44; // 0x2c
-    field public static final int OUTGOING_EMERGENCY_CALL_PLACED = 80; // 0x50
-    field public static final int OUTGOING_FAILURE = 43; // 0x2b
-    field public static final int OUT_OF_NETWORK = 11; // 0xb
-    field public static final int OUT_OF_SERVICE = 18; // 0x12
-    field public static final int POWER_OFF = 17; // 0x11
-    field public static final int SERVER_ERROR = 12; // 0xc
-    field public static final int SERVER_UNREACHABLE = 9; // 0x9
-    field public static final int TIMED_OUT = 13; // 0xd
-    field public static final int TOO_MANY_ONGOING_CALLS = 75; // 0x4b
-    field public static final int UNOBTAINABLE_NUMBER = 25; // 0x19
-    field public static final int VIDEO_CALL_NOT_ALLOWED_WHILE_TTY_ENABLED = 50; // 0x32
-    field public static final int VOICEMAIL_NUMBER_MISSING = 40; // 0x28
-    field public static final int WIFI_LOST = 59; // 0x3b
   }
 
   public final class ImsiEncryptionInfo implements android.os.Parcelable {
@@ -10153,6 +10085,7 @@ package android.telephony {
     method @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE) public boolean isDataConnectionAllowed();
     method public boolean isDataConnectivityPossible();
     method @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE) public boolean isDataEnabledForApn(int);
+    method @RequiresPermission(anyOf={android.Manifest.permission.ACCESS_NETWORK_STATE, android.Manifest.permission.READ_PHONE_STATE}) public boolean isDataEnabledWithReason(int);
     method @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE) public boolean isEmergencyAssistanceEnabled();
     method @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE) @WorkerThread public boolean isIccLockEnabled();
     method @Deprecated @RequiresPermission(anyOf={android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE, android.Manifest.permission.READ_PHONE_STATE}) public boolean isIdle();
@@ -10180,10 +10113,11 @@ package android.telephony {
     method @RequiresPermission(android.Manifest.permission.CONNECTIVITY_INTERNAL) public void resetSettings();
     method @Deprecated @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE) public int setAllowedCarriers(int, java.util.List<android.service.carrier.CarrierIdentifier>);
     method @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE) public boolean setAllowedNetworkTypes(long);
-    method @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE) public void setCarrierDataEnabled(boolean);
+    method @Deprecated @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE) public void setCarrierDataEnabled(boolean);
     method @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE) public int setCarrierRestrictionRules(@NonNull android.telephony.CarrierRestrictionRules);
     method @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE) public void setDataActivationState(int);
     method @Deprecated @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE) public void setDataEnabled(int, boolean);
+    method @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE) public void setDataEnabledWithReason(int, boolean);
     method @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE) public void setDataRoamingEnabled(boolean);
     method @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE) public void setMultiSimCarrierRestriction(boolean);
     method @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE) public boolean setOpportunisticNetworkState(boolean);
@@ -10221,6 +10155,10 @@ package android.telephony {
     field public static final int CARRIER_PRIVILEGE_STATUS_HAS_ACCESS = 1; // 0x1
     field public static final int CARRIER_PRIVILEGE_STATUS_NO_ACCESS = 0; // 0x0
     field public static final int CARRIER_PRIVILEGE_STATUS_RULES_NOT_LOADED = -1; // 0xffffffff
+    field public static final int DATA_ENABLED_REASON_CARRIER = 2; // 0x2
+    field public static final int DATA_ENABLED_REASON_POLICY = 1; // 0x1
+    field public static final int DATA_ENABLED_REASON_THERMAL = 3; // 0x3
+    field public static final int DATA_ENABLED_REASON_USER = 0; // 0x0
     field public static final String EXTRA_ANOMALY_DESCRIPTION = "android.telephony.extra.ANOMALY_DESCRIPTION";
     field public static final String EXTRA_ANOMALY_ID = "android.telephony.extra.ANOMALY_ID";
     field public static final String EXTRA_PHONE_IN_ECM_STATE = "android.telephony.extra.PHONE_IN_ECM_STATE";
@@ -11176,7 +11114,6 @@ package android.telephony.ims.feature {
     ctor @Deprecated public MmTelFeature.MmTelCapabilities(android.telephony.ims.feature.ImsFeature.Capabilities);
     ctor public MmTelFeature.MmTelCapabilities(int);
     method public final void addCapabilities(int);
-    method public final boolean isCapable(int);
     method public final void removeCapabilities(int);
   }
 
@@ -11396,6 +11333,7 @@ package android.telephony.mbms.vendor {
   public class MbmsDownloadServiceBase extends android.os.Binder implements android.os.IInterface {
     ctor public MbmsDownloadServiceBase();
     method public int addProgressListener(android.telephony.mbms.DownloadRequest, android.telephony.mbms.DownloadProgressListener) throws android.os.RemoteException;
+    method public int addServiceAnnouncement(int, @NonNull byte[]);
     method public int addStatusListener(android.telephony.mbms.DownloadRequest, android.telephony.mbms.DownloadStatusListener) throws android.os.RemoteException;
     method public android.os.IBinder asBinder();
     method public int cancelDownload(android.telephony.mbms.DownloadRequest) throws android.os.RemoteException;
@@ -11713,6 +11651,7 @@ package android.webkit {
     method public void super_computeScroll();
     method public boolean super_dispatchKeyEvent(android.view.KeyEvent);
     method public int super_getScrollBarStyle();
+    method @Nullable public android.view.WindowInsets super_onApplyWindowInsets(@Nullable android.view.WindowInsets);
     method public void super_onDrawVerticalScrollBar(android.graphics.Canvas, android.graphics.drawable.Drawable, int, int, int, int);
     method public boolean super_onGenericMotionEvent(android.view.MotionEvent);
     method public boolean super_onHoverEvent(android.view.MotionEvent);
@@ -11915,6 +11854,7 @@ package android.webkit {
     method public android.os.Handler getHandler(android.os.Handler);
     method public default boolean isVisibleToUserForAutofill(int);
     method public void onActivityResult(int, int, android.content.Intent);
+    method @Nullable public default android.view.WindowInsets onApplyWindowInsets(@Nullable android.view.WindowInsets);
     method public void onAttachedToWindow();
     method public default boolean onCheckIsTextEditor();
     method public void onConfigurationChanged(android.content.res.Configuration);

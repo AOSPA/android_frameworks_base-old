@@ -711,11 +711,13 @@
     <string name="notification_silence_title" msgid="8608090968400832335">"Silencio"</string>
     <string name="notification_alert_title" msgid="3656229781017543655">"Predeterminada"</string>
     <string name="notification_bubble_title" msgid="8330481035191903164">"Cuadro"</string>
+    <string name="notification_automatic_title" msgid="3745465364578762652">"Automática"</string>
     <string name="notification_channel_summary_low" msgid="4860617986908931158">"Sin sonido ni vibración"</string>
     <string name="notification_conversation_summary_low" msgid="1734433426085468009">"No suena ni vibra, y aparece en una parte inferior de la sección de conversaciones"</string>
     <string name="notification_channel_summary_default" msgid="3282930979307248890">"Puede sonar o vibrar en función de la configuración del teléfono"</string>
     <string name="notification_channel_summary_default_with_bubbles" msgid="1782419896613644568">"Puede sonar o vibrar en función de la configuración del teléfono. Conversaciones de la burbuja de <xliff:g id="APP_NAME">%1$s</xliff:g> de forma predeterminada."</string>
     <string name="notification_channel_summary_bubble" msgid="7235935211580860537">"Retiene tu atención con un acceso directo flotante a este contenido."</string>
+    <string name="notification_channel_summary_automatic" msgid="5813109268050235275">"Dejar que el sistema determine si esta notificación debe emitir un sonido o una vibración"</string>
     <string name="notification_channel_summary_priority" msgid="7952654515769021553">"Aparece en la parte superior de la sección de conversaciones, en forma de burbuja flotante, y muestra la foto de perfil en la pantalla de bloqueo"</string>
     <string name="notification_conversation_channel_settings" msgid="2409977688430606835">"Configuración"</string>
     <string name="notification_priority_title" msgid="2079708866333537093">"Prioridad"</string>
@@ -736,6 +738,12 @@
     <string name="appops_camera_mic_overlay" msgid="5584311236445644095">"Esta app se muestra sobre otras apps en la pantalla y está usando el micrófono y la cámara."</string>
     <string name="notification_appops_settings" msgid="5208974858340445174">"Configuración"</string>
     <string name="notification_appops_ok" msgid="2177609375872784124">"Aceptar"</string>
+    <string name="feedback_silenced" msgid="5382212321253328247">"El sistema silenció la notificación."</string>
+    <string name="feedback_promoted" msgid="8075757485407091976">"El sistema ascendió el nivel de esta notificación."</string>
+    <string name="feedback_demoted" msgid="5848066008939031913">"El sistema descendió el nivel de esta notificación."</string>
+    <string name="feedback_prompt" msgid="2278631214125128281">"¿Te parece bien?"</string>
+    <string name="feedback_response" msgid="4671729244976641339">"Gracias por tus comentarios."</string>
+    <string name="feedback_ok" msgid="6481426753298857144">"Aceptar"</string>
     <string name="notification_channel_controls_opened_accessibility" msgid="6111817750774381094">"Se abrieron los controles de notificaciones de <xliff:g id="APP_NAME">%1$s</xliff:g>"</string>
     <string name="notification_channel_controls_closed_accessibility" msgid="1561909368876911701">"Se cerraron los controles de notificaciones de <xliff:g id="APP_NAME">%1$s</xliff:g>"</string>
     <string name="notification_channel_switch_accessibility" msgid="8979885820432540252">"Permitir las notificaciones de este canal"</string>
@@ -908,25 +916,14 @@
     <string name="accessibility_quick_settings_edit" msgid="1523745183383815910">"Editar orden de configuración"</string>
     <string name="accessibility_quick_settings_page" msgid="7506322631645550961">"Página <xliff:g id="ID_1">%1$d</xliff:g> de <xliff:g id="ID_2">%2$d</xliff:g>"</string>
     <string name="tuner_lock_screen" msgid="2267383813241144544">"Pantalla de bloqueo"</string>
-    <string name="pip_phone_expand" msgid="1424988917240616212">"Expandir"</string>
-    <string name="pip_phone_minimize" msgid="9057117033655996059">"Minimizar"</string>
-    <string name="pip_phone_close" msgid="8801864042095341824">"Cerrar"</string>
-    <string name="pip_phone_settings" msgid="5687538631925004341">"Configuración"</string>
-    <string name="pip_phone_dismiss_hint" msgid="5825740708095316710">"Arrastra hacia abajo para descartar"</string>
-    <string name="pip_menu_title" msgid="6365909306215631910">"Menú"</string>
-    <string name="pip_notification_title" msgid="8661573026059630525">"<xliff:g id="NAME">%s</xliff:g> está en modo de Pantalla en pantalla"</string>
-    <string name="pip_notification_message" msgid="4991831338795022227">"Si no quieres que <xliff:g id="NAME">%s</xliff:g> use esta función, presiona para abrir la configuración y desactivarla."</string>
-    <string name="pip_play" msgid="333995977693142810">"Reproducir"</string>
-    <string name="pip_pause" msgid="1139598607050555845">"Pausar"</string>
-    <string name="pip_skip_to_next" msgid="3864212650579956062">"Siguiente"</string>
-    <string name="pip_skip_to_prev" msgid="3742589641443049237">"Anterior"</string>
-    <string name="accessibility_action_pip_resize" msgid="8237306972921160456">"Cambiar el tamaño"</string>
     <string name="thermal_shutdown_title" msgid="2702966892682930264">"El teléfono se apagó por calor"</string>
-    <string name="thermal_shutdown_message" msgid="7432744214105003895">"Tu teléfono ya funciona correctamente"</string>
+    <string name="thermal_shutdown_message" msgid="6142269839066172984">"Tu teléfono ahora se ejecuta con normalidad.\nPresiona para obtener más información"</string>
     <string name="thermal_shutdown_dialog_message" msgid="6745684238183492031">"Tu teléfono estaba muy caliente y se apagó para enfriarse. Ya funciona correctamente.\n\nTu teléfono puede calentarse en estos casos:\n	• Usas apps que consumen muchos recursos (como juegos, videos o navegación).\n	• Subes o descargas archivos grandes.\n	• Usas el teléfono en condiciones de temperatura alta."</string>
+    <string name="thermal_shutdown_dialog_help_text" msgid="6413474593462902901">"Ver pasos de mantenimiento"</string>
     <string name="high_temp_title" msgid="2218333576838496100">"El teléfono se está calentando"</string>
-    <string name="high_temp_notif_message" msgid="163928048626045592">"Se limitarán algunas funciones mientras se enfría el teléfono"</string>
+    <string name="high_temp_notif_message" msgid="1277346543068257549">"Algunas funciones se limitan durante el enfriamiento del teléfono.\nPresiona para obtener más información"</string>
     <string name="high_temp_dialog_message" msgid="3793606072661253968">"Tu teléfono intentará enfriarse automáticamente. Podrás usarlo, pero es posible que funcione más lento.\n\nUna vez que se haya enfriado, volverá a funcionar correctamente."</string>
+    <string name="high_temp_dialog_help_text" msgid="7380171287943345858">"Ver pasos de mantenimiento"</string>
     <string name="high_temp_alarm_title" msgid="2359958549570161495">"Desconectar cargador"</string>
     <string name="high_temp_alarm_notify_message" msgid="7186272817783835089">"No se puede cargar el dispositivo. Desconecta el adaptador de la corriente con cuidado, ya que el cable podría estar caliente."</string>
     <string name="high_temp_alarm_help_care_steps" msgid="5017002218341329566">"Ver pasos de mantenimiento"</string>
@@ -1022,7 +1019,6 @@
     <string name="priority_onboarding_ignores_dnd_text" msgid="2918952762719600529">"Suspender No interrumpir"</string>
     <string name="priority_onboarding_done_button_title" msgid="4569550984286506007">"Entendido"</string>
     <string name="priority_onboarding_settings_button_title" msgid="6663601574303585927">"Configuración"</string>
-    <string name="magnification_overlay_title" msgid="6584179429612427958">"Ventana superpuesta de ampliación"</string>
     <string name="magnification_window_title" msgid="4863914360847258333">"Ventana de ampliación"</string>
     <string name="magnification_controls_title" msgid="8421106606708891519">"Controles de ampliación de la ventana"</string>
     <string name="quick_controls_title" msgid="6839108006171302273">"Controles de dispositivos"</string>

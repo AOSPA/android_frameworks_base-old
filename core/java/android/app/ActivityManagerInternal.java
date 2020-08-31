@@ -31,6 +31,7 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.os.IBinder;
 import android.os.TransactionTooLargeException;
+import android.os.WorkSource;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -102,17 +103,16 @@ public abstract class ActivityManagerInternal {
             IBinder whitelistToken, long duration);
 
     /**
-     * Allows for a {@link PendingIntent} to be whitelisted to start activities from background.
+     * Allows a {@link PendingIntent} to start activities from background.
      */
     public abstract void setPendingIntentAllowBgActivityStarts(
-            IIntentSender target, IBinder whitelistToken, int flags);
+            IIntentSender target, IBinder allowlistToken, int flags);
 
     /**
-     * Voids {@link PendingIntent}'s privilege to be whitelisted to start activities from
-     * background.
+     * Voids {@link PendingIntent}'s privilege to start activities from background.
      */
     public abstract void clearPendingIntentAllowBgActivityStarts(IIntentSender target,
-            IBinder whitelistToken);
+            IBinder allowlistToken);
 
     /**
      * Allow DeviceIdleController to tell us about what apps are whitelisted.
@@ -262,6 +262,33 @@ public abstract class ActivityManagerInternal {
      */
     public abstract boolean shouldConfirmCredentials(@UserIdInt int userId);
 
+    /**
+     * Used in conjunction with {@link #noteAlarmStart(PendingIntent, WorkSource, int, String)} to
+     * note an alarm duration for battery attribution
+     */
+    public abstract void noteAlarmFinish(PendingIntent ps, WorkSource workSource, int sourceUid,
+            String tag);
+
+    /**
+     * Used in conjunction with {@link #noteAlarmFinish(PendingIntent, WorkSource, int, String)} to
+     * note an alarm duration for battery attribution
+     */
+    public abstract void noteAlarmStart(PendingIntent ps, WorkSource workSource, int sourceUid,
+            String tag);
+
+    /**
+     * Used to note a wakeup alarm for battery attribution.
+     */
+    public abstract void noteWakeupAlarm(PendingIntent ps, WorkSource workSource, int sourceUid,
+            String sourcePkg, String tag);
+
+    /**
+     * Returns whether this app is disallowed to run in the background.
+     *
+     * @see ActivityManager#APP_START_MODE_DISABLED
+     */
+    public abstract boolean isAppStartModeDisabled(int uid, String packageName);
+
     public abstract int[] getCurrentProfileIds();
     public abstract UserInfo getCurrentUser();
     public abstract void ensureNotSpecialUser(@UserIdInt int userId);
@@ -359,8 +386,8 @@ public abstract class ActivityManagerInternal {
     /** Returns true if the given uid is the app in the foreground. */
     public abstract boolean isAppForeground(int uid);
 
-    /** Returns true if the given uid is currently marked 'bad' */
-    public abstract boolean isAppBad(ApplicationInfo info);
+    /** Returns true if the given process name and uid is currently marked 'bad' */
+    public abstract boolean isAppBad(String processName, int uid);
 
     /** Remove pending backup for the given userId. */
     public abstract void clearPendingBackup(@UserIdInt int userId);

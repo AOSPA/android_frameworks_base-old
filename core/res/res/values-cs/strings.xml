@@ -197,8 +197,10 @@
     <string name="network_logging_notification_text" msgid="1327373071132562512">"Toto zařízení je spravováno vaší organizací, která může sledovat síťový provoz. Podrobnosti zobrazíte klepnutím."</string>
     <string name="location_changed_notification_title" msgid="3620158742816699316">"Aplikace mají přístup k vaší poloze"</string>
     <string name="location_changed_notification_text" msgid="7158423339982706912">"Další informace vám poskytne váš administrátor IT"</string>
+    <string name="geofencing_service" msgid="3826902410740315456">"Geofencingová služba"</string>
     <string name="country_detector" msgid="7023275114706088854">"Detektor země"</string>
     <string name="location_service" msgid="2439187616018455546">"Služby určování polohy"</string>
+    <string name="gnss_service" msgid="8907781262179951385">"Služba GNSS"</string>
     <string name="sensor_notification_service" msgid="7474531979178682676">"Služba oznámení ze senzoru"</string>
     <string name="twilight_service" msgid="8964898045693187224">"Služba detekce soumraku"</string>
     <string name="factory_reset_warning" msgid="6858705527798047809">"Zařízení bude vymazáno"</string>
@@ -548,6 +550,7 @@
     <string name="biometric_not_recognized" msgid="5106687642694635888">"Nerozpoznáno"</string>
     <string name="biometric_error_canceled" msgid="8266582404844179778">"Ověření bylo zrušeno"</string>
     <string name="biometric_error_device_not_secured" msgid="3129845065043995924">"Není nastaven žádný PIN, gesto ani heslo"</string>
+    <string name="biometric_error_generic" msgid="6784371929985434439">"Při ověřování došlo k chybě"</string>
     <string name="fingerprint_acquired_partial" msgid="8532380671091299342">"Byla zjištěna jen část otisku prstu. Zkuste to znovu."</string>
     <string name="fingerprint_acquired_insufficient" msgid="2545149524031515411">"Zpracování otisku prstu se nezdařilo. Zkuste to znovu."</string>
     <string name="fingerprint_acquired_imager_dirty" msgid="4694800187151533990">"Senzor otisků prstů je znečištěn. Vyčistěte jej a zkuste to znovu."</string>
@@ -835,7 +838,8 @@
     <string name="lockscreen_instructions_when_pattern_enabled" msgid="7982445492532123308">"Chcete-li odemknout telefon nebo provést tísňové volání, stiskněte Menu."</string>
     <string name="lockscreen_instructions_when_pattern_disabled" msgid="7434061749374801753">"Telefon odemknete stisknutím tlačítka Menu."</string>
     <string name="lockscreen_pattern_instructions" msgid="3169991838169244941">"Odblokujte pomocí gesta"</string>
-    <string name="lockscreen_emergency_call" msgid="7500692654885445299">"Stav nouze"</string>
+    <!-- no translation found for lockscreen_emergency_call (7549683825868928636) -->
+    <skip />
     <string name="lockscreen_return_to_call" msgid="3156883574692006382">"Zavolat zpět"</string>
     <string name="lockscreen_pattern_correct" msgid="8050630103651508582">"Správně!"</string>
     <string name="lockscreen_pattern_wrong" msgid="2940138714468358458">"Zkusit znovu"</string>
@@ -1502,9 +1506,6 @@
     <string name="gpsNotifMessage" msgid="7346649122793758032">"Požadavek od uživatele <xliff:g id="NAME">%1$s</xliff:g> (<xliff:g id="SERVICE">%2$s</xliff:g>)"</string>
     <string name="gpsVerifYes" msgid="3719843080744112940">"Ano"</string>
     <string name="gpsVerifNo" msgid="1671201856091564741">"Ne"</string>
-    <string name="gnss_nfw_notification_title" msgid="5004493772059563423">"Byl využit údaj o poloze v nouzi"</string>
-    <string name="gnss_nfw_notification_message_oem" msgid="3683958907027107969">"Výrobce vašeho zařízení při nedávném tísňovém volání získal přístup k vaší poloze"</string>
-    <string name="gnss_nfw_notification_message_carrier" msgid="815888995791562151">"Váš operátor při nedávném tísňovém volání získal přístup k vaší poloze"</string>
     <string name="sync_too_many_deletes" msgid="6999440774578705300">"Byl překročen limit mazání."</string>
     <string name="sync_too_many_deletes_desc" msgid="7409327940303504440">"Počet smazaných položek pro <xliff:g id="TYPE_OF_SYNC">%2$s</xliff:g> (účet <xliff:g id="ACCOUNT_NAME">%3$s</xliff:g>): <xliff:g id="NUMBER_OF_DELETED_ITEMS">%1$d</xliff:g>. Co chcete dělat?"</string>
     <string name="sync_really_delete" msgid="5657871730315579051">"Smazat položky."</string>
@@ -1838,8 +1839,8 @@
     <string name="package_updated_device_owner" msgid="7560272363805506941">"Aktualizováno administrátorem"</string>
     <string name="package_deleted_device_owner" msgid="2292335928930293023">"Smazáno administrátorem"</string>
     <string name="confirm_battery_saver" msgid="5247976246208245754">"OK"</string>
-    <string name="battery_saver_description_with_learn_more" msgid="5997766757551917769">"Spořič baterie za účelem úspory energie:\n\n• zapne tmavý motiv,\n• vypne nebo omezí aktivitu na pozadí, některé vizuální efekty a další funkce jako „Ok Google“\n\n"<annotation id="url">"Další informace"</annotation></string>
-    <string name="battery_saver_description" msgid="8587408568232177204">"Spořič baterie za účelem úspory energie:\n\n• zapne tmavý motiv,\n• vypne nebo omezí aktivitu na pozadí, některé vizuální efekty a další funkce jako „Ok Google“"</string>
+    <string name="battery_saver_description_with_learn_more" msgid="4424488535318105801">"Spořič baterie za účelem úspory energie:\n\n• Zapne tmavý motiv.\n• Vypne nebo omezí aktivitu na pozadí, některé vizuální efekty a další funkce jako „Ok Google“.\n\n"<annotation id="url">"Další informace"</annotation></string>
+    <string name="battery_saver_description" msgid="6794188153647295212">"Spořič baterie za účelem úspory energie:\n\n• Zapne tmavý motiv.\n• Vypne nebo omezí aktivitu na pozadí, některé vizuální efekty a další funkce jako „Ok Google“."</string>
     <string name="data_saver_description" msgid="4995164271550590517">"Spořič dat z důvodu snížení využití dat některým aplikacím brání v odesílání nebo příjmu dat na pozadí. Aplikace, kterou právě používáte, data přenášet může, ale může tak činit méně často. V důsledku toho se například obrázky nemusejí zobrazit, dokud na ně neklepnete."</string>
     <string name="data_saver_enable_title" msgid="7080620065745260137">"Chcete zapnout Spořič dat?"</string>
     <string name="data_saver_enable_button" msgid="4399405762586419726">"Zapnout"</string>
@@ -2063,6 +2064,7 @@
     <string name="notification_appops_camera_active" msgid="8177643089272352083">"Fotoaparát"</string>
     <string name="notification_appops_microphone_active" msgid="581333393214739332">"Mikrofon"</string>
     <string name="notification_appops_overlay_active" msgid="5571732753262836481">"zobrazení přes ostatní aplikace na obrazovce"</string>
+    <string name="notification_feedback_indicator" msgid="663476517711323016">"Odeslat zpětnou vazbu"</string>
     <string name="dynamic_mode_notification_channel_name" msgid="2986926422100223328">"Informační oznámení režimu sledu činností"</string>
     <string name="dynamic_mode_notification_title" msgid="9205715501274608016">"Baterie se možná vybije před obvyklým časem nabití"</string>
     <string name="dynamic_mode_notification_summary" msgid="4141614604437372157">"Byl aktivován spořič baterie za účelem prodloužení výdrže"</string>

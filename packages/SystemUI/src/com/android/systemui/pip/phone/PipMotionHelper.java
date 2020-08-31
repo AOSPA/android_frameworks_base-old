@@ -26,9 +26,10 @@ import android.os.Debug;
 import android.util.Log;
 import android.view.Choreographer;
 
+import androidx.dynamicanimation.animation.AnimationHandler;
+import androidx.dynamicanimation.animation.AnimationHandler.FrameCallbackScheduler;
 import androidx.dynamicanimation.animation.SpringForce;
 
-import com.android.internal.graphics.SfVsyncFrameCallbackProvider;
 import com.android.systemui.pip.PipSnapAlgorithm;
 import com.android.systemui.pip.PipTaskOrganizer;
 import com.android.systemui.util.FloatingContentCoordinator;
@@ -74,9 +75,6 @@ public class PipMotionHelper implements PipAppOpsListener.Callback,
     /** The region that all of PIP must stay within. */
     private final Rect mFloatingAllowedArea = new Rect();
 
-    private final SfVsyncFrameCallbackProvider mSfVsyncFrameProvider =
-            new SfVsyncFrameCallbackProvider();
-
     /**
      * Temporary bounds used when PIP is being dragged or animated. These bounds are applied to PIP
      * using {@link PipTaskOrganizer#scheduleUserResizePip}, so that we can animate shrinking into
@@ -94,8 +92,13 @@ public class PipMotionHelper implements PipAppOpsListener.Callback,
     /** Coordinator instance for resolving conflicts with other floating content. */
     private FloatingContentCoordinator mFloatingContentCoordinator;
 
-    /** Callback that re-sizes PIP to the animated bounds. */
-    private final Choreographer.FrameCallback mResizePipVsyncCallback;
+    private ThreadLocal<AnimationHandler> mSfAnimationHandlerThreadLocal =
+            ThreadLocal.withInitial(() -> {
+                FrameCallbackScheduler scheduler = runnable ->
+                        Choreographer.getSfInstance().postFrameCallback(t -> runnable.run());
+                AnimationHandler handler = new AnimationHandler(scheduler);
+                return handler;
+            });
 
     /**
      * PhysicsAnimator instance for animating {@link #mTemporaryBounds} using physics animations.
@@ -124,7 +127,10 @@ public class PipMotionHelper implements PipAppOpsListener.Callback,
                 new PhysicsAnimator.SpringConfig(
                         SpringForce.STIFFNESS_LOW, SpringForce.DAMPING_RATIO_LOW_BOUNCY);
 
-    private final Consumer<Rect> mUpdateBoundsCallback = mBounds::set;
+    private final Consumer<Rect> mUpdateBoundsCallback = (Rect newBounds) -> {
+        mMenuController.updateMenuLayout(newBounds);
+        mBounds.set(newBounds);
+    };
 
     /**
      * Whether we're springing to the touch event location (vs. moving it to that position
@@ -171,16 +177,15 @@ public class PipMotionHelper implements PipAppOpsListener.Callback,
         mSnapAlgorithm = snapAlgorithm;
         mFloatingContentCoordinator = floatingContentCoordinator;
         mPipTaskOrganizer.registerPipTransitionCallback(mPipTransitionCallback);
+        mTemporaryBoundsPhysicsAnimator.setCustomAnimationHandler(
+                mSfAnimationHandlerThreadLocal.get());
 
-        mResizePipVsyncCallback = l -> {
+        mResizePipUpdateListener = (target, values) -> {
             if (!mTemporaryBounds.isEmpty()) {
                 mPipTaskOrganizer.scheduleUserResizePip(
                         mBounds, mTemporaryBounds, null);
             }
         };
-
-        mResizePipUpdateListener = (target, values) ->
-                mSfVsyncFrameProvider.postFrameCallback(mResizePipVsyncCallback);
     }
 
     @NonNull
@@ -246,7 +251,10 @@ public class PipMotionHelper implements PipAppOpsListener.Callback,
                 mBounds.set(toBounds);
             } else {
                 mTemporaryBounds.set(toBounds);
-                mPipTaskOrganizer.scheduleUserResizePip(mBounds, mTemporaryBounds, null);
+                mPipTaskOrganizer.scheduleUserResizePip(mBounds, mTemporaryBounds,
+                        (Rect newBounds) -> {
+                            mMenuController.updateMenuLayout(newBounds);
+                    });
             }
         } else {
             // If PIP is 'catching up' after being stuck in the dismiss target, update the animation

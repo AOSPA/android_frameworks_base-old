@@ -37,7 +37,9 @@ import android.content.pm.LauncherApps;
 import android.content.pm.PackageManager;
 import android.content.pm.ShortcutManager;
 import android.content.res.Resources;
+import android.hardware.SensorManager;
 import android.hardware.SensorPrivacyManager;
+import android.hardware.display.ColorDisplayManager;
 import android.hardware.display.DisplayManager;
 import android.media.AudioManager;
 import android.media.MediaRouter2Manager;
@@ -101,6 +103,12 @@ public class SystemServicesModule {
     @Singleton
     static AudioManager provideAudioManager(Context context) {
         return context.getSystemService(AudioManager.class);
+    }
+
+    @Provides
+    @Singleton
+    static ColorDisplayManager provideColorDisplayManager(Context context) {
+        return context.getSystemService(ColorDisplayManager.class);
     }
 
     @Provides
@@ -254,6 +262,12 @@ public class SystemServicesModule {
         return context.getResources();
     }
 
+    @Provides
+    @Singleton
+    static SensorManager providesSensorManager(Context context) {
+        return context.getSystemService(SensorManager.class);
+    }
+
     @Singleton
     @Provides
     static SensorPrivacyManager provideSensorPrivacyManager(Context context) {
@@ -305,6 +319,7 @@ public class SystemServicesModule {
 
     @Provides
     @Singleton
+    @Nullable
     static WifiManager provideWifiManager(Context context) {
         return context.getSystemService(WifiManager.class);
     }

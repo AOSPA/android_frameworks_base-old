@@ -102,6 +102,7 @@ public class SystemServicesTestRule implements TestRule {
 
     private static final int[] TEST_USER_PROFILE_IDS = {};
 
+    private Description mDescription;
     private Context mContext;
     private StaticMockitoSession mMockitoSession;
     private ActivityManagerService mAmService;
@@ -121,6 +122,7 @@ public class SystemServicesTestRule implements TestRule {
         return new Statement() {
             @Override
             public void evaluate() throws Throwable {
+                mDescription = description;
                 Throwable throwable = null;
                 try {
                     runWithDexmakerShareClassLoader(SystemServicesTestRule.this::setUp);
@@ -317,7 +319,7 @@ public class SystemServicesTestRule implements TestRule {
         spyOn(display);
         final TaskDisplayArea taskDisplayArea = display.getDefaultTaskDisplayArea();
         spyOn(taskDisplayArea);
-        final ActivityStack homeStack = taskDisplayArea.getStack(
+        final Task homeStack = taskDisplayArea.getStack(
                 WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_HOME);
         spyOn(homeStack);
     }
@@ -371,6 +373,10 @@ public class SystemServicesTestRule implements TestRule {
         LocalServices.removeServiceForTest(ColorDisplayService.ColorDisplayServiceInternal.class);
         LocalServices.removeServiceForTest(UsageStatsManagerInternal.class);
         LocalServices.removeServiceForTest(StatusBarManagerInternal.class);
+    }
+
+    Description getDescription() {
+        return mDescription;
     }
 
     WindowManagerService getWindowManagerService() {

@@ -56,6 +56,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -70,6 +71,7 @@ import android.app.NotificationChannel;
 import android.app.NotificationChannelGroup;
 import android.app.NotificationManager;
 import android.content.ContentProvider;
+import android.content.ContentResolver;
 import android.content.Context;
 import android.content.IContentProvider;
 import android.content.pm.ApplicationInfo;
@@ -80,13 +82,16 @@ import android.content.res.Resources;
 import android.graphics.Color;
 import android.media.AudioAttributes;
 import android.net.Uri;
+import android.os.AsyncTask;
 import android.os.Build;
+import android.os.Bundle;
+import android.os.RemoteCallback;
+import android.os.RemoteException;
 import android.os.UserHandle;
 import android.provider.Settings;
 import android.provider.Settings.Global;
 import android.provider.Settings.Secure;
 import android.service.notification.ConversationChannelWrapper;
-import android.test.mock.MockIContentProvider;
 import android.test.suitebuilder.annotation.SmallTest;
 import android.testing.TestableContentResolver;
 import android.util.ArrayMap;
@@ -108,7 +113,6 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
-import org.mockito.Spy;
 import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlSerializer;
 
@@ -146,7 +150,7 @@ public class PreferencesHelperTest extends UiServiceTestCase {
     @Mock NotificationUsageStats mUsageStats;
     @Mock RankingHandler mHandler;
     @Mock PackageManager mPm;
-    @Spy IContentProvider mTestIContentProvider = new MockIContentProvider();
+    IContentProvider mTestIContentProvider;
     @Mock Context mContext;
     @Mock ZenModeHelper mMockZenModeHelper;
     @Mock AppOpsManager mAppOpsManager;
@@ -193,6 +197,39 @@ public class PreferencesHelperTest extends UiServiceTestCase {
         Global.putInt(contentResolver, Global.NOTIFICATION_BUBBLES, 1);
 
         ContentProvider testContentProvider = mock(ContentProvider.class);
+        mTestIContentProvider = mock(IContentProvider.class, invocation -> {
+            throw new UnsupportedOperationException("unimplemented mock method");
+        });
+        doAnswer(invocation -> {
+            String callingPkg = invocation.getArgument(0);
+            String featureId = invocation.getArgument(1);
+            Uri uri = invocation.getArgument(2);
+            RemoteCallback cb = invocation.getArgument(3);
+            IContentProvider mock = (IContentProvider) (invocation.getMock());
+            AsyncTask.SERIAL_EXECUTOR.execute(() -> {
+                final Bundle bundle = new Bundle();
+                try {
+                    bundle.putParcelable(ContentResolver.REMOTE_CALLBACK_RESULT,
+                            mock.canonicalize(callingPkg, featureId, uri));
+                } catch (RemoteException e) { /* consume */ }
+                cb.sendResult(bundle);
+            });
+            return null;
+        }).when(mTestIContentProvider).canonicalizeAsync(any(), any(), any(), any());
+        doAnswer(invocation -> {
+            Uri uri = invocation.getArgument(0);
+            RemoteCallback cb = invocation.getArgument(1);
+            IContentProvider mock = (IContentProvider) (invocation.getMock());
+            AsyncTask.SERIAL_EXECUTOR.execute(() -> {
+                final Bundle bundle = new Bundle();
+                try {
+                    bundle.putString(ContentResolver.REMOTE_CALLBACK_RESULT, mock.getType(uri));
+                } catch (RemoteException e) { /* consume */ }
+                cb.sendResult(bundle);
+            });
+            return null;
+        }).when(mTestIContentProvider).getTypeAsync(any(), any());
+
         when(testContentProvider.getIContentProvider()).thenReturn(mTestIContentProvider);
         contentResolver.addProvider(TEST_AUTHORITY, testContentProvider);
 
@@ -2088,6 +2125,22 @@ public class PreferencesHelperTest extends UiServiceTestCase {
     }
 
     @Test
+    public void testShowQSMediaOverrideTrue() {
+        Global.putInt(getContext().getContentResolver(),
+                Global.SHOW_MEDIA_ON_QUICK_SETTINGS, 1);
+        mHelper.updateMediaNotificationFilteringEnabled(); // would be called by settings observer
+        assertTrue(mHelper.isMediaNotificationFilteringEnabled());
+    }
+
+    @Test
+    public void testShowQSMediaOverrideFalse() {
+        Global.putInt(getContext().getContentResolver(),
+                Global.SHOW_MEDIA_ON_QUICK_SETTINGS, 0);
+        mHelper.updateMediaNotificationFilteringEnabled(); // would be called by settings observer
+        assertFalse(mHelper.isMediaNotificationFilteringEnabled());
+    }
+
+    @Test
     public void testOnLocaleChanged_updatesDefaultChannels() throws Exception {
         String newLabel = "bananas!";
         final NotificationChannel defaultChannel = mHelper.getNotificationChannel(PKG_N_MR1,
@@ -2629,6 +2682,96 @@ public class PreferencesHelperTest extends UiServiceTestCase {
         assertTrue(mHelper.getNotificationChannel(PKG_O, 3, b.getId(), false)
                 .isImportanceLockedByOEM());
         assertTrue(mHelper.getNotificationChannel(PKG_O, 30, c.getId(), false)
+                .isImportanceLockedByOEM());
+    }
+
+    @Test
+    public void testLockChannelsForOEM_onlyGivenPkg_appDoesNotExistYet() {
+        mHelper.lockChannelsForOEM(new String[] {PKG_O});
+
+        NotificationChannel a = new NotificationChannel("a", "a", IMPORTANCE_HIGH);
+        NotificationChannel b = new NotificationChannel("b", "b", IMPORTANCE_LOW);
+        mHelper.createNotificationChannel(PKG_O, 3, a, true, false);
+        mHelper.createNotificationChannel(PKG_N_MR1, 30, b, false, false);
+
+        assertTrue(mHelper.getNotificationChannel(PKG_O, 3, a.getId(), false)
+                .isImportanceLockedByOEM());
+        assertFalse(mHelper.getNotificationChannel(PKG_N_MR1, 30, b.getId(), false)
+                .isImportanceLockedByOEM());
+    }
+
+    @Test
+    public void testLockChannelsForOEM_channelSpecific_appDoesNotExistYet() {
+        mHelper.lockChannelsForOEM(new String[] {PKG_O + ":b", PKG_O + ":c"});
+
+        NotificationChannel a = new NotificationChannel("a", "a", IMPORTANCE_HIGH);
+        NotificationChannel b = new NotificationChannel("b", "b", IMPORTANCE_LOW);
+        NotificationChannel c = new NotificationChannel("c", "c", IMPORTANCE_DEFAULT);
+        // different uids, same package
+        mHelper.createNotificationChannel(PKG_O, 3, a, true, false);
+        mHelper.createNotificationChannel(PKG_O, 3, b, false, false);
+        mHelper.createNotificationChannel(PKG_O, 30, c, true, true);
+
+        assertFalse(mHelper.getNotificationChannel(PKG_O, 3, a.getId(), false)
+                .isImportanceLockedByOEM());
+        assertTrue(mHelper.getNotificationChannel(PKG_O, 3, b.getId(), false)
+                .isImportanceLockedByOEM());
+        assertTrue(mHelper.getNotificationChannel(PKG_O, 30, c.getId(), false)
+                .isImportanceLockedByOEM());
+    }
+
+    @Test
+    public void testLockChannelsForOEM_onlyGivenPkg_appDoesNotExistYet_restoreData()
+            throws Exception {
+        mHelper.lockChannelsForOEM(new String[] {PKG_O});
+
+        final String xml = "<ranking version=\"1\">\n"
+                + "<package name=\"" + PKG_O + "\" uid=\"" + UID_O + "\" >\n"
+                + "<channel id=\"a\" name=\"a\" importance=\"3\"/>"
+                + "<channel id=\"b\" name=\"b\" importance=\"3\"/>"
+                + "</package>"
+                + "<package name=\"" + PKG_N_MR1 + "\" uid=\"" + UID_N_MR1 + "\" >\n"
+                + "<channel id=\"a\" name=\"a\" importance=\"3\"/>"
+                + "<channel id=\"b\" name=\"b\" importance=\"3\"/>"
+                + "</package>"
+                + "</ranking>";
+        XmlPullParser parser = Xml.newPullParser();
+        parser.setInput(new BufferedInputStream(new ByteArrayInputStream(xml.getBytes())),
+                null);
+        parser.nextTag();
+        mHelper.readXml(parser, false, UserHandle.USER_ALL);
+
+        assertTrue(mHelper.getNotificationChannel(PKG_O, UID_O, "a", false)
+                .isImportanceLockedByOEM());
+        assertFalse(mHelper.getNotificationChannel(PKG_N_MR1, UID_N_MR1, "b", false)
+                .isImportanceLockedByOEM());
+    }
+
+    @Test
+    public void testLockChannelsForOEM_channelSpecific_appDoesNotExistYet_restoreData()
+            throws Exception {
+        mHelper.lockChannelsForOEM(new String[] {PKG_O + ":b", PKG_O + ":c"});
+
+        final String xml = "<ranking version=\"1\">\n"
+                + "<package name=\"" + PKG_O + "\" uid=\"" + 3 + "\" >\n"
+                + "<channel id=\"a\" name=\"a\" importance=\"3\"/>"
+                + "<channel id=\"b\" name=\"b\" importance=\"3\"/>"
+                + "</package>"
+                + "<package name=\"" + PKG_O + "\" uid=\"" + 30 + "\" >\n"
+                + "<channel id=\"c\" name=\"c\" importance=\"3\"/>"
+                + "</package>"
+                + "</ranking>";
+        XmlPullParser parser = Xml.newPullParser();
+        parser.setInput(new BufferedInputStream(new ByteArrayInputStream(xml.getBytes())),
+                null);
+        parser.nextTag();
+        mHelper.readXml(parser, false, UserHandle.USER_ALL);
+
+        assertFalse(mHelper.getNotificationChannel(PKG_O, 3, "a", false)
+                .isImportanceLockedByOEM());
+        assertTrue(mHelper.getNotificationChannel(PKG_O, 3, "b", false)
+                .isImportanceLockedByOEM());
+        assertTrue(mHelper.getNotificationChannel(PKG_O, 30, "c", false)
                 .isImportanceLockedByOEM());
     }
 

@@ -707,7 +707,7 @@ public class AppsFilterTest {
         PackageSetting target = simulateAddPackage(appsFilter, pkg("com.some.package"),
                 DUMMY_TARGET_APPID);
         PackageSetting calling = simulateAddPackage(appsFilter, pkg("com.some.other.package"),
-                DUMMY_CALLING_APPID, withInstallSource(target.name, null, null, false));
+                DUMMY_CALLING_APPID, withInstallSource(target.name, null, null, null, false));
 
         assertFalse(appsFilter.shouldFilterApplication(DUMMY_CALLING_APPID, calling, target,
                 SYSTEM_USER));
@@ -723,7 +723,7 @@ public class AppsFilterTest {
         PackageSetting target = simulateAddPackage(appsFilter, pkg("com.some.package"),
                 DUMMY_TARGET_APPID);
         PackageSetting calling = simulateAddPackage(appsFilter, pkg("com.some.other.package"),
-                DUMMY_CALLING_APPID, withInstallSource(target.name, null, null, true));
+                DUMMY_CALLING_APPID, withInstallSource(target.name, null, null, null, true));
 
         assertTrue(appsFilter.shouldFilterApplication(DUMMY_CALLING_APPID, calling, target,
                 SYSTEM_USER));
@@ -739,7 +739,7 @@ public class AppsFilterTest {
         PackageSetting target = simulateAddPackage(appsFilter, pkg("com.some.package"),
                 DUMMY_TARGET_APPID);
         PackageSetting calling = simulateAddPackage(appsFilter, pkg("com.some.other.package"),
-                DUMMY_CALLING_APPID, withInstallSource(null, target.name, null, false));
+                DUMMY_CALLING_APPID, withInstallSource(null, target.name, null, null, false));
 
         assertTrue(appsFilter.shouldFilterApplication(DUMMY_CALLING_APPID, calling, target,
                 SYSTEM_USER));
@@ -755,7 +755,7 @@ public class AppsFilterTest {
         PackageSetting target = simulateAddPackage(appsFilter, pkg("com.some.package"),
                 DUMMY_TARGET_APPID);
         PackageSetting calling = simulateAddPackage(appsFilter, pkg("com.some.other.package"),
-                DUMMY_CALLING_APPID, withInstallSource(null, null, target.name, false));
+                DUMMY_CALLING_APPID, withInstallSource(null, null, target.name, null, false));
 
         assertFalse(appsFilter.shouldFilterApplication(DUMMY_CALLING_APPID, calling, target,
                 SYSTEM_USER));
@@ -892,9 +892,9 @@ public class AppsFilterTest {
 
     private WithSettingBuilder withInstallSource(String initiatingPackageName,
             String originatingPackageName, String installerPackageName,
-            boolean isInitiatingPackageUninstalled) {
+            String installerAttributionTag, boolean isInitiatingPackageUninstalled) {
         final InstallSource installSource = InstallSource.create(initiatingPackageName,
-                originatingPackageName, installerPackageName,
+                originatingPackageName, installerPackageName, installerAttributionTag,
                 /* isOrphaned= */ false, isInitiatingPackageUninstalled);
         return setting -> setting.setInstallSource(installSource);
     }

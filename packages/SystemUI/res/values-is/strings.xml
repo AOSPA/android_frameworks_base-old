@@ -711,11 +711,13 @@
     <string name="notification_silence_title" msgid="8608090968400832335">"Hljóðlaust"</string>
     <string name="notification_alert_title" msgid="3656229781017543655">"Sjálfgefið"</string>
     <string name="notification_bubble_title" msgid="8330481035191903164">"Blaðra"</string>
+    <string name="notification_automatic_title" msgid="3745465364578762652">"Sjálfvirk"</string>
     <string name="notification_channel_summary_low" msgid="4860617986908931158">"Ekkert hljóð eða titringur"</string>
     <string name="notification_conversation_summary_low" msgid="1734433426085468009">"Ekkert hljóð eða titringur og birtist neðar í samtalshluta"</string>
     <string name="notification_channel_summary_default" msgid="3282930979307248890">"Gæti hringt eða titrað eftir stillingum símans"</string>
     <string name="notification_channel_summary_default_with_bubbles" msgid="1782419896613644568">"Gæti hringt eða titrað eftir stillingum símans. Samtöl á <xliff:g id="APP_NAME">%1$s</xliff:g> birtast sjálfkrafa í blöðru."</string>
     <string name="notification_channel_summary_bubble" msgid="7235935211580860537">"Fangar athygli þína með fljótandi flýtileið á þetta efni."</string>
+    <string name="notification_channel_summary_automatic" msgid="5813109268050235275">"Láta kerfið ákvarða hvort hljóð eða titringur fylgir þessari tilkynningu"</string>
     <string name="notification_channel_summary_priority" msgid="7952654515769021553">"Birtist efst í samtalshluta, birtist sem fljótandi blaðra, birtir prófílmynd á lásskjánum"</string>
     <string name="notification_conversation_channel_settings" msgid="2409977688430606835">"Áfram"</string>
     <string name="notification_priority_title" msgid="2079708866333537093">"Forgangur"</string>
@@ -736,6 +738,12 @@
     <string name="appops_camera_mic_overlay" msgid="5584311236445644095">"Þetta forrit er að birta efni yfir öðrum forritum á skjánum þínum og er að nota hljóðnemann og myndavélina."</string>
     <string name="notification_appops_settings" msgid="5208974858340445174">"Stillingar"</string>
     <string name="notification_appops_ok" msgid="2177609375872784124">"Í lagi"</string>
+    <string name="feedback_silenced" msgid="5382212321253328247">"Kerfið þaggaði þessa tilkynningu."</string>
+    <string name="feedback_promoted" msgid="8075757485407091976">"Kerfið hækkaði þessa tilkynningu."</string>
+    <string name="feedback_demoted" msgid="5848066008939031913">"Kerfið lækkaði þessa tilkynningu."</string>
+    <string name="feedback_prompt" msgid="2278631214125128281">"Var þetta rétt?"</string>
+    <string name="feedback_response" msgid="4671729244976641339">"Takk fyrir að segja þína skoðun!"</string>
+    <string name="feedback_ok" msgid="6481426753298857144">"Í lagi"</string>
     <string name="notification_channel_controls_opened_accessibility" msgid="6111817750774381094">"Opnað fyrir tilkynningastýringar <xliff:g id="APP_NAME">%1$s</xliff:g>"</string>
     <string name="notification_channel_controls_closed_accessibility" msgid="1561909368876911701">"Lokað fyrir tilkynningastýringar <xliff:g id="APP_NAME">%1$s</xliff:g>"</string>
     <string name="notification_channel_switch_accessibility" msgid="8979885820432540252">"Leyfa tilkynningar frá þessari rás"</string>
@@ -908,25 +916,14 @@
     <string name="accessibility_quick_settings_edit" msgid="1523745183383815910">"Breyta röð stillinga."</string>
     <string name="accessibility_quick_settings_page" msgid="7506322631645550961">"Blaðsíða <xliff:g id="ID_1">%1$d</xliff:g> af <xliff:g id="ID_2">%2$d</xliff:g>"</string>
     <string name="tuner_lock_screen" msgid="2267383813241144544">"Lásskjár"</string>
-    <string name="pip_phone_expand" msgid="1424988917240616212">"Stækka"</string>
-    <string name="pip_phone_minimize" msgid="9057117033655996059">"Minnka"</string>
-    <string name="pip_phone_close" msgid="8801864042095341824">"Loka"</string>
-    <string name="pip_phone_settings" msgid="5687538631925004341">"Stillingar"</string>
-    <string name="pip_phone_dismiss_hint" msgid="5825740708095316710">"Draga niður til að hunsa"</string>
-    <string name="pip_menu_title" msgid="6365909306215631910">"Valmynd"</string>
-    <string name="pip_notification_title" msgid="8661573026059630525">"<xliff:g id="NAME">%s</xliff:g> er með mynd í mynd"</string>
-    <string name="pip_notification_message" msgid="4991831338795022227">"Ef þú vilt ekki að <xliff:g id="NAME">%s</xliff:g> noti þennan eiginleika skaltu ýta til að opna stillingarnar og slökkva á því."</string>
-    <string name="pip_play" msgid="333995977693142810">"Spila"</string>
-    <string name="pip_pause" msgid="1139598607050555845">"Gera hlé"</string>
-    <string name="pip_skip_to_next" msgid="3864212650579956062">"Fara á næsta"</string>
-    <string name="pip_skip_to_prev" msgid="3742589641443049237">"Fara á fyrra"</string>
-    <string name="accessibility_action_pip_resize" msgid="8237306972921160456">"Breyta stærð"</string>
     <string name="thermal_shutdown_title" msgid="2702966892682930264">"Slökkt var á símanum vegna hita"</string>
-    <string name="thermal_shutdown_message" msgid="7432744214105003895">"Síminn virkar núna sem skyldi"</string>
+    <string name="thermal_shutdown_message" msgid="6142269839066172984">"Síminn virkar nú eins og venjulega.\nÝttu til að fá frekari upplýsingar"</string>
     <string name="thermal_shutdown_dialog_message" msgid="6745684238183492031">"Síminn varð of heitur og því var slökkt á honum til að kæla hann. Síminn virkar núna sem skyldi.\n\nSíminn getur orðið of heitur ef þú:\n	• Notar plássfrek forrit (t.d. leikja-, myndbands- eða leiðsagnarforrit\n	• Sækir eða hleður upp stórum skrám\n	• Notar símann í miklum hita"</string>
+    <string name="thermal_shutdown_dialog_help_text" msgid="6413474593462902901">"Sjá varúðarskref"</string>
     <string name="high_temp_title" msgid="2218333576838496100">"Síminn er að hitna"</string>
-    <string name="high_temp_notif_message" msgid="163928048626045592">"Sumir eiginleikar eru takmarkaðir þegar síminn kælir sig"</string>
+    <string name="high_temp_notif_message" msgid="1277346543068257549">"Sumir eiginleikar eru takmarkaðir meðan síminn kælir sig.\nÝttu til að fá frekari upplýsingar"</string>
     <string name="high_temp_dialog_message" msgid="3793606072661253968">"Síminn reynir sjálfkrafa að kæla sig. Þú getur enn notað símann en hann gæti verið hægvirkari.\n\nEftir að síminn hefur kælt sig niður virkar hann eðlilega."</string>
+    <string name="high_temp_dialog_help_text" msgid="7380171287943345858">"Sjá varúðarskref"</string>
     <string name="high_temp_alarm_title" msgid="2359958549570161495">"Taktu hleðslutækið úr sambandi"</string>
     <string name="high_temp_alarm_notify_message" msgid="7186272817783835089">"Upp kom vandamál varðandi hleðslu tækisins. Taktu straumbreytinn úr sambandi og farðu varlega því snúran gæti verið heit."</string>
     <string name="high_temp_alarm_help_care_steps" msgid="5017002218341329566">"Sjá varúðarskref"</string>
@@ -1022,7 +1019,6 @@
     <string name="priority_onboarding_ignores_dnd_text" msgid="2918952762719600529">"Stöðva „Ónáðið ekki“"</string>
     <string name="priority_onboarding_done_button_title" msgid="4569550984286506007">"Ég skil"</string>
     <string name="priority_onboarding_settings_button_title" msgid="6663601574303585927">"Stillingar"</string>
-    <string name="magnification_overlay_title" msgid="6584179429612427958">"Stækkun yfirglugga"</string>
     <string name="magnification_window_title" msgid="4863914360847258333">"Stækkunargluggi"</string>
     <string name="magnification_controls_title" msgid="8421106606708891519">"Stækkunarstillingar glugga"</string>
     <string name="quick_controls_title" msgid="6839108006171302273">"Tækjastjórnun"</string>

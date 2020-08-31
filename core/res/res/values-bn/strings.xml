@@ -193,8 +193,10 @@
     <string name="network_logging_notification_text" msgid="1327373071132562512">"আপনার প্রতিষ্ঠান এই ডিভাইসটি পরিচালনা করে এবং এটির নেটওয়ার্ক ট্রাফিকের উপরে নজর রাখতে পারে। বিশদ বিবরণের জন্য ট্যাপ করুন।,"</string>
     <string name="location_changed_notification_title" msgid="3620158742816699316">"অ্যাপগুলি আপনার লোকেশন অ্যাক্সেস করতে পারবে"</string>
     <string name="location_changed_notification_text" msgid="7158423339982706912">"আরও জানতে আইটি অ্যাডমিনের সাথে যোগাযোগ করুন"</string>
+    <string name="geofencing_service" msgid="3826902410740315456">"জিওফেন্সিং সার্ভিস"</string>
     <string name="country_detector" msgid="7023275114706088854">"দেশ শনাক্তকারী"</string>
     <string name="location_service" msgid="2439187616018455546">"লোকেশন পরিষেবা"</string>
+    <string name="gnss_service" msgid="8907781262179951385">"GNSS পরিষেবা"</string>
     <string name="sensor_notification_service" msgid="7474531979178682676">"সেন্সর বিজ্ঞপ্তি পরিষেবা"</string>
     <string name="twilight_service" msgid="8964898045693187224">"গোধূলি পরিষেবা"</string>
     <string name="factory_reset_warning" msgid="6858705527798047809">"আপনার ডিভাইসটি মুছে ফেলা হবে"</string>
@@ -542,6 +544,7 @@
     <string name="biometric_not_recognized" msgid="5106687642694635888">"স্বীকৃত নয়"</string>
     <string name="biometric_error_canceled" msgid="8266582404844179778">"যাচাইকরণ বাতিল হয়েছে"</string>
     <string name="biometric_error_device_not_secured" msgid="3129845065043995924">"পিন, প্যাটার্ন অথবা পাসওয়ার্ড সেট করা নেই"</string>
+    <string name="biometric_error_generic" msgid="6784371929985434439">"যাচাইকরণে সমস্যা হয়েছে"</string>
     <string name="fingerprint_acquired_partial" msgid="8532380671091299342">"আঙ্গুলের ছাপ আংশিক শনাক্ত করা হয়েছে৷ অনুগ্রহ করে আবার চেষ্টা করুন৷"</string>
     <string name="fingerprint_acquired_insufficient" msgid="2545149524031515411">"আঙ্গুলের ছাপ প্রক্রিয়া করা যায়নি৷ অনুগ্রহ করে আবার চেষ্টা করুন৷"</string>
     <string name="fingerprint_acquired_imager_dirty" msgid="4694800187151533990">"আঙ্গুলের ছাপ নেওয়ার সেন্সরটি অপরিস্কার৷ পরিষ্কার করে আবার চেষ্টা করুন৷"</string>
@@ -829,7 +832,8 @@
     <string name="lockscreen_instructions_when_pattern_enabled" msgid="7982445492532123308">"আনলক করতে বা জরুরি কল করতে মেনু টিপুন৷"</string>
     <string name="lockscreen_instructions_when_pattern_disabled" msgid="7434061749374801753">"আনলক করতে মেনু টিপুন৷"</string>
     <string name="lockscreen_pattern_instructions" msgid="3169991838169244941">"আনলক করতে প্যাটার্ন আঁকুন"</string>
-    <string name="lockscreen_emergency_call" msgid="7500692654885445299">"জরুরী"</string>
+    <!-- no translation found for lockscreen_emergency_call (7549683825868928636) -->
+    <skip />
     <string name="lockscreen_return_to_call" msgid="3156883574692006382">"কলে ফিরুন"</string>
     <string name="lockscreen_pattern_correct" msgid="8050630103651508582">"সঠিক!"</string>
     <string name="lockscreen_pattern_wrong" msgid="2940138714468358458">"আবার চেষ্টা করুন"</string>
@@ -1460,9 +1464,6 @@
     <string name="gpsNotifMessage" msgid="7346649122793758032">"<xliff:g id="NAME">%1$s</xliff:g> (<xliff:g id="SERVICE">%2$s</xliff:g>) এর দ্বারা অনুরোধকৃত"</string>
     <string name="gpsVerifYes" msgid="3719843080744112940">"হ্যাঁ"</string>
     <string name="gpsVerifNo" msgid="1671201856091564741">"না"</string>
-    <string name="gnss_nfw_notification_title" msgid="5004493772059563423">"জরুরি লোকেশন অ্যাক্সেস করা হয়েছে"</string>
-    <string name="gnss_nfw_notification_message_oem" msgid="3683958907027107969">"সাম্প্রতিক জরুরি সেশনের সময় আপনার ডিভাইস প্রস্তুতকর্তা আপনার লোকেশন অ্যাক্সেস করেছে"</string>
-    <string name="gnss_nfw_notification_message_carrier" msgid="815888995791562151">"সাম্প্রতিক জরুরি সেশনের সময় আপনার পরিষেবা প্রদানকারী আপনার লোকেশন অ্যাক্সেস করেছে"</string>
     <string name="sync_too_many_deletes" msgid="6999440774578705300">"মুছে ফেলার সীমা ছাড়িয়ে গেছে"</string>
     <string name="sync_too_many_deletes_desc" msgid="7409327940303504440">"<xliff:g id="ACCOUNT_NAME">%3$s</xliff:g> অ্যাকাউন্টে <xliff:g id="TYPE_OF_SYNC">%2$s</xliff:g> এর জন্য <xliff:g id="NUMBER_OF_DELETED_ITEMS">%1$d</xliff:g>টি মুছে ফেলা আইটেম রয়েছে৷ আপনি এগুলিকে নিয়ে কি করতে চান?"</string>
     <string name="sync_really_delete" msgid="5657871730315579051">"আইটেমগুলি মুছুন"</string>
@@ -1792,8 +1793,8 @@
     <string name="package_updated_device_owner" msgid="7560272363805506941">"আপনার প্রশাসক আপডেট করেছেন"</string>
     <string name="package_deleted_device_owner" msgid="2292335928930293023">"আপনার প্রশাসক মুছে দিয়েছেন"</string>
     <string name="confirm_battery_saver" msgid="5247976246208245754">"ঠিক আছে"</string>
-    <string name="battery_saver_description_with_learn_more" msgid="5997766757551917769">"ব্যাটারি আরও বেশিক্ষণ চালাতে, ব্যাটারি সেভার:\n\n•গাঢ় থিম চালু করে\n•ব্যাকগ্রাউন্ড অ্যাক্টিভিটি, কিছু ভিজ্যুয়াল এফেক্ট এবং “হ্যালো Google”-এর মতো অন্যান্য ফিচার বন্ধ বা সীমিত করে\n\n"<annotation id="url">"আরও জানুন"</annotation></string>
-    <string name="battery_saver_description" msgid="8587408568232177204">"ব্যাটারি আরও বেশিক্ষণ চালাতে, ব্যাটারি সেভার:\n\n•গাঢ় থিম চালু করে\n•ব্যাকগ্রাউন্ড অ্যাক্টিভিটি, কিছু ভিজ্যুয়াল এফেক্ট এবং “হ্যালো Google”-এর মতো অন্যান্য ফিচার বন্ধ বা সীমিত করে"</string>
+    <string name="battery_saver_description_with_learn_more" msgid="4424488535318105801">"ব্যাটারি আরও বেশিক্ষণ চালাতে, ব্যাটারি সেভার:\n\n• ডার্ক থিম চালু করে\n• ব্যাকগ্রাউন্ড অ্যাক্টিভিটি, কিছু ভিজ্যুয়াল এফেক্ট এবং “হ্যালো Google”-এর মতো অন্যান্য ফিচার বন্ধ বা সীমিত করে\n\n"<annotation id="url">"আরও জানুন"</annotation></string>
+    <string name="battery_saver_description" msgid="6794188153647295212">"ব্যাটারি আরও বেশিক্ষণ চালাতে, ব্যাটারি সেভার:\n\n• ডার্ক থিম চালু করে\n• ব্যাকগ্রাউন্ড অ্যাক্টিভিটি, কিছু ভিজ্যুয়াল এফেক্ট এবং “হ্যালো Google”-এর মতো অন্যান্য ফিচার বন্ধ অথবা সীমিত করে"</string>
     <string name="data_saver_description" msgid="4995164271550590517">"ডেটার ব্যবহার কমাতে সহায়তা করার জন্য, ডেটা সেভার ব্যাকগ্রাউন্ডে কিছু অ্যাপ্লিকেশনকে ডেটা পাঠাতে বা গ্রহণ করতে বাধা দেয়৷ আপনি বর্তমানে এমন একটি অ্যাপ্লিকেশন ব্যবহার করছেন যেটি ডেটা অ্যাক্সেস করতে পারে, তবে সেটি কমই করে৷ এর ফলে যা হতে পারে, উদাহরণস্বরূপ, আপনি ছবির উপর ট্যাপ না করা পর্যন্ত সেগুলি দেখানো হবে না৷"</string>
     <string name="data_saver_enable_title" msgid="7080620065745260137">"ডেটা সেভার চালু করবেন?"</string>
     <string name="data_saver_enable_button" msgid="4399405762586419726">"চালু করুন"</string>
@@ -1997,6 +1998,7 @@
     <string name="notification_appops_camera_active" msgid="8177643089272352083">"ক্যামেরা"</string>
     <string name="notification_appops_microphone_active" msgid="581333393214739332">"মাইক্রোফোন"</string>
     <string name="notification_appops_overlay_active" msgid="5571732753262836481">"স্ক্রিনে অন্যান্য অ্যাপের উপরে দেখানো হচ্ছে"</string>
+    <string name="notification_feedback_indicator" msgid="663476517711323016">"মতামত জানান"</string>
     <string name="dynamic_mode_notification_channel_name" msgid="2986926422100223328">"রুটিন মোডের তথ্য সংক্রান্ত বিজ্ঞপ্তি"</string>
     <string name="dynamic_mode_notification_title" msgid="9205715501274608016">"সাধারণত যখন চার্জ দেন, তার আগে চার্জ শেষ হয়ে যেতে পারে"</string>
     <string name="dynamic_mode_notification_summary" msgid="4141614604437372157">"ডিভাইস বেশিক্ষণ চালু রাখতে ব্যাটারি সেভার চালু করা হয়েছে"</string>

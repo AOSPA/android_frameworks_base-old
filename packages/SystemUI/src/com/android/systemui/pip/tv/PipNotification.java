@@ -19,6 +19,7 @@ package com.android.systemui.pip.tv;
 import android.app.Notification;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
+import android.app.RemoteAction;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
@@ -35,9 +36,9 @@ import android.text.TextUtils;
 import android.util.Log;
 
 import com.android.internal.messages.nano.SystemMessageProto.SystemMessage;
-import com.android.systemui.R;
 import com.android.systemui.broadcast.BroadcastDispatcher;
 import com.android.systemui.util.NotificationChannels;
+import com.android.wm.shell.R;
 
 /**
  * A notification that informs users that PIP is running and also provides PIP controls.
@@ -89,7 +90,7 @@ public class PipNotification {
         }
 
         @Override
-        public void onPipMenuActionsChanged(ParceledListSlice actions) {
+        public void onPipMenuActionsChanged(ParceledListSlice<RemoteAction> actions) {
             // no-op.
         }
 

@@ -20,6 +20,7 @@ import static android.Manifest.permission.LOG_COMPAT_CHANGE;
 import static android.Manifest.permission.OVERRIDE_COMPAT_CHANGE_CONFIG;
 import static android.Manifest.permission.READ_COMPAT_CHANGE_CONFIG;
 import static android.content.pm.PackageManager.PERMISSION_GRANTED;
+import static android.os.Process.SYSTEM_UID;
 
 import android.annotation.UserIdInt;
 import android.app.ActivityManager;
@@ -333,6 +334,10 @@ public class PlatformCompat extends IPlatformCompat.Stub {
     }
 
     private void checkCompatChangeLogPermission() throws SecurityException {
+        // Don't check for permissions within the system process
+        if (Binder.getCallingUid() == SYSTEM_UID) {
+            return;
+        }
         if (mContext.checkCallingOrSelfPermission(LOG_COMPAT_CHANGE)
                 != PERMISSION_GRANTED) {
             throw new SecurityException("Cannot log compat change usage");
@@ -340,6 +345,10 @@ public class PlatformCompat extends IPlatformCompat.Stub {
     }
 
     private void checkCompatChangeReadPermission() throws SecurityException {
+        // Don't check for permissions within the system process
+        if (Binder.getCallingUid() == SYSTEM_UID) {
+            return;
+        }
         if (mContext.checkCallingOrSelfPermission(READ_COMPAT_CHANGE_CONFIG)
                 != PERMISSION_GRANTED) {
             throw new SecurityException("Cannot read compat change");
@@ -347,6 +356,10 @@ public class PlatformCompat extends IPlatformCompat.Stub {
     }
 
     private void checkCompatChangeOverridePermission() throws SecurityException {
+        // Don't check for permissions within the system process
+        if (Binder.getCallingUid() == SYSTEM_UID) {
+            return;
+        }
         if (mContext.checkCallingOrSelfPermission(OVERRIDE_COMPAT_CHANGE_CONFIG)
                 != PERMISSION_GRANTED) {
             throw new SecurityException("Cannot override compat change");

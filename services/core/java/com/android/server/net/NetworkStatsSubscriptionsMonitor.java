@@ -21,6 +21,7 @@ import static android.net.NetworkTemplate.getCollapsedRatType;
 
 import android.annotation.NonNull;
 import android.content.Context;
+import android.os.Looper;
 import android.telephony.Annotation;
 import android.telephony.NetworkRegistrationInfo;
 import android.telephony.PhoneStateListener;
@@ -77,9 +78,9 @@ public class NetworkStatsSubscriptionsMonitor extends
     @NonNull
     private final Executor mExecutor;
 
-    NetworkStatsSubscriptionsMonitor(@NonNull Context context, @NonNull Executor executor,
-            @NonNull Delegate delegate) {
-        super();
+    NetworkStatsSubscriptionsMonitor(@NonNull Context context, @NonNull Looper looper,
+            @NonNull Executor executor, @NonNull Delegate delegate) {
+        super(looper);
         mSubscriptionManager = (SubscriptionManager) context.getSystemService(
                 Context.TELEPHONY_SUBSCRIPTION_SERVICE);
         mTeleManager = (TelephonyManager) context.getSystemService(Context.TELEPHONY_SERVICE);

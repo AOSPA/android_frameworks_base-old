@@ -16,7 +16,8 @@
 
 package com.android.server.media;
 
-import static android.os.UserHandle.USER_ALL;
+import static android.os.UserHandle.ALL;
+import static android.os.UserHandle.CURRENT;
 
 import static com.android.server.media.MediaKeyDispatcher.KEY_EVENT_LONG_PRESS;
 import static com.android.server.media.MediaKeyDispatcher.isDoubleTapOverridden;
@@ -25,8 +26,8 @@ import static com.android.server.media.MediaKeyDispatcher.isSingleTapOverridden;
 import static com.android.server.media.MediaKeyDispatcher.isTripleTapOverridden;
 
 import android.app.ActivityManager;
-import android.app.INotificationManager;
 import android.app.KeyguardManager;
+import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.content.ActivityNotFoundException;
 import android.content.ComponentName;
@@ -67,7 +68,6 @@ import android.os.Process;
 import android.os.RemoteCallbackList;
 import android.os.RemoteException;
 import android.os.ResultReceiver;
-import android.os.ServiceManager;
 import android.os.ShellCallback;
 import android.os.UserHandle;
 import android.os.UserManager;
@@ -75,7 +75,6 @@ import android.provider.Settings;
 import android.speech.RecognizerIntent;
 import android.text.TextUtils;
 import android.util.Log;
-import android.util.Slog;
 import android.util.SparseArray;
 import android.util.SparseIntArray;
 import android.view.KeyEvent;
@@ -118,7 +117,7 @@ public class MediaSessionService extends SystemService implements Monitor {
     private final SessionManagerImpl mSessionManagerImpl;
     private final MessageHandler mHandler = new MessageHandler();
     private final PowerManager.WakeLock mMediaEventWakeLock;
-    private final INotificationManager mNotificationManager;
+    private final NotificationManager mNotificationManager;
     private final Object mLock = new Object();
     private final HandlerThread mRecordThread = new HandlerThread("SessionRecordThread");
     // Keeps the full user id for each user.
@@ -158,10 +157,9 @@ public class MediaSessionService extends SystemService implements Monitor {
         super(context);
         mContext = context;
         mSessionManagerImpl = new SessionManagerImpl();
-        PowerManager pm = (PowerManager) context.getSystemService(Context.POWER_SERVICE);
+        PowerManager pm = mContext.getSystemService(PowerManager.class);
         mMediaEventWakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "handleMediaEvent");
-        mNotificationManager = INotificationManager.Stub.asInterface(
-                ServiceManager.getService(Context.NOTIFICATION_SERVICE));
+        mNotificationManager = mContext.getSystemService(NotificationManager.class);
     }
 
     @Override
@@ -252,7 +250,7 @@ public class MediaSessionService extends SystemService implements Monitor {
 
     private List<MediaSessionRecord> getActiveSessionsLocked(int userId) {
         List<MediaSessionRecord> records = new ArrayList<>();
-        if (userId == USER_ALL) {
+        if (userId == ALL.getIdentifier()) {
             int size = mUserRecords.size();
             for (int i = 0; i < size; i++) {
                 records.addAll(mUserRecords.valueAt(i).mPriorityStack.getActiveSessions(userId));
@@ -268,7 +266,8 @@ public class MediaSessionService extends SystemService implements Monitor {
 
         // Return global priority session at the first whenever it's asked.
         if (isGlobalPriorityActiveLocked()
-                && (userId == USER_ALL || userId == mGlobalPrioritySession.getUserId())) {
+                && (userId == ALL.getIdentifier()
+                        || userId == mGlobalPrioritySession.getUserId())) {
             records.add(0, mGlobalPrioritySession);
         }
         return records;
@@ -276,7 +275,7 @@ public class MediaSessionService extends SystemService implements Monitor {
 
     List<Session2Token> getSession2TokensLocked(int userId) {
         List<Session2Token> list = new ArrayList<>();
-        if (userId == USER_ALL) {
+        if (userId == ALL.getIdentifier()) {
             int size = mUserRecords.size();
             for (int i = 0; i < size; i++) {
                 list.addAll(mUserRecords.valueAt(i).mPriorityStack.getSession2Tokens(userId));
@@ -352,7 +351,7 @@ public class MediaSessionService extends SystemService implements Monitor {
             FullUserRecord user = getFullUserRecordLocked(userId);
             if (user != null) {
                 if (user.mFullUserId == userId) {
-                    user.destroySessionsForUserLocked(USER_ALL);
+                    user.destroySessionsForUserLocked(ALL.getIdentifier());
                     mUserRecords.remove(userId);
                 } else {
                     user.destroySessionsForUserLocked(userId);
@@ -506,11 +505,12 @@ public class MediaSessionService extends SystemService implements Monitor {
     private void enforceMediaPermissions(ComponentName compName, int pid, int uid,
             int resolvedUserId) {
         if (hasStatusBarServicePermission(pid, uid)) return;
+        // TODO: Refactor to use hasMediaControlPermission and hasEnabledNotificationListener
         if (mContext
                 .checkPermission(android.Manifest.permission.MEDIA_CONTENT_CONTROL, pid, uid)
                 != PackageManager.PERMISSION_GRANTED
                 && !isEnabledNotificationListener(compName,
-                UserHandle.getUserHandleForUid(uid).getIdentifier(), resolvedUserId)) {
+                UserHandle.getUserHandleForUid(uid), resolvedUserId)) {
             throw new SecurityException("Missing permission to control media.");
         }
     }
@@ -546,13 +546,13 @@ public class MediaSessionService extends SystemService implements Monitor {
      * they're running as.
      *
      * @param compName The component that is enabled.
-     * @param userId The user id of the caller.
+     * @param userHandle The user handle of the caller.
      * @param forUserId The user id they're making the request on behalf of.
      * @return True if the component is enabled, false otherwise
      */
-    private boolean isEnabledNotificationListener(ComponentName compName, int userId,
+    private boolean isEnabledNotificationListener(ComponentName compName, UserHandle userHandle,
             int forUserId) {
-        if (userId != forUserId) {
+        if (userHandle.getIdentifier() != forUserId) {
             // You may not access another user's content as an enabled listener.
             return false;
         }
@@ -560,12 +560,8 @@ public class MediaSessionService extends SystemService implements Monitor {
             Log.d(TAG, "Checking if enabled notification listener " + compName);
         }
         if (compName != null) {
-            try {
-                return mNotificationManager.isNotificationListenerAccessGrantedForUser(
-                        compName, userId);
-            } catch (RemoteException e) {
-                Log.w(TAG, "Dead NotificationManager in isEnabledNotificationListener", e);
-            }
+            return mNotificationManager.hasEnabledNotificationListener(compName.getPackageName(),
+                    userHandle);
         }
         return false;
     }
@@ -654,7 +650,7 @@ public class MediaSessionService extends SystemService implements Monitor {
             pushRemoteVolumeUpdateLocked(userId);
             for (int i = mSessionsListeners.size() - 1; i >= 0; i--) {
                 SessionsListenerRecord record = mSessionsListeners.get(i);
-                if (record.userId == USER_ALL || record.userId == userId) {
+                if (record.userId == ALL.getIdentifier() || record.userId == userId) {
                     try {
                         record.listener.onActiveSessionsChanged(tokens);
                     } catch (RemoteException e) {
@@ -669,13 +665,13 @@ public class MediaSessionService extends SystemService implements Monitor {
 
     void pushSession2Changed(int userId) {
         synchronized (mLock) {
-            List<Session2Token> allSession2Tokens = getSession2TokensLocked(USER_ALL);
+            List<Session2Token> allSession2Tokens = getSession2TokensLocked(ALL.getIdentifier());
             List<Session2Token> session2Tokens = getSession2TokensLocked(userId);
 
             for (int i = mSession2TokensListenerRecords.size() - 1; i >= 0; i--) {
                 Session2TokensListenerRecord listenerRecord = mSession2TokensListenerRecords.get(i);
                 try {
-                    if (listenerRecord.userId == USER_ALL) {
+                    if (listenerRecord.userId == ALL.getIdentifier()) {
                         listenerRecord.listener.onSession2TokensChanged(allSession2Tokens);
                     } else if (listenerRecord.userId == userId) {
                         listenerRecord.listener.onSession2TokensChanged(session2Tokens);
@@ -761,7 +757,8 @@ public class MediaSessionService extends SystemService implements Monitor {
     }
 
     private MediaSessionRecord getMediaSessionRecordLocked(MediaSession.Token sessionToken) {
-        FullUserRecord user = getFullUserRecordLocked(UserHandle.getUserId(sessionToken.getUid()));
+        FullUserRecord user = getFullUserRecordLocked(
+                UserHandle.getUserHandleForUid(sessionToken.getUid()).getIdentifier());
         if (user != null) {
             return user.mPriorityStack.getMediaSessionRecord(sessionToken);
         }
@@ -1090,7 +1087,7 @@ public class MediaSessionService extends SystemService implements Monitor {
 
         private void observe() {
             mContentResolver.registerContentObserver(mSecureSettingsUri,
-                    false, this, USER_ALL);
+                    false, this, ALL.getIdentifier());
         }
 
         @Override
@@ -1140,7 +1137,7 @@ public class MediaSessionService extends SystemService implements Monitor {
                 }
                 return sessionBinder;
             } catch (Exception e) {
-                Slog.w(TAG, "Exception in creating a new session", e);
+                Log.w(TAG, "Exception in creating a new session", e);
                 throw e;
             } finally {
                 Binder.restoreCallingIdentity(token);
@@ -1351,7 +1348,7 @@ public class MediaSessionService extends SystemService implements Monitor {
                 if (!isUserSetupComplete()) {
                     // Global media key handling can have the side-effect of starting new
                     // activities which is undesirable while setup is in progress.
-                    Slog.i(TAG, "Not dispatching media key event because user "
+                    Log.i(TAG, "Not dispatching media key event because user "
                             + "setup is in progress.");
                     return;
                 }
@@ -1361,7 +1358,7 @@ public class MediaSessionService extends SystemService implements Monitor {
                     if (isGlobalPriorityActive && uid != Process.SYSTEM_UID) {
                         // Prevent dispatching key event through reflection while the global
                         // priority session is active.
-                        Slog.i(TAG, "Only the system can dispatch media key event "
+                        Log.i(TAG, "Only the system can dispatch media key event "
                                 + "to the global priority session.");
                         return;
                     }
@@ -1436,7 +1433,7 @@ public class MediaSessionService extends SystemService implements Monitor {
                 final IOnMediaKeyEventDispatchedListener listener) {
             final int pid = Binder.getCallingPid();
             final int uid = Binder.getCallingUid();
-            final int userId = UserHandle.getUserId(uid);
+            final int userId = UserHandle.getUserHandleForUid(uid).getIdentifier();
             final long token = Binder.clearCallingIdentity();
             try {
                 if (!hasMediaControlPermission(pid, uid)) {
@@ -1464,7 +1461,7 @@ public class MediaSessionService extends SystemService implements Monitor {
                 final IOnMediaKeyEventDispatchedListener listener) {
             final int pid = Binder.getCallingPid();
             final int uid = Binder.getCallingUid();
-            final int userId = UserHandle.getUserId(uid);
+            final int userId = UserHandle.getUserHandleForUid(uid).getIdentifier();
             final long token = Binder.clearCallingIdentity();
             try {
                 if (!hasMediaControlPermission(pid, uid)) {
@@ -1492,7 +1489,7 @@ public class MediaSessionService extends SystemService implements Monitor {
                 final IOnMediaKeyEventSessionChangedListener listener) {
             final int pid = Binder.getCallingPid();
             final int uid = Binder.getCallingUid();
-            final int userId = UserHandle.getUserId(uid);
+            final int userId = UserHandle.getUserHandleForUid(uid).getIdentifier();
             final long token = Binder.clearCallingIdentity();
             try {
                 if (!hasMediaControlPermission(pid, uid)) {
@@ -1520,7 +1517,7 @@ public class MediaSessionService extends SystemService implements Monitor {
                 final IOnMediaKeyEventSessionChangedListener listener) {
             final int pid = Binder.getCallingPid();
             final int uid = Binder.getCallingUid();
-            final int userId = UserHandle.getUserId(uid);
+            final int userId = UserHandle.getUserHandleForUid(uid).getIdentifier();
             final long token = Binder.clearCallingIdentity();
             try {
                 if (!hasMediaControlPermission(pid, uid)) {
@@ -1558,7 +1555,7 @@ public class MediaSessionService extends SystemService implements Monitor {
                 }
 
                 synchronized (mLock) {
-                    int userId = UserHandle.getUserId(uid);
+                    int userId = UserHandle.getUserHandleForUid(uid).getIdentifier();
                     FullUserRecord user = getFullUserRecordLocked(userId);
                     if (user == null || user.mFullUserId != userId) {
                         Log.w(TAG, "Only the full user can set the volume key long-press listener"
@@ -1617,7 +1614,7 @@ public class MediaSessionService extends SystemService implements Monitor {
                 }
 
                 synchronized (mLock) {
-                    int userId = UserHandle.getUserId(uid);
+                    int userId = UserHandle.getUserHandleForUid(uid).getIdentifier();
                     FullUserRecord user = getFullUserRecordLocked(userId);
                     if (user == null || user.mFullUserId != userId) {
                         Log.w(TAG, "Only the full user can set the media key listener"
@@ -1743,10 +1740,7 @@ public class MediaSessionService extends SystemService implements Monitor {
             }
             if (down || up) {
                 int flags = AudioManager.FLAG_FROM_KEY;
-                if (musicOnly) {
-                    // This flag is used when the screen is off to only affect active media.
-                    flags |= AudioManager.FLAG_ACTIVE_MEDIA_ONLY;
-                } else {
+                if (!musicOnly) {
                     // These flags are consistent with the home screen
                     if (up) {
                         flags |= AudioManager.FLAG_PLAY_SOUND | AudioManager.FLAG_VIBRATE;
@@ -1760,11 +1754,12 @@ public class MediaSessionService extends SystemService implements Monitor {
                         direction = 0;
                     }
                     dispatchAdjustVolumeLocked(packageName, opPackageName, pid, uid,
-                            asSystemService, stream, direction, flags);
+                            asSystemService, stream, direction, flags, musicOnly);
                 } else if (isMute) {
                     if (down && keyEvent.getRepeatCount() == 0) {
                         dispatchAdjustVolumeLocked(packageName, opPackageName, pid, uid,
-                                asSystemService, stream, AudioManager.ADJUST_TOGGLE_MUTE, flags);
+                                asSystemService, stream, AudioManager.ADJUST_TOGGLE_MUTE, flags,
+                                musicOnly);
                     }
                 }
             }
@@ -1847,7 +1842,7 @@ public class MediaSessionService extends SystemService implements Monitor {
             try {
                 synchronized (mLock) {
                     dispatchAdjustVolumeLocked(packageName, opPackageName, pid, uid, false,
-                            suggestedStream, delta, flags);
+                            suggestedStream, delta, flags, false);
                 }
             } finally {
                 Binder.restoreCallingIdentity(token);
@@ -1922,10 +1917,10 @@ public class MediaSessionService extends SystemService implements Monitor {
          * @param controllerUid uid of the controller app
          */
         @Override
-        public boolean isTrusted(String controllerPackageName, int controllerPid, int controllerUid)
-                throws RemoteException {
+        public boolean isTrusted(String controllerPackageName, int controllerPid,
+                int controllerUid) {
             final int uid = Binder.getCallingUid();
-            final int userId = UserHandle.getUserId(uid);
+            final int userId = UserHandle.getUserHandleForUid(uid).getIdentifier();
             final long token = Binder.clearCallingIdentity();
             try {
                 // Don't perform sanity check between controllerPackageName and controllerUid.
@@ -1937,7 +1932,7 @@ public class MediaSessionService extends SystemService implements Monitor {
                 // Context#getPackageName() for getting package name that matches with the PID/UID,
                 // but it doesn't tell which package has created the MediaController, so useless.
                 return hasMediaControlPermission(controllerPid, controllerUid)
-                        || hasEnabledNotificationListener(userId, controllerPackageName);
+                        || hasEnabledNotificationListener(userId, controllerPackageName, uid);
             } finally {
                 Binder.restoreCallingIdentity(token);
             }
@@ -2001,35 +1996,28 @@ public class MediaSessionService extends SystemService implements Monitor {
             return resolvedUserId;
         }
 
-        private boolean hasEnabledNotificationListener(int resolvedUserId, String packageName)
-                throws RemoteException {
+        private boolean hasEnabledNotificationListener(int resolvedUserId, String packageName,
+                int uid) {
+            // TODO: revisit this checking code
             // You may not access another user's content as an enabled listener.
-            final int userId = UserHandle.getUserId(resolvedUserId);
+            final int userId = UserHandle.getUserHandleForUid(resolvedUserId).getIdentifier();
             if (resolvedUserId != userId) {
                 return false;
             }
-
-            // TODO(jaewan): (Post-P) Propose NotificationManager#hasEnabledNotificationListener(
-            //               String pkgName) to notification team for optimization
-            final List<ComponentName> enabledNotificationListeners =
-                    mNotificationManager.getEnabledNotificationListeners(userId);
-            if (enabledNotificationListeners != null) {
-                for (int i = 0; i < enabledNotificationListeners.size(); i++) {
-                    if (TextUtils.equals(packageName,
-                            enabledNotificationListeners.get(i).getPackageName())) {
-                        return true;
-                    }
-                }
+            if (mNotificationManager.hasEnabledNotificationListener(packageName,
+                    UserHandle.getUserHandleForUid(uid))) {
+                return true;
             }
             if (DEBUG) {
-                Log.d(TAG, packageName + " (uid=" + resolvedUserId + ") doesn't have an enabled "
+                Log.d(TAG, packageName + " (uid=" + uid + ") doesn't have an enabled "
                         + "notification listener");
             }
             return false;
         }
 
         private void dispatchAdjustVolumeLocked(String packageName, String opPackageName, int pid,
-                int uid, boolean asSystemService, int suggestedStream, int direction, int flags) {
+                int uid, boolean asSystemService, int suggestedStream, int direction, int flags,
+                boolean musicOnly) {
             MediaSessionRecordImpl session = isGlobalPriorityActiveLocked() ? mGlobalPrioritySession
                     : mCurrentFullUserRecord.mPriorityStack.getDefaultVolumeSession();
 
@@ -2044,8 +2032,7 @@ public class MediaSessionService extends SystemService implements Monitor {
                             + ". flags=" + flags + ", preferSuggestedStream="
                             + preferSuggestedStream + ", session=" + session);
                 }
-                if ((flags & AudioManager.FLAG_ACTIVE_MEDIA_ONLY) != 0
-                        && !AudioSystem.isStreamActive(AudioManager.STREAM_MUSIC, 0)) {
+                if (musicOnly && !AudioSystem.isStreamActive(AudioManager.STREAM_MUSIC, 0)) {
                     if (DEBUG_KEY_EVENT) {
                         Log.d(TAG, "Nothing is playing on the music stream. Skipping volume event,"
                                 + " flags=" + flags);
@@ -2106,8 +2093,8 @@ public class MediaSessionService extends SystemService implements Monitor {
             MediaButtonReceiverHolder mediaButtonReceiverHolder = null;
 
             if (mCustomMediaKeyDispatcher != null) {
-                MediaSession.Token token = mCustomMediaKeyDispatcher.getMediaSession(keyEvent, uid,
-                        asSystemService);
+                MediaSession.Token token = mCustomMediaKeyDispatcher.getMediaSession(
+                        keyEvent, uid, asSystemService);
                 if (token != null) {
                     session = getMediaSessionRecordLocked(token);
                 }
@@ -2221,7 +2208,7 @@ public class MediaSessionService extends SystemService implements Monitor {
 
         private boolean isUserSetupComplete() {
             return Settings.Secure.getIntForUser(mContext.getContentResolver(),
-                    Settings.Secure.USER_SETUP_COMPLETE, 0, UserHandle.USER_CURRENT) != 0;
+                    Settings.Secure.USER_SETUP_COMPLETE, 0, CURRENT.getIdentifier()) != 0;
         }
 
         // we only handle public stream types, which are 0-5

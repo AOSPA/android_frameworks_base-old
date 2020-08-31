@@ -18,6 +18,7 @@ package com.android.server.rollback;
 
 import android.content.Context;
 
+import com.android.server.LocalServices;
 import com.android.server.SystemService;
 
 /**
@@ -38,11 +39,12 @@ public final class RollbackManagerService extends SystemService {
     public void onStart() {
         mService = new RollbackManagerServiceImpl(getContext());
         publishBinderService(Context.ROLLBACK_SERVICE, mService);
+        LocalServices.addService(RollbackManagerInternal.class, mService);
     }
 
     @Override
-    public void onUnlockUser(int user) {
-        mService.onUnlockUser(user);
+    public void onUserUnlocking(TargetUser user) {
+        mService.onUnlockUser(user.getUserHandle().getIdentifier());
     }
 
     @Override

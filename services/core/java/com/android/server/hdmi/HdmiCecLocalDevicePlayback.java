@@ -45,7 +45,7 @@ public class HdmiCecLocalDevicePlayback extends HdmiCecLocalDeviceSource {
     private static final String TAG = "HdmiCecLocalDevicePlayback";
 
     private static final boolean SET_MENU_LANGUAGE =
-            HdmiProperties.set_menu_language().orElse(false);
+            HdmiProperties.set_menu_language_enabled().orElse(false);
 
     // Used to keep the device awake while it is the active source. For devices that
     // cannot wake up via CEC commands, this address the inconvenience of having to
@@ -65,11 +65,17 @@ public class HdmiCecLocalDevicePlayback extends HdmiCecLocalDeviceSource {
 
     // Determines what action should be taken upon receiving Routing Control messages.
     @VisibleForTesting
-    protected String mPlaybackDeviceActionOnRoutingControl;
+    protected HdmiProperties.playback_device_action_on_routing_control_values
+            mPlaybackDeviceActionOnRoutingControl = HdmiProperties
+                    .playback_device_action_on_routing_control()
+                    .orElse(HdmiProperties.playback_device_action_on_routing_control_values.NONE);
 
     // Behaviour of the device when <Active Source> is lost in favor of another device.
     @VisibleForTesting
-    protected String mPowerStateChangeOnActiveSourceLost;
+    protected HdmiProperties.power_state_change_on_active_source_lost_values
+            mPowerStateChangeOnActiveSourceLost = HdmiProperties
+                    .power_state_change_on_active_source_lost()
+                    .orElse(HdmiProperties.power_state_change_on_active_source_lost_values.NONE);
 
     HdmiCecLocalDevicePlayback(HdmiControlService service) {
         super(service, HdmiDeviceInfo.DEVICE_PLAYBACK);
@@ -79,14 +85,6 @@ public class HdmiCecLocalDevicePlayback extends HdmiCecLocalDeviceSource {
         // The option is false by default. Update settings db as well to have the right
         // initial setting on UI.
         mService.writeBooleanSetting(Global.HDMI_CONTROL_AUTO_DEVICE_OFF_ENABLED, mAutoTvOff);
-
-        mPlaybackDeviceActionOnRoutingControl = SystemProperties.get(
-                Constants.PLAYBACK_DEVICE_ACTION_ON_ROUTING_CONTROL,
-                Constants.PLAYBACK_DEVICE_ACTION_ON_ROUTING_CONTROL_NONE);
-
-        mPowerStateChangeOnActiveSourceLost = SystemProperties.get(
-                Constants.POWER_STATE_CHANGE_ON_ACTIVE_SOURCE_LOST,
-                Constants.POWER_STATE_CHANGE_ON_ACTIVE_SOURCE_LOST_NONE);
     }
 
     @Override
@@ -227,7 +225,7 @@ public class HdmiCecLocalDevicePlayback extends HdmiCecLocalDeviceSource {
             if (SystemProperties.getBoolean(Constants.PROPERTY_KEEP_AWAKE, true)) {
                 mWakeLock = new SystemWakeLock();
             } else {
-                // Create a dummy lock object that doesn't do anything about wake lock,
+                // Create a stub lock object that doesn't do anything about wake lock,
                 // hence allows the device to go to sleep even if it's the active source.
                 mWakeLock = new ActiveWakeLock() {
                     @Override
@@ -256,18 +254,13 @@ public class HdmiCecLocalDevicePlayback extends HdmiCecLocalDeviceSource {
             return true;
         }
         switch (mPowerStateChangeOnActiveSourceLost) {
-            case Constants.POWER_STATE_CHANGE_ON_ACTIVE_SOURCE_LOST_STANDBY_NOW:
+            case STANDBY_NOW:
                 mService.standby();
                 return true;
-            case Constants.POWER_STATE_CHANGE_ON_ACTIVE_SOURCE_LOST_NONE:
-                return true;
-            default:
-                Slog.w(TAG, "Invalid property '"
-                        + Constants.POWER_STATE_CHANGE_ON_ACTIVE_SOURCE_LOST
-                        + "' value: "
-                        + mPowerStateChangeOnActiveSourceLost);
+            case NONE:
                 return true;
         }
+        return true;
     }
 
     @ServiceThreadOnly
@@ -384,19 +377,13 @@ public class HdmiCecLocalDevicePlayback extends HdmiCecLocalDeviceSource {
             return; // Do nothing.
         }
         switch (mPlaybackDeviceActionOnRoutingControl) {
-            case Constants.PLAYBACK_DEVICE_ACTION_ON_ROUTING_CONTROL_WAKE_UP_AND_SEND_ACTIVE_SOURCE:
+            case WAKE_UP_AND_SEND_ACTIVE_SOURCE:
                 setAndBroadcastActiveSource(message, physicalAddress);
                 break;
-            case Constants.PLAYBACK_DEVICE_ACTION_ON_ROUTING_CONTROL_WAKE_UP_ONLY:
+            case WAKE_UP_ONLY:
                 mService.wakeUp();
                 break;
-            case Constants.PLAYBACK_DEVICE_ACTION_ON_ROUTING_CONTROL_NONE:
-                break;
-            default:
-                Slog.w(TAG, "Invalid property '"
-                        + Constants.PLAYBACK_DEVICE_ACTION_ON_ROUTING_CONTROL
-                        + "' value: "
-                        + mPlaybackDeviceActionOnRoutingControl);
+            case NONE:
                 break;
         }
     }

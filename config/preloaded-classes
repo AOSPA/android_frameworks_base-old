@@ -417,9 +417,6 @@ android.app.INotificationManager
 android.app.IProcessObserver$Stub$Proxy
 android.app.IProcessObserver$Stub
 android.app.IProcessObserver
-android.app.IRequestFinishCallback$Stub$Proxy
-android.app.IRequestFinishCallback$Stub
-android.app.IRequestFinishCallback
 android.app.ISearchManager$Stub$Proxy
 android.app.ISearchManager$Stub
 android.app.ISearchManager
@@ -2297,10 +2294,6 @@ android.hardware.camera2.impl.CameraMetadataNative$Key
 android.hardware.camera2.impl.CameraMetadataNative
 android.hardware.camera2.impl.GetCommand
 android.hardware.camera2.impl.SetCommand
-android.hardware.camera2.legacy.LegacyCameraDevice
-android.hardware.camera2.legacy.LegacyExceptionUtils$BufferQueueAbandonedException
-android.hardware.camera2.legacy.LegacyMetadataMapper
-android.hardware.camera2.legacy.PerfMeasurement
 android.hardware.camera2.marshal.MarshalHelpers
 android.hardware.camera2.marshal.MarshalQueryable
 android.hardware.camera2.marshal.MarshalRegistry$MarshalToken
@@ -6505,6 +6498,7 @@ android.util.FeatureFlagUtils
 android.util.FloatProperty
 android.util.Half
 android.util.IconDrawableFactory
+android.util.IndentingPrintWriter
 android.util.IntArray
 android.util.IntProperty
 android.util.JsonReader$1
@@ -9322,7 +9316,6 @@ com.android.internal.util.GrowingArrayUtils
 com.android.internal.util.HexDump
 com.android.internal.util.IState
 com.android.internal.util.ImageUtils
-com.android.internal.util.IndentingPrintWriter
 com.android.internal.util.IntPair
 com.android.internal.util.JournaledFile
 com.android.internal.util.LatencyTracker$1
@@ -9990,8 +9983,6 @@ dalvik.system.CloseGuard$DefaultReporter
 dalvik.system.CloseGuard$Reporter
 dalvik.system.CloseGuard$Tracker
 dalvik.system.CloseGuard
-dalvik.system.DalvikLogHandler
-dalvik.system.DalvikLogging
 dalvik.system.DelegateLastClassLoader
 dalvik.system.DexClassLoader
 dalvik.system.DexFile$1
@@ -11952,6 +11943,7 @@ sun.nio.fs.LinuxFileSystemProvider
 sun.nio.fs.NativeBuffer$Deallocator
 sun.nio.fs.NativeBuffer
 sun.nio.fs.NativeBuffers
+sun.nio.fs.UnixChannelFactory
 sun.nio.fs.UnixChannelFactory$Flags
 sun.nio.fs.UnixConstants
 sun.nio.fs.UnixException

@@ -18839,7 +18839,6 @@ HSPLandroid/telephony/PreciseDataConnectionState;-><init>(Landroid/os/Parcel;)V
 HSPLandroid/telephony/PreciseDataConnectionState;-><init>(Landroid/os/Parcel;Landroid/telephony/PreciseDataConnectionState$1;)V
 HPLandroid/telephony/PreciseDataConnectionState;->equals(Ljava/lang/Object;)Z
 HPLandroid/telephony/PreciseDataConnectionState;->getDataConnectionApn()Ljava/lang/String;
-HPLandroid/telephony/PreciseDataConnectionState;->getDataConnectionLinkProperties()Landroid/net/LinkProperties;
 HPLandroid/telephony/PreciseDataConnectionState;->getNetworkType()I
 HPLandroid/telephony/PreciseDataConnectionState;->getState()I
 HSPLandroid/telephony/PreciseDataConnectionState;->toString()Ljava/lang/String;
@@ -42425,10 +42424,6 @@ Landroid/hardware/camera2/impl/CameraMetadataNative$Key;
 Landroid/hardware/camera2/impl/CameraMetadataNative;
 Landroid/hardware/camera2/impl/GetCommand;
 Landroid/hardware/camera2/impl/SetCommand;
-Landroid/hardware/camera2/legacy/LegacyCameraDevice;
-Landroid/hardware/camera2/legacy/LegacyExceptionUtils$BufferQueueAbandonedException;
-Landroid/hardware/camera2/legacy/LegacyMetadataMapper;
-Landroid/hardware/camera2/legacy/PerfMeasurement;
 Landroid/hardware/camera2/marshal/MarshalHelpers;
 Landroid/hardware/camera2/marshal/MarshalQueryable;
 Landroid/hardware/camera2/marshal/MarshalRegistry$MarshalToken;
