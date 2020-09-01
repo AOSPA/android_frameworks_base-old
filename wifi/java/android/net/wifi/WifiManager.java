@@ -1768,6 +1768,92 @@ public class WifiManager {
       }
 
     /**
+     * Check whether SoftAp OCV Feature is enabled
+     *
+     * @return true if SoftAp OCV is enabled.
+     *
+     * @hide no intent to publish
+     */
+     public boolean isSoftApOcvFeatureEnabled() {
+         try {
+             return mService.isSoftApOcvFeatureEnabled();
+         } catch (RemoteException e) {
+             throw e.rethrowFromSystemServer();
+         }
+     }
+
+    /**
+     * Check whether SoftAp OCV Feature is supported
+     *
+     * @return true if SoftAp OCV is supported.
+     *
+     * @hide no intent to publish
+     */
+     public boolean isSoftApOcvFeatureSupported() {
+         try {
+             return mService.isSoftApOcvFeatureSupported();
+         } catch (RemoteException e) {
+             throw e.rethrowFromSystemServer();
+         }
+     }
+
+    /**
+     * Enable/disable SoftAp OCV Feature.
+     *
+     * @hide no intent to publish
+     */
+     public void enableSoftApOcvFeature(boolean enable) {
+         try {
+             mService.enableSoftApOcvFeature(enable);
+         } catch (RemoteException e) {
+             throw e.rethrowFromSystemServer();
+         }
+     }
+
+    /**
+     * Check whether SoftAp Beacon Protection Feature is enabled
+     *
+     * @return true if SoftAp Beacon Protection Feature is enabled.
+     *
+     * @hide no intent to publish
+     */
+     public boolean isSoftApBeaconProtFeatureEnabled() {
+         try {
+             return mService.isSoftApBeaconProtFeatureEnabled();
+         } catch (RemoteException e) {
+             throw e.rethrowFromSystemServer();
+         }
+     }
+
+    /**
+     * Check whether SoftAp Beacon Protection Feature is supported
+     *
+     * @return true if SoftAp Beacon Protection Feature is supported.
+     *
+     * @hide no intent to publish
+     */
+     public boolean isSoftApBeaconProtFeatureSupported() {
+         try {
+             return mService.isSoftApBeaconProtFeatureSupported();
+         } catch (RemoteException e) {
+             throw e.rethrowFromSystemServer();
+         }
+     }
+
+    /**
+     * Enable/disable SoftAp Beacon Protection Feature.
+     *
+     * @hide no intent to publish
+     */
+     public void enableSoftApBeaconProtFeature(boolean enable) {
+         try {
+             mService.enableSoftApBeaconProtFeature(enable);
+         } catch (RemoteException e) {
+             throw e.rethrowFromSystemServer();
+         }
+     }
+
+    /**
      * Internal method for doing the RPC that creates a new network description
      * or updates an existing one.
      *
