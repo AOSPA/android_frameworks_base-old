@@ -27,7 +27,6 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentSender;
-import android.content.pm.ActivityInfo;
 import android.content.pm.PackageManager;
 import android.content.res.Resources;
 import android.graphics.drawable.Drawable;
@@ -215,13 +214,7 @@ final class SaveUi {
                     return componentName;
                 }
                 intent.addFlags(Intent.FLAG_ACTIVITY_MATCH_EXTERNAL);
-                final ActivityInfo ai =
-                        intent.resolveActivityInfo(packageManager, PackageManager.MATCH_INSTANT);
-                if (ai != null) {
-                    return new ComponentName(ai.applicationInfo.packageName, ai.name);
-                }
-
-                return null;
+                return intent.resolveActivity(packageManager);
             }
         };
         final LayoutInflater inflater = LayoutInflater.from(context);
