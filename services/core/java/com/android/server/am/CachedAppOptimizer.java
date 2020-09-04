@@ -92,8 +92,6 @@ public final class CachedAppOptimizer {
     private static final String COMPACT_ACTION_ANON = "anon";
     private static final String COMPACT_ACTION_FULL = "all";
 
-    private static boolean isLowRAM = false;
-
     // Defaults for phenotype flags.
     @VisibleForTesting static Boolean DEFAULT_USE_COMPACTION = false;
     @VisibleForTesting static final Boolean DEFAULT_USE_FREEZER = false;
@@ -265,10 +263,6 @@ public final class CachedAppOptimizer {
         mProcStateThrottle = new HashSet<>();
         mProcessDependencies = processDependencies;
         mTestCallback = callback;
-        isLowRAM = SystemProperties.getBoolean("ro.config.low_ram", false);
-
-        if (isLowRAM == true)
-            DEFAULT_USE_COMPACTION = true;
     }
 
     /**
