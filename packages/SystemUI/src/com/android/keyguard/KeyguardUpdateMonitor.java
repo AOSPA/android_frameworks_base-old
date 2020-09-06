@@ -1767,11 +1767,13 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
     private boolean shouldListenForFingerprint() {
         // Only listen if this KeyguardUpdateMonitor belongs to the primary user. There is an
         // instance of KeyguardUpdateMonitor for each user but KeyguardUpdateMonitor is user-aware.
+        // Only listen if Biometric Unlocking is allowed (not allowed on boot if device PIN is required)
         final boolean shouldListen = (mKeyguardIsVisible || !mDeviceInteractive ||
                 (mBouncer && !mKeyguardGoingAway) || mGoingToSleep ||
                 shouldListenForFingerprintAssistant() || (mKeyguardOccluded && mIsDreaming))
                 && !mSwitchingUser && !isFingerprintDisabled(getCurrentUser())
-                && (!mKeyguardGoingAway || !mDeviceInteractive) && mIsPrimaryUser && !mIsDeviceInPocket;
+                && (!mKeyguardGoingAway || !mDeviceInteractive) && mIsPrimaryUser
+                && !mIsDeviceInPocket && isUnlockingWithBiometricAllowed();
         return shouldListen;
     }
 
