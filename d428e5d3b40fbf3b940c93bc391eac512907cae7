@@ -1,0 +1,67 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "f77a50d4_f850ec7b",
+        "filename": "packages/SettingsLib/src/com/android/settingslib/graph/CircleBatteryDrawable.kt",
+        "patchSetId": 3
+      },
+      "lineNbr": 185,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2020-09-06T20:21:48Z",
+      "side": 1,
+      "message": "This seems unused. Can you remove this (along with the companion object)",
+      "revId": "d428e5d3b40fbf3b940c93bc391eac512907cae7",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "62d092ff_c492d480",
+        "filename": "packages/SettingsLib/src/com/android/settingslib/graph/CircleBatteryDrawable.kt",
+        "patchSetId": 3
+      },
+      "lineNbr": 231,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2020-09-06T20:21:48Z",
+      "side": 1,
+      "message": "this can all be set when creating the variable: private val backPaint \u003d new Paint(Paint.ANTI_ALIAS_FLAG).apply { color \u003d frameColor isDither \u003d true }",
+      "range": {
+        "startLine": 229,
+        "startChar": 1,
+        "endLine": 231,
+        "endChar": 33
+      },
+      "revId": "d428e5d3b40fbf3b940c93bc391eac512907cae7",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "9c8bc1f8_38afff24",
+        "filename": "packages/SettingsLib/src/com/android/settingslib/graph/CircleBatteryDrawable.kt",
+        "patchSetId": 3
+      },
+      "lineNbr": 248,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2020-09-06T20:21:48Z",
+      "side": 1,
+      "message": "same applies to the rest of this",
+      "range": {
+        "startLine": 232,
+        "startChar": 2,
+        "endLine": 248,
+        "endChar": 89
+      },
+      "revId": "d428e5d3b40fbf3b940c93bc391eac512907cae7",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    }
+  ]
+}
