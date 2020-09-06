@@ -1,0 +1,27 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "0b40aca8_9dd76d3e",
+        "filename": "packages/SystemUI/src/com/android/systemui/qs/QuickStatusBarHeader.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 595,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2020-09-06T21:03:13Z",
+      "side": 1,
+      "message": "I think a better naming for this would be something like calendarIntent since this is used for launching the calendar and doesn\u0027t necessarily have anything to do with the day.",
+      "range": {
+        "startLine": 595,
+        "startChar": 19,
+        "endLine": 595,
+        "endChar": 30
+      },
+      "revId": "37542d65d5426a40302a5f7f997cfdc49dbd8752",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    }
+  ]
+}
