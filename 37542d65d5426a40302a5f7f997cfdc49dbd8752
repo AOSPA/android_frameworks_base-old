@@ -22,6 +22,30 @@
       "revId": "37542d65d5426a40302a5f7f997cfdc49dbd8752",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
       "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "36efbe9b_365e0fc7",
+        "filename": "packages/SystemUI/src/com/android/systemui/qs/QuickStatusBarHeader.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 595,
+      "author": {
+        "id": 1000550
+      },
+      "writtenOn": "2020-09-07T04:12:45Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "0b40aca8_9dd76d3e",
+      "range": {
+        "startLine": 595,
+        "startChar": 19,
+        "endLine": 595,
+        "endChar": 30
+      },
+      "revId": "37542d65d5426a40302a5f7f997cfdc49dbd8752",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
     }
   ]
 }
