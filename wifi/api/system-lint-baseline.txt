@@ -10,6 +10,8 @@ ActionValue: android.net.wifi.WifiManager#EXTRA_WIFI_AP_FAILURE_DESCRIPTION:
 IntentName: android.net.wifi.WifiManager#WIFI_COUNTRY_CODE_CHANGED_ACTION:
     Intent action constant name must be ACTION_FOO: WIFI_COUNTRY_CODE_CHANGED_ACTION
 
+MissingGetterMatchingBuilder: android.net.wifi.rtt.RangingRequest.Builder#addResponder(android.net.wifi.rtt.ResponderConfig):
+    android.net.wifi.rtt.RangingRequest does not declare a `getResponders()` method matching method android.net.wifi.rtt.RangingRequest.Builder.addResponder(android.net.wifi.rtt.ResponderConfig)
 
 MissingNullability: android.net.wifi.rtt.RangingRequest.Builder#addResponder(android.net.wifi.rtt.ResponderConfig):
     
