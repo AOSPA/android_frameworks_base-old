@@ -293,7 +293,9 @@ public class KeyguardSecurityContainer extends FrameLayout implements KeyguardSe
             }
         }
         int layoutId = getLayoutIdFor(securityMode);
-        if (view == null && layoutId != 0) {
+        if ((view == null || mCurrentSecuritySelection == SecurityMode.SimPin
+                || mCurrentSecuritySelection == SecurityMode.SimPuk)
+                && layoutId != 0) {
             final LayoutInflater inflater = LayoutInflater.from(mContext);
             if (DEBUG) Log.v(TAG, "inflating id = " + layoutId);
             View v = mInjectionInflationController.injectable(inflater)
