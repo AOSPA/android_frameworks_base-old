@@ -16,6 +16,24 @@
       "revId": "649489fcf320c1fbd40ab4944084bfb007197310",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
       "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "cc540a15_dab6d7da",
+        "filename": "services/core/java/com/android/server/BatteryService.java",
+        "patchSetId": 4
+      },
+      "lineNbr": 245,
+      "author": {
+        "id": 1000463
+      },
+      "writtenOn": "2020-09-09T19:23:48Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "de346d62_ef917c43",
+      "revId": "649489fcf320c1fbd40ab4944084bfb007197310",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
     }
   ]
 }
