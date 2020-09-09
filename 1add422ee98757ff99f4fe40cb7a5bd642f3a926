@@ -25,6 +25,30 @@
     },
     {
       "key": {
+        "uuid": "c695e86e_a76b9ad2",
+        "filename": "packages/SystemUI/src/com/android/keyguard/clock/TypeClockController.java",
+        "patchSetId": 11
+      },
+      "lineNbr": 175,
+      "author": {
+        "id": 1000463
+      },
+      "writtenOn": "2020-09-09T17:45:23Z",
+      "side": 1,
+      "message": "Well, I\u0027m not a programmer/developer, then I don\u0027t know where ElDainosor got these calcs. But If you remove the (mTypeClock.getHeight() / 5) the date will be very near to the clock. \nThe original commit uses (mTypeClock.getHeight() / 2) instead of \"/ 5\", and It\u0027s too much space between the clock and the date. \nThen I changed it to \"/ 5\" tho decrease the value, now It seems fine (not perfect, but is fine).",
+      "parentUuid": "5906f535_210c944f",
+      "range": {
+        "startLine": 174,
+        "startChar": 0,
+        "endLine": 175,
+        "endChar": 89
+      },
+      "revId": "1add422ee98757ff99f4fe40cb7a5bd642f3a926",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    },
+    {
+      "key": {
         "uuid": "5a5c0fe9_2f271574",
         "filename": "packages/SystemUI/src/com/android/keyguard/clock/TypeClockController.java",
         "patchSetId": 11
