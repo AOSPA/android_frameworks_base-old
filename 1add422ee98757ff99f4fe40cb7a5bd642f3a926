@@ -1,0 +1,61 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "5906f535_210c944f",
+        "filename": "packages/SystemUI/src/com/android/keyguard/clock/TypeClockController.java",
+        "patchSetId": 11
+      },
+      "lineNbr": 175,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2020-09-09T16:45:39Z",
+      "side": 1,
+      "message": "where are these calculations from? if they\u0027re not taken from elsewhere in the source code, can you add more context to them? e.g why are you dividing mTypeclock.height by 5 and adding it up again?",
+      "range": {
+        "startLine": 174,
+        "startChar": 0,
+        "endLine": 175,
+        "endChar": 89
+      },
+      "revId": "1add422ee98757ff99f4fe40cb7a5bd642f3a926",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "5a5c0fe9_2f271574",
+        "filename": "packages/SystemUI/src/com/android/keyguard/clock/TypeClockController.java",
+        "patchSetId": 11
+      },
+      "lineNbr": 177,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2020-09-09T16:45:39Z",
+      "side": 1,
+      "message": "same thing applies for this",
+      "revId": "1add422ee98757ff99f4fe40cb7a5bd642f3a926",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "6e0f2a45_40eb08d4",
+        "filename": "packages/SystemUI/src/com/android/keyguard/clock/TypeClockController.java",
+        "patchSetId": 11
+      },
+      "lineNbr": 208,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2020-09-09T16:45:39Z",
+      "side": 1,
+      "message": "use spaces instead of tab",
+      "revId": "1add422ee98757ff99f4fe40cb7a5bd642f3a926",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    }
+  ]
+}
