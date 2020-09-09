@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "9be76c08_c1e1b40d",
+        "filename": "services/core/java/com/android/server/biometrics/ClientMonitor.java",
+        "patchSetId": 3
+      },
+      "lineNbr": 296,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2020-09-09T16:57:21Z",
+      "side": 1,
+      "message": "Java (in general) uses camelcase. Can you match that here? Also change the naming of FingerprintVib to something which reflects the action better, shouldVibrate or something among those lines",
+      "revId": "c8b940373c827c2072672ac85b5785cafc2cae49",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    }
+  ]
+}
