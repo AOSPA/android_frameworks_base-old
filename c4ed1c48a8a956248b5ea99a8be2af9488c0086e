@@ -1,0 +1,44 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "17f366a4_f1429745",
+        "filename": "services/core/java/com/android/server/BatteryService.java",
+        "patchSetId": 3
+      },
+      "lineNbr": 242,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2020-09-09T17:01:03Z",
+      "side": 1,
+      "message": "create a new variable which holds the state of the config (e.g mHasIntrusiveBatteryLed), then assign mBatteryLightEnabled to mHasIntrusiveBatteryLed when reading the initial state of mHasIntrusiveBatteryLed.",
+      "revId": "c4ed1c48a8a956248b5ea99a8be2af9488c0086e",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "434916a4_2001f680",
+        "filename": "services/core/java/com/android/server/BatteryService.java",
+        "patchSetId": 3
+      },
+      "lineNbr": 309,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2020-09-09T17:01:03Z",
+      "side": 1,
+      "message": "Re-use the mHasIntrusiveBatteryLed here so you don\u0027t have to load the config every time the setting is toggled since the config isn\u0027t something that changes in runtime (and even if it did, we don\u0027t care about it in this case :-))",
+      "range": {
+        "startLine": 308,
+        "startChar": 59,
+        "endLine": 309,
+        "endChar": 80
+      },
+      "revId": "c4ed1c48a8a956248b5ea99a8be2af9488c0086e",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    }
+  ]
+}
