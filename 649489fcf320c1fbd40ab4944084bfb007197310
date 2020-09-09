@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "de346d62_ef917c43",
+        "filename": "services/core/java/com/android/server/BatteryService.java",
+        "patchSetId": 4
+      },
+      "lineNbr": 245,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2020-09-09T19:20:34Z",
+      "side": 1,
+      "message": "almost. turn this around. so mHasIntrusiveBatteryLed \u003d mContext.getResources().getBoolean(......); mBatteryLightEnabled \u003d mHasIntrusiveBatteryLed;",
+      "revId": "649489fcf320c1fbd40ab4944084bfb007197310",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    }
+  ]
+}
