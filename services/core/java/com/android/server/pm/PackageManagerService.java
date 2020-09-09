@@ -15440,7 +15440,7 @@ public class PackageManagerService extends IPackageManager.Stub
                          * We don't want the copy to proceed until
                          * verification succeeds.
                          */
-                        mVerificationCompleted = false;
+                        mWaitForVerificationToComplete = false;
                     }
                 }
                 if (mRequiredVerifierPackage != null) {
