@@ -1,0 +1,38 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "d97f94d1_a999b604",
+        "filename": "services/core/java/com/android/server/BatteryService.java",
+        "patchSetId": 5
+      },
+      "lineNbr": 34,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2020-09-09T19:30:37Z",
+      "side": 1,
+      "message": "remove this line since it\u0027s unused now",
+      "revId": "bc1c080ea0fefd68348172c1f1b69721ade8fa88",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "add4f7e3_36c633db",
+        "filename": "services/core/java/com/android/server/BatteryService.java",
+        "patchSetId": 5
+      },
+      "lineNbr": 308,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2020-09-09T19:30:37Z",
+      "side": 1,
+      "message": "remove this line since it\u0027s unused now",
+      "revId": "bc1c080ea0fefd68348172c1f1b69721ade8fa88",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    }
+  ]
+}
