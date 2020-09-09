@@ -2122,8 +2122,8 @@ public class NotificationPanelView extends PanelView implements
 
         final float w = getMeasuredWidth();
         float region = (w * (1.f/4.f)); // TODO overlay region fraction?
-        final boolean showQsOverride = (isLayoutRtl() ? (x < region) : (w - region < x))
-            && !mKeyguardShowing && SettingConfirmationHelper.get(
+        final boolean showQsOverride = isFullyCollapsed() && (isLayoutRtl() ? (x < region)
+            : (w - region < x)) && !mKeyguardShowing && SettingConfirmationHelper.get(
                     getContext().getContentResolver(),
                     Settings.Secure.QUICK_SETTINGS_QUICK_PULL_DOWN,
                     notSetFallback);
