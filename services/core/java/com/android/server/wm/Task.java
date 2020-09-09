@@ -622,6 +622,9 @@ class Task extends WindowContainer<WindowContainer> {
 
     private final Handler mHandler;
 
+    private static final ActivityPluginDelegate mActivityPluginDelegate =
+        new ActivityPluginDelegate();
+
     private class ActivityStackHandler extends Handler {
 
         ActivityStackHandler(Looper looper) {
@@ -7709,6 +7712,13 @@ class Task extends WindowContainer<WindowContainer> {
 
     AnimatingActivityRegistry getAnimatingActivityRegistry() {
         return mAnimatingActivityRegistry;
+    }
+
+    public void onARStopTriggered(ActivityRecord r) {
+        if (mActivityPluginDelegate != null && getWindowingMode() != WINDOWING_MODE_UNDEFINED) {
+                            mActivityPluginDelegate.activitySuspendNotification
+                                (r.info.applicationInfo.packageName, getWindowingMode() == WINDOWING_MODE_FULLSCREEN, false);
+                        }
     }
 
     void executeAppTransition(ActivityOptions options) {
