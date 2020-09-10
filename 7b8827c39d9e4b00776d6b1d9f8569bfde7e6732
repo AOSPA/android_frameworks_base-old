@@ -1,0 +1,27 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "74de2cb2_24725578",
+        "filename": "packages/SystemUI/src/com/android/systemui/volume/VolumeDialogImpl.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 1363,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2020-09-10T14:47:39Z",
+      "side": 0,
+      "message": "are you sure this is to be deleted? it seems like this is setting some kind of text somewhere",
+      "range": {
+        "startLine": 1356,
+        "startChar": 1,
+        "endLine": 1363,
+        "endChar": 25
+      },
+      "revId": "7b8827c39d9e4b00776d6b1d9f8569bfde7e6732",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    }
+  ]
+}
