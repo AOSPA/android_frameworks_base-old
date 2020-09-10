@@ -1,0 +1,153 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "7270b839_e50aa734",
+        "filename": "services/core/java/com/android/server/twilight/TwilightService.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 282,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2020-09-10T14:45:33Z",
+      "side": 1,
+      "message": "can you rename this t sunrise since it\u0027s a single word",
+      "revId": "8aa63e2716df39d02b526200c2ea52aa35eeee2b",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "cf2cab98_aace168d",
+        "filename": "services/core/java/com/android/server/twilight/TwilightService.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 284,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2020-09-10T14:45:33Z",
+      "side": 1,
+      "message": "can you move this to a constant?",
+      "range": {
+        "startLine": 284,
+        "startChar": 46,
+        "endLine": 284,
+        "endChar": 47
+      },
+      "revId": "8aa63e2716df39d02b526200c2ea52aa35eeee2b",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "369fd18e_8dfeaa42",
+        "filename": "services/core/java/com/android/server/twilight/TwilightService.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 287,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2020-09-10T14:45:33Z",
+      "side": 1,
+      "message": "is this really necessary?",
+      "range": {
+        "startLine": 285,
+        "startChar": 3,
+        "endLine": 287,
+        "endChar": 49
+      },
+      "revId": "8aa63e2716df39d02b526200c2ea52aa35eeee2b",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "144cfa38_b1755910",
+        "filename": "services/core/java/com/android/server/twilight/TwilightService.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 288,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2020-09-10T14:45:33Z",
+      "side": 1,
+      "message": "same here. rename this to sunset",
+      "revId": "8aa63e2716df39d02b526200c2ea52aa35eeee2b",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "11053095_8f203cf0",
+        "filename": "services/core/java/com/android/server/twilight/TwilightService.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 290,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2020-09-10T14:45:33Z",
+      "side": 1,
+      "message": "move this to a constant as well",
+      "range": {
+        "startLine": 290,
+        "startChar": 45,
+        "endLine": 290,
+        "endChar": 47
+      },
+      "revId": "8aa63e2716df39d02b526200c2ea52aa35eeee2b",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "76a25dc8_dd07236b",
+        "filename": "services/core/java/com/android/server/twilight/TwilightService.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 293,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2020-09-10T14:45:33Z",
+      "side": 1,
+      "message": "same here",
+      "range": {
+        "startLine": 291,
+        "startChar": 3,
+        "endLine": 293,
+        "endChar": 48
+      },
+      "revId": "8aa63e2716df39d02b526200c2ea52aa35eeee2b",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "41951d1d_ab2fb1cc",
+        "filename": "services/core/java/com/android/server/twilight/TwilightService.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 303,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2020-09-10T14:45:33Z",
+      "side": 1,
+      "message": "can you move this code into a separate method? e.g getManualTwilightState",
+      "range": {
+        "startLine": 282,
+        "startChar": 1,
+        "endLine": 303,
+        "endChar": 66
+      },
+      "revId": "8aa63e2716df39d02b526200c2ea52aa35eeee2b",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    }
+  ]
+}
