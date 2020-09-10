@@ -16,6 +16,24 @@
       "revId": "c8b940373c827c2072672ac85b5785cafc2cae49",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
       "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "caa1450a_72bb5243",
+        "filename": "services/core/java/com/android/server/biometrics/ClientMonitor.java",
+        "patchSetId": 3
+      },
+      "lineNbr": 296,
+      "author": {
+        "id": 1000463
+      },
+      "writtenOn": "2020-09-10T17:03:18Z",
+      "side": 1,
+      "message": "I rewrote whole commit to match \"Authentication success vibration\" since it works with any kind of Authenticator (fingerprint, FaceUnlock, pin, etc).",
+      "parentUuid": "9be76c08_c1e1b40d",
+      "revId": "c8b940373c827c2072672ac85b5785cafc2cae49",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
     }
   ]
 }
