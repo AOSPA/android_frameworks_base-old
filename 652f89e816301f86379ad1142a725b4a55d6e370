@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "edc72a44_7a8c3a24",
+        "filename": "packages/SystemUI/res-keyguard/layout/keyguard_sim_pin_view.xml",
+        "patchSetId": 2
+      },
+      "lineNbr": 39,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2020-09-10T14:42:40Z",
+      "side": 1,
+      "message": "does this do anything since layout_weight is set on this layout?",
+      "revId": "652f89e816301f86379ad1142a725b4a55d6e370",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    }
+  ]
+}
