@@ -1,0 +1,73 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "b49a26ac_71ae5388",
+        "filename": "services/core/java/com/android/server/camera/CameraServiceProxy.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 316,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2020-09-10T14:39:50Z",
+      "side": 1,
+      "message": "these parentheses aren\u0027t needed",
+      "range": {
+        "startLine": 316,
+        "startChar": 38,
+        "endLine": 316,
+        "endChar": 64
+      },
+      "revId": "16dfc10d22f66bcb3df97f7403e1bf79100a799e",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "5e87a237_87a61bc9",
+        "filename": "services/core/java/com/android/server/camera/CameraServiceProxy.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 319,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2020-09-10T14:39:50Z",
+      "side": 1,
+      "message": "I think it\u0027d be a better idea to swap this around. the constant is null-safe, while we have no guarantee that mClientName is too",
+      "range": {
+        "startLine": 319,
+        "startChar": 60,
+        "endLine": 319,
+        "endChar": 100
+      },
+      "revId": "16dfc10d22f66bcb3df97f7403e1bf79100a799e",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "08fa562d_0807b941",
+        "filename": "services/core/java/com/android/server/camera/CameraServiceProxy.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 320,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2020-09-10T14:39:50Z",
+      "side": 1,
+      "message": "can you make this a constant? perhaps even make it a config",
+      "range": {
+        "startLine": 320,
+        "startChar": 54,
+        "endLine": 320,
+        "endChar": 58
+      },
+      "revId": "16dfc10d22f66bcb3df97f7403e1bf79100a799e",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    }
+  ]
+}
