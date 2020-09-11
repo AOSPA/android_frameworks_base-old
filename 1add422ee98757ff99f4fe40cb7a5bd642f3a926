@@ -49,6 +49,30 @@
     },
     {
       "key": {
+        "uuid": "f92f9a3b_05d881a5",
+        "filename": "packages/SystemUI/src/com/android/keyguard/clock/TypeClockController.java",
+        "patchSetId": 11
+      },
+      "lineNbr": 175,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2020-09-11T20:57:16Z",
+      "side": 1,
+      "message": "Can you make it a dimension instead in that case? dividing the height by 5, using 5 as the magic number seems unstable imo.",
+      "parentUuid": "c695e86e_a76b9ad2",
+      "range": {
+        "startLine": 174,
+        "startChar": 0,
+        "endLine": 175,
+        "endChar": 89
+      },
+      "revId": "1add422ee98757ff99f4fe40cb7a5bd642f3a926",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    },
+    {
+      "key": {
         "uuid": "5a5c0fe9_2f271574",
         "filename": "packages/SystemUI/src/com/android/keyguard/clock/TypeClockController.java",
         "patchSetId": 11
