@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "83711440_e7a01780",
+        "filename": "packages/SystemUI/src/com/android/systemui/BatteryMeterView.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 458,
+      "author": {
+        "id": 1000012
+      },
+      "writtenOn": "2020-09-16T19:04:32Z",
+      "side": 1,
+      "message": "one demerit",
+      "revId": "156330c214a6f8587364856186a406af4588eccf",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    }
+  ]
+}
