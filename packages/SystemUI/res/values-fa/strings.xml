@@ -711,11 +711,13 @@
     <string name="notification_silence_title" msgid="8608090968400832335">"بی‌صدا"</string>
     <string name="notification_alert_title" msgid="3656229781017543655">"پیش‌فرض"</string>
     <string name="notification_bubble_title" msgid="8330481035191903164">"حباب"</string>
+    <string name="notification_automatic_title" msgid="3745465364578762652">"خودکار"</string>
     <string name="notification_channel_summary_low" msgid="4860617986908931158">"بدون صدا یا لرزش"</string>
     <string name="notification_conversation_summary_low" msgid="1734433426085468009">"بدون صدا و لرزش در پایین بخش مکالمه نشان داده می‌شود"</string>
     <string name="notification_channel_summary_default" msgid="3282930979307248890">"بسته به تنظیمات ممکن است تلفن زنگ بزند یا لرزش داشته باشد"</string>
     <string name="notification_channel_summary_default_with_bubbles" msgid="1782419896613644568">"بسته به تنظیمات ممکن است تلفن زنگ بزند یا لرزش داشته باشد. مکالمه‌های <xliff:g id="APP_NAME">%1$s</xliff:g> به‌طور پیش‌فرض در حبابک نشان داده می‌شوند."</string>
     <string name="notification_channel_summary_bubble" msgid="7235935211580860537">"با میان‌بری شناور به این محتوا، توجه‌تان را جلب می‌کند."</string>
+    <string name="notification_channel_summary_automatic" msgid="5813109268050235275">"سیستم را تنظیم کنید که تشخیص دهد اعلان صدا و لرزش داشته باشد یا نه"</string>
     <string name="notification_channel_summary_priority" msgid="7952654515769021553">"در بالای بخش مکالمه به‌صورت حبابک شناور نشان داده می‌شود و تصویر نمایه را در صفحه قفل نمایش می‌دهد"</string>
     <string name="notification_conversation_channel_settings" msgid="2409977688430606835">"تنظیمات"</string>
     <string name="notification_priority_title" msgid="2079708866333537093">"اولویت"</string>
@@ -736,6 +738,12 @@
     <string name="appops_camera_mic_overlay" msgid="5584311236445644095">"این برنامه روی برنامه‌های دیگر در صفحه‌نمایش نشان داده می‌شود و از میکروفون و دوربین استفاده می‌کند."</string>
     <string name="notification_appops_settings" msgid="5208974858340445174">"تنظیمات"</string>
     <string name="notification_appops_ok" msgid="2177609375872784124">"تأیید"</string>
+    <string name="feedback_silenced" msgid="5382212321253328247">"سیستم این اعلان را بی‌صدا کرده است."</string>
+    <string name="feedback_promoted" msgid="8075757485407091976">"سیستمْ این اعلان را ارتقا داده است."</string>
+    <string name="feedback_demoted" msgid="5848066008939031913">"سیستمْ این اعلان را تنزل داده است."</string>
+    <string name="feedback_prompt" msgid="2278631214125128281">"این مورد درست بود؟"</string>
+    <string name="feedback_response" msgid="4671729244976641339">"از بازخورد شما سپاسگزاریم!"</string>
+    <string name="feedback_ok" msgid="6481426753298857144">"تأیید"</string>
     <string name="notification_channel_controls_opened_accessibility" msgid="6111817750774381094">"کنترل‌های اعلان برای <xliff:g id="APP_NAME">%1$s</xliff:g> باز شد"</string>
     <string name="notification_channel_controls_closed_accessibility" msgid="1561909368876911701">"کنترل‌های اعلان برای <xliff:g id="APP_NAME">%1$s</xliff:g> بسته شد"</string>
     <string name="notification_channel_switch_accessibility" msgid="8979885820432540252">"مجاز کردن اعلان‌های این کانال"</string>
@@ -908,25 +916,14 @@
     <string name="accessibility_quick_settings_edit" msgid="1523745183383815910">"ویرایش ترتیب تنظیمات."</string>
     <string name="accessibility_quick_settings_page" msgid="7506322631645550961">"صفحه <xliff:g id="ID_1">%1$d</xliff:g> از <xliff:g id="ID_2">%2$d</xliff:g>"</string>
     <string name="tuner_lock_screen" msgid="2267383813241144544">"صفحه قفل"</string>
-    <string name="pip_phone_expand" msgid="1424988917240616212">"بزرگ کردن"</string>
-    <string name="pip_phone_minimize" msgid="9057117033655996059">"کوچک کردن"</string>
-    <string name="pip_phone_close" msgid="8801864042095341824">"بستن"</string>
-    <string name="pip_phone_settings" msgid="5687538631925004341">"تنظیمات"</string>
-    <string name="pip_phone_dismiss_hint" msgid="5825740708095316710">"برای نپذیرفتن، به پایین بکشید"</string>
-    <string name="pip_menu_title" msgid="6365909306215631910">"منو"</string>
-    <string name="pip_notification_title" msgid="8661573026059630525">"<xliff:g id="NAME">%s</xliff:g> درحالت تصویر در تصویر است"</string>
-    <string name="pip_notification_message" msgid="4991831338795022227">"اگر نمی‌خواهید <xliff:g id="NAME">%s</xliff:g> از این قابلیت استفاده کند، با ضربه زدن، تنظیمات را باز کنید و آن را خاموش کنید."</string>
-    <string name="pip_play" msgid="333995977693142810">"پخش"</string>
-    <string name="pip_pause" msgid="1139598607050555845">"توقف موقت"</string>
-    <string name="pip_skip_to_next" msgid="3864212650579956062">"رد شدن به بعدی"</string>
-    <string name="pip_skip_to_prev" msgid="3742589641443049237">"رد شدن به قبلی"</string>
-    <string name="accessibility_action_pip_resize" msgid="8237306972921160456">"تغییر اندازه"</string>
     <string name="thermal_shutdown_title" msgid="2702966892682930264">"تلفن به علت گرم شدن خاموش شد"</string>
-    <string name="thermal_shutdown_message" msgid="7432744214105003895">"اکنون تلفنتان عملکرد معمولش را دارد"</string>
+    <string name="thermal_shutdown_message" msgid="6142269839066172984">"اکنون عملکرد تلفنتان به حالت عادی برگشته است.\nبرای اطلاعات بیشتر ضربه بزنید"</string>
     <string name="thermal_shutdown_dialog_message" msgid="6745684238183492031">"تلفنتان خیلی گرم شده بود، بنابراین خاموش شد تا خنک شود. اکنون تلفنتان عملکرد معمولش را دارد.\n\nتلفنتان خیلی گرم می‌شود، اگر:\n	• از برنامه‌های نیازمند پردازش زیاد (مانند بازی، برنامه‌های ویدیویی یا پیمایشی) استفاده کنید\n	• فایل‌های بزرگ بارگیری یا بارگذاری کنید\n	• در دماهای بالا از تلفنتان استفاده کنید"</string>
+    <string name="thermal_shutdown_dialog_help_text" msgid="6413474593462902901">"دیدن اقدامات محافظتی"</string>
     <string name="high_temp_title" msgid="2218333576838496100">"تلفن درحال گرم شدن است"</string>
-    <string name="high_temp_notif_message" msgid="163928048626045592">"وقتی تلفن درحال خنک شدن است، بعضی از قابلیت‌ها محدود می‌شوند"</string>
+    <string name="high_temp_notif_message" msgid="1277346543068257549">"وقتی تلفن درحال خنک شدن است، بعضی از ویژگی‌ها محدود می‌شوند.\nبرای اطلاعات بیشتر ضربه بزنید"</string>
     <string name="high_temp_dialog_message" msgid="3793606072661253968">"تلفنتان به‌طور خودکار سعی می‌کند خنک شود. همچنان می‌توانید از تلفنتان استفاده کنید، اما ممکن است کندتر عمل کند.\n\nوقتی تلفن خنک شد، عملکرد عادی‌اش از سرگرفته می‌شود."</string>
+    <string name="high_temp_dialog_help_text" msgid="7380171287943345858">"دیدن اقدامات محافظتی"</string>
     <string name="high_temp_alarm_title" msgid="2359958549570161495">"جدا کردن شارژر از برق"</string>
     <string name="high_temp_alarm_notify_message" msgid="7186272817783835089">"مشکلی در شارژ کردن این دستگاه وجود دارد. آداپتور برق را از برق جدا کنید و مراقب باشید زیرا ممکن است کابل گرم باشد."</string>
     <string name="high_temp_alarm_help_care_steps" msgid="5017002218341329566">"مشاهده مراحل احتیاط"</string>
@@ -1022,7 +1019,6 @@
     <string name="priority_onboarding_ignores_dnd_text" msgid="2918952762719600529">"وقفه در «مزاحم نشوید»"</string>
     <string name="priority_onboarding_done_button_title" msgid="4569550984286506007">"متوجه‌ام"</string>
     <string name="priority_onboarding_settings_button_title" msgid="6663601574303585927">"تنظیمات"</string>
-    <string name="magnification_overlay_title" msgid="6584179429612427958">"پنجره همپوشانی بزرگ‌نمایی"</string>
     <string name="magnification_window_title" msgid="4863914360847258333">"پنجره بزرگ‌نمایی"</string>
     <string name="magnification_controls_title" msgid="8421106606708891519">"کنترل‌های پنجره بزرگ‌نمایی"</string>
     <string name="quick_controls_title" msgid="6839108006171302273">"کنترل‌های دستگاه"</string>

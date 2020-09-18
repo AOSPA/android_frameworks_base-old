@@ -77,6 +77,8 @@ public abstract class ApexManager {
     public static final int MATCH_ACTIVE_PACKAGE = 1 << 0;
     static final int MATCH_FACTORY_PACKAGE = 1 << 1;
 
+    private static final String VNDK_APEX_MODULE_NAME_PREFIX = "com.android.vndk.";
+
     private static final Singleton<ApexManager> sApexManagerSingleton =
             new Singleton<ApexManager>() {
                 @Override
@@ -321,9 +323,9 @@ public abstract class ApexManager {
      * Copies the CE apex data directory for the given {@code userId} to a backup location, for use
      * in case of rollback.
      *
-     * @return long inode for the snapshot directory if the snapshot was successful, or -1 if not
+     * @return boolean true if the snapshot was successful
      */
-    public abstract long snapshotCeData(int userId, int rollbackId, String apexPackageName);
+    public abstract boolean snapshotCeData(int userId, int rollbackId, String apexPackageName);
 
     /**
      * Restores the snapshot of the CE apex data directory for the given {@code userId}.
@@ -342,12 +344,26 @@ public abstract class ApexManager {
     public abstract boolean destroyDeSnapshots(int rollbackId);
 
     /**
+     *  Deletes snapshots of the credential encrypted apex data directories for the specified user,
+     *  for the given rollback id as long as the user is credential unlocked.
+     *
+     * @return boolean true if the delete was successful
+     */
+    public abstract boolean destroyCeSnapshots(int userId, int rollbackId);
+
+    /**
      * Deletes snapshots of the credential encrypted apex data directories for the specified user,
-     * where the rollback id is not included in {@code retainRollbackIds}.
+     * where the rollback id is not included in {@code retainRollbackIds} as long as the user is
+     * credential unlocked.
      *
      * @return boolean true if the delete was successful
      */
     public abstract boolean destroyCeSnapshotsNotSpecified(int userId, int[] retainRollbackIds);
+
+    /**
+     * Inform apexd that the boot has completed.
+     */
+    public abstract void markBootCompleted();
 
     /**
      * Dumps various state information to the provided {@link PrintWriter} object.
@@ -521,7 +537,9 @@ public abstract class ApexManager {
                         activePackagesSet.add(packageInfo.packageName);
                     }
                     if (ai.isFactory) {
-                        if (factoryPackagesSet.contains(packageInfo.packageName)) {
+                        // Don't throw when the duplicating APEX is VNDK APEX
+                        if (factoryPackagesSet.contains(packageInfo.packageName)
+                                && !ai.moduleName.startsWith(VNDK_APEX_MODULE_NAME_PREFIX)) {
                             throw new IllegalStateException(
                                     "Two factory packages have the same name: "
                                             + packageInfo.packageName);
@@ -545,76 +563,85 @@ public abstract class ApexManager {
 
         @Override
         @Nullable
-        public PackageInfo getPackageInfo(String packageName,
-                @PackageInfoFlags int flags) {
-            Preconditions.checkState(mAllPackagesCache != null,
-                    "APEX packages have not been scanned");
-            boolean matchActive = (flags & MATCH_ACTIVE_PACKAGE) != 0;
-            boolean matchFactory = (flags & MATCH_FACTORY_PACKAGE) != 0;
-            for (int i = 0, size = mAllPackagesCache.size(); i < size; i++) {
-                final PackageInfo packageInfo = mAllPackagesCache.get(i);
-                if (!packageInfo.packageName.equals(packageName)) {
-                    continue;
+        public PackageInfo getPackageInfo(String packageName, @PackageInfoFlags int flags) {
+            synchronized (mLock) {
+                Preconditions.checkState(mAllPackagesCache != null,
+                        "APEX packages have not been scanned");
+                boolean matchActive = (flags & MATCH_ACTIVE_PACKAGE) != 0;
+                boolean matchFactory = (flags & MATCH_FACTORY_PACKAGE) != 0;
+                for (int i = 0, size = mAllPackagesCache.size(); i < size; i++) {
+                    final PackageInfo packageInfo = mAllPackagesCache.get(i);
+                    if (!packageInfo.packageName.equals(packageName)) {
+                        continue;
+                    }
+                    if ((matchActive && isActive(packageInfo))
+                            || (matchFactory && isFactory(packageInfo))) {
+                        return packageInfo;
+                    }
                 }
-                if ((matchActive && isActive(packageInfo))
-                        || (matchFactory && isFactory(packageInfo))) {
-                    return packageInfo;
-                }
+                return null;
             }
-            return null;
         }
 
         @Override
         List<PackageInfo> getActivePackages() {
-            Preconditions.checkState(mAllPackagesCache != null,
-                    "APEX packages have not been scanned");
-            final List<PackageInfo> activePackages = new ArrayList<>();
-            for (int i = 0; i < mAllPackagesCache.size(); i++) {
-                final PackageInfo packageInfo = mAllPackagesCache.get(i);
-                if (isActive(packageInfo)) {
-                    activePackages.add(packageInfo);
+            synchronized (mLock) {
+                Preconditions.checkState(mAllPackagesCache != null,
+                        "APEX packages have not been scanned");
+                final List<PackageInfo> activePackages = new ArrayList<>();
+                for (int i = 0; i < mAllPackagesCache.size(); i++) {
+                    final PackageInfo packageInfo = mAllPackagesCache.get(i);
+                    if (isActive(packageInfo)) {
+                        activePackages.add(packageInfo);
+                    }
                 }
+                return activePackages;
             }
-            return activePackages;
         }
 
         @Override
         List<PackageInfo> getFactoryPackages() {
-            Preconditions.checkState(mAllPackagesCache != null,
-                    "APEX packages have not been scanned");
-            final List<PackageInfo> factoryPackages = new ArrayList<>();
-            for (int i = 0; i < mAllPackagesCache.size(); i++) {
-                final PackageInfo packageInfo = mAllPackagesCache.get(i);
-                if (isFactory(packageInfo)) {
-                    factoryPackages.add(packageInfo);
+            synchronized (mLock) {
+                Preconditions.checkState(mAllPackagesCache != null,
+                        "APEX packages have not been scanned");
+                final List<PackageInfo> factoryPackages = new ArrayList<>();
+                for (int i = 0; i < mAllPackagesCache.size(); i++) {
+                    final PackageInfo packageInfo = mAllPackagesCache.get(i);
+                    if (isFactory(packageInfo)) {
+                        factoryPackages.add(packageInfo);
+                    }
                 }
+                return factoryPackages;
             }
-            return factoryPackages;
         }
 
         @Override
         List<PackageInfo> getInactivePackages() {
-            Preconditions.checkState(mAllPackagesCache != null,
-                    "APEX packages have not been scanned");
-            final List<PackageInfo> inactivePackages = new ArrayList<>();
-            for (int i = 0; i < mAllPackagesCache.size(); i++) {
-                final PackageInfo packageInfo = mAllPackagesCache.get(i);
-                if (!isActive(packageInfo)) {
-                    inactivePackages.add(packageInfo);
+            synchronized (mLock) {
+                Preconditions.checkState(mAllPackagesCache != null,
+                        "APEX packages have not been scanned");
+                final List<PackageInfo> inactivePackages = new ArrayList<>();
+                for (int i = 0; i < mAllPackagesCache.size(); i++) {
+                    final PackageInfo packageInfo = mAllPackagesCache.get(i);
+                    if (!isActive(packageInfo)) {
+                        inactivePackages.add(packageInfo);
+                    }
                 }
+                return inactivePackages;
             }
-            return inactivePackages;
         }
 
         @Override
         boolean isApexPackage(String packageName) {
             if (!isApexSupported()) return false;
-            Preconditions.checkState(mAllPackagesCache != null,
-                    "APEX packages have not been scanned");
-            for (int i = 0, size = mAllPackagesCache.size(); i < size; i++) {
-                final PackageInfo packageInfo = mAllPackagesCache.get(i);
-                if (packageInfo.packageName.equals(packageName)) {
-                    return true;
+            synchronized (mLock) {
+                Preconditions.checkState(mAllPackagesCache != null,
+                        "APEX packages have not been scanned");
+                for (int i = 0, size = mAllPackagesCache.size(); i < size; i++) {
+                    final PackageInfo packageInfo = mAllPackagesCache.get(i);
+                    if (packageInfo.packageName.equals(packageName)) {
+                        return true;
+                    }
                 }
             }
             return false;
@@ -622,14 +649,11 @@ public abstract class ApexManager {
 
         @Override
         @Nullable
-        public String getActiveApexPackageNameContainingPackage(
-                @NonNull AndroidPackage containedPackage) {
-            Preconditions.checkState(mPackageNameToApexModuleName != null,
-                    "APEX packages have not been scanned");
-
+        public String getActiveApexPackageNameContainingPackage(AndroidPackage containedPackage) {
             Objects.requireNonNull(containedPackage);
-
             synchronized (mLock) {
+                Preconditions.checkState(mPackageNameToApexModuleName != null,
+                        "APEX packages have not been scanned");
                 int numApksInApex = mApksInApex.size();
                 for (int apkInApexNum = 0; apkInApexNum < numApksInApex; apkInApexNum++) {
                     if (mApksInApex.valueAt(apkInApexNum).contains(
@@ -817,7 +841,7 @@ public abstract class ApexManager {
         }
 
         @Override
-        public long snapshotCeData(int userId, int rollbackId, String apexPackageName) {
+        public boolean snapshotCeData(int userId, int rollbackId, String apexPackageName) {
             String apexModuleName;
             synchronized (mLock) {
                 Preconditions.checkState(mPackageNameToApexModuleName != null,
@@ -826,13 +850,14 @@ public abstract class ApexManager {
             }
             if (apexModuleName == null) {
                 Slog.e(TAG, "Invalid apex package name: " + apexPackageName);
-                return -1;
+                return false;
             }
             try {
-                return waitForApexService().snapshotCeData(userId, rollbackId, apexModuleName);
+                waitForApexService().snapshotCeData(userId, rollbackId, apexModuleName);
+                return true;
             } catch (Exception e) {
                 Slog.e(TAG, e.getMessage(), e);
-                return -1;
+                return false;
             }
         }
 
@@ -869,6 +894,17 @@ public abstract class ApexManager {
         }
 
         @Override
+        public boolean destroyCeSnapshots(int userId, int rollbackId) {
+            try {
+                waitForApexService().destroyCeSnapshots(userId, rollbackId);
+                return true;
+            } catch (Exception e) {
+                Slog.e(TAG, e.getMessage(), e);
+                return false;
+            }
+        }
+
+        @Override
         public boolean destroyCeSnapshotsNotSpecified(int userId, int[] retainRollbackIds) {
             try {
                 waitForApexService().destroyCeSnapshotsNotSpecified(userId, retainRollbackIds);
@@ -876,6 +912,15 @@ public abstract class ApexManager {
             } catch (Exception e) {
                 Slog.e(TAG, e.getMessage(), e);
                 return false;
+            }
+        }
+
+        @Override
+        public void markBootCompleted() {
+            try {
+                waitForApexService().markBootCompleted();
+            } catch (RemoteException re) {
+                Slog.e(TAG, "Unable to contact apexservice", re);
             }
         }
 
@@ -943,9 +988,11 @@ public abstract class ApexManager {
                 }
                 ipw.decreaseIndent();
                 ipw.println();
-                if (mAllPackagesCache == null) {
-                    ipw.println("APEX packages have not been scanned");
-                    return;
+                synchronized (mLock) {
+                    if (mAllPackagesCache == null) {
+                        ipw.println("APEX packages have not been scanned");
+                        return;
+                    }
                 }
                 ipw.println("Active APEX packages:");
                 dumpFromPackagesCache(getActivePackages(), packageName, ipw);
@@ -984,12 +1031,17 @@ public abstract class ApexManager {
                 if (files != null) {
                     for (File file : files) {
                         if (file.isDirectory() && !file.getName().contains("@")) {
+                            boolean skip = false;
                             for (String skipDir : skipDirs) {
                                 if (file.getName().equals(skipDir)) {
-                                    continue;
+                                    skip = true;
+                                    break;
                                 }
                             }
-                            result.add(new ActiveApexInfo(file, Environment.getRootDirectory()));
+                            if (!skip) {
+                                result.add(
+                                    new ActiveApexInfo(file, Environment.getRootDirectory()));
+                            }
                         }
                     }
                 }
@@ -1106,7 +1158,7 @@ public abstract class ApexManager {
         }
 
         @Override
-        public long snapshotCeData(int userId, int rollbackId, String apexPackageName) {
+        public boolean snapshotCeData(int userId, int rollbackId, String apexPackageName) {
             throw new UnsupportedOperationException();
         }
 
@@ -1121,8 +1173,18 @@ public abstract class ApexManager {
         }
 
         @Override
+        public boolean destroyCeSnapshots(int userId, int rollbackId) {
+            return true;
+        }
+
+        @Override
         public boolean destroyCeSnapshotsNotSpecified(int userId, int[] retainRollbackIds) {
             return true;
+        }
+
+        @Override
+        public void markBootCompleted() {
+            // No-op
         }
 
         @Override

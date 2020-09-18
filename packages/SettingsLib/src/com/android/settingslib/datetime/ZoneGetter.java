@@ -32,11 +32,10 @@ import androidx.annotation.VisibleForTesting;
 import androidx.core.text.BidiFormatter;
 import androidx.core.text.TextDirectionHeuristicsCompat;
 
+import com.android.i18n.timezone.CountryTimeZones;
+import com.android.i18n.timezone.CountryTimeZones.TimeZoneMapping;
+import com.android.i18n.timezone.TimeZoneFinder;
 import com.android.settingslib.R;
-
-import libcore.timezone.CountryTimeZones;
-import libcore.timezone.CountryTimeZones.TimeZoneMapping;
-import libcore.timezone.TimeZoneFinder;
 
 import org.xmlpull.v1.XmlPullParserException;
 
@@ -242,17 +241,21 @@ public class ZoneGetter {
         final TimeZoneNames.NameType nameType =
                 tz.inDaylightTime(now) ? TimeZoneNames.NameType.LONG_DAYLIGHT
                         : TimeZoneNames.NameType.LONG_STANDARD;
+        return names.getDisplayName(getCanonicalZoneId(tz), nameType, now.getTime());
+    }
+
+    private static String getCanonicalZoneId(TimeZone timeZone) {
         // Canonicalize the zone ID for ICU. It will only return valid strings for zone IDs
         // that match ICUs zone IDs (which are similar but not guaranteed the same as those
         // in timezones.xml). timezones.xml and related files uses the IANA IDs. ICU IDs are
         // stable and IANA IDs have changed over time so they have drifted.
         // See http://bugs.icu-project.org/trac/ticket/13070 / http://b/36469833.
-        String canonicalZoneId = android.icu.util.TimeZone.getCanonicalID(tz.getID());
-        if (canonicalZoneId == null) {
-            canonicalZoneId = tz.getID();
+        final String id = timeZone.getID();
+        final String canonicalId = android.icu.util.TimeZone.getCanonicalID(id);
+        if (canonicalId != null) {
+            return canonicalId;
         }
-
-        return names.getDisplayName(canonicalZoneId, nameType, now.getTime());
+        return id;
     }
 
     private static void appendWithTtsSpan(SpannableStringBuilder builder, CharSequence content,

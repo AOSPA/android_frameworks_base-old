@@ -8,7 +8,6 @@ LOCAL_SHARED_LIBRARIES := \
     libandroid \
     libandroid_runtime \
     libandroidfw \
-    libnativehelper \
     libRS \
     libcutils \
     libhwui \
@@ -19,10 +18,10 @@ LOCAL_SHARED_LIBRARIES := \
     libjnigraphics
 
 LOCAL_HEADER_LIBRARIES := \
+    jni_headers \
     libbase_headers
 
 LOCAL_C_INCLUDES += \
-    $(JNI_H_INCLUDE) \
     frameworks/rs
 
 LOCAL_CFLAGS += -Wno-unused-parameter

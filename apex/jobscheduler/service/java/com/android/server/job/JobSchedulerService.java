@@ -70,6 +70,7 @@ import android.os.WorkSource;
 import android.provider.Settings;
 import android.text.format.DateUtils;
 import android.util.ArrayMap;
+import android.util.IndentingPrintWriter;
 import android.util.KeyValueListParser;
 import android.util.Log;
 import android.util.Slog;
@@ -84,10 +85,9 @@ import com.android.internal.app.IBatteryStats;
 import com.android.internal.util.ArrayUtils;
 import com.android.internal.util.DumpUtils;
 import com.android.internal.util.FrameworkStatsLog;
-import com.android.internal.util.IndentingPrintWriter;
 import com.android.server.AppStateTracker;
+import com.android.server.AppStateTrackerImpl;
 import com.android.server.DeviceIdleInternal;
-import com.android.server.FgThread;
 import com.android.server.LocalServices;
 import com.android.server.job.JobSchedulerServiceDumpProto.ActiveJob;
 import com.android.server.job.JobSchedulerServiceDumpProto.PendingJob;
@@ -284,7 +284,7 @@ public class JobSchedulerService extends com.android.server.SystemService
     IBatteryStats mBatteryStats;
     DeviceIdleInternal mLocalDeviceIdleController;
     @VisibleForTesting
-    AppStateTracker mAppStateTracker;
+    AppStateTrackerImpl mAppStateTracker;
     final UsageStatsManagerInternal mUsageStats;
     private final AppStandbyInternal mAppStandbyInternal;
 
@@ -713,12 +713,12 @@ public class JobSchedulerService extends com.android.server.SystemService
         void dump(IndentingPrintWriter pw) {
             pw.println("Settings:");
             pw.increaseIndent();
-            pw.printPair(KEY_MIN_READY_NON_ACTIVE_JOBS_COUNT,
+            pw.print(KEY_MIN_READY_NON_ACTIVE_JOBS_COUNT,
                     MIN_READY_NON_ACTIVE_JOBS_COUNT).println();
-            pw.printPair(KEY_MAX_NON_ACTIVE_JOB_BATCH_DELAY_MS,
+            pw.print(KEY_MAX_NON_ACTIVE_JOB_BATCH_DELAY_MS,
                     MAX_NON_ACTIVE_JOB_BATCH_DELAY_MS).println();
-            pw.printPair(KEY_HEAVY_USE_FACTOR, HEAVY_USE_FACTOR).println();
-            pw.printPair(KEY_MODERATE_USE_FACTOR, MODERATE_USE_FACTOR).println();
+            pw.print(KEY_HEAVY_USE_FACTOR, HEAVY_USE_FACTOR).println();
+            pw.print(KEY_MODERATE_USE_FACTOR, MODERATE_USE_FACTOR).println();
 
             MAX_JOB_COUNTS_SCREEN_ON.normal.dump(pw, "");
             MAX_JOB_COUNTS_SCREEN_ON.moderate.dump(pw, "");
@@ -732,17 +732,17 @@ public class JobSchedulerService extends com.android.server.SystemService
 
             SCREEN_OFF_JOB_CONCURRENCY_INCREASE_DELAY_MS.dump(pw, "");
 
-            pw.printPair(KEY_MIN_LINEAR_BACKOFF_TIME, MIN_LINEAR_BACKOFF_TIME).println();
-            pw.printPair(KEY_MIN_EXP_BACKOFF_TIME, MIN_EXP_BACKOFF_TIME).println();
-            pw.printPair(KEY_CONN_CONGESTION_DELAY_FRAC, CONN_CONGESTION_DELAY_FRAC).println();
-            pw.printPair(KEY_CONN_PREFETCH_RELAX_FRAC, CONN_PREFETCH_RELAX_FRAC).println();
+            pw.print(KEY_MIN_LINEAR_BACKOFF_TIME, MIN_LINEAR_BACKOFF_TIME).println();
+            pw.print(KEY_MIN_EXP_BACKOFF_TIME, MIN_EXP_BACKOFF_TIME).println();
+            pw.print(KEY_CONN_CONGESTION_DELAY_FRAC, CONN_CONGESTION_DELAY_FRAC).println();
+            pw.print(KEY_CONN_PREFETCH_RELAX_FRAC, CONN_PREFETCH_RELAX_FRAC).println();
 
-            pw.printPair(KEY_ENABLE_API_QUOTAS, ENABLE_API_QUOTAS).println();
-            pw.printPair(KEY_API_QUOTA_SCHEDULE_COUNT, API_QUOTA_SCHEDULE_COUNT).println();
-            pw.printPair(KEY_API_QUOTA_SCHEDULE_WINDOW_MS, API_QUOTA_SCHEDULE_WINDOW_MS).println();
-            pw.printPair(KEY_API_QUOTA_SCHEDULE_THROW_EXCEPTION,
+            pw.print(KEY_ENABLE_API_QUOTAS, ENABLE_API_QUOTAS).println();
+            pw.print(KEY_API_QUOTA_SCHEDULE_COUNT, API_QUOTA_SCHEDULE_COUNT).println();
+            pw.print(KEY_API_QUOTA_SCHEDULE_WINDOW_MS, API_QUOTA_SCHEDULE_WINDOW_MS).println();
+            pw.print(KEY_API_QUOTA_SCHEDULE_THROW_EXCEPTION,
                     API_QUOTA_SCHEDULE_THROW_EXCEPTION).println();
-            pw.printPair(KEY_API_QUOTA_SCHEDULE_RETURN_FAILURE_RESULT,
+            pw.print(KEY_API_QUOTA_SCHEDULE_RETURN_FAILURE_RESULT,
                     API_QUOTA_SCHEDULE_RETURN_FAILURE_RESULT).println();
 
             pw.decreaseIndent();
@@ -1482,13 +1482,15 @@ public class JobSchedulerService extends com.android.server.SystemService
 
                     // And kick off the work to update the affected jobs, using a secondary
                     // thread instead of chugging away here on the main looper thread.
-                    FgThread.getHandler().post(mJobTimeUpdater);
+                    new Thread(mJobTimeUpdater, "JobSchedulerTimeSetReceiver").start();
                 }
             }
         }
     };
 
     private final Runnable mJobTimeUpdater = () -> {
+        Process.setThreadPriority(Process.THREAD_PRIORITY_FOREGROUND);
+
         final ArrayList<JobStatus> toRemove = new ArrayList<>();
         final ArrayList<JobStatus> toAdd = new ArrayList<>();
         synchronized (mLock) {
@@ -1523,7 +1525,7 @@ public class JobSchedulerService extends com.android.server.SystemService
                 controller.onSystemServicesReady();
             }
 
-            mAppStateTracker = Objects.requireNonNull(
+            mAppStateTracker = (AppStateTrackerImpl) Objects.requireNonNull(
                     LocalServices.getService(AppStateTracker.class));
 
             // Register br for package removals and user removals.
@@ -2286,7 +2288,8 @@ public class JobSchedulerService extends com.android.server.SystemService
         }
 
         // Everything else checked out so far, so this is the final yes/no check
-        final boolean appIsBad = mActivityManagerInternal.isAppBad(service.applicationInfo);
+        final boolean appIsBad = mActivityManagerInternal.isAppBad(
+                service.processName, service.applicationInfo.uid);
         if (DEBUG && appIsBad) {
             Slog.i(TAG, "App is bad for " + job.toShortString() + " so not runnable");
         }

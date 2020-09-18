@@ -56,6 +56,7 @@ import android.os.RemoteException;
 import android.os.UserHandle;
 import android.util.Log;
 import android.view.InputMonitor;
+import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.Surface;
 import android.view.accessibility.AccessibilityManager;
@@ -66,6 +67,7 @@ import com.android.internal.util.ScreenshotHelper;
 import com.android.systemui.Dumpable;
 import com.android.systemui.broadcast.BroadcastDispatcher;
 import com.android.systemui.model.SysUiState;
+import com.android.systemui.onehanded.OneHandedUI;
 import com.android.systemui.pip.PipAnimationController;
 import com.android.systemui.pip.PipUI;
 import com.android.systemui.recents.OverviewProxyService.OverviewProxyListener;
@@ -75,6 +77,7 @@ import com.android.systemui.shared.recents.IPinnedStackAnimationListener;
 import com.android.systemui.shared.recents.ISystemUiProxy;
 import com.android.systemui.shared.recents.model.Task;
 import com.android.systemui.shared.system.ActivityManagerWrapper;
+import com.android.systemui.shared.system.InputMonitorCompat;
 import com.android.systemui.shared.system.QuickStepContract;
 import com.android.systemui.stackdivider.Divider;
 import com.android.systemui.statusbar.CommandQueue;
@@ -128,6 +131,8 @@ public class OverviewProxyService extends CurrentUserTracker implements
     private final List<OverviewProxyListener> mConnectionCallbacks = new ArrayList<>();
     private final Intent mQuickStepIntent;
     private final ScreenshotHelper mScreenshotHelper;
+    private final OneHandedUI mOneHandedUI;
+    private final CommandQueue mCommandQueue;
 
     private Region mActiveNavBarRegion;
 
@@ -328,10 +333,11 @@ public class OverviewProxyService extends CurrentUserTracker implements
             }
             long token = Binder.clearCallingIdentity();
             try {
-                InputMonitor monitor =
+                final InputMonitor monitor =
                         InputManager.getInstance().monitorGestureInput(name, displayId);
-                Bundle result = new Bundle();
-                result.putParcelable(KEY_EXTRA_INPUT_MONITOR, monitor);
+                final Bundle result = new Bundle();
+                result.putParcelable(KEY_EXTRA_INPUT_MONITOR,
+                        InputMonitorCompat.obtainReturnValue(monitor));
                 return result;
             } finally {
                 Binder.restoreCallingIdentity(token);
@@ -437,6 +443,36 @@ public class OverviewProxyService extends CurrentUserTracker implements
         }
 
         @Override
+        public void startOneHandedMode() {
+            if (!verifyCaller("startOneHandedMode")) {
+                return;
+            }
+            long token = Binder.clearCallingIdentity();
+            try {
+                if (mOneHandedUI != null) {
+                    mOneHandedUI.startOneHanded();
+                }
+            } finally {
+                Binder.restoreCallingIdentity(token);
+            }
+        }
+
+        @Override
+        public void stopOneHandedMode()  {
+            if (!verifyCaller("stopOneHandedMode")) {
+                return;
+            }
+            long token = Binder.clearCallingIdentity();
+            try {
+                if (mOneHandedUI != null) {
+                    mOneHandedUI.stopOneHanded();
+                }
+            } finally {
+                Binder.restoreCallingIdentity(token);
+            }
+        }
+
+        @Override
         public void handleImageBundleAsScreenshot(Bundle screenImageBundle, Rect locationInScreen,
                 Insets visibleInsets, Task.TaskKey task) {
             mScreenshotHelper.provideScreenshot(
@@ -449,6 +485,19 @@ public class OverviewProxyService extends CurrentUserTracker implements
                     SCREENSHOT_OVERVIEW,
                     mHandler,
                     null);
+        }
+
+        @Override
+        public void expandNotificationPanel() {
+            if (!verifyCaller("expandNotificationPanel")) {
+                return;
+            }
+            long token = Binder.clearCallingIdentity();
+            try {
+                mCommandQueue.handleSystemKey(KeyEvent.KEYCODE_SYSTEM_NAVIGATION_DOWN);
+            } finally {
+                Binder.restoreCallingIdentity(token);
+            }
         }
 
         private boolean verifyCaller(String reason) {
@@ -552,7 +601,7 @@ public class OverviewProxyService extends CurrentUserTracker implements
             NavigationBarController navBarController, NavigationModeController navModeController,
             NotificationShadeWindowController statusBarWinController, SysUiState sysUiState,
             PipUI pipUI, Optional<Divider> dividerOptional,
-            Optional<Lazy<StatusBar>> statusBarOptionalLazy,
+            Optional<Lazy<StatusBar>> statusBarOptionalLazy, OneHandedUI oneHandedUI,
             BroadcastDispatcher broadcastDispatcher) {
         super(broadcastDispatcher);
         mContext = context;
@@ -572,6 +621,7 @@ public class OverviewProxyService extends CurrentUserTracker implements
                 .supportsRoundedCornersOnWindows(mContext.getResources());
         mSysUiState = sysUiState;
         mSysUiState.addCallback(this::notifySystemUiStateFlags);
+        mOneHandedUI = oneHandedUI;
 
         // Assumes device always starts with back button until launcher tells it that it does not
         mNavBarButtonAlpha = 1.0f;
@@ -599,6 +649,7 @@ public class OverviewProxyService extends CurrentUserTracker implements
                         .commitUpdate(mContext.getDisplayId());
             }
         });
+        mCommandQueue = commandQueue;
 
         // Listen for user setup
         startTracking();
@@ -758,7 +809,9 @@ public class OverviewProxyService extends CurrentUserTracker implements
 
     @Override
     public void addCallback(OverviewProxyListener listener) {
-        mConnectionCallbacks.add(listener);
+        if (!mConnectionCallbacks.contains(listener)) {
+            mConnectionCallbacks.add(listener);
+        }
         listener.onConnectionChanged(mOverviewProxy != null);
         listener.onNavBarButtonAlphaChanged(mNavBarButtonAlpha, false);
     }

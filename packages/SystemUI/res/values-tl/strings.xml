@@ -711,11 +711,13 @@
     <string name="notification_silence_title" msgid="8608090968400832335">"Naka-silent"</string>
     <string name="notification_alert_title" msgid="3656229781017543655">"Default"</string>
     <string name="notification_bubble_title" msgid="8330481035191903164">"Bubble"</string>
+    <string name="notification_automatic_title" msgid="3745465364578762652">"Awtomatiko"</string>
     <string name="notification_channel_summary_low" msgid="4860617986908931158">"Walang tunog o pag-vibrate"</string>
     <string name="notification_conversation_summary_low" msgid="1734433426085468009">"Walang tunog o pag-vibrate at lumalabas nang mas mababa sa seksyon ng pag-uusap"</string>
     <string name="notification_channel_summary_default" msgid="3282930979307248890">"Puwedeng mag-ring o mag-vibrate batay sa mga setting ng telepono"</string>
     <string name="notification_channel_summary_default_with_bubbles" msgid="1782419896613644568">"Puwedeng mag-ring o mag-vibrate batay sa mga setting ng telepono. Mga pag-uusap mula sa <xliff:g id="APP_NAME">%1$s</xliff:g> bubble bilang default."</string>
     <string name="notification_channel_summary_bubble" msgid="7235935211580860537">"Pinapanatili ang iyong atensyon sa pamamagitan ng lumulutang na shortcut sa content na ito."</string>
+    <string name="notification_channel_summary_automatic" msgid="5813109268050235275">"Ipatukoy sa system kung dapat gumawa ng tunog o pag-vibrate ang notification na ito"</string>
     <string name="notification_channel_summary_priority" msgid="7952654515769021553">"Makikita sa itaas ng seksyon ng pag-uusap, lumalabas bilang floating bubble, ipinapakita sa lock screen ang larawan sa profile"</string>
     <string name="notification_conversation_channel_settings" msgid="2409977688430606835">"Mga Setting"</string>
     <string name="notification_priority_title" msgid="2079708866333537093">"Priyoridad"</string>
@@ -736,6 +738,12 @@
     <string name="appops_camera_mic_overlay" msgid="5584311236445644095">"Ipinapakita ang app na ito sa ibabaw ng iba pang app sa iyong screen at ginagamit nito ang mikropono at camera."</string>
     <string name="notification_appops_settings" msgid="5208974858340445174">"Mga Setting"</string>
     <string name="notification_appops_ok" msgid="2177609375872784124">"OK"</string>
+    <string name="feedback_silenced" msgid="5382212321253328247">"Ginawang silent ng system ang notification na ito."</string>
+    <string name="feedback_promoted" msgid="8075757485407091976">"Na-promote ng system ang notification na ito."</string>
+    <string name="feedback_demoted" msgid="5848066008939031913">"Na-demote ng system ang notification na ito."</string>
+    <string name="feedback_prompt" msgid="2278631214125128281">"Tama ba ito?"</string>
+    <string name="feedback_response" msgid="4671729244976641339">"Salamat sa iyong feedback!"</string>
+    <string name="feedback_ok" msgid="6481426753298857144">"OK"</string>
     <string name="notification_channel_controls_opened_accessibility" msgid="6111817750774381094">"Binuksan ang mga kontrol sa notification para sa <xliff:g id="APP_NAME">%1$s</xliff:g>"</string>
     <string name="notification_channel_controls_closed_accessibility" msgid="1561909368876911701">"Isinara ang mga kontrol sa notification para sa <xliff:g id="APP_NAME">%1$s</xliff:g>"</string>
     <string name="notification_channel_switch_accessibility" msgid="8979885820432540252">"Payagan ang mga notification mula sa channel na ito"</string>
@@ -908,25 +916,14 @@
     <string name="accessibility_quick_settings_edit" msgid="1523745183383815910">"I-edit ang pagkakasunud-sunod ng mga setting."</string>
     <string name="accessibility_quick_settings_page" msgid="7506322631645550961">"Page <xliff:g id="ID_1">%1$d</xliff:g> ng <xliff:g id="ID_2">%2$d</xliff:g>"</string>
     <string name="tuner_lock_screen" msgid="2267383813241144544">"Lock screen"</string>
-    <string name="pip_phone_expand" msgid="1424988917240616212">"Palawakin"</string>
-    <string name="pip_phone_minimize" msgid="9057117033655996059">"I-minimize"</string>
-    <string name="pip_phone_close" msgid="8801864042095341824">"Isara"</string>
-    <string name="pip_phone_settings" msgid="5687538631925004341">"Mga Setting"</string>
-    <string name="pip_phone_dismiss_hint" msgid="5825740708095316710">"I-drag pababa upang i-dismiss"</string>
-    <string name="pip_menu_title" msgid="6365909306215631910">"Menu"</string>
-    <string name="pip_notification_title" msgid="8661573026059630525">"Nasa picture-in-picture ang <xliff:g id="NAME">%s</xliff:g>"</string>
-    <string name="pip_notification_message" msgid="4991831338795022227">"Kung ayaw mong magamit ni <xliff:g id="NAME">%s</xliff:g> ang feature na ito, i-tap upang buksan ang mga setting at i-off ito."</string>
-    <string name="pip_play" msgid="333995977693142810">"I-play"</string>
-    <string name="pip_pause" msgid="1139598607050555845">"I-pause"</string>
-    <string name="pip_skip_to_next" msgid="3864212650579956062">"Lumaktaw sa susunod"</string>
-    <string name="pip_skip_to_prev" msgid="3742589641443049237">"Lumaktaw sa nakaraan"</string>
-    <string name="accessibility_action_pip_resize" msgid="8237306972921160456">"I-resize"</string>
     <string name="thermal_shutdown_title" msgid="2702966892682930264">"Na-off ang telepono dahil sa init"</string>
-    <string name="thermal_shutdown_message" msgid="7432744214105003895">"Maayos na ngayong gumagana ang iyong telepono"</string>
+    <string name="thermal_shutdown_message" msgid="6142269839066172984">"Maayos na ngayong gumagana ang iyong telepono.\nMag-tap para sa higit pang impormasyon"</string>
     <string name="thermal_shutdown_dialog_message" msgid="6745684238183492031">"Napakainit ng telepono, kaya nag-off ito para lumamig. Maayos na itong gumagana.\n\nMaaaring lubos na uminit ang telepono kapag:\n	• Gumamit ka ng resource-intensive na app (gaya ng app para sa gaming, video, o navigation)\n	• Nag-download o nag-upload ka ng malaking file\n • Ginamit mo ito sa mainit na lugar"</string>
+    <string name="thermal_shutdown_dialog_help_text" msgid="6413474593462902901">"Tingnan ang mga hakbang sa pangangalaga"</string>
     <string name="high_temp_title" msgid="2218333576838496100">"Umiinit ang telepono"</string>
-    <string name="high_temp_notif_message" msgid="163928048626045592">"Limitado ang ilang feature habang nagku-cool down ang telepono"</string>
+    <string name="high_temp_notif_message" msgid="1277346543068257549">"Limitado ang ilang feature habang nagku-cool down ang telepono.\nMag-tap para sa higit pang impormasyon"</string>
     <string name="high_temp_dialog_message" msgid="3793606072661253968">"Awtomatikong susubukan ng iyong telepono na mag-cool down. Magagamit mo pa rin ang iyong telepono, ngunit maaaring mas mabagal ang paggana nito.\n\nKapag nakapag-cool down na ang iyong telepono, gagana na ito nang normal."</string>
+    <string name="high_temp_dialog_help_text" msgid="7380171287943345858">"Tingnan ang mga hakbang sa pangangalaga"</string>
     <string name="high_temp_alarm_title" msgid="2359958549570161495">"Hugutin ang charger"</string>
     <string name="high_temp_alarm_notify_message" msgid="7186272817783835089">"May isyu sa pag-charge ng device na ito. Hugutin ang power adapter at mag-ingat dahil maaaring mainit ang cable."</string>
     <string name="high_temp_alarm_help_care_steps" msgid="5017002218341329566">"Tingnan ang mga hakbang sa pangangalaga"</string>
@@ -1022,7 +1019,6 @@
     <string name="priority_onboarding_ignores_dnd_text" msgid="2918952762719600529">"Ihinto ang Huwag Istorbohin"</string>
     <string name="priority_onboarding_done_button_title" msgid="4569550984286506007">"OK"</string>
     <string name="priority_onboarding_settings_button_title" msgid="6663601574303585927">"Mga Setting"</string>
-    <string name="magnification_overlay_title" msgid="6584179429612427958">"Window ng Overlay sa Pag-magnify"</string>
     <string name="magnification_window_title" msgid="4863914360847258333">"Window ng Pag-magnify"</string>
     <string name="magnification_controls_title" msgid="8421106606708891519">"Mga Kontrol sa Pag-magnify ng Window"</string>
     <string name="quick_controls_title" msgid="6839108006171302273">"Mga kontrol ng device"</string>

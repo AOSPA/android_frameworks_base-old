@@ -193,8 +193,10 @@
     <string name="network_logging_notification_text" msgid="1327373071132562512">"Inhlangano yakho iphethe le divayisi futhi kungenzeka ingaqaphi ithrafikhi yenethiwekhi. Thephela imininingwane."</string>
     <string name="location_changed_notification_title" msgid="3620158742816699316">"Izinhlelo zokusebenza zingakwazi ukufinyelela endaweni yakho"</string>
     <string name="location_changed_notification_text" msgid="7158423339982706912">"Xhumana nomphathi wakho we-IT ukuze ufunde kabanzi"</string>
+    <string name="geofencing_service" msgid="3826902410740315456">"Isevisi ye-Geofencing"</string>
     <string name="country_detector" msgid="7023275114706088854">"Isitholi Sezwe"</string>
     <string name="location_service" msgid="2439187616018455546">"Isevisi Yendawo"</string>
+    <string name="gnss_service" msgid="8907781262179951385">"Isevisi ye-GNSS"</string>
     <string name="sensor_notification_service" msgid="7474531979178682676">"Isevisi Yesaziso Senzwa"</string>
     <string name="twilight_service" msgid="8964898045693187224">"Isevisi Yangovivi"</string>
     <string name="factory_reset_warning" msgid="6858705527798047809">"Idivayisi yakho izosulwa"</string>
@@ -542,6 +544,7 @@
     <string name="biometric_not_recognized" msgid="5106687642694635888">"Akwaziwa"</string>
     <string name="biometric_error_canceled" msgid="8266582404844179778">"Ukufakazela ubuqiniso kukhanseliwe"</string>
     <string name="biometric_error_device_not_secured" msgid="3129845065043995924">"Ayikho iphinikhodi, iphethini, noma iphasiwedi esethiwe"</string>
+    <string name="biometric_error_generic" msgid="6784371929985434439">"Iphutha lokufakazela ubuqiniso"</string>
     <string name="fingerprint_acquired_partial" msgid="8532380671091299342">"Izigxivizo zeminwe ezincane zitholiwe. Sicela uzame futhi."</string>
     <string name="fingerprint_acquired_insufficient" msgid="2545149524031515411">"Ayikwazanga ukucubungula izigxivizo zeminwe. Sicela uzame futhi."</string>
     <string name="fingerprint_acquired_imager_dirty" msgid="4694800187151533990">"Inzwa yezigxivizo zeminwe ingcolile. Sicela uyihlanze uphinde uzame futhi."</string>
@@ -829,7 +832,8 @@
     <string name="lockscreen_instructions_when_pattern_enabled" msgid="7982445492532123308">"Chofoza Menyu ukuvula noma ukwenza ikholi ephuthumayo."</string>
     <string name="lockscreen_instructions_when_pattern_disabled" msgid="7434061749374801753">"Chofoza Menyu ukuvula."</string>
     <string name="lockscreen_pattern_instructions" msgid="3169991838169244941">"Dweba iphathini ukuvula"</string>
-    <string name="lockscreen_emergency_call" msgid="7500692654885445299">"Isimo esiphuthumayo"</string>
+    <!-- no translation found for lockscreen_emergency_call (7549683825868928636) -->
+    <skip />
     <string name="lockscreen_return_to_call" msgid="3156883574692006382">"Buyela ekholini"</string>
     <string name="lockscreen_pattern_correct" msgid="8050630103651508582">"Lungile!"</string>
     <string name="lockscreen_pattern_wrong" msgid="2940138714468358458">"Zama futhi"</string>
@@ -1460,9 +1464,6 @@
     <string name="gpsNotifMessage" msgid="7346649122793758032">"Icelwe ngu-:<xliff:g id="NAME">%1$s</xliff:g><xliff:g id="SERVICE">%2$s</xliff:g>"</string>
     <string name="gpsVerifYes" msgid="3719843080744112940">"Yebo"</string>
     <string name="gpsVerifNo" msgid="1671201856091564741">"Cha"</string>
-    <string name="gnss_nfw_notification_title" msgid="5004493772059563423">"Indawo yesimo esiphuthumayo ifinyelelwe"</string>
-    <string name="gnss_nfw_notification_message_oem" msgid="3683958907027107969">"Umkhiqizi wedivayisi yakho ufinyelele indawo yakho phakathi nesikhathi sakamuva sesimo esiphuthumayo"</string>
-    <string name="gnss_nfw_notification_message_carrier" msgid="815888995791562151">"Inkampani yenethiwekhi yakho ifinyelele indawo yakho phakathi nesikhathi sakamuva sesimo esiphuthumayo"</string>
     <string name="sync_too_many_deletes" msgid="6999440774578705300">"Umkhawulo wokususa ufinyelelwe"</string>
     <string name="sync_too_many_deletes_desc" msgid="7409327940303504440">"Kunezinto ezingu <xliff:g id="NUMBER_OF_DELETED_ITEMS">%1$d</xliff:g> ezisusiwe <xliff:g id="TYPE_OF_SYNC">%2$s</xliff:g>, e-akhawuntini <xliff:g id="ACCOUNT_NAME">%3$s</xliff:g>. Ingabe ufuna ukwenzani?"</string>
     <string name="sync_really_delete" msgid="5657871730315579051">"Susa izintwana."</string>
@@ -1792,8 +1793,8 @@
     <string name="package_updated_device_owner" msgid="7560272363805506941">"Kubuyekezwe umlawuli wakho"</string>
     <string name="package_deleted_device_owner" msgid="2292335928930293023">"Kususwe umlawuli wakho"</string>
     <string name="confirm_battery_saver" msgid="5247976246208245754">"KULUNGILE"</string>
-    <string name="battery_saver_description_with_learn_more" msgid="5997766757551917769">"Ukuze unwebe impilo yebhethri, Isilondolozi Sebhethri:\n\n•Sivula itimu emnyama\n•Sivala noma sibeka umkhawulo emsebenzini wangemuva, kweminye imithelela yokubuka, nakwezinye izici ezifana nokuthi “Ok Google”\n\n"<annotation id="url">"Funda kabanzi"</annotation></string>
-    <string name="battery_saver_description" msgid="8587408568232177204">"Ukuze unwebe impilo yebhethri, Isilondolozi sebhethri:\n\n•Sivula itimu emnyama\n•Sivala noma sibeka umkhawulo emsebenzini wangemuva, kweminye imithelela yokubuka, nakwezinye izici ezifana nokuthi “Ok Google”"</string>
+    <string name="battery_saver_description_with_learn_more" msgid="4424488535318105801">"Ukuze unwebe impilo yebhethri, Isilondolozi Sebhethri:\n\n•Sivula itimu emnyama\n• Sivala noma sibeka umkhawulo emsebenzini wangemuva, kweminye imithelela yokubuka, nakwezinye izici ezifana nokuthi “Ok Google”\n\n"<annotation id="url">"Funda kabanzi"</annotation></string>
+    <string name="battery_saver_description" msgid="6794188153647295212">"Ukuze unwebe impilo yebhethri, Isilondolozi sebhethri:\n\n•Sivula itimu emnyama\n• Sivala noma sibeka umkhawulo emsebenzini wangemuva, kweminye imithelela yokubuka, nakwezinye izici ezifana nokuthi “Ok Google”"</string>
     <string name="data_saver_description" msgid="4995164271550590517">"Ukusiza ukwehlisa ukusetshenziswa kwedatha, iseva yedatha igwema ezinye izinhlelo zokusebenza ukuthi zithumele noma zamukele idatha ngasemuva. Uhlelo lokusebenza olisebenzisa okwamanje lingafinyelela idatha, kodwa lingenza kanjalo kancane. Lokhu kungachaza, isibonelo, ukuthi izithombe azibonisi uze uzithephe."</string>
     <string name="data_saver_enable_title" msgid="7080620065745260137">"Vula iseva yedatha?"</string>
     <string name="data_saver_enable_button" msgid="4399405762586419726">"Vula"</string>
@@ -1997,6 +1998,7 @@
     <string name="notification_appops_camera_active" msgid="8177643089272352083">"Ikhamera"</string>
     <string name="notification_appops_microphone_active" msgid="581333393214739332">"Imakrofoni"</string>
     <string name="notification_appops_overlay_active" msgid="5571732753262836481">"iboniswa ngaphezulu kwezinye izinhlelo zokusebenza kusikrini sakho"</string>
+    <string name="notification_feedback_indicator" msgid="663476517711323016">"Nikeza impendulo"</string>
     <string name="dynamic_mode_notification_channel_name" msgid="2986926422100223328">"Isaziso solwazi lwe-Routine Mode"</string>
     <string name="dynamic_mode_notification_title" msgid="9205715501274608016">"Ibhethri lingaphela ngaphambi kokushaja okuvamile"</string>
     <string name="dynamic_mode_notification_summary" msgid="4141614604437372157">"Isilondolozi sebhethri siyasebenza ngaphandle kwempilo yebhethri"</string>

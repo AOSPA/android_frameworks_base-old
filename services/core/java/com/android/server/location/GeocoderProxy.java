@@ -18,14 +18,15 @@ package com.android.server.location;
 
 import android.annotation.Nullable;
 import android.content.Context;
-import android.location.Address;
 import android.location.GeocoderParams;
+import android.location.IGeocodeListener;
 import android.location.IGeocodeProvider;
+import android.os.IBinder;
+import android.os.RemoteException;
 
-import com.android.internal.os.BackgroundThread;
 import com.android.server.ServiceWatcher;
 
-import java.util.List;
+import java.util.Collections;
 
 /**
  * Proxy for IGeocodeProvider implementations.
@@ -53,8 +54,7 @@ public class GeocoderProxy {
     private final ServiceWatcher mServiceWatcher;
 
     private GeocoderProxy(Context context) {
-        mServiceWatcher = new ServiceWatcher(context, BackgroundThread.getHandler(), SERVICE_ACTION,
-                null, null,
+        mServiceWatcher = new ServiceWatcher(context, SERVICE_ACTION, null, null,
                 com.android.internal.R.bool.config_enableGeocoderOverlay,
                 com.android.internal.R.string.config_geocoderProviderPackageName);
     }
@@ -63,23 +63,53 @@ public class GeocoderProxy {
         return mServiceWatcher.register();
     }
 
-    public String getFromLocation(double latitude, double longitude, int maxResults,
-            GeocoderParams params, List<Address> addrs) {
-        return mServiceWatcher.runOnBinderBlocking(binder -> {
-            IGeocodeProvider provider = IGeocodeProvider.Stub.asInterface(binder);
-            return provider.getFromLocation(latitude, longitude, maxResults, params, addrs);
-        }, "Service not Available");
+    /**
+     * Geocodes stuff.
+     */
+    public void getFromLocation(double latitude, double longitude, int maxResults,
+            GeocoderParams params, IGeocodeListener listener) {
+        mServiceWatcher.runOnBinder(new ServiceWatcher.BinderRunner() {
+            @Override
+            public void run(IBinder binder) throws RemoteException {
+                IGeocodeProvider provider = IGeocodeProvider.Stub.asInterface(binder);
+                provider.getFromLocation(latitude, longitude, maxResults, params, listener);
+            }
+
+            @Override
+            public void onError() {
+                try {
+                    listener.onResults("Service not Available", Collections.emptyList());
+                } catch (RemoteException e) {
+                    // ignore
+                }
+            }
+        });
     }
 
-    public String getFromLocationName(String locationName,
+    /**
+     * Geocodes stuff.
+     */
+    public void getFromLocationName(String locationName,
             double lowerLeftLatitude, double lowerLeftLongitude,
             double upperRightLatitude, double upperRightLongitude, int maxResults,
-            GeocoderParams params, List<Address> addrs) {
-        return mServiceWatcher.runOnBinderBlocking(binder -> {
-            IGeocodeProvider provider = IGeocodeProvider.Stub.asInterface(binder);
-            return provider.getFromLocationName(locationName, lowerLeftLatitude,
-                    lowerLeftLongitude, upperRightLatitude, upperRightLongitude,
-                    maxResults, params, addrs);
-        }, "Service not Available");
+            GeocoderParams params, IGeocodeListener listener) {
+        mServiceWatcher.runOnBinder(new ServiceWatcher.BinderRunner() {
+            @Override
+            public void run(IBinder binder) throws RemoteException {
+                IGeocodeProvider provider = IGeocodeProvider.Stub.asInterface(binder);
+                provider.getFromLocationName(locationName, lowerLeftLatitude,
+                        lowerLeftLongitude, upperRightLatitude, upperRightLongitude,
+                        maxResults, params, listener);
+            }
+
+            @Override
+            public void onError() {
+                try {
+                    listener.onResults("Service not Available", Collections.emptyList());
+                } catch (RemoteException e) {
+                    // ignore
+                }
+            }
+        });
     }
 }

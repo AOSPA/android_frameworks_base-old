@@ -41,7 +41,6 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.IntentSender;
-import android.content.pm.CrossProfileAppsInternal;
 import android.content.pm.PackageManager;
 import android.content.pm.PackageManager.NameNotFoundException;
 import android.content.pm.PackageManagerInternal;
@@ -267,7 +266,6 @@ public class UserManagerService extends IUserManager.Stub {
     private final UserSystemPackageInstaller mSystemPackageInstaller;
 
     private PackageManagerInternal mPmInternal;
-    private CrossProfileAppsInternal mCrossProfileAppsInternal;
     private DevicePolicyManagerInternal mDevicePolicyManagerInternal;
 
     /**
@@ -3308,27 +3306,6 @@ public class UserManagerService extends IUserManager.Stub {
         }
     }
 
-    private long logUserCreateJourneyBegin(@UserIdInt int userId, String userType,
-            @UserInfoFlag int flags) {
-        final long sessionId = ThreadLocalRandom.current().nextLong(1, Long.MAX_VALUE);
-        // log the journey atom with the user metadata
-        FrameworkStatsLog.write(FrameworkStatsLog.USER_LIFECYCLE_JOURNEY_REPORTED, sessionId,
-                FrameworkStatsLog.USER_LIFECYCLE_JOURNEY_REPORTED__JOURNEY__USER_CREATE,
-                /* origin_user= */ -1, userId, UserManager.getUserTypeForStatsd(userType), flags);
-        // log the event atom to indicate the event start
-        FrameworkStatsLog.write(FrameworkStatsLog.USER_LIFECYCLE_EVENT_OCCURRED, sessionId, userId,
-                FrameworkStatsLog.USER_LIFECYCLE_EVENT_OCCURRED__EVENT__CREATE_USER,
-                FrameworkStatsLog.USER_LIFECYCLE_EVENT_OCCURRED__STATE__BEGIN);
-        return sessionId;
-    }
-
-    private void logUserCreateJourneyFinish(long sessionId, @UserIdInt int userId, boolean finish) {
-        FrameworkStatsLog.write(FrameworkStatsLog.USER_LIFECYCLE_EVENT_OCCURRED, sessionId, userId,
-                FrameworkStatsLog.USER_LIFECYCLE_EVENT_OCCURRED__EVENT__CREATE_USER,
-                finish ? FrameworkStatsLog.USER_LIFECYCLE_EVENT_OCCURRED__STATE__FINISH
-                       : FrameworkStatsLog.USER_LIFECYCLE_EVENT_OCCURRED__STATE__NONE);
-    }
-
     private UserInfo createUserInternalUncheckedNoTracing(@Nullable String name,
             @NonNull String userType, @UserInfoFlag int flags, @UserIdInt int parentId,
             boolean preCreate, @Nullable String[] disallowedPackages,
@@ -3435,6 +3412,7 @@ public class UserManagerService extends IUserManager.Stub {
                 }
 
                 userId = getNextAvailableId();
+                Slog.i(LOG_TAG, "Creating user " + userId + " of type " + userType);
                 Environment.getUserSystemDirectory(userId).mkdirs();
 
                 synchronized (mUsersLock) {
@@ -3686,6 +3664,27 @@ public class UserManagerService extends IUserManager.Stub {
                 && !userTypeDetails.getName().equals(UserManager.USER_TYPE_FULL_RESTRICTED);
     }
 
+    private long logUserCreateJourneyBegin(@UserIdInt int userId, String userType,
+            @UserInfoFlag int flags) {
+        final long sessionId = ThreadLocalRandom.current().nextLong(1, Long.MAX_VALUE);
+        // log the journey atom with the user metadata
+        FrameworkStatsLog.write(FrameworkStatsLog.USER_LIFECYCLE_JOURNEY_REPORTED, sessionId,
+                FrameworkStatsLog.USER_LIFECYCLE_JOURNEY_REPORTED__JOURNEY__USER_CREATE,
+                /* origin_user= */ -1, userId, UserManager.getUserTypeForStatsd(userType), flags);
+        // log the event atom to indicate the event start
+        FrameworkStatsLog.write(FrameworkStatsLog.USER_LIFECYCLE_EVENT_OCCURRED, sessionId, userId,
+                FrameworkStatsLog.USER_LIFECYCLE_EVENT_OCCURRED__EVENT__CREATE_USER,
+                FrameworkStatsLog.USER_LIFECYCLE_EVENT_OCCURRED__STATE__BEGIN);
+        return sessionId;
+    }
+
+    private void logUserCreateJourneyFinish(long sessionId, @UserIdInt int userId, boolean finish) {
+        FrameworkStatsLog.write(FrameworkStatsLog.USER_LIFECYCLE_EVENT_OCCURRED, sessionId, userId,
+                FrameworkStatsLog.USER_LIFECYCLE_EVENT_OCCURRED__EVENT__CREATE_USER,
+                finish ? FrameworkStatsLog.USER_LIFECYCLE_EVENT_OCCURRED__STATE__FINISH
+                        : FrameworkStatsLog.USER_LIFECYCLE_EVENT_OCCURRED__STATE__NONE);
+    }
+
     @VisibleForTesting
     UserData putUserInfo(UserInfo userInfo) {
         final UserData userData = new UserData();
@@ -3921,6 +3920,19 @@ public class UserManagerService extends IUserManager.Stub {
 
     void finishRemoveUser(final @UserIdInt int userId) {
         if (DBG) Slog.i(LOG_TAG, "finishRemoveUser " + userId);
+
+        UserInfo user;
+        synchronized (mUsersLock) {
+            user = getUserInfoLU(userId);
+        }
+        if (user != null && user.preCreated) {
+            Slog.i(LOG_TAG, "Removing a precreated user with user id: " + userId);
+            // Don't want to fire ACTION_USER_REMOVED, so cleanup the state and exit early.
+            LocalServices.getService(ActivityTaskManagerInternal.class).onUserStopped(userId);
+            removeUserState(userId);
+            return;
+        }
+
         // Let other services shutdown any activity and clean up their state before completely
         // wiping the user's system directory and removing from the user list
         long ident = Binder.clearCallingIdentity();
@@ -5356,14 +5368,6 @@ public class UserManagerService extends IUserManager.Stub {
             mPmInternal = LocalServices.getService(PackageManagerInternal.class);
         }
         return mPmInternal;
-    }
-
-    /** Retrieve the internal cross profile apps interface. */
-    private CrossProfileAppsInternal getCrossProfileAppsInternal() {
-        if (mCrossProfileAppsInternal == null) {
-            mCrossProfileAppsInternal = LocalServices.getService(CrossProfileAppsInternal.class);
-        }
-        return mCrossProfileAppsInternal;
     }
 
     /** Returns the internal device policy manager interface. */

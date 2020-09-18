@@ -276,7 +276,7 @@ class ProcessRecord implements WindowProcessListener {
     final ArrayMap<String, ContentProviderRecord> pubProviders = new ArrayMap<>();
     // All ContentProviderRecord process is using
     final ArrayList<ContentProviderConnection> conProviders = new ArrayList<>();
-    // A set of tokens that currently contribute to this process being temporarily whitelisted
+    // A set of tokens that currently contribute to this process being temporarily allowed
     // to start activities even if it's not in the foreground
     final ArraySet<Binder> mAllowBackgroundActivityStartsTokens = new ArraySet<>();
     // a set of UIDs of all bound clients
@@ -353,6 +353,8 @@ class ProcessRecord implements WindowProcessListener {
     int mCachedSchedGroup = ProcessList.SCHED_GROUP_BACKGROUND;
 
     boolean mReachable; // Whether or not this process is reachable from given process
+
+    long mKillTime; // The timestamp in uptime when this process was killed.
 
     void setStartParams(int startUid, HostingRecord hostingRecord, String seInfo,
             long startTime) {
@@ -628,7 +630,7 @@ class ProcessRecord implements WindowProcessListener {
             }
         }
         if (mAllowBackgroundActivityStartsTokens.size() > 0) {
-            pw.print(prefix); pw.println("Background activity start whitelist tokens:");
+            pw.print(prefix); pw.println("Background activity start tokens:");
             for (int i = 0; i < mAllowBackgroundActivityStartsTokens.size(); i++) {
                 pw.print(prefix); pw.print("  - ");
                 pw.println(mAllowBackgroundActivityStartsTokens.valueAt(i));
@@ -952,6 +954,7 @@ class ProcessRecord implements WindowProcessListener {
             if (!mPersistent) {
                 killed = true;
                 killedByAm = true;
+                mKillTime = SystemClock.uptimeMillis();
             }
             if (ux_perf != null && !mService.mForceStopKill && !mNotResponding && !mCrashing) {
                 ux_perf.perfUXEngine_events(BoostFramework.UXE_EVENT_KILL, 0, this.processName, 0);

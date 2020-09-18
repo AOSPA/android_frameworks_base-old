@@ -96,7 +96,7 @@ struct Restore final : Op {
 struct SaveLayer final : Op {
     static const auto kType = Type::SaveLayer;
     SaveLayer(const SkRect* bounds, const SkPaint* paint, const SkImageFilter* backdrop,
-              const SkImage* clipMask, const SkMatrix* clipMatrix, SkCanvas::SaveLayerFlags flags) {
+              SkCanvas::SaveLayerFlags flags) {
         if (bounds) {
             this->bounds = *bounds;
         }
@@ -104,19 +104,14 @@ struct SaveLayer final : Op {
             this->paint = *paint;
         }
         this->backdrop = sk_ref_sp(backdrop);
-        this->clipMask = sk_ref_sp(clipMask);
-        this->clipMatrix = clipMatrix ? *clipMatrix : SkMatrix::I();
         this->flags = flags;
     }
     SkRect bounds = kUnset;
     SkPaint paint;
     sk_sp<const SkImageFilter> backdrop;
-    sk_sp<const SkImage> clipMask;
-    SkMatrix clipMatrix;
     SkCanvas::SaveLayerFlags flags;
     void draw(SkCanvas* c, const SkMatrix&) const {
-        c->saveLayer({maybe_unset(bounds), &paint, backdrop.get(), clipMask.get(),
-                      clipMatrix.isIdentity() ? nullptr : &clipMatrix, flags});
+        c->saveLayer({maybe_unset(bounds), &paint, backdrop.get(), flags});
     }
 };
 struct SaveBehind final : Op {
@@ -132,9 +127,9 @@ struct SaveBehind final : Op {
 
 struct Concat44 final : Op {
     static const auto kType = Type::Concat44;
-    Concat44(const SkScalar m[16]) { memcpy(colMajor, m, sizeof(colMajor)); }
-    SkScalar colMajor[16];
-    void draw(SkCanvas* c, const SkMatrix&) const { c->experimental_concat44(colMajor); }
+    Concat44(const SkM44& m) : matrix(m) {}
+    SkM44 matrix;
+    void draw(SkCanvas* c, const SkMatrix&) const { c->concat(matrix); }
 };
 struct Concat final : Op {
     static const auto kType = Type::Concat;
@@ -448,14 +443,13 @@ struct DrawPoints final : Op {
 };
 struct DrawVertices final : Op {
     static const auto kType = Type::DrawVertices;
-    DrawVertices(const SkVertices* v, int bc, SkBlendMode m, const SkPaint& p)
-            : vertices(sk_ref_sp(const_cast<SkVertices*>(v))), boneCount(bc), mode(m), paint(p) {}
+    DrawVertices(const SkVertices* v, SkBlendMode m, const SkPaint& p)
+            : vertices(sk_ref_sp(const_cast<SkVertices*>(v))), mode(m), paint(p) {}
     sk_sp<SkVertices> vertices;
-    int boneCount;
     SkBlendMode mode;
     SkPaint paint;
     void draw(SkCanvas* c, const SkMatrix&) const {
-        c->drawVertices(vertices, pod<SkVertices::Bone>(this), boneCount, mode, paint);
+        c->drawVertices(vertices, mode, paint);
     }
 };
 struct DrawAtlas final : Op {
@@ -565,17 +559,16 @@ void DisplayListData::restore() {
     this->push<Restore>(0);
 }
 void DisplayListData::saveLayer(const SkRect* bounds, const SkPaint* paint,
-                                const SkImageFilter* backdrop, const SkImage* clipMask,
-                                const SkMatrix* clipMatrix, SkCanvas::SaveLayerFlags flags) {
-    this->push<SaveLayer>(0, bounds, paint, backdrop, clipMask, clipMatrix, flags);
+                                const SkImageFilter* backdrop, SkCanvas::SaveLayerFlags flags) {
+    this->push<SaveLayer>(0, bounds, paint, backdrop, flags);
 }
 
 void DisplayListData::saveBehind(const SkRect* subset) {
     this->push<SaveBehind>(0, subset);
 }
 
-void DisplayListData::concat44(const SkScalar colMajor[16]) {
-    this->push<Concat44>(0, colMajor);
+void DisplayListData::concat(const SkM44& m) {
+    this->push<Concat44>(0, m);
 }
 void DisplayListData::concat(const SkMatrix& matrix) {
     this->push<Concat>(0, matrix);
@@ -686,11 +679,8 @@ void DisplayListData::drawPoints(SkCanvas::PointMode mode, size_t count, const S
     void* pod = this->push<DrawPoints>(count * sizeof(SkPoint), mode, count, paint);
     copy_v(pod, points, count);
 }
-void DisplayListData::drawVertices(const SkVertices* vertices, const SkVertices::Bone bones[],
-                                   int boneCount, SkBlendMode mode, const SkPaint& paint) {
-    void* pod = this->push<DrawVertices>(boneCount * sizeof(SkVertices::Bone), vertices, boneCount,
-                                         mode, paint);
-    copy_v(pod, bones, boneCount);
+void DisplayListData::drawVertices(const SkVertices* vertices, SkBlendMode mode, const SkPaint& paint) {
+    this->push<DrawVertices>(0, vertices, mode, paint);
 }
 void DisplayListData::drawAtlas(const SkImage* atlas, const SkRSXform xforms[], const SkRect texs[],
                                 const SkColor colors[], int count, SkBlendMode xfermode,
@@ -823,8 +813,7 @@ void RecordingCanvas::willSave() {
     fDL->save();
 }
 SkCanvas::SaveLayerStrategy RecordingCanvas::getSaveLayerStrategy(const SaveLayerRec& rec) {
-    fDL->saveLayer(rec.fBounds, rec.fPaint, rec.fBackdrop, rec.fClipMask, rec.fClipMatrix,
-                   rec.fSaveLayerFlags);
+    fDL->saveLayer(rec.fBounds, rec.fPaint, rec.fBackdrop, rec.fSaveLayerFlags);
     return SkCanvas::kNoLayer_SaveLayerStrategy;
 }
 void RecordingCanvas::willRestore() {
@@ -841,8 +830,8 @@ bool RecordingCanvas::onDoSaveBehind(const SkRect* subset) {
     return false;
 }
 
-void RecordingCanvas::didConcat44(const SkScalar colMajor[16]) {
-    fDL->concat44(colMajor);
+void RecordingCanvas::didConcat44(const SkM44& m) {
+    fDL->concat(m);
 }
 void RecordingCanvas::didConcat(const SkMatrix& matrix) {
     fDL->concat(matrix);
@@ -929,24 +918,6 @@ void RecordingCanvas::onDrawTextBlob(const SkTextBlob* blob, SkScalar x, SkScala
     fDL->drawTextBlob(blob, x, y, paint);
 }
 
-void RecordingCanvas::onDrawBitmap(const SkBitmap& bm, SkScalar x, SkScalar y,
-                                   const SkPaint* paint) {
-    fDL->drawImage(SkImage::MakeFromBitmap(bm), x, y, paint, BitmapPalette::Unknown);
-}
-void RecordingCanvas::onDrawBitmapNine(const SkBitmap& bm, const SkIRect& center, const SkRect& dst,
-                                       const SkPaint* paint) {
-    fDL->drawImageNine(SkImage::MakeFromBitmap(bm), center, dst, paint);
-}
-void RecordingCanvas::onDrawBitmapRect(const SkBitmap& bm, const SkRect* src, const SkRect& dst,
-                                       const SkPaint* paint, SrcRectConstraint constraint) {
-    fDL->drawImageRect(SkImage::MakeFromBitmap(bm), src, dst, paint, constraint,
-                       BitmapPalette::Unknown);
-}
-void RecordingCanvas::onDrawBitmapLattice(const SkBitmap& bm, const SkCanvas::Lattice& lattice,
-                                          const SkRect& dst, const SkPaint* paint) {
-    fDL->drawImageLattice(SkImage::MakeFromBitmap(bm), lattice, dst, paint, BitmapPalette::Unknown);
-}
-
 void RecordingCanvas::drawImage(const sk_sp<SkImage>& image, SkScalar x, SkScalar y,
                                 const SkPaint* paint, BitmapPalette palette) {
     fDL->drawImage(image, x, y, paint, palette);
@@ -1007,9 +978,8 @@ void RecordingCanvas::onDrawPoints(SkCanvas::PointMode mode, size_t count, const
     fDL->drawPoints(mode, count, pts, paint);
 }
 void RecordingCanvas::onDrawVerticesObject(const SkVertices* vertices,
-                                           const SkVertices::Bone bones[], int boneCount,
                                            SkBlendMode mode, const SkPaint& paint) {
-    fDL->drawVertices(vertices, bones, boneCount, mode, paint);
+    fDL->drawVertices(vertices, mode, paint);
 }
 void RecordingCanvas::onDrawAtlas(const SkImage* atlas, const SkRSXform xforms[],
                                   const SkRect texs[], const SkColor colors[], int count,

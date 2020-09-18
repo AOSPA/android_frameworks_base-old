@@ -1324,6 +1324,11 @@ public class AudioService extends IAudioService.Stub
                         device, caller, true /*hasModifyAudioSettings*/);
             }
             mStreamStates[streamType].checkFixedVolumeDevices();
+
+            // Unmute streams if device is full volume
+            if (mFullVolumeDevices.contains(device)) {
+                mStreamStates[streamType].mute(false);
+            }
         }
     }
 
@@ -2174,7 +2179,7 @@ public class AudioService extends IAudioService.Stub
                 && (direction != AudioManager.ADJUST_SAME) && (keyEventMode != VOL_ADJUST_END)) {
             mAudioHandler.removeMessages(MSG_UNMUTE_STREAM);
 
-            if (isMuteAdjust) {
+            if (isMuteAdjust && !mFullVolumeDevices.contains(device)) {
                 boolean state;
                 if (direction == AudioManager.ADJUST_TOGGLE_MUTE) {
                     state = !streamState.mIsMuted;
@@ -2961,11 +2966,10 @@ public class AudioService extends IAudioService.Stub
 
     // Don't show volume UI when:
     //  - Hdmi-CEC system audio mode is on and we are a TV panel
-    //  - CEC volume control enabled on a set-top box
     private int updateFlagsForTvPlatform(int flags) {
         synchronized (mHdmiClientLock) {
-            if ((mHdmiTvClient != null && mHdmiSystemAudioSupported && mHdmiCecVolumeControlEnabled)
-                    || (mHdmiPlaybackClient != null && mHdmiCecVolumeControlEnabled)) {
+            if (mHdmiTvClient != null && mHdmiSystemAudioSupported
+                    && mHdmiCecVolumeControlEnabled) {
                 flags &= ~AudioManager.FLAG_SHOW_UI;
             }
         }
@@ -3827,7 +3831,7 @@ public class AudioService extends IAudioService.Stub
                 }
                 try {
                     hdlr.getBinder().unlinkToDeath(hdlr, 0);
-                    if (cb != hdlr.getBinder()) {
+                    if (cb != hdlr.getBinder()){
                         hdlr = null;
                     }
                 } catch (NoSuchElementException e) {
@@ -5434,14 +5438,29 @@ public class AudioService extends IAudioService.Stub
             return mIndexMin;
         }
 
+        private boolean isValidLegacyStreamType() {
+            return (mLegacyStreamType != AudioSystem.STREAM_DEFAULT)
+                    && (mLegacyStreamType < mStreamStates.length);
+        }
+
         public void applyAllVolumes() {
             synchronized (VolumeGroupState.class) {
+                int deviceForStream = AudioSystem.DEVICE_NONE;
+                int volumeIndexForStream = 0;
+                if (isValidLegacyStreamType()) {
+                    // Prevent to apply settings twice when group is associated to public stream
+                    deviceForStream = getDeviceForStream(mLegacyStreamType);
+                    volumeIndexForStream = getStreamVolume(mLegacyStreamType);
+                }
                 // apply device specific volumes first
                 int index;
                 for (int i = 0; i < mIndexMap.size(); i++) {
                     final int device = mIndexMap.keyAt(i);
                     if (device != AudioSystem.DEVICE_OUT_DEFAULT) {
                         index = mIndexMap.valueAt(i);
+                        if (device == deviceForStream && volumeIndexForStream == index) {
+                            continue;
+                        }
                         if (DEBUG_VOL) {
                             Log.v(TAG, "applyAllVolumes: restore index " + index + " for group "
                                     + mAudioVolumeGroup.name() + " and device "
@@ -5457,6 +5476,13 @@ public class AudioService extends IAudioService.Stub
                     Log.v(TAG, "applyAllVolumes: restore default device index " + index
                             + " for group " + mAudioVolumeGroup.name());
                 }
+                if (isValidLegacyStreamType()) {
+                    int defaultStreamIndex = (mStreamStates[mLegacyStreamType]
+                            .getIndex(AudioSystem.DEVICE_OUT_DEFAULT) + 5) / 10;
+                    if (defaultStreamIndex == index) {
+                        return;
+                    }
+                }
                 setVolumeIndexInt(index, AudioSystem.DEVICE_OUT_DEFAULT, 0 /*flags*/);
             }
         }
@@ -5467,8 +5493,9 @@ public class AudioService extends IAudioService.Stub
             }
             if (DEBUG_VOL) {
                 Log.v(TAG, "persistVolumeGroup: storing index " + getIndex(device) + " for group "
-                        + mAudioVolumeGroup.name() + " and device "
-                        + AudioSystem.getOutputDeviceName(device));
+                        + mAudioVolumeGroup.name()
+                        + ", device " + AudioSystem.getOutputDeviceName(device)
+                        + " and User=" + ActivityManager.getCurrentUser());
             }
             boolean success = Settings.System.putIntForUser(mContentResolver,
                     getSettingNameForDevice(device),
@@ -5503,7 +5530,8 @@ public class AudioService extends IAudioService.Stub
                     }
                     if (DEBUG_VOL) {
                         Log.v(TAG, "readSettings: found stored index " + getValidIndex(index)
-                                 + " for group " + mAudioVolumeGroup.name() + ", device: " + name);
+                                 + " for group " + mAudioVolumeGroup.name() + ", device: " + name
+                                 + ", User=" + ActivityManager.getCurrentUser());
                     }
                     mIndexMap.put(device, getValidIndex(index));
                 }
@@ -8919,7 +8947,7 @@ public class AudioService extends IAudioService.Stub
 
 
     //======================
-    // Audioserver state displatch
+    // Audioserver state dispatch
     //======================
     private class AsdProxy implements IBinder.DeathRecipient {
         private final IAudioServerStateDispatcher mAsd;
@@ -9080,10 +9108,15 @@ public class AudioService extends IAudioService.Stub
         if (DEBUG_VOL) {
             Log.d(TAG, "Persisting Volume Behavior for DeviceType: " + deviceType);
         }
-        System.putIntForUser(mContentResolver,
-                getSettingsNameForDeviceVolumeBehavior(deviceType),
-                deviceVolumeBehavior,
-                UserHandle.USER_CURRENT);
+        long callingIdentity = Binder.clearCallingIdentity();
+        try {
+            System.putIntForUser(mContentResolver,
+                    getSettingsNameForDeviceVolumeBehavior(deviceType),
+                    deviceVolumeBehavior,
+                    UserHandle.USER_CURRENT);
+        } finally {
+            Binder.restoreCallingIdentity(callingIdentity);
+        }
     }
 
     @AudioManager.DeviceVolumeBehaviorState

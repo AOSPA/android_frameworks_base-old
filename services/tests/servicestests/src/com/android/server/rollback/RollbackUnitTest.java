@@ -29,14 +29,11 @@ import static org.mockito.Mockito.when;
 import android.content.pm.PackageManagerInternal;
 import android.content.pm.VersionedPackage;
 import android.content.rollback.PackageRollbackInfo;
-import android.util.IntArray;
 import android.util.SparseArray;
 import android.util.SparseIntArray;
-import android.util.SparseLongArray;
 
 import com.android.server.pm.PackageList;
 import com.android.server.pm.parsing.pkg.PackageImpl;
-
 import com.google.common.collect.Range;
 
 import org.junit.Before;
@@ -255,6 +252,7 @@ public class RollbackUnitTest {
         verify(mMockDataHelper).destroyAppDataSnapshot(eq(123), pkgRollbackInfoFor(PKG_2), eq(111));
         verify(mMockDataHelper).destroyAppDataSnapshot(eq(123), pkgRollbackInfoFor(PKG_2), eq(222));
         verify(mMockDataHelper, never()).destroyApexDeSnapshots(anyInt());
+        verify(mMockDataHelper, never()).destroyApexCeSnapshots(anyInt(), anyInt());
 
         assertThat(rollback.isDeleted()).isTrue();
     }
@@ -276,6 +274,8 @@ public class RollbackUnitTest {
         verify(mMockDataHelper, never())
                 .destroyAppDataSnapshot(anyInt(), pkgRollbackInfoFor(PKG_2), anyInt());
         verify(mMockDataHelper).destroyApexDeSnapshots(123);
+        verify(mMockDataHelper).destroyApexCeSnapshots(111, 123);
+        verify(mMockDataHelper).destroyApexCeSnapshots(222, 123);
 
         assertThat(rollback.isDeleted()).isTrue();
     }
@@ -353,26 +353,6 @@ public class RollbackUnitTest {
         // #allPackagesEnabled returns true when 2 out of 2 packages are enabled.
         rollback.info.getPackages().add(newPkgInfoFor(PKG_2, 18, 12, true));
         assertThat(rollback.allPackagesEnabled()).isTrue();
-    }
-
-    @Test
-    public void readAndWriteStagedRollbackIdsFile() throws Exception {
-        File testFile = File.createTempFile("test", ".txt");
-        RollbackPackageHealthObserver.writeStagedRollbackId(testFile, 2468, null);
-        RollbackPackageHealthObserver.writeStagedRollbackId(testFile, 12345,
-                new VersionedPackage("com.test.package", 1));
-        RollbackPackageHealthObserver.writeStagedRollbackId(testFile, 13579,
-                new VersionedPackage("com.test.package2", 2));
-        SparseArray<String> readInfo =
-                RollbackPackageHealthObserver.readStagedRollbackIds(testFile);
-        assertThat(readInfo.size()).isEqualTo(3);
-
-        assertThat(readInfo.keyAt(0)).isEqualTo(2468);
-        assertThat(readInfo.valueAt(0)).isEqualTo("");
-        assertThat(readInfo.keyAt(1)).isEqualTo(12345);
-        assertThat(readInfo.valueAt(1)).isEqualTo("com.test.package");
-        assertThat(readInfo.keyAt(2)).isEqualTo(13579);
-        assertThat(readInfo.valueAt(2)).isEqualTo("com.test.package2");
     }
 
     @Test
@@ -454,12 +434,31 @@ public class RollbackUnitTest {
         return result;
     }
 
+    @Test
+    public void readAndWriteStagedRollbackIdsFile() throws Exception {
+        File testFile = File.createTempFile("test", ".txt");
+        RollbackPackageHealthObserver.writeStagedRollbackId(testFile, 2468, null);
+        RollbackPackageHealthObserver.writeStagedRollbackId(testFile, 12345,
+                new VersionedPackage("com.test.package", 1));
+        RollbackPackageHealthObserver.writeStagedRollbackId(testFile, 13579,
+                new VersionedPackage("com.test.package2", 2));
+        SparseArray<String> readInfo =
+                RollbackPackageHealthObserver.readStagedRollbackIds(testFile);
+        assertThat(readInfo.size()).isEqualTo(3);
+
+        assertThat(readInfo.keyAt(0)).isEqualTo(2468);
+        assertThat(readInfo.valueAt(0)).isEqualTo("");
+        assertThat(readInfo.keyAt(1)).isEqualTo(12345);
+        assertThat(readInfo.valueAt(1)).isEqualTo("com.test.package");
+        assertThat(readInfo.keyAt(2)).isEqualTo(13579);
+        assertThat(readInfo.valueAt(2)).isEqualTo("com.test.package2");
+    }
+
     private static PackageRollbackInfo newPkgInfoFor(
             String packageName, long fromVersion, long toVersion, boolean isApex) {
         return new PackageRollbackInfo(new VersionedPackage(packageName, fromVersion),
                 new VersionedPackage(packageName, toVersion),
-                new IntArray(), new ArrayList<>(), isApex, false, new IntArray(),
-                new SparseLongArray());
+                new ArrayList<>(), new ArrayList<>(), isApex, false, new ArrayList<>());
     }
 
     /**
@@ -472,8 +471,7 @@ public class RollbackUnitTest {
             String packageName, long fromVersion, long toVersion) {
         return new PackageRollbackInfo(new VersionedPackage(packageName, fromVersion),
                 new VersionedPackage(packageName, toVersion),
-                new IntArray(), new ArrayList<>(), false, true, new IntArray(),
-                new SparseLongArray());
+                new ArrayList<>(), new ArrayList<>(), false, true, new ArrayList<>());
     }
 
     private static class PackageRollbackInfoForPackage implements

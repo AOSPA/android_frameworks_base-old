@@ -1821,6 +1821,7 @@ public final class BluetoothAdapter {
         try {
             mServiceLock.readLock().lock();
             if (mService != null) {
+                if (DBG) Log.d(TAG, "removeActiveDevice, profiles: " + profiles);
                 return mService.removeActiveDevice(profiles);
             }
         } catch (RemoteException e) {
@@ -1865,6 +1866,9 @@ public final class BluetoothAdapter {
         try {
             mServiceLock.readLock().lock();
             if (mService != null) {
+                if (DBG) {
+                    Log.d(TAG, "setActiveDevice, device: " + device + ", profiles: " + profiles);
+                }
                 return mService.setActiveDevice(device, profiles);
             }
         } catch (RemoteException e) {
@@ -2358,6 +2362,36 @@ public final class BluetoothAdapter {
         return supportedProfiles;
     }
 
+    private static final String BLUETOOTH_GET_ADAPTER_CONNECTION_STATE_CACHE_PROPERTY =
+            "cache_key.bluetooth.get_adapter_connection_state";
+    private final PropertyInvalidatedCache<Void, Integer>
+            mBluetoothGetAdapterConnectionStateCache =
+            new PropertyInvalidatedCache<Void, Integer> (
+                8, BLUETOOTH_GET_ADAPTER_CONNECTION_STATE_CACHE_PROPERTY) {
+                /**
+                 * This method must not be called when mService is null.
+                 */
+                @Override
+                protected Integer recompute(Void query) {
+                    try {
+                        return mService.getAdapterConnectionState();
+                    } catch (RemoteException e) {
+                        throw e.rethrowAsRuntimeException();
+                    }
+                }
+            };
+
+    /** @hide */
+    public void disableGetAdapterConnectionStateCache() {
+        mBluetoothGetAdapterConnectionStateCache.disableLocal();
+    }
+
+    /** @hide */
+    public static void invalidateGetAdapterConnectionStateCache() {
+        PropertyInvalidatedCache.invalidateCache(
+            BLUETOOTH_GET_ADAPTER_CONNECTION_STATE_CACHE_PROPERTY);
+    }
+
     /**
      * Get the current connection state of the local Bluetooth adapter.
      * This can be used to check whether the local Bluetooth adapter is connected
@@ -2378,10 +2412,14 @@ public final class BluetoothAdapter {
         try {
             mServiceLock.readLock().lock();
             if (mService != null) {
-                return mService.getAdapterConnectionState();
+                return mBluetoothGetAdapterConnectionStateCache.query(null);
             }
-        } catch (RemoteException e) {
-            Log.e(TAG, "getConnectionState:", e);
+        } catch (RuntimeException e) {
+            if (e.getCause() instanceof RemoteException) {
+                Log.e(TAG, "getConnectionState:", e.getCause());
+            } else {
+                throw e;
+            }
         } finally {
             mServiceLock.readLock().unlock();
         }

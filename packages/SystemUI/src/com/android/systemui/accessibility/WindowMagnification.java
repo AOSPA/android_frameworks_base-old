@@ -16,40 +16,67 @@
 
 package com.android.systemui.accessibility;
 
+import android.annotation.MainThread;
+import android.annotation.NonNull;
 import android.content.Context;
 import android.content.pm.ActivityInfo;
 import android.content.res.Configuration;
-import android.database.ContentObserver;
+import android.graphics.Rect;
 import android.os.Handler;
-import android.provider.Settings;
+import android.os.RemoteException;
+import android.util.Log;
+import android.view.accessibility.AccessibilityManager;
+import android.view.accessibility.IWindowMagnificationConnection;
+import android.view.accessibility.IWindowMagnificationConnectionCallback;
 
+import com.android.internal.annotations.VisibleForTesting;
+import com.android.internal.graphics.SfVsyncFrameCallbackProvider;
 import com.android.systemui.SystemUI;
 import com.android.systemui.dagger.qualifiers.Main;
+import com.android.systemui.statusbar.CommandQueue;
 
 import javax.inject.Inject;
 import javax.inject.Singleton;
 
 /**
- * Class to handle changes to setting window_magnification value.
+ * Class to handle the interaction with
+ * {@link com.android.server.accessibility.AccessibilityManagerService}. It invokes
+ * {@link AccessibilityManager#setWindowMagnificationConnection(IWindowMagnificationConnection)}
+ * when {@code IStatusBar#requestWindowMagnificationConnection(boolean)} is called.
  */
 @Singleton
-public class WindowMagnification extends SystemUI {
-    private WindowMagnificationController mWindowMagnificationController;
-    private final Handler mHandler;
+public class WindowMagnification extends SystemUI implements WindowMagnifierCallback,
+        CommandQueue.Callbacks {
+    private static final String TAG = "WindowMagnification";
+    private static final int CONFIG_MASK =
+            ActivityInfo.CONFIG_DENSITY | ActivityInfo.CONFIG_ORIENTATION;
 
+    @VisibleForTesting
+    protected WindowMagnificationController mWindowMagnificationController;
+    protected final ModeSwitchesController mModeSwitchesController;
+    private final Handler mHandler;
+    private final AccessibilityManager mAccessibilityManager;
+    private final CommandQueue mCommandQueue;
+
+    private WindowMagnificationConnectionImpl mWindowMagnificationConnectionImpl;
     private Configuration mLastConfiguration;
 
     @Inject
-    public WindowMagnification(Context context, @Main Handler mainHandler) {
+    public WindowMagnification(Context context, @Main Handler mainHandler,
+            CommandQueue commandQueue, ModeSwitchesController modeSwitchesController) {
         super(context);
         mHandler = mainHandler;
         mLastConfiguration = new Configuration(context.getResources().getConfiguration());
+        mAccessibilityManager = (AccessibilityManager) mContext.getSystemService(
+                Context.ACCESSIBILITY_SERVICE);
+        mCommandQueue = commandQueue;
+        mModeSwitchesController = modeSwitchesController;
     }
 
     @Override
     public void onConfigurationChanged(Configuration newConfig) {
         final int configDiff = newConfig.diff(mLastConfiguration);
-        if ((configDiff & ActivityInfo.CONFIG_DENSITY) == 0) {
+        if ((configDiff & CONFIG_MASK) == 0) {
             return;
         }
         mLastConfiguration.setTo(newConfig);
@@ -60,41 +87,143 @@ public class WindowMagnification extends SystemUI {
 
     @Override
     public void start() {
-        mContext.getContentResolver().registerContentObserver(
-                Settings.Secure.getUriFor(Settings.Secure.WINDOW_MAGNIFICATION),
-                true, new ContentObserver(mHandler) {
-                    @Override
-                    public void onChange(boolean selfChange) {
-                        updateWindowMagnification();
-                    }
-                });
+        mCommandQueue.addCallback(this);
     }
 
-    private void updateWindowMagnification() {
-        try {
-            boolean enable = Settings.Secure.getInt(mContext.getContentResolver(),
-                    Settings.Secure.WINDOW_MAGNIFICATION) != 0;
-            if (enable) {
-                enableMagnification();
-            } else {
-                disableMagnification();
-            }
-        } catch (Settings.SettingNotFoundException e) {
-            disableMagnification();
-        }
-    }
-
-    private void enableMagnification() {
+    @MainThread
+    void enableWindowMagnification(int displayId, float scale, float centerX, float centerY) {
+        //TODO: b/144080869 support multi-display.
         if (mWindowMagnificationController == null) {
-            mWindowMagnificationController = new WindowMagnificationController(mContext, null);
+            mWindowMagnificationController = new WindowMagnificationController(mContext,
+                    mHandler,
+                    new SfVsyncFrameCallbackProvider(),
+                    null,
+                    this);
         }
-        mWindowMagnificationController.createWindowMagnification();
+        mWindowMagnificationController.enableWindowMagnification(scale, centerX, centerY);
     }
 
-    private void disableMagnification() {
+    @MainThread
+    void setScale(int displayId, float scale) {
+        //TODO: b/144080869 support multi-display.
+        if (mWindowMagnificationController != null) {
+            mWindowMagnificationController.setScale(scale);
+        }
+    }
+
+    @MainThread
+    void moveWindowMagnifier(int displayId, float offsetX, float offsetY) {
+        //TODO: b/144080869 support multi-display.
+        if (mWindowMagnificationController != null) {
+            mWindowMagnificationController.moveWindowMagnifier(offsetX, offsetY);
+        }
+    }
+
+    @MainThread
+    void disableWindowMagnification(int displayId) {
+        //TODO: b/144080869 support multi-display.
         if (mWindowMagnificationController != null) {
             mWindowMagnificationController.deleteWindowMagnification();
         }
         mWindowMagnificationController = null;
+    }
+
+    @Override
+    public void onWindowMagnifierBoundsChanged(int displayId, Rect frame) {
+        if (mWindowMagnificationConnectionImpl != null) {
+            mWindowMagnificationConnectionImpl.onWindowMagnifierBoundsChanged(displayId, frame);
+        }
+    }
+
+    @Override
+    public void requestWindowMagnificationConnection(boolean connect) {
+        if (connect) {
+            setWindowMagnificationConnection();
+        } else {
+            clearWindowMagnificationConnection();
+        }
+    }
+
+    private void setWindowMagnificationConnection() {
+        if (mWindowMagnificationConnectionImpl == null) {
+            mWindowMagnificationConnectionImpl = new WindowMagnificationConnectionImpl(this,
+                    mHandler, mModeSwitchesController);
+        }
+        mAccessibilityManager.setWindowMagnificationConnection(
+                mWindowMagnificationConnectionImpl);
+    }
+
+    private void clearWindowMagnificationConnection() {
+        mAccessibilityManager.setWindowMagnificationConnection(null);
+        //TODO: destroy controllers.
+    }
+
+    private static class WindowMagnificationConnectionImpl extends
+            IWindowMagnificationConnection.Stub {
+
+        private static final String TAG = "WindowMagnificationConnectionImpl";
+
+        private IWindowMagnificationConnectionCallback mConnectionCallback;
+        private final WindowMagnification mWindowMagnification;
+        private final Handler mHandler;
+        private final ModeSwitchesController mModeSwitchesController;
+
+        WindowMagnificationConnectionImpl(@NonNull WindowMagnification windowMagnification,
+                @Main Handler mainHandler, ModeSwitchesController modeSwitchesController) {
+            mWindowMagnification = windowMagnification;
+            mHandler = mainHandler;
+            mModeSwitchesController = modeSwitchesController;
+        }
+
+        @Override
+        public void enableWindowMagnification(int displayId, float scale, float centerX,
+                float centerY) {
+            mHandler.post(
+                    () -> mWindowMagnification.enableWindowMagnification(displayId, scale, centerX,
+                            centerY));
+        }
+
+        @Override
+        public void setScale(int displayId, float scale) {
+            mHandler.post(() -> mWindowMagnification.setScale(displayId, scale));
+        }
+
+        @Override
+        public void disableWindowMagnification(int displayId) {
+            mHandler.post(() -> mWindowMagnification.disableWindowMagnification(displayId));
+        }
+
+        @Override
+        public void moveWindowMagnifier(int displayId, float offsetX, float offsetY) {
+            mHandler.post(
+                    () -> mWindowMagnification.moveWindowMagnifier(displayId, offsetX, offsetY));
+        }
+
+        @Override
+        public void showMagnificationButton(int displayId, int magnificationMode) {
+            mHandler.post(
+                    () -> mModeSwitchesController.showButton(displayId, magnificationMode));
+        }
+
+        @Override
+        public void removeMagnificationButton(int displayId) {
+            mHandler.post(
+                    () -> mModeSwitchesController.removeButton(displayId));
+        }
+
+        @Override
+        public void setConnectionCallback(IWindowMagnificationConnectionCallback callback) {
+            mConnectionCallback = callback;
+        }
+
+        void onWindowMagnifierBoundsChanged(int displayId, Rect frame) {
+            if (mConnectionCallback != null) {
+                try {
+                    mConnectionCallback.onWindowMagnifierBoundsChanged(displayId, frame);
+                } catch (RemoteException e) {
+                    Log.e(TAG, "Failed to inform bounds changed", e);
+                }
+            }
+        }
     }
 }

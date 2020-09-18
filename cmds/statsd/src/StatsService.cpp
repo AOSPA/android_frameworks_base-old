@@ -484,7 +484,8 @@ void StatsService::print_cmd_help(int out) {
     dprintf(out, "  Clear cached puller data.\n");
     dprintf(out, "\n");
     dprintf(out, "usage: adb shell cmd stats print-logs\n");
-    dprintf(out, "      Only works on eng build\n");
+    dprintf(out, "  Requires root privileges.\n");
+    dprintf(out, "  Can be disabled by calling adb shell cmd stats print-logs 0\n");
 }
 
 status_t StatsService::cmd_trigger_broadcast(int out, Vector<String8>& args) {
@@ -865,18 +866,19 @@ status_t StatsService::cmd_clear_puller_cache(int out) {
 }
 
 status_t StatsService::cmd_print_logs(int out, const Vector<String8>& args) {
-    VLOG("StatsService::cmd_print_logs with Pid %i, Uid %i", AIBinder_getCallingPid(),
-         AIBinder_getCallingUid());
-    if (checkPermission(kPermissionDump)) {
-        bool enabled = true;
-        if (args.size() >= 2) {
-            enabled = atoi(args[1].c_str()) != 0;
-        }
-        mProcessor->setPrintLogs(enabled);
-        return NO_ERROR;
-    } else {
+    Status status = checkUid(AID_ROOT);
+    if (!status.isOk()) {
         return PERMISSION_DENIED;
     }
+
+    VLOG("StatsService::cmd_print_logs with pid %i, uid %i", AIBinder_getCallingPid(),
+         AIBinder_getCallingUid());
+    bool enabled = true;
+    if (args.size() >= 2) {
+        enabled = atoi(args[1].c_str()) != 0;
+    }
+    mProcessor->setPrintLogs(enabled);
+    return NO_ERROR;
 }
 
 bool StatsService::getUidFromArgs(const Vector<String8>& args, size_t uidArgIndex, int32_t& uid) {
@@ -1093,36 +1095,26 @@ void StatsService::OnLogEvent(LogEvent* event) {
     }
 }
 
-Status StatsService::getData(int64_t key, const int32_t callingUid, vector<int8_t>* output) {
+Status StatsService::getData(int64_t key, const int32_t callingUid, vector<uint8_t>* output) {
     ENFORCE_UID(AID_SYSTEM);
 
     VLOG("StatsService::getData with Uid %i", callingUid);
     ConfigKey configKey(callingUid, key);
-    // TODO(b/149254662): Since libbinder_ndk uses int8_t instead of uint8_t,
-    // there are inconsistencies with internal statsd logic. Instead of
-    // modifying lots of files, we create a temporary output array of int8_t and
-    // copy its data into output. This is a bad hack, but hopefully
-    // libbinder_ndk will transition to using uint8_t soon: progress is tracked
-    // in b/144957764. Same applies to StatsService::getMetadata.
-    vector<uint8_t> unsignedOutput;
     // The dump latency does not matter here since we do not include the current bucket, we do not
     // need to pull any new data anyhow.
     mProcessor->onDumpReport(configKey, getElapsedRealtimeNs(), false /* include_current_bucket*/,
-                             true /* erase_data */, GET_DATA_CALLED, FAST, &unsignedOutput);
-    *output = vector<int8_t>(unsignedOutput.begin(), unsignedOutput.end());
+                             true /* erase_data */, GET_DATA_CALLED, FAST, output);
     return Status::ok();
 }
 
-Status StatsService::getMetadata(vector<int8_t>* output) {
+Status StatsService::getMetadata(vector<uint8_t>* output) {
     ENFORCE_UID(AID_SYSTEM);
 
-    vector<uint8_t> unsignedOutput;
-    StatsdStats::getInstance().dumpStats(&unsignedOutput, false); // Don't reset the counters.
-    *output = vector<int8_t>(unsignedOutput.begin(), unsignedOutput.end());
+    StatsdStats::getInstance().dumpStats(output, false); // Don't reset the counters.
     return Status::ok();
 }
 
-Status StatsService::addConfiguration(int64_t key, const vector <int8_t>& config,
+Status StatsService::addConfiguration(int64_t key, const vector <uint8_t>& config,
                                       const int32_t callingUid) {
     ENFORCE_UID(AID_SYSTEM);
 
@@ -1133,7 +1125,7 @@ Status StatsService::addConfiguration(int64_t key, const vector <int8_t>& config
     }
 }
 
-bool StatsService::addConfigurationChecked(int uid, int64_t key, const vector<int8_t>& config) {
+bool StatsService::addConfigurationChecked(int uid, int64_t key, const vector<uint8_t>& config) {
     ConfigKey configKey(uid, key);
     StatsdConfig cfg;
     if (config.size() > 0) {  // If the config is empty, skip parsing.

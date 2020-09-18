@@ -193,8 +193,10 @@
     <string name="network_logging_notification_text" msgid="1327373071132562512">"Fyrirtækið þitt stjórnar þessu tæki og kann að fylgjast með netnotkun. Ýttu hér til að fá upplýsingar."</string>
     <string name="location_changed_notification_title" msgid="3620158742816699316">"Forrit hafa aðgang að staðsetningu þinni"</string>
     <string name="location_changed_notification_text" msgid="7158423339982706912">"Hafðu samband við kerfisstjórann til að fá frekari upplýsingar"</string>
+    <string name="geofencing_service" msgid="3826902410740315456">"Þjónusta fyrir landfræðileg mörk"</string>
     <string name="country_detector" msgid="7023275114706088854">"Landsgreining"</string>
     <string name="location_service" msgid="2439187616018455546">"Staðsetningarþjónusta"</string>
+    <string name="gnss_service" msgid="8907781262179951385">"GNSS-þjónusta"</string>
     <string name="sensor_notification_service" msgid="7474531979178682676">"Tilkynningaþjónusta nema"</string>
     <string name="twilight_service" msgid="8964898045693187224">"Ljósaskiptaþjónusta"</string>
     <string name="factory_reset_warning" msgid="6858705527798047809">"Tækið verður hreinsað"</string>
@@ -542,6 +544,7 @@
     <string name="biometric_not_recognized" msgid="5106687642694635888">"Þekktist ekki"</string>
     <string name="biometric_error_canceled" msgid="8266582404844179778">"Hætt við auðkenningu"</string>
     <string name="biometric_error_device_not_secured" msgid="3129845065043995924">"Ekkert PIN-númer, mynstur eða aðgangsorð stillt"</string>
+    <string name="biometric_error_generic" msgid="6784371929985434439">"Villa við auðkenningu"</string>
     <string name="fingerprint_acquired_partial" msgid="8532380671091299342">"Hluti fingrafars greindist. Reyndu aftur."</string>
     <string name="fingerprint_acquired_insufficient" msgid="2545149524031515411">"Ekki var hægt að vinna úr fingrafarinu. Reyndu aftur."</string>
     <string name="fingerprint_acquired_imager_dirty" msgid="4694800187151533990">"Fingrafaraskynjarinn er óhreinn. Hreinsaðu hann og reyndu aftur."</string>
@@ -829,7 +832,8 @@
     <string name="lockscreen_instructions_when_pattern_enabled" msgid="7982445492532123308">"Ýttu á valmyndartakkann til að taka úr lás eða hringja neyðarsímtal."</string>
     <string name="lockscreen_instructions_when_pattern_disabled" msgid="7434061749374801753">"Ýttu á valmyndartakkann til að taka úr lás."</string>
     <string name="lockscreen_pattern_instructions" msgid="3169991838169244941">"Teiknaðu mynstur til að taka úr lás"</string>
-    <string name="lockscreen_emergency_call" msgid="7500692654885445299">"Neyðarsímtal"</string>
+    <!-- no translation found for lockscreen_emergency_call (7549683825868928636) -->
+    <skip />
     <string name="lockscreen_return_to_call" msgid="3156883574692006382">"Aftur í símtal"</string>
     <string name="lockscreen_pattern_correct" msgid="8050630103651508582">"Rétt!"</string>
     <string name="lockscreen_pattern_wrong" msgid="2940138714468358458">"Reyndu aftur"</string>
@@ -1460,9 +1464,6 @@
     <string name="gpsNotifMessage" msgid="7346649122793758032">"Beiðni frá <xliff:g id="NAME">%1$s</xliff:g> (<xliff:g id="SERVICE">%2$s</xliff:g>)"</string>
     <string name="gpsVerifYes" msgid="3719843080744112940">"Já"</string>
     <string name="gpsVerifNo" msgid="1671201856091564741">"Nei"</string>
-    <string name="gnss_nfw_notification_title" msgid="5004493772059563423">"Aðgangur að staðsetningu"</string>
-    <string name="gnss_nfw_notification_message_oem" msgid="3683958907027107969">"Framleiðandi tækisins fékk aðgang að staðsetningu þinni í nýlegri neyðarlotu"</string>
-    <string name="gnss_nfw_notification_message_carrier" msgid="815888995791562151">"Símafyrirtækið þitt fékk aðgang að staðsetningu þinni í nýlegri neyðarlotu"</string>
     <string name="sync_too_many_deletes" msgid="6999440774578705300">"Hámarki eyðinga náð"</string>
     <string name="sync_too_many_deletes_desc" msgid="7409327940303504440">"<xliff:g id="NUMBER_OF_DELETED_ITEMS">%1$d</xliff:g> atriðum hefur verið eytt fyrir <xliff:g id="TYPE_OF_SYNC">%2$s</xliff:g> á reikningnum <xliff:g id="ACCOUNT_NAME">%3$s</xliff:g>. Hvað viltu gera?"</string>
     <string name="sync_really_delete" msgid="5657871730315579051">"Eyða atriðunum"</string>
@@ -1792,8 +1793,8 @@
     <string name="package_updated_device_owner" msgid="7560272363805506941">"Kerfisstjóri uppfærði"</string>
     <string name="package_deleted_device_owner" msgid="2292335928930293023">"Kerfisstjóri eyddi"</string>
     <string name="confirm_battery_saver" msgid="5247976246208245754">"Í lagi"</string>
-    <string name="battery_saver_description_with_learn_more" msgid="5997766757551917769">"Til að auka rafhlöðuendingu gerir rafhlöðusparnaður eftirfarandi:\n\n•Kveikir á dökku þema\n•Slekkur á eða takmarkar bakgrunnsvirkni, tilteknar myndbrellur og aðra eiginleika eins og „Ok Google“\n\n"<annotation id="url">"Frekari upplýsingar"</annotation></string>
-    <string name="battery_saver_description" msgid="8587408568232177204">"Til að auka rafhlöðuendingu gerir rafhlöðusparnaður eftirfarandi:\n\n•Kveikir á dökku þema\n•Slekkur á eða takmarkar bakgrunnsvirkni, tilteknar myndbrellur og aðra eiginleika eins og „Ok Google“"</string>
+    <string name="battery_saver_description_with_learn_more" msgid="4424488535318105801">"Til að auka rafhlöðuendingu gerir rafhlöðusparnaður eftirfarandi:\n\n•·Kveikir á dökku þema\n•·Slekkur á eða takmarkar bakgrunnsvirkni, tilteknar myndbrellur og aðra eiginleika eins og „Ok Google“\n\n"<annotation id="url">"Frekari upplýsingar"</annotation></string>
+    <string name="battery_saver_description" msgid="6794188153647295212">"Til að auka rafhlöðuendingu gerir rafhlöðusparnaður eftirfarandi:\n\n•·Kveikir á dökku þema\n•·Slekkur á eða takmarkar bakgrunnsvirkni, tilteknar myndbrellur og aðra eiginleika eins og „Ok Google“"</string>
     <string name="data_saver_description" msgid="4995164271550590517">"Gagnasparnaður getur hjálpað til við að draga úr gagnanotkun með því að hindra forrit í að senda eða sækja gögn í bakgrunni. Forrit sem er í notkun getur náð í gögn, en gerir það kannski sjaldnar. Niðurstaðan getur verið, svo dæmi sé tekið, að myndir eru ekki birtar fyrr en þú ýtir á þær."</string>
     <string name="data_saver_enable_title" msgid="7080620065745260137">"Kveikja á gagnasparnaði?"</string>
     <string name="data_saver_enable_button" msgid="4399405762586419726">"Kveikja"</string>
@@ -1997,6 +1998,7 @@
     <string name="notification_appops_camera_active" msgid="8177643089272352083">"Myndavél"</string>
     <string name="notification_appops_microphone_active" msgid="581333393214739332">"Hljóðnemi"</string>
     <string name="notification_appops_overlay_active" msgid="5571732753262836481">"birt yfir öðrum forritum á skjánum"</string>
+    <string name="notification_feedback_indicator" msgid="663476517711323016">"Senda ábendingar"</string>
     <string name="dynamic_mode_notification_channel_name" msgid="2986926422100223328">"Upplýsingatilkynning aðgerðastillingar"</string>
     <string name="dynamic_mode_notification_title" msgid="9205715501274608016">"Rafhlaðan kann að tæmast áður en hún kemst í hleðslu"</string>
     <string name="dynamic_mode_notification_summary" msgid="4141614604437372157">"Kveikt á rafhlöðusparnaði til að lengja endingu rafhlöðunnar"</string>

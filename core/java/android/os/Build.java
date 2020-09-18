@@ -106,6 +106,12 @@ public class Build {
     public static final String HARDWARE = getString("ro.hardware");
 
     /**
+     * The hardware variant (SKU), if available.
+     */
+    @NonNull
+    public static final String SKU = getString("ro.boot.hardware.sku");
+
+    /**
      * Whether this build was for an emulator device.
      * @hide
      */
@@ -1017,6 +1023,11 @@ public class Build {
          * R.
          */
         public static final int R = 30;
+
+        /**
+         * S.
+         */
+        public static final int S = CUR_DEVELOPMENT;
     }
 
     /** The type of build, like "user" or "eng". */

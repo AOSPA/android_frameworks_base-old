@@ -399,7 +399,8 @@ public class BubbleExpandedView extends LinearLayout {
     }
 
     /** Return a GraphicBuffer with the contents of the ActivityView's underlying surface. */
-    @Nullable SurfaceControl.ScreenshotGraphicBuffer snapshotActivitySurface() {
+    @Nullable
+    SurfaceControl.ScreenshotHardwareBuffer snapshotActivitySurface() {
         if (mActivitySurface == null) {
             return null;
         }

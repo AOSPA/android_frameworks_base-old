@@ -711,11 +711,13 @@
     <string name="notification_silence_title" msgid="8608090968400832335">"Тих режим"</string>
     <string name="notification_alert_title" msgid="3656229781017543655">"Стандартно"</string>
     <string name="notification_bubble_title" msgid="8330481035191903164">"Балонче"</string>
+    <string name="notification_automatic_title" msgid="3745465364578762652">"Автоматично"</string>
     <string name="notification_channel_summary_low" msgid="4860617986908931158">"Без звук или вибриране"</string>
     <string name="notification_conversation_summary_low" msgid="1734433426085468009">"Без звук или вибриране и се показва по-долу в секцията с разговори"</string>
     <string name="notification_channel_summary_default" msgid="3282930979307248890">"Може да звъни или да вибрира въз основа на настройките за телефона"</string>
     <string name="notification_channel_summary_default_with_bubbles" msgid="1782419896613644568">"Може да звъни или да вибрира въз основа на настройките за телефона. Разговорите от <xliff:g id="APP_NAME">%1$s</xliff:g> се показват като балончета по подразбиране."</string>
     <string name="notification_channel_summary_bubble" msgid="7235935211580860537">"Задържа вниманието ви посредством плаващ пряк път към това съдържание."</string>
+    <string name="notification_channel_summary_automatic" msgid="5813109268050235275">"Нека системата да определя дали дадено известие да се придружава от звук, или вибриране"</string>
     <string name="notification_channel_summary_priority" msgid="7952654515769021553">"Показва се като плаващо балонче в горната част на секцията с разговори и показва снимката на потребителския профил на заключения екран"</string>
     <string name="notification_conversation_channel_settings" msgid="2409977688430606835">"Настройки"</string>
     <string name="notification_priority_title" msgid="2079708866333537093">"Приоритет"</string>
@@ -736,6 +738,12 @@
     <string name="appops_camera_mic_overlay" msgid="5584311236445644095">"Това приложение се показва върху други приложения на екрана и използва микрофона и камерата."</string>
     <string name="notification_appops_settings" msgid="5208974858340445174">"Настройки"</string>
     <string name="notification_appops_ok" msgid="2177609375872784124">"OK"</string>
+    <string name="feedback_silenced" msgid="5382212321253328247">"Това известие бе заглушено от системата."</string>
+    <string name="feedback_promoted" msgid="8075757485407091976">"Това известие бе повишено от системата."</string>
+    <string name="feedback_demoted" msgid="5848066008939031913">"Това известие бе понижено от системата."</string>
+    <string name="feedback_prompt" msgid="2278631214125128281">"Правилно ли е това?"</string>
+    <string name="feedback_response" msgid="4671729244976641339">"Благодарим ви за отзивите!"</string>
+    <string name="feedback_ok" msgid="6481426753298857144">"ОК"</string>
     <string name="notification_channel_controls_opened_accessibility" msgid="6111817750774381094">"Контролите за известията за <xliff:g id="APP_NAME">%1$s</xliff:g> са оттворени"</string>
     <string name="notification_channel_controls_closed_accessibility" msgid="1561909368876911701">"Контролите за известията за <xliff:g id="APP_NAME">%1$s</xliff:g> са затворени"</string>
     <string name="notification_channel_switch_accessibility" msgid="8979885820432540252">"Разрешаване на известия от този канал"</string>
@@ -908,25 +916,14 @@
     <string name="accessibility_quick_settings_edit" msgid="1523745183383815910">"Редактиране на подредбата на настройките."</string>
     <string name="accessibility_quick_settings_page" msgid="7506322631645550961">"Страница <xliff:g id="ID_1">%1$d</xliff:g> от <xliff:g id="ID_2">%2$d</xliff:g>"</string>
     <string name="tuner_lock_screen" msgid="2267383813241144544">"Заключен екран"</string>
-    <string name="pip_phone_expand" msgid="1424988917240616212">"Разгъване"</string>
-    <string name="pip_phone_minimize" msgid="9057117033655996059">"Намаляване"</string>
-    <string name="pip_phone_close" msgid="8801864042095341824">"Затваряне"</string>
-    <string name="pip_phone_settings" msgid="5687538631925004341">"Настройки"</string>
-    <string name="pip_phone_dismiss_hint" msgid="5825740708095316710">"Преместете надолу с плъзгане, за да отхвърлите"</string>
-    <string name="pip_menu_title" msgid="6365909306215631910">"Меню"</string>
-    <string name="pip_notification_title" msgid="8661573026059630525">"<xliff:g id="NAME">%s</xliff:g> е в режима „Картина в картината“"</string>
-    <string name="pip_notification_message" msgid="4991831338795022227">"Ако не искате <xliff:g id="NAME">%s</xliff:g> да използва тази функция, докоснете, за да отворите настройките, и я изключете."</string>
-    <string name="pip_play" msgid="333995977693142810">"Пускане"</string>
-    <string name="pip_pause" msgid="1139598607050555845">"Поставяне на пауза"</string>
-    <string name="pip_skip_to_next" msgid="3864212650579956062">"Към следващия елемент"</string>
-    <string name="pip_skip_to_prev" msgid="3742589641443049237">"Към предишния елемент"</string>
-    <string name="accessibility_action_pip_resize" msgid="8237306972921160456">"Преоразмеряване"</string>
     <string name="thermal_shutdown_title" msgid="2702966892682930264">"Тел. се изкл. поради загряване"</string>
-    <string name="thermal_shutdown_message" msgid="7432744214105003895">"Телефонът ви вече работи нормално"</string>
+    <string name="thermal_shutdown_message" msgid="6142269839066172984">"Телефонът ви вече работи нормално.\nДокоснете за още информация"</string>
     <string name="thermal_shutdown_dialog_message" msgid="6745684238183492031">"Телефонът ви бе твърде горещ, затова се изключи с цел охлаждане. Вече работи нормално.\n\nТелефонът ви може да стане твърде горещ, ако:\n	• използвате приложения, които ползват голям обем ресурси (като например игри, видеосъдържание или приложения за навигация);\n	• изтегляте или качвате големи файлове;\n	• използвате устройството си при високи температури."</string>
+    <string name="thermal_shutdown_dialog_help_text" msgid="6413474593462902901">"Вижте стъпките, които да предприемете"</string>
     <string name="high_temp_title" msgid="2218333576838496100">"Телефонът загрява"</string>
-    <string name="high_temp_notif_message" msgid="163928048626045592">"Някои функции са ограничени, докато телефонът се охлажда"</string>
+    <string name="high_temp_notif_message" msgid="1277346543068257549">"Някои функции са ограничени, докато телефонът се охлажда.\nДокоснете за още информация"</string>
     <string name="high_temp_dialog_message" msgid="3793606072661253968">"Телефонът ви автоматично ще направи опит за охлаждане. Пак можете да го използвате, но той може да работи по-бавно.\n\nСлед като се охлади, ще работи нормално."</string>
+    <string name="high_temp_dialog_help_text" msgid="7380171287943345858">"Вижте стъпките, които да предприемете"</string>
     <string name="high_temp_alarm_title" msgid="2359958549570161495">"Изключете зарядното устройство"</string>
     <string name="high_temp_alarm_notify_message" msgid="7186272817783835089">"При зареждането на това устройство възникна проблем. Изключете захранващия адаптер и внимавайте, тъй като кабелът може да е топъл."</string>
     <string name="high_temp_alarm_help_care_steps" msgid="5017002218341329566">"Вижте стъпките, които да предприемете"</string>
@@ -1022,7 +1019,6 @@
     <string name="priority_onboarding_ignores_dnd_text" msgid="2918952762719600529">"Прекъсване на режима „Не безпокойте“"</string>
     <string name="priority_onboarding_done_button_title" msgid="4569550984286506007">"Разбрах"</string>
     <string name="priority_onboarding_settings_button_title" msgid="6663601574303585927">"Настройки"</string>
-    <string name="magnification_overlay_title" msgid="6584179429612427958">"Прозорец с наслагване за ниво на мащаба"</string>
     <string name="magnification_window_title" msgid="4863914360847258333">"Прозорец за ниво на мащаба"</string>
     <string name="magnification_controls_title" msgid="8421106606708891519">"Контроли за прозореца за ниво на мащаба"</string>
     <string name="quick_controls_title" msgid="6839108006171302273">"Контроли за устройството"</string>

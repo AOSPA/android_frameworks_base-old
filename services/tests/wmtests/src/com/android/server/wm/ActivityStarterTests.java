@@ -201,7 +201,8 @@ public class ActivityStarterTests extends ActivityTestsBase {
         ai.packageName = "com.android.test.package";
         final WindowProcessController wpc =
                 containsConditions(preconditions, PRECONDITION_NO_CALLER_APP)
-                ? null : new WindowProcessController(service, ai, null, 0, -1, null, listener);
+                        ? null
+                        : new WindowProcessController(service, ai, null, 0, -1, null, listener);
         doReturn(wpc).when(service).getProcessController(any());
 
         final Intent intent = new Intent();
@@ -212,7 +213,7 @@ public class ActivityStarterTests extends ActivityTestsBase {
 
         IVoiceInteractionSession voiceSession =
                 containsConditions(preconditions, PRECONDITION_SOURCE_VOICE_SESSION)
-                ? mock(IVoiceInteractionSession.class) : null;
+                        ? mock(IVoiceInteractionSession.class) : null;
 
         // Create source token
         final ActivityBuilder builder = new ActivityBuilder(service).setTask(
@@ -321,7 +322,7 @@ public class ActivityStarterTests extends ActivityTestsBase {
 
         if (mockGetLaunchStack) {
             // Instrument the stack and task used.
-            final ActivityStack stack = mRootWindowContainer.getDefaultTaskDisplayArea()
+            final Task stack = mRootWindowContainer.getDefaultTaskDisplayArea()
                     .createStack(WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_STANDARD,
                             true /* onTop */);
 
@@ -492,13 +493,12 @@ public class ActivityStarterTests extends ActivityTestsBase {
     }
 
     private void assertNoTasks(DisplayContent display) {
-        for (int tdaNdx = display.getTaskDisplayAreaCount() - 1; tdaNdx >= 0; --tdaNdx) {
-            final TaskDisplayArea taskDisplayArea = display.getTaskDisplayAreaAt(tdaNdx);
+        display.forAllTaskDisplayAreas(taskDisplayArea -> {
             for (int sNdx = taskDisplayArea.getStackCount() - 1; sNdx >= 0; --sNdx) {
-                final ActivityStack stack = taskDisplayArea.getStackAt(sNdx);
+                final Task stack = taskDisplayArea.getStackAt(sNdx);
                 assertFalse(stack.hasChild());
             }
-        }
+        });
     }
 
     /**
@@ -623,7 +623,7 @@ public class ActivityStarterTests extends ActivityTestsBase {
                 UNIMPORTANT_UID2, false, PROCESS_STATE_TOP + 1,
                 false, true, false, false, false);
         runAndVerifyBackgroundActivityStartsSubtest(
-                "disallowed_callerIsWhitelisted_notAborted", false,
+                "disallowed_callerIsAllowed_notAborted", false,
                 UNIMPORTANT_UID, false, PROCESS_STATE_TOP + 1,
                 UNIMPORTANT_UID2, false, PROCESS_STATE_TOP + 1,
                 false, false, true, false, false);
@@ -644,7 +644,7 @@ public class ActivityStarterTests extends ActivityTestsBase {
             int callingUid, boolean callingUidHasVisibleWindow, int callingUidProcState,
             int realCallingUid, boolean realCallingUidHasVisibleWindow, int realCallingUidProcState,
             boolean hasForegroundActivities, boolean callerIsRecents,
-            boolean callerIsTempWhitelisted,
+            boolean callerIsTempAllowed,
             boolean callerIsInstrumentingWithBackgroundActivityStartPrivileges,
             boolean isCallingUidDeviceOwner) {
         // window visibility
@@ -669,8 +669,8 @@ public class ActivityStarterTests extends ActivityTestsBase {
         RecentTasks recentTasks = mock(RecentTasks.class);
         mService.mStackSupervisor.setRecentTasks(recentTasks);
         doReturn(callerIsRecents).when(recentTasks).isCallerRecents(callingUid);
-        // caller is temp whitelisted
-        callerApp.setAllowBackgroundActivityStarts(callerIsTempWhitelisted);
+        // caller is temp allowed
+        callerApp.setAllowBackgroundActivityStarts(callerIsTempAllowed);
         // caller is instrumenting with background activity starts privileges
         callerApp.setInstrumenting(callerIsInstrumentingWithBackgroundActivityStartPrivileges,
                 callerIsInstrumentingWithBackgroundActivityStartPrivileges);
@@ -746,7 +746,7 @@ public class ActivityStarterTests extends ActivityTestsBase {
                 new TestDisplayContent.Builder(mService, 1000, 1500)
                         .setPosition(POSITION_BOTTOM).build();
         final TaskDisplayArea secondaryTaskContainer = secondaryDisplay.getDefaultTaskDisplayArea();
-        final ActivityStack stack = secondaryTaskContainer.createStack(
+        final Task stack = secondaryTaskContainer.createStack(
                 WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_STANDARD, true /* onTop */);
 
         // Create an activity record on the top of secondary display.
@@ -792,7 +792,7 @@ public class ActivityStarterTests extends ActivityTestsBase {
                         ACTIVITY_TYPE_STANDARD, false /* onTop */));
 
         // Create another activity on top of the secondary display.
-        final ActivityStack topStack = secondaryTaskContainer.createStack(WINDOWING_MODE_FULLSCREEN,
+        final Task topStack = secondaryTaskContainer.createStack(WINDOWING_MODE_FULLSCREEN,
                 ACTIVITY_TYPE_STANDARD, true /* onTop */);
         final Task topTask = new TaskBuilder(mSupervisor).setStack(topStack).build();
         new ActivityBuilder(mService).setTask(topTask).build();
@@ -831,7 +831,7 @@ public class ActivityStarterTests extends ActivityTestsBase {
 
         Task task = topActivity.getTask();
         starter.postStartActivityProcessing(
-                task.getTopNonFinishingActivity(), START_DELIVERED_TO_TOP, task.getStack());
+                task.getTopNonFinishingActivity(), START_DELIVERED_TO_TOP, task.getRootTask());
 
         verify(taskChangeNotifier).notifyActivityRestartAttempt(
                 any(), anyBoolean(), anyBoolean(), anyBoolean());
@@ -840,14 +840,14 @@ public class ActivityStarterTests extends ActivityTestsBase {
 
         Task task2 = reusableActivity.getTask();
         starter.postStartActivityProcessing(
-                task2.getTopNonFinishingActivity(), START_TASK_TO_FRONT, task.getStack());
+                task2.getTopNonFinishingActivity(), START_TASK_TO_FRONT, task.getRootTask());
         verify(taskChangeNotifier, times(2)).notifyActivityRestartAttempt(
                 any(), anyBoolean(), anyBoolean(), anyBoolean());
         verify(taskChangeNotifier).notifyActivityRestartAttempt(
                 any(), anyBoolean(), anyBoolean(), eq(false));
     }
 
-    private ActivityRecord createSingleTaskActivityOn(ActivityStack stack) {
+    private ActivityRecord createSingleTaskActivityOn(Task stack) {
         final ComponentName componentName = ComponentName.createRelative(
                 DEFAULT_COMPONENT_PACKAGE_NAME,
                 DEFAULT_COMPONENT_PACKAGE_NAME + ".SingleTaskActivity");
@@ -1051,7 +1051,7 @@ public class ActivityStarterTests extends ActivityTestsBase {
         targetRecord.setVisibility(false);
         final ActivityRecord sourceRecord = new ActivityBuilder(mService).build();
 
-        final ActivityStack stack = spy(
+        final Task stack = spy(
                 mRootWindowContainer.getDefaultTaskDisplayArea()
                         .createStack(WINDOWING_MODE_SPLIT_SCREEN_PRIMARY, ACTIVITY_TYPE_STANDARD,
                                 /* onTop */true));

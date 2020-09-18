@@ -56,7 +56,6 @@ import static android.view.WindowManager.LayoutParams.TYPE_SYSTEM_DIALOG;
 import static android.view.WindowManager.LayoutParams.TYPE_SYSTEM_ERROR;
 import static android.view.WindowManager.LayoutParams.TYPE_SYSTEM_OVERLAY;
 import static android.view.WindowManager.LayoutParams.TYPE_TOAST;
-import static android.view.WindowManager.LayoutParams.TYPE_TRUSTED_APPLICATION_OVERLAY;
 import static android.view.WindowManager.LayoutParams.TYPE_VOICE_INTERACTION;
 import static android.view.WindowManager.LayoutParams.TYPE_VOICE_INTERACTION_STARTING;
 import static android.view.WindowManager.LayoutParams.TYPE_VOLUME_OVERLAY;
@@ -140,6 +139,10 @@ public interface WindowManagerPolicy extends WindowManagerPolicyConstants {
     @Retention(SOURCE)
     @IntDef({NAV_BAR_LEFT, NAV_BAR_RIGHT, NAV_BAR_BOTTOM})
     @interface NavigationBarPosition {}
+
+    @Retention(SOURCE)
+    @IntDef({ALT_BAR_UNKNOWN, ALT_BAR_LEFT, ALT_BAR_RIGHT, ALT_BAR_BOTTOM, ALT_BAR_TOP})
+    @interface AltBarPosition {}
 
     /**
      * Pass this event to the user / app.  To be returned from
@@ -762,11 +765,8 @@ public interface WindowManagerPolicy extends WindowManagerPolicyConstants {
                 return  1;
             case TYPE_PRESENTATION:
             case TYPE_PRIVATE_PRESENTATION:
-                return  APPLICATION_LAYER;
             case TYPE_DOCK_DIVIDER:
-                return  APPLICATION_LAYER;
             case TYPE_QS_DIALOG:
-                return  APPLICATION_LAYER;
             case TYPE_PHONE:
                 return  3;
             case TYPE_SEARCH_BAR:
@@ -791,7 +791,6 @@ public interface WindowManagerPolicy extends WindowManagerPolicyConstants {
                 // in a higher layer than TYPE_APPLICATION_OVERLAY.
                 return  canAddInternalSystemWindow ? 13 : 10;
             case TYPE_APPLICATION_OVERLAY:
-            case TYPE_TRUSTED_APPLICATION_OVERLAY:
                 return  12;
             case TYPE_INPUT_METHOD:
                 // on-screen keyboards and other such input method user interfaces go here.
@@ -854,7 +853,7 @@ public interface WindowManagerPolicy extends WindowManagerPolicyConstants {
                 return  35;
             default:
                 Slog.e("WindowManager", "Unknown window type: " + type);
-                return APPLICATION_LAYER;
+                return 3;
         }
     }
 

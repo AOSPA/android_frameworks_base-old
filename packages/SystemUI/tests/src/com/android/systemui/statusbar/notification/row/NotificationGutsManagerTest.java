@@ -72,6 +72,7 @@ import com.android.systemui.plugins.statusbar.NotificationMenuRowPlugin;
 import com.android.systemui.settings.CurrentUserContextTracker;
 import com.android.systemui.statusbar.NotificationLockscreenUserManager;
 import com.android.systemui.statusbar.NotificationPresenter;
+import com.android.systemui.statusbar.notification.AssistantFeedbackController;
 import com.android.systemui.statusbar.notification.NotificationActivityStarter;
 import com.android.systemui.statusbar.notification.VisualStabilityManager;
 import com.android.systemui.statusbar.notification.collection.NotificationEntry;
@@ -133,6 +134,7 @@ public class NotificationGutsManagerTest extends SysuiTestCase {
     @Mock(answer = Answers.RETURNS_SELF)
     private PriorityOnboardingDialogController.Builder mBuilder;
     private Provider<PriorityOnboardingDialogController.Builder> mProvider = () -> mBuilder;
+    @Mock private AssistantFeedbackController mAssistantFeedbackController;
 
     @Before
     public void setUp() {
@@ -151,7 +153,8 @@ public class NotificationGutsManagerTest extends SysuiTestCase {
         mGutsManager = new NotificationGutsManager(mContext, mVisualStabilityManager,
                 () -> mStatusBar, mHandler, mHandler, mAccessibilityManager, mHighPriorityProvider,
                 mINotificationManager, mLauncherApps, mShortcutManager,
-                mChannelEditorDialogController, mContextTracker, mProvider, mBubbleController,
+                mChannelEditorDialogController, mContextTracker, mProvider,
+                mAssistantFeedbackController, mBubbleController,
                 new UiEventLoggerFake());
         mGutsManager.setUpWithPresenter(mPresenter, mStackScroller,
                 mCheckSaveListener, mOnSettingsClickListener);
@@ -368,7 +371,8 @@ public class NotificationGutsManagerTest extends SysuiTestCase {
                 any(UiEventLogger.class),
                 eq(false),
                 eq(false),
-                eq(true) /* wasShownHighPriority */);
+                eq(true), /* wasShownHighPriority */
+                eq(false) /* showAutomaticSetting */);
     }
 
     @Test
@@ -401,7 +405,8 @@ public class NotificationGutsManagerTest extends SysuiTestCase {
                 any(UiEventLogger.class),
                 eq(true),
                 eq(false),
-                eq(false) /* wasShownHighPriority */);
+                eq(false), /* wasShownHighPriority */
+                eq(false) /* showAutomaticSetting */);
     }
 
     @Test
@@ -432,7 +437,8 @@ public class NotificationGutsManagerTest extends SysuiTestCase {
                 any(UiEventLogger.class),
                 eq(false),
                 eq(false),
-                eq(false) /* wasShownHighPriority */);
+                eq(false), /* wasShownHighPriority */
+                eq(false) /* showAutomaticSetting */);
     }
 
     @Test

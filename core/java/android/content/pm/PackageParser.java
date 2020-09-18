@@ -46,7 +46,6 @@ import android.annotation.IntRange;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.StringRes;
-import android.annotation.TestApi;
 import android.apex.ApexInfo;
 import android.app.ActivityTaskManager;
 import android.app.ActivityThread;
@@ -472,15 +471,19 @@ public class PackageParser {
         public final String targetPackageName;
         public final boolean overlayIsStatic;
         public final int overlayPriority;
+        public final int rollbackDataPolicy;
 
         public ApkLite(String codePath, String packageName, String splitName,
-                boolean isFeatureSplit, String configForSplit, String usesSplitName,
-                boolean isSplitRequired, int versionCode, int versionCodeMajor, int revisionCode,
-                int installLocation, List<VerifierInfo> verifiers, SigningDetails signingDetails,
-                boolean coreApp, boolean debuggable, boolean profilableByShell, boolean multiArch,
+                boolean isFeatureSplit,
+                String configForSplit, String usesSplitName, boolean isSplitRequired,
+                int versionCode, int versionCodeMajor,
+                int revisionCode, int installLocation, List<VerifierInfo> verifiers,
+                SigningDetails signingDetails, boolean coreApp,
+                boolean debuggable, boolean profilableByShell, boolean multiArch,
                 boolean use32bitAbi, boolean useEmbeddedDex, boolean extractNativeLibs,
                 boolean isolatedSplits, String targetPackageName, boolean overlayIsStatic,
-                int overlayPriority, int minSdkVersion, int targetSdkVersion) {
+                int overlayPriority, int minSdkVersion, int targetSdkVersion,
+                int rollbackDataPolicy) {
             this.codePath = codePath;
             this.packageName = packageName;
             this.splitName = splitName;
@@ -507,6 +510,7 @@ public class PackageParser {
             this.overlayPriority = overlayPriority;
             this.minSdkVersion = minSdkVersion;
             this.targetSdkVersion = targetSdkVersion;
+            this.rollbackDataPolicy = rollbackDataPolicy;
         }
 
         public long getLongVersionCode() {
@@ -1591,6 +1595,7 @@ public class PackageParser {
         String targetPackage = null;
         boolean overlayIsStatic = false;
         int overlayPriority = 0;
+        int rollbackDataPolicy = 0;
 
         String requiredSystemPropertyName = null;
         String requiredSystemPropertyValue = null;
@@ -1644,10 +1649,6 @@ public class PackageParser {
                     final String attr = attrs.getAttributeName(i);
                     if ("debuggable".equals(attr)) {
                         debuggable = attrs.getAttributeBooleanValue(i, false);
-                        if (debuggable) {
-                            // Debuggable implies profileable
-                            profilableByShell = true;
-                        }
                     }
                     if ("multiArch".equals(attr)) {
                         multiArch = attrs.getAttributeBooleanValue(i, false);
@@ -1660,6 +1661,9 @@ public class PackageParser {
                     }
                     if ("useEmbeddedDex".equals(attr)) {
                         useEmbeddedDex = attrs.getAttributeBooleanValue(i, false);
+                    }
+                    if (attr.equals("rollbackDataPolicy")) {
+                        rollbackDataPolicy = attrs.getAttributeIntValue(i, 0);
                     }
                 }
             } else if (PackageParser.TAG_OVERLAY.equals(parser.getName())) {
@@ -1700,13 +1704,6 @@ public class PackageParser {
                         minSdkVersion = attrs.getAttributeIntValue(i, DEFAULT_MIN_SDK_VERSION);
                     }
                 }
-            } else if (TAG_PROFILEABLE.equals(parser.getName())) {
-                for (int i = 0; i < attrs.getAttributeCount(); ++i) {
-                    final String attr = attrs.getAttributeName(i);
-                    if ("shell".equals(attr)) {
-                        profilableByShell = attrs.getAttributeBooleanValue(i, profilableByShell);
-                    }
-                }
             }
         }
 
@@ -1726,7 +1723,7 @@ public class PackageParser {
                 revisionCode, installLocation, verifiers, signingDetails, coreApp, debuggable,
                 profilableByShell, multiArch, use32bitAbi, useEmbeddedDex, extractNativeLibs,
                 isolatedSplits, targetPackage, overlayIsStatic, overlayPriority, minSdkVersion,
-                targetSdkVersion);
+                targetSdkVersion, rollbackDataPolicy);
     }
 
     /**
@@ -2545,7 +2542,6 @@ public class PackageParser {
      *         not compatible with this platform
      * @hide Exposed for unit testing only.
      */
-    @TestApi
     public static int computeTargetSdkVersion(@IntRange(from = 0) int targetVers,
             @Nullable String targetCode, @NonNull String[] platformSdkCodenames,
             @NonNull String[] outError) {
@@ -2610,7 +2606,6 @@ public class PackageParser {
      *         compatible with this platform
      * @hide Exposed for unit testing only.
      */
-    @TestApi
     public static int computeMinSdkVersion(@IntRange(from = 1) int minVers,
             @Nullable String minCode, @IntRange(from = 1) int platformSdkVersion,
             @NonNull String[] platformSdkCodenames, @NonNull String[] outError) {
@@ -3464,8 +3459,6 @@ public class PackageParser {
                 com.android.internal.R.styleable.AndroidManifestApplication_debuggable,
                 false)) {
             ai.flags |= ApplicationInfo.FLAG_DEBUGGABLE;
-            // Debuggable implies profileable
-            ai.privateFlags |= ApplicationInfo.PRIVATE_FLAG_PROFILEABLE_BY_SHELL;
         }
 
         if (sa.getBoolean(
@@ -4732,7 +4725,6 @@ public class PackageParser {
      *                                AndroidManifest.xml.
      * @hide Exposed for unit testing only.
      */
-    @TestApi
     public static int getActivityConfigChanges(int configChanges, int recreateOnConfigChanges) {
         return configChanges | ((~recreateOnConfigChanges) & RECREATE_ON_CONFIG_CHANGES_MASK);
     }

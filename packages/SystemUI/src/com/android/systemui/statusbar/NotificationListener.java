@@ -210,6 +210,7 @@ public class NotificationListener extends NotificationListenerWithPlugins {
                     false,
                     false,
                     null,
+                    0,
                     false
             );
         }

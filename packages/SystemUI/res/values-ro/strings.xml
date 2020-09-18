@@ -714,11 +714,13 @@
     <string name="notification_silence_title" msgid="8608090968400832335">"Silențios"</string>
     <string name="notification_alert_title" msgid="3656229781017543655">"Prestabilite"</string>
     <string name="notification_bubble_title" msgid="8330481035191903164">"Balon"</string>
+    <string name="notification_automatic_title" msgid="3745465364578762652">"Automat"</string>
     <string name="notification_channel_summary_low" msgid="4860617986908931158">"Fără sunet sau vibrații"</string>
     <string name="notification_conversation_summary_low" msgid="1734433426085468009">"Fără sunet sau vibrații și apare în partea de jos a secțiunii de conversație"</string>
     <string name="notification_channel_summary_default" msgid="3282930979307248890">"Poate să sune sau să vibreze, în funcție de setările telefonului"</string>
     <string name="notification_channel_summary_default_with_bubbles" msgid="1782419896613644568">"Poate să sune sau să vibreze, în funcție de setările telefonului. Conversațiile din balonul <xliff:g id="APP_NAME">%1$s</xliff:g> în mod prestabilit."</string>
     <string name="notification_channel_summary_bubble" msgid="7235935211580860537">"Vă atrage atenția printr-o comandă rapidă flotantă la acest conținut."</string>
+    <string name="notification_channel_summary_automatic" msgid="5813109268050235275">"Solicitați-i sistemului să stabilească dacă această notificare este sonoră sau cu vibrații."</string>
     <string name="notification_channel_summary_priority" msgid="7952654515769021553">"Se afișează în partea de sus a secțiunii de conversație, apare ca un balon flotant, afișează fotografia de profil pe ecranul de blocare"</string>
     <string name="notification_conversation_channel_settings" msgid="2409977688430606835">"Setări"</string>
     <string name="notification_priority_title" msgid="2079708866333537093">"Prioritate"</string>
@@ -739,6 +741,12 @@
     <string name="appops_camera_mic_overlay" msgid="5584311236445644095">"Această aplicație se afișează peste alte aplicații de pe ecran și folosește microfonul și camera foto."</string>
     <string name="notification_appops_settings" msgid="5208974858340445174">"Setări"</string>
     <string name="notification_appops_ok" msgid="2177609375872784124">"OK"</string>
+    <string name="feedback_silenced" msgid="5382212321253328247">"Notificarea a fost dezactivată de sistem."</string>
+    <string name="feedback_promoted" msgid="8075757485407091976">"Notificarea a fost promovată de sistem."</string>
+    <string name="feedback_demoted" msgid="5848066008939031913">"Notificarea a fost mutată în jos de sistem."</string>
+    <string name="feedback_prompt" msgid="2278631214125128281">"Este corect?"</string>
+    <string name="feedback_response" msgid="4671729244976641339">"Mulțumim pentru feedback!"</string>
+    <string name="feedback_ok" msgid="6481426753298857144">"OK"</string>
     <string name="notification_channel_controls_opened_accessibility" msgid="6111817750774381094">"Opțiunile privind notificările pentru <xliff:g id="APP_NAME">%1$s</xliff:g> sunt afișate"</string>
     <string name="notification_channel_controls_closed_accessibility" msgid="1561909368876911701">"Opțiunile privind notificările pentru <xliff:g id="APP_NAME">%1$s</xliff:g> nu sunt afișate"</string>
     <string name="notification_channel_switch_accessibility" msgid="8979885820432540252">"Permiteți notificările de la acest canal"</string>
@@ -913,25 +921,14 @@
     <string name="accessibility_quick_settings_edit" msgid="1523745183383815910">"Editați ordinea setărilor."</string>
     <string name="accessibility_quick_settings_page" msgid="7506322631645550961">"Pagina <xliff:g id="ID_1">%1$d</xliff:g> din <xliff:g id="ID_2">%2$d</xliff:g>"</string>
     <string name="tuner_lock_screen" msgid="2267383813241144544">"Ecran de blocare"</string>
-    <string name="pip_phone_expand" msgid="1424988917240616212">"Extindeți"</string>
-    <string name="pip_phone_minimize" msgid="9057117033655996059">"Minimizați"</string>
-    <string name="pip_phone_close" msgid="8801864042095341824">"Închideți"</string>
-    <string name="pip_phone_settings" msgid="5687538631925004341">"Setări"</string>
-    <string name="pip_phone_dismiss_hint" msgid="5825740708095316710">"Trageți în jos pentru a închide"</string>
-    <string name="pip_menu_title" msgid="6365909306215631910">"Meniu"</string>
-    <string name="pip_notification_title" msgid="8661573026059630525">"<xliff:g id="NAME">%s</xliff:g> este în modul picture-in-picture"</string>
-    <string name="pip_notification_message" msgid="4991831338795022227">"Dacă nu doriți ca <xliff:g id="NAME">%s</xliff:g> să utilizeze această funcție, atingeți pentru a deschide setările și dezactivați-o."</string>
-    <string name="pip_play" msgid="333995977693142810">"Redați"</string>
-    <string name="pip_pause" msgid="1139598607050555845">"Întrerupeți"</string>
-    <string name="pip_skip_to_next" msgid="3864212650579956062">"Treceți la următorul"</string>
-    <string name="pip_skip_to_prev" msgid="3742589641443049237">"Treceți la cel anterior"</string>
-    <string name="accessibility_action_pip_resize" msgid="8237306972921160456">"Redimensionați"</string>
     <string name="thermal_shutdown_title" msgid="2702966892682930264">"Telefonul s-a oprit din cauza încălzirii"</string>
-    <string name="thermal_shutdown_message" msgid="7432744214105003895">"Acum telefonul funcționează normal"</string>
+    <string name="thermal_shutdown_message" msgid="6142269839066172984">"Acum telefonul funcționează normal.\nAtingeți pentru mai multe informații"</string>
     <string name="thermal_shutdown_dialog_message" msgid="6745684238183492031">"Telefonul se încălzise prea mult și s-a oprit pentru a se răci. Acum telefonul funcționează normal.\n\nTelefonul s-ar putea încălzi prea mult dacă:\n	• folosiți aplicații care consumă multe resurse (de ex., jocuri, aplicații video/de navigare);\n	• descărcați/încărcați fișiere mari;\n	• folosiți telefonul la temperaturi ridicate."</string>
+    <string name="thermal_shutdown_dialog_help_text" msgid="6413474593462902901">"Vedeți pașii pentru îngrijire"</string>
     <string name="high_temp_title" msgid="2218333576838496100">"Telefonul se încălzește"</string>
-    <string name="high_temp_notif_message" msgid="163928048626045592">"Anumite funcții sunt limitate în timp ce telefonul se răcește"</string>
+    <string name="high_temp_notif_message" msgid="1277346543068257549">"Anumite funcții sunt limitate în timp ce telefonul se răcește.\nAtingeți pentru mai multe informații"</string>
     <string name="high_temp_dialog_message" msgid="3793606072661253968">"Telefonul va încerca automat să se răcească. Puteți folosi telefonul în continuare, dar este posibil să funcționeze mai lent.\n\nDupă ce se răcește, telefonul va funcționa normal."</string>
+    <string name="high_temp_dialog_help_text" msgid="7380171287943345858">"Vedeți pașii pentru îngrijire"</string>
     <string name="high_temp_alarm_title" msgid="2359958549570161495">"Deconectați încărcătorul"</string>
     <string name="high_temp_alarm_notify_message" msgid="7186272817783835089">"Există o problemă la încărcarea acestui dispozitiv. Deconectați adaptorul de curent și aveți grijă, deoarece cablul poate fi cald."</string>
     <string name="high_temp_alarm_help_care_steps" msgid="5017002218341329566">"Vedeți pașii pentru îngrijire"</string>
@@ -1027,7 +1024,6 @@
     <string name="priority_onboarding_ignores_dnd_text" msgid="2918952762719600529">"Întrerup modul Nu deranja"</string>
     <string name="priority_onboarding_done_button_title" msgid="4569550984286506007">"OK"</string>
     <string name="priority_onboarding_settings_button_title" msgid="6663601574303585927">"Setări"</string>
-    <string name="magnification_overlay_title" msgid="6584179429612427958">"Fereastra de suprapunere pentru mărire"</string>
     <string name="magnification_window_title" msgid="4863914360847258333">"Fereastra de mărire"</string>
     <string name="magnification_controls_title" msgid="8421106606708891519">"Comenzi pentru fereastra de mărire"</string>
     <string name="quick_controls_title" msgid="6839108006171302273">"Comenzile dispozitivelor"</string>

@@ -34,7 +34,9 @@ import android.app.StatusBarManager.WindowType;
 import android.app.StatusBarManager.WindowVisibleState;
 import android.content.ComponentName;
 import android.content.Context;
-import android.hardware.biometrics.IBiometricServiceReceiverInternal;
+import android.hardware.biometrics.BiometricAuthenticator;
+import android.hardware.biometrics.IBiometricSysuiReceiver;
+import android.hardware.biometrics.PromptInfo;
 import android.hardware.display.DisplayManager;
 import android.inputmethodservice.InputMethodService.BackDispositionMode;
 import android.os.Bundle;
@@ -126,6 +128,7 @@ public class CommandQueue extends IStatusBar.Stub implements CallbackController<
     private static final int MSG_HIDE_TOAST                        = 54 << MSG_SHIFT;
     private static final int MSG_TRACING_STATE_CHANGED             = 55 << MSG_SHIFT;
     private static final int MSG_SUPPRESS_AMBIENT_DISPLAY          = 56 << MSG_SHIFT;
+    private static final int MSG_REQUEST_WINDOW_MAGNIFICATION_CONNECTION = 57 << MSG_SHIFT;
 
     public static final int FLAG_EXCLUDE_NONE = 0;
     public static final int FLAG_EXCLUDE_SEARCH_PANEL = 1 << 0;
@@ -260,10 +263,11 @@ public class CommandQueue extends IStatusBar.Stub implements CallbackController<
 
         default void onRotationProposal(int rotation, boolean isValid) { }
 
-        default void showAuthenticationDialog(Bundle bundle,
-                IBiometricServiceReceiverInternal receiver, int biometricModality,
+        default void showAuthenticationDialog(PromptInfo promptInfo,
+                IBiometricSysuiReceiver receiver,
+                @BiometricAuthenticator.Modality int biometricModality,
                 boolean requireConfirmation, int userId, String opPackageName,
-                long operationId, int sysUiSessionId) { }
+                long operationId) { }
         default void onBiometricAuthenticated() { }
         default void onBiometricHelp(String message) { }
         default void onBiometricError(int modality, int error, int vendorCode) { }
@@ -338,6 +342,15 @@ public class CommandQueue extends IStatusBar.Stub implements CallbackController<
          * @param enabled
          */
         default void onTracingStateChanged(boolean enabled) { }
+
+        /**
+         * Requests {@link com.android.systemui.accessibility.WindowMagnification} to invoke
+         * {@code android.view.accessibility.AccessibilityManager#
+         * setWindowMagnificationConnection(IWindowMagnificationConnection)}
+         *
+         * @param connect {@code true} if needs connection, otherwise set the connection to null.
+         */
+        default void requestWindowMagnificationConnection(boolean connect) { }
     }
 
     public CommandQueue(Context context) {
@@ -780,19 +793,18 @@ public class CommandQueue extends IStatusBar.Stub implements CallbackController<
     }
 
     @Override
-    public void showAuthenticationDialog(Bundle bundle, IBiometricServiceReceiverInternal receiver,
-            int biometricModality, boolean requireConfirmation, int userId, String opPackageName,
-            long operationId, int sysUiSessionId) {
+    public void showAuthenticationDialog(PromptInfo promptInfo, IBiometricSysuiReceiver receiver,
+            @BiometricAuthenticator.Modality int biometricModality, boolean requireConfirmation,
+            int userId, String opPackageName, long operationId) {
         synchronized (mLock) {
             SomeArgs args = SomeArgs.obtain();
-            args.arg1 = bundle;
+            args.arg1 = promptInfo;
             args.arg2 = receiver;
             args.argi1 = biometricModality;
             args.arg3 = requireConfirmation;
             args.argi2 = userId;
             args.arg4 = opPackageName;
             args.arg5 = operationId;
-            args.argi3 = sysUiSessionId;
             mHandler.obtainMessage(MSG_BIOMETRIC_SHOW, args)
                     .sendToTarget();
         }
@@ -883,6 +895,14 @@ public class CommandQueue extends IStatusBar.Stub implements CallbackController<
     public void dismissInattentiveSleepWarning(boolean animated) {
         synchronized (mLock) {
             mHandler.obtainMessage(MSG_DISMISS_INATTENTIVE_SLEEP_WARNING, animated)
+                    .sendToTarget();
+        }
+    }
+
+    @Override
+    public void requestWindowMagnificationConnection(boolean connect) {
+        synchronized (mLock) {
+            mHandler.obtainMessage(MSG_REQUEST_WINDOW_MAGNIFICATION_CONNECTION, connect)
                     .sendToTarget();
         }
     }
@@ -1164,14 +1184,13 @@ public class CommandQueue extends IStatusBar.Stub implements CallbackController<
                     SomeArgs someArgs = (SomeArgs) msg.obj;
                     for (int i = 0; i < mCallbacks.size(); i++) {
                         mCallbacks.get(i).showAuthenticationDialog(
-                                (Bundle) someArgs.arg1,
-                                (IBiometricServiceReceiverInternal) someArgs.arg2,
+                                (PromptInfo) someArgs.arg1,
+                                (IBiometricSysuiReceiver) someArgs.arg2,
                                 someArgs.argi1 /* biometricModality */,
                                 (boolean) someArgs.arg3 /* requireConfirmation */,
                                 someArgs.argi2 /* userId */,
                                 (String) someArgs.arg4 /* opPackageName */,
-                                (long) someArgs.arg5 /* operationId */,
-                                someArgs.argi3 /* sysUiSessionId */);
+                                (long) someArgs.arg5 /* operationId */);
                     }
                     someArgs.recycle();
                     break;
@@ -1304,6 +1323,11 @@ public class CommandQueue extends IStatusBar.Stub implements CallbackController<
                 case MSG_SUPPRESS_AMBIENT_DISPLAY:
                     for (Callbacks callbacks: mCallbacks) {
                         callbacks.suppressAmbientDisplay((boolean) msg.obj);
+                    }
+                    break;
+                case MSG_REQUEST_WINDOW_MAGNIFICATION_CONNECTION:
+                    for (int i = 0; i < mCallbacks.size(); i++) {
+                        mCallbacks.get(i).requestWindowMagnificationConnection((Boolean) msg.obj);
                     }
                     break;
             }

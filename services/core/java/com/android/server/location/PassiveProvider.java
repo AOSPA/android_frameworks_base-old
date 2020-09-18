@@ -21,6 +21,7 @@ import static com.android.internal.util.ConcurrentUtils.DIRECT_EXECUTOR;
 import android.content.Context;
 import android.location.Criteria;
 import android.location.Location;
+import android.location.util.identity.CallerIdentity;
 import android.os.Bundle;
 
 import com.android.internal.location.ProviderProperties;
@@ -49,13 +50,9 @@ public class PassiveProvider extends AbstractLocationProvider {
             Criteria.POWER_LOW,
             Criteria.ACCURACY_COARSE);
 
-    private volatile boolean mReportLocation;
-
     public PassiveProvider(Context context) {
         // using a direct executor is ok because this class has no locks that could deadlock
-        super(DIRECT_EXECUTOR, context);
-
-        mReportLocation = false;
+        super(DIRECT_EXECUTOR, CallerIdentity.fromContext(context));
 
         setProperties(PROPERTIES);
         setAllowed(true);
@@ -65,15 +62,11 @@ public class PassiveProvider extends AbstractLocationProvider {
      * Pass a location into the passive provider.
      */
     public void updateLocation(Location location) {
-        if (mReportLocation) {
-            reportLocation(location);
-        }
+        reportLocation(location);
     }
 
     @Override
-    public void onSetRequest(ProviderRequest request) {
-        mReportLocation = request.reportLocation;
-    }
+    public void onSetRequest(ProviderRequest request) {}
 
     @Override
     protected void onExtraCommand(int uid, int pid, String command, Bundle extras) {}

@@ -36,6 +36,7 @@ import com.android.systemui.plugins.qs.QSFactory;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.power.EnhancedEstimates;
 import com.android.systemui.power.EnhancedEstimatesImpl;
+import com.android.systemui.qs.dagger.QSModule;
 import com.android.systemui.qs.tileimpl.QSFactoryImpl;
 import com.android.systemui.recents.Recents;
 import com.android.systemui.recents.RecentsImplementation;
@@ -58,6 +59,7 @@ import com.android.systemui.statusbar.policy.ConfigurationController;
 import com.android.systemui.statusbar.policy.DeviceProvisionedController;
 import com.android.systemui.statusbar.policy.DeviceProvisionedControllerImpl;
 import com.android.systemui.statusbar.policy.HeadsUpManager;
+import com.android.systemui.wmshell.WindowManagerShellModule;
 
 import javax.inject.Named;
 import javax.inject.Singleton;
@@ -70,7 +72,7 @@ import dagger.Provides;
  * A dagger module for injecting default implementations of components of System UI that may be
  * overridden by the System UI implementation.
  */
-@Module(includes = {DividerModule.class})
+@Module(includes = {DividerModule.class, QSModule.class, WindowManagerShellModule.class})
 public abstract class SystemUIDefaultModule {
 
     @Singleton
@@ -102,7 +104,7 @@ public abstract class SystemUIDefaultModule {
 
     @Binds
     @Singleton
-    public abstract QSFactory provideQSFactory(QSFactoryImpl qsFactoryImpl);
+    public abstract QSFactory bindQSFactory(QSFactoryImpl qsFactoryImpl);
 
     @Binds
     abstract DockManager bindDockManager(DockManagerImpl dockManager);

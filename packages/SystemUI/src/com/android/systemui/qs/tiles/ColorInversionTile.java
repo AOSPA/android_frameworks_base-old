@@ -17,17 +17,26 @@
 package com.android.systemui.qs.tiles;
 
 import android.content.Intent;
+import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.provider.Settings;
 import android.provider.Settings.Secure;
 import android.service.quicksettings.Tile;
 import android.widget.Switch;
 
+import com.android.internal.logging.MetricsLogger;
 import com.android.internal.logging.nano.MetricsProto.MetricsEvent;
 import com.android.systemui.R;
 import com.android.systemui.R.drawable;
+import com.android.systemui.dagger.qualifiers.Background;
+import com.android.systemui.dagger.qualifiers.Main;
+import com.android.systemui.plugins.ActivityStarter;
 import com.android.systemui.plugins.qs.QSTile.BooleanState;
+import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.qs.QSHost;
 import com.android.systemui.qs.SecureSetting;
+import com.android.systemui.qs.logging.QSLogger;
 import com.android.systemui.qs.tileimpl.QSTileImpl;
 
 import javax.inject.Inject;
@@ -35,19 +44,33 @@ import javax.inject.Inject;
 /** Quick settings tile: Invert colors **/
 public class ColorInversionTile extends QSTileImpl<BooleanState> {
 
+    private static final String EXTRA_FRAGMENT_ARGS_KEY = ":settings:fragment_args_key";
+    private static final String EXTRA_SHOW_FRAGMENT_ARGS_KEY = ":settings:show_fragment_args";
+    private static final String COLOR_INVERSION_PREFERENCE_KEY = "toggle_inversion_preference";
+
     private final Icon mIcon = ResourceIcon.get(drawable.ic_invert_colors);
     private final SecureSetting mSetting;
 
     private boolean mListening;
 
     @Inject
-    public ColorInversionTile(QSHost host) {
-        super(host);
+    public ColorInversionTile(
+            QSHost host,
+            @Background Looper backgroundLooper,
+            @Main Handler mainHandler,
+            MetricsLogger metricsLogger,
+            StatusBarStateController statusBarStateController,
+            ActivityStarter activityStarter,
+            QSLogger qsLogger
+    ) {
+        super(host, backgroundLooper, mainHandler, metricsLogger, statusBarStateController,
+                activityStarter, qsLogger);
 
-        mSetting = new SecureSetting(mContext, mHandler,
+        mSetting = new SecureSetting(mContext, mainHandler,
                 Secure.ACCESSIBILITY_DISPLAY_INVERSION_ENABLED) {
             @Override
             protected void handleValueChanged(int value, boolean observedChange) {
+                // mHandler is the background handler so calling this is OK
                 handleRefreshState(value);
             }
         };
@@ -78,7 +101,11 @@ public class ColorInversionTile extends QSTileImpl<BooleanState> {
 
     @Override
     public Intent getLongClickIntent() {
-        return new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS);
+        Intent intent = new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS);
+        Bundle bundle = new Bundle();
+        bundle.putString(EXTRA_FRAGMENT_ARGS_KEY, COLOR_INVERSION_PREFERENCE_KEY);
+        intent.putExtra(EXTRA_SHOW_FRAGMENT_ARGS_KEY, bundle);
+        return intent;
     }
 
     @Override

@@ -27,7 +27,6 @@ import android.app.PendingIntent.CanceledException;
 import android.app.RemoteAction;
 import android.compat.annotation.UnsupportedAppUsage;
 import android.content.ClipData;
-import android.content.ClipData.Item;
 import android.content.Context;
 import android.content.Intent;
 import android.content.UndoManager;
@@ -160,7 +159,6 @@ public class Editor {
 
     static final int BLINK = 500;
     private static final int DRAG_SHADOW_MAX_TEXT_LENGTH = 20;
-    private static final float LINE_SLOP_MULTIPLIER_FOR_HANDLEVIEWS = 0.5f;
     private static final int UNSET_X_VALUE = -1;
     private static final int UNSET_LINE = -1;
     // Tag used when the Editor maintains its own separate UndoManager.
@@ -406,9 +404,13 @@ public class Editor {
     private float mInitialZoom = 1f;
 
     // For calculating the line change slops while moving cursor/selection.
+    // The slop value as ratio of the current line height. It indicates the tolerant distance to
+    // avoid the cursor jumps to upper/lower line when the hit point is moving vertically out of
+    // the current line.
+    private final float mLineSlopRatio;
     // The slop max/min value include line height and the slop on the upper/lower line.
     private static final int LINE_CHANGE_SLOP_MAX_DP = 45;
-    private static final int LINE_CHANGE_SLOP_MIN_DP = 12;
+    private static final int LINE_CHANGE_SLOP_MIN_DP = 8;
     private int mLineChangeSlopMax;
     private int mLineChangeSlopMin;
 
@@ -429,6 +431,9 @@ public class Editor {
         mNewMagnifierEnabled = AppGlobals.getIntCoreSetting(
                 WidgetFlags.KEY_ENABLE_NEW_MAGNIFIER,
                 WidgetFlags.ENABLE_NEW_MAGNIFIER_DEFAULT ? 1 : 0) != 0;
+        mLineSlopRatio = AppGlobals.getFloatCoreSetting(
+                WidgetFlags.KEY_LINE_SLOP_RATIO,
+                WidgetFlags.LINE_SLOP_RATIO_DEFAULT);
         if (TextView.DEBUG_CURSOR) {
             logCursor("Editor", "Cursor drag from anywhere is %s.",
                     mFlagCursorDragFromAnywhereEnabled ? "enabled" : "disabled");
@@ -2802,78 +2807,67 @@ public class Editor {
     }
 
     void onDrop(DragEvent event) {
-        SpannableStringBuilder content = new SpannableStringBuilder();
+        final int offset = mTextView.getOffsetForPosition(event.getX(), event.getY());
+        Object localState = event.getLocalState();
+        DragLocalState dragLocalState = null;
+        if (localState instanceof DragLocalState) {
+            dragLocalState = (DragLocalState) localState;
+        }
+        boolean dragDropIntoItself = dragLocalState != null
+                && dragLocalState.sourceTextView == mTextView;
+        if (dragDropIntoItself) {
+            if (offset >= dragLocalState.start && offset < dragLocalState.end) {
+                // A drop inside the original selection discards the drop.
+                return;
+            }
+        }
 
         final DragAndDropPermissions permissions = DragAndDropPermissions.obtain(event);
         if (permissions != null) {
             permissions.takeTransient();
         }
-
-        try {
-            ClipData clipData = event.getClipData();
-            final int itemCount = clipData.getItemCount();
-            for (int i = 0; i < itemCount; i++) {
-                Item item = clipData.getItemAt(i);
-                content.append(item.coerceToStyledText(mTextView.getContext()));
-            }
-        } finally {
-            if (permissions != null) {
-                permissions.release();
-            }
-        }
-
         mTextView.beginBatchEdit();
         mUndoInputFilter.freezeLastEdit();
         try {
-            final int offset = mTextView.getOffsetForPosition(event.getX(), event.getY());
-            Object localState = event.getLocalState();
-            DragLocalState dragLocalState = null;
-            if (localState instanceof DragLocalState) {
-                dragLocalState = (DragLocalState) localState;
-            }
-            boolean dragDropIntoItself = dragLocalState != null
-                    && dragLocalState.sourceTextView == mTextView;
-
-            if (dragDropIntoItself) {
-                if (offset >= dragLocalState.start && offset < dragLocalState.end) {
-                    // A drop inside the original selection discards the drop.
-                    return;
-                }
-            }
-
             final int originalLength = mTextView.getText().length();
-            int min = offset;
-            int max = offset;
-
-            Selection.setSelection((Spannable) mTextView.getText(), max);
-            mTextView.replaceText_internal(min, max, content);
-
+            Selection.setSelection((Spannable) mTextView.getText(), offset);
+            ClipData clip = event.getClipData();
+            mTextView.getRichContentReceiver().onReceive(mTextView, clip,
+                    RichContentReceiver.SOURCE_DRAG_AND_DROP, 0);
             if (dragDropIntoItself) {
-                int dragSourceStart = dragLocalState.start;
-                int dragSourceEnd = dragLocalState.end;
-                if (max <= dragSourceStart) {
-                    // Inserting text before selection has shifted positions
-                    final int shift = mTextView.getText().length() - originalLength;
-                    dragSourceStart += shift;
-                    dragSourceEnd += shift;
-                }
-
-                // Delete original selection
-                mTextView.deleteText_internal(dragSourceStart, dragSourceEnd);
-
-                // Make sure we do not leave two adjacent spaces.
-                final int prevCharIdx = Math.max(0,  dragSourceStart - 1);
-                final int nextCharIdx = Math.min(mTextView.getText().length(), dragSourceStart + 1);
-                if (nextCharIdx > prevCharIdx + 1) {
-                    CharSequence t = mTextView.getTransformedText(prevCharIdx, nextCharIdx);
-                    if (Character.isSpaceChar(t.charAt(0)) && Character.isSpaceChar(t.charAt(1))) {
-                        mTextView.deleteText_internal(prevCharIdx, prevCharIdx + 1);
-                    }
-                }
+                deleteSourceAfterLocalDrop(dragLocalState, offset, originalLength);
             }
         } finally {
             mTextView.endBatchEdit();
             mUndoInputFilter.freezeLastEdit();
+            if (permissions != null) {
+                permissions.release();
+            }
+        }
+    }
+
+    private void deleteSourceAfterLocalDrop(@NonNull DragLocalState dragLocalState, int dropOffset,
+            int lengthBeforeDrop) {
+        int dragSourceStart = dragLocalState.start;
+        int dragSourceEnd = dragLocalState.end;
+        if (dropOffset <= dragSourceStart) {
+            // Inserting text before selection has shifted positions
+            final int shift = mTextView.getText().length() - lengthBeforeDrop;
+            dragSourceStart += shift;
+            dragSourceEnd += shift;
+        }
+
+        // Delete original selection
+        mTextView.deleteText_internal(dragSourceStart, dragSourceEnd);
+
+        // Make sure we do not leave two adjacent spaces.
+        final int prevCharIdx = Math.max(0, dragSourceStart - 1);
+        final int nextCharIdx = Math.min(mTextView.getText().length(), dragSourceStart + 1);
+        if (nextCharIdx > prevCharIdx + 1) {
+            CharSequence t = mTextView.getTransformedText(prevCharIdx, nextCharIdx);
+            if (Character.isSpaceChar(t.charAt(0)) && Character.isSpaceChar(t.charAt(1))) {
+                mTextView.deleteText_internal(prevCharIdx, prevCharIdx + 1);
+            }
         }
     }
 
@@ -6059,9 +6053,8 @@ public class Editor {
             return trueLine;
         }
 
-        final int lineHeight = layout.getLineBottom(prevLine) - layout.getLineTop(prevLine);
-        int slop = (int)(LINE_SLOP_MULTIPLIER_FOR_HANDLEVIEWS
-                * (layout.getLineBottom(trueLine) - layout.getLineTop(trueLine)));
+        final int lineHeight = mTextView.getLineHeight();
+        int slop = (int)(mLineSlopRatio * lineHeight);
         slop = Math.max(mLineChangeSlopMin,
                 Math.min(mLineChangeSlopMax, lineHeight + slop)) - lineHeight;
         slop = Math.max(0, slop);

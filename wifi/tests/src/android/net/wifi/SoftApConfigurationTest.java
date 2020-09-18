@@ -21,6 +21,7 @@ import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.assertNull;
 
 import android.net.MacAddress;
+import android.os.Build;
 import android.os.Parcel;
 
 import androidx.test.filters.SmallTest;
@@ -34,6 +35,7 @@ import java.util.Random;
 @SmallTest
 public class SoftApConfigurationTest {
     private static final String TEST_CHAR_SET_AS_STRING = "abcdefghijklmnopqrstuvwxyz0123456789";
+    private static final String TEST_BSSID = "aa:22:33:aa:bb:cc";
 
     private SoftApConfiguration parcelUnparcel(SoftApConfiguration configIn) {
         Parcel parcel = Parcel.obtain();
@@ -66,18 +68,23 @@ public class SoftApConfigurationTest {
 
     @Test
     public void testBasicSettings() {
+        MacAddress testBssid = MacAddress.fromString(TEST_BSSID);
         SoftApConfiguration original = new SoftApConfiguration.Builder()
                 .setSsid("ssid")
-                .setBssid(MacAddress.fromString("11:22:33:44:55:66"))
+                .setBssid(testBssid)
                 .build();
         assertThat(original.getSsid()).isEqualTo("ssid");
-        assertThat(original.getBssid()).isEqualTo(MacAddress.fromString("11:22:33:44:55:66"));
+        assertThat(original.getBssid()).isEqualTo(testBssid);
         assertThat(original.getPassphrase()).isNull();
         assertThat(original.getSecurityType()).isEqualTo(SoftApConfiguration.SECURITY_TYPE_OPEN);
         assertThat(original.getBand()).isEqualTo(SoftApConfiguration.BAND_2GHZ);
         assertThat(original.getChannel()).isEqualTo(0);
         assertThat(original.isHiddenSsid()).isEqualTo(false);
         assertThat(original.getMaxNumberOfClients()).isEqualTo(0);
+        if (Build.VERSION.SDK_INT > Build.VERSION_CODES.R) {
+            assertThat(original.getMacRandomizationSetting())
+                    .isEqualTo(SoftApConfiguration.RANDOMIZATION_PERSISTENT);
+        }
 
         SoftApConfiguration unparceled = parcelUnparcel(original);
         assertThat(unparceled).isNotSameAs(original);
@@ -120,7 +127,7 @@ public class SoftApConfigurationTest {
         List<MacAddress> testAllowedClientList = new ArrayList<>();
         testBlockedClientList.add(MacAddress.fromString("11:22:33:44:55:66"));
         testAllowedClientList.add(MacAddress.fromString("aa:bb:cc:dd:ee:ff"));
-        SoftApConfiguration original = new SoftApConfiguration.Builder()
+        SoftApConfiguration.Builder originalBuilder = new SoftApConfiguration.Builder()
                 .setPassphrase("secretsecret", SoftApConfiguration.SECURITY_TYPE_WPA2_PSK)
                 .setChannel(149, SoftApConfiguration.BAND_5GHZ)
                 .setHiddenSsid(true)
@@ -129,8 +136,11 @@ public class SoftApConfigurationTest {
                 .setShutdownTimeoutMillis(500000)
                 .setClientControlByUserEnabled(true)
                 .setBlockedClientList(testBlockedClientList)
-                .setAllowedClientList(testAllowedClientList)
-                .build();
+                .setAllowedClientList(testAllowedClientList);
+        if (Build.VERSION.SDK_INT > Build.VERSION_CODES.R) {
+            originalBuilder.setMacRandomizationSetting(SoftApConfiguration.RANDOMIZATION_NONE);
+        }
+        SoftApConfiguration original = originalBuilder.build();
         assertThat(original.getPassphrase()).isEqualTo("secretsecret");
         assertThat(original.getSecurityType()).isEqualTo(
                 SoftApConfiguration.SECURITY_TYPE_WPA2_PSK);
@@ -143,6 +153,10 @@ public class SoftApConfigurationTest {
         assertThat(original.isClientControlByUserEnabled()).isEqualTo(true);
         assertThat(original.getBlockedClientList()).isEqualTo(testBlockedClientList);
         assertThat(original.getAllowedClientList()).isEqualTo(testAllowedClientList);
+        if (Build.VERSION.SDK_INT > Build.VERSION_CODES.R) {
+            assertThat(original.getMacRandomizationSetting())
+                    .isEqualTo(SoftApConfiguration.RANDOMIZATION_NONE);
+        }
 
         SoftApConfiguration unparceled = parcelUnparcel(original);
         assertThat(unparceled).isNotSameAs(original);
@@ -206,6 +220,20 @@ public class SoftApConfigurationTest {
         assertThat(copy).isNotSameAs(original);
         assertThat(copy).isEqualTo(original);
         assertThat(copy.hashCode()).isEqualTo(original.hashCode());
+    }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void testInvalidBroadcastBssid() {
+        SoftApConfiguration original = new SoftApConfiguration.Builder()
+                .setBssid(MacAddress.BROADCAST_ADDRESS)
+                .build();
+    }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void testInvalidMulticastBssid() {
+        SoftApConfiguration original = new SoftApConfiguration.Builder()
+                .setBssid(MacAddress.fromString("01:aa:bb:cc:dd:ee"))
+                .build();
     }
 
     @Test(expected = IllegalArgumentException.class)

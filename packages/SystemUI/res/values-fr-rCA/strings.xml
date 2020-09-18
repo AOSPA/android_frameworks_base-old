@@ -711,11 +711,13 @@
     <string name="notification_silence_title" msgid="8608090968400832335">"Mode silencieux"</string>
     <string name="notification_alert_title" msgid="3656229781017543655">"Par défaut"</string>
     <string name="notification_bubble_title" msgid="8330481035191903164">"Bulle"</string>
+    <string name="notification_automatic_title" msgid="3745465364578762652">"Automatique"</string>
     <string name="notification_channel_summary_low" msgid="4860617986908931158">"Aucun son ni vibration"</string>
     <string name="notification_conversation_summary_low" msgid="1734433426085468009">"Aucun son ni vibration, et s\'affiche plus bas dans la section des conversations"</string>
     <string name="notification_channel_summary_default" msgid="3282930979307248890">"Peut sonner ou vibrer, selon les paramètres du téléphone"</string>
     <string name="notification_channel_summary_default_with_bubbles" msgid="1782419896613644568">"Peut sonner ou vibrer, selon les paramètres du téléphone. Conversations des bulles de <xliff:g id="APP_NAME">%1$s</xliff:g> par défaut."</string>
     <string name="notification_channel_summary_bubble" msgid="7235935211580860537">"Garde votre attention à l\'aide d\'un raccourci flottant vers ce contenu."</string>
+    <string name="notification_channel_summary_automatic" msgid="5813109268050235275">"Faire en sorte que le système détermine si cette notification devrait émettre un son ou vibrer"</string>
     <string name="notification_channel_summary_priority" msgid="7952654515769021553">"S\'affiche en haut de la section des conversations sous forme de bulle flottante et affiche la photo du profil sur l\'écran de verrouillage"</string>
     <string name="notification_conversation_channel_settings" msgid="2409977688430606835">"Paramètres"</string>
     <string name="notification_priority_title" msgid="2079708866333537093">"Priorité"</string>
@@ -736,6 +738,12 @@
     <string name="appops_camera_mic_overlay" msgid="5584311236445644095">"Cette application superpose du contenu par-dessus d\'autres applications à l\'écran et utilise le microphone et l\'appareil photo."</string>
     <string name="notification_appops_settings" msgid="5208974858340445174">"Paramètres"</string>
     <string name="notification_appops_ok" msgid="2177609375872784124">"OK"</string>
+    <string name="feedback_silenced" msgid="5382212321253328247">"Cette notification a été désactivée par le système."</string>
+    <string name="feedback_promoted" msgid="8075757485407091976">"Cette notification a été promue par le système."</string>
+    <string name="feedback_demoted" msgid="5848066008939031913">"Cette notification a été rétrogradée par le système."</string>
+    <string name="feedback_prompt" msgid="2278631214125128281">"Était-ce correct?"</string>
+    <string name="feedback_response" msgid="4671729244976641339">"Merci de vos commentaires!"</string>
+    <string name="feedback_ok" msgid="6481426753298857144">"OK"</string>
     <string name="notification_channel_controls_opened_accessibility" msgid="6111817750774381094">"Les paramètres des notifications pour <xliff:g id="APP_NAME">%1$s</xliff:g> sont ouverts"</string>
     <string name="notification_channel_controls_closed_accessibility" msgid="1561909368876911701">"Les paramètres des notifications pour <xliff:g id="APP_NAME">%1$s</xliff:g> sont fermés"</string>
     <string name="notification_channel_switch_accessibility" msgid="8979885820432540252">"Autoriser les notifications de cette chaîne"</string>
@@ -908,25 +916,14 @@
     <string name="accessibility_quick_settings_edit" msgid="1523745183383815910">"Modifier l\'ordre des paramètres."</string>
     <string name="accessibility_quick_settings_page" msgid="7506322631645550961">"Page <xliff:g id="ID_1">%1$d</xliff:g> sur <xliff:g id="ID_2">%2$d</xliff:g>"</string>
     <string name="tuner_lock_screen" msgid="2267383813241144544">"Écran de verrouillage"</string>
-    <string name="pip_phone_expand" msgid="1424988917240616212">"Développer"</string>
-    <string name="pip_phone_minimize" msgid="9057117033655996059">"Réduire"</string>
-    <string name="pip_phone_close" msgid="8801864042095341824">"Fermer"</string>
-    <string name="pip_phone_settings" msgid="5687538631925004341">"Paramètres"</string>
-    <string name="pip_phone_dismiss_hint" msgid="5825740708095316710">"Faire glisser vers le bas pour ignorer"</string>
-    <string name="pip_menu_title" msgid="6365909306215631910">"Menu"</string>
-    <string name="pip_notification_title" msgid="8661573026059630525">"<xliff:g id="NAME">%s</xliff:g> est en mode d\'incrustation d\'image"</string>
-    <string name="pip_notification_message" msgid="4991831338795022227">"Si vous ne voulez pas que <xliff:g id="NAME">%s</xliff:g> utilise cette fonctionnalité, touchez l\'écran pour ouvrir les paramètres, puis désactivez-la."</string>
-    <string name="pip_play" msgid="333995977693142810">"Lire"</string>
-    <string name="pip_pause" msgid="1139598607050555845">"Interrompre"</string>
-    <string name="pip_skip_to_next" msgid="3864212650579956062">"Passer au suivant"</string>
-    <string name="pip_skip_to_prev" msgid="3742589641443049237">"Revenir au précédent"</string>
-    <string name="accessibility_action_pip_resize" msgid="8237306972921160456">"Redimensionner"</string>
     <string name="thermal_shutdown_title" msgid="2702966892682930264">"Tél. éteint car il surchauffait"</string>
-    <string name="thermal_shutdown_message" msgid="7432744214105003895">"Votre téléphone fonctionne maintenant normalement"</string>
+    <string name="thermal_shutdown_message" msgid="6142269839066172984">"Votre téléphone fonctionne maintenant de manière normale.\nTouchez pour en savoir plus"</string>
     <string name="thermal_shutdown_dialog_message" msgid="6745684238183492031">"Votre téléphone s\'est éteint, car il surchauffait. Il s\'est refroidi et fonctionne normalement.\n\nIl peut surchauffer si vous :\n	• Util. des applis utilisant beaucoup de ressources (jeux, vidéo, navigation, etc.)\n	• Téléchargez ou téléversez de gros fichiers\n	• Utilisez téléphone dans des températures élevées"</string>
+    <string name="thermal_shutdown_dialog_help_text" msgid="6413474593462902901">"Afficher les étapes d\'entretien"</string>
     <string name="high_temp_title" msgid="2218333576838496100">"Le téléphone commence à chauffer"</string>
-    <string name="high_temp_notif_message" msgid="163928048626045592">"Les fonctionnalités sont limitées pendant que le téléphone refroidit"</string>
+    <string name="high_temp_notif_message" msgid="1277346543068257549">"Certaines fonctionnalités sont limitées pendant que le téléphone refroidit.\nTouchez pour en savoir plus"</string>
     <string name="high_temp_dialog_message" msgid="3793606072661253968">"Votre téléphone va essayer de se refroidir automatiquement. Vous pouvez toujours l\'utiliser, mais il risque d\'être plus lent.\n\nUne fois refroidi, il fonctionnera normalement."</string>
+    <string name="high_temp_dialog_help_text" msgid="7380171287943345858">"Afficher les étapes d\'entretien"</string>
     <string name="high_temp_alarm_title" msgid="2359958549570161495">"Débranchez le chargeur"</string>
     <string name="high_temp_alarm_notify_message" msgid="7186272817783835089">"Il y a un problème avec la recharge de cet appareil. Débranchez l\'adaptateur d\'alimentation, et faites attention, car le câble pourrait être chaud."</string>
     <string name="high_temp_alarm_help_care_steps" msgid="5017002218341329566">"Afficher les étapes d\'entretien"</string>
@@ -1022,7 +1019,6 @@
     <string name="priority_onboarding_ignores_dnd_text" msgid="2918952762719600529">"Interrompre le mode Ne pas déranger"</string>
     <string name="priority_onboarding_done_button_title" msgid="4569550984286506007">"OK"</string>
     <string name="priority_onboarding_settings_button_title" msgid="6663601574303585927">"Paramètres"</string>
-    <string name="magnification_overlay_title" msgid="6584179429612427958">"Fenêtre d\'agrandissement superposée"</string>
     <string name="magnification_window_title" msgid="4863914360847258333">"Fenêtre d\'agrandissement"</string>
     <string name="magnification_controls_title" msgid="8421106606708891519">"Commandes pour la fenêtre d\'agrandissement"</string>
     <string name="quick_controls_title" msgid="6839108006171302273">"Commandes des appareils"</string>

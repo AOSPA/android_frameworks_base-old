@@ -26,6 +26,7 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
 
 import android.content.ComponentName;
 import android.graphics.Rect;
+import android.hardware.biometrics.PromptInfo;
 import android.os.Bundle;
 import android.view.WindowInsetsController.Appearance;
 
@@ -407,15 +408,14 @@ public class CommandQueueTest extends SysuiTestCase {
 
     @Test
     public void testShowAuthenticationDialog() {
-        Bundle bundle = new Bundle();
+        PromptInfo promptInfo = new PromptInfo();
         String packageName = "test";
         final long operationId = 1;
-        final int sysUiSessionId = 2;
-        mCommandQueue.showAuthenticationDialog(bundle, null /* receiver */, 1, true, 3,
-                packageName, operationId, sysUiSessionId);
+        mCommandQueue.showAuthenticationDialog(promptInfo, null /* receiver */, 1, true, 3,
+                packageName, operationId);
         waitForIdleSync();
-        verify(mCallbacks).showAuthenticationDialog(eq(bundle), eq(null), eq(1), eq(true), eq(3),
-                eq(packageName), eq(operationId), eq(sysUiSessionId));
+        verify(mCallbacks).showAuthenticationDialog(eq(promptInfo), eq(null), eq(1), eq(true),
+                eq(3), eq(packageName), eq(operationId));
     }
 
     @Test
@@ -455,5 +455,12 @@ public class CommandQueueTest extends SysuiTestCase {
         mCommandQueue.suppressAmbientDisplay(true);
         waitForIdleSync();
         verify(mCallbacks).suppressAmbientDisplay(true);
+    }
+
+    @Test
+    public void testRequestWindowMagnificationConnection() {
+        mCommandQueue.requestWindowMagnificationConnection(true);
+        waitForIdleSync();
+        verify(mCallbacks).requestWindowMagnificationConnection(true);
     }
 }

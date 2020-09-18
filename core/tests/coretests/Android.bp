@@ -54,8 +54,12 @@ android_test {
         "android.test.mock",
         "framework-atb-backward-compatibility",
         "framework",
+        "icing-java-proto-lite",
         "ext",
         "framework-res",
+    ],
+    jni_libs: [
+         "libpowermanagertest_jni",
     ],
 
     platform_apis: true,

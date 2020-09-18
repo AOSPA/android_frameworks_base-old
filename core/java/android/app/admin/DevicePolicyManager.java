@@ -5967,17 +5967,6 @@ public class DevicePolicyManager {
     }
 
     /**
-     * Determine whether or not creating a guest user has been disabled for the device
-     *
-     * @hide
-     */
-    public boolean getGuestUserDisabled(@Nullable ComponentName admin) {
-        // Currently guest users can always be created if multi-user is enabled
-        // TODO introduce a policy for guest user creation
-        return false;
-    }
-
-    /**
      * Called by a device/profile owner to set whether the screen capture is disabled. Disabling
      * screen capture also prevents the content from being shown on display devices that do not have
      * a secure video output. See {@link android.view.Display#FLAG_SECURE} for more details about
@@ -10282,7 +10271,10 @@ public class DevicePolicyManager {
      * @param admin Which {@link DeviceAdminReceiver} this request is associated with.
      * @param color The 24bit (0xRRGGBB) representation of the color to be used.
      * @throws SecurityException if {@code admin} is not a profile owner.
+     * @deprecated From {@link android.os.Build.VERSION_CODES#R}, the organization color is never
+     * used as the background color of the confirm credentials screen.
      */
+    @Deprecated
     public void setOrganizationColor(@NonNull ComponentName admin, int color) {
         throwIfParentInstance("setOrganizationColor");
         try {
@@ -10304,7 +10296,10 @@ public class DevicePolicyManager {
      * @RequiresPermission(allOf = {
      *       Manifest.permission.MANAGE_USERS,
      *       Manifest.permission.INTERACT_ACROSS_USERS_FULL})
+     * @deprecated From {@link android.os.Build.VERSION_CODES#R}, the organization color is never
+     * used as the background color of the confirm credentials screen.
      */
+    @Deprecated
     public void setOrganizationColorForUser(@ColorInt int color, @UserIdInt int userId) {
         try {
             // always enforce alpha channel to have 100% opacity
@@ -10322,7 +10317,10 @@ public class DevicePolicyManager {
      * @param admin Which {@link DeviceAdminReceiver} this request is associated with.
      * @return The 24bit (0xRRGGBB) representation of the color to be used.
      * @throws SecurityException if {@code admin} is not a profile owner.
+     * @deprecated From {@link android.os.Build.VERSION_CODES#R}, the organization color is never
+     * used as the background color of the confirm credentials screen.
      */
+    @Deprecated
     public @ColorInt int getOrganizationColor(@NonNull ComponentName admin) {
         throwIfParentInstance("getOrganizationColor");
         try {
@@ -10338,7 +10336,10 @@ public class DevicePolicyManager {
      *
      * @param userHandle The user id of the user we're interested in.
      * @return The 24bit (0xRRGGBB) representation of the color to be used.
+     * @deprecated From {@link android.os.Build.VERSION_CODES#R}, the organization color is never
+     * used as the background color of the confirm credentials screen.
      */
+    @Deprecated
     public @ColorInt int getOrganizationColorForUser(int userHandle) {
         try {
             return mService.getOrganizationColorForUser(userHandle);

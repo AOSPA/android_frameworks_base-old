@@ -193,8 +193,10 @@
     <string name="network_logging_notification_text" msgid="1327373071132562512">"तपाईंको संगठनले यस यन्त्रको व्यवस्थापन गर्दछ र नेटवर्क ट्राफिकको अनुगमन गर्न सक्छ। विवरणहरूका लागि ट्याप गर्नुहोस्।"</string>
     <string name="location_changed_notification_title" msgid="3620158742816699316">"एपहरूले तपाईंको स्थान प्रयोग गर्न सक्छन्"</string>
     <string name="location_changed_notification_text" msgid="7158423339982706912">"थप जानकारी प्राप्त गर्न आफ्ना IT प्रशासकसँग सम्पर्क गर्नुहोस्"</string>
+    <string name="geofencing_service" msgid="3826902410740315456">"जियोफेन्सिङ सेवा"</string>
     <string name="country_detector" msgid="7023275114706088854">"देश पत्ता लगाउने सुविधा"</string>
     <string name="location_service" msgid="2439187616018455546">"स्थानसम्बन्धी सेवा"</string>
+    <string name="gnss_service" msgid="8907781262179951385">"GNSS सेवा"</string>
     <string name="sensor_notification_service" msgid="7474531979178682676">"सेन्सरको सूचनासम्बन्धी सेवा"</string>
     <string name="twilight_service" msgid="8964898045693187224">"ट्वाइलाइट सेवा"</string>
     <string name="factory_reset_warning" msgid="6858705527798047809">"तपाईंको यन्त्र मेटिनेछ"</string>
@@ -542,6 +544,7 @@
     <string name="biometric_not_recognized" msgid="5106687642694635888">"पहिचान भएन"</string>
     <string name="biometric_error_canceled" msgid="8266582404844179778">"प्रमाणीकरण रद्द गरियो"</string>
     <string name="biometric_error_device_not_secured" msgid="3129845065043995924">"कुनै पनि PIN, ढाँचा वा पासवर्ड सेट गरिएको छैन"</string>
+    <string name="biometric_error_generic" msgid="6784371929985434439">"प्रमाणित गर्ने क्रममा त्रुटि भयो"</string>
     <string name="fingerprint_acquired_partial" msgid="8532380671091299342">"आंशिक फिंगरप्रिन्ट पत्ता लाग्यो। कृपया फेरि प्रयास गर्नुहोस्।"</string>
     <string name="fingerprint_acquired_insufficient" msgid="2545149524031515411">"फिंगरप्रिन्ट प्रशोधन गर्न सकिएन। कृपया फेरि प्रयास गर्नुहोस्।"</string>
     <string name="fingerprint_acquired_imager_dirty" msgid="4694800187151533990">"फिंगरप्रिन्ट सेन्सर फोहोर छ। कृपया सफा गरेर फेरि प्रयास गर्नुहोस्।"</string>
@@ -829,7 +832,8 @@
     <string name="lockscreen_instructions_when_pattern_enabled" msgid="7982445492532123308">"अनलक वा आपतकालीन कल गर्न मेनु थिच्नुहोस्।"</string>
     <string name="lockscreen_instructions_when_pattern_disabled" msgid="7434061749374801753">"अनलक गर्न मेनु थिच्नुहोस्।"</string>
     <string name="lockscreen_pattern_instructions" msgid="3169991838169244941">"अनलक गर्नु ढाँचा खिच्नुहोस्"</string>
-    <string name="lockscreen_emergency_call" msgid="7500692654885445299">"आपतकालीन"</string>
+    <!-- no translation found for lockscreen_emergency_call (7549683825868928636) -->
+    <skip />
     <string name="lockscreen_return_to_call" msgid="3156883574692006382">"कलमा फर्किनुहोस्"</string>
     <string name="lockscreen_pattern_correct" msgid="8050630103651508582">"सही!"</string>
     <string name="lockscreen_pattern_wrong" msgid="2940138714468358458">"फेरि प्रयास गर्नुहोस्"</string>
@@ -1460,9 +1464,6 @@
     <string name="gpsNotifMessage" msgid="7346649122793758032">"<xliff:g id="NAME">%1$s</xliff:g> (<xliff:g id="SERVICE">%2$s</xliff:g>) द्वारा अनुरोध गरिएको"</string>
     <string name="gpsVerifYes" msgid="3719843080744112940">"हो"</string>
     <string name="gpsVerifNo" msgid="1671201856091564741">"होइन"</string>
-    <string name="gnss_nfw_notification_title" msgid="5004493772059563423">"आपत्कालीन सेवा उपलब्ध गराउन स्थान प्रयोग गरेको थियो"</string>
-    <string name="gnss_nfw_notification_message_oem" msgid="3683958907027107969">"तपाईंको यन्त्रका उत्पादकले हालसालै तपाईंलाई आपत्कालीन सेवा उपलब्ध गराउने प्रयोजनका लागि तपाईंको स्थान प्रयोग गरेको थियो"</string>
-    <string name="gnss_nfw_notification_message_carrier" msgid="815888995791562151">"तपाईंको टेलिफोन कम्पनीले हालसालै तपाईंलाई आपत्कालीन सेवा उपलब्ध गराउने प्रयोजनका लागि तपाईंको स्थान प्रयोग गरेको थियो"</string>
     <string name="sync_too_many_deletes" msgid="6999440774578705300">"सीमा नाघेकाहरू मेट्नुहोस्"</string>
     <string name="sync_too_many_deletes_desc" msgid="7409327940303504440">"त्यहाँ <xliff:g id="NUMBER_OF_DELETED_ITEMS">%1$d</xliff:g> मेटाइएका आइटमहरू छन् <xliff:g id="TYPE_OF_SYNC">%2$s</xliff:g>को लागि, खाता <xliff:g id="ACCOUNT_NAME">%3$s</xliff:g>। तपाईं के गर्न चाहनु हुन्छ?"</string>
     <string name="sync_really_delete" msgid="5657871730315579051">"वस्तुहरू मेट्नुहोस्"</string>
@@ -1792,8 +1793,8 @@
     <string name="package_updated_device_owner" msgid="7560272363805506941">"तपाईंका प्रशासकले अद्यावधिक गर्नुभएको"</string>
     <string name="package_deleted_device_owner" msgid="2292335928930293023">"तपाईंका प्रशासकले मेट्नुभएको"</string>
     <string name="confirm_battery_saver" msgid="5247976246208245754">"ठिक छ"</string>
-    <string name="battery_saver_description_with_learn_more" msgid="5997766757551917769">"ब्याट्रीको आयु बढाउन ब्याट्री सेभरले:\n\n•अँध्यारो थिम सक्रिय गर्छ\n•पृष्ठभूमिका गतिविधि, केही दृश्यात्मक प्रभाव तथा “Hey Google” जस्ता अन्य सुविधाहरू निष्क्रिय वा सीमित पार्छ\n\n"<annotation id="url">"थप जान्नुहोस्"</annotation></string>
-    <string name="battery_saver_description" msgid="8587408568232177204">"ब्याट्रीको आयु बढाउन ब्याट्री सेभरले:\n\n•अँध्यारो थिम सक्रिय गर्छ\n•पृष्ठभूमिका गतिविधि, केही दृश्यात्मक प्रभाव तथा “Hey Google” जस्ता अन्य सुविधाहरू निष्क्रिय वा सीमित पार्छ"</string>
+    <string name="battery_saver_description_with_learn_more" msgid="4424488535318105801">"ब्याट्री सेभरले यन्त्रको ब्याट्री बढी समय टिकाउन:\n\n•अँध्यारो थिम सक्रिय गर्छ\n•पृष्ठभूमिका गतिविधि, केही दृश्यात्मक प्रभाव तथा “Hey Google” जस्ता अन्य सुविधाहरू निष्क्रिय वा सीमित पार्छ\n\n"<annotation id="url">"थप जान्नुहोस्"</annotation></string>
+    <string name="battery_saver_description" msgid="6794188153647295212">"ब्याट्री सेभरले यन्त्रको ब्याट्री बढी समय टिकाउन:\n\n• अँध्यारो थिम अन गर्छ\n• पृष्ठभूमिका क्रियाकलाप, केही दृश्यात्मक प्रभाव तथा “Hey Google” जस्ता अन्य सुविधाहरू अफ गर्छ वा सीमित पार्छ"</string>
     <string name="data_saver_description" msgid="4995164271550590517">"डेटाको प्रयोगलाई कम गर्न डेटा सर्भरले केही एपलाई पृष्ठभूमिमा डेटा पठाउन वा प्राप्त गर्न दिँदैन। तपाईंले हाल प्रयोग गरिरहनुभएको अनु्प्रयोगले डेटा चलाउन सक्छ, तर पहिला भन्दा कम अन्तरालमा मात्र। उदाहरणका लागि, तपाईले छविहरूमा ट्याप नगरेसम्म ती छविहरू देखिँदैनन्।"</string>
     <string name="data_saver_enable_title" msgid="7080620065745260137">"डेटा सेभर सक्रिय गर्ने हो?"</string>
     <string name="data_saver_enable_button" msgid="4399405762586419726">"सक्रिय गर्नुहोस्"</string>
@@ -1997,6 +1998,7 @@
     <string name="notification_appops_camera_active" msgid="8177643089272352083">"क्यामेरा"</string>
     <string name="notification_appops_microphone_active" msgid="581333393214739332">"माइक्रोफोन"</string>
     <string name="notification_appops_overlay_active" msgid="5571732753262836481">"तपाईंको स्क्रिनका अन्य एपहरूमा प्रदर्शन गरिँदै छ"</string>
+    <string name="notification_feedback_indicator" msgid="663476517711323016">"प्रतिक्रिया दिनुहोस्"</string>
     <string name="dynamic_mode_notification_channel_name" msgid="2986926422100223328">"दिनचर्या मोडको जानकारीमूलक सूचना"</string>
     <string name="dynamic_mode_notification_title" msgid="9205715501274608016">"प्रायः चार्ज गर्ने समय हुनुभन्दा पहिले नै ब्याट्री सकिन सक्छ"</string>
     <string name="dynamic_mode_notification_summary" msgid="4141614604437372157">"ब्याट्रीको आयु बढाउन ब्याट्री सेभर सक्रिय गरियो"</string>

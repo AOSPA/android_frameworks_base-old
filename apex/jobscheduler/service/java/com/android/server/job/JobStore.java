@@ -36,6 +36,7 @@ import android.util.AtomicFile;
 import android.util.Pair;
 import android.util.Slog;
 import android.util.SparseArray;
+import android.util.SystemConfigFileCommitEventLogger;
 import android.util.Xml;
 
 import com.android.internal.annotations.GuardedBy;
@@ -102,6 +103,7 @@ public final class JobStore {
     private boolean mWriteInProgress;
 
     private static final Object sSingletonLock = new Object();
+    private final SystemConfigFileCommitEventLogger mEventLogger;
     private final AtomicFile mJobsFile;
     /** Handler backed by IoThread for writing to disk. */
     private final Handler mIoHandler = IoThread.getHandler();
@@ -141,7 +143,8 @@ public final class JobStore {
         File systemDir = new File(dataDir, "system");
         File jobDir = new File(systemDir, "job");
         jobDir.mkdirs();
-        mJobsFile = new AtomicFile(new File(jobDir, "jobs.xml"), "jobs");
+        mEventLogger = new SystemConfigFileCommitEventLogger("jobs");
+        mJobsFile = new AtomicFile(new File(jobDir, "jobs.xml"), mEventLogger);
 
         mJobSet = new JobSet();
 
@@ -332,7 +335,7 @@ public final class JobStore {
                     Slog.v(TAG, "Scheduling persist of jobs to disk.");
                 }
                 mIoHandler.postDelayed(mWriteRunnable, JOB_PERSIST_DELAY);
-                mWriteScheduled = mWriteInProgress = true;
+                mWriteScheduled = true;
             }
         }
     }
@@ -350,7 +353,7 @@ public final class JobStore {
                 throw new IllegalStateException("An asynchronous write is already scheduled.");
             }
 
-            mWriteScheduled = mWriteInProgress = true;
+            mWriteScheduled = true;
             mWriteRunnable.run();
         }
     }
@@ -366,7 +369,7 @@ public final class JobStore {
         final long start = SystemClock.uptimeMillis();
         final long end = start + maxWaitMillis;
         synchronized (mWriteScheduleLock) {
-            while (mWriteInProgress) {
+            while (mWriteScheduled || mWriteInProgress) {
                 final long now = SystemClock.uptimeMillis();
                 if (now >= end) {
                     // still not done and we've hit the end; failure
@@ -401,6 +404,12 @@ public final class JobStore {
             // a bit of lock contention.
             synchronized (mWriteScheduleLock) {
                 mWriteScheduled = false;
+                if (mWriteInProgress) {
+                    // Another runnable is currently writing. Postpone this new write task.
+                    maybeWriteStatusToDiskAsync();
+                    return;
+                }
+                mWriteInProgress = true;
             }
             synchronized (mLock) {
                 // Clone the jobs so we can release the lock before writing.
@@ -426,7 +435,7 @@ public final class JobStore {
             int numSystemJobs = 0;
             int numSyncJobs = 0;
             try {
-                final long startTime = SystemClock.uptimeMillis();
+                mEventLogger.setStartTime(SystemClock.uptimeMillis());
                 ByteArrayOutputStream baos = new ByteArrayOutputStream();
                 XmlSerializer out = new FastXmlSerializer();
                 out.setOutput(baos, StandardCharsets.UTF_8.name());
@@ -459,7 +468,7 @@ public final class JobStore {
                 out.endDocument();
 
                 // Write out to disk in one fell swoop.
-                FileOutputStream fos = mJobsFile.startWrite(startTime);
+                FileOutputStream fos = mJobsFile.startWrite();
                 fos.write(baos.toByteArray());
                 mJobsFile.finishWrite(fos);
             } catch (IOException e) {

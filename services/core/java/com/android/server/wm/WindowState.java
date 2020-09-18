@@ -24,6 +24,7 @@ import static android.app.WindowConfiguration.ACTIVITY_TYPE_DREAM;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_HOME;
 import static android.app.WindowConfiguration.isSplitScreenWindowingMode;
 import static android.content.res.Configuration.ORIENTATION_LANDSCAPE;
+import static android.graphics.GraphicsProtos.dumpPointProto;
 import static android.os.PowerManager.DRAW_WAKE_LOCK;
 import static android.os.Trace.TRACE_TAG_WINDOW_MANAGER;
 import static android.view.InsetsState.ITYPE_IME;
@@ -55,11 +56,14 @@ import static android.view.WindowManager.LayoutParams.MATCH_PARENT;
 import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_COMPATIBLE_WINDOW;
 import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_LAYOUT_CHILD_WINDOW_IN_PARENT_FRAME;
 import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_NO_MOVE_ANIMATION;
+import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_TRUSTED_OVERLAY;
 import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_WILL_NOT_REPLACE_ON_RELAUNCH;
 import static android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE;
 import static android.view.WindowManager.LayoutParams.SOFT_INPUT_MASK_ADJUST;
 import static android.view.WindowManager.LayoutParams.SYSTEM_FLAG_HIDE_NON_SYSTEM_OVERLAY_WINDOWS;
 import static android.view.WindowManager.LayoutParams.SYSTEM_FLAG_SHOW_FOR_ALL_USERS;
+import static android.view.WindowManager.LayoutParams.TYPE_ACCESSIBILITY_MAGNIFICATION_OVERLAY;
+import static android.view.WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY;
 import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION;
 import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION_MEDIA;
 import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION_MEDIA_OVERLAY;
@@ -84,6 +88,7 @@ import static android.view.WindowManager.LayoutParams.TYPE_PRIORITY_PHONE;
 import static android.view.WindowManager.LayoutParams.TYPE_PRIVATE_PRESENTATION;
 import static android.view.WindowManager.LayoutParams.TYPE_SCREENSHOT;
 import static android.view.WindowManager.LayoutParams.TYPE_SEARCH_BAR;
+import static android.view.WindowManager.LayoutParams.TYPE_SECURE_SYSTEM_OVERLAY;
 import static android.view.WindowManager.LayoutParams.TYPE_STATUS_BAR;
 import static android.view.WindowManager.LayoutParams.TYPE_STATUS_BAR_ADDITIONAL;
 import static android.view.WindowManager.LayoutParams.TYPE_STATUS_BAR_SUB_PANEL;
@@ -158,7 +163,6 @@ import static com.android.server.wm.WindowStateProto.FINISHED_SEAMLESS_ROTATION_
 import static com.android.server.wm.WindowStateProto.FORCE_SEAMLESS_ROTATION;
 import static com.android.server.wm.WindowStateProto.GIVEN_CONTENT_INSETS;
 import static com.android.server.wm.WindowStateProto.HAS_SURFACE;
-import static com.android.server.wm.WindowStateProto.IDENTIFIER;
 import static com.android.server.wm.WindowStateProto.IS_ON_SCREEN;
 import static com.android.server.wm.WindowStateProto.IS_READY_FOR_DISPLAY;
 import static com.android.server.wm.WindowStateProto.IS_VISIBLE;
@@ -945,6 +949,23 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
                 mActivityRecord != null ? mActivityRecord.mInputApplicationHandle : null,
                     getDisplayId());
 
+        //  Check private trusted overlay flag and window type to set trustedOverlay variable of
+        //  input window handle.
+        mInputWindowHandle.trustedOverlay =
+                (mAttrs.privateFlags & PRIVATE_FLAG_TRUSTED_OVERLAY) != 0
+                && mOwnerCanAddInternalSystemWindow;
+        mInputWindowHandle.trustedOverlay |=
+                mAttrs.type == TYPE_ACCESSIBILITY_MAGNIFICATION_OVERLAY
+                || mAttrs.type == TYPE_INPUT_METHOD || mAttrs.type == TYPE_INPUT_METHOD_DIALOG
+                || mAttrs.type == TYPE_MAGNIFICATION_OVERLAY || mAttrs.type == TYPE_STATUS_BAR
+                || mAttrs.type == TYPE_NOTIFICATION_SHADE
+                || mAttrs.type == TYPE_NAVIGATION_BAR
+                || mAttrs.type == TYPE_NAVIGATION_BAR_PANEL
+                || mAttrs.type == TYPE_SECURE_SYSTEM_OVERLAY
+                || mAttrs.type == TYPE_DOCK_DIVIDER
+                || mAttrs.type == TYPE_ACCESSIBILITY_OVERLAY
+                || mAttrs.type == TYPE_INPUT_CONSUMER;
+
         // Make sure we initial all fields before adding to parentWindow, to prevent exception
         // during onDisplayChanged.
         if (mIsChildWindow) {
@@ -1545,10 +1566,10 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         return mActivityRecord != null ? mActivityRecord.getTask() : null;
     }
 
-    @Nullable ActivityStack getRootTask() {
+    @Nullable Task getRootTask() {
         final Task task = getTask();
         if (task != null) {
-            return (ActivityStack) task.getRootTask();
+            return task.getRootTask();
         }
         // Some system windows (e.g. "Power off" dialog) don't have a task, but we would still
         // associate them with some stack to enable dimming.
@@ -1590,7 +1611,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         bounds.setEmpty();
         mTmpRect.setEmpty();
         if (intersectWithStackBounds) {
-            final ActivityStack stack = task.getStack();
+            final Task stack = task.getRootTask();
             if (stack != null) {
                 stack.getDimBounds(mTmpRect);
             } else {
@@ -1601,7 +1622,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
                 // the secondary split, it means this is "minimized" and thus must prevent
                 // overlapping with home.
                 // TODO(b/158242495): get rid of this when drag/drop can use surface bounds.
-                final ActivityStack rootSecondary =
+                final Task rootSecondary =
                         task.getDisplayArea().getRootSplitScreenSecondaryTask();
                 if (rootSecondary.isActivityTypeHome() || rootSecondary.isActivityTypeRecents()) {
                     final WindowContainer topTask = rootSecondary.getTopChild();
@@ -2086,7 +2107,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
 
     boolean isObscuringDisplay() {
         Task task = getTask();
-        if (task != null && task.getStack() != null && !task.getStack().fillsParent()) {
+        if (task != null && task.getRootTask() != null && !task.getRootTask().fillsParent()) {
             return false;
         }
         return isOpaqueDrawn() && fillsDisplay();
@@ -2394,7 +2415,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
             return false;
         }
 
-        final ActivityStack stack = getRootTask();
+        final Task stack = getRootTask();
         if (stack != null && !stack.isFocusable()) {
             // Ignore when the stack shouldn't receive input event.
             // (i.e. the minimized stack in split screen mode.)
@@ -2895,7 +2916,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
             return false;
         }
 
-        return mActivityRecord.getTask().getStack().shouldIgnoreInput()
+        return mActivityRecord.getTask().getRootTask().shouldIgnoreInput()
                 || !mActivityRecord.mVisibleRequested
                 || isRecentsAnimationConsumingAppInput();
     }
@@ -3356,6 +3377,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
 
             // These are the windows that by default are shown to all users. However, to
             // protect against spoofing, check permissions below.
+            case TYPE_ACCESSIBILITY_MAGNIFICATION_OVERLAY:
             case TYPE_APPLICATION_STARTING:
             case TYPE_BOOT_PROGRESS:
             case TYPE_DISPLAY_OVERLAY:
@@ -3464,7 +3486,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
             return;
         }
 
-        final ActivityStack stack = task.getStack();
+        final Task stack = task.getRootTask();
         if (stack == null || inFreeformWindowingMode()) {
             handle.setTouchableRegionCrop(null);
             return;
@@ -3479,7 +3501,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
             return;
         }
 
-        final ActivityStack stack = task.getStack();
+        final Task stack = task.getRootTask();
         if (stack == null || stack.mCreatedByOrganizer) {
             return;
         }
@@ -3723,7 +3745,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
     }
 
     private int getRootTaskId() {
-        final ActivityStack stack = getRootTask();
+        final Task stack = getRootTask();
         if (stack == null) {
             return INVALID_TASK_ID;
         }
@@ -3909,14 +3931,13 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
 
         final long token = proto.start(fieldId);
         super.dumpDebug(proto, WINDOW_CONTAINER, logLevel);
-        writeIdentifierToProto(proto, IDENTIFIER);
         proto.write(DISPLAY_ID, getDisplayId());
         proto.write(STACK_ID, getRootTaskId());
         mAttrs.dumpDebug(proto, ATTRIBUTES);
         mGivenContentInsets.dumpDebug(proto, GIVEN_CONTENT_INSETS);
         mWindowFrames.dumpDebug(proto, WINDOW_FRAMES);
         mAttrs.surfaceInsets.dumpDebug(proto, SURFACE_INSETS);
-        mSurfacePosition.dumpDebug(proto, SURFACE_POSITION);
+        dumpPointProto(mSurfacePosition, proto, SURFACE_POSITION);
         mWinAnimator.dumpDebug(proto, ANIMATOR);
         proto.write(ANIMATING_EXIT, mAnimatingExit);
         proto.write(REQUESTED_WIDTH, mRequestedWidth);
@@ -5302,13 +5323,14 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
 
     @Override
     boolean shouldMagnify() {
-        if (mAttrs.type == TYPE_INPUT_METHOD ||
-                mAttrs.type == TYPE_INPUT_METHOD_DIALOG ||
-                mAttrs.type == TYPE_MAGNIFICATION_OVERLAY ||
-                mAttrs.type == TYPE_NAVIGATION_BAR ||
+        if (mAttrs.type == TYPE_ACCESSIBILITY_MAGNIFICATION_OVERLAY
+                || mAttrs.type == TYPE_INPUT_METHOD
+                || mAttrs.type == TYPE_INPUT_METHOD_DIALOG
+                || mAttrs.type == TYPE_MAGNIFICATION_OVERLAY
+                || mAttrs.type == TYPE_NAVIGATION_BAR
                 // It's tempting to wonder: Have we forgotten the rounded corners overlay?
                 // worry not: it's a fake TYPE_NAVIGATION_BAR_PANEL
-                mAttrs.type == TYPE_NAVIGATION_BAR_PANEL) {
+                || mAttrs.type == TYPE_NAVIGATION_BAR_PANEL) {
             return false;
         }
         return true;
@@ -5406,7 +5428,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         }
     }
 
-    private void transformFrameToSurfacePosition(int left, int top, Point outPoint) {
+    void transformFrameToSurfacePosition(int left, int top, Point outPoint) {
         outPoint.set(left, top);
 
         // If changed, also adjust getTransformationMatrix
@@ -5426,7 +5448,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
             outPoint.offset(-parentBounds.left, -parentBounds.top);
         }
 
-        ActivityStack stack = getRootTask();
+        Task stack = getRootTask();
 
         // If we have stack outsets, that means the top-left
         // will be outset, and we need to inset ourselves
@@ -5754,8 +5776,8 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         @Override
         public void dumpDebugInner(ProtoOutputStream proto) {
             final long token = proto.start(MOVE);
-            mFrom.dumpDebug(proto, FROM);
-            mTo.dumpDebug(proto, TO);
+            dumpPointProto(mFrom, proto, FROM);
+            dumpPointProto(mTo, proto, TO);
             proto.write(DURATION_MS, mDuration);
             proto.end(token);
         }

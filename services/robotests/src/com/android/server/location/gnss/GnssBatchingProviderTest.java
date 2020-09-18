@@ -50,6 +50,9 @@ public class GnssBatchingProviderTest {
     private GnssBatchingProviderNative mMockNative;
     private GnssBatchingProvider mTestProvider;
 
+    /**
+     * Mocks native methods and starts GnssBatchingProvider.
+     */
     @Before
     public void setUp() {
         MockitoAnnotations.initMocks(this);
@@ -62,34 +65,52 @@ public class GnssBatchingProviderTest {
         mTestProvider.start(PERIOD_NANOS, WAKE_ON_FIFO_FULL);
     }
 
+    /**
+     * Test native start method is called.
+     */
     @Test
     public void start_nativeStarted() {
         verify(mMockNative).startBatch(eq(PERIOD_NANOS), eq(WAKE_ON_FIFO_FULL));
     }
 
+    /**
+     * Verify native stop method is called.
+     */
     @Test
     public void stop_nativeStopped() {
         mTestProvider.stop();
         verify(mMockNative).stopBatch();
     }
 
+    /**
+     * Verify native flush method is called.
+     */
     @Test
     public void flush_nativeFlushed() {
         mTestProvider.flush();
         verify(mMockNative).flushBatch();
     }
 
+    /**
+     * Verify getBatchSize returns value from native batch size method.
+     */
     @Test
     public void getBatchSize_nativeGetBatchSize() {
         assertThat(mTestProvider.getBatchSize()).isEqualTo(BATCH_SIZE);
     }
 
+    /**
+     * Verify resumeIfStarted method will call native start method a second time.
+     */
     @Test
     public void started_resume_started() {
         mTestProvider.resumeIfStarted();
         verify(mMockNative, times(2)).startBatch(eq(PERIOD_NANOS), eq(WAKE_ON_FIFO_FULL));
     }
 
+    /**
+     * Verify that if batching is stopped, resume will not call native start method.
+     */
     @Test
     public void stopped_resume_notStarted() {
         mTestProvider.stop();

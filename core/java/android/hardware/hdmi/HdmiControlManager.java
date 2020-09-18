@@ -16,8 +16,6 @@
 
 package android.hardware.hdmi;
 
-import static com.android.internal.os.RoSystemProperties.PROPERTY_HDMI_IS_DEVICE_HDMI_CEC_SWITCH;
-
 import android.annotation.CallbackExecutor;
 import android.annotation.IntDef;
 import android.annotation.NonNull;
@@ -34,11 +32,12 @@ import android.content.Context;
 import android.content.pm.PackageManager;
 import android.os.Binder;
 import android.os.RemoteException;
-import android.os.SystemProperties;
+import android.sysprop.HdmiProperties;
 import android.util.ArrayMap;
 import android.util.Log;
 
 import com.android.internal.annotations.GuardedBy;
+import com.android.internal.util.ConcurrentUtils;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -349,8 +348,7 @@ public final class HdmiControlManager {
         mHasPlaybackDevice = hasDeviceType(types, HdmiDeviceInfo.DEVICE_PLAYBACK);
         mHasAudioSystemDevice = hasDeviceType(types, HdmiDeviceInfo.DEVICE_AUDIO_SYSTEM);
         mHasSwitchDevice = hasDeviceType(types, HdmiDeviceInfo.DEVICE_PURE_CEC_SWITCH);
-        mIsSwitchDevice = SystemProperties.getBoolean(
-            PROPERTY_HDMI_IS_DEVICE_HDMI_CEC_SWITCH, false);
+        mIsSwitchDevice = HdmiProperties.is_switch().orElse(false);
         addHotplugEventListener(new ClientHotplugEventListener());
     }
 
@@ -375,8 +373,8 @@ public final class HdmiControlManager {
                     if (port.getType() == HdmiPortInfo.PORT_OUTPUT) {
                         setLocalPhysicalAddress(
                                 event.isConnected()
-                                ? port.getAddress()
-                                : INVALID_PHYSICAL_ADDRESS);
+                                        ? port.getAddress()
+                                        : INVALID_PHYSICAL_ADDRESS);
                     }
                     break;
                 }
@@ -894,6 +892,11 @@ public final class HdmiControlManager {
      * <p>To stop getting the notification,
      * use {@link #removeHotplugEventListener(HotplugEventListener)}.
      *
+     * Note that each invocation of the callback will be executed on an arbitrary
+     * Binder thread. This means that all callback implementations must be
+     * thread safe. To specify the execution thread, use
+     * {@link addHotplugEventListener(Executor, HotplugEventListener)}.
+     *
      * @param listener {@link HotplugEventListener} instance
      * @see HdmiControlManager#removeHotplugEventListener(HotplugEventListener)
      *
@@ -902,6 +905,24 @@ public final class HdmiControlManager {
     @SystemApi
     @RequiresPermission(android.Manifest.permission.HDMI_CEC)
     public void addHotplugEventListener(HotplugEventListener listener) {
+        addHotplugEventListener(ConcurrentUtils.DIRECT_EXECUTOR, listener);
+    }
+
+    /**
+     * Adds a listener to get informed of {@link HdmiHotplugEvent}.
+     *
+     * <p>To stop getting the notification,
+     * use {@link #removeHotplugEventListener(HotplugEventListener)}.
+     *
+     * @param listener {@link HotplugEventListener} instance
+     * @see HdmiControlManager#removeHotplugEventListener(HotplugEventListener)
+     *
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.HDMI_CEC)
+    public void addHotplugEventListener(@NonNull @CallbackExecutor Executor executor,
+            @NonNull HotplugEventListener listener) {
         if (mService == null) {
             Log.e(TAG, "HdmiControlService is not available");
             return;
@@ -910,7 +931,8 @@ public final class HdmiControlManager {
             Log.e(TAG, "listener is already registered");
             return;
         }
-        IHdmiHotplugEventListener wrappedListener = getHotplugEventListenerWrapper(listener);
+        IHdmiHotplugEventListener wrappedListener =
+                getHotplugEventListenerWrapper(executor, listener);
         mHotplugEventListeners.put(listener, wrappedListener);
         try {
             mService.addHotplugEventListener(wrappedListener);
@@ -946,13 +968,36 @@ public final class HdmiControlManager {
     }
 
     private IHdmiHotplugEventListener getHotplugEventListenerWrapper(
-            final HotplugEventListener listener) {
+            Executor executor, final HotplugEventListener listener) {
         return new IHdmiHotplugEventListener.Stub() {
             @Override
             public void onReceived(HdmiHotplugEvent event) {
-                listener.onReceived(event);;
+                Binder.clearCallingIdentity();
+                executor.execute(() -> listener.onReceived(event));
             }
         };
+    }
+
+    /**
+     * Adds a listener to get informed of {@link HdmiControlStatusChange}.
+     *
+     * <p>To stop getting the notification,
+     * use {@link #removeHdmiControlStatusChangeListener(HdmiControlStatusChangeListener)}.
+     *
+     * Note that each invocation of the callback will be executed on an arbitrary
+     * Binder thread. This means that all callback implementations must be
+     * thread safe. To specify the execution thread, use
+     * {@link addHdmiControlStatusChangeListener(Executor, HdmiControlStatusChangeListener)}.
+     *
+     * @param listener {@link HdmiControlStatusChangeListener} instance
+     * @see HdmiControlManager#removeHdmiControlStatusChangeListener(
+     * HdmiControlStatusChangeListener)
+     *
+     * @hide
+     */
+    @RequiresPermission(android.Manifest.permission.HDMI_CEC)
+    public void addHdmiControlStatusChangeListener(HdmiControlStatusChangeListener listener) {
+        addHdmiControlStatusChangeListener(ConcurrentUtils.DIRECT_EXECUTOR, listener);
     }
 
     /**
@@ -968,7 +1013,8 @@ public final class HdmiControlManager {
      * @hide
      */
     @RequiresPermission(android.Manifest.permission.HDMI_CEC)
-    public void addHdmiControlStatusChangeListener(HdmiControlStatusChangeListener listener) {
+    public void addHdmiControlStatusChangeListener(@NonNull @CallbackExecutor Executor executor,
+            @NonNull HdmiControlStatusChangeListener listener) {
         if (mService == null) {
             Log.e(TAG, "HdmiControlService is not available");
             return;
@@ -978,7 +1024,7 @@ public final class HdmiControlManager {
             return;
         }
         IHdmiControlStatusChangeListener wrappedListener =
-                getHdmiControlStatusChangeListenerWrapper(listener);
+                getHdmiControlStatusChangeListenerWrapper(executor, listener);
         mHdmiControlStatusChangeListeners.put(listener, wrappedListener);
         try {
             mService.addHdmiControlStatusChangeListener(wrappedListener);
@@ -1014,11 +1060,12 @@ public final class HdmiControlManager {
     }
 
     private IHdmiControlStatusChangeListener getHdmiControlStatusChangeListenerWrapper(
-            final HdmiControlStatusChangeListener listener) {
+            Executor executor, final HdmiControlStatusChangeListener listener) {
         return new IHdmiControlStatusChangeListener.Stub() {
             @Override
             public void onStatusChange(boolean isCecEnabled, boolean isCecAvailable) {
-                listener.onStatusChange(isCecEnabled, isCecAvailable);
+                Binder.clearCallingIdentity();
+                executor.execute(() -> listener.onStatusChange(isCecEnabled, isCecAvailable));
             }
         };
     }

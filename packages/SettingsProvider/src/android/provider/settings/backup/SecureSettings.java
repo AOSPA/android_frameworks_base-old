@@ -112,6 +112,7 @@ public class SecureSettings {
         Settings.Secure.FACE_UNLOCK_ALWAYS_REQUIRE_CONFIRMATION,
         Settings.Secure.VR_DISPLAY_MODE,
         Settings.Secure.NOTIFICATION_BADGING,
+        Settings.Secure.NOTIFICATION_FEEDBACK_ENABLED,
         Settings.Secure.NOTIFICATION_DISMISS_RTL,
         Settings.Secure.QS_AUTO_ADDED_TILES,
         Settings.Secure.SCREENSAVER_ENABLED,
@@ -166,6 +167,12 @@ public class SecureSettings {
         Settings.Secure.PEOPLE_STRIP,
         Settings.Secure.MEDIA_CONTROLS_RESUME,
         Settings.Secure.ACCESSIBILITY_MAGNIFICATION_MODE,
-        Settings.Secure.ACCESSIBILITY_BUTTON_TARGETS
+        Settings.Secure.ACCESSIBILITY_BUTTON_TARGETS,
+        Settings.Secure.ACCESSIBILITY_MAGNIFICATION_CAPABILITY,
+        Settings.Secure.ONE_HANDED_MODE_ENABLED,
+        Settings.Secure.ONE_HANDED_MODE_TIMEOUT,
+        Settings.Secure.TAPS_APP_TO_EXIT,
+        Settings.Secure.SWIPE_BOTTOM_TO_NOTIFICATION_ENABLED,
+        Settings.Secure.PANIC_GESTURE_ENABLED,
     };
 }

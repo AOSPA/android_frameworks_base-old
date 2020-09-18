@@ -15,10 +15,12 @@
  */
 package android.hardware.face;
 
-import android.hardware.biometrics.IBiometricServiceReceiverInternal;
+import android.hardware.biometrics.IBiometricSensorReceiver;
 import android.hardware.biometrics.IBiometricServiceLockoutResetCallback;
 import android.hardware.face.IFaceServiceReceiver;
 import android.hardware.face.Face;
+import android.hardware.face.FaceSensorProperties;
+import android.view.Surface;
 
 /**
  * Communication channel from client to the face service. These methods are all require the
@@ -26,17 +28,24 @@ import android.hardware.face.Face;
  * @hide
  */
 interface IFaceService {
+    // Retrieve static sensor properties for all face sensors
+    List<FaceSensorProperties> getSensorProperties(String opPackageName);
+
     // Authenticate the given sessionId with a face
-    void authenticate(IBinder token, long sessionId, int userid,
-            IFaceServiceReceiver receiver, int flags, String opPackageName);
+    void authenticate(IBinder token, long operationId, int userid, IFaceServiceReceiver receiver,
+            String opPackageName);
+
+    // Uses the face hardware to detect for the presence of a face, without giving details
+    // about accept/reject/lockout.
+    void detectFace(IBinder token, int userId, IFaceServiceReceiver receiver, String opPackageName);
 
     // This method prepares the service to start authenticating, but doesn't start authentication.
     // This is protected by the MANAGE_BIOMETRIC signatuer permission. This method should only be
     // called from BiometricService. The additional uid, pid, userId arguments should be determined
     // by BiometricService. To start authentication after the clients are ready, use
     // startPreparedClient().
-    void prepareForAuthentication(boolean requireConfirmation, IBinder token, long sessionId,
-            int userId, IBiometricServiceReceiverInternal wrapperReceiver, String opPackageName,
+    void prepareForAuthentication(boolean requireConfirmation, IBinder token, long operationId,
+            int userId, IBiometricSensorReceiver sensorReceiver, String opPackageName,
             int cookie, int callingUid, int callingPid, int callingUserId);
 
     // Starts authentication with the previously prepared client.
@@ -45,12 +54,19 @@ interface IFaceService {
     // Cancel authentication for the given sessionId
     void cancelAuthentication(IBinder token, String opPackageName);
 
+    // Cancel face detection
+    void cancelFaceDetect(IBinder token, String opPackageName);
+
     // Same as above, with extra arguments.
     void cancelAuthenticationFromService(IBinder token, String opPackageName,
-            int callingUid, int callingPid, int callingUserId, boolean fromClient);
+            int callingUid, int callingPid, int callingUserId);
 
     // Start face enrollment
-    void enroll(int userId, IBinder token, in byte [] cryptoToken, IFaceServiceReceiver receiver,
+    void enroll(int userId, IBinder token, in byte [] hardwareAuthToken, IFaceServiceReceiver receiver,
+            String opPackageName, in int [] disabledFeatures, in Surface surface);
+
+    // Start remote face enrollment
+    void enrollRemotely(int userId, IBinder token, in byte [] hardwareAuthToken, IFaceServiceReceiver receiver,
             String opPackageName, in int [] disabledFeatures);
 
     // Cancel enrollment in progress
@@ -60,9 +76,6 @@ interface IFaceService {
     void remove(IBinder token, int faceId, int userId, IFaceServiceReceiver receiver,
             String opPackageName);
 
-    // Rename the face specified by faceId to the given name
-    void rename(int faceId, String name);
-
     // Get the enrolled face for user.
     List<Face> getEnrolledFaces(int userId, String opPackageName);
 
@@ -70,42 +83,32 @@ interface IFaceService {
     boolean isHardwareDetected(String opPackageName);
 
     // Get a pre-enrollment authentication token
-    long generateChallenge(IBinder token);
+    void generateChallenge(IBinder token, IFaceServiceReceiver receiver, String opPackageName);
 
     // Finish an enrollment sequence and invalidate the authentication token
-    int revokeChallenge(IBinder token);
+    void revokeChallenge(IBinder token, String opPackageName);
 
     // Determine if a user has at least one enrolled face
     boolean hasEnrolledFaces(int userId, String opPackageName);
 
-    // Gets the number of hardware devices
-    // int getHardwareDeviceCount();
-
-    // Gets the unique device id for hardware enumerated at i
-    // long getHardwareDevice(int i);
+    // Return the LockoutTracker status for the specified user
+    int getLockoutModeForUser(int userId);
 
     // Gets the authenticator ID for face
     long getAuthenticatorId(int callingUserId);
 
     // Reset the lockout when user authenticates with strong auth (e.g. PIN, pattern or password)
-    void resetLockout(in byte [] token);
+    void resetLockout(int userId, in byte [] hardwareAuthToken);
 
     // Add a callback which gets notified when the face lockout period expired.
-    void addLockoutResetCallback(IBiometricServiceLockoutResetCallback callback);
+    void addLockoutResetCallback(IBiometricServiceLockoutResetCallback callback, String opPackageName);
 
-    // Explicitly set the active user (for enrolling work profile)
-    void setActiveUser(int uid);
+    void setFeature(IBinder token, int userId, int feature, boolean enabled,
+            in byte [] hardwareAuthToken, IFaceServiceReceiver receiver, String opPackageName);
 
-    // Enumerate all faces
-    void enumerate(IBinder token, int userId, IFaceServiceReceiver receiver);
+    void getFeature(IBinder token, int userId, int feature, IFaceServiceReceiver receiver,
+            String opPackageName);
 
-    void setFeature(int userId, int feature, boolean enabled, in byte [] token,
-            IFaceServiceReceiver receiver, String opPackageName);
-
-    void getFeature(int userId, int feature, IFaceServiceReceiver receiver, String opPackageName);
-
-    void userActivity();
-
-    // Initialize the OEM configured biometric strength
-    void initConfiguredStrength(int strength);
+    // Give FaceService its ID. See AuthService.java
+    void initializeConfiguration(int sensorId);
 }

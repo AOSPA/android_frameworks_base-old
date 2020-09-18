@@ -23,6 +23,7 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.res.TypedArray;
 import android.graphics.Rect;
+import android.icu.text.DateTimePatternGenerator;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Parcelable;
@@ -53,8 +54,6 @@ import com.android.systemui.statusbar.policy.ConfigurationController.Configurati
 import com.android.systemui.tuner.TunerService;
 import com.android.systemui.tuner.TunerService.Tunable;
 
-import libcore.icu.LocaleData;
-
 import java.text.SimpleDateFormat;
 import java.util.Calendar;
 import java.util.Locale;
@@ -82,6 +81,7 @@ public class Clock extends TextView implements DemoMode, Tunable, CommandQueue.C
     private boolean mClockVisibleByUser = true;
 
     private boolean mAttached;
+    private boolean mScreenReceiverRegistered;
     private Calendar mCalendar;
     private String mClockFormatString;
     private SimpleDateFormat mClockFormat;
@@ -213,6 +213,14 @@ public class Clock extends TextView implements DemoMode, Tunable, CommandQueue.C
     @Override
     protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();
+        if (mScreenReceiverRegistered) {
+            mScreenReceiverRegistered = false;
+            mBroadcastDispatcher.unregisterReceiver(mScreenReceiver);
+            if (mSecondsHandler != null) {
+                mSecondsHandler.removeCallbacks(mSecondTick);
+                mSecondsHandler = null;
+            }
+        }
         if (mAttached) {
             mBroadcastDispatcher.unregisterReceiver(mIntentReceiver);
             mAttached = false;
@@ -363,12 +371,14 @@ public class Clock extends TextView implements DemoMode, Tunable, CommandQueue.C
                     mSecondsHandler.postAtTime(mSecondTick,
                             SystemClock.uptimeMillis() / 1000 * 1000 + 1000);
                 }
+                mScreenReceiverRegistered = true;
                 IntentFilter filter = new IntentFilter(Intent.ACTION_SCREEN_OFF);
                 filter.addAction(Intent.ACTION_SCREEN_ON);
                 mBroadcastDispatcher.registerReceiver(mScreenReceiver, filter);
             }
         } else {
             if (mSecondsHandler != null) {
+                mScreenReceiverRegistered = false;
                 mBroadcastDispatcher.unregisterReceiver(mScreenReceiver);
                 mSecondsHandler.removeCallbacks(mSecondTick);
                 mSecondsHandler = null;
@@ -380,15 +390,16 @@ public class Clock extends TextView implements DemoMode, Tunable, CommandQueue.C
     private final CharSequence getSmallTime() {
         Context context = getContext();
         boolean is24 = DateFormat.is24HourFormat(context, mCurrentUserId);
-        LocaleData d = LocaleData.get(context.getResources().getConfiguration().locale);
+        DateTimePatternGenerator dtpg = DateTimePatternGenerator.getInstance(
+                context.getResources().getConfiguration().locale);
 
         final char MAGIC1 = '\uEF00';
         final char MAGIC2 = '\uEF01';
 
         SimpleDateFormat sdf;
         String format = mShowSeconds
-                ? is24 ? d.timeFormat_Hms : d.timeFormat_hms
-                : is24 ? d.timeFormat_Hm : d.timeFormat_hm;
+                ? is24 ? dtpg.getBestPattern("Hms") : dtpg.getBestPattern("hms")
+                : is24 ? dtpg.getBestPattern("Hm") : dtpg.getBestPattern("hm");
         if (!format.equals(mClockFormatString)) {
             mContentDescriptionFormat = new SimpleDateFormat(format);
             /*

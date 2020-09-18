@@ -2268,22 +2268,6 @@ public class WifiManager {
     }
 
     /**
-     * Deauthenticate and set the re-authentication hold off time for the current network
-     * @param holdoff hold off time in milliseconds
-     * @param ess set if the hold off pertains to an ESS rather than a BSS
-     * @hide
-     *
-     * TODO (140167680): This needs to be removed, the implementation is empty!
-     */
-    public void deauthenticateNetwork(long holdoff, boolean ess) {
-        try {
-            mService.deauthenticateNetwork(holdoff, ess);
-        } catch (RemoteException e) {
-            throw e.rethrowFromSystemServer();
-        }
-    }
-
-    /**
      * Remove the specified network from the list of configured networks.
      * This may result in the asynchronous delivery of state change
      * events.
@@ -3541,7 +3525,10 @@ public class WifiManager {
      */
     @NonNull
     @SystemApi
-    @RequiresPermission(android.Manifest.permission.NETWORK_SETTINGS)
+    @RequiresPermission(anyOf = {
+            android.Manifest.permission.NETWORK_SETTINGS,
+            android.Manifest.permission.OVERRIDE_WIFI_CONFIG
+    })
     public SoftApConfiguration getSoftApConfiguration() {
         try {
             return mService.getSoftApConfiguration();
@@ -3589,7 +3576,10 @@ public class WifiManager {
      * @hide
      */
     @SystemApi
-    @RequiresPermission(android.Manifest.permission.NETWORK_SETTINGS)
+    @RequiresPermission(anyOf = {
+            android.Manifest.permission.NETWORK_SETTINGS,
+            android.Manifest.permission.OVERRIDE_WIFI_CONFIG
+    })
     public boolean setSoftApConfiguration(@NonNull SoftApConfiguration softApConfig) {
         try {
             return mService.setSoftApConfiguration(
@@ -4293,14 +4283,11 @@ public class WifiManager {
     private void connectInternal(@Nullable WifiConfiguration config, int networkId,
             @Nullable ActionListener listener) {
         ActionListenerProxy listenerProxy = null;
-        Binder binder = null;
         if (listener != null) {
             listenerProxy = new ActionListenerProxy("connect", mLooper, listener);
-            binder = new Binder();
         }
         try {
-            mService.connect(config, networkId, binder, listenerProxy,
-                    listener == null ? 0 : listener.hashCode());
+            mService.connect(config, networkId, listenerProxy);
         } catch (RemoteException e) {
             if (listenerProxy != null) listenerProxy.onFailure(ERROR);
         } catch (SecurityException e) {
@@ -4391,14 +4378,11 @@ public class WifiManager {
     public void save(@NonNull WifiConfiguration config, @Nullable ActionListener listener) {
         if (config == null) throw new IllegalArgumentException("config cannot be null");
         ActionListenerProxy listenerProxy = null;
-        Binder binder = null;
         if (listener != null) {
             listenerProxy = new ActionListenerProxy("save", mLooper, listener);
-            binder = new Binder();
         }
         try {
-            mService.save(config, binder, listenerProxy,
-                    listener == null ? 0 : listener.hashCode());
+            mService.save(config, listenerProxy);
         } catch (RemoteException e) {
             if (listenerProxy != null) listenerProxy.onFailure(ERROR);
         } catch (SecurityException e) {
@@ -4428,14 +4412,11 @@ public class WifiManager {
     public void forget(int netId, @Nullable ActionListener listener) {
         if (netId < 0) throw new IllegalArgumentException("Network id cannot be negative");
         ActionListenerProxy listenerProxy = null;
-        Binder binder = null;
         if (listener != null) {
             listenerProxy = new ActionListenerProxy("forget", mLooper, listener);
-            binder = new Binder();
         }
         try {
-            mService.forget(netId, binder, listenerProxy,
-                    listener == null ? 0 : listener.hashCode());
+            mService.forget(netId, listenerProxy);
         } catch (RemoteException e) {
             if (listenerProxy != null) listenerProxy.onFailure(ERROR);
         } catch (SecurityException e) {

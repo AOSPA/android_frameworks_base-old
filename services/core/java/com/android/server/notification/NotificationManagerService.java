@@ -88,6 +88,9 @@ import static android.service.notification.NotificationListenerService.REASON_SN
 import static android.service.notification.NotificationListenerService.REASON_TIMEOUT;
 import static android.service.notification.NotificationListenerService.REASON_UNAUTOBUNDLED;
 import static android.service.notification.NotificationListenerService.REASON_USER_STOPPED;
+import static android.service.notification.NotificationListenerService.Ranking.RANKING_DEMOTED;
+import static android.service.notification.NotificationListenerService.Ranking.RANKING_PROMOTED;
+import static android.service.notification.NotificationListenerService.Ranking.RANKING_UNCHANGED;
 import static android.service.notification.NotificationListenerService.TRIM_FULL;
 import static android.service.notification.NotificationListenerService.TRIM_LIGHT;
 import static android.view.WindowManager.LayoutParams.TYPE_TOAST;
@@ -171,12 +174,12 @@ import android.net.Uri;
 import android.os.Binder;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.DeviceIdleManager;
 import android.os.Environment;
 import android.os.Handler;
 import android.os.HandlerExecutor;
 import android.os.HandlerThread;
 import android.os.IBinder;
-import android.os.IDeviceIdleController;
 import android.os.IInterface;
 import android.os.Looper;
 import android.os.Message;
@@ -388,6 +391,8 @@ public class NotificationManagerService extends SystemService {
     private static final String SCHEME_TIMEOUT = "timeout";
     private static final String EXTRA_KEY = "key";
 
+    private static final String FEEDBACK_KEY = "feedback_key";
+
     private static final int NOTIFICATION_INSTANCE_ID_MAX = (1 << 13);
 
     /**
@@ -414,7 +419,7 @@ public class NotificationManagerService extends SystemService {
     private AlarmManager mAlarmManager;
     private ICompanionDeviceManager mCompanionManager;
     private AccessibilityManager mAccessibilityManager;
-    private IDeviceIdleController mDeviceIdleController;
+    private DeviceIdleManager mDeviceIdleManager;
     private IUriGrantsManager mUgm;
     private UriGrantsManagerInternal mUgmInternal;
     private RoleObserver mRoleObserver;
@@ -933,26 +938,30 @@ public class NotificationManagerService extends SystemService {
                     return;
                 }
                 final long now = System.currentTimeMillis();
-                MetricsLogger.action(r.getLogMaker(now)
-                        .setCategory(MetricsEvent.NOTIFICATION_ITEM_ACTION)
-                        .setType(MetricsEvent.TYPE_ACTION)
-                        .setSubtype(actionIndex)
-                        .addTaggedData(MetricsEvent.NOTIFICATION_SHADE_INDEX, nv.rank)
-                        .addTaggedData(MetricsEvent.NOTIFICATION_SHADE_COUNT, nv.count)
-                        .addTaggedData(MetricsEvent.NOTIFICATION_ACTION_IS_SMART,
-                                action.isContextual() ? 1 : 0)
-                        .addTaggedData(
-                                MetricsEvent.NOTIFICATION_SMART_SUGGESTION_ASSISTANT_GENERATED,
-                                generatedByAssistant ? 1 : 0)
-                        .addTaggedData(MetricsEvent.NOTIFICATION_LOCATION,
-                                nv.location.toMetricsEventEnum()));
-                mNotificationRecordLogger.log(
-                        NotificationRecordLogger.NotificationEvent.fromAction(actionIndex,
-                                generatedByAssistant, action.isContextual()), r);
-                EventLogTags.writeNotificationActionClicked(key, actionIndex,
-                        r.getLifespanMs(now), r.getFreshnessMs(now), r.getExposureMs(now),
-                        nv.rank, nv.count);
-                nv.recycle();
+                //TODO(b/154257994): remove this when feedback apis are in place
+                boolean isFeedback = action.getExtras().containsKey(FEEDBACK_KEY);
+                if (!isFeedback) {
+                    MetricsLogger.action(r.getLogMaker(now)
+                            .setCategory(MetricsEvent.NOTIFICATION_ITEM_ACTION)
+                            .setType(MetricsEvent.TYPE_ACTION)
+                            .setSubtype(actionIndex)
+                            .addTaggedData(MetricsEvent.NOTIFICATION_SHADE_INDEX, nv.rank)
+                            .addTaggedData(MetricsEvent.NOTIFICATION_SHADE_COUNT, nv.count)
+                            .addTaggedData(MetricsEvent.NOTIFICATION_ACTION_IS_SMART,
+                                    action.isContextual() ? 1 : 0)
+                            .addTaggedData(
+                                    MetricsEvent.NOTIFICATION_SMART_SUGGESTION_ASSISTANT_GENERATED,
+                                    generatedByAssistant ? 1 : 0)
+                            .addTaggedData(MetricsEvent.NOTIFICATION_LOCATION,
+                                    nv.location.toMetricsEventEnum()));
+                    mNotificationRecordLogger.log(
+                            NotificationRecordLogger.NotificationEvent.fromAction(actionIndex,
+                                    generatedByAssistant, action.isContextual()), r);
+                    EventLogTags.writeNotificationActionClicked(key, actionIndex,
+                            r.getLifespanMs(now), r.getFreshnessMs(now), r.getExposureMs(now),
+                            nv.rank, nv.count);
+                    nv.recycle();
+                }
                 reportUserInteraction(r);
                 mAssistants.notifyAssistantActionClicked(
                         r.getSbn(), actionIndex, action, generatedByAssistant);
@@ -1621,6 +1630,8 @@ public class NotificationManagerService extends SystemService {
                 = Settings.Global.getUriFor(Settings.Global.MAX_NOTIFICATION_ENQUEUE_RATE);
         private final Uri NOTIFICATION_HISTORY_ENABLED
                 = Settings.Secure.getUriFor(Settings.Secure.NOTIFICATION_HISTORY_ENABLED);
+        private final Uri NOTIFICATION_SHOW_MEDIA_ON_QUICK_SETTINGS_URI
+                = Settings.Global.getUriFor(Settings.Global.SHOW_MEDIA_ON_QUICK_SETTINGS);
 
         SettingsObserver(Handler handler) {
             super(handler);
@@ -1637,6 +1648,8 @@ public class NotificationManagerService extends SystemService {
             resolver.registerContentObserver(NOTIFICATION_BUBBLES_URI,
                     false, this, UserHandle.USER_ALL);
             resolver.registerContentObserver(NOTIFICATION_HISTORY_ENABLED,
+                    false, this, UserHandle.USER_ALL);
+            resolver.registerContentObserver(NOTIFICATION_SHOW_MEDIA_ON_QUICK_SETTINGS_URI,
                     false, this, UserHandle.USER_ALL);
             update(null);
         }
@@ -1673,6 +1686,9 @@ public class NotificationManagerService extends SystemService {
                     mArchive.updateHistoryEnabled(userIds.get(i), Settings.Secure.getInt(resolver,
                             Settings.Secure.NOTIFICATION_HISTORY_ENABLED, 0) == 1);
                 }
+            }
+            if (uri == null || NOTIFICATION_SHOW_MEDIA_ON_QUICK_SETTINGS_URI.equals(uri)) {
+                mPreferencesHelper.updateMediaNotificationFilteringEnabled();
             }
         }
     }
@@ -1888,8 +1904,7 @@ public class NotificationManagerService extends SystemService {
         mAlarmManager = (AlarmManager) getContext().getSystemService(Context.ALARM_SERVICE);
         mCompanionManager = companionManager;
         mActivityManager = activityManager;
-        mDeviceIdleController = IDeviceIdleController.Stub.asInterface(
-                ServiceManager.getService(Context.DEVICE_IDLE_CONTROLLER));
+        mDeviceIdleManager = getContext().getSystemService(DeviceIdleManager.class);
         mDpm = dpm;
         mUm = userManager;
         mPlatformCompat = IPlatformCompat.Stub.asInterface(
@@ -2379,11 +2394,8 @@ public class NotificationManagerService extends SystemService {
     }
 
     private void exitIdle() {
-        try {
-            if (mDeviceIdleController != null) {
-                mDeviceIdleController.exitIdle("notification interaction");
-            }
-        } catch (RemoteException e) {
+        if (mDeviceIdleManager != null) {
+            mDeviceIdleManager.endIdle("notification interaction");
         }
     }
 
@@ -4662,10 +4674,11 @@ public class NotificationManagerService extends SystemService {
         @Override
         public void setNotificationPolicy(String pkg, Policy policy) {
             enforcePolicyAccess(pkg, "setNotificationPolicy");
+            int callingUid = Binder.getCallingUid();
             final long identity = Binder.clearCallingIdentity();
             try {
                 final ApplicationInfo applicationInfo = mPackageManager.getApplicationInfo(pkg,
-                        0, UserHandle.getUserId(MY_UID));
+                        0, UserHandle.getUserId(callingUid));
                 Policy currPolicy = mZenModeHelper.getNotificationPolicy();
 
                 if (applicationInfo.targetSdkVersion < Build.VERSION_CODES.P) {
@@ -4736,6 +4749,12 @@ public class NotificationManagerService extends SystemService {
         @Override
         public ComponentName getAllowedNotificationAssistant() {
             return getAllowedNotificationAssistantForUser(getCallingUserHandle().getIdentifier());
+        }
+
+        @Override
+        public boolean hasEnabledNotificationListener(String packageName, int userId) {
+            checkCallerIsSystem();
+            return mListeners.isPackageAllowed(packageName, userId);
         }
 
         @Override
@@ -6968,6 +6987,10 @@ public class NotificationManagerService extends SystemService {
         if (isInCall() || mScreenOn) {
             return false;
         }
+        // check current user
+        if (!isNotificationForCurrentUser(record)) {
+            return false;
+        }
 
         return true;
     }
@@ -8536,6 +8559,9 @@ public class NotificationManagerService extends SystemService {
                     record.isInterruptive(),
                     record.isConversation(),
                     record.getShortcutInfo(),
+                    record.getRankingScore() == 0
+                            ? RANKING_UNCHANGED
+                            : (record.getRankingScore() > 0 ?  RANKING_PROMOTED : RANKING_DEMOTED),
                     record.getNotification().isBubbleNotification()
             );
             rankings.add(ranking);

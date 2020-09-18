@@ -99,6 +99,7 @@ interface IActivityManager {
     void unregisterUidObserver(in IUidObserver observer);
     boolean isUidActive(int uid, String callingPackage);
     int getUidProcessState(int uid, in String callingPackage);
+    boolean setSchedPolicyCgroup(int tid, int group);
     // =============== End of transactions used on native side as well ============================
 
     // Special low-level communication with activity manager.
@@ -344,6 +345,8 @@ interface IActivityManager {
     boolean isIntentSenderTargetedToPackage(in IIntentSender sender);
     @UnsupportedAppUsage
     void updatePersistentConfiguration(in Configuration values);
+    void updatePersistentConfigurationWithAttribution(in Configuration values,
+            String callingPackageName, String callingAttributionTag);
     @UnsupportedAppUsage
     long[] getProcessPss(in int[] pids);
     void showBootMessage(in CharSequence msg, boolean always);
@@ -683,4 +686,11 @@ interface IActivityManager {
      * Kills uid with the reason of permission change.
      */
     void killUidForPermissionChange(int appId, int userId, String reason);
+
+    /**
+     * Resets the state of the {@link com.android.server.am.AppErrors} instance.
+     * This is intended for testing within the CTS only and is protected by
+     * android.permission.RESET_APP_ERRORS.
+     */
+    void resetAppErrors();
 }

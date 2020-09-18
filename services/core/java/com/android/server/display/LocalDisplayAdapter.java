@@ -134,7 +134,7 @@ final class LocalDisplayAdapter extends DisplayAdapter {
                         hdrCapabilities, isDefaultDisplay);
                 mDevices.put(physicalDisplayId, device);
                 sendDisplayDeviceEventLocked(device, DISPLAY_DEVICE_EVENT_ADDED);
-            } else if (device.updateDisplayProperties(configs, activeConfig,
+            } else if (device.updateDisplayPropertiesLocked(info, configs, activeConfig,
                     configSpecs, colorModes, activeColorMode, hdrCapabilities)) {
                 sendDisplayDeviceEventLocked(device, DISPLAY_DEVICE_EVENT_CHANGED);
             }
@@ -212,8 +212,7 @@ final class LocalDisplayAdapter extends DisplayAdapter {
             super(LocalDisplayAdapter.this, displayToken, UNIQUE_ID_PREFIX + physicalDisplayId);
             mPhysicalDisplayId = physicalDisplayId;
             mIsDefaultDisplay = isDefaultDisplay;
-            mDisplayInfo = info;
-            updateDisplayProperties(configs, activeConfigId, configSpecs, colorModes,
+            updateDisplayPropertiesLocked(info, configs, activeConfigId, configSpecs, colorModes,
                     activeColorMode, hdrCapabilities);
             mSidekickInternal = LocalServices.getService(SidekickInternal.class);
             if (mIsDefaultDisplay) {
@@ -238,12 +237,18 @@ final class LocalDisplayAdapter extends DisplayAdapter {
         /**
          * Returns true if there is a change.
          **/
-        public boolean updateDisplayProperties(SurfaceControl.DisplayConfig[] configs,
+        public boolean updateDisplayPropertiesLocked(SurfaceControl.DisplayInfo info,
+                SurfaceControl.DisplayConfig[] configs,
                 int activeConfigId, SurfaceControl.DesiredDisplayConfigSpecs configSpecs,
                 int[] colorModes, int activeColorMode, Display.HdrCapabilities hdrCapabilities) {
             boolean changed = updateDisplayConfigsLocked(configs, activeConfigId, configSpecs);
+            changed |= updateDisplayInfo(info);
             changed |= updateColorModesLocked(colorModes, activeColorMode);
             changed |= updateHdrCapabilitiesLocked(hdrCapabilities);
+
+            if (changed) {
+                mHavePendingChanges = true;
+            }
             return changed;
         }
 
@@ -327,8 +332,6 @@ final class LocalDisplayAdapter extends DisplayAdapter {
             if (!recordsChanged) {
                 return false;
             }
-            // Update the index of modes.
-            mHavePendingChanges = true;
 
             mSupportedModes.clear();
             for (DisplayModeRecord record : records) {
@@ -419,6 +422,14 @@ final class LocalDisplayAdapter extends DisplayAdapter {
             mSystemBrightnessToNits = sysToNits;
         }
 
+        private boolean updateDisplayInfo(SurfaceControl.DisplayInfo info) {
+            if (Objects.equals(mDisplayInfo, info)) {
+                return false;
+            }
+            mDisplayInfo = info;
+            return true;
+        }
+
         private boolean updateColorModesLocked(int[] colorModes, int activeColorMode) {
             if (colorModes == null) {
                 return false;
@@ -443,15 +454,13 @@ final class LocalDisplayAdapter extends DisplayAdapter {
                 return false;
             }
 
-            mHavePendingChanges = true;
-
             mSupportedColorModes.clear();
             mSupportedColorModes.addAll(pendingColorModes);
             Collections.sort(mSupportedColorModes);
 
             // Determine whether the active color mode is still there.
             if (!mSupportedColorModes.contains(mActiveColorMode)) {
-                if (mActiveColorMode != 0) {
+                if (mActiveColorMode != Display.COLOR_MODE_DEFAULT) {
                     Slog.w(TAG, "Active color mode no longer available, reverting"
                             + " to default mode.");
                     mActiveColorMode = Display.COLOR_MODE_DEFAULT;
@@ -1016,7 +1025,7 @@ final class LocalDisplayAdapter extends DisplayAdapter {
             int[] ports = res.getIntArray(
                     com.android.internal.R.array.config_localPrivateDisplayPorts);
             if (ports != null) {
-                int port = Byte.toUnsignedInt(physicalAddress.getPort());
+                int port = physicalAddress.getPort();
                 for (int p : ports) {
                     if (p == port) {
                         return true;

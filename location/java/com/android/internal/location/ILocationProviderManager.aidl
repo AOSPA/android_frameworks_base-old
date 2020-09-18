@@ -25,15 +25,8 @@ import com.android.internal.location.ProviderProperties;
  * @hide
  */
 interface ILocationProviderManager {
-
-    void onSetAdditionalProviderPackages(in List<String> packageNames);
-
-    @UnsupportedAppUsage
+    void onSetIdentity(@nullable String packageName, @nullable String attributionTag);
     void onSetAllowed(boolean allowed);
-
-    @UnsupportedAppUsage
     void onSetProperties(in ProviderProperties properties);
-
-    @UnsupportedAppUsage
     void onReportLocation(in Location location);
 }

@@ -711,11 +711,13 @@
     <string name="notification_silence_title" msgid="8608090968400832335">"အသံတိတ်ရန်"</string>
     <string name="notification_alert_title" msgid="3656229781017543655">"မူလ"</string>
     <string name="notification_bubble_title" msgid="8330481035191903164">"ပူဖောင်းဖောက်သံ"</string>
+    <string name="notification_automatic_title" msgid="3745465364578762652">"အလိုအလျောက်"</string>
     <string name="notification_channel_summary_low" msgid="4860617986908931158">"အသံ သို့မဟုတ် တုန်ခါမှုမရှိပါ"</string>
     <string name="notification_conversation_summary_low" msgid="1734433426085468009">"အသံ သို့မဟုတ် တုန်ခါမှုမရှိပါ၊ စကားဝိုင်းကဏ္ဍ၏ အောက်ပိုင်းတွင် မြင်ရသည်"</string>
     <string name="notification_channel_summary_default" msgid="3282930979307248890">"ဖုန်းဆက်တင်များပေါ် အခြေခံပြီး အသံမြည်နိုင်သည် သို့မဟုတ် တုန်ခါနိုင်သည်"</string>
     <string name="notification_channel_summary_default_with_bubbles" msgid="1782419896613644568">"ဖုန်းဆက်တင်များပေါ် အခြေခံပြီး အသံမြည်နိုင်သည် သို့မဟုတ် တုန်ခါနိုင်သည်။ မူရင်းသတ်မှတ်ချက်အဖြစ် <xliff:g id="APP_NAME">%1$s</xliff:g> မှ စကားဝိုင်းများကို ပူဖောင်းကွက်ဖြင့် ပြသည်။"</string>
     <string name="notification_channel_summary_bubble" msgid="7235935211580860537">"အကြောင်းအရာကို floating shortcut ကိုသုံး၍ အာရုံစိုက်လာအောင်လုပ်ပါ။"</string>
+    <string name="notification_channel_summary_automatic" msgid="5813109268050235275">"ဤအကြောင်းကြားချက်က အသံ သို့မဟုတ် တုန်ခါမှု ပေးရန် သင့်/မသင့်ကို စနစ်က ဆုံးဖြတ်ပါစေ"</string>
     <string name="notification_channel_summary_priority" msgid="7952654515769021553">"စကားဝိုင်းကဏ္ဍ၏ ထိပ်ပိုင်းတွင် ပြပြီး ပူဖောင်းကွက်အဖြစ် မြင်ရသည်၊ လော့ခ်ချထားချိန် မျက်နှာပြင်တွင် ပရိုဖိုင်ပုံကို ပြသည်"</string>
     <string name="notification_conversation_channel_settings" msgid="2409977688430606835">"ဆက်တင်များ"</string>
     <string name="notification_priority_title" msgid="2079708866333537093">"ဦးစားပေး"</string>
@@ -736,6 +738,12 @@
     <string name="appops_camera_mic_overlay" msgid="5584311236445644095">"ဤအက်ပ်က မိုက်ခရိုဖုန်းနှင့် ကင်မရာကို အသုံးပြု၍ ဖန်သားမျက်နှာပြင်ပေါ်ရှိ အခြားအက်ပ်များ အပေါ်မှ ထပ်ပြီး ပြသနေပါသည်။"</string>
     <string name="notification_appops_settings" msgid="5208974858340445174">"ဆက်တင်များ"</string>
     <string name="notification_appops_ok" msgid="2177609375872784124">"OK"</string>
+    <string name="feedback_silenced" msgid="5382212321253328247">"ဤအကြောင်းကြားချက်ကို စနစ်က အသံပိတ်ထားလိုက်သည်။"</string>
+    <string name="feedback_promoted" msgid="8075757485407091976">"ဤအကြောင်းကြားချက်ကို စနစ်က အဆင့်မြှင့်လိုက်သည်။"</string>
+    <string name="feedback_demoted" msgid="5848066008939031913">"ဤအကြောင်းကြားချက်ကို စနစ်က အဆင့်ချလိုက်သည်။"</string>
+    <string name="feedback_prompt" msgid="2278631214125128281">"ဤအရာက မှန်ပါသလား။"</string>
+    <string name="feedback_response" msgid="4671729244976641339">"အကြံပြုချက်အတွက် ကျေးဇူးတင်ပါသည်"</string>
+    <string name="feedback_ok" msgid="6481426753298857144">"OK"</string>
     <string name="notification_channel_controls_opened_accessibility" msgid="6111817750774381094">"<xliff:g id="APP_NAME">%1$s</xliff:g> အတွက် အကြောင်းကြားချက်ထိန်းချုပ်မှုများကို ဖွင့်ထားသည်"</string>
     <string name="notification_channel_controls_closed_accessibility" msgid="1561909368876911701">"<xliff:g id="APP_NAME">%1$s</xliff:g> အတွက် အကြောင်းကြားချက်ထိန်းချုပ်မှုများကို ပိတ်ထားသည်"</string>
     <string name="notification_channel_switch_accessibility" msgid="8979885820432540252">"ဤချန်နယ်မှ အကြောင်းကြားချက်များကို ခွင့်ပြုပါ"</string>
@@ -908,25 +916,14 @@
     <string name="accessibility_quick_settings_edit" msgid="1523745183383815910">"ဆက်တင်များ၏ အစီအစဉ်ကို တည်းဖြတ်ပါ။"</string>
     <string name="accessibility_quick_settings_page" msgid="7506322631645550961">"စာမျက်နှာ <xliff:g id="ID_2">%2$d</xliff:g> အနက်မှ စာမျက်နှာ <xliff:g id="ID_1">%1$d</xliff:g>"</string>
     <string name="tuner_lock_screen" msgid="2267383813241144544">"လော့ခ်ချထားချိန် မျက်နှာပြင်"</string>
-    <string name="pip_phone_expand" msgid="1424988917240616212">"ချဲ့ရန်"</string>
-    <string name="pip_phone_minimize" msgid="9057117033655996059">"ချုံ့ရန်"</string>
-    <string name="pip_phone_close" msgid="8801864042095341824">"ပိတ်ရန်"</string>
-    <string name="pip_phone_settings" msgid="5687538631925004341">"ဆက်တင်များ"</string>
-    <string name="pip_phone_dismiss_hint" msgid="5825740708095316710">"ပယ်ရန်အတွက် အောက်သို့ ပွတ်ဆွဲပါ"</string>
-    <string name="pip_menu_title" msgid="6365909306215631910">"မီနူး"</string>
-    <string name="pip_notification_title" msgid="8661573026059630525">"<xliff:g id="NAME">%s</xliff:g> သည် တစ်ခုပေါ် တစ်ခုထပ်၍ ဖွင့်ထားသည်"</string>
-    <string name="pip_notification_message" msgid="4991831338795022227">"<xliff:g id="NAME">%s</xliff:g> အား ဤဝန်ဆောင်မှုကို အသုံးမပြုစေလိုလျှင် ဆက်တင်ကိုဖွင့်ရန် တို့ပြီး ၎င်းဝန်ဆောင်မှုကို ပိတ်လိုက်ပါ။"</string>
-    <string name="pip_play" msgid="333995977693142810">"ဖွင့်ရန်"</string>
-    <string name="pip_pause" msgid="1139598607050555845">"ခေတ္တရပ်ရန်"</string>
-    <string name="pip_skip_to_next" msgid="3864212650579956062">"နောက်တစ်ခုသို့ ကျော်ရန်"</string>
-    <string name="pip_skip_to_prev" msgid="3742589641443049237">"ယခင်တစ်ခုသို့ ပြန်သွားရန်"</string>
-    <string name="accessibility_action_pip_resize" msgid="8237306972921160456">"အရွယ်အစားပြောင်းရန်"</string>
     <string name="thermal_shutdown_title" msgid="2702966892682930264">"အပူရှိန်ကြောင့်ဖုန်းပိတ်ထားသည်"</string>
-    <string name="thermal_shutdown_message" msgid="7432744214105003895">"သင်၏ဖုန်းသည် ပုံမှန် အလုပ်လုပ်နေပါသည်"</string>
+    <string name="thermal_shutdown_message" msgid="6142269839066172984">"သင့်ဖုန်းသည် ယခု ပုံမှန်အလုပ်လုပ်နေပါပြီ။\nနောက်ထပ်အချက်အလက်များအတွက် တို့ပါ"</string>
     <string name="thermal_shutdown_dialog_message" msgid="6745684238183492031">"သင့်ဖုန်းအလွန်ပူနေသည့်အတွက် အေးသွားစေရန် ပိတ်ထားပါသည်။ ယခုပုံမှန် အလုပ်လုပ်ပါပြီ။\n\nအောက်ပါတို့ကိုသုံးလျှင် ပူလာပါမည်-\n	• အရင်းအမြစ်များသောအက်ပ်ကို သုံးခြင်း (ဥပမာ ဂိမ်းကစားခြင်း၊ ဗီဒီယိုကြည့်ခြင်း (သို့) လမ်းညွှန်အက်ပ်)\n	• ကြီးမားသောဖိုင်များ ဒေါင်းလုဒ် (သို့) အပ်လုဒ်လုပ်ခြင်း\n	• အပူရှိန်မြင့်သောနေရာတွင် သုံးခြင်း"</string>
+    <string name="thermal_shutdown_dialog_help_text" msgid="6413474593462902901">"ဂရုပြုစရာ အဆင့်များ ကြည့်ရန်"</string>
     <string name="high_temp_title" msgid="2218333576838496100">"ဖုန်း ပူနွေးလာပါပြီ"</string>
-    <string name="high_temp_notif_message" msgid="163928048626045592">"ဖုန်းကို အေးအောင်ပြုလုပ်နေစဉ်တွင် အချို့ဝန်ဆောင်မှုများကို ကန့်သတ်ထားပါသည်"</string>
+    <string name="high_temp_notif_message" msgid="1277346543068257549">"ဖုန်းကို အေးအောင်ပြုလုပ်နေစဉ်တွင် အချို့ဝန်ဆောင်မှုများကို ကန့်သတ်ထားပါသည်။\nနောက်ထပ်အချက်အလက်များအတွက် တို့ပါ"</string>
     <string name="high_temp_dialog_message" msgid="3793606072661253968">"သင့်ဖုန်းသည် အလိုအလျောက် ပြန်အေးသွားပါလိမ့်မည်။ ဖုန်းကို အသုံးပြုနိုင်ပါသေးသည် သို့သော် ပိုနှေးနိုင်ပါသည်။\n\nသင့်ဖုန်း အေးသွားသည်နှင့် ပုံမှန်အတိုင်း ပြန်အလုပ်လုပ်ပါလိမ့်မည်။"</string>
+    <string name="high_temp_dialog_help_text" msgid="7380171287943345858">"ဂရုပြုစရာ အဆင့်များ ကြည့်ရန်"</string>
     <string name="high_temp_alarm_title" msgid="2359958549570161495">"အားသွင်းကိရိယာ ပလပ်ဖြုတ်ပါ"</string>
     <string name="high_temp_alarm_notify_message" msgid="7186272817783835089">"ဤစက်ပစ္စည်းကို အားသွင်းရာတွင် ပြဿနာရှိနေသည်။ ပါဝါ ကြားခံကိရိယာကို ပလပ်ဖြုတ်ပါ။ ကေဘယ်ကြိုး ပူနွေးနေနိုင်သဖြင့် သတိထားပါ။"</string>
     <string name="high_temp_alarm_help_care_steps" msgid="5017002218341329566">"ဂရုပြုစရာ အဆင့်များ ကြည့်ရန်"</string>
@@ -1022,7 +1019,6 @@
     <string name="priority_onboarding_ignores_dnd_text" msgid="2918952762719600529">"\'မနှောင့်ယှက်ရ\' ကို ကြားဖြတ်ခြင်း"</string>
     <string name="priority_onboarding_done_button_title" msgid="4569550984286506007">"Ok"</string>
     <string name="priority_onboarding_settings_button_title" msgid="6663601574303585927">"ဆက်တင်များ"</string>
-    <string name="magnification_overlay_title" msgid="6584179429612427958">"ဝင်းဒိုး ထပ်ပိုးလွှာ ချဲ့ခြင်း"</string>
     <string name="magnification_window_title" msgid="4863914360847258333">"ဝင်းဒိုး ချဲ့ခြင်း"</string>
     <string name="magnification_controls_title" msgid="8421106606708891519">"ဝင်းဒိုး ထိန်းချုပ်မှုများ ချဲ့ခြင်း"</string>
     <string name="quick_controls_title" msgid="6839108006171302273">"စက်ထိန်းစနစ်"</string>

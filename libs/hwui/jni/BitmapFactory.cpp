@@ -3,12 +3,11 @@
 
 #include "BitmapFactory.h"
 #include "CreateJavaOutputStreamAdaptor.h"
+#include "FrontBufferedStream.h"
 #include "GraphicsJNI.h"
 #include "MimeType.h"
 #include "NinePatchPeeker.h"
 #include "SkAndroidCodec.h"
-#include "SkBRDAllocator.h"
-#include "SkFrontBufferedStream.h"
 #include "SkMath.h"
 #include "SkPixelRef.h"
 #include "SkStream.h"
@@ -16,7 +15,7 @@
 #include "Utils.h"
 
 #include <HardwareBitmapUploader.h>
-#include <nativehelper/JNIHelp.h>
+#include <nativehelper/JNIPlatformHelp.h>
 #include <androidfw/Asset.h>
 #include <androidfw/ResourceTypes.h>
 #include <cutils/compiler.h>
@@ -510,8 +509,8 @@ static jobject nativeDecodeStream(JNIEnv* env, jobject clazz, jobject is, jbyteA
     std::unique_ptr<SkStream> stream(CreateJavaInputStreamAdaptor(env, is, storage));
 
     if (stream.get()) {
-        std::unique_ptr<SkStreamRewindable> bufferedStream(
-                SkFrontBufferedStream::Make(std::move(stream), SkCodec::MinBufferedBytesNeeded()));
+        std::unique_ptr<SkStreamRewindable> bufferedStream(skia::FrontBufferedStream::Make(
+                std::move(stream), SkCodec::MinBufferedBytesNeeded()));
         SkASSERT(bufferedStream.get() != NULL);
         bitmap = doDecode(env, std::move(bufferedStream), padding, options, inBitmapHandle,
                           colorSpaceHandle);
@@ -565,8 +564,8 @@ static jobject nativeDecodeFileDescriptor(JNIEnv* env, jobject clazz, jobject fi
     // Use a buffered stream. Although an SkFILEStream can be rewound, this
     // ensures that SkImageDecoder::Factory never rewinds beyond the
     // current position of the file descriptor.
-    std::unique_ptr<SkStreamRewindable> stream(SkFrontBufferedStream::Make(std::move(fileStream),
-            SkCodec::MinBufferedBytesNeeded()));
+    std::unique_ptr<SkStreamRewindable> stream(skia::FrontBufferedStream::Make(
+            std::move(fileStream), SkCodec::MinBufferedBytesNeeded()));
 
     return doDecode(env, std::move(stream), padding, bitmapFactoryOptions, inBitmapHandle,
                     colorSpaceHandle);

@@ -150,7 +150,6 @@ import java.io.FileDescriptor;
 import java.io.PrintWriter;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
-import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -220,8 +219,8 @@ import java.util.function.Consumer;
  * <a name="Fragments"></a>
  * <h3>Fragments</h3>
  *
- * <p>The {@link android.support.v4.app.FragmentActivity} subclass
- * can make use of the {@link android.support.v4.app.Fragment} class to better
+ * <p>The {@link androidx.fragment.app.FragmentActivity} subclass
+ * can make use of the {@link androidx.fragment.app.Fragment} class to better
  * modularize their code, build more sophisticated user interfaces for larger
  * screens, and help scale their application between small and large screens.</p>
  *
@@ -1042,13 +1041,14 @@ public class Activity extends ContextThemeWrapper
      * so that the system can learn appropriate ranking signals linking the activity's
      * locus id with the matching shortcut.
      *
-     * @param locusId  a unique, stable id that identifies this {@code Activity} instance from
-     *      others. This can be linked to a shortcut using
+     * @param locusId  a unique, stable id that identifies this {@code Activity} instance. LocusId
+     *      is an opaque ID that links this Activity's state to different Android concepts:
      *      {@link android.content.pm.ShortcutInfo.Builder#setLocusId(android.content.LocusId)
-     *      setLocusId} with the same locus id string.
+     *      setLocusId}. LocusID is null by default or if you explicitly reset it.
      * @param bundle extras set or updated as part of this locus context. This may help provide
      *      additional metadata such as URLs, conversation participants specific to this
-     *      {@code Activity}'s context.
+     *      {@code Activity}'s context. Bundle can be null if additional metadata is not needed.
+     *      Bundle should always be null for null locusId.
      *
      * @see android.view.contentcapture.ContentCaptureManager
      * @see android.view.contentcapture.ContentCaptureContext
@@ -1100,7 +1100,7 @@ public class Activity extends ContextThemeWrapper
     /**
      * Return the LoaderManager for this activity, creating it if needed.
      *
-     * @deprecated Use {@link android.support.v4.app.FragmentActivity#getSupportLoaderManager()}
+     * @deprecated Use {@link androidx.fragment.app.FragmentActivity#getSupportLoaderManager()}
      */
     @Deprecated
     public LoaderManager getLoaderManager() {
@@ -3159,7 +3159,7 @@ public class Activity extends ContextThemeWrapper
      * Return the FragmentManager for interacting with fragments associated
      * with this activity.
      *
-     * @deprecated Use {@link android.support.v4.app.FragmentActivity#getSupportFragmentManager()}
+     * @deprecated Use {@link androidx.fragment.app.FragmentActivity#getSupportFragmentManager()}
      */
     @Deprecated
     public FragmentManager getFragmentManager() {
@@ -3172,7 +3172,7 @@ public class Activity extends ContextThemeWrapper
      * method and before {@link Fragment#onCreate Fragment.onCreate()}.
      *
      * @deprecated Use {@link
-     * android.support.v4.app.FragmentActivity#onAttachFragment(android.support.v4.app.Fragment)}
+     * androidx.fragment.app.FragmentActivity#onAttachFragment(androidx.fragment.app.Fragment)}
      */
     @Deprecated
     public void onAttachFragment(Fragment fragment) {
@@ -3797,22 +3797,6 @@ public class Activity extends ContextThemeWrapper
         return false;
     }
 
-    private static final class RequestFinishCallback extends IRequestFinishCallback.Stub {
-        private final WeakReference<Activity> mActivityRef;
-
-        RequestFinishCallback(WeakReference<Activity> activityRef) {
-            mActivityRef = activityRef;
-        }
-
-        @Override
-        public void requestFinish() {
-            Activity activity = mActivityRef.get();
-            if (activity != null) {
-                activity.mHandler.post(activity::finishAfterTransition);
-            }
-        }
-    }
-
     /**
      * Called when the activity has detected the user's press of the back
      * key.  The default implementation simply finishes the current activity,
@@ -3836,9 +3820,8 @@ public class Activity extends ContextThemeWrapper
         try {
             // Inform activity task manager that the activity received a back press
             // while at the root of the task. This call allows ActivityTaskManager
-            // to intercept or defer finishing.
-            ActivityTaskManager.getService().onBackPressedOnTaskRoot(mToken,
-                    new RequestFinishCallback(new WeakReference<>(this)));
+            // to intercept or move the task to the back.
+            ActivityTaskManager.getService().onBackPressedOnTaskRoot(mToken);
         } catch (RemoteException e) {
             finishAfterTransition();
         }
@@ -5376,7 +5359,7 @@ public class Activity extends ContextThemeWrapper
         return mActivityTransitionState.isTransitionRunning();
     }
 
-    private Bundle transferSpringboardActivityOptions(Bundle options) {
+    private Bundle transferSpringboardActivityOptions(@Nullable Bundle options) {
         if (options == null && (mWindow != null && !mWindow.isActive())) {
             final ActivityOptions activityOptions = getActivityOptions();
             if (activityOptions != null &&
@@ -5544,7 +5527,7 @@ public class Activity extends ContextThemeWrapper
      */
     public void startIntentSenderForResult(IntentSender intent, int requestCode,
             @Nullable Intent fillInIntent, int flagsMask, int flagsValues, int extraFlags,
-            Bundle options) throws IntentSender.SendIntentException {
+            @Nullable Bundle options) throws IntentSender.SendIntentException {
         if (mParent == null) {
             startIntentSenderForResultInner(intent, mEmbeddedID, requestCode, fillInIntent,
                     flagsMask, flagsValues, options);
@@ -5561,7 +5544,7 @@ public class Activity extends ContextThemeWrapper
 
     private void startIntentSenderForResultInner(IntentSender intent, String who, int requestCode,
             Intent fillInIntent, int flagsMask, int flagsValues,
-            Bundle options)
+            @Nullable Bundle options)
             throws IntentSender.SendIntentException {
         try {
             options = transferSpringboardActivityOptions(options);
@@ -5722,6 +5705,7 @@ public class Activity extends ContextThemeWrapper
      * <var>flagsMask</var>
      * @param extraFlags Always set to 0.
      */
+    @Override
     public void startIntentSender(IntentSender intent,
             @Nullable Intent fillInIntent, int flagsMask, int flagsValues, int extraFlags)
             throws IntentSender.SendIntentException {
@@ -5749,9 +5733,10 @@ public class Activity extends ContextThemeWrapper
      * have also been supplied by the IntentSender, options given here will
      * override any that conflict with those given by the IntentSender.
      */
+    @Override
     public void startIntentSender(IntentSender intent,
             @Nullable Intent fillInIntent, int flagsMask, int flagsValues, int extraFlags,
-            Bundle options) throws IntentSender.SendIntentException {
+            @Nullable Bundle options) throws IntentSender.SendIntentException {
         if (options != null) {
             startIntentSenderForResult(intent, -1, fillInIntent, flagsMask,
                     flagsValues, extraFlags, options);

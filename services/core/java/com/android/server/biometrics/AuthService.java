@@ -28,19 +28,19 @@ import static android.hardware.biometrics.BiometricAuthenticator.TYPE_FINGERPRIN
 import static android.hardware.biometrics.BiometricAuthenticator.TYPE_IRIS;
 import static android.hardware.biometrics.BiometricManager.Authenticators;
 
+import android.app.AppOpsManager;
 import android.content.Context;
 import android.content.pm.PackageManager;
-import android.hardware.biometrics.BiometricPrompt;
 import android.hardware.biometrics.IAuthService;
 import android.hardware.biometrics.IBiometricAuthenticator;
 import android.hardware.biometrics.IBiometricEnabledOnKeyguardCallback;
 import android.hardware.biometrics.IBiometricService;
 import android.hardware.biometrics.IBiometricServiceReceiver;
+import android.hardware.biometrics.PromptInfo;
 import android.hardware.face.IFaceService;
 import android.hardware.fingerprint.IFingerprintService;
 import android.hardware.iris.IIrisService;
 import android.os.Binder;
-import android.os.Bundle;
 import android.os.IBinder;
 import android.os.RemoteException;
 import android.os.ServiceManager;
@@ -50,9 +50,9 @@ import android.util.Slog;
 import com.android.internal.R;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.server.SystemService;
-import com.android.server.biometrics.face.FaceAuthenticator;
-import com.android.server.biometrics.fingerprint.FingerprintAuthenticator;
-import com.android.server.biometrics.iris.IrisAuthenticator;
+import com.android.server.biometrics.sensors.face.FaceAuthenticator;
+import com.android.server.biometrics.sensors.fingerprint.FingerprintAuthenticator;
+import com.android.server.biometrics.sensors.iris.IrisAuthenticator;
 
 /**
  * System service that provides an interface for authenticating with biometrics and
@@ -128,16 +128,23 @@ public class AuthService extends SystemService {
             return IIrisService.Stub.asInterface(
                     ServiceManager.getService(Context.IRIS_SERVICE));
         }
+
+        @VisibleForTesting
+        public AppOpsManager getAppOps(Context context) {
+            return context.getSystemService(AppOpsManager.class);
+        }
     }
 
     private final class AuthServiceImpl extends IAuthService.Stub {
         @Override
         public void authenticate(IBinder token, long sessionId, int userId,
-                IBiometricServiceReceiver receiver, String opPackageName, Bundle bundle)
+                IBiometricServiceReceiver receiver, String opPackageName, PromptInfo promptInfo)
                 throws RemoteException {
 
             // Only allow internal clients to authenticate with a different userId.
             final int callingUserId = UserHandle.getCallingUserId();
+            final int callingUid = Binder.getCallingUid();
+            final int callingPid = Binder.getCallingPid();
             if (userId == callingUserId) {
                 checkPermission();
             } else {
@@ -146,29 +153,30 @@ public class AuthService extends SystemService {
                 checkInternalPermission();
             }
 
-            if (token == null || receiver == null || opPackageName == null || bundle == null) {
+            if (!checkAppOps(callingUid, opPackageName, "authenticate()")) {
+                Slog.e(TAG, "Denied by app ops: " + opPackageName);
+                return;
+            }
+
+            if (!Utils.isForeground(callingUid, callingPid)) {
+                Slog.e(TAG, "Caller is not foreground: " + opPackageName);
+                return;
+            }
+
+            if (token == null || receiver == null || opPackageName == null || promptInfo == null) {
                 Slog.e(TAG, "Unable to authenticate, one or more null arguments");
                 return;
             }
 
             // Only allow internal clients to enable non-public options.
-            if (bundle.getBoolean(BiometricPrompt.EXTRA_DISALLOW_BIOMETRICS_IF_POLICY_EXISTS)
-                    || bundle.getBoolean(BiometricPrompt.KEY_USE_DEFAULT_TITLE, false)
-                    || bundle.getCharSequence(BiometricPrompt.KEY_DEVICE_CREDENTIAL_TITLE) != null
-                    || bundle.getCharSequence(
-                            BiometricPrompt.KEY_DEVICE_CREDENTIAL_SUBTITLE) != null
-                    || bundle.getCharSequence(
-                            BiometricPrompt.KEY_DEVICE_CREDENTIAL_DESCRIPTION) != null
-                    || bundle.getBoolean(BiometricPrompt.KEY_RECEIVE_SYSTEM_EVENTS, false)) {
+            if (promptInfo.containsPrivateApiConfigurations()) {
                 checkInternalPermission();
             }
 
-            final int callingUid = Binder.getCallingUid();
-            final int callingPid = Binder.getCallingPid();
             final long identity = Binder.clearCallingIdentity();
             try {
                 mBiometricService.authenticate(
-                        token, sessionId, userId, receiver, opPackageName, bundle, callingUid,
+                        token, sessionId, userId, receiver, opPackageName, promptInfo, callingUid,
                         callingPid, callingUserId);
             } finally {
                 Binder.restoreCallingIdentity(identity);
@@ -181,7 +189,7 @@ public class AuthService extends SystemService {
             checkPermission();
 
             if (token == null || opPackageName == null) {
-                Slog.e(TAG, "Unable to authenticate, one or more null arguments");
+                Slog.e(TAG, "Unable to cancel authentication, one or more null arguments");
                 return;
             }
 
@@ -251,22 +259,11 @@ public class AuthService extends SystemService {
         }
 
         @Override
-        public void setActiveUser(int userId) throws RemoteException {
+        public void resetLockout(int userId, byte[] hardwareAuthToken) throws RemoteException {
             checkInternalPermission();
             final long identity = Binder.clearCallingIdentity();
             try {
-                mBiometricService.setActiveUser(userId);
-            } finally {
-                Binder.restoreCallingIdentity(identity);
-            }
-        }
-
-        @Override
-        public void resetLockout(byte[] token) throws RemoteException {
-            checkInternalPermission();
-            final long identity = Binder.clearCallingIdentity();
-            try {
-                mBiometricService.resetLockout(token);
+                mBiometricService.resetLockout(userId, hardwareAuthToken);
             } finally {
                 Binder.restoreCallingIdentity(identity);
             }
@@ -328,13 +325,13 @@ public class AuthService extends SystemService {
     }
 
     private void registerAuthenticator(SensorConfig config) throws RemoteException {
-        Slog.d(TAG, "Registering ID: " + config.mId
-                + " Modality: " + config.mModality
-                + " Strength: " + config.mStrength);
+        Slog.d(TAG, "Registering ID: " + config.id
+                + " Modality: " + config.modality
+                + " Strength: " + config.strength);
 
         final IBiometricAuthenticator.Stub authenticator;
 
-        switch (config.mModality) {
+        switch (config.modality) {
             case TYPE_FINGERPRINT:
                 final IFingerprintService fingerprintService = mInjector.getFingerprintService();
                 if (fingerprintService == null) {
@@ -343,8 +340,7 @@ public class AuthService extends SystemService {
                     return;
                 }
 
-                authenticator = new FingerprintAuthenticator(fingerprintService);
-                fingerprintService.initConfiguredStrength(config.mStrength);
+                authenticator = new FingerprintAuthenticator(fingerprintService, config);
                 break;
 
             case TYPE_FACE:
@@ -355,8 +351,7 @@ public class AuthService extends SystemService {
                     return;
                 }
 
-                authenticator = new FaceAuthenticator(faceService);
-                faceService.initConfiguredStrength(config.mStrength);
+                authenticator = new FaceAuthenticator(faceService, config);
                 break;
 
             case TYPE_IRIS:
@@ -367,16 +362,15 @@ public class AuthService extends SystemService {
                     return;
                 }
 
-                authenticator = new IrisAuthenticator(irisService);
-                irisService.initConfiguredStrength(config.mStrength);
+                authenticator = new IrisAuthenticator(irisService, config);
                 break;
 
             default:
-                Slog.e(TAG, "Unknown modality: " + config.mModality);
+                Slog.e(TAG, "Unknown modality: " + config.modality);
                 return;
         }
 
-        mBiometricService.registerAuthenticator(config.mId, config.mModality, config.mStrength,
+        mBiometricService.registerAuthenticator(config.id, config.modality, config.strength,
                 authenticator);
     }
 
@@ -391,5 +385,10 @@ public class AuthService extends SystemService {
             getContext().enforceCallingOrSelfPermission(USE_BIOMETRIC,
                     "Must have USE_BIOMETRIC permission");
         }
+    }
+
+    private boolean checkAppOps(int uid, String opPackageName, String reason) {
+        return mInjector.getAppOps(getContext()).noteOp(AppOpsManager.OP_USE_BIOMETRIC, uid,
+                opPackageName, null /* attributionTag */, reason) == AppOpsManager.MODE_ALLOWED;
     }
 }

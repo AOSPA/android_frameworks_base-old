@@ -712,10 +712,17 @@
           case, this can be disabled (set to false). -->
     <bool name="config_enableCarDockHomeLaunch">true</bool>
 
-    <!-- Control whether to force the display of System UI Bars at all times regardless of
-         System Ui Flags. This can be useful in the Automotive case if there's a requirement for
-         a UI element to be on screen at all times. -->
-    <bool name="config_forceShowSystemBars">false</bool>
+    <!-- Control whether to force apps to give up control over the display of system bars at all
+         times regardless of System Ui Flags.
+         In the Automotive case, this is helpful if there's a requirement for an UI element to be on
+         screen at all times. Setting this to true also gives System UI the ability to override the
+         visibility controls for the system through the usage of the
+         "SYSTEM_BAR_VISIBILITY_OVERRIDE" setting.
+         Ex: Only setting the config to true will force show system bars for the entire system.
+         Ex: Setting the config to true and the "SYSTEM_BAR_VISIBILITY_OVERRIDE" setting to
+         "immersive.status=apps" will force show navigation bar for all apps and force hide status
+         bar for all apps. -->
+    <bool name="config_remoteInsetsControllerControlsSystemBars">false</bool>
 
     <!-- HDMI behavior -->
 
@@ -2092,7 +2099,7 @@
          effectively and terminate the dream.  Use -1 to disable this safety feature.  -->
     <integer name="config_dreamsBatteryLevelDrainCutoff">5</integer>
     <!-- Limit of how long the device can remain unlocked due to attention checking.  -->
-    <integer name="config_attentionMaximumExtension">330000</integer> <!-- 5 minutes and 30 sec.-->
+    <integer name="config_attentionMaximumExtension">900000</integer> <!-- 15 minutes.  -->
 
     <!-- ComponentName of a dream to show whenever the system would otherwise have
          gone to sleep.  When the PowerManager is asked to go to sleep, it will instead
@@ -2282,7 +2289,7 @@
     </integer-array>
 
     <!-- Set to true to add links to Cell Broadcast app from Settings and MMS app. -->
-    <bool name="config_cellBroadcastAppLinks">false</bool>
+    <bool name="config_cellBroadcastAppLinks">true</bool>
 
     <!-- The default value if the SyncStorageEngine should sync automatically or not -->
     <bool name="config_syncstorageengine_masterSyncAutomatically">true</bool>
@@ -2910,6 +2917,11 @@
     <!-- IWLAN data service package name to bind to by default. If none is specified in an overlay, an
          empty string is passed in -->
     <string name="config_wlan_data_service_package" translatable="false"></string>
+
+    <!-- Boolean indicating whether the Iwlan data service supports persistence of iwlan ipsec
+         tunnels across service restart. If iwlan tunnels are not persisted across restart,
+         Framework will clean up dangling data connections when service restarts -->
+    <bool name="config_wlan_data_service_conn_persistence_on_restart">true</bool>
 
     <!-- Cellular data service class name to bind to by default. If none is specified in an overlay, an
          empty string is passed in -->
@@ -4226,10 +4238,6 @@
     only. The component must be part of a system app. -->
     <string name="config_defaultSupervisionProfileOwnerComponent" translatable="false"></string>
 
-    <!-- Whether to artificially interpret all signal strengths as
-         one bar higher than they actually are -->
-    <bool name="config_inflateSignalStrength">false</bool>
-
     <!-- Trigger a warning for notifications with RemoteView objects that are larger in bytes than
     this value (default 1MB)-->
     <integer name="config_notificationWarnRemoteViewSizeBytes">2000000</integer>
@@ -4381,4 +4389,29 @@
     <bool name="config_pdp_reject_enable_retry">false</bool>
     <!-- pdp data reject retry delay in ms -->
     <integer name="config_pdp_reject_retry_delay_ms">-1</integer>
+
+    <!-- Whether or not to enable the binder heavy hitter watcher by default -->
+    <bool name="config_defaultBinderHeavyHitterWatcherEnabled">true</bool>
+
+    <!-- The default batch size for the binder heavy hitter watcher -->
+    <integer name="config_defaultBinderHeavyHitterWatcherBatchSize">2000</integer>
+
+    <!-- The default threshold for the binder heavy hitter watcher -->
+    <item name="config_defaultBinderHeavyHitterWatcherThreshold" format="float" type="dimen">
+        0.333
+    </item>
+
+    <!-- Whether or not to enable the binder heavy hitter auto sampler by default -->
+    <bool name="config_defaultBinderHeavyHitterAutoSamplerEnabled">true</bool>
+
+    <!-- The default batch size for the binder heavy hitter auto sampler -->
+    <integer name="config_defaultBinderHeavyHitterAutoSamplerBatchSize">400</integer>
+
+    <!-- The default threshold for the binder heavy hitter auto sampler -->
+    <item name="config_defaultBinderHeavyHitterAutoSamplerThreshold" format="float" type="dimen">
+        0.333
+    </item>
+
+    <!-- Component names of the services which will keep critical code path warm -->
+    <string-array name="config_keep_warming_services" translatable="false" />
 </resources>

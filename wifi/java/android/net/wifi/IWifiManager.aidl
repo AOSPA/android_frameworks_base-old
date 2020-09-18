@@ -81,8 +81,6 @@ interface IWifiManager
 
     int matchProviderWithCurrentNetwork(String fqdn);
 
-    void deauthenticateNetwork(long holdoff, boolean ess);
-
     boolean removeNetwork(int netId, String packageName);
 
     boolean enableNetwork(int netId, boolean disableOthers, String packageName);
@@ -268,11 +266,11 @@ interface IWifiManager
 
     void updateWifiUsabilityScore(int seqNum, int score, int predictionHorizonSec);
 
-    oneway void connect(in WifiConfiguration config, int netId, in IBinder binder, in IActionListener listener, int callbackIdentifier);
+    oneway void connect(in WifiConfiguration config, int netId, in IActionListener listener);
 
-    oneway void save(in WifiConfiguration config, in IBinder binder, in IActionListener listener, int callbackIdentifier);
+    oneway void save(in WifiConfiguration config, in IActionListener listener);
 
-    oneway void forget(int netId, in IBinder binder, in IActionListener listener, int callbackIdentifier);
+    oneway void forget(int netId, in IActionListener listener);
 
     void registerScanResultsCallback(in IScanResultsCallback callback);
 

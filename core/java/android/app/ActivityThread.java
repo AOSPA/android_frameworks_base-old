@@ -84,9 +84,10 @@ import android.database.sqlite.SQLiteDebug.DbStats;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.HardwareRenderer;
-import android.graphics.ImageDecoder;
 import android.hardware.display.DisplayManagerGlobal;
 import android.inputmethodservice.InputMethodService;
+import android.media.MediaFrameworkInitializer;
+import android.media.MediaServiceManager;
 import android.net.ConnectivityManager;
 import android.net.IConnectivityManager;
 import android.net.Proxy;
@@ -270,9 +271,6 @@ public final class ActivityThread extends ClientTransactionHandler {
     public static final int SERVICE_DONE_EXECUTING_START = 1;
     /** Type for IActivityManager.serviceDoneExecuting: done stopping (destroying) service */
     public static final int SERVICE_DONE_EXECUTING_STOP = 2;
-
-    // Whether to invoke an activity callback after delivering new configuration.
-    private static final boolean REPORT_TO_ACTIVITY = true;
 
     /** Use foreground GC policy (less pause time) and higher JIT weight. */
     private static final int VM_PROCESS_STATE_JANK_PERCEPTIBLE = 0;
@@ -4973,7 +4971,8 @@ public final class ActivityThread extends ClientTransactionHandler {
     private void relaunchAllActivities(boolean preserveWindows) {
         for (Map.Entry<IBinder, ActivityClientRecord> entry : mActivities.entrySet()) {
             final ActivityClientRecord r = entry.getValue();
-            if (!r.activity.mFinished) {
+            // Schedule relaunch the activity if it is not a local object or finishing.
+            if (!r.activity.mFinished && !(r.token instanceof Binder)) {
                 if (preserveWindows && r.window != null) {
                     r.mPreserveWindow = true;
                 }
@@ -5539,18 +5538,14 @@ public final class ActivityThread extends ClientTransactionHandler {
     }
 
     /**
-     * Updates the configuration for an Activity. The ActivityClientRecord's
-     * {@link ActivityClientRecord#overrideConfig} is used to compute the final Configuration for
-     * that Activity. {@link ActivityClientRecord#tmpConfig} is used as a temporary for delivering
-     * the updated Configuration.
-     * @param r ActivityClientRecord representing the Activity.
-     * @param newBaseConfig The new configuration to use. This may be augmented with
-     *                      {@link ActivityClientRecord#overrideConfig}.
+     * Updates the configuration for an Activity in its current display.
+     *
+     * @see #performConfigurationChangedForActivity(ActivityClientRecord, Configuration, int,
+     *      boolean)
      */
     private void performConfigurationChangedForActivity(ActivityClientRecord r,
             Configuration newBaseConfig) {
-        performConfigurationChangedForActivity(r, newBaseConfig, r.activity.getDisplayId(),
-                false /* movedToDifferentDisplay */);
+        performConfigurationChangedForActivity(r, newBaseConfig, r.activity.getDisplayId());
     }
 
     /**
@@ -5562,17 +5557,16 @@ public final class ActivityThread extends ClientTransactionHandler {
      * @param newBaseConfig The new configuration to use. This may be augmented with
      *                      {@link ActivityClientRecord#overrideConfig}.
      * @param displayId The id of the display where the Activity currently resides.
-     * @param movedToDifferentDisplay Indicates if the activity was moved to different display.
      * @return {@link Configuration} instance sent to client, null if not sent.
      */
     private Configuration performConfigurationChangedForActivity(ActivityClientRecord r,
-            Configuration newBaseConfig, int displayId, boolean movedToDifferentDisplay) {
+            Configuration newBaseConfig, int displayId) {
         r.tmpConfig.setTo(newBaseConfig);
         if (r.overrideConfig != null) {
             r.tmpConfig.updateFrom(r.overrideConfig);
         }
         final Configuration reportedConfig = performActivityConfigurationChanged(r.activity,
-                r.tmpConfig, r.overrideConfig, displayId, movedToDifferentDisplay);
+                r.tmpConfig, r.overrideConfig, displayId);
         freeTextLayoutCachesIfNeeded(r.activity.mCurrentConfig.diff(r.tmpConfig));
         return reportedConfig;
     }
@@ -5599,10 +5593,6 @@ public final class ActivityThread extends ClientTransactionHandler {
      * @param newConfig The new configuration.
      */
     private void performConfigurationChanged(ComponentCallbacks2 cb, Configuration newConfig) {
-        if (!REPORT_TO_ACTIVITY) {
-            return;
-        }
-
         // ContextThemeWrappers may override the configuration for that context. We must check and
         // apply any overrides defined.
         Configuration contextThemeWrapperOverrideConfig = null;
@@ -5627,12 +5617,10 @@ public final class ActivityThread extends ClientTransactionHandler {
      *                         from the base global configuration. This is supplied by
      *                         ActivityManager.
      * @param displayId Id of the display where activity currently resides.
-     * @param movedToDifferentDisplay Indicates if the activity was moved to different display.
      * @return Configuration sent to client, null if no changes and not moved to different display.
      */
     private Configuration performActivityConfigurationChanged(Activity activity,
-            Configuration newConfig, Configuration amOverrideConfig, int displayId,
-            boolean movedToDifferentDisplay) {
+            Configuration newConfig, Configuration amOverrideConfig, int displayId) {
         if (activity == null) {
             throw new IllegalArgumentException("No activity provided.");
         }
@@ -5645,6 +5633,7 @@ public final class ActivityThread extends ClientTransactionHandler {
         // callback, see also PinnedStackTests#testConfigurationChangeOrderDuringTransition
         handleWindowingModeChangeIfNeeded(activity, newConfig);
 
+        final boolean movedToDifferentDisplay = isDifferentDisplay(activity, displayId);
         boolean shouldReportChange = false;
         if (activity.mCurrentConfig == null) {
             shouldReportChange = true;
@@ -5658,8 +5647,7 @@ public final class ActivityThread extends ClientTransactionHandler {
                     amOverrideConfig)) {
                 // Nothing significant, don't proceed with updating and reporting.
                 return null;
-            } else if ((~activity.mActivityInfo.getRealConfigChanged() & diff) == 0
-                    || !REPORT_TO_ACTIVITY) {
+            } else if ((~activity.mActivityInfo.getRealConfigChanged() & diff) == 0) {
                 // If this activity doesn't handle any of the config changes, then don't bother
                 // calling onConfigurationChanged. Otherwise, report to the activity for the
                 // changes.
@@ -5692,11 +5680,6 @@ public final class ActivityThread extends ClientTransactionHandler {
         // in many places.
         final Configuration configToReport = createNewConfigAndUpdateIfNotNull(newConfig,
                 contextThemeWrapperOverrideConfig);
-
-        if (!REPORT_TO_ACTIVITY) {
-            // Not configured to report to activity.
-            return configToReport;
-        }
 
         if (movedToDifferentDisplay) {
             activity.dispatchMovedToDisplay(displayId, configToReport);
@@ -5796,6 +5779,7 @@ public final class ActivityThread extends ClientTransactionHandler {
 
             configDiff = mConfiguration.updateFrom(config);
             config = applyCompatConfiguration(mCurDefaultDisplayDpi);
+            HardwareRenderer.sendDeviceConfigurationForDebugging(config);
 
             if ((systemTheme.getChangingConfigurations() & configDiff) != 0) {
                 systemTheme.rebase();
@@ -5989,8 +5973,6 @@ public final class ActivityThread extends ClientTransactionHandler {
             if (DEBUG_CONFIGURATION) Slog.w(TAG, "Not found target activity to report to: " + r);
             return;
         }
-        final boolean movedToDifferentDisplay = displayId != INVALID_DISPLAY
-                && displayId != r.activity.getDisplayId();
 
         synchronized (r) {
             if (overrideConfig.isOtherSeqNewer(r.mPendingOverrideConfig)) {
@@ -6004,6 +5986,7 @@ public final class ActivityThread extends ClientTransactionHandler {
             r.mPendingOverrideConfig = null;
         }
 
+        final boolean movedToDifferentDisplay = isDifferentDisplay(r.activity, displayId);
         if (r.overrideConfig != null && !r.overrideConfig.isOtherSeqNewer(overrideConfig)
                 && !movedToDifferentDisplay) {
             if (DEBUG_CONFIGURATION) {
@@ -6019,27 +6002,32 @@ public final class ActivityThread extends ClientTransactionHandler {
         final ViewRootImpl viewRoot = r.activity.mDecor != null
             ? r.activity.mDecor.getViewRootImpl() : null;
 
-        if (movedToDifferentDisplay) {
-            if (DEBUG_CONFIGURATION) Slog.v(TAG, "Handle activity moved to display, activity:"
-                    + r.activityInfo.name + ", displayId=" + displayId
+        if (DEBUG_CONFIGURATION) {
+            Slog.v(TAG, "Handle activity config changed, activity:"
+                    + r.activityInfo.name + ", displayId=" + r.activity.getDisplayId()
+                    + (movedToDifferentDisplay ? (", newDisplayId=" + displayId) : "")
                     + ", config=" + overrideConfig);
-
-            final Configuration reportedConfig = performConfigurationChangedForActivity(r,
-                    mCompatConfiguration, displayId, true /* movedToDifferentDisplay */);
-            if (viewRoot != null) {
-                viewRoot.onMovedToDisplay(displayId, reportedConfig);
-            }
-        } else {
-            if (DEBUG_CONFIGURATION) Slog.v(TAG, "Handle activity config changed: "
-                    + r.activityInfo.name + ", config=" + overrideConfig);
-            performConfigurationChangedForActivity(r, mCompatConfiguration);
         }
+        final Configuration reportedConfig = performConfigurationChangedForActivity(r,
+                mCompatConfiguration,
+                movedToDifferentDisplay ? displayId : r.activity.getDisplayId());
         // Notify the ViewRootImpl instance about configuration changes. It may have initiated this
         // update to make sure that resources are updated before updating itself.
         if (viewRoot != null) {
+            if (movedToDifferentDisplay) {
+                viewRoot.onMovedToDisplay(displayId, reportedConfig);
+            }
             viewRoot.updateConfiguration(displayId);
         }
         mSomeActivitiesChanged = true;
+    }
+
+    /**
+     * Checks if the display id of activity is different from the given one. Note that
+     * {@link #INVALID_DISPLAY} means no difference.
+     */
+    private static boolean isDifferentDisplay(@NonNull Activity activity, int displayId) {
+        return displayId != INVALID_DISPLAY && displayId != activity.getDisplayId();
     }
 
     final void handleProfilerControl(boolean start, ProfilerInfo profilerInfo, int profileType) {
@@ -6433,12 +6421,9 @@ public final class ActivityThread extends ClientTransactionHandler {
 
         Message.updateCheckRecycle(data.appInfo.targetSdkVersion);
 
-        // Prior to P, internal calls to decode Bitmaps used BitmapFactory,
-        // which may scale up to account for density. In P, we switched to
-        // ImageDecoder, which skips the upscale to save memory. ImageDecoder
-        // needs to still scale up in older apps, in case they rely on the
-        // size of the Bitmap without considering its density.
-        ImageDecoder.sApiLevel = data.appInfo.targetSdkVersion;
+        // Supply the targetSdkVersion to the UI rendering module, which may
+        // need it in cases where it does not have access to the appInfo.
+        android.graphics.Compatibility.setTargetSdkVersion(data.appInfo.targetSdkVersion);
 
         /*
          * Before spawning a new process, reset the time zone to be the system time zone.
@@ -6533,7 +6518,8 @@ public final class ActivityThread extends ClientTransactionHandler {
         }
 
         // Allow binder tracing, and application-generated systrace messages if we're profileable.
-        boolean isAppProfileable = data.appInfo.isProfileableByShell();
+        boolean isAppDebuggable = (data.appInfo.flags & ApplicationInfo.FLAG_DEBUGGABLE) != 0;
+        boolean isAppProfileable = isAppDebuggable || data.appInfo.isProfileableByShell();
         Trace.setAppTracingAllowed(isAppProfileable);
         if ((isAppProfileable || Build.IS_DEBUGGABLE) && data.enableBinderTracking) {
             Binder.enableTracing();
@@ -6545,9 +6531,11 @@ public final class ActivityThread extends ClientTransactionHandler {
         }
 
         // Allow renderer debugging features if we're debuggable.
-        boolean isAppDebuggable = (data.appInfo.flags & ApplicationInfo.FLAG_DEBUGGABLE) != 0;
         HardwareRenderer.setDebuggingEnabled(isAppDebuggable || Build.IS_DEBUGGABLE);
         HardwareRenderer.setPackageName(data.appInfo.packageName);
+
+        // Pass the current context to HardwareRenderer
+        HardwareRenderer.setContextForInit(getSystemContext());
 
         /**
          * Initialize the default http proxy in this process for the reasons we set the time zone.
@@ -7706,6 +7694,7 @@ public final class ActivityThread extends ClientTransactionHandler {
     public static void initializeMainlineModules() {
         TelephonyFrameworkInitializer.setTelephonyServiceManager(new TelephonyServiceManager());
         StatsFrameworkInitializer.setStatsServiceManager(new StatsServiceManager());
+        MediaFrameworkInitializer.setMediaServiceManager(new MediaServiceManager());
     }
 
     private void purgePendingResources() {

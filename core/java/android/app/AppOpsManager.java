@@ -182,6 +182,22 @@ public class AppOpsManager {
     @EnabledAfter(targetSdkVersion = Build.VERSION_CODES.Q)
     public static final long CALL_BACK_ON_CHANGED_LISTENER_WITH_SWITCHED_OP_CHANGE = 148180766L;
 
+    /**
+     * Enforce that all attributionTags send to {@link #noteOp}, {@link #noteProxyOp},
+     * and {@link #startOp} are defined in the manifest of the package that is specified as
+     * parameter to the methods.
+     *
+     * <p>To enable this change both the package calling {@link #noteOp} as well as the package
+     * specified as parameter to the method need to have this change enable.
+     *
+     * @hide
+     */
+    @TestApi
+    @ChangeId
+    @EnabledAfter(targetSdkVersion = Build.VERSION_CODES.R)
+    public static final long SECURITY_EXCEPTION_ON_INVALID_ATTRIBUTION_TAG_CHANGE = 151105954L;
+
+
     private static final int MAX_UNFORWARDED_OPS = 10;
 
     final Context mContext;
@@ -716,6 +732,10 @@ public class AppOpsManager {
     public static final int SAMPLING_STRATEGY_BOOT_TIME_SAMPLING =
             FrameworkStatsLog.RUNTIME_APP_OP_ACCESS__SAMPLING_STRATEGY__BOOT_TIME_SAMPLING;
 
+    /** @hide */
+    public static final int SAMPLING_STRATEGY_UNIFORM_OPS =
+            FrameworkStatsLog.RUNTIME_APP_OP_ACCESS__SAMPLING_STRATEGY__UNIFORM_OPS;
+
     /**
      * Strategies used for message sampling
      * @hide
@@ -725,7 +745,8 @@ public class AppOpsManager {
             SAMPLING_STRATEGY_DEFAULT,
             SAMPLING_STRATEGY_UNIFORM,
             SAMPLING_STRATEGY_RARELY_USED,
-            SAMPLING_STRATEGY_BOOT_TIME_SAMPLING
+            SAMPLING_STRATEGY_BOOT_TIME_SAMPLING,
+            SAMPLING_STRATEGY_UNIFORM_OPS
     })
     public @interface SamplingStrategy {}
 
@@ -1440,8 +1461,12 @@ public class AppOpsManager {
     /**
      * AppOp granted to apps that we are started via {@code am instrument -e --no-isolated-storage}
      *
+     * <p>MediaProvider is the only component (outside of system server) that should care about this
+     * app op, hence {@code SystemApi.Client.MODULE_LIBRARIES}.
+     *
      * @hide
      */
+    @SystemApi(client = SystemApi.Client.MODULE_LIBRARIES)
     public static final String OPSTR_NO_ISOLATED_STORAGE = "android:no_isolated_storage";
 
     /** {@link #sAppOpsToNote} not initialized yet for this op */
@@ -2623,9 +2648,9 @@ public class AppOpsManager {
      *
      * This is intended for use client side, when the receiver id must be created before the
      * associated call is made to the system server. If using {@link PendingIntent} as the receiver,
-     * avoid using this method as it will include a pointless additional x-process call. Instead to
+     * avoid using this method as it will include a pointless additional x-process call. Instead
      * prefer passing the PendingIntent to the system server, and then invoking
-     * {@link #toReceiverId(PendingIntent)} instead.
+     * {@link #toReceiverId(PendingIntent)}.
      *
      * @param obj the receiver in use
      * @return a string representation of the receiver suitable for app ops use
@@ -3719,7 +3744,7 @@ public class AppOpsManager {
         /**
          * @hide
          */
-        @UnsupportedAppUsage(/*maxTargetSdk = Build.VERSION_CODES.R,*/ publicAlternatives = "{@code "
+        @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, publicAlternatives = "{@code "
                 + "#getOpStr()}")
         public int getOp() {
             return mOp;
@@ -3738,7 +3763,7 @@ public class AppOpsManager {
          * @deprecated Use {@link #getLastAccessTime(int)} instead
          */
         @Deprecated
-        @UnsupportedAppUsage(/*maxTargetSdk = Build.VERSION_CODES.R,*/ publicAlternatives = "{@code "
+        @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, publicAlternatives = "{@code "
                 + "#getLastAccessTime(int)}")
         public long getTime() {
             return getLastAccessTime(OP_FLAGS_ALL);
@@ -3853,7 +3878,7 @@ public class AppOpsManager {
          * @deprecated Use {@link #getLastRejectTime(int)} instead
          */
         @Deprecated
-        @UnsupportedAppUsage(/*maxTargetSdk = Build.VERSION_CODES.R,*/ publicAlternatives = "{@code "
+        @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, publicAlternatives = "{@code "
                 + "#getLastRejectTime(int)}")
         public long getRejectTime() {
             return getLastRejectTime(OP_FLAGS_ALL);
@@ -7526,6 +7551,7 @@ public class AppOpsManager {
      *
      * @hide
      */
+    @SuppressWarnings("AndroidFrameworkClientSidePermissionCheck")
     public int noteProxyOpNoThrow(int op, @Nullable String proxiedPackageName, int proxiedUid,
             @Nullable String proxiedAttributionTag, @Nullable String message) {
         int myUid = Process.myUid();
@@ -8333,7 +8359,7 @@ public class AppOpsManager {
      * @hide
      */
     private static boolean isCollectingStackTraces() {
-        if (sConfig.getSampledOpCode() == OP_NONE &&
+        if (sConfig.getSampledOpCode() == OP_NONE && sConfig.getAcceptableLeftDistance() == 0 &&
                 sConfig.getExpirationTimeSinceBootMillis() >= SystemClock.elapsedRealtime()) {
             return false;
         }

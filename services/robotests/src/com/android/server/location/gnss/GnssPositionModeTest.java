@@ -33,28 +33,35 @@ import java.util.HashSet;
 @Presubmit
 public class GnssPositionModeTest {
 
-    private GnssPositionMode positionMode1 = createGnssPositionMode(0, 1000);
-    private GnssPositionMode positionMode2 = createGnssPositionMode(0, 1000);
-    private GnssPositionMode positionMode3 = createGnssPositionMode(1, 1000);
+    private GnssPositionMode mPositionMode1 = createGnssPositionMode(0, 1000);
+    private GnssPositionMode mPositionMode2 = createGnssPositionMode(0, 1000);
+    private GnssPositionMode mPositionMode3 = createGnssPositionMode(1, 1000);
 
+    /**
+     * Verifies hashcode method.
+     */
     @Test
     public void testHashCode() {
-        assertThat(positionMode1.hashCode()).isEqualTo(positionMode2.hashCode());
-        assertThat(positionMode1.hashCode()).isNotEqualTo(positionMode3.hashCode());
-        assertThat(positionMode1.hashCode()).isNotEqualTo(positionMode3.hashCode());
+        assertThat(mPositionMode1.hashCode()).isEqualTo(mPositionMode2.hashCode());
+        assertThat(mPositionMode1.hashCode()).isNotEqualTo(mPositionMode3.hashCode());
+        assertThat(mPositionMode1.hashCode()).isNotEqualTo(mPositionMode3.hashCode());
 
         HashSet<Integer> hashSet = new HashSet<>();
-        hashSet.add(positionMode1.hashCode());
-        hashSet.add(positionMode2.hashCode());
+        hashSet.add(mPositionMode1.hashCode());
+        hashSet.add(mPositionMode2.hashCode());
         assertThat(hashSet.size()).isEqualTo(1);
-        hashSet.add(positionMode3.hashCode());
+        hashSet.add(mPositionMode3.hashCode());
         assertThat(hashSet.size()).isEqualTo(2);
     }
 
+    /**
+     * Verify that GnssPositionMode objects that return true for equals() also have the same
+     * hashcode.
+     */
     @Test
     public void checkIfEqualsImpliesSameHashCode() {
-        assertTEqualsImpliesSameHashCode(positionMode1, positionMode2);
-        assertTEqualsImpliesSameHashCode(positionMode2, positionMode3);
+        assertTEqualsImpliesSameHashCode(mPositionMode1, mPositionMode2);
+        assertTEqualsImpliesSameHashCode(mPositionMode2, mPositionMode3);
     }
 
     private void assertTEqualsImpliesSameHashCode(GnssPositionMode mode1, GnssPositionMode mode2) {

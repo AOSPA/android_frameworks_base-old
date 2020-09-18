@@ -51,7 +51,6 @@ import static android.content.pm.PackageManager.FLAG_PERMISSION_WHITELIST_INSTAL
 import static android.content.pm.PackageManager.INSTALL_FAILED_ALREADY_EXISTS;
 import static android.content.pm.PackageManager.INSTALL_FAILED_DUPLICATE_PACKAGE;
 import static android.content.pm.PackageManager.INSTALL_FAILED_DUPLICATE_PERMISSION;
-import static android.content.pm.PackageManager.INSTALL_FAILED_INSTANT_APP_INVALID;
 import static android.content.pm.PackageManager.INSTALL_FAILED_INSUFFICIENT_STORAGE;
 import static android.content.pm.PackageManager.INSTALL_FAILED_INTERNAL_ERROR;
 import static android.content.pm.PackageManager.INSTALL_FAILED_INVALID_APK;
@@ -59,6 +58,7 @@ import static android.content.pm.PackageManager.INSTALL_FAILED_INVALID_INSTALL_L
 import static android.content.pm.PackageManager.INSTALL_FAILED_MISSING_SHARED_LIBRARY;
 import static android.content.pm.PackageManager.INSTALL_FAILED_PACKAGE_CHANGED;
 import static android.content.pm.PackageManager.INSTALL_FAILED_PROCESS_NOT_DEFINED;
+import static android.content.pm.PackageManager.INSTALL_FAILED_SESSION_INVALID;
 import static android.content.pm.PackageManager.INSTALL_FAILED_SHARED_USER_INCOMPATIBLE;
 import static android.content.pm.PackageManager.INSTALL_FAILED_TEST_ONLY;
 import static android.content.pm.PackageManager.INSTALL_FAILED_UPDATE_INCOMPATIBLE;
@@ -225,7 +225,6 @@ import android.content.pm.VersionedPackage;
 import android.content.pm.dex.ArtManager;
 import android.content.pm.dex.DexMetadataHelper;
 import android.content.pm.dex.IArtManager;
-import android.content.pm.parsing.ApkLiteParseUtils;
 import android.content.pm.parsing.ParsingPackageUtils;
 import android.content.pm.parsing.component.ParsedActivity;
 import android.content.pm.parsing.component.ParsedInstrumentation;
@@ -235,10 +234,7 @@ import android.content.pm.parsing.component.ParsedPermission;
 import android.content.pm.parsing.component.ParsedProcess;
 import android.content.pm.parsing.component.ParsedProvider;
 import android.content.pm.parsing.component.ParsedService;
-import android.content.pm.parsing.result.ParseResult;
-import android.content.pm.parsing.result.ParseTypeImpl;
 import android.content.res.Resources;
-import android.content.rollback.IRollbackManager;
 import android.database.ContentObserver;
 import android.graphics.Bitmap;
 import android.hardware.display.DisplayManager;
@@ -370,6 +366,7 @@ import com.android.server.pm.permission.PermissionManagerService;
 import com.android.server.pm.permission.PermissionManagerServiceInternal;
 import com.android.server.pm.permission.PermissionsState;
 import com.android.server.policy.PermissionPolicyInternal;
+import com.android.server.rollback.RollbackManagerInternal;
 import com.android.server.security.VerityUtils;
 import com.android.server.storage.DeviceStorageMonitorInternal;
 import com.android.server.uri.UriGrantsManagerInternal;
@@ -654,6 +651,23 @@ public class PackageManagerService extends IPackageManager.Stub
     @EnabledAfter(targetSdkVersion = Build.VERSION_CODES.Q)
     private static final long THROW_EXCEPTION_ON_REQUIRE_INSTALL_PACKAGES_TO_ADD_INSTALLER_PACKAGE =
             150857253;
+
+    /**
+     * Apps targeting Android S and above need to declare dependencies to the public native
+     * shared libraries that are defined by the device maker using {@code uses-native-library} tag
+     * in its {@code AndroidManifest.xml}.
+     *
+     * If any of the dependencies cannot be satisfied, i.e. one of the dependency doesn't exist,
+     * the package manager rejects to install the app. The dependency can be specified as optional
+     * using {@code android:required} attribute in the tag, in which case failing to satisfy the
+     * dependency doesn't stop the installation.
+     * <p>Once installed, an app is provided with only the native shared libraries that are
+     * specified in the app manifest. {@code dlopen}ing a native shared library that doesn't appear
+     * in the app manifest will fail even if it actually exists on the device.
+     */
+    @ChangeId
+    @EnabledAfter(targetSdkVersion = Build.VERSION_CODES.R)
+    private static final long ENFORCE_NATIVE_SHARED_LIBRARY_DEPENDENCIES = 142191088;
 
     public static final String PLATFORM_PACKAGE_NAME = "android";
 
@@ -1823,24 +1837,23 @@ public class PackageManagerService extends IPackageManager.Stub
                     if ((state != null) && !state.isVerificationComplete()
                             && !state.timeoutExtended()) {
                         final InstallParams params = state.getInstallParams();
-                        final InstallArgs args = params.mArgs;
-                        final Uri originUri = Uri.fromFile(args.origin.resolvedFile);
+                        final Uri originUri = Uri.fromFile(params.origin.resolvedFile);
 
                         Slog.i(TAG, "Verification timed out for " + originUri);
 
-                        final UserHandle user = args.getUser();
+                        final UserHandle user = params.getUser();
                         if (getDefaultVerificationResponse(user)
                                 == PackageManager.VERIFICATION_ALLOW) {
                             Slog.i(TAG, "Continuing with installation of " + originUri);
                             state.setVerifierResponse(Binder.getCallingUid(),
                                     PackageManager.VERIFICATION_ALLOW_WITHOUT_SUFFICIENT);
                             broadcastPackageVerified(verificationId, originUri,
-                                    PackageManager.VERIFICATION_ALLOW, null, args.mDataLoaderType,
+                                    PackageManager.VERIFICATION_ALLOW, null, params.mDataLoaderType,
                                     user);
                         } else {
                             broadcastPackageVerified(verificationId, originUri,
-                                    PackageManager.VERIFICATION_REJECT, null, args.mDataLoaderType,
-                                    user);
+                                    PackageManager.VERIFICATION_REJECT, null,
+                                    params.mDataLoaderType, user);
                             params.setReturnCode(
                                     PackageManager.INSTALL_FAILED_VERIFICATION_FAILURE);
                             state.setVerifierResponse(Binder.getCallingUid(),
@@ -1865,8 +1878,7 @@ public class PackageManagerService extends IPackageManager.Stub
 
                     if (state != null && !state.isIntegrityVerificationComplete()) {
                         final InstallParams params = state.getInstallParams();
-                        final InstallArgs args = params.mArgs;
-                        final Uri originUri = Uri.fromFile(args.origin.resolvedFile);
+                        final Uri originUri = Uri.fromFile(params.origin.resolvedFile);
 
                         Slog.i(TAG, "Integrity verification timed out for " + originUri);
 
@@ -1911,12 +1923,11 @@ public class PackageManagerService extends IPackageManager.Stub
 
                     if (state.isVerificationComplete()) {
                         final InstallParams params = state.getInstallParams();
-                        final InstallArgs args = params.mArgs;
-                        final Uri originUri = Uri.fromFile(args.origin.resolvedFile);
+                        final Uri originUri = Uri.fromFile(params.origin.resolvedFile);
 
                         if (state.isInstallAllowed()) {
                             broadcastPackageVerified(verificationId, originUri,
-                                    response.code, null, args.mDataLoaderType, args.getUser());
+                                    response.code, null, params.mDataLoaderType, params.getUser());
                         } else {
                             params.setReturnCode(
                                     PackageManager.INSTALL_FAILED_VERIFICATION_FAILURE);
@@ -1945,10 +1956,8 @@ public class PackageManagerService extends IPackageManager.Stub
                     }
 
                     final int response = (Integer) msg.obj;
-
                     final InstallParams params = state.getInstallParams();
-                    final InstallArgs args = params.mArgs;
-                    final Uri originUri = Uri.fromFile(args.origin.resolvedFile);
+                    final Uri originUri = Uri.fromFile(params.origin.resolvedFile);
 
                     state.setIntegrityVerificationResult(response);
 
@@ -2041,8 +2050,7 @@ public class PackageManagerService extends IPackageManager.Stub
                     mPendingEnableRollback.remove(enableRollbackToken);
 
                     if (enableRollbackCode != PackageManagerInternal.ENABLE_ROLLBACK_SUCCEEDED) {
-                        final InstallArgs args = params.mArgs;
-                        final Uri originUri = Uri.fromFile(args.origin.resolvedFile);
+                        final Uri originUri = Uri.fromFile(params.origin.resolvedFile);
                         Slog.w(TAG, "Failed to enable rollback for " + originUri);
                         Slog.w(TAG, "Continuing with installation of " + originUri);
                     }
@@ -2058,8 +2066,7 @@ public class PackageManagerService extends IPackageManager.Stub
                     final int sessionId = msg.arg2;
                     final InstallParams params = mPendingEnableRollback.get(enableRollbackToken);
                     if (params != null) {
-                        final InstallArgs args = params.mArgs;
-                        final Uri originUri = Uri.fromFile(args.origin.resolvedFile);
+                        final Uri originUri = Uri.fromFile(params.origin.resolvedFile);
 
                         Slog.w(TAG, "Enable rollback timed out for " + originUri);
                         mPendingEnableRollback.remove(enableRollbackToken);
@@ -2819,6 +2826,9 @@ public class PackageManagerService extends IPackageManager.Stub
     public PackageManagerService(Injector injector, boolean onlyCore, boolean factoryTest) {
         PackageManager.disableApplicationInfoCache();
         PackageManager.disablePackageInfoCache();
+        ApplicationPackageManager.invalidateGetPackagesForUidCache();
+        ApplicationPackageManager.disableGetPackagesForUidCache();
+        ApplicationPackageManager.invalidateHasSystemFeatureCache();
 
         // Avoid invalidation-thrashing by preventing cache invalidations from causing property
         // writes if the cache isn't enabled yet.  We re-enable writes later when we're
@@ -2926,7 +2936,6 @@ public class PackageManagerService extends IPackageManager.Stub
         t.traceBegin("get system config");
         SystemConfig systemConfig = SystemConfig.getInstance();
         mAvailableFeatures = systemConfig.getAvailableFeatures();
-        ApplicationPackageManager.invalidateHasSystemFeatureCache();
         t.traceEnd();
 
         mProtectedPackages = new ProtectedPackages(mContext);
@@ -2964,9 +2973,8 @@ public class PackageManagerService extends IPackageManager.Stub
                     = systemConfig.getSharedLibraries();
             final int builtInLibCount = libConfig.size();
             for (int i = 0; i < builtInLibCount; i++) {
-                String name = libConfig.keyAt(i);
                 SystemConfig.SharedLibraryEntry entry = libConfig.valueAt(i);
-                addBuiltInSharedLibraryLocked(entry.filename, name);
+                addBuiltInSharedLibraryLocked(libConfig.valueAt(i));
             }
 
             // Now that we have added all the libraries, iterate again to add dependency
@@ -6229,6 +6237,11 @@ public class PackageManagerService extends IPackageManager.Stub
      * </ol>
      * The second is an artifact of the current data structures and should be fixed. See
      * b/111075456 for one such instance.
+     * This binder API is cached.  If the algorithm in this method changes,
+     * or if the underlying objecs (as returned by getSettingLPr()) change
+     * then the logic that invalidates the cache must be revisited.  See
+     * calls to invalidateGetPackagesForUidCache() to locate the points at
+     * which the cache is invalidated.
      */
     @Override
     public String[] getPackagesForUid(int uid) {
@@ -6531,7 +6544,7 @@ public class PackageManagerService extends IPackageManager.Stub
                 intent, resolvedType, flags, query, 0, false, true, false, userId);
         // Add the new activity as the last chosen for this filter
         addPreferredActivityInternal(filter, match, null, activity, false, userId,
-                "Setting last chosen");
+                "Setting last chosen", false);
     }
 
     @Override
@@ -10542,6 +10555,19 @@ public class PackageManagerService extends IPackageManager.Stub
                     null, null, pkg.getPackageName(), false, pkg.getTargetSdkVersion(),
                     usesLibraryInfos, availablePackages, existingLibraries, newLibraries);
         }
+        // TODO(b/160928779) gate this behavior using ENFORCE_NATIVE_SHARED_LIBRARY_DEPENDENCIES
+        if (pkg.getTargetSdkVersion() > 30) {
+            if (!pkg.getUsesNativeLibraries().isEmpty() && pkg.getTargetSdkVersion() > 30) {
+                usesLibraryInfos = collectSharedLibraryInfos(pkg.getUsesNativeLibraries(), null,
+                        null, pkg.getPackageName(), true, pkg.getTargetSdkVersion(),
+                        usesLibraryInfos, availablePackages, existingLibraries, newLibraries);
+            }
+            if (!pkg.getUsesOptionalNativeLibraries().isEmpty()) {
+                usesLibraryInfos = collectSharedLibraryInfos(pkg.getUsesOptionalNativeLibraries(),
+                        null, null, pkg.getPackageName(), false, pkg.getTargetSdkVersion(),
+                        usesLibraryInfos, availablePackages, existingLibraries, newLibraries);
+            }
+        }
         return usesLibraryInfos;
     }
 
@@ -11549,15 +11575,14 @@ public class PackageManagerService extends IPackageManager.Stub
         }
 
         final String cpuAbiOverride = deriveAbiOverride(request.cpuAbiOverride, pkgSetting);
+        final boolean isUpdatedSystemApp = pkgSetting.getPkgState().isUpdatedSystemApp();
 
         if ((scanFlags & SCAN_NEW_INSTALL) == 0) {
             if (needToDeriveAbi) {
                 Trace.traceBegin(TRACE_TAG_PACKAGE_MANAGER, "derivePackageAbi");
-                final boolean extractNativeLibs = !AndroidPackageUtils.isLibrary(parsedPackage);
                 final Pair<PackageAbiHelper.Abis, PackageAbiHelper.NativeLibraryPaths> derivedAbi =
-                        packageAbiHelper.derivePackageAbi(parsedPackage,
-                                pkgSetting.getPkgState().isUpdatedSystemApp(), cpuAbiOverride,
-                                extractNativeLibs);
+                        packageAbiHelper.derivePackageAbi(parsedPackage, isUpdatedSystemApp,
+                                cpuAbiOverride);
                 derivedAbi.first.applyTo(parsedPackage);
                 derivedAbi.second.applyTo(parsedPackage);
                 Trace.traceEnd(TRACE_TAG_PACKAGE_MANAGER);
@@ -11567,15 +11592,15 @@ public class PackageManagerService extends IPackageManager.Stub
                 // structure. Try to detect abi based on directory structure.
 
                 String pkgRawPrimaryCpuAbi = AndroidPackageUtils.getRawPrimaryCpuAbi(parsedPackage);
-                if (parsedPackage.isSystem() && !pkgSetting.getPkgState().isUpdatedSystemApp() &&
-                        pkgRawPrimaryCpuAbi == null) {
+                if (parsedPackage.isSystem() && !isUpdatedSystemApp
+                        && pkgRawPrimaryCpuAbi == null) {
                     final PackageAbiHelper.Abis abis = packageAbiHelper.getBundledAppAbis(
                             parsedPackage);
                     abis.applyTo(parsedPackage);
                     abis.applyTo(pkgSetting);
                     final PackageAbiHelper.NativeLibraryPaths nativeLibraryPaths =
-                            packageAbiHelper.getNativeLibraryPaths(parsedPackage, pkgSetting,
-                                    sAppLib32InstallDir);
+                            packageAbiHelper.deriveNativeLibraryPaths(parsedPackage,
+                                    isUpdatedSystemApp, sAppLib32InstallDir);
                     nativeLibraryPaths.applyTo(parsedPackage);
                 }
             } else {
@@ -11586,8 +11611,8 @@ public class PackageManagerService extends IPackageManager.Stub
                         .setSecondaryCpuAbi(secondaryCpuAbiFromSettings);
 
                 final PackageAbiHelper.NativeLibraryPaths nativeLibraryPaths =
-                        packageAbiHelper.getNativeLibraryPaths(parsedPackage,
-                                pkgSetting, sAppLib32InstallDir);
+                        packageAbiHelper.deriveNativeLibraryPaths(parsedPackage,
+                                isUpdatedSystemApp, sAppLib32InstallDir);
                 nativeLibraryPaths.applyTo(parsedPackage);
 
                 if (DEBUG_ABI_SELECTION) {
@@ -11612,7 +11637,7 @@ public class PackageManagerService extends IPackageManager.Stub
             // ABIs we determined during compilation, but the path will depend on the final
             // package path (after the rename away from the stage path).
             final PackageAbiHelper.NativeLibraryPaths nativeLibraryPaths =
-                    packageAbiHelper.getNativeLibraryPaths(parsedPackage, pkgSetting,
+                    packageAbiHelper.deriveNativeLibraryPaths(parsedPackage, isUpdatedSystemApp,
                             sAppLib32InstallDir);
             nativeLibraryPaths.applyTo(parsedPackage);
         }
@@ -12234,15 +12259,16 @@ public class PackageManagerService extends IPackageManager.Stub
     }
 
     @GuardedBy("mLock")
-    private boolean addBuiltInSharedLibraryLocked(String path, String name) {
-        if (nonStaticSharedLibExistsLocked(name)) {
+    private boolean addBuiltInSharedLibraryLocked(SystemConfig.SharedLibraryEntry entry) {
+        if (nonStaticSharedLibExistsLocked(entry.name)) {
             return false;
         }
 
-        SharedLibraryInfo libraryInfo = new SharedLibraryInfo(path, null, null, name,
-                (long) SharedLibraryInfo.VERSION_UNDEFINED, SharedLibraryInfo.TYPE_BUILTIN,
-                new VersionedPackage(PLATFORM_PACKAGE_NAME, (long) 0),
-                null, null);
+        SharedLibraryInfo libraryInfo = new SharedLibraryInfo(entry.filename, null, null,
+                entry.name, (long) SharedLibraryInfo.VERSION_UNDEFINED,
+                SharedLibraryInfo.TYPE_BUILTIN,
+                new VersionedPackage(PLATFORM_PACKAGE_NAME, (long)0), null, null,
+                entry.isNative);
 
         commitSharedLibraryInfoLocked(libraryInfo);
         return true;
@@ -12878,11 +12904,11 @@ public class PackageManagerService extends IPackageManager.Stub
         mHandler.sendMessage(msg);
     }
 
-    void installStage(List<ActiveInstallSession> children)
+    void installStage(ActiveInstallSession parent, List<ActiveInstallSession> children)
             throws PackageManagerException {
         final Message msg = mHandler.obtainMessage(INIT_COPY);
         final MultiPackageInstallParams params =
-                new MultiPackageInstallParams(UserHandle.ALL, children);
+                new MultiPackageInstallParams(UserHandle.ALL, parent, children);
         params.setTraceMethod("installStageMultiPackage")
                 .setTraceCookie(System.identityHashCode(params));
         msg.obj = params;
@@ -14374,17 +14400,6 @@ public class PackageManagerService extends IPackageManager.Stub
         }
     }
 
-    private void processPendingInstall(final InstallArgs args, final int currentStatus) {
-        if (args.mMultiPackageInstallParams != null) {
-            args.mMultiPackageInstallParams.tryProcessInstallRequest(args, currentStatus);
-        } else {
-            PackageInstalledInfo res = createPackageInstalledInfo(currentStatus);
-            processInstallRequestsAsync(
-                    res.returnCode == PackageManager.INSTALL_SUCCEEDED,
-                    Collections.singletonList(new InstallRequest(args, res)));
-        }
-    }
-
     // Queue up an async operation since the package installation may take a little while.
     private void processInstallRequestsAsync(boolean success,
             List<InstallRequest> installRequests) {
@@ -14524,8 +14539,7 @@ public class PackageManagerService extends IPackageManager.Stub
      */
     private boolean performRollbackManagerRestore(int userId, int token, PackageInstalledInfo res,
             PostInstallData data) {
-        IRollbackManager rm = IRollbackManager.Stub.asInterface(
-                ServiceManager.getService(Context.ROLLBACK_SERVICE));
+        RollbackManagerInternal rm = LocalServices.getService(RollbackManagerInternal.class);
 
         final String packageName = res.pkg.getPackageName();
         final int[] allUsers = mUserManager.getUserIds();
@@ -14552,13 +14566,8 @@ public class PackageManagerService extends IPackageManager.Stub
 
         if (ps != null && doSnapshotOrRestore) {
             final String seInfo = AndroidPackageUtils.getSeInfo(res.pkg, ps);
-            try {
-                rm.snapshotAndRestoreUserData(packageName, installedUsers, appId, ceDataInode,
-                        seInfo, token);
-            } catch (RemoteException re) {
-                Log.e(TAG, "Error snapshotting/restoring user data: " + re);
-                return false;
-            }
+            rm.snapshotAndRestoreUserData(packageName, UserHandle.toUserHandles(installedUsers),
+                    appId, ceDataInode, seInfo, token);
             return true;
         }
         return false;
@@ -14771,15 +14780,17 @@ public class PackageManagerService extends IPackageManager.Stub
      * committed together.
      */
     class MultiPackageInstallParams extends HandlerParams {
-
-        private int mRet = INSTALL_SUCCEEDED;
+        private final IPackageInstallObserver2 mVerificationObserver;
         @NonNull
         private final ArrayList<InstallParams> mChildParams;
+        // TODO(samiul): mCurrentState will relocated to a install-specific class in future
         @NonNull
         private final Map<InstallArgs, Integer> mCurrentState;
+        private final Map<InstallParams, Integer> mVerificationState;
 
         MultiPackageInstallParams(
                 @NonNull UserHandle user,
+                @NonNull ActiveInstallSession parent,
                 @NonNull List<ActiveInstallSession> activeInstallSessions)
                 throws PackageManagerException {
             super(user);
@@ -14793,15 +14804,14 @@ public class PackageManagerService extends IPackageManager.Stub
                 this.mChildParams.add(childParams);
             }
             this.mCurrentState = new ArrayMap<>(mChildParams.size());
+            this.mVerificationState = new ArrayMap<>(mChildParams.size());
+            mVerificationObserver = parent.getVerificationObserver();
         }
 
         @Override
         void handleStartCopy() {
             for (InstallParams params : mChildParams) {
                 params.handleStartCopy();
-                if (params.mRet != INSTALL_SUCCEEDED) {
-                    mRet = params.mRet;
-                }
             }
         }
 
@@ -14809,12 +14819,10 @@ public class PackageManagerService extends IPackageManager.Stub
         void handleReturnCode() {
             for (InstallParams params : mChildParams) {
                 params.handleReturnCode();
-                if (params.mRet != INSTALL_SUCCEEDED) {
-                    mRet = params.mRet;
-                }
             }
         }
 
+        // TODO(samiul): this method will relocated to a install-specific class in future
         void tryProcessInstallRequest(InstallArgs args, int currentStatus) {
             mCurrentState.put(args, currentStatus);
             if (mCurrentState.size() != mChildParams.size()) {
@@ -14838,6 +14846,28 @@ public class PackageManagerService extends IPackageManager.Stub
                     completeStatus == PackageManager.INSTALL_SUCCEEDED,
                     installRequests);
         }
+
+        void trySendVerificationCompleteNotification(InstallParams child, int currentStatus) {
+            mVerificationState.put(child, currentStatus);
+            if (mVerificationState.size() != mChildParams.size()) {
+                return;
+            }
+            int completeStatus = PackageManager.INSTALL_SUCCEEDED;
+            for (Integer status : mVerificationState.values()) {
+                if (status == PackageManager.INSTALL_UNKNOWN) {
+                    return;
+                } else if (status != PackageManager.INSTALL_SUCCEEDED) {
+                    completeStatus = status;
+                    break;
+                }
+            }
+            try {
+                mVerificationObserver.onPackageInstalled(null, completeStatus,
+                        "Package Verification Result", new Bundle());
+            } catch (RemoteException e) {
+                Slog.i(TAG, "Observer no longer exists.");
+            }
+        }
     }
 
     class InstallParams extends HandlerParams {
@@ -14845,14 +14875,14 @@ public class PackageManagerService extends IPackageManager.Stub
 
         final OriginInfo origin;
         final MoveInfo move;
-        final IPackageInstallObserver2 observer;
+        final IPackageInstallObserver2 mInstallObserver;
+        private final IPackageInstallObserver2 mVerificationObserver;
         int installFlags;
         @NonNull final InstallSource installSource;
         final String volumeUuid;
-        private boolean mVerificationCompleted;
-        private boolean mIntegrityVerificationCompleted;
-        private boolean mEnableRollbackCompleted;
-        private InstallArgs mArgs;
+        private boolean mWaitForVerificationToComplete;
+        private boolean mWaitForIntegrityVerificationToComplete;
+        private boolean mWaitForEnableRollbackToComplete;
         int mRet;
         final String packageAbiOverride;
         final String[] grantedRuntimePermissions;
@@ -14868,7 +14898,7 @@ public class PackageManagerService extends IPackageManager.Stub
         final int mDataLoaderType;
         final int mSessionId;
 
-        InstallParams(OriginInfo origin, MoveInfo move, IPackageInstallObserver2 observer,
+        InstallParams(OriginInfo origin, MoveInfo move, IPackageInstallObserver2 installObserver,
                 int installFlags, InstallSource installSource, String volumeUuid,
                 VerificationInfo verificationInfo, UserHandle user, String packageAbiOverride,
                 String[] grantedPermissions, List<String> whitelistedRestrictedPermissions,
@@ -14878,7 +14908,8 @@ public class PackageManagerService extends IPackageManager.Stub
             super(user);
             this.origin = origin;
             this.move = move;
-            this.observer = observer;
+            this.mInstallObserver = installObserver;
+            this.mVerificationObserver = null;
             this.installFlags = installFlags;
             this.installSource = Preconditions.checkNotNull(installSource);
             this.volumeUuid = volumeUuid;
@@ -14916,7 +14947,8 @@ public class PackageManagerService extends IPackageManager.Stub
                     activeInstallSession.getInstallSource().installerPackageName,
                     activeInstallSession.getInstallerUid(),
                     sessionParams.installReason);
-            observer = activeInstallSession.getObserver();
+            mInstallObserver = activeInstallSession.getInstallObserver();
+            mVerificationObserver = activeInstallSession.getVerificationObserver();
             installFlags = sessionParams.installFlags;
             installSource = activeInstallSession.getInstallSource();
             volumeUuid = sessionParams.volumeUuid;
@@ -14946,46 +14978,6 @@ public class PackageManagerService extends IPackageManager.Stub
                 // Currently installed package which the new package is attempting to replace or
                 // null if no such package is installed.
                 AndroidPackage installedPkg = mPackages.get(packageName);
-                // Package which currently owns the data which the new package will own if installed.
-                // If an app is unstalled while keeping data (e.g., adb uninstall -k), installedPkg
-                // will be null whereas dataOwnerPkg will contain information about the package
-                // which was uninstalled while keeping its data.
-                AndroidPackage dataOwnerPkg = installedPkg;
-                if (dataOwnerPkg  == null) {
-                    PackageSetting ps = mSettings.mPackages.get(packageName);
-                    if (ps != null) {
-                        dataOwnerPkg = ps.pkg;
-                    }
-                }
-
-                if (requiredInstalledVersionCode != PackageManager.VERSION_CODE_HIGHEST) {
-                    if (dataOwnerPkg == null) {
-                        Slog.w(TAG, "Required installed version code was "
-                                + requiredInstalledVersionCode
-                                + " but package is not installed");
-                        return PackageHelper.RECOMMEND_FAILED_WRONG_INSTALLED_VERSION;
-                    }
-
-                    if (dataOwnerPkg.getLongVersionCode() != requiredInstalledVersionCode) {
-                        Slog.w(TAG, "Required installed version code was "
-                                + requiredInstalledVersionCode
-                                + " but actual installed version is "
-                                + dataOwnerPkg.getLongVersionCode());
-                        return PackageHelper.RECOMMEND_FAILED_WRONG_INSTALLED_VERSION;
-                    }
-                }
-
-                if (dataOwnerPkg != null) {
-                    if (!PackageManagerServiceUtils.isDowngradePermitted(installFlags,
-                            dataOwnerPkg.isDebuggable())) {
-                        try {
-                            checkDowngrade(dataOwnerPkg, pkgLite);
-                        } catch (PackageManagerException e) {
-                            Slog.w(TAG, "Downgrade detected: " + e.getMessage());
-                            return PackageHelper.RECOMMEND_FAILED_VERSION_DOWNGRADE;
-                        }
-                    }
-                }
 
                 if (installedPkg != null) {
                     if ((installFlags & PackageManager.INSTALL_REPLACE_EXISTING) != 0) {
@@ -15016,42 +15008,33 @@ public class PackageManagerService extends IPackageManager.Stub
             return pkgLite.recommendedInstallLocation;
         }
 
-        /*
-         * Invoke remote method to get package information and install
-         * location values. Override install location based on default
-         * policy if needed and then create install arguments based
-         * on the install location.
+        /**
+         * Override install location based on default policy if needed.
+         *
+         * Only {@link #installFlags} may mutate in this method.
+         *
+         * Only {@link PackageManager#INSTALL_INTERNAL} flag may mutate in
+         * {@link #installFlags}
          */
-        public void handleStartCopy() {
-            int ret = PackageManager.INSTALL_SUCCEEDED;
+        private int overrideInstallLocation(PackageInfoLite pkgLite) {
+            final boolean ephemeral = (installFlags & PackageManager.INSTALL_INSTANT_APP) != 0;
+            if (DEBUG_INSTANT && ephemeral) {
+                Slog.v(TAG, "pkgLite for install: " + pkgLite);
+            }
 
-            // If we're already staged, we've firmly committed to an install location
             if (origin.staged) {
+                // If we're already staged, we've firmly committed to an install location
                 if (origin.file != null) {
                     installFlags |= PackageManager.INSTALL_INTERNAL;
                 } else {
                     throw new IllegalStateException("Invalid stage location");
                 }
-            }
-
-            final boolean onInt = (installFlags & PackageManager.INSTALL_INTERNAL) != 0;
-            final boolean ephemeral = (installFlags & PackageManager.INSTALL_INSTANT_APP) != 0;
-            PackageInfoLite pkgLite = null;
-
-
-            pkgLite = PackageManagerServiceUtils.getMinimalPackageInfo(mContext,
-                    origin.resolvedPath, installFlags, packageAbiOverride);
-
-            if (DEBUG_INSTANT && ephemeral) {
-                Slog.v(TAG, "pkgLite for install: " + pkgLite);
-            }
-
-            /*
-             * If we have too little free space, try to free cache
-             * before giving up.
-             */
-            if (!origin.staged && pkgLite.recommendedInstallLocation
+            } else if (pkgLite.recommendedInstallLocation
                     == PackageHelper.RECOMMEND_FAILED_INSUFFICIENT_STORAGE) {
+                /*
+                 * If we are not staged and have too little free space, try to free cache
+                 * before giving up.
+                 */
                 // TODO: focus freeing disk space on the target device
                 final StorageManager storage = StorageManager.from(mContext);
                 final long lowThreshold = storage.getStorageLowBytes(
@@ -15081,124 +15064,177 @@ public class PackageManagerService extends IPackageManager.Stub
                 }
             }
 
+            int ret = INSTALL_SUCCEEDED;
+            int loc = pkgLite.recommendedInstallLocation;
+            if (loc == PackageHelper.RECOMMEND_FAILED_INVALID_LOCATION) {
+                ret = PackageManager.INSTALL_FAILED_INVALID_INSTALL_LOCATION;
+            } else if (loc == PackageHelper.RECOMMEND_FAILED_ALREADY_EXISTS) {
+                ret = PackageManager.INSTALL_FAILED_ALREADY_EXISTS;
+            } else if (loc == PackageHelper.RECOMMEND_FAILED_INSUFFICIENT_STORAGE) {
+                ret = PackageManager.INSTALL_FAILED_INSUFFICIENT_STORAGE;
+            } else if (loc == PackageHelper.RECOMMEND_FAILED_INVALID_APK) {
+                ret = PackageManager.INSTALL_FAILED_INVALID_APK;
+            } else if (loc == PackageHelper.RECOMMEND_FAILED_INVALID_URI) {
+                ret = PackageManager.INSTALL_FAILED_INVALID_URI;
+            } else if (loc == PackageHelper.RECOMMEND_MEDIA_UNAVAILABLE) {
+                ret = PackageManager.INSTALL_FAILED_MEDIA_UNAVAILABLE;
+            } else {
+                // Override with defaults if needed.
+                loc = installLocationPolicy(pkgLite);
 
-            if (ret == PackageManager.INSTALL_SUCCEEDED) {
-                int loc = pkgLite.recommendedInstallLocation;
-                if (loc == PackageHelper.RECOMMEND_FAILED_INVALID_LOCATION) {
-                    ret = PackageManager.INSTALL_FAILED_INVALID_INSTALL_LOCATION;
-                } else if (loc == PackageHelper.RECOMMEND_FAILED_ALREADY_EXISTS) {
-                    ret = PackageManager.INSTALL_FAILED_ALREADY_EXISTS;
-                } else if (loc == PackageHelper.RECOMMEND_FAILED_INSUFFICIENT_STORAGE) {
-                    ret = PackageManager.INSTALL_FAILED_INSUFFICIENT_STORAGE;
-                } else if (loc == PackageHelper.RECOMMEND_FAILED_INVALID_APK) {
-                    ret = PackageManager.INSTALL_FAILED_INVALID_APK;
-                } else if (loc == PackageHelper.RECOMMEND_FAILED_INVALID_URI) {
-                    ret = PackageManager.INSTALL_FAILED_INVALID_URI;
-                } else if (loc == PackageHelper.RECOMMEND_MEDIA_UNAVAILABLE) {
-                    ret = PackageManager.INSTALL_FAILED_MEDIA_UNAVAILABLE;
-                } else {
-                    // Override with defaults if needed.
-                    loc = installLocationPolicy(pkgLite);
-                    if (loc == PackageHelper.RECOMMEND_FAILED_VERSION_DOWNGRADE) {
-                        ret = PackageManager.INSTALL_FAILED_VERSION_DOWNGRADE;
-                    } else if (loc == PackageHelper.RECOMMEND_FAILED_WRONG_INSTALLED_VERSION) {
-                        ret = PackageManager.INSTALL_FAILED_WRONG_INSTALLED_VERSION;
-                    } else if (!onInt) {
-                        // Override install location with flags
-                        if (loc == PackageHelper.RECOMMEND_INSTALL_EXTERNAL) {
-                            // Set the flag to install on external media.
-                            installFlags &= ~PackageManager.INSTALL_INTERNAL;
-                        } else if (loc == PackageHelper.RECOMMEND_INSTALL_EPHEMERAL) {
-                            if (DEBUG_INSTANT) {
-                                Slog.v(TAG, "...setting INSTALL_EPHEMERAL install flag");
-                            }
-                            installFlags |= PackageManager.INSTALL_INSTANT_APP;
-                            installFlags &= ~PackageManager.INSTALL_INTERNAL;
-                        } else {
-                            // Make sure the flag for installing on external
-                            // media is unset
-                            installFlags |= PackageManager.INSTALL_INTERNAL;
+                final boolean onInt = (installFlags & PackageManager.INSTALL_INTERNAL) != 0;
+
+                if (!onInt) {
+                    // Override install location with flags
+                    if (loc == PackageHelper.RECOMMEND_INSTALL_EXTERNAL) {
+                        // Set the flag to install on external media.
+                        installFlags &= ~PackageManager.INSTALL_INTERNAL;
+                    } else {
+                        // Make sure the flag for installing on external
+                        // media is unset
+                        installFlags |= PackageManager.INSTALL_INTERNAL;
+                    }
+                }
+            }
+            return ret;
+        }
+
+        /*
+         * Invoke remote method to get package information and install
+         * location values. Override install location based on default
+         * policy if needed and then create install arguments based
+         * on the install location.
+         */
+        public void handleStartCopy() {
+            PackageInfoLite pkgLite = PackageManagerServiceUtils.getMinimalPackageInfo(mContext,
+                    origin.resolvedPath, installFlags, packageAbiOverride);
+
+            mRet = verifyReplacingVersionCode(pkgLite);
+
+            if (mRet == INSTALL_SUCCEEDED) {
+                mRet = overrideInstallLocation(pkgLite);
+            }
+
+            // Perform package verification and enable rollback (unless we are simply moving the
+            // package).
+            if (mRet == INSTALL_SUCCEEDED && !origin.existing) {
+                sendApkVerificationRequest(pkgLite);
+                if ((installFlags & PackageManager.INSTALL_ENABLE_ROLLBACK) != 0) {
+                    sendEnableRollbackRequest();
+                }
+            }
+        }
+
+        private int verifyReplacingVersionCode(PackageInfoLite pkgLite) {
+            String packageName = pkgLite.packageName;
+            synchronized (mLock) {
+                // Package which currently owns the data that the new package will own if installed.
+                // If an app is uninstalled while keeping data (e.g. adb uninstall -k), installedPkg
+                // will be null whereas dataOwnerPkg will contain information about the package
+                // which was uninstalled while keeping its data.
+                AndroidPackage dataOwnerPkg = mPackages.get(packageName);
+                if (dataOwnerPkg  == null) {
+                    PackageSetting ps = mSettings.mPackages.get(packageName);
+                    if (ps != null) {
+                        dataOwnerPkg = ps.pkg;
+                    }
+                }
+
+                if (requiredInstalledVersionCode != PackageManager.VERSION_CODE_HIGHEST) {
+                    if (dataOwnerPkg == null) {
+                        Slog.w(TAG, "Required installed version code was "
+                                + requiredInstalledVersionCode
+                                + " but package is not installed");
+                        return PackageManager.INSTALL_FAILED_WRONG_INSTALLED_VERSION;
+                    }
+
+                    if (dataOwnerPkg.getLongVersionCode() != requiredInstalledVersionCode) {
+                        Slog.w(TAG, "Required installed version code was "
+                                + requiredInstalledVersionCode
+                                + " but actual installed version is "
+                                + dataOwnerPkg.getLongVersionCode());
+                        return PackageManager.INSTALL_FAILED_WRONG_INSTALLED_VERSION;
+                    }
+                }
+
+                if (dataOwnerPkg != null) {
+                    if (!PackageManagerServiceUtils.isDowngradePermitted(installFlags,
+                            dataOwnerPkg.isDebuggable())) {
+                        try {
+                            checkDowngrade(dataOwnerPkg, pkgLite);
+                        } catch (PackageManagerException e) {
+                            Slog.w(TAG, "Downgrade detected: " + e.getMessage());
+                            return PackageManager.INSTALL_FAILED_VERSION_DOWNGRADE;
                         }
                     }
                 }
             }
-
-            final InstallArgs args = createInstallArgs(this);
-            mVerificationCompleted = true;
-            mIntegrityVerificationCompleted = true;
-            mEnableRollbackCompleted = true;
-            mArgs = args;
-
-            if (ret == PackageManager.INSTALL_SUCCEEDED) {
-                final int verificationId = mPendingVerificationToken++;
-
-                // Perform package verification (unless we are simply moving the package).
-                if (!origin.existing) {
-                    PackageVerificationState verificationState =
-                            new PackageVerificationState(this);
-                    mPendingVerification.append(verificationId, verificationState);
-
-                    sendIntegrityVerificationRequest(verificationId, pkgLite, verificationState);
-                    ret = sendPackageVerificationRequest(
-                            verificationId, pkgLite, verificationState);
-
-                    // If both verifications are skipped, we should remove the state.
-                    if (verificationState.areAllVerificationsComplete()) {
-                        mPendingVerification.remove(verificationId);
-                    }
-                }
+            return PackageManager.INSTALL_SUCCEEDED;
+        }
 
 
-                if ((installFlags & PackageManager.INSTALL_ENABLE_ROLLBACK) != 0) {
-                    // TODO(ruhler) b/112431924: Don't do this in case of 'move'?
-                    final int enableRollbackToken = mPendingEnableRollbackToken++;
-                    Trace.asyncTraceBegin(
-                            TRACE_TAG_PACKAGE_MANAGER, "enable_rollback", enableRollbackToken);
-                    mPendingEnableRollback.append(enableRollbackToken, this);
+        void sendApkVerificationRequest(PackageInfoLite pkgLite) {
+            final int verificationId = mPendingVerificationToken++;
 
-                    Intent enableRollbackIntent = new Intent(Intent.ACTION_PACKAGE_ENABLE_ROLLBACK);
-                    enableRollbackIntent.putExtra(
-                            PackageManagerInternal.EXTRA_ENABLE_ROLLBACK_TOKEN,
-                            enableRollbackToken);
-                    enableRollbackIntent.putExtra(
-                            PackageManagerInternal.EXTRA_ENABLE_ROLLBACK_SESSION_ID,
-                            mSessionId);
-                    enableRollbackIntent.setType(PACKAGE_MIME_TYPE);
-                    enableRollbackIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            PackageVerificationState verificationState =
+                    new PackageVerificationState(this);
+            mPendingVerification.append(verificationId, verificationState);
 
-                    // Allow the broadcast to be sent before boot complete.
-                    // This is needed when committing the apk part of a staged
-                    // session in early boot. The rollback manager registers
-                    // its receiver early enough during the boot process that
-                    // it will not miss the broadcast.
-                    enableRollbackIntent.addFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY_BEFORE_BOOT);
+            sendIntegrityVerificationRequest(verificationId, pkgLite, verificationState);
+            mRet = sendPackageVerificationRequest(
+                    verificationId, pkgLite, verificationState);
 
-                    mContext.sendOrderedBroadcastAsUser(enableRollbackIntent, UserHandle.SYSTEM,
-                            android.Manifest.permission.PACKAGE_ROLLBACK_AGENT,
-                            new BroadcastReceiver() {
-                                @Override
-                                public void onReceive(Context context, Intent intent) {
-                                    // the duration to wait for rollback to be enabled, in millis
-                                    long rollbackTimeout = DeviceConfig.getLong(
-                                            DeviceConfig.NAMESPACE_ROLLBACK,
-                                            PROPERTY_ENABLE_ROLLBACK_TIMEOUT_MILLIS,
-                                            DEFAULT_ENABLE_ROLLBACK_TIMEOUT_MILLIS);
-                                    if (rollbackTimeout < 0) {
-                                        rollbackTimeout = DEFAULT_ENABLE_ROLLBACK_TIMEOUT_MILLIS;
-                                    }
-                                    final Message msg = mHandler.obtainMessage(
-                                            ENABLE_ROLLBACK_TIMEOUT);
-                                    msg.arg1 = enableRollbackToken;
-                                    msg.arg2 = mSessionId;
-                                    mHandler.sendMessageDelayed(msg, rollbackTimeout);
-                                }
-                            }, null, 0, null, null);
-
-                    mEnableRollbackCompleted = false;
-                }
+            // If both verifications are skipped, we should remove the state.
+            if (verificationState.areAllVerificationsComplete()) {
+                mPendingVerification.remove(verificationId);
             }
+        }
 
-            mRet = ret;
+        void sendEnableRollbackRequest() {
+            final int enableRollbackToken = mPendingEnableRollbackToken++;
+            Trace.asyncTraceBegin(
+                    TRACE_TAG_PACKAGE_MANAGER, "enable_rollback", enableRollbackToken);
+            mPendingEnableRollback.append(enableRollbackToken, this);
+
+            Intent enableRollbackIntent = new Intent(Intent.ACTION_PACKAGE_ENABLE_ROLLBACK);
+            enableRollbackIntent.putExtra(
+                    PackageManagerInternal.EXTRA_ENABLE_ROLLBACK_TOKEN,
+                    enableRollbackToken);
+            enableRollbackIntent.putExtra(
+                    PackageManagerInternal.EXTRA_ENABLE_ROLLBACK_SESSION_ID,
+                    mSessionId);
+            enableRollbackIntent.setType(PACKAGE_MIME_TYPE);
+            enableRollbackIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+
+            // Allow the broadcast to be sent before boot complete.
+            // This is needed when committing the apk part of a staged
+            // session in early boot. The rollback manager registers
+            // its receiver early enough during the boot process that
+            // it will not miss the broadcast.
+            enableRollbackIntent.addFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY_BEFORE_BOOT);
+
+            mContext.sendOrderedBroadcastAsUser(enableRollbackIntent, UserHandle.SYSTEM,
+                    android.Manifest.permission.PACKAGE_ROLLBACK_AGENT,
+                    new BroadcastReceiver() {
+                        @Override
+                        public void onReceive(Context context, Intent intent) {
+                            // the duration to wait for rollback to be enabled, in millis
+                            long rollbackTimeout = DeviceConfig.getLong(
+                                    DeviceConfig.NAMESPACE_ROLLBACK,
+                                    PROPERTY_ENABLE_ROLLBACK_TIMEOUT_MILLIS,
+                                    DEFAULT_ENABLE_ROLLBACK_TIMEOUT_MILLIS);
+                            if (rollbackTimeout < 0) {
+                                rollbackTimeout = DEFAULT_ENABLE_ROLLBACK_TIMEOUT_MILLIS;
+                            }
+                            final Message msg = mHandler.obtainMessage(
+                                    ENABLE_ROLLBACK_TIMEOUT);
+                            msg.arg1 = enableRollbackToken;
+                            msg.arg2 = mSessionId;
+                            mHandler.sendMessageDelayed(msg, rollbackTimeout);
+                        }
+                    }, null, 0, null, null);
+
+            mWaitForEnableRollbackToComplete = true;
         }
 
         /**
@@ -15266,7 +15302,7 @@ public class PackageManagerService extends IPackageManager.Stub
                     TRACE_TAG_PACKAGE_MANAGER, "integrity_verification", verificationId);
 
             // stop the copy until verification succeeds.
-            mIntegrityVerificationCompleted = false;
+            mWaitForIntegrityVerificationToComplete = true;
         }
 
         /**
@@ -15302,9 +15338,9 @@ public class PackageManagerService extends IPackageManager.Stub
             final boolean isVerificationEnabled = isVerificationEnabled(
                     pkgLite, verifierUser.getIdentifier(), installFlags, installerUid);
             final boolean isV4Signed =
-                    (mArgs.signingDetails.signatureSchemeVersion == SIGNING_BLOCK_V4);
+                    (signingDetails.signatureSchemeVersion == SIGNING_BLOCK_V4);
             final boolean isIncrementalInstall =
-                    (mArgs.mDataLoaderType == DataLoaderType.INCREMENTAL);
+                    (mDataLoaderType == DataLoaderType.INCREMENTAL);
             // NOTE: We purposefully skip verification for only incremental installs when there's
             // a v4 signature block. Otherwise, proceed with verification as usual.
             if (!origin.existing
@@ -15404,7 +15440,7 @@ public class PackageManagerService extends IPackageManager.Stub
                          * We don't want the copy to proceed until
                          * verification succeeds.
                          */
-                        mVerificationCompleted = false;
+                        mWaitForVerificationToComplete = false;
                     }
                 }
                 if (mRequiredVerifierPackage != null) {
@@ -15440,7 +15476,7 @@ public class PackageManagerService extends IPackageManager.Stub
                      * We don't want the copy to proceed until verification
                      * succeeds.
                      */
-                    mVerificationCompleted = false;
+                    mWaitForVerificationToComplete = true;
                 }
             } else {
                 verificationState.setVerifierResponse(
@@ -15482,66 +15518,70 @@ public class PackageManagerService extends IPackageManager.Stub
         }
 
         void handleVerificationFinished() {
-            if (!mVerificationCompleted) {
-                mVerificationCompleted = true;
-                if (mIntegrityVerificationCompleted) {
-                    handleReturnCode();
-                }
-                // integrity verification still pending.
-            }
+            mWaitForVerificationToComplete = false;
+            handleReturnCode();
         }
 
         void handleIntegrityVerificationFinished() {
-            if (!mIntegrityVerificationCompleted) {
-                mIntegrityVerificationCompleted = true;
-                if (mVerificationCompleted) {
-                    handleReturnCode();
-                }
-                // verifier still pending
-            }
+            mWaitForIntegrityVerificationToComplete = false;
+            handleReturnCode();
         }
 
 
         void handleRollbackEnabled() {
             // TODO(ruhler) b/112431924: Consider halting the install if we
             // couldn't enable rollback.
-            mEnableRollbackCompleted = true;
+            mWaitForEnableRollbackToComplete = false;
             handleReturnCode();
         }
 
         @Override
         void handleReturnCode() {
-            if (mVerificationCompleted
-                    && mIntegrityVerificationCompleted && mEnableRollbackCompleted) {
-                if ((installFlags & PackageManager.INSTALL_DRY_RUN) != 0) {
-                    String packageName = "";
-                    ParseResult<PackageLite> result = ApkLiteParseUtils.parsePackageLite(
-                            new ParseTypeImpl(
-                                    (changeId, packageName1, targetSdkVersion) -> {
-                                        ApplicationInfo appInfo = new ApplicationInfo();
-                                        appInfo.packageName = packageName1;
-                                        appInfo.targetSdkVersion = targetSdkVersion;
-                                        return mPackageParserCallback.isChangeEnabled(changeId,
-                                                appInfo);
-                                    }).reset(),
-                            origin.file, 0);
-                    if (result.isError()) {
-                        Slog.e(TAG, "Can't parse package at " + origin.file.getAbsolutePath(),
-                                result.getException());
-                    } else {
-                        packageName = result.getResult().packageName;
-                    }
-                    try {
-                        observer.onPackageInstalled(packageName, mRet, "Dry run", new Bundle());
-                    } catch (RemoteException e) {
-                        Slog.i(TAG, "Observer no longer exists.");
-                    }
-                    return;
+            if (mWaitForVerificationToComplete || mWaitForIntegrityVerificationToComplete
+                    || mWaitForEnableRollbackToComplete) {
+                return;
+            }
+
+            if ((installFlags & PackageManager.INSTALL_DRY_RUN) != 0) {
+                try {
+                    mInstallObserver.onPackageInstalled(null, mRet, "Dry run", new Bundle());
+                } catch (RemoteException e) {
+                    Slog.i(TAG, "Observer no longer exists.");
                 }
-                if (mRet == PackageManager.INSTALL_SUCCEEDED) {
-                    mRet = mArgs.copyApk();
+                return;
+            }
+            sendVerificationCompleteNotification();
+
+            // TODO(samiul): In future return once verification is complete
+            processPendingInstall();
+        }
+
+        private void processPendingInstall() {
+            InstallArgs args = createInstallArgs(this);
+            if (mRet == PackageManager.INSTALL_SUCCEEDED) {
+                mRet = args.copyApk();
+            }
+            if (mParentInstallParams != null) {
+                mParentInstallParams.tryProcessInstallRequest(args, mRet);
+            } else {
+                PackageInstalledInfo res = createPackageInstalledInfo(mRet);
+                processInstallRequestsAsync(
+                        res.returnCode == PackageManager.INSTALL_SUCCEEDED,
+                        Collections.singletonList(new InstallRequest(args, res)));
+
+            }
+        }
+
+        private void sendVerificationCompleteNotification() {
+            if (mParentInstallParams != null) {
+                mParentInstallParams.trySendVerificationCompleteNotification(this, mRet);
+            } else {
+                try {
+                    mVerificationObserver.onPackageInstalled(null, mRet,
+                            "Package Verification Result", new Bundle());
+                } catch (RemoteException e) {
+                    Slog.i(TAG, "Observer no longer exists.");
                 }
-                processPendingInstall(mArgs, mRet);
             }
         }
     }
@@ -15585,7 +15625,6 @@ public class PackageManagerService extends IPackageManager.Stub
         final PackageParser.SigningDetails signingDetails;
         final int installReason;
         final boolean forceQueryableOverride;
-        @Nullable final MultiPackageInstallParams mMultiPackageInstallParams;
         final int mDataLoaderType;
 
         // The list of instruction sets supported by this app. This is currently
@@ -15600,8 +15639,7 @@ public class PackageManagerService extends IPackageManager.Stub
                 List<String> whitelistedRestrictedPermissions,
                 int autoRevokePermissionsMode,
                 String traceMethod, int traceCookie, SigningDetails signingDetails,
-                int installReason, boolean forceQueryableOverride,
-                MultiPackageInstallParams multiPackageInstallParams, int dataLoaderType) {
+                int installReason, boolean forceQueryableOverride, int dataLoaderType) {
             this.origin = origin;
             this.move = move;
             this.installFlags = installFlags;
@@ -15619,20 +15657,18 @@ public class PackageManagerService extends IPackageManager.Stub
             this.signingDetails = signingDetails;
             this.installReason = installReason;
             this.forceQueryableOverride = forceQueryableOverride;
-            this.mMultiPackageInstallParams = multiPackageInstallParams;
             this.mDataLoaderType = dataLoaderType;
         }
 
         /** New install */
         InstallArgs(InstallParams params) {
-            this(params.origin, params.move, params.observer, params.installFlags,
+            this(params.origin, params.move, params.mInstallObserver, params.installFlags,
                     params.installSource, params.volumeUuid,
                     params.getUser(), null /*instructionSets*/, params.packageAbiOverride,
                     params.grantedRuntimePermissions, params.whitelistedRestrictedPermissions,
                     params.autoRevokePermissionsMode,
                     params.traceMethod, params.traceCookie, params.signingDetails,
-                    params.installReason, params.forceQueryableOverride,
-                    params.mParentInstallParams, params.mDataLoaderType);
+                    params.installReason, params.forceQueryableOverride, params.mDataLoaderType);
         }
 
         abstract int copyApk();
@@ -15723,7 +15759,7 @@ public class PackageManagerService extends IPackageManager.Stub
             super(OriginInfo.fromNothing(), null, null, 0, InstallSource.EMPTY,
                     null, null, instructionSets, null, null, null, MODE_DEFAULT, null, 0,
                     PackageParser.SigningDetails.UNKNOWN,
-                    PackageManager.INSTALL_REASON_UNKNOWN, false, null /* parent */,
+                    PackageManager.INSTALL_REASON_UNKNOWN, false,
                     DataLoaderType.NONE);
             this.codeFile = (codePath != null) ? new File(codePath) : null;
             this.resourceFile = (resourcePath != null) ? new File(resourcePath) : null;
@@ -16830,6 +16866,7 @@ public class PackageManagerService extends IPackageManager.Stub
                 updateInstantAppInstallerLocked(packageName);
             }
         }
+        ApplicationPackageManager.invalidateGetPackagesForUidCache();
     }
 
     /**
@@ -17259,7 +17296,7 @@ public class PackageManagerService extends IPackageManager.Stub
         // Sanity check
         if (instantApp && onExternal) {
             Slog.i(TAG, "Incompatible ephemeral install; external=" + onExternal);
-            throw new PrepareFailure(PackageManager.INSTALL_FAILED_INSTANT_APP_INVALID);
+            throw new PrepareFailure(PackageManager.INSTALL_FAILED_SESSION_INVALID);
         }
 
         // Retrieve PackageSettings and parse package
@@ -17284,13 +17321,13 @@ public class PackageManagerService extends IPackageManager.Stub
             if (parsedPackage.getTargetSdkVersion() < Build.VERSION_CODES.O) {
                 Slog.w(TAG, "Instant app package " + parsedPackage.getPackageName()
                                 + " does not target at least O");
-                throw new PrepareFailure(INSTALL_FAILED_INSTANT_APP_INVALID,
+                throw new PrepareFailure(INSTALL_FAILED_SESSION_INVALID,
                         "Instant app package must target at least O");
             }
             if (parsedPackage.getSharedUserId() != null) {
                 Slog.w(TAG, "Instant app package " + parsedPackage.getPackageName()
                         + " may not declare sharedUserId.");
-                throw new PrepareFailure(INSTALL_FAILED_INSTANT_APP_INVALID,
+                throw new PrepareFailure(INSTALL_FAILED_SESSION_INVALID,
                         "Instant app package may not declare a sharedUserId");
             }
         }
@@ -17330,7 +17367,7 @@ public class PackageManagerService extends IPackageManager.Stub
                 < SignatureSchemeVersion.SIGNING_BLOCK_V2) {
             Slog.w(TAG, "Instant app package " + parsedPackage.getPackageName()
                     + " is not signed with at least APK Signature Scheme v2");
-            throw new PrepareFailure(INSTALL_FAILED_INSTANT_APP_INVALID,
+            throw new PrepareFailure(INSTALL_FAILED_SESSION_INVALID,
                     "Instant app package must be signed with APK Signature Scheme v2 or greater");
         }
 
@@ -17541,7 +17578,7 @@ public class PackageManagerService extends IPackageManager.Stub
                         "Cannot install updates to system apps on sdcard");
             } else if (instantApp) {
                 // Abort update; system app can't be replaced with an instant app
-                throw new PrepareFailure(INSTALL_FAILED_INSTANT_APP_INVALID,
+                throw new PrepareFailure(INSTALL_FAILED_SESSION_INVALID,
                         "Cannot update a system app with an instant app");
             }
         }
@@ -17569,7 +17606,6 @@ public class PackageManagerService extends IPackageManager.Stub
             scanFlags |= SCAN_NO_DEX;
 
             try {
-                final boolean extractNativeLibs = !AndroidPackageUtils.isLibrary(parsedPackage);
                 PackageSetting pkgSetting;
                 synchronized (mLock) {
                     pkgSetting = mSettings.getPackageLPr(pkgName);
@@ -17584,7 +17620,7 @@ public class PackageManagerService extends IPackageManager.Stub
                 final Pair<PackageAbiHelper.Abis, PackageAbiHelper.NativeLibraryPaths>
                         derivedAbi = mInjector.getAbiHelper().derivePackageAbi(parsedPackage,
                         isUpdatedSystemAppFromExistingSetting || isUpdatedSystemAppInferred,
-                        abiOverride, extractNativeLibs);
+                        abiOverride);
                 derivedAbi.first.applyTo(parsedPackage);
                 derivedAbi.second.applyTo(parsedPackage);
             } catch (PackageManagerException pme) {
@@ -17733,7 +17769,7 @@ public class PackageManagerService extends IPackageManager.Stub
                                             "Can't replace full app with instant app: " + pkgName11
                                                     + " for user: " + currentUser);
                                     throw new PrepareFailure(
-                                            PackageManager.INSTALL_FAILED_INSTANT_APP_INVALID);
+                                            PackageManager.INSTALL_FAILED_SESSION_INVALID);
                                 }
                             }
                         } else if (!ps.getInstantApp(args.user.getIdentifier())) {
@@ -17741,7 +17777,7 @@ public class PackageManagerService extends IPackageManager.Stub
                             Slog.w(TAG, "Can't replace full app with instant app: " + pkgName11
                                     + " for user: " + args.user.getIdentifier());
                             throw new PrepareFailure(
-                                    PackageManager.INSTALL_FAILED_INSTANT_APP_INVALID);
+                                    PackageManager.INSTALL_FAILED_SESSION_INVALID);
                         }
                     }
                 }
@@ -18618,6 +18654,7 @@ public class PackageManagerService extends IPackageManager.Stub
                     updateInstantAppInstallerLocked(packageName);
                 }
             }
+            ApplicationPackageManager.invalidateGetPackagesForUidCache();
         }
 
         if (res) {
@@ -19704,14 +19741,14 @@ public class PackageManagerService extends IPackageManager.Stub
 
     @Override
     public void addPreferredActivity(IntentFilter filter, int match,
-            ComponentName[] set, ComponentName activity, int userId) {
+            ComponentName[] set, ComponentName activity, int userId, boolean removeExisting) {
         addPreferredActivityInternal(filter, match, set, activity, true, userId,
-                "Adding preferred");
+                "Adding preferred", removeExisting);
     }
 
     private void addPreferredActivityInternal(IntentFilter filter, int match,
             ComponentName[] set, ComponentName activity, boolean always, int userId,
-            String opname) {
+            String opname, boolean removeExisting) {
         // writer
         int callingUid = Binder.getCallingUid();
         mPermissionManager.enforceCrossUserPermission(callingUid, userId,
@@ -19739,6 +19776,10 @@ public class PackageManagerService extends IPackageManager.Stub
         }
         synchronized (mLock) {
             final PreferredIntentResolver pir = mSettings.editPreferredActivitiesLPw(userId);
+            final ArrayList<PreferredActivity> existing = pir.findFilters(filter);
+            if (removeExisting && existing != null) {
+                removeFiltersLocked(pir, filter, existing);
+            }
             pir.addFilter(new PreferredActivity(filter, match, set, activity, always));
             scheduleWritePackageRestrictionsLocked(userId);
         }
@@ -19838,24 +19879,28 @@ public class PackageManagerService extends IPackageManager.Stub
                     }
                 }
                 if (existing != null) {
-                    if (DEBUG_PREFERRED) {
-                        Slog.i(TAG, existing.size() + " existing preferred matches for:");
-                        filter.dump(new LogPrinter(Log.INFO, TAG), "  ");
-                    }
-                    for (int i = existing.size() - 1; i >= 0; --i) {
-                        final PreferredActivity pa = existing.get(i);
-                        if (DEBUG_PREFERRED) {
-                            Slog.i(TAG, "Removing existing preferred activity "
-                                    + pa.mPref.mComponent + ":");
-                            pa.dump(new LogPrinter(Log.INFO, TAG), "  ");
-                        }
-                        pir.removeFilter(pa);
-                    }
+                    removeFiltersLocked(pir, filter, existing);
                 }
             }
         }
         addPreferredActivityInternal(filter, match, set, activity, true, userId,
-                "Replacing preferred");
+                "Replacing preferred", false);
+    }
+
+    private void removeFiltersLocked(@NonNull PreferredIntentResolver pir,
+            @NonNull IntentFilter filter, @NonNull List<PreferredActivity> existing) {
+        if (DEBUG_PREFERRED) {
+            Slog.i(TAG, existing.size() + " preferred matches for:");
+            filter.dump(new LogPrinter(Log.INFO, TAG), "  ");
+        }
+        for (int i = existing.size() - 1; i >= 0; --i) {
+            final PreferredActivity pa = existing.get(i);
+            if (DEBUG_PREFERRED) {
+                Slog.i(TAG, "Removing preferred activity " + pa.mPref.mComponent + ":");
+                pa.dump(new LogPrinter(Log.INFO, TAG), "  ");
+            }
+            pir.removeFilter(pa);
+        }
     }
 
     @Override
@@ -21684,7 +21729,7 @@ public class PackageManagerService extends IPackageManager.Stub
     public void onShellCommand(FileDescriptor in, FileDescriptor out,
             FileDescriptor err, String[] args, ShellCallback callback,
             ResultReceiver resultReceiver) {
-        (new PackageManagerShellCommand(this, mPermissionManagerService)).exec(
+        (new PackageManagerShellCommand(this, mPermissionManagerService, mContext)).exec(
                 this, in, out, err, args, callback, resultReceiver);
     }
 
@@ -21987,7 +22032,11 @@ public class PackageManagerService extends IPackageManager.Stub
                             pw.print(" -> ");
                         }
                         if (libraryInfo.getPath() != null) {
-                            pw.print(" (jar) ");
+                            if (libraryInfo.isNative()) {
+                                pw.print(" (so) ");
+                            } else {
+                                pw.print(" (jar) ");
+                            }
                             pw.print(libraryInfo.getPath());
                         } else {
                             pw.print(" (apk) ");
@@ -25669,7 +25718,10 @@ public class PackageManagerService extends IPackageManager.Stub
     static class ActiveInstallSession {
         private final String mPackageName;
         private final File mStagedDir;
-        private final IPackageInstallObserver2 mObserver;
+        private final IPackageInstallObserver2 mInstallObserver;
+        // TODO(samiul): We are temporarily assigning two observer to ActiveInstallSession. One for
+        // installation and one for verification. This will be fixed within next few CLs.
+        private final IPackageInstallObserver2 mVerificationObserver;
         private final int mSessionId;
         private final PackageInstaller.SessionParams mSessionParams;
         private final int mInstallerUid;
@@ -25677,12 +25729,15 @@ public class PackageManagerService extends IPackageManager.Stub
         private final UserHandle mUser;
         private final SigningDetails mSigningDetails;
 
-        ActiveInstallSession(String packageName, File stagedDir, IPackageInstallObserver2 observer,
+        ActiveInstallSession(String packageName, File stagedDir,
+                IPackageInstallObserver2 installObserver,
+                IPackageInstallObserver2 verificationObserver,
                 int sessionId, PackageInstaller.SessionParams sessionParams, int installerUid,
                 InstallSource installSource, UserHandle user, SigningDetails signingDetails) {
             mPackageName = packageName;
             mStagedDir = stagedDir;
-            mObserver = observer;
+            mInstallObserver = installObserver;
+            mVerificationObserver = verificationObserver;
             mSessionId = sessionId;
             mSessionParams = sessionParams;
             mInstallerUid = installerUid;
@@ -25699,8 +25754,12 @@ public class PackageManagerService extends IPackageManager.Stub
             return mStagedDir;
         }
 
-        public IPackageInstallObserver2 getObserver() {
-            return mObserver;
+        public IPackageInstallObserver2 getInstallObserver() {
+            return mInstallObserver;
+        }
+
+        public IPackageInstallObserver2 getVerificationObserver() {
+            return mVerificationObserver;
         }
 
         public int getSessionId() {

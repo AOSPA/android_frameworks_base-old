@@ -354,6 +354,34 @@ public class CarrierConfigManager {
             "only_auto_select_in_home_network";
 
     /**
+     * Flag indicating whether to show single operator row in the choose network setting.
+     *
+     * The device configuration value {@code config_enableNewAutoSelectNetworkUI} ultimately
+     * controls whether this carrier configuration option is used.  Where
+     * {@code config_enableNewAutoSelectNetworkUI} is false, the value of the
+     * {@link #KEY_SHOW_SINGLE_OPERATOR_ROW_IN_CHOOSE_NETWORK_SETTING_BOOL} carrier configuration
+     * option is ignored.
+     *
+     * If {@code true}, default value, merge the duplicate networks which with the same plmn, keep
+     * the one that with the higher signal strength level.
+     * If {@code false}, show all operators without merging.
+     * @hide
+     */
+    public static final String KEY_SHOW_SINGLE_OPERATOR_ROW_IN_CHOOSE_NETWORK_SETTING_BOOL =
+            "show_single_operator_row_in_choose_network_setting_bool";
+
+    /**
+     * Flag indicating whether to display SPN as network name for home network in choose
+     * network setting.
+     *
+     * If {@code true}, display SPN as network name in choose network setting.
+     * If {@code false}, display PLMN in choose network setting.
+     * @hide
+     */
+    public static final String KEY_SHOW_SPN_FOR_HOME_IN_CHOOSE_NETWORK_SETTING_BOOL =
+            "show_spn_for_home_in_choose_network_setting_bool";
+
+    /**
      * Control whether users receive a simplified network settings UI and improved network
      * selection.
      */
@@ -1084,6 +1112,15 @@ public class CarrierConfigManager {
         "show_signal_strength_in_sim_status_bool";
 
     /**
+     * Flag specifying if we should interpret all signal strength as one bar higher
+     * This is a replacement for the former resource config_inflateSignalStrength
+     * The default value is false.
+     * @hide
+     */
+    public static final String KEY_INFLATE_SIGNAL_STRENGTH_BOOL =
+            "inflate_signal_strength_bool";
+
+    /**
      * Flag specifying whether an additional (client initiated) intent needs to be sent on System
      * update
      */
@@ -1589,7 +1626,7 @@ public class CarrierConfigManager {
      */
     public static final class Apn {
         /** Prefix of all Apn.KEY_* constants. */
-        public static final String KEY_PREFIX = "apn.";
+        private static final String KEY_PREFIX = "apn.";
 
         /** IPv4 internet protocol */
         public static final String PROTOCOL_IPV4 = "IP";
@@ -2387,6 +2424,16 @@ public class CarrierConfigManager {
             "call_forwarding_blocks_while_roaming_string_array";
 
     /**
+     * Call forwarding number prefixes defined by {@link
+     * #KEY_CALL_FORWARDING_BLOCKS_WHILE_ROAMING_STRING_ARRAY} which will be allowed while the
+     * device is reporting that it is roaming and IMS is registered over LTE or Wi-Fi.
+     * By default this value is {@code true}.
+     * @hide
+     */
+    public static final String KEY_SUPPORT_IMS_CALL_FORWARDING_WHILE_ROAMING_BOOL =
+            "support_ims_call_forwarding_while_roaming_bool";
+
+    /**
      * The day of the month (1-31) on which the data cycle rolls over.
      * <p>
      * If the current month does not have this day, the cycle will roll over at
@@ -2554,15 +2601,15 @@ public class CarrierConfigManager {
     /**
      * List of 4 customized 5G SS reference signal received quality (SSRSRQ) thresholds.
      * <p>
-     * Reference: 3GPP TS 38.215
+     * Reference: 3GPP TS 38.215; 3GPP TS 38.133 section 10
      * <p>
-     * 4 threshold integers must be within the boundaries [-20 dB, -3 dB], and the levels are:
+     * 4 threshold integers must be within the boundaries [-43 dB, 20 dB], and the levels are:
      * <UL>
-     *     <LI>"NONE: [-20, threshold1]"</LI>
+     *     <LI>"NONE: [-43, threshold1]"</LI>
      *     <LI>"POOR: (threshold1, threshold2]"</LI>
      *     <LI>"MODERATE: (threshold2, threshold3]"</LI>
      *     <LI>"GOOD:  (threshold3, threshold4]"</LI>
-     *     <LI>"EXCELLENT:  (threshold4, -3]"</LI>
+     *     <LI>"EXCELLENT:  (threshold4, 20]"</LI>
      * </UL>
      * <p>
      * This key is considered invalid if the format is violated. If the key is invalid or
@@ -3221,6 +3268,17 @@ public class CarrierConfigManager {
             "5g_icon_display_secondary_grace_period_string";
 
     /**
+     * Whether device reset all of NR timers when device camped on a network that haven't 5G
+     * capability and RRC currently in IDLE state.
+     *
+     * The default value is false;
+     *
+     * @hide
+     */
+    public static final String KEY_NR_TIMERS_RESET_IF_NON_ENDC_AND_RRC_IDLE_BOOL =
+            "nr_timers_reset_if_non_endc_and_rrc_idle_bool";
+
+    /**
      * Controls time in milliseconds until DcTracker reevaluates 5G connection state.
      * @hide
      */
@@ -3800,6 +3858,15 @@ public class CarrierConfigManager {
             "carrier_certificate_string_array";
 
     /**
+     * Flag specifying whether the incoming call number should be formatted to national number
+     * for Japan. @return {@code true} convert to the national format, {@code false} otherwise.
+     * e.g. "+819012345678" -> "09012345678"
+     * @hide
+     */
+    public static final String KEY_FORMAT_INCOMING_NUMBER_TO_NATIONAL_FOR_JP_BOOL =
+            "format_incoming_number_to_national_for_jp_bool";
+
+    /**
      * DisconnectCause array to play busy tone. Value should be array of
      * {@link android.telephony.DisconnectCause}.
      */
@@ -3856,6 +3923,15 @@ public class CarrierConfigManager {
      */
     public static final String KEY_MISSED_INCOMING_CALL_SMS_PATTERN_STRING_ARRAY =
             "missed_incoming_call_sms_pattern_string_array";
+
+    /**
+     * Indicating whether DUN APN should be disabled when the device is roaming. In that case,
+     * the default APN (i.e. internet) will be used for tethering.
+     *
+     * @hide
+     */
+    public static final String KEY_DISABLE_DUN_APN_WHILE_ROAMING =
+            "disable_dun_apn_while_roaming";
 
      /**
      * Flag indicating whether carrier supports multianchor conference.
@@ -3943,6 +4019,8 @@ public class CarrierConfigManager {
         sDefaults.putBoolean(KEY_HAS_IN_CALL_NOISE_SUPPRESSION_BOOL, false);
         sDefaults.putBoolean(KEY_HIDE_CARRIER_NETWORK_SETTINGS_BOOL, false);
         sDefaults.putBoolean(KEY_ONLY_AUTO_SELECT_IN_HOME_NETWORK_BOOL, false);
+        sDefaults.putBoolean(KEY_SHOW_SINGLE_OPERATOR_ROW_IN_CHOOSE_NETWORK_SETTING_BOOL, true);
+        sDefaults.putBoolean(KEY_SHOW_SPN_FOR_HOME_IN_CHOOSE_NETWORK_SETTING_BOOL, false);
         sDefaults.putBoolean(KEY_SIMPLIFIED_NETWORK_SETTINGS_BOOL, false);
         sDefaults.putBoolean(KEY_HIDE_SIM_LOCK_SETTINGS_BOOL, false);
 
@@ -3994,6 +4072,7 @@ public class CarrierConfigManager {
         sDefaults.putStringArray(KEY_CARRIER_VVM_PACKAGE_NAME_STRING_ARRAY, null);
         sDefaults.putBoolean(KEY_SHOW_ICCID_IN_SIM_STATUS_BOOL, false);
         sDefaults.putBoolean(KEY_SHOW_SIGNAL_STRENGTH_IN_SIM_STATUS_BOOL, true);
+        sDefaults.putBoolean(KEY_INFLATE_SIGNAL_STRENGTH_BOOL, false);
         sDefaults.putBoolean(KEY_CI_ACTION_ON_SYS_UPDATE_BOOL, false);
         sDefaults.putString(KEY_CI_ACTION_ON_SYS_UPDATE_INTENT_STRING, "");
         sDefaults.putString(KEY_CI_ACTION_ON_SYS_UPDATE_EXTRA_STRING, "");
@@ -4219,6 +4298,7 @@ public class CarrierConfigManager {
         sDefaults.putBoolean(KEY_SHOW_VIDEO_CALL_CHARGES_ALERT_DIALOG_BOOL, false);
         sDefaults.putStringArray(KEY_CALL_FORWARDING_BLOCKS_WHILE_ROAMING_STRING_ARRAY,
                 null);
+        sDefaults.putBoolean(KEY_SUPPORT_IMS_CALL_FORWARDING_WHILE_ROAMING_BOOL, true);
         sDefaults.putInt(KEY_LTE_EARFCNS_RSRP_BOOST_INT, 0);
         sDefaults.putStringArray(KEY_BOOSTED_LTE_EARFCNS_STRING_ARRAY, null);
         sDefaults.putBoolean(KEY_USE_ONLY_RSRP_FOR_LTE_SIGNAL_BAR_BOOL, false);
@@ -4291,12 +4371,12 @@ public class CarrierConfigManager {
                     -65,  /* SIGNAL_STRENGTH_GREAT */
                 });
         sDefaults.putIntArray(KEY_5G_NR_SSRSRQ_THRESHOLDS_INT_ARRAY,
-                // Boundaries: [-20 dB, -3 dB]
+                // Boundaries: [-43 dB, 20 dB]
                 new int[] {
-                    -16, /* SIGNAL_STRENGTH_POOR */
-                    -12, /* SIGNAL_STRENGTH_MODERATE */
-                    -9, /* SIGNAL_STRENGTH_GOOD */
-                    -6  /* SIGNAL_STRENGTH_GREAT */
+                    -31, /* SIGNAL_STRENGTH_POOR */
+                    -19, /* SIGNAL_STRENGTH_MODERATE */
+                    -7, /* SIGNAL_STRENGTH_GOOD */
+                    6  /* SIGNAL_STRENGTH_GREAT */
                 });
         sDefaults.putIntArray(KEY_5G_NR_SSSINR_THRESHOLDS_INT_ARRAY,
                 // Boundaries: [-23 dB, 40 dB]
@@ -4333,6 +4413,7 @@ public class CarrierConfigManager {
                         + "not_restricted_rrc_con:5G");
         sDefaults.putString(KEY_5G_ICON_DISPLAY_GRACE_PERIOD_STRING, "");
         sDefaults.putString(KEY_5G_ICON_DISPLAY_SECONDARY_GRACE_PERIOD_STRING, "");
+        sDefaults.putBoolean(KEY_NR_TIMERS_RESET_IF_NON_ENDC_AND_RRC_IDLE_BOOL, false);
         /* Default value is 1 hour. */
         sDefaults.putLong(KEY_5G_WATCHDOG_TIME_MS_LONG, 3600000);
         sDefaults.putBoolean(KEY_UNMETERED_NR_NSA_BOOL, false);
@@ -4392,6 +4473,7 @@ public class CarrierConfigManager {
         sDefaults.putBoolean(KEY_SUPPORT_WPS_OVER_IMS_BOOL, true);
         sDefaults.putAll(Ims.getDefaults());
         sDefaults.putStringArray(KEY_CARRIER_CERTIFICATE_STRING_ARRAY, null);
+         sDefaults.putBoolean(KEY_FORMAT_INCOMING_NUMBER_TO_NATIONAL_FOR_JP_BOOL, false);
         sDefaults.putIntArray(KEY_DISCONNECT_CAUSE_PLAY_BUSYTONE_INT_ARRAY,
                 new int[] {4 /* BUSY */});
         sDefaults.putBoolean(KEY_PREVENT_CLIR_ACTIVATION_AND_DEACTIVATION_CODE_BOOL, false);
@@ -4411,6 +4493,7 @@ public class CarrierConfigManager {
                 "ims:2", "cbs:2", "ia:2", "emergency:2", "mcx:3", "xcap:3"
         });
         sDefaults.putStringArray(KEY_MISSED_INCOMING_CALL_SMS_PATTERN_STRING_ARRAY, new String[0]);
+        sDefaults.putBoolean(KEY_DISABLE_DUN_APN_WHILE_ROAMING, false);
         sDefaults.putBoolean(KEY_CARRIER_SUPPORTS_MULTIANCHOR_CONFERENCE, false);
         sDefaults.putInt(KEY_DEFAULT_RTT_MODE_INT, 0);
     }
@@ -4656,6 +4739,7 @@ public class CarrierConfigManager {
         } catch (RemoteException ex) {
             Rlog.e(TAG, "getDefaultCarrierServicePackageName ICarrierConfigLoader is null"
                     + ex.toString());
+            ex.rethrowAsRuntimeException();
         }
         return "";
     }

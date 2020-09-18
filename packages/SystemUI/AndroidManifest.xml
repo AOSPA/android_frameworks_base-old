@@ -240,6 +240,7 @@
 
     <!-- Listen app op changes -->
     <uses-permission android:name="android.permission.WATCH_APPOPS" />
+    <uses-permission android:name="android.permission.OBSERVE_GRANT_REVOKE_PERMISSIONS" />
 
     <!-- to read and change hvac values in a car -->
     <uses-permission android:name="android.car.permission.CONTROL_CAR_CLIMATE" />
@@ -396,19 +397,15 @@
 
         <!-- Springboard for launching the share and edit activity. This needs to be in the main
              system ui process since we need to notify the status bar to dismiss the keyguard -->
-        <receiver android:name=".screenshot.GlobalScreenshot$ActionProxyReceiver"
-            android:exported="false" />
-
-        <!-- Callback for dismissing screenshot notification after a share target is picked -->
-        <receiver android:name=".screenshot.GlobalScreenshot$TargetChosenReceiver"
+        <receiver android:name=".screenshot.ActionProxyReceiver"
             android:exported="false" />
 
         <!-- Callback for deleting screenshot notification -->
-        <receiver android:name=".screenshot.GlobalScreenshot$DeleteScreenshotReceiver"
+        <receiver android:name=".screenshot.DeleteScreenshotReceiver"
             android:exported="false" />
 
         <!-- Callback for invoking a smart action from the screenshot notification. -->
-        <receiver android:name=".screenshot.GlobalScreenshot$SmartActionsReceiver"
+        <receiver android:name=".screenshot.SmartActionsReceiver"
                   android:exported="false"/>
 
         <!-- started from UsbDeviceSettingsManager -->
@@ -548,7 +545,8 @@
         <activity android:name=".SlicePermissionActivity"
             android:theme="@style/Theme.SystemUI.Dialog.Alert"
             android:finishOnCloseSystemDialogs="true"
-            android:excludeFromRecents="true">
+            android:excludeFromRecents="true"
+            android:exported="true">
             <intent-filter>
                 <action android:name="com.android.intent.action.REQUEST_SLICE_PERMISSION" />
             </intent-filter>
@@ -657,7 +655,8 @@
             android:process=":fgservices"
             android:excludeFromRecents="true"
             android:launchMode="singleTop"
-            android:theme="@*android:style/Theme.DeviceDefault.Settings.Dialog">
+            android:theme="@*android:style/Theme.DeviceDefault.Settings.Dialog"
+            android:exported="true">
             <intent-filter android:priority="1">
                 <action android:name="android.settings.FOREGROUND_SERVICES_SETTINGS" />
                 <category android:name="android.intent.category.DEFAULT" />
@@ -672,7 +671,8 @@
                 android:relinquishTaskIdentity="true"
                 android:configChanges="screenSize|smallestScreenSize|screenLayout|orientation|keyboard|keyboardHidden"
                 android:process=":ui"
-                android:visibleToInstantApps="true">
+                android:visibleToInstantApps="true"
+                android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.CHOOSER" />
                 <category android:name="android.intent.category.VOICE" />
@@ -712,7 +712,8 @@
                   android:visibleToInstantApps="true">
         </activity>
 
-        <receiver android:name=".controls.management.ControlsRequestReceiver">
+        <receiver android:name=".controls.management.ControlsRequestReceiver"
+            android:exported="true">
             <intent-filter>
                 <action android:name="android.service.controls.action.ADD_CONTROL" />
             </intent-filter>
@@ -775,7 +776,8 @@
         </provider>
 
         <receiver
-            android:name=".statusbar.KeyboardShortcutsReceiver">
+            android:name=".statusbar.KeyboardShortcutsReceiver"
+            android:exported="true">
             <intent-filter>
                 <action android:name="com.android.intent.action.DISMISS_KEYBOARD_SHORTCUTS" />
                 <action android:name="com.android.intent.action.SHOW_KEYBOARD_SHORTCUTS" />

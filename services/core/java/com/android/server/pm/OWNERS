@@ -10,8 +10,8 @@ toddke@android.com
 toddke@google.com
 
 # apex support
-per-file ApexManager.java = dariofreni@google.com
-per-file StagingManager.java = dariofreni@google.com
+per-file ApexManager.java = dariofreni@google.com, ioffe@google.com, olilan@google.com
+per-file StagingManager.java = dariofreni@google.com, ioffe@google.com, olilan@google.com
 
 # dex
 per-file AbstractStatsBase.java = agampe@google.com, calin@google.com, ngeoffray@google.com
@@ -30,8 +30,9 @@ per-file CrossProfileAppsServiceImpl.java = omakoto@google.com, yamasani@google.
 per-file CrossProfileAppsService.java = omakoto@google.com, yamasani@google.com
 per-file CrossProfileIntentFilter.java = omakoto@google.com, yamasani@google.com
 per-file CrossProfileIntentResolver.java = omakoto@google.com, yamasani@google.com
-per-file UserManagerService.java = omakoto@google.com, yamasani@google.com
+per-file UserManagerService.java = bookatz@google.com, omakoto@google.com, yamasani@google.com
 per-file UserRestrictionsUtils.java = omakoto@google.com, rubinxu@google.com, sandness@google.com, yamasani@google.com
+per-file RestrictionsSet.java = bookatz@google.com, omakoto@google.com, yamasani@google.com, rubinxu@google.com, sandness@google.com
 per-file UserSystemPackageInstaller.java = bookatz@google.com, omakoto@google.com, yamasani@google.com
 per-file UserTypeDetails.java = bookatz@google.com, omakoto@google.com, yamasani@google.com
 per-file UserTypeFactory.java = bookatz@google.com, omakoto@google.com, yamasani@google.com

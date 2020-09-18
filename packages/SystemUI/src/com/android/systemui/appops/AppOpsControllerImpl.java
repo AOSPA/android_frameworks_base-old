@@ -18,18 +18,22 @@ package com.android.systemui.appops;
 
 import android.app.AppOpsManager;
 import android.content.Context;
+import android.content.pm.PackageManager;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.UserHandle;
-import android.util.ArrayMap;
 import android.util.ArraySet;
 import android.util.Log;
+import android.util.SparseArray;
+
+import androidx.annotation.WorkerThread;
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.systemui.Dumpable;
 import com.android.systemui.dagger.qualifiers.Background;
 import com.android.systemui.dump.DumpManager;
+import com.android.systemui.util.Assert;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
@@ -57,12 +61,12 @@ public class AppOpsControllerImpl implements AppOpsController,
     private static final long NOTED_OP_TIME_DELAY_MS = 5000;
     private static final String TAG = "AppOpsControllerImpl";
     private static final boolean DEBUG = false;
-    private final Context mContext;
 
     private final AppOpsManager mAppOps;
     private H mBGHandler;
     private final List<AppOpsController.Callback> mCallbacks = new ArrayList<>();
-    private final ArrayMap<Integer, Set<Callback>> mCallbacksByCode = new ArrayMap<>();
+    private final SparseArray<Set<Callback>> mCallbacksByCode = new SparseArray<>();
+    private final PermissionFlagsCache mFlagsCache;
     private boolean mListening;
 
     @GuardedBy("mActiveItems")
@@ -71,6 +75,7 @@ public class AppOpsControllerImpl implements AppOpsController,
     private final List<AppOpItem> mNotedItems = new ArrayList<>();
 
     protected static final int[] OPS = new int[] {
+            AppOpsManager.OP_MONITOR_HIGH_POWER_LOCATION,
             AppOpsManager.OP_CAMERA,
             AppOpsManager.OP_SYSTEM_ALERT_WINDOW,
             AppOpsManager.OP_RECORD_AUDIO,
@@ -82,9 +87,11 @@ public class AppOpsControllerImpl implements AppOpsController,
     public AppOpsControllerImpl(
             Context context,
             @Background Looper bgLooper,
-            DumpManager dumpManager) {
-        mContext = context;
+            DumpManager dumpManager,
+            PermissionFlagsCache cache
+    ) {
         mAppOps = (AppOpsManager) context.getSystemService(Context.APP_OPS_SERVICE);
+        mFlagsCache = cache;
         mBGHandler = new H(bgLooper);
         final int numOps = OPS.length;
         for (int i = 0; i < numOps; i++) {
@@ -131,7 +138,7 @@ public class AppOpsControllerImpl implements AppOpsController,
         boolean added = false;
         final int numCodes = opsCodes.length;
         for (int i = 0; i < numCodes; i++) {
-            if (mCallbacksByCode.containsKey(opsCodes[i])) {
+            if (mCallbacksByCode.contains(opsCodes[i])) {
                 mCallbacksByCode.get(opsCodes[i]).add(callback);
                 added = true;
             } else {
@@ -155,7 +162,7 @@ public class AppOpsControllerImpl implements AppOpsController,
     public void removeCallback(int[] opsCodes, AppOpsController.Callback callback) {
         final int numCodes = opsCodes.length;
         for (int i = 0; i < numCodes; i++) {
-            if (mCallbacksByCode.containsKey(opsCodes[i])) {
+            if (mCallbacksByCode.contains(opsCodes[i])) {
                 mCallbacksByCode.get(opsCodes[i]).remove(callback);
             }
         }
@@ -231,10 +238,66 @@ public class AppOpsControllerImpl implements AppOpsController,
     }
 
     /**
+     * Does the app-op code refer to a user sensitive permission for the specified user id
+     * and package. Only user sensitive permission should be shown to the user by default.
+     *
+     * @param appOpCode The code of the app-op.
+     * @param uid The uid of the user.
+     * @param packageName The name of the package.
+     *
+     * @return {@code true} iff the app-op item is user sensitive
+     */
+    private boolean isUserSensitive(int appOpCode, int uid, String packageName) {
+        String permission = AppOpsManager.opToPermission(appOpCode);
+        if (permission == null) {
+            return false;
+        }
+        int permFlags = mFlagsCache.getPermissionFlags(permission,
+                packageName, uid);
+        return (permFlags & PackageManager.FLAG_PERMISSION_USER_SENSITIVE_WHEN_GRANTED) != 0;
+    }
+
+    /**
+     * Does the app-op item refer to an operation that should be shown to the user.
+     * Only specficic ops (like SYSTEM_ALERT_WINDOW) or ops that refer to user sensitive
+     * permission should be shown to the user by default.
+     *
+     * @param item The item
+     *
+     * @return {@code true} iff the app-op item should be shown to the user
+     */
+    private boolean isUserVisible(AppOpItem item) {
+        return isUserVisible(item.getCode(), item.getUid(), item.getPackageName());
+    }
+
+
+    /**
+     * Does the app-op, uid and package name, refer to an operation that should be shown to the
+     * user. Only specficic ops (like {@link AppOpsManager.OP_SYSTEM_ALERT_WINDOW}) or
+     * ops that refer to user sensitive permission should be shown to the user by default.
+     *
+     * @param item The item
+     *
+     * @return {@code true} iff the app-op for should be shown to the user
+     */
+    private boolean isUserVisible(int appOpCode, int uid, String packageName) {
+        // currently OP_SYSTEM_ALERT_WINDOW does not correspond to a platform permission
+        // which may be user senstive, so for now always show it to the user.
+        if (appOpCode == AppOpsManager.OP_SYSTEM_ALERT_WINDOW) {
+            return true;
+        }
+
+        return isUserSensitive(appOpCode, uid, packageName);
+    }
+
+    /**
      * Returns a copy of the list containing all the active AppOps that the controller tracks.
+     *
+     * Call from a worker thread as it may perform long operations.
      *
      * @return List of active AppOps information
      */
+    @WorkerThread
     public List<AppOpItem> getActiveAppOps() {
         return getActiveAppOpsForUser(UserHandle.USER_ALL);
     }
@@ -243,18 +306,23 @@ public class AppOpsControllerImpl implements AppOpsController,
      * Returns a copy of the list containing all the active AppOps that the controller tracks, for
      * a given user id.
      *
+     * Call from a worker thread as it may perform long operations.
+     *
      * @param userId User id to track, can be {@link UserHandle#USER_ALL}
      *
      * @return List of active AppOps information for that user id
      */
+    @WorkerThread
     public List<AppOpItem> getActiveAppOpsForUser(int userId) {
+        Assert.isNotMainThread();
         List<AppOpItem> list = new ArrayList<>();
         synchronized (mActiveItems) {
             final int numActiveItems = mActiveItems.size();
             for (int i = 0; i < numActiveItems; i++) {
                 AppOpItem item = mActiveItems.get(i);
                 if ((userId == UserHandle.USER_ALL
-                        || UserHandle.getUserId(item.getUid()) == userId)) {
+                        || UserHandle.getUserId(item.getUid()) == userId)
+                        && isUserVisible(item)) {
                     list.add(item);
                 }
             }
@@ -264,7 +332,8 @@ public class AppOpsControllerImpl implements AppOpsController,
             for (int i = 0; i < numNotedItems; i++) {
                 AppOpItem item = mNotedItems.get(i);
                 if ((userId == UserHandle.USER_ALL
-                        || UserHandle.getUserId(item.getUid()) == userId)) {
+                        || UserHandle.getUserId(item.getUid()) == userId)
+                        && isUserVisible(item)) {
                     list.add(item);
                 }
             }
@@ -312,7 +381,7 @@ public class AppOpsControllerImpl implements AppOpsController,
     }
 
     private void notifySuscribers(int code, int uid, String packageName, boolean active) {
-        if (mCallbacksByCode.containsKey(code)) {
+        if (mCallbacksByCode.contains(code) && isUserVisible(code, uid, packageName)) {
             if (DEBUG) Log.d(TAG, "Notifying of change in package " + packageName);
             for (Callback cb: mCallbacksByCode.get(code)) {
                 cb.onActiveStateChanged(code, uid, packageName, active);

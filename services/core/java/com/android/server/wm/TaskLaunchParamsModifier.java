@@ -341,8 +341,8 @@ class TaskLaunchParamsModifier implements LaunchParamsModifier {
             }
         }
 
-        ActivityStack stack = (taskDisplayArea == null && task != null)
-                ? task.getStack() : null;
+        Task stack = (taskDisplayArea == null && task != null)
+                ? task.getRootTask() : null;
         if (stack != null) {
             if (DEBUG) appendLog("display-from-task=" + stack.getDisplayId());
             taskDisplayArea = stack.getDisplayArea();
@@ -741,21 +741,19 @@ class TaskLaunchParamsModifier implements LaunchParamsModifier {
     private void adjustBoundsToAvoidConflictInDisplay(@NonNull DisplayContent display,
             @NonNull Rect inOutBounds) {
         final List<Rect> taskBoundsToCheck = new ArrayList<>();
-        int numTaskContainers = display.getTaskDisplayAreaCount();
-        for (int tdaNdx = 0; tdaNdx < numTaskContainers; tdaNdx++) {
-            final TaskDisplayArea taskDisplayArea = display.getTaskDisplayAreaAt(tdaNdx);
+        display.forAllTaskDisplayAreas(taskDisplayArea -> {
             int numStacks = taskDisplayArea.getStackCount();
             for (int sNdx = 0; sNdx < numStacks; ++sNdx) {
-                final ActivityStack stack = taskDisplayArea.getStackAt(sNdx);
-                if (!stack.inFreeformWindowingMode()) {
+                final Task task = taskDisplayArea.getStackAt(sNdx);
+                if (!task.inFreeformWindowingMode()) {
                     continue;
                 }
 
-                for (int j = 0; j < stack.getChildCount(); ++j) {
-                    taskBoundsToCheck.add(stack.getChildAt(j).getBounds());
+                for (int j = 0; j < task.getChildCount(); ++j) {
+                    taskBoundsToCheck.add(task.getChildAt(j).getBounds());
                 }
             }
-        }
+        }, false /* traverseTopToBottom */);
         adjustBoundsToAvoidConflict(display.getBounds(), taskBoundsToCheck, inOutBounds);
     }
 

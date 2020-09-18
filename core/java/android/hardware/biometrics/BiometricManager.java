@@ -30,6 +30,9 @@ import android.security.keystore.KeyGenParameterSpec;
 import android.security.keystore.KeyProperties;
 import android.util.Slog;
 
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+
 /**
  * A class that contains biometric utilities. For authentication, see {@link BiometricPrompt}.
  */
@@ -71,12 +74,16 @@ public class BiometricManager {
     public static final int BIOMETRIC_ERROR_SECURITY_UPDATE_REQUIRED =
             BiometricConstants.BIOMETRIC_ERROR_SECURITY_UPDATE_REQUIRED;
 
+    /**
+     * @hide
+     */
     @IntDef({BIOMETRIC_SUCCESS,
             BIOMETRIC_ERROR_HW_UNAVAILABLE,
             BIOMETRIC_ERROR_NONE_ENROLLED,
             BIOMETRIC_ERROR_NO_HARDWARE,
             BIOMETRIC_ERROR_SECURITY_UPDATE_REQUIRED})
-    @interface BiometricError {}
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface BiometricError {}
 
     /**
      * Types of authenticators, defined at a level of granularity supported by
@@ -293,33 +300,17 @@ public class BiometricManager {
     }
 
     /**
-     * Sets the active user.
-     * @hide
-     */
-    @RequiresPermission(USE_BIOMETRIC_INTERNAL)
-    public void setActiveUser(int userId) {
-        if (mService != null) {
-            try {
-                mService.setActiveUser(userId);
-            } catch (RemoteException e) {
-                throw e.rethrowFromSystemServer();
-            }
-        } else {
-            Slog.w(TAG, "setActiveUser(): Service not connected");
-        }
-    }
-
-    /**
      * Reset the lockout when user authenticates with strong auth (e.g. PIN, pattern or password)
      *
-     * @param token an opaque token returned by password confirmation.
+     * @param userId this operation takes effect for.
+     * @param hardwareAuthToken an opaque token returned by password confirmation.
      * @hide
      */
     @RequiresPermission(USE_BIOMETRIC_INTERNAL)
-    public void resetLockout(byte[] token) {
+    public void resetLockout(int userId, byte[] hardwareAuthToken) {
         if (mService != null) {
             try {
-                mService.resetLockout(token);
+                mService.resetLockout(userId, hardwareAuthToken);
             } catch (RemoteException e) {
                 throw e.rethrowFromSystemServer();
             }
