@@ -16,20 +16,21 @@
 
 #define LOG_TAG "InputWindowHandle"
 
-#include <nativehelper/JNIHelp.h>
-#include "core_jni_helpers.h"
-#include "jni.h"
-#include <android_runtime/AndroidRuntime.h>
-#include <utils/threads.h>
+#include "android_hardware_input_InputWindowHandle.h"
 
 #include <android/graphics/region.h>
+#include <android_runtime/AndroidRuntime.h>
+#include <binder/IPCThreadState.h>
 #include <gui/SurfaceControl.h>
+#include <nativehelper/JNIHelp.h>
 #include <ui/Region.h>
+#include <utils/threads.h>
 
-#include "android_hardware_input_InputWindowHandle.h"
 #include "android_hardware_input_InputApplicationHandle.h"
 #include "android_util_Binder.h"
-#include <binder/IPCThreadState.h>
+#include "core_jni_helpers.h"
+#include "input/InputWindow.h"
+#include "jni.h"
 
 namespace android {
 
@@ -59,6 +60,7 @@ static struct {
     jfieldID hasFocus;
     jfieldID hasWallpaper;
     jfieldID paused;
+    jfieldID trustedOverlay;
     jfieldID ownerPid;
     jfieldID ownerUid;
     jfieldID inputFeatures;
@@ -112,12 +114,12 @@ bool NativeInputWindowHandle::updateInfo() {
 
     mInfo.name = getStringField(env, obj, gInputWindowHandleClassInfo.name, "<null>");
 
-    mInfo.layoutParamsFlags = env->GetIntField(obj,
-            gInputWindowHandleClassInfo.layoutParamsFlags);
-    mInfo.layoutParamsType = env->GetIntField(obj,
-            gInputWindowHandleClassInfo.layoutParamsType);
-    mInfo.dispatchingTimeout = env->GetLongField(obj,
-            gInputWindowHandleClassInfo.dispatchingTimeoutNanos);
+    mInfo.flags = Flags<InputWindowInfo::Flag>(
+            env->GetIntField(obj, gInputWindowHandleClassInfo.layoutParamsFlags));
+    mInfo.type = static_cast<InputWindowInfo::Type>(
+            env->GetIntField(obj, gInputWindowHandleClassInfo.layoutParamsType));
+    mInfo.dispatchingTimeout = decltype(mInfo.dispatchingTimeout)(
+            env->GetLongField(obj, gInputWindowHandleClassInfo.dispatchingTimeoutNanos));
     mInfo.frameLeft = env->GetIntField(obj,
             gInputWindowHandleClassInfo.frameLeft);
     mInfo.frameTop = env->GetIntField(obj,
@@ -151,12 +153,13 @@ bool NativeInputWindowHandle::updateInfo() {
             gInputWindowHandleClassInfo.hasWallpaper);
     mInfo.paused = env->GetBooleanField(obj,
             gInputWindowHandleClassInfo.paused);
+    mInfo.trustedOverlay = env->GetBooleanField(obj, gInputWindowHandleClassInfo.trustedOverlay);
     mInfo.ownerPid = env->GetIntField(obj,
             gInputWindowHandleClassInfo.ownerPid);
     mInfo.ownerUid = env->GetIntField(obj,
             gInputWindowHandleClassInfo.ownerUid);
-    mInfo.inputFeatures = env->GetIntField(obj,
-            gInputWindowHandleClassInfo.inputFeatures);
+    mInfo.inputFeatures = static_cast<InputWindowInfo::Feature>(
+            env->GetIntField(obj, gInputWindowHandleClassInfo.inputFeatures));
     mInfo.displayId = env->GetIntField(obj,
             gInputWindowHandleClassInfo.displayId);
     mInfo.portalToDisplayId = env->GetIntField(obj,
@@ -328,6 +331,8 @@ int register_android_view_InputWindowHandle(JNIEnv* env) {
 
     GET_FIELD_ID(gInputWindowHandleClassInfo.paused, clazz,
             "paused", "Z");
+
+    GET_FIELD_ID(gInputWindowHandleClassInfo.trustedOverlay, clazz, "trustedOverlay", "Z");
 
     GET_FIELD_ID(gInputWindowHandleClassInfo.ownerPid, clazz,
             "ownerPid", "I");

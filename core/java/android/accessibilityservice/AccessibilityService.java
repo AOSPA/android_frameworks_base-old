@@ -33,6 +33,7 @@ import android.graphics.ColorSpace;
 import android.graphics.ParcelableColorSpace;
 import android.graphics.Region;
 import android.hardware.HardwareBuffer;
+import android.hardware.display.DisplayManager;
 import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
@@ -497,32 +498,27 @@ public abstract class AccessibilityService extends Service {
     /**
      * Action to send the KEYCODE_HEADSETHOOK KeyEvent, which is used to answer/hang up calls and
      * play/stop media
-     * @hide
      */
     public static final int GLOBAL_ACTION_KEYCODE_HEADSETHOOK = 10;
 
     /**
      * Action to trigger the Accessibility Button
-     * @hide
      */
     public static final int GLOBAL_ACTION_ACCESSIBILITY_BUTTON = 11;
 
     /**
      * Action to bring up the Accessibility Button's chooser menu
-     * @hide
      */
     public static final int GLOBAL_ACTION_ACCESSIBILITY_BUTTON_CHOOSER = 12;
 
     /**
      * Action to trigger the Accessibility Shortcut. This shortcut has a hardware trigger and can
      * be activated by holding down the two volume keys.
-     * @hide
      */
     public static final int GLOBAL_ACTION_ACCESSIBILITY_SHORTCUT = 13;
 
     /**
      * Action to show Launcher's all apps.
-     * @hide
      */
     public static final int GLOBAL_ACTION_ACCESSIBILITY_ALL_APPS = 14;
 
@@ -1045,8 +1041,9 @@ public abstract class AccessibilityService extends Service {
         if (connection == null) {
             return false;
         }
+        int sampleTimeMs = calculateGestureSampleTimeMs(gesture.getDisplayId());
         List<GestureDescription.GestureStep> steps =
-                MotionEventGenerator.getGestureStepsFromGestureDescription(gesture, 16);
+                MotionEventGenerator.getGestureStepsFromGestureDescription(gesture, sampleTimeMs);
         try {
             synchronized (mLock) {
                 mGestureStatusCallbackSequence++;
@@ -1065,6 +1062,30 @@ public abstract class AccessibilityService extends Service {
             throw new RuntimeException(re);
         }
         return true;
+    }
+
+    /**
+     * Returns the sample time in millis of gesture steps for the current display.
+     *
+     * <p>For gestures to be smooth they should line up with the refresh rate of the display.
+     * On versions of Android before R, the sample time was fixed to 100ms.
+     */
+    private int calculateGestureSampleTimeMs(int displayId) {
+        if (getApplicationInfo().targetSdkVersion <= Build.VERSION_CODES.Q) {
+            return 100;
+        }
+        Display display = getSystemService(DisplayManager.class).getDisplay(
+                displayId);
+        if (display == null) {
+            return 100;
+        }
+        int msPerSecond = 1000;
+        int sampleTimeMs = (int) (msPerSecond / display.getRefreshRate());
+        if (sampleTimeMs < 1) {
+            // Should be impossible, but do not return 0.
+            return 100;
+        }
+        return sampleTimeMs;
     }
 
     void onPerformGestureResult(int sequence, final boolean completedSuccessfully) {
@@ -1880,6 +1901,11 @@ public abstract class AccessibilityService extends Service {
      * at any moment regardless of the current application or user
      * location in that application. For example going back, going
      * home, opening recents, etc.
+     *
+     * <p>
+     * Note: The global action ids themselves give no information about the current availability
+     * of their corresponding actions. To determine if a global action is available, use
+     * {@link #getSystemActions()}
      *
      * @param action The action to perform.
      * @return Whether the action was successfully performed.

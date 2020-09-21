@@ -63,7 +63,6 @@ import android.telephony.CellSignalStrengthLte;
 import android.telephony.CellSignalStrengthNr;
 import android.telephony.CellSignalStrengthTdscdma;
 import android.telephony.CellSignalStrengthWcdma;
-import android.telephony.DataFailCause;
 import android.telephony.DisconnectCause;
 import android.telephony.LocationAccessPolicy;
 import android.telephony.PhoneCapability;
@@ -89,6 +88,7 @@ import com.android.internal.telephony.IOnSubscriptionsChangedListener;
 import com.android.internal.telephony.IPhoneStateListener;
 import com.android.internal.telephony.ITelephonyRegistry;
 import com.android.internal.telephony.TelephonyPermissions;
+import com.android.internal.telephony.util.TelephonyUtils;
 import com.android.internal.util.ArrayUtils;
 import com.android.internal.util.DumpUtils;
 import com.android.internal.util.FrameworkStatsLog;
@@ -1706,7 +1706,7 @@ public class TelephonyRegistry extends ITelephonyRegistry.Stub {
             apn = preciseState.getDataConnectionApn();
             state = preciseState.getState();
             networkType = preciseState.getNetworkType();
-            linkProps = preciseState.getDataConnectionLinkProperties();
+            linkProps = preciseState.getLinkProperties();
         }
         if (VDBG) {
             log("notifyDataConnectionForSubscriber: subId=" + subId
@@ -1722,7 +1722,7 @@ public class TelephonyRegistry extends ITelephonyRegistry.Stub {
                         && (mDataConnectionState[phoneId] != state
                         || mDataConnectionNetworkType[phoneId] != networkType)) {
                     String str = "onDataConnectionStateChanged("
-                            + dataStateToString(state)
+                            + TelephonyUtils.dataStateToString(state)
                             + ", " + getNetworkTypeName(networkType)
                             + ") subId=" + subId + ", phoneId=" + phoneId;
                     log(str);
@@ -1799,11 +1799,9 @@ public class TelephonyRegistry extends ITelephonyRegistry.Stub {
             if (validatePhoneId(phoneId)) {
                 mPreciseDataConnectionStates.get(phoneId).put(
                         apnType,
-                        new PreciseDataConnectionState(
-                                TelephonyManager.DATA_UNKNOWN,
-                                TelephonyManager.NETWORK_TYPE_UNKNOWN,
-                                apnType, null, null,
-                                DataFailCause.NONE, null));
+                        new PreciseDataConnectionState.Builder()
+                                .setApnTypes(apnType)
+                                .build());
                 for (Record r : mRecords) {
                     if (r.matchPhoneStateListenerEvent(
                             PhoneStateListener.LISTEN_PRECISE_DATA_CONNECTION_STATE)
@@ -1985,11 +1983,10 @@ public class TelephonyRegistry extends ITelephonyRegistry.Stub {
             if (validatePhoneId(phoneId)) {
                 mPreciseDataConnectionStates.get(phoneId).put(
                         apnType,
-                        new PreciseDataConnectionState(
-                                TelephonyManager.DATA_UNKNOWN,
-                                TelephonyManager.NETWORK_TYPE_UNKNOWN,
-                                apnType, null, null,
-                                failCause, null));
+                        new PreciseDataConnectionState.Builder()
+                                .setApnTypes(apnType)
+                                .setFailCause(failCause)
+                                .build());
                 for (Record r : mRecords) {
                     if (r.matchPhoneStateListenerEvent(
                             PhoneStateListener.LISTEN_PRECISE_DATA_CONNECTION_STATE)
@@ -2583,7 +2580,7 @@ public class TelephonyRegistry extends ITelephonyRegistry.Stub {
         // status bar takes care of that after taking into account all of the
         // required info.
         Intent intent = new Intent(ACTION_ANY_DATA_CONNECTION_STATE_CHANGED);
-        intent.putExtra(PHONE_CONSTANTS_STATE_KEY, dataStateToString(state));
+        intent.putExtra(PHONE_CONSTANTS_STATE_KEY, TelephonyUtils.dataStateToString(state));
         intent.putExtra(PHONE_CONSTANTS_DATA_APN_KEY, apn);
         intent.putExtra(PHONE_CONSTANTS_DATA_APN_TYPE_KEY,
                 ApnSetting.getApnTypesStringFromBitmask(apnType));
@@ -2625,16 +2622,23 @@ public class TelephonyRegistry extends ITelephonyRegistry.Stub {
                 .setCallingUid(Binder.getCallingUid());
 
         boolean shouldCheckLocationPermissions = false;
-        if ((events & ENFORCE_COARSE_LOCATION_PERMISSION_MASK) != 0) {
-            locationQueryBuilder.setMinSdkVersionForCoarse(0);
-            shouldCheckLocationPermissions = true;
-        }
 
         if ((events & ENFORCE_FINE_LOCATION_PERMISSION_MASK) != 0) {
             // Everything that requires fine location started in Q. So far...
             locationQueryBuilder.setMinSdkVersionForFine(Build.VERSION_CODES.Q);
+            // If we're enforcing fine starting in Q, we also want to enforce coarse starting in Q.
+            locationQueryBuilder.setMinSdkVersionForCoarse(Build.VERSION_CODES.Q);
+            locationQueryBuilder.setMinSdkVersionForEnforcement(Build.VERSION_CODES.Q);
             shouldCheckLocationPermissions = true;
         }
+
+        if ((events & ENFORCE_COARSE_LOCATION_PERMISSION_MASK) != 0) {
+            locationQueryBuilder.setMinSdkVersionForCoarse(0);
+            locationQueryBuilder.setMinSdkVersionForEnforcement(0);
+            shouldCheckLocationPermissions = true;
+        }
+
+        boolean isPermissionCheckSuccessful = true;
 
         if (shouldCheckLocationPermissions) {
             LocationAccessPolicy.LocationPermissionResult result =
@@ -2645,14 +2649,14 @@ public class TelephonyRegistry extends ITelephonyRegistry.Stub {
                     throw new SecurityException("Unable to listen for events " + events + " due to "
                             + "insufficient location permissions.");
                 case DENIED_SOFT:
-                    return false;
+                    isPermissionCheckSuccessful = false;
             }
         }
 
         if ((events & ENFORCE_PHONE_STATE_PERMISSION_MASK) != 0) {
             if (!TelephonyPermissions.checkCallingOrSelfReadPhoneState(
                     mContext, subId, callingPackage, callingFeatureId, message)) {
-                return false;
+                isPermissionCheckSuccessful = false;
             }
         }
 
@@ -2682,7 +2686,7 @@ public class TelephonyRegistry extends ITelephonyRegistry.Stub {
                     android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE, null);
         }
 
-        return true;
+        return isPermissionCheckSuccessful;
     }
 
     private void handleRemoveListLocked() {
@@ -2760,6 +2764,19 @@ public class TelephonyRegistry extends ITelephonyRegistry.Stub {
         }
     }
 
+    private boolean checkFineLocationAccess(Record r) {
+        return checkFineLocationAccess(r, Build.VERSION_CODES.BASE);
+    }
+
+    private boolean checkCoarseLocationAccess(Record r) {
+        return checkCoarseLocationAccess(r, Build.VERSION_CODES.BASE);
+    }
+
+    /**
+     * Note -- this method should only be used at the site of a permission check if you need to
+     * explicitly allow apps below a certain SDK level access regardless of location permissions.
+     * If you don't need app compat logic, use {@link #checkFineLocationAccess(Record)}.
+     */
     private boolean checkFineLocationAccess(Record r, int minSdk) {
         LocationAccessPolicy.LocationPermissionQuery query =
                 new LocationAccessPolicy.LocationPermissionQuery.Builder()
@@ -2769,6 +2786,8 @@ public class TelephonyRegistry extends ITelephonyRegistry.Stub {
                         .setMethod("TelephonyRegistry push")
                         .setLogAsInfo(true) // we don't need to log an error every time we push
                         .setMinSdkVersionForFine(minSdk)
+                        .setMinSdkVersionForCoarse(minSdk)
+                        .setMinSdkVersionForEnforcement(minSdk)
                         .build();
 
         return Binder.withCleanCallingIdentity(() -> {
@@ -2778,6 +2797,11 @@ public class TelephonyRegistry extends ITelephonyRegistry.Stub {
         });
     }
 
+    /**
+     * Note -- this method should only be used at the site of a permission check if you need to
+     * explicitly allow apps below a certain SDK level access regardless of location permissions.
+     * If you don't need app compat logic, use {@link #checkCoarseLocationAccess(Record)}.
+     */
     private boolean checkCoarseLocationAccess(Record r, int minSdk) {
         LocationAccessPolicy.LocationPermissionQuery query =
                 new LocationAccessPolicy.LocationPermissionQuery.Builder()
@@ -2787,6 +2811,8 @@ public class TelephonyRegistry extends ITelephonyRegistry.Stub {
                         .setMethod("TelephonyRegistry push")
                         .setLogAsInfo(true) // we don't need to log an error every time we push
                         .setMinSdkVersionForCoarse(minSdk)
+                        .setMinSdkVersionForFine(Integer.MAX_VALUE)
+                        .setMinSdkVersionForEnforcement(minSdk)
                         .build();
 
         return Binder.withCleanCallingIdentity(() -> {
@@ -2938,21 +2964,6 @@ public class TelephonyRegistry extends ITelephonyRegistry.Stub {
                 mRemoveList.add(r.binder);
             }
         }
-    }
-
-    /**
-     * Convert TelephonyManager.DATA_* to string.
-     *
-     * @return The data state in string format.
-     */
-    private static String dataStateToString(int state) {
-        switch (state) {
-            case TelephonyManager.DATA_DISCONNECTED: return "DISCONNECTED";
-            case TelephonyManager.DATA_CONNECTING: return "CONNECTING";
-            case TelephonyManager.DATA_CONNECTED: return "CONNECTED";
-            case TelephonyManager.DATA_SUSPENDED: return "SUSPENDED";
-        }
-        return "UNKNOWN(" + state + ")";
     }
 
     /**

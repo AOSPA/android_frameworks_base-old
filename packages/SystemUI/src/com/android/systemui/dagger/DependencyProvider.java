@@ -22,7 +22,6 @@ import android.app.INotificationManager;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.hardware.display.AmbientDisplayConfiguration;
-import android.hardware.display.NightDisplayListener;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.Looper;
@@ -40,6 +39,7 @@ import com.android.internal.util.NotificationMessagingUtil;
 import com.android.internal.widget.LockPatternUtils;
 import com.android.keyguard.ViewMediatorCallback;
 import com.android.systemui.Prefs;
+import com.android.systemui.accessibility.ModeSwitchesController;
 import com.android.systemui.broadcast.BroadcastDispatcher;
 import com.android.systemui.broadcast.logging.BroadcastDispatcherLogger;
 import com.android.systemui.dagger.qualifiers.Background;
@@ -77,7 +77,7 @@ import dagger.Provides;
  *
  * See SystemUI/docs/dagger.md
  */
-@Module
+@Module(includes = {NightDisplayListenerModule.class})
 public class DependencyProvider {
 
     @Singleton
@@ -100,6 +100,12 @@ public class DependencyProvider {
     @Provides
     public AmbientDisplayConfiguration provideAmbientDisplayConfiguration(Context context) {
         return new AmbientDisplayConfiguration(context);
+    }
+
+    /** */
+    @Provides
+    public Handler provideHandler() {
+        return new Handler();
     }
 
     @Singleton
@@ -142,13 +148,6 @@ public class DependencyProvider {
     @Provides
     public MetricsLogger provideMetricsLogger() {
         return new MetricsLogger();
-    }
-
-    @Singleton
-    @Provides
-    public NightDisplayListener provideNightDisplayListener(Context context,
-            @Background Handler bgHandler) {
-        return new NightDisplayListener(context, bgHandler);
     }
 
     @Singleton
@@ -243,4 +242,12 @@ public class DependencyProvider {
     static UiEventLogger provideUiEventLogger() {
         return new UiEventLoggerImpl();
     }
+
+    /** */
+    @Singleton
+    @Provides
+    public ModeSwitchesController providesModeSwitchesController(Context context) {
+        return new ModeSwitchesController(context);
+    }
+
 }

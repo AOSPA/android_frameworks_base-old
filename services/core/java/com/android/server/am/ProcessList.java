@@ -125,7 +125,6 @@ import com.android.server.pm.parsing.pkg.AndroidPackage;
 import com.android.server.wm.ActivityServiceConnectionsHolder;
 import com.android.server.wm.WindowManagerService;
 
-import dalvik.annotation.compat.VersionCodes;
 import dalvik.system.VMRuntime;
 
 import java.io.File;
@@ -155,9 +154,6 @@ public final class ProcessList {
     // A system property to control if obb app data isolation is enabled in vold.
     static final String ANDROID_VOLD_APP_DATA_ISOLATION_ENABLED_PROPERTY =
             "persist.sys.vold_app_data_isolation_enabled";
-
-    // A system property to control if fuse is enabled.
-    static final String ANDROID_FUSE_ENABLED = "persist.sys.fuse";
 
     // The minimum time we allow between crashes, for us to consider this
     // application to be bad and stop and its services and reject broadcasts.
@@ -346,8 +342,16 @@ public final class ProcessList {
      * Pointers</a>
      */
     @ChangeId
-    @EnabledAfter(targetSdkVersion = VersionCodes.Q)
+    @EnabledAfter(targetSdkVersion = Build.VERSION_CODES.Q)
     private static final long NATIVE_HEAP_POINTER_TAGGING = 135754954; // This is a bug id.
+
+    /**
+     * Enable memory tag checks in non-system apps. This flag will only have an effect on
+     * hardware supporting the ARM Memory Tagging Extension (MTE).
+     */
+    @ChangeId
+    @Disabled
+    private static final long NATIVE_MEMORY_TAGGING = 135772972; // This is a bug id.
 
     /**
      * Enable sampled memory bug detection in the app.
@@ -362,7 +366,7 @@ public final class ProcessList {
      * app has made them world-readable.
      */
     @ChangeId
-    @EnabledAfter(targetSdkVersion = VersionCodes.Q)
+    @EnabledAfter(targetSdkVersion = Build.VERSION_CODES.Q)
     private static final long APP_DATA_DIRECTORY_ISOLATION = 143937733; // See b/143937733
 
     ActivityManagerService mService = null;
@@ -717,13 +721,8 @@ public final class ProcessList {
         // want some apps enabled while some apps disabled
         mAppDataIsolationEnabled =
                 SystemProperties.getBoolean(ANDROID_APP_DATA_ISOLATION_ENABLED_PROPERTY, true);
-        boolean fuseEnabled = SystemProperties.getBoolean(ANDROID_FUSE_ENABLED, false);
-        boolean voldAppDataIsolationEnabled = SystemProperties.getBoolean(
+        mVoldAppDataIsolationEnabled = SystemProperties.getBoolean(
                 ANDROID_VOLD_APP_DATA_ISOLATION_ENABLED_PROPERTY, false);
-        if (!fuseEnabled && voldAppDataIsolationEnabled) {
-            Slog.e(TAG, "Fuse is not enabled while vold app data isolation is enabled");
-        }
-        mVoldAppDataIsolationEnabled = fuseEnabled && voldAppDataIsolationEnabled;
         mAppDataIsolationWhitelistedApps = new ArrayList<>(
                 SystemConfig.getInstance().getAppDataIsolationWhitelistedApps());
 
@@ -1675,6 +1674,25 @@ public final class ProcessList {
         return gidArray;
     }
 
+    private boolean shouldEnableMemoryTagging(ProcessRecord app) {
+        // Ensure the hardware + kernel actually supports MTE.
+        if (!Zygote.nativeSupportsMemoryTagging()) {
+            return false;
+        }
+
+        // Enable MTE for system apps if supported.
+        if ((app.info.flags & ApplicationInfo.FLAG_SYSTEM) != 0) {
+            return true;
+        }
+
+        // Enable MTE if the compat feature is enabled.
+        if (mPlatformCompat.isChangeEnabled(NATIVE_MEMORY_TAGGING, app.info)) {
+            return true;
+        }
+
+        return false;
+    }
+
     private boolean shouldEnableTaggedPointers(ProcessRecord app) {
         // Ensure we have platform + kernel support for TBI.
         if (!Zygote.nativeSupportsTaggedPointers()) {
@@ -1695,6 +1713,11 @@ public final class ProcessList {
     }
 
     private int decideTaggingLevel(ProcessRecord app) {
+        // Check MTE support first, as it should take precedence over TBI.
+        if (shouldEnableMemoryTagging(app)) {
+            return Zygote.MEMORY_TAG_LEVEL_ASYNC;
+        }
+
         if (shouldEnableTaggedPointers(app)) {
             return Zygote.MEMORY_TAG_LEVEL_TBI;
         }
@@ -1923,13 +1946,13 @@ public final class ProcessList {
             // If instructionSet is non-null, this indicates that the system_server is spawning a
             // process with an ISA that may be different from its own. System (kernel and hardware)
             // compatililty for these features is checked in the decideTaggingLevel in the
-            // system_server process (not the child process). As TBI is only supported in aarch64,
-            // we can simply ensure that the new process is also aarch64. This prevents the mismatch
-            // where a 64-bit system server spawns a 32-bit child that thinks it should enable some
-            // tagging variant. Theoretically, a 32-bit system server could exist that spawns 64-bit
-            // processes, in which case the new process won't get any tagging. This is fine as we
-            // haven't seen this configuration in practice, and we can reasonable assume that if
-            // tagging is desired, the system server will be 64-bit.
+            // system_server process (not the child process). As both MTE and TBI are only supported
+            // in aarch64, we can simply ensure that the new process is also aarch64. This prevents
+            // the mismatch where a 64-bit system server spawns a 32-bit child that thinks it should
+            // enable some tagging variant. Theoretically, a 32-bit system server could exist that
+            // spawns 64-bit processes, in which case the new process won't get any tagging. This is
+            // fine as we haven't seen this configuration in practice, and we can reasonable assume
+            // that if tagging is desired, the system server will be 64-bit.
             if (instructionSet == null || instructionSet.equals("arm64")) {
                 runtimeFlags |= decideTaggingLevel(app);
             }
@@ -2033,7 +2056,9 @@ public final class ProcessList {
             final int pid = precedence.pid;
             long now = System.currentTimeMillis();
             final long end = now + PROC_KILL_TIMEOUT;
+            final int oldPolicy = StrictMode.getThreadPolicyMask();
             try {
+                StrictMode.setThreadPolicyMask(0);
                 Process.waitForProcessDeath(pid, PROC_KILL_TIMEOUT);
                 // It's killed successfully, but we'd make sure the cleanup work is done.
                 synchronized (precedence) {
@@ -2052,9 +2077,11 @@ public final class ProcessList {
                     }
                 }
             } catch (Exception e) {
-                // It's still alive...
+                // It's still alive... maybe blocked at uninterruptible sleep ?
                 Slog.wtf(TAG, precedence.toString() + " refused to die, but we need to launch "
-                        + app);
+                        + app, e);
+            } finally {
+                StrictMode.setThreadPolicyMask(oldPolicy);
             }
         }
         try {
@@ -2349,9 +2376,9 @@ public final class ProcessList {
             if ((intentFlags & Intent.FLAG_FROM_BACKGROUND) != 0) {
                 // If we are in the background, then check to see if this process
                 // is bad.  If so, we will just silently fail.
-                if (mService.mAppErrors.isBadProcessLocked(info)) {
+                if (mService.mAppErrors.isBadProcessLocked(processName, info.uid)) {
                     if (DEBUG_PROCESSES) Slog.v(TAG, "Bad process: " + info.uid
-                            + "/" + info.processName);
+                            + "/" + processName);
                     return null;
                 }
             } else {
@@ -2360,13 +2387,13 @@ public final class ProcessList {
                 // least one crash dialog again, and make the process good again
                 // if it had been bad.
                 if (DEBUG_PROCESSES) Slog.v(TAG, "Clearing bad process: " + info.uid
-                        + "/" + info.processName);
-                mService.mAppErrors.resetProcessCrashTimeLocked(info);
-                if (mService.mAppErrors.isBadProcessLocked(info)) {
+                        + "/" + processName);
+                mService.mAppErrors.resetProcessCrashTimeLocked(processName, info.uid);
+                if (mService.mAppErrors.isBadProcessLocked(processName, info.uid)) {
                     EventLog.writeEvent(EventLogTags.AM_PROC_GOOD,
                             UserHandle.getUserId(info.uid), info.uid,
                             info.processName);
-                    mService.mAppErrors.clearBadProcessLocked(info);
+                    mService.mAppErrors.clearBadProcessLocked(processName, info.uid);
                     if (app != null) {
                         app.bad = false;
                     }
@@ -2406,7 +2433,15 @@ public final class ProcessList {
             ProcessList.killProcessGroup(app.uid, app.pid);
             checkSlow(startTime, "startProcess: done killing old proc");
 
-            Slog.wtf(TAG_PROCESSES, app.toString() + " is attached to a previous process");
+            if (!app.killed || mService.mLastMemoryLevel <= ProcessStats.ADJ_MEM_FACTOR_NORMAL
+                    || app.setProcState < ActivityManager.PROCESS_STATE_CACHED_EMPTY
+                    || app.lastCachedPss < getCachedRestoreThresholdKb()) {
+                // Throw a wtf if it's not killed, or killed but not because the system was in
+                // memory pressure + the app was in "cch-empty" and used large amount of memory
+                Slog.wtf(TAG_PROCESSES, app.toString() + " is attached to a previous process");
+            } else {
+                Slog.w(TAG_PROCESSES, app.toString() + " is attached to a previous process");
+            }
             // We are not going to re-use the ProcessRecord, as we haven't dealt with the cleanup
             // routine of it yet, but we'd set it as the precedence of the new process.
             precedence = app;
@@ -2809,7 +2844,15 @@ public final class ProcessList {
             // We are re-adding a persistent process.  Whatevs!  Just leave it there.
             Slog.w(TAG, "Re-adding persistent process " + proc);
         } else if (old != null) {
-            Slog.wtf(TAG, "Already have existing proc " + old + " when adding " + proc);
+            if (old.killed) {
+                // The old process has been killed, we probably haven't had
+                // a chance to clean up the old record, just log a warning
+                Slog.w(TAG, "Existing proc " + old + " was killed "
+                        + (SystemClock.uptimeMillis() - old.mKillTime)
+                        + "ms ago when adding " + proc);
+            } else {
+                Slog.wtf(TAG, "Already have existing proc " + old + " when adding " + proc);
+            }
         }
         UidRecord uidRec = mActiveUids.get(proc.uid);
         if (uidRec == null) {

@@ -19,10 +19,15 @@ package com.android.internal.os;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.os.Binder;
+import android.os.Handler;
+import android.os.Looper;
 import android.os.Process;
 import android.os.SystemClock;
+import android.os.UserHandle;
 import android.text.format.DateFormat;
 import android.util.ArrayMap;
+import android.util.ArraySet;
+import android.util.IntArray;
 import android.util.Pair;
 import android.util.Slog;
 import android.util.SparseArray;
@@ -32,13 +37,10 @@ import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.os.BinderInternal.CallSession;
 
 import java.io.PrintWriter;
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Map;
 import java.util.Queue;
 import java.util.Random;
 import java.util.concurrent.ConcurrentLinkedQueue;
@@ -93,15 +95,57 @@ public class BinderCallsStats implements BinderInternal.Observer {
     private CachedDeviceState.Readonly mDeviceState;
     private CachedDeviceState.TimeInStateStopwatch mBatteryStopwatch;
 
+    private static final int CALL_STATS_OBSERVER_DEBOUNCE_MILLIS = 5000;
+    private BinderInternal.CallStatsObserver mCallStatsObserver;
+    private ArraySet<Integer> mSendUidsToObserver = new ArraySet<>(32);
+    private final Handler mCallStatsObserverHandler;
+    private Runnable mCallStatsObserverRunnable = new Runnable() {
+        @Override
+        public void run() {
+            if (mCallStatsObserver == null) {
+                return;
+            }
+
+            noteCallsStatsDelayed();
+
+            synchronized (mLock) {
+                int size = mSendUidsToObserver.size();
+                for (int i = 0; i < size; i++) {
+                    UidEntry uidEntry = mUidEntries.get(mSendUidsToObserver.valueAt(i));
+                    if (uidEntry != null) {
+                        ArrayMap<CallStatKey, CallStat> callStats = uidEntry.mCallStats;
+                        mCallStatsObserver.noteCallStats(uidEntry.workSourceUid,
+                                uidEntry.incrementalCallCount, callStats.values());
+                        uidEntry.incrementalCallCount = 0;
+                        for (int j = callStats.size() - 1; j >= 0; j--) {
+                            callStats.valueAt(j).incrementalCallCount = 0;
+                        }
+                    }
+                }
+                mSendUidsToObserver.clear();
+            }
+        }
+    };
+
+    private final Object mNativeTidsLock = new Object();
+    // @GuardedBy("mNativeTidsLock")  // Cannot mark it as "GuardedBy" because it's read
+    // directly, as a volatile field.
+    private volatile IntArray mNativeTids = new IntArray(0);
+
     /** Injector for {@link BinderCallsStats}. */
     public static class Injector {
         public Random getRandomGenerator() {
             return new Random();
         }
+
+        public Handler getHandler() {
+            return new Handler(Looper.getMainLooper());
+        }
     }
 
     public BinderCallsStats(Injector injector) {
         this.mRandom = injector.getRandomGenerator();
+        this.mCallStatsObserverHandler = injector.getHandler();
     }
 
     public void setDeviceState(@NonNull CachedDeviceState.Readonly deviceState) {
@@ -112,12 +156,32 @@ public class BinderCallsStats implements BinderInternal.Observer {
         mBatteryStopwatch = deviceState.createTimeOnBatteryStopwatch();
     }
 
+    /**
+     * Registers an observer for call stats, which is invoked periodically with accumulated
+     * binder call stats.
+     */
+    public void setCallStatsObserver(
+            BinderInternal.CallStatsObserver callStatsObserver) {
+        mCallStatsObserver = callStatsObserver;
+        noteCallsStatsDelayed();
+    }
+
+    private void noteCallsStatsDelayed() {
+        mCallStatsObserverHandler.removeCallbacks(mCallStatsObserverRunnable);
+        if (mCallStatsObserver != null) {
+            mCallStatsObserverHandler.postDelayed(mCallStatsObserverRunnable,
+                    CALL_STATS_OBSERVER_DEBOUNCE_MILLIS);
+        }
+    }
+
     @Override
     @Nullable
     public CallSession callStarted(Binder binder, int code, int workSourceUid) {
         if (mDeviceState == null || mDeviceState.isCharging()) {
             return null;
         }
+
+        noteNativeThreadId();
 
         final CallSession s = obtainCallSession();
         s.binderClass = binder.getClass();
@@ -179,6 +243,7 @@ public class BinderCallsStats implements BinderInternal.Observer {
 
             final UidEntry uidEntry = getUidEntry(workSourceUid);
             uidEntry.callCount++;
+            uidEntry.incrementalCallCount++;
 
             if (recordCall) {
                 uidEntry.cpuTimeMicros += duration;
@@ -194,6 +259,7 @@ public class BinderCallsStats implements BinderInternal.Observer {
                 }
 
                 callStat.callCount++;
+                callStat.incrementalCallCount++;
                 callStat.recordedCallCount++;
                 callStat.cpuTimeMicros += duration;
                 callStat.maxCpuTimeMicros = Math.max(callStat.maxCpuTimeMicros, duration);
@@ -215,7 +281,11 @@ public class BinderCallsStats implements BinderInternal.Observer {
                         screenInteractive);
                 if (callStat != null) {
                     callStat.callCount++;
+                    callStat.incrementalCallCount++;
                 }
+            }
+            if (mCallStatsObserver != null && !UserHandle.isCore(workSourceUid)) {
+                mSendUidsToObserver.add(workSourceUid);
             }
         }
     }
@@ -250,26 +320,24 @@ public class BinderCallsStats implements BinderInternal.Observer {
         }
     }
 
-    @Nullable
-    private Method getDefaultTransactionNameMethod(Class<? extends Binder> binder) {
-        try {
-            return binder.getMethod("getDefaultTransactionName", int.class);
-        } catch (NoSuchMethodException e) {
-            // The method might not be present for stubs not generated with AIDL.
-            return null;
-        }
-    }
-
-    @Nullable
-    private String resolveTransactionCode(Method getDefaultTransactionName, int transactionCode) {
-        if (getDefaultTransactionName == null) {
-            return null;
+    private void noteNativeThreadId() {
+        final int tid = getNativeTid();
+        int index = mNativeTids.binarySearch(tid);
+        if (index >= 0) {
+            return;
         }
 
-        try {
-            return (String) getDefaultTransactionName.invoke(null, transactionCode);
-        } catch (IllegalAccessException | InvocationTargetException | ClassCastException e) {
-            throw new RuntimeException(e);
+        // Use the copy-on-write approach. The changes occur exceedingly infrequently, so
+        // this code path is exercised just a few times per boot
+        synchronized (mNativeTidsLock) {
+            IntArray nativeTids = mNativeTids;
+            index = nativeTids.binarySearch(tid);
+            if (index < 0) {
+                IntArray copyOnWriteArray = new IntArray(nativeTids.size() + 1);
+                copyOnWriteArray.addAll(nativeTids);
+                copyOnWriteArray.add(-index - 1, tid);
+                mNativeTids = copyOnWriteArray;
+            }
         }
     }
 
@@ -311,31 +379,23 @@ public class BinderCallsStats implements BinderInternal.Observer {
 
         // Resolve codes outside of the lock since it can be slow.
         ExportedCallStat previous = null;
-        // Cache the previous method/transaction code.
-        Method getDefaultTransactionName = null;
         String previousMethodName = null;
         resultCallStats.sort(BinderCallsStats::compareByBinderClassAndCode);
+        BinderTransactionNameResolver resolver = new BinderTransactionNameResolver();
         for (ExportedCallStat exported : resultCallStats) {
             final boolean isClassDifferent = previous == null
                     || !previous.className.equals(exported.className);
-            if (isClassDifferent) {
-                getDefaultTransactionName = getDefaultTransactionNameMethod(exported.binderClass);
-            }
-
             final boolean isCodeDifferent = previous == null
                     || previous.transactionCode != exported.transactionCode;
             final String methodName;
             if (isClassDifferent || isCodeDifferent) {
-                String resolvedCode = resolveTransactionCode(
-                        getDefaultTransactionName, exported.transactionCode);
-                methodName = resolvedCode == null
-                        ? String.valueOf(exported.transactionCode)
-                        : resolvedCode;
+                methodName = resolver.getMethodName(exported.binderClass, exported.transactionCode);
             } else {
                 methodName = previousMethodName;
             }
             previousMethodName = methodName;
             exported.methodName = methodName;
+            previous = exported;
         }
 
         // Debug entries added to help validate the data.
@@ -472,6 +532,17 @@ public class BinderCallsStats implements BinderInternal.Observer {
 
     protected int getCallingUid() {
         return Binder.getCallingUid();
+    }
+
+    protected int getNativeTid() {
+        return Binder.getNativeTid();
+    }
+
+    /**
+     * Returns known Linux TIDs for threads taking incoming binder calls.
+     */
+    public int[] getNativeTids() {
+        return mNativeTids.toArray();
     }
 
     protected long getElapsedRealtimeMicro() {
@@ -620,13 +691,31 @@ public class BinderCallsStats implements BinderInternal.Observer {
         public long maxRequestSizeBytes;
         public long maxReplySizeBytes;
         public long exceptionCount;
+        // Call count since reset
+        public long incrementalCallCount;
 
-        CallStat(int callingUid, Class<? extends Binder> binderClass, int transactionCode,
+        public CallStat(int callingUid, Class<? extends Binder> binderClass, int transactionCode,
                 boolean screenInteractive) {
             this.callingUid = callingUid;
             this.binderClass = binderClass;
             this.transactionCode = transactionCode;
             this.screenInteractive = screenInteractive;
+        }
+
+        @Override
+        public String toString() {
+            // This is expensive, but CallStat.toString() is only used for debugging.
+            String methodName = new BinderTransactionNameResolver().getMethodName(binderClass,
+                    transactionCode);
+            return "CallStat{"
+                    + "callingUid=" + callingUid
+                    + ", transaction=" + binderClass.getSimpleName() + '.' + methodName
+                    + ", callCount=" + callCount
+                    + ", incrementalCallCount=" + incrementalCallCount
+                    + ", recordedCallCount=" + recordedCallCount
+                    + ", cpuTimeMicros=" + cpuTimeMicros
+                    + ", latencyMicros=" + latencyMicros
+                    + '}';
         }
     }
 
@@ -675,13 +764,15 @@ public class BinderCallsStats implements BinderInternal.Observer {
         // Approximate total CPU usage can be computed by
         // cpuTimeMicros * callCount / recordedCallCount
         public long cpuTimeMicros;
+        // Call count that gets reset after delivery to BatteryStats
+        public long incrementalCallCount;
 
         UidEntry(int uid) {
             this.workSourceUid = uid;
         }
 
         // Aggregate time spent per each call name: call_desc -> cpu_time_micros
-        private Map<CallStatKey, CallStat> mCallStats = new ArrayMap<>();
+        private ArrayMap<CallStatKey, CallStat> mCallStats = new ArrayMap<>();
         private CallStatKey mTempKey = new CallStatKey();
 
         @Nullable

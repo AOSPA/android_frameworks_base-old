@@ -41,7 +41,6 @@ import android.content.Intent;
 import android.content.ServiceConnection;
 import android.content.pm.PackageManager;
 import android.content.pm.ParceledListSlice;
-import android.graphics.GraphicBuffer;
 import android.graphics.ParcelableColorSpace;
 import android.graphics.Region;
 import android.hardware.HardwareBuffer;
@@ -64,7 +63,7 @@ import android.util.SparseArray;
 import android.view.Display;
 import android.view.KeyEvent;
 import android.view.MagnificationSpec;
-import android.view.SurfaceControl.ScreenshotGraphicBuffer;
+import android.view.SurfaceControl.ScreenshotHardwareBuffer;
 import android.view.View;
 import android.view.WindowInfo;
 import android.view.accessibility.AccessibilityCache;
@@ -80,6 +79,7 @@ import com.android.internal.util.DumpUtils;
 import com.android.internal.util.function.pooled.PooledLambda;
 import com.android.server.LocalServices;
 import com.android.server.accessibility.AccessibilityWindowManager.RemoteAccessibilityConnection;
+import com.android.server.accessibility.magnification.FullScreenMagnificationController;
 import com.android.server.wm.ActivityTaskManagerInternal;
 import com.android.server.wm.WindowManagerInternal;
 
@@ -90,6 +90,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
+import java.util.NoSuchElementException;
 import java.util.Set;
 
 /**
@@ -206,7 +207,8 @@ abstract class AbstractAccessibilityServiceConnection extends IAccessibilityServ
         /**
          * @return The magnification controller
          */
-        @NonNull MagnificationController getMagnificationController();
+        @NonNull
+        FullScreenMagnificationController getFullScreenMagnificationController();
 
         /**
          * Called back to notify system that the client has changed
@@ -296,6 +298,7 @@ abstract class AbstractAccessibilityServiceConnection extends IAccessibilityServ
         mEventTypes = info.eventTypes;
         mFeedbackType = info.feedbackType;
         String[] packageNames = info.packageNames;
+        mPackageNames.clear();
         if (packageNames != null) {
             mPackageNames.addAll(Arrays.asList(packageNames));
         }
@@ -831,7 +834,7 @@ abstract class AbstractAccessibilityServiceConnection extends IAccessibilityServ
         }
         final long identity = Binder.clearCallingIdentity();
         try {
-            return mSystemSupport.getMagnificationController().getScale(displayId);
+            return mSystemSupport.getFullScreenMagnificationController().getScale(displayId);
         } finally {
             Binder.restoreCallingIdentity(identity);
         }
@@ -844,8 +847,8 @@ abstract class AbstractAccessibilityServiceConnection extends IAccessibilityServ
             if (!hasRightsToCurrentUserLocked()) {
                 return region;
             }
-            MagnificationController magnificationController =
-                    mSystemSupport.getMagnificationController();
+            FullScreenMagnificationController magnificationController =
+                    mSystemSupport.getFullScreenMagnificationController();
             boolean registeredJustForThisCall =
                     registerMagnificationIfNeeded(displayId, magnificationController);
             final long identity = Binder.clearCallingIdentity();
@@ -867,8 +870,8 @@ abstract class AbstractAccessibilityServiceConnection extends IAccessibilityServ
             if (!hasRightsToCurrentUserLocked()) {
                 return 0.0f;
             }
-            MagnificationController magnificationController =
-                    mSystemSupport.getMagnificationController();
+            FullScreenMagnificationController magnificationController =
+                    mSystemSupport.getFullScreenMagnificationController();
             boolean registeredJustForThisCall =
                     registerMagnificationIfNeeded(displayId, magnificationController);
             final long identity = Binder.clearCallingIdentity();
@@ -889,8 +892,8 @@ abstract class AbstractAccessibilityServiceConnection extends IAccessibilityServ
             if (!hasRightsToCurrentUserLocked()) {
                 return 0.0f;
             }
-            MagnificationController magnificationController =
-                    mSystemSupport.getMagnificationController();
+            FullScreenMagnificationController magnificationController =
+                    mSystemSupport.getFullScreenMagnificationController();
             boolean registeredJustForThisCall =
                     registerMagnificationIfNeeded(displayId, magnificationController);
             final long identity = Binder.clearCallingIdentity();
@@ -906,7 +909,7 @@ abstract class AbstractAccessibilityServiceConnection extends IAccessibilityServ
     }
 
     private boolean registerMagnificationIfNeeded(int displayId,
-            MagnificationController magnificationController) {
+            FullScreenMagnificationController magnificationController) {
         if (!magnificationController.isRegistered(displayId)
                 && mSecurityPolicy.canControlMagnification(this)) {
             magnificationController.register(displayId);
@@ -927,8 +930,8 @@ abstract class AbstractAccessibilityServiceConnection extends IAccessibilityServ
         }
         final long identity = Binder.clearCallingIdentity();
         try {
-            MagnificationController magnificationController =
-                    mSystemSupport.getMagnificationController();
+            FullScreenMagnificationController magnificationController =
+                    mSystemSupport.getFullScreenMagnificationController();
             return (magnificationController.reset(displayId, animate)
                     || !magnificationController.isMagnifying(displayId));
         } finally {
@@ -948,8 +951,8 @@ abstract class AbstractAccessibilityServiceConnection extends IAccessibilityServ
             }
             final long identity = Binder.clearCallingIdentity();
             try {
-                MagnificationController magnificationController =
-                        mSystemSupport.getMagnificationController();
+                FullScreenMagnificationController magnificationController =
+                        mSystemSupport.getFullScreenMagnificationController();
                 if (!magnificationController.isRegistered(displayId)) {
                     magnificationController.register(displayId);
                 }
@@ -1022,7 +1025,7 @@ abstract class AbstractAccessibilityServiceConnection extends IAccessibilityServ
         final long identity = Binder.clearCallingIdentity();
         try {
             mMainHandler.post(PooledLambda.obtainRunnable((nonArg) -> {
-                final ScreenshotGraphicBuffer screenshotBuffer = LocalServices
+                final ScreenshotHardwareBuffer screenshotBuffer = LocalServices
                         .getService(DisplayManagerInternal.class).userScreenshot(displayId);
                 if (screenshotBuffer != null) {
                     sendScreenshotSuccess(screenshotBuffer, callback);
@@ -1036,27 +1039,24 @@ abstract class AbstractAccessibilityServiceConnection extends IAccessibilityServ
         }
     }
 
-    private void sendScreenshotSuccess(ScreenshotGraphicBuffer screenshotBuffer,
+    private void sendScreenshotSuccess(ScreenshotHardwareBuffer screenshotBuffer,
             RemoteCallback callback) {
-        final GraphicBuffer graphicBuffer = screenshotBuffer.getGraphicBuffer();
-        try (HardwareBuffer hardwareBuffer =
-                     HardwareBuffer.createFromGraphicBuffer(graphicBuffer)) {
-            final ParcelableColorSpace colorSpace =
-                    new ParcelableColorSpace(screenshotBuffer.getColorSpace());
+        final HardwareBuffer hardwareBuffer = screenshotBuffer.getHardwareBuffer();
+        final ParcelableColorSpace colorSpace =
+                new ParcelableColorSpace(screenshotBuffer.getColorSpace());
 
-            final Bundle payload = new Bundle();
-            payload.putInt(KEY_ACCESSIBILITY_SCREENSHOT_STATUS,
-                    AccessibilityService.TAKE_SCREENSHOT_SUCCESS);
-            payload.putParcelable(KEY_ACCESSIBILITY_SCREENSHOT_HARDWAREBUFFER,
-                    hardwareBuffer);
-            payload.putParcelable(KEY_ACCESSIBILITY_SCREENSHOT_COLORSPACE, colorSpace);
-            payload.putLong(KEY_ACCESSIBILITY_SCREENSHOT_TIMESTAMP,
-                    SystemClock.uptimeMillis());
+        final Bundle payload = new Bundle();
+        payload.putInt(KEY_ACCESSIBILITY_SCREENSHOT_STATUS,
+                AccessibilityService.TAKE_SCREENSHOT_SUCCESS);
+        payload.putParcelable(KEY_ACCESSIBILITY_SCREENSHOT_HARDWAREBUFFER,
+                hardwareBuffer);
+        payload.putParcelable(KEY_ACCESSIBILITY_SCREENSHOT_COLORSPACE, colorSpace);
+        payload.putLong(KEY_ACCESSIBILITY_SCREENSHOT_TIMESTAMP,
+                SystemClock.uptimeMillis());
 
-            // Send back the result.
-            callback.sendResult(payload);
-            hardwareBuffer.close();
-        }
+        // Send back the result.
+        callback.sendResult(payload);
+        hardwareBuffer.close();
     }
 
     private void sendScreenshotFailure(@AccessibilityService.ScreenshotErrorCode int errorCode,
@@ -1179,7 +1179,11 @@ abstract class AbstractAccessibilityServiceConnection extends IAccessibilityServ
                 /* ignore */
         }
         if (mService != null) {
-            mService.unlinkToDeath(this, 0);
+            try {
+                mService.unlinkToDeath(this, 0);
+            } catch (NoSuchElementException e) {
+                Slog.e(LOG_TAG, "Failed unregistering death link");
+            }
             mService = null;
         }
 

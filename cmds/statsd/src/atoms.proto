@@ -583,9 +583,10 @@ message Atom {
         SupportedRadioAccessFamily supported_radio_access_family = 10079 [(module) = "telephony"];
         SettingSnapshot setting_snapshot = 10080 [(module) = "framework"];
         BlobInfo blob_info = 10081 [(module) = "framework"];
-        DataUsageBytesTransfer data_usage_bytes_transfer = 10082 [(module) = "framework"];
+        DataUsageBytesTransfer data_usage_bytes_transfer =
+                10082 [(module) = "framework", (truncate_timestamp) = true];
         BytesTransferByTagAndMetered bytes_transfer_by_tag_and_metered =
-                10083 [(module) = "framework"];
+                10083 [(module) = "framework", (truncate_timestamp) = true];
         DNDModeProto dnd_mode_rule = 10084 [(module) = "framework"];
         GeneralExternalStorageAccessStats general_external_storage_access_stats =
             10085 [(module) = "mediaprovider"];
@@ -4244,6 +4245,19 @@ message BinaryPushStateChanged {
         INSTALL_FAILURE_STATE_MISMATCH = 24;
         INSTALL_FAILURE_COMMIT = 25;
         REBOOT_TRIGGERED = 26;
+        // Logged after INSTALL_REQUESTED for devices installing a train that
+        // contains no module requiring reboot.
+        REBOOT_NOT_REQUIRED = 27;
+        // Logged after INSTALL_REQUESTED for devices that are installing a train
+        // which requires reboot and eligible for soft restart.
+        SOFT_RESTART_ELIGIBLE = 28;
+        // Logged after INSTALL_REQUESTED for devices that are installing a train
+        // which requires reboot and eligible for notification restart.
+        NOTIFICATION_RESTART_ELIGIBLE = 29;
+        // Logged after INSTALL_REQUESTED for devices that are installing a train
+        // which requires reboot and not eligible for any reboot promotion strategy
+        // (e.g. soft restart, notification restart).
+        NO_REBOOT_PROMOTION_STRATEGY_ELIGIBLE = 30;
     }
     optional State state = 6;
     // Possible experiment ids for monitoring this push.
@@ -4577,7 +4591,7 @@ message GeneralExternalStorageAccessStats {
     // Includes file path and ContentResolver accesses
     optional uint32 secondary_storage_accesses = 4;
     // Comma-separated list of mime types that were accessed.
-    optional MimeTypes mime_types_accessed = 5;
+    optional MimeTypes mime_types_accessed = 5 [(log_mode) = MODE_BYTES];
 }
 
 /**
@@ -6167,7 +6181,7 @@ message ProcessStatsAvailablePagesProto {
  * Pulled from ProcessStatsService.java
  */
 message ProcStats {
-    optional ProcessStatsSectionProto proc_stats_section = 1;
+    optional ProcessStatsSectionProto proc_stats_section = 1 [(log_mode) = MODE_BYTES];
     // Data pulled from device into this is sometimes sharded across multiple atoms to work around
     // a size limit. When this happens, this shard ID will contain an increasing 1-indexed integer
     // with the number of this shard.
@@ -6178,7 +6192,7 @@ message ProcStats {
  * Pulled from ProcessStatsService.java
  */
 message ProcStatsPkgProc {
-    optional ProcessStatsSectionProto proc_stats_section = 1;
+    optional ProcessStatsSectionProto proc_stats_section = 1 [(log_mode) = MODE_BYTES];
 }
 
 // Next Tag: 2
@@ -6196,7 +6210,7 @@ message NotificationRemoteViewsProto {
  * Pulled from NotificationManagerService.java
  */
 message NotificationRemoteViews {
-    optional NotificationRemoteViewsProto notification_remote_views = 1;
+    optional NotificationRemoteViewsProto notification_remote_views = 1 [(log_mode) = MODE_BYTES];
 }
 
 /**
@@ -6264,7 +6278,7 @@ message DNDModeProto {
     // May also be "MANUAL_RULE" to indicate app-activation of the manual rule.
     optional string id = 5;
     optional int32 uid = 6 [(is_uid) = true]; // currently only SYSTEM_UID or 0 for other
-    optional DNDPolicyProto policy = 7;
+    optional DNDPolicyProto policy = 7 [(log_mode) = MODE_BYTES];
 }
 
 /**
@@ -6429,7 +6443,7 @@ message PowerProfileProto {
  * Pulled from PowerProfile.java
  */
 message PowerProfile {
-    optional PowerProfileProto power_profile = 1;
+    optional PowerProfileProto power_profile = 1 [(log_mode) = MODE_BYTES];
 }
 
 /**
@@ -8124,7 +8138,7 @@ message DeviceIdentifierAccessDenied {
 message TrainInfo {
     optional int64 train_version_code = 1;
 
-    optional TrainExperimentIds train_experiment_id = 2;
+    optional TrainExperimentIds train_experiment_id = 2 [(log_mode) = MODE_BYTES];
 
     optional string train_name = 3;
 
@@ -11172,8 +11186,8 @@ message BlobInfo {
     optional int64 expiry_timestamp_millis = 3;
 
     // List of committers of this Blob
-    optional BlobCommitterListProto committers = 4;
+    optional BlobCommitterListProto committers = 4 [(log_mode) = MODE_BYTES];
 
     // List of leasees of this Blob
-    optional BlobLeaseeListProto leasees = 5;
+    optional BlobLeaseeListProto leasees = 5 [(log_mode) = MODE_BYTES];
 }

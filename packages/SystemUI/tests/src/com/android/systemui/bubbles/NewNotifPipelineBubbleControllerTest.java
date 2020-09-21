@@ -394,7 +394,7 @@ public class NewNotifPipelineBubbleControllerTest extends SysuiTestCase {
         mBubbleData.setExpanded(true);
         assertTrue(mBubbleController.isStackExpanded());
         verify(mBubbleExpandListener, atLeastOnce()).onBubbleExpandChanged(
-                true, mRow.getEntry().getKey());
+                true, mRow2.getEntry().getKey());
 
         // Last added is the one that is expanded
         assertEquals(mRow2.getEntry().getKey(), mBubbleData.getSelectedBubble().getKey());
@@ -414,6 +414,7 @@ public class NewNotifPipelineBubbleControllerTest extends SysuiTestCase {
         // expand for selected bubble
         verify(mBubbleExpandListener, atLeastOnce()).onBubbleExpandChanged(
                 true, mRow.getEntry().getKey());
+
 
         // Collapse
         mBubbleController.collapseStack();

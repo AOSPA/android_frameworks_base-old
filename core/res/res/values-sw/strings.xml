@@ -193,8 +193,10 @@
     <string name="network_logging_notification_text" msgid="1327373071132562512">"Shirika lako linadhibiti kifaa hiki na huenda likafuatilia shughuli kwenye mtandao. Gusa ili upate maelezo zaidi."</string>
     <string name="location_changed_notification_title" msgid="3620158742816699316">"Programu zinaweza kutambua mahali ulipo"</string>
     <string name="location_changed_notification_text" msgid="7158423339982706912">"Wasiliana na msimamizi wako wa TEHAMA ili upate maelezo zaidi"</string>
+    <string name="geofencing_service" msgid="3826902410740315456">"Huduma ya Kuweka Mipaka Pepe"</string>
     <string name="country_detector" msgid="7023275114706088854">"Kitambuzi cha Nchi"</string>
     <string name="location_service" msgid="2439187616018455546">"Huduma ya Mahali"</string>
+    <string name="gnss_service" msgid="8907781262179951385">"Huduma ya GNSS"</string>
     <string name="sensor_notification_service" msgid="7474531979178682676">"Huduma ya Arifa ya Kitambuzi"</string>
     <string name="twilight_service" msgid="8964898045693187224">"Twilight Service"</string>
     <string name="factory_reset_warning" msgid="6858705527798047809">"Data iliyomo kwenye kifaa chako itafutwa"</string>
@@ -542,6 +544,7 @@
     <string name="biometric_not_recognized" msgid="5106687642694635888">"Hayatambuliki"</string>
     <string name="biometric_error_canceled" msgid="8266582404844179778">"Imeghairi uthibitishaji"</string>
     <string name="biometric_error_device_not_secured" msgid="3129845065043995924">"Hujaweka pin, mchoro au nenosiri"</string>
+    <string name="biometric_error_generic" msgid="6784371929985434439">"Hitilafu imetokea wakati wa uthibitishaji"</string>
     <string name="fingerprint_acquired_partial" msgid="8532380671091299342">"Kitambua alama kimetambua sehemu ya alama. Tafadhali jaribu tena."</string>
     <string name="fingerprint_acquired_insufficient" msgid="2545149524031515411">"Imeshindwa kuchakata alama ya kidole. Tafadhali jaribu tena."</string>
     <string name="fingerprint_acquired_imager_dirty" msgid="4694800187151533990">"Kitambua alama ya kidole ni kichafu. Tafadhali kisafishe na ujaribu tena."</string>
@@ -829,7 +832,8 @@
     <string name="lockscreen_instructions_when_pattern_enabled" msgid="7982445492532123308">"Bonyeza Menyu ili kufungua au kupiga simu ya dharura."</string>
     <string name="lockscreen_instructions_when_pattern_disabled" msgid="7434061749374801753">"Bonyeza Menyu ili kufungua."</string>
     <string name="lockscreen_pattern_instructions" msgid="3169991838169244941">"Chora ruwaza ili kufungua"</string>
-    <string name="lockscreen_emergency_call" msgid="7500692654885445299">"Dharura"</string>
+    <!-- no translation found for lockscreen_emergency_call (7549683825868928636) -->
+    <skip />
     <string name="lockscreen_return_to_call" msgid="3156883574692006382">"Rudi kwa kupiga simu"</string>
     <string name="lockscreen_pattern_correct" msgid="8050630103651508582">"Sahihi!"</string>
     <string name="lockscreen_pattern_wrong" msgid="2940138714468358458">"Jaribu tena"</string>
@@ -1460,9 +1464,6 @@
     <string name="gpsNotifMessage" msgid="7346649122793758032">"Imeombwa na <xliff:g id="NAME">%1$s</xliff:g> (<xliff:g id="SERVICE">%2$s</xliff:g>)"</string>
     <string name="gpsVerifYes" msgid="3719843080744112940">"Ndiyo"</string>
     <string name="gpsVerifNo" msgid="1671201856091564741">"Hapana"</string>
-    <string name="gnss_nfw_notification_title" msgid="5004493772059563423">"Eneo lilifikiwa wakati wa dharura"</string>
-    <string name="gnss_nfw_notification_message_oem" msgid="3683958907027107969">"Mtengenezaji wa kifaa chako alifikia maelezo ya mahali ulipo wakati wa dharura hivi majuzi"</string>
-    <string name="gnss_nfw_notification_message_carrier" msgid="815888995791562151">"Mtoa huduma wako alifikia maelezo ya mahali ulipo wakati wa dharura hivi majuzi"</string>
     <string name="sync_too_many_deletes" msgid="6999440774578705300">"Upeo wa ufutaji umezidishwa"</string>
     <string name="sync_too_many_deletes_desc" msgid="7409327940303504440">"Kuna vipengee <xliff:g id="NUMBER_OF_DELETED_ITEMS">%1$d</xliff:g> vilivyofutwa vya <xliff:g id="TYPE_OF_SYNC">%2$s</xliff:g>, akaunti <xliff:g id="ACCOUNT_NAME">%3$s</xliff:g>. Je, unataka kufanya nini?"</string>
     <string name="sync_really_delete" msgid="5657871730315579051">"Futa vipengee"</string>
@@ -1792,8 +1793,8 @@
     <string name="package_updated_device_owner" msgid="7560272363805506941">"Imesasishwa na msimamizi wako"</string>
     <string name="package_deleted_device_owner" msgid="2292335928930293023">"Imefutwa na msimamizi wako"</string>
     <string name="confirm_battery_saver" msgid="5247976246208245754">"Sawa"</string>
-    <string name="battery_saver_description_with_learn_more" msgid="5997766757551917769">"Ili kuongeza muda wa matumizi ya betri, Kiokoa Betri:\n\n•Huwasha Mandhari meusi\n•Huzima au kuzuia shughuli za chinichini, baadhi ya madoido yanayoonekana na vipengele vingine kama vile \"Ok Google\"\n\n"<annotation id="url">"Pata maelezo zaidi"</annotation></string>
-    <string name="battery_saver_description" msgid="8587408568232177204">"Ili kuongeza muda wa matumizi ya betri, Kiokoa Betri:\n\n•Huwasha Mandhari meusi\n•Huzima au kuzuia shughuli za chinichini, baadhi ya madoido yanayoonekana na vipengele vingine kama vile \"Ok Google\""</string>
+    <string name="battery_saver_description_with_learn_more" msgid="4424488535318105801">"Ili kuongeza muda wa matumizi ya betri, Kiokoa Betri:\n\n• Huwasha Mandhari meusi\n• Huzima au kuzuia shughuli za chinichini, baadhi ya madoido yanayoonekana na vipengele vingine kama vile \"Ok Google\"\n\n"<annotation id="url">"Pata maelezo zaidi"</annotation></string>
+    <string name="battery_saver_description" msgid="6794188153647295212">"Ili kuongeza muda wa matumizi ya betri, Kiokoa Betri:\n\n• Huwasha Mandhari meusi\n• Huzima au kudhibiti shughuli za chinichini, baadhi ya madoido yanayoonekana na vipengele vingine kama vile \"Ok Google\""</string>
     <string name="data_saver_description" msgid="4995164271550590517">"Ili kusaidia kupunguza matumizi ya data, Kiokoa Data huzuia baadhi ya programu kupokea na kutuma data chinichini. Programu ambayo unatumia sasa inaweza kufikia data, lakini si kila wakati. Kwa mfano, haitaonyesha picha hadi utakapozifungua."</string>
     <string name="data_saver_enable_title" msgid="7080620065745260137">"Ungependa Kuwasha Kiokoa Data?"</string>
     <string name="data_saver_enable_button" msgid="4399405762586419726">"Washa"</string>
@@ -1997,6 +1998,7 @@
     <string name="notification_appops_camera_active" msgid="8177643089272352083">"Kamera"</string>
     <string name="notification_appops_microphone_active" msgid="581333393214739332">"Maikrofoni"</string>
     <string name="notification_appops_overlay_active" msgid="5571732753262836481">"inachomoza kwenye programu zingine katika skrini yako"</string>
+    <string name="notification_feedback_indicator" msgid="663476517711323016">"Toa Maoni"</string>
     <string name="dynamic_mode_notification_channel_name" msgid="2986926422100223328">"Arifa ya maelezo ya Hali ya Kawaida"</string>
     <string name="dynamic_mode_notification_title" msgid="9205715501274608016">"Huenda betri itakwisha chaji mapema"</string>
     <string name="dynamic_mode_notification_summary" msgid="4141614604437372157">"Imewasha Kiokoa Betri ili kurefusha muda wa matumizi ya betri"</string>

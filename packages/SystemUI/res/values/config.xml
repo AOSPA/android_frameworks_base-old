@@ -207,6 +207,26 @@
          far break points. A sensor value less than this is considered "near". -->
     <item name="proximity_sensor_threshold" translatable="false" format="float" type="dimen"></item>
 
+    <!-- If using proximity_sensor_type, specifies a threshold value to distinguish near and
+         far break points. A sensor value more than this is considered "far". If not set,
+         proximity_sensor_threshold is used. This allows one to implement a latching mechanism for
+         noisy sensors. -->
+    <item name="proximity_sensor_threshold_latch" translatable="false" format="float" type="dimen"></item>
+
+    <!-- Override value to use for proximity sensor as confirmation for proximity_sensor_type. -->
+    <string name="proximity_sensor_secondary_type" translatable="false"></string>
+
+    <!-- If using proximity_sensor_secondary_type, specifies a threshold value to distinguish
+         near and far break points. A sensor value less than this is considered "near". -->
+    <item name="proximity_sensor_secondary_threshold" translatable="false" format="float"
+          type="dimen"></item>
+
+    <!-- If using proximity_sensor_secondary_type, specifies a threshold value to distinguish near and
+         far break points. A sensor value more than this is considered "far". If not set,
+         proximity_sensor_secondary_threshold is used. This allows one to implement a latching
+         mechanism for noisy sensors. -->
+    <item name="proximity_sensor_secondary_threshold_latch" translatable="false" format="float" type="dimen"></item>
+
     <!-- Doze: pulse parameter - how long does it take to fade in? -->
     <integer name="doze_pulse_duration_in">130</integer>
 
@@ -304,7 +324,12 @@
         <item>com.android.systemui.accessibility.WindowMagnification</item>
         <item>com.android.systemui.accessibility.SystemActions</item>
         <item>com.android.systemui.toast.ToastUI</item>
+        <item>com.android.systemui.onehanded.OneHandedUI</item>
     </string-array>
+
+    <!-- QS tile shape store width. negative implies fill configuration instead of stroke-->
+    <dimen name="config_qsTileStrokeWidthActive">-1dp</dimen>
+    <dimen name="config_qsTileStrokeWidthInactive">-1dp</dimen>
 
     <!-- SystemUI vender service, used in config_systemUIServiceComponents. -->
     <string name="config_systemUIVendorServiceComponent" translatable="false">com.android.systemui.VendorServices</string>
@@ -471,22 +496,12 @@
     <!-- On debuggable builds, alert the user if SystemUI PSS goes over this number (in kb) -->
     <integer name="watch_heap_limit">256000</integer>
 
-    <!-- Animation duration for resizing of PIP when entering/exiting. -->
-    <integer name="config_pipResizeAnimationDuration">425</integer>
-
-    <!-- Allow dragging the PIP to a location to close it -->
-    <bool name="config_pipEnableDismissDragToEdge">true</bool>
-
-    <!-- Allow PIP to resize to a slightly bigger state upon touch/showing the menu -->
-    <bool name="config_pipEnableResizeForMenu">true</bool>
-
-    <!-- Allow PIP to enable round corner, see also R.dimen.pip_corner_radius -->
-    <bool name="config_pipEnableRoundCorner">false</bool>
-
     <!-- SystemUI Plugins that can be loaded on user builds. -->
     <string-array name="config_pluginWhitelist" translatable="false">
         <item>com.android.systemui</item>
     </string-array>
+
+    <integer name="ongoing_appops_dialog_max_apps">5</integer>
 
     <!-- Launcher package name for overlaying icons. -->
     <string name="launcher_overlayable_package" translatable="false">com.android.launcher3</string>
@@ -555,4 +570,14 @@
     <integer name="controls_max_columns_adjust_below_width_dp">320</integer>
     <!-- If the config font scale is >= this value, potentially adjust the number of columns-->
     <item name="controls_max_columns_adjust_above_font_scale" translatable="false" format="float" type="dimen">1.25</item>
+
+    <!-- One handed mode default offset % of display size -->
+    <fraction name="config_one_handed_offset">50%</fraction>
+
+    <!-- Allow one handed to enable round corner -->
+    <bool name="config_one_handed_enable_round_corner">true</bool>
+
+    <!-- Animation duration for translating of one handed when trigger / dismiss. -->
+    <integer name="config_one_handed_translate_animation_duration">150</integer>
+
 </resources>

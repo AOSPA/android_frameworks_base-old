@@ -53,15 +53,10 @@ import java.io.FileDescriptor;
 import java.io.PrintWriter;
 import java.util.List;
 import java.util.Objects;
-import java.util.concurrent.Callable;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.FutureTask;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 
 /**
  * Maintains a binding to the best service that matches the given intent information. Bind and
- * unbind callbacks, as well as all binder operations, will all be run on the given handler.
+ * unbind callbacks, as well as all binder operations, will all be run on a single thread.
  */
 public class ServiceWatcher implements ServiceConnection {
 
@@ -71,21 +66,18 @@ public class ServiceWatcher implements ServiceConnection {
     private static final String EXTRA_SERVICE_VERSION = "serviceVersion";
     private static final String EXTRA_SERVICE_IS_MULTIUSER = "serviceIsMultiuser";
 
-    private static final long BLOCKING_BINDER_TIMEOUT_MS = 30 * 1000;
+    private static final long RETRY_DELAY_MS = 15 * 1000;
 
     /** Function to run on binder interface. */
     public interface BinderRunner {
         /** Called to run client code with the binder. */
         void run(IBinder binder) throws RemoteException;
-    }
-
-    /**
-     * Function to run on binder interface.
-     * @param <T> Type to return.
-     */
-    public interface BlockingBinderRunner<T> {
-        /** Called to run client code with the binder. */
-        T run(IBinder binder) throws RemoteException;
+        /**
+         * Called if an error occurred and the function could not be run. This callback is only
+         * intended for resource deallocation and cleanup in response to a single binder operation,
+         * it should not be used to propagate errors further.
+         */
+        default void onError() {}
     }
 
     /**
@@ -94,34 +86,40 @@ public class ServiceWatcher implements ServiceConnection {
     public static final class ServiceInfo implements Comparable<ServiceInfo> {
 
         public static final ServiceInfo NONE = new ServiceInfo(Integer.MIN_VALUE, null,
-                UserHandle.USER_NULL);
+                UserHandle.USER_NULL, false);
 
         public final int version;
         @Nullable public final ComponentName component;
         @UserIdInt public final int userId;
+        public final boolean serviceIsMultiuser;
 
         ServiceInfo(ResolveInfo resolveInfo, int currentUserId) {
             Preconditions.checkArgument(resolveInfo.serviceInfo.getComponentName() != null);
 
             Bundle metadata = resolveInfo.serviceInfo.metaData;
-            boolean isMultiuser;
             if (metadata != null) {
                 version = metadata.getInt(EXTRA_SERVICE_VERSION, Integer.MIN_VALUE);
-                isMultiuser = metadata.getBoolean(EXTRA_SERVICE_IS_MULTIUSER, false);
+                serviceIsMultiuser = metadata.getBoolean(EXTRA_SERVICE_IS_MULTIUSER, false);
             } else {
                 version = Integer.MIN_VALUE;
-                isMultiuser = false;
+                serviceIsMultiuser = false;
             }
 
             component = resolveInfo.serviceInfo.getComponentName();
-            userId = isMultiuser ? UserHandle.USER_SYSTEM : currentUserId;
+            userId = serviceIsMultiuser ? UserHandle.USER_SYSTEM : currentUserId;
         }
 
-        private ServiceInfo(int version, @Nullable ComponentName component, int userId) {
+        private ServiceInfo(int version, @Nullable ComponentName component, int userId,
+                boolean serviceIsMultiuser) {
             Preconditions.checkArgument(component != null || version == Integer.MIN_VALUE);
             this.version = version;
             this.component = component;
             this.userId = userId;
+            this.serviceIsMultiuser = serviceIsMultiuser;
+        }
+
+        public @Nullable String getPackageName() {
+            return component != null ? component.getPackageName() : null;
         }
 
         @Override
@@ -191,11 +189,18 @@ public class ServiceWatcher implements ServiceConnection {
     private volatile ServiceInfo mServiceInfo;
     private volatile IBinder mBinder;
 
+    public ServiceWatcher(Context context, String action,
+            @Nullable BinderRunner onBind, @Nullable Runnable onUnbind,
+            @BoolRes int enableOverlayResId, @StringRes int nonOverlayPackageResId) {
+        this(context, FgThread.getHandler(), action, onBind, onUnbind, enableOverlayResId,
+                nonOverlayPackageResId);
+    }
+
     public ServiceWatcher(Context context, Handler handler, String action,
             @Nullable BinderRunner onBind, @Nullable Runnable onUnbind,
             @BoolRes int enableOverlayResId, @StringRes int nonOverlayPackageResId) {
         mContext = context;
-        mHandler = FgThread.getHandler();
+        mHandler = handler;
         mIntent = new Intent(Objects.requireNonNull(action));
 
         Resources resources = context.getResources();
@@ -283,13 +288,6 @@ public class ServiceWatcher implements ServiceConnection {
         return true;
     }
 
-    /**
-     * Returns information on the currently selected service.
-     */
-    public ServiceInfo getBoundService() {
-        return mServiceInfo;
-    }
-
     private void onBestServiceChanged(boolean forceRebind) {
         Preconditions.checkState(Looper.myLooper() == mHandler.getLooper());
 
@@ -336,9 +334,13 @@ public class ServiceWatcher implements ServiceConnection {
         }
 
         Intent bindIntent = new Intent(mIntent).setComponent(mServiceInfo.component);
-        mContext.bindServiceAsUser(bindIntent, this,
+        if (!mContext.bindServiceAsUser(bindIntent, this,
                 BIND_AUTO_CREATE | BIND_NOT_FOREGROUND | BIND_NOT_VISIBLE,
-                mHandler, UserHandle.of(mServiceInfo.userId));
+                mHandler, UserHandle.of(mServiceInfo.userId))) {
+            mServiceInfo = ServiceInfo.NONE;
+            Log.e(TAG, getLogPrefix() + " unexpected bind failure - retrying later");
+            mHandler.postDelayed(() -> onBestServiceChanged(false), RETRY_DELAY_MS);
+        }
     }
 
     @Override
@@ -381,7 +383,7 @@ public class ServiceWatcher implements ServiceConnection {
     }
 
     @Override
-    public void onBindingDied(ComponentName component) {
+    public final void onBindingDied(ComponentName component) {
         Preconditions.checkState(Looper.myLooper() == mHandler.getLooper());
 
         if (D) {
@@ -404,9 +406,7 @@ public class ServiceWatcher implements ServiceConnection {
 
     void onPackageChanged(String packageName) {
         // force a rebind if the changed package was the currently connected package
-        String currentPackageName =
-                mServiceInfo.component != null ? mServiceInfo.component.getPackageName() : null;
-        onBestServiceChanged(packageName.equals(currentPackageName));
+        onBestServiceChanged(packageName.equals(mServiceInfo.getPackageName()));
     }
 
     /**
@@ -416,6 +416,7 @@ public class ServiceWatcher implements ServiceConnection {
     public final void runOnBinder(BinderRunner runner) {
         mHandler.post(() -> {
             if (mBinder == null) {
+                runner.onError();
                 return;
             }
 
@@ -425,68 +426,9 @@ public class ServiceWatcher implements ServiceConnection {
                 // binders may propagate some specific non-RemoteExceptions from the other side
                 // through the binder as well - we cannot allow those to crash the system server
                 Log.e(TAG, getLogPrefix() + " exception running on " + mServiceInfo, e);
+                runner.onError();
             }
         });
-    }
-
-    /**
-     * Runs the given function synchronously if currently connected, and returns the default value
-     * if not currently connected or if any exception is thrown. Do not obtain any locks within the
-     * BlockingBinderRunner, or risk deadlock. The default value will be returned if there is no
-     * service connection when this is run, if a RemoteException occurs, or if the operation times
-     * out.
-     *
-     * @deprecated Using this function is an indication that your AIDL API is broken. Calls from
-     * system server to outside MUST be one-way, and so cannot return any result, and this
-     * method should not be needed or used. Use a separate callback interface to allow outside
-     * components to return results back to the system server.
-     */
-    @Deprecated
-    public final <T> T runOnBinderBlocking(BlockingBinderRunner<T> runner, T defaultValue) {
-        try {
-            return runOnHandlerBlocking(() -> {
-                if (mBinder == null) {
-                    return defaultValue;
-                }
-
-                try {
-                    return runner.run(mBinder);
-                } catch (RuntimeException | RemoteException e) {
-                    // binders may propagate some specific non-RemoteExceptions from the other side
-                    // through the binder as well - we cannot allow those to crash the system server
-                    Log.e(TAG, getLogPrefix() + " exception running on " + mServiceInfo, e);
-                    return defaultValue;
-                }
-            });
-        } catch (InterruptedException | TimeoutException e) {
-            return defaultValue;
-        }
-    }
-
-    private <T> T runOnHandlerBlocking(Callable<T> c)
-            throws InterruptedException, TimeoutException {
-        if (Looper.myLooper() == mHandler.getLooper()) {
-            try {
-                return c.call();
-            } catch (Exception e) {
-                // Function cannot throw exception, this should never happen
-                throw new IllegalStateException(e);
-            }
-        } else {
-            FutureTask<T> task = new FutureTask<>(c);
-            mHandler.post(task);
-            try {
-                // timeout will unblock callers, in particular if the caller is a binder thread to
-                // help reduce binder contention. this will still result in blocking the handler
-                // thread which may result in ANRs, but should make problems slightly more rare.
-                // the underlying solution is simply not to use this API at all, but that would
-                // require large refactors to very legacy code.
-                return task.get(BLOCKING_BINDER_TIMEOUT_MS, TimeUnit.MILLISECONDS);
-            } catch (ExecutionException e) {
-                // Function cannot throw exception, this should never happen
-                throw new IllegalStateException(e);
-            }
-        }
     }
 
     private String getLogPrefix() {

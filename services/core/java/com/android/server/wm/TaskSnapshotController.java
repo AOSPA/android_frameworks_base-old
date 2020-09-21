@@ -27,13 +27,13 @@ import android.annotation.Nullable;
 import android.app.ActivityManager.TaskSnapshot;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
-import android.graphics.GraphicBuffer;
 import android.graphics.Insets;
 import android.graphics.PixelFormat;
 import android.graphics.Point;
 import android.graphics.RecordingCanvas;
 import android.graphics.Rect;
 import android.graphics.RenderNode;
+import android.hardware.HardwareBuffer;
 import android.os.Environment;
 import android.os.Handler;
 import android.util.ArraySet;
@@ -201,9 +201,9 @@ class TaskSnapshotController {
                 }
             }
             if (snapshot != null) {
-                final GraphicBuffer buffer = snapshot.getSnapshot();
+                final HardwareBuffer buffer = snapshot.getHardwareBuffer();
                 if (buffer.getWidth() == 0 || buffer.getHeight() == 0) {
-                    buffer.destroy();
+                    buffer.close();
                     Slog.e(TAG, "Invalid task snapshot dimensions " + buffer.getWidth() + "x"
                             + buffer.getHeight());
                 } else {
@@ -338,23 +338,23 @@ class TaskSnapshotController {
     }
 
     @Nullable
-    SurfaceControl.ScreenshotGraphicBuffer createTaskSnapshot(@NonNull Task task,
+    SurfaceControl.ScreenshotHardwareBuffer createTaskSnapshot(@NonNull Task task,
             TaskSnapshot.Builder builder) {
         Point taskSize = new Point();
-        final SurfaceControl.ScreenshotGraphicBuffer taskSnapshot = createTaskSnapshot(task,
+        final SurfaceControl.ScreenshotHardwareBuffer taskSnapshot = createTaskSnapshot(task,
                 mHighResTaskSnapshotScale, builder.getPixelFormat(), taskSize);
         builder.setTaskSize(taskSize);
         return taskSnapshot;
     }
 
     @Nullable
-    SurfaceControl.ScreenshotGraphicBuffer createTaskSnapshot(@NonNull Task task,
+    SurfaceControl.ScreenshotHardwareBuffer createTaskSnapshot(@NonNull Task task,
             float scaleFraction) {
         return createTaskSnapshot(task, scaleFraction, PixelFormat.RGBA_8888, null);
     }
 
     @Nullable
-    SurfaceControl.ScreenshotGraphicBuffer createTaskSnapshot(@NonNull Task task,
+    SurfaceControl.ScreenshotHardwareBuffer createTaskSnapshot(@NonNull Task task,
             float scaleFraction, int pixelFormat, Point outTaskSize) {
         if (task.getSurfaceControl() == null) {
             if (DEBUG_SCREENSHOT) {
@@ -373,7 +373,7 @@ class TaskSnapshotController {
         } else {
             excludeLayers = new SurfaceControl[0];
         }
-        final SurfaceControl.ScreenshotGraphicBuffer screenshotBuffer =
+        final SurfaceControl.ScreenshotHardwareBuffer screenshotBuffer =
                 SurfaceControl.captureLayersExcluding(
                         task.getSurfaceControl(), mTmpRect, scaleFraction,
                         pixelFormat, excludeLayers);
@@ -381,8 +381,8 @@ class TaskSnapshotController {
             outTaskSize.x = mTmpRect.width();
             outTaskSize.y = mTmpRect.height();
         }
-        final GraphicBuffer buffer = screenshotBuffer != null ? screenshotBuffer.getGraphicBuffer()
-                : null;
+        final HardwareBuffer buffer = screenshotBuffer == null ? null
+                : screenshotBuffer.getHardwareBuffer();
         if (buffer == null || buffer.getWidth() <= 1 || buffer.getHeight() <= 1) {
             return null;
         }
@@ -403,14 +403,14 @@ class TaskSnapshotController {
             return null;
         }
 
-        final SurfaceControl.ScreenshotGraphicBuffer screenshotBuffer =
+        final SurfaceControl.ScreenshotHardwareBuffer screenshotBuffer =
                 createTaskSnapshot(task, builder);
 
         if (screenshotBuffer == null) {
             // Failed to acquire image. Has been logged.
             return null;
         }
-        builder.setSnapshot(screenshotBuffer.getGraphicBuffer());
+        builder.setSnapshot(screenshotBuffer.getHardwareBuffer());
         builder.setColorSpace(screenshotBuffer.getColorSpace());
         return builder.build();
     }
@@ -510,7 +510,7 @@ class TaskSnapshotController {
         // color above
         return new TaskSnapshot(
                 System.currentTimeMillis() /* id */,
-                topChild.mActivityComponent, hwBitmap.createGraphicBufferHandle(),
+                topChild.mActivityComponent, hwBitmap.getHardwareBuffer(),
                 hwBitmap.getColorSpace(), mainWindow.getConfiguration().orientation,
                 mainWindow.getWindowConfiguration().getRotation(), new Point(taskWidth, taskHeight),
                 getInsets(mainWindow), false /* isLowResolution */,

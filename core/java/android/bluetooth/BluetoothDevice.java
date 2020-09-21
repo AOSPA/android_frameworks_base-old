@@ -473,6 +473,26 @@ public final class BluetoothDevice implements Parcelable {
     public static final String EXTRA_PAIRING_KEY = "android.bluetooth.device.extra.PAIRING_KEY";
 
     /**
+     * Used as an int extra field in {@link #ACTION_PAIRING_REQUEST}
+     * intents as the value of passkey.
+     * @hide
+     */
+    public static final String EXTRA_PAIRING_INITIATOR =
+            "android.bluetooth.device.extra.PAIRING_INITIATOR";
+
+    /**
+     * Bluetooth pairing initiator, Foreground App
+     * @hide
+     */
+    public static final int EXTRA_PAIRING_INITIATOR_FOREGROUND = 1;
+
+    /**
+     * Bluetooth pairing initiator, Background
+     * @hide
+     */
+    public static final int EXTRA_PAIRING_INITIATOR_BACKGROUND = 2;
+
+    /**
      * Bluetooth device type, Unknown
      */
     public static final int DEVICE_TYPE_UNKNOWN = 0;
@@ -1180,7 +1200,11 @@ public final class BluetoothDevice implements Parcelable {
         try {
             String name = service.getRemoteName(this);
             if (name != null) {
-                return name.replaceAll("[\\t\\n\\r]+", " ");
+                // remove whitespace characters from the name
+                return name
+                        .replace('\t', ' ')
+                        .replace('\n', ' ')
+                        .replace('\r', ' ');
             }
             return null;
         } catch (RemoteException e) {

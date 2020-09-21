@@ -195,8 +195,10 @@
     <string name="network_logging_notification_text" msgid="1327373071132562512">"Vaša organizacija upravlja ovim uređajem i može nadzirati mrežni promet. Dodirnite za pojedinosti."</string>
     <string name="location_changed_notification_title" msgid="3620158742816699316">"Aplikacije mogu pristupiti vašoj lokaciji"</string>
     <string name="location_changed_notification_text" msgid="7158423339982706912">"Obratite se IT administratoru da biste saznali više"</string>
+    <string name="geofencing_service" msgid="3826902410740315456">"Usluga geofencinga"</string>
     <string name="country_detector" msgid="7023275114706088854">"Detektor zemlje"</string>
     <string name="location_service" msgid="2439187616018455546">"Usluga lokacije"</string>
+    <string name="gnss_service" msgid="8907781262179951385">"Usluga GNSS-a"</string>
     <string name="sensor_notification_service" msgid="7474531979178682676">"Usluga Obavijesti senzora"</string>
     <string name="twilight_service" msgid="8964898045693187224">"Usluga Sumrak"</string>
     <string name="factory_reset_warning" msgid="6858705527798047809">"Uređaj će se izbrisati"</string>
@@ -545,6 +547,7 @@
     <string name="biometric_not_recognized" msgid="5106687642694635888">"Nije prepoznato"</string>
     <string name="biometric_error_canceled" msgid="8266582404844179778">"Autentifikacija otkazana"</string>
     <string name="biometric_error_device_not_secured" msgid="3129845065043995924">"Nisu postavljeni PIN, uzorak ni zaporka"</string>
+    <string name="biometric_error_generic" msgid="6784371929985434439">"Pogreška prilikom autentifikacije"</string>
     <string name="fingerprint_acquired_partial" msgid="8532380671091299342">"Otkriven je djelomični otisak prsta. Pokušajte ponovo."</string>
     <string name="fingerprint_acquired_insufficient" msgid="2545149524031515411">"Obrada otiska prsta nije uspjela. Pokušajte ponovo."</string>
     <string name="fingerprint_acquired_imager_dirty" msgid="4694800187151533990">"Senzor otiska prsta nije čist. Očistite ga i pokušajte ponovo."</string>
@@ -832,7 +835,8 @@
     <string name="lockscreen_instructions_when_pattern_enabled" msgid="7982445492532123308">"Pritisnite Izbornik za otključavanje ili pozivanje hitnih službi."</string>
     <string name="lockscreen_instructions_when_pattern_disabled" msgid="7434061749374801753">"Pritisnite Izbornik za otključavanje."</string>
     <string name="lockscreen_pattern_instructions" msgid="3169991838169244941">"Iscrtajte uzorak za otključavanje"</string>
-    <string name="lockscreen_emergency_call" msgid="7500692654885445299">"Hitne službe"</string>
+    <!-- no translation found for lockscreen_emergency_call (7549683825868928636) -->
+    <skip />
     <string name="lockscreen_return_to_call" msgid="3156883574692006382">"Uzvrati poziv"</string>
     <string name="lockscreen_pattern_correct" msgid="8050630103651508582">"Ispravno!"</string>
     <string name="lockscreen_pattern_wrong" msgid="2940138714468358458">"Pokušajte ponovo"</string>
@@ -1481,9 +1485,6 @@
     <string name="gpsNotifMessage" msgid="7346649122793758032">"Zatražio <xliff:g id="NAME">%1$s</xliff:g> (<xliff:g id="SERVICE">%2$s</xliff:g>)"</string>
     <string name="gpsVerifYes" msgid="3719843080744112940">"Da"</string>
     <string name="gpsVerifNo" msgid="1671201856091564741">"Ne"</string>
-    <string name="gnss_nfw_notification_title" msgid="5004493772059563423">"Pristup lokaciji tijekom hitnog slučaja"</string>
-    <string name="gnss_nfw_notification_message_oem" msgid="3683958907027107969">"Proizvođač vašeg uređaja pristupio je vašoj lokaciji tijekom nedavne hitne sesije"</string>
-    <string name="gnss_nfw_notification_message_carrier" msgid="815888995791562151">"Vaš mobilni operater pristupio je vašoj lokaciji tijekom nedavne hitne sesije"</string>
     <string name="sync_too_many_deletes" msgid="6999440774578705300">"Prekoračeno je ograničenje za brisanje"</string>
     <string name="sync_too_many_deletes_desc" msgid="7409327940303504440">"Postoji sljedeći broj izbrisanih stavki: <xliff:g id="NUMBER_OF_DELETED_ITEMS">%1$d</xliff:g> za vrstu sinkronizacije <xliff:g id="TYPE_OF_SYNC">%2$s</xliff:g> i račun <xliff:g id="ACCOUNT_NAME">%3$s</xliff:g>. Što želite učiniti?"</string>
     <string name="sync_really_delete" msgid="5657871730315579051">"Izbriši ove stavke"</string>
@@ -1815,8 +1816,8 @@
     <string name="package_updated_device_owner" msgid="7560272363805506941">"Ažurirao administrator"</string>
     <string name="package_deleted_device_owner" msgid="2292335928930293023">"Izbrisao administrator"</string>
     <string name="confirm_battery_saver" msgid="5247976246208245754">"U redu"</string>
-    <string name="battery_saver_description_with_learn_more" msgid="5997766757551917769">"Da bi se produljilo trajanje baterije, Štednja baterije:\n\n• Uključuje Tamnu temu.\n• Isključuje ili ograničava aktivnosti u pozadini, neke vizualne efekte i druge značajke kao što je \"Hey Google\".\n\n"<annotation id="url">"Saznajte više"</annotation></string>
-    <string name="battery_saver_description" msgid="8587408568232177204">"Da bi se produljilo trajanje baterije, Štednja baterije:\n\n• Uključuje Tamnu temu.\n• Isključuje ili ograničava aktivnosti u pozadini, neke vizualne efekte i druge značajke kao što je \"Hey Google\"."</string>
+    <string name="battery_saver_description_with_learn_more" msgid="4424488535318105801">"Da bi se produljilo trajanje baterije, Štednja baterije:\n\n• Uključuje Tamnu temu.\n• Isključuje ili ograničava aktivnosti u pozadini, neke vizualne efekte i druge značajke kao što je \"Hey Google\".\n\n"<annotation id="url">"Saznajte više"</annotation></string>
+    <string name="battery_saver_description" msgid="6794188153647295212">"Da bi se produljilo trajanje baterije, Štednja baterije:\n\n• Uključuje Tamnu temu.\n• Isključuje ili ograničava aktivnosti u pozadini, neke vizualne efekte i druge značajke kao što je \"Hey Google\"."</string>
     <string name="data_saver_description" msgid="4995164271550590517">"Da bi se smanjio podatkovni promet, značajka Štednja podatkovnog prometa onemogućuje nekim aplikacijama slanje ili primanje podataka u pozadini. Aplikacija koju trenutačno upotrebljavate može pristupiti podacima, no možda će to činiti rjeđe. To može značiti da se, na primjer, slike neće prikazivati dok ih ne dodirnete."</string>
     <string name="data_saver_enable_title" msgid="7080620065745260137">"Uključiti Štednju podatkovnog prometa?"</string>
     <string name="data_saver_enable_button" msgid="4399405762586419726">"Uključi"</string>
@@ -2030,6 +2031,7 @@
     <string name="notification_appops_camera_active" msgid="8177643089272352083">"Fotoaparat"</string>
     <string name="notification_appops_microphone_active" msgid="581333393214739332">"Mikrofon"</string>
     <string name="notification_appops_overlay_active" msgid="5571732753262836481">"prikazuje se preko drugih aplikacija na zaslonu"</string>
+    <string name="notification_feedback_indicator" msgid="663476517711323016">"Slanje povratnih informacija"</string>
     <string name="dynamic_mode_notification_channel_name" msgid="2986926422100223328">"Obavještavanje o informacijama u Rutinskom načinu rada"</string>
     <string name="dynamic_mode_notification_title" msgid="9205715501274608016">"Baterija se može isprazniti prije uobičajenog vremena punjenja"</string>
     <string name="dynamic_mode_notification_summary" msgid="4141614604437372157">"Štednja baterije aktivirana je kako bi se produljilo trajanje baterije"</string>

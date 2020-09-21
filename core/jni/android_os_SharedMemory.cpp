@@ -22,7 +22,7 @@
 #include <utils/Log.h>
 
 #include <nativehelper/jni_macros.h>
-#include <nativehelper/JNIHelp.h>
+#include <nativehelper/JNIPlatformHelp.h>
 #include <nativehelper/ScopedLocalRef.h>
 
 #include <algorithm>
@@ -69,7 +69,11 @@ jobject SharedMemory_nCreate(JNIEnv* env, jobject, jstring jname, jint size) {
         return nullptr;
     }
 
-    return jniCreateFileDescriptor(env, fd);
+    jobject jifd = jniCreateFileDescriptor(env, fd);
+    if (jifd == nullptr) {
+        close(fd);
+    }
+    return jifd;
 }
 
 jint SharedMemory_nGetSize(JNIEnv* env, jobject, jobject fileDescriptor) {

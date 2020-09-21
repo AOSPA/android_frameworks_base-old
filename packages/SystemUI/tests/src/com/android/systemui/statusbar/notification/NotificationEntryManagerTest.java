@@ -61,6 +61,7 @@ import com.android.internal.statusbar.NotificationVisibility;
 import com.android.systemui.Dependency;
 import com.android.systemui.R;
 import com.android.systemui.SysuiTestCase;
+import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.statusbar.FeatureFlags;
 import com.android.systemui.statusbar.NotificationLifetimeExtender;
 import com.android.systemui.statusbar.NotificationMediaManager;
@@ -145,7 +146,7 @@ public class NotificationEntryManagerTest extends SysuiTestCase {
                     IMPORTANCE_DEFAULT,
                     null, null,
                     null, null, null, true, sentiment, false, -1, false, null, null, false, false,
-                    false, null, false);
+                    false, null, 0, false);
             return true;
         }).when(mRankingMap).getRanking(eq(key), any(Ranking.class));
     }
@@ -164,7 +165,7 @@ public class NotificationEntryManagerTest extends SysuiTestCase {
                     null, null,
                     null, null, null, true,
                     Ranking.USER_SENTIMENT_NEUTRAL, false, -1,
-                    false, smartActions, null, false, false, false, null, false);
+                    false, smartActions, null, false, false, false, null, 0, false);
             return true;
         }).when(mRankingMap).getRanking(eq(key), any(Ranking.class));
     }
@@ -200,7 +201,9 @@ public class NotificationEntryManagerTest extends SysuiTestCase {
                 () -> mNotificationRowBinder,
                 () -> mRemoteInputManager,
                 mLeakDetector,
-                mock(ForegroundServiceDismissalFeatureController.class)
+                mock(ForegroundServiceDismissalFeatureController.class),
+                mock(HeadsUpManager.class),
+                mock(StatusBarStateController.class)
         );
         mEntryManager.setUpWithPresenter(mPresenter);
         mEntryManager.addNotificationEntryListener(mEntryListener);

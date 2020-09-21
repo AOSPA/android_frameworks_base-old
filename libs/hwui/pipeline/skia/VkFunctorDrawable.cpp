@@ -20,7 +20,7 @@
 #include <GrBackendDrawableInfo.h>
 #include <SkAndroidFrameworkUtils.h>
 #include <SkImage.h>
-#include "include/private/SkM44.h"
+#include <SkM44.h>
 #include <utils/Color.h>
 #include <utils/Trace.h>
 #include <utils/TraceUtils.h>
@@ -121,12 +121,7 @@ std::unique_ptr<FunctorDrawable::GpuDrawHandler> VkFunctorDrawable::onSnapGpuDra
         return nullptr;
     }
     std::unique_ptr<VkFunctorDrawHandler> draw;
-    if (mAnyFunctor.index() == 0) {
-        return std::make_unique<VkFunctorDrawHandler>(std::get<0>(mAnyFunctor).handle, matrix, clip,
-                                                      image_info);
-    } else {
-        LOG_ALWAYS_FATAL("Not implemented");
-    }
+    return std::make_unique<VkFunctorDrawHandler>(mWebViewHandle, matrix, clip, image_info);
 }
 
 }  // namespace skiapipeline

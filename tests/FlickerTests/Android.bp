@@ -16,7 +16,9 @@
 
 android_test {
     name: "FlickerTests",
-    srcs: ["src/**/*.java"],
+    srcs: ["src/**/*.java", "src/**/*.kt"],
+    manifest: "AndroidManifest.xml",
+    test_config: "AndroidTest.xml",
     platform_apis: true,
     certificate: "platform",
     test_suites: ["device-tests"],
@@ -26,5 +28,7 @@ android_test {
         "flickerlib",
         "truth-prebuilt",
         "app-helpers-core",
+        "launcher-helper-lib",
+        "launcher-aosp-tapl"
     ],
 }

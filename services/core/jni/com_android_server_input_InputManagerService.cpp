@@ -194,16 +194,16 @@ protected:
 public:
     NativeInputManager(jobject contextObj, jobject serviceObj, const sp<Looper>& looper);
 
-    inline sp<InputManager> getInputManager() const { return mInputManager; }
+    inline sp<InputManagerInterface> getInputManager() const { return mInputManager; }
 
     void dump(std::string& dump);
 
     void setDisplayViewports(JNIEnv* env, jobjectArray viewportObjArray);
 
-    status_t registerInputChannel(JNIEnv* env, const sp<InputChannel>& inputChannel);
-    status_t registerInputMonitor(JNIEnv* env, const sp<InputChannel>& inputChannel,
-            int32_t displayId, bool isGestureMonitor);
-    status_t unregisterInputChannel(JNIEnv* env, const sp<InputChannel>& inputChannel);
+    status_t registerInputChannel(JNIEnv* env, const std::shared_ptr<InputChannel>& inputChannel);
+    status_t registerInputMonitor(JNIEnv* env, const std::shared_ptr<InputChannel>& inputChannel,
+                                  int32_t displayId, bool isGestureMonitor);
+    status_t unregisterInputChannel(JNIEnv* env, const InputChannel& inputChannel);
     status_t pilferPointers(const sp<IBinder>& token);
 
     void displayRemoved(JNIEnv* env, int32_t displayId);
@@ -225,7 +225,7 @@ public:
     /* --- InputReaderPolicyInterface implementation --- */
 
     virtual void getReaderConfiguration(InputReaderConfiguration* outConfig);
-    virtual sp<PointerControllerInterface> obtainPointerController(int32_t deviceId);
+    virtual std::shared_ptr<PointerControllerInterface> obtainPointerController(int32_t deviceId);
     virtual void notifyInputDevicesChanged(const std::vector<InputDeviceInfo>& inputDevices);
     virtual sp<KeyCharacterMap> getKeyboardLayoutOverlay(const InputDeviceIdentifier& identifier);
     virtual std::string getDeviceAlias(const InputDeviceIdentifier& identifier);
@@ -236,29 +236,26 @@ public:
 
     /* --- InputDispatcherPolicyInterface implementation --- */
 
-    virtual void notifySwitch(nsecs_t when, uint32_t switchValues, uint32_t switchMask,
-                              uint32_t policyFlags) override;
-    virtual void notifyConfigurationChanged(nsecs_t when);
-    virtual nsecs_t notifyAnr(const sp<InputApplicationHandle>& inputApplicationHandle,
-                              const sp<IBinder>& token, const std::string& reason) override;
-    virtual void notifyInputChannelBroken(const sp<IBinder>& token);
-    virtual void notifyFocusChanged(const sp<IBinder>& oldToken,
-                                    const sp<IBinder>& newToken) override;
-    virtual bool filterInputEvent(const InputEvent* inputEvent, uint32_t policyFlags) override;
-    virtual void getDispatcherConfiguration(InputDispatcherConfiguration* outConfig) override;
-    virtual void interceptKeyBeforeQueueing(const KeyEvent* keyEvent,
-                                            uint32_t& policyFlags) override;
-    virtual void interceptMotionBeforeQueueing(const int32_t displayId, nsecs_t when,
-                                               uint32_t& policyFlags) override;
-    virtual nsecs_t interceptKeyBeforeDispatching(const sp<IBinder>& token,
-                                                  const KeyEvent* keyEvent,
-                                                  uint32_t policyFlags) override;
-    virtual bool dispatchUnhandledKey(const sp<IBinder>& token, const KeyEvent* keyEvent,
-                                      uint32_t policyFlags, KeyEvent* outFallbackKeyEvent) override;
-    virtual void pokeUserActivity(nsecs_t eventTime, int32_t eventType) override;
-    virtual bool checkInjectEventsPermissionNonReentrant(int32_t injectorPid,
-                                                         int32_t injectorUid) override;
-    virtual void onPointerDownOutsideFocus(const sp<IBinder>& touchedToken) override;
+    void notifySwitch(nsecs_t when, uint32_t switchValues, uint32_t switchMask,
+                      uint32_t policyFlags) override;
+    void notifyConfigurationChanged(nsecs_t when) override;
+    std::chrono::nanoseconds notifyAnr(const sp<InputApplicationHandle>& inputApplicationHandle,
+                                       const sp<IBinder>& token,
+                                       const std::string& reason) override;
+    void notifyInputChannelBroken(const sp<IBinder>& token) override;
+    void notifyFocusChanged(const sp<IBinder>& oldToken, const sp<IBinder>& newToken) override;
+    bool filterInputEvent(const InputEvent* inputEvent, uint32_t policyFlags) override;
+    void getDispatcherConfiguration(InputDispatcherConfiguration* outConfig) override;
+    void interceptKeyBeforeQueueing(const KeyEvent* keyEvent, uint32_t& policyFlags) override;
+    void interceptMotionBeforeQueueing(const int32_t displayId, nsecs_t when,
+                                       uint32_t& policyFlags) override;
+    nsecs_t interceptKeyBeforeDispatching(const sp<IBinder>& token, const KeyEvent* keyEvent,
+                                          uint32_t policyFlags) override;
+    bool dispatchUnhandledKey(const sp<IBinder>& token, const KeyEvent* keyEvent,
+                              uint32_t policyFlags, KeyEvent* outFallbackKeyEvent) override;
+    void pokeUserActivity(nsecs_t eventTime, int32_t eventType) override;
+    bool checkInjectEventsPermissionNonReentrant(int32_t injectorPid, int32_t injectorUid) override;
+    void onPointerDownOutsideFocus(const sp<IBinder>& touchedToken) override;
 
     /* --- PointerControllerPolicyInterface implementation --- */
 
@@ -270,7 +267,7 @@ public:
     virtual int32_t getCustomPointerIconId();
 
 private:
-    sp<InputManager> mInputManager;
+    sp<InputManagerInterface> mInputManager;
 
     jobject mServiceObj;
     sp<Looper> mLooper;
@@ -299,7 +296,7 @@ private:
         sp<SpriteController> spriteController;
 
         // Pointer controller singleton, created and destroyed as needed.
-        wp<PointerController> pointerController;
+        std::weak_ptr<PointerController> pointerController;
 
         // Input devices to be disabled
         std::set<int32_t> disabledInputDevices;
@@ -342,9 +339,9 @@ NativeInputManager::NativeInputManager(jobject contextObj,
     }
     mInteractive = true;
 
-    mInputManager = new InputManager(this, this);
-    defaultServiceManager()->addService(String16("inputflinger"),
-            mInputManager, false);
+    InputManager* im = new InputManager(this, this);
+    mInputManager = im;
+    defaultServiceManager()->addService(String16("inputflinger"), im);
 }
 
 NativeInputManager::~NativeInputManager() {
@@ -424,21 +421,22 @@ void NativeInputManager::setDisplayViewports(JNIEnv* env, jobjectArray viewportO
             InputReaderConfiguration::CHANGE_DISPLAY_INFO);
 }
 
-status_t NativeInputManager::registerInputChannel(JNIEnv* /* env */,
-        const sp<InputChannel>& inputChannel) {
+status_t NativeInputManager::registerInputChannel(
+        JNIEnv* /* env */, const std::shared_ptr<InputChannel>& inputChannel) {
     ATRACE_CALL();
     return mInputManager->getDispatcher()->registerInputChannel(inputChannel);
 }
 
 status_t NativeInputManager::registerInputMonitor(JNIEnv* /* env */,
-        const sp<InputChannel>& inputChannel, int32_t displayId, bool isGestureMonitor) {
+                                                  const std::shared_ptr<InputChannel>& inputChannel,
+                                                  int32_t displayId, bool isGestureMonitor) {
     ATRACE_CALL();
     return mInputManager->getDispatcher()->registerInputMonitor(
             inputChannel, displayId, isGestureMonitor);
 }
 
 status_t NativeInputManager::unregisterInputChannel(JNIEnv* /* env */,
-        const sp<InputChannel>& inputChannel) {
+                                                    const InputChannel& inputChannel) {
     ATRACE_CALL();
     return mInputManager->getDispatcher()->unregisterInputChannel(inputChannel);
 }
@@ -544,15 +542,16 @@ void NativeInputManager::getReaderConfiguration(InputReaderConfiguration* outCon
     } // release lock
 }
 
-sp<PointerControllerInterface> NativeInputManager::obtainPointerController(int32_t /* deviceId */) {
+std::shared_ptr<PointerControllerInterface> NativeInputManager::obtainPointerController(
+        int32_t /* deviceId */) {
     ATRACE_CALL();
     AutoMutex _l(mLock);
 
-    sp<PointerController> controller = mLocked.pointerController.promote();
+    std::shared_ptr<PointerController> controller = mLocked.pointerController.lock();
     if (controller == nullptr) {
         ensureSpriteControllerLocked();
 
-        controller = new PointerController(this, mLooper, mLocked.spriteController);
+        controller = PointerController::create(this, mLooper, mLocked.spriteController);
         mLocked.pointerController = controller;
         updateInactivityTimeoutLocked();
     }
@@ -694,8 +693,9 @@ static jobject getInputApplicationHandleObjLocalRef(JNIEnv* env,
     return handle->getInputApplicationHandleObjLocalRef(env);
 }
 
-nsecs_t NativeInputManager::notifyAnr(const sp<InputApplicationHandle>& inputApplicationHandle,
-                                      const sp<IBinder>& token, const std::string& reason) {
+std::chrono::nanoseconds NativeInputManager::notifyAnr(
+        const sp<InputApplicationHandle>& inputApplicationHandle, const sp<IBinder>& token,
+        const std::string& reason) {
 #if DEBUG_INPUT_DISPATCHER_POLICY
     ALOGD("notifyANR");
 #endif
@@ -718,7 +718,7 @@ nsecs_t NativeInputManager::notifyAnr(const sp<InputApplicationHandle>& inputApp
     } else {
         assert(newTimeout >= 0);
     }
-    return newTimeout;
+    return std::chrono::nanoseconds(newTimeout);
 }
 
 void NativeInputManager::notifyInputChannelBroken(const sp<IBinder>& token) {
@@ -803,15 +803,14 @@ void NativeInputManager::setSystemUiVisibility(int32_t visibility) {
 }
 
 void NativeInputManager::updateInactivityTimeoutLocked() REQUIRES(mLock) {
-    sp<PointerController> controller = mLocked.pointerController.promote();
+    std::shared_ptr<PointerController> controller = mLocked.pointerController.lock();
     if (controller == nullptr) {
         return;
     }
 
     bool lightsOut = mLocked.systemUiVisibility & ASYSTEM_UI_VISIBILITY_STATUS_BAR_HIDDEN;
-    controller->setInactivityTimeout(lightsOut
-            ? PointerController::INACTIVITY_TIMEOUT_SHORT
-            : PointerController::INACTIVITY_TIMEOUT_NORMAL);
+    controller->setInactivityTimeout(lightsOut ? PointerController::InactivityTimeout::SHORT
+                                               : PointerController::InactivityTimeout::NORMAL);
 }
 
 void NativeInputManager::setPointerSpeed(int32_t speed) {
@@ -891,7 +890,7 @@ void NativeInputManager::reloadCalibration() {
 
 void NativeInputManager::setPointerIconType(int32_t iconId) {
     AutoMutex _l(mLock);
-    sp<PointerController> controller = mLocked.pointerController.promote();
+    std::shared_ptr<PointerController> controller = mLocked.pointerController.lock();
     if (controller != nullptr) {
         controller->updatePointerIcon(iconId);
     }
@@ -899,7 +898,7 @@ void NativeInputManager::setPointerIconType(int32_t iconId) {
 
 void NativeInputManager::reloadPointerIcons() {
     AutoMutex _l(mLock);
-    sp<PointerController> controller = mLocked.pointerController.promote();
+    std::shared_ptr<PointerController> controller = mLocked.pointerController.lock();
     if (controller != nullptr) {
         controller->reloadPointerResources();
     }
@@ -907,7 +906,7 @@ void NativeInputManager::reloadPointerIcons() {
 
 void NativeInputManager::setCustomPointerIcon(const SpriteIcon& icon) {
     AutoMutex _l(mLock);
-    sp<PointerController> controller = mLocked.pointerController.promote();
+    std::shared_ptr<PointerController> controller = mLocked.pointerController.lock();
     if (controller != nullptr) {
         controller->setCustomPointerIcon(icon);
     }
@@ -1253,7 +1252,7 @@ int32_t NativeInputManager::getCustomPointerIconId() {
 }
 
 void NativeInputManager::setMotionClassifierEnabled(bool enabled) {
-    mInputManager->setMotionClassifierEnabled(enabled);
+    mInputManager->getClassifier()->setMotionClassifierEnabled(enabled);
 }
 
 // ----------------------------------------------------------------------------
@@ -1340,21 +1339,22 @@ static void throwInputChannelNotInitialized(JNIEnv* env) {
              "inputChannel is not initialized");
 }
 
-static void handleInputChannelDisposed(JNIEnv* env,
-        jobject /* inputChannelObj */, const sp<InputChannel>& inputChannel, void* data) {
+static void handleInputChannelDisposed(JNIEnv* env, jobject /* inputChannelObj */,
+                                       const std::shared_ptr<InputChannel>& inputChannel,
+                                       void* data) {
     NativeInputManager* im = static_cast<NativeInputManager*>(data);
 
     ALOGW("Input channel object '%s' was disposed without first being unregistered with "
             "the input manager!", inputChannel->getName().c_str());
-    im->unregisterInputChannel(env, inputChannel);
+    im->unregisterInputChannel(env, *inputChannel);
 }
 
 static void nativeRegisterInputChannel(JNIEnv* env, jclass /* clazz */,
         jlong ptr, jobject inputChannelObj) {
     NativeInputManager* im = reinterpret_cast<NativeInputManager*>(ptr);
 
-    sp<InputChannel> inputChannel = android_view_InputChannel_getInputChannel(env,
-            inputChannelObj);
+    std::shared_ptr<InputChannel> inputChannel =
+            android_view_InputChannel_getInputChannel(env, inputChannelObj);
     if (inputChannel == nullptr) {
         throwInputChannelNotInitialized(env);
         return;
@@ -1377,8 +1377,8 @@ static void nativeRegisterInputMonitor(JNIEnv* env, jclass /* clazz */,
         jlong ptr, jobject inputChannelObj, jint displayId, jboolean isGestureMonitor) {
     NativeInputManager* im = reinterpret_cast<NativeInputManager*>(ptr);
 
-    sp<InputChannel> inputChannel = android_view_InputChannel_getInputChannel(env,
-            inputChannelObj);
+    std::shared_ptr<InputChannel> inputChannel =
+            android_view_InputChannel_getInputChannel(env, inputChannelObj);
     if (inputChannel == nullptr) {
         throwInputChannelNotInitialized(env);
         return;
@@ -1403,8 +1403,8 @@ static void nativeUnregisterInputChannel(JNIEnv* env, jclass /* clazz */,
         jlong ptr, jobject inputChannelObj) {
     NativeInputManager* im = reinterpret_cast<NativeInputManager*>(ptr);
 
-    sp<InputChannel> inputChannel = android_view_InputChannel_getInputChannel(env,
-            inputChannelObj);
+    std::shared_ptr<InputChannel> inputChannel =
+            android_view_InputChannel_getInputChannel(env, inputChannelObj);
     if (inputChannel == nullptr) {
         throwInputChannelNotInitialized(env);
         return;
@@ -1412,7 +1412,7 @@ static void nativeUnregisterInputChannel(JNIEnv* env, jclass /* clazz */,
 
     android_view_InputChannel_setDisposeCallback(env, inputChannelObj, nullptr, nullptr);
 
-    status_t status = im->unregisterInputChannel(env, inputChannel);
+    status_t status = im->unregisterInputChannel(env, *inputChannel);
     if (status && status != BAD_VALUE) { // ignore already unregistered channel
         std::string message;
         message += StringPrintf("Failed to unregister input channel.  status=%d", status);
@@ -1617,9 +1617,8 @@ static void nativeReloadCalibration(JNIEnv* env, jclass clazz, jlong ptr) {
     im->reloadCalibration();
 }
 
-static void nativeVibrate(JNIEnv* env,
-        jclass /* clazz */, jlong ptr, jint deviceId, jlongArray patternObj,
-        jint repeat, jint token) {
+static void nativeVibrate(JNIEnv* env, jclass /* clazz */, jlong ptr, jint deviceId,
+                          jlongArray patternObj, jintArray amplitudesObj, jint repeat, jint token) {
     NativeInputManager* im = reinterpret_cast<NativeInputManager*>(ptr);
 
     size_t patternSize = env->GetArrayLength(patternObj);
@@ -1632,14 +1631,19 @@ static void nativeVibrate(JNIEnv* env,
 
     jlong* patternMillis = static_cast<jlong*>(env->GetPrimitiveArrayCritical(
             patternObj, nullptr));
-    nsecs_t pattern[patternSize];
+    jint* amplitudes = static_cast<jint*>(env->GetPrimitiveArrayCritical(amplitudesObj, nullptr));
+
+    std::vector<VibrationElement> pattern(patternSize);
     for (size_t i = 0; i < patternSize; i++) {
-        pattern[i] = max(jlong(0), min(patternMillis[i],
-                (jlong)(MAX_VIBRATE_PATTERN_DELAY_NSECS / 1000000LL))) * 1000000LL;
+        jlong duration =
+                max(min(patternMillis[i], (jlong)MAX_VIBRATE_PATTERN_DELAY_MSECS), (jlong)0);
+        pattern[i].duration = std::chrono::milliseconds(duration);
+        pattern[i].channels = {amplitudes[i]};
     }
     env->ReleasePrimitiveArrayCritical(patternObj, patternMillis, JNI_ABORT);
+    env->ReleasePrimitiveArrayCritical(amplitudesObj, amplitudes, JNI_ABORT);
 
-    im->getInputManager()->getReader()->vibrate(deviceId, pattern, patternSize, repeat, token);
+    im->getInputManager()->getReader()->vibrate(deviceId, pattern, repeat, token);
 }
 
 static void nativeCancelVibrate(JNIEnv* /* env */,
@@ -1791,7 +1795,7 @@ static const JNINativeMethod gInputManagerMethods[] = {
         {"nativeSetShowTouches", "(JZ)V", (void*)nativeSetShowTouches},
         {"nativeSetInteractive", "(JZ)V", (void*)nativeSetInteractive},
         {"nativeReloadCalibration", "(J)V", (void*)nativeReloadCalibration},
-        {"nativeVibrate", "(JI[JII)V", (void*)nativeVibrate},
+        {"nativeVibrate", "(JI[J[III)V", (void*)nativeVibrate},
         {"nativeCancelVibrate", "(JII)V", (void*)nativeCancelVibrate},
         {"nativeReloadKeyboardLayouts", "(J)V", (void*)nativeReloadKeyboardLayouts},
         {"nativeReloadDeviceAliases", "(J)V", (void*)nativeReloadDeviceAliases},

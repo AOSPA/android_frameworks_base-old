@@ -232,7 +232,6 @@ import android.content.res.Resources;
 import android.database.ContentObserver;
 import android.graphics.Rect;
 import android.hardware.display.DisplayManagerInternal;
-import android.location.LocationManager;
 import android.media.audiofx.AudioEffect;
 import android.net.Proxy;
 import android.net.Uri;
@@ -326,7 +325,10 @@ import com.android.internal.messages.nano.SystemMessageProto.SystemMessage;
 import com.android.internal.notification.SystemNotificationChannels;
 import com.android.internal.os.BackgroundThread;
 import com.android.internal.os.BatteryStatsImpl;
+import com.android.internal.os.BinderCallHeavyHitterWatcher.BinderCallHeavyHitterListener;
+import com.android.internal.os.BinderCallHeavyHitterWatcher.HeavyHitterContainer;
 import com.android.internal.os.BinderInternal;
+import com.android.internal.os.BinderTransactionNameResolver;
 import com.android.internal.os.ByteTransferPipe;
 import com.android.internal.os.IResultReceiver;
 import com.android.internal.os.ProcessCpuTracker;
@@ -1556,7 +1558,7 @@ public class ActivityManagerService extends IActivityManager.Stub
         void onOomAdjMessage(String msg);
     }
 
-    final AnrHelper mAnrHelper = new AnrHelper();
+    final AnrHelper mAnrHelper = new AnrHelper(this);
 
     /**
      * Runtime CPU use collection thread.  This object's lock is used to
@@ -1654,6 +1656,7 @@ public class ActivityManagerService extends IActivityManager.Stub
     static final int SERVICE_FOREGROUND_CRASH_MSG = 69;
     static final int DISPATCH_OOM_ADJ_OBSERVER_MSG = 70;
     static final int KILL_APP_ZYGOTE_MSG = 71;
+    static final int BINDER_HEAVYHITTER_AUTOSAMPLER_TIMEOUT_MSG = 72;
 
     static final int FIRST_BROADCAST_QUEUE_MSG = 200;
 
@@ -1698,6 +1701,21 @@ public class ActivityManagerService extends IActivityManager.Stub
      * Used to notify activity lifecycle events.
      */
     @Nullable ContentCaptureManagerInternal mContentCaptureService;
+
+    /*
+     * The default duration for the binder heavy hitter auto sampler
+     */
+    private static final long BINDER_HEAVY_HITTER_AUTO_SAMPLER_DURATION_MS = 300000L;
+
+    /**
+     * The default throttling duration for the binder heavy hitter auto sampler
+     */
+    private static final long BINDER_HEAVY_HITTER_AUTO_SAMPLER_THROTTLE_MS = 3600000L;
+
+    /**
+     * The last time when the binder heavy hitter auto sampler started.
+     */
+    private long mLastBinderHeavyHitterAutoSamplerStart = 0L;
 
     final class UiHandler extends Handler {
         public UiHandler() {
@@ -1972,6 +1990,9 @@ public class ActivityManagerService extends IActivityManager.Stub
                     mProcessList.handleAllTrustStorageUpdateLocked();
                 }
             } break;
+                case BINDER_HEAVYHITTER_AUTOSAMPLER_TIMEOUT_MSG: {
+                    handleBinderHeavyHitterAutoSamplerTimeOut();
+                } break;
             }
         }
     }
@@ -3341,6 +3362,9 @@ public class ActivityManagerService extends IActivityManager.Stub
     @Override
     public boolean setProcessMemoryTrimLevel(String process, int userId, int level)
             throws RemoteException {
+        if (!isCallerShell()) {
+            throw new SecurityException("Only shell can call it");
+        }
         synchronized (this) {
             final ProcessRecord app = findProcessLocked(process, userId, "setProcessMemoryTrimLevel");
             if (app == null) {
@@ -4970,7 +4994,13 @@ public class ActivityManagerService extends IActivityManager.Stub
         }
         mForceStopKill = true;
 
-        boolean didSomething = mProcessList.killPackageProcessesLocked(packageName, appId, userId,
+        // Notify first that the package is stopped, so its process won't be restarted unexpectedly
+        // if there is an activity of the package without attached process becomes visible when
+        // killing its other processes with visible activities.
+        boolean didSomething =
+                mAtmInternal.onForceStopPackage(packageName, doit, evenPersistent, userId);
+
+        didSomething |= mProcessList.killPackageProcessesLocked(packageName, appId, userId,
                 ProcessList.INVALID_ADJ, callerWillRestart, false /* allowRestart */, doit,
                 evenPersistent, true /* setRemoved */,
                 packageName == null ? ApplicationExitInfo.REASON_USER_STOPPED
@@ -4978,9 +5008,6 @@ public class ActivityManagerService extends IActivityManager.Stub
                 ApplicationExitInfo.SUBREASON_UNKNOWN,
                 (packageName == null ? ("stop user " + userId) : ("stop " + packageName))
                 + " due to " + reason);
-
-        didSomething |=
-                mAtmInternal.onForceStopPackage(packageName, doit, evenPersistent, userId);
 
         if (mServices.bringDownDisabledPackageServicesLocked(
                 packageName, null /* filterByClasses */, userId, evenPersistent, doit)) {
@@ -6086,9 +6113,9 @@ public class ActivityManagerService extends IActivityManager.Stub
         }
     }
 
-    private boolean isAppBad(ApplicationInfo info) {
+    private boolean isAppBad(final String processName, final int uid) {
         synchronized (this) {
-            return mAppErrors.isBadProcessLocked(info);
+            return mAppErrors.isBadProcessLocked(processName, uid);
         }
     }
 
@@ -6982,62 +7009,54 @@ public class ActivityManagerService extends IActivityManager.Stub
         return msg;
     }
 
-    ContentProviderConnection incProviderCountLocked(ProcessRecord r,
+    @GuardedBy("this")
+    private ContentProviderConnection incProviderCountLocked(ProcessRecord r,
             final ContentProviderRecord cpr, IBinder externalProcessToken, int callingUid,
-            String callingPackage, String callingTag, boolean stable) {
+            String callingPackage, String callingTag, boolean stable,
+            boolean updateLru, long startTime) {
         if (r != null) {
             for (int i=0; i<r.conProviders.size(); i++) {
                 ContentProviderConnection conn = r.conProviders.get(i);
                 if (conn.provider == cpr) {
-                    if (DEBUG_PROVIDER) Slog.v(TAG_PROVIDER,
-                            "Adding provider requested by "
-                            + r.processName + " from process "
-                            + cpr.info.processName + ": " + cpr.name.flattenToShortString()
-                            + " scnt=" + conn.stableCount + " uscnt=" + conn.unstableCount);
-                    if (stable) {
-                        conn.stableCount++;
-                        conn.numStableIncs++;
-                    } else {
-                        conn.unstableCount++;
-                        conn.numUnstableIncs++;
-                    }
+                    conn.incrementCount(stable);
                     return conn;
                 }
             }
+
+            // Create a new ContentProviderConnection.  The reference count
+            // is known to be 1.
             ContentProviderConnection conn = new ContentProviderConnection(cpr, r, callingPackage);
             conn.startAssociationIfNeeded();
-            if (stable) {
-                conn.stableCount = 1;
-                conn.numStableIncs = 1;
-            } else {
-                conn.unstableCount = 1;
-                conn.numUnstableIncs = 1;
-            }
+            conn.initializeCount(stable);
             cpr.connections.add(conn);
             r.conProviders.add(conn);
             startAssociationLocked(r.uid, r.processName, r.getCurProcState(),
                     cpr.uid, cpr.appInfo.longVersionCode, cpr.name, cpr.info.processName);
+            if (updateLru && cpr.proc != null
+                    && r != null && r.setAdj <= ProcessList.PERCEPTIBLE_LOW_APP_ADJ) {
+                // If this is a perceptible app accessing the provider, make
+                // sure to count it as being accessed and thus back up on
+                // the LRU list.  This is good because content providers are
+                // often expensive to start.  The calls to checkTime() use
+                // the "getContentProviderImpl" tag here, because it's part
+                // of the checktime log in getContentProviderImpl().
+                checkTime(startTime, "getContentProviderImpl: before updateLruProcess");
+                mProcessList.updateLruProcessLocked(cpr.proc, false, null);
+                checkTime(startTime, "getContentProviderImpl: after updateLruProcess");
+            }
             return conn;
         }
         cpr.addExternalProcessHandleLocked(externalProcessToken, callingUid, callingTag);
         return null;
     }
 
-    boolean decProviderCountLocked(ContentProviderConnection conn,
+    @GuardedBy("this")
+    private boolean decProviderCountLocked(ContentProviderConnection conn,
             ContentProviderRecord cpr, IBinder externalProcessToken, boolean stable) {
         if (conn != null) {
             cpr = conn.provider;
-            if (DEBUG_PROVIDER) Slog.v(TAG_PROVIDER,
-                    "Removing provider requested by "
-                    + conn.client.processName + " from process "
-                    + cpr.info.processName + ": " + cpr.name.flattenToShortString()
-                    + " scnt=" + conn.stableCount + " uscnt=" + conn.unstableCount);
-            if (stable) {
-                conn.stableCount--;
-            } else {
-                conn.unstableCount--;
-            }
-            if (conn.stableCount == 0 && conn.unstableCount == 0) {
+            final int referenceCount = conn.decrementCount(stable);
+            if (referenceCount == 0) {
                 conn.stopAssociation();
                 cpr.connections.remove(conn);
                 conn.client.conProviders.remove(conn);
@@ -7235,20 +7254,8 @@ public class ActivityManagerService extends IActivityManager.Stub
 
                 // In this case the provider instance already exists, so we can
                 // return it right away.
-                conn = incProviderCountLocked(r, cpr, token, callingUid, callingPackage, callingTag,
-                        stable);
-                if (conn != null && (conn.stableCount+conn.unstableCount) == 1) {
-                    if (cpr.proc != null
-                            && r != null && r.setAdj <= ProcessList.PERCEPTIBLE_LOW_APP_ADJ) {
-                        // If this is a perceptible app accessing the provider,
-                        // make sure to count it as being accessed and thus
-                        // back up on the LRU list.  This is good because
-                        // content providers are often expensive to start.
-                        checkTime(startTime, "getContentProviderImpl: before updateLruProcess");
-                        mProcessList.updateLruProcessLocked(cpr.proc, false, null);
-                        checkTime(startTime, "getContentProviderImpl: after updateLruProcess");
-                    }
-                }
+                conn = incProviderCountLocked(r, cpr, token, callingUid, callingPackage,
+                        callingTag, stable, true, startTime);
 
                 checkTime(startTime, "getContentProviderImpl: before updateOomAdj");
                 final int verifiedAdj = cpr.proc.verifiedAdj;
@@ -7493,8 +7500,8 @@ public class ActivityManagerService extends IActivityManager.Stub
                 }
 
                 mProviderMap.putProviderByName(name, cpr);
-                conn = incProviderCountLocked(r, cpr, token, callingUid, callingPackage, callingTag,
-                        stable);
+                conn = incProviderCountLocked(r, cpr, token, callingUid,
+                        callingPackage, callingTag, stable, false, startTime);
                 if (conn != null) {
                     conn.waiting = true;
                 }
@@ -7830,6 +7837,7 @@ public class ActivityManagerService extends IActivityManager.Stub
         }
     }
 
+    @Override
     public boolean refContentProvider(IBinder connection, int stable, int unstable) {
         ContentProviderConnection conn;
         try {
@@ -7844,31 +7852,8 @@ public class ActivityManagerService extends IActivityManager.Stub
             throw new NullPointerException("connection is null");
         }
 
-        synchronized (this) {
-            if (stable > 0) {
-                conn.numStableIncs += stable;
-            }
-            stable = conn.stableCount + stable;
-            if (stable < 0) {
-                throw new IllegalStateException("stableCount < 0: " + stable);
-            }
-
-            if (unstable > 0) {
-                conn.numUnstableIncs += unstable;
-            }
-            unstable = conn.unstableCount + unstable;
-            if (unstable < 0) {
-                throw new IllegalStateException("unstableCount < 0: " + unstable);
-            }
-
-            if ((stable+unstable) <= 0) {
-                throw new IllegalStateException("ref counts can't go to zero here: stable="
-                        + stable + " unstable=" + unstable);
-            }
-            conn.stableCount = stable;
-            conn.unstableCount = unstable;
-            return !conn.dead;
-        }
+        conn.adjustCounts(stable, unstable);
+        return !conn.dead;
     }
 
     public void unstableProviderDied(IBinder connection) {
@@ -8576,7 +8561,9 @@ public class ActivityManagerService extends IActivityManager.Stub
         synchronized (this) {
             boolean isDebuggable = "1".equals(SystemProperties.get(SYSTEM_DEBUGGABLE, "0"));
             if (!isDebuggable) {
-                if (!app.isProfileableByShell()) {
+                boolean isAppDebuggable = (app.flags & ApplicationInfo.FLAG_DEBUGGABLE) != 0;
+                boolean isAppProfileable = app.isProfileableByShell();
+                if (!isAppDebuggable && !isAppProfileable) {
                     throw new SecurityException("Process not debuggable, "
                             + "and not profileable by shell: " + app.packageName);
                 }
@@ -8921,6 +8908,53 @@ public class ActivityManagerService extends IActivityManager.Stub
     boolean isUidActiveLocked(int uid) {
         final UidRecord uidRecord = mProcessList.getUidRecordLocked(uid);
         return uidRecord != null && !uidRecord.setIdle;
+    }
+
+    /**
+     * Change the sched policy cgroup of a thread.
+     *
+     * <p>It is intended to be used in jni call of {@link Process#setThreadPriority(int, int)}.
+     * When a process is changing the priority of its threads, the sched policy of that
+     * thread may need to be changed accordingly - if the priority is changed to below
+     * or equal to {@link android.os.Process#THREAD_PRIORITY_BACKGROUND} or raising from it.
+     * However, because of the limitation of sepolicy, the thread priority change will
+     * fail for some processes. To solve it, we add this binder call in Activity Manager,
+     * so that the jni call of {@link Process#setThreadPriority(int, int)} could use it.
+     *
+     * @param tid tid of the thread to be changed.
+     * @param group The sched policy group to be changed to.
+     *
+     * @throws IllegalArgumentException if group is invalid.
+     * @throws SecurityException if no permission.
+     *
+     * @return Returns {@code true} if the sched policy is changed successfully;
+     *         {@code false} otherwise.
+     */
+    @Override
+    public boolean setSchedPolicyCgroup(final int tid, final int group) {
+        final int pid = Binder.getCallingPid();
+        final int tgid = Process.getThreadGroupLeader(tid);
+        final int pgroup = Process.getProcessGroup(pid);
+
+        // tid is not in the thread group of caller
+        if (pid != tgid) {
+            return false;
+        }
+
+        // sched group is higher than its main process
+        if (group > pgroup) {
+            return false;
+        }
+
+        try {
+            Process.setThreadGroup(tid, group);
+            return true;
+        } catch (IllegalArgumentException e) {
+            Slog.w(TAG, "Failed to set thread group, argument invalid:\n" + e);
+        } catch (SecurityException e) {
+            Slog.w(TAG, "Failed to set thread group, no permission:\n" + e);
+        }
+        return false;
     }
 
     @Override
@@ -14768,7 +14802,7 @@ public class ActivityManagerService extends IActivityManager.Stub
             }
             ProcessRecord capp = conn.client;
             conn.dead = true;
-            if (conn.stableCount > 0) {
+            if (conn.stableCount() > 0) {
                 if (!capp.isPersistent() && capp.thread != null
                         && capp.pid != 0
                         && capp.pid != MY_PID) {
@@ -15951,7 +15985,6 @@ public class ActivityManagerService extends IActivityManager.Stub
                 || Intent.ACTION_FACTORY_RESET.equals(action)
                 || AppWidgetManager.ACTION_APPWIDGET_CONFIGURE.equals(action)
                 || AppWidgetManager.ACTION_APPWIDGET_UPDATE.equals(action)
-                || LocationManager.HIGH_POWER_REQUEST_CHANGE_ACTION.equals(action)
                 || TelephonyManager.ACTION_REQUEST_OMADM_CONFIGURATION_UPDATE.equals(action)
                 || SuggestionSpan.ACTION_SUGGESTION_PICKED.equals(action)
                 || AudioEffect.ACTION_OPEN_AUDIO_EFFECT_CONTROL_SESSION.equals(action)
@@ -17222,8 +17255,16 @@ public class ActivityManagerService extends IActivityManager.Stub
 
     @Override
     public void updatePersistentConfiguration(Configuration values) {
+        updatePersistentConfigurationWithAttribution(values,
+                Settings.getPackageNameForUid(mContext, Binder.getCallingUid()), null);
+    }
+
+    @Override
+    public void updatePersistentConfigurationWithAttribution(Configuration values,
+            String callingPackage, String callingAttributionTag) {
         enforceCallingPermission(CHANGE_CONFIGURATION, "updatePersistentConfiguration()");
-        enforceWriteSettingsPermission("updatePersistentConfiguration()");
+        enforceWriteSettingsPermission("updatePersistentConfiguration()", callingPackage,
+                callingAttributionTag);
         if (values == null) {
             throw new NullPointerException("Configuration must not be null");
         }
@@ -17233,14 +17274,15 @@ public class ActivityManagerService extends IActivityManager.Stub
         mActivityTaskManager.updatePersistentConfiguration(values, userId);
     }
 
-    private void enforceWriteSettingsPermission(String func) {
+    private void enforceWriteSettingsPermission(String func, String callingPackage,
+            String callingAttributionTag) {
         int uid = Binder.getCallingUid();
         if (uid == ROOT_UID) {
             return;
         }
 
         if (Settings.checkAndNoteWriteSettingsOperation(mContext, uid,
-                Settings.getPackageNameForUid(mContext, uid), false)) {
+                callingPackage, callingAttributionTag, false)) {
             return;
         }
 
@@ -19429,6 +19471,32 @@ public class ActivityManagerService extends IActivityManager.Stub
         }
 
         @Override
+        public void noteAlarmFinish(PendingIntent ps, WorkSource workSource, int sourceUid,
+                String tag) {
+            ActivityManagerService.this.noteAlarmFinish((ps != null) ? ps.getTarget() : null,
+                    workSource, sourceUid, tag);
+        }
+
+        @Override
+        public void noteAlarmStart(PendingIntent ps, WorkSource workSource, int sourceUid,
+                String tag) {
+            ActivityManagerService.this.noteAlarmStart((ps != null) ? ps.getTarget() : null,
+                    workSource, sourceUid, tag);
+        }
+
+        @Override
+        public void noteWakeupAlarm(PendingIntent ps, WorkSource workSource, int sourceUid,
+                String sourcePkg, String tag) {
+            ActivityManagerService.this.noteWakeupAlarm((ps != null) ? ps.getTarget() : null,
+                    workSource, sourceUid, sourcePkg, tag);
+        }
+
+        @Override
+        public boolean isAppStartModeDisabled(int uid, String packageName) {
+            return ActivityManagerService.this.isAppStartModeDisabled(uid, packageName);
+        }
+
+        @Override
         public int[] getCurrentProfileIds() {
             return mUserController.getCurrentProfileIds();
         }
@@ -19796,8 +19864,8 @@ public class ActivityManagerService extends IActivityManager.Stub
         }
 
         @Override
-        public boolean isAppBad(ApplicationInfo info) {
-            return ActivityManagerService.this.isAppBad(info);
+        public boolean isAppBad(final String processName, final int uid) {
+            return ActivityManagerService.this.isAppBad(processName, uid);
         }
 
         @Override
@@ -20143,6 +20211,130 @@ public class ActivityManagerService extends IActivityManager.Stub
     }
 
     /**
+     * Update the binder call heavy hitter watcher per the new configuration
+     */
+    void scheduleUpdateBinderHeavyHitterWatcherConfig() {
+        // There are two sets of configs: the default watcher and the auto sampler,
+        // the default one takes precedence. System would kick off auto sampler when there is
+        // an anomaly (i.e., consecutive ANRs), but it'll be stopped automatically after a while.
+        mHandler.post(() -> {
+            final boolean enabled;
+            final int batchSize;
+            final float threshold;
+            final BinderCallHeavyHitterListener listener;
+            synchronized (ActivityManagerService.this) {
+                if (mConstants.BINDER_HEAVY_HITTER_WATCHER_ENABLED) {
+                    // Default watcher takes precedence, ignore the auto sampler.
+                    mHandler.removeMessages(BINDER_HEAVYHITTER_AUTOSAMPLER_TIMEOUT_MSG);
+                    // Set the watcher with the default watcher's config
+                    enabled = true;
+                    batchSize = mConstants.BINDER_HEAVY_HITTER_WATCHER_BATCHSIZE;
+                    threshold = mConstants.BINDER_HEAVY_HITTER_WATCHER_THRESHOLD;
+                    listener = (a, b, c, d) -> mHandler.post(
+                            () -> handleBinderHeavyHitters(a, b, c, d));
+                } else if (mHandler.hasMessages(BINDER_HEAVYHITTER_AUTOSAMPLER_TIMEOUT_MSG)) {
+                    // There is an ongoing auto sampler session, update it
+                    enabled = mConstants.BINDER_HEAVY_HITTER_AUTO_SAMPLER_ENABLED;
+                    batchSize = mConstants.BINDER_HEAVY_HITTER_AUTO_SAMPLER_BATCHSIZE;
+                    threshold = mConstants.BINDER_HEAVY_HITTER_AUTO_SAMPLER_THRESHOLD;
+                    listener = (a, b, c, d) -> mHandler.post(
+                            () -> handleBinderHeavyHitters(a, b, c, d));
+                } else {
+                    // Stop it
+                    enabled = false;
+                    batchSize = 0;
+                    threshold = 0.0f;
+                    listener = null;
+                }
+            }
+            Binder.setHeavyHitterWatcherConfig(enabled, batchSize, threshold, listener);
+        });
+    }
+
+    /**
+     * Kick off the watcher to run for given timeout, it could be throttled however.
+     */
+    void scheduleBinderHeavyHitterAutoSampler() {
+        mHandler.post(() -> {
+            final int batchSize;
+            final float threshold;
+            final long now;
+            synchronized (ActivityManagerService.this) {
+                if (!mConstants.BINDER_HEAVY_HITTER_AUTO_SAMPLER_ENABLED) {
+                    // It's configured OFF
+                    return;
+                }
+                if (mConstants.BINDER_HEAVY_HITTER_WATCHER_ENABLED) {
+                    // If the default watcher is active already, don't start the auto sampler
+                    return;
+                }
+                now = SystemClock.uptimeMillis();
+                if (mLastBinderHeavyHitterAutoSamplerStart
+                        + BINDER_HEAVY_HITTER_AUTO_SAMPLER_THROTTLE_MS > now) {
+                    // Too frequent, throttle it
+                    return;
+                }
+                batchSize = mConstants.BINDER_HEAVY_HITTER_AUTO_SAMPLER_BATCHSIZE;
+                threshold = mConstants.BINDER_HEAVY_HITTER_AUTO_SAMPLER_THRESHOLD;
+            }
+            // No lock is needed because we are accessing these variables in handle thread only.
+            mLastBinderHeavyHitterAutoSamplerStart = now;
+            // Start the watcher with the auto sampler's config.
+            Binder.setHeavyHitterWatcherConfig(true, batchSize, threshold,
+                    (a, b, c, d) -> mHandler.post(() -> handleBinderHeavyHitters(a, b, c, d)));
+            // Schedule to stop it after given timeout.
+            mHandler.sendMessageDelayed(mHandler.obtainMessage(
+                    BINDER_HEAVYHITTER_AUTOSAMPLER_TIMEOUT_MSG),
+                    BINDER_HEAVY_HITTER_AUTO_SAMPLER_DURATION_MS);
+        });
+    }
+
+    /**
+     * Stop the binder heavy hitter auto sampler after given timeout.
+     */
+    private void handleBinderHeavyHitterAutoSamplerTimeOut() {
+        synchronized (ActivityManagerService.this) {
+            if (mConstants.BINDER_HEAVY_HITTER_WATCHER_ENABLED) {
+                // The default watcher is ON, don't bother to stop it.
+                return;
+            }
+        }
+        Binder.setHeavyHitterWatcherConfig(false, 0, 0.0f, null);
+    }
+
+    /**
+     * Handle the heavy hitters
+     */
+    private void handleBinderHeavyHitters(@NonNull final List<HeavyHitterContainer> hitters,
+            final int totalBinderCalls, final float threshold, final long timeSpan) {
+        final int size = hitters.size();
+        if (size == 0) {
+            return;
+        }
+        // Simply log it for now
+        final String pfmt = "%.1f%%";
+        final BinderTransactionNameResolver resolver = new BinderTransactionNameResolver();
+        final StringBuilder sb = new StringBuilder("Excessive incoming binder calls(>")
+                .append(String.format(pfmt, threshold * 100))
+                .append(',').append(totalBinderCalls)
+                .append(',').append(timeSpan)
+                .append("ms): ");
+        for (int i = 0; i < size; i++) {
+            if (i > 0) {
+                sb.append(", ");
+            }
+            final HeavyHitterContainer container = hitters.get(i);
+            sb.append('[').append(container.mUid)
+                    .append(',').append(container.mClass.getName())
+                    .append(',').append(resolver.getMethodName(container.mClass, container.mCode))
+                    .append(',').append(container.mCode)
+                    .append(',').append(String.format(pfmt, container.mFrequency * 100))
+                    .append(']');
+        }
+        Slog.w(TAG, sb.toString());
+    }
+
+    /**
      * Attach an agent to the specified process (proces name or PID)
      */
     public void attachAgent(String process, String path) {
@@ -20472,6 +20664,19 @@ public class ActivityManagerService extends IActivityManager.Stub
             return mOomAdjuster.mCachedAppOptimizer.isFreezerSupported();
         } finally {
             Binder.restoreCallingIdentity(token);
+        }
+    }
+
+    /**
+     * Resets the state of the {@link com.android.server.am.AppErrors} instance.
+     * This is intended for testing within the CTS only and is protected by
+     * android.permission.RESET_APP_ERRORS.
+     */
+    @Override
+    public void resetAppErrors() {
+        enforceCallingPermission(Manifest.permission.RESET_APP_ERRORS, "resetAppErrors");
+        synchronized (this) {
+            mAppErrors.resetStateLocked();
         }
     }
 }

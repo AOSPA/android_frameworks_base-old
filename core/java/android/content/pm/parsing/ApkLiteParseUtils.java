@@ -315,6 +315,7 @@ public class ApkLiteParseUtils {
         String targetPackage = null;
         boolean overlayIsStatic = false;
         int overlayPriority = 0;
+        int rollbackDataPolicy = 0;
 
         String requiredSystemPropertyName = null;
         String requiredSystemPropertyValue = null;
@@ -379,10 +380,6 @@ public class ApkLiteParseUtils {
                     switch (attr) {
                         case "debuggable":
                             debuggable = attrs.getAttributeBooleanValue(i, false);
-                            if (debuggable) {
-                                // Debuggable implies profileable
-                                profilableByShell = true;
-                            }
                             break;
                         case "multiArch":
                             multiArch = attrs.getAttributeBooleanValue(i, false);
@@ -396,6 +393,33 @@ public class ApkLiteParseUtils {
                         case "useEmbeddedDex":
                             useEmbeddedDex = attrs.getAttributeBooleanValue(i, false);
                             break;
+                        case "rollbackDataPolicy":
+                            rollbackDataPolicy = attrs.getAttributeIntValue(i, 0);
+                            break;
+                    }
+                }
+
+                final int innerDepth = parser.getDepth();
+                int innerType;
+                while ((innerType = parser.next()) != XmlPullParser.END_DOCUMENT
+                        && (innerType != XmlPullParser.END_TAG || parser.getDepth() > innerDepth)) {
+                    if (innerType == XmlPullParser.END_TAG || innerType == XmlPullParser.TEXT) {
+                        continue;
+                    }
+
+                    if (parser.getDepth() != innerDepth + 1) {
+                        // Search only under <application>.
+                        continue;
+                    }
+
+                    if (PackageParser.TAG_PROFILEABLE.equals(parser.getName())) {
+                        for (int i = 0; i < attrs.getAttributeCount(); ++i) {
+                            final String attr = attrs.getAttributeName(i);
+                            if ("shell".equals(attr)) {
+                                profilableByShell = attrs.getAttributeBooleanValue(i,
+                                        profilableByShell);
+                            }
+                        }
                     }
                 }
             } else if (PackageParser.TAG_OVERLAY.equals(parser.getName())) {
@@ -435,13 +459,6 @@ public class ApkLiteParseUtils {
                         minSdkVersion = attrs.getAttributeIntValue(i, DEFAULT_MIN_SDK_VERSION);
                     }
                 }
-            } else if (PackageParser.TAG_PROFILEABLE.equals(parser.getName())) {
-                for (int i = 0; i < attrs.getAttributeCount(); ++i) {
-                    final String attr = attrs.getAttributeName(i);
-                    if ("shell".equals(attr)) {
-                        profilableByShell = attrs.getAttributeBooleanValue(i, profilableByShell);
-                    }
-                }
             }
         }
 
@@ -462,7 +479,8 @@ public class ApkLiteParseUtils {
                         versionCodeMajor, revisionCode, installLocation, verifiers, signingDetails,
                         coreApp, debuggable, profilableByShell, multiArch, use32bitAbi,
                         useEmbeddedDex, extractNativeLibs, isolatedSplits, targetPackage,
-                        overlayIsStatic, overlayPriority, minSdkVersion, targetSdkVersion));
+                        overlayIsStatic, overlayPriority, minSdkVersion, targetSdkVersion,
+                        rollbackDataPolicy));
     }
 
     public static ParseResult<Pair<String, String>> parsePackageSplitNames(ParseInput input,

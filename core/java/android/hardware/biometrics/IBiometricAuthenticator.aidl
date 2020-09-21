@@ -16,7 +16,7 @@
 
 package android.hardware.biometrics;
 
-import android.hardware.biometrics.IBiometricServiceReceiverInternal;
+import android.hardware.biometrics.IBiometricSensorReceiver;
 import android.hardware.biometrics.IBiometricServiceLockoutResetCallback;
 import android.hardware.face.IFaceServiceReceiver;
 import android.hardware.face.Face;
@@ -33,16 +33,16 @@ interface IBiometricAuthenticator {
     // called from BiometricService. The additional uid, pid, userId arguments should be determined
     // by BiometricService. To start authentication after the clients are ready, use
     // startPreparedClient().
-    void prepareForAuthentication(boolean requireConfirmation, IBinder token, long sessionId,
-            int userId, IBiometricServiceReceiverInternal wrapperReceiver, String opPackageName,
+    void prepareForAuthentication(boolean requireConfirmation, IBinder token, long operationId,
+            int userId, IBiometricSensorReceiver sensorReceiver, String opPackageName,
             int cookie, int callingUid, int callingPid, int callingUserId);
 
     // Starts authentication with the previously prepared client.
     void startPreparedClient(int cookie);
 
-    // Same as above, with extra arguments.
+    // Cancels authentication.
     void cancelAuthenticationFromService(IBinder token, String opPackageName,
-            int callingUid, int callingPid, int callingUserId, boolean fromClient);
+            int callingUid, int callingPid, int callingUserId);
 
     // Determine if HAL is loaded and ready
     boolean isHardwareDetected(String opPackageName);
@@ -50,11 +50,11 @@ interface IBiometricAuthenticator {
     // Determine if a user has at least one enrolled face
     boolean hasEnrolledTemplates(int userId, String opPackageName);
 
-    // Reset the lockout when user authenticates with strong auth (e.g. PIN, pattern or password)
-    void resetLockout(in byte [] token);
+    // Return the LockoutTracker status for the specified user
+    int getLockoutModeForUser(int userId);
 
-    // Explicitly set the active user (for enrolling work profile)
-    void setActiveUser(int uid);
+    // Reset the lockout when user authenticates with strong auth (e.g. PIN, pattern or password)
+    void resetLockout(int userId, in byte [] hardwareAuthToken);
 
     // Gets the authenticator ID representing the current set of enrolled templates
     long getAuthenticatorId(int callingUserId);

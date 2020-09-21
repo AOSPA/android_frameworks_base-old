@@ -52,6 +52,7 @@ import android.view.ViewGroup;
 import androidx.test.filters.FlakyTest;
 import androidx.test.filters.MediumTest;
 
+import com.android.compatibility.common.util.SystemUtil;
 import com.android.internal.annotations.GuardedBy;
 
 import org.junit.After;
@@ -73,6 +74,7 @@ public class TaskStackChangedListenerTest {
     private IActivityManager mService;
     private ITaskStackListener mTaskStackListener;
 
+    private static final int WAIT_TIMEOUT_MS = 5000;
     private static final Object sLock = new Object();
     @GuardedBy("sLock")
     private static boolean sTaskStackChangedCalled;
@@ -295,7 +297,7 @@ public class TaskStackChangedListenerTest {
         final Context context = instrumentation.getContext();
         Intent intent = new Intent(context, ActivityInActivityView.class);
         intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_MULTIPLE_TASK);
-        activityView.startActivity(intent);
+        SystemUtil.runWithShellPermissionIdentity(() -> activityView.startActivity(intent));
         waitForCallback(singleTaskDisplayDrawnLatch);
     }
 
@@ -356,7 +358,7 @@ public class TaskStackChangedListenerTest {
         final Context context = instrumentation.getContext();
         Intent intent = new Intent(context, ActivityLaunchesNewActivityInActivityView.class);
         intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_MULTIPLE_TASK);
-        activityView.startActivity(intent);
+        SystemUtil.runWithShellPermissionIdentity(() -> activityView.startActivity(intent));
         waitForCallback(singleTaskDisplayDrawnLatch);
         UiDevice.getInstance(getInstrumentation()).waitForIdle();
         assertEquals(1, singleTaskDisplayEmptyLatch.getCount());
@@ -486,10 +488,11 @@ public class TaskStackChangedListenerTest {
         final ActivityMonitor monitor = new ActivityMonitor(activityClass.getName(), null, false);
         getInstrumentation().addMonitor(monitor);
         final Context context = getInstrumentation().getContext();
-        context.startActivity(
+        SystemUtil.runWithShellPermissionIdentity(() -> context.startActivity(
                 new Intent(context, activityClass).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-                options.toBundle());
-        final TestActivity activity = (TestActivity) monitor.waitForActivityWithTimeout(1000);
+                options.toBundle()));
+        final TestActivity activity =
+                (TestActivity) monitor.waitForActivityWithTimeout(WAIT_TIMEOUT_MS);
         if (activity == null) {
             throw new RuntimeException("Timed out waiting for Activity");
         }
@@ -507,7 +510,7 @@ public class TaskStackChangedListenerTest {
 
     private void waitForCallback(CountDownLatch latch) {
         try {
-            final boolean result = latch.await(4, TimeUnit.SECONDS);
+            final boolean result = latch.await(WAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
             if (!result) {
                 throw new RuntimeException("Timed out waiting for task stack change notification");
             }
@@ -559,7 +562,7 @@ public class TaskStackChangedListenerTest {
                 if (mIsResumed == isResumed) {
                     return;
                 }
-                wait(5000);
+                wait(WAIT_TIMEOUT_MS);
             }
             assertEquals("The activity resume state change timed out", isResumed, mIsResumed);
         }

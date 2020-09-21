@@ -214,8 +214,10 @@ final class HdmiCecLocalDeviceTv extends HdmiCecLocalDevice {
         resetSelectRequestBuffer();
         launchDeviceDiscovery();
         startQueuedActions();
+        if (!mDelayedMessageBuffer.isBuffered(Constants.MESSAGE_ACTIVE_SOURCE)) {
+            mService.sendCecCommand(HdmiCecMessageBuilder.buildRequestActiveSource(mAddress));
+        }
     }
-
 
     @ServiceThreadOnly
     private List<Integer> initLocalDeviceAddresses() {
@@ -1096,10 +1098,11 @@ final class HdmiCecLocalDeviceTv extends HdmiCecLocalDevice {
         HdmiDeviceInfo avr = getAvrDeviceInfo();
         if (avr != null
                 && (avrAddress == avr.getLogicalAddress())
-                && isConnectedToArcPort(avr.getPhysicalAddress())
-                && isDirectConnectAddress(avr.getPhysicalAddress())) {
+                && isConnectedToArcPort(avr.getPhysicalAddress())) {
             if (enabled) {
-                return isConnected(avr.getPortId()) && isArcFeatureEnabled(avr.getPortId());
+                return isConnected(avr.getPortId())
+                    && isArcFeatureEnabled(avr.getPortId())
+                    && isDirectConnectAddress(avr.getPhysicalAddress());
             } else {
                 return true;
             }
@@ -1664,6 +1667,7 @@ final class HdmiCecLocalDeviceTv extends HdmiCecLocalDevice {
         if (avr == null) {
             return;
         }
+        setArcStatus(false);
 
         // Seq #44.
         removeAction(RequestArcInitiationAction.class);

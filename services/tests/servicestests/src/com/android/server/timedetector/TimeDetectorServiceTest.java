@@ -35,6 +35,7 @@ import android.content.Context;
 import android.content.pm.PackageManager;
 import android.os.HandlerThread;
 import android.os.TimestampedValue;
+import android.util.IndentingPrintWriter;
 
 import androidx.test.runner.AndroidJUnit4;
 
@@ -46,6 +47,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 
 import java.io.PrintWriter;
+import java.io.StringWriter;
 
 @RunWith(AndroidJUnit4.class)
 public class TimeDetectorServiceTest {
@@ -132,15 +134,14 @@ public class TimeDetectorServiceTest {
         doNothing().when(mMockContext).enforceCallingOrSelfPermission(anyString(), any());
 
         ManualTimeSuggestion manualTimeSuggestion = createManualTimeSuggestion();
-        mTimeDetectorService.suggestManualTime(manualTimeSuggestion);
-        mTestHandler.assertTotalMessagesEnqueued(1);
+
+        assertTrue(mTimeDetectorService.suggestManualTime(manualTimeSuggestion));
+        mStubbedTimeDetectorStrategy.verifySuggestManualTimeCalled(manualTimeSuggestion);
 
         verify(mMockContext).enforceCallingOrSelfPermission(
                 eq(android.Manifest.permission.SUGGEST_MANUAL_TIME_AND_ZONE),
                 anyString());
 
-        mTestHandler.waitForMessagesToBeProcessed();
-        mStubbedTimeDetectorStrategy.verifySuggestManualTimeCalled(manualTimeSuggestion);
     }
 
     @Test(expected = SecurityException.class)
@@ -178,7 +179,8 @@ public class TimeDetectorServiceTest {
         when(mMockContext.checkCallingOrSelfPermission(android.Manifest.permission.DUMP))
                 .thenReturn(PackageManager.PERMISSION_GRANTED);
 
-        mTimeDetectorService.dump(null, null, null);
+        PrintWriter pw = new PrintWriter(new StringWriter());
+        mTimeDetectorService.dump(null, pw, null);
 
         verify(mMockContext).checkCallingOrSelfPermission(eq(android.Manifest.permission.DUMP));
         mStubbedTimeDetectorStrategy.verifyDumpCalled();
@@ -236,8 +238,9 @@ public class TimeDetectorServiceTest {
         }
 
         @Override
-        public void suggestManualTime(ManualTimeSuggestion timeSuggestion) {
+        public boolean suggestManualTime(ManualTimeSuggestion timeSuggestion) {
             mLastManualSuggestion = timeSuggestion;
+            return true;
         }
 
         @Override
@@ -251,7 +254,7 @@ public class TimeDetectorServiceTest {
         }
 
         @Override
-        public void dump(PrintWriter pw, String[] args) {
+        public void dump(IndentingPrintWriter pw, String[] args) {
             mDumpCalled = true;
         }
 
@@ -267,11 +270,11 @@ public class TimeDetectorServiceTest {
             assertEquals(expectedSuggestion, mLastTelephonySuggestion);
         }
 
-        public void verifySuggestManualTimeCalled(ManualTimeSuggestion expectedSuggestion) {
+        void verifySuggestManualTimeCalled(ManualTimeSuggestion expectedSuggestion) {
             assertEquals(expectedSuggestion, mLastManualSuggestion);
         }
 
-        public void verifySuggestNetworkTimeCalled(NetworkTimeSuggestion expectedSuggestion) {
+        void verifySuggestNetworkTimeCalled(NetworkTimeSuggestion expectedSuggestion) {
             assertEquals(expectedSuggestion, mLastNetworkSuggestion);
         }
 

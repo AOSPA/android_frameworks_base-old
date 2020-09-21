@@ -711,11 +711,13 @@
     <string name="notification_silence_title" msgid="8608090968400832335">"静音"</string>
     <string name="notification_alert_title" msgid="3656229781017543655">"默认"</string>
     <string name="notification_bubble_title" msgid="8330481035191903164">"气泡"</string>
+    <string name="notification_automatic_title" msgid="3745465364578762652">"自动"</string>
     <string name="notification_channel_summary_low" msgid="4860617986908931158">"不发出提示音，也不振动"</string>
     <string name="notification_conversation_summary_low" msgid="1734433426085468009">"不发出提示音，也不振动；显示在对话部分的靠下位置"</string>
     <string name="notification_channel_summary_default" msgid="3282930979307248890">"可能会响铃或振动（取决于手机设置）"</string>
     <string name="notification_channel_summary_default_with_bubbles" msgid="1782419896613644568">"可能会响铃或振动（取决于手机设置）。默认情况下，来自<xliff:g id="APP_NAME">%1$s</xliff:g>的对话会以对话泡的形式显示。"</string>
     <string name="notification_channel_summary_bubble" msgid="7235935211580860537">"通过可链接到这项内容的浮动快捷方式吸引您的注意。"</string>
+    <string name="notification_channel_summary_automatic" msgid="5813109268050235275">"让系统决定是否应让设备在收到此通知时发出提示音或振动"</string>
     <string name="notification_channel_summary_priority" msgid="7952654515769021553">"以悬浮对话泡形式显示在对话部分顶部，如果设备处于锁定状态，在锁定屏幕上显示个人资料照片"</string>
     <string name="notification_conversation_channel_settings" msgid="2409977688430606835">"设置"</string>
     <string name="notification_priority_title" msgid="2079708866333537093">"优先"</string>
@@ -736,6 +738,12 @@
     <string name="appops_camera_mic_overlay" msgid="5584311236445644095">"此应用正显示在屏幕上其他应用的上层，并且正在使用麦克风和摄像头。"</string>
     <string name="notification_appops_settings" msgid="5208974858340445174">"设置"</string>
     <string name="notification_appops_ok" msgid="2177609375872784124">"确定"</string>
+    <string name="feedback_silenced" msgid="5382212321253328247">"此通知已被系统静音。"</string>
+    <string name="feedback_promoted" msgid="8075757485407091976">"此通知已被系统升级。"</string>
+    <string name="feedback_demoted" msgid="5848066008939031913">"此通知已被系统降级。"</string>
+    <string name="feedback_prompt" msgid="2278631214125128281">"是否正确？"</string>
+    <string name="feedback_response" msgid="4671729244976641339">"感谢您提供反馈！"</string>
+    <string name="feedback_ok" msgid="6481426753298857144">"确定"</string>
     <string name="notification_channel_controls_opened_accessibility" msgid="6111817750774381094">"<xliff:g id="APP_NAME">%1$s</xliff:g>的通知控件已打开"</string>
     <string name="notification_channel_controls_closed_accessibility" msgid="1561909368876911701">"<xliff:g id="APP_NAME">%1$s</xliff:g>的通知控件已关闭"</string>
     <string name="notification_channel_switch_accessibility" msgid="8979885820432540252">"允许接收来自此频道的通知"</string>
@@ -908,25 +916,14 @@
     <string name="accessibility_quick_settings_edit" msgid="1523745183383815910">"修改设置顺序。"</string>
     <string name="accessibility_quick_settings_page" msgid="7506322631645550961">"第 <xliff:g id="ID_1">%1$d</xliff:g> 页，共 <xliff:g id="ID_2">%2$d</xliff:g> 页"</string>
     <string name="tuner_lock_screen" msgid="2267383813241144544">"锁定屏幕"</string>
-    <string name="pip_phone_expand" msgid="1424988917240616212">"展开"</string>
-    <string name="pip_phone_minimize" msgid="9057117033655996059">"最小化"</string>
-    <string name="pip_phone_close" msgid="8801864042095341824">"关闭"</string>
-    <string name="pip_phone_settings" msgid="5687538631925004341">"设置"</string>
-    <string name="pip_phone_dismiss_hint" msgid="5825740708095316710">"向下拖动即可关闭"</string>
-    <string name="pip_menu_title" msgid="6365909306215631910">"菜单"</string>
-    <string name="pip_notification_title" msgid="8661573026059630525">"<xliff:g id="NAME">%s</xliff:g>目前位于“画中画”中"</string>
-    <string name="pip_notification_message" msgid="4991831338795022227">"如果您不想让“<xliff:g id="NAME">%s</xliff:g>”使用此功能，请点按以打开设置，然后关闭此功能。"</string>
-    <string name="pip_play" msgid="333995977693142810">"播放"</string>
-    <string name="pip_pause" msgid="1139598607050555845">"暂停"</string>
-    <string name="pip_skip_to_next" msgid="3864212650579956062">"跳到下一个"</string>
-    <string name="pip_skip_to_prev" msgid="3742589641443049237">"跳到上一个"</string>
-    <string name="accessibility_action_pip_resize" msgid="8237306972921160456">"调整大小"</string>
     <string name="thermal_shutdown_title" msgid="2702966892682930264">"手机因严重发热而自动关机"</string>
-    <string name="thermal_shutdown_message" msgid="7432744214105003895">"现在，您的手机已恢复正常运行"</string>
+    <string name="thermal_shutdown_message" msgid="6142269839066172984">"现在，您的手机已恢复正常运行。\n点按即可了解详情"</string>
     <string name="thermal_shutdown_dialog_message" msgid="6745684238183492031">"由于发热严重，因此您的手机执行了自动关机以降温。现在，您的手机已恢复正常运行。\n\n以下情况可能会导致您的手机严重发热：\n • 使用占用大量资源的应用（例如游戏、视频或导航应用）\n • 下载或上传大型文件\n • 在高温环境下使用手机"</string>
+    <string name="thermal_shutdown_dialog_help_text" msgid="6413474593462902901">"查看处理步骤"</string>
     <string name="high_temp_title" msgid="2218333576838496100">"手机温度上升中"</string>
-    <string name="high_temp_notif_message" msgid="163928048626045592">"手机降温时，部分功能的使用会受限制"</string>
+    <string name="high_temp_notif_message" msgid="1277346543068257549">"手机降温时，部分功能的使用会受限制。\n点按即可了解详情"</string>
     <string name="high_temp_dialog_message" msgid="3793606072661253968">"您的手机将自动尝试降温。您依然可以使用您的手机，但是手机运行速度可能会更慢。\n\n手机降温后，就会恢复正常的运行速度。"</string>
+    <string name="high_temp_dialog_help_text" msgid="7380171287943345858">"查看处理步骤"</string>
     <string name="high_temp_alarm_title" msgid="2359958549570161495">"拔下充电器"</string>
     <string name="high_temp_alarm_notify_message" msgid="7186272817783835089">"为此设备充电时出现问题。这可能是由数据线太热所导致，请拔下电源适配器并采取相应的处理措施。"</string>
     <string name="high_temp_alarm_help_care_steps" msgid="5017002218341329566">"查看处理步骤"</string>
@@ -1022,7 +1019,6 @@
     <string name="priority_onboarding_ignores_dnd_text" msgid="2918952762719600529">"中断勿扰模式"</string>
     <string name="priority_onboarding_done_button_title" msgid="4569550984286506007">"知道了"</string>
     <string name="priority_onboarding_settings_button_title" msgid="6663601574303585927">"设置"</string>
-    <string name="magnification_overlay_title" msgid="6584179429612427958">"放大叠加窗口"</string>
     <string name="magnification_window_title" msgid="4863914360847258333">"放大窗口"</string>
     <string name="magnification_controls_title" msgid="8421106606708891519">"放大窗口控件"</string>
     <string name="quick_controls_title" msgid="6839108006171302273">"设备控制器"</string>

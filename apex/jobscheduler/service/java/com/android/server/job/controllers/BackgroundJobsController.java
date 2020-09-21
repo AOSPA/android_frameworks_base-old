@@ -20,13 +20,14 @@ import static com.android.server.job.JobSchedulerService.NEVER_INDEX;
 
 import android.os.SystemClock;
 import android.os.UserHandle;
+import android.util.IndentingPrintWriter;
 import android.util.Log;
 import android.util.Slog;
 import android.util.proto.ProtoOutputStream;
 
-import com.android.internal.util.IndentingPrintWriter;
 import com.android.server.AppStateTracker;
-import com.android.server.AppStateTracker.Listener;
+import com.android.server.AppStateTrackerImpl;
+import com.android.server.AppStateTrackerImpl.Listener;
 import com.android.server.LocalServices;
 import com.android.server.job.JobSchedulerService;
 import com.android.server.job.JobStore;
@@ -56,12 +57,12 @@ public final class BackgroundJobsController extends StateController {
     static final int KNOWN_ACTIVE = 1;
     static final int KNOWN_INACTIVE = 2;
 
-    private final AppStateTracker mAppStateTracker;
+    private final AppStateTrackerImpl mAppStateTracker;
 
     public BackgroundJobsController(JobSchedulerService service) {
         super(service);
 
-        mAppStateTracker = Objects.requireNonNull(
+        mAppStateTracker = (AppStateTrackerImpl) Objects.requireNonNull(
                 LocalServices.getService(AppStateTracker.class));
         mAppStateTracker.addListener(mForceAppStandbyListener);
     }

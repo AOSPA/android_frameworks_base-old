@@ -63,6 +63,7 @@ private val ART_URIS = arrayOf(
 )
 
 private const val TAG = "MediaDataManager"
+private const val DEBUG = true
 private const val DEFAULT_LUMINOSITY = 0.25f
 private const val LUMINOSITY_THRESHOLD = 0.05f
 private const val SATURATION_MULTIPLIER = 0.8f
@@ -253,7 +254,7 @@ class MediaDataManager(
     fun removeListener(listener: Listener) = listeners.remove(listener)
 
     /**
-     * Called whenever the player has been paused or stopped for a while.
+     * Called whenever the player has been paused or stopped for a while, or swiped from QQS.
      * This will make the player not active anymore, hiding it from QQS and Keyguard.
      * @see MediaData.active
      */
@@ -263,6 +264,7 @@ class MediaDataManager(
                 return
             }
             it.active = !timedOut
+            if (DEBUG) Log.d(TAG, "Updating $token timedOut: $timedOut")
             onMediaDataLoaded(token, token, it)
         }
     }
@@ -283,7 +285,9 @@ class MediaDataManager(
             return
         }
 
-        Log.d(TAG, "adding track for $userId from browser: $desc")
+        if (DEBUG) {
+            Log.d(TAG, "adding track for $userId from browser: $desc")
+        }
 
         // Album art
         var artworkBitmap = desc.iconBitmap
@@ -316,18 +320,13 @@ class MediaDataManager(
                 as MediaSession.Token?
         val metadata = mediaControllerFactory.create(token).metadata
 
-        if (metadata == null) {
-            // TODO: handle this better, removing media notification
-            return
-        }
-
         // Foreground and Background colors computed from album art
         val notif: Notification = sbn.notification
-        var artworkBitmap = metadata.getBitmap(MediaMetadata.METADATA_KEY_ART)
+        var artworkBitmap = metadata?.getBitmap(MediaMetadata.METADATA_KEY_ART)
         if (artworkBitmap == null) {
-            artworkBitmap = metadata.getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART)
+            artworkBitmap = metadata?.getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART)
         }
-        if (artworkBitmap == null) {
+        if (artworkBitmap == null && metadata != null) {
             artworkBitmap = loadBitmapFromUri(metadata)
         }
         val artWorkIcon = if (artworkBitmap == null) {
@@ -363,16 +362,16 @@ class MediaDataManager(
         val smallIconDrawable: Drawable = sbn.notification.smallIcon.loadDrawable(context)
 
         // Song name
-        var song: CharSequence? = metadata.getString(MediaMetadata.METADATA_KEY_DISPLAY_TITLE)
+        var song: CharSequence? = metadata?.getString(MediaMetadata.METADATA_KEY_DISPLAY_TITLE)
         if (song == null) {
-            song = metadata.getString(MediaMetadata.METADATA_KEY_TITLE)
+            song = metadata?.getString(MediaMetadata.METADATA_KEY_TITLE)
         }
         if (song == null) {
             song = HybridGroupManager.resolveTitle(notif)
         }
 
         // Artist name
-        var artist: CharSequence? = metadata.getString(MediaMetadata.METADATA_KEY_ARTIST)
+        var artist: CharSequence? = metadata?.getString(MediaMetadata.METADATA_KEY_ARTIST)
         if (artist == null) {
             artist = HybridGroupManager.resolveText(notif)
         }
@@ -388,7 +387,7 @@ class MediaDataManager(
         if (actions != null) {
             for ((index, action) in actions.withIndex()) {
                 if (action.getIcon() == null) {
-                    Log.i(TAG, "No icon for action $index ${action.title}")
+                    if (DEBUG) Log.i(TAG, "No icon for action $index ${action.title}")
                     actionsToShowCollapsed.remove(index)
                     continue
                 }
@@ -432,7 +431,7 @@ class MediaDataManager(
             if (!TextUtils.isEmpty(uriString)) {
                 val albumArt = loadBitmapFromUri(Uri.parse(uriString))
                 if (albumArt != null) {
-                    Log.d(TAG, "loaded art from $uri")
+                    if (DEBUG) Log.d(TAG, "loaded art from $uri")
                     return albumArt
                 }
             }
@@ -519,7 +518,7 @@ class MediaDataManager(
         Assert.isMainThread()
         val removed = mediaEntries.remove(key)
         if (useMediaResumption && removed?.resumeAction != null) {
-            Log.d(TAG, "Not removing $key because resumable")
+            if (DEBUG) Log.d(TAG, "Not removing $key because resumable")
             // Move to resume key (aka package name) if that key doesn't already exist.
             val resumeAction = getResumeMediaAction(removed.resumeAction!!)
             val updated = removed.copy(token = null, actions = listOf(resumeAction),

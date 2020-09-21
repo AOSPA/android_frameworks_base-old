@@ -193,8 +193,10 @@
     <string name="network_logging_notification_text" msgid="1327373071132562512">"तुमची संस्था हे डिव्हाइस व्यवस्थापित करते आणि नेटवर्क रहदारीचे निरीक्षण करू शकते. तपशीलांसाठी टॅप करा."</string>
     <string name="location_changed_notification_title" msgid="3620158742816699316">"ॲप्स तुमचे स्थान अ‍ॅक्सेस करू शकतात"</string>
     <string name="location_changed_notification_text" msgid="7158423339982706912">"अधिक जाणून घेण्यासाठी तुमच्या आयटी ॲडमिनशी संपर्क साधा"</string>
+    <string name="geofencing_service" msgid="3826902410740315456">"जिओफेन्सिंग सेवा"</string>
     <string name="country_detector" msgid="7023275114706088854">"कंट्री डिटेक्टर"</string>
     <string name="location_service" msgid="2439187616018455546">"स्थान सेवा"</string>
+    <string name="gnss_service" msgid="8907781262179951385">"GNSS सेवा"</string>
     <string name="sensor_notification_service" msgid="7474531979178682676">"सेंसर सूचना सेवा"</string>
     <string name="twilight_service" msgid="8964898045693187224">"ट्वायलाइट सेवा"</string>
     <string name="factory_reset_warning" msgid="6858705527798047809">"तुमचे डिव्हाइस मिटविले जाईल"</string>
@@ -542,6 +544,7 @@
     <string name="biometric_not_recognized" msgid="5106687642694635888">"ओळखले नाही"</string>
     <string name="biometric_error_canceled" msgid="8266582404844179778">"ऑथेंटिकेशन रद्द केले"</string>
     <string name="biometric_error_device_not_secured" msgid="3129845065043995924">"कोणताही पिन, पॅटर्न किंवा पासवर्ड सेट केलेला नाही"</string>
+    <string name="biometric_error_generic" msgid="6784371929985434439">"एरर ऑथेंटिकेट करत आहे"</string>
     <string name="fingerprint_acquired_partial" msgid="8532380671091299342">"आंशिक फिंगरप्रिंट आढळली. कृपया पुन्हा प्रयत्न करा."</string>
     <string name="fingerprint_acquired_insufficient" msgid="2545149524031515411">"फिंगरप्रिंटवर प्रक्रिया करणे शक्य झाले नाही. कृपया पुन्हा प्रयत्न करा."</string>
     <string name="fingerprint_acquired_imager_dirty" msgid="4694800187151533990">"फिंगरप्रिंट सेन्सर खराब आहे. कृपया साफ करा आणि पुन्हा प्रयत्न करा."</string>
@@ -829,7 +832,8 @@
     <string name="lockscreen_instructions_when_pattern_enabled" msgid="7982445492532123308">"अनलॉक करण्‍यासाठी मेनू दाबा किंवा आणीबाणीचा कॉल करा."</string>
     <string name="lockscreen_instructions_when_pattern_disabled" msgid="7434061749374801753">"अनलॉक करण्यासाठी मेनू दाबा."</string>
     <string name="lockscreen_pattern_instructions" msgid="3169991838169244941">"अनलॉक करण्यासाठी पॅटर्न काढा"</string>
-    <string name="lockscreen_emergency_call" msgid="7500692654885445299">"आणीबाणी"</string>
+    <!-- no translation found for lockscreen_emergency_call (7549683825868928636) -->
+    <skip />
     <string name="lockscreen_return_to_call" msgid="3156883574692006382">"कॉलवर परत या"</string>
     <string name="lockscreen_pattern_correct" msgid="8050630103651508582">"अचूक!"</string>
     <string name="lockscreen_pattern_wrong" msgid="2940138714468358458">"पुन्हा प्रयत्न करा"</string>
@@ -1460,9 +1464,6 @@
     <string name="gpsNotifMessage" msgid="7346649122793758032">"<xliff:g id="NAME">%1$s</xliff:g> (<xliff:g id="SERVICE">%2$s</xliff:g>) द्वारे विनंती केली"</string>
     <string name="gpsVerifYes" msgid="3719843080744112940">"होय"</string>
     <string name="gpsVerifNo" msgid="1671201856091564741">"नाही"</string>
-    <string name="gnss_nfw_notification_title" msgid="5004493772059563423">"आणीबाणी स्थान अ‍ॅक्सेस केले आहे"</string>
-    <string name="gnss_nfw_notification_message_oem" msgid="3683958907027107969">"अलीकडील आणीबाणी सेशनदरम्यान तुमच्या डिव्हाइस निर्मात्याने तुमचे स्थान अ‍ॅक्सेस केले आहे"</string>
-    <string name="gnss_nfw_notification_message_carrier" msgid="815888995791562151">"अलीकडील आणीबाणी सेशनदरम्यान तुमच्या वाहकाने तुमचे स्थान अ‍ॅक्सेस केले आहे"</string>
     <string name="sync_too_many_deletes" msgid="6999440774578705300">"ओलांडलेली मर्यादा हटवा"</string>
     <string name="sync_too_many_deletes_desc" msgid="7409327940303504440">"<xliff:g id="ACCOUNT_NAME">%3$s</xliff:g> खात्यासाठी <xliff:g id="TYPE_OF_SYNC">%2$s</xliff:g>, <xliff:g id="NUMBER_OF_DELETED_ITEMS">%1$d</xliff:g> हटविलेले आयटम आहेत. तुम्ही काय करू इच्छिता?"</string>
     <string name="sync_really_delete" msgid="5657871730315579051">"आयटम हटवा"</string>
@@ -1792,8 +1793,8 @@
     <string name="package_updated_device_owner" msgid="7560272363805506941">"आपल्या प्रशासकाने अपडेट केले"</string>
     <string name="package_deleted_device_owner" msgid="2292335928930293023">"आपल्या प्रशासकाने हटवले"</string>
     <string name="confirm_battery_saver" msgid="5247976246208245754">"ओके"</string>
-    <string name="battery_saver_description_with_learn_more" msgid="5997766757551917769">"बॅटरीचे आयुष्य वाढवण्यासाठी बॅटरी सेव्हर:\n\n•गडद थीम सुरू करते\n•बॅकग्राउंड ॲक्टिव्हिटी, काही व्हिज्युअल इफेक्ट आणि \"Ok Google\" यांसारखी वैशिष्ट्ये बंद किंवा मर्यादित करते.\n\n"<annotation id="url">"अधिक जाणून घ्या"</annotation></string>
-    <string name="battery_saver_description" msgid="8587408568232177204">"बॅटरीचे आयुष्य वाढवण्यासाठी बॅटरी सेव्हर:\n\n•गडद थीम सुरू करते\n•बॅकग्राउंड ॲक्टिव्हिटी, काही व्हिज्युअल इफेक्ट आणि \"Ok Google\" यांसारखी वैशिष्ट्ये बंद किंवा मर्यादित करते."</string>
+    <string name="battery_saver_description_with_learn_more" msgid="4424488535318105801">"बॅटरी लाइफ वाढवण्यासाठी बॅटरी सेव्हर:\n\n•गडद थीम सुरू करते\n•बॅकग्राउंड ॲक्टिव्हिटी, काही व्हिज्युअल इफेक्ट आणि \"Ok Google\" यांसारखी वैशिष्ट्ये बंद किंवा मर्यादित करते.\n\n"<annotation id="url">"अधिक जाणून घ्या"</annotation></string>
+    <string name="battery_saver_description" msgid="6794188153647295212">"बॅटरी लाइफ वाढवण्यासाठी बॅटरी सेव्हर:\n\n• गडद थीम सुरू करते\n• बॅकग्राउंड ॲक्टिव्हिटी, काही व्हिज्युअल इफेक्ट आणि “Ok Google” यांसारखी इतर वैशिष्ट्ये बंद किंवा मर्यादित करते"</string>
     <string name="data_saver_description" msgid="4995164271550590517">"डेटाचा वापर कमी करण्यात मदत करण्यासाठी काही अ‍ॅप्सना बॅकग्राउंडमध्ये डेटा पाठवण्यास किंवा मिळवण्यास डेटा सर्व्हर प्रतिबंध करतो. तुम्ही सध्या वापरत असलेले अ‍ॅप डेटा अ‍ॅक्सेस करू शकते, पण तसे खूप कमी वेळा होते. याचाच अर्थ असा की, तुम्ही इमेजवर टॅप करेपर्यंत त्या डिस्प्ले होणार नाहीत असे होऊ शकते."</string>
     <string name="data_saver_enable_title" msgid="7080620065745260137">"डेटा सेव्हर सुरू करायचे?"</string>
     <string name="data_saver_enable_button" msgid="4399405762586419726">"सुरू करा"</string>
@@ -1997,6 +1998,7 @@
     <string name="notification_appops_camera_active" msgid="8177643089272352083">"कॅमेरा"</string>
     <string name="notification_appops_microphone_active" msgid="581333393214739332">"मायक्रोफोन"</string>
     <string name="notification_appops_overlay_active" msgid="5571732753262836481">"तुमच्‍या स्‍क्रीनवर इतर ॲप्‍सवर डिस्‍प्‍ले करत आहे"</string>
+    <string name="notification_feedback_indicator" msgid="663476517711323016">"फीडबॅक द्या"</string>
     <string name="dynamic_mode_notification_channel_name" msgid="2986926422100223328">"दिनक्रम मोडची माहिती सूचना"</string>
     <string name="dynamic_mode_notification_title" msgid="9205715501274608016">"चार्जिंगची सामान्य पातळी गाठेपर्यंत कदाचित बॅटरी संपू शकते"</string>
     <string name="dynamic_mode_notification_summary" msgid="4141614604437372157">"बॅटरी लाइफ वाढवण्यासाठी बॅटरी सेव्हर सुरू केला आहे"</string>

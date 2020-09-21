@@ -711,11 +711,13 @@
     <string name="notification_silence_title" msgid="8608090968400832335">"Səssiz"</string>
     <string name="notification_alert_title" msgid="3656229781017543655">"Defolt"</string>
     <string name="notification_bubble_title" msgid="8330481035191903164">"Qabarcıq"</string>
+    <string name="notification_automatic_title" msgid="3745465364578762652">"Avtomatik"</string>
     <string name="notification_channel_summary_low" msgid="4860617986908931158">"Səs və ya vibrasiya yoxdur"</string>
     <string name="notification_conversation_summary_low" msgid="1734433426085468009">"Səs və ya vibrasiya yoxdur və söhbət bölməsinin aşağısında görünür"</string>
     <string name="notification_channel_summary_default" msgid="3282930979307248890">"Telefon ayarlarına əsasən zəng çala və ya vibrasiya edə bilər"</string>
     <string name="notification_channel_summary_default_with_bubbles" msgid="1782419896613644568">"Telefon ayarlarına əsasən zəng çala və ya vibrasiya edə bilər. <xliff:g id="APP_NAME">%1$s</xliff:g> tətbiqindən söhbətlərdə defolt olaraq qabarcıq çıxır."</string>
     <string name="notification_channel_summary_bubble" msgid="7235935211580860537">"Bu məzmuna üzən qısayol ilə diqqətinizi cəlb edir."</string>
+    <string name="notification_channel_summary_automatic" msgid="5813109268050235275">"Bu bildirişin səs çıxarması və ya vibrasiya etməsi sistem tərəfindən təyin edilsin"</string>
     <string name="notification_channel_summary_priority" msgid="7952654515769021553">"Söhbət bölməsinin yuxarısında göstərilir, üzən qabarcıq kimi görünür, kilid ekranında profil şəkli göstərir"</string>
     <string name="notification_conversation_channel_settings" msgid="2409977688430606835">"Ayarlar"</string>
     <string name="notification_priority_title" msgid="2079708866333537093">"Prioritet"</string>
@@ -736,6 +738,12 @@
     <string name="appops_camera_mic_overlay" msgid="5584311236445644095">"Bu tətbiq ekranda digər tətbiqlərin üzərində göstərilir və mikrofon ilə kameradan istifadə edir."</string>
     <string name="notification_appops_settings" msgid="5208974858340445174">"Ayarlar"</string>
     <string name="notification_appops_ok" msgid="2177609375872784124">"OK"</string>
+    <string name="feedback_silenced" msgid="5382212321253328247">"Bu bildiriş sistem tərəfindən səssiz edilib."</string>
+    <string name="feedback_promoted" msgid="8075757485407091976">"Bu bildiriş sistem tərəfindən irəli çəkilib."</string>
+    <string name="feedback_demoted" msgid="5848066008939031913">"Bu bildiriş sistem tərəfindən geri çəkilib."</string>
+    <string name="feedback_prompt" msgid="2278631214125128281">"Bu, doğru oldu?"</string>
+    <string name="feedback_response" msgid="4671729244976641339">"Rəyiniz üçün təşəkkür edirik!"</string>
+    <string name="feedback_ok" msgid="6481426753298857144">"OK"</string>
     <string name="notification_channel_controls_opened_accessibility" msgid="6111817750774381094">"<xliff:g id="APP_NAME">%1$s</xliff:g> üçün bildiriş kontrolları açıqdır"</string>
     <string name="notification_channel_controls_closed_accessibility" msgid="1561909368876911701">"<xliff:g id="APP_NAME">%1$s</xliff:g> üçün bildiriş kontrolları bağlıdır"</string>
     <string name="notification_channel_switch_accessibility" msgid="8979885820432540252">"Bu kanaldan gələn bildirişlərə icazə verin"</string>
@@ -908,25 +916,14 @@
     <string name="accessibility_quick_settings_edit" msgid="1523745183383815910">"Ayarların sıralanmasını redaktə edin."</string>
     <string name="accessibility_quick_settings_page" msgid="7506322631645550961">"<xliff:g id="ID_2">%2$d</xliff:g> səhifədən <xliff:g id="ID_1">%1$d</xliff:g> səhifə"</string>
     <string name="tuner_lock_screen" msgid="2267383813241144544">"Ekran kilidi"</string>
-    <string name="pip_phone_expand" msgid="1424988917240616212">"Genişləndirin"</string>
-    <string name="pip_phone_minimize" msgid="9057117033655996059">"Kiçildin"</string>
-    <string name="pip_phone_close" msgid="8801864042095341824">"Bağlayın"</string>
-    <string name="pip_phone_settings" msgid="5687538631925004341">"Ayarlar"</string>
-    <string name="pip_phone_dismiss_hint" msgid="5825740708095316710">"Rədd etmək üçün aşağı çəkin"</string>
-    <string name="pip_menu_title" msgid="6365909306215631910">"Menyu"</string>
-    <string name="pip_notification_title" msgid="8661573026059630525">"<xliff:g id="NAME">%s</xliff:g> şəkil içində şəkildədir"</string>
-    <string name="pip_notification_message" msgid="4991831338795022227">"<xliff:g id="NAME">%s</xliff:g> tətbiqinin bu funksiyadan istifadə etməyini istəmirsinizsə, ayarları açmaq və deaktiv etmək üçün klikləyin."</string>
-    <string name="pip_play" msgid="333995977693142810">"Oxudun"</string>
-    <string name="pip_pause" msgid="1139598607050555845">"Fasilə verin"</string>
-    <string name="pip_skip_to_next" msgid="3864212650579956062">"Növbətiyə keçin"</string>
-    <string name="pip_skip_to_prev" msgid="3742589641443049237">"Əvvəlkinə keçin"</string>
-    <string name="accessibility_action_pip_resize" msgid="8237306972921160456">"Ölçüsünü dəyişin"</string>
     <string name="thermal_shutdown_title" msgid="2702966892682930264">"İstiliyə görə telefon söndü"</string>
-    <string name="thermal_shutdown_message" msgid="7432744214105003895">"Telefon indi normal işləyir"</string>
+    <string name="thermal_shutdown_message" msgid="6142269839066172984">"Telefonunuz indi normal işləyir.\nƏtraflı məlumat üçün toxunun"</string>
     <string name="thermal_shutdown_dialog_message" msgid="6745684238183492031">"Telefon çox isti idi və soyumaq üçün söndü. Hazırda telefon normal işləyir.\n\n Telefon bu hallarda çox isti ola bilər:\n 	• Çox resurslu tətbiq istifadə etsəniz (oyun, video və ya naviqasiya tətbiqi kimi)\n	• Böyük həcmli fayl endirsəniz və ya yükləsəniz\n	• Telefonu yüksək temperaturda istifadə etsəniz"</string>
+    <string name="thermal_shutdown_dialog_help_text" msgid="6413474593462902901">"Ehtiyat tədbiri mərhələlərinə baxın"</string>
     <string name="high_temp_title" msgid="2218333576838496100">"Telefon qızmağa başlayır"</string>
-    <string name="high_temp_notif_message" msgid="163928048626045592">"Telefon soyuyana kimi bəzi funksiyalar məhdudlaşdırılır"</string>
+    <string name="high_temp_notif_message" msgid="1277346543068257549">"Telefon soyuyana kimi bəzi funksiyalar məhdudlaşdırılır.\nƏtraflı məlumat üçün toxunun"</string>
     <string name="high_temp_dialog_message" msgid="3793606072661253968">"Telefonunuz avtomatik olaraq soyumağa başlayacaq. Telefon istifadəsinə davam edə bilərsiniz, lakin sürəti yavaşlaya bilər.\n\nTelefonunuz soyuduqdan sonra normal işləyəcək."</string>
+    <string name="high_temp_dialog_help_text" msgid="7380171287943345858">"Ehtiyat tədbiri mərhələlərinə baxın"</string>
     <string name="high_temp_alarm_title" msgid="2359958549570161495">"Adapteri cərəyandan ayırın"</string>
     <string name="high_temp_alarm_notify_message" msgid="7186272817783835089">"Bu cihazın batareya yığmasında problem var. Adapteri cərəyandan ayırın. Ehtiyatlı olun, kabel isti ola bilər."</string>
     <string name="high_temp_alarm_help_care_steps" msgid="5017002218341329566">"Ehtiyat tədbiri mərhələlərinə baxın"</string>
@@ -1022,7 +1019,6 @@
     <string name="priority_onboarding_ignores_dnd_text" msgid="2918952762719600529">"Narahat Etməyin rejimində göstərilsin"</string>
     <string name="priority_onboarding_done_button_title" msgid="4569550984286506007">"Anladım"</string>
     <string name="priority_onboarding_settings_button_title" msgid="6663601574303585927">"Ayarlar"</string>
-    <string name="magnification_overlay_title" msgid="6584179429612427958">"Böyütmə Üst-üstə Düşən Pəncərəsi"</string>
     <string name="magnification_window_title" msgid="4863914360847258333">"Böyütmə Pəncərəsi"</string>
     <string name="magnification_controls_title" msgid="8421106606708891519">"Böyütmə Pəncərəsi Kontrolları"</string>
     <string name="quick_controls_title" msgid="6839108006171302273">"Cihaz idarəetmələri"</string>

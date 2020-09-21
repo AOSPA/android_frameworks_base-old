@@ -197,8 +197,10 @@
     <string name="network_logging_notification_text" msgid="1327373071132562512">"Адміністратор вашої організації контролює цей пристрій і відстежує мережевий трафік. Торкніться, щоб дізнатися більше."</string>
     <string name="location_changed_notification_title" msgid="3620158742816699316">"Додаток має доступ до геоданих"</string>
     <string name="location_changed_notification_text" msgid="7158423339982706912">"Дізнатися більше можна в IT-адміністратора"</string>
+    <string name="geofencing_service" msgid="3826902410740315456">"Сервіс геозонування"</string>
     <string name="country_detector" msgid="7023275114706088854">"Визначення країни"</string>
     <string name="location_service" msgid="2439187616018455546">"Служби локації"</string>
+    <string name="gnss_service" msgid="8907781262179951385">"Сервіс GNSS"</string>
     <string name="sensor_notification_service" msgid="7474531979178682676">"Сервіс \"Сповіщення датчика\""</string>
     <string name="twilight_service" msgid="8964898045693187224">"Сервіс \"Сутінки\""</string>
     <string name="factory_reset_warning" msgid="6858705527798047809">"З вашого пристрою буде стерто всі дані"</string>
@@ -548,6 +550,7 @@
     <string name="biometric_not_recognized" msgid="5106687642694635888">"Не розпізнано"</string>
     <string name="biometric_error_canceled" msgid="8266582404844179778">"Автентифікацію скасовано"</string>
     <string name="biometric_error_device_not_secured" msgid="3129845065043995924">"Не вказано PIN-код, ключ або пароль"</string>
+    <string name="biometric_error_generic" msgid="6784371929985434439">"Помилка автентифікації"</string>
     <string name="fingerprint_acquired_partial" msgid="8532380671091299342">"Відбиток пальця розпізнано частково. Повторіть спробу."</string>
     <string name="fingerprint_acquired_insufficient" msgid="2545149524031515411">"Не вдалось обробити відбиток пальця. Повторіть спробу."</string>
     <string name="fingerprint_acquired_imager_dirty" msgid="4694800187151533990">"Датчик відбитків пальців забруднився. Очистьте його та повторіть спробу."</string>
@@ -835,7 +838,8 @@
     <string name="lockscreen_instructions_when_pattern_enabled" msgid="7982445492532123308">"Натис. меню, щоб розбл. чи зробити авар. виклик."</string>
     <string name="lockscreen_instructions_when_pattern_disabled" msgid="7434061749374801753">"Натисн. меню, щоб розбл."</string>
     <string name="lockscreen_pattern_instructions" msgid="3169991838169244941">"Намал. ключ, щоб розбл."</string>
-    <string name="lockscreen_emergency_call" msgid="7500692654885445299">"Екстрений виклик"</string>
+    <!-- no translation found for lockscreen_emergency_call (7549683825868928636) -->
+    <skip />
     <string name="lockscreen_return_to_call" msgid="3156883574692006382">"Поверн. до дзвін."</string>
     <string name="lockscreen_pattern_correct" msgid="8050630103651508582">"Правильно!"</string>
     <string name="lockscreen_pattern_wrong" msgid="2940138714468358458">"Повторіть спробу"</string>
@@ -1162,7 +1166,7 @@
     <string name="capital_off" msgid="7443704171014626777">"ВИМК"</string>
     <string name="checked" msgid="9179896827054513119">"вибрано"</string>
     <string name="not_checked" msgid="7972320087569023342">"не вибрано"</string>
-    <string name="whichApplication" msgid="5432266899591255759">"Завершити дію за доп."</string>
+    <string name="whichApplication" msgid="5432266899591255759">"Що використовувати?"</string>
     <string name="whichApplicationNamed" msgid="6969946041713975681">"Завершити дію за допомогою %1$s"</string>
     <string name="whichApplicationLabel" msgid="7852182961472531728">"Завершити дію"</string>
     <string name="whichViewApplication" msgid="5733194231473132945">"Відкрити за допомогою"</string>
@@ -1502,9 +1506,6 @@
     <string name="gpsNotifMessage" msgid="7346649122793758032">"Запит зроблено користувачем <xliff:g id="NAME">%1$s</xliff:g> (<xliff:g id="SERVICE">%2$s</xliff:g>)"</string>
     <string name="gpsVerifYes" msgid="3719843080744112940">"Так"</string>
     <string name="gpsVerifNo" msgid="1671201856091564741">"Ні"</string>
-    <string name="gnss_nfw_notification_title" msgid="5004493772059563423">"Переглянуто геодані в екстреній ситуації"</string>
-    <string name="gnss_nfw_notification_message_oem" msgid="3683958907027107969">"Виробник пристрою отримав доступ до ваших геоданих під час нещодавнього екстреного звернення"</string>
-    <string name="gnss_nfw_notification_message_carrier" msgid="815888995791562151">"Оператор отримав доступ до ваших геоданих під час нещодавнього екстреного звернення"</string>
     <string name="sync_too_many_deletes" msgid="6999440774578705300">"Перевищено ліміт видалень"</string>
     <string name="sync_too_many_deletes_desc" msgid="7409327940303504440">"Для <xliff:g id="TYPE_OF_SYNC">%2$s</xliff:g>, облікового запису <xliff:g id="ACCOUNT_NAME">%3$s</xliff:g>, знайдено стільки видалених елементів: <xliff:g id="NUMBER_OF_DELETED_ITEMS">%1$d</xliff:g>. Що робити?"</string>
     <string name="sync_really_delete" msgid="5657871730315579051">"Видалити елементи"</string>
@@ -1838,8 +1839,8 @@
     <string name="package_updated_device_owner" msgid="7560272363805506941">"Оновлено адміністратором"</string>
     <string name="package_deleted_device_owner" msgid="2292335928930293023">"Видалено адміністратором"</string>
     <string name="confirm_battery_saver" msgid="5247976246208245754">"ОК"</string>
-    <string name="battery_saver_description_with_learn_more" msgid="5997766757551917769">"Щоб подовжити час роботи акумулятора, режим енергозбереження:\n\n•вмикає темну тему;\n•припиняє або обмежує фонову активність, вимикає деякі візуальні ефекти та інші енергозатратні функції, зокрема команду \"Ok Google\".\n\n"<annotation id="url">"Докладніше"</annotation></string>
-    <string name="battery_saver_description" msgid="8587408568232177204">"Щоб подовжити час роботи акумулятора, режим енергозбереження:\n\n•вмикає темну тему;\n•припиняє або обмежує фонову активність, вимикає деякі візуальні ефекти та інші енергозатратні функції, зокрема команду \"Ok Google\"."</string>
+    <string name="battery_saver_description_with_learn_more" msgid="4424488535318105801">"Щоб подовжити час роботи акумулятора, режим енергозбереження:\n\n• вмикає темну тему;\n• припиняє або обмежує фонову активність, вимикає деякі візуальні ефекти та інші енергозатратні функції, зокрема команду \"Ok Google\".\n\n"<annotation id="url">"Докладніше"</annotation></string>
+    <string name="battery_saver_description" msgid="6794188153647295212">"Щоб подовжити час роботи акумулятора, режим енергозбереження:\n\n• вмикає темну тему;\n• припиняє або обмежує фонову активність, вимикає деякі візуальні ефекти та інші енергозатратні функції, зокрема команду \"Ok Google\"."</string>
     <string name="data_saver_description" msgid="4995164271550590517">"Щоб зменшити використання трафіку, функція \"Заощадження трафіку\" не дозволяє деяким додаткам надсилати чи отримувати дані у фоновому режимі. Поточний додаток зможе отримувати доступ до таких даних, але рідше. Наприклад, зображення не відображатиметься, доки ви не торкнетеся його."</string>
     <string name="data_saver_enable_title" msgid="7080620065745260137">"Увімкнути заощадження трафіку?"</string>
     <string name="data_saver_enable_button" msgid="4399405762586419726">"Увімкнути"</string>
@@ -2063,6 +2064,7 @@
     <string name="notification_appops_camera_active" msgid="8177643089272352083">"Камера"</string>
     <string name="notification_appops_microphone_active" msgid="581333393214739332">"Мікрофон"</string>
     <string name="notification_appops_overlay_active" msgid="5571732753262836481">"показ поверх інших додатків на екрані"</string>
+    <string name="notification_feedback_indicator" msgid="663476517711323016">"Надати відгук"</string>
     <string name="dynamic_mode_notification_channel_name" msgid="2986926422100223328">"Сповіщення про послідовнсть дій"</string>
     <string name="dynamic_mode_notification_title" msgid="9205715501274608016">"Акумулятор може розрядитися раніше ніж зазвичай"</string>
     <string name="dynamic_mode_notification_summary" msgid="4141614604437372157">"Режим енергозбереження активовано для збільшення часу роботи акумулятора"</string>

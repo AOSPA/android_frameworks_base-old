@@ -730,6 +730,7 @@ import java.util.function.Predicate;
  * </p>
  *
  * @attr ref android.R.styleable#View_accessibilityHeading
+ * @attr ref android.R.styleable#View_allowClickWhenDisabled
  * @attr ref android.R.styleable#View_alpha
  * @attr ref android.R.styleable#View_background
  * @attr ref android.R.styleable#View_clickable
@@ -1269,7 +1270,8 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
             AUTOFILL_TYPE_TEXT,
             AUTOFILL_TYPE_TOGGLE,
             AUTOFILL_TYPE_LIST,
-            AUTOFILL_TYPE_DATE
+            AUTOFILL_TYPE_DATE,
+            AUTOFILL_TYPE_RICH_CONTENT
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface AutofillType {}
@@ -1332,6 +1334,18 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * @see #getAutofillType()
      */
     public static final int AUTOFILL_TYPE_DATE = 4;
+
+    /**
+     * Autofill type for a field that can accept rich content (text, images, etc).
+     *
+     * <p>{@link AutofillValue} instances for autofilling a {@link View} can be obtained through
+     * {@link AutofillValue#forRichContent(ClipData)}, and the values passed to
+     * autofill a {@link View} can be fetched through {@link AutofillValue#getRichContentValue()}.
+     *
+     * @see #getAutofillType()
+     */
+    public static final int AUTOFILL_TYPE_RICH_CONTENT = 5;
+
 
     /** @hide */
     @IntDef(prefix = { "IMPORTANT_FOR_AUTOFILL_" }, value = {
@@ -3491,6 +3505,8 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      *                        1         PFLAG4_FRAMEWORK_OPTIONAL_FITS_SYSTEM_WINDOWS
      *                       1          PFLAG4_AUTOFILL_HIDE_HIGHLIGHT
      *                     11           PFLAG4_SCROLL_CAPTURE_HINT_MASK
+     *                    1             PFLAG4_ALLOW_CLICK_WHEN_DISABLED
+     *                   1              PFLAG4_DETACHED
      * |-------|-------|-------|-------|
      */
 
@@ -3546,6 +3562,16 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     static final int PFLAG4_SCROLL_CAPTURE_HINT_MASK = (SCROLL_CAPTURE_HINT_INCLUDE
             | SCROLL_CAPTURE_HINT_EXCLUDE | SCROLL_CAPTURE_HINT_EXCLUDE_DESCENDANTS)
             << PFLAG4_SCROLL_CAPTURE_HINT_SHIFT;
+
+    /**
+     * Indicates if the view can receive click events when disabled.
+     */
+    private static final int PFLAG4_ALLOW_CLICK_WHEN_DISABLED = 0x000001000;
+
+    /**
+     * Indicates if the view is just detached.
+     */
+    private static final int PFLAG4_DETACHED = 0x000002000;
 
     /* End of masks for mPrivateFlags4 */
 
@@ -4303,7 +4329,44 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
                     equals = STATUS_BAR_TRANSPARENT,
                     name = "STATUS_BAR_TRANSPARENT")
     }, formatToHexString = true)
+    @SystemUiVisibility
     int mSystemUiVisibility;
+
+    /**
+     * @hide
+     */
+    @IntDef(flag = true, prefix = "", value = {
+            SYSTEM_UI_FLAG_LOW_PROFILE,
+            SYSTEM_UI_FLAG_HIDE_NAVIGATION,
+            SYSTEM_UI_FLAG_FULLSCREEN,
+            SYSTEM_UI_FLAG_LAYOUT_STABLE,
+            SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION,
+            SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN,
+            SYSTEM_UI_FLAG_IMMERSIVE,
+            SYSTEM_UI_FLAG_IMMERSIVE_STICKY,
+            SYSTEM_UI_FLAG_LIGHT_STATUS_BAR,
+            SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR,
+            STATUS_BAR_DISABLE_EXPAND,
+            STATUS_BAR_DISABLE_NOTIFICATION_ICONS,
+            STATUS_BAR_DISABLE_NOTIFICATION_ALERTS,
+            STATUS_BAR_DISABLE_NOTIFICATION_TICKER,
+            STATUS_BAR_DISABLE_SYSTEM_INFO,
+            STATUS_BAR_DISABLE_HOME,
+            STATUS_BAR_DISABLE_BACK,
+            STATUS_BAR_DISABLE_CLOCK,
+            STATUS_BAR_DISABLE_RECENT,
+            STATUS_BAR_DISABLE_SEARCH,
+            STATUS_BAR_TRANSIENT,
+            NAVIGATION_BAR_TRANSIENT,
+            STATUS_BAR_UNHIDE,
+            NAVIGATION_BAR_UNHIDE,
+            STATUS_BAR_TRANSLUCENT,
+            NAVIGATION_BAR_TRANSLUCENT,
+            NAVIGATION_BAR_TRANSPARENT,
+            STATUS_BAR_TRANSPARENT,
+    })
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface SystemUiVisibility {}
 
     /**
      * Reference count for transient state.
@@ -5333,10 +5396,6 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
             // of whether a layout was requested on that View.
             sIgnoreMeasureCache = targetSdkVersion < Build.VERSION_CODES.KITKAT;
 
-            Canvas.sCompatibilityRestore = targetSdkVersion < Build.VERSION_CODES.M;
-            Canvas.sCompatibilitySetBitmap = targetSdkVersion < Build.VERSION_CODES.O;
-            Canvas.setCompatibilityVersion(targetSdkVersion);
-
             // In M and newer, our widgets can pass a "hint" value in the size
             // for UNSPECIFIED MeasureSpecs. This lets child views of scrolling containers
             // know what the expected parent size is going to be, so e.g. list items can size
@@ -5657,6 +5716,9 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
                         viewFlagValues |= CLICKABLE;
                         viewFlagMasks |= CLICKABLE;
                     }
+                    break;
+                case com.android.internal.R.styleable.View_allowClickWhenDisabled:
+                    setAllowClickWhenDisabled(a.getBoolean(attr, false));
                     break;
                 case com.android.internal.R.styleable.View_longClickable:
                     if (a.getBoolean(attr, false)) {
@@ -8311,7 +8373,8 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
                 (event.getEventType() == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED);
         boolean isWindowDisappearedEvent = isWindowStateChanged && ((event.getContentChangeTypes()
                 & AccessibilityEvent.CONTENT_CHANGE_TYPE_PANE_DISAPPEARED) != 0);
-        if (!isShown() && !isWindowDisappearedEvent) {
+        boolean detached = detached();
+        if (!isShown() && !isWindowDisappearedEvent && !detached) {
             return;
         }
         onInitializeAccessibilityEvent(event);
@@ -8322,6 +8385,14 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         SendAccessibilityEventThrottle throttle = getThrottleForAccessibilityEvent(event);
         if (throttle != null) {
             throttle.post(event);
+        } else if (!isWindowDisappearedEvent && detached) {
+            // Views could be attached soon later. Accessibility events during this temporarily
+            // detached period should be sent too.
+            postDelayed(() -> {
+                if (AccessibilityManager.getInstance(mContext).isEnabled() && isShown()) {
+                    requestParentSendAccessibilityEvent(event);
+                }
+            }, ViewConfiguration.getSendRecurringAccessibilityEventsInterval());
         } else {
             requestParentSendAccessibilityEvent(event);
         }
@@ -11107,6 +11178,26 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         return false;
     }
 
+    private boolean detached() {
+        View current = this;
+        //noinspection ConstantConditions
+        do {
+            if ((current.mPrivateFlags4 & PFLAG4_DETACHED) != 0) {
+                return true;
+            }
+            ViewParent parent = current.mParent;
+            if (parent == null) {
+                return false;
+            }
+            if (!(parent instanceof View)) {
+                return false;
+            }
+            current = (View) parent;
+        } while (current != null);
+
+        return false;
+    }
+
     /**
      * Called by the view hierarchy when the content insets for a window have
      * changed, to allow it to adjust its content to fit within those windows.
@@ -12222,6 +12313,21 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      */
     public void setClickable(boolean clickable) {
         setFlags(clickable ? CLICKABLE : 0, CLICKABLE);
+    }
+
+    /**
+     * Enables or disables click events for this view when disabled.
+     *
+     * @param clickableWhenDisabled true to make the view clickable, false otherwise
+     *
+     * @attr ref android.R.styleable#View_allowClickWhenDisabled
+     */
+    public void setAllowClickWhenDisabled(boolean clickableWhenDisabled) {
+        if (clickableWhenDisabled) {
+            mPrivateFlags4 |= PFLAG4_ALLOW_CLICK_WHEN_DISABLED;
+        } else {
+            mPrivateFlags4 &= ~PFLAG4_ALLOW_CLICK_WHEN_DISABLED;
+        }
     }
 
     /**
@@ -13763,6 +13869,17 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
                             " does not fully implement ViewParent", e);
                 }
             }
+        }
+    }
+
+    private void notifySubtreeAccessibilityStateChangedByParentIfNeeded() {
+        if (!AccessibilityManager.getInstance(mContext).isEnabled()) {
+            return;
+        }
+
+        final View sendA11yEventView = (View) getParentForAccessibility();
+        if (sendA11yEventView != null && sendA11yEventView.isShown()) {
+            sendA11yEventView.notifySubtreeAccessibilityStateChangedIfNeeded();
         }
     }
 
@@ -15667,7 +15784,8 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
                 || (viewFlags & LONG_CLICKABLE) == LONG_CLICKABLE)
                 || (viewFlags & CONTEXT_CLICKABLE) == CONTEXT_CLICKABLE;
 
-        if ((viewFlags & ENABLED_MASK) == DISABLED) {
+        if ((viewFlags & ENABLED_MASK) == DISABLED
+                && (mPrivateFlags4 & PFLAG4_ALLOW_CLICK_WHEN_DISABLED) == 0) {
             if (action == MotionEvent.ACTION_UP && (mPrivateFlags & PFLAG_PRESSED) != 0) {
                 setPressed(false);
             }
@@ -16206,7 +16324,13 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
                         ((!(mParent instanceof ViewGroup)) || ((ViewGroup) mParent).isShown())) {
                     dispatchVisibilityAggregated(newVisibility == VISIBLE);
                 }
-                notifySubtreeAccessibilityStateChangedIfNeeded();
+                // If this view is invisible from visible, then sending the A11y event by its
+                // parent which is shown and has the accessibility important.
+                if ((old & VISIBILITY_MASK) == VISIBLE) {
+                    notifySubtreeAccessibilityStateChangedByParentIfNeeded();
+                } else {
+                    notifySubtreeAccessibilityStateChangedIfNeeded();
+                }
             }
         }
 
@@ -29420,7 +29544,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
 
         @Override
         public void run() {
-            if (AccessibilityManager.getInstance(mContext).isEnabled()) {
+            if (AccessibilityManager.getInstance(mContext).isEnabled() && isShown()) {
                 requestParentSendAccessibilityEvent(mAccessibilityEvent);
             }
             reset();
@@ -30407,6 +30531,21 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
                     }
                 }
             }
+        }
+    }
+
+    /**
+     * Set the view to be detached or not detached.
+     *
+     * @param detached Whether the view is detached.
+     *
+     * @hide
+     */
+    protected void setDetached(boolean detached) {
+        if (detached) {
+            mPrivateFlags4 |= PFLAG4_DETACHED;
+        } else {
+            mPrivateFlags4 &= ~PFLAG4_DETACHED;
         }
     }
 }

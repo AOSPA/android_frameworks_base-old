@@ -711,11 +711,13 @@
     <string name="notification_silence_title" msgid="8608090968400832335">"Kimya"</string>
     <string name="notification_alert_title" msgid="3656229781017543655">"Chaguomsingi"</string>
     <string name="notification_bubble_title" msgid="8330481035191903164">"Kiputo"</string>
+    <string name="notification_automatic_title" msgid="3745465364578762652">"Otomatiki"</string>
     <string name="notification_channel_summary_low" msgid="4860617986908931158">"Hakuna sauti wala mtetemo"</string>
     <string name="notification_conversation_summary_low" msgid="1734433426085468009">"Hakuna sauti wala mtetemo na huonekana upande wa chini katika sehemu ya mazungumzo"</string>
     <string name="notification_channel_summary_default" msgid="3282930979307248890">"Huenda ikalia au kutetema kulingana na mipangilio ya simu"</string>
     <string name="notification_channel_summary_default_with_bubbles" msgid="1782419896613644568">"Huenda ikalia au kutetema kulingana na mipangilio ya simu. Mazungumzo kutoka kiputo cha <xliff:g id="APP_NAME">%1$s</xliff:g> kwa chaguomsingi."</string>
     <string name="notification_channel_summary_bubble" msgid="7235935211580860537">"Huweka umakinifu wako kwenye maudhui haya kwa kutumia njia ya mkato ya kuelea."</string>
+    <string name="notification_channel_summary_automatic" msgid="5813109268050235275">"Ruhusu mfumo ubainishe iwapo arifa hii inapaswa kutoa sauti au mtetemo"</string>
     <string name="notification_channel_summary_priority" msgid="7952654515769021553">"Huonyeshwa kwenye sehemu ya juu ya mazungumzo, huonekana kama kiputo, huonyesha picha ya wasifu kwenye skrini iliyofungwa"</string>
     <string name="notification_conversation_channel_settings" msgid="2409977688430606835">"Mipangilio"</string>
     <string name="notification_priority_title" msgid="2079708866333537093">"Kipaumbele"</string>
@@ -736,6 +738,12 @@
     <string name="appops_camera_mic_overlay" msgid="5584311236445644095">"Programu hii inachomoza kwenye programu zingine zilizo katika skrini yako na inatumia maikrofoni na kamera."</string>
     <string name="notification_appops_settings" msgid="5208974858340445174">"Mipangilio"</string>
     <string name="notification_appops_ok" msgid="2177609375872784124">"Sawa"</string>
+    <string name="feedback_silenced" msgid="5382212321253328247">"Arifa hii ilizimwa na mfumo."</string>
+    <string name="feedback_promoted" msgid="8075757485407091976">"Arifa hii ilipandishwa hadhi na mfumo."</string>
+    <string name="feedback_demoted" msgid="5848066008939031913">"Arifa hii ilishushwa hadhi na mfumo."</string>
+    <string name="feedback_prompt" msgid="2278631214125128281">"Je, hatua hii ilikuwa sahihi?"</string>
+    <string name="feedback_response" msgid="4671729244976641339">"Asante kwa maoni yako!"</string>
+    <string name="feedback_ok" msgid="6481426753298857144">"Sawa"</string>
     <string name="notification_channel_controls_opened_accessibility" msgid="6111817750774381094">"Vidhibiti vya arifa <xliff:g id="APP_NAME">%1$s</xliff:g> vimefunguliwa"</string>
     <string name="notification_channel_controls_closed_accessibility" msgid="1561909368876911701">"Vidhibiti vya arifa vya <xliff:g id="APP_NAME">%1$s</xliff:g> vimefungwa"</string>
     <string name="notification_channel_switch_accessibility" msgid="8979885820432540252">"Ruhusu arifa kutoka kwenye kituo hiki"</string>
@@ -908,25 +916,14 @@
     <string name="accessibility_quick_settings_edit" msgid="1523745183383815910">"Badilisha orodha ya mipangilio."</string>
     <string name="accessibility_quick_settings_page" msgid="7506322631645550961">"Ukurasa wa <xliff:g id="ID_1">%1$d</xliff:g> kati ya <xliff:g id="ID_2">%2$d</xliff:g>"</string>
     <string name="tuner_lock_screen" msgid="2267383813241144544">"Skrini iliyofungwa"</string>
-    <string name="pip_phone_expand" msgid="1424988917240616212">"Panua"</string>
-    <string name="pip_phone_minimize" msgid="9057117033655996059">"Punguza"</string>
-    <string name="pip_phone_close" msgid="8801864042095341824">"Funga"</string>
-    <string name="pip_phone_settings" msgid="5687538631925004341">"Mipangilio"</string>
-    <string name="pip_phone_dismiss_hint" msgid="5825740708095316710">"Buruta ili uondoe"</string>
-    <string name="pip_menu_title" msgid="6365909306215631910">"Menyu"</string>
-    <string name="pip_notification_title" msgid="8661573026059630525">"<xliff:g id="NAME">%s</xliff:g> iko katika hali ya picha ndani ya picha nyingine"</string>
-    <string name="pip_notification_message" msgid="4991831338795022227">"Ikiwa hutaki <xliff:g id="NAME">%s</xliff:g> itumie kipengele hiki, gusa ili ufungue mipangilio na uizime."</string>
-    <string name="pip_play" msgid="333995977693142810">"Cheza"</string>
-    <string name="pip_pause" msgid="1139598607050555845">"Sitisha"</string>
-    <string name="pip_skip_to_next" msgid="3864212650579956062">"Ruka ufikie inayofuata"</string>
-    <string name="pip_skip_to_prev" msgid="3742589641443049237">"Ruka ufikie iliyotangulia"</string>
-    <string name="accessibility_action_pip_resize" msgid="8237306972921160456">"Badilisha ukubwa"</string>
     <string name="thermal_shutdown_title" msgid="2702966892682930264">"Simu ilizima kutokana na joto"</string>
-    <string name="thermal_shutdown_message" msgid="7432744214105003895">"Simu yako sasa inafanya kazi ipasavyo"</string>
+    <string name="thermal_shutdown_message" msgid="6142269839066172984">"Simu yako sasa inafanya kazi ipasavyo.\nGusa ili upate maelezo zaidi"</string>
     <string name="thermal_shutdown_dialog_message" msgid="6745684238183492031">"Simu yako ilikuwa moto sana, kwa hivyo ilijizima ili ipoe. Simu yako sasa inafanya kazi ipasavyo.\n\nSimu yako inaweza kuwa moto sana ikiwa:\n	• Unatumia programu zinazotumia vipengee vingi (kama vile michezo ya video, video au programu za uelekezaji)\n	• Unapakua au upakie faili kubwa\n	• Unatumia simu yako katika maeneo yenye halijoto ya juu"</string>
+    <string name="thermal_shutdown_dialog_help_text" msgid="6413474593462902901">"Angalia hatua za utunzaji"</string>
     <string name="high_temp_title" msgid="2218333576838496100">"Joto la simu linaongezeka"</string>
-    <string name="high_temp_notif_message" msgid="163928048626045592">"Baadhi ya vipengele havitatumika kwenye simu wakati inapoa"</string>
+    <string name="high_temp_notif_message" msgid="1277346543068257549">"Baadhi ya vipengele havitatumika kwenye simu wakati inapoa.\nGusa ili upate maelezo zaidi"</string>
     <string name="high_temp_dialog_message" msgid="3793606072661253968">"Simu yako itajaribu kupoa kiotomatiki. Bado unaweza kutumia simu yako, lakini huenda ikafanya kazi polepole. \n\nPindi simu yako itakapopoa, itaendelea kufanya kazi kama kawaida."</string>
+    <string name="high_temp_dialog_help_text" msgid="7380171287943345858">"Angalia hatua za utunzaji"</string>
     <string name="high_temp_alarm_title" msgid="2359958549570161495">"Chomoa chaja"</string>
     <string name="high_temp_alarm_notify_message" msgid="7186272817783835089">"Kuna tatizo la kuchaji kifaa hiki. Chomoa adapta ya nishati na uwe mwangalifu, huenda kebo ni moto."</string>
     <string name="high_temp_alarm_help_care_steps" msgid="5017002218341329566">"Angalia hatua za ulinzi"</string>
@@ -1022,7 +1019,6 @@
     <string name="priority_onboarding_ignores_dnd_text" msgid="2918952762719600529">"Katiza kipengele cha Usinisumbue"</string>
     <string name="priority_onboarding_done_button_title" msgid="4569550984286506007">"Nimeelewa"</string>
     <string name="priority_onboarding_settings_button_title" msgid="6663601574303585927">"Mipangilio"</string>
-    <string name="magnification_overlay_title" msgid="6584179429612427958">"Dirisha la Kuwekelea Linalokuza"</string>
     <string name="magnification_window_title" msgid="4863914360847258333">"Dirisha la Ukuzaji"</string>
     <string name="magnification_controls_title" msgid="8421106606708891519">"Vidhibiti vya Dirisha la Ukuzaji"</string>
     <string name="quick_controls_title" msgid="6839108006171302273">"Vidhibiti vya vifaa"</string>

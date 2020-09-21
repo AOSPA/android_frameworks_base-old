@@ -66,7 +66,6 @@ import android.content.pm.parsing.result.ParseResult;
 import android.content.pm.parsing.result.ParseTypeImpl;
 import android.content.res.AssetManager;
 import android.content.res.Resources;
-import android.content.rollback.IRollbackManager;
 import android.content.rollback.PackageRollbackInfo;
 import android.content.rollback.RollbackInfo;
 import android.content.rollback.RollbackManager;
@@ -144,6 +143,7 @@ class PackageManagerShellCommand extends ShellCommand {
 
     final IPackageManager mInterface;
     final IPermissionManager mPermissionManager;
+    final Context mShellPackageContext;
     final private WeakHashMap<String, Resources> mResourceCache =
             new WeakHashMap<String, Resources>();
     int mTargetUser;
@@ -152,9 +152,15 @@ class PackageManagerShellCommand extends ShellCommand {
     int mQueryFlags;
 
     PackageManagerShellCommand(
-            PackageManagerService service, IPermissionManager permissionManager) {
+            PackageManagerService service, IPermissionManager permissionManager, Context context) {
         mInterface = service;
         mPermissionManager = permissionManager;
+        try {
+            mShellPackageContext = context.createPackageContext("com.android.shell", 0);
+        } catch (NameNotFoundException e) {
+            // should not happen
+            throw new RuntimeException(e);
+        }
     }
 
     @Override
@@ -465,31 +471,24 @@ class PackageManagerShellCommand extends ShellCommand {
         }
 
         final LocalIntentReceiver receiver = new LocalIntentReceiver();
-        try {
-            IRollbackManager rm = IRollbackManager.Stub.asInterface(
-                    ServiceManager.getService(Context.ROLLBACK_SERVICE));
-
-            RollbackInfo rollback = null;
-            for (RollbackInfo r : (List<RollbackInfo>) rm.getAvailableRollbacks().getList()) {
-                for (PackageRollbackInfo info : r.getPackages()) {
-                    if (packageName.equals(info.getPackageName())) {
-                        rollback = r;
-                        break;
-                    }
+        RollbackManager rm = mShellPackageContext.getSystemService(RollbackManager.class);
+        RollbackInfo rollback = null;
+        for (RollbackInfo r : rm.getAvailableRollbacks()) {
+            for (PackageRollbackInfo info : r.getPackages()) {
+                if (packageName.equals(info.getPackageName())) {
+                    rollback = r;
+                    break;
                 }
             }
-
-            if (rollback == null) {
-                pw.println("No available rollbacks for: " + packageName);
-                return 1;
-            }
-
-            rm.commitRollback(rollback.getRollbackId(),
-                    ParceledListSlice.<VersionedPackage>emptyList(),
-                    "com.android.shell", receiver.getIntentSender());
-        } catch (RemoteException re) {
-            // Cannot happen.
         }
+
+        if (rollback == null) {
+            pw.println("No available rollbacks for: " + packageName);
+            return 1;
+        }
+
+        rm.commitRollback(rollback.getRollbackId(),
+                Collections.emptyList(), receiver.getIntentSender());
 
         final Intent result = receiver.getResult();
         final int status = result.getIntExtra(RollbackManager.EXTRA_STATUS,
@@ -1377,7 +1376,7 @@ class PackageManagerShellCommand extends ShellCommand {
         long timeoutMs = -1;
         while ((opt = getNextOption()) != null) {
             switch (opt) {
-                case "--wait":
+                case "--wait-for-staged-ready":
                     waitForStagedSessionReady = true;
                     // If there is only one remaining argument, then it represents the sessionId, we
                     // shouldn't try to parse it as timeoutMs.
@@ -2865,7 +2864,7 @@ class PackageManagerShellCommand extends ShellCommand {
                     }
                     sessionParams.installFlags |= PackageManager.INSTALL_ENABLE_ROLLBACK;
                     break;
-                case "--wait":
+                case "--wait-for-staged-ready":
                     params.mWaitForStagedSessionReady = true;
                     try {
                         params.timeoutMs = Long.parseLong(peekNextArg());
@@ -3084,7 +3083,8 @@ class PackageManagerShellCommand extends ShellCommand {
         final int translatedUserId =
                 translateUserId(userId, UserHandle.USER_SYSTEM, "doCreateSession");
         final int sessionId = mInterface.getPackageInstaller()
-                .createSession(params, installerPackageName, translatedUserId);
+                .createSession(params, installerPackageName, null /*installerAttributionTag*/,
+                        translatedUserId);
         return sessionId;
     }
 
@@ -3597,7 +3597,7 @@ class PackageManagerShellCommand extends ShellCommand {
         pw.println("       [--preload] [--instant] [--full] [--dont-kill]");
         pw.println("       [--enable-rollback]");
         pw.println("       [--force-uuid internal|UUID] [--pkg PACKAGE] [-S BYTES]");
-        pw.println("       [--apex] [--wait TIMEOUT]");
+        pw.println("       [--apex] [--wait-for-staged-ready TIMEOUT]");
         pw.println("       [PATH [SPLIT...]|-]");
         pw.println("    Install an application.  Must provide the apk data to install, either as");
         pw.println("    file path(s) or '-' to read from stdin.  Options are:");
@@ -3625,8 +3625,8 @@ class PackageManagerShellCommand extends ShellCommand {
         pw.println("          3=device setup, 4=user request");
         pw.println("      --force-uuid: force install on to disk volume with given UUID");
         pw.println("      --apex: install an .apex file, not an .apk");
-        pw.println("      --wait: when performing staged install, wait TIMEOUT milliseconds");
-        pw.println("          for pre-reboot verification to complete. If TIMEOUT is not");
+        pw.println("      --wait-for-staged-ready: when performing staged install, wait TIMEOUT");
+        pw.println("          ms for pre-reboot verification to complete. If TIMEOUT is not");
         pw.println("          specified it will wait for " + DEFAULT_WAIT_MS + " milliseconds.");
         pw.println("");
         pw.println("  install-existing [--user USER_ID|all|current]");

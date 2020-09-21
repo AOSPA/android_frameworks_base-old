@@ -40,6 +40,7 @@ import static com.android.server.wm.KeyguardControllerProto.KEYGUARD_SHOWING;
 import static com.android.server.wm.KeyguardOccludedProto.DISPLAY_ID;
 import static com.android.server.wm.KeyguardOccludedProto.KEYGUARD_OCCLUDED;
 
+import android.annotation.Nullable;
 import android.os.IBinder;
 import android.os.RemoteException;
 import android.os.Trace;
@@ -49,7 +50,6 @@ import android.util.proto.ProtoOutputStream;
 
 import com.android.internal.policy.IKeyguardDismissCallback;
 import com.android.server.policy.WindowManagerPolicy;
-import com.android.server.wm.ActivityTaskManagerInternal.SleepToken;
 
 import java.io.PrintWriter;
 
@@ -73,11 +73,14 @@ class KeyguardController {
     private final SparseArray<KeyguardDisplayState> mDisplayStates = new SparseArray<>();
     private final ActivityTaskManagerService mService;
     private RootWindowContainer mRootWindowContainer;
+    private final ActivityTaskManagerInternal.SleepTokenAcquirer mSleepTokenAcquirer;
+
 
     KeyguardController(ActivityTaskManagerService service,
             ActivityStackSupervisor stackSupervisor) {
         mService = service;
         mStackSupervisor = stackSupervisor;
+        mSleepTokenAcquirer = mService.new SleepTokenAcquirerImpl("keyguard");
     }
 
     void setWindowManager(WindowManagerService windowManager) {
@@ -411,17 +414,17 @@ class KeyguardController {
 
     private void updateKeyguardSleepToken(int displayId) {
         final KeyguardDisplayState state = getDisplay(displayId);
-        if (isKeyguardUnoccludedOrAodShowing(displayId) && state.mSleepToken == null) {
-            state.acquiredSleepToken();
-        } else if (!isKeyguardUnoccludedOrAodShowing(displayId) && state.mSleepToken != null) {
-            state.releaseSleepToken();
+        if (isKeyguardUnoccludedOrAodShowing(displayId)) {
+            state.mSleepTokenAcquirer.acquire(displayId);
+        } else if (!isKeyguardUnoccludedOrAodShowing(displayId)) {
+            state.mSleepTokenAcquirer.release(displayId);
         }
     }
 
     private KeyguardDisplayState getDisplay(int displayId) {
         KeyguardDisplayState state = mDisplayStates.get(displayId);
         if (state == null) {
-            state = new KeyguardDisplayState(mService, displayId);
+            state = new KeyguardDisplayState(mService, displayId, mSleepTokenAcquirer);
             mDisplayStates.append(displayId, state);
         }
         return state;
@@ -442,29 +445,18 @@ class KeyguardController {
         private ActivityRecord mDismissingKeyguardActivity;
         private boolean mRequestDismissKeyguard;
         private final ActivityTaskManagerService mService;
-        private SleepToken mSleepToken;
+        private final ActivityTaskManagerInternal.SleepTokenAcquirer mSleepTokenAcquirer;
 
-        KeyguardDisplayState(ActivityTaskManagerService service, int displayId) {
+        KeyguardDisplayState(ActivityTaskManagerService service, int displayId,
+                ActivityTaskManagerInternal.SleepTokenAcquirer acquirer) {
             mService = service;
             mDisplayId = displayId;
+            mSleepTokenAcquirer = acquirer;
         }
 
         void onRemoved() {
             mDismissingKeyguardActivity = null;
-            releaseSleepToken();
-        }
-
-        void acquiredSleepToken() {
-            if (mSleepToken == null) {
-                mSleepToken = mService.acquireSleepToken("keyguard", mDisplayId);
-            }
-        }
-
-        void releaseSleepToken() {
-            if (mSleepToken != null) {
-                mSleepToken.release();
-                mSleepToken = null;
-            }
+            mSleepTokenAcquirer.release(mDisplayId);
         }
 
         void visibilitiesUpdated(KeyguardController controller, DisplayContent display) {
@@ -474,7 +466,7 @@ class KeyguardController {
             mOccluded = false;
             mDismissingKeyguardActivity = null;
 
-            final ActivityStack stack = getStackForControllingOccluding(display);
+            final Task stack = getStackForControllingOccluding(display);
             if (stack != null) {
                 final ActivityRecord topDismissing = stack.getTopDismissingKeyguardActivity();
                 mOccluded = stack.topActivityOccludesKeyguard() || (topDismissing != null
@@ -514,18 +506,18 @@ class KeyguardController {
          * Only the top non-pinned activity of the focusable stack on each display can control its
          * occlusion state.
          */
-        private ActivityStack getStackForControllingOccluding(DisplayContent display) {
-            for (int tdaNdx = display.getTaskDisplayAreaCount() - 1; tdaNdx >= 0; --tdaNdx) {
-                final TaskDisplayArea taskDisplayArea = display.getTaskDisplayAreaAt(tdaNdx);
+        @Nullable
+        private Task getStackForControllingOccluding(DisplayContent display) {
+            return display.getItemFromTaskDisplayAreas(taskDisplayArea -> {
                 for (int sNdx = taskDisplayArea.getStackCount() - 1; sNdx >= 0; --sNdx) {
-                    final ActivityStack stack = taskDisplayArea.getStackAt(sNdx);
+                    final Task stack = taskDisplayArea.getStackAt(sNdx);
                     if (stack != null && stack.isFocusableAndVisible()
                             && !stack.inPinnedWindowingMode()) {
                         return stack;
                     }
                 }
-            }
-            return null;
+                return null;
+            });
         }
 
         void dumpStatus(PrintWriter pw, String prefix) {

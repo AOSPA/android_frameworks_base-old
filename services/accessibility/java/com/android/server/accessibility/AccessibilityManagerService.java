@@ -112,11 +112,14 @@ import com.android.internal.accessibility.dialog.AccessibilityShortcutChooserAct
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.content.PackageMonitor;
+import com.android.internal.os.BackgroundThread;
 import com.android.internal.util.ArrayUtils;
 import com.android.internal.util.DumpUtils;
 import com.android.internal.util.IntPair;
 import com.android.server.LocalServices;
 import com.android.server.SystemService;
+import com.android.server.accessibility.magnification.FullScreenMagnificationController;
+import com.android.server.accessibility.magnification.MagnificationGestureHandler;
 import com.android.server.accessibility.magnification.WindowMagnificationManager;
 import com.android.server.wm.ActivityTaskManagerInternal;
 import com.android.server.wm.WindowManagerInternal;
@@ -149,6 +152,7 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
         AccessibilityUserState.ServiceInfoChangeListener,
         AccessibilityWindowManager.AccessibilityEventSender,
         AccessibilitySecurityPolicy.AccessibilityUserManager,
+        MagnificationGestureHandler.ScaleChangedListener,
         SystemActionPerformer.SystemActionsChangedListener {
 
     private static final boolean DEBUG = false;
@@ -214,7 +218,7 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
     // Lazily initialized - access through getSystemActionPerfomer()
     private SystemActionPerformer mSystemActionPerformer;
 
-    private MagnificationController mMagnificationController;
+    private FullScreenMagnificationController mFullScreenMagnificationController;
 
     private InteractionBridge mInteractionBridge;
 
@@ -242,7 +246,8 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
     private final RemoteCallbackList<IAccessibilityManagerClient> mGlobalClients =
             new RemoteCallbackList<>();
 
-    private final SparseArray<AccessibilityUserState> mUserStates = new SparseArray<>();
+    @VisibleForTesting
+    final SparseArray<AccessibilityUserState> mUserStates = new SparseArray<>();
 
     private final UiAutomationManager mUiAutomationManager = new UiAutomationManager(mLock);
 
@@ -284,7 +289,8 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
             AccessibilitySecurityPolicy securityPolicy,
             SystemActionPerformer systemActionPerformer,
             AccessibilityWindowManager a11yWindowManager,
-            AccessibilityDisplayListener a11yDisplayListener) {
+            AccessibilityDisplayListener a11yDisplayListener,
+            WindowMagnificationManager windowMagnificationMgr) {
         mContext = context;
         mPowerManager =  (PowerManager) mContext.getSystemService(Context.POWER_SERVICE);
         mWindowManagerService = LocalServices.getService(WindowManagerInternal.class);
@@ -295,6 +301,7 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
         mSystemActionPerformer = systemActionPerformer;
         mA11yWindowManager = a11yWindowManager;
         mA11yDisplayListener = a11yDisplayListener;
+        mWindowMagnificationMgr = windowMagnificationMgr;
         init();
     }
 
@@ -1039,6 +1046,17 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
         }
     }
 
+    @Override
+    public void onMagnificationScaleChanged(int displayId, int mode) {
+        synchronized (mLock) {
+            final int capabilities =
+                    getCurrentUserStateLocked().getMagnificationCapabilitiesLocked();
+            if (capabilities == Settings.Secure.ACCESSIBILITY_MAGNIFICATION_MODE_ALL) {
+                getWindowMagnificationMgr().showMagnificationButton(displayId, mode);
+            }
+        }
+    }
+
     /**
      * Called by AccessibilityInputFilter when it creates or destroys the motionEventInjector.
      * Not using a getter because the AccessibilityInputFilter isn't thread-safe
@@ -1161,6 +1179,9 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
             // The user changed.
             mCurrentUserId = userId;
 
+            if (mWindowMagnificationMgr != null) {
+                mWindowMagnificationMgr.setUserId(mCurrentUserId);
+            }
             AccessibilityUserState userState = getCurrentUserStateLocked();
 
             readConfigurationForUserStateLocked(userState);
@@ -1474,6 +1495,35 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
                 ? mUiAutomationManager.getRelevantEventTypes()
                 : 0;
         return relevantEventTypes;
+    }
+
+    private void updateMagnificationModeChangeSettingsLocked(AccessibilityUserState userState) {
+        if (userState.mUserId != mCurrentUserId) {
+            return;
+        }
+        // New mode is invalid, so ignore and restore it.
+        if (fallBackMagnificationModeSettingsLocked(userState)) {
+            return;
+        }
+        mMainHandler.sendMessage(obtainMessage(
+                AccessibilityManagerService::notifyRefreshMagnificationModeToInputFilter,
+                this));
+    }
+
+    private void notifyRefreshMagnificationModeToInputFilter() {
+        synchronized (mLock) {
+            if (!mHasInputFilter) {
+                return;
+            }
+            // TODO: notify the mode change on specified display.
+            final ArrayList<Display> displays = getValidDisplayList();
+            for (int i = 0; i < displays.size(); i++) {
+                final Display display = displays.get(i);
+                if (display != null) {
+                    mInputFilter.refreshMagnificationMode(display);
+                }
+            }
+        }
     }
 
     private static boolean isClientInPackageWhitelist(
@@ -1853,6 +1903,9 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
         scheduleUpdateClientsIfNeededLocked(userState);
         updateAccessibilityShortcutKeyTargetsLocked(userState);
         updateAccessibilityButtonTargetsLocked(userState);
+        // Update the capabilities before the mode.
+        updateMagnificationCapabilitiesSettingsChangeLocked(userState);
+        updateMagnificationModeChangeSettingsLocked(userState);
     }
 
     private void updateWindowsForAccessibilityCallbackLocked(AccessibilityUserState userState) {
@@ -1952,6 +2005,8 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
         somethingChanged |= readAccessibilityButtonTargetsLocked(userState);
         somethingChanged |= readAccessibilityButtonTargetComponentLocked(userState);
         somethingChanged |= readUserRecommendedUiTimeoutSettingsLocked(userState);
+        somethingChanged |= readMagnificationModeLocked(userState);
+        somethingChanged |= readMagnificationCapabilitiesLocked(userState);
         return somethingChanged;
     }
 
@@ -2183,13 +2238,13 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
             return;
         }
 
-        if (mMagnificationController != null) {
-            mMagnificationController.setUserId(userState.mUserId);
+        if (mFullScreenMagnificationController != null) {
+            mFullScreenMagnificationController.setUserId(userState.mUserId);
         }
 
         if (mUiAutomationManager.suppressingAccessibilityServicesLocked()
-                && mMagnificationController != null) {
-            mMagnificationController.unregisterAll();
+                && mFullScreenMagnificationController != null) {
+            mFullScreenMagnificationController.unregisterAll();
             return;
         }
 
@@ -2201,7 +2256,7 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
                 || userState.isShortcutMagnificationEnabledLocked()) {
             for (int i = 0; i < displays.size(); i++) {
                 final Display display = displays.get(i);
-                getMagnificationController().register(display.getDisplayId());
+                getFullScreenMagnificationController().register(display.getDisplayId());
             }
             return;
         }
@@ -2211,11 +2266,19 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
             final Display display = displays.get(i);
             final int displayId = display.getDisplayId();
             if (userHasListeningMagnificationServicesLocked(userState, displayId)) {
-                getMagnificationController().register(displayId);
-            } else if (mMagnificationController != null) {
-                mMagnificationController.unregister(displayId);
+                getFullScreenMagnificationController().register(displayId);
+            } else if (mFullScreenMagnificationController != null) {
+                mFullScreenMagnificationController.unregister(displayId);
             }
         }
+    }
+
+    private void updateWindowMagnificationConnectionIfNeeded(AccessibilityUserState userState) {
+        final boolean connect = (userState.isShortcutMagnificationEnabledLocked()
+                || userState.isDisplayMagnificationEnabledLocked())
+                && (userState.getMagnificationCapabilitiesLocked()
+                != Settings.Secure.ACCESSIBILITY_MAGNIFICATION_MODE_FULLSCREEN);
+        getWindowMagnificationMgr().requestConnection(connect);
     }
 
     /**
@@ -2552,7 +2615,7 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
         }
         // In case user assigned magnification to the given shortcut.
         if (targetName.equals(MAGNIFICATION_CONTROLLER_NAME)) {
-            final boolean enabled = !getMagnificationController().isMagnifying(displayId);
+            final boolean enabled = !getFullScreenMagnificationController().isMagnifying(displayId);
             logAccessibilityShortcutActivated(MAGNIFICATION_COMPONENT_NAME, shortcutType, enabled);
             sendAccessibilityButtonToInputFilter(displayId);
             return;
@@ -2845,7 +2908,7 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
     WindowMagnificationManager getWindowMagnificationMgr() {
         synchronized (mLock) {
             if (mWindowMagnificationMgr == null) {
-                mWindowMagnificationMgr = new WindowMagnificationManager();
+                mWindowMagnificationMgr = new WindowMagnificationManager(mContext, mCurrentUserId);
             }
             return mWindowMagnificationMgr;
         }
@@ -2872,6 +2935,9 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
             pw.println("ACCESSIBILITY MANAGER (dumpsys accessibility)");
             pw.println();
             pw.append("currentUserId=").append(String.valueOf(mCurrentUserId));
+            pw.println();
+            pw.append("hasWindowMagnificationConnection=").append(
+                    String.valueOf(getWindowMagnificationMgr().isConnected()));
             pw.println();
             final int userCount = mUserStates.size();
             for (int i = 0; i < userCount; i++) {
@@ -2909,13 +2975,14 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
     }
 
     @Override
-    public MagnificationController getMagnificationController() {
+    public FullScreenMagnificationController getFullScreenMagnificationController() {
         synchronized (mLock) {
-            if (mMagnificationController == null) {
-                mMagnificationController = new MagnificationController(mContext, this, mLock);
-                mMagnificationController.setUserId(mCurrentUserId);
+            if (mFullScreenMagnificationController == null) {
+                mFullScreenMagnificationController = new FullScreenMagnificationController(mContext,
+                        this, mLock);
+                mFullScreenMagnificationController.setUserId(mCurrentUserId);
             }
-            return mMagnificationController;
+            return mFullScreenMagnificationController;
         }
     }
 
@@ -3157,8 +3224,8 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
                     }
                 }
             }
-            if (mMagnificationController != null) {
-                mMagnificationController.onDisplayRemoved(displayId);
+            if (mFullScreenMagnificationController != null) {
+                mFullScreenMagnificationController.onDisplayRemoved(displayId);
             }
             mA11yWindowManager.stopTrackingWindows(displayId);
         }
@@ -3255,6 +3322,12 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
         private final Uri mUserInteractiveUiTimeoutUri = Settings.Secure.getUriFor(
                 Settings.Secure.ACCESSIBILITY_INTERACTIVE_UI_TIMEOUT_MS);
 
+        private final Uri mMagnificationModeUri = Settings.Secure.getUriFor(
+                Settings.Secure.ACCESSIBILITY_MAGNIFICATION_MODE);
+
+        private final Uri mMagnificationCapabilityUri = Settings.Secure.getUriFor(
+                Settings.Secure.ACCESSIBILITY_MAGNIFICATION_CAPABILITY);
+
         public AccessibilityContentObserver(Handler handler) {
             super(handler);
         }
@@ -3287,6 +3360,10 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
                     mUserNonInteractiveUiTimeoutUri, false, this, UserHandle.USER_ALL);
             contentResolver.registerContentObserver(
                     mUserInteractiveUiTimeoutUri, false, this, UserHandle.USER_ALL);
+            contentResolver.registerContentObserver(
+                    mMagnificationModeUri, false, this, UserHandle.USER_ALL);
+            contentResolver.registerContentObserver(
+                    mMagnificationCapabilityUri, false, this, UserHandle.USER_ALL);
         }
 
         @Override
@@ -3339,9 +3416,98 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
                 } else if (mUserNonInteractiveUiTimeoutUri.equals(uri)
                         || mUserInteractiveUiTimeoutUri.equals(uri)) {
                     readUserRecommendedUiTimeoutSettingsLocked(userState);
+                } else if (mMagnificationModeUri.equals(uri)) {
+                    if (readMagnificationModeLocked(userState)) {
+                        updateMagnificationModeChangeSettingsLocked(userState);
+                    }
+                } else if (mMagnificationCapabilityUri.equals(uri)) {
+                    if (readMagnificationCapabilitiesLocked(userState)) {
+                        updateMagnificationCapabilitiesSettingsChangeLocked(userState);
+                    }
                 }
             }
         }
+    }
+
+    private void updateMagnificationCapabilitiesSettingsChangeLocked(
+            AccessibilityUserState userState) {
+        if (fallBackMagnificationModeSettingsLocked(userState)) {
+            updateMagnificationModeChangeSettingsLocked(userState);
+        }
+        updateWindowMagnificationConnectionIfNeeded(userState);
+        // Remove magnification button UI when the magnification capability is not all mode or
+        // magnification is disabled.
+        if (!(userState.isDisplayMagnificationEnabledLocked()
+                || userState.isShortcutMagnificationEnabledLocked())
+                || userState.getMagnificationCapabilitiesLocked()
+                != Settings.Secure.ACCESSIBILITY_MAGNIFICATION_MODE_ALL) {
+            final ArrayList<Display> displays = getValidDisplayList();
+            for (int i = 0; i < displays.size(); i++) {
+                final int displayId = displays.get(i).getDisplayId();
+                getWindowMagnificationMgr().removeMagnificationButton(displayId);
+            }
+        }
+    }
+
+    private boolean fallBackMagnificationModeSettingsLocked(AccessibilityUserState userState) {
+        if (userState.isValidMagnificationModeLocked()) {
+            return false;
+        }
+        Slog.w(LOG_TAG, "invalid magnification mode:" + userState.getMagnificationModeLocked());
+        final int capabilities = userState.getMagnificationCapabilitiesLocked();
+        userState.setMagnificationModeLocked(capabilities);
+        persistMagnificationModeSettingLocked(capabilities);
+        return true;
+    }
+
+    private void persistMagnificationModeSettingLocked(int mode) {
+        BackgroundThread.getHandler().post(() -> {
+            final long identity = Binder.clearCallingIdentity();
+            try {
+                Settings.Secure.putIntForUser(mContext.getContentResolver(),
+                        Settings.Secure.ACCESSIBILITY_MAGNIFICATION_MODE, mode, mCurrentUserId);
+            } finally {
+                Binder.restoreCallingIdentity(identity);
+            }
+        });
+    }
+
+    //TODO: support multi-display.
+    /**
+     * Gets the magnification mode of the specified display.
+     *
+     * @param displayId The logical displayId.
+     * @return magnification mode. It's either ACCESSIBILITY_MAGNIFICATION_MODE_FULLSCREEN or
+     * ACCESSIBILITY_MAGNIFICATION_MODE_WINDOW.
+     */
+    public int getMagnificationMode(int displayId) {
+        synchronized (mLock) {
+            return getCurrentUserStateLocked().getMagnificationModeLocked();
+        }
+    }
+
+    private boolean readMagnificationModeLocked(AccessibilityUserState userState) {
+        final int magnificationMode = Settings.Secure.getIntForUser(
+                mContext.getContentResolver(),
+                Settings.Secure.ACCESSIBILITY_MAGNIFICATION_MODE,
+                Settings.Secure.ACCESSIBILITY_MAGNIFICATION_MODE_FULLSCREEN, userState.mUserId);
+        if (magnificationMode != userState.getMagnificationModeLocked()) {
+            userState.setMagnificationModeLocked(magnificationMode);
+            return true;
+        }
+        return false;
+    }
+
+    private boolean readMagnificationCapabilitiesLocked(AccessibilityUserState userState) {
+        final int capabilities = Settings.Secure.getIntForUser(
+                mContext.getContentResolver(),
+                Settings.Secure.ACCESSIBILITY_MAGNIFICATION_CAPABILITY,
+                Settings.Secure.ACCESSIBILITY_MAGNIFICATION_MODE_FULLSCREEN, userState.mUserId);
+        if (capabilities != userState.getMagnificationCapabilitiesLocked()) {
+            userState.setMagnificationCapabilitiesLocked(capabilities);
+            return true;
+        }
+        return false;
     }
 
     @Override

@@ -25,13 +25,13 @@ import android.compat.annotation.UnsupportedAppUsage;
 import android.content.res.CompatibilityInfo.Translator;
 import android.graphics.Canvas;
 import android.graphics.ColorSpace;
-import android.graphics.GraphicBuffer;
 import android.graphics.HardwareRenderer;
 import android.graphics.Matrix;
 import android.graphics.RecordingCanvas;
 import android.graphics.Rect;
 import android.graphics.RenderNode;
 import android.graphics.SurfaceTexture;
+import android.hardware.HardwareBuffer;
 import android.os.Parcel;
 import android.os.Parcelable;
 import android.util.Log;
@@ -88,7 +88,7 @@ public class Surface implements Parcelable {
     private static native int nativeSetScalingMode(long nativeObject, int scalingMode);
     private static native int nativeForceScopedDisconnect(long nativeObject);
     private static native int nativeAttachAndQueueBufferWithColorSpace(long nativeObject,
-            GraphicBuffer buffer, int colorSpaceId);
+            HardwareBuffer buffer, int colorSpaceId);
 
     private static native int nativeSetSharedBufferModeEnabled(long nativeObject, boolean enabled);
     private static native int nativeSetAutoRefreshEnabled(long nativeObject, boolean enabled);
@@ -223,12 +223,12 @@ public class Surface implements Parcelable {
     }
 
     /**
-     * Create a Surface assosciated with a given {@link SurfaceControl}. Buffers submitted to this
+     * Create a Surface associated with a given {@link SurfaceControl}. Buffers submitted to this
      * surface will be displayed by the system compositor according to the parameters
      * specified by the control. Multiple surfaces may be constructed from one SurfaceControl,
      * but only one can be connected (e.g. have an active EGL context) at a time.
      *
-     * @param from The SurfaceControl to assosciate this Surface with
+     * @param from The SurfaceControl to associate this Surface with
      */
     public Surface(@NonNull SurfaceControl from) {
         copyFrom(from);
@@ -762,7 +762,7 @@ public class Surface implements Parcelable {
      * treated as SRGB.
      * @hide
      */
-    public void attachAndQueueBufferWithColorSpace(GraphicBuffer buffer, ColorSpace colorSpace) {
+    public void attachAndQueueBufferWithColorSpace(HardwareBuffer buffer, ColorSpace colorSpace) {
         synchronized (mLock) {
             checkNotReleasedLocked();
             if (colorSpace == null) {
@@ -776,16 +776,6 @@ public class Surface implements Parcelable {
                         + "native error: " + err);
             }
         }
-    }
-
-    /**
-     * Deprecated, use attachAndQueueBufferWithColorSpace instead.
-     * Transfer ownership of buffer and present it on the Surface.
-     * The color space of the buffer is treated as SRGB.
-     * @hide
-     */
-    public void attachAndQueueBuffer(GraphicBuffer buffer) {
-        attachAndQueueBufferWithColorSpace(buffer, ColorSpace.get(ColorSpace.Named.SRGB));
     }
 
     /**

@@ -22,12 +22,14 @@
 #include <android/hardware/gnss/1.1/IGnss.h>
 #include <android/hardware/gnss/2.0/IGnss.h>
 #include <android/hardware/gnss/2.1/IGnss.h>
+#include <android/hardware/gnss/3.0/IGnss.h>
 
 #include <android/hardware/gnss/1.0/IGnssMeasurement.h>
 #include <android/hardware/gnss/1.1/IGnssMeasurement.h>
 #include <android/hardware/gnss/2.0/IGnssMeasurement.h>
 #include <android/hardware/gnss/2.1/IGnssAntennaInfo.h>
 #include <android/hardware/gnss/2.1/IGnssMeasurement.h>
+#include <android/hardware/gnss/3.0/IGnssPsds.h>
 #include <android/hardware/gnss/measurement_corrections/1.0/IMeasurementCorrections.h>
 #include <android/hardware/gnss/measurement_corrections/1.1/IMeasurementCorrections.h>
 #include <android/hardware/gnss/visibility_control/1.0/IGnssVisibilityControl.h>
@@ -159,7 +161,8 @@ using android::hardware::gnss::V1_0::IGnssNavigationMessageCallback;
 using android::hardware::gnss::V1_0::IGnssNi;
 using android::hardware::gnss::V1_0::IGnssNiCallback;
 using android::hardware::gnss::V1_0::IGnssXtra;
-using android::hardware::gnss::V1_0::IGnssXtraCallback;
+using android::hardware::gnss::V3_0::IGnssPsds;
+using android::hardware::gnss::V3_0::IGnssPsdsCallback;
 
 using android::hardware::gnss::V2_0::ElapsedRealtimeFlags;
 
@@ -182,6 +185,7 @@ using IGnss_V1_0 = android::hardware::gnss::V1_0::IGnss;
 using IGnss_V1_1 = android::hardware::gnss::V1_1::IGnss;
 using IGnss_V2_0 = android::hardware::gnss::V2_0::IGnss;
 using IGnss_V2_1 = android::hardware::gnss::V2_1::IGnss;
+using IGnss_V3_0 = android::hardware::gnss::V3_0::IGnss;
 using IGnssCallback_V1_0 = android::hardware::gnss::V1_0::IGnssCallback;
 using IGnssCallback_V2_0 = android::hardware::gnss::V2_0::IGnssCallback;
 using IGnssCallback_V2_1 = android::hardware::gnss::V2_1::IGnssCallback;
@@ -240,6 +244,8 @@ sp<IGnss_V1_0> gnssHal = nullptr;
 sp<IGnss_V1_1> gnssHal_V1_1 = nullptr;
 sp<IGnss_V2_0> gnssHal_V2_0 = nullptr;
 sp<IGnss_V2_1> gnssHal_V2_1 = nullptr;
+sp<IGnss_V3_0> gnssHal_V3_0 = nullptr;
+sp<IGnssPsds> gnssPsdsIface = nullptr;
 sp<IGnssXtra> gnssXtraIface = nullptr;
 sp<IAGnssRil_V1_0> agnssRilIface = nullptr;
 sp<IAGnssRil_V2_0> agnssRilIface_V2_0 = nullptr;
@@ -918,17 +924,26 @@ Return<void> GnssCallback::gnssSetSystemInfoCb(const IGnssCallback_V2_0::GnssSys
     return Void();
 }
 
-class GnssXtraCallback : public IGnssXtraCallback {
-    Return<void> downloadRequestCb() override;
-};
-
 /*
- * GnssXtraCallback class implements the callback methods for the IGnssXtra
+ * GnssPsdsCallback class implements the callback methods for the IGnssPsds
  * interface.
  */
-Return<void> GnssXtraCallback::downloadRequestCb() {
+class GnssPsdsCallback : public IGnssPsdsCallback {
+    Return<void> downloadRequestCb() override;
+    Return<void> downloadRequestCb_3_0(int32_t psdsType) override;
+};
+
+Return<void> GnssPsdsCallback::downloadRequestCb() {
     JNIEnv* env = getJniEnv();
-    env->CallVoidMethod(mCallbacksObj, method_psdsDownloadRequest);
+    env->CallVoidMethod(mCallbacksObj, method_psdsDownloadRequest, /* psdsType= */ 1);
+    checkAndClearExceptionFromCallback(env, __FUNCTION__);
+    return Void();
+}
+
+Return<void> GnssPsdsCallback::downloadRequestCb_3_0(int32_t psdsType) {
+    ALOGD("%s: %d", __func__, psdsType);
+    JNIEnv* env = getJniEnv();
+    env->CallVoidMethod(mCallbacksObj, method_psdsDownloadRequest, psdsType);
     checkAndClearExceptionFromCallback(env, __FUNCTION__);
     return Void();
 }
@@ -1902,6 +1917,17 @@ struct GnssBatchingCallback_V2_0 : public IGnssBatchingCallback_V2_0 {
 
 /* Initializes the GNSS service handle. */
 static void android_location_GnssLocationProvider_set_gps_service_handle() {
+    ALOGD("Trying IGnss_V3_0::getService()");
+    gnssHal_V3_0 = IGnss_V3_0::getService();
+    if (gnssHal_V3_0 != nullptr) {
+        gnssHal = gnssHal_V3_0;
+        gnssHal_V2_1 = gnssHal_V3_0;
+        gnssHal_V2_0 = gnssHal_V3_0;
+        gnssHal_V1_1 = gnssHal_V3_0;
+        gnssHal = gnssHal_V3_0;
+        return;
+    }
+
     ALOGD("Trying IGnss_V2_1::getService()");
     gnssHal_V2_1 = IGnss_V2_1::getService();
     if (gnssHal_V2_1 != nullptr) {
@@ -1932,7 +1958,7 @@ static void android_location_GnssLocationProvider_set_gps_service_handle() {
 }
 
 /* One time initialization at system boot */
-static void android_location_GnssLocationProvider_class_init_native(JNIEnv* env, jclass clazz) {
+static void android_location_GnssNative_class_init_once(JNIEnv* env, jclass clazz) {
     // Initialize the top level gnss HAL handle.
     android_location_GnssLocationProvider_set_gps_service_handle();
 
@@ -1947,7 +1973,7 @@ static void android_location_GnssLocationProvider_class_init_native(JNIEnv* env,
     method_setGnssYearOfHardware = env->GetMethodID(clazz, "setGnssYearOfHardware", "(I)V");
     method_setGnssHardwareModelName = env->GetMethodID(clazz, "setGnssHardwareModelName",
             "(Ljava/lang/String;)V");
-    method_psdsDownloadRequest = env->GetMethodID(clazz, "psdsDownloadRequest", "()V");
+    method_psdsDownloadRequest = env->GetMethodID(clazz, "psdsDownloadRequest", "(I)V");
     method_reportNiNotification = env->GetMethodID(clazz, "reportNiNotification",
             "(IIIIILjava/lang/String;Ljava/lang/String;II)V");
     method_requestLocation = env->GetMethodID(clazz, "requestLocation", "(ZZ)V");
@@ -2112,8 +2138,8 @@ static void android_location_GnssLocationProvider_class_init_native(JNIEnv* env,
 }
 
 /* Initialization needed at system boot and whenever GNSS service dies. */
-static void android_location_GnssLocationProvider_init_once(JNIEnv* env, jclass clazz,
-        jboolean reinitializeGnssServiceHandle) {
+static void android_location_GnssNative_init_once(JNIEnv* env, jobject obj,
+                                                  jboolean reinitializeGnssServiceHandle) {
     /*
      * Save a pointer to JVM.
      */
@@ -2142,11 +2168,20 @@ static void android_location_GnssLocationProvider_init_once(JNIEnv* env, jclass 
         ALOGD("Link to death notification successful");
     }
 
-    auto gnssXtra = gnssHal->getExtensionXtra();
-    if (!gnssXtra.isOk()) {
-        ALOGD("Unable to get a handle to Xtra");
+    if (gnssHal_V3_0 != nullptr) {
+        auto gnssPsds = gnssHal_V3_0->getExtensionPsds();
+        if (!gnssPsds.isOk()) {
+            ALOGD("Unable to get a handle to Psds");
+        } else {
+            gnssPsdsIface = gnssPsds;
+        }
     } else {
-        gnssXtraIface = gnssXtra;
+        auto gnssXtra = gnssHal->getExtensionXtra();
+        if (!gnssXtra.isOk()) {
+            ALOGD("Unable to get a handle to Xtra");
+        } else {
+            gnssXtraIface = gnssXtra;
+        }
     }
 
     if (gnssHal_V2_0 != nullptr) {
@@ -2358,10 +2393,15 @@ static void android_location_GnssLocationProvider_init_once(JNIEnv* env, jclass 
             gnssVisibilityControlIface = gnssVisibilityControl;
         }
     }
+
+    if (mCallbacksObj) {
+        ALOGE("Callbacks already initialized");
+    } else {
+        mCallbacksObj = env->NewGlobalRef(obj);
+    }
 }
 
-static jboolean android_location_GnssLocationProvider_is_supported(
-        JNIEnv* /* env */, jclass /* clazz */) {
+static jboolean android_location_GnssNative_is_supported(JNIEnv* /* env */, jclass /* clazz */) {
     return (gnssHal != nullptr) ?  JNI_TRUE : JNI_FALSE;
 }
 
@@ -2394,12 +2434,14 @@ static jobject android_location_GnssConfiguration_get_gnss_configuration_version
 }
 
 /* Initialization needed each time the GPS service is shutdown. */
-static jboolean android_location_GnssLocationProvider_init(JNIEnv* env, jobject obj) {
+static jboolean android_location_GnssLocationProvider_init(JNIEnv* /* env */, jobject /* obj */) {
     /*
      * This must be set before calling into the HAL library.
      */
-    if (!mCallbacksObj)
-        mCallbacksObj = env->NewGlobalRef(obj);
+    if (!mCallbacksObj) {
+        ALOGE("No callbacks set during GNSS HAL initialization.");
+        return JNI_FALSE;
+    }
 
     /*
      * Fail if the main interface fails to initialize
@@ -2427,15 +2469,20 @@ static jboolean android_location_GnssLocationProvider_init(JNIEnv* env, jobject 
         return JNI_FALSE;
     }
 
-    // Set IGnssXtra.hal callback.
-    if (gnssXtraIface == nullptr) {
-        ALOGI("Unable to initialize IGnssXtra interface.");
-    } else {
-        sp<IGnssXtraCallback> gnssXtraCbIface = new GnssXtraCallback();
-        result = gnssXtraIface->setCallback(gnssXtraCbIface);
+    // Set IGnssPsds or IGnssXtra callback.
+    sp<IGnssPsdsCallback> gnssPsdsCbIface = new GnssPsdsCallback();
+    if (gnssPsdsIface != nullptr) {
+        result = gnssPsdsIface->setCallback_3_0(gnssPsdsCbIface);
+        if (!checkHidlReturn(result, "IGnssPsds setCallback() failed.")) {
+            gnssPsdsIface = nullptr;
+        }
+    } else if (gnssXtraIface != nullptr) {
+        result = gnssXtraIface->setCallback(gnssPsdsCbIface);
         if (!checkHidlReturn(result, "IGnssXtra setCallback() failed.")) {
             gnssXtraIface = nullptr;
         }
+    } else {
+        ALOGI("Unable to initialize IGnssPsds/IGnssXtra interface.");
     }
 
     // Set IAGnss.hal callback.
@@ -3606,49 +3653,54 @@ static jboolean android_location_GnssVisibilityControl_enable_nfw_location_acces
     return checkHidlReturn(result, "IGnssVisibilityControl enableNfwLocationAccess() failed.");
 }
 
-static const JNINativeMethod sMethods[] = {
-     /* name, signature, funcPtr */
-    {"class_init_native", "()V", reinterpret_cast<void *>(
-            android_location_GnssLocationProvider_class_init_native)},
-    {"native_is_supported", "()Z", reinterpret_cast<void *>(
-            android_location_GnssLocationProvider_is_supported)},
-    {"native_init_once", "(Z)V", reinterpret_cast<void *>(
-            android_location_GnssLocationProvider_init_once)},
-    {"native_init", "()Z", reinterpret_cast<void *>(android_location_GnssLocationProvider_init)},
-    {"native_cleanup", "()V", reinterpret_cast<void *>(
-            android_location_GnssLocationProvider_cleanup)},
-    {"native_set_position_mode", "(IIIIIZ)Z", reinterpret_cast<void *>(
-            android_location_GnssLocationProvider_set_position_mode)},
-    {"native_start", "()Z", reinterpret_cast<void *>(
-            android_location_GnssLocationProvider_start)},
-    {"native_stop", "()Z", reinterpret_cast<void *>(
-            android_location_GnssLocationProvider_stop)},
-    {"native_delete_aiding_data", "(I)V", reinterpret_cast<void *>(
-            android_location_GnssLocationProvider_delete_aiding_data)},
-    {"native_read_nmea", "([BI)I", reinterpret_cast<void *>(
-            android_location_GnssLocationProvider_read_nmea)},
-    {"native_inject_time", "(JJI)V", reinterpret_cast<void *>(
-            android_location_GnssLocationProvider_inject_time)},
-    {"native_inject_best_location", "(IDDDFFFFFFJIJD)V", reinterpret_cast<void *>(
-            android_location_GnssLocationProvider_inject_best_location)},
-    {"native_inject_location", "(DDF)V", reinterpret_cast<void *>(
-            android_location_GnssLocationProvider_inject_location)},
-    {"native_supports_psds", "()Z", reinterpret_cast<void *>(
-            android_location_GnssLocationProvider_supports_psds)},
-    {"native_inject_psds_data", "([BI)V", reinterpret_cast<void *>(
-            android_location_GnssLocationProvider_inject_psds_data)},
-    {"native_agps_set_id", "(ILjava/lang/String;)V", reinterpret_cast<void *>(
-            android_location_GnssLocationProvider_agps_set_id)},
-    {"native_agps_set_ref_location_cellid", "(IIIII)V", reinterpret_cast<void *>(
-            android_location_GnssLocationProvider_agps_set_reference_location_cellid)},
-    {"native_set_agps_server", "(ILjava/lang/String;I)V", reinterpret_cast<void *>(
-            android_location_GnssLocationProvider_set_agps_server)},
-    {"native_send_ni_response", "(II)V", reinterpret_cast<void *>(
-            android_location_GnssLocationProvider_send_ni_response)},
-    {"native_get_internal_state", "()Ljava/lang/String;", reinterpret_cast<void *>(
-            android_location_GnssLocationProvider_get_internal_state)},
-    {"native_is_gnss_visibility_control_supported", "()Z", reinterpret_cast<void *>(
-            android_location_GnssLocationProvider_is_gnss_visibility_control_supported)},
+static const JNINativeMethod sCoreMethods[] = {
+        /* name, signature, funcPtr */
+        {"native_class_init_once", "()V",
+         reinterpret_cast<void*>(android_location_GnssNative_class_init_once)},
+        {"native_is_supported", "()Z",
+         reinterpret_cast<void*>(android_location_GnssNative_is_supported)},
+        {"native_init_once", "(Z)V",
+         reinterpret_cast<void*>(android_location_GnssNative_init_once)},
+};
+
+static const JNINativeMethod sLocationProviderMethods[] = {
+        /* name, signature, funcPtr */
+        {"native_init", "()Z", reinterpret_cast<void*>(android_location_GnssLocationProvider_init)},
+        {"native_cleanup", "()V",
+         reinterpret_cast<void*>(android_location_GnssLocationProvider_cleanup)},
+        {"native_set_position_mode", "(IIIIIZ)Z",
+         reinterpret_cast<void*>(android_location_GnssLocationProvider_set_position_mode)},
+        {"native_start", "()Z",
+         reinterpret_cast<void*>(android_location_GnssLocationProvider_start)},
+        {"native_stop", "()Z", reinterpret_cast<void*>(android_location_GnssLocationProvider_stop)},
+        {"native_delete_aiding_data", "(I)V",
+         reinterpret_cast<void*>(android_location_GnssLocationProvider_delete_aiding_data)},
+        {"native_read_nmea", "([BI)I",
+         reinterpret_cast<void*>(android_location_GnssLocationProvider_read_nmea)},
+        {"native_inject_time", "(JJI)V",
+         reinterpret_cast<void*>(android_location_GnssLocationProvider_inject_time)},
+        {"native_inject_best_location", "(IDDDFFFFFFJIJD)V",
+         reinterpret_cast<void*>(android_location_GnssLocationProvider_inject_best_location)},
+        {"native_inject_location", "(DDF)V",
+         reinterpret_cast<void*>(android_location_GnssLocationProvider_inject_location)},
+        {"native_supports_psds", "()Z",
+         reinterpret_cast<void*>(android_location_GnssLocationProvider_supports_psds)},
+        {"native_inject_psds_data", "([BI)V",
+         reinterpret_cast<void*>(android_location_GnssLocationProvider_inject_psds_data)},
+        {"native_agps_set_id", "(ILjava/lang/String;)V",
+         reinterpret_cast<void*>(android_location_GnssLocationProvider_agps_set_id)},
+        {"native_agps_set_ref_location_cellid", "(IIIII)V",
+         reinterpret_cast<void*>(
+                 android_location_GnssLocationProvider_agps_set_reference_location_cellid)},
+        {"native_set_agps_server", "(ILjava/lang/String;I)V",
+         reinterpret_cast<void*>(android_location_GnssLocationProvider_set_agps_server)},
+        {"native_send_ni_response", "(II)V",
+         reinterpret_cast<void*>(android_location_GnssLocationProvider_send_ni_response)},
+        {"native_get_internal_state", "()Ljava/lang/String;",
+         reinterpret_cast<void*>(android_location_GnssLocationProvider_get_internal_state)},
+        {"native_is_gnss_visibility_control_supported", "()Z",
+         reinterpret_cast<void*>(
+                 android_location_GnssLocationProvider_is_gnss_visibility_control_supported)},
 };
 
 static const JNINativeMethod sMethodsBatching[] = {
@@ -3816,8 +3868,10 @@ int register_android_server_location_GnssLocationProvider(JNIEnv* env) {
                              sConfigurationMethods, NELEM(sConfigurationMethods));
     jniRegisterNativeMethods(env, "com/android/server/location/gnss/GnssVisibilityControl",
                              sVisibilityControlMethods, NELEM(sVisibilityControlMethods));
-    return jniRegisterNativeMethods(env, "com/android/server/location/gnss/GnssLocationProvider",
-                                    sMethods, NELEM(sMethods));
+    jniRegisterNativeMethods(env, "com/android/server/location/gnss/GnssLocationProvider",
+                             sLocationProviderMethods, NELEM(sLocationProviderMethods));
+    return jniRegisterNativeMethods(env, "com/android/server/location/gnss/GnssNative",
+                                    sCoreMethods, NELEM(sCoreMethods));
 }
 
 } /* namespace android */

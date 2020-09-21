@@ -55,6 +55,7 @@
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/auxv.h>
 #include <sys/capability.h>
 #include <sys/cdefs.h>
 #include <sys/eventfd.h>
@@ -76,6 +77,8 @@
 #include <android-base/stringprintf.h>
 #include <android-base/unique_fd.h>
 #include <bionic/malloc.h>
+#include <bionic/mte.h>
+#include <bionic/mte_kernel.h>
 #include <cutils/fs.h>
 #include <cutils/multiuser.h>
 #include <cutils/properties.h>
@@ -101,6 +104,19 @@
 
 #include "nativebridge/native_bridge.h"
 
+/* Functions in the callchain during the fork shall not be protected with
+   Armv8.3-A Pointer Authentication, otherwise child will not be able to return. */
+#ifdef __ARM_FEATURE_PAC_DEFAULT
+#ifdef __ARM_FEATURE_BTI_DEFAULT
+#define NO_PAC_FUNC __attribute__((target("branch-protection=bti")))
+#else
+#define NO_PAC_FUNC __attribute__((target("branch-protection=none")))
+#endif /* __ARM_FEATURE_BTI_DEFAULT */
+#else /* !__ARM_FEATURE_PAC_DEFAULT */
+#define NO_PAC_FUNC
+#endif /* __ARM_FEATURE_PAC_DEFAULT */
+
+
 namespace {
 
 // TODO (chriswailes): Add a function to initialize native Zygote data.
@@ -124,7 +140,6 @@ typedef const std::function<void(std::string)>& fail_fn_t;
 static pid_t gSystemServerPid = 0;
 
 static constexpr const char* kVoldAppDataIsolation = "persist.sys.vold_app_data_isolation_enabled";
-static constexpr const char* kPropFuse = "persist.sys.fuse";
 static const char kZygoteClassName[] = "com/android/internal/os/Zygote";
 static jclass gZygoteClass;
 static jmethodID gCallPostForkSystemServerHooks;
@@ -347,6 +362,8 @@ enum RuntimeFlags : uint32_t {
     PROFILE_FROM_SHELL = 1 << 15,
     MEMORY_TAG_LEVEL_MASK = (1 << 19) | (1 << 20),
     MEMORY_TAG_LEVEL_TBI = 1 << 19,
+    MEMORY_TAG_LEVEL_ASYNC = 2 << 19,
+    MEMORY_TAG_LEVEL_SYNC = 3 << 19,
     GWP_ASAN_LEVEL_MASK = (1 << 21) | (1 << 22),
     GWP_ASAN_LEVEL_NEVER = 0 << 21,
     GWP_ASAN_LEVEL_LOTTERY = 1 << 21,
@@ -854,29 +871,20 @@ static void MountEmulatedStorage(uid_t uid, jint mount_mode,
   PrepareDir(user_source, 0710, user_id ? AID_ROOT : AID_SHELL,
              multiuser_get_uid(user_id, AID_EVERYBODY), fail_fn);
 
-  bool isFuse = GetBoolProperty(kPropFuse, false);
   bool isAppDataIsolationEnabled = GetBoolProperty(kVoldAppDataIsolation, false);
 
-  if (isFuse) {
-    if (mount_mode == MOUNT_EXTERNAL_PASS_THROUGH) {
+  if (mount_mode == MOUNT_EXTERNAL_PASS_THROUGH) {
       const std::string pass_through_source = StringPrintf("/mnt/pass_through/%d", user_id);
       PrepareDir(pass_through_source, 0710, AID_ROOT, AID_MEDIA_RW, fail_fn);
       BindMount(pass_through_source, "/storage", fail_fn);
-    } else if (mount_mode == MOUNT_EXTERNAL_INSTALLER) {
+  } else if (mount_mode == MOUNT_EXTERNAL_INSTALLER) {
       const std::string installer_source = StringPrintf("/mnt/installer/%d", user_id);
       BindMount(installer_source, "/storage", fail_fn);
-    } else if (isAppDataIsolationEnabled && mount_mode == MOUNT_EXTERNAL_ANDROID_WRITABLE) {
+  } else if (isAppDataIsolationEnabled && mount_mode == MOUNT_EXTERNAL_ANDROID_WRITABLE) {
       const std::string writable_source = StringPrintf("/mnt/androidwritable/%d", user_id);
       BindMount(writable_source, "/storage", fail_fn);
-    } else {
-      BindMount(user_source, "/storage", fail_fn);
-    }
   } else {
-    const std::string& storage_source = ExternalStorageViews[mount_mode];
-    BindMount(storage_source, "/storage", fail_fn);
-
-    // Mount user-specific symlink helper into place
-    BindMount(user_source, "/storage/self", fail_fn);
+      BindMount(user_source, "/storage", fail_fn);
   }
 }
 
@@ -1094,7 +1102,23 @@ static void ClearUsapTable() {
   gUsapPoolCount = 0;
 }
 
+NO_PAC_FUNC
+static void PAuthKeyChange(JNIEnv* env) {
+#ifdef __aarch64__
+  unsigned long int hwcaps = getauxval(AT_HWCAP);
+  if (hwcaps & HWCAP_PACA) {
+    const unsigned long key_mask = PR_PAC_APIAKEY | PR_PAC_APIBKEY |
+                                   PR_PAC_APDAKEY | PR_PAC_APDBKEY | PR_PAC_APGAKEY;
+    if (prctl(PR_PAC_RESET_KEYS, key_mask, 0, 0, 0) != 0) {
+      ALOGE("Failed to change the PAC keys: %s", strerror(errno));
+      RuntimeAbort(env, __LINE__, "PAC key change failed.");
+    }
+  }
+#endif
+}
+
 // Utility routine to fork a process from the zygote.
+NO_PAC_FUNC
 static pid_t ForkCommon(JNIEnv* env, bool is_system_server,
                         const std::vector<int>& fds_to_close,
                         const std::vector<int>& fds_to_ignore,
@@ -1145,6 +1169,7 @@ static pid_t ForkCommon(JNIEnv* env, bool is_system_server,
     }
 
     // The child process.
+    PAuthKeyChange(env);
     PreApplicationInit();
 
     // Clean up any descriptors which must be closed immediately
@@ -1622,6 +1647,28 @@ static void BindMountStorageDirs(JNIEnv* env, jobjectArray pkg_data_info_list,
   }
 }
 
+#ifdef ANDROID_EXPERIMENTAL_MTE
+static void SetTagCheckingLevel(int level) {
+#ifdef __aarch64__
+  if (!(getauxval(AT_HWCAP2) & HWCAP2_MTE)) {
+    return;
+  }
+
+  int tagged_addr_ctrl = prctl(PR_GET_TAGGED_ADDR_CTRL, 0, 0, 0, 0);
+  if (tagged_addr_ctrl < 0) {
+    ALOGE("prctl(PR_GET_TAGGED_ADDR_CTRL) failed: %s", strerror(errno));
+    return;
+  }
+
+  tagged_addr_ctrl = (tagged_addr_ctrl & ~PR_MTE_TCF_MASK) | level;
+  if (prctl(PR_SET_TAGGED_ADDR_CTRL, tagged_addr_ctrl, 0, 0, 0) < 0) {
+    ALOGE("prctl(PR_SET_TAGGED_ADDR_CTRL, %d) failed: %s", tagged_addr_ctrl,
+          strerror(errno));
+  }
+#endif
+}
+#endif
+
 // Utility routine to specialize a zygote child process.
 static void SpecializeCommon(JNIEnv* env, uid_t uid, gid_t gid, jintArray gids,
                              jint runtime_flags, jobjectArray rlimits,
@@ -1756,7 +1803,23 @@ static void SpecializeCommon(JNIEnv* env, uid_t uid, gid_t gid, jintArray gids,
     case RuntimeFlags::MEMORY_TAG_LEVEL_TBI:
       heap_tagging_level = M_HEAP_TAGGING_LEVEL_TBI;
       break;
+    case RuntimeFlags::MEMORY_TAG_LEVEL_ASYNC:
+#ifdef ANDROID_EXPERIMENTAL_MTE
+      SetTagCheckingLevel(PR_MTE_TCF_ASYNC);
+#endif
+      heap_tagging_level = M_HEAP_TAGGING_LEVEL_ASYNC;
+      break;
+    case RuntimeFlags::MEMORY_TAG_LEVEL_SYNC:
+#ifdef ANDROID_EXPERIMENTAL_MTE
+      SetTagCheckingLevel(PR_MTE_TCF_SYNC);
+#endif
+      // TODO(pcc): Use SYNC here once the allocator supports it.
+      heap_tagging_level = M_HEAP_TAGGING_LEVEL_ASYNC;
+      break;
     default:
+#ifdef ANDROID_EXPERIMENTAL_MTE
+      SetTagCheckingLevel(PR_MTE_TCF_NONE);
+#endif
       heap_tagging_level = M_HEAP_TAGGING_LEVEL_NONE;
   }
   android_mallopt(M_SET_HEAP_TAGGING_LEVEL, &heap_tagging_level, sizeof(heap_tagging_level));
@@ -2043,6 +2106,7 @@ static void com_android_internal_os_Zygote_nativePreApplicationInit(JNIEnv*, jcl
   PreApplicationInit();
 }
 
+NO_PAC_FUNC
 static jint com_android_internal_os_Zygote_nativeForkAndSpecialize(
         JNIEnv* env, jclass, jint uid, jint gid, jintArray gids,
         jint runtime_flags, jobjectArray rlimits,
@@ -2095,6 +2159,7 @@ static jint com_android_internal_os_Zygote_nativeForkAndSpecialize(
     return pid;
 }
 
+NO_PAC_FUNC
 static jint com_android_internal_os_Zygote_nativeForkSystemServer(
         JNIEnv* env, jclass, uid_t uid, gid_t gid, jintArray gids,
         jint runtime_flags, jobjectArray rlimits, jlong permitted_capabilities,
@@ -2166,6 +2231,7 @@ static jint com_android_internal_os_Zygote_nativeForkSystemServer(
  * @param is_priority_fork  Controls the nice level assigned to the newly created process
  * @return
  */
+NO_PAC_FUNC
 static jint com_android_internal_os_Zygote_nativeForkUsap(JNIEnv* env,
                                                           jclass,
                                                           jint read_pipe_fd,
@@ -2456,6 +2522,14 @@ static jint com_android_internal_os_Zygote_nativeParseSigChld(JNIEnv* env, jclas
     return -1;
 }
 
+static jboolean com_android_internal_os_Zygote_nativeSupportsMemoryTagging(JNIEnv* env, jclass) {
+#if defined(__aarch64__)
+  return mte_supported();
+#else
+  return false;
+#endif
+}
+
 static jboolean com_android_internal_os_Zygote_nativeSupportsTaggedPointers(JNIEnv* env, jclass) {
 #ifdef __aarch64__
   int res = prctl(PR_GET_TAGGED_ADDR_CTRL, 0, 0, 0, 0);
@@ -2500,6 +2574,8 @@ static const JNINativeMethod gMethods[] = {
          (void*)com_android_internal_os_Zygote_nativeBoostUsapPriority},
         {"nativeParseSigChld", "([BI[I)I",
          (void*)com_android_internal_os_Zygote_nativeParseSigChld},
+        {"nativeSupportsMemoryTagging", "()Z",
+         (void*)com_android_internal_os_Zygote_nativeSupportsMemoryTagging},
         {"nativeSupportsTaggedPointers", "()Z",
          (void*)com_android_internal_os_Zygote_nativeSupportsTaggedPointers},
 };

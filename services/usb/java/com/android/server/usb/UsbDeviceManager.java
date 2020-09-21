@@ -166,6 +166,8 @@ public class UsbDeviceManager implements ActivityTaskManagerInternal.ScreenObser
     private static final int MSG_FUNCTION_SWITCH_TIMEOUT = 17;
     private static final int MSG_GADGET_HAL_REGISTERED = 18;
     private static final int MSG_RESET_USB_GADGET = 19;
+    private static final int MSG_ACCESSORY_HANDSHAKE_TIMEOUT = 20;
+    private static final int MSG_INCREASE_SENDSTRING_COUNT = 21;
 
     private static final int AUDIO_MODE_SOURCE = 1;
 
@@ -177,6 +179,13 @@ public class UsbDeviceManager implements ActivityTaskManagerInternal.ScreenObser
     // Timeout for entering USB request mode.
     // Request is cancelled if host does not configure device within 10 seconds.
     private static final int ACCESSORY_REQUEST_TIMEOUT = 10 * 1000;
+
+    /**
+     * Timeout for receiving USB accessory request
+     * Reset when receive next control request
+     * Broadcast intent if not receive next control request or enter next step.
+     */
+    private static final int ACCESSORY_HANDSHAKE_TIMEOUT = 10 * 1000;
 
     private static final String BOOT_MODE_PROPERTY = "ro.bootmode";
 
@@ -224,8 +233,19 @@ public class UsbDeviceManager implements ActivityTaskManagerInternal.ScreenObser
             String accessory = event.get("ACCESSORY");
             if (state != null) {
                 mHandler.updateState(state);
+            } else if ("GETPROTOCOL".equals(accessory)) {
+                if (DEBUG) Slog.d(TAG, "got accessory get protocol");
+                long elapsedRealtime = SystemClock.elapsedRealtime();
+                mHandler.setAccessoryUEventTime(elapsedRealtime);
+                resetAccessoryHandshakeTimeoutHandler();
+            } else if ("SENDSTRING".equals(accessory)) {
+                if (DEBUG) Slog.d(TAG, "got accessory send string");
+                mHandler.sendEmptyMessage(MSG_INCREASE_SENDSTRING_COUNT);
+                resetAccessoryHandshakeTimeoutHandler();
             } else if ("START".equals(accessory)) {
                 if (DEBUG) Slog.d(TAG, "got accessory start");
+                mHandler.removeMessages(MSG_ACCESSORY_HANDSHAKE_TIMEOUT);
+                mHandler.setStartAccessoryTrue();
                 startAccessoryMode();
             }
         }
@@ -398,6 +418,23 @@ public class UsbDeviceManager implements ActivityTaskManagerInternal.ScreenObser
         mHandler.sendEmptyMessage(MSG_UPDATE_USER_RESTRICTIONS);
     }
 
+    /*
+     * Start the timeout-timer upon receiving "get_protocol" uevent.
+     * Restart the timer every time if any succeeding uevnet received.
+     * (Only when USB is under accessory mode)
+     * <p>About the details of the related control request and sequence ordering, refer to
+     * <a href="https://source.android.com/devices/accessories/aoa">AOA</a> developer guide.</p>
+     */
+    private void resetAccessoryHandshakeTimeoutHandler() {
+        long functions = getCurrentFunctions();
+        // some accesories send get_protocol after start accessory
+        if ((functions & UsbManager.FUNCTION_ACCESSORY) == 0) {
+            mHandler.removeMessages(MSG_ACCESSORY_HANDSHAKE_TIMEOUT);
+            mHandler.sendMessageDelayed(mHandler.obtainMessage(MSG_ACCESSORY_HANDSHAKE_TIMEOUT),
+                    ACCESSORY_HANDSHAKE_TIMEOUT);
+        }
+    }
+
     private void startAccessoryMode() {
         if (!mHasUsbAccessory) return;
 
@@ -419,6 +456,8 @@ public class UsbDeviceManager implements ActivityTaskManagerInternal.ScreenObser
         if (functions != UsbManager.FUNCTION_NONE) {
             mHandler.sendMessageDelayed(mHandler.obtainMessage(MSG_ACCESSORY_MODE_ENTER_TIMEOUT),
                     ACCESSORY_REQUEST_TIMEOUT);
+            mHandler.sendMessageDelayed(mHandler.obtainMessage(MSG_ACCESSORY_HANDSHAKE_TIMEOUT),
+                    ACCESSORY_HANDSHAKE_TIMEOUT);
             setCurrentFunctions(functions);
         }
     }
@@ -470,6 +509,15 @@ public class UsbDeviceManager implements ActivityTaskManagerInternal.ScreenObser
         private boolean mMidiEnabled;
         private int mMidiCard;
         private int mMidiDevice;
+
+        /**
+         * mAccessoryConnectionStartTime record the timing of start_accessory
+         * mSendStringCount count the number of receiving uevent send_string
+         * mStartAccessory record whether start_accessory is received
+         */
+        private long mAccessoryConnectionStartTime = 0L;
+        private int mSendStringCount = 0;
+        private boolean mStartAccessory = false;
 
         private final Context mContext;
         private final UsbAlsaManager mUsbAlsaManager;
@@ -648,6 +696,8 @@ public class UsbDeviceManager implements ActivityTaskManagerInternal.ScreenObser
                     // defer accessoryAttached if system is not ready
                     if (mBootCompleted) {
                         mUsbDeviceManager.getCurrentSettings().accessoryAttached(mCurrentAccessory);
+                        removeMessages(MSG_ACCESSORY_HANDSHAKE_TIMEOUT);
+                        broadcastUsbAccessoryHandshake();
                     } // else handle in boot completed
                 } else {
                     Slog.e(TAG, "nativeGetAccessoryStrings failed");
@@ -702,6 +752,30 @@ public class UsbDeviceManager implements ActivityTaskManagerInternal.ScreenObser
                 }
             }
             return false;
+        }
+
+        private void broadcastUsbAccessoryHandshake() {
+            long elapsedRealtime = SystemClock.elapsedRealtime();
+            long accessoryHandShakeEnd = elapsedRealtime;
+
+            // send a sticky broadcast containing USB accessory handshake information
+            Intent intent = new Intent(UsbManager.ACTION_USB_ACCESSORY_HANDSHAKE)
+                    .putExtra(UsbManager.EXTRA_ACCESSORY_UEVENT_TIME,
+                            mAccessoryConnectionStartTime)
+                    .putExtra(UsbManager.EXTRA_ACCESSORY_STRING_COUNT,
+                            mSendStringCount)
+                    .putExtra(UsbManager.EXTRA_ACCESSORY_START,
+                            mStartAccessory)
+                    .putExtra(UsbManager.EXTRA_ACCESSORY_HANDSHAKE_END,
+                            accessoryHandShakeEnd);
+
+            if (DEBUG) {
+                Slog.d(TAG, "broadcasting " + intent + " extras: " + intent.getExtras());
+            }
+
+            sendStickyBroadcast(intent);
+            resetUsbAccessoryHandshakeDebuggingInfo();
+            accessoryHandShakeEnd = 0L;
         }
 
         protected void updateUsbStateBroadcastIfNeeded(long functions) {
@@ -1012,6 +1086,16 @@ public class UsbDeviceManager implements ActivityTaskManagerInternal.ScreenObser
                     }
                     break;
                 }
+                case MSG_ACCESSORY_HANDSHAKE_TIMEOUT: {
+                    if (DEBUG) {
+                        Slog.v(TAG, "Accessory handshake timeout");
+                    }
+                    broadcastUsbAccessoryHandshake();
+                    break;
+                }
+                case MSG_INCREASE_SENDSTRING_COUNT: {
+                    mSendStringCount = mSendStringCount + 1;
+                }
             }
         }
 
@@ -1029,6 +1113,7 @@ public class UsbDeviceManager implements ActivityTaskManagerInternal.ScreenObser
                 }
                 if (mCurrentAccessory != null) {
                     mUsbDeviceManager.getCurrentSettings().accessoryAttached(mCurrentAccessory);
+                    broadcastUsbAccessoryHandshake();
                 }
 
                 updateUsbNotification(false);
@@ -1296,6 +1381,9 @@ public class UsbDeviceManager implements ActivityTaskManagerInternal.ScreenObser
             try {
                 writeStringIfNotNull(dump, "kernel_state", UsbHandlerProto.KERNEL_STATE,
                         FileUtils.readTextFile(new File(STATE_PATH), 0, null).trim());
+            } catch (FileNotFoundException exNotFound) {
+                Slog.w(TAG, "Ignore missing legacy kernel path in bugreport dump: "
+                        + "kernel state:" + STATE_PATH);
             } catch (Exception e) {
                 Slog.e(TAG, "Could not read kernel state", e);
             }
@@ -1304,6 +1392,9 @@ public class UsbDeviceManager implements ActivityTaskManagerInternal.ScreenObser
                 writeStringIfNotNull(dump, "kernel_function_list",
                         UsbHandlerProto.KERNEL_FUNCTION_LIST,
                         FileUtils.readTextFile(new File(FUNCTIONS_PATH), 0, null).trim());
+            } catch (FileNotFoundException exNotFound) {
+                Slog.w(TAG, "Ignore missing legacy kernel path in bugreport dump: "
+                        + "kernel function list:" + FUNCTIONS_PATH);
             } catch (Exception e) {
                 Slog.e(TAG, "Could not read kernel function list", e);
             }
@@ -1315,6 +1406,20 @@ public class UsbDeviceManager implements ActivityTaskManagerInternal.ScreenObser
          * Evaluates USB function policies and applies the change accordingly.
          */
         protected abstract void setEnabledFunctions(long functions, boolean forceRestart);
+
+        public void setAccessoryUEventTime(long accessoryConnectionStartTime) {
+            mAccessoryConnectionStartTime = accessoryConnectionStartTime;
+        }
+
+        public void setStartAccessoryTrue() {
+            mStartAccessory = true;
+        }
+
+        public void resetUsbAccessoryHandshakeDebuggingInfo() {
+            mAccessoryConnectionStartTime = 0L;
+            mSendStringCount = 0;
+            mStartAccessory = false;
+        }
     }
 
     private static final class UsbHandlerLegacy extends UsbHandler {

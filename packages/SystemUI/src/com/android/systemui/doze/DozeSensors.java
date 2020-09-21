@@ -21,8 +21,6 @@ import static com.android.systemui.plugins.SensorManagerPlugin.Sensor.TYPE_WAKE_
 
 import android.annotation.AnyThread;
 import android.app.ActivityManager;
-import android.app.AlarmManager;
-import android.content.ContentResolver;
 import android.content.Context;
 import android.database.ContentObserver;
 import android.hardware.Sensor;
@@ -37,6 +35,7 @@ import android.os.UserHandle;
 import android.provider.Settings;
 import android.text.TextUtils;
 import android.util.Log;
+import android.view.Display;
 
 import androidx.annotation.VisibleForTesting;
 
@@ -49,6 +48,7 @@ import com.android.systemui.plugins.SensorManagerPlugin;
 import com.android.systemui.statusbar.phone.DozeParameters;
 import com.android.systemui.util.sensors.AsyncSensorManager;
 import com.android.systemui.util.sensors.ProximitySensor;
+import com.android.systemui.util.settings.SecureSettings;
 import com.android.systemui.util.wakelock.WakeLock;
 
 import java.io.PrintWriter;
@@ -63,14 +63,11 @@ public class DozeSensors {
     private static final UiEventLogger UI_EVENT_LOGGER = new UiEventLoggerImpl();
 
     private final Context mContext;
-    private final AlarmManager mAlarmManager;
     private final AsyncSensorManager mSensorManager;
-    private final ContentResolver mResolver;
-    private final TriggerSensor mPickupSensor;
-    private final DozeParameters mDozeParameters;
     private final AmbientDisplayConfiguration mConfig;
     private final WakeLock mWakeLock;
     private final Consumer<Boolean> mProxCallback;
+    private final SecureSettings mSecureSettings;
     private final Callback mCallback;
     @VisibleForTesting
     protected TriggerSensor[] mSensors;
@@ -80,7 +77,6 @@ public class DozeSensors {
     private long mDebounceFrom;
     private boolean mSettingRegistered;
     private boolean mListening;
-    private boolean mPaused;
 
     @VisibleForTesting
     public enum DozeSensorsUiEvent implements UiEventLogger.UiEventEnum {
@@ -99,18 +95,16 @@ public class DozeSensors {
         }
     }
 
-    public DozeSensors(Context context, AlarmManager alarmManager, AsyncSensorManager sensorManager,
+    DozeSensors(Context context, AsyncSensorManager sensorManager,
             DozeParameters dozeParameters, AmbientDisplayConfiguration config, WakeLock wakeLock,
             Callback callback, Consumer<Boolean> proxCallback, DozeLog dozeLog,
-            ProximitySensor proximitySensor) {
+            ProximitySensor proximitySensor, SecureSettings secureSettings) {
         mContext = context;
-        mAlarmManager = alarmManager;
         mSensorManager = sensorManager;
-        mDozeParameters = dozeParameters;
         mConfig = config;
         mWakeLock = wakeLock;
         mProxCallback = proxCallback;
-        mResolver = mContext.getContentResolver();
+        mSecureSettings = secureSettings;
         mCallback = callback;
         mProximitySensor = proximitySensor;
 
@@ -122,7 +116,7 @@ public class DozeSensors {
                         dozeParameters.getPulseOnSigMotion(),
                         DozeLog.PULSE_REASON_SENSOR_SIGMOTION, false /* touchCoords */,
                         false /* touchscreen */, dozeLog),
-                mPickupSensor = new TriggerSensor(
+                new TriggerSensor(
                         mSensorManager.getDefaultSensor(Sensor.TYPE_PICK_UP_GESTURE),
                         Settings.Secure.DOZE_PICK_UP_GESTURE,
                         true /* settingDef */,
@@ -179,7 +173,7 @@ public class DozeSensors {
         mProximitySensor.register(
                 proximityEvent -> {
                     if (proximityEvent != null) {
-                        mProxCallback.accept(!proximityEvent.getNear());
+                        mProxCallback.accept(!proximityEvent.getBelow());
                     }
                 });
     }
@@ -207,7 +201,10 @@ public class DozeSensors {
         return findSensorWithType(mSensorManager, type);
     }
 
-    static Sensor findSensorWithType(SensorManager sensorManager, String type) {
+    /**
+     * Utility method to find a {@link Sensor} for the supplied string type.
+     */
+    public static Sensor findSensorWithType(SensorManager sensorManager, String type) {
         if (TextUtils.isEmpty(type)) {
             return null;
         }
@@ -232,18 +229,6 @@ public class DozeSensors {
     }
 
     /**
-     * Unregister sensors, when listening, unless they are prox gated.
-     * @see #setListening(boolean)
-     */
-    public void setPaused(boolean paused) {
-        if (mPaused == paused) {
-            return;
-        }
-        mPaused = paused;
-        updateListening();
-    }
-
-    /**
      * Registers/unregisters sensors based on internal state.
      */
     public void updateListening() {
@@ -256,7 +241,7 @@ public class DozeSensors {
         }
 
         if (!anyListening) {
-            mResolver.unregisterContentObserver(mSettingsObserver);
+            mSecureSettings.unregisterContentObserver(mSettingsObserver);
         } else if (!mSettingRegistered) {
             for (TriggerSensor s : mSensors) {
                 s.registerSettingsObserver(mSettingsObserver);
@@ -278,6 +263,13 @@ public class DozeSensors {
         for (TriggerSensor s : mSensors) {
             s.updateListening();
         }
+    }
+
+    void onScreenState(int state) {
+        mProximitySensor.setSecondarySafe(
+                state == Display.STATE_DOZE
+                || state == Display.STATE_DOZE_SUSPEND
+                || state == Display.STATE_OFF);
     }
 
     public void setProxListening(boolean listen) {
@@ -303,10 +295,6 @@ public class DozeSensors {
             }
         }
     };
-
-    public void setDisableSensorsInterferingWithProximity(boolean disable) {
-        mPickupSensor.setDisabled(disable);
-    }
 
     /** Ignore the setting value of only the sensors that require the touchscreen. */
     public void ignoreTouchScreenSensorsSettingInterferingWithDocking(boolean ignore) {
@@ -412,7 +400,7 @@ public class DozeSensors {
             } else if (TextUtils.isEmpty(mSetting)) {
                 return true;
             }
-            return Settings.Secure.getIntForUser(mResolver, mSetting, mSettingDefault ? 1 : 0,
+            return mSecureSettings.getIntForUser(mSetting, mSettingDefault ? 1 : 0,
                     UserHandle.USER_CURRENT) != 0;
         }
 
@@ -456,9 +444,8 @@ public class DozeSensors {
 
         public void registerSettingsObserver(ContentObserver settingsObserver) {
             if (mConfigured && !TextUtils.isEmpty(mSetting)) {
-                mResolver.registerContentObserver(
-                        Settings.Secure.getUriFor(mSetting), false /* descendants */,
-                        mSettingsObserver, UserHandle.USER_ALL);
+                mSecureSettings.registerContentObserverForUser(
+                        mSetting, mSettingsObserver, UserHandle.USER_ALL);
             }
         }
 

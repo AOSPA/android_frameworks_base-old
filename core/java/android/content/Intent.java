@@ -758,8 +758,8 @@ public class Intent implements Parcelable, Cloneable {
      * Activity Action: Creates a reminder.
      * <p>Input: {@link #EXTRA_TITLE} The title of the reminder that will be shown to the user.
      * {@link #EXTRA_TEXT} The reminder text that will be shown to the user. The intent should at
-     * least specify a title or a text. {@link #EXTRA_TIME} The time when the reminder will be shown
-     * to the user. The time is specified in milliseconds since the Epoch (optional).
+     * least specify a title or a text. {@link #EXTRA_TIME} The time when the reminder will
+     * be shown to the user. The time is specified in milliseconds since the Epoch (optional).
      * </p>
      * <p>Output: Nothing.</p>
      *

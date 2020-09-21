@@ -723,11 +723,13 @@
     <string name="notification_silence_title" msgid="8608090968400832335">"صامتة"</string>
     <string name="notification_alert_title" msgid="3656229781017543655">"تلقائية"</string>
     <string name="notification_bubble_title" msgid="8330481035191903164">"فقاعة"</string>
+    <string name="notification_automatic_title" msgid="3745465364578762652">"تلقائي"</string>
     <string name="notification_channel_summary_low" msgid="4860617986908931158">"بدون صوت أو اهتزاز"</string>
     <string name="notification_conversation_summary_low" msgid="1734433426085468009">"بدون صوت أو اهتزاز وتظهر في موضع أسفل في قسم المحادثات"</string>
     <string name="notification_channel_summary_default" msgid="3282930979307248890">"يمكن إصدار رنين أو اهتزاز بناءً على إعدادات الهاتف"</string>
     <string name="notification_channel_summary_default_with_bubbles" msgid="1782419896613644568">"يمكن إصدار رنين أو اهتزاز بناءً على إعدادات الهاتف. تظهر المحادثات من <xliff:g id="APP_NAME">%1$s</xliff:g> كفقاعات تلقائيًا."</string>
     <string name="notification_channel_summary_bubble" msgid="7235935211580860537">"يلفِت هذا الإشعار انتباهك لهذا المحتوى باستخدام اختصار عائم."</string>
+    <string name="notification_channel_summary_automatic" msgid="5813109268050235275">"السماح للنظام بتحديد ما إذا يجب اهتزاز الجهاز أو إصدار رنين عند تلقّي هذا الإشعار"</string>
     <string name="notification_channel_summary_priority" msgid="7952654515769021553">"تظهر في أعلى قسم المحادثات وتظهر كفقاعة عائمة وتعرض صورة الملف الشخصي على شاشة القفل"</string>
     <string name="notification_conversation_channel_settings" msgid="2409977688430606835">"الإعدادات"</string>
     <string name="notification_priority_title" msgid="2079708866333537093">"الأولوية"</string>
@@ -748,6 +750,12 @@
     <string name="appops_camera_mic_overlay" msgid="5584311236445644095">"يتم عرض هذا التطبيق فوق التطبيقات الأخرى على شاشتك ويستخدم الميكروفون والكاميرا."</string>
     <string name="notification_appops_settings" msgid="5208974858340445174">"الإعدادات"</string>
     <string name="notification_appops_ok" msgid="2177609375872784124">"حسنًا"</string>
+    <string name="feedback_silenced" msgid="5382212321253328247">"كتم النظام صوت هذا الإشعار."</string>
+    <string name="feedback_promoted" msgid="8075757485407091976">"رفع النظام ترتيب هذا الإشعار."</string>
+    <string name="feedback_demoted" msgid="5848066008939031913">"خفض النظام ترتيب هذا الإشعار."</string>
+    <string name="feedback_prompt" msgid="2278631214125128281">"هل كان هذا صحيحًا؟"</string>
+    <string name="feedback_response" msgid="4671729244976641339">"شكرًا على تعليقك"</string>
+    <string name="feedback_ok" msgid="6481426753298857144">"حسنًا"</string>
     <string name="notification_channel_controls_opened_accessibility" msgid="6111817750774381094">"تم فتح عناصر التحكم في الإشعارات لتطبيق <xliff:g id="APP_NAME">%1$s</xliff:g>"</string>
     <string name="notification_channel_controls_closed_accessibility" msgid="1561909368876911701">"تم إغلاق عناصر التحكم في الإشعارات لتطبيق <xliff:g id="APP_NAME">%1$s</xliff:g>"</string>
     <string name="notification_channel_switch_accessibility" msgid="8979885820432540252">"السماح بالإشعارات من هذه القناة"</string>
@@ -928,25 +936,14 @@
     <string name="accessibility_quick_settings_edit" msgid="1523745183383815910">"تعديل ترتيب الإعدادات."</string>
     <string name="accessibility_quick_settings_page" msgid="7506322631645550961">"الصفحة <xliff:g id="ID_1">%1$d</xliff:g> من <xliff:g id="ID_2">%2$d</xliff:g>"</string>
     <string name="tuner_lock_screen" msgid="2267383813241144544">"شاشة القفل"</string>
-    <string name="pip_phone_expand" msgid="1424988917240616212">"توسيع"</string>
-    <string name="pip_phone_minimize" msgid="9057117033655996059">"تصغير"</string>
-    <string name="pip_phone_close" msgid="8801864042095341824">"إغلاق"</string>
-    <string name="pip_phone_settings" msgid="5687538631925004341">"الإعدادات"</string>
-    <string name="pip_phone_dismiss_hint" msgid="5825740708095316710">"اسحب لأسفل للإلغاء"</string>
-    <string name="pip_menu_title" msgid="6365909306215631910">"القائمة"</string>
-    <string name="pip_notification_title" msgid="8661573026059630525">"<xliff:g id="NAME">%s</xliff:g> يظهر في صورة داخل صورة"</string>
-    <string name="pip_notification_message" msgid="4991831338795022227">"إذا كنت لا تريد أن يستخدم <xliff:g id="NAME">%s</xliff:g> هذه الميزة، فانقر لفتح الإعدادات، ثم أوقِف تفعيل هذه الميزة."</string>
-    <string name="pip_play" msgid="333995977693142810">"تشغيل"</string>
-    <string name="pip_pause" msgid="1139598607050555845">"إيقاف مؤقت"</string>
-    <string name="pip_skip_to_next" msgid="3864212650579956062">"التخطي إلى التالي"</string>
-    <string name="pip_skip_to_prev" msgid="3742589641443049237">"التخطي إلى السابق"</string>
-    <string name="accessibility_action_pip_resize" msgid="8237306972921160456">"تغيير الحجم"</string>
     <string name="thermal_shutdown_title" msgid="2702966892682930264">"تم إيقاف الهاتف بسبب الحرارة"</string>
-    <string name="thermal_shutdown_message" msgid="7432744214105003895">"يعمل هاتفك الآن بشكل طبيعي"</string>
+    <string name="thermal_shutdown_message" msgid="6142269839066172984">"يعمل هاتفك الآن بشكل طبيعي.\nانقر للحصول على مزيد من المعلومات."</string>
     <string name="thermal_shutdown_dialog_message" msgid="6745684238183492031">"ارتفعت درجة حرارة هاتفك بشدة، لذا تم إيقاف تشغيله لخفض درجة حرارته. يعمل هاتفك الآن بشكل طبيعي.\n\nقد ترتفع بشدة درجة حرارة هاتفك إذا:\n	• استخدمت تطبيقات كثيفة الاستخدام لموارد الجهاز (مثل الألعاب أو الفيديو أو تطبيقات التنقل)\n	• نزَّلت أو حمَّلت ملفات كبيرة الحجم\n	• استخدمت هاتفك وسط أجواء مرتفعة الحرارة"</string>
+    <string name="thermal_shutdown_dialog_help_text" msgid="6413474593462902901">"الاطّلاع على خطوات العناية"</string>
     <string name="high_temp_title" msgid="2218333576838496100">"تزداد درجة حرارة الهاتف"</string>
-    <string name="high_temp_notif_message" msgid="163928048626045592">"يتم تقييد عمل بعض الميزات إلى أن تنخفض درجة حرارة الهاتف"</string>
+    <string name="high_temp_notif_message" msgid="1277346543068257549">"يتم تقييد عمل بعض الميزات إلى أن تنخفض درجة حرارة الهاتف.\nانقر للحصول على مزيد من المعلومات."</string>
     <string name="high_temp_dialog_message" msgid="3793606072661253968">"سيحاول الهاتف تخفيض درجة حرارته تلقائيًا. سيظل بإمكانك استخدام هاتفك، ولكن قد يعمل بشكل أبطأ.\n\nبعد أن تنخفض درجة حرارة الهاتف، سيستعيد سرعته المعتادة."</string>
+    <string name="high_temp_dialog_help_text" msgid="7380171287943345858">"الاطّلاع على خطوات العناية"</string>
     <string name="high_temp_alarm_title" msgid="2359958549570161495">"فصل الشاحن"</string>
     <string name="high_temp_alarm_notify_message" msgid="7186272817783835089">"هناك مشكلة في شحن هذا الجهاز. يُرجى فصل محوِّل الطاقة بحرص لأن الكابل قد يكون ساخنًا."</string>
     <string name="high_temp_alarm_help_care_steps" msgid="5017002218341329566">"الاطّلاع على خطوات العناية"</string>
@@ -1042,7 +1039,6 @@
     <string name="priority_onboarding_ignores_dnd_text" msgid="2918952762719600529">"لا تتقيّد بميزة \"عدم الإزعاج\""</string>
     <string name="priority_onboarding_done_button_title" msgid="4569550984286506007">"حسنًا"</string>
     <string name="priority_onboarding_settings_button_title" msgid="6663601574303585927">"الإعدادات"</string>
-    <string name="magnification_overlay_title" msgid="6584179429612427958">"نافذة تراكب التكبير"</string>
     <string name="magnification_window_title" msgid="4863914360847258333">"نافذة التكبير"</string>
     <string name="magnification_controls_title" msgid="8421106606708891519">"عناصر التحكم في نافذة التكبير"</string>
     <string name="quick_controls_title" msgid="6839108006171302273">"أدوات التحكم بالأجهزة"</string>

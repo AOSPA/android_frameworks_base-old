@@ -55,6 +55,7 @@ import android.view.ViewGroup;
 import android.view.ViewHierarchyEncoder;
 import android.view.ViewStructure;
 import android.view.ViewTreeObserver;
+import android.view.WindowInsets;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
 import android.view.accessibility.AccessibilityNodeProvider;
@@ -1510,7 +1511,7 @@ public class WebView extends AbsoluteLayout
      *
      * @param hosts the list of hosts
      * @param callback will be called with {@code true} if hosts are successfully added to the
-     * whitelist. It will be called with {@code false} if any hosts are malformed. The callback
+     * allowlist. It will be called with {@code false} if any hosts are malformed. The callback
      * will be run on the UI thread
      */
     public static void setSafeBrowsingWhitelist(@NonNull List<String> hosts,
@@ -2449,6 +2450,14 @@ public class WebView extends AbsoluteLayout
             WebView.super.startActivityForResult(intent, requestCode);
         }
 
+        /**
+         * @see View#onApplyWindowInsets(WindowInsets)
+         */
+        @Nullable
+        public WindowInsets super_onApplyWindowInsets(@Nullable WindowInsets insets) {
+            return WebView.super.onApplyWindowInsets(insets);
+        }
+
         // ---- Access to non-public methods ----
         public void overScrollBy(int deltaX, int deltaY,
                 int scrollX, int scrollY,
@@ -3077,5 +3086,12 @@ public class WebView extends AbsoluteLayout
         encoder.addProperty("webview:title", mProvider.getTitle());
         encoder.addProperty("webview:url", mProvider.getUrl());
         encoder.addProperty("webview:originalUrl", mProvider.getOriginalUrl());
+    }
+
+    @Override
+    public WindowInsets onApplyWindowInsets(WindowInsets insets) {
+        WindowInsets result = mProvider.getViewDelegate().onApplyWindowInsets(insets);
+        if (result == null) return super.onApplyWindowInsets(insets);
+        return result;
     }
 }

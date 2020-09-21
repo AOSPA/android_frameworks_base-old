@@ -16,10 +16,10 @@
 
 package android.hardware.biometrics;
 
-import android.os.Bundle;
 import android.hardware.biometrics.IBiometricEnabledOnKeyguardCallback;
 import android.hardware.biometrics.IBiometricServiceReceiver;
 import android.hardware.biometrics.IBiometricAuthenticator;
+import android.hardware.biometrics.PromptInfo;
 
 /**
  * Communication channel from AuthService to BiometricService.
@@ -28,8 +28,8 @@ import android.hardware.biometrics.IBiometricAuthenticator;
 interface IBiometricService {
     // Requests authentication. The service choose the appropriate biometric to use, and show
     // the corresponding BiometricDialog.
-    void authenticate(IBinder token, long sessionId, int userId,
-            IBiometricServiceReceiver receiver, String opPackageName, in Bundle bundle,
+    void authenticate(IBinder token, long operationId, int userId,
+            IBiometricServiceReceiver receiver, String opPackageName, in PromptInfo promptInfo,
             int callingUid, int callingPid, int callingUserId);
 
     // Cancel authentication for the given session.
@@ -52,18 +52,17 @@ interface IBiometricService {
     void registerEnabledOnKeyguardCallback(IBiometricEnabledOnKeyguardCallback callback,
             int callingUserId);
 
-    // Explicitly set the active user.
-    void setActiveUser(int userId);
-
     // Notify BiometricService when <Biometric>Service is ready to start the prepared client.
     // Client lifecycle is still managed in <Biometric>Service.
-    void onReadyForAuthentication(int cookie, boolean requireConfirmation, int userId);
+    void onReadyForAuthentication(int cookie);
 
     // Reset the lockout when user authenticates with strong auth (e.g. PIN, pattern or password)
-    void resetLockout(in byte [] token);
+    void resetLockout(int userId, in byte [] hardwareAuthToken);
 
     // Get a list of AuthenticatorIDs for authenticators which have enrolled templates and meet
     // the requirements for integrating with Keystore. The AuthenticatorID are known in Keystore
     // land as SIDs, and are used during key generation.
     long[] getAuthenticatorIds(int callingUserId);
+
+    int getCurrentStrength(int sensorId);
 }

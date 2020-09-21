@@ -23,7 +23,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.PackageManagerInternal;
-import android.hardware.power.V1_0.PowerHint;
+import android.hardware.power.Mode;
 import android.os.BatteryManager;
 import android.os.BatterySaverPolicyConfig;
 import android.os.Handler;
@@ -49,6 +49,7 @@ import com.android.server.power.batterysaver.BatterySaverPolicy.Policy;
 import com.android.server.power.batterysaver.BatterySavingStats.BatterySaverState;
 import com.android.server.power.batterysaver.BatterySavingStats.DozeState;
 import com.android.server.power.batterysaver.BatterySavingStats.InteractiveState;
+import com.android.server.power.batterysaver.BatterySavingStats.PlugState;
 
 import java.util.ArrayList;
 import java.util.Objects;
@@ -474,7 +475,7 @@ public class BatterySaverController implements BatterySaverPolicyListener {
 
         final PowerManagerInternal pmi = LocalServices.getService(PowerManagerInternal.class);
         if (pmi != null) {
-            pmi.powerHint(PowerHint.LOW_POWER, isEnabled() ? 1 : 0);
+            pmi.setPowerMode(Mode.LOW_POWER, isEnabled());
         }
 
         updateBatterySavingStats();
@@ -497,12 +498,7 @@ public class BatterySaverController implements BatterySaverPolicyListener {
 
             // Send the broadcasts and notify the listeners. We only do this when the battery saver
             // mode changes, but not when only the screen state changes.
-            Intent intent = new Intent(PowerManager.ACTION_POWER_SAVE_MODE_CHANGING)
-                    .putExtra(PowerManager.EXTRA_POWER_SAVE_MODE, isEnabled())
-                    .addFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY);
-            mContext.sendBroadcastAsUser(intent, UserHandle.ALL);
-
-            intent = new Intent(PowerManager.ACTION_POWER_SAVE_MODE_CHANGED);
+            Intent intent = new Intent(PowerManager.ACTION_POWER_SAVE_MODE_CHANGED);
             intent.addFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY);
             mContext.sendBroadcastAsUser(intent, UserHandle.ALL);
 
@@ -556,17 +552,14 @@ public class BatterySaverController implements BatterySaverPolicyListener {
                         : DozeState.NOT_DOZING;
 
         synchronized (mLock) {
-            if (mIsPluggedIn) {
-                mBatterySavingStats.startCharging();
-                return;
-            }
             mBatterySavingStats.transitionState(
                     getFullEnabledLocked() ? BatterySaverState.ON :
                             (getAdaptiveEnabledLocked() ? BatterySaverState.ADAPTIVE :
                             BatterySaverState.OFF),
                             isInteractive ? InteractiveState.INTERACTIVE :
                             InteractiveState.NON_INTERACTIVE,
-                            dozeMode);
+                            dozeMode,
+                    mIsPluggedIn ? PlugState.PLUGGED : PlugState.UNPLUGGED);
         }
     }
 

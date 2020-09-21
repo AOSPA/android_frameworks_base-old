@@ -19,6 +19,7 @@ package com.android.server.am;
 import static com.android.server.am.ActivityManagerDebugConfig.DEBUG_POWER_QUICK;
 
 import android.app.ActivityThread;
+import android.content.ComponentName;
 import android.content.ContentResolver;
 import android.content.Context;
 import android.database.ContentObserver;
@@ -255,7 +256,8 @@ final class ActivityManagerConstants extends ContentObserver {
     // allowing the next pending start to run.
     public long BG_START_TIMEOUT = DEFAULT_BG_START_TIMEOUT;
 
-    // For how long after a whitelisted service's start its process can start a background activity
+    // For a service that has been allowed to start background activities, how long after it started
+    // its process can start a background activity.
     public long SERVICE_BG_ACTIVITY_START_TIMEOUT = DEFAULT_SERVICE_BG_ACTIVITY_START_TIMEOUT;
 
     // Initial backoff delay for retrying bound foreground services
@@ -348,6 +350,11 @@ final class ActivityManagerConstants extends ContentObserver {
      */
     public int PENDINGINTENT_WARNING_THRESHOLD =  DEFAULT_PENDINGINTENT_WARNING_THRESHOLD;
 
+    /**
+     * Component names of the services which will keep critical code path of the host warm
+     */
+    public final ArraySet<ComponentName> KEEP_WARMING_SERVICES = new ArraySet<ComponentName>();
+
     private List<String> mDefaultImperceptibleKillExemptPackages;
     private List<Integer> mDefaultImperceptibleKillExemptProcStates;
 
@@ -396,6 +403,33 @@ final class ActivityManagerConstants extends ContentObserver {
 
     public static long MIN_ASSOC_LOG_DURATION = DEFAULT_MIN_ASSOC_LOG_DURATION;
 
+    private static final String KEY_BINDER_HEAVY_HITTER_WATCHER_ENABLED =
+            "binder_heavy_hitter_watcher_enabled";
+    private static final String KEY_BINDER_HEAVY_HITTER_WATCHER_BATCHSIZE =
+            "binder_heavy_hitter_watcher_batchsize";
+    private static final String KEY_BINDER_HEAVY_HITTER_WATCHER_THRESHOLD =
+            "binder_heavy_hitter_watcher_threshold";
+    private static final String KEY_BINDER_HEAVY_HITTER_AUTO_SAMPLER_ENABLED =
+            "binder_heavy_hitter_auto_sampler_enabled";
+    private static final String KEY_BINDER_HEAVY_HITTER_AUTO_SAMPLER_BATCHSIZE =
+            "binder_heavy_hitter_auto_sampler_batchsize";
+    private static final String KEY_BINDER_HEAVY_HITTER_AUTO_SAMPLER_THRESHOLD =
+            "binder_heavy_hitter_auto_sampler_threshold";
+
+    private final boolean mDefaultBinderHeavyHitterWatcherEnabled;
+    private final int mDefaultBinderHeavyHitterWatcherBatchSize;
+    private final float mDefaultBinderHeavyHitterWatcherThreshold;
+    private final boolean mDefaultBinderHeavyHitterAutoSamplerEnabled;
+    private final int mDefaultBinderHeavyHitterAutoSamplerBatchSize;
+    private final float mDefaultBinderHeavyHitterAutoSamplerThreshold;
+
+    public static boolean BINDER_HEAVY_HITTER_WATCHER_ENABLED;
+    public static int BINDER_HEAVY_HITTER_WATCHER_BATCHSIZE;
+    public static float BINDER_HEAVY_HITTER_WATCHER_THRESHOLD;
+    public static boolean BINDER_HEAVY_HITTER_AUTO_SAMPLER_ENABLED;
+    public static int BINDER_HEAVY_HITTER_AUTO_SAMPLER_BATCHSIZE;
+    public static float BINDER_HEAVY_HITTER_AUTO_SAMPLER_THRESHOLD;
+
     private final OnPropertiesChangedListener mOnDeviceConfigChangedListener =
             new OnPropertiesChangedListener() {
                 @Override
@@ -427,6 +461,14 @@ final class ActivityManagerConstants extends ContentObserver {
                             case KEY_MIN_ASSOC_LOG_DURATION:
                                 updateMinAssocLogDuration();
                                 break;
+                            case KEY_BINDER_HEAVY_HITTER_WATCHER_ENABLED:
+                            case KEY_BINDER_HEAVY_HITTER_WATCHER_BATCHSIZE:
+                            case KEY_BINDER_HEAVY_HITTER_WATCHER_THRESHOLD:
+                            case KEY_BINDER_HEAVY_HITTER_AUTO_SAMPLER_ENABLED:
+                            case KEY_BINDER_HEAVY_HITTER_AUTO_SAMPLER_BATCHSIZE:
+                            case KEY_BINDER_HEAVY_HITTER_AUTO_SAMPLER_THRESHOLD:
+                                updateBinderHeavyHitterWatcher();
+                                break;
                             default:
                                 break;
                         }
@@ -454,6 +496,29 @@ final class ActivityManagerConstants extends ContentObserver {
                 .boxed().collect(Collectors.toList());
         IMPERCEPTIBLE_KILL_EXEMPT_PACKAGES.addAll(mDefaultImperceptibleKillExemptPackages);
         IMPERCEPTIBLE_KILL_EXEMPT_PROC_STATES.addAll(mDefaultImperceptibleKillExemptProcStates);
+        mDefaultBinderHeavyHitterWatcherEnabled = context.getResources().getBoolean(
+                com.android.internal.R.bool.config_defaultBinderHeavyHitterWatcherEnabled);
+        mDefaultBinderHeavyHitterWatcherBatchSize = context.getResources().getInteger(
+                com.android.internal.R.integer.config_defaultBinderHeavyHitterWatcherBatchSize);
+        mDefaultBinderHeavyHitterWatcherThreshold = context.getResources().getFloat(
+                com.android.internal.R.dimen.config_defaultBinderHeavyHitterWatcherThreshold);
+        mDefaultBinderHeavyHitterAutoSamplerEnabled = context.getResources().getBoolean(
+                com.android.internal.R.bool.config_defaultBinderHeavyHitterAutoSamplerEnabled);
+        mDefaultBinderHeavyHitterAutoSamplerBatchSize = context.getResources().getInteger(
+                com.android.internal.R.integer.config_defaultBinderHeavyHitterAutoSamplerBatchSize);
+        mDefaultBinderHeavyHitterAutoSamplerThreshold = context.getResources().getFloat(
+                com.android.internal.R.dimen.config_defaultBinderHeavyHitterAutoSamplerThreshold);
+        BINDER_HEAVY_HITTER_WATCHER_ENABLED = mDefaultBinderHeavyHitterWatcherEnabled;
+        BINDER_HEAVY_HITTER_WATCHER_BATCHSIZE = mDefaultBinderHeavyHitterWatcherBatchSize;
+        BINDER_HEAVY_HITTER_WATCHER_THRESHOLD = mDefaultBinderHeavyHitterWatcherThreshold;
+        BINDER_HEAVY_HITTER_AUTO_SAMPLER_ENABLED = mDefaultBinderHeavyHitterAutoSamplerEnabled;
+        BINDER_HEAVY_HITTER_AUTO_SAMPLER_BATCHSIZE = mDefaultBinderHeavyHitterAutoSamplerBatchSize;
+        BINDER_HEAVY_HITTER_AUTO_SAMPLER_THRESHOLD = mDefaultBinderHeavyHitterAutoSamplerThreshold;
+        service.scheduleUpdateBinderHeavyHitterWatcherConfig();
+        KEEP_WARMING_SERVICES.addAll(Arrays.stream(
+                context.getResources().getStringArray(
+                        com.android.internal.R.array.config_keep_warming_services))
+                .map(ComponentName::unflattenFromString).collect(Collectors.toSet()));
     }
 
     private void updatePerfConfigConstants() {
@@ -744,6 +809,31 @@ final class ActivityManagerConstants extends ContentObserver {
                 /* defaultValue */ DEFAULT_MIN_ASSOC_LOG_DURATION);
     }
 
+    private void updateBinderHeavyHitterWatcher() {
+        BINDER_HEAVY_HITTER_WATCHER_ENABLED = DeviceConfig.getBoolean(
+                DeviceConfig.NAMESPACE_ACTIVITY_MANAGER, KEY_BINDER_HEAVY_HITTER_WATCHER_ENABLED,
+                mDefaultBinderHeavyHitterWatcherEnabled);
+        BINDER_HEAVY_HITTER_WATCHER_BATCHSIZE = DeviceConfig.getInt(
+                DeviceConfig.NAMESPACE_ACTIVITY_MANAGER, KEY_BINDER_HEAVY_HITTER_WATCHER_BATCHSIZE,
+                mDefaultBinderHeavyHitterWatcherBatchSize);
+        BINDER_HEAVY_HITTER_WATCHER_THRESHOLD = DeviceConfig.getFloat(
+                DeviceConfig.NAMESPACE_ACTIVITY_MANAGER, KEY_BINDER_HEAVY_HITTER_WATCHER_THRESHOLD,
+                mDefaultBinderHeavyHitterWatcherThreshold);
+        BINDER_HEAVY_HITTER_AUTO_SAMPLER_ENABLED = DeviceConfig.getBoolean(
+                DeviceConfig.NAMESPACE_ACTIVITY_MANAGER,
+                KEY_BINDER_HEAVY_HITTER_AUTO_SAMPLER_ENABLED,
+                mDefaultBinderHeavyHitterAutoSamplerEnabled);
+        BINDER_HEAVY_HITTER_AUTO_SAMPLER_BATCHSIZE = DeviceConfig.getInt(
+                DeviceConfig.NAMESPACE_ACTIVITY_MANAGER,
+                KEY_BINDER_HEAVY_HITTER_AUTO_SAMPLER_BATCHSIZE,
+                mDefaultBinderHeavyHitterAutoSamplerBatchSize);
+        BINDER_HEAVY_HITTER_WATCHER_THRESHOLD = DeviceConfig.getFloat(
+                DeviceConfig.NAMESPACE_ACTIVITY_MANAGER,
+                KEY_BINDER_HEAVY_HITTER_AUTO_SAMPLER_THRESHOLD,
+                mDefaultBinderHeavyHitterAutoSamplerThreshold);
+        mService.scheduleUpdateBinderHeavyHitterWatcherConfig();
+    }
+
     void dump(PrintWriter pw) {
         pw.println("ACTIVITY MANAGER SETTINGS (dumpsys activity settings) "
                 + Settings.Global.ACTIVITY_MANAGER_CONSTANTS + ":");
@@ -816,6 +906,18 @@ final class ActivityManagerConstants extends ContentObserver {
         pw.println(Arrays.toString(IMPERCEPTIBLE_KILL_EXEMPT_PACKAGES.toArray()));
         pw.print("  "); pw.print(KEY_MIN_ASSOC_LOG_DURATION); pw.print("=");
         pw.println(MIN_ASSOC_LOG_DURATION);
+        pw.print("  "); pw.print(KEY_BINDER_HEAVY_HITTER_WATCHER_ENABLED); pw.print("=");
+        pw.println(BINDER_HEAVY_HITTER_WATCHER_ENABLED);
+        pw.print("  "); pw.print(KEY_BINDER_HEAVY_HITTER_WATCHER_BATCHSIZE); pw.print("=");
+        pw.println(BINDER_HEAVY_HITTER_WATCHER_BATCHSIZE);
+        pw.print("  "); pw.print(KEY_BINDER_HEAVY_HITTER_WATCHER_THRESHOLD); pw.print("=");
+        pw.println(BINDER_HEAVY_HITTER_WATCHER_THRESHOLD);
+        pw.print("  "); pw.print(KEY_BINDER_HEAVY_HITTER_AUTO_SAMPLER_ENABLED); pw.print("=");
+        pw.println(BINDER_HEAVY_HITTER_AUTO_SAMPLER_ENABLED);
+        pw.print("  "); pw.print(KEY_BINDER_HEAVY_HITTER_AUTO_SAMPLER_BATCHSIZE); pw.print("=");
+        pw.println(BINDER_HEAVY_HITTER_AUTO_SAMPLER_BATCHSIZE);
+        pw.print("  "); pw.print(KEY_BINDER_HEAVY_HITTER_AUTO_SAMPLER_THRESHOLD); pw.print("=");
+        pw.println(BINDER_HEAVY_HITTER_AUTO_SAMPLER_THRESHOLD);
 
         pw.println();
         if (mOverrideMaxCachedProcesses >= 0) {

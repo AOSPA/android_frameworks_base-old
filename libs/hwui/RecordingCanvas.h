@@ -77,12 +77,11 @@ private:
     void flush();
 
     void save();
-    void saveLayer(const SkRect*, const SkPaint*, const SkImageFilter*, const SkImage*,
-                   const SkMatrix*, SkCanvas::SaveLayerFlags);
+    void saveLayer(const SkRect*, const SkPaint*, const SkImageFilter*, SkCanvas::SaveLayerFlags);
     void saveBehind(const SkRect*);
     void restore();
 
-    void concat44(const SkScalar colMajor[16]);
+    void concat(const SkM44&);
     void concat(const SkMatrix&);
     void setMatrix(const SkMatrix&);
     void scale(SkScalar, SkScalar);
@@ -120,8 +119,7 @@ private:
     void drawPatch(const SkPoint[12], const SkColor[4], const SkPoint[4], SkBlendMode,
                    const SkPaint&);
     void drawPoints(SkCanvas::PointMode, size_t, const SkPoint[], const SkPaint&);
-    void drawVertices(const SkVertices*, const SkVertices::Bone bones[], int boneCount, SkBlendMode,
-                      const SkPaint&);
+    void drawVertices(const SkVertices*, SkBlendMode, const SkPaint&);
     void drawAtlas(const SkImage*, const SkRSXform[], const SkRect[], const SkColor[], int,
                    SkBlendMode, const SkRect*, const SkPaint*);
     void drawShadowRec(const SkPath&, const SkDrawShadowRec&);
@@ -155,7 +153,7 @@ public:
 
     void onFlush() override;
 
-    void didConcat44(const SkScalar[16]) override;
+    void didConcat44(const SkM44&) override;
     void didConcat(const SkMatrix&) override;
     void didSetMatrix(const SkMatrix&) override;
     void didScale(SkScalar, SkScalar) override;
@@ -182,13 +180,6 @@ public:
 
     void onDrawTextBlob(const SkTextBlob*, SkScalar, SkScalar, const SkPaint&) override;
 
-    void onDrawBitmap(const SkBitmap&, SkScalar, SkScalar, const SkPaint*) override;
-    void onDrawBitmapLattice(const SkBitmap&, const Lattice&, const SkRect&,
-                             const SkPaint*) override;
-    void onDrawBitmapNine(const SkBitmap&, const SkIRect&, const SkRect&, const SkPaint*) override;
-    void onDrawBitmapRect(const SkBitmap&, const SkRect*, const SkRect&, const SkPaint*,
-                          SrcRectConstraint) override;
-
     void drawImage(const sk_sp<SkImage>& image, SkScalar left, SkScalar top, const SkPaint* paint,
                    BitmapPalette pallete);
 
@@ -206,8 +197,7 @@ public:
     void onDrawPatch(const SkPoint[12], const SkColor[4], const SkPoint[4], SkBlendMode,
                      const SkPaint&) override;
     void onDrawPoints(PointMode, size_t count, const SkPoint pts[], const SkPaint&) override;
-    void onDrawVerticesObject(const SkVertices*, const SkVertices::Bone bones[], int boneCount,
-                              SkBlendMode, const SkPaint&) override;
+    void onDrawVerticesObject(const SkVertices*, SkBlendMode, const SkPaint&) override;
     void onDrawAtlas(const SkImage*, const SkRSXform[], const SkRect[], const SkColor[], int,
                      SkBlendMode, const SkRect*, const SkPaint*) override;
     void onDrawShadowRec(const SkPath&, const SkDrawShadowRec&) override;

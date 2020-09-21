@@ -193,8 +193,10 @@
     <string name="network_logging_notification_text" msgid="1327373071132562512">"贵单位会管理该设备，且可能会监控网络流量。点按即可了解详情。"</string>
     <string name="location_changed_notification_title" msgid="3620158742816699316">"应用可以访问您的位置信息"</string>
     <string name="location_changed_notification_text" msgid="7158423339982706912">"详情请与您的 IT 管理员联系"</string>
+    <string name="geofencing_service" msgid="3826902410740315456">"地理围栏服务"</string>
     <string name="country_detector" msgid="7023275114706088854">"国家/地区检测器"</string>
     <string name="location_service" msgid="2439187616018455546">"位置信息服务"</string>
+    <string name="gnss_service" msgid="8907781262179951385">"GNSS 服务"</string>
     <string name="sensor_notification_service" msgid="7474531979178682676">"传感器通知服务"</string>
     <string name="twilight_service" msgid="8964898045693187224">"Twilight 服务"</string>
     <string name="factory_reset_warning" msgid="6858705527798047809">"系统将清空您的设备"</string>
@@ -542,6 +544,7 @@
     <string name="biometric_not_recognized" msgid="5106687642694635888">"无法识别"</string>
     <string name="biometric_error_canceled" msgid="8266582404844179778">"身份验证已取消"</string>
     <string name="biometric_error_device_not_secured" msgid="3129845065043995924">"未设置任何 PIN 码、图案和密码"</string>
+    <string name="biometric_error_generic" msgid="6784371929985434439">"进行身份验证时出错"</string>
     <string name="fingerprint_acquired_partial" msgid="8532380671091299342">"仅检测到部分指纹，请重试。"</string>
     <string name="fingerprint_acquired_insufficient" msgid="2545149524031515411">"无法处理指纹，请重试。"</string>
     <string name="fingerprint_acquired_imager_dirty" msgid="4694800187151533990">"指纹传感器有脏污。请擦拭干净，然后重试。"</string>
@@ -829,7 +832,8 @@
     <string name="lockscreen_instructions_when_pattern_enabled" msgid="7982445492532123308">"按 Menu 解锁或进行紧急呼救。"</string>
     <string name="lockscreen_instructions_when_pattern_disabled" msgid="7434061749374801753">"按 MENU 解锁。"</string>
     <string name="lockscreen_pattern_instructions" msgid="3169991838169244941">"绘制解锁图案"</string>
-    <string name="lockscreen_emergency_call" msgid="7500692654885445299">"紧急呼救"</string>
+    <!-- no translation found for lockscreen_emergency_call (7549683825868928636) -->
+    <skip />
     <string name="lockscreen_return_to_call" msgid="3156883574692006382">"返回通话"</string>
     <string name="lockscreen_pattern_correct" msgid="8050630103651508582">"正确！"</string>
     <string name="lockscreen_pattern_wrong" msgid="2940138714468358458">"重试"</string>
@@ -1460,9 +1464,6 @@
     <string name="gpsNotifMessage" msgid="7346649122793758032">"请求人：<xliff:g id="NAME">%1$s</xliff:g>（<xliff:g id="SERVICE">%2$s</xliff:g>）"</string>
     <string name="gpsVerifYes" msgid="3719843080744112940">"是"</string>
     <string name="gpsVerifNo" msgid="1671201856091564741">"否"</string>
-    <string name="gnss_nfw_notification_title" msgid="5004493772059563423">"外部实体获取了您的紧急位置信息"</string>
-    <string name="gnss_nfw_notification_message_oem" msgid="3683958907027107969">"最近发生紧急情况时，您的设备制造商获取了您的位置信息"</string>
-    <string name="gnss_nfw_notification_message_carrier" msgid="815888995791562151">"最近发生紧急情况时，您的运营商获取了您的位置信息"</string>
     <string name="sync_too_many_deletes" msgid="6999440774578705300">"超出删除限制"</string>
     <string name="sync_too_many_deletes_desc" msgid="7409327940303504440">"帐号 <xliff:g id="ACCOUNT_NAME">%3$s</xliff:g> 在进行“<xliff:g id="TYPE_OF_SYNC">%2$s</xliff:g>”同步时删除了 <xliff:g id="NUMBER_OF_DELETED_ITEMS">%1$d</xliff:g> 项内容。您要如何处理这些删除的内容？"</string>
     <string name="sync_really_delete" msgid="5657871730315579051">"删除这些内容"</string>
@@ -1792,8 +1793,8 @@
     <string name="package_updated_device_owner" msgid="7560272363805506941">"已由您的管理员更新"</string>
     <string name="package_deleted_device_owner" msgid="2292335928930293023">"已由您的管理员删除"</string>
     <string name="confirm_battery_saver" msgid="5247976246208245754">"确定"</string>
-    <string name="battery_saver_description_with_learn_more" msgid="5997766757551917769">"为了延长电池续航时间，省电模式会执行以下操作：\n\n• 开启深色主题\n• 关闭或限制后台活动、部分视觉效果和其他功能，例如“Ok Google”\n\n"<annotation id="url">"了解详情"</annotation></string>
-    <string name="battery_saver_description" msgid="8587408568232177204">"为了延长电池续航时间，省电模式会执行以下操作：\n\n• 开启深色主题\n• 关闭或限制后台活动、部分视觉效果和其他功能，例如“Ok Google”"</string>
+    <string name="battery_saver_description_with_learn_more" msgid="4424488535318105801">"为了延长电池续航时间，省电模式会执行以下操作：\n\n• 开启深色主题\n• 关闭或限制后台活动、部分视觉效果和其他功能，例如“Ok Google”\n\n"<annotation id="url">"了解详情"</annotation></string>
+    <string name="battery_saver_description" msgid="6794188153647295212">"为了延长电池续航时间，省电模式会执行以下操作：\n\n• 开启深色主题\n• 关闭或限制后台活动、部分视觉效果和其他功能，例如“Ok Google”"</string>
     <string name="data_saver_description" msgid="4995164271550590517">"为了减少流量消耗，流量节省程序会阻止某些应用在后台收发数据。您当前使用的应用可以收发数据，但频率可能会降低。举例而言，这可能意味着图片只有在您点按之后才会显示。"</string>
     <string name="data_saver_enable_title" msgid="7080620065745260137">"要开启流量节省程序吗？"</string>
     <string name="data_saver_enable_button" msgid="4399405762586419726">"开启"</string>
@@ -1997,6 +1998,7 @@
     <string name="notification_appops_camera_active" msgid="8177643089272352083">"相机"</string>
     <string name="notification_appops_microphone_active" msgid="581333393214739332">"麦克风"</string>
     <string name="notification_appops_overlay_active" msgid="5571732753262836481">"显示在屏幕上其他应用的上层"</string>
+    <string name="notification_feedback_indicator" msgid="663476517711323016">"提供反馈"</string>
     <string name="dynamic_mode_notification_channel_name" msgid="2986926422100223328">"日常安排模式信息通知"</string>
     <string name="dynamic_mode_notification_title" msgid="9205715501274608016">"电池电量可能会在您平时的充电时间之前耗尽"</string>
     <string name="dynamic_mode_notification_summary" msgid="4141614604437372157">"已启用省电模式以延长电池续航时间"</string>

@@ -113,7 +113,6 @@ import com.android.server.am.ActivityManagerService.ItemMatcher;
 import com.android.server.uri.NeededUriGrants;
 import com.android.server.wm.ActivityRecord;
 import com.android.server.wm.ActivityServiceConnectionsHolder;
-import com.android.server.wm.ActivityStack;
 
 import java.io.FileDescriptor;
 import java.io.IOException;
@@ -230,7 +229,7 @@ public final class ActiveServices {
      * Watch for apps being put into forced app standby, so we can step their fg
      * services down.
      */
-    class ForcedStandbyListener extends AppStateTracker.Listener {
+    class ForcedStandbyListener implements AppStateTracker.ServiceStateListener {
         @Override
         public void stopForegroundServicesForUidPackage(final int uid, final String packageName) {
             synchronized (mAm) {
@@ -421,7 +420,7 @@ public final class ActiveServices {
 
     void systemServicesReady() {
         AppStateTracker ast = LocalServices.getService(AppStateTracker.class);
-        ast.addListener(new ForcedStandbyListener());
+        ast.addServiceStateListener(new ForcedStandbyListener());
         mAppWidgetManagerInternal = LocalServices.getService(AppWidgetManagerInternal.class);
         setWhiteListAllowWhileInUsePermissionInFgs();
     }
@@ -726,7 +725,7 @@ public final class ActiveServices {
         }
 
         if (allowBackgroundActivityStarts) {
-            r.whitelistBgActivityStartsOnServiceStart();
+            r.allowBgActivityStartsOnServiceStart();
         }
         ComponentName cmp = startServiceInnerLocked(smap, service, r, callerFg, addToStarting);
 
@@ -2081,7 +2080,7 @@ public final class ActiveServices {
                 s.whitelistManager = true;
             }
             if ((flags & Context.BIND_ALLOW_BACKGROUND_ACTIVITY_STARTS) != 0) {
-                s.setHasBindingWhitelistingBgActivityStarts(true);
+                s.setAllowedBgActivityStartsByBinding(true);
             }
             if (s.app != null) {
                 updateServiceClientActivitiesLocked(s.app, c, true);
@@ -3635,9 +3634,9 @@ public final class ActiveServices {
                     updateWhitelistManagerLocked(s.app);
                 }
             }
-            // And do the same for bg activity starts whitelisting.
+            // And do the same for bg activity starts ability.
             if ((c.flags & Context.BIND_ALLOW_BACKGROUND_ACTIVITY_STARTS) != 0) {
-                s.updateHasBindingWhitelistingBgActivityStarts();
+                s.updateIsAllowedBgActivityStartsByBinding();
             }
             if (s.app != null) {
                 updateServiceClientActivitiesLocked(s.app, c, true);

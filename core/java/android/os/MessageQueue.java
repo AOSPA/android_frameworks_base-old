@@ -726,7 +726,7 @@ public final class MessageQueue {
                 Message n = p.next;
                 if (n != null) {
                     if (n.target == h && n.what == what
-                            && (object == null || object.equals(n.obj))) {
+                        && (object == null || object.equals(n.obj))) {
                         Message nn = n.next;
                         n.recycleUnchecked();
                         p.next = nn;
@@ -794,7 +794,7 @@ public final class MessageQueue {
                 Message n = p.next;
                 if (n != null) {
                     if (n.target == h && n.callback == r
-                            && (object == null || object.equals(n.obj))) {
+                        && (object == null || object.equals(n.obj))) {
                         Message nn = n.next;
                         n.recycleUnchecked();
                         p.next = nn;

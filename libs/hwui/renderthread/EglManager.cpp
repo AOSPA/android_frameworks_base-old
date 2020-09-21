@@ -136,7 +136,7 @@ void EglManager::initialize() {
     LOG_ALWAYS_FATAL_IF(!DeviceInfo::get()->getWideColorSpace()->toXYZD50(&wideColorGamut),
                         "Could not get gamut matrix from wideColorSpace");
     bool hasWideColorSpaceExtension = false;
-    if (memcmp(&wideColorGamut, &SkNamedGamut::kDCIP3, sizeof(wideColorGamut)) == 0) {
+    if (memcmp(&wideColorGamut, &SkNamedGamut::kDisplayP3, sizeof(wideColorGamut)) == 0) {
         hasWideColorSpaceExtension = EglExtensions.displayP3;
     } else if (memcmp(&wideColorGamut, &SkNamedGamut::kSRGB, sizeof(wideColorGamut)) == 0) {
         hasWideColorSpaceExtension = EglExtensions.scRGB;
@@ -208,8 +208,12 @@ EGLConfig EglManager::loadFP16Config(EGLDisplay display, SwapBehavior swapBehavi
     return config;
 }
 
+extern "C" EGLAPI const char* eglQueryStringImplementationANDROID(EGLDisplay dpy, EGLint name);
+
 void EglManager::initExtensions() {
     auto extensions = StringUtils::split(eglQueryString(mEglDisplay, EGL_EXTENSIONS));
+    auto extensionsAndroid =
+            StringUtils::split(eglQueryStringImplementationANDROID(mEglDisplay, EGL_EXTENSIONS));
 
     // For our purposes we don't care if EGL_BUFFER_AGE is a result of
     // EGL_EXT_buffer_age or EGL_KHR_partial_update as our usage is covered
@@ -228,9 +232,12 @@ void EglManager::initExtensions() {
     EglExtensions.displayP3 = extensions.has("EGL_EXT_gl_colorspace_display_p3_passthrough");
     EglExtensions.contextPriority = extensions.has("EGL_IMG_context_priority");
     EglExtensions.surfacelessContext = extensions.has("EGL_KHR_surfaceless_context");
-    EglExtensions.nativeFenceSync = extensions.has("EGL_ANDROID_native_fence_sync");
     EglExtensions.fenceSync = extensions.has("EGL_KHR_fence_sync");
     EglExtensions.waitSync = extensions.has("EGL_KHR_wait_sync");
+
+    // EGL_ANDROID_native_fence_sync is not exposed to applications, so access
+    // this through the private Android-specific query instead.
+    EglExtensions.nativeFenceSync = extensionsAndroid.has("EGL_ANDROID_native_fence_sync");
 }
 
 bool EglManager::hasEglContext() {
@@ -337,7 +344,7 @@ Result<EGLSurface, EGLint> EglManager::createSurface(EGLNativeWindowType window,
             skcms_Matrix3x3 colorGamut;
             LOG_ALWAYS_FATAL_IF(!colorSpace->toXYZD50(&colorGamut),
                                 "Could not get gamut matrix from color space");
-            if (memcmp(&colorGamut, &SkNamedGamut::kDCIP3, sizeof(colorGamut)) == 0) {
+            if (memcmp(&colorGamut, &SkNamedGamut::kDisplayP3, sizeof(colorGamut)) == 0) {
                 attribs[1] = EGL_GL_COLORSPACE_DISPLAY_P3_PASSTHROUGH_EXT;
             } else if (memcmp(&colorGamut, &SkNamedGamut::kSRGB, sizeof(colorGamut)) == 0) {
                 attribs[1] = EGL_GL_COLORSPACE_SCRGB_EXT;

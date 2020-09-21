@@ -66,7 +66,7 @@ public class GnssMeasurementCorrectionsProvider {
      * Injects GNSS measurement corrections into the GNSS chipset.
      *
      * @param measurementCorrections a {@link GnssMeasurementCorrections} object with the GNSS
-     *     measurement corrections to be injected into the GNSS chipset.
+     *                               measurement corrections to be injected into the GNSS chipset.
      */
     public void injectGnssMeasurementCorrections(
             GnssMeasurementCorrections measurementCorrections) {
@@ -124,7 +124,7 @@ public class GnssMeasurementCorrectionsProvider {
         return s.toString();
     }
 
-    private static  boolean hasCapability(int halCapabilities, int capability) {
+    private static boolean hasCapability(int halCapabilities, int capability) {
         return (halCapabilities & capability) != 0;
     }
 
@@ -144,8 +144,8 @@ public class GnssMeasurementCorrectionsProvider {
         }
     }
 
-    private static native boolean native_is_measurement_corrections_supported();
+    static native boolean native_is_measurement_corrections_supported();
 
-    private static native boolean native_inject_gnss_measurement_corrections(
+    static native boolean native_inject_gnss_measurement_corrections(
             GnssMeasurementCorrections measurementCorrections);
 }

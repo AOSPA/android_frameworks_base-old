@@ -95,6 +95,7 @@ import android.os.UserHandle;
 import android.provider.Settings.Global;
 import android.telephony.TelephonyManager;
 import android.util.ArraySet;
+import android.util.IndentingPrintWriter;
 import android.util.KeyValueListParser;
 import android.util.Slog;
 import android.util.SparseArray;
@@ -107,10 +108,9 @@ import com.android.internal.R;
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.app.IBatteryStats;
-import com.android.internal.os.SomeArgs;
 import com.android.internal.util.ArrayUtils;
 import com.android.internal.util.ConcurrentUtils;
-import com.android.internal.util.IndentingPrintWriter;
+import com.android.server.JobSchedulerBackgroundThread;
 import com.android.server.LocalServices;
 import com.android.server.pm.parsing.pkg.AndroidPackage;
 import com.android.server.usage.AppIdleHistory.AppUsageHistory;
@@ -337,9 +337,30 @@ public class AppStandbyController implements AppStandbyInternal {
     private PackageManager mPackageManager;
     Injector mInjector;
 
-    static final ArrayList<StandbyUpdateRecord> sStandbyUpdatePool = new ArrayList<>(4);
+    private static class Pool<T> {
+        private final T[] mArray;
+        private int mSize = 0;
 
-    public static class StandbyUpdateRecord {
+        Pool(T[] array) {
+            mArray = array;
+        }
+
+        @Nullable
+        synchronized T obtain() {
+            return mSize > 0 ? mArray[--mSize] : null;
+        }
+
+        synchronized void recycle(T instance) {
+            if (mSize < mArray.length) {
+                mArray[mSize++] = instance;
+            }
+        }
+    }
+
+    private static class StandbyUpdateRecord {
+        private static final Pool<StandbyUpdateRecord> sPool =
+                new Pool<>(new StandbyUpdateRecord[10]);
+
         // Identity of the app whose standby state has changed
         String packageName;
         int userId;
@@ -353,41 +374,53 @@ public class AppStandbyController implements AppStandbyInternal {
         // Reason for bucket change
         int reason;
 
-        StandbyUpdateRecord(String pkgName, int userId, int bucket, int reason,
-                boolean isInteraction) {
-            this.packageName = pkgName;
-            this.userId = userId;
-            this.bucket = bucket;
-            this.reason = reason;
-            this.isUserInteraction = isInteraction;
-        }
-
         public static StandbyUpdateRecord obtain(String pkgName, int userId,
                 int bucket, int reason, boolean isInteraction) {
-            synchronized (sStandbyUpdatePool) {
-                final int size = sStandbyUpdatePool.size();
-                if (size < 1) {
-                    return new StandbyUpdateRecord(pkgName, userId, bucket, reason, isInteraction);
-                }
-                StandbyUpdateRecord r = sStandbyUpdatePool.remove(size - 1);
-                r.packageName = pkgName;
-                r.userId = userId;
-                r.bucket = bucket;
-                r.reason = reason;
-                r.isUserInteraction = isInteraction;
-                return r;
+            StandbyUpdateRecord r = sPool.obtain();
+            if (r == null) {
+                r = new StandbyUpdateRecord();
             }
+            r.packageName = pkgName;
+            r.userId = userId;
+            r.bucket = bucket;
+            r.reason = reason;
+            r.isUserInteraction = isInteraction;
+            return r;
+
         }
 
         public void recycle() {
-            synchronized (sStandbyUpdatePool) {
-                sStandbyUpdatePool.add(this);
-            }
+            sPool.recycle(this);
         }
     }
 
-    public AppStandbyController(Context context, Looper looper) {
-        this(new Injector(context, looper));
+    private static class ContentProviderUsageRecord {
+        private static final Pool<ContentProviderUsageRecord> sPool =
+                new Pool<>(new ContentProviderUsageRecord[10]);
+
+        public String name;
+        public String packageName;
+        public int userId;
+
+        public static ContentProviderUsageRecord obtain(String name, String packageName,
+                int userId) {
+            ContentProviderUsageRecord r = sPool.obtain();
+            if (r == null) {
+                r = new ContentProviderUsageRecord();
+            }
+            r.name = name;
+            r.packageName = packageName;
+            r.userId = userId;
+            return r;
+        }
+
+        public void recycle() {
+            sPool.recycle(this);
+        }
+    }
+
+    public AppStandbyController(Context context) {
+        this(new Injector(context, JobSchedulerBackgroundThread.get().getLooper()));
     }
 
     AppStandbyController(Injector injector) {
@@ -428,7 +461,6 @@ public class AppStandbyController implements AppStandbyInternal {
                 }
             }
         }
-
     }
 
     @Override
@@ -455,9 +487,6 @@ public class AppStandbyController implements AppStandbyInternal {
 
             mSystemServicesReady = true;
 
-            // Offload to handler thread to avoid boot time impact.
-            mHandler.post(AppStandbyController.this::updatePowerWhitelistCache);
-
             boolean userFileExists;
             synchronized (mAppIdleLock) {
                 userFileExists = mAppIdleHistory.userFileExists(UserHandle.USER_SYSTEM);
@@ -474,7 +503,9 @@ public class AppStandbyController implements AppStandbyInternal {
             setChargingState(mInjector.isCharging());
 
             // Offload to handler thread after boot completed to avoid boot time impact. This means
-            // that headless system apps may be put in a lower bucket until boot has completed.
+            // that app standby buckets may be slightly out of date and headless system apps may be
+            // put in a lower bucket until boot has completed.
+            mHandler.post(AppStandbyController.this::updatePowerWhitelistCache);
             mHandler.post(this::loadHeadlessSystemAppCache);
         }
     }
@@ -1800,11 +1831,9 @@ public class AppStandbyController implements AppStandbyInternal {
 
     @Override
     public void postReportContentProviderUsage(String name, String packageName, int userId) {
-        SomeArgs args = SomeArgs.obtain();
-        args.arg1 = name;
-        args.arg2 = packageName;
-        args.arg3 = userId;
-        mHandler.obtainMessage(MSG_REPORT_CONTENT_PROVIDER_USAGE, args)
+        ContentProviderUsageRecord record = ContentProviderUsageRecord.obtain(name, packageName,
+                userId);
+        mHandler.obtainMessage(MSG_REPORT_CONTENT_PROVIDER_USAGE, record)
                 .sendToTarget();
     }
 
@@ -2159,11 +2188,9 @@ public class AppStandbyController implements AppStandbyInternal {
                     break;
 
                 case MSG_REPORT_CONTENT_PROVIDER_USAGE:
-                    SomeArgs args = (SomeArgs) msg.obj;
-                    reportContentProviderUsage((String) args.arg1, // authority name
-                            (String) args.arg2, // package name
-                            (int) args.arg3); // userId
-                    args.recycle();
+                    ContentProviderUsageRecord record = (ContentProviderUsageRecord) msg.obj;
+                    reportContentProviderUsage(record.name, record.packageName, record.userId);
+                    record.recycle();
                     break;
 
                 case MSG_PAROLE_STATE_CHANGED:

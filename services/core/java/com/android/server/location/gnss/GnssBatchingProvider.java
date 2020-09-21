@@ -69,8 +69,8 @@ public class GnssBatchingProvider {
             throw new IllegalStateException();
         }
         if (periodNanos <= 0) {
-            Log.e(TAG, "Invalid periodNanos " + periodNanos +
-                    " in batching request, not started");
+            Log.e(TAG, "Invalid periodNanos " + periodNanos
+                    + " in batching request, not started");
             return false;
         }
         mStarted = mNative.startBatch(periodNanos, wakeOnFifoFull);

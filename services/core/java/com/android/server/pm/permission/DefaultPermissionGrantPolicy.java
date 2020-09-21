@@ -647,9 +647,11 @@ public final class DefaultPermissionGrantPolicy {
                 CALENDAR_PERMISSIONS);
 
         // Calendar provider sync adapters
-        grantPermissionToEachSystemPackage(pm,
-                getHeadlessSyncAdapterPackages(pm, calendarSyncAdapterPackages, userId),
-                userId, CALENDAR_PERMISSIONS);
+        if (calendarSyncAdapterPackages != null) {
+            grantPermissionToEachSystemPackage(pm,
+                    getHeadlessSyncAdapterPackages(pm, calendarSyncAdapterPackages, userId),
+                    userId, CALENDAR_PERMISSIONS);
+        }
 
         // Contacts
         grantPermissionsToSystemPackage(pm,
@@ -658,9 +660,11 @@ public final class DefaultPermissionGrantPolicy {
                 userId, CONTACTS_PERMISSIONS, PHONE_PERMISSIONS);
 
         // Contacts provider sync adapters
-        grantPermissionToEachSystemPackage(pm,
-                getHeadlessSyncAdapterPackages(pm, contactsSyncAdapterPackages, userId),
-                userId, CONTACTS_PERMISSIONS);
+        if (contactsSyncAdapterPackages != null) {
+            grantPermissionToEachSystemPackage(pm,
+                    getHeadlessSyncAdapterPackages(pm, contactsSyncAdapterPackages, userId),
+                    userId, CONTACTS_PERMISSIONS);
+        }
 
         // Contacts provider
         String contactsProviderPackage =
@@ -816,7 +820,7 @@ public final class DefaultPermissionGrantPolicy {
         if (!TextUtils.isEmpty(contentCapturePackageName)) {
             grantPermissionsToSystemPackage(pm, contentCapturePackageName, userId,
                     PHONE_PERMISSIONS, SMS_PERMISSIONS, ALWAYS_LOCATION_PERMISSIONS,
-                    CONTACTS_PERMISSIONS);
+                    CONTACTS_PERMISSIONS, STORAGE_PERMISSIONS);
         }
 
         // Atthention Service

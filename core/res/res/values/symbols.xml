@@ -246,6 +246,7 @@
   <java-symbol type="id" name="mic" />
   <java-symbol type="id" name="overlay" />
   <java-symbol type="id" name="app_ops" />
+  <java-symbol type="id" name="feedback" />
   <java-symbol type="id" name="profile_pager" />
   <java-symbol type="id" name="content_preview_container" />
   <java-symbol type="id" name="profile_tabhost" />
@@ -302,6 +303,7 @@
   <java-symbol type="string" name="config_wlan_network_service_package" />
   <java-symbol type="string" name="config_wwan_network_service_class" />
   <java-symbol type="string" name="config_wlan_network_service_class" />
+  <java-symbol type="bool" name="config_wlan_data_service_conn_persistence_on_restart" />
   <java-symbol type="string" name="config_wwan_data_service_package" />
   <java-symbol type="string" name="config_wlan_data_service_package" />
   <java-symbol type="string" name="config_wwan_data_service_class" />
@@ -741,9 +743,6 @@
   <java-symbol type="string" name="gpsNotifTitle" />
   <java-symbol type="string" name="gpsVerifNo" />
   <java-symbol type="string" name="gpsVerifYes" />
-  <java-symbol type="string" name="gnss_nfw_notification_title" />
-  <java-symbol type="string" name="gnss_nfw_notification_message_carrier" />
-  <java-symbol type="string" name="gnss_nfw_notification_message_oem" />
   <java-symbol type="string" name="gsm_alphabet_default_charset" />
   <java-symbol type="string" name="httpError" />
   <java-symbol type="string" name="httpErrorAuth" />
@@ -1450,6 +1449,7 @@
   <java-symbol type="drawable" name="ic_camera" />
   <java-symbol type="drawable" name="ic_mic" />
   <java-symbol type="drawable" name="ic_alert_window_layer" />
+  <java-symbol type="drawable" name="ic_feedback_indicator" />
 
   <java-symbol type="drawable" name="ic_account_circle" />
   <java-symbol type="color" name="user_icon_1" />
@@ -1685,7 +1685,7 @@
   <java-symbol type="bool" name="config_enableCarDockHomeLaunch" />
   <java-symbol type="bool" name="config_enableLockBeforeUnlockScreen" />
   <java-symbol type="bool" name="config_enableLockScreenRotation" />
-  <java-symbol type="bool" name="config_forceShowSystemBars" />
+  <java-symbol type="bool" name="config_remoteInsetsControllerControlsSystemBars" />
   <java-symbol type="bool" name="config_lidControlsScreenLock" />
   <java-symbol type="bool" name="config_lidControlsSleep" />
   <java-symbol type="bool" name="config_lockDayNightMode" />
@@ -2454,6 +2454,7 @@
   <java-symbol type="string" name="biometric_not_recognized" />
   <java-symbol type="string" name="biometric_error_canceled" />
   <java-symbol type="string" name="biometric_error_device_not_secured" />
+  <java-symbol type="string" name="biometric_error_generic" />
 
   <!-- Fingerprint messages -->
   <java-symbol type="string" name="fingerprint_error_unable_to_process" />
@@ -3381,6 +3382,7 @@
   <java-symbol type="dimen" name="notification_media_image_max_width_low_ram"/>
   <java-symbol type="dimen" name="notification_media_image_max_height_low_ram"/>
   <java-symbol type="dimen" name="notification_right_icon_size_low_ram"/>
+  <java-symbol type="dimen" name="notification_grayscale_icon_max_size"/>
   <java-symbol type="dimen" name="notification_custom_view_max_image_height_low_ram"/>
   <java-symbol type="dimen" name="notification_custom_view_max_image_width_low_ram"/>
 
@@ -3850,7 +3852,6 @@
   <java-symbol type="color" name="decor_view_status_guard_light" />
 
   <java-symbol type="string" name="config_defaultSupervisionProfileOwnerComponent" />
-  <java-symbol type="bool" name="config_inflateSignalStrength" />
 
   <java-symbol type="drawable" name="android_logotype" />
   <java-symbol type="layout" name="platlogo_layout" />
@@ -4074,4 +4075,14 @@
   <java-symbol type="string" name="config_pdp_reject_multi_conn_to_same_pdn_not_allowed" />
 
   <java-symbol type="array" name="config_notificationMsgPkgsAllowedAsConvos" />
+
+  <!-- Binder heavy hitter watcher configs -->
+  <java-symbol type="bool" name="config_defaultBinderHeavyHitterWatcherEnabled" />
+  <java-symbol type="integer" name="config_defaultBinderHeavyHitterWatcherBatchSize" />
+  <java-symbol type="dimen" name="config_defaultBinderHeavyHitterWatcherThreshold" />
+  <java-symbol type="bool" name="config_defaultBinderHeavyHitterAutoSamplerEnabled" />
+  <java-symbol type="integer" name="config_defaultBinderHeavyHitterAutoSamplerBatchSize" />
+  <java-symbol type="dimen" name="config_defaultBinderHeavyHitterAutoSamplerThreshold" />
+
+  <java-symbol type="array" name="config_keep_warming_services" />
 </resources>

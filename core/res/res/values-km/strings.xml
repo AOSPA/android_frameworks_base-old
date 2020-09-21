@@ -193,8 +193,10 @@
     <string name="network_logging_notification_text" msgid="1327373071132562512">"ស្ថាប័នរបស់អ្នកគ្រប់គ្រងឧបករណ៍នេះ ហើយអាចនឹងតាមដានចរាចរណ៍បណ្តាញ។ ចុចដើម្បីទទួលបានព័ត៌មានលម្អិត។"</string>
     <string name="location_changed_notification_title" msgid="3620158742816699316">"កម្មវិធី​អាច​ចូលប្រើ​ទីតាំង​របស់អ្នក​បាន"</string>
     <string name="location_changed_notification_text" msgid="7158423339982706912">"ទាក់ទង​អ្នក​គ្រប់គ្រងផ្នែកព័ត៌មានវិទ្យា​របស់អ្នក​ដើម្បីស្វែងយល់​បន្ថែម"</string>
+    <string name="geofencing_service" msgid="3826902410740315456">"សេវាកម្ម​បង្កើតដែនភូមិសាស្ត្រ"</string>
     <string name="country_detector" msgid="7023275114706088854">"ឧបករណ៍​សម្គាល់​ប្រទេស"</string>
     <string name="location_service" msgid="2439187616018455546">"សេវាកម្ម​ទីតាំង"</string>
+    <string name="gnss_service" msgid="8907781262179951385">"សេវាកម្ម GNSS"</string>
     <string name="sensor_notification_service" msgid="7474531979178682676">"សេវាកម្ម​ជូនដំណឹង​ឧបករណ៍​ចាប់សញ្ញា"</string>
     <string name="twilight_service" msgid="8964898045693187224">"សេវាកម្ម​ព្រលប់"</string>
     <string name="factory_reset_warning" msgid="6858705527798047809">"ឧបករណ៍របស់អ្នកនឹងត្រូវបានលុប"</string>
@@ -542,6 +544,7 @@
     <string name="biometric_not_recognized" msgid="5106687642694635888">"មិនអាចសម្គាល់បានទេ"</string>
     <string name="biometric_error_canceled" msgid="8266582404844179778">"បាន​បោះបង់​ការ​ផ្ទៀងផ្ទាត់"</string>
     <string name="biometric_error_device_not_secured" msgid="3129845065043995924">"គ្មាន​ការកំណត់​កូដ pin លំនាំ ឬពាក្យសម្ងាត់​ទេ"</string>
+    <string name="biometric_error_generic" msgid="6784371929985434439">"មានបញ្ហាក្នុង​ការផ្ទៀងផ្ទាត់"</string>
     <string name="fingerprint_acquired_partial" msgid="8532380671091299342">"បានផ្តិតយកស្នាមម្រាមដៃមិនពេញលក្ខណៈ។ សូមព្យាយាមម្តងទៀត។"</string>
     <string name="fingerprint_acquired_insufficient" msgid="2545149524031515411">"មិនអាចដំណើរការស្នាមម្រាមដៃបានទេ។ សូមព្យាយាមម្តងទៀត។"</string>
     <string name="fingerprint_acquired_imager_dirty" msgid="4694800187151533990">"ឧបករណ៍ចាប់ស្នាមម្រាមដៃគឺប្រឡាក់។ សូមសម្អាត រួចព្យាយាមម្តងទៀត។"</string>
@@ -829,7 +832,8 @@
     <string name="lockscreen_instructions_when_pattern_enabled" msgid="7982445492532123308">"ចុច​ម៉ឺនុយ ដើម្បី​ដោះ​សោ​ ឬ​ហៅ​ពេល​អាសន្ន។"</string>
     <string name="lockscreen_instructions_when_pattern_disabled" msgid="7434061749374801753">"ចុច​ម៉ឺនុយ ដើម្បី​ដោះ​សោ។"</string>
     <string name="lockscreen_pattern_instructions" msgid="3169991838169244941">"គូរ​លំនាំ ដើម្បី​ដោះ​សោ"</string>
-    <string name="lockscreen_emergency_call" msgid="7500692654885445299">"បន្ទាន់"</string>
+    <!-- no translation found for lockscreen_emergency_call (7549683825868928636) -->
+    <skip />
     <string name="lockscreen_return_to_call" msgid="3156883574692006382">"ត្រឡប់​ទៅ​ការ​ហៅ"</string>
     <string name="lockscreen_pattern_correct" msgid="8050630103651508582">"ត្រឹមត្រូវ!"</string>
     <string name="lockscreen_pattern_wrong" msgid="2940138714468358458">"ព្យាយាម​ម្ដង​ទៀត"</string>
@@ -1460,9 +1464,6 @@
     <string name="gpsNotifMessage" msgid="7346649122793758032">"បាន​ស្នើ​ដោយ <xliff:g id="NAME">%1$s</xliff:g> (<xliff:g id="SERVICE">%2$s</xliff:g>)"</string>
     <string name="gpsVerifYes" msgid="3719843080744112940">"បាទ/ចាស"</string>
     <string name="gpsVerifNo" msgid="1671201856091564741">"ទេ"</string>
-    <string name="gnss_nfw_notification_title" msgid="5004493772059563423">"បានចូលប្រើ​ទីតាំងពេលមាន​អាសន្ន"</string>
-    <string name="gnss_nfw_notification_message_oem" msgid="3683958907027107969">"ក្រុមហ៊ុន​ផលិតឧបករណ៍​របស់អ្នកបាន​ចូលប្រើទីតាំង​របស់អ្នក អំឡុងវគ្គពេលមាន​អាសន្នថ្មីៗ"</string>
-    <string name="gnss_nfw_notification_message_carrier" msgid="815888995791562151">"ក្រុមហ៊ុនសេវាទូរសព្ទ​របស់អ្នកបាន​ចូលប្រើទីតាំង​របស់អ្នក អំឡុងវគ្គពេលមាន​អាសន្នថ្មីៗ"</string>
     <string name="sync_too_many_deletes" msgid="6999440774578705300">"លុប​​លើស​ដែន​កំណត់"</string>
     <string name="sync_too_many_deletes_desc" msgid="7409327940303504440">"មាន​ធាតុ​បាន​លុប <xliff:g id="NUMBER_OF_DELETED_ITEMS">%1$d</xliff:g> សម្រាប់ <xliff:g id="TYPE_OF_SYNC">%2$s</xliff:g> គណនី <xliff:g id="ACCOUNT_NAME">%3$s</xliff:g> ។ តើ​អ្នក​ចង់​ធ្វើ​អ្វី​ខ្លះ​?"</string>
     <string name="sync_really_delete" msgid="5657871730315579051">"លុប​ធាតុ"</string>
@@ -1792,8 +1793,8 @@
     <string name="package_updated_device_owner" msgid="7560272363805506941">"ធ្វើ​បច្ចុប្បន្នភាព​ដោយ​អ្នកគ្រប់គ្រង​របស់​អ្នក"</string>
     <string name="package_deleted_device_owner" msgid="2292335928930293023">"លុប​ដោយ​អ្នកគ្រប់គ្រង​របស់​អ្នក"</string>
     <string name="confirm_battery_saver" msgid="5247976246208245754">"យល់ព្រម"</string>
-    <string name="battery_saver_description_with_learn_more" msgid="5997766757551917769">"ដើម្បី​បង្កើនកម្រិត​ថាមពលថ្ម កម្មវិធី​សន្សំថ្ម៖\n\n•បើករចនាប័ទ្មងងឹត\n•បិទ ឬដាក់កំហិតលើ​សកម្មភាពផ្ទៃខាងក្រោយ ឥទ្ធិពល​ជារូបភាពមួយចំនួន និងមុខងារផ្សេងទៀត​ដូចជា “Ok Google” ជាដើម\n\n"<annotation id="url">"ស្វែងយល់​បន្ថែម"</annotation></string>
-    <string name="battery_saver_description" msgid="8587408568232177204">"ដើម្បី​បង្កើនកម្រិត​ថាមពលថ្ម កម្មវិធី​សន្សំថ្ម៖\n\n•បើករចនាប័ទ្មងងឹត\n•បិទ ឬដាក់កំហិតលើ​សកម្មភាពផ្ទៃខាងក្រោយ ឥទ្ធិពល​ជារូបភាពមួយចំនួន និងមុខងារផ្សេងទៀត​ដូចជា “Ok Google” ជាដើម"</string>
+    <string name="battery_saver_description_with_learn_more" msgid="4424488535318105801">"ដើម្បី​បង្កើនកម្រិត​ថាមពលថ្ម កម្មវិធី​សន្សំថ្ម៖\n\n• បើករចនាប័ទ្មងងឹត\n• បិទ ឬដាក់កំហិតលើ​សកម្មភាពផ្ទៃខាងក្រោយ ឥទ្ធិពល​ជារូបភាពមួយចំនួន និងមុខងារផ្សេងទៀត​ដូចជា “Ok Google” ជាដើម\n\n"<annotation id="url">"ស្វែងយល់​បន្ថែម"</annotation></string>
+    <string name="battery_saver_description" msgid="6794188153647295212">"ដើម្បី​បង្កើនកម្រិត​ថាមពលថ្ម មុខងារ​សន្សំថ្ម៖\n\n• បើករចនាប័ទ្មងងឹត\n• បិទ ឬដាក់កំហិតលើ​សកម្មភាពផ្ទៃខាងក្រោយ ឥទ្ធិពលរូបភាពមួយចំនួន និងមុខងារផ្សេងទៀត​ដូចជា “Ok Google” ជាដើម"</string>
     <string name="data_saver_description" msgid="4995164271550590517">"ដើម្បីជួយកាត់បន្ថយការប្រើប្រាស់ទិន្នន័យ កម្មវិធីសន្សំសំចៃទិន្នន័យរារាំងកម្មវិធីមួយចំនួនមិនឲ្យបញ្ជូន ឬទទួលទិន្នន័យនៅផ្ទៃខាងក្រោយទេ។ កម្មវិធីដែលអ្នកកំពុងប្រើនាពេលបច្ចុប្បន្នអាចចូលប្រើប្រាស់​ទិន្នន័យបាន ប៉ុន្តែអាចនឹងមិនញឹកញាប់ដូចមុនទេ។ ឧទាហរណ៍ រូបភាពមិនបង្ហាញទេ លុះត្រាតែអ្នកប៉ះរូបភាពទាំងនោះ។"</string>
     <string name="data_saver_enable_title" msgid="7080620065745260137">"បើកកម្មវិធីសន្សំសំចៃទិន្នន័យ?"</string>
     <string name="data_saver_enable_button" msgid="4399405762586419726">"បើក"</string>
@@ -1997,6 +1998,7 @@
     <string name="notification_appops_camera_active" msgid="8177643089272352083">"កាមេរ៉ា"</string>
     <string name="notification_appops_microphone_active" msgid="581333393214739332">"មីក្រូហ្វូន"</string>
     <string name="notification_appops_overlay_active" msgid="5571732753262836481">"កំពុងបង្ហាញ​ពីលើកម្មវិធីផ្សេងទៀត​នៅលើអេក្រង់​របស់អ្នក"</string>
+    <string name="notification_feedback_indicator" msgid="663476517711323016">"ផ្ដល់​មតិកែលម្អ"</string>
     <string name="dynamic_mode_notification_channel_name" msgid="2986926422100223328">"ការ​ជូនដំណឹង​ព័ត៌មាន​របស់​មុខងារ​ទម្លាប់"</string>
     <string name="dynamic_mode_notification_title" msgid="9205715501274608016">"ថ្ម​អាច​នឹង​អស់ មុនពេល​សាកថ្មធម្មតា"</string>
     <string name="dynamic_mode_notification_summary" msgid="4141614604437372157">"បាន​បើក​ដំណើរការកម្មវិធី​សន្សំ​ថ្ម ដើម្បីបង្កើនកម្រិត​ថាមពល​​ថ្ម"</string>

@@ -290,6 +290,22 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
         return effects;
     }
 
+    private int applyDisplayAreaChanges(WindowContainer container,
+            WindowContainerTransaction.Change c) {
+        final int[] effects = new int[1];
+
+        container.forAllTasks(task -> {
+            Task tr = (Task) task;
+            if ((c.getChangeMask() & WindowContainerTransaction.Change.CHANGE_HIDDEN) != 0) {
+                if (tr.setForceHidden(FLAG_FORCE_HIDDEN_FOR_TASK_ORG, c.getHidden())) {
+                    effects[0] |= TRANSACT_EFFECTS_LIFECYCLE;
+                }
+            }
+        });
+
+        return effects[0];
+    }
+
     private int sanitizeAndApplyHierarchyOp(WindowContainer container,
             WindowContainerTransaction.HierarchyOp hop) {
         final Task task = container.asTask();
@@ -301,32 +317,34 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
             Slog.w(TAG, "Container is no longer attached: " + task);
             return 0;
         }
-        final ActivityStack as = (ActivityStack) task;
+        final Task as = task;
 
         if (hop.isReparent()) {
             final boolean isNonOrganizedRootableTask =
                     (task.isRootTask() && !task.mCreatedByOrganizer)
                             || task.getParent().asTask().mCreatedByOrganizer;
             if (isNonOrganizedRootableTask) {
-                Task newParent = hop.getNewParent() == null ? null
-                        : WindowContainer.fromBinder(hop.getNewParent()).asTask();
+                WindowContainer newParent = hop.getNewParent() == null
+                        ? dc.getDefaultTaskDisplayArea()
+                        : WindowContainer.fromBinder(hop.getNewParent());
                 if (task.getParent() != newParent) {
-                    if (newParent == null) {
-                        // Re-parent task to display as a root task.
-                        as.reparent(dc.getDefaultTaskDisplayArea(), hop.getToTop());
+                    if (newParent instanceof TaskDisplayArea) {
+                        // For now, reparenting to displayarea is different from other reparents...
+                        as.reparent((TaskDisplayArea) newParent, hop.getToTop());
                     } else if (newParent.inMultiWindowMode() && !task.isResizeable()
                             && task.isLeafTask()) {
                         Slog.w(TAG, "Can't support task that doesn't support multi-window mode in"
                                 + " multi-window mode... newParent=" + newParent + " task=" + task);
                         return 0;
                     } else {
-                        task.reparent((ActivityStack) newParent,
+                        task.reparent((Task) newParent,
                                 hop.getToTop() ? POSITION_TOP : POSITION_BOTTOM,
                                 false /*moveParents*/, "sanitizeAndApplyHierarchyOp");
                     }
                 } else {
-                    final ActivityStack rootTask =
-                            (ActivityStack) (newParent != null ? newParent : task.getRootTask());
+                    final Task rootTask = (Task) (
+                            (newParent != null && !(newParent instanceof TaskDisplayArea))
+                                    ? newParent : task.getRootTask());
                     if (hop.getToTop()) {
                         as.getDisplayArea().positionStackAtTop(rootTask,
                                 false /* includingParents */);
@@ -335,7 +353,7 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
                     }
                 }
             } else {
-                throw new RuntimeException("Reparenting leaf Tasks is not supported now.");
+                throw new RuntimeException("Reparenting leaf Tasks is not supported now. " + task);
             }
         } else {
             // Ugh, of course ActivityStack has its own special reorder logic...
@@ -366,7 +384,9 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
 
         int effects = applyChanges(wc, c);
 
-        if (wc instanceof Task) {
+        if (wc instanceof DisplayArea) {
+            effects |= applyDisplayAreaChanges(wc, c);
+        } else if (wc instanceof Task) {
             effects |= applyTaskChanges(wc.asTask(), c);
         }
 
@@ -375,10 +395,10 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
 
     private void resizePinnedStackIfNeeded(ConfigurationContainer container, int configMask,
             int windowMask, Configuration config) {
-        if ((container instanceof ActivityStack)
+        if ((container instanceof Task)
                 && ((configMask & ActivityInfo.CONFIG_WINDOW_CONFIGURATION) != 0)
                 && ((windowMask & WindowConfiguration.WINDOW_CONFIG_BOUNDS) != 0)) {
-            final ActivityStack stack = (ActivityStack) container;
+            final Task stack = (Task) container;
             if (stack.inPinnedWindowingMode()) {
                 stack.resize(config.windowConfiguration.getBounds(),
                         PRESERVE_WINDOWS, true /* deferResume */);
@@ -447,10 +467,10 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
         final Rect bounds = new Rect();
         wc.getBounds(bounds);
         bounds.offsetTo(0, 0);
-        SurfaceControl.ScreenshotGraphicBuffer buffer = SurfaceControl.captureLayers(
+        SurfaceControl.ScreenshotHardwareBuffer buffer = SurfaceControl.captureLayers(
                 wc.getSurfaceControl(), bounds, 1);
 
-        if (buffer == null || buffer.getGraphicBuffer() == null) {
+        if (buffer == null || buffer.getHardwareBuffer() == null) {
             return false;
         }
 
@@ -464,7 +484,7 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
 
         Surface surface = new Surface();
         surface.copyFrom(screenshot);
-        surface.attachAndQueueBufferWithColorSpace(buffer.getGraphicBuffer(), null);
+        surface.attachAndQueueBufferWithColorSpace(buffer.getHardwareBuffer(), null);
         surface.release();
 
         outSurfaceControl.copyFrom(screenshot, "WindowOrganizerController.takeScreenshot");

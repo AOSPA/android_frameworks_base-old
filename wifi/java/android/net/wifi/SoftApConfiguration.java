@@ -22,6 +22,7 @@ import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.SystemApi;
 import android.net.MacAddress;
+import android.os.Build;
 import android.os.Parcel;
 import android.os.Parcelable;
 import android.text.TextUtils;
@@ -230,6 +231,34 @@ public final class SoftApConfiguration implements Parcelable {
      */
     private final long mShutdownTimeoutMillis;
 
+    /** @hide */
+    @Retention(RetentionPolicy.SOURCE)
+    @IntDef(prefix = {"RANDOMIZATION_"}, value = {
+            RANDOMIZATION_NONE,
+            RANDOMIZATION_PERSISTENT})
+    public @interface MacRandomizationSetting {}
+
+    /**
+     * Use factory MAC as BSSID for the AP
+     * @hide
+     */
+    @SystemApi
+    public static final int RANDOMIZATION_NONE = 0;
+    /**
+     * Generate a randomized MAC as BSSID for the AP
+     * @hide
+     */
+    @SystemApi
+    public static final int RANDOMIZATION_PERSISTENT = 1;
+
+    /**
+     * Level of MAC randomization for the AP BSSID.
+     * @hide
+     */
+    @MacRandomizationSetting
+    private int mMacRandomizationSetting;
+
+
     /**
      * THe definition of security type OPEN.
      */
@@ -275,7 +304,7 @@ public final class SoftApConfiguration implements Parcelable {
             @SecurityType int securityType, int maxNumberOfClients, boolean shutdownTimeoutEnabled,
             long shutdownTimeoutMillis, boolean clientControlByUser,
             @NonNull List<MacAddress> blockedList, @NonNull List<MacAddress> allowedList,
-            @Nullable String oweTransIfaceName) {
+            int macRandomizationSetting, @Nullable String oweTransIfaceName) {
         mSsid = ssid;
         mBssid = bssid;
         mPassphrase = passphrase;
@@ -289,6 +318,7 @@ public final class SoftApConfiguration implements Parcelable {
         mClientControlByUser = clientControlByUser;
         mBlockedClientList = new ArrayList<>(blockedList);
         mAllowedClientList = new ArrayList<>(allowedList);
+        mMacRandomizationSetting = macRandomizationSetting;
         mOweTransIfaceName = oweTransIfaceName;
     }
 
@@ -314,6 +344,7 @@ public final class SoftApConfiguration implements Parcelable {
                 && mClientControlByUser == other.mClientControlByUser
                 && Objects.equals(mBlockedClientList, other.mBlockedClientList)
                 && Objects.equals(mAllowedClientList, other.mAllowedClientList)
+                && mMacRandomizationSetting == other.mMacRandomizationSetting
                 && mOweTransIfaceName == other.mOweTransIfaceName;
     }
 
@@ -322,7 +353,7 @@ public final class SoftApConfiguration implements Parcelable {
         return Objects.hash(mSsid, mBssid, mPassphrase, mHiddenSsid,
                 mBand, mChannel, mSecurityType, mMaxNumberOfClients, mAutoShutdownEnabled,
                 mShutdownTimeoutMillis, mClientControlByUser, mBlockedClientList,
-                mAllowedClientList, mOweTransIfaceName);
+                mAllowedClientList, mMacRandomizationSetting, mOweTransIfaceName);
     }
 
     @Override
@@ -342,6 +373,7 @@ public final class SoftApConfiguration implements Parcelable {
         sbuf.append(" \n ClientControlByUser=").append(mClientControlByUser);
         sbuf.append(" \n BlockedClientList=").append(mBlockedClientList);
         sbuf.append(" \n AllowedClientList=").append(mAllowedClientList);
+        sbuf.append(" \n MacRandomizationSetting=").append(mMacRandomizationSetting);
         sbuf.append(" \n OWE Transition mode Iface =").append(mOweTransIfaceName);
         return sbuf.toString();
     }
@@ -361,6 +393,7 @@ public final class SoftApConfiguration implements Parcelable {
         dest.writeBoolean(mClientControlByUser);
         dest.writeTypedList(mBlockedClientList);
         dest.writeTypedList(mAllowedClientList);
+        dest.writeInt(mMacRandomizationSetting);
         dest.writeString(mOweTransIfaceName);
     }
 
@@ -379,7 +412,7 @@ public final class SoftApConfiguration implements Parcelable {
                     in.readString(), in.readBoolean(), in.readInt(), in.readInt(), in.readInt(),
                     in.readInt(), in.readBoolean(), in.readLong(), in.readBoolean(),
                     in.createTypedArrayList(MacAddress.CREATOR),
-                    in.createTypedArrayList(MacAddress.CREATOR), in.readString());
+                    in.createTypedArrayList(MacAddress.CREATOR), in.readInt(), in.readString());
         }
 
         @Override
@@ -537,6 +570,21 @@ public final class SoftApConfiguration implements Parcelable {
     }
 
     /**
+     * Returns the level of MAC randomization for the AP BSSID.
+     * {@link Builder#setMacRandomizationSetting(int)}.
+     *
+     * @hide
+     */
+    @SystemApi
+    @MacRandomizationSetting
+    public int getMacRandomizationSetting() {
+        if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.R) {
+            throw new UnsupportedOperationException();
+        }
+        return mMacRandomizationSetting;
+    }
+
+    /**
      * Returns a {@link WifiConfiguration} representation of this {@link SoftApConfiguration}.
      * Note that SoftApConfiguration may contain configuration which is cannot be represented
      * by the legacy WifiConfiguration, in such cases a null will be returned.
@@ -563,6 +611,9 @@ public final class SoftApConfiguration implements Parcelable {
             case SECURITY_TYPE_WPA2_PSK:
                 wifiConfig.allowedKeyManagement.set(WifiConfiguration.KeyMgmt.WPA2_PSK);
                 break;
+            case SECURITY_TYPE_OWE:
+                wifiConfig.allowedKeyManagement.set(WifiConfiguration.KeyMgmt.OWE);
+                break;
             default:
                 Log.e(TAG, "Convert fail, unsupported security type :" + mSecurityType);
                 return null;
@@ -576,6 +627,9 @@ public final class SoftApConfiguration implements Parcelable {
                 wifiConfig.apBand  = WifiConfiguration.AP_BAND_5GHZ;
                 break;
             case BAND_2GHZ | BAND_5GHZ:
+                wifiConfig.apBand  = WifiConfiguration.AP_BAND_ANY;
+                break;
+            case BAND_2GHZ | BAND_6GHZ:
                 wifiConfig.apBand  = WifiConfiguration.AP_BAND_ANY;
                 break;
             case BAND_ANY:
@@ -626,6 +680,7 @@ public final class SoftApConfiguration implements Parcelable {
         private boolean mClientControlByUser;
         private List<MacAddress> mBlockedClientList;
         private List<MacAddress> mAllowedClientList;
+        private int mMacRandomizationSetting;
         private String mOweTransIfaceName;
 
         /**
@@ -645,6 +700,7 @@ public final class SoftApConfiguration implements Parcelable {
             mClientControlByUser = false;
             mBlockedClientList = new ArrayList<>();
             mAllowedClientList = new ArrayList<>();
+            mMacRandomizationSetting = RANDOMIZATION_PERSISTENT;
             mOweTransIfaceName = null;
         }
 
@@ -667,6 +723,7 @@ public final class SoftApConfiguration implements Parcelable {
             mClientControlByUser = other.mClientControlByUser;
             mBlockedClientList = new ArrayList<>(other.mBlockedClientList);
             mAllowedClientList = new ArrayList<>(other.mAllowedClientList);
+            mMacRandomizationSetting = other.mMacRandomizationSetting;
             mOweTransIfaceName = other.mOweTransIfaceName;
         }
 
@@ -685,7 +742,8 @@ public final class SoftApConfiguration implements Parcelable {
             return new SoftApConfiguration(mSsid, mBssid, mPassphrase,
                     mHiddenSsid, mBand, mChannel, mSecurityType, mMaxNumberOfClients,
                     mAutoShutdownEnabled, mShutdownTimeoutMillis, mClientControlByUser,
-                    mBlockedClientList, mAllowedClientList, mOweTransIfaceName);
+                    mBlockedClientList, mAllowedClientList, mMacRandomizationSetting,
+                    mOweTransIfaceName);
         }
 
         /**
@@ -717,14 +775,17 @@ public final class SoftApConfiguration implements Parcelable {
          * @param bssid BSSID, or null to have the BSSID chosen by the framework. The caller is
          *              responsible for avoiding collisions.
          * @return Builder for chaining.
-         * @throws IllegalArgumentException when the given BSSID is the all-zero or broadcast MAC
-         *                                  address.
+         * @throws IllegalArgumentException when the given BSSID is the all-zero
+         *                                  , multicast or broadcast MAC address.
          */
         @NonNull
         public Builder setBssid(@Nullable MacAddress bssid) {
             if (bssid != null) {
                 Preconditions.checkArgument(!bssid.equals(WifiManager.ALL_ZEROS_MAC_ADDRESS));
-                Preconditions.checkArgument(!bssid.equals(MacAddress.BROADCAST_ADDRESS));
+                if (bssid.getAddressType() != MacAddress.TYPE_UNICAST) {
+                    throw new IllegalArgumentException("bssid doesn't support "
+                            + "multicast or broadcast mac address");
+                }
             }
             mBssid = bssid;
             return this;
@@ -817,6 +878,9 @@ public final class SoftApConfiguration implements Parcelable {
          * Specifies the channel and associated band for the AP.
          *
          * The channel which AP resides on. Valid channels are country dependent.
+         * The {@link SoftApCapability#getSupportedChannelList(int)} can be used to obtain
+         * valid channels.
+         *
          * <p>
          * The default for the channel is a the special value 0 to have the framework
          * auto-select a valid channel from the band configured with
@@ -1014,6 +1078,31 @@ public final class SoftApConfiguration implements Parcelable {
         @NonNull
         public Builder setBlockedClientList(@NonNull List<MacAddress> blockedClientList) {
             mBlockedClientList = new ArrayList<>(blockedClientList);
+            return this;
+        }
+
+        /**
+         * Specifies the level of MAC randomization for the AP BSSID.
+         * The Soft AP BSSID will be randomized only if the BSSID isn't set
+         * {@link #setBssid(MacAddress)} and this method is either uncalled
+         * or called with {@link #RANDOMIZATION_PERSISTENT}.
+         *
+         * <p>
+         * <li>If not set, defaults to {@link #RANDOMIZATION_PERSISTENT}</li>
+         *
+         * @param macRandomizationSetting One of the following setting:.
+         * {@link #RANDOMIZATION_NONE} or {@link #RANDOMIZATION_PERSISTENT}.
+         * @return Builder for chaining.
+         *
+         * @see #setBssid(MacAddress)
+         */
+        @NonNull
+        public Builder setMacRandomizationSetting(
+                @MacRandomizationSetting int macRandomizationSetting) {
+            if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.R) {
+                throw new UnsupportedOperationException();
+            }
+            mMacRandomizationSetting = macRandomizationSetting;
             return this;
         }
 

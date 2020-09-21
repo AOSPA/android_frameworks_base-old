@@ -193,8 +193,10 @@
     <string name="network_logging_notification_text" msgid="1327373071132562512">"आपका संगठन इस डिवाइस का प्रबंधन करता है और वह नेटवर्क ट्रैफ़िक की निगरानी भी कर सकता है. विवरण के लिए टैप करें."</string>
     <string name="location_changed_notification_title" msgid="3620158742816699316">"ऐप्लिकेशन आपकी जगह की जानकारी ऐक्सेस कर सकते हैं"</string>
     <string name="location_changed_notification_text" msgid="7158423339982706912">"ज़्यादा जानने के लिए अपने आईटी एडमिन से संपर्क करें"</string>
+    <string name="geofencing_service" msgid="3826902410740315456">"जियोफ़ेंसिंग की सेवा"</string>
     <string name="country_detector" msgid="7023275114706088854">"देश की पहचान करने वाली सुविधा"</string>
     <string name="location_service" msgid="2439187616018455546">"जगह की जानकारी"</string>
+    <string name="gnss_service" msgid="8907781262179951385">"जीएनएसएस सेवा"</string>
     <string name="sensor_notification_service" msgid="7474531979178682676">"सेंसर से जुड़ी सूचना सेवा"</string>
     <string name="twilight_service" msgid="8964898045693187224">"ट्वाइलाइट समय बताने वाली सेवा"</string>
     <string name="factory_reset_warning" msgid="6858705527798047809">"आपके डिवाइस को मिटा दिया जाएगा"</string>
@@ -542,6 +544,7 @@
     <string name="biometric_not_recognized" msgid="5106687642694635888">"पहचान नहीं हो पाई"</string>
     <string name="biometric_error_canceled" msgid="8266582404844179778">"प्रमाणीकरण रद्द किया गया"</string>
     <string name="biometric_error_device_not_secured" msgid="3129845065043995924">"पिन, पैटर्न या पासवर्ड सेट नहीं है"</string>
+    <string name="biometric_error_generic" msgid="6784371929985434439">"गड़बड़ी की पुष्टि की जा रही है"</string>
     <string name="fingerprint_acquired_partial" msgid="8532380671091299342">"अधूरा फ़िंगरप्रिंट प्रोसेस हो सका. कृपया फिर से कोशिश करें."</string>
     <string name="fingerprint_acquired_insufficient" msgid="2545149524031515411">"फ़िंगरप्रिंट प्रोसेस नहीं हो सका. कृपया दोबारा कोशिश करें."</string>
     <string name="fingerprint_acquired_imager_dirty" msgid="4694800187151533990">"फ़िंगरप्रिंट सेंसर गंदा है. कृपया साफ़ करें और फिर कोशिश करें."</string>
@@ -829,7 +832,8 @@
     <string name="lockscreen_instructions_when_pattern_enabled" msgid="7982445492532123308">"लॉक खोलने के लिए मेन्यू दबाएं या आपातलकालीन कॉल करें."</string>
     <string name="lockscreen_instructions_when_pattern_disabled" msgid="7434061749374801753">"लॉक खोलने के लिए मेन्यू दबाएं."</string>
     <string name="lockscreen_pattern_instructions" msgid="3169991838169244941">"अनलॉक करने के लिए आकार आरेखित करें"</string>
-    <string name="lockscreen_emergency_call" msgid="7500692654885445299">"आपातकाल"</string>
+    <!-- no translation found for lockscreen_emergency_call (7549683825868928636) -->
+    <skip />
     <string name="lockscreen_return_to_call" msgid="3156883574692006382">"कॉल पर वापस लौटें"</string>
     <string name="lockscreen_pattern_correct" msgid="8050630103651508582">"सही!"</string>
     <string name="lockscreen_pattern_wrong" msgid="2940138714468358458">"फिर से कोशिश करें"</string>
@@ -1460,9 +1464,6 @@
     <string name="gpsNotifMessage" msgid="7346649122793758032">"<xliff:g id="NAME">%1$s</xliff:g> (<xliff:g id="SERVICE">%2$s</xliff:g>) द्वारा अनुरोधित"</string>
     <string name="gpsVerifYes" msgid="3719843080744112940">"हां"</string>
     <string name="gpsVerifNo" msgid="1671201856091564741">"नहीं"</string>
-    <string name="gnss_nfw_notification_title" msgid="5004493772059563423">"आपातकालीन स्थिति में जगह की जानकारी ऐक्सेस की गई"</string>
-    <string name="gnss_nfw_notification_message_oem" msgid="3683958907027107969">"हाल ही में आपातकालीन स्थिति के दौरान, डिवाइस बनाने वाली कंपनी ने आपकी जगह की जानकारी को ऐक्सेस किया"</string>
-    <string name="gnss_nfw_notification_message_carrier" msgid="815888995791562151">"हाल ही में आपातकालीन स्थिति के दौरान, मोबाइल और इंटरनेट सेवा देने वाली कंपनी ने आपकी जगह की जानकारी को ऐक्सेस किया"</string>
     <string name="sync_too_many_deletes" msgid="6999440774578705300">"हटाने की सीमा पार हो गई"</string>
     <string name="sync_too_many_deletes_desc" msgid="7409327940303504440">"<xliff:g id="TYPE_OF_SYNC">%2$s</xliff:g>, <xliff:g id="ACCOUNT_NAME">%3$s</xliff:g> खाते के <xliff:g id="NUMBER_OF_DELETED_ITEMS">%1$d</xliff:g> आइटम हटा दिए गए हैं. आप क्‍या करना चाहते हैं?"</string>
     <string name="sync_really_delete" msgid="5657871730315579051">"आइटम मिटाएं"</string>
@@ -1792,8 +1793,8 @@
     <string name="package_updated_device_owner" msgid="7560272363805506941">"आपके व्यवस्थापक ने अपडेट किया है"</string>
     <string name="package_deleted_device_owner" msgid="2292335928930293023">"आपके व्यवस्थापक ने हटा दिया है"</string>
     <string name="confirm_battery_saver" msgid="5247976246208245754">"ठीक है"</string>
-    <string name="battery_saver_description_with_learn_more" msgid="5997766757551917769">"बैटरी लाइफ़ बढ़ाने के लिए, बैटरी सेवर:\n\n•गहरे रंग वाली थीम चालू करता है\n•बैकग्राउंड की गतिविधि, कुछ विज़ुअल इफ़ेक्ट, और \"Hey Google\" जैसी दूसरी सुविधाएं इस्तेमाल करने से रोकता है या उन्हें बंद कर देता है\n\n"<annotation id="url">"ज़्यादा जानें"</annotation></string>
-    <string name="battery_saver_description" msgid="8587408568232177204">"बैटरी लाइफ़ बढ़ाने के लिए, बैटरी सेवर:\n\n•गहरे रंग वाली थीम चालू करता है\n•बैकग्राउंड की गतिविधि, कुछ विज़ुअल इफ़ेक्ट, और \"Hey Google\" जैसी दूसरी सुविधाएं इस्तेमाल करने से रोकता है या उन्हें बंद कर देता है"</string>
+    <string name="battery_saver_description_with_learn_more" msgid="4424488535318105801">"बैटरी लाइफ़ बढ़ाने के लिए, बैटरी सेवर:\n\n• गहरे रंग वाली थीम चालू करता है\n• बैकग्राउंड की गतिविधि, कुछ विज़ुअल इफ़ेक्ट, और \"Hey Google\" जैसी दूसरी सुविधाएं इस्तेमाल करने से रोकता है या इन्हें बंद कर देता है\n\n"<annotation id="url">"ज़्यादा जानें"</annotation></string>
+    <string name="battery_saver_description" msgid="6794188153647295212">"बैटरी लाइफ़ बढ़ाने के लिए, बैटरी सेवर:\n\n• गहरे रंग वाली थीम चालू करता है\n• बैकग्राउंड की गतिविधि, कुछ विज़ुअल इफ़ेक्ट, और \"Hey Google\" जैसी दूसरी सुविधाएं इस्तेमाल करने से रोकता है या इन्हें बंद कर देता है"</string>
     <string name="data_saver_description" msgid="4995164271550590517">"डेटा खर्च को कम करने के लिए, डेटा बचाने की सेटिंग कुछ ऐप्लिकेशन को बैकग्राउंड में डेटा भेजने या डेटा पाने से रोकती है. फ़िलहाल, आप जिस ऐप्लिकेशन का इस्तेमाल कर रहे हैं वह डेटा ऐक्सेस कर सकता है, लेकिन ऐसा कभी-कभी ही हो पाएगा. उदाहरण के लिए, इमेज तब तक दिखाई नहीं देंगी जब तक कि आप उन पर टैप नहीं करते."</string>
     <string name="data_saver_enable_title" msgid="7080620065745260137">"डेटा बचाने की सेटिंग चालू करें?"</string>
     <string name="data_saver_enable_button" msgid="4399405762586419726">"चालू करें"</string>
@@ -1997,6 +1998,7 @@
     <string name="notification_appops_camera_active" msgid="8177643089272352083">"कैमरा"</string>
     <string name="notification_appops_microphone_active" msgid="581333393214739332">"माइक्रोफ़ोन"</string>
     <string name="notification_appops_overlay_active" msgid="5571732753262836481">"आपकी स्क्रीन पर, इस्तेमाल हो रहे दूसरे ऐप्लिकेशन के ऊपर दिखाया जा रहा है"</string>
+    <string name="notification_feedback_indicator" msgid="663476517711323016">"सुझाव दें या शिकायत करें"</string>
     <string name="dynamic_mode_notification_channel_name" msgid="2986926422100223328">"रूटीन मोड जानकारी की सूचना"</string>
     <string name="dynamic_mode_notification_title" msgid="9205715501274608016">"बैटरी आम तौर पर जितने समय चलती है, उससे पहले खत्म हो सकती है"</string>
     <string name="dynamic_mode_notification_summary" msgid="4141614604437372157">"बैटरी लाइफ़ बढ़ाने के लिए \'बैटरी सेवर\' चालू हो गया है"</string>

@@ -711,11 +711,13 @@
     <string name="notification_silence_title" msgid="8608090968400832335">"Lydløs"</string>
     <string name="notification_alert_title" msgid="3656229781017543655">"Standard"</string>
     <string name="notification_bubble_title" msgid="8330481035191903164">"Boble"</string>
+    <string name="notification_automatic_title" msgid="3745465364578762652">"Automatisk"</string>
     <string name="notification_channel_summary_low" msgid="4860617986908931158">"Ingen lyd eller vibration"</string>
     <string name="notification_conversation_summary_low" msgid="1734433426085468009">"Ingen lyd eller vibration, og den vises længere nede i samtalesektionen"</string>
     <string name="notification_channel_summary_default" msgid="3282930979307248890">"Kan ringe eller vibrere baseret på telefonens indstillinger"</string>
     <string name="notification_channel_summary_default_with_bubbles" msgid="1782419896613644568">"Kan ringe eller vibrere baseret på telefonens indstillinger. Samtaler fra <xliff:g id="APP_NAME">%1$s</xliff:g> vises som standard i bobler."</string>
     <string name="notification_channel_summary_bubble" msgid="7235935211580860537">"Fastholder din opmærksomhed med en svævende genvej til indholdet."</string>
+    <string name="notification_channel_summary_automatic" msgid="5813109268050235275">"Få systemet til at afgøre, om denne notifikation skal vibrere eller afspille en lyd"</string>
     <string name="notification_channel_summary_priority" msgid="7952654515769021553">"Vises øverst i samtalesektionen, som en svævende boble og med profilbillede på låseskærmen"</string>
     <string name="notification_conversation_channel_settings" msgid="2409977688430606835">"Indstillinger"</string>
     <string name="notification_priority_title" msgid="2079708866333537093">"Prioritet"</string>
@@ -736,6 +738,12 @@
     <string name="appops_camera_mic_overlay" msgid="5584311236445644095">"Denne app vises over andre apps på din skærm og anvender mikrofonen og kameraet."</string>
     <string name="notification_appops_settings" msgid="5208974858340445174">"Indstillinger"</string>
     <string name="notification_appops_ok" msgid="2177609375872784124">"OK"</string>
+    <string name="feedback_silenced" msgid="5382212321253328247">"Denne notifikation blev sat på lydløs af systemet."</string>
+    <string name="feedback_promoted" msgid="8075757485407091976">"Denne notifikation blev rykket op af systemet."</string>
+    <string name="feedback_demoted" msgid="5848066008939031913">"Denne notifikation blev rykket ned af systemet."</string>
+    <string name="feedback_prompt" msgid="2278631214125128281">"Var dette korrekt?"</string>
+    <string name="feedback_response" msgid="4671729244976641339">"Tak for din feedback"</string>
+    <string name="feedback_ok" msgid="6481426753298857144">"OK"</string>
     <string name="notification_channel_controls_opened_accessibility" msgid="6111817750774381094">"Styring af notifikationer for <xliff:g id="APP_NAME">%1$s</xliff:g> blev åbnet"</string>
     <string name="notification_channel_controls_closed_accessibility" msgid="1561909368876911701">"Styring af notifikationer for <xliff:g id="APP_NAME">%1$s</xliff:g> blev lukket"</string>
     <string name="notification_channel_switch_accessibility" msgid="8979885820432540252">"Tillad notifikationer fra denne kanal"</string>
@@ -908,25 +916,14 @@
     <string name="accessibility_quick_settings_edit" msgid="1523745183383815910">"Rediger rækkefølgen af indstillinger."</string>
     <string name="accessibility_quick_settings_page" msgid="7506322631645550961">"Side <xliff:g id="ID_1">%1$d</xliff:g> af <xliff:g id="ID_2">%2$d</xliff:g>"</string>
     <string name="tuner_lock_screen" msgid="2267383813241144544">"Låseskærm"</string>
-    <string name="pip_phone_expand" msgid="1424988917240616212">"Udvid"</string>
-    <string name="pip_phone_minimize" msgid="9057117033655996059">"Minimer"</string>
-    <string name="pip_phone_close" msgid="8801864042095341824">"Luk"</string>
-    <string name="pip_phone_settings" msgid="5687538631925004341">"Indstillinger"</string>
-    <string name="pip_phone_dismiss_hint" msgid="5825740708095316710">"Træk ned for at fjerne"</string>
-    <string name="pip_menu_title" msgid="6365909306215631910">"Menu"</string>
-    <string name="pip_notification_title" msgid="8661573026059630525">"<xliff:g id="NAME">%s</xliff:g> vises som integreret billede"</string>
-    <string name="pip_notification_message" msgid="4991831338795022227">"Hvis du ikke ønsker, at <xliff:g id="NAME">%s</xliff:g> skal benytte denne funktion, kan du åbne indstillingerne og deaktivere den."</string>
-    <string name="pip_play" msgid="333995977693142810">"Afspil"</string>
-    <string name="pip_pause" msgid="1139598607050555845">"Sæt på pause"</string>
-    <string name="pip_skip_to_next" msgid="3864212650579956062">"Gå videre til næste"</string>
-    <string name="pip_skip_to_prev" msgid="3742589641443049237">"Gå til forrige"</string>
-    <string name="accessibility_action_pip_resize" msgid="8237306972921160456">"Rediger størrelse"</string>
     <string name="thermal_shutdown_title" msgid="2702966892682930264">"Telefonen slukkede pga. varme"</string>
-    <string name="thermal_shutdown_message" msgid="7432744214105003895">"Din telefon kører nu normalt"</string>
+    <string name="thermal_shutdown_message" msgid="6142269839066172984">"Din telefon kører nu normalt.\nTryk for at få flere oplysninger"</string>
     <string name="thermal_shutdown_dialog_message" msgid="6745684238183492031">"Din telefon var blevet for varm, så den slukkede for at køle ned. Din telefon kører nu igen normalt. \n\nDin telefon kan blive for varm, hvis du:\n	• Bruger ressourcekrævende apps (f.eks. spil, video eller navigation)\n	• Downloader eller uploader store filer\n	• Bruger din telefon i varme omgivelser"</string>
+    <string name="thermal_shutdown_dialog_help_text" msgid="6413474593462902901">"Se håndteringsvejledning"</string>
     <string name="high_temp_title" msgid="2218333576838496100">"Telefonen er ved at blive varm"</string>
-    <string name="high_temp_notif_message" msgid="163928048626045592">"Nogle funktioner er begrænsede, mens telefonen køler ned"</string>
+    <string name="high_temp_notif_message" msgid="1277346543068257549">"Nogle funktioner er begrænsede, mens telefonen køler ned.\nTryk for at få flere oplysninger"</string>
     <string name="high_temp_dialog_message" msgid="3793606072661253968">"Din telefon forsøger automatisk at køle ned. Du kan stadig bruge telefonen, men den kører muligvis langsommere.\n\nNår din telefon er kølet ned, fungerer den normalt igen."</string>
+    <string name="high_temp_dialog_help_text" msgid="7380171287943345858">"Se håndteringsvejledning"</string>
     <string name="high_temp_alarm_title" msgid="2359958549570161495">"Frakobl opladeren"</string>
     <string name="high_temp_alarm_notify_message" msgid="7186272817783835089">"Der er et problem med opladning af denne enhed. Frakobl strømadapteren, og vær forsigtig, da kablet kan være varmt."</string>
     <string name="high_temp_alarm_help_care_steps" msgid="5017002218341329566">"Se vejledningen i pleje"</string>
@@ -1022,7 +1019,6 @@
     <string name="priority_onboarding_ignores_dnd_text" msgid="2918952762719600529">"Afbryd Forstyr ikke"</string>
     <string name="priority_onboarding_done_button_title" msgid="4569550984286506007">"OK"</string>
     <string name="priority_onboarding_settings_button_title" msgid="6663601574303585927">"Indstillinger"</string>
-    <string name="magnification_overlay_title" msgid="6584179429612427958">"Vindue med overlejret forstørrelse"</string>
     <string name="magnification_window_title" msgid="4863914360847258333">"Vindue med forstørrelse"</string>
     <string name="magnification_controls_title" msgid="8421106606708891519">"Vindue med forstørrelsesstyring"</string>
     <string name="quick_controls_title" msgid="6839108006171302273">"Enhedsstyring"</string>

@@ -701,6 +701,8 @@ public class ParsingPackageUtils {
                 return parseUsesStaticLibrary(input, pkg, res, parser);
             case "uses-library":
                 return parseUsesLibrary(input, pkg, res, parser);
+            case "uses-native-library":
+                return parseUsesNativeLibrary(input, pkg, res, parser);
             case "uses-package":
                 // Dependencies for app installers; we don't currently try to
                 // enforce this.
@@ -773,7 +775,7 @@ public class ParsingPackageUtils {
         if (!ParsedAttribution.isCombinationValid(pkg.getAttributions())) {
             return input.error(
                     INSTALL_PARSE_FAILED_BAD_MANIFEST,
-                    "Combination <feature> tags are not valid"
+                    "Combination <attribution> tags are not valid"
             );
         }
 
@@ -1720,8 +1722,7 @@ public class ParsingPackageUtils {
 
             // TODO(b/135203078): Should parsing code be responsible for this? Maybe move to a
             //  util or just have PackageImpl return true if either flag is set
-            // Debuggable implies profileable
-            pkg.setProfileableByShell(pkg.isProfileableByShell() || pkg.isDebuggable());
+            pkg.setProfileableByShell(pkg.isProfileableByShell());
 
             if (sa.hasValueOrEmpty(R.styleable.AndroidManifestApplication_resizeableActivity)) {
                 pkg.setResizeableActivity(sa.getBoolean(
@@ -2018,6 +2019,8 @@ public class ParsingPackageUtils {
                 return parseUsesStaticLibrary(input, pkg, res, parser);
             case "uses-library":
                 return parseUsesLibrary(input, pkg, res, parser);
+            case "uses-native-library":
+                return parseUsesNativeLibrary(input, pkg, res, parser);
             case "processes":
                 return parseProcesses(input, pkg, res, parser, mSeparateProcesses, flags);
             case "uses-package":
@@ -2168,6 +2171,37 @@ public class ParsingPackageUtils {
                     // Ignore if someone already defined as required
                     if (!ArrayUtils.contains(pkg.getUsesLibraries(), lname)) {
                         pkg.addUsesOptionalLibrary(lname);
+                    }
+                }
+            }
+
+            return input.success(pkg);
+        } finally {
+            sa.recycle();
+        }
+    }
+
+    @NonNull
+    private static ParseResult<ParsingPackage> parseUsesNativeLibrary(ParseInput input,
+            ParsingPackage pkg, Resources res, XmlResourceParser parser) {
+        TypedArray sa = res.obtainAttributes(parser, R.styleable.AndroidManifestUsesNativeLibrary);
+        try {
+            // Note: don't allow this value to be a reference to a resource
+            // that may change.
+            String lname = sa.getNonResourceString(
+                    R.styleable.AndroidManifestUsesNativeLibrary_name);
+            boolean req = sa.getBoolean(R.styleable.AndroidManifestUsesNativeLibrary_required,
+                    true);
+
+            if (lname != null) {
+                if (req) {
+                    // Upgrade to treat as stronger constraint
+                    pkg.addUsesNativeLibrary(lname)
+                            .removeUsesOptionalNativeLibrary(lname);
+                } else {
+                    // Ignore if someone already defined as required
+                    if (!ArrayUtils.contains(pkg.getUsesNativeLibraries(), lname)) {
+                        pkg.addUsesOptionalNativeLibrary(lname);
                     }
                 }
             }
