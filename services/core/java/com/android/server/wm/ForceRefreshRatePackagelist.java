@@ -29,6 +29,7 @@ import android.content.Context;
 import android.database.ContentObserver;
 import android.net.Uri;
 import android.os.Handler;
+import android.os.Looper;
 import android.os.UserHandle;
 import android.provider.Settings;
 import android.text.TextUtils;
@@ -36,6 +37,8 @@ import android.util.ArrayMap;
 import android.util.Log;
 import android.view.Display;
 import android.view.DisplayInfo;
+
+import com.android.server.UiThread;
 
 /**
  * A list for packages that should force the display out of high refresh rate.
@@ -48,27 +51,16 @@ class ForceRefreshRatePackageList {
 
     private final ArrayMap<String, Float> mForcedPackageList = new ArrayMap<>();
     private final Object mLock = new Object();
-    private final Handler mHandler = new Handler();
+    private final Handler mHandler;
     private DisplayInfo mDisplayInfo;
     private SettingsObserver mSettingsObserver;
 
-    private static volatile ForceRefreshRatePackageList mInstance;
-
-    static ForceRefreshRatePackageList getInstance(WindowManagerService wmService) {
-        if (mInstance == null) {
-            synchronized (ForceRefreshRatePackageList.class) {
-                if (mInstance == null) {
-                    mInstance = new ForceRefreshRatePackageList(wmService);
-                }
-            }
-        }
-        return mInstance;
-    }
-
-    private ForceRefreshRatePackageList(WindowManagerService wmService) {
-        mDisplayInfo = wmService.getDefaultDisplayContentLocked().getDisplayInfo();
+    ForceRefreshRatePackageList(WindowManagerService wmService, DisplayInfo displayInfo) {
+        mDisplayInfo = displayInfo;
+        final Looper looper = UiThread.getHandler().getLooper();
+        mHandler = new Handler(looper);
         mSettingsObserver = new SettingsObserver(wmService.mContext);
-        mSettingsObserver.observe();
+        mHandler.post(mSettingsObserver::observe);
     }
 
     private void updateForcedPackagelist(String forcePackagesStr) {
