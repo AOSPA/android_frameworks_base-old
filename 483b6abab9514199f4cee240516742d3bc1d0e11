@@ -19,6 +19,23 @@
     },
     {
       "key": {
+        "uuid": "353ad240_d91a5b95",
+        "filename": "services/core/java/com/android/server/pocket/PocketService.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 183,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2020-09-28T14:19:29Z",
+      "side": 1,
+      "message": "can you check if !TextUtils.isEmpty(mVendorPocketSensor) before calling this? If we have no vendor sensor supplied, we already know in advance that we won\u0027t find any matching sensors",
+      "revId": "483b6abab9514199f4cee240516742d3bc1d0e11",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    },
+    {
+      "key": {
         "uuid": "9d95c782_4bfc8ed2",
         "filename": "services/core/java/com/android/server/pocket/PocketService.java",
         "patchSetId": 1
